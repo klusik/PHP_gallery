@@ -2,7 +2,7 @@
 
 A modern PHP 8.0+ gallery CMS designed for ordinary shared hosting. The application uses the filesystem as the authoritative source for gallery structure, while storing all metadata, access rules, votes, user accounts, and audit logs in MySQL or MariaDB.
 
-**Current Version:** 0.86.1
+**Current Version:** 0.87
 
 **Key Benefit:** Deploy in minutes on shared hosting. No npm, no Composer, no framework overhead. Just PHP + MySQL.
 
@@ -32,10 +32,22 @@ A modern PHP 8.0+ gallery CMS designed for ordinary shared hosting. The applicat
 - **Automatic generation** - Create optimized thumbnails during import or on-demand
 - **Multiple formats** - JPEG and WebP variants for browser compatibility
 - **Responsive sizing** - Automatically serve appropriately-sized images for device
+- **Two public thumbnail renderers** - Responsive browser selection remains the default; selected-gallery photo cards can optionally use progressive small-first sharpening from Admin > Theme > Layout
 - **Quality tuning** - Configurable JPEG quality with automatic size optimization
 - **DNG RAW support** - Generate display masters from DNG raw files
 - **Lazy loading** - Deferred thumbnail loading in fullscreen gallery
 - **Maintenance tools** - Regenerate, delete, or verify thumbnail cache
+- **Admin log scalability** - Browse grouped operational events, export large histories in bounded batches, and keep recent records in the live database while archiving older days safely
+
+#### Public thumbnail rendering modes
+
+The site-level `public_thumbnail_rendering_mode` setting controls photo cards inside a selected gallery and accepts only `responsive` or `progressive`. Missing or invalid values resolve to `responsive`. Gallery cover cards, subgallery collage cells, home-page gallery cards, and Admin thumbnails continue to use responsive browser selection.
+
+**Responsive browser selection - Default** renders normal server-side `<picture>/<img>` markup with the complete available WebP/JPEG candidate set immediately. The browser can select among generated 300, 600, 800, and 960 px candidates, subject to actual derivatives and thumbnail bounds. It works fully without JavaScript.
+
+**Progressive thumbnail sharpening - Beta** is the current Admin-facing label for the second permanent pipeline. PHP still renders a real small thumbnail, normally the 300 px derivative, plus semantic links and alt text. Larger candidates remain inert until the optional browser module sees a visible or near-visible card, measures it, and preloads/decodes the smallest adequate replacement. JavaScript-disabled visitors keep the functional small thumbnail.
+
+Progressive rendering prioritizes perceived initial responsiveness, not minimum total transfer. A visitor can download both the initial small thumbnail and a later larger replacement, so total transferred bytes can be higher than responsive mode even when the page feels ready sooner. The word Beta describes current Admin-facing maturity only; it is not part of setting keys, renderer identifiers, filenames, or architecture terminology.
 
 ### Access Control
 - **Visibility modes** - Public, unpublished (admin-only), or private (password/token protected)
@@ -93,6 +105,7 @@ A modern PHP 8.0+ gallery CMS designed for ordinary shared hosting. The applicat
 - **Database inspection** - Explicit full-schema inventory with migration/code audit, cleanup reasons, and protected-table policies
 - **Safe logical cleanup** - Dry-run and bounded resumable removal of proven orphans, deterministic duplicates, and explicitly expired temporary state, with exact row identities audited transactionally
 - **Physical database maintenance** - Selected `ANALYZE TABLE`, selected-table optimization previews, and separately confirmed selected `OPTIMIZE TABLE`, never automatic
+- **Admin log archive maintenance** - Configure live-log retention, create protected day archives, inspect archive state, and recover safely after interrupted archive work
 
 ### Admin Tools
 
@@ -373,7 +386,7 @@ Then open `http://localhost:8000/` in your browser.
 
 #### Customizing Appearance
 
-1. Go to **Theme** to customize colors, fonts, layout, and the default lightbox browsing mode
+1. Go to **Theme** to customize colors, fonts, layout, the default lightbox browsing mode, and selected-gallery public thumbnail rendering
 2. Choose light or dark mode
 3. Set default gallery card layout (vertical or horizontal)
 4. Choose language (English, Czech, etc.)

@@ -1,0 +1,1480 @@
+% PHP Gallery Complete Product Documentation
+% Build from this directory with:
+%   pdflatex PHP_Gallery_Manual.tex
+%   makeindex PHP_Gallery_Manual.idx
+%   pdflatex PHP_Gallery_Manual.tex
+%   pdflatex PHP_Gallery_Manual.tex
+%
+% The Markdown and implementation files listed in the references are the
+% editorial and technical sources for this edition. Review the local project
+% whenever the application version changes.
+
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[english]{babel}
+\usepackage{geometry}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{tabularx}
+\usepackage{enumitem}
+\usepackage{listings}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage[bottom,hang,flushmargin]{footmisc}
+\usepackage{makeidx}
+\usepackage{hyperref}
+\usepackage{bookmark}
+
+\geometry{top=23mm,bottom=25mm,left=24mm,right=24mm,headheight=15pt}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.65em}
+\setcounter{tocdepth}{3}
+\setcounter{secnumdepth}{3}
+\setlist{itemsep=0.3em,topsep=0.45em}
+\renewcommand{\arraystretch}{1.2}
+
+\definecolor{GalleryBlue}{HTML}{245A86}
+\definecolor{GalleryLightBlue}{HTML}{EAF2F8}
+\definecolor{GalleryDark}{HTML}{263238}
+\definecolor{GalleryGray}{HTML}{F3F5F7}
+\definecolor{GalleryCode}{HTML}{1F2933}
+\definecolor{GalleryGreen}{HTML}{2E6B45}
+\definecolor{GalleryRed}{HTML}{8A2F2F}
+
+% Edition metadata lives here so a release update requires one version edit.
+\newcommand{\version}{0.87}
+\newcommand{\manualdate}{10 August 2026}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=GalleryBlue,
+  citecolor=GalleryGreen,
+  urlcolor=GalleryBlue,
+  pdftitle={PHP Gallery Complete Product Documentation},
+  pdfauthor={Rudolf Klusal},
+  pdfsubject={Installation, administration, architecture, security, maintenance, and development reference},
+  pdfkeywords={PHP Gallery, gallery CMS, administration, architecture, documentation},
+  pdfdisplaydoctitle=true,
+  bookmarksopen=true,
+  bookmarksnumbered=true
+}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small PHP Gallery}
+\fancyhead[R]{\small Complete Product Documentation}
+\fancyfoot[L]{\small Version \version}
+\fancyfoot[C]{\thepage}
+\fancyfoot[R]{\small \manualdate}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0.2pt}
+
+\titleformat{\section}{\Large\bfseries\color{GalleryBlue}}{\thesection}{0.75em}{}
+\titleformat{\subsection}{\large\bfseries\color{GalleryDark}}{\thesubsection}{0.75em}{}
+\titleformat{\subsubsection}{\normalsize\bfseries\color{GalleryDark}}{\thesubsubsection}{0.75em}{}
+\pretocmd{\section}{\clearpage}{}{}
+
+\lstdefinestyle{gallery}{
+  basicstyle=\ttfamily\small\color{GalleryCode},
+  backgroundcolor=\color{GalleryGray},
+  frame=single,
+  rulecolor=\color{GalleryLightBlue},
+  breaklines=true,
+  breakatwhitespace=false,
+  columns=fullflexible,
+  keepspaces=true,
+  showstringspaces=false,
+  tabsize=4,
+  xleftmargin=0.8em,
+  xrightmargin=0.8em,
+  framexleftmargin=0.4em,
+  aboveskip=0.8em,
+  belowskip=0.8em
+}
+\lstset{style=gallery}
+
+\newcommand{\product}{\textbf{PHP Gallery}}
+\newcommand{\setting}[1]{\nolinkurl{#1}}
+\newcommand{\filepath}[1]{\path{#1}}
+\newcommand{\ui}[1]{\textbf{#1}}
+\newcommand{\codeword}[1]{\nolinkurl{#1}}
+\newcommand{\important}[1]{%
+  \begin{center}\fcolorbox{GalleryBlue}{GalleryLightBlue}{\parbox{0.91\linewidth}{\textbf{Important.} #1}}\end{center}}
+\newcommand{\securitynote}[1]{%
+  \begin{center}\fcolorbox{GalleryRed}{GalleryGray}{\parbox{0.91\linewidth}{\textbf{Security note.} #1}}\end{center}}
+\newcommand{\performancenote}[1]{%
+  \begin{center}\fcolorbox{GalleryGreen}{GalleryGray}{\parbox{0.91\linewidth}{\textbf{Performance note.} #1}}\end{center}}
+
+\makeindex
+
+\begin{document}
+
+\pagenumbering{gobble}
+\begin{titlepage}
+  \centering
+  \vspace*{24mm}
+  {\Huge\bfseries\color{GalleryBlue} PHP Gallery\par}
+  \vspace{6mm}
+  {\LARGE Complete Product Documentation\par}
+  \vspace{14mm}
+  {\large Installation, administration, architecture, security, maintenance, and development reference\par}
+  \vfill
+  \begin{tabular}{rl}
+    \textbf{Application version:} & \version\\
+    \textbf{Manual edition:} & \manualdate\\
+    \textbf{Document format:} & A4, indexed, linked PDF\\
+    \textbf{Project author:} & Rudolf Klusal\\
+    \textbf{License:} & MIT License\\
+  \end{tabular}
+  \vfill
+  {\small A practical guide to creating, organizing, presenting, protecting, sharing, and preserving a photographic collection with PHP Gallery version \version.\par}
+\end{titlepage}
+
+\pagenumbering{roman}
+\tableofcontents
+\clearpage
+\pagenumbering{arabic}
+
+\section{Purpose and reading guide}
+\index{documentation}
+\index{manual!scope}
+
+\product{} is a website for presenting photographs as organized collections. You choose where it runs, keep control of the original files, and decide who can see each gallery. It can serve a public portfolio, a family archive, a private client delivery area, an event collection, a travel diary, or a large personal photographic library.
+
+This manual is written for the person who owns or manages that collection. It explains what each feature is useful for, where to find it, how choices affect visitors, and what to check afterward. You can read it from beginning to end or use the linked contents and index to answer a specific question.
+
+Start with Section~\ref{sec:first-hour} when the site has just been installed. Section~\ref{sec:planning} helps you plan a collection before adding hundreds of photographs. Sections~\ref{sec:create-edit-gallery} and~\ref{sec:photo-workflow} explain ordinary gallery work. Section~\ref{sec:audiences} provides complete examples for common audiences. Technical background remains near the end for readers who want to understand hosting, backups, or how the application works behind the screen.
+
+\subsection{How to use this manual}
+\index{manual!how to use}
+
+Each feature is presented in four practical parts whenever appropriate:
+
+\begin{enumerate}
+  \item its purpose and the problem it solves;
+  \item a common situation in which it is useful;
+  \item the choices available to the gallery owner;
+  \item the result a visitor should experience.
+\end{enumerate}
+
+Names shown in bold, such as \ui{Theme} or \ui{System Health}, refer to areas or controls in the Admin interface. Text in a monospaced style usually represents a file name, setting name, or command and appears mainly in the optional technical sections.
+
+\subsection{Further project references}
+
+This manual gathers the information needed by gallery owners into one reading experience. The project also includes concise documents for developers and server administrators. They are listed in the References section and cited where they provide useful supporting detail \cite{readme,architecture,database,codemap,testing,agents}.\footnote{The additional project documents are useful when modifying application code, examining database structure, or preparing a software release. Ordinary gallery creation and daily administration can be learned entirely from this manual.}
+
+\subsection{Terminology}
+
+\begin{description}
+  \item[Gallery] A named collection of photographs. A gallery can contain photographs and smaller galleries.
+  \item[Photograph or image] One item in a gallery, together with its title, description, tags, visibility, and available camera information.
+  \item[Thumbnail] A smaller copy created for quick display in gallery grids, search results, covers, and previews.
+  \item[Visitor] A person viewing the public side of the site.
+  \item[Administrator] A trusted person who signs in to create and manage content and settings.
+  \item[Selected gallery] The gallery currently open on the screen.
+  \item[Gallery branch] A gallery together with every smaller gallery contained beneath it.
+\end{description}
+
+\section{Product overview}
+\label{sec:overview}
+\index{product overview}
+\index{shared hosting}
+
+\product{} turns a folder collection into a browsable photographic website. Visitors see covers, titles, descriptions, photo grids, full-screen viewing, maps, tags, search, and downloads according to the choices made by the owner. Administrators receive private tools for adding photographs, arranging collections, controlling privacy, improving descriptions, and keeping the installation healthy.
+
+The application is designed to run on ordinary web hosting. This matters to an owner because the gallery can live on a familiar hosting account and remain under the owner's control. The original photographs stay in recognizable folders, and the database remembers the information that makes those files pleasant to browse.\footnote{The project overview provides a concise feature and installation summary \cite{readme}.}
+
+\subsection{Core capabilities}
+
+\begin{itemize}
+  \item Create galleries inside other galleries, for example \emph{2026 / Italy / Rome} or \emph{Clients / Northwind / Final selection}.
+  \item Give every gallery a title, description, date range, cover, public address, privacy choice, and individual appearance.
+  \item Upload photographs through the browser or discover files copied into gallery folders.
+  \item Add titles, stories, tags, visibility, ordering, dates, and location information to photographs.
+  \item Let visitors search, browse tags, view photographs full screen, follow maps, vote, and download permitted collections.
+  \item Protect family, client, or sensitive collections with access controls and share methods.
+  \item Find likely duplicate photographs and review them with direct links to both locations.
+  \item Keep the installation current through guided updates, health checks, backups, and maintenance tools.
+\end{itemize}
+
+\subsection{Filesystem and database partnership}
+\index{filesystem-first design}
+\index{database}
+
+Think of the installation as a photographic cabinet with a catalog. The gallery folders are the cabinet: they hold the actual image files in an understandable arrangement. The database is the catalog: it remembers titles, descriptions, tags, display order, privacy, votes, dates, and other details.
+
+Both parts are valuable. If the files were present without the catalog, the site would lose much of its organization and presentation. If the catalog were present without the files, it would describe photographs that were unavailable. This is why a complete backup always includes the gallery folders and the database together.\footnote{Section~\ref{sec:user-data} explains this partnership in everyday language and provides a complete backup model.}
+
+\section{Requirements and environment}
+\label{sec:requirements}
+\index{requirements}
+\index{PHP}
+\index{MySQL}
+\index{MariaDB}
+
+This section is mainly for the person choosing a hosting plan or helping with installation. A gallery owner can send this page to the hosting provider and ask whether the account meets the listed requirements.
+
+\subsection{Minimum runtime}
+
+\begin{longtable}{>{\bfseries}p{0.27\linewidth}p{0.65\linewidth}}
+\toprule
+Component & Requirement\\
+\midrule
+\endhead
+PHP & Version 8.0 or newer.\\
+Database & MySQL 5.7 or newer, or MariaDB 10.2 or newer.\\
+PDO & PDO MySQL extension for application queries and migrations.\\
+Image processing & GD for common thumbnail generation. Additional local image tooling can support specialized formats.\\
+Archives & ZipArchive for package, download, and transfer workflows that produce or consume ZIP data.\\
+Filesystem & Writable application data, gallery, cache, and generated-media locations.\\
+Web server & Apache-style rewriting is recommended for clean URLs; query-string routing supports compatible environments without rewrites.\\
+\bottomrule
+\end{longtable}
+
+Outbound HTTPS access supports application updates and remote release metadata. Local operation and manually deployed releases can function with a more restricted outbound policy.\footnote{Network policy should follow the installation owner’s update and privacy requirements. Update code validates packages and preserves recovery data according to the local updater implementation.}
+
+\subsection{Permissions}
+\index{permissions!filesystem}
+
+The web process needs read access to runtime code and write access to designated mutable locations. Keep runtime code read-only where hosting permits it, except during a controlled updater operation. Gallery source files deserve backup coverage equal to the database because the complete application state spans both domains.
+
+\important{Create backups of the database, gallery files, and installation configuration together. A database-only backup preserves metadata while omitting the authoritative media tree.}
+
+\section{Installation and initial setup}
+\label{sec:installation}
+\index{installation}
+\index{setup}
+
+\subsection{Browser installation}
+
+\subsubsection{Installation sequence}
+
+The browser installer gathers database settings, initializes the schema through migrations, creates the first administrator, prepares writable locations, and writes local configuration. A fresh request redirects to installation when required configuration is absent.\footnote{Installation state and generated configuration should receive the same protection as credentials. Source archives should continue excluding the local \filepath{config.php}.}
+
+Typical steps are:
+
+\begin{enumerate}
+  \item Create an empty MySQL or MariaDB database using the hosting control panel.
+  \item Upload the application package to the intended web directory.
+  \item Open the site and follow the installer.
+  \item Enter database connection values and the initial administrator credentials.
+  \item Confirm writable directories and extension checks.
+  \item Complete installation and enter the Admin area.
+\end{enumerate}
+
+\subsection{Command-line setup}
+
+\subsubsection{Local commands}
+
+The repository provides plain PHP scripts for migration and administrator creation:
+
+\begin{lstlisting}[language=bash]
+php scripts/migrate.php
+php scripts/create_admin.php <username> <password>
+\end{lstlisting}
+
+Command-line setup follows the same persistent schema model as browser setup. Review \filepath{config.example.php}, create the local configuration, provision the database, run migrations, and create the first administrator.
+
+\subsection{First administrative review}
+
+After installation, review:
+
+\begin{itemize}
+  \item Site name, language, theme, page width, and public rendering preferences.
+  \item Gallery root permissions and discovery results.
+  \item Thumbnail formats, dimensions, quality, and maintenance state.
+  \item Access, password-reset, email, telemetry, update-channel, and backup preferences.
+  \item Rewrite compatibility and canonical public URLs.
+  \item System Health diagnostics and pending migrations.
+\end{itemize}
+
+\section{Your first hour with PHP Gallery}
+\label{sec:first-hour}
+\index{first hour}
+\index{getting started}
+\index{gallery owner}
+\index{Admin dashboard}
+
+This section follows the experience of a new gallery owner after installation. The goal is a small, attractive, working gallery that can be viewed from another browser. You can refine colors, descriptions, privacy, and organization after this first success.
+
+\subsection{Open the Admin area}
+\index{Admin login}
+
+Choose \ui{Admin login} from the public header and enter the account created during installation. The dashboard is the starting point for everyday ownership. It summarizes galleries, photos, system state, and available maintenance actions.\footnote{The exact dashboard contents depend on enabled features, completed migrations, and development settings. A healthy installation can still display informational notices that invite an administrator to complete optional work.}
+
+Spend a few minutes identifying these areas:
+
+\begin{itemize}
+  \item \ui{Galleries}, where collections are created, discovered, edited, and arranged;
+  \item \ui{Theme}, where the public site's appearance and presentation defaults are selected;
+  \item \ui{Tags}, where reusable subjects and categories are maintained;
+  \item \ui{System Health}, where migrations, thumbnails, storage, and consistency are reviewed;
+  \item \ui{Account}, where credentials, recovery email, and mail delivery are managed.
+\end{itemize}
+
+\subsection{Create a first gallery}
+\index{gallery!creating the first gallery}
+
+Open the gallery administration area and choose the action for creating a gallery. Give it a short, recognizable title such as \emph{Summer Walk}. A simple title works well because the application can propose a public path and folder name from it. Add a one-sentence description that tells a visitor what the collection contains.
+
+Select public visibility for this first exercise. Leave advanced branding and inherited settings at their defaults. Save the gallery, open it, and add three to ten photographs. A compact first collection makes it easy to see ordering, thumbnail generation, titles, and the lightbox without waiting for a large upload.
+
+\subsection{Preview as a visitor}
+\index{anonymous preview}
+\index{visitor preview}
+
+Use the public-gallery link or visitor-preview control. For a realistic check, open the public address in a private browser window where the Admin session is absent. Confirm that the title, description, photographs, and navigation appear as intended. Open a photograph, move forward and backward in the viewer, and return to the gallery.
+
+Administrator views can contain edit controls and additional assets. Anonymous preview gives the clearest picture of the experience received by family, clients, or the public.\footnote{Protected galleries and age-restricted content deserve a separate anonymous test because an active administrator session already has broader access.}
+
+\subsection{Complete the first-hour checklist}
+
+\begin{enumerate}
+  \item Set the public site name and language.
+  \item Create one gallery with a title and description.
+  \item Upload a small group of photographs.
+  \item Add a meaningful title to at least one photograph.
+  \item Reorder two photographs and confirm the new order publicly.
+  \item Open the gallery as an anonymous visitor.
+  \item Check the gallery on a phone-sized screen.
+  \item Confirm that System Health reports no urgent migration or permission problem.
+  \item Create a coordinated backup after the initial setup is complete.
+\end{enumerate}
+
+\section{Planning a gallery collection}
+\label{sec:planning}
+\index{planning galleries}
+\index{collection design}
+\index{gallery hierarchy!planning}
+
+A thoughtful structure helps visitors understand a collection and helps the owner maintain it over time. Start with the way people will look for photographs. Folder names and database details can follow that human organization.
+
+\subsection{Choose a structure people recognize}
+
+Common structures include:
+
+\begin{description}
+  \item[By year and event] A top-level year contains weddings, trips, celebrations, and projects. This suits family and historical archives.
+  \item[By place] Countries contain regions and cities. This suits travel, aviation, landscape, and documentary photography.
+  \item[By client or project] Each client contains assignments and delivery galleries. This suits professional work with separate access rules.
+  \item[By subject] Wildlife, architecture, portraits, aircraft, and similar subjects form enduring categories. Tags can provide a second way to browse across them.
+  \item[By workflow] Incoming, selected, delivered, and archive galleries represent stages. Visibility settings keep working collections private while finished selections become public.
+\end{description}
+
+Use galleries for strong navigational boundaries and tags for relationships that cross those boundaries. A photograph from Prague can live in \emph{Travel / Czech Republic / Prague} and carry tags such as \emph{architecture}, \emph{night}, and \emph{tram}.\footnote{A photograph has one gallery location in the normal content model, while reusable tags provide several semantic connections. Copy and move tools support deliberate changes to physical organization.}
+
+\subsection{Decide how deep the hierarchy should be}
+\index{gallery hierarchy!depth}
+
+Nested galleries support deep collections, yet most visitors browse more comfortably when each level has a clear purpose. Two to four levels serve many sites well. A deeper archive remains practical when breadcrumbs, meaningful titles, and consistent dates guide the reader.
+
+Create a child gallery when it deserves its own title, description, cover, access policy, date range, or public address. Keep photographs together when a new level would add only one extra click.
+
+\subsection{Prepare titles and descriptions}
+\index{gallery title}
+\index{gallery description}
+
+A gallery title should make sense outside the Admin interface. A description can answer three questions:
+
+\begin{itemize}
+  \item What does this collection show?
+  \item Where and when was it created?
+  \item What context makes the photographs meaningful?
+\end{itemize}
+
+Descriptions can be brief for casual albums and extensive for documentary work. Use the first sentence as the essential summary because visitors often scan before reading the full text.
+
+\subsection{Plan privacy before uploading}
+\index{privacy planning}
+\index{gallery visibility}
+
+Choose whether a collection is public, unpublished for administrative preparation, or protected for a known audience. Parent-gallery policy can influence descendants, so place collections with similar audiences together where practical.
+
+Examples include:
+
+\begin{itemize}
+  \item a public portfolio with carefully selected photographs;
+  \item a password-protected family branch;
+  \item an unpublished client proofing gallery during preparation;
+  \item a public event gallery with selected individual photographs marked private;
+  \item an age-gated branch for content that needs visitor confirmation.
+\end{itemize}
+
+\section{Creating and editing galleries}
+\label{sec:create-edit-gallery}
+\index{gallery!creation}
+\index{gallery!editing}
+\index{gallery editor}
+
+\subsection{Create a gallery from Admin}
+
+Choose a parent gallery when the new collection belongs inside an existing subject, year, place, or client. Leave the parent empty for a top-level gallery. Enter a title, review the proposed folder or public path, and add the description, dates, and initial visibility.
+
+After saving, the gallery becomes a real collection in the gallery tree. Its folder can receive photographs through the browser, filesystem transfer, discovery, or another supported upload workflow. The database stores its descriptive and presentation settings.
+
+\subsubsection{A practical creation sequence}
+
+\begin{enumerate}
+  \item Choose the intended parent.
+  \item Enter a visitor-friendly title.
+  \item Confirm the folder and public-path proposal.
+  \item Add a description and date range where useful.
+  \item Select visibility and access.
+  \item Save the gallery.
+  \item Add photographs or create child galleries.
+  \item Select a cover after suitable photographs exist.
+  \item Preview the result anonymously.
+\end{enumerate}
+
+\subsection{Edit identity and context}
+\index{gallery metadata}
+\index{date range}
+
+The editor lets you improve a gallery over time. Titles and descriptions can change as a collection develops. Date fields can represent a single day, a trip, a season, or a longer historical period. EXIF date suggestions can examine photographs and descendants, then offer an editable range for approval.
+
+Use date suggestions as a helpful starting point. Scanned photographs, screenshots, edited exports, and cameras with an incorrect clock can produce dates that deserve human review.\footnote{Applying an EXIF-derived suggestion updates the proposed gallery fields through the existing editor workflow. The administrator remains responsible for the final dates shown to visitors.}
+
+\subsection{Choose a cover and visual identity}
+\index{gallery cover}
+\index{gallery branding}
+
+A cover acts as the gallery's visual invitation. Choose an image that remains recognizable as a thumbnail and represents the collection fairly. Faces, strong silhouettes, clear subjects, and uncluttered compositions often work well at small sizes.
+
+Gallery branding can provide a logo, banner, background, separator, or presentation override according to available controls. Begin with inherited theme styling, then add gallery-specific assets where a collection has a genuine identity, such as a wedding, exhibition, client, or long-running project.
+
+\subsection{Move and reorder galleries}
+\index{gallery!moving}
+\index{gallery!reordering}
+
+Moving a gallery changes its place in the hierarchy and can affect inherited access or presentation. Review the destination before confirming the move. Reordering changes the sequence shown among siblings and supports a curated reading order.
+
+A useful order can be chronological, geographical, narrative, alphabetical, or manually featured. Keep the principle consistent within one parent so visitors can predict what comes next.
+
+\subsection{Delete a gallery thoughtfully}
+\index{gallery!deletion}
+
+Gallery deletion can affect source files, descendants, metadata, thumbnails, links, and visitor bookmarks. Review the exact selected gallery and its children, create a backup, and use the normal Admin deletion workflow. A temporary visibility change can provide a safer preparation period when a gallery may still be needed.
+
+\section{Adding, describing, and organizing photographs}
+\label{sec:photo-workflow}
+\index{photo workflow}
+\index{image metadata}
+\index{photo organization}
+
+\subsection{Choose an upload method}
+\index{upload methods}
+
+Browser upload suits everyday additions. Select a gallery, choose files, review the batch, and follow progress while the server validates media and prepares records and thumbnails. Filesystem discovery suits large existing folder trees or transfers made through FTP and hosting tools. Automation and WebDAV suit repeated or mobile workflows after their scoped credentials are configured.
+
+For a large event, upload in meaningful groups. Smaller groups make errors easier to identify and allow titles, ordering, and visibility to be reviewed incrementally.
+
+\subsection{Write useful photo titles}
+\index{photo title}
+\index{captions}
+\index{alternative text}
+
+A title identifies the photograph quickly. A description or caption can explain people, place, activity, technical context, or a story outside the frame. Useful examples include:
+
+\begin{itemize}
+  \item \emph{Charles Bridge before sunrise};
+  \item \emph{Arrival of the first train at the restored station};
+  \item \emph{Family group in the garden, June 1998};
+  \item \emph{Final approach during the Saturday display}.
+\end{itemize}
+
+Meaningful text improves search, accessibility, later identification, and the experience of readers who want more than a visual grid. File names can remain operational details when public display settings favor curated titles.
+
+\subsection{Use tags as a second organization layer}
+\index{tags!practical use}
+\index{tagging strategy}
+
+Create a small vocabulary before adding many near-duplicate tags. Prefer one stable term, such as \emph{aircraft}, over several accidental variants. Tags can represent subjects, people, places, techniques, equipment, seasons, or editorial status.
+
+For a travel archive, galleries can represent trips and tags can represent recurring themes. For a family archive, galleries can represent years and events while tags identify people. For a professional portfolio, galleries can represent clients and tags can identify deliverable type, location, and specialty.
+
+\subsection{Arrange the viewing order}
+\index{photo ordering}
+\index{storytelling}
+
+Ordering turns a collection into a sequence. Start with an inviting image, establish place or context, vary wide and close views, keep closely related details together, and finish with a natural conclusion. Chronological order works well for events, while visual rhythm can suit portfolios and exhibitions.
+
+The public reorder controls help administrators adjust visible cards. Pagination can divide a large collection, so review transitions around page boundaries as well as the first page.
+
+\subsection{Review EXIF and location information}
+\index{EXIF!user review}
+\index{location privacy}
+
+EXIF can enrich a photograph with capture date, camera, lens, exposure, and GPS coordinates. This information supports maps, date suggestions, duplicate evidence, and technical context. Review GPS visibility before publishing photographs made at homes, schools, private workplaces, or sensitive natural locations.
+
+\section{Publishing, sharing, and audience scenarios}
+\label{sec:audiences}
+\index{publishing workflow}
+\index{audiences}
+\index{use cases}
+
+\subsection{Public portfolio}
+\index{portfolio}
+
+A public portfolio benefits from a small number of strong top-level galleries, consistent covers, concise descriptions, and careful ordering. Use tags for specialties that cross projects. Keep source archives in private or unpublished branches and copy selected work into public presentation galleries where the workflow calls for separate curation.
+
+Test the portfolio on a phone, a high-density display, and a slower connection. Responsive thumbnail selection provides the default balance. Progressive sharpening can make small thumbnails populate first for installations that prioritize early visual response.
+
+\subsection{Private family archive}
+\index{family archive}
+
+Organize by year, family branch, or event. Use password-protected parent galleries to establish an understandable private area, then place related descendants within it. Add names and dates while memories are available. Scanned photographs benefit especially from human descriptions because embedded camera metadata may be absent.
+
+Share the protected address and password through an appropriate private channel. Explain that recipients can navigate child galleries without receiving an administrator account. Periodically review whether old links and passwords still serve the intended audience.
+
+\subsection{Client delivery}
+\index{client gallery}
+\index{proofing workflow}
+
+Create one protected gallery per client or assignment. Upload proofs, organize them into useful groups, and use descriptions to explain selection or download expectations. Voting can support lightweight preference gathering when enabled for that gallery. A final delivery gallery can contain approved files in the intended order.
+
+Share links offer another controlled entry method where configured. Test the exact client journey in a private browser window before sending the address.
+
+\subsection{Event and community gallery}
+\index{event gallery}
+
+An event gallery can begin unpublished while photographs are arriving. Use child galleries for days, stages, teams, locations, or activities. Publish the parent when the first useful selection is ready, then add later groups without changing the familiar public address.
+
+Public voting can highlight audience favorites. Tags connect recurring participants or subjects. Downloads provide a convenient collection transfer when the event policy allows it.
+
+\subsection{Travel and location archive}
+\index{travel archive}
+\index{maps!travel use}
+
+Country, region, city, and trip galleries provide natural navigation. Date ranges establish chronology, while GPS maps create a geographical reading path. Review coordinates for accommodation and private locations. A descriptive introduction can explain the route, purpose, and historical context of a trip.
+
+\subsection{Historical and institutional archive}
+\index{historical archive}
+\index{institutional archive}
+
+Historical collections benefit from careful source notes, uncertain-date wording, names, locations, and provenance. Use descriptions to distinguish confirmed facts from family or institutional recollection. Tags can connect people, buildings, organizations, and periods across many galleries.
+
+Create backups before large metadata projects and export information through available tools when planning external preservation. The gallery can provide an accessible presentation layer while original preservation practices continue alongside it.
+
+\section{Understanding your gallery data}
+\label{sec:user-data}
+\index{data ownership}
+\index{database!for gallery owners}
+\index{filesystem!for gallery owners}
+
+Gallery owners interact with two cooperating stores: ordinary files and a database. Understanding their roles makes backup, migration, and troubleshooting easier.
+
+\subsection{What lives in gallery folders}
+
+The gallery folders contain the photographs and folder hierarchy. This makes the core collection recognizable through FTP, a hosting file manager, a backup tool, or a local copy. Moving or renaming files outside the application can require discovery or synchronization so the database learns the new state.
+
+\subsection{What lives in the database}
+
+The database remembers titles, descriptions, dates, visibility, passwords and access configuration, public paths, ordering, tags, votes, image dimensions, EXIF indexes, checksums, thumbnail records, administrator accounts, settings, audit information, and workflow state.\footnote{Password values use hashes or protected configuration appropriate to their purpose. A database export still contains sensitive operational information and deserves secure storage.}
+
+The database makes search and administration fast. It also allows a file to have a friendly title, rich description, tags, a chosen order, and access rules without changing the original image bytes.
+
+\subsection{How users benefit from the database}
+\index{database!benefits}
+
+Everyday benefits include:
+
+\begin{itemize}
+  \item searching words across gallery and photo descriptions;
+  \item opening a gallery through a stable public path;
+  \item displaying photographs in a curated order;
+  \item remembering tags and visitor votes;
+  \item protecting a gallery with inherited access rules;
+  \item finding exact duplicate content through stored checksums;
+  \item preparing suitable thumbnails without re-reading every source file on every page;
+  \item recording migrations and maintenance decisions safely.
+\end{itemize}
+
+\subsection{Backup as one complete set}
+
+A complete backup includes the gallery tree, database export, local configuration, and installation-owned custom assets. Give these parts the same backup date so they describe one coherent state. Store a copy away from the web server and test restoration in a separate location.
+
+\section{Everyday ownership and care}
+\label{sec:daily-care}
+\index{daily administration}
+\index{monthly maintenance}
+\index{ownership checklist}
+
+\subsection{After every important upload}
+
+Review the destination gallery, photo count, ordering, titles, visibility, and thumbnail appearance. Open several photographs in the lightbox and check the gallery anonymously. For a protected collection, repeat the password or share-link journey from a fresh private session.
+
+\subsection{Monthly review}
+
+A practical monthly routine includes:
+
+\begin{enumerate}
+  \item Review System Health and pending migrations.
+  \item Check recent Admin audit events.
+  \item Inspect available application updates and their release information.
+  \item Confirm scheduled or manual backups completed.
+  \item Open representative public and protected galleries.
+  \item Review thumbnail maintenance when source files or rendering settings changed substantially.
+  \item Remove or revoke credentials and share methods that have completed their purpose.
+\end{enumerate}
+
+\subsection{Before a major public launch}
+\index{launch checklist}
+
+Check titles, descriptions, cover images, spelling, mobile layout, privacy, GPS exposure, downloads, maps, voting, search results, and contact expectations. Test through a slow network profile if the audience may use mobile connections. Create a backup immediately before the launch state.
+
+\subsection{When another person helps administer}
+
+Give each administrator an individual account where the account model supports the intended workflow. Explain gallery scope, privacy expectations, naming conventions, tag vocabulary, backup responsibilities, and deletion procedures. Individual accounts improve accountability in audit records and keep personal duplicate-review ledgers separate.
+
+\section{Public visitor experience}
+\label{sec:public}
+\index{public gallery}
+\index{routing}
+
+\subsection{What a visitor sees}
+\index{visitor experience}
+
+A visitor opens the site at the home page or follows a direct link to a gallery or photograph. The page presents the site's name, navigation, gallery title, description, breadcrumbs, tags, child galleries, and photographs that the visitor is allowed to see. Protected content asks for the appropriate access step before revealing private material.
+
+Each gallery has a public address that can be bookmarked or shared. A direct photo address opens the gallery context and leads the visitor to that photograph. Meaningful titles and stable public paths help links remain understandable in messages, bookmarks, and search results.
+
+\subsubsection{A normal visit}
+
+A typical visitor journey looks like this:
+
+\begin{enumerate}
+  \item Open the home page and choose an interesting gallery cover.
+  \item Read the gallery introduction and follow child galleries or tags.
+  \item Scroll through smaller preview images.
+  \item Open one photograph in the large viewer.
+  \item Move through nearby photographs with buttons, keys, a strip, or the selected viewing mode.
+  \item Open a map, vote, search, or download when the gallery offers those actions.
+  \item Use breadcrumbs to return to a broader collection.
+\end{enumerate}
+
+\subsection{Gallery hierarchy and pagination}
+\index{pagination}
+\index{gallery hierarchy}
+
+\subsubsection{Direct content and stable ordering}
+
+A gallery can show smaller galleries first and photographs afterward. For example, \emph{Italy 2026} can contain \emph{Rome}, \emph{Florence}, and \emph{Venice}, while also showing a few overview photographs directly on the Italy page.
+
+Pagination divides a long collection into manageable pages. This helps the first page appear promptly and keeps scrolling comfortable. A small exhibition may look best on one page. A wedding with 1,500 photographs will usually benefit from pages or child galleries. The large photo viewer can continue through the wider gallery sequence while loading additional information as needed.\footnote{Pagination changes how many cards appear at once. It leaves the underlying photographs and their order intact.}
+
+\subsection{Search, tags, and navigation}
+\index{search}
+\index{tags}
+
+Search can look across the whole public site or stay within the current gallery and its children. A visitor looking at \emph{Family archive} can search only that branch for a person's name, while a visitor on the home page can search across every public collection.
+
+Tags provide another route through the archive. A \emph{night photography} tag can connect Prague, London, and Tokyo even when those photographs live in separate travel galleries. Breadcrumbs show the current place in the hierarchy, and favorite shortcuts place important galleries directly in the site header.
+
+\section{Media and gallery administration}
+\label{sec:admin}
+\index{administration}
+
+\subsection{Admin workspace}
+
+After signing in, an administrator sees private controls for the dashboard, galleries, photographs, theme, tags, maintenance, updates, logs, and account settings. Many editing actions open in a panel on the right so the gallery remains visible in the background. This makes it easier to edit one item, save it, and continue working through the same collection.\footnote{A full Admin page remains available for workflows that need more space or when browser enhancement is unavailable.}
+
+\subsection{Gallery management}
+
+Gallery administration covers the full life of a collection: creation, discovery, naming, description, dates, tags, privacy, passwords, branding, covers, layout, ordering, moving, and eventual deletion. A child gallery can inherit useful choices from its parent. For example, every gallery inside a private family branch can follow the parent's protection, and an individual child can use its own presentation choice where the editor offers an override.
+
+\subsection{Image management}
+\label{sec:media}
+\index{images}
+\index{uploads}
+
+Photographs can be uploaded in the browser, copied into folders and discovered, received through configured automation, transferred from another compatible installation, or added through a scoped mobile workflow. After a photograph arrives, the gallery records its size and available camera information and prepares the smaller display copies used throughout the site.
+
+Image tools include:
+
+\begin{itemize}
+  \item title, description, visibility, tags, and ordering;
+  \item EXIF-derived information and date suggestions;
+  \item GPS visibility and maps;
+  \item bulk selection, move, copy, download, and deletion;
+  \item public voting and score state;
+  \item duplicate review and cleanup.
+\end{itemize}
+
+\subsection{Uploads and discovery}
+\index{discovery}
+
+Filesystem discovery is useful when photographs have already been copied to the server through FTP, a hosting file manager, or a restored backup. The discovery screen shows what the application found and lets the administrator bring those folders and files into the catalog.
+
+Browser upload is the friendliest choice for routine work. Select the destination, choose files, and follow the progress display. Large sets can be prepared in bounded groups so the browser and server remain responsive. The application checks the destination and file information before accepting each result.
+
+\section{Thumbnail generation and public rendering}
+\label{sec:thumbnails}
+\index{thumbnails}
+\index{WebP}
+\index{JPEG}
+\index{image previews}
+\index{page speed!thumbnails}
+
+\subsection{What a thumbnail is}
+\index{thumbnail!definition}
+
+A thumbnail is a smaller display copy of a photograph. The original photograph may be several thousand pixels wide and occupy many megabytes. A gallery card on a phone may need only a few hundred pixels. Sending the full original for every small card would make visitors wait for detail they cannot see at that size.\footnote{Thumbnail generation keeps the source photograph as the archival and full-viewing asset. The generated copy is a replaceable browsing aid.}
+
+Imagine a gallery containing 60 photographs, each with a 12-megabyte original file. Loading every original for the first grid could require hundreds of megabytes. Small thumbnails can reduce that first viewing task dramatically. The original remains available for authorized full viewing or download, while the grid receives efficient previews.\footnote{Actual savings depend on image content, quality, format, dimensions, and the browser's selected candidate. The example illustrates scale rather than promising one fixed compression ratio.}
+
+Thumbnails serve several everyday purposes:
+
+\begin{itemize}
+  \item gallery grids appear sooner;
+  \item scrolling uses less memory and network capacity;
+  \item mobile visitors receive an image closer to the size of their screen;
+  \item gallery covers and search results remain compact;
+  \item the large viewer can begin with a suitable preview while a larger source is prepared;
+  \item repeated visits can reuse files already stored in the browser cache.\footnote{A browser cache stores recently used web resources on the visitor's device according to server and browser policy. Reuse can make a later visit feel much quicker.}
+\end{itemize}
+
+\subsection{Why several thumbnail sizes exist}
+\index{thumbnail!sizes}
+\index{device pixel ratio}
+
+One small size cannot suit every screen. A narrow phone card may look clear with a 300-pixel thumbnail. A wide desktop card may need 600 or 800 pixels. A high-density screen uses more image pixels to draw the same physical area and may benefit from a larger candidate.
+
+PHP Gallery can prepare common sizes such as 300, 600, 800, 960, 1280, and 1600 pixels, depending on configuration and source-image limits. The number describes the maximum long side of the generated copy. Portrait and landscape photographs keep their original proportions.\footnote{For a landscape photograph, the long side is usually the width. For a portrait photograph, it is usually the height. The shorter side is calculated from the original aspect ratio.}
+
+The smaller candidates serve grids and covers. Larger candidates serve wide cards, high-density displays, search presentations, map previews, and the large viewer. The browser can select from the available group instead of receiving one fixed size for every situation.
+
+\subsection{Why JPEG and WebP are available}
+\index{thumbnail!formats}
+\index{JPEG!thumbnail use}
+\index{WebP!thumbnail use}
+
+JPEG is widely compatible and familiar for photographs. WebP often provides similar visual quality with fewer transferred bytes. PHP Gallery can generate both so a compatible browser can use WebP while JPEG remains a dependable alternative.\footnote{Compression efficiency varies with the photograph and quality settings. Fine texture, noise, gradients, and sharp graphic details can produce different results.}
+
+The visitor does not choose a format manually. The page tells the browser which versions exist, and the browser chooses a format it understands. The original photograph keeps its own source format and remains separate from these browsing copies.
+
+\subsection{When thumbnails are created}
+\index{thumbnail!generation}
+\index{thumbnail!maintenance}
+
+Thumbnails can be prepared when photographs are imported or uploaded, rebuilt through Admin maintenance, or generated through a guarded repair process when the public page discovers that an expected copy is missing. Preparing them near upload time gives later visitors the smoothest experience because the required files already exist before the first visit.\footnote{Large imports can require meaningful processing time and storage. Running preparation as an intentional Admin task gives the owner a clearer opportunity to monitor completion.}
+
+A gallery owner should review thumbnail maintenance after:
+
+\begin{itemize}
+  \item importing a large existing folder tree;
+  \item changing enabled thumbnail sizes or quality;
+  \item restoring a backup that contains originals and database data but an incomplete thumbnail cache;
+  \item moving an installation between servers with different image-format support;
+  \item seeing repeated original-file fallbacks or missing previews in System Health.
+\end{itemize}
+
+Generated thumbnails can be recreated from the source photographs. This makes them suitable for cache and maintenance workflows. Source photographs deserve permanent backup protection.
+
+\subsection{What visitors receive}
+\index{thumbnail!browser selection}
+
+The gallery sends the browser a list of thumbnail copies that really exist for a card. The browser considers the space available on the page, the sharpness needs of the screen, the supported format, and its own loading decisions. It then requests an appropriate file.
+
+For example, suppose a photograph has 300, 600, 800, and 960-pixel copies:
+
+\begin{itemize}
+  \item a small phone card may receive the 300-pixel copy;
+  \item a medium card may receive the 600-pixel copy;
+  \item a large or high-density card may receive the 800 or 960-pixel copy;
+  \item the large viewer may request a still larger preview prepared for that purpose.
+\end{itemize}
+
+The exact choice can differ between browsers and screens. This flexibility is useful because the server does not need to guess one universal size.
+
+\subsection{Responsive browser selection}
+\index{responsive renderer}
+\index{srcset}
+\index{thumbnail!responsive mode}
+
+\ui{Responsive browser selection} is the default mode under \ui{Admin > Theme > Layout}. It gives the browser the full list of suitable available thumbnails as soon as the page is read. The browser can begin requesting the size it considers best without waiting for an additional gallery script.\footnote{The underlying web standard calls this candidate list a \emph{srcset}. Gallery owners can rely on the visual behavior without learning that markup term.}
+
+This mode is a strong general-purpose choice. It usually transfers one selected thumbnail for each loaded card. It works fully when JavaScript is unavailable, and modern browsers have extensive experience choosing responsive images.
+
+\subsubsection{Example of responsive selection}
+
+Anna opens a six-column gallery on a large desktop display. Each card is fairly narrow, so the browser may select a medium thumbnail. She rotates a tablet where cards become wider, and that browser may select a larger copy. The gallery owner maintains one set of photographs and thumbnails while each visitor receives a suitable presentation.
+
+The 300-pixel copy acts as a practical fallback when available. Its presence does not force a modern browser to download it first because the larger choices are presented immediately.
+
+\subsection{Progressive thumbnail sharpening}
+\index{progressive renderer}
+\index{progressive sharpening}
+\index{thumbnail!progressive mode}
+
+\ui{Progressive thumbnail sharpening} is an optional mode under \ui{Admin > Theme > Layout}. It emphasizes the feeling that the page is ready quickly. The gallery first presents a small thumbnail, usually 300 pixels, and sharpens relevant photographs later with larger copies.
+
+This can feel pleasant on a slow connection because the visitor sees the collection taking shape before every card reaches its final sharpness. The page reserves the correct spaces for photographs, so the layout remains stable while images improve.
+
+\subsubsection{What happens on the screen}
+
+The visitor experience follows this sequence:
+
+\begin{enumerate}
+  \item The page appears with correctly sized photo spaces.
+  \item Small thumbnails begin filling the visible cards.
+  \item The visitor can read, scroll, open links, and use the page.
+  \item Photographs on or near the screen join a short sharpening queue.
+  \item The gallery chooses a larger copy suitable for each card.
+  \item A larger copy loads quietly while the small one remains visible.
+  \item The card becomes sharper after the replacement is ready.
+\end{enumerate}
+
+Only a small number of larger copies are prepared at once. Visible cards receive attention before cards farther down the page. This prevents a large gallery from starting dozens of sharpening downloads together.\footnote{The current progressive scheduler permits two larger-image preparation jobs at a time. This bounded queue preserves capacity for interaction and other page resources.}
+
+\subsubsection{The transfer tradeoff}
+
+Progressive mode can transfer two files for one photograph: the small first copy and the sharper replacement. Responsive mode often transfers one browser-selected copy. Progressive mode therefore favors early visual response, while responsive mode often favors lower total transfer for the same card.
+
+\performancenote{Progressive rendering prioritizes early visual population and page responsiveness. A session can transfer the small thumbnail and a larger replacement. Responsive rendering commonly minimizes that deliberate two-stage transfer by exposing all candidates immediately.}
+
+The current progressive choice applies to photo cards inside an open gallery. Gallery covers, collage cells, home-page gallery cards, and Admin images continue using responsive browser selection. The Admin interface currently labels progressive sharpening as Beta so owners know that the option is receiving practical evaluation.\footnote{The Beta label describes the maturity shown to administrators. The saved choice and feature implementation use the permanent name \emph{progressive}.}
+
+\subsection{Which mode should an owner choose?}
+\index{thumbnail!choosing a renderer}
+
+Choose \ui{Responsive browser selection} for a dependable default, efficient browser-native choice, and typically one thumbnail transfer per loaded card.
+
+Try \ui{Progressive thumbnail sharpening} when early page response matters strongly, many visitors use slow connections, and a small-first visual experience suits the gallery. Test it with representative galleries and devices before making it the normal presentation.
+
+Useful questions include:
+
+\begin{itemize}
+  \item Do visitors see the first photographs sooner?
+  \item Does the small version look acceptable during sharpening?
+  \item How much extra data is transferred on a typical visit?
+  \item Do phones and high-density screens sharpen at a comfortable pace?
+  \item Does the chosen mode suit the audience's likely connection quality?
+\end{itemize}
+
+\subsection{Loading priorities and stable layout}
+\index{lazy loading}
+\index{layout stability}
+\index{thumbnail!lazy loading}
+
+The first visible photographs receive earlier loading attention because they shape the visitor's first impression. Photographs farther down the page use lazy loading, which means the browser can wait until they approach the visible area. This avoids spending connection capacity on the bottom of a long gallery while the visitor is still looking at the top.\footnote{Lazy loading timing belongs partly to the browser. Browsers consider scrolling, viewport distance, connection state, and their own implementation policy.}
+
+The gallery knows the width and height of indexed photographs. It uses those proportions to reserve stable card shapes before image loading finishes. Text, buttons, and neighboring cards therefore keep their positions as thumbnails appear.
+
+Visitors who prefer reduced motion receive a calm presentation without a required continuous loading animation. Photograph links remain usable throughout loading and sharpening.
+
+\subsection{Thumbnail quality and storage}
+\index{thumbnail!quality}
+\index{thumbnail!storage}
+
+Higher quality preserves more fine detail and can create larger files. Lower quality saves space and transfer while introducing more visible compression. The best setting depends on subject matter, screen use, hosting capacity, and audience. Detailed foliage, hair, text, and fine architecture can reveal compression more readily than broad soft backgrounds.
+
+Every additional enabled size and format uses storage because it creates another copy for each photograph. The benefit is more precise delivery to different screens. System Health and storage statistics help an owner understand the resulting cache. A large source archive may produce a substantial thumbnail collection, yet those files remain reproducible from the originals.
+
+\subsection{If a thumbnail is missing}
+\index{thumbnail!missing}
+\index{thumbnail!rebuild}
+
+A missing thumbnail may appear as a slower original-file fallback, an empty preview, or a maintenance warning, depending on the image and available files. Open the thumbnail maintenance tools, inspect the affected gallery or sizes, and rebuild the missing variants. Review write permissions and image-format support when rebuilding repeatedly fails.
+
+After repair, open the gallery with an empty browser cache and confirm that covers, cards, and the large viewer receive the expected previews.
+
+\section{Lightbox, maps, EXIF, and voting}
+\label{sec:lightbox}
+\index{lightbox}
+\index{EXIF}
+\index{GPS}
+\index{voting}
+
+\subsection{Asynchronous lightbox metadata}
+
+The lightbox is the large photograph viewer that opens above the gallery page. It lets visitors concentrate on one photograph while retaining forward, backward, close, full-screen, slideshow, map, and other available controls.
+
+The gallery prepares the viewer when it becomes useful and obtains information for nearby photographs in manageable groups. A visitor can therefore move through a large gallery without requiring the first page to carry every title, preview, map point, and vote at once.\footnote{The current viewer normally requests information in bounded windows of nearby photographs. Access checks are repeated for each request so private gallery rules continue to apply.}
+
+The viewer usually starts with an appropriately sized preview. A larger or original source can be used where the action and access policy call for it. Nearby previews may be prepared quietly so the next photograph appears smoothly.
+
+\subsection{EXIF and map policy}
+
+EXIF is information many cameras and phones save inside a photograph. It can include capture date, camera, lens, exposure, dimensions, orientation, and GPS coordinates. PHP Gallery can use this information for date suggestions, maps, technical details, ordering assistance, and duplicate review.
+
+Maps load when a visitor asks to see them, which saves work for visitors interested only in the photographs. A gallery can show individual photo locations and an overview of available points. Parent and child settings determine which galleries expose this information.
+
+\securitynote{GPS data can reveal sensitive locations. Administrators should review inherited map settings, image metadata, and public access before publishing personal photographs.}
+
+\subsection{Voting}
+
+Public cards and lightbox controls share vote state. Server-rendered forms provide direct behavior, while JavaScript submits normal interactions asynchronously and synchronizes the score across matching views. The server validates image identity, gallery policy, and request integrity.
+
+\section{Duplicate Photo Detector}
+\label{sec:duplicates}
+\index{Duplicate Photo Detector}
+\index{duplicate ledger}
+\index{SHA-256}
+
+The Admin Duplicate Photo Detector analyzes a selected gallery branch by default and can expand to global scope when the administrator enables the corresponding option. It reports exact and possible duplicate pairs, provides gallery and photo context links, records review decisions, and delegates confirmed deletion to the normal gallery image-deletion service.\footnote{The detector remains a review tool. Evidence supports administrator judgment because matching file size and photographic metadata can describe distinct photographs under some workflows.}
+
+\subsection{Evidence categories}
+
+\subsubsection{Exact and possible findings}
+
+An exact duplicate contains the same file content. The application recognizes this through a checksum, which acts like a very detailed digital fingerprint calculated from the file. Matching fingerprints provide strong evidence that two files contain the same bytes.
+
+A possible duplicate has supporting similarities without an exact fingerprint match. The detector can compare file size and available camera information such as dimensions, capture time, camera, lens, exposure, aperture, focal length, ISO, and orientation. Two separately exported copies of one photograph may differ as files while retaining enough shared information to deserve review.
+
+Missing camera information simply gives the detector fewer clues. The results remain suggestions for a person to inspect. Open both photograph links, compare their gallery context and quality, and delete only the copy whose removal fits the collection.
+
+\subsection{Persistent review ledger}
+
+The ledger belongs to the authenticated administrator. Pair entries store canonical image identifiers, with the lower identifier in the low column and the higher identifier in the high column. Gallery entries apply to the exact stored gallery. Parent and child gallery decisions remain independent.
+
+Available review actions include:
+
+\begin{itemize}
+  \item ignore the selected pair;
+  \item ignore all findings from the left image's exact gallery;
+  \item ignore all findings from the right image's exact gallery;
+  \item clear the current administrator's ledger;
+  \item delete a confirmed duplicate through validated normal image deletion.
+\end{itemize}
+
+AJAX actions refresh the detector fragment in the existing Admin right-side panel. Direct POST requests use redirect behavior as a fallback. Server-owned scan jobs preserve scope between continuation requests, and deletion prunes the affected image from current job results.
+
+\section{Access control and security}
+\label{sec:security}
+\index{security}
+\index{CSRF}
+\index{authentication}
+\index{NSFW}
+
+\subsection{Layered access evaluation}
+
+\subsubsection{Request authorization}
+
+Privacy is decided in layers. The gallery has a visibility and access choice, its parent can provide inherited protection, an individual photograph has its own visibility, and age-restricted content can require confirmation. Password and share-link state determine whether the current visitor has completed the required access step.
+
+These rules also apply when the browser requests a thumbnail, map point, large preview, or original file. A copied image address therefore continues through the same access checks as the gallery page.
+
+Admin tools require a signed-in account. Forms include a private request token that helps the application distinguish an intended Admin action from a forged submission. The server also checks the selected gallery, photograph, and operation before changing data.\footnote{The technical name for the private form token is a CSRF token. Gallery owners usually interact with it automatically through normal Admin forms.}
+
+\subsection{Passwords and share links}
+\index{password protection}
+\index{share links}
+
+Protected galleries store password hashes and grant session-scoped access after successful verification. Share links use server-generated token state and expiry policy. Child-gallery access resolution follows the effective inherited rules represented by the local services.
+
+Password reset uses one-time hashed tokens, optional recovery email, configured lifetime, and selectable mail transport. Administrators should use HTTPS, strong credentials, restricted database accounts, and protected mail secrets.
+
+\subsection{Operational security}
+
+Recommended practices include:
+
+\begin{itemize}
+  \item Serve the application through HTTPS.
+  \item Restrict database credentials to the application schema and required operations.
+  \item Keep \filepath{config.php}, backups, caches, and generated archives outside public discovery wherever the hosting layout permits.
+  \item Apply migrations and updates through authenticated maintenance workflows.
+  \item Review audit logs and security diagnostics.
+  \item Test protected galleries through anonymous visitor sessions.
+  \item Maintain coordinated filesystem and database backups.
+\end{itemize}
+
+\section{Theme, presentation, and localization}
+\label{sec:theme}
+\index{theme}
+\index{localization}
+
+The Theme area controls site identity, colors, dimensions, page width, backgrounds, branding, language, gallery-card presentation, lightbox defaults, GPS presentation, favorite navigation, and public thumbnail rendering. Settings use normalized scalar values or focused service models.
+
+English and Czech catalogs provide server and browser strings. PHP and JSON catalogs must remain synchronized according to the translation workflow. New interface text should use stable semantic keys and retain safe English fallbacks.
+
+Custom CSS supports installation-specific visual refinement. Theme-generated CSS exposes validated variables and computed selectors through a dedicated route. Gallery branding can override selected site-level assets while preserving effective fallback behavior.
+
+\section{Downloads, sharing, and transfer}
+\label{sec:sharing}
+\index{downloads}
+\index{ZIP}
+\index{WebDAV}
+
+Gallery downloads stream authorized content as ZIP archives. Selection downloads package chosen images, while full-gallery operations traverse the permitted scope. Archive paths require normalization to prevent traversal and preserve deterministic names.
+
+Gallery migration exchanges manifests and assets between compatible installations. Resumable status endpoints allow the receiver to report completed work and avoid retransmitting accepted assets after interruption. Browser upload preparation similarly uses manifests and bounded batches, followed by server validation.
+
+Mobile WebDAV tokens associate a user, gallery scope, credential state, and path behavior. Operators should treat these tokens as credentials and revoke unused entries through the corresponding controls.
+
+\section{Maintenance, updates, and recovery}
+\label{sec:maintenance}
+\index{maintenance}
+\index{updates}
+\index{backup}
+
+\subsection{Migrations}
+
+Schema changes live in timestamped PHP files under \filepath{database/migrations/}. The migration runner prevalidates pending definitions, applies them in filename order, and records successful versions. New schema work receives a new migration file so existing installations retain a deterministic history.\footnote{Some migrations include repair callbacks in addition to SQL. Compatibility tests protect partial-update scenarios where an older runner encounters newer migration definitions.}
+
+\subsection{Thumbnail maintenance}
+
+Maintenance tools inspect generated variants, identify missing or stale derivatives, and rebuild selected sizes. Browser-assisted rebuilding can prepare source chunks where configured. Background warm-up handles small public-rendering gaps with bounded requests, while explicit Admin maintenance remains the primary large-scale repair path.
+
+\subsection{Database maintenance}
+
+Database inspection inventories schema objects, references, ownership categories, retention policy, and cleanup confidence. Logical cleanup uses allow-listed rules with deterministic selection, bounded batches, and audit records. Schema repair provides a dry-run and idempotent migration path. Physical table optimization remains a separately confirmed selected-table operation.\footnote{Storage-engine allocation values such as data-free estimates describe engine state and do not guarantee a precise number of filesystem bytes returned after optimization.}
+
+\subsection{Admin log history and archives}
+\index{admin logs}
+\index{log archive}
+
+Everyday administrative work creates a useful history: uploads, gallery changes, security decisions, maintenance results, warnings, and other operational events can leave a record in the Admin log. That history is valuable when you want to understand what happened, when it happened, and which account or request was involved. It is also normal for the table to become large on an active installation. Version~\version{} therefore treats log care as its own explicit maintenance task rather than allowing generic database cleanup to remove audit history unexpectedly.
+
+The Admin log screen can show individual entries or group repeated events into a compact summary. A group might represent many occurrences of the same kind of thumbnail warning, upload result, or maintenance message. Opening the group reveals its members. This gives an administrator a useful overview without losing the underlying detail. Large lists and exports are processed in bounded portions, so requesting a complete history does not require the browser or PHP to hold the entire table in memory at once.
+
+The owner can choose how long recent logs should remain in the live database. Choosing \emph{Forever} disables automatic archival. Choosing a finite live period does not immediately throw older records away. The maintenance workflow first selects complete calendar days that are safely older than the live window, writes a protected archive containing both machine-readable JSON and a readable static HTML report, checks that the archive contains the expected number of records, and only then removes those same rows from the live table. The archive is stored under \filepath{data/admin-log-archives/}, which is application data rather than a public gallery area and carries an additional web-server protection rule.
+
+Archive maintenance is deliberately recoverable. It writes temporary files before promoting a completed archive, records a small state file, and uses a lock so two maintenance requests do not process the same history simultaneously. If hosting limits, a connection interruption, or another problem stops the work, the Admin screen can show the incomplete state and the next maintenance attempt can verify, continue, or safely recover it. An archive is never considered a reason to delete live records merely because a file with a similar name exists; the row-count and archive metadata checks are part of the safety boundary.
+
+Administrators should still include the database and the \filepath{data/admin-log-archives/} directory in coordinated backups. The live database contains recent operational history, while the archive directory contains older history selected by the explicit retention policy. Keeping both gives the owner a continuous record and makes a restored installation easier to investigate after an update, migration, or unexpected event.
+
+\subsection{Application updates}
+
+The updater checks configured channels, validates packages, stages content, verifies required runtime files and sizes, preserves overwritten files in recovery storage, and activates the update. Rate-limit handling and retry state prevent repeated remote requests during provider wait periods.
+
+\important{Run a coordinated backup before an application update. Keep the backup available until runtime checks, migrations, public galleries, protected access, uploads, and Admin operations have been verified.}
+
+\subsection{Integrity manifest}
+\index{core manifest}
+
+\filepath{app/core-manifest.json} records the application version and hashes for integrity-managed core files. The local generator under \filepath{scripts/generate_manifest.php} calculates final hashes after runtime changes. Documentation and user-data inclusion follow the generator's established policy.
+
+\section{Optional background: how PHP Gallery works}
+\label{sec:architecture}
+\index{architecture}
+\index{controllers}
+\index{services}
+\index{views}
+
+This section is optional background for curious owners, hosting administrators, and developers. Daily gallery work can continue without these implementation details. The purpose is to explain the main pieces in approachable terms and provide precise file references for someone maintaining the installation.
+
+\subsection{Bootstrap and dispatch}
+
+When someone opens a page, the application first reads its configuration and determines which public or Admin action the address represents. It then asks the responsible part of the application to gather information, apply access rules, and produce a page, file, download, or saved result. The central starting file is \filepath{app/bootstrap.php}.
+
+\subsubsection{What happens when somebody opens your website}
+\index{request!life cycle}
+\index{website request}
+
+It is helpful to imagine that every visit begins with a person handing a small note to the gallery's reception desk. The note is the web request: it may say that the visitor wants the home page, a particular gallery, one photograph, a thumbnail, a download, or an Admin action. The visitor does not need to know which file contains the answer, just as a visitor to a real archive does not need to know which cupboard contains a particular photograph. PHP Gallery receives the note through its public entrance, prepares the installation for this one visit, understands what was requested, and then passes the work to the part of the application that is best suited to answer it.
+
+The first preparation step is called \emph{bootstrap}. This does not create or change your photographs. It means that the application gathers the basic information needed to work safely: it reads the local configuration, connects the request to the correct database when database information is needed, prepares the language and security settings, and starts the visitor or administrator session when the requested action requires one. The application also checks general conditions that should apply before a page is produced, such as whether a feature is enabled, whether a request needs a security check, and whether a scheduled maintenance opportunity should be recorded. These checks happen before the requested gallery or control is allowed to continue, so the same protective rules do not need to be reinvented separately on every screen.
+
+After preparation, PHP Gallery interprets the address. A visitor may use a clean address such as \codeword{/gallery/holidays/rome}, while another installation may use a compatible query-style address containing a page name. The application translates both forms into the same internal meaning. It recognizes that the first address asks for the public gallery called ``holidays/rome'' and that a request ending in a thumbnail filename asks for a smaller image copy rather than a normal page. This translation is called routing. Routing is not the act of opening a photograph; it is the act of deciding which kind of answer is needed and which information belongs to that answer.
+
+Once the meaning is known, the application chooses a controller. A controller is the responsible reception clerk for one kind of request. A public-gallery controller prepares a gallery page, a media controller prepares an authorized image or original file, an Admin controller handles an administrative action, and a maintenance controller handles a repair or inspection task. The controller does not normally perform every detail itself. It asks specialized services to check access, find galleries and images, prepare thumbnails, load tags, validate a form, save a change, or create a download. Finally, the controller returns the appropriate result: an HTML page, a JSON response for an in-place Admin action, a media file, a download, or a redirect to another address.
+
+This means that opening one gallery is a coordinated journey rather than a single file being displayed directly. The request enters through one public door, the bootstrap prepares the application, routing identifies the requested destination, the controller coordinates the work, services apply the rules and gather the information, and the final response travels back to the browser. The browser then displays the result and may add interactive behavior such as the lightbox, search suggestions, voting, progressive thumbnail sharpening, or the Admin side panel. If JavaScript is unavailable, the server-rendered page and its normal links still provide the essential route wherever that feature supports a no-JavaScript path.
+
+\important{For a gallery owner, this process explains why a direct image or thumbnail address is still protected. The address does not bypass the application simply because it ends in an image filename. It is routed through the same request preparation and access decision before the file is allowed to reach the visitor.}
+
+\subsubsection{The three central steps: preparation, routing, and dispatch}
+\index{bootstrap}
+\index{routing}
+\index{controller dispatch}
+
+The three central steps can be understood as preparation, routing, and dispatch. \emph{Preparation} makes the application ready for the current visit. It reads the installation's instructions, establishes the context in which the request will run, and performs shared checks. \emph{Routing} reads the requested address and turns it into a meaningful destination with its parameters, such as a gallery path, share token, page number, thumbnail size, or file format. \emph{Dispatch} hands that prepared destination to the controller that knows how to complete it. The words are technical names for a simple sequence: get ready, understand the request, and give it to the right helper.
+
+These steps are kept together near the beginning of the application because their order matters. Access and request-safety decisions must happen before private information is assembled. A thumbnail request must be understood as a thumbnail request before the application selects a generated file. An Admin form must be recognized as an Admin operation before its submitted values are accepted. Keeping the common preparation and hand-off steps in one central place helps the application behave consistently when the same photograph is reached from a gallery card, a lightbox, a direct link, a search result, or a download action.
+
+\subsubsection{Why one central entrance is useful}
+\index{front controller}
+
+PHP Gallery uses one central public entrance for ordinary web requests. In technical language this is often called a \emph{front controller}; for an owner, it is simply the main reception desk. It gives the application one reliable opportunity to prepare configuration, security, translation, sessions, and feature rules before any particular page is handled. The repository-root \filepath{index.php} is a compatibility entrance for hosting and local-development arrangements, while \filepath{public/index.php} is the normal public entrance. Both lead into the same bootstrap process, so choosing one supported web-root arrangement does not create a different application.
+
+This arrangement also helps preserve the filesystem and database partnership described earlier. The address may identify a gallery path or image, but the application still resolves that identity through its catalog, checks the corresponding permissions, and then uses the actual gallery files when it is time to serve media. A request is therefore not trusted merely because its text resembles a folder name or a filename. The central entrance gives the application a consistent place to translate the request and apply the rules before it touches the requested result.
+
+\begin{lstlisting}
+browser request
+  -> index.php or public/index.php
+  -> app/bootstrap.php
+  -> cms_run()
+  -> cms_route_from_request()
+  -> controller function
+  -> service functions
+  -> HTML, JSON, media, archive, or redirect response
+\end{lstlisting}
+
+\subsection{Controllers}
+
+\index{controller}
+
+Controllers are the reception desk of the application. They receive the request after the central entrance and routing steps have prepared it, look at what the visitor or administrator is asking for, and coordinate the answer. A controller does not represent a photograph or a gallery itself. It represents an action involving one of them: show this gallery, open this image, accept this upload, save this description, inspect this installation, or return the next part of an Admin panel.
+
+For example, when a visitor opens a gallery, the controller first receives the selected gallery path and the visitor's request context. It helps establish which gallery the address refers to, asks the access rules whether the visitor may see it, and gathers the information needed for the page. When an administrator submits a form to rename a gallery, a different controller receives the submitted action, confirms that the administrator is signed in and that the request is genuine, and then asks the appropriate service to perform the change. The controller is therefore the coordinator of the journey, not the person who performs every specialist task.
+
+Public gallery rendering resides principally in \filepath{app/controllers/public_gallery.php}. Other controller files receive uploads, media requests, maintenance actions, updates, downloads, and Admin forms. Dividing these entry points by the kind of request helps the application keep a public visitor's experience separate from private administration. It also means that a request for a thumbnail can receive a small, efficient media response instead of loading the full page machinery needed for a dashboard.
+
+Controllers can return several kinds of answer. A normal page produces HTML for the browser to display. A side-panel action may produce a small HTML fragment or JSON information so the existing Admin screen can update in place. A media controller may send an authorized image file, while a download controller may prepare an archive. Some actions redirect the browser to a new address after a normal form submission. The result depends on the request, but the controller remains responsible for making sure that the right type of answer is returned.
+
+The most important promise made by a controller is that it does not skip the rules simply because the request is direct or technically small. A request for a thumbnail, map point, original file, or background asset still passes through the relevant access decision. A controller also hands persistent changes to trusted services instead of duplicating file deletion, authorization, CSRF, or database logic in each individual form handler. For the owner, this means that using a normal gallery link, a direct photo link, or an Admin control leads through the same protective decisions.
+
+\subsection{Services}
+
+\index{service layer}
+
+Services are the specialists behind the reception desk. If a controller is the person who receives a request, a service is the person who knows how to do one particular kind of work correctly. One service understands gallery access, another creates thumbnails, another reads and validates image metadata, another finds likely duplicates, and others handle uploads, updates, maintenance, downloads, search, translations, and telemetry. The service files live mainly under \filepath{app/services/}.
+
+This separation is valuable because the same rule may be needed from several places. A photograph can be reached from a gallery card, a search result, a lightbox, a direct link, or a download operation. Each of those entry points should not invent its own version of ``is this visitor allowed to see the image?'' Instead, the controllers ask the gallery-access service to make that decision. Likewise, thumbnail generation, thumbnail validation, and thumbnail cleanup are shared responsibilities rather than separate behaviors hidden inside upload, maintenance, and public rendering screens.
+
+Consider a new photograph arriving through the browser. The upload controller receives the upload and passes it to upload-related services. Those services check the file, place it in the selected gallery, record the image in the catalog, read useful camera information, and arrange any requested thumbnail work. If the same photograph is later discovered because it was copied to the server by another method, discovery services can reuse the same image and metadata rules. The owner sees one consistent gallery even though the photograph entered through different doors.
+
+Services also protect the difference between the original file and the information about it. The original remains in the gallery folders, while services coordinate the database catalog, generated thumbnails, checksums, descriptions, visibility, and maintenance state. When a gallery is deleted, the gallery-mutation service can coordinate the database and filesystem consequences. When a thumbnail is missing, the thumbnail-maintenance service can record or repair that condition without requiring every public page controller to understand the repair process.
+
+Some services prepare information rather than change anything. A search service finds matching public content, a gallery lookup service resolves a public path, a rendering service prepares a media manifest, and a statistics service summarizes storage use. Other services perform deliberate changes such as saving a description or deleting an image. Keeping these responsibilities in named specialists makes it easier to tell whether a screen is merely reading the catalog or is about to change the collection.
+
+For a gallery owner, the practical result is consistency. A setting changed in Admin is interpreted by the same focused service wherever it matters. An access choice affects pages and media routes together. A maintenance operation uses the same thumbnail and filesystem rules as an upload. The service layer is the application's shared memory of how the gallery should behave.
+
+\subsection{Views and browser modules}
+
+\index{views}
+\index{browser modules}
+
+Views are the part that turns prepared information into the page people see. They place the site name, navigation, gallery title, description, cards, controls, messages, and footer into an HTML response. A view should not decide whether a visitor is allowed to see a protected gallery or how a thumbnail is generated. Those decisions are made before the view receives its prepared information. In everyday terms, the view is the careful display cabinet: it arranges the material for the visitor without being responsible for deciding which material may leave the archive.
+
+When a gallery page is prepared, a view may receive a selected gallery, its visible child galleries, permitted images, descriptions, tags, pagination links, thumbnail information, and the active theme. It can then present those elements consistently. The same layout helpers can be used for a home page, a public gallery, an Admin screen, or a side-panel fragment where appropriate, while each screen still has its own purpose and amount of detail.
+
+Browser modules add behavior after the HTML reaches the visitor's browser. They power the lightbox, search suggestions, voting, Admin side panels, upload progress, drag-and-drop actions, thumbnail upgrades, diagnostics, and other interactions. The server gives the browser the initial structure and the information needed to use it; the browser modules listen for actions and make the experience more immediate. For example, clicking a vote button can send a small request and update the displayed count without rebuilding the entire gallery page.
+
+Browser code remains framework-free, which means PHP Gallery does not require a large client-side application framework before a visitor can read a gallery. This keeps the public page understandable to ordinary browsers and helps the server-rendered HTML remain useful on its own. Public visitors receive a smaller set of browser features than signed-in administrators because an administrator's workspace needs controls for editing, progress, maintenance, and side-panel workflows that are not relevant to a normal visitor.
+
+The Admin side panel deserves special mention. Its content can be replaced while the surrounding page remains open. The browser modules therefore use lifecycle-aware setup and teardown behavior: a module can attach to a newly inserted form, stop listening to an old fragment, and attach again to the refreshed copy. Event delegation allows a stable parent area to recognize actions from controls that were added later, so the administrator can save an item, keep the panel open, and continue working without a full-page navigation.
+
+The division between views and browser modules also provides a safety net. The server can render links, forms, titles, alternative text, and essential image choices before JavaScript runs. JavaScript then improves speed and convenience where the browser supports it. This is why a visitor should still be able to open a gallery, follow a direct link, read its content, and navigate its important parts even when scripts are blocked, delayed, or unavailable.
+
+\subsection{Public selected-gallery render pipeline}
+
+\index{render pipeline}
+
+\subsubsection{Server render and browser enhancement}
+
+When a visitor opens a gallery, PHP Gallery follows a deliberate render pipeline. First it identifies the selected gallery and resolves the effective access rules, including visibility, parent-gallery protection, password state, share access, and any age-related restriction. The application performs this work before it constructs public media addresses. A visitor therefore does not receive a useful-looking page containing links to material that the visitor is not allowed to open.
+
+The application then prepares the gallery's shape. It counts or estimates the information needed for navigation, determines the current page of results, loads the direct child galleries, and selects the image rows that are visible in the current scope. It also prepares titles, descriptions, dates, tags, votes, ordering, and relevant display choices. A large collection is not treated as one enormous undifferentiated list: pagination allows the visitor to move through it in manageable sections.
+
+Next, the application prepares the media that the visible cards will need. It gathers thumbnail metadata in batches rather than asking the database the same small question once for every card. It creates request-local media manifest entries describing the candidates that are actually available and permitted for each image. This preparation allows the page to expose suitable image choices without repeatedly probing every possible file while the visitor is waiting for the first screen.
+
+The selected-gallery controller then gives the prepared information to the presentation layer. The response includes the page title and other search-engine information, branding, navigation, breadcrumbs, child-gallery cards, photograph cards, pagination, lightbox configuration, and the footer assets. Diagnostics and privacy-controlled telemetry may also receive carefully selected information about the render. These pieces are assembled for this request; they do not mean that the application has permanently copied the original photographs into the page or database.
+
+The browser receives a useful server-rendered starting point. It can read the title and descriptions, discover the initial image candidates, follow links, and preserve the page's semantic structure before JavaScript has finished loading. Browser modules then enhance that starting point: search can respond as the visitor types, votes can update in place, the lightbox can open without a new page, and the progressive renderer can request larger candidates when appropriate. The server remains responsible for access and for producing safe initial markup; the browser supplies convenience and carefully bounded enhancement.
+
+Server-side rendering gives browsers early semantic content and image discovery. JavaScript enhances search, votes, lightbox behavior, thumbnail policy, diagnostics, and authenticated controls. This division supports accessibility, crawlers, direct links, and graceful operation on constrained clients.
+
+\subsubsection{A visitor's example journey}
+
+Imagine that Anna opens a shared link to \emph{Travel / Rome}. The request first enters the central application entrance. Bootstrap prepares the installation and the request context. Routing recognizes the gallery path and passes it to the public-gallery controller. The controller asks the access service whether Anna may see the gallery, resolves the gallery record, and determines which child galleries and photographs belong on the requested page.
+
+The services then prepare the details that make the page useful. Gallery and image information provides the names and descriptions, pagination chooses the visible part of the collection, tag and vote services provide related controls, and thumbnail services identify the available display copies. The view arranges those results into the page. When the response reaches Anna's browser, the first cards can begin to appear using server-provided image information. If JavaScript is available, the lightbox and other enhancements become active; if it is not, the ordinary links and server-rendered content still provide the essential journey.
+
+If Anna clicks a photograph, the new request or browser action does not abandon the original protections. The selected image is resolved again, access is checked again where required, and the appropriate preview or original is chosen for that purpose. If she later opens the same link from a different browser, the application makes a fresh decision based on that visitor's access state rather than trusting that the address was previously used successfully. This repeated discipline is what allows friendly, shareable addresses to coexist with private and protected galleries.
+
+\section{Optional background: what the database remembers}
+\label{sec:database}
+\index{database schema}
+\index{migrations}
+
+The database is the gallery's catalog. It remembers facts and choices that would be awkward to store in image filenames: descriptions, privacy, order, tags, votes, dates, public addresses, accounts, and maintenance history. This section offers an overview for owners preparing backups or discussing the installation with a hosting provider. Detailed column definitions remain in the separate database reference \cite{database}.
+
+\subsection{Principal domains}
+
+\begin{longtable}{>{\bfseries}p{0.25\linewidth}p{0.67\linewidth}}
+\toprule
+Domain & Persistent responsibility\\
+\midrule
+\endhead
+Users and authentication & Administrator identity, password hashes, recovery email, external identity links, reset tokens, and scoped credentials.\\
+Galleries & Folder path, hierarchy, public path, metadata, visibility, access, branding, presentation overrides, and operational ordering.\\
+Images & Gallery ownership, relative path, filename, metadata, dimensions, visibility, checksum, EXIF data, ordering, and derived state.\\
+Tags & Reusable tag identity plus gallery and image relationships.\\
+Votes & Gallery and image scoring records with viewer association.\\
+Thumbnails & Valid generated variant inventory, dimensions, format, status, and derivative version.\\
+Settings & Scalar application, theme, feature, update, maintenance, and rendering values.\\
+Audit and telemetry & Administrator events, operational diagnostics, privacy-controlled measurements, and rollups.\\
+Duplicate ledger & Per-administrator canonical pair decisions and exact-gallery suppression rules.\\
+Jobs and tokens & Bounded browser, detector, migration, WebDAV, reset, sharing, and maintenance state where persistence is required.\\
+\bottomrule
+\end{longtable}
+
+\subsection{Relations and cascades}
+
+Foreign keys express ownership where schema evolution and compatibility permit it. Cascades remove dependent workflow records when their parent identity disappears. Content deletion continues through application services so filesystem and database effects remain coordinated. Unique constraints encode identities such as canonical duplicate pairs, exact administrator-gallery rules, slugs, tokens, and metadata variants.
+
+\subsection{Application settings}
+
+The \codeword{app_settings} table stores key-value configuration. \codeword{app_setting()} reads values, \codeword{set_app_setting()} persists normalized values, and focused services interpret domain-specific settings. The public thumbnail renderer uses \setting{public_thumbnail_rendering_mode} with \setting{responsive} and \setting{progressive} values.
+
+\section{Optional reference for developers}
+\label{sec:development}
+\index{development}
+\index{coding style}
+
+This section supports people changing the PHP Gallery software itself. Gallery owners can continue directly to Section~\ref{sec:testing} for publication and maintenance checks.
+
+\subsection{Repository organization}
+
+\begin{longtable}{>{\ttfamily}p{0.27\linewidth}p{0.65\linewidth}}
+\toprule
+\textrm{Location} & \textrm{Responsibility}\\
+\midrule
+\endhead
+app/controllers/ & HTTP controllers and response coordination.\\
+app/services/ & Reusable domain and infrastructure services.\\
+app/views/ & Layout and reusable server-rendered view helpers.\\
+app/lang/ & Server and browser translation catalogs.\\
+database/migrations/ & Timestamped schema evolution.\\
+public/assets/ & Framework-free JavaScript, CSS, and public assets.\\
+scripts/ & Migration, integrity, deployment, and maintenance utilities.\\
+tests/ & Standalone PHP and focused JavaScript tests.\\
+winapp/ & Windows-specific tools and integrations.\\
+\bottomrule
+\end{longtable}
+
+\subsection{Coding conventions}
+
+New PHP files use strict types and four-space indentation. Controllers coordinate request behavior, while services own reusable logic. New JavaScript and CSS remain framework-free and belong under public assets. Migrations use timestamp-prefixed filenames. Existing explanatory comments, docstrings, and PHPDoc receive preservation and correction as behavior evolves.
+
+Atomic modules should own one cohesive responsibility. Shared contracts deserve normalized inputs, explicit outputs, and focused tests. Dynamic Admin and public fragments require lifecycle-safe setup and teardown.
+
+\subsection{Adding a feature}
+
+A typical feature change follows this sequence:
+
+\begin{enumerate}
+  \item Trace current implementation and identify the owning controller, services, views, browser modules, persistence, and tests.
+  \item Define access, CSRF, scope, fallback, migration, and no-JavaScript contracts.
+  \item Add focused services and route integration.
+  \item Add append-only migration work where persistent schema changes are required.
+  \item Add translated interface strings.
+  \item Add focused automated tests and documented manual verification.
+  \item Update architecture, code map, database, testing, and user guidance according to their ownership.
+  \item Regenerate integrity metadata after final runtime changes.
+  \item Review the complete diff and run the relevant local test suite.
+\end{enumerate}
+
+\section{Checking your gallery before publication}
+\label{sec:testing}
+\index{testing}
+\index{quality assurance}
+
+Testing for a gallery owner means walking through the site as the intended audience. A technically healthy page can still contain a private location, an unclear title, an incorrect date, an accidental download permission, or an awkward mobile layout. A short human review catches these presentation and privacy concerns.
+
+\subsection{A visitor-centered publication check}
+\index{publication checklist}
+
+Open a private browser window and follow the same link you plan to share. Check:
+
+\begin{enumerate}
+  \item The title and first paragraph explain the collection.
+  \item The chosen cover remains clear at a small size.
+  \item Child galleries appear in a sensible order.
+  \item Photograph titles and descriptions match the visible subjects.
+  \item Private photographs and galleries stay hidden.
+  \item Password or share access works from a fresh session.
+  \item GPS maps reveal only intended locations.
+  \item The first page loads comfortably on a phone.
+  \item The large viewer, forward and backward controls, and close action feel natural.
+  \item Search, tags, voting, and downloads behave according to the gallery's purpose.
+\end{enumerate}
+
+Ask another person to try the gallery without instructions. Their first click and first question often reveal navigation or wording that felt obvious only to the owner.
+
+\subsection{Automated checks for software maintainers}
+
+Developers can run the project's executable test scripts after changing application code. The aggregate runner covers the project suite, while focused scripts verify particular features.
+
+\begin{lstlisting}[language=bash]
+php tests/run.php
+php tests/public_thumbnail_rendering_model_test.php
+php tests/public_thumbnail_markup_test.php
+php tests/duplicate_photo_detector_test.php
+php tests/duplicate_photo_ledger_test.php
+php tests/migration_consistency_test.php
+node tests/progressive_thumbnail_renderer_test.mjs
+\end{lstlisting}
+
+\subsection{Manual browser verification}
+
+\subsubsection{Network and interaction checks}
+
+Browser-dependent software checks use representative data, anonymous and authenticated sessions, an empty cache, mobile and desktop viewports, JavaScript-disabled operation where relevant, reduced-motion preferences, and network throttling.
+
+For public thumbnail rendering, inspect the Elements and Network panels. Responsive mode should expose its complete active candidate set. Progressive mode should expose a small active candidate and inert larger candidates before activation, then perform at most the documented bounded upgrades for relevant cards. Check layout stability, cache reuse, error fallback, lightbox interaction, maps, voting, protected media, and direct links.
+
+\subsection{Release hygiene}
+
+A release review confirms runtime version consistency, migrations, manifest hashes, documentation, translations, tests, package exclusions, and user-data safety. Test failures caused by missing local dependencies should be reported with exact commands and environment details.
+
+\section{Making the gallery feel fast}
+\label{sec:performance}
+\index{performance}
+\index{profiling}
+
+Visitors experience speed as a sequence of impressions: the page begins to appear, the first photographs become recognizable, scrolling responds, controls work, and larger photographs open without an uncomfortable pause. Total loading can continue quietly after the page already feels useful.
+
+The largest practical influences are the visitor's connection, distance to the server, number of photographs shown at once, thumbnail sizes, large branding images, and the selected thumbnail rendering mode. A gallery owner can improve the experience without reading technical timing reports.
+
+\subsection{Practical ways to improve speed}
+\index{page speed!practical improvements}
+
+\begin{itemize}
+  \item Keep pagination enabled for very large galleries.
+  \item Generate the configured thumbnails before sharing a new large collection.
+  \item Use an appropriately sized background and branding image.
+  \item Choose covers that remain effective as compact previews.
+  \item Test responsive and progressive thumbnail modes with the actual audience and gallery layout.
+  \item Use a hosting location reasonably close to most visitors.
+  \item Enable normal web-server compression and caching with help from the hosting provider.
+  \item Review the site as an anonymous visitor because signed-in Admin pages load additional controls.
+\end{itemize}
+
+\subsection{A simple slow-connection test}
+
+Open the gallery in a browser's private window, select a mobile screen size, enable a throttled network profile in developer tools, and reload with an empty cache. Observe when the title appears, when the first row becomes recognizable, when scrolling feels ready, and when the first large photograph opens. Repeat with the alternative thumbnail mode and compare the experience.
+
+\subsection{Technical measurements for maintainers}
+
+Developers and hosting administrators can use public render profiling and browser diagnostics for precise comparisons. Useful measurements include:
+
+Useful measurements include:
+
+\begin{itemize}
+  \item time to first byte and server render spans;
+  \item first contentful paint and largest contentful paint;
+  \item time until the first visible cards contain images;
+  \item transferred bytes before interaction;
+  \item number and priority of image requests;
+  \item layout shift;
+  \item responsive candidate selected by the browser;
+  \item progressive small-to-large transfer sequence;
+  \item lightbox activation and first-preview latency;
+  \item bytes transferred after the initial page becomes usable.
+\end{itemize}
+
+The development profiler and captured benchmark records support comparisons across renderer modes and gallery layouts. Representative testing includes high-density screens and constrained connections because those screens can request larger thumbnail candidates.
+
+\section{Troubleshooting}
+\label{sec:troubleshooting}
+\index{troubleshooting}
+
+\subsection{Application does not start}
+
+Confirm the PHP version, required extensions, configuration location, database connectivity, writable paths, and web-root routing. Review PHP and web-server logs. Run syntax checks on recently changed PHP files and inspect pending migrations.
+
+\subsection{Gallery or images are missing}
+
+Confirm filesystem paths, gallery discovery state, database records, visibility, parent access rules, password unlock state, NSFW policy, supported file type, and image relative path. Test as both administrator and anonymous visitor.
+
+\subsection{Thumbnails are missing or soft}
+
+Review thumbnail metadata and maintenance reports. Confirm generated sizes, format support, configured bounds, source geometry, derivative status, and public endpoint authorization. In responsive mode, inspect the browser-selected candidate and \codeword{sizes}. In progressive mode, inspect the small candidate, queue state, selected replacement, and decode result.
+
+\subsection{Admin actions leave the side panel}
+
+Confirm the matching JavaScript module loaded, delegated handlers recognized the form, AJAX headers and response contracts are correct, the returned fragment contains expected lifecycle markers, and generic Admin form handlers exclude feature-owned forms. Direct POST behavior can still provide the documented fallback route.
+
+\subsection{Migration fails}
+
+Record the exact migration filename, database error, server version, existing schema state, and migration audit rows. Use available dry-run or inspection tools. Preserve the database before repair and follow the migration’s idempotent compatibility path.
+
+\subsection{PDF manual compilation fails}
+
+Run the commands in \filepath{docs/LATEX_BUILD.md}. Confirm \codeword{pdflatex} and \codeword{makeindex} are installed. A first MiKTeX run may request common packages. Delete ignored intermediate build files after a failed package transition and repeat the documented sequence.
+
+\section{Backup and recovery checklist}
+\label{sec:backup}
+\index{recovery}
+
+\begin{enumerate}
+  \item Export the complete application database.
+  \item Copy \filepath{galleries/} with source files and gallery-owned assets.
+  \item Copy local configuration and relevant installation secrets securely.
+  \item Preserve custom theme assets and custom CSS.
+  \item Record the application version and pending migration state.
+  \item Store backups outside the active web tree.
+  \item Test restoration periodically in an isolated environment.
+  \item Verify public routes, protected access, Admin login, thumbnails, uploads, and migrations after restoration.
+\end{enumerate}
+
+Updater-created backups preserve overwritten application files for update recovery. A complete operational backup also includes the database, gallery tree, local configuration, and installation-owned assets.
+
+\section{Glossary}
+\label{sec:glossary}
+\index{glossary}
+
+\begin{description}
+  \item[AJAX] Browser request used to update a page region while preserving the surrounding interface.
+  \item[Branch scope] A gallery and its descendants, when the selected feature defines recursive scope.
+  \item[Canonical pair] Two image identifiers stored in a stable low-to-high order.
+  \item[CSRF token] Session-bound value used to validate intentional state-changing form submissions.
+  \item[Derivative] Generated media representation such as a JPEG or WebP thumbnail.
+  \item[EXIF] Camera and capture metadata embedded in supported image files.
+  \item[Integrity manifest] Versioned list of core paths and expected hashes.
+  \item[Lightbox] Fullscreen or overlay photo viewer with navigation and related controls.
+  \item[Media manifest] Request-local rendering data prepared from thumbnail metadata for visible images.
+  \item[NSFW guard] Age and gallery/image policy controlling access to restricted media.
+  \item[Progressive sharpening] Small-first thumbnail pipeline that activates a decoded larger candidate later.
+  \item[Responsive selection] Browser-native candidate selection from an immediately active source set.
+  \item[Selected gallery] Gallery represented by the current public route.
+  \item[Side panel] Admin right-side contextual interface loaded and refreshed through fragment requests.
+  \item[Thumbnail bounds] Gallery-aware minimum and maximum generated sizes eligible for selection.
+\end{description}
+
+\clearpage
+\section{References}
+\label{sec:references}
+
+\begin{thebibliography}{99}
+
+\bibitem{readme}
+PHP Gallery project, \emph{README.md}, local product overview, feature guide, requirements, and installation documentation, version \version.
+
+\bibitem{architecture}
+PHP Gallery project, \emph{ARCHITECTURE.md}, local application architecture and subsystem lifecycle reference, version \version.
+
+\bibitem{database}
+PHP Gallery project, \emph{DATABASE.md}, local migration and persistent schema reference, version \version.
+
+\bibitem{codemap}
+PHP Gallery project, \emph{CODEMAP.md}, local source ownership and maintenance map, version \version.
+
+\bibitem{testing}
+PHP Gallery project, \emph{TESTING.md}, local automated and manual verification guide, version \version.
+
+\bibitem{agents}
+PHP Gallery project, \emph{AGENTS.md}, local repository contribution and security guidelines.
+
+\bibitem{phpmanual}
+The PHP Documentation Group, \emph{PHP Manual}, \url{https://www.php.net/manual/en/}.
+
+\bibitem{mysqlmanual}
+Oracle Corporation, \emph{MySQL Reference Manual}, \url{https://dev.mysql.com/doc/}.
+
+\bibitem{mariadbmanual}
+MariaDB Foundation, \emph{MariaDB Server Documentation}, \url{https://mariadb.com/docs/server/}.
+
+\bibitem{htmlimages}
+WHATWG, \emph{HTML Living Standard: Images}, \url{https://html.spec.whatwg.org/multipage/images.html}.
+
+\bibitem{owasp}
+OWASP Foundation, \emph{Web Application Security Guidance}, \url{https://owasp.org/}.
+
+\end{thebibliography}
+
+\clearpage
+\phantomsection
+\addcontentsline{toc}{section}{Index}
+\printindex
+
+\end{document}

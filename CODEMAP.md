@@ -35,7 +35,10 @@ This file maps features to source files. It is optimized for fast maintenance an
 | Breadcrumbs | `app/controllers/public_gallery.php` | `app/services/gallery_lookup.php`, `app/services/public_paths.php` |
 | Gallery cards | `app/controllers/public_gallery.php` | `app/services/gallery_count_badges.php`, `app/services/gallery_dates.php`, `app/services/gallery_grid.php` |
 | Gallery date ranges | `app/services/gallery_dates.php` | Manual start/end validation, public date formatting and EXIF-derived suggestion aggregation. |
-| Image grid | `app/controllers/public_gallery.php` | `app/services/thumbnail_html.php`, `app/services/thumbnail_bundles.php` |
+| Image grid | `app/controllers/public_gallery.php` | `app/services/public_thumbnail_rendering.php`, `app/services/thumbnail_html.php`, `app/services/thumbnail_bundles.php`, `app/services/public_gallery_media_manifest.php` |
+| Selected-gallery thumbnail renderer setting | `app/services/public_thumbnail_rendering.php`, `app/controllers/admin_theme.php` | Stable key `public_thumbnail_rendering_mode`; allowed values `responsive` and `progressive`; responsive is the safe default. |
+| Progressive browser activation | `public/assets/gallery-modules/progressive-thumbnail-renderer.js`, `public/assets/gallery-modules/progressive-thumbnail-upgrade.js` | Conditional from `public/assets/public-gallery.js` and `public/assets/gallery.js`; near-viewport observer, two-slot scheduler, measured candidate selection, decode-before-swap. |
+| Public thumbnail placeholder/layout CSS | `public/assets/styles/utilities.css` | Existing stable image-slot background and no-flicker rules are shared; intrinsic image dimensions are emitted by `thumbnail_html.php`. |
 | Lightbox JSON | `app/controllers/gallery_lightbox.php` | `app/services/lightbox_metadata.php` |
 | Lightbox browsing modes | `app/services/gallery_lightbox_mode.php` | Theme default plus per-gallery override resolution for single-image, picture-strip, and 3D-carousel modes. |
 | Public tags | `app/controllers/public_tags.php` | `app/services/tags.php`, `app/services/tag_metadata.php` |
@@ -148,6 +151,7 @@ This file maps features to source files. It is optimized for fast maintenance an
 | Task | Files |
 | --- | --- |
 | Admin theme page | `app/controllers/admin_theme.php` |
+| Public thumbnail renderer control | `app/controllers/admin_theme.php`, `app/services/public_thumbnail_rendering.php`, `app/lang/en.php`, `app/lang/cs.php`, `app/lang/en.json`, `app/lang/cs.json` |
 | Theme settings and CSS variables | `app/services/theme.php` |
 | Dynamic theme CSS | `app/controllers/theme_assets.php`, handler `cms_theme_css` |
 | Custom CSS presets | `app/services/custom_css.php`, `custom_css/*.css` |
@@ -240,6 +244,8 @@ This file maps features to source files. It is optimized for fast maintenance an
 | Display logs | `app/controllers/admin_logs.php` |
 | Update log status | `app/controllers/admin_logs.php`, handler `cms_admin_log_update` |
 | Export logs | `app/controllers/admin_logs.php`, handlers `cms_admin_log_export`, `cms_admin_logs_export_zip` |
+| Archive and retain logs | `app/services/admin_log_archives.php`, `app/controllers/admin_logs.php`, `app/controllers/site_maintenance.php` |
+| Archive protection | `data/admin-log-archives/.htaccess` |
 | Table | `admin_logs` |
 
 ## Updates and GitHub Integration
@@ -290,6 +296,8 @@ This file maps features to source files. It is optimized for fast maintenance an
 | Test | Purpose |
 | --- | --- |
 | `tests/admin_log_severity_filter_test.php` | Log filtering behavior. |
+| `tests/admin_log_scaling_test.php` | Indexed grouped browsing, bounded exports, and retention contracts. |
+| `tests/admin_log_archive_maintenance_test.php` | Protected day archives, resumable archive state, row-count safety, and archive cleanup behavior. |
 | `tests/gallery_branding_model_test.php` | Gallery branding model. |
 | `tests/gallery_dates_model_test.php` | Gallery date range normalization and renderer behavior. |
 | `tests/duplicate_photo_detector_test.php` | Duplicate checksum/EXIF matching, pair expansion and ledger filtering, selected-gallery branch/global scope, deterministic ordering, linked-context rendering, delete/ledger scope validation, detector-job pruning, and AJAX side-panel integration contracts. |
@@ -303,6 +311,9 @@ This file maps features to source files. It is optimized for fast maintenance an
 | `tests/migration_consistency_test.php` | Migration definitions, preflight validation, and obsolete-version compatibility. |
 | `tests/migration_legacy_runner_compatibility_test.php` | Compatibility with the former SQL-only migration runner. |
 | `tests/updater_safety_model_test.php` | Required update files, staged-update assumptions, and cleanup safety. |
+| `tests/public_thumbnail_rendering_model_test.php` | Renderer normalization, persistence dispatch, and responsive/progressive loading policies. |
+| `tests/public_thumbnail_markup_test.php` | Responsive/progressive server markup, bounds, missing variants, warm-up/media fallback, intrinsic dimensions, and NSFW gate ordering. |
+| `tests/progressive_thumbnail_renderer_test.mjs` | Browser-independent candidate parsing/selection, DPR calculation, queue deduplication, priority, and concurrency bounds. |
 
 ## Common Change Recipes
 

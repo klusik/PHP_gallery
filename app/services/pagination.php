@@ -253,10 +253,10 @@ function pagination_grid_columns_class(array $settings): string
 /**
  * Return an initial sizes attribute for paginated photo thumbnails.
  *
- * The browser uses this hint before JavaScript can measure the actual card
- * width. JavaScript then replaces it with the exact rendered pixel width, but
- * this conservative viewport-based value already prevents wide grids from
- * eagerly selecting 800 px thumbnails on first parse.
+ * The responsive renderer gives this hint directly to the browser with the full
+ * candidate set during HTML parsing. The progressive renderer uses the same
+ * conservative initial hint, then its optional near-viewport module measures the
+ * actual rendered width before selecting a larger inert candidate.
  *
  * @param array $settings Settings used by this workflow.
  * @return string Text result for the caller.

@@ -45,6 +45,14 @@ use function Gallery\Core\now_sql;
 use function Gallery\Services\translation_interpolate;
 use function Gallery\Services\translation_load_language;
 
+const ADMIN_LOG_GROUP_MEMBER_PAGE_SIZE = 50;
+const ADMIN_LOG_EXPORT_BATCH_SIZE = 500;
+const ADMIN_LOG_DEFAULT_RETENTION_DAYS = 30;
+const ADMIN_LOG_MIN_RETENTION_DAYS = 1;
+const ADMIN_LOG_MAX_RETENTION_DAYS = 3650;
+const ADMIN_LOG_RETENTION_DELETE_BATCH_SIZE = 2000;
+const ADMIN_LOG_RETENTION_MAX_DELETE_PER_RUN = 100000;
+
 /**
  * Administrative log service model.
  *
@@ -572,7 +580,7 @@ function admin_log_grouped_list(?string $status = null, int $limit = 100, array 
     // $stmt stores the prepared grouped admin log query.
     $stmt = db()->prepare($sql);
     $stmt->execute($filterSql['params']);
-    return admin_log_attach_group_members($stmt->fetchAll());
+    return $stmt->fetchAll();
 }
 
 /**
@@ -600,12 +608,154 @@ function admin_log_grouped_count(?string $status = null, array $filters = []): i
 }
 
 /**
- * Return every log row that belongs to the requested grouped hashes.
+ * Return the deterministic grouped hash for one already-fetched admin log row.
  *
- * @param array $groupHashes Group hashes value.
+ * @param array $entry Entry value.
+ * @return string Text result for the caller.
+ */
+function admin_log_group_hash_for_entry(array $entry): string
+{
+    // $parts mirrors admin_log_group_hash_sql() so lazy group requests can validate
+    // their representative row without scanning the complete log table first.
+    $parts = [];
+    foreach (admin_log_group_columns() as $column) {
+        $parts[] = isset($entry[$column]) ? (string) $entry[$column] : '';
+    }
+    return hash('sha256', implode('|', $parts));
+}
+
+/**
+ * Return an indexed WHERE clause matching the group represented by one log row.
+ *
+ * @param array $entry Entry value.
+ * @param string $tableAlias Table alias value.
  * @return array Structured result data for the caller.
  */
-function admin_log_group_member_rows(array $groupHashes): array
+function admin_log_group_member_filter(array $entry, string $tableAlias = 'l'): array
+{
+    // $where stores equality predicates over the real grouping columns. Using the
+    // representative values is materially cheaper than filtering by a calculated
+    // SHA-256 expression for every row in a large table.
+    $where = [];
+    $params = [];
+    foreach (admin_log_group_columns() as $column) {
+        $where[] = $tableAlias . '.' . $column . ' = ?';
+        $params[] = isset($entry[$column]) ? (string) $entry[$column] : '';
+    }
+    return [
+        'where_sql' => implode(' AND ', $where),
+        'params' => $params,
+    ];
+}
+
+/**
+ * Return one bounded page of raw rows represented by a grouped admin log entry.
+ *
+ * @param array $entry Representative grouped entry.
+ * @param int $limit Maximum number of items.
+ * @param int $offset Starting offset.
+ * @return array Structured result data for the caller.
+ */
+function admin_log_group_member_page(array $entry, int $limit = ADMIN_LOG_GROUP_MEMBER_PAGE_SIZE, int $offset = 0): array
+{
+    if (!admin_log_schema_ready()) {
+        return [];
+    }
+    // $memberFilter stores indexed predicates derived from the representative row.
+    $memberFilter = admin_log_group_member_filter($entry, 'l');
+    // $safeLimit keeps every browser or export batch strictly memory-bounded.
+    $safeLimit = max(1, min(500, $limit));
+    // $safeOffset prevents negative SQL offsets from malformed requests.
+    $safeOffset = max(0, $offset);
+    // $stmt stores only the requested page instead of materializing the whole group.
+    $stmt = db()->prepare(
+        'SELECT l.*, u.username FROM admin_logs l LEFT JOIN users u ON u.id = l.user_id'
+        . ' WHERE ' . $memberFilter['where_sql']
+        . ' ORDER BY l.created_at DESC, l.id DESC'
+        . ' LIMIT ' . $safeLimit . ' OFFSET ' . $safeOffset
+    );
+    $stmt->execute($memberFilter['params']);
+    return $stmt->fetchAll();
+}
+
+/**
+ * Return one descending keyset batch of grouped members for streaming exports.
+ *
+ * @param array $entry Representative grouped entry.
+ * @param ?string $beforeCreatedAt Created-at cursor; null starts at the newest row.
+ * @param int $beforeId Id cursor paired with beforeCreatedAt.
+ * @param int $limit Maximum number of rows.
+ * @return array Structured result data for the caller.
+ */
+function admin_log_group_member_export_batch(array $entry, ?string $beforeCreatedAt = null, int $beforeId = 0, int $limit = ADMIN_LOG_EXPORT_BATCH_SIZE): array
+{
+    if (!admin_log_schema_ready()) {
+        return [];
+    }
+    // $memberFilter stores indexed predicates derived from the representative row.
+    $memberFilter = admin_log_group_member_filter($entry, 'l');
+    // $safeLimit bounds one streaming chunk.
+    $safeLimit = max(50, min(2000, $limit));
+    $whereSql = $memberFilter['where_sql'];
+    $params = $memberFilter['params'];
+    if ($beforeCreatedAt !== null && $beforeCreatedAt !== '' && $beforeId > 0) {
+        $whereSql .= ' AND (l.created_at < ? OR (l.created_at = ? AND l.id < ?))';
+        $params[] = $beforeCreatedAt;
+        $params[] = $beforeCreatedAt;
+        $params[] = $beforeId;
+    }
+    // $stmt uses the grouping/created_at/id index as a descending keyset cursor.
+    $stmt = db()->prepare(
+        'SELECT l.*, u.username FROM admin_logs l LEFT JOIN users u ON u.id = l.user_id'
+        . ' WHERE ' . $whereSql
+        . ' ORDER BY l.created_at DESC, l.id DESC LIMIT ' . $safeLimit
+    );
+    $stmt->execute($params);
+    return $stmt->fetchAll();
+}
+
+/**
+ * Return aggregate timestamps and count for one grouped admin log entry.
+ *
+ * @param array $entry Representative grouped entry.
+ * @return array Structured result data for the caller.
+ */
+function admin_log_group_member_summary(array $entry): array
+{
+    if (!admin_log_schema_ready()) {
+        return ['group_count' => 0, 'first_created_at' => '', 'latest_created_at' => ''];
+    }
+    // $memberFilter stores indexed predicates derived from the representative row.
+    $memberFilter = admin_log_group_member_filter($entry, 'l');
+    // $stmt reads aggregate metadata only and never returns raw LONGTEXT contexts.
+    $stmt = db()->prepare(
+        'SELECT COUNT(*) AS group_count, MIN(l.created_at) AS first_created_at, MAX(l.created_at) AS latest_created_at'
+        . ' FROM admin_logs l WHERE ' . $memberFilter['where_sql']
+    );
+    $stmt->execute($memberFilter['params']);
+    $summary = $stmt->fetch();
+    if (!is_array($summary)) {
+        return ['group_count' => 0, 'first_created_at' => '', 'latest_created_at' => ''];
+    }
+    return [
+        'group_count' => max(0, (int) ($summary['group_count'] ?? 0)),
+        'first_created_at' => (string) ($summary['first_created_at'] ?? ''),
+        'latest_created_at' => (string) ($summary['latest_created_at'] ?? ''),
+    ];
+}
+
+/**
+ * Return every log row that belongs to the requested grouped hashes.
+ *
+ * This compatibility helper is intentionally bounded. Interactive grouped log
+ * details and exports use representative-row pagination instead, which prevents a
+ * single noisy event from materializing an arbitrarily large result in PHP memory.
+ *
+ * @param array $groupHashes Group hashes value.
+ * @param int $limit Maximum number of raw rows returned across all groups.
+ * @return array Structured result data for the caller.
+ */
+function admin_log_group_member_rows(array $groupHashes, int $limit = 500): array
 {
     if ($groupHashes === [] || !admin_log_schema_ready()) {
         return [];
@@ -629,7 +779,8 @@ function admin_log_group_member_rows(array $groupHashes): array
     $sql = 'SELECT l.*, u.username, ' . $hashSql . ' AS group_hash FROM admin_logs l'
         . ' LEFT JOIN users u ON u.id = l.user_id'
         . ' WHERE ' . $hashSql . ' IN (' . implode(', ', array_fill(0, count($hashes), '?')) . ')'
-        . ' ORDER BY l.created_at DESC, l.id DESC';
+        . ' ORDER BY l.created_at DESC, l.id DESC'
+        . ' LIMIT ' . max(1, min(2000, $limit));
     // $stmt stores the prepared grouped member query.
     $stmt = db()->prepare($sql);
     $stmt->execute($hashes);
@@ -675,6 +826,60 @@ function admin_log_attach_group_members(array $logs): array
 }
 
 /**
+ * Normalize the configured admin log retention in days. Zero disables automatic retention.
+ *
+ * @param int $days Retention days value.
+ * @return int Integer result for the caller.
+ */
+function admin_log_normalize_retention_days(int $days): int
+{
+    if ($days <= 0) {
+        return 0;
+    }
+    return max(ADMIN_LOG_MIN_RETENTION_DAYS, min(ADMIN_LOG_MAX_RETENTION_DAYS, $days));
+}
+
+/**
+ * Return the configured automatic admin log retention in days.
+ *
+ * @return int Integer result for the caller.
+ */
+function admin_log_retention_days(): int
+{
+    return admin_log_normalize_retention_days((int) app_setting('admin_log_retention_days', (string) ADMIN_LOG_DEFAULT_RETENTION_DAYS));
+}
+
+/**
+ * Preserve the legacy direct-retention function without deleting unarchived data.
+ *
+ * Admin log retention is now owned by the filesystem archive service. Historical
+ * rows may be removed only after a verified daily ZIP containing JSON and static
+ * HTML exists. Keeping this compatibility function as a no-op prevents older or
+ * custom maintenance callers from bypassing that archive-first safety contract.
+ *
+ * @param ?int $retentionDays Retention days value or null for the saved setting.
+ * @param ?float $deadline Optional maintenance deadline expressed as microtime(true).
+ * @param int $maxDeletes Legacy maximum rows argument, retained for call compatibility.
+ * @param int $batchSize Legacy batch-size argument, retained for call compatibility.
+ * @return array Structured result data for the caller.
+ */
+function admin_log_cleanup_retention(?int $retentionDays = null, ?float $deadline = null, int $maxDeletes = ADMIN_LOG_RETENTION_MAX_DELETE_PER_RUN, int $batchSize = ADMIN_LOG_RETENTION_DELETE_BATCH_SIZE): array
+{
+    unset($deadline, $maxDeletes, $batchSize);
+    $days = admin_log_normalize_retention_days($retentionDays ?? admin_log_retention_days());
+    return [
+        'enabled' => false,
+        'retention_days' => $days,
+        'deleted_rows' => 0,
+        'batches' => 0,
+        'cutoff' => '',
+        'has_more' => false,
+        'time_exhausted' => false,
+        'reason' => 'archive_service_required',
+    ];
+}
+
+/**
  * Return every admin log row available to the logs subsystem for full exports.
  *
  * @return array Structured result data for the caller.
@@ -714,6 +919,9 @@ function admin_log_export_columns(): array
         'subject_id',
         'request_id',
         'route_name',
+        'fingerprint',
+        'http_method',
+        'is_ajax',
         'resolved_at',
         'resolution_note',
         'context',
@@ -748,6 +956,9 @@ function admin_log_export_normalize_entry(array $entry): array
         'subject_id' => isset($entry['subject_id']) && $entry['subject_id'] !== null ? (int) $entry['subject_id'] : null,
         'request_id' => (string) ($entry['request_id'] ?? ''),
         'route_name' => (string) ($entry['route_name'] ?? ''),
+        'fingerprint' => (string) ($entry['fingerprint'] ?? ''),
+        'http_method' => (string) ($entry['http_method'] ?? ''),
+        'is_ajax' => !empty($entry['is_ajax']) ? 1 : 0,
         'resolved_at' => (string) ($entry['resolved_at'] ?? ''),
         'resolution_note' => (string) ($entry['resolution_note'] ?? ''),
         'context' => $context,
@@ -827,6 +1038,149 @@ function admin_log_export_csv(array $payload): string
         throw new RuntimeException('Unable to read generated CSV export.');
     }
     return $csv;
+}
+
+/**
+ * Return one ascending id-based export batch without holding the complete log table in memory.
+ *
+ * @param int $afterId Last exported id.
+ * @param int $limit Maximum number of rows.
+ * @return array Structured result data for the caller.
+ */
+function admin_log_export_row_batch(int $afterId, int $limit = ADMIN_LOG_EXPORT_BATCH_SIZE): array
+{
+    if (!admin_log_schema_ready()) {
+        return [];
+    }
+    // $safeLimit bounds both database and PHP memory for the export loop.
+    $safeLimit = max(50, min(2000, $limit));
+    // $stmt uses keyset pagination, so export cost does not degrade with large OFFSET values.
+    $stmt = db()->prepare(
+        'SELECT l.*, u.username FROM admin_logs l LEFT JOIN users u ON u.id = l.user_id'
+        . ' WHERE l.id > ? ORDER BY l.id ASC LIMIT ' . $safeLimit
+    );
+    $stmt->execute([max(0, $afterId)]);
+    return $stmt->fetchAll();
+}
+
+/**
+ * Create a complete CSV and JSON ZIP export using bounded database and file-stream batches.
+ *
+ * @param string $filePath File path filesystem path.
+ * @param int $batchSize Maximum rows held in PHP memory at once.
+ */
+function admin_log_create_export_zip_streamed(string $filePath, int $batchSize = ADMIN_LOG_EXPORT_BATCH_SIZE): void
+{
+    if (!class_exists(ZipArchive::class)) {
+        throw new RuntimeException('ZipArchive is not available.');
+    }
+    if (!admin_log_schema_ready()) {
+        throw new RuntimeException('Admin log schema is not available.');
+    }
+
+    // $csvPath and $jsonPath keep large export payloads on disk instead of PHP memory.
+    $csvPath = tempnam(sys_get_temp_dir(), 'php-gallery-admin-logs-csv-');
+    $jsonPath = tempnam(sys_get_temp_dir(), 'php-gallery-admin-logs-json-');
+    if ($csvPath === false || $jsonPath === false) {
+        if (is_string($csvPath) && is_file($csvPath)) {
+            @unlink($csvPath);
+        }
+        if (is_string($jsonPath) && is_file($jsonPath)) {
+            @unlink($jsonPath);
+        }
+        throw new RuntimeException('Unable to allocate temporary admin log export streams.');
+    }
+
+    $csvHandle = null;
+    $jsonHandle = null;
+    $zip = null;
+    try {
+        $csvHandle = fopen($csvPath, 'wb');
+        $jsonHandle = fopen($jsonPath, 'wb');
+        if ($csvHandle === false || $jsonHandle === false) {
+            throw new RuntimeException('Unable to open temporary admin log export streams.');
+        }
+
+        // $columns stores the stable shared CSV/JSON column contract.
+        $columns = admin_log_export_columns();
+        fputcsv($csvHandle, $columns, ',', '"', '');
+
+        // $rowCount is scalar metadata only and does not materialize row payloads.
+        $rowCount = admin_log_count();
+        $schemaJson = json_encode('php-gallery-admin-logs-v1', JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $generatedAtJson = json_encode(now_sql(), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $columnsJson = json_encode($columns, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        if ($schemaJson === false || $generatedAtJson === false || $columnsJson === false) {
+            throw new RuntimeException('Unable to encode admin log export metadata.');
+        }
+        fwrite($jsonHandle, "{\n  \"schema\": " . $schemaJson . ",\n  \"generated_at\": " . $generatedAtJson . ",\n  \"row_count\": " . $rowCount . ",\n  \"columns\": " . $columnsJson . ",\n  \"logs\": [");
+
+        $afterId = 0;
+        $firstJsonRow = true;
+        while (true) {
+            // $batch stores only one bounded keyset page at a time.
+            $batch = admin_log_export_row_batch($afterId, $batchSize);
+            if ($batch === []) {
+                break;
+            }
+            foreach ($batch as $entry) {
+                $normalized = admin_log_export_normalize_entry($entry);
+                $csvRow = [];
+                foreach ($columns as $column) {
+                    $value = $normalized[$column] ?? '';
+                    if (is_array($value)) {
+                        $value = json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                        if ($value === false) {
+                            $value = '';
+                        }
+                    }
+                    $csvRow[] = $value;
+                }
+                fputcsv($csvHandle, $csvRow, ',', '"', '');
+
+                $encoded = json_encode($normalized, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                if ($encoded === false) {
+                    throw new RuntimeException('Unable to encode admin log JSON export row: ' . json_last_error_msg());
+                }
+                fwrite($jsonHandle, ($firstJsonRow ? "\n" : ",\n") . '    ' . $encoded);
+                $firstJsonRow = false;
+                $afterId = max($afterId, (int) ($entry['id'] ?? 0));
+            }
+            if (count($batch) < max(50, min(2000, $batchSize))) {
+                break;
+            }
+        }
+        fwrite($jsonHandle, ($firstJsonRow ? '' : "\n") . "  ]\n}\n");
+        fclose($csvHandle);
+        $csvHandle = null;
+        fclose($jsonHandle);
+        $jsonHandle = null;
+
+        $zip = new ZipArchive();
+        if ($zip->open($filePath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+            throw new RuntimeException('Unable to create admin log ZIP export.');
+        }
+        if (!$zip->addFile($csvPath, 'logs.csv') || !$zip->addFile($jsonPath, 'logs.json')) {
+            throw new RuntimeException('Unable to add streamed admin log export files to ZIP.');
+        }
+        $zip->close();
+        $zip = null;
+        if (!is_file($filePath)) {
+            throw new RuntimeException('Unable to finalize admin log ZIP export.');
+        }
+    } finally {
+        if (is_resource($csvHandle)) {
+            fclose($csvHandle);
+        }
+        if (is_resource($jsonHandle)) {
+            fclose($jsonHandle);
+        }
+        if ($zip instanceof ZipArchive) {
+            $zip->close();
+        }
+        @unlink($csvPath);
+        @unlink($jsonPath);
+    }
 }
 
 /**
@@ -971,6 +1325,27 @@ function admin_log_export_text(array $entry): string
 }
 
 /**
+ * Build the fixed header used by grouped plain-text log exports.
+ *
+ * @param array $entry Entry value.
+ * @param int $groupCount Group count value.
+ * @return string Text result for the caller.
+ */
+function admin_log_export_group_header_text(array $entry, int $groupCount): string
+{
+    $lines = [
+        admin_log_english_t('admin.logs.export.title', 'PHP Gallery admin log event'),
+        str_repeat('=', 60),
+        admin_log_english_t('admin.logs.export.event_key', 'Event key: {value}', ['value' => (string) ($entry['event_key'] ?? '')]),
+        admin_log_english_t('admin.logs.group_count', 'Grouped entries') . ': ' . max(0, $groupCount),
+        admin_log_english_t('admin.logs.first_seen', 'First seen') . ': ' . (string) ($entry['first_created_at'] ?? $entry['created_at'] ?? ''),
+        admin_log_english_t('admin.logs.latest_seen', 'Latest seen') . ': ' . (string) ($entry['latest_created_at'] ?? $entry['created_at'] ?? ''),
+        '',
+    ];
+    return implode("\n", $lines) . "\n";
+}
+
+/**
  * Build a plain-text diagnostic export for a grouped admin log summary.
  *
  * @param array $entry Entry value.
@@ -980,22 +1355,12 @@ function admin_log_export_text(array $entry): string
 function admin_log_export_group_text(array $entry, array $groupMembers): string
 {
     $groupCount = count($groupMembers);
-    $lines = [
-        admin_log_english_t('admin.logs.export.title', 'PHP Gallery admin log event'),
-        str_repeat('=', 60),
-        admin_log_english_t('admin.logs.export.event_key', 'Event key: {value}', ['value' => (string) ($entry['event_key'] ?? '')]),
-        admin_log_english_t('admin.logs.group_count', 'Grouped entries') . ': ' . $groupCount,
-        admin_log_english_t('admin.logs.first_seen', 'First seen') . ': ' . (string) ($entry['first_created_at'] ?? $entry['created_at'] ?? ''),
-        admin_log_english_t('admin.logs.latest_seen', 'Latest seen') . ': ' . (string) ($entry['latest_created_at'] ?? $entry['created_at'] ?? ''),
-        '',
-    ];
-
+    $text = admin_log_export_group_header_text($entry, $groupCount);
     foreach ($groupMembers as $index => $member) {
-        $lines[] = '[' . ($index + 1) . '/' . $groupCount . ']';
-        $lines[] = admin_log_export_text($member);
+        $text .= '[' . ($index + 1) . '/' . $groupCount . "]\n";
+        $text .= admin_log_export_text($member) . "\n";
     }
-
-    return implode("\n", $lines) . "\n";
+    return $text;
 }
 
 /**

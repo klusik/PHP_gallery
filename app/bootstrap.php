@@ -37,6 +37,7 @@ declare(strict_types=1);
 namespace Gallery\Core;
 
 use function Gallery\Services\application_autoupdate_maybe_run;
+use function Gallery\Services\admin_log_archive_register_request_trigger;
 use function Gallery\Services\auth_admin_session_lifetime_seconds;
 use function Gallery\Services\feature_flag_render_disabled_route;
 use function Gallery\Services\feature_flag_route_enabled;
@@ -46,7 +47,7 @@ use function Gallery\Services\seo_request_guard_enforce;
 use function Gallery\Services\site_maintenance_register_request_trigger;
 use function Gallery\Services\translation_bootstrap_request;
 
-const CMS_VERSION = '0.86.1';
+const CMS_VERSION = '0.87';
 const CMS_GITHUB_REPOSITORY = 'klusik/PHP_gallery';
 const CMS_UPDATE_BRANCHES = ['main', 'master'];
 
@@ -171,6 +172,9 @@ function cms_run(): void
     translation_bootstrap_request($page);
     send_security_headers();
     application_autoupdate_maybe_run();
+    if (function_exists('Gallery\\Services\\admin_log_archive_register_request_trigger')) {
+        admin_log_archive_register_request_trigger($page);
+    }
     if (function_exists('Gallery\\Services\\site_maintenance_register_request_trigger')) {
         site_maintenance_register_request_trigger($page);
     }
@@ -287,9 +291,13 @@ function cms_run(): void
         'admin_openai_text_assist' => '\\Gallery\\Controllers\\cms_admin_openai_text_assist',
         'admin_integrity' => '\\Gallery\\Controllers\\cms_admin_integrity',
         'admin_logs' => '\\Gallery\\Controllers\\cms_admin_logs',
+        'admin_log_group_members' => '\\Gallery\\Controllers\\cms_admin_log_group_members',
         'admin_log_update' => '\\Gallery\\Controllers\\cms_admin_log_update',
         'admin_log_export' => '\\Gallery\\Controllers\\cms_admin_log_export',
         'admin_logs_export_zip' => '\\Gallery\\Controllers\\cms_admin_logs_export_zip',
+        'admin_log_archive_maintenance' => '\\Gallery\\Controllers\\cms_admin_log_archive_maintenance',
+        'admin_log_archive_view' => '\\Gallery\\Controllers\\cms_admin_log_archive_view',
+        'admin_log_archive_download' => '\\Gallery\\Controllers\\cms_admin_log_archive_download',
         'admin_telemetry' => '\\Gallery\\Controllers\\cms_admin_telemetry',
         'admin_telemetry_settings' => '\\Gallery\\Controllers\\cms_admin_telemetry_settings',
         'admin_telemetry_maintenance' => '\\Gallery\\Controllers\\cms_admin_telemetry_maintenance',

@@ -9,7 +9,7 @@ This document is intended to help future maintainers and AI coding agents unders
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.86.1';
+const CMS_VERSION = '0.87';
 ```
 
 Update-related code uses:
@@ -319,14 +319,14 @@ Key service families:
 | Gallery model | `gallery_lookup.php`, `gallery_mutations.php`, `gallery_paths.php`, `gallery_display.php`, `gallery_grid.php`, `gallery_dates.php`, `gallery_count_badges.php`, `gallery_description_layout.php` | Gallery queries, edits, URLs, manual date ranges, EXIF-derived date suggestions, display inheritance and presentation options. |
 | Gallery assets | `gallery_covers.php`, `gallery_backgrounds.php`, `gallery_branding.php`, `favicon.php` | Cover, background, banner, logo, separator and favicon handling. |
 | Images | `image_scanning.php`, `uploads.php`, `browser_uploads.php`, `dng_derivatives.php`, `picture_manager.php` | Image discovery, metadata scan, standard upload, browser client-prepared ZIP ingestion, copy/move, public-view selection sharing and DNG helper logic. |
-| Thumbnails | `thumbnails.php`, `thumbnail_sources.php`, `thumbnail_generation.php`, `thumbnail_bundles.php`, `thumbnail_formats.php`, `thumbnail_html.php`, `thumbnail_bounds.php`, `thumbnail_maintenance.php` | Thumbnail pathing, static serving, generation, quality bounds and responsive HTML. |
+| Thumbnails | `thumbnails.php`, `thumbnail_sources.php`, `thumbnail_generation.php`, `thumbnail_bundles.php`, `thumbnail_formats.php`, `thumbnail_html.php`, `thumbnail_bounds.php`, `thumbnail_maintenance.php`, `public_thumbnail_rendering.php` | Thumbnail pathing, static serving, generation, quality bounds, responsive/progressive server markup, and selected-gallery renderer policy. |
 | Access | `gallery_access.php`, `auth_persistence.php`, `auth_throttle.php`, `google_auth.php`, `download_signatures.php` | Protected gallery access, admin sessions, durable login, Google linking, download signatures. |
 | Tags | `tags.php`, `tag_metadata.php` | Tag CRUD, slugs, entity linking and weighted suggestions. |
 | Search | `public_search.php`, `lightbox_metadata.php` | Public search across galleries, images, tags and AI metadata. |
 | Maps and aviation | `exif.php`, `flight_maps.php`, `navigation_data.php`, `simbrief_descriptions.php` | EXIF GPS, default-enabled EXIF/GPS display policy with per-gallery overrides, flight route maps, waypoint lookup and SimBrief OFP processing. |
 | AI | `ai_image_analysis.php`, `openai_text_assist.php` | Local AI metadata queue, OpenAI text/image-description integration. |
 | Telemetry | `telemetry.php`, `telemetry_privacy.php`, `telemetry_settings.php`, `telemetry_rollup.php`, `database_observer.php` | Anonymous usage events, media serving metrics, privacy bucketing and rollups. |
-| Admin operations | `admin_dashboard.php`, `admin_render_profiler.php`, `logs.php`, `updates.php`, `github.php`, `gallery_migration.php`, `site_maintenance.php` | Dashboard model, diagnostics, audit logs, GitHub update checks, API migration and resumable scheduled maintenance. |
+| Admin operations | `admin_dashboard.php`, `admin_render_profiler.php`, `logs.php`, `admin_log_archives.php`, `updates.php`, `github.php`, `gallery_migration.php`, `site_maintenance.php` | Dashboard model, diagnostics, grouped and exportable audit logs, protected day archives, GitHub update checks, API migration and resumable scheduled maintenance. |
 
 ## View Layer
 
@@ -430,6 +430,8 @@ delete_app_settings(array $keys): void
 ```
 
 Settings are used for URL rewrites, site name, dev mode, collapsed admin state, public search, theme behavior, telemetry preferences and related runtime options.
+
+`public_thumbnail_rendering_mode` is a scalar site setting owned by `app/services/public_thumbnail_rendering.php`. Its only machine values are `responsive` and `progressive`; missing, empty, unknown, malformed, or obsolete values normalize to `responsive`. Admin Theme persists the setting after the existing administrator and CSRF checks. No schema migration is required because the setting uses the existing `app_settings` key/value table.
 
 Theme favorite shortcuts are stored as a JSON array in `theme_favorite_gallery_ids`. The array may contain numeric gallery IDs and the `home` token for the main gallery page. `app/services/favorite_galleries.php` normalizes the value, removes duplicates, validates that selected galleries still exist before saving, and resolves public header navigation items in configured order. Anonymous visitors only receive gallery shortcuts that remain public and listed; the main page shortcut is always safe to render.
 
@@ -616,7 +618,23 @@ Important concepts:
 4. Thumbnail bounds can be configured globally, per gallery and per image.
 5. Admin maintenance screens can generate or delete thumbnails.
 6. Scheduled site maintenance calls the same thumbnail generation service in bounded cron-safe batches, records progress after each image, reuses valid existing thumbnails and only repairs missing, stale or invalid-ratio variants. Automatic maintenance runs only inside the configured UTC window and can chain safe web slices until the cycle completes or the window ends.
-7. Public pages use responsive picture helpers to select suitable variants.
+7. Public thumbnail cards always keep server-rendered semantic picture/img markup; renderer policy only changes how candidate URLs become active.
+
+### Public Thumbnail Rendering Pipelines
+
+`app/services/public_thumbnail_rendering.php` is the renderer-selection boundary for selected-gallery photo cards. It owns the setting key, allowed values, safe default, normalization, mode-specific initial loading policy, and final choice between `thumbnail_picture_html()` and `thumbnail_progressive_picture_html()`. `app/controllers/public_gallery.php` does not duplicate card rendering or perform renderer string comparisons. Access checks, URLs, lightbox attributes, votes, maps, tags, pagination, thumbnail bundles, and media-manifest preparation remain shared.
+
+The **responsive** pipeline is the permanent default. `thumbnail_picture_html()` emits the complete available WebP/JPEG srcsets and the existing `sizes` hint during server rendering, with the 300 px request as the preferred fallback. The browser therefore chooses the suitable bounded/generated candidate during HTML parsing. The responsive loading policy is unchanged: cards 1 and 2 are eager/high priority, cards 3 through 8 are eager/auto, and later cards are lazy/low. JavaScript is not required.
+
+The **progressive** pipeline is also permanent even though Admin currently labels its availability Beta. `thumbnail_progressive_picture_html()` emits a real small `src` and small-only active srcsets, plus larger bounded candidates in `data-progressive-srcset`. The first small card is eager/high, the second is eager/auto, and later small thumbnails are native lazy/low. Stored `display_width`/`display_height`, with legacy `width`/`height` fallback, are emitted as intrinsic dimensions without opening originals during rendering. Existing public thumbnail background styling provides a stable painted placeholder, and progressive code intentionally adds no required animation, so reduced-motion users do not receive extra motion.
+
+Browser activation is conditional. `public/assets/public-gallery.js` dynamically imports `progressive-thumbnail-renderer.js` only when progressive markers exist on anonymous markup; logged-in public pages use the same conditional import from `gallery.js`, while Admin-only pages do not load it. Two IntersectionObservers distinguish visible cards from a 720 px near-viewport margin. Larger work is scheduled only after the small image loads, prefers `requestIdleCallback` with a bounded timeout, and falls back to a short timer. A single exported concurrency constant limits preload/decode work to 2. Visible queued cards are prioritized over merely near-visible cards, duplicate jobs collapse, disconnected nodes are removed, and ResizeObserver can reconsider only currently relevant cards.
+
+`progressive-thumbnail-upgrade.js` measures the rendered card width, multiplies by device pixel ratio capped at 2, and selects the smallest adequate available candidate above the currently active width. It uses the native `Image` loader and `decode()` where available. Live `source/srcset` or `img/srcset` attributes change only after the replacement is ready. Failed upgrades leave the small image untouched. No `fetch()`, Blob URL, byte-progress mechanism, page reload, or navigation is involved. Teardown aborts late DOM mutations and disconnects observers before reinitialization.
+
+The renderer setting currently applies only to selected-gallery photo cards. Subgallery covers, subgallery collage cells, home-page gallery cards, search/card contexts that reuse gallery covers, and Admin/maintenance thumbnails remain responsive intentionally. This avoids repaint waves in collage cells and keeps the primary feature boundary narrow.
+
+Both pipelines consume the same request-local `thumbnail_bundles.php` variants prepared through `public_gallery_media_manifest.php`, respect `thumbnail_bounds.php`, and preserve `thumbnail_warmup.php` authorization metadata. SEO remains server-rendered: image elements, alt text, direct photo/gallery links, JSON-LD, social metadata, and media URLs retain their existing ownership. Security gates run before bundle/URL construction for restricted NSFW photos, and password/gallery visibility plus media endpoint authorization are unchanged. JavaScript-disabled progressive pages remain navigable with their small thumbnails.
 
 Use the service family instead of hardcoding thumbnail paths:
 
@@ -625,6 +643,7 @@ thumbnail_sources.php
 thumbnail_generation.php
 thumbnail_bundles.php
 thumbnail_html.php
+public_thumbnail_rendering.php
 thumbnail_maintenance.php
 thumbnail_bounds.php
 ```

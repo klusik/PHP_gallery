@@ -1,0 +1,12 @@
+# Documentation files use an explicit opt-in policy.
+*
+
+# Allow Git to traverse documentation subdirectories.
+!*/
+
+# Keep documentation policy files and approved source/delivery formats.
+!.gitignore
+!**/.gitignore
+!**/*.tex
+!**/*.pdf
+!**/*.md

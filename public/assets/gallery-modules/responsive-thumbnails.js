@@ -33,10 +33,10 @@
 /**
  * Responsive thumbnail size hints
  *
- * Measures rendered gallery cells only when they are near the viewport. Public
- * gallery thumbnails start with a cheap 300px candidate, then this module
- * upgrades visible large cells to their full srcset after the first image has
- * had a chance to paint.
+ * Measures explicitly opted-in `data-responsive-thumbnail` markup when it is near
+ * the viewport. The permanent responsive browser-selection renderer does not emit
+ * that marker and does not depend on this compatibility module. Selected-gallery
+ * progressive rendering uses the dedicated progressive-thumbnail-renderer modules.
  *
  * Example usage from the gallery entrypoint:
  *

@@ -1948,9 +1948,13 @@ function render_footer(): void
         dirname(__DIR__) . '/public/assets/gallery-modules/public-home-search.js',
         dirname(__DIR__) . '/public/assets/gallery-modules/back-to-top.js',
         dirname(__DIR__) . '/public/assets/gallery-modules/responsive-thumbnails.js',
+        dirname(__DIR__) . '/public/assets/gallery-modules/progressive-thumbnail-renderer.js',
+        dirname(__DIR__) . '/public/assets/gallery-modules/progressive-thumbnail-upgrade.js',
         dirname(__DIR__) . '/public/assets/gallery-modules/thumbnail-warmup.js',
     ] : [
         $scriptPath,
+        dirname(__DIR__) . '/public/assets/gallery-modules/progressive-thumbnail-renderer.js',
+        dirname(__DIR__) . '/public/assets/gallery-modules/progressive-thumbnail-upgrade.js',
         dirname(__DIR__) . '/public/assets/gallery-modules/lightbox.js',
         dirname(__DIR__) . '/public/assets/gallery-modules/lightbox-votes.js',
         dirname(__DIR__) . '/public/assets/gallery-modules/tag-suggestions.js',

@@ -414,6 +414,10 @@ function render_public_render_profile_panel(): void
     $snapshot = public_render_profile_snapshot();
     $counters = isset($snapshot['counters']) && is_array($snapshot['counters']) ? $snapshot['counters'] : [];
     $timers = isset($snapshot['timers']) && is_array($snapshot['timers']) ? $snapshot['timers'] : [];
+    // $thumbnailRenderingMode exposes only the validated machine mode to the admin-only browser diagnostics panel.
+    $thumbnailRenderingMode = (string) ($snapshot['route'] ?? '') === 'gallery' && function_exists('Gallery\Services\public_thumbnail_rendering_mode')
+        ? public_thumbnail_rendering_mode()
+        : '';
 
     echo '<details class="public-render-profile" data-public-render-profile>'; 
     echo '<summary>' . e(t('dev.public_render_profile.title', 'Public render profile'));
@@ -442,6 +446,13 @@ function render_public_render_profile_panel(): void
             echo '<tr><th>' . e((string) $row['purpose']) . '</th><td>' . (int) $row['size'] . '</td><td>' . e((string) $row['format']) . '</td><td>' . (int) $row['calls'] . '</td><td>' . (int) $row['cache_hits'] . '</td><td>' . (int) $row['bundle_calls'] . '</td><td>' . number_format((float) $row['total_ms'], 2, '.', ' ') . '</td><td>' . number_format((float) $row['max_ms'], 2, '.', ' ') . '</td></tr>';
         }
         echo '</tbody></table></section>';
+    }
+    if ($thumbnailRenderingMode !== '') {
+        echo '<section class="public-render-profile-wide public-thumbnail-diagnostics" data-public-thumbnail-diagnostics data-thumbnail-rendering-mode="' . e($thumbnailRenderingMode) . '" data-gallery-id="' . (int) ($snapshot['gallery_id'] ?? 0) . '" data-server-total-ms="' . e(number_format((float) ($snapshot['total_ms'] ?? 0.0), 4, '.', '')) . '">';
+        echo '<div class="public-thumbnail-diagnostics-heading"><div><h2>' . e(t('dev.public_render_profile.thumbnail_renderer_diagnostics', 'Thumbnail renderer diagnostics')) . '</h2><p class="public-thumbnail-diagnostics-help">' . e(t('dev.public_render_profile.thumbnail_renderer_diagnostics_help', 'Live admin-only browser measurements for comparing responsive and progressive loads. Clear the browser cache the same way before each comparison.')) . '</p></div><button type="button" class="button secondary" data-public-thumbnail-diagnostics-copy data-copy-label="' . e(t('dev.public_render_profile.copy_thumbnail_report', 'Copy thumbnail report')) . '" data-copied-label="' . e(t('dev.public_render_profile.thumbnail_report_copied', 'Copied')) . '">' . e(t('dev.public_render_profile.copy_thumbnail_report', 'Copy thumbnail report')) . '</button></div>';
+        echo '<textarea class="public-thumbnail-diagnostics-report" rows="24" readonly spellcheck="false" data-public-thumbnail-diagnostics-report>' . e(t('dev.public_render_profile.thumbnail_report_loading', 'Collecting browser thumbnail measurements...')) . '</textarea>';
+        echo '<p class="public-thumbnail-diagnostics-help">' . e(t('dev.public_render_profile.thumbnail_report_bytes_note', 'Resource Timing byte values can be zero for browser cache hits. Use the same hard-reload or cache-clearing procedure for both renderer samples.')) . '</p>';
+        echo '</section>';
     }
     echo '</div>';
     echo '<p class="public-render-profile-note">' . e(t('dev.public_render_profile.admin_only_note', 'Admin-only diagnostics. Anonymous visitors do not see this panel.')) . '</p>';
