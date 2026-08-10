@@ -148,6 +148,18 @@ assert_admin_log_archive_maintenance(
     'Admin Logs must expose retention, force-run, view, download, and manual archive deletion controls.'
 );
 assert_admin_log_archive_maintenance(
+    str_contains($controllerSource, 'function render_admin_log_section_tabs(string $activeSection): void')
+        && str_contains($controllerSource, '>Logs</a>')
+        && str_contains($controllerSource, '>Maintenance &amp; archives</a>')
+        && str_contains($controllerSource, 'if ($section === \'maintenance\')'),
+    'Admin Logs must separate live browsing from maintenance and archive management with server-backed subtabs.'
+);
+assert_admin_log_archive_maintenance(
+    strpos($controllerSource, 'if ($section === \'maintenance\')') < strpos($controllerSource, 'admin_log_grouped_count($status, $filters)')
+        && str_contains($controllerSource, "redirect_to(url_for('admin_logs', ['section' => 'maintenance']));"),
+    'The Maintenance & archives subtab must bypass live-log queries and maintenance actions must return to that subtab.'
+);
+assert_admin_log_archive_maintenance(
     !str_contains($siteMaintenanceSource, 'admin_log_cleanup_retention(null, $deadline)')
         && !str_contains($siteMaintenanceViewSource, 'site_maintenance_admin_log_retention_days'),
     'General site maintenance must no longer purge Admin logs or own the retention setting.'

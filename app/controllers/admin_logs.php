@@ -805,12 +805,85 @@ function render_admin_log_archive_panel(array $status, array $archiveList): void
     echo '</section>';
 }
 
+
+/**
+ * Normalize the selected Admin Logs subsection.
+ *
+ * @param mixed $value Submitted subsection value.
+ * @return string Stable subsection identifier.
+ */
+function admin_log_section(mixed $value): string
+{
+    return strtolower(trim((string) $value)) === 'maintenance' ? 'maintenance' : 'logs';
+}
+
+/**
+ * Render server-backed Admin Logs subtabs.
+ *
+ * These deliberately navigate instead of only hiding DOM panels so the inactive
+ * subsection does not perform its database or filesystem work in the background.
+ *
+ * @param string $activeSection Current normalized subsection.
+ */
+function render_admin_log_section_tabs(string $activeSection): void
+{
+    // $preservedParams keeps live-log filter state when temporarily opening maintenance.
+    $preservedParams = $_GET;
+    unset($preservedParams['page'], $preservedParams['section'], $preservedParams['ajax'], $preservedParams['archive_page']);
+
+    $logsUrl = url_for('admin_logs', $preservedParams);
+    $maintenanceUrl = url_for('admin_logs', array_merge($preservedParams, ['section' => 'maintenance']));
+
+    echo '<nav class="admin-subtabs admin-log-section-tabs" aria-label="Admin log sections">';
+    echo '<div class="admin-subtab-list">';
+    echo '<a class="admin-subtab' . ($activeSection === 'logs' ? ' is-active' : '') . '" href="' . e($logsUrl) . '"' . ($activeSection === 'logs' ? ' aria-current="page"' : '') . '>Logs</a>';
+    echo '<a class="admin-subtab' . ($activeSection === 'maintenance' ? ' is-active' : '') . '" href="' . e($maintenanceUrl) . '"' . ($activeSection === 'maintenance' ? ' aria-current="page"' : '') . '>Maintenance &amp; archives</a>';
+    echo '</div></nav>';
+}
+
+/**
+ * Render the shared Admin Logs page heading and subsection navigation.
+ *
+ * @param string $activeSection Current normalized subsection.
+ */
+function render_admin_log_page_heading(string $activeSection): void
+{
+    echo '<section class="hero"><h1>' . e(admin_log_english_t('admin.logs.title', 'Admin log')) . '</h1><p>' . e(admin_log_english_t('admin.logs.intro', 'Operational events, failures, and maintenance actions.')) . '</p><nav class="nav">';
+    echo '<a class="button secondary" href="' . e(url_for('admin')) . '">' . e(admin_log_english_t('admin.logs.back_to_dashboard', 'Back to dashboard')) . '</a>';
+    echo '<a class="button secondary" href="' . e(url_for('admin_telemetry')) . '">' . e(admin_log_english_t('admin.logs.anonymous_telemetry', 'Anonymous telemetry')) . '</a>';
+    echo '</nav></section>';
+    render_admin_log_section_tabs($activeSection);
+}
+
 /**
  * Handles cms admin logs logic for the gallery application.
  */
 function cms_admin_logs(): void
 {
     require_admin();
+    // $section stores the server-backed Admin Logs subsection selected by the user.
+    $section = admin_log_section($_GET['section'] ?? 'logs');
+    // $notice stores the result of retention, manual maintenance, and archive file actions.
+    $notice = (string) flash_message('admin_notice');
+
+    if ($section === 'maintenance') {
+        // $archivePage stores the filesystem archive browser page independently of live-log pagination.
+        $archivePage = admin_log_archive_page_number($_GET['archive_page'] ?? 1);
+        // $archiveStatus stores the lightweight counter state and filesystem inventory.
+        $archiveStatus = admin_log_archive_status();
+        // $archiveList opens manifests only for the currently visible archive page.
+        $archiveList = admin_log_archive_list($archivePage);
+
+        render_header(admin_log_english_t('admin.logs.title', 'Admin log'));
+        render_admin_log_page_heading($section);
+        if ($notice !== '') {
+            echo '<div class="notice">' . e($notice) . '</div>';
+        }
+        render_admin_log_archive_panel($archiveStatus, $archiveList);
+        render_footer();
+        return;
+    }
+
     // $status remains available to the service layer but is intentionally hidden from the admin log UI.
     $status = null;
     // $category stores the operational category filter.
@@ -873,27 +946,13 @@ function cms_admin_logs(): void
         return;
     }
 
-    // $archivePage stores the filesystem archive browser page independently of live-log pagination.
-    $archivePage = admin_log_archive_page_number($_GET['archive_page'] ?? 1);
-    // $archiveStatus stores the lightweight counter state and filesystem inventory.
-    $archiveStatus = admin_log_archive_status();
-    // $archiveList opens manifests only for the currently visible archive page.
-    $archiveList = admin_log_archive_list($archivePage);
-    // $notice stores the result of retention, manual maintenance, and archive file actions.
-    $notice = (string) flash_message('admin_notice');
-
     render_header(admin_log_english_t('admin.logs.title', 'Admin log'));
-    echo '<section class="hero"><h1>' . e(admin_log_english_t('admin.logs.title', 'Admin log')) . '</h1><p>' . e(admin_log_english_t('admin.logs.intro', 'Operational events, failures, and maintenance actions.')) . '</p><nav class="nav">';
-    echo '<a class="button secondary" href="' . e(url_for('admin')) . '">' . e(admin_log_english_t('admin.logs.back_to_dashboard', 'Back to dashboard')) . '</a>';
-    echo '<a class="button secondary" href="' . e(url_for('admin_telemetry')) . '">' . e(admin_log_english_t('admin.logs.anonymous_telemetry', 'Anonymous telemetry')) . '</a>';
-    echo '<a class="button" href="' . e(url_for('admin_logs_export_zip')) . '">' . e(admin_log_english_t('admin.logs.export_all_zip', 'Export all logs ZIP')) . '</a>';
-    echo '</nav></section>';
+    render_admin_log_page_heading($section);
     if ($notice !== '') {
         echo '<div class="notice">' . e($notice) . '</div>';
     }
-    render_admin_log_archive_panel($archiveStatus, $archiveList);
 
-    echo '<section class="panel admin-log-filters-panel"><div class="admin-log-filters-header"><div><h2>' . e(admin_log_english_t('admin.logs.filters', 'Filters')) . '</h2><p class="muted">' . e(admin_log_english_t('admin.logs.filters_intro', 'Refine the operational log by category, severity, grouping, and row count.')) . '</p></div><span class="admin-log-filter-state" data-admin-log-live-state aria-live="polite"></span></div><form method="get" action="' . e(base_url('index.php')) . '" class="admin-log-filter-grid" data-admin-log-filter-form data-admin-log-live-url="' . e(url_for('admin_logs')) . '" data-admin-log-searching-text="' . e(admin_log_english_t('admin.logs.searching', 'Searching...')) . '" data-admin-log-updated-text="' . e(admin_log_english_t('admin.logs.updated', 'Updated.')) . '" data-admin-log-failed-text="' . e(admin_log_english_t('admin.logs.live_search_failed', 'Live search failed. Use Apply filters.')) . '" data-admin-log-shown-text="' . e(admin_log_english_t('admin.logs.shown_suffix', 'shown')) . '" data-admin-log-when-text="' . e(admin_log_english_t('admin.logs.when', 'When')) . '">';
+    echo '<section class="panel admin-log-filters-panel"><div class="admin-log-filters-header"><div><h2>' . e(admin_log_english_t('admin.logs.filters', 'Filters')) . '</h2><p class="muted">' . e(admin_log_english_t('admin.logs.filters_intro', 'Refine the operational log by category, severity, grouping, and row count.')) . '</p></div><div class="admin-log-filters-header-actions"><a class="button secondary" href="' . e(url_for('admin_logs_export_zip')) . '">' . e(admin_log_english_t('admin.logs.export_all_zip', 'Export all logs ZIP')) . '</a><span class="admin-log-filter-state" data-admin-log-live-state aria-live="polite"></span></div></div><form method="get" action="' . e(base_url('index.php')) . '" class="admin-log-filter-grid" data-admin-log-filter-form data-admin-log-live-url="' . e(url_for('admin_logs')) . '" data-admin-log-searching-text="' . e(admin_log_english_t('admin.logs.searching', 'Searching...')) . '" data-admin-log-updated-text="' . e(admin_log_english_t('admin.logs.updated', 'Updated.')) . '" data-admin-log-failed-text="' . e(admin_log_english_t('admin.logs.live_search_failed', 'Live search failed. Use Apply filters.')) . '" data-admin-log-shown-text="' . e(admin_log_english_t('admin.logs.shown_suffix', 'shown')) . '" data-admin-log-when-text="' . e(admin_log_english_t('admin.logs.when', 'When')) . '">';
     echo '<input type="hidden" name="page" value="admin_logs">';
     echo '<input type="hidden" name="log_page" value="' . (int) $currentPage . '" data-admin-log-page-input>';
     echo '<div class="admin-log-filter-main">';
@@ -1003,7 +1062,7 @@ function cms_admin_log_archive_maintenance(): void
         $days = admin_log_archive_set_retention_days((int) ($_POST['retention_days'] ?? 30));
         $label = $days === 0 ? 'Forever' : $days . ' days';
         flash_message('admin_notice', 'Admin log live retention saved: ' . $label . '. Archived ZIP files are never deleted automatically.');
-        redirect_to(url_for('admin_logs'));
+        redirect_to(url_for('admin_logs', ['section' => 'maintenance']));
     }
 
     if ($action === 'run_now') {
@@ -1030,14 +1089,14 @@ function cms_admin_log_archive_maintenance(): void
         } else {
             flash_message('admin_notice', 'Admin log maintenance found no completed days old enough to archive.');
         }
-        redirect_to(url_for('admin_logs'));
+        redirect_to(url_for('admin_logs', ['section' => 'maintenance']));
     }
 
     if ($action === 'delete_archive') {
         $date = trim((string) ($_POST['date'] ?? ''));
         if (!admin_log_archive_valid_date($date)) {
             flash_message('admin_notice', 'Invalid Admin log archive date.');
-            redirect_to(url_for('admin_logs'));
+            redirect_to(url_for('admin_logs', ['section' => 'maintenance']));
         }
         try {
             $deleted = admin_log_archive_delete_file($date);
@@ -1056,7 +1115,7 @@ function cms_admin_log_archive_maintenance(): void
         } catch (Throwable $exception) {
             flash_message('admin_notice', 'Unable to delete the selected Admin log archive: ' . $exception->getMessage());
         }
-        redirect_to(url_for('admin_logs'));
+        redirect_to(url_for('admin_logs', ['section' => 'maintenance']));
     }
 
     cms_not_found();

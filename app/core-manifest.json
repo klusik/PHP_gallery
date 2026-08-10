@@ -1,6 +1,6 @@
 {
     "version": "0.86.1",
-    "generated_at": "2026-08-10T12:28:28+00:00",
+    "generated_at": "2026-08-10T12:44:50+00:00",
     "algorithm": "sha256",
     "hash_mode": "normalized-text-sha256",
     "files": {
@@ -28,7 +28,7 @@
         "app/controllers/admin_images_bulk.php": "sha256:b605777ad2ad7e3cf04283be01cc5966ca0a7965acbf54325ae5287555017389",
         "app/controllers/admin_images_reorder.php": "sha256:3f87dd969c039aa5ddbc66f4bdffd58d6d07193cd8e2dd528838091afed08a7c",
         "app/controllers/admin_integrity.php": "sha256:56328ec2b9f24a4572075b1f55ffb4b649ec5e5ad60838ec203662c7fee198cd",
-        "app/controllers/admin_logs.php": "sha256:568de8f893618d0df670e92a89154a5236e6a249e943f5c36a2f5cb30e10d3a2",
+        "app/controllers/admin_logs.php": "sha256:a62e93add67376988336e8eb9867749946286e6446bc67d48f36a5bc608cf9da",
         "app/controllers/admin_media_renamer.php": "sha256:d474e015b7651d88b2425072e0c6ba4740fea346a3f18aea736c33d6205cc187",
         "app/controllers/admin_openai_text_assist.php": "sha256:83895d34e826630cd20d8c8ee39822ef60250dc7139361287985451c363718b5",
         "app/controllers/admin_public_inline.php": "sha256:9b742c37a567dbe8504287838dfa939058a72c41ce53d8da1a07f679670c37db",
@@ -299,7 +299,7 @@
         "public/assets/styles/admin-theme-editor.css": "sha256:493e9fc47a176bdb0569a7372c8bd31a261742119c04b8102b2520751a22ead7",
         "public/assets/styles/admin-theme-preview.css": "sha256:8203c5dcfe25a336a4c5432547711bac535b877e1c0c1e84569e002ad61e2798",
         "public/assets/styles/admin-update.css": "sha256:c19eaf2711fe0cb83ede62723b6c68fdd482512386dae404573a0d126b0a9dc2",
-        "public/assets/styles/admin.css": "sha256:1d2afc947de445099d2b4707d56beb6e3b67e25c7eacc9e83066d0ace3686b81",
+        "public/assets/styles/admin.css": "sha256:f33c01cd3791fe77a875b773462e798414a60a4c84b709b2060c4e2daa04d257",
         "public/assets/styles/base.css": "sha256:9ec9fb6b1266d1904751581c2961001979f65a71ea04f131eb68466e05cab226",
         "public/assets/styles/lightbox.css": "sha256:d7070bb1fbfb7996a38dc084c9b6d131c34d65fa8a9c67db16931e2b56364112",
         "public/assets/styles/mobile-gallery.css": "sha256:bb50c8bcb1cecb037b05e4abc893ad15c61fe4a6c091b8e7616006bf26756f12",

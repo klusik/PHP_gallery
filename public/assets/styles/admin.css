@@ -2184,6 +2184,22 @@ body.admin-image-order-active {
     }
 }
 
+.admin-log-section-tabs {
+    margin-bottom: 1rem;
+}
+
+.admin-log-section-tabs .admin-subtab {
+    text-decoration: none;
+}
+
+.admin-log-filters-header-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.65rem;
+    align-items: center;
+    justify-content: flex-end;
+}
+
 .admin-log-archive-panel {
     display: grid;
     gap: 1rem;
@@ -2588,6 +2604,10 @@ body.admin-image-order-active {
 @media (max-width: 48rem) {
     .admin-log-filters-header {
         display: grid;
+    }
+
+    .admin-log-filters-header-actions {
+        justify-content: flex-start;
     }
 
     .admin-log-filter-state {
