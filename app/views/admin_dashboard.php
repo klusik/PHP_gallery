@@ -45,6 +45,7 @@ use function Gallery\Core\render_footer;
 use function Gallery\Core\render_header;
 use function Gallery\Core\url_for;
 use function Gallery\Services\admin_render_profile_span;
+use function Gallery\Services\admin_settings_url;
 use function Gallery\Services\dev_mode_enabled;
 use function Gallery\Services\gallery_background_source;
 use function Gallery\Services\gallery_effective_gps_map_enabled;
@@ -256,7 +257,7 @@ function view_render_admin_exif_gps_defaults_card(string $className, bool $defau
     echo '<label class="checkbox-label"><input type="checkbox" name="exif_gps_default_enabled" value="1"' . ($defaultEnabled ? ' checked' : '') . '> ' . e(t('admin.dashboard.exif_gps_default_enabled_label', 'Show EXIF GPS maps by default for all galleries')) . '</label>';
     echo '<label class="checkbox-label"><input type="checkbox" name="reset_gallery_overrides" value="1"> ' . e(t('admin.dashboard.exif_gps_reset_overrides_label', 'Reset all per-gallery EXIF / GPS display overrides')) . '</label>';
     echo '<span class="muted">' . e(t('admin.dashboard.exif_gps_override_count', 'Gallery override(s): {count}', ['count' => (string) $overrideCount])) . '</span>';
-    echo '<button type="submit" class="secondary">' . e(t('admin.dashboard.save_exif_gps_defaults', 'Save EXIF / GPS defaults')) . '</button></form>';
+    echo '<div class="nav"><button type="submit" class="secondary">' . e(t('admin.dashboard.save_exif_gps_defaults', 'Save EXIF / GPS defaults')) . '</button><a class="button secondary" href="' . e(admin_settings_url('media')) . '">' . e(t('admin.settings.open_centralized', 'Open centralized settings')) . '</a></div></form>';
 }
 
 /**

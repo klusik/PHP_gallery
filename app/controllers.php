@@ -64,6 +64,8 @@ require_once __DIR__ . '/controllers/admin_openai_text_assist.php';
 require_once __DIR__ . '/controllers/navigation_data.php';
 require_once __DIR__ . '/controllers/admin_thumbnails.php';
 require_once __DIR__ . '/controllers/admin_dashboard.php';
+// Load the centralized Admin Settings hub after dashboard setting endpoints.
+require_once __DIR__ . '/controllers/admin_settings.php';
 require_once __DIR__ . '/controllers/admin_database_maintenance.php';
 require_once __DIR__ . '/controllers/admin_gallery_report.php';
 require_once __DIR__ . '/controllers/admin_gallery_benchmark.php';

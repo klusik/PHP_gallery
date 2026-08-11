@@ -151,6 +151,25 @@ function public_thumbnail_rendering_mode_save(mixed $value): string
 }
 
 /**
+ * Persist the public thumbnail rendering mode and preserve Theme content-revision side effects.
+ *
+ * Both the Theme editor and centralized Settings hub use this helper so changing the renderer
+ * has one canonical normalization path and one canonical cache/content-revision behavior.
+ *
+ * @param mixed $value Submitted rendering mode value.
+ * @return string Normalized value that was persisted.
+ */
+function public_thumbnail_rendering_mode_save_with_revision(mixed $value): string
+{
+    $previous = public_thumbnail_rendering_mode();
+    $normalized = public_thumbnail_rendering_mode_save($value);
+    if ($normalized !== $previous) {
+        set_app_setting('theme_public_content_revision', (string) time());
+    }
+    return $normalized;
+}
+
+/**
  * Return the unchanged loading and fetch-priority policy used by responsive public thumbnails.
  *
  * @param int $index Zero-based public card index.

@@ -40,6 +40,7 @@ use function Gallery\Core\csrf_field;
 use function Gallery\Core\csrf_token;
 use function Gallery\Core\e;
 use function Gallery\Core\url_for;
+use function Gallery\Services\admin_settings_url;
 use function Gallery\Services\browser_thumbnail_rebuild_browser_config;
 use function Gallery\Services\feature_flag_enabled;
 use function Gallery\Services\public_home_search_enabled;
@@ -128,6 +129,7 @@ function view_render_admin_dashboard_overview_panel(array $model): void
         'class' => 'admin-panel-heading',
     ]);
     echo '<div class="admin-action-grid">';
+    view_render_admin_dashboard_settings_card();
     view_render_admin_dashboard_manage_galleries_card();
     view_render_admin_dashboard_upload_card();
     view_render_admin_dashboard_discover_card();
@@ -205,6 +207,14 @@ function view_render_admin_dashboard_metric_grid(array $model): void
 function view_render_admin_dashboard_manage_galleries_card(): void
 {
     echo '<article class="admin-action-card"><strong>' . e(t('admin.dashboard.manage_galleries_title', 'Manage galleries')) . '</strong><span>' . e(t('admin.dashboard.manage_galleries_hint', 'Open the gallery tree for visibility changes, ordering, bulk actions, and per-gallery editing.')) . '</span><div class="nav"><a class="button secondary" href="' . e(url_for('admin') . '#admin-tab-galleries') . '">' . e(t('admin.dashboard.open_gallery_tree', 'Open gallery tree')) . '</a></div></article>';
+}
+
+/**
+ * Render the overview card for centralized global settings.
+ */
+function view_render_admin_dashboard_settings_card(): void
+{
+    echo '<article class="admin-action-card"><strong>' . e(t('admin.settings.title', 'Settings')) . '</strong><span>' . e(t('admin.settings.dashboard_hint', 'Review important global values in one place, then open specialized pages for complex or sensitive configuration.')) . '</span><div class="nav"><a class="button secondary" href="' . e(admin_settings_url()) . '">' . e(t('admin.settings.open_centralized', 'Open centralized settings')) . '</a></div></article>';
 }
 
 /**
@@ -413,7 +423,7 @@ function view_render_admin_dashboard_public_search_card(string $className): void
     echo '<form method="post" action="' . e(url_for('admin_public_search_settings')) . '" class="' . e($className) . ' admin-public-search-settings">' . csrf_field();
     echo '<strong>' . e(t('admin.dashboard.public_search_title', 'Public search')) . '</strong><span>' . e(t('admin.dashboard.public_search_hint', 'Show a thin live search bar above the public front-page and gallery content. Gallery pages include a visitor checkbox to limit results to that gallery and its subgalleries.')) . '</span>';
     echo '<label class="admin-compact-toggle"><input type="checkbox" name="public_home_search_enabled" value="1"' . (public_home_search_enabled() ? ' checked' : '') . '> <span>' . e(t('admin.dashboard.public_search_enable', 'Enable public search bar')) . '</span></label>';
-    echo '<button type="submit" class="secondary">' . e(t('admin.dashboard.save_public_search', 'Save search setting')) . '</button></form>';
+    echo '<div class="nav"><button type="submit" class="secondary">' . e(t('admin.dashboard.save_public_search', 'Save search setting')) . '</button><a class="button secondary" href="' . e(admin_settings_url('general')) . '">' . e(t('admin.settings.open_centralized', 'Open centralized settings')) . '</a></div></form>';
 }
 
 /**
@@ -454,7 +464,7 @@ function view_render_admin_dashboard_seo_guard_card(string $className): void
     echo '<label class="admin-compact-toggle"><input type="checkbox" name="seo_request_guard_enabled" value="1"' . (!empty($status['enabled']) ? ' checked' : '') . '> <span>' . e(t('admin.dashboard.seo_guard_enable', 'Reject suspicious public query strings')) . '</span></label>';
     echo '<label class="admin-compact-toggle"><input type="checkbox" name="seo_request_guard_logging_enabled" value="1"' . (!empty($status['logging_enabled']) ? ' checked' : '') . '> <span>' . e(t('admin.dashboard.seo_guard_logging_enable', 'Log sampled rejected requests')) . '</span></label>';
     echo '<small class="muted">' . e($logStatus) . '</small>';
-    echo '<button type="submit" class="secondary">' . e(t('admin.dashboard.save_seo_guard', 'Save crawler safety')) . '</button></form>';
+    echo '<div class="nav"><button type="submit" class="secondary">' . e(t('admin.dashboard.save_seo_guard', 'Save crawler safety')) . '</button><a class="button secondary" href="' . e(admin_settings_url('privacy')) . '">' . e(t('admin.settings.open_centralized', 'Open centralized settings')) . '</a></div></form>';
 }
 
 /**
@@ -677,6 +687,7 @@ function view_render_admin_dashboard_site_maintenance_card(array $model, string 
     echo '<button type="submit" name="site_maintenance_action" value="rotate_token" class="secondary danger" onclick="return confirm(' . e(json_encode(t('admin.site_maintenance.rotate_confirm', 'Rotate the hidden web-cron token? Existing external web cron URLs will stop working until updated.'), JSON_UNESCAPED_UNICODE)) . ');">' . e(t('admin.site_maintenance.rotate_token', 'Rotate hidden web-cron token')) . '</button>';
     echo '</div>';
     echo '</form>';
+    echo '<div class="nav"><a class="button secondary" href="' . e(admin_settings_url('privacy')) . '">' . e(t('admin.settings.open_centralized', 'Open centralized settings')) . '</a></div>';
 
     echo '</article>';
 }

@@ -280,6 +280,14 @@ Then open `http://localhost:8000/` in your browser.
 
 ## Admin Workflow
 
+### Centralized Settings
+
+Use **Settings** in the Admin navigation as the central overview for important global configuration. The hub is intentionally not one giant form. It groups stable peer sections for General, Public appearance, Content, Media and browsing, Uploads and automation, Privacy and diagnostics, and Advanced configuration. Each section shows current values and whether a value is explicitly configured, inherited, or using its default.
+
+The hub can directly edit only settings that already have a safe canonical service setter: site name, public language, URL rewrite, public search when available, the public thumbnail renderer, the global EXIF/GPS display default when its existing schema is ready, and development diagnostics. Theme layout, tag presentation, upload tuning, telemetry, Account credentials, language-pack editing, raw CSS, API keys, database tools and destructive maintenance remain on their existing specialized pages. Those pages remain fully supported and link back to the relevant Settings section.
+
+Deep links use stable identifiers such as `?page=admin_settings&section=appearance#settings-appearance`. JavaScript tab changes update the complete query plus hash URL so Back/Forward and refresh preserve the selected section. Without JavaScript, the tab links load the same section as normal pages. See `docs/ADMIN_SETTINGS_INVENTORY.md` for canonical ownership, defaults, fallbacks, sensitivity and migration status.
+
 ### Initial Setup (First Time)
 
 1. Log in at `?page=admin_login` with the admin account you created during installation

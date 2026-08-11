@@ -45,6 +45,7 @@ use function Gallery\Core\render_header;
 use function Gallery\Core\require_admin;
 use function Gallery\Core\url_for;
 use function Gallery\Core\verify_csrf;
+use function Gallery\Services\admin_settings_url;
 use function Gallery\Services\t;
 use function Gallery\Services\translation_active_language;
 use function Gallery\Services\admin_log_event;
@@ -112,6 +113,7 @@ function cms_admin_telemetry(): void
     $schemaReady = telemetry_settings_schema_ready();
     render_header(t('admin.telemetry.page_title', 'Telemetry'));
     echo '<section class="hero"><h1>' . e(t('admin.telemetry.title', 'Anonymous telemetry')) . '</h1><p>' . e(t('admin.telemetry.description', 'Local, privacy-safe usage and performance statistics for tuning the gallery.')) . '</p><nav class="nav">';
+    echo '<a class="button secondary" href="' . e(admin_settings_url('privacy')) . '">' . e(t('admin.settings.open_centralized', 'Open centralized settings')) . '</a>';
     echo '<a class="button secondary" href="' . e(url_for('admin_logs')) . '">' . e(t('admin.telemetry.operational_logs', 'Operational logs')) . '</a>';
     echo '<a class="button secondary" href="' . e(url_for('admin_telemetry_export')) . '">' . e(t('admin.telemetry.export_html_report', 'Export HTML report')) . '</a>';
     echo '<a class="button secondary" href="' . e(url_for('admin')) . '">' . e(t('admin.common.dashboard', 'Dashboard')) . '</a>';

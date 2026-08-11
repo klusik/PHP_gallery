@@ -60,6 +60,7 @@ use function Gallery\Core\request_method;
 use function Gallery\Core\require_admin;
 use function Gallery\Core\url_for;
 use function Gallery\Core\verify_csrf;
+use function Gallery\Services\admin_settings_url;
 use function Gallery\Services\app_setting;
 use function Gallery\Services\clear_theme_overrides;
 use function Gallery\Services\custom_css_path;
@@ -79,13 +80,14 @@ use function Gallery\Services\main_page_gallery_grid_settings;
 use function Gallery\Services\pagination_dimension_value;
 use function Gallery\Services\pagination_global_settings;
 use function Gallery\Services\public_thumbnail_rendering_mode;
-use function Gallery\Services\public_thumbnail_rendering_mode_save;
+use function Gallery\Services\public_thumbnail_rendering_mode_save_with_revision;
 use function Gallery\Services\remove_stored_favicon;
 use function Gallery\Services\reset_all_gallery_grid_overrides;
 use function Gallery\Services\sanitize_hex_color;
 use function Gallery\Services\save_theme_favorite_gallery_ids;
 use function Gallery\Services\save_theme_favorite_gallery_slots;
 use function Gallery\Services\set_app_setting;
+use function Gallery\Services\set_site_name;
 use function Gallery\Services\site_name;
 use function Gallery\Services\store_uploaded_favicon;
 use function Gallery\Services\store_uploaded_theme_background;
@@ -375,7 +377,7 @@ function cms_admin_theme(): void
         } else {
             // Variable $siteName stores this steps working value.
             $siteName = trim((string) ($_POST['site_name'] ?? ''));
-            set_app_setting('site_name', $siteName !== '' ? substr($siteName, 0, 120) : 'Gallery CMS');
+            set_site_name($siteName);
             // $themeControlsChanged stores an intermediate value used by the surrounding gallery workflow.
             $themeControlsChanged = (string) ($_POST['theme_controls_changed'] ?? '') === '1';
             // Variable $preset stores the posted skin selector value.
@@ -508,15 +510,8 @@ function cms_admin_theme(): void
                 set_app_setting('theme_public_content_revision', (string) time());
             }
             set_app_setting('theme_gallery_count_badge_enabled', !empty($_POST['theme_gallery_count_badge_enabled']) ? '1' : '0');
-            // $previousPublicThumbnailRenderingMode stores the public picture-markup policy before this save.
-            $previousPublicThumbnailRenderingMode = public_thumbnail_rendering_mode();
-            // Public thumbnail renderer values are normalized in the service so unsupported POST data safely selects responsive mode.
-            $nextPublicThumbnailRenderingMode = public_thumbnail_rendering_mode_save($_POST['public_thumbnail_rendering_mode'] ?? null);
-            if ($nextPublicThumbnailRenderingMode !== $previousPublicThumbnailRenderingMode) {
-                // The rendering mode changes selected-gallery server-rendered picture markup and browser activation markers.
-                // Bump the existing public content revision so cache diagnostics reflect the new mode immediately.
-                set_app_setting('theme_public_content_revision', (string) time());
-            }
+            // Public thumbnail renderer values and their public-content revision side effect share one service path.
+            public_thumbnail_rendering_mode_save_with_revision($_POST['public_thumbnail_rendering_mode'] ?? null);
             if ($lightboxModesFeatureEnabled) {
                 // $previousLightboxBrowsingMode stores the currently rendered lightbox mode before this save.
                 $previousLightboxBrowsingMode = theme_lightbox_browsing_mode();
@@ -580,7 +575,7 @@ function cms_admin_theme(): void
         'title' => t('admin.theme.title', 'Theme'),
         'description' => t('admin.theme.description', 'Control the public gallery appearance, media identity, layout, and custom stylesheet from one focused workspace.'),
         'class' => 'admin-theme-hero',
-        'actions_html' => '<button type="submit" form="admin-theme-form">' . e(t('admin.theme.save_theme', 'Save theme')) . '</button>',
+        'actions_html' => '<a class="button secondary" href="' . e(admin_settings_url('appearance')) . '">' . e(t('admin.settings.open_centralized', 'Open centralized settings')) . '</a><button type="submit" form="admin-theme-form">' . e(t('admin.theme.save_theme', 'Save theme')) . '</button>',
     ]);
 
     $themeTabs = [

@@ -15,6 +15,7 @@ app/controllers/admin_logs.php
 app/controllers/admin_media_renamer.php
 app/controllers/admin_openai_text_assist.php
 app/controllers/admin_public_inline.php
+app/controllers/admin_settings.php
 app/controllers/admin_simbrief.php
 app/controllers/admin_tags.php
 app/controllers/admin_telemetry.php
@@ -43,6 +44,7 @@ app/security.php
 app/services/admin_dashboard.php
 app/services/admin_database_usage.php
 app/services/admin_render_profiler.php
+app/services/admin_settings_registry.php
 app/services/admin_storage_statistics.php
 app/services/ai_image_analysis.php
 app/services/app_settings.php
@@ -121,6 +123,7 @@ app/views/admin_dashboard_sections.php
 app/views/admin_database_usage.php
 app/views/admin_gallery_forms.php
 app/views/admin_gallery_migration.php
+app/views/admin_settings.php
 app/views/admin_storage_statistics.php
 app/views/admin_ui.php
 app/views/admin_upload_settings.php
@@ -177,6 +180,10 @@ scripts/site_maintenance.php
 setup-gallery.php
 tests/admin_database_usage_test.php
 tests/admin_log_severity_filter_test.php
+tests/admin_settings_navigation_contract_test.php
+tests/admin_settings_normalization_test.php
+tests/admin_settings_registry_test.php
+tests/admin_settings_rendering_contract_test.php
 tests/admin_storage_statistics_test.php
 tests/dng_conversion_policy_test.php
 tests/browser_upload_settings_test.php

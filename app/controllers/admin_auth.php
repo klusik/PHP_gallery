@@ -95,6 +95,7 @@ use function Gallery\Services\set_app_setting;
 use function Gallery\Services\site_name;
 use function Gallery\Services\t;
 use function Gallery\Services\admin_log_event;
+use function Gallery\Services\admin_settings_url;
 
 /**
  * Admin authentication controller model.
@@ -1274,6 +1275,7 @@ function cms_admin_account(): void
     echo '<section class="panel account-settings-page">';
     echo '<div class="account-settings-hero">';
     echo '<div><p class="account-settings-kicker">' . e(t('admin.account.kicker')) . '</p><h1>' . e(t('admin.account.title')) . '</h1><p class="muted">' . e(t('admin.account.description')) . '</p></div>';
+    echo '<div class="nav"><a class="button secondary" href="' . e(admin_settings_url('advanced')) . '">' . e(t('admin.settings.open_centralized', 'Open centralized settings')) . '</a></div>';
     echo '<div class="account-settings-status ' . ($resetReady ? 'is-ready' : 'is-incomplete') . '">';
     echo '<span class="account-settings-status-label">' . e(t('admin.account.password_reset')) . '</span>';
     echo '<strong>' . e($resetReady ? t('admin.account.status_ready') : t('admin.account.status_needs_setup')) . '</strong>';

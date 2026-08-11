@@ -685,6 +685,19 @@ Tags provide another route through the archive. A \emph{night photography} tag c
 
 After signing in, an administrator sees private controls for the dashboard, galleries, photographs, theme, tags, maintenance, updates, logs, and account settings. Many editing actions open in a panel on the right so the gallery remains visible in the background. This makes it easier to edit one item, save it, and continue working through the same collection.\footnote{A full Admin page remains available for workflows that need more space or when browser enhancement is unavailable.}
 
+\subsection{Central Settings hub}
+\index{Settings!central hub}
+
+The Admin navigation includes a central \textbf{Settings} page for discovering important site-wide configuration without replacing the existing specialist screens. The page is divided into a small set of peer sections: General, Public appearance, Content, Media and browsing, Uploads and automation, Privacy and diagnostics, and Advanced. Each section has a matching visible heading and a stable URL, so bookmarks, browser history, refresh, keyboard navigation, and the no-JavaScript fallback all lead back to the same category.
+
+The hub deliberately does not behave like one enormous form. Safe settings with an existing canonical service setter can be edited in their own small section form. Current central editing covers site name, public language, URL rewrite, public search when available, the public thumbnail renderer, the global EXIF/GPS display default when its existing schema is ready, and development diagnostics. Saving one group does not submit unrelated settings.
+
+More contextual configuration remains on the page that already owns it. Theme layout, Gallery tags presentation, uploads, telemetry, Account passwords, Google and OpenAI credentials, raw CSS, branding uploads, language packs, API keys, database repair and destructive maintenance stay specialized. The central hub shows safe status and current-value summaries and provides explicit links such as \textbf{Open specialized page}. Specialist pages also provide \textbf{Open centralized settings} links back to the relevant section.
+
+Tag-page presentation retains inheritance instead of silently creating new values. Dedicated tag columns and rows inherit the global pagination dimensions when absent, and the tag-page card layout inherits the global Theme card layout. Hero-tag display controls are separate. Gallery-specific card layout, lightbox and EXIF/GPS overrides remain attached to each gallery and are not rewritten by the global Settings page.
+
+Secrets are never displayed as raw summaries. SMTP passwords, maintenance tokens, OpenAI/API credentials and upload automation keys are represented only by safe state such as Configured, Not configured, or Specialized page only. The central Settings feature requires no new database migration and does not rename or duplicate existing keys.
+
 \subsection{Gallery management}
 
 Gallery administration covers the full life of a collection: creation, discovery, naming, description, dates, tags, privacy, passwords, branding, covers, layout, ordering, moving, and eventual deletion. A child gallery can inherit useful choices from its parent. For example, every gallery inside a private family branch can follow the parent's protection, and an individual child can use its own presentation choice where the editor offers an override.
@@ -1464,6 +1477,9 @@ PHP Gallery project, \emph{DATABASE.md}, local migration and persistent schema r
 
 \bibitem{codemap}
 PHP Gallery project, \emph{CODEMAP.md}, local source ownership and maintenance map, version \version.
+
+\bibitem{settingsinventory}
+PHP Gallery project, \emph{docs/ADMIN\_SETTINGS\_INVENTORY.md}, canonical global Settings ownership, fallback, sensitivity, and migration inventory, version \version.
 
 \bibitem{testing}
 PHP Gallery project, \emph{TESTING.md}, local automated and manual verification guide, version \version.

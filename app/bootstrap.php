@@ -222,6 +222,7 @@ function cms_run(): void
         'admin_google_callback' => '\\Gallery\\Controllers\\cms_admin_google_callback',
         'admin_logout' => '\\Gallery\\Controllers\\cms_admin_logout',
         'admin_theme' => '\\Gallery\\Controllers\\cms_admin_theme',
+        'admin_settings' => '\\Gallery\\Controllers\\cms_admin_settings',
         'admin_account' => '\\Gallery\\Controllers\\cms_admin_account',
         'admin_update' => '\\Gallery\\Controllers\\cms_admin_update',
         'admin_diagnostics' => '\\Gallery\\Controllers\\cms_admin_diagnostics',

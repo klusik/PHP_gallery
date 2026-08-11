@@ -46,6 +46,7 @@ use function Gallery\Core\request_method;
 use function Gallery\Core\require_admin;
 use function Gallery\Core\url_for;
 use function Gallery\Core\verify_csrf;
+use function Gallery\Services\admin_settings_url;
 use function Gallery\Services\admin_tag_rows;
 use function Gallery\Services\admin_tag_usage_rows;
 use function Gallery\Services\app_setting;
@@ -207,6 +208,7 @@ function cms_admin_tags(): void
     echo '<p class="admin-kicker">' . e(t('admin.tags.kicker', 'Metadata')) . '</p>';
     echo '<h1>' . e(t('admin.tags.title', 'Edit tags')) . '</h1>';
     echo '<p class="muted">' . e(t('admin.tags.description', 'Rename reusable tags, adjust their clean URL slug, and add public text for tag landing pages. Tags are always stored as safe lowercase values.')) . '</p>';
+    echo '<nav class="nav"><a class="button secondary" href="' . e(admin_settings_url('content')) . '">' . e(t('admin.settings.open_centralized', 'Open centralized settings')) . '</a></nav>';
     echo '</section>';
 
     if ($notice) {

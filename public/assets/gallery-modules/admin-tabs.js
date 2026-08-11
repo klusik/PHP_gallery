@@ -216,6 +216,8 @@ export function setupAdminTabsInRoot(root) {
         }
         // shouldManageHash stores whether this tab group owns the browser URL hash.
         const shouldManageHash = !tabsRoot.closest('[data-admin-side-panel]');
+        // urlMode keeps specialized tab groups synchronized with query parameters as well as hashes.
+        const urlMode = String(tabsRoot.dataset.adminTabsUrlMode || 'hash');
 
         // activateTab stores behavior for selecting one tab and hiding the other panels.
         /**
@@ -251,9 +253,21 @@ export function setupAdminTabsInRoot(root) {
                 tabs.find((tab) => tab.dataset.adminTabTarget === targetPanel.id)?.focus();
             }
             if (options.updateHash && shouldManageHash) {
-                const nextHash = `#${targetPanel.id}`;
-                if (window.location.hash !== nextHash) {
-                    window.history.pushState(null, '', nextHash);
+                if (urlMode === 'href') {
+                    const selectedTab = tabs.find((tab) => tab.dataset.adminTabTarget === targetPanel.id);
+                    if (selectedTab instanceof HTMLAnchorElement) {
+                        const nextUrl = new URL(selectedTab.href, window.location.href);
+                        const nextLocation = `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`;
+                        const currentLocation = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+                        if (nextLocation !== currentLocation) {
+                            window.history.pushState(null, '', nextLocation);
+                        }
+                    }
+                } else {
+                    const nextHash = `#${targetPanel.id}`;
+                    if (window.location.hash !== nextHash) {
+                        window.history.pushState(null, '', nextHash);
+                    }
                 }
             }
             if (shouldManageHash) {
@@ -273,6 +287,17 @@ export function setupAdminTabsInRoot(root) {
         }
         const initialTargetId = (activeHash || '').replace(/^#/, '') || tabs.find((tab) => tab.getAttribute('aria-selected') === 'true')?.dataset.adminTabTarget || tabs[0].dataset.adminTabTarget || '';
         activateTab(initialTargetId);
+        if (shouldManageHash && urlMode === 'href') {
+            const initialTab = tabs.find((tab) => tab.dataset.adminTabTarget === initialTargetId);
+            if (initialTab instanceof HTMLAnchorElement) {
+                const initialUrl = new URL(initialTab.href, window.location.href);
+                const normalizedLocation = `${initialUrl.pathname}${initialUrl.search}${initialUrl.hash}`;
+                const currentLocation = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+                if (normalizedLocation !== currentLocation) {
+                    window.history.replaceState(null, '', normalizedLocation);
+                }
+            }
+        }
         syncAdminSidebarHashSelection(initialTargetId ? `#${initialTargetId}` : '');
 
         tabs.forEach((tab) => {

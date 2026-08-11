@@ -85,6 +85,21 @@ This file maps features to source files. It is optimized for fast maintenance an
 | Google OAuth config and token handling | `app/services/google_auth.php` |
 | Google login routes | `app/controllers/admin_auth.php`, handlers `cms_admin_google_start`, `cms_admin_google_callback` |
 
+## Centralized Admin Settings
+
+| Path | Responsibility |
+| --- | --- |
+| `app/controllers/admin_settings.php` | Admin-authenticated Settings hub controller, per-section validation, delegated saves, flash/redirect handling and safe audit metadata. |
+| `app/services/admin_settings_registry.php` | Stable section taxonomy, setting ownership metadata, current/default/source resolution, central-edit whitelist, canonical normalizers/save delegation and deep-link helpers. |
+| `app/views/admin_settings.php` | Accessible Settings overview, tab/section navigation, scoped fieldsets, error summary, current-source labels, redacted summaries and specialized-page links. |
+| `app/views/admin_chrome.php` | Persistent Admin navigation entry for Settings. |
+| `public/assets/gallery-modules/admin-tabs.js` | Shared Admin tab behavior; Settings opts into href-history mode so query and hash remain synchronized. |
+| `public/assets/styles/admin.css` | Responsive Settings tab strip and field/summary layout. |
+| `docs/ADMIN_SETTINGS_INVENTORY.md` | Canonical ownership, defaults, fallbacks, migration and sensitivity inventory. |
+| `tests/admin_settings_*_test.php` | Registry, normalization, navigation and rendering/accessibility contracts. |
+
+Future global settings should be registered summary-only first. Enable central editing only after the entry can call the same service normalizer and setter as its specialized owner. Never register per-gallery/per-image values, raw secrets, file editors or destructive actions as generic centrally editable keys.
+
 ## Admin Dashboard and Maintenance
 
 | Task | Primary files | Notes |
@@ -327,11 +342,12 @@ The Gallery tags Theme subsection is rendered by app/controllers/admin_theme.php
 
 ### Add an admin setting
 
-1. Add a helper in the relevant service or `app/services/app_settings.php`.
-2. Add form fields to the relevant admin controller/view.
-3. Validate and save POST data after CSRF validation.
-4. Apply setting in service/rendering layer.
-5. Update docs if the setting changes architecture.
+1. Identify the existing canonical service normalizer/setter and whether the setting is global, per-gallery, sensitive, file-backed or destructive.
+2. Add or update the specialized page first.
+3. Register the global setting in `app/services/admin_settings_registry.php` as summary-only, with a stable ID and specialized route.
+4. Enable `central_editable` only when central save can delegate to the exact same service boundary and preserve all feature/schema guards and side effects.
+5. Add English/Czech PHP and JSON translation keys, navigation/rendering tests, and update `docs/ADMIN_SETTINGS_INVENTORY.md`.
+
 
 ### Add a database column
 

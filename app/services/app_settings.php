@@ -690,6 +690,20 @@ function site_name(): string
 }
 
 /**
+ * Persist the normalized public site name used by Theme and centralized Settings.
+ *
+ * @param string $name Submitted site name.
+ * @return string Normalized value that was persisted.
+ */
+function set_site_name(string $name): string
+{
+    $normalized = trim($name);
+    $normalized = $normalized !== '' ? substr($normalized, 0, 120) : 'Gallery CMS';
+    set_app_setting('site_name', $normalized);
+    return $normalized;
+}
+
+/**
  * Return true when admin-only JavaScript diagnostics should be rendered.
  *
  * @return bool True when the condition matches.

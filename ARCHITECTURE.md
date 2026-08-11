@@ -178,6 +178,7 @@ The definitive route table is in `cms_run()` inside `app/bootstrap.php`. Importa
 | Page | Handler | Responsibility |
 | --- | --- | --- |
 | `admin` | `cms_admin` | Admin dashboard. |
+| `admin_settings` | `cms_admin_settings` | Central global Settings overview and safe delegated edits. |
 | `admin_login` | `cms_admin_login` | Admin login. |
 | `admin_logout` | `cms_admin_logout` | Logout and token cleanup. |
 | `admin_forgot_password` | `cms_admin_forgot_password` | Password reset request. |
@@ -212,6 +213,20 @@ The definitive route table is in `cms_run()` inside `app/bootstrap.php`. Importa
 | `admin_run_migrations` | `cms_admin_run_migrations` | Browser-triggered migration runner. |
 | `admin_devmode` | `cms_admin_devmode` | Development diagnostics. |
 | `admin_exif_gps_settings` | `cms_admin_exif_gps_settings` | Saves the global EXIF/GPS display default and can reset all per-gallery overrides. |
+
+### Centralized Admin Settings ownership
+
+`app/services/admin_settings_registry.php` is the ownership registry for the central Settings hub. Stable section IDs are `general`, `appearance`, `content`, `media`, `uploads`, `privacy`, and `advanced`. Registry entries describe canonical keys, current/default resolvers, validation metadata, sensitivity, migration readiness and specialized destinations. The registry does not replace the domain services that own normalization or persistence.
+
+`app/controllers/admin_settings.php` accepts only registry-whitelisted centrally editable IDs. POST requests require Admin authentication and CSRF validation, retain field-level errors, and save through `admin_settings_save_editable_value()`. That function delegates to the same focused setters used elsewhere, including `set_site_name()`, `translation_set_public_language()`, `set_url_rewrite_enabled()`, `set_public_home_search_enabled()`, `public_thumbnail_rendering_mode_save()`, `set_exif_gps_default_enabled()`, and `set_dev_mode_enabled()`. Unknown IDs and specialized-only entries are rejected. No generic submitted key can be written directly to `app_settings`.
+
+The central page starts from a read-only ownership model and enables editing only for the narrow safe set above. Complex Theme persistence, upload pipeline settings, telemetry retention, Account/Google/OpenAI credentials, raw CSS, uploaded branding, language packs, API keys, database repair/migrations and destructive maintenance stay at their existing mutation boundaries. Sensitive values are resolved to status labels before rendering and are never placed into central HTML or logs.
+
+Tag-page presentation keeps its existing inheritance rules: `tag_page_gallery_grid_columns` and `tag_page_gallery_grid_rows` fall back to global pagination dimensions, while `tag_page_gallery_description_layout` falls back to the global Theme card layout. Hero-tag controls are distinct settings. Per-gallery description layout, lightbox and EXIF/GPS overrides remain per-gallery.
+
+The navigation contract is implemented by `admin_settings_url()` and `admin_settings_section_id()`. Central links contain both `section=<stable-id>` and `#settings-<stable-id>`. The existing Admin tab module has an opt-in `data-admin-tabs-url-mode="href"` mode for this page so JavaScript activation updates the complete href in browser history rather than changing only the hash. Existing tabs retain their original hash-only behavior. Normal links remain the JavaScript-disabled fallback.
+
+The complete source audit and setting inventory is maintained in `docs/ADMIN_SETTINGS_INVENTORY.md`. The central page itself requires no database migration. Optional existing schemas, for example telemetry or per-gallery EXIF/GPS overrides, continue to gate only the features that already depend on them.
 
 ### Integration and automation routes
 

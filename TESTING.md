@@ -81,6 +81,32 @@ Recommended flow:
 14. Delete the test gallery and confirm cleanup succeeds.
 
 
+### Centralized Admin Settings Tests
+
+Run the focused contracts after changing the Settings hub, any registered setting owner, Admin navigation, or shared tab behavior:
+
+```bash
+php tests/admin_settings_registry_test.php
+php tests/admin_settings_normalization_test.php
+php tests/admin_settings_navigation_contract_test.php
+php tests/admin_settings_rendering_contract_test.php
+```
+
+The registry test checks stable unique IDs/keys, known sections, ownership metadata, secret redaction and specialized routes. The normalization test locks safe thumbnail fallback, browser-upload numeric clamping, central site-name normalization and unknown-write rejection. The navigation test locks the route, Admin menu, specialized backlinks, Gallery tags deep link, stable section IDs and href-history tab mode. The rendering contract checks headings, fieldsets, labels/help wiring, tab ARIA state, hidden inactive panels, error summary and secret redaction.
+
+Manual browser verification:
+
+1. Load every direct section URL from `general` through `advanced` and confirm the query plus `#settings-*` fragment agree with the visible heading.
+2. Change sections with pointer and keyboard. Verify arrow/Home/End tab movement, Browser Back/Forward, and refresh preserve the active section.
+3. Disable JavaScript and use the section links. Each link must load the correct server-selected section and all specialized links must remain usable.
+4. At mobile width, confirm the top-level tab strip remains a single horizontally scrollable row rather than a multi-line wall.
+5. Submit each centrally editable group and verify only that group is posted. Confirm success notice and redirect stay on the same section.
+6. Force an invalid language/renderer value with a direct POST test and verify a page-level error summary plus field error. Unrelated fields must retain submitted values, including unchecked checkboxes.
+7. Verify Theme, Tags, Upload settings, Telemetry, Account and Dashboard settings still save directly when opened without visiting the central hub.
+8. Verify central links to Theme Gallery tags use `appearance_subtab=admin-theme-appearance-subtab-gallery-tags#admin-theme-tab-appearance`.
+9. Confirm `password_reset_smtp_password`, site-maintenance tokens, OpenAI keys and upload API keys never appear in central page source, error output or Admin logs.
+10. Re-run `hero_tag_theme_model_test.php`, `tag_page_theme_model_test.php`, upload/settings tests, telemetry tests and the complete `php tests/run.php` suite.
+
 ### Public Thumbnail Rendering Smoke Test
 
 Use a gallery with enough photos to create several viewport lengths. Test with browser DevTools, an empty cache, and a simulated slow connection. Perform the checks both anonymously and while logged in.

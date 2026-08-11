@@ -5512,3 +5512,81 @@ button.gallery-row-action.secondary {
     color: var(--muted-text, #646970);
     white-space: pre-wrap;
 }
+
+/* Central Settings keeps peer sections horizontally scannable without nested tab rows. */
+.admin-settings-tabs .admin-tab-list {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scrollbar-width: thin;
+}
+
+.admin-settings-tabs .admin-tab {
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+
+.admin-settings-overview-values,
+.admin-settings-card dl {
+    display: grid;
+    gap: 0.45rem;
+    margin: 0.75rem 0 0;
+}
+
+.admin-settings-overview-values > div,
+.admin-settings-card dl > div {
+    display: grid;
+    grid-template-columns: minmax(8rem, 0.7fr) minmax(0, 1.3fr);
+    gap: 0.75rem;
+    align-items: baseline;
+}
+
+.admin-settings-card dt {
+    color: var(--muted-text, #646970);
+    font-weight: 600;
+}
+
+.admin-settings-card dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.admin-settings-field {
+    display: grid;
+    gap: 0.35rem;
+}
+
+.admin-settings-field > label,
+.admin-settings-field-label {
+    font-weight: 650;
+}
+
+.admin-settings-field .field-error,
+.admin-settings-error-summary {
+    font-weight: 600;
+}
+
+.admin-settings-source {
+    display: inline-flex;
+    gap: 0.35rem;
+    align-items: baseline;
+    color: var(--muted-text, #646970);
+    font-size: 0.9em;
+}
+
+.admin-settings-actions,
+.admin-settings-overview-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    align-items: center;
+    margin-top: 0.9rem;
+}
+
+@media (max-width: 760px) {
+    .admin-settings-overview-values > div,
+    .admin-settings-card dl > div {
+        grid-template-columns: 1fr;
+        gap: 0.15rem;
+    }
+}
