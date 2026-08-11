@@ -511,23 +511,26 @@ function gallery_public_url(array $gallery): string
 }
 
 /**
- * Build the preferred public URL for one image detail page.
+ * Build the route-level public path for one image.
+ *
+ * The returned value is independent from URL rewrite support so callers can
+ * safely choose either clean path routing or index.php query-string routing.
  *
  * @param array $image Image row or image data.
  * @param array $gallery Gallery row or gallery data.
- * @return string Text result for the caller.
+ * @return string Public gallery/image path without a leading or trailing slash.
  */
-function image_public_url(array $image, array $gallery): string
+function image_public_route_path(array $image, array $gallery): string
 {
-    // $slug stores an intermediate value used by the surrounding gallery workflow.
+    // $slug stores the stable public image slug used by both routing modes.
     $slug = trim((string) ($image['url_slug'] ?? ''));
     if ($slug === '') {
-        // $slug stores an intermediate value used by the surrounding gallery workflow.
         $slug = slugify(pathinfo((string) ($image['filename'] ?? 'image'), PATHINFO_FILENAME));
     } else {
-        // $slug stores an intermediate value used by the surrounding gallery workflow.
         $slug = slugify($slug);
     }
+
+    // $urlPath stores the gallery portion of the public route.
     $urlPath = trim((string) ($gallery['url_path'] ?? ''), '/');
     if ($urlPath === '') {
         $urlPath = trim((string) ($gallery['slug'] ?? ''), '/');
@@ -536,15 +539,33 @@ function image_public_url(array $image, array $gallery): string
         $folderName = basename(str_replace('\\', '/', trim((string) ($gallery['folder_path'] ?? ''), '/')));
         $urlPath = slugify((string) (($gallery['title'] ?? '') ?: $folderName ?: 'gallery'));
     }
+
+    return trim($urlPath . '/' . $slug, '/');
+}
+
+/**
+ * Build the preferred public URL for one image detail page.
+ *
+ * @param array $image Image row or image data.
+ * @param array $gallery Gallery row or gallery data.
+ * @return string Text result for the caller.
+ */
+function image_public_url(array $image, array $gallery): string
+{
+    // $publicPath stores the rewrite-independent gallery/image route.
+    $publicPath = image_public_route_path($image, $gallery);
     if (!url_rewrite_should_emit_clean_urls()) {
-        return url_for('gallery', ['public_path' => trim($urlPath . '/' . $slug, '/')]);
+        return url_for('gallery', ['public_path' => $publicPath]);
     }
-    return rtrim(gallery_public_url($gallery), '/') . '/' . rawurlencode($slug) . '/';
+    return public_base_url() . '/gallery/' . public_path_segment($publicPath) . '/';
 }
 
 
 /**
- * Build the preferred clean public media URL for one original image file.
+ * Build the preferred public media URL for one original image file.
+ *
+ * Query-string installations must use the dedicated public_media route rather
+ * than appending /media after an index.php query string.
  *
  * @param array $image Image row or image data.
  * @param array $gallery Gallery row or gallery data.
@@ -552,16 +573,19 @@ function image_public_url(array $image, array $gallery): string
  */
 function image_public_media_url(array $image, array $gallery): string
 {
+    if (!url_rewrite_should_emit_clean_urls()) {
+        return image_public_asset_url_with_version(url_for('public_media', ['public_path' => image_public_route_path($image, $gallery)]), $image);
+    }
     return image_public_asset_url_with_version(rtrim(image_public_url($image, $gallery), '/') . '/media', $image);
 }
 
 /**
- * Return a public media or thumbnail URL without adding query parameters.
+ * Return a public media or thumbnail URL without adding cache-version parameters.
  *
- * The public gallery serves clean image URLs only. Cache invalidation for
- * replaced media and regenerated thumbnails must not append version parameters,
- * because some shared-hosting rewrite paths and lightbox consumers treat
- * those parameterized thumbnail URLs as separate, invalid resources.
+ * Rewritten installations use clean image paths, while rewrite-disabled
+ * installations already depend on routing query parameters. Cache invalidation
+ * for replaced media and regenerated thumbnails must therefore not append an
+ * additional version parameter that could change routing behavior on shared hosting.
  *
  * @param string $url Public media or thumbnail URL.
  * @param array $image Image row or image data.
@@ -588,7 +612,10 @@ function image_public_asset_version(array $image): string
 }
 
 /**
- * Build the preferred clean public thumbnail URL for one generated image variant.
+ * Build the preferred public thumbnail URL for one generated image variant.
+ *
+ * Query-string installations must use the dedicated public_thumb route rather
+ * than appending /thumb-N.ext after an index.php query string.
  *
  * @param array $image Image row or image data.
  * @param array $gallery Gallery row or gallery data.
@@ -600,6 +627,13 @@ function image_public_thumbnail_url(array $image, array $gallery, int $size, str
 {
     // $format stores an intermediate value used by the surrounding gallery workflow.
     $format = $format === 'webp' ? 'webp' : 'jpg';
+    if (!url_rewrite_should_emit_clean_urls()) {
+        return image_public_asset_url_with_version(url_for('public_thumb', [
+            'public_path' => image_public_route_path($image, $gallery),
+            'size' => $size,
+            'format' => $format,
+        ]), $image);
+    }
     return image_public_asset_url_with_version(rtrim(image_public_url($image, $gallery), '/') . '/thumb-' . $size . '.' . $format, $image);
 }
 

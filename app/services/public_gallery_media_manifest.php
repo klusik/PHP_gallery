@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-06-18
+ *   2026-08-11
  */
 
 declare(strict_types=1);
@@ -38,8 +38,11 @@ namespace Gallery\Services;
 
 use Throwable;
 use function Gallery\Core\db;
+use function Gallery\Core\image_public_media_url;
+use function Gallery\Core\image_public_thumbnail_url;
 use function Gallery\Core\image_public_url;
 use function Gallery\Core\url_for;
+use function Gallery\Services\url_rewrite_should_emit_clean_urls;
 
 /**
  * Return unique image rows keyed by their database id.
@@ -187,8 +190,10 @@ function public_gallery_media_manifest_image_base_url(array $image, array $galle
 function public_gallery_media_manifest_media_url(array $image, array $gallery, string $imageBaseUrl): string
 {
     if (public_path_schema_ready()) {
-        unset($image, $gallery);
-        return $imageBaseUrl . '/media';
+        if (url_rewrite_should_emit_clean_urls()) {
+            return $imageBaseUrl . '/media';
+        }
+        return image_public_media_url($image, $gallery);
     }
 
     unset($gallery);
@@ -210,8 +215,10 @@ function public_gallery_media_manifest_variant_url(array $image, array $gallery,
     // $format stores the normalized generated thumbnail format.
     $format = $format === 'webp' ? 'webp' : 'jpg';
     if (public_path_schema_ready()) {
-        unset($image, $gallery);
-        return $imageBaseUrl . '/thumb-' . (int) $size . '.' . $format;
+        if (url_rewrite_should_emit_clean_urls()) {
+            return $imageBaseUrl . '/thumb-' . (int) $size . '.' . $format;
+        }
+        return image_public_thumbnail_url($image, $gallery, (int) $size, $format);
     }
 
     return thumbnail_serving_url($image, $gallery, (int) $size, $format);
@@ -411,7 +418,7 @@ function public_gallery_media_manifest(array $images, array $gallery): array
             // $manifest stores prepared media data keyed by image id.
             $manifest = [];
             foreach ($imagesById as $imageId => $image) {
-                // $imageBaseUrl stores the clean image URL once so thumbnail URLs can be composed cheaply.
+                // $imageBaseUrl stores the public image route once so clean thumbnail URLs can be composed cheaply when rewriting is active.
                 $imageBaseUrl = public_gallery_media_manifest_image_base_url($image, $gallery);
                 // $bundle stores thumbnail variants for this image without invoking thumbnail_bundle() when metadata is available.
                 $bundle = $metadataReady

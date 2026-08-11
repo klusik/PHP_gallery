@@ -1,6 +1,6 @@
 {
     "version": "0.87.1",
-    "generated_at": "2026-08-11T15:14:55+00:00",
+    "generated_at": "2026-08-11T15:32:46+00:00",
     "algorithm": "sha256",
     "hash_mode": "normalized-text-sha256",
     "files": {
@@ -60,7 +60,7 @@
         "app/controllers/upload_automation.php": "sha256:ab023ca6d07d229266258a7d5938f88c26bc502f1f3f19c2a57bd92368c66de4",
         "app/controllers/votes.php": "sha256:e0158e621e6cd99784a845c6bc69b4c5dd9a75cb362a6c054eec1dd945f694b0",
         "app/database.php": "sha256:b809a884469ebc1069e7c974c3d31cfb0a936b74848dbbe7a965272c80685cb5",
-        "app/helpers.php": "sha256:2c8ae00f2d3ac9dd70c334e57542b7489115284d53090a6180fd0a9b86f5dabe",
+        "app/helpers.php": "sha256:44d82ccd3aef2559ab90d532988de9eb1d89004c29ade90542b73d611ed32625",
         "app/integrity.php": "sha256:e83c0744f6d9250b656a3176a034edd184515c66c90e1791b114fd8a4bac018b",
         "app/lang/cs.json": "sha256:cfda92209f9deb4cfb4134d24a49dd3ad57e5d91a0f1095dc2eae5997e74f3fb",
         "app/lang/cs.php": "sha256:23c9da61e36e25e29250fe1f37b8e7e5ae24455834262cf212d79ee036358694",
@@ -129,7 +129,7 @@
         "app/services/pagination.php": "sha256:da223ac252d682cc8d72d05f21b66ef4ca016dabf0559d3a250cd6d4b7860d41",
         "app/services/picture_game.php": "sha256:9a169e92d9923d2301bed911da2227459fa457c2aaba426bd75f840e8151483a",
         "app/services/picture_manager.php": "sha256:b50edfcc6488c1a65492b755bab093d1b34a31b854e286232b349d3bb0831c3d",
-        "app/services/public_gallery_media_manifest.php": "sha256:d72d66fa9ecee2f2297183e0b9d0bd4ff7582d4d929688fda2df547406894df4",
+        "app/services/public_gallery_media_manifest.php": "sha256:264dffc4a4445fcf3f072a0785e5dd9cf11bb6744371bea06c23893e82bf3efe",
         "app/services/public_paths.php": "sha256:02e153035064b867716493f1312c7de6fbfa3a97b649ea4f20004705de01af1a",
         "app/services/public_render_profiler.php": "sha256:c48761615d15741117416d2ccc68575ed9e9aa042ec6c74ffdd122025cd79193",
         "app/services/public_search.php": "sha256:f0e748e5aaf72ebfb9ed7361e1b96d21b57588623a2ddd8be34d7f0ae8aa6ea4",
