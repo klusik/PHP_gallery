@@ -83,6 +83,42 @@ function setAdminPanelVisibility(panel, isVisible) {
     }
 }
 
+/**
+ * Load a deferred dashboard panel the first time it becomes visible.
+ *
+ * @param {HTMLElement} panel Dashboard panel.
+ * @return {Promise<void>} Completion promise.
+ */
+async function loadDeferredAdminPanel(panel) {
+    if (!(panel instanceof HTMLElement) || panel.dataset.adminPanelLoaded === '1' || panel.dataset.adminPanelLoading === '1') {
+        return;
+    }
+    const placeholder = panel.querySelector('[data-admin-dashboard-maintenance-placeholder]');
+    const endpoint = placeholder instanceof HTMLElement ? String(placeholder.dataset.maintenanceEndpoint || '') : '';
+    if (!endpoint) {
+        return;
+    }
+    panel.dataset.adminPanelLoading = '1';
+    try {
+        const response = await fetch(endpoint, {headers: {'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest'}});
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        const payload = await response.json();
+        if (!payload || payload.ok !== true || typeof payload.html !== 'string') {
+            throw new Error('Invalid deferred Admin panel response');
+        }
+        panel.innerHTML = payload.html;
+        panel.dataset.adminPanelLoaded = '1';
+        setupAdminTabsInRoot(panel);
+    } catch (error) {
+        placeholder.textContent = 'Unable to load maintenance tools. Please reload the page.';
+        placeholder.classList.add('error');
+    } finally {
+        delete panel.dataset.adminPanelLoading;
+    }
+}
+
 
 /**
  * Keep the persistent admin sidebar aligned with hash-selected dashboard tabs.
@@ -208,6 +244,9 @@ export function setupAdminTabsInRoot(root) {
                 const isSelected = panel.id === targetPanel.id;
                 setAdminPanelVisibility(panel, isSelected);
             });
+            if (targetPanel.id === 'admin-tab-maintenance') {
+                void loadDeferredAdminPanel(targetPanel);
+            }
             if (options.focusTab) {
                 tabs.find((tab) => tab.dataset.adminTabTarget === targetPanel.id)?.focus();
             }

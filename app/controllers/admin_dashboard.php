@@ -96,6 +96,23 @@ function cms_admin(): void
     view_render_admin_dashboard($dashboardModel);
 }
 
+/**
+ * Render the deferred Admin dashboard Maintenance tab.
+ *
+ * This endpoint keeps database metadata, navdata, and maintenance status
+ * queries out of the initial dashboard navigation request.
+ */
+function cms_admin_dashboard_maintenance(): void
+{
+    require_admin();
+    $model = admin_dashboard_view_model(true);
+    ob_start();
+    view_render_admin_dashboard_maintenance_panel($model);
+    $html = (string) ob_get_clean();
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode(['ok' => true, 'html' => $html], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+}
+
 
 /**
  * Render the dedicated Admin storage statistics view.

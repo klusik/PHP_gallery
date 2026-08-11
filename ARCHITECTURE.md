@@ -340,6 +340,8 @@ Important view files:
 | `app/views/admin_chrome.php` | Admin navigation and shared admin page shell. |
 | `app/views/admin_dashboard.php` | Dashboard page composition, top-level Admin tabs, and gallery table rendering. |
 | `app/views/admin_dashboard_sections.php` | Reusable dashboard overview and grouped maintenance subtab sections. |
+
+The main Admin dashboard keeps its initial request bounded: the Maintenance tab is rendered through the authenticated `admin_dashboard_maintenance` JSON endpoint only when the tab is first activated. This keeps database usage metadata, navigation-data status, maintenance state, and related optional-schema checks out of ordinary gallery navigation. The server-rendered placeholder remains safe without JavaScript and links to the dedicated maintenance details page as a fallback.
 | `app/views/admin_gallery_forms.php` | Gallery admin form sections. |
 | `app/views/gallery_descriptions.php` | Gallery description rendering helpers. |
 | `app/views/navigation_data.php` | Navigation data admin rendering. |

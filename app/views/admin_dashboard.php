@@ -194,7 +194,11 @@ function view_render_admin_dashboard(array $model): void
     admin_render_profile_span('render_galleries_tab_panel', static function () use ($galleriesHtml): void { render_admin_tab_panel('admin-tab-galleries', $galleriesHtml, false); });
 
     ob_start();
-    view_render_admin_dashboard_maintenance_panel($model);
+    if (!empty($model['maintenance_loaded'])) {
+        view_render_admin_dashboard_maintenance_panel($model);
+    } else {
+        echo '<div class="admin-dashboard-deferred-panel" data-admin-dashboard-maintenance-placeholder data-maintenance-endpoint="' . e(url_for('admin_dashboard_maintenance')) . '" role="status"><p class="muted">' . e(t('admin.dashboard.maintenance_loading', 'Loading maintenance tools…')) . '</p><noscript><a href="' . e(url_for('admin_storage_statistics')) . '">' . e(t('admin.storage.open_details', 'Open storage and maintenance details')) . '</a></noscript></div>';
+    }
     $maintenanceHtml = (string) ob_get_clean();
     admin_render_profile_span('render_maintenance_tab_panel', static function () use ($maintenanceHtml): void { render_admin_tab_panel('admin-tab-maintenance', $maintenanceHtml, false); });
 

@@ -214,6 +214,7 @@ function cms_run(): void
         'download_gallery' => '\\Gallery\\Controllers\\cms_download_gallery',
         'download_all' => '\\Gallery\\Controllers\\cms_download_all',
         'admin' => '\\Gallery\\Controllers\\cms_admin',
+        'admin_dashboard_maintenance' => '\\Gallery\\Controllers\\cms_admin_dashboard_maintenance',
         'admin_login' => '\\Gallery\\Controllers\\cms_admin_login',
         'admin_forgot_password' => '\\Gallery\\Controllers\\cms_admin_forgot_password',
         'admin_reset_password' => '\\Gallery\\Controllers\\cms_admin_reset_password',
