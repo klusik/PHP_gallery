@@ -197,7 +197,8 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(16rem, min(30rem, 36vw));
     align-items: start;
-    gap: clamp(1rem, 3vw, 2.25rem);
+    column-gap: clamp(1rem, 3vw, 2.25rem);
+    row-gap: 0.55rem;
 }
 
 /* Holds the readable story part of the hero: title, date, description, and breadcrumbs. */
@@ -275,8 +276,9 @@
 }
 
 .public-page .hero-tags {
+    grid-column: 1 / -1;
     display: grid;
-    justify-items: end;
+    justify-items: stretch;
     gap: 0.35rem;
     width: 100%;
     max-width: 100%;
@@ -295,7 +297,7 @@
 }
 
 .public-page .hero .tag-list {
-    justify-content: flex-end;
+    justify-content: flex-start;
     gap: 0.28rem;
     opacity: 0.92;
 }
@@ -349,7 +351,7 @@
     }
 
     .public-page .hero-tags {
-        justify-items: start;
+        justify-items: stretch;
         max-height: 9.5rem;
     }
 

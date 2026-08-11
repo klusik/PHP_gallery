@@ -504,12 +504,12 @@ function cms_gallery(): void
         echo '<a class="button secondary hero-icon-button hero-picture-game-button" href="' . e(url_for('picture_game', ['id' => $gallery['id']])) . '" aria-label="' . e(t('gallery.play_picture_game', 'Play picture game')) . '" title="' . e(t('gallery.play_picture_game', 'Play picture game')) . '"><span aria-hidden="true">&#127918;</span><span class="visually-hidden">' . e(t('gallery.play_picture_game', 'Play picture game')) . '</span></a>';
     }
     echo '</div>';
+    echo '</div>';
     echo '<div class="hero-tags" aria-label="' . e(t('gallery.tags', 'Gallery tags')) . '">';
     render_tag_list(tags_for_entity('gallery', (int) $gallery['id']));
     if ($children) {
         render_tag_list(public_render_profile_span('contained_tag_lookup', static fn (): array => contained_tags_for_gallery($gallery, $publicOnly)), t('gallery.containing_tags', 'Containing tags'));
     }
-    echo '</div>';
     echo '</div>';
     echo '</div>';
     echo '</section>';
