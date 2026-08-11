@@ -421,6 +421,8 @@ Schema repair and data cleanup are independent. DDL uses a new timestamped migra
 
 ## Settings System
 
+Public tag-page presentation is stored in app_settings. The pagination service resolves the dedicated grid columns and rows with global pagination as the compatibility fallback, while the description-layout service resolves the dedicated vertical or horizontal card design with the global Theme card layout as fallback. The public tag controller applies these values only to tag-result pages. The Edit tags contextual link carries the Appearance subsection target so the Theme page opens Gallery tags directly.
+
 DB-backed settings live in `app_settings` and are accessed through `app/services/app_settings.php`.
 
 Core helpers:

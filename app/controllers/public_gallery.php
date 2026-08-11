@@ -87,6 +87,7 @@ use function Gallery\Services\gallery_cover_image;
 use function Gallery\Services\gallery_date_range_display_value;
 use function Gallery\Services\gallery_effective_count_badge_enabled;
 use function Gallery\Services\gallery_effective_description_layout;
+use function Gallery\Services\gallery_description_layout_normalize;
 use function Gallery\Services\gallery_effective_grid_settings;
 use function Gallery\Services\gallery_effective_lightbox_browsing_mode;
 use function Gallery\Services\gallery_count_dated_rows;
@@ -1318,7 +1319,9 @@ function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicR
     // $isProtectedPublicCard stores an intermediate value used by the surrounding gallery workflow.
     $isProtectedPublicCard = $publicOnly && gallery_access_requirement($gallery) !== null;
     // $descriptionLayout stores the visual layout selected by Theme or the gallery override.
-    $descriptionLayout = gallery_effective_description_layout($gallery);
+    $descriptionLayout = array_key_exists('description_layout', $cardContext)
+        ? gallery_description_layout_normalize($cardContext['description_layout'], gallery_effective_description_layout($gallery))
+        : gallery_effective_description_layout($gallery);
     // Variable $cover stores this steps working value.
     $coverAsset = $isProtectedPublicCard ? '' : (array_key_exists('cover_asset', $cardContext) ? (string) $cardContext['cover_asset'] : public_render_profile_span('gallery_cover_asset_lookup', static fn (): string => gallery_cover_asset_url($gallery, $publicOnly)));
     // $cover stores an intermediate value used by the surrounding gallery workflow.

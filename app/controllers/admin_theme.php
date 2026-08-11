@@ -116,6 +116,8 @@ use function Gallery\Services\theme_hero_tag_sort_mode;
 use function Gallery\Services\theme_hero_tag_sort_mode_normalize;
 use function Gallery\Services\theme_hero_tag_visible_limit;
 use function Gallery\Services\theme_hero_tag_visible_limit_value;
+use function Gallery\Services\tag_page_gallery_description_layout;
+use function Gallery\Services\tag_page_gallery_grid_settings;
 use function Gallery\Services\theme_page_width_custom_value;
 use function Gallery\Services\theme_page_width_mode;
 use function Gallery\Services\theme_settings;
@@ -533,6 +535,9 @@ function cms_admin_theme(): void
             set_app_setting('pagination_rows', (string) pagination_dimension_value($_POST['pagination_rows'] ?? CMS_PAGINATION_DEFAULT_ROWS, CMS_PAGINATION_DEFAULT_ROWS, CMS_PAGINATION_MAX_ROWS));
             set_app_setting('home_gallery_grid_columns', (string) pagination_dimension_value($_POST['home_gallery_grid_columns'] ?? CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_MAX_COLUMNS));
             set_app_setting('home_gallery_grid_rows', (string) pagination_dimension_value($_POST['home_gallery_grid_rows'] ?? CMS_PAGINATION_DEFAULT_ROWS, CMS_PAGINATION_DEFAULT_ROWS, CMS_PAGINATION_MAX_ROWS));
+            set_app_setting('tag_page_gallery_grid_columns', (string) pagination_dimension_value($_POST['tag_page_gallery_grid_columns'] ?? CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_MAX_COLUMNS));
+            set_app_setting('tag_page_gallery_grid_rows', (string) pagination_dimension_value($_POST['tag_page_gallery_grid_rows'] ?? CMS_PAGINATION_DEFAULT_ROWS, CMS_PAGINATION_DEFAULT_ROWS, CMS_PAGINATION_MAX_ROWS));
+            set_app_setting('tag_page_gallery_description_layout', gallery_description_layout_normalize($_POST['tag_page_gallery_description_layout'] ?? theme_gallery_description_layout(), theme_gallery_description_layout()));
             if ($themeControlsChanged) {
                 set_app_setting('theme_accent', sanitize_hex_color((string) $_POST['theme_accent'], '#a5481c'));
                 set_app_setting('theme_accent_dark', sanitize_hex_color((string) $_POST['theme_accent_dark'], '#713414'));
@@ -555,6 +560,10 @@ function cms_admin_theme(): void
     $paginationSettings = pagination_global_settings();
     // Variable $homeGridSettings stores the separate public home-page gallery grid.
     $homeGridSettings = main_page_gallery_grid_settings();
+    // $tagPageGridSettings stores the independent public tag-page gallery grid.
+    $tagPageGridSettings = tag_page_gallery_grid_settings();
+    // $tagPageDescriptionLayout stores the card design used only on public tag pages.
+    $tagPageDescriptionLayout = tag_page_gallery_description_layout();
     // $publicThumbnailRenderingMode stores the validated public photo-card rendering mode shown by the Layout form.
     $publicThumbnailRenderingMode = public_thumbnail_rendering_mode();
     render_header(t('admin.theme.page_title', 'Theme'));
@@ -593,12 +602,23 @@ function cms_admin_theme(): void
         'description' => t('admin.theme.appearance.description', 'Edit the core visual language. The preview mirrors colors, typography, radius, page width, and background transparency.'),
     ]);
     echo '<div class="admin-subtab-scope admin-theme-subtab-scope" data-admin-subtab-scope data-theme-preview-root data-theme-preview-background-url="' . e($themeBackgroundUrl) . '">';
+    // $appearanceSubtab stores an optional deep-link target supplied by contextual Admin links.
+    $appearanceSubtab = (string) ($_GET['appearance_subtab'] ?? '');
+    $appearanceSubtabOptions = [
+        'admin-theme-appearance-subtab-colors',
+        'admin-theme-appearance-subtab-width-map',
+        'admin-theme-appearance-subtab-gallery-tags',
+        'admin-theme-appearance-subtab-preview',
+    ];
+    if (!in_array($appearanceSubtab, $appearanceSubtabOptions, true)) {
+        $appearanceSubtab = 'admin-theme-appearance-subtab-colors';
+    }
     render_admin_subtabs([
         ['id' => 'admin-theme-appearance-subtab-colors', 'label' => t('admin.theme.subtab_colors_identity', 'Colors & identity')],
         ['id' => 'admin-theme-appearance-subtab-width-map', 'label' => t('admin.theme.subtab_width_map', 'Width & map pin')],
         ['id' => 'admin-theme-appearance-subtab-gallery-tags', 'label' => t('admin.theme.subtab_gallery_tags', 'Gallery tags')],
         ['id' => 'admin-theme-appearance-subtab-preview', 'label' => t('admin.theme.subtab_preview', 'Live preview')],
-    ], 'admin-theme-appearance-subtab-colors', t('admin.theme.appearance.subtabs_label', 'Appearance subsections'));
+    ], $appearanceSubtab, t('admin.theme.appearance.subtabs_label', 'Appearance subsections'));
     ob_start();
     echo '<fieldset class="form-grid admin-theme-appearance-controls-panel"><legend>' . e(t('admin.theme.appearance.legend', 'Visual appearance')) . '</legend>';
     echo '<div class="theme-appearance-controls">';
@@ -656,6 +676,17 @@ function cms_admin_theme(): void
     $heroTagScrollbarEnabled = theme_hero_tag_scrollbar_enabled();
     $heroTagScrollbarRows = theme_hero_tag_scrollbar_rows();
     $heroTagSortMode = theme_hero_tag_sort_mode();
+    echo '<fieldset class="form-grid admin-theme-tag-page-settings"><legend>' . e(t('admin.theme.appearance.tag_page_legend', 'Public tag page layout')) . '</legend>';
+    echo '<p class="muted">' . e(t('admin.theme.appearance.tag_page_hint', 'Overrides the normal Theme grid and gallery-card design when visitors open a public tag page. The site-wide pagination switch still controls whether long tag results are split into pages.')) . '</p>';
+    echo '<label>' . e(t('admin.theme.appearance.tag_page_columns', 'Galleries per row')) . ' <span class="muted">' . (int) $tagPageGridSettings['columns'] . '</span><input type="range" name="tag_page_gallery_grid_columns" min="1" max="' . CMS_PAGINATION_MAX_COLUMNS . '" value="' . (int) $tagPageGridSettings['columns'] . '"></label>';
+    echo '<label>' . e(t('admin.theme.appearance.tag_page_rows', 'Rows per page')) . ' <span class="muted">' . (int) $tagPageGridSettings['rows'] . '</span><input type="range" name="tag_page_gallery_grid_rows" min="1" max="' . CMS_PAGINATION_MAX_ROWS . '" value="' . (int) $tagPageGridSettings['rows'] . '"></label>';
+    echo '<p class="muted">' . e(t('admin.theme.appearance.tag_page_capacity', 'Tag-page capacity: {count} galleries per page.', ['count' => (int) $tagPageGridSettings['items_per_page']])) . '</p>';
+    echo '<label>' . e(t('admin.theme.appearance.tag_page_card_layout', 'Gallery-card design')) . '<select name="tag_page_gallery_description_layout">';
+    foreach (gallery_description_layout_options() as $descriptionLayoutOption) {
+        echo '<option value="' . e($descriptionLayoutOption) . '"' . ($tagPageDescriptionLayout === $descriptionLayoutOption ? ' selected' : '') . '>' . e(gallery_description_layout_label($descriptionLayoutOption)) . '</option>';
+    }
+    echo '</select><span class="muted">' . e(t('admin.theme.appearance.tag_page_card_layout_hint', 'This choice overrides both the Theme default and individual gallery-card layout on tag result pages only.')) . '</span></label>';
+    echo '</fieldset>';
     echo '<fieldset class="form-grid admin-theme-hero-tag-settings"><legend>' . e(t('admin.theme.appearance.hero_tags_legend', 'Gallery hero tags')) . '</legend>';
     echo '<p class="muted">' . e(t('admin.theme.appearance.hero_tags_hint', 'Controls the tag collection shown below an open gallery title. Every tag remains in the server-rendered HTML; the visible limit and expand/collapse behavior are applied in the browser without reloading the page.')) . '</p>';
     echo '<label>' . e(t('admin.theme.appearance.hero_tag_sort', 'Tag order')) . '<select name="theme_hero_tag_sort_mode"><option value="usage"' . ($heroTagSortMode === 'usage' ? ' selected' : '') . '>' . e(t('admin.theme.appearance.hero_tag_sort_usage', 'Most used first')) . '</option><option value="alphabetical"' . ($heroTagSortMode === 'alphabetical' ? ' selected' : '') . '>' . e(t('admin.theme.appearance.hero_tag_sort_alphabetical', 'Alphabetical')) . '</option></select><span class="muted">' . e(t('admin.theme.appearance.hero_tag_sort_hint', 'Usage counts direct gallery and photo assignments across the installation; equal counts are ordered alphabetically.')) . '</span></label>';
@@ -671,6 +702,7 @@ function cms_admin_theme(): void
     echo '<label>' . e(t('admin.theme.appearance.hero_tag_scrollbar_rows_number', 'Maximum visible tag rows')) . '<input type="number" name="theme_hero_tag_scrollbar_rows" min="1" max="12" step="1" value="' . $heroTagScrollbarRows . '" inputmode="numeric" data-theme-hero-tag-scrollbar-rows-number><span class="muted" data-theme-hero-tag-scrollbar-rows-display>' . $heroTagScrollbarRows . '</span></label>';
     echo '</div>';
     echo '<p class="muted">' . e(t('admin.theme.appearance.hero_tag_scrollbar_rows_hint', 'Default: 5 rows. Scrolling is enabled only when the tags actually wrap onto more rows at the current screen width. Disable the scrollbar option to let the hero grow naturally.')) . '</p>';
+    echo '<div class="bulk-row"><a class="button secondary" href="' . e(url_for('admin_tags')) . '">' . e(t('admin.theme.appearance.open_tag_metadata', 'Manage tag metadata')) . '</a></div>';
     echo '</fieldset>';
     $appearanceGalleryTagsHtml = ob_get_clean();
     render_admin_subtab_panel('admin-theme-appearance-subtab-gallery-tags', $appearanceGalleryTagsHtml, false);

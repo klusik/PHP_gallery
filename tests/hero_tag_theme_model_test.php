@@ -206,9 +206,14 @@ namespace {
     assert_hero_tag_theme_same(['Alpha', 'Zulu'], array_column($alphabeticalGroups['contained'], 'name'), 'alphabetical mode preserves contained group boundary');
 
     $adminThemeSource = (string) file_get_contents(__DIR__ . '/../app/controllers/admin_theme.php');
+    $adminTagsSource = (string) file_get_contents(__DIR__ . '/../app/controllers/admin_tags.php');
     assert_hero_tag_source_contains($adminThemeSource, "theme_hero_tag_visible_limit_value(\$_POST['theme_hero_tag_visible_limit'] ?? null)", 'Admin visible-limit normalization');
     assert_hero_tag_source_contains($adminThemeSource, "theme_hero_tag_sort_mode_normalize(\$_POST['theme_hero_tag_sort_mode'] ?? 'usage')", 'Admin sort normalization');
     assert_hero_tag_source_contains($adminThemeSource, "set_app_setting('theme_hero_tag_scrollbar_enabled'", 'Admin scrollbar persistence');
+    assert_hero_tag_source_contains($adminThemeSource, "url_for('admin_tags')", 'Theme links to tag metadata management');
+assert_hero_tag_source_contains($adminTagsSource, "appearance_subtab", 'Admin tag editor links to contextual tag display settings');
+assert_hero_tag_source_contains($adminTagsSource, "#admin-theme-tab-appearance", 'Admin tag editor opens the Appearance tab for contextual settings');
+assert_hero_tag_source_contains($adminThemeSource, "appearance_subtab", 'Theme controller accepts a Gallery tags deep link');
 
     $publicGallerySource = (string) file_get_contents(__DIR__ . '/../app/controllers/public_gallery.php');
     assert_hero_tag_source_contains($publicGallerySource, 'sort_public_hero_tag_groups($heroTagGroups, theme_hero_tag_sort_mode())', 'public server-side hero sort');

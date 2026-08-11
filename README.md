@@ -349,6 +349,8 @@ Then open `http://localhost:8000/` in your browser.
 
 #### Managing Tags
 
+Public tag pages can use a dedicated presentation. In Theme > Appearance > Gallery tags, configure galleries per row, rows per page, and the gallery-card design. The Edit tags screen provides a Configure tag display shortcut to these settings.
+
 1. Go to **Tags** in the admin menu
 2. Create new tags with display names, slugs, and descriptions
 3. View usage statistics for each tag
@@ -385,6 +387,8 @@ Then open `http://localhost:8000/` in your browser.
 7. Your `config.php`, galleries, and custom CSS are never overwritten
 
 #### Customizing Appearance
+
+Theme > Appearance > Gallery tags controls the public tag-page grid and card design independently from the normal gallery defaults.
 
 1. Go to **Theme** to customize colors, fonts, layout, the default lightbox browsing mode, and selected-gallery public thumbnail rendering
 2. Choose light or dark mode

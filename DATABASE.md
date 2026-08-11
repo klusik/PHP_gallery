@@ -338,6 +338,8 @@ Primary key is `(image_id, tag_id)`.
 
 Key-value storage for mutable runtime settings.
 
+Public tag-page presentation uses scalar settings in this existing table: tag_page_gallery_grid_columns, tag_page_gallery_grid_rows, and tag_page_gallery_description_layout. Missing values inherit the global pagination dimensions and Theme gallery-card layout, so no schema migration is required.
+
 | Column | Meaning |
 | --- | --- |
 | `setting_key` | Primary setting key. |

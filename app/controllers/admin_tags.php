@@ -312,6 +312,7 @@ function render_admin_tag_form(array $tag, string $sortMode = 'usage'): void
     echo '<div class="bulk-row">';
     echo '<button type="submit">' . e(t('admin.tags.save', 'Save tag')) . '</button>';
     echo '<a class="button secondary" href="' . e(url_for('tag', ['slug' => (string) $tag['slug']])) . '">' . e(t('admin.tags.view_public', 'View public tag')) . '</a>';
+    echo '<a class="button secondary" href="' . e(url_for('admin_theme', ['appearance_subtab' => 'admin-theme-appearance-subtab-gallery-tags']) . '#admin-theme-tab-appearance') . '">' . e(t('admin.tags.configure_display', 'Configure tag display')) . '</a>';
     echo '</div>';
     echo '</form>';
 }

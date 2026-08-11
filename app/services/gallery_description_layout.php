@@ -90,6 +90,20 @@ function theme_gallery_description_layout(): string
 }
 
 /**
+ * Return the gallery-card layout dedicated to public tag landing pages.
+ *
+ * The global Theme layout is the compatibility fallback for installations that
+ * have not saved the new Gallery tags controls yet.
+ *
+ * @return string Normalized gallery-card layout identifier.
+ */
+function tag_page_gallery_description_layout(): string
+{
+    $fallback = theme_gallery_description_layout();
+    return gallery_description_layout_normalize(app_setting('tag_page_gallery_description_layout', $fallback), $fallback);
+}
+
+/**
  * Normalize a per-gallery override for database storage.
  *
  * A null return value means the gallery inherits the global Theme setting.

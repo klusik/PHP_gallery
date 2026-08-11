@@ -139,6 +139,8 @@ This file maps features to source files. It is optimized for fast maintenance an
 
 ## Tags
 
+Public tag-page grid and card overrides are implemented by app/controllers/public_tags.php with app/services/pagination.php and app/services/gallery_description_layout.php.
+
 | Task | Files |
 | --- | --- |
 | Tag creation and syncing | `app/services/tag_metadata.php`, `app/services/tags.php` |
@@ -150,6 +152,8 @@ This file maps features to source files. It is optimized for fast maintenance an
 | Hero tag disclosure and row-based scrolling | `public/assets/gallery-modules/hero-tags.js`, `public/assets/styles/public-shared.css`, `public/assets/styles/admin-layout.css`, `public/assets/styles/admin.css` |
 
 ## Theme, Layout and Branding
+
+The Gallery tags Theme subsection is rendered by app/controllers/admin_theme.php and persisted through app_settings; public resolution is shared with the public tag controller through the pagination and description-layout services.
 
 | Task | Files |
 | --- | --- |
