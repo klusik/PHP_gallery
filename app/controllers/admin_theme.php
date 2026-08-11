@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-04
+ *   2026-08-11
  */
 
 declare(strict_types=1);
@@ -108,6 +108,14 @@ use function Gallery\Services\theme_gallery_description_layout;
 use function Gallery\Services\theme_gps_pin_background_size_value;
 use function Gallery\Services\theme_gps_pin_size_value;
 use function Gallery\Services\theme_lightbox_browsing_mode;
+use function Gallery\Services\theme_hero_tag_display_all_enabled;
+use function Gallery\Services\theme_hero_tag_scrollbar_enabled;
+use function Gallery\Services\theme_hero_tag_scrollbar_rows;
+use function Gallery\Services\theme_hero_tag_scrollbar_rows_value;
+use function Gallery\Services\theme_hero_tag_sort_mode;
+use function Gallery\Services\theme_hero_tag_sort_mode_normalize;
+use function Gallery\Services\theme_hero_tag_visible_limit;
+use function Gallery\Services\theme_hero_tag_visible_limit_value;
 use function Gallery\Services\theme_page_width_custom_value;
 use function Gallery\Services\theme_page_width_mode;
 use function Gallery\Services\theme_settings;
@@ -454,6 +462,31 @@ function cms_admin_theme(): void
             }
             set_app_setting('theme_page_width', theme_page_width_mode((string) ($_POST['theme_page_width'] ?? 'default')));
             set_app_setting('theme_page_width_custom', (string) theme_page_width_custom_value($_POST['theme_page_width_custom'] ?? null));
+            // Hero-tag controls change public HTML ordering and disclosure data attributes, so compare them before saving.
+            $previousHeroTagSettings = [
+                'visible_limit' => theme_hero_tag_visible_limit(),
+                'display_all' => theme_hero_tag_display_all_enabled(),
+                'scrollbar_enabled' => theme_hero_tag_scrollbar_enabled(),
+                'scrollbar_rows' => theme_hero_tag_scrollbar_rows(),
+                'sort_mode' => theme_hero_tag_sort_mode(),
+            ];
+            // Server-side normalization protects direct POST requests from bypassing slider and select constraints.
+            $nextHeroTagSettings = [
+                'visible_limit' => theme_hero_tag_visible_limit_value($_POST['theme_hero_tag_visible_limit'] ?? null),
+                'display_all' => !empty($_POST['theme_hero_tag_display_all']),
+                'scrollbar_enabled' => !empty($_POST['theme_hero_tag_scrollbar_enabled']),
+                'scrollbar_rows' => theme_hero_tag_scrollbar_rows_value($_POST['theme_hero_tag_scrollbar_rows'] ?? null),
+                'sort_mode' => theme_hero_tag_sort_mode_normalize($_POST['theme_hero_tag_sort_mode'] ?? 'usage'),
+            ];
+            set_app_setting('theme_hero_tag_visible_limit', (string) $nextHeroTagSettings['visible_limit']);
+            set_app_setting('theme_hero_tag_display_all', $nextHeroTagSettings['display_all'] ? '1' : '0');
+            set_app_setting('theme_hero_tag_scrollbar_enabled', $nextHeroTagSettings['scrollbar_enabled'] ? '1' : '0');
+            set_app_setting('theme_hero_tag_scrollbar_rows', (string) $nextHeroTagSettings['scrollbar_rows']);
+            set_app_setting('theme_hero_tag_sort_mode', $nextHeroTagSettings['sort_mode']);
+            if ($nextHeroTagSettings !== $previousHeroTagSettings) {
+                // Sorting changes server-rendered tag order while the remaining values change public disclosure metadata.
+                set_app_setting('theme_public_content_revision', (string) time());
+            }
             if (function_exists('Gallery\\Services\\save_theme_favorite_gallery_slots')) {
                 save_theme_favorite_gallery_slots($_POST['theme_favorite_gallery_types'] ?? [], $_POST['theme_favorite_gallery_ids'] ?? []);
             } elseif (function_exists('Gallery\\Services\\save_theme_favorite_gallery_ids')) {
@@ -563,6 +596,7 @@ function cms_admin_theme(): void
     render_admin_subtabs([
         ['id' => 'admin-theme-appearance-subtab-colors', 'label' => t('admin.theme.subtab_colors_identity', 'Colors & identity')],
         ['id' => 'admin-theme-appearance-subtab-width-map', 'label' => t('admin.theme.subtab_width_map', 'Width & map pin')],
+        ['id' => 'admin-theme-appearance-subtab-gallery-tags', 'label' => t('admin.theme.subtab_gallery_tags', 'Gallery tags')],
         ['id' => 'admin-theme-appearance-subtab-preview', 'label' => t('admin.theme.subtab_preview', 'Live preview')],
     ], 'admin-theme-appearance-subtab-colors', t('admin.theme.appearance.subtabs_label', 'Appearance subsections'));
     ob_start();
@@ -614,6 +648,32 @@ function cms_admin_theme(): void
     echo '</fieldset>';
     $appearanceWidthMapHtml = ob_get_clean();
     render_admin_subtab_panel('admin-theme-appearance-subtab-width-map', $appearanceWidthMapHtml, false);
+
+    ob_start();
+    // Hero tag display policy is global because the same public hero component is used for every open gallery.
+    $heroTagVisibleLimit = theme_hero_tag_visible_limit();
+    $heroTagDisplayAll = theme_hero_tag_display_all_enabled();
+    $heroTagScrollbarEnabled = theme_hero_tag_scrollbar_enabled();
+    $heroTagScrollbarRows = theme_hero_tag_scrollbar_rows();
+    $heroTagSortMode = theme_hero_tag_sort_mode();
+    echo '<fieldset class="form-grid admin-theme-hero-tag-settings"><legend>' . e(t('admin.theme.appearance.hero_tags_legend', 'Gallery hero tags')) . '</legend>';
+    echo '<p class="muted">' . e(t('admin.theme.appearance.hero_tags_hint', 'Controls the tag collection shown below an open gallery title. Every tag remains in the server-rendered HTML; the visible limit and expand/collapse behavior are applied in the browser without reloading the page.')) . '</p>';
+    echo '<label>' . e(t('admin.theme.appearance.hero_tag_sort', 'Tag order')) . '<select name="theme_hero_tag_sort_mode"><option value="usage"' . ($heroTagSortMode === 'usage' ? ' selected' : '') . '>' . e(t('admin.theme.appearance.hero_tag_sort_usage', 'Most used first')) . '</option><option value="alphabetical"' . ($heroTagSortMode === 'alphabetical' ? ' selected' : '') . '>' . e(t('admin.theme.appearance.hero_tag_sort_alphabetical', 'Alphabetical')) . '</option></select><span class="muted">' . e(t('admin.theme.appearance.hero_tag_sort_hint', 'Usage counts direct gallery and photo assignments across the installation; equal counts are ordered alphabetically.')) . '</span></label>';
+    echo '<label class="checkbox-label"><input type="checkbox" name="theme_hero_tag_display_all" value="1"' . ($heroTagDisplayAll ? ' checked' : '') . ' data-theme-hero-tag-display-all> ' . e(t('admin.theme.appearance.hero_tag_display_all', 'Display every tag immediately')) . '</label>';
+    echo '<div class="theme-number-slider-control" data-theme-hero-tag-limit-controls' . ($heroTagDisplayAll ? ' hidden' : '') . '>';
+    echo '<label>' . e(t('admin.theme.appearance.hero_tag_visible_limit', 'Tags before “Display all tags”')) . '<input type="range" name="theme_hero_tag_visible_limit_slider" min="1" max="200" step="1" value="' . $heroTagVisibleLimit . '" data-theme-hero-tag-limit-slider></label>';
+    echo '<label>' . e(t('admin.theme.appearance.hero_tag_visible_limit_number', 'Visible tag count')) . '<input type="number" name="theme_hero_tag_visible_limit" min="1" max="200" step="1" value="' . $heroTagVisibleLimit . '" inputmode="numeric" data-theme-hero-tag-limit-number><span class="muted" data-theme-hero-tag-limit-display>' . $heroTagVisibleLimit . '</span></label>';
+    echo '</div>';
+    echo '<p class="muted">' . e(t('admin.theme.appearance.hero_tag_visible_limit_hint', 'Default: 20 tags. When more tags exist, “Display all tags” expands them in-place with JavaScript and does not reload the page.')) . '</p>';
+    echo '<label class="checkbox-label"><input type="checkbox" name="theme_hero_tag_scrollbar_enabled" value="1"' . ($heroTagScrollbarEnabled ? ' checked' : '') . ' data-theme-hero-tag-scrollbar-enabled> ' . e(t('admin.theme.appearance.hero_tag_scrollbar_enabled', 'Use a scrollbar for long tag lists')) . '</label>';
+    echo '<div class="theme-number-slider-control" data-theme-hero-tag-scrollbar-controls' . ($heroTagScrollbarEnabled ? '' : ' hidden') . '>';
+    echo '<label>' . e(t('admin.theme.appearance.hero_tag_scrollbar_rows', 'Rows before scrolling')) . '<input type="range" name="theme_hero_tag_scrollbar_rows_slider" min="1" max="12" step="1" value="' . $heroTagScrollbarRows . '" data-theme-hero-tag-scrollbar-rows-slider></label>';
+    echo '<label>' . e(t('admin.theme.appearance.hero_tag_scrollbar_rows_number', 'Maximum visible tag rows')) . '<input type="number" name="theme_hero_tag_scrollbar_rows" min="1" max="12" step="1" value="' . $heroTagScrollbarRows . '" inputmode="numeric" data-theme-hero-tag-scrollbar-rows-number><span class="muted" data-theme-hero-tag-scrollbar-rows-display>' . $heroTagScrollbarRows . '</span></label>';
+    echo '</div>';
+    echo '<p class="muted">' . e(t('admin.theme.appearance.hero_tag_scrollbar_rows_hint', 'Default: 5 rows. Scrolling is enabled only when the tags actually wrap onto more rows at the current screen width. Disable the scrollbar option to let the hero grow naturally.')) . '</p>';
+    echo '</fieldset>';
+    $appearanceGalleryTagsHtml = ob_get_clean();
+    render_admin_subtab_panel('admin-theme-appearance-subtab-gallery-tags', $appearanceGalleryTagsHtml, false);
 
     ob_start();
     echo '<aside class="theme-live-preview" aria-label="' . e(t('admin.theme.appearance.live_preview_label', 'Live theme preview')) . '" data-theme-live-preview>';

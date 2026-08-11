@@ -27,7 +27,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-04
+ *   2026-08-11
  */
 
 /**
@@ -513,6 +513,111 @@ function i18n(key, fallback, parameters = {}) {
 }
 
 /**
+ * Keep a range slider and direct number field synchronized within validated bounds.
+ *
+ * @param {HTMLFormElement} form Theme form containing the controls.
+ * @param {string} sliderSelector Selector for the range input.
+ * @param {string} numberSelector Selector for the numeric input.
+ * @param {string} displaySelector Selector for the optional visible value display.
+ * @param {number} minimum Lowest accepted integer.
+ * @param {number} maximum Highest accepted integer.
+ * @param {number} fallback Value used when direct input is empty or invalid.
+ */
+function setupThemeNumberSliderPair(form, sliderSelector, numberSelector, displaySelector, minimum, maximum, fallback) {
+    const slider = form.querySelector(sliderSelector);
+    const number = form.querySelector(numberSelector);
+    const display = form.querySelector(displaySelector);
+    if (!(slider instanceof HTMLInputElement) || !(number instanceof HTMLInputElement)) {
+        return;
+    }
+
+    /**
+     * Clamp one input and mirror the resolved integer to both controls.
+     *
+     * @param {HTMLInputElement} source Input that triggered synchronization.
+     */
+    const sync = (source) => {
+        const parsed = Number.parseInt(source.value, 10);
+        const value = Math.max(minimum, Math.min(maximum, Number.isFinite(parsed) ? parsed : fallback));
+        slider.value = String(value);
+        number.value = String(value);
+        if (display instanceof HTMLElement) {
+            display.textContent = String(value);
+        }
+    };
+
+    [slider, number].forEach((control) => {
+        control.addEventListener('input', () => {
+            // Let the direct number field be temporarily empty while a user replaces its value.
+            if (control === number && number.value.trim() === '') {
+                if (display instanceof HTMLElement) {
+                    display.textContent = '';
+                }
+                return;
+            }
+            sync(control);
+        });
+        control.addEventListener('change', () => sync(control));
+    });
+    sync(number);
+}
+
+/**
+ * Initialize Theme controls specific to the public gallery hero tag collection.
+ *
+ * The dependency sections are presentation-only. The server still validates
+ * every submitted value so direct POST requests cannot escape supported bounds.
+ *
+ * @param {HTMLFormElement} form Theme form containing hero-tag settings.
+ */
+function setupThemeHeroTagControls(form) {
+    setupThemeNumberSliderPair(
+        form,
+        '[data-theme-hero-tag-limit-slider]',
+        '[data-theme-hero-tag-limit-number]',
+        '[data-theme-hero-tag-limit-display]',
+        1,
+        200,
+        20,
+    );
+    setupThemeNumberSliderPair(
+        form,
+        '[data-theme-hero-tag-scrollbar-rows-slider]',
+        '[data-theme-hero-tag-scrollbar-rows-number]',
+        '[data-theme-hero-tag-scrollbar-rows-display]',
+        1,
+        12,
+        5,
+    );
+
+    const displayAll = form.querySelector('[data-theme-hero-tag-display-all]');
+    const limitControls = form.querySelector('[data-theme-hero-tag-limit-controls]');
+    const scrollbarEnabled = form.querySelector('[data-theme-hero-tag-scrollbar-enabled]');
+    const scrollbarControls = form.querySelector('[data-theme-hero-tag-scrollbar-controls]');
+
+    /**
+     * Hide controls that have no effect under the currently selected mode.
+     */
+    const syncDependencies = () => {
+        if (displayAll instanceof HTMLInputElement && limitControls instanceof HTMLElement) {
+            limitControls.hidden = displayAll.checked;
+        }
+        if (scrollbarEnabled instanceof HTMLInputElement && scrollbarControls instanceof HTMLElement) {
+            scrollbarControls.hidden = !scrollbarEnabled.checked;
+        }
+    };
+
+    [displayAll, scrollbarEnabled].forEach((control) => {
+        if (!(control instanceof HTMLInputElement)) {
+            return;
+        }
+        control.addEventListener('input', syncDependencies);
+        control.addEventListener('change', syncDependencies);
+    });
+    syncDependencies();
+}
+
+/**
  * Handle setup theme override form.
  *
  * Used by browser-side gallery behavior.
@@ -533,6 +638,7 @@ export function setupThemeOverrideForm() {
     setupThemeLivePreview(form);
     setupThemeBackgroundOptimizedSizeDisplay(form);
     setupThemeDescriptionLayoutPicker(form);
+    setupThemeHeroTagControls(form);
     // changed stores state or configuration for the gallery front-end flow.
     const changed = form.querySelector('[data-theme-controls-changed]');
     if (!changed) {

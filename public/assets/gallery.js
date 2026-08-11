@@ -52,7 +52,8 @@
  *   .then((module) => module.setupResponsiveThumbnailSizes());
  */
 
-import { setupThemeOverrideForm } from './gallery-modules/theme-form.js?v=20260511-i18n-js-v1';
+import { setupThemeOverrideForm } from './gallery-modules/theme-form.js?v=20260811-hero-tag-theme-v1';
+import { setupHeroTagDisclosure } from './gallery-modules/hero-tags.js?v=20260811-hero-tags-v1';
 import { setupResponsiveThumbnailSizes } from './gallery-modules/responsive-thumbnails.js?v=20260510-lazy-map-v1';
 import { setupThumbnailWarmup } from './gallery-modules/thumbnail-warmup.js?v=20260608-thumbnail-warmup-v1';
 import { setupFaviconCropper } from './gallery-modules/favicon-cropper.js';
@@ -167,6 +168,7 @@ function bootGalleryBrowserFeatures() {
     setupVoteForms();
     setupBackToTopButton();
     setupThemeOverrideForm();
+    setupHeroTagDisclosure();
     setupFaviconCropper();
     setupTagSuggestions();
     setupGalleryLightbox();

@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-04
+ *   2026-08-11
  */
 
 declare(strict_types=1);
@@ -39,10 +39,10 @@ namespace Gallery\Services;
 /**
  * Theme setting service helpers.
  *
- * This module is intentionally limited to color, radius, font, and CSS default
- * resolution. Runtime assets such as favicon files, custom CSS files, and
- * background images stay in their own services so path handling remains easy to
- * audit after the services.php split.
+ * This module owns normalized site-level visual settings and lightweight public
+ * presentation policy, including hero-tag disclosure defaults. Runtime assets
+ * such as favicon files, custom CSS files, and background images stay in their
+ * own services so path handling remains easy to audit after the services.php split.
  */
 
 /**
@@ -215,6 +215,105 @@ function theme_page_width_custom_value(mixed $value): int
         return 1440;
     }
     return max(1024, min(2048, $width));
+}
+
+
+/**
+ * Normalize the number of hero tags shown before the browser offers expansion.
+ *
+ * @param mixed $value Value to process.
+ * @return int Integer result for the caller.
+ */
+function theme_hero_tag_visible_limit_value(mixed $value): int
+{
+    // $limit stores the requested number of initially visible tags before clamping.
+    $limit = (int) $value;
+    if ($limit <= 0) {
+        return 20;
+    }
+    return max(1, min(200, $limit));
+}
+
+/**
+ * Return the configured initial hero-tag limit.
+ *
+ * @return int Integer result for the caller.
+ */
+function theme_hero_tag_visible_limit(): int
+{
+    return theme_hero_tag_visible_limit_value(app_setting('theme_hero_tag_visible_limit', '20'));
+}
+
+/**
+ * Return whether public gallery heroes should expose every tag immediately.
+ *
+ * @return bool True when the hero should not collapse its tag collection.
+ */
+function theme_hero_tag_display_all_enabled(): bool
+{
+    return ((string) app_setting('theme_hero_tag_display_all', '0')) === '1';
+}
+
+/**
+ * Return whether long public hero tag collections may become internally scrollable.
+ *
+ * @return bool True when row-based scrollbar activation is allowed.
+ */
+function theme_hero_tag_scrollbar_enabled(): bool
+{
+    return ((string) app_setting('theme_hero_tag_scrollbar_enabled', '1')) !== '0';
+}
+
+/**
+ * Normalize the visible-row threshold used before hero-tag scrolling is enabled.
+ *
+ * @param mixed $value Value to process.
+ * @return int Integer result for the caller.
+ */
+function theme_hero_tag_scrollbar_rows_value(mixed $value): int
+{
+    // $rows stores the requested number of unscrolled visual rows before clamping.
+    $rows = (int) $value;
+    if ($rows <= 0) {
+        return 5;
+    }
+    return max(1, min(12, $rows));
+}
+
+/**
+ * Return the configured hero-tag scrollbar row threshold.
+ *
+ * @return int Integer result for the caller.
+ */
+function theme_hero_tag_scrollbar_rows(): int
+{
+    return theme_hero_tag_scrollbar_rows_value(app_setting('theme_hero_tag_scrollbar_rows', '5'));
+}
+
+/**
+ * Normalize the public hero-tag sorting mode.
+ *
+ * Supported modes are usage, which sorts highest assignment count first, and
+ * alphabetical. Unsupported or empty values intentionally fall back to usage.
+ *
+ * @param mixed $value Value to process.
+ * @return string Text result for the caller.
+ */
+function theme_hero_tag_sort_mode_normalize(mixed $value): string
+{
+    // $mode stores the trimmed submitted or database value before validation.
+    $mode = trim((string) $value);
+    return in_array($mode, ['usage', 'alphabetical'], true) ? $mode : 'usage';
+}
+
+/**
+ * Return the configured public hero-tag sorting mode.
+ *
+ * @return string Text result for the caller.
+ */
+function theme_hero_tag_sort_mode(): string
+{
+    return theme_hero_tag_sort_mode_normalize(app_setting('theme_hero_tag_sort_mode', 'usage'));
 }
 
 /**

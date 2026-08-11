@@ -435,6 +435,10 @@ Settings are used for URL rewrites, site name, dev mode, collapsed admin state, 
 
 Theme favorite shortcuts are stored as a JSON array in `theme_favorite_gallery_ids`. The array may contain numeric gallery IDs and the `home` token for the main gallery page. `app/services/favorite_galleries.php` normalizes the value, removes duplicates, validates that selected galleries still exist before saving, and resolves public header navigation items in configured order. Anonymous visitors only receive gallery shortcuts that remain public and listed; the main page shortcut is always safe to render.
 
+Gallery hero tag presentation also uses the existing `app_settings` table and therefore needs no schema migration. `app/services/theme.php` owns normalization and defaults for `theme_hero_tag_visible_limit` (default 20, range 1 to 200), `theme_hero_tag_display_all` (default off, so progressive disclosure is active), `theme_hero_tag_scrollbar_enabled` (default on), `theme_hero_tag_scrollbar_rows` (default 5, range 1 to 12), and `theme_hero_tag_sort_mode` (`usage` or `alphabetical`, default `usage`). `app/controllers/admin_theme.php` persists the values after the existing Admin and CSRF checks and bumps `theme_public_content_revision` when this public rendering policy changes.
+
+`app/services/tag_metadata.php` owns hero usage sorting. Usage is the sum of direct `gallery_tags` and `image_tags` assignments, restricted to tag IDs required by the current hero. The service sorts direct and contained tag groups independently, with usage descending and natural case-insensitive name ordering as the tie-break. `app/controllers/public_gallery.php` emits every tag in the HTML plus validated data attributes. `public/assets/gallery-modules/hero-tags.js` progressively hides tags above the initial limit, expands/collapses them without requests, and measures actual wrapped rows before applying a scrollbar. No-JavaScript rendering remains complete because the server never omits tags for this feature.
+
 When adding a setting:
 
 1. Add a named helper when the setting has validation or conversion rules.
@@ -543,8 +547,10 @@ Site-level theme logic is in:
 app/controllers/admin_theme.php
 app/controllers/theme_assets.php
 app/services/theme.php
+app/services/tag_metadata.php
 app/services/custom_css.php
 app/services/favicon.php
+public/assets/gallery-modules/hero-tags.js
 public/assets/styles.css
 custom_css/*.css
 ```
@@ -569,7 +575,8 @@ Supported branding concepts include:
 8. Count badge visibility.
 9. Lightbox browsing mode.
 10. Thumbnail size bounds.
-11. Custom CSS presets.
+11. Gallery hero tag disclosure, ordering and row-based scrolling.
+12. Custom CSS presets.
 
 ## Lightbox Browsing Mode Model
 

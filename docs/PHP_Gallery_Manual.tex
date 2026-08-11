@@ -996,6 +996,20 @@ English and Czech catalogs provide server and browser strings. PHP and JSON cata
 
 Custom CSS supports installation-specific visual refinement. Theme-generated CSS exposes validated variables and computed selectors through a dedicated route. Gallery branding can override selected site-level assets while preserving effective fallback behavior.
 
+\subsection{Gallery hero tags}
+\index{tags!gallery hero}
+\index{theme!gallery tags}
+
+The \ui{Appearance > Gallery tags} subsection controls the compact tag collection below the title of an open gallery. The tag area uses the complete width of the hero panel, so tags can continue wrapping toward the right edge instead of being limited by the normal readable paragraph width. Direct gallery tags and tags collected from contained content remain separate semantic groups, but each group follows the same global display policy.
+
+By default, the browser initially shows 20 tags. The limit can be changed from 1 to 200 with either a range slider or an exact number field. When more tags exist, \ui{Display all tags} appears and expands the existing tag elements in place with JavaScript; no page reload or additional server request is used. The same control can collapse the collection again. Administrators who do not want progressive disclosure can enable \ui{Display every tag immediately}. All tags are still emitted in the server-rendered HTML in every mode, so disabling JavaScript leaves the complete tag collection visible and usable rather than hiding content permanently.
+
+Tag ordering is configurable as \ui{Most used first} or \ui{Alphabetical}. \ui{Most used first} is the default. Usage is the total number of direct tag assignments to galleries plus direct tag assignments to photographs across the installation. Equal usage counts fall back to a natural case-insensitive alphabetical order and then a stable identifier tie-break. Direct gallery tags are sorted within their group and contained tags are sorted within their group; the groups are not mixed together.
+
+Long tag collections can also use a responsive internal scrollbar. This option is enabled by default and defaults to five visible rows. The row threshold can be configured from 1 to 12 with a slider or exact number field. The browser measures the rows after the tags have actually wrapped at the current hero width, and it enables scrolling only when the measured row count exceeds the configured threshold. Resizing the page causes the measurement to be recalculated. Disabling the scrollbar option removes the height constraint and allows the hero to grow naturally.
+
+These controls are stored as scalar values in the existing application settings table: \texttt{theme\_hero\_tag\_visible\_limit}, \texttt{theme\_hero\_tag\_display\_all}, \texttt{theme\_hero\_tag\_scrollbar\_enabled}, \texttt{theme\_hero\_tag\_scrollbar\_rows}, and \texttt{theme\_hero\_tag\_sort\_mode}. They therefore require no database schema migration. Server-side normalization protects the supported numeric ranges and sort modes even when a form is submitted without the browser controls.
+
 \section{Downloads, sharing, and transfer}
 \label{sec:sharing}
 \index{downloads}

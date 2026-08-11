@@ -42,6 +42,7 @@ This file maps features to source files. It is optimized for fast maintenance an
 | Lightbox JSON | `app/controllers/gallery_lightbox.php` | `app/services/lightbox_metadata.php` |
 | Lightbox browsing modes | `app/services/gallery_lightbox_mode.php` | Theme default plus per-gallery override resolution for single-image, picture-strip, and 3D-carousel modes. |
 | Public tags | `app/controllers/public_tags.php` | `app/services/tags.php`, `app/services/tag_metadata.php` |
+| Gallery hero tags | `app/controllers/public_gallery.php`, `app/services/tag_metadata.php` | Full-width server-rendered tag groups with usage/alphabetical sorting and browser disclosure. |
 | Picture game | `app/controllers/picture_game.php` | `app/services/picture_game.php` |
 | Voting | `app/controllers/votes.php` | `app/services/votes.php`, `app/services/picture_game.php` |
 
@@ -145,6 +146,8 @@ This file maps features to source files. It is optimized for fast maintenance an
 | Public tag pages | `app/controllers/public_tags.php` |
 | Tag suggestions | `app/services/tag_metadata.php`, `app/controllers/admin_gallery_renderers.php` |
 | Gallery/image tag relations | Tables `gallery_tags`, `image_tags` |
+| Hero tag usage sorting | `app/services/tag_metadata.php`, `app/controllers/public_gallery.php` |
+| Hero tag disclosure and row-based scrolling | `public/assets/gallery-modules/hero-tags.js`, `public/assets/styles/public-shared.css`, `public/assets/styles/admin-layout.css`, `public/assets/styles/admin.css` |
 
 ## Theme, Layout and Branding
 
@@ -153,6 +156,7 @@ This file maps features to source files. It is optimized for fast maintenance an
 | Admin theme page | `app/controllers/admin_theme.php` |
 | Public thumbnail renderer control | `app/controllers/admin_theme.php`, `app/services/public_thumbnail_rendering.php`, `app/lang/en.php`, `app/lang/cs.php`, `app/lang/en.json`, `app/lang/cs.json` |
 | Theme settings and CSS variables | `app/services/theme.php` |
+| Gallery hero tag Theme controls | `app/controllers/admin_theme.php`, `app/services/theme.php`, `public/assets/gallery-modules/theme-form.js`, `public/assets/styles/admin-theme-editor.css` |
 | Dynamic theme CSS | `app/controllers/theme_assets.php`, handler `cms_theme_css` |
 | Custom CSS presets | `app/services/custom_css.php`, `custom_css/*.css` |
 | Favicon | `app/services/favicon.php`, `app/controllers/theme_assets.php` |
@@ -160,7 +164,7 @@ This file maps features to source files. It is optimized for fast maintenance an
 | Lightbox browsing-mode resolution | `app/services/gallery_lightbox_mode.php`, `app/controllers/admin_theme.php`, `app/controllers/admin_galleries_edit.php`, `app/controllers/public_gallery.php` |
 | Picture-strip and 3D-carousel lightbox UI | `public/assets/gallery-modules/lightbox.js`, `public/assets/styles/lightbox.css`, `public/assets/styles/mobile-gallery.css` |
 | Public/admin styling | `public/assets/styles.css`, `public/assets/custom.css` |
-| Browser UI behavior | `public/assets/gallery.js`, `public/assets/gallery-modules/admin-gallery-date-suggestion.js`, `public/assets/gallery-modules/admin-refresh-progress.js` |
+| Browser UI behavior | `public/assets/gallery.js`, `public/assets/public-gallery.js`, `public/assets/gallery-modules/hero-tags.js`, `public/assets/gallery-modules/admin-gallery-date-suggestion.js`, `public/assets/gallery-modules/admin-refresh-progress.js` |
 
 ## Access, Sharing and Downloads
 

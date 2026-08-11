@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-04
+ *   2026-08-11
  */
 
 declare(strict_types=1);
@@ -143,6 +143,12 @@ use function Gallery\Services\site_name;
 use function Gallery\Services\t;
 use function Gallery\Services\tags_for_entities;
 use function Gallery\Services\tags_for_entity;
+use function Gallery\Services\sort_public_hero_tag_groups;
+use function Gallery\Services\theme_hero_tag_display_all_enabled;
+use function Gallery\Services\theme_hero_tag_scrollbar_enabled;
+use function Gallery\Services\theme_hero_tag_scrollbar_rows;
+use function Gallery\Services\theme_hero_tag_sort_mode;
+use function Gallery\Services\theme_hero_tag_visible_limit;
 use function Gallery\Services\telemetry_append_public_script;
 use function Gallery\Services\thumbnail_bundle;
 use function Gallery\Services\thumbnail_bundle_url;
@@ -484,6 +490,29 @@ function cms_gallery(): void
     if ($publicNotice !== '') {
         echo '<div class="notice">' . e($publicNotice) . '</div>';
     }
+    // $heroTagGroups keeps direct gallery tags and inherited/contained tags semantically separate while sharing one display policy.
+    $heroTagGroups = [
+        'gallery' => tags_for_entity('gallery', (int) $gallery['id']),
+        'contained' => $children
+            ? public_render_profile_span('contained_tag_lookup', static fn (): array => contained_tags_for_gallery($gallery, $publicOnly))
+            : [],
+    ];
+    // Sort each group according to the global Theme setting without mixing direct and contained tags.
+    $heroTagGroups = public_render_profile_span(
+        'hero_tag_sort',
+        static fn (): array => sort_public_hero_tag_groups($heroTagGroups, theme_hero_tag_sort_mode())
+    );
+    // $heroTagVisibleLimit is the browser-side collapse boundary; every tag remains in the server HTML for no-JS access.
+    $heroTagVisibleLimit = theme_hero_tag_visible_limit();
+    // $heroTagDisplayAll disables the disclosure behavior while retaining the same server-rendered markup.
+    $heroTagDisplayAll = theme_hero_tag_display_all_enabled();
+    // $heroTagScrollbarEnabled allows the browser to constrain the content only when wrapping exceeds the configured row count.
+    $heroTagScrollbarEnabled = theme_hero_tag_scrollbar_enabled();
+    // $heroTagScrollbarRows is interpreted as rendered visual rows after responsive wrapping, not as a fixed CSS height.
+    $heroTagScrollbarRows = theme_hero_tag_scrollbar_rows();
+    // $heroTagCount determines whether an expand control is useful at all.
+    $heroTagCount = count($heroTagGroups['gallery']) + count($heroTagGroups['contained']);
+
     echo '<section class="hero">';
     // Keep the title, date, description, and breadcrumbs in one primary column so long descriptions do not become a narrow middle strip.
     echo '<div class="hero-topbar">';
@@ -505,12 +534,18 @@ function cms_gallery(): void
     }
     echo '</div>';
     echo '</div>';
-    echo '<div class="hero-tags" aria-label="' . e(t('gallery.tags', 'Gallery tags')) . '">';
-    render_tag_list(tags_for_entity('gallery', (int) $gallery['id']));
-    if ($children) {
-        render_tag_list(public_render_profile_span('contained_tag_lookup', static fn (): array => contained_tags_for_gallery($gallery, $publicOnly)), t('gallery.containing_tags', 'Containing tags'));
+    if ($heroTagCount > 0) {
+        echo '<div class="hero-tags" aria-label="' . e(t('gallery.tags', 'Gallery tags')) . '" data-hero-tags data-hero-tag-visible-limit="' . $heroTagVisibleLimit . '" data-hero-tag-display-all="' . ($heroTagDisplayAll ? '1' : '0') . '" data-hero-tag-scrollbar-enabled="' . ($heroTagScrollbarEnabled ? '1' : '0') . '" data-hero-tag-scrollbar-rows="' . $heroTagScrollbarRows . '">';
+        echo '<div class="hero-tags-content" data-hero-tags-content>';
+        render_tag_list($heroTagGroups['gallery']);
+        render_tag_list($heroTagGroups['contained'], t('gallery.containing_tags', 'Containing tags'));
+        echo '</div>';
+        if (!$heroTagDisplayAll && $heroTagCount > $heroTagVisibleLimit) {
+            // The browser toggles visibility in-place. No navigation or server request is required to expose the complete collection.
+            echo '<div class="hero-tags-controls"><button type="button" class="button secondary hero-tags-toggle" data-hero-tags-toggle hidden data-show-all-label="' . e(t('gallery.show_all_tags', 'Display all tags')) . '" data-show-fewer-label="' . e(t('gallery.show_fewer_tags', 'Show fewer tags')) . '" aria-expanded="false">' . e(t('gallery.show_all_tags', 'Display all tags')) . '</button></div>';
+        }
+        echo '</div>';
     }
-    echo '</div>';
     echo '</div>';
     echo '</section>';
     render_public_gallery_branding_separator($gallery, $publicOnly);
