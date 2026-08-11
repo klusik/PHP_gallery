@@ -29,12 +29,21 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-10
+ *   2026-08-11
  */
 
 import { i18n } from './admin-core.js?v=20260512-modular-admin-v1';
 
-const lightboxModuleUrl = './lightbox.js?v=20260620-lightbox-phaseb-help-map-nav-v1';
+const lightboxModuleUrl = (() => {
+    const moduleUrl = new URL('./lightbox.js', import.meta.url);
+    const entrypointRevision = String(document.querySelector('script[data-gallery-asset-revision]')?.dataset.galleryAssetRevision || '').trim();
+    const deferredRevision = new URL(import.meta.url).searchParams.get('v') || '';
+    const assetRevision = entrypointRevision || deferredRevision;
+    if (assetRevision !== '') {
+        moduleUrl.searchParams.set('v', assetRevision);
+    }
+    return moduleUrl.href;
+})();
 
 const deferredLightboxState = {
     controller: null,

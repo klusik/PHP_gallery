@@ -27,7 +27,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-04
+ *   2026-08-11
  */
 
 /**
@@ -3718,11 +3718,10 @@ export function setupGalleryLightbox() {
             return;
         }
 
-        // Leaflet normally detects marker image URLs from leaflet.css. The app
-        // loads Leaflet dynamically and can run inside fullscreen/modal scopes,
-        // where custom gallery image CSS may make that detection unreliable.
-        // Use explicit upstream image URLs so normal maps and fullscreen split
-        // maps both keep the blue GPS marker.
+        // Leaflet normally detects its default marker image URLs from leaflet.css.
+        // The gallery markers below use L.divIcon() and are intentionally independent
+        // from these PNG files. Keep explicit upstream URLs only for any legacy/default
+        // L.Icon.Default usage elsewhere in the page.
         L.Icon.Default.mergeOptions({
             iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
             iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
@@ -3754,7 +3753,7 @@ export function setupGalleryLightbox() {
             const popupAnchor = isActivePhoto ? [0, -35] : (isRouteVia ? [0, -7] : [0, -27]);
             window.galleryMapMarkerIcons[markerRole] = L.divIcon({
                 className: `gallery-leaflet-marker gallery-leaflet-marker--${markerRole}`,
-                html: '<span class="gallery-leaflet-marker-shadow" aria-hidden="true"></span><span class="gallery-leaflet-marker-pin" aria-hidden="true"></span>',
+                html: '<span class="gallery-leaflet-marker-shadow" aria-hidden="true"></span><span class="gallery-leaflet-marker-tail" aria-hidden="true"></span><span class="gallery-leaflet-marker-pin" aria-hidden="true"></span>',
                 iconAnchor,
                 iconSize,
                 popupAnchor,
@@ -4241,6 +4240,7 @@ export function setupGalleryLightbox() {
             const markerRole = mapPointMarkerRole(point);
             const marker = L.marker([point.lat, point.lng], {
                 icon: getGalleryMapMarkerIcon(point),
+                pane: 'markerPane',
                 zIndexOffset: markerRole === 'active-photo' ? 1200 : (markerRole === 'photo' ? 500 : (markerRole === 'route-via' ? 50 : 100)),
             }).addTo(map);
             marker.bindPopup(mapPopupHtml(point));

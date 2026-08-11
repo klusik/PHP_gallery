@@ -27,7 +27,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-19
+ *   2026-08-11
  */
 
 /**
@@ -73,7 +73,7 @@ import { setupAdminGalleryBenchmark } from './gallery-modules/admin-gallery-benc
 import { setupPublicThumbnailRenderDiagnostics } from './gallery-modules/public-thumbnail-render-diagnostics.js?v=20260809-thumbnail-render-diagnostics-v1';
 import { setupVoteForms } from './gallery-modules/votes.js?v=20260512-lightbox-vote-clone-widget-v6';
 import { setupAdminBulkSelection, setupGalleryBulkDeleteConfirmation, setupImageBulkDeleteConfirmation, setupImageBulkMoveFields, setupThumbnailCacheDeleteConfirmation } from './gallery-modules/admin-bulk-actions.js?v=20260519-gallery-picker-v1';
-import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20260620-lightbox-phaseb-help-map-nav-v1';
+import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20260811-leaflet-safari-marker-v1';
 import {
     setupAdminGalleryFilters,
     setupAdminGalleryTree,
@@ -92,7 +92,7 @@ import {
     setupAdminNavdataUpdateFeedback,
     setupAdminMediaRenamer,
     setupAdminMetadataOrganizer,
-} from './gallery-modules/admin-operations.js?v=20260810-admin-log-scaling-v1';
+} from './gallery-modules/admin-operations.js?v=20260811-leaflet-safari-marker-v1';
 
 /**
  * Runs a setup callback after the DOM is ready.
