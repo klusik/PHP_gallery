@@ -1,5 +1,37 @@
 # Patch notes
 
+## Version 0.87.1
+
+Version 0.87.1 is a focused Safari compatibility patch for the public Leaflet maps shown in the lightbox. It restores visible map pins in Safari while preserving the existing Chrome behavior, map access rules, and fullscreen lightbox workflows.
+
+  ### Highlights
+
+  #### Restored Safari map pins
+
+  - Fixed public lightbox map markers that were missing in Safari even though the map tiles and location were displayed correctly.
+  - Hardened the CSS-only Leaflet marker rendering against gallery image styles, fullscreen rules, inherited filters, opacity, sizing, and visibility overrides.
+  - Kept separate visual roles for photo, active-photo, route, route-start, route-end, and route-via markers.
+
+  ### Technical Details
+
+  #### Frontend
+
+  - Updated `public/assets/gallery-modules/lightbox.js` to keep Leaflet marker setup and lightbox asset revisions synchronized.
+  - Updated `public/assets/styles/public-shared.css` with Safari-safe marker sizing, visibility, stacking, and rendering rules.
+  - Updated `app/helpers.php` and `app/views/layout.php` so changes to the lightbox module invalidate deployed browser caches.
+
+  #### Tests
+
+  - Added `tests/leaflet_marker_rendering_model_test.php` for marker creation, role handling, CSS contracts, and asset-version coverage.
+  - Added `tests/SAFARI_LEAFLET_MARKER_MANUAL_TEST.md` for Safari and Chrome verification of normal and fullscreen lightbox maps.
+
+  ### User Impact
+
+  #### For visitors
+
+  - Safari users can see photo and route pins on public lightbox maps again.
+  - Existing GPS authorization, privacy, gallery access, map navigation, popups, and no-JavaScript behavior remain unchanged.
+
 ## Version 0.87
 
 Version 0.87 is an operational scalability and public-rendering release. It introduces a durable Admin log lifecycle for installations whose audit history has grown large, adds grouped browsing and bounded exports, moves eligible historical days into protected filesystem archives before removing their live database rows, and preserves resumable recovery when maintenance is interrupted. It also adds the permanent progressive public thumbnail renderer, improves the explanation of the application request pipeline for gallery owners, and refreshes the release documentation and integrity metadata.
