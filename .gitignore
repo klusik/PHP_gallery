@@ -13,6 +13,7 @@ Thumbs.db
 .DS_Store
 *deploy*zip*
 admin_logs*.zip
+admin-logs*.zip
 __pycache__/
 *.pyc
 *.pyo
