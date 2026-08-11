@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-04
+ *   2026-08-11
  */
 
 declare(strict_types=1);
@@ -1943,6 +1943,7 @@ function render_footer(): void
     $scriptVersionPaths = $scriptAsset === 'assets/public-gallery.js' ? [
         $scriptPath,
         dirname(__DIR__) . '/public/assets/gallery-modules/lightbox-deferred.js',
+        dirname(__DIR__) . '/public/assets/gallery-modules/lightbox.js',
         dirname(__DIR__) . '/public/assets/gallery-modules/admin-core.js',
         dirname(__DIR__) . '/public/assets/gallery-modules/votes.js',
         dirname(__DIR__) . '/public/assets/gallery-modules/public-home-search.js',
@@ -1976,7 +1977,8 @@ function render_footer(): void
         }
     }
     render_browser_i18n_script();
-    echo '<script type="module" src="' . e(asset_url($scriptAsset)) . '?v=' . ($scriptVersion > 0 ? $scriptVersion : time()) . '"></script>';
+    $resolvedScriptVersion = $scriptVersion > 0 ? $scriptVersion : time();
+    echo '<script type="module" data-gallery-asset-revision="' . e((string) $resolvedScriptVersion) . '" src="' . e(asset_url($scriptAsset)) . '?v=' . $resolvedScriptVersion . '"></script>';
     echo cms_footer_scripts_html();
     echo '</body></html>';
 }

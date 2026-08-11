@@ -27,10 +27,10 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-06-09
+ *   2026-08-11
  */
 
-import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20260620-lightbox-phaseb-help-map-nav-v1';
+import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20260811-leaflet-safari-marker-v1';
 
 const optionalPublicModules = {
     votes: './gallery-modules/votes.js?v=20260512-lightbox-vote-clone-widget-v6',
