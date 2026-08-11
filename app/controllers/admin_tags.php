@@ -263,7 +263,7 @@ function cms_admin_tags(): void
                 echo '<h4>' . e(t('admin.tags.used_in_galleries', 'Galleries')) . '</h4>';
                 echo '<ul class="admin-tags-usage-list">';
                 foreach ($selectedTagUsage['galleries'] as $gallery) {
-                    echo '<li><a href="' . e((string) $gallery['edit_url']) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="gallery-edit" data-admin-side-panel-kicker="' . e(t('gallery.editor', 'Gallery editor')) . '" data-admin-side-panel-title="' . e(t('gallery.edit', 'Edit gallery')) . '" data-gallery-side-panel-url="' . e(url_for('admin_edit_gallery', ['id' => (int) $gallery['id'], 'panel' => 1])) . '">';
+                    echo '<li><a href="' . e((string) $gallery['public_url']) . '" target="_blank" rel="noopener">';
                     echo e((string) $gallery['title']);
                     echo '</a></li>';
                 }

@@ -49,11 +49,27 @@ function assert_tag_metadata_mysql_source_contains(string $source, string $needl
 }
 
 $serviceSource = (string) file_get_contents(__DIR__ . '/../app/services/tag_metadata.php');
+$adminTagsSource = (string) file_get_contents(__DIR__ . '/../app/controllers/admin_tags.php');
 
 assert_tag_metadata_mysql_source_contains(
     $serviceSource,
     'SELECT DISTINCT i.id, i.relative_path, i.filename, i.gallery_id, i.sort_order AS image_sort_order, g.title AS gallery_title, g.slug AS gallery_slug',
     'Admin tag image usage DISTINCT projection'
+);
+assert_tag_metadata_mysql_source_contains(
+    $serviceSource,
+    'SELECT DISTINCT g.id, g.title, g.slug, g.url_path, g.folder_path',
+    'Admin tag gallery usage includes the stored clean public path'
+);
+assert_tag_metadata_mysql_source_contains(
+    $serviceSource,
+    '\'public_url\' => gallery_public_url($row)',
+    'Admin tag gallery usage exposes the preferred public URL'
+);
+assert_tag_metadata_mysql_source_contains(
+    $adminTagsSource,
+    'e((string) $gallery[\'public_url\']) . \'" target="_blank" rel="noopener"',
+    'Admin tag gallery usage links to the public gallery URL'
 );
 assert_tag_metadata_mysql_source_contains(
     $serviceSource,

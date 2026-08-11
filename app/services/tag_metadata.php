@@ -604,7 +604,7 @@ function admin_tag_usage_rows(int $tagId): array
     // Variable $galleries stores this steps working value.
     $galleries = [];
     // Variable $galleryStmt stores this steps working value.
-    $galleryStmt = db()->prepare("SELECT DISTINCT g.id, g.title, g.slug, g.folder_path
+    $galleryStmt = db()->prepare("SELECT DISTINCT g.id, g.title, g.slug, g.url_path, g.folder_path
         FROM gallery_tags gt
         JOIN galleries g ON g.id = gt.gallery_id
         WHERE gt.tag_id = ?
@@ -615,6 +615,7 @@ function admin_tag_usage_rows(int $tagId): array
             'id' => (int) $row['id'],
             'title' => (string) ($row['title'] ?? ''),
             'slug' => (string) ($row['slug'] ?? ''),
+            'url_path' => (string) ($row['url_path'] ?? ''),
             'folder_path' => (string) ($row['folder_path'] ?? ''),
             'edit_url' => url_for('admin_edit_gallery', ['id' => (int) $row['id']]),
             'public_url' => gallery_public_url($row),
