@@ -231,6 +231,15 @@ foreach (['site_name', 'public_language', 'url_rewrite_enabled', 'public_home_se
     }
 }
 
+foreach (['theme_accent', 'theme_favicon', 'theme_custom_css_editor', 'browser_upload_max_worker_count', 'telemetry_raw_retention_days', 'thumbnail_exact_scan', 'site_maintenance_time_budget_seconds', 'navigation_data_update', 'database_optimize', 'password_reset_transport', 'google_account_linking', 'openai_model'] as $discoveryId) {
+    if (!str_contains($registrySource, "['{$discoveryId}',")) {
+        throw new RuntimeException('Specialized Settings discovery entry missing: ' . $discoveryId);
+    }
+}
+if (substr_count($registrySource, "['") < 100 || !str_contains($registrySource, "['discovery_only'] = true")) {
+    throw new RuntimeException('Specialized Settings discovery catalog is unexpectedly incomplete.');
+}
+
 if (!str_contains($registrySource, "'normalization_callback' =>") || !str_contains($registrySource, "'save_callback' =>")) {
     throw new RuntimeException('Registry does not expose canonical normalization/save callback metadata.');
 }

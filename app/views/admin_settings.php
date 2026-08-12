@@ -67,6 +67,7 @@ function view_render_admin_settings_page(array $model): void
         'title' => t('admin.settings.title', 'Settings'),
         'description' => t('admin.settings.description', 'Central overview of important global settings. Complex, sensitive, and destructive controls remain on their specialized pages.'),
     ]);
+    view_render_admin_settings_search($sections, $registry);
 
     if ($notice !== '') {
         echo '<section class="panel notice" role="status"><p>' . e($notice) . '</p></section>';
@@ -87,7 +88,7 @@ function view_render_admin_settings_page(array $model): void
     foreach ($sections as $sectionId => $section) {
         $panelId = admin_settings_section_id($sectionId);
         $isActive = $sectionId === $activeSection;
-        $entries = array_filter($registry, static fn (array $entry): bool => ($entry['group'] ?? '') === $sectionId);
+        $entries = array_filter($registry, static fn (array $entry): bool => ($entry['group'] ?? '') === $sectionId && empty($entry['discovery_only']));
         echo '<section class="panel admin-tab-panel admin-settings-section' . ($isActive ? ' is-active' : '') . '" id="' . e($panelId) . '" role="tabpanel" aria-labelledby="' . e($panelId . '-control') . '" data-admin-tab-panel' . ($isActive ? '' : ' hidden') . '>';
         echo '<div class="admin-tab-intro"><div><h2>' . e(t((string) $section['label_key'], (string) $section['label'])) . '</h2><p>' . e(t((string) $section['description_key'], (string) $section['description'])) . '</p></div></div>';
         view_render_admin_settings_section($sectionId, $entries, $errors, $submittedValues);
@@ -95,6 +96,39 @@ function view_render_admin_settings_page(array $model): void
     }
 
     render_footer();
+}
+
+/**
+ * Render the client-side Settings spotlight and its complete searchable index.
+ *
+ * @param array<string,array<string,string>> $sections Section taxonomy.
+ * @param array<string,array<string,mixed>> $registry Settings registry.
+ */
+function view_render_admin_settings_search(array $sections, array $registry): void
+{
+    echo '<section class="panel admin-settings-search" data-admin-settings-search data-results-label="' . e(t('admin.settings.search_matches', 'matching settings')) . '" data-empty-label="' . e(t('admin.settings.search_empty', 'No matching settings found.')) . '">';
+    echo '<div class="admin-settings-search-shell">';
+    echo '<span class="admin-settings-search-icon" aria-hidden="true">&#128269;</span>';
+    echo '<input class="admin-settings-search-input" type="search" role="combobox" autocomplete="off" spellcheck="false" placeholder="' . e(t('admin.settings.search_placeholder', 'Search settings and tools...')) . '" aria-label="' . e(t('admin.settings.search_label', 'Search settings')) . '" aria-autocomplete="list" aria-controls="admin-settings-search-results" aria-expanded="false" data-admin-settings-search-input>';
+    echo '<button type="button" class="admin-settings-search-clear" aria-label="' . e(t('admin.settings.search_clear', 'Clear settings search')) . '" data-admin-settings-search-clear hidden>&times;</button>';
+    echo '</div>';
+    echo '<div class="admin-settings-search-results" id="admin-settings-search-results" role="listbox" aria-label="' . e(t('admin.settings.search_results', 'Matching settings')) . '" data-admin-settings-search-results hidden>';
+    echo '<p class="admin-settings-search-status" role="status" aria-live="polite" data-admin-settings-search-status></p>';
+    echo '<div class="admin-settings-search-list">';
+    foreach ($registry as $id => $entry) {
+        $sectionId = admin_settings_section_normalize($entry['group'] ?? 'general');
+        $section = $sections[$sectionId] ?? [];
+        $label = view_admin_settings_entry_label($entry);
+        $description = view_admin_settings_entry_description($entry);
+        $sectionLabel = t((string) ($section['label_key'] ?? ''), (string) ($section['label'] ?? $sectionId));
+        $targetId = 'admin-setting-result-' . preg_replace('/[^a-z0-9_-]/i', '-', (string) $id);
+        $keywords = implode(' ', [(string) $id, str_replace('_', ' ', (string) $id), $label, $description, $sectionLabel, (string) ($entry['sensitivity'] ?? '')]);
+        echo '<a class="admin-settings-search-result" id="admin-settings-search-option-' . e((string) $id) . '" href="' . e(admin_settings_url($sectionId)) . '" role="option" aria-selected="false" data-admin-settings-search-result data-search-text="' . e($keywords) . '" data-search-label="' . e($label) . '" data-search-section="' . e($sectionId) . '" data-search-target="' . e($targetId) . '" hidden>';
+        echo '<span class="admin-settings-search-result-section">' . e($sectionLabel) . '</span>';
+        echo '<span class="admin-settings-search-result-copy"><strong>' . e($label) . '</strong><small>' . e($description) . '</small></span>';
+        echo '<span class="admin-settings-search-result-arrow" aria-hidden="true">&rarr;</span></a>';
+    }
+    echo '</div></div></section>';
 }
 
 /**
@@ -192,7 +226,7 @@ function view_render_admin_settings_input(string $id, array $entry, array $error
     $type = (string) ($entry['input_type'] ?? 'text');
     $describedBy = $helpId . ($error !== '' ? ' ' . $errorId : '');
 
-    echo '<div class="admin-settings-field' . ($error !== '' ? ' has-error' : '') . '">';
+    echo '<div class="admin-settings-field' . ($error !== '' ? ' has-error' : '') . '" id="admin-setting-result-' . e($id) . '" data-admin-setting-target tabindex="-1">';
     if ($type === 'checkbox') {
         $checked = array_key_exists($id, $submittedValues) ? !empty($submittedValues[$id]) : ((string) ($entry['current'] ?? '0') === '1');
         echo '<label class="checkbox-label" for="' . e($inputId) . '"><input id="' . e($inputId) . '" type="checkbox" name="settings[' . e($id) . ']" value="1"' . ($checked ? ' checked' : '') . ' aria-describedby="' . e($describedBy) . '"' . ($error !== '' ? ' aria-invalid="true"' : '') . '> ' . e(view_admin_settings_entry_label($entry)) . '</label>';
@@ -228,7 +262,8 @@ function view_render_admin_settings_input(string $id, array $entry, array $error
  */
 function view_render_admin_settings_summary_card(array $entry): void
 {
-    echo '<article class="admin-maintenance-card admin-settings-card">';
+    $id = (string) ($entry['id'] ?? '');
+    echo '<article class="admin-maintenance-card admin-settings-card" id="admin-setting-result-' . e($id) . '" data-admin-setting-target tabindex="-1">';
     echo '<strong>' . e(view_admin_settings_entry_label($entry)) . '</strong>';
     echo '<span>' . e(view_admin_settings_entry_description($entry)) . '</span>';
     echo '<dl><div><dt>' . e(t('admin.settings.current_value', 'Current value')) . '</dt><dd>' . e(view_admin_settings_display_value($entry)) . '</dd></div></dl>';

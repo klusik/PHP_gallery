@@ -24,6 +24,16 @@ The Settings work audited the requested sources and their effective owners:
 
 `app/services/admin_settings_registry.php` is now the machine-readable ownership registry for settings surfaced by the central hub. It records stable IDs, canonical keys, ownership, current/default resolvers, validation metadata, migration status, sensitivity and specialized routes.
 
+## Settings search
+
+The central Settings page renders a local Spotlight-style search directly below its title. Its index is generated from every visible registry entry, using the translated setting label, description, section, stable ID and sensitivity classification. Results update while the administrator types; no request, external API or separate search index is involved. Matching is case-insensitive, accent-insensitive and token-based, with label-prefix matches ranked first and a maximum of twelve visible results.
+
+Selecting a result activates the owning Settings section, scrolls to and highlights the exact editable control or summary card, and preserves the existing specialized-page link where applicable. Arrow keys move through results, Enter opens the active result, Escape closes the result list, and the clear control resets the query. Without JavaScript, the normal section tabs, stable URLs and complete Settings content remain available.
+
+The registry also contains an exhaustive discovery-only catalog for global controls that remain on specialist screens. It indexes individual Theme colors, typography, corners, width, GPS-pin presentation, hero-tag behavior, shortcuts, card/grid options, branding, backgrounds, favicons, language import/export, and custom CSS; every browser-upload bound; telemetry collection and retention controls; thumbnail generation and cleanup tools; scheduled-maintenance timing and execution; navigation data; logs, updates, integrity, diagnostics, reports, feature flags, and database operations; plus account, password-reset mail, Google linking, and per-user OpenAI controls. Discovery-only entries appear in search but do not create hundreds of duplicate cards in ordinary Settings sections. Selecting one opens its canonical owner.
+
+Per-gallery and per-image values are intentionally not global registry entries. Their controls depend on the selected gallery or photograph and remain searchable only within those contextual editors. Secret values are never copied into the registry; only a safe setting name and destination are indexed.
+
 ## Classification legend
 
 - **Edit**: safe central editing is enabled and the save delegates to the existing canonical service setter.

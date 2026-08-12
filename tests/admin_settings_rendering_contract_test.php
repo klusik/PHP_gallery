@@ -24,8 +24,41 @@ declare(strict_types=1);
 
 $view = file_get_contents(__DIR__ . '/../app/views/admin_settings.php');
 $registry = file_get_contents(__DIR__ . '/../app/services/admin_settings_registry.php');
-if (!is_string($view) || !is_string($registry)) {
+$search = file_get_contents(__DIR__ . '/../public/assets/gallery-modules/admin-settings-search.js');
+$gallery = file_get_contents(__DIR__ . '/../public/assets/gallery.js');
+$styles = file_get_contents(__DIR__ . '/../public/assets/styles/admin.css');
+if (!is_string($view) || !is_string($registry) || !is_string($search) || !is_string($gallery) || !is_string($styles)) {
     throw new RuntimeException('Unable to read Admin Settings source files.');
+}
+
+foreach ([
+    'data-admin-settings-search',
+    'data-admin-settings-search-input',
+    'role="combobox"',
+    'aria-autocomplete="list"',
+    'role="listbox"',
+    'role="option"',
+    'aria-live="polite"',
+    'data-search-section=',
+    'data-search-target=',
+    'data-admin-setting-target',
+    "empty(\$entry['discovery_only'])",
+] as $needle) {
+    if (!str_contains($view, $needle)) {
+        throw new RuntimeException('Settings search rendering contract missing: ' . $needle);
+    }
+}
+
+foreach (['normalizeSettingsSearchText', "event.key === 'ArrowDown'", "event.key === 'Enter'", "event.key === 'Escape'", 'setupAdminSettingsSearch'] as $needle) {
+    if (!str_contains($search, $needle)) {
+        throw new RuntimeException('Settings search interaction contract missing: ' . $needle);
+    }
+}
+if (!str_contains($gallery, 'setupAdminSettingsSearch();')) {
+    throw new RuntimeException('Settings search is not initialized by the browser entrypoint.');
+}
+if (!str_contains($styles, '.admin-settings-search-result[hidden] { display: none; }')) {
+    throw new RuntimeException('Settings search CSS must keep non-matching result rows hidden.');
 }
 
 foreach ([

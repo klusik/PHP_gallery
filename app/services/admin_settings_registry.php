@@ -89,6 +89,149 @@ function admin_settings_sections(): array
             'description' => 'Sensitive, destructive, or specialized configuration remains on dedicated Admin pages.',
         ],
     ];
+
+}
+
+/**
+ * Return exhaustive discovery entries for global controls owned by specialized pages.
+ *
+ * These entries deliberately remain summary-only. They make every global control
+ * searchable without duplicating validation, persistence, secrets, or destructive
+ * actions in the central Settings page.
+ *
+ * @return array<string,array<string,mixed>> Specialized discovery entries.
+ */
+function admin_settings_specialized_catalog(): array
+{
+    $definitions = [
+        // Theme: appearance, identity, width, map pin, tags, and preview.
+        ['theme_accent', 'appearance', 'Accent color', 'Buttons, selected pagination, and important public links.', 'admin_theme', ['appearance_subtab' => 'admin-theme-appearance-subtab-colors'], 'admin-theme-tab-appearance'],
+        ['theme_accent_dark', 'appearance', 'Dark accent color', 'Hover states, outlines, and secondary public actions.', 'admin_theme', [], 'admin-theme-appearance-subtab-colors'],
+        ['theme_paper', 'appearance', 'Page background color', 'Base public page color behind all content.', 'admin_theme', [], 'admin-theme-appearance-subtab-colors'],
+        ['theme_panel', 'appearance', 'Panel background color', 'Background color for public cards and panels.', 'admin_theme', [], 'admin-theme-appearance-subtab-colors'],
+        ['theme_gallery_panel', 'appearance', 'Open gallery panel color', 'Background used by gallery-specific cards and image panels.', 'admin_theme', [], 'admin-theme-appearance-subtab-colors'],
+        ['theme_header_text', 'appearance', 'Header title color', 'Color of the main site title in the public header.', 'admin_theme', [], 'admin-theme-appearance-subtab-colors'],
+        ['theme_hero_text', 'appearance', 'Gallery title color', 'Color of open-gallery title and hero text.', 'admin_theme', [], 'admin-theme-appearance-subtab-colors'],
+        ['theme_radius', 'appearance', 'Rounded corners', 'Global public corner-radius style.', 'admin_theme', [], 'admin-theme-appearance-subtab-colors'],
+        ['theme_font', 'appearance', 'Font style', 'Classic serif or clean sans-serif public typography.', 'admin_theme', [], 'admin-theme-appearance-subtab-colors'],
+        ['theme_page_width_custom', 'appearance', 'Custom page width', 'Custom public container width in pixels.', 'admin_theme', ['appearance_subtab' => 'admin-theme-appearance-subtab-width-map'], 'admin-theme-tab-appearance'],
+        ['theme_gps_pin_enabled', 'appearance', 'Photo-card GPS pin', 'Show a GPS pin on photo cards with location metadata.', 'admin_theme', ['appearance_subtab' => 'admin-theme-appearance-subtab-width-map'], 'admin-theme-tab-appearance'],
+        ['theme_gps_pin_background_enabled', 'appearance', 'GPS pin background', 'Show the background underlay behind photo-card GPS pins.', 'admin_theme', ['appearance_subtab' => 'admin-theme-appearance-subtab-width-map'], 'admin-theme-tab-appearance'],
+        ['theme_gps_pin_size', 'appearance', 'GPS pin size', 'Diameter of the GPS marker on public photo cards.', 'admin_theme', ['appearance_subtab' => 'admin-theme-appearance-subtab-width-map'], 'admin-theme-tab-appearance'],
+        ['theme_gps_pin_background_size', 'appearance', 'GPS pin background size', 'Diameter of the GPS marker background badge.', 'admin_theme', ['appearance_subtab' => 'admin-theme-appearance-subtab-width-map'], 'admin-theme-tab-appearance'],
+        ['theme_hero_tag_display_all', 'content', 'Display all gallery hero tags', 'Show every gallery tag immediately instead of using expansion.', 'admin_theme', ['appearance_subtab' => 'admin-theme-appearance-subtab-gallery-tags'], 'admin-theme-tab-appearance'],
+        ['theme_hero_tag_scrollbar_enabled', 'content', 'Hero tag scrollbar', 'Use bounded scrolling when a gallery has many hero tags.', 'admin_theme', ['appearance_subtab' => 'admin-theme-appearance-subtab-gallery-tags'], 'admin-theme-tab-appearance'],
+        ['theme_hero_tag_scrollbar_rows', 'content', 'Hero tag scrollbar rows', 'Maximum visible tag rows before hero-tag scrolling begins.', 'admin_theme', ['appearance_subtab' => 'admin-theme-appearance-subtab-gallery-tags'], 'admin-theme-tab-appearance'],
+        ['theme_live_preview', 'appearance', 'Theme live preview', 'Preview public Theme colors, corners, typography, width, and identity.', 'admin_theme', ['appearance_subtab' => 'admin-theme-appearance-subtab-preview'], 'admin-theme-tab-appearance'],
+
+        // Theme: layout, cards, grids, shortcuts, lightbox, and media.
+        ['theme_favorite_galleries', 'content', 'Favorite gallery shortcuts', 'Configure public-header shortcuts to the main page or selected galleries.', 'admin_theme', [], 'admin-theme-tab-layout'],
+        ['theme_gallery_count_badge_enabled', 'appearance', 'Gallery picture-count badge', 'Show the stacked-picture icon and image count on gallery cards.', 'admin_theme', [], 'admin-gallery-count-badge'],
+        ['reset_all_gallery_grid_overrides', 'advanced', 'Reset gallery grid overrides', 'Clear every per-gallery custom grid and stale gallery.json grid key.', 'admin_theme', [], 'admin-home-grid'],
+        ['theme_header_branding', 'appearance', 'Header branding image', 'Upload, position, size, crop, or remove the public header branding asset.', 'admin_theme', [], 'admin-theme-tab-media'],
+        ['theme_background_image', 'appearance', 'Public background image', 'Upload, position, size, or remove the public page background.', 'admin_theme', [], 'admin-theme-tab-media'],
+        ['theme_favicon', 'appearance', 'Site favicon', 'Upload, crop, generate, or remove browser and shortcut icons.', 'admin_theme', [], 'admin-theme-tab-media'],
+        ['theme_media_cleanup', 'advanced', 'Theme media cleanup', 'Remove superseded generated Theme media files safely.', 'admin_theme', [], 'admin-theme-tab-media'],
+        ['theme_language_catalog', 'general', 'Installed language', 'Select the active public language catalog.', 'admin_theme', [], 'admin-theme-tab-language'],
+        ['theme_language_editor', 'advanced', 'Language string editor', 'Search and edit individual translation strings in an installed language pack.', 'admin_theme', [], 'admin-theme-tab-language'],
+        ['theme_language_import', 'advanced', 'Import language pack', 'Import a translated JSON language catalog.', 'admin_theme', [], 'admin-theme-tab-language'],
+        ['theme_language_export', 'advanced', 'Export language pack', 'Download an installed language catalog for editing or backup.', 'admin_theme', [], 'admin-theme-tab-language'],
+        ['theme_custom_css_editor', 'advanced', 'Custom CSS editor', 'Edit raw custom public stylesheet rules.', 'admin_theme', [], 'admin-theme-tab-custom-css'],
+        ['theme_custom_css_preset', 'advanced', 'Custom CSS preset', 'Select and apply a built-in custom CSS starting point.', 'admin_theme', [], 'admin-theme-tab-custom-css'],
+        ['theme_custom_css_import', 'advanced', 'Import custom CSS', 'Upload a custom stylesheet into the Theme editor.', 'admin_theme', [], 'admin-theme-tab-custom-css'],
+
+        // Upload pipeline.
+        ['browser_upload_max_worker_count', 'uploads', 'Maximum browser upload workers', 'Upper bound for browser preparation worker-pool parallelism.', 'admin_upload_settings', ['tab' => 'browser'], ''],
+        ['browser_upload_hard_worker_cap', 'uploads', 'Browser upload worker hard cap', 'Absolute safety cap for browser preparation workers.', 'admin_upload_settings', ['tab' => 'browser'], ''],
+        ['browser_upload_batch_size_policy', 'uploads', 'Browser upload batch policy', 'Choose how prepared ZIP batches are bounded against server limits.', 'admin_upload_settings', ['tab' => 'browser'], ''],
+        ['browser_upload_zip_size_threshold_ratio', 'uploads', 'Browser ZIP threshold ratio', 'Target fraction of the PHP upload limit used by each ZIP batch.', 'admin_upload_settings', ['tab' => 'browser'], ''],
+        ['browser_upload_max_zip_batch_bytes', 'uploads', 'Absolute browser ZIP batch cap', 'Hard byte-size limit applied to each prepared upload ZIP.', 'admin_upload_settings', ['tab' => 'browser'], ''],
+        ['browser_thumbnail_rebuild_source_chunk', 'uploads', 'Browser thumbnail source chunk', 'Original-file download chunk size for browser thumbnail rebuilding.', 'admin_upload_settings', ['tab' => 'browser'], ''],
+        ['upload_api_key_management', 'advanced', 'Upload automation API keys', 'Create, revoke, and inspect gallery-scoped upload API credentials.', 'admin_api_manager', [], ''],
+
+        // Telemetry and privacy.
+        ['telemetry_performance_enabled', 'privacy', 'Browser performance telemetry', 'Collect anonymous browser performance measurements.', 'admin_telemetry', [], ''],
+        ['telemetry_cache_enabled', 'privacy', 'Cache telemetry', 'Collect thumbnail and media cache-hit/miss metrics.', 'admin_telemetry', [], ''],
+        ['telemetry_database_enabled', 'privacy', 'Database telemetry', 'Collect bounded query timing and database operation metrics.', 'admin_telemetry', [], ''],
+        ['telemetry_respect_dnt', 'privacy', 'Respect Do Not Track', 'Suppress public telemetry when the browser requests Do Not Track.', 'admin_telemetry', [], ''],
+        ['telemetry_admin_excluded', 'privacy', 'Exclude administrators from telemetry', 'Do not count signed-in Admin browsing in public usage metrics.', 'admin_telemetry', [], ''],
+        ['telemetry_max_photo_view_seconds', 'privacy', 'Maximum counted photo-view time', 'Cap engagement time contributed by one open photo.', 'admin_telemetry', [], ''],
+        ['telemetry_raw_retention_days', 'privacy', 'Raw telemetry retention', 'Days to retain detailed anonymous telemetry events.', 'admin_telemetry', [], ''],
+        ['telemetry_hourly_retention_days', 'privacy', 'Hourly telemetry retention', 'Days to retain compact hourly aggregate metrics.', 'admin_telemetry', [], ''],
+        ['telemetry_daily_retention_days', 'privacy', 'Daily telemetry retention', 'Days to retain long-term daily aggregate metrics.', 'admin_telemetry', [], ''],
+        ['telemetry_export', 'privacy', 'Telemetry HTML export', 'Generate a private aggregated telemetry report.', 'admin_telemetry', [], ''],
+        ['telemetry_maintenance', 'privacy', 'Telemetry aggregation and cleanup', 'Run telemetry rollup, retention, and maintenance jobs.', 'admin_telemetry', [], ''],
+
+        // Scheduled maintenance, thumbnails, navigation, diagnostics, and operations.
+        ['thumbnail_compatibility_mode', 'media', 'Thumbnail compatibility mode', 'Choose modern WebP-only support or legacy JPEG fallback generation.', 'admin', ['maintenance_tab' => 'media'], 'admin-tab-maintenance'],
+        ['thumbnail_exact_scan', 'media', 'Exact thumbnail scan', 'Scan every expected thumbnail variant and report missing files.', 'admin', ['maintenance_tab' => 'media'], 'admin-tab-maintenance'],
+        ['thumbnail_rebuild', 'media', 'Thumbnail rebuild', 'Generate missing or refreshed thumbnail variants.', 'admin', ['maintenance_tab' => 'media'], 'admin-tab-maintenance'],
+        ['thumbnail_cache_cleanup', 'media', 'Thumbnail cache cleanup', 'Remove generated thumbnail cache through protected maintenance controls.', 'admin', ['maintenance_tab' => 'media'], 'admin-tab-maintenance'],
+        ['archive_downloads', 'media', 'Gallery archive downloads', 'Configure and maintain generated gallery download archives.', 'admin', ['maintenance_tab' => 'media'], 'admin-tab-maintenance'],
+        ['media_renamer', 'media', 'Physical media renamer', 'Preview and apply safe filename normalization for gallery media.', 'admin', ['maintenance_tab' => 'media'], 'admin-tab-maintenance'],
+        ['site_maintenance_request_trigger_enabled', 'privacy', 'Request-triggered maintenance', 'Allow normal requests to schedule maintenance when it becomes due.', 'admin', ['maintenance_tab' => 'media'], 'admin-tab-maintenance'],
+        ['site_maintenance_utc_time', 'privacy', 'Maintenance start time', 'Daily UTC start time for scheduled maintenance.', 'admin', ['maintenance_tab' => 'media'], 'admin-tab-maintenance'],
+        ['site_maintenance_window_minutes', 'privacy', 'Maintenance window', 'Overall time window in which scheduled maintenance may run.', 'admin', ['maintenance_tab' => 'media'], 'admin-tab-maintenance'],
+        ['site_maintenance_batch_size', 'privacy', 'Maintenance batch size', 'Maximum images inspected by one internal maintenance batch.', 'admin', ['maintenance_tab' => 'media'], 'admin-tab-maintenance'],
+        ['site_maintenance_time_budget_seconds', 'privacy', 'Maintenance call time budget', 'Maximum execution time allocated to one maintenance request.', 'admin', ['maintenance_tab' => 'media'], 'admin-tab-maintenance'],
+        ['site_maintenance_run_now', 'advanced', 'Run maintenance now', 'Run one bounded safe maintenance check immediately.', 'admin', ['maintenance_tab' => 'media'], 'admin-tab-maintenance'],
+        ['site_maintenance_reset_state', 'advanced', 'Reset maintenance state', 'Clear interrupted scheduled-maintenance progress safely.', 'admin', ['maintenance_tab' => 'media'], 'admin-tab-maintenance'],
+        ['site_maintenance_rotate_token', 'advanced', 'Rotate maintenance cron token', 'Invalidate the existing secret web-cron URL and issue a new token.', 'admin', ['maintenance_tab' => 'media'], 'admin-tab-maintenance'],
+        ['navigation_data_accounts', 'advanced', 'Navigation-data accounts', 'Configure source accounts used to download flight navigation data.', 'admin_navdata', [], ''],
+        ['navigation_data_update', 'advanced', 'Update navigation data', 'Download, import, and inspect flight-map navigation datasets.', 'admin_navdata', [], ''],
+        ['admin_logs', 'advanced', 'Admin operational logs', 'Filter, review, resolve, archive, and inspect application events.', 'admin_logs', [], ''],
+        ['application_updates', 'advanced', 'Application updates', 'Check, download, verify, and apply PHP Gallery updates.', 'admin_update', [], ''],
+        ['integrity_check', 'advanced', 'Core integrity check', 'Compare deployed core files with the release integrity manifest.', 'admin_integrity', [], ''],
+        ['runtime_diagnostics', 'advanced', 'Runtime diagnostics', 'Inspect PHP, image libraries, upload limits, and conversion capability.', 'admin', [], 'admin-tab-maintenance'],
+        ['feature_flags', 'advanced', 'Feature visibility', 'Enable or hide optional and unfinished application features.', 'admin_features', [], ''],
+        ['gallery_report', 'advanced', 'Complete gallery report', 'Generate the detailed HTML storage, database, telemetry, EXIF, GPS, and runtime report.', 'admin_gallery_report', [], ''],
+        ['database_audit', 'advanced', 'Database schema audit', 'Inspect every table, column, key, migration reference, and storage estimate.', 'admin_storage_statistics', ['tab' => 'maintenance'], ''],
+        ['database_safe_cleanup', 'advanced', 'Safe database cleanup', 'Preview or remove high-confidence orphaned and expired rows in bounded batches.', 'admin_storage_statistics', ['tab' => 'maintenance'], ''],
+        ['database_schema_repair', 'advanced', 'Legacy database schema repair', 'Preview and apply the dedicated idempotent schema repair migration.', 'admin_storage_statistics', ['tab' => 'maintenance'], ''],
+        ['database_analyze', 'advanced', 'Analyze database tables', 'Refresh optimizer statistics for explicitly selected tables.', 'admin_storage_statistics', ['tab' => 'maintenance'], ''],
+        ['database_optimize', 'advanced', 'Optimize database tables', 'Rebuild explicitly selected tables to reclaim estimated free space.', 'admin_storage_statistics', ['tab' => 'maintenance'], ''],
+
+        // Account, authentication, mail, linked services, and user preferences.
+        ['account_username', 'advanced', 'Administrator username', 'Change the signed-in administrator account name.', 'admin_account', [], ''],
+        ['account_password', 'advanced', 'Administrator password', 'Change the signed-in administrator password.', 'admin_account', [], ''],
+        ['password_reset_enabled', 'advanced', 'Password reset', 'Enable or disable administrator password recovery by email.', 'admin_account', [], ''],
+        ['password_reset_transport', 'advanced', 'Password reset mail transport', 'Choose PHP mail or authenticated SMTP delivery.', 'admin_account', [], ''],
+        ['password_reset_from_email', 'advanced', 'Password reset sender email', 'Sender email address used for recovery messages.', 'admin_account', [], ''],
+        ['password_reset_from_name', 'advanced', 'Password reset sender name', 'Readable sender name used for recovery messages.', 'admin_account', [], ''],
+        ['password_reset_token_lifetime_minutes', 'advanced', 'Password reset token lifetime', 'Minutes before a password-reset link expires.', 'admin_account', [], ''],
+        ['password_reset_smtp_host', 'advanced', 'SMTP host', 'Mail server hostname for password recovery.', 'admin_account', [], ''],
+        ['password_reset_smtp_port', 'advanced', 'SMTP port', 'Mail server port for password recovery.', 'admin_account', [], ''],
+        ['password_reset_smtp_encryption', 'advanced', 'SMTP encryption', 'TLS or connection security mode for password-reset mail.', 'admin_account', [], ''],
+        ['password_reset_smtp_username', 'advanced', 'SMTP username', 'Authentication username for password-reset mail.', 'admin_account', [], ''],
+        ['google_account_linking', 'advanced', 'Google account linking', 'Connect or disconnect a Google identity for administrator sign-in.', 'admin_account', [], ''],
+        ['openai_text_assist_enabled', 'advanced', 'OpenAI text assistance', 'Enable or disable per-user AI-assisted Admin text generation.', 'admin_account', [], ''],
+        ['openai_api_key', 'advanced', 'OpenAI API key', 'Configure the per-user secret used by Admin text assistance.', 'admin_account', [], ''],
+        ['openai_model', 'advanced', 'OpenAI model', 'Select the model used by Admin text assistance.', 'admin_account', [], ''],
+    ];
+
+    $entries = [];
+    foreach ($definitions as [$id, $group, $label, $description, $route, $params, $fragment]) {
+        $entries[$id] = admin_settings_entry($id, $group, $label, $description, '', 'specialized', '', t('admin.settings.status.specialized_only', 'Specialized page only'), $route, $params, $fragment, false, str_contains($id, 'password') || str_contains($id, 'token') || str_contains($id, 'api_key') ? 'secret' : 'normal');
+        $entries[$id]['discovery_only'] = true;
+    }
+    if (function_exists('Gallery\\Services\\feature_flag_definitions')) {
+        foreach (feature_flag_definitions() as $featureKey => $definition) {
+            $id = 'feature_' . feature_flag_normalize_key((string) $featureKey);
+            $entries[$id] = admin_settings_entry(
+                $id,
+                'advanced',
+                (string) ($definition['label'] ?? $featureKey),
+                (string) ($definition['description'] ?? 'Optional application feature visibility.'),
+                feature_flag_setting_key((string) $featureKey),
+                'summary',
+                '1',
+                feature_flag_enabled((string) $featureKey) ? '1' : '0',
+                'admin_features'
+            );
+            $entries[$id]['discovery_only'] = true;
+        }
+    }
+    return $entries;
 }
 
 /**
@@ -203,7 +346,7 @@ function admin_settings_registry(): array
     $browserUpload = function_exists('Gallery\\Services\\browser_upload_settings') ? browser_upload_settings() : [];
     $theme = theme_settings();
 
-    return [
+    $registry = [
         'site_name' => admin_settings_entry('site_name', 'general', 'Site name', 'Public site title used in the header and browser title.', 'site_name', 'text', 'Gallery CMS', site_name(), 'admin_theme', [], 'admin-theme-tab-appearance', true, 'normal', ['max_length' => 120]),
         'public_language' => admin_settings_entry('public_language', 'general', 'Public language', 'Default language for anonymous visitors.', 'public_language', 'select', 'en', translation_public_language(), 'admin_theme', [], 'admin-theme-tab-language', true, 'normal', ['allowed' => function_exists('Gallery\\Services\\translation_supported_languages') ? translation_supported_languages() : ['en', 'cs', 'de', 'sv']]),
         'url_rewrite_enabled' => admin_settings_entry('url_rewrite_enabled', 'general', 'Clean public URLs', 'Controls whether generated public links prefer URL rewriting.', 'url_rewrite_enabled', 'checkbox', '1', url_rewrite_enabled() ? '1' : '0', 'admin', [], 'admin-tab-maintenance', true),
@@ -252,6 +395,8 @@ function admin_settings_registry(): array
         'destructive_maintenance' => admin_settings_entry('destructive_maintenance', 'advanced', 'Destructive maintenance', 'Reset, cleanup, rebuild, and other destructive operations remain on their existing maintenance screens.', '', 'specialized', '', t('admin.settings.status.specialized_only', 'Specialized page only'), 'admin', [], 'admin-tab-maintenance', false, 'destructive'),
         'account_credentials' => admin_settings_entry('account_credentials', 'advanced', 'Account and credentials', 'Passwords, Google OAuth, OpenAI API keys, and credential-bearing settings remain on Account.', '', 'specialized', '', t('admin.settings.status.specialized_only', 'Specialized page only'), 'admin_account', [], '', false, 'secret'),
     ];
+
+    return array_replace($registry, admin_settings_specialized_catalog());
 }
 
 /**

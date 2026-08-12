@@ -65,6 +65,7 @@ import { setupSimbriefDescriptionGenerator } from './gallery-modules/admin-simbr
 import { setupAdminNavigationDataPanel } from './gallery-modules/admin-navdata-panel.js?v=20260527-navdata-panel-v1';
 import { setupOpenAITextAssist } from './gallery-modules/admin-openai-text-assist.js?v=20260529-openai-text-assist-v2';
 import { setupPublicHomeSearch } from './gallery-modules/public-home-search.js?v=20260528-public-search-context-v1';
+import { setupAdminSettingsSearch } from './gallery-modules/admin-settings-search.js?v=20260812-settings-spotlight-v1';
 import { setupAdminGalleryMigration } from './gallery-modules/admin-gallery-migration.js?v=20260527-gallery-migration-reconnect-v1';
 import { setupAdminGalleryDateSuggestions } from './gallery-modules/admin-gallery-date-suggestion.js?v=20260607-date-suggestion-endpoint-v2';
 import { setupAdminDuplicatePhotoDetector } from './gallery-modules/admin-duplicate-photo-detector.js?v=20260808-duplicate-photo-detector-ledger-v4';
@@ -93,7 +94,7 @@ import {
     setupAdminNavdataUpdateFeedback,
     setupAdminMediaRenamer,
     setupAdminMetadataOrganizer,
-} from './gallery-modules/admin-operations.js?v=20260811-leaflet-safari-marker-v1';
+} from './gallery-modules/admin-operations.js?v=20260812-deferred-maintenance-v2';
 
 /**
  * Runs a setup callback after the DOM is ready.
@@ -174,6 +175,7 @@ function bootGalleryBrowserFeatures() {
     setupGalleryLightbox();
     setupPictureManager();
     setupPublicHomeSearch();
+    setupAdminSettingsSearch();
 
     runWhenDomReady(setupAdminNavdataUpdateFeedback);
     runWhenDomReady(setupAdminNavigationDataPanel);

@@ -31,6 +31,7 @@
  */
 
 import { i18n } from './admin-core.js?v=20260512-modular-admin-v1';
+import { setupAdminNestedTabs } from './admin-nested-tabs.js?v=20260812-deferred-maintenance-v1';
 
 const legacyAdminTabHashes = new Map([
     ['#admin-galleries', '#admin-tab-galleries'],
@@ -101,19 +102,45 @@ async function loadDeferredAdminPanel(panel) {
         return;
     }
     panel.dataset.adminPanelLoading = '1';
+    let responseStatus = 0;
+    let responseContentType = '';
+    let responseSnippet = '';
     try {
         const response = await fetch(endpoint, {headers: {'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest'}});
+        responseStatus = response.status;
+        responseContentType = response.headers.get('content-type') || '';
+        const responseText = await response.text();
+        responseSnippet = responseText.slice(0, 2000);
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}`);
         }
-        const payload = await response.json();
+        let payload;
+        try {
+            payload = JSON.parse(responseText);
+        } catch (error) {
+            throw new Error(`Invalid JSON response: ${error instanceof Error ? error.message : String(error)}`);
+        }
         if (!payload || payload.ok !== true || typeof payload.html !== 'string') {
-            throw new Error('Invalid deferred Admin panel response');
+            throw new Error(`Invalid deferred Admin panel response${payload?.diagnostic_id ? ` (${payload.diagnostic_id})` : ''}`);
         }
         panel.innerHTML = payload.html;
         panel.dataset.adminPanelLoaded = '1';
         setupAdminTabsInRoot(panel);
+        setupAdminNestedTabs(panel);
     } catch (error) {
+        const logEndpoint = placeholder.dataset.maintenanceLogEndpoint || '';
+        const csrfToken = placeholder.dataset.csrfToken || '';
+        if (logEndpoint && csrfToken) {
+            const body = new URLSearchParams();
+            body.set('csrf_token', csrfToken);
+            body.set('endpoint', endpoint);
+            body.set('http_status', String(responseStatus));
+            body.set('content_type', responseContentType);
+            body.set('browser_error', error instanceof Error ? error.message : String(error));
+            body.set('response_snippet', responseSnippet);
+            body.set('page_url', window.location.href);
+            fetch(logEndpoint, {method: 'POST', body, credentials: 'same-origin'}).catch(() => {});
+        }
         placeholder.textContent = i18n('admin.dashboard.maintenance_load_failed', 'Unable to load maintenance tools. Please reload the page.');
         placeholder.classList.add('error');
     } finally {

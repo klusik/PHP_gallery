@@ -37,6 +37,7 @@ declare(strict_types=1);
 namespace Gallery\Views;
 
 use function Gallery\Core\csrf_field;
+use function Gallery\Core\csrf_token;
 use function Gallery\Core\e;
 use function Gallery\Core\gallery_public_url;
 use function Gallery\Core\render_admin_tab_panel;
@@ -198,7 +199,8 @@ function view_render_admin_dashboard(array $model): void
     if (!empty($model['maintenance_loaded'])) {
         view_render_admin_dashboard_maintenance_panel($model);
     } else {
-        echo '<div class="admin-dashboard-deferred-panel" data-admin-dashboard-maintenance-placeholder data-maintenance-endpoint="' . e(url_for('admin_dashboard_maintenance')) . '" role="status"><p class="muted">' . e(t('admin.dashboard.maintenance_loading', 'Loading maintenance tools…')) . '</p><noscript><a href="' . e(url_for('admin_storage_statistics')) . '">' . e(t('admin.storage.open_details', 'Open storage and maintenance details')) . '</a></noscript></div>';
+        $maintenanceEndpointParams = strtolower(trim((string) ($_GET['maintenance_tab'] ?? ''))) === 'media' ? ['maintenance_tab' => 'media'] : [];
+        echo '<div class="admin-dashboard-deferred-panel" data-admin-dashboard-maintenance-placeholder data-maintenance-endpoint="' . e(url_for('admin_dashboard_maintenance', $maintenanceEndpointParams)) . '" data-maintenance-log-endpoint="' . e(url_for('admin_dashboard_maintenance_client_log')) . '" data-csrf-token="' . e(csrf_token()) . '" role="status"><p class="muted">' . e(t('admin.dashboard.maintenance_loading', 'Loading maintenance tools…')) . '</p><noscript><a href="' . e(url_for('admin_storage_statistics')) . '">' . e(t('admin.storage.open_details', 'Open storage and maintenance details')) . '</a></noscript></div>';
     }
     $maintenanceHtml = (string) ob_get_clean();
     admin_render_profile_span('render_maintenance_tab_panel', static function () use ($maintenanceHtml): void { render_admin_tab_panel('admin-tab-maintenance', $maintenanceHtml, false); });

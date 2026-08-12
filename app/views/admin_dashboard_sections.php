@@ -163,8 +163,10 @@ function view_render_admin_dashboard_metric_grid(array $model): void
         ? t('admin.dashboard.metric_images_checked', 'images checked')
         : t('admin.dashboard.metric_images_sampled', 'images sampled');
     $thumbnailHelp = !empty($thumbnailSummary['deferred'])
-        ? t('admin.dashboard.metric_thumbnail_check_deferred', 'Open thumbnail maintenance for an exact scan.')
-        : (int) ($thumbnailSummary['images_scanned'] ?? 0) . ' ' . $thumbnailImagesLabel;
+        ? e(t('admin.dashboard.metric_thumbnail_check_deferred', 'Open thumbnail maintenance for an exact scan.'))
+            . '<br><a class="admin-metric-inline-link" href="' . e(url_for('admin', ['maintenance_tab' => 'media']) . '#admin-tab-maintenance') . '">'
+            . e(t('admin.dashboard.open_thumbnail_maintenance', 'Open thumbnail maintenance')) . '</a>'
+        : e((int) ($thumbnailSummary['images_scanned'] ?? 0) . ' ' . $thumbnailImagesLabel);
     $galleryStorageHelp = e((int) $unpublishedGalleries . ' ' . t('admin.dashboard.metric_unpublished', 'unpublished') . ', ' . (int) $privateGalleries . ' ' . t('admin.dashboard.metric_private', 'private')) . '<br>' . e(t('admin.dashboard.metric_original_storage', 'Original files: {size}', ['size' => $originalStorageLabel]));
     if ($databaseUsageAvailable && $galleryDatabaseUsageLabel !== '') {
         $galleryStorageHelp .= '<br>' . e(t('admin.dashboard.metric_gallery_database_storage', 'Gallery DB: {size}', ['size' => $galleryDatabaseUsageLabel]));
@@ -189,7 +191,7 @@ function view_render_admin_dashboard_metric_grid(array $model): void
         [
             'label' => t('admin.dashboard.metric_thumbnail_gaps', 'Thumbnail gaps'),
             'value' => $thumbnailValue,
-            'help' => $thumbnailHelp,
+            'help_html' => $thumbnailHelp,
             'state' => $missingThumbnailVariants > 0 ? 'care' : 'ready',
         ],
         [
@@ -269,15 +271,17 @@ function view_render_admin_dashboard_maintenance_panel(array $model): void
     view_render_admin_gallery_report_maintenance_card('admin-maintenance-card is-featured');
     echo '</div>';
     echo '<div class="admin-subtab-scope admin-dashboard-maintenance-scope" data-admin-subtab-scope>';
-    view_render_admin_subtabs($maintenanceSubtabs, 'admin-maintenance-content', t('admin.dashboard.maintenance_subtabs_aria', 'Maintenance tool groups'));
+    $requestedMaintenanceTab = strtolower(trim((string) ($_GET['maintenance_tab'] ?? '')));
+    $activeMaintenanceTab = $requestedMaintenanceTab === 'media' ? 'admin-maintenance-media' : 'admin-maintenance-content';
+    view_render_admin_subtabs($maintenanceSubtabs, $activeMaintenanceTab, t('admin.dashboard.maintenance_subtabs_aria', 'Maintenance tool groups'));
 
     ob_start();
     view_render_admin_dashboard_content_display_tools($model);
-    view_render_admin_subtab_panel('admin-maintenance-content', (string) ob_get_clean(), true);
+    view_render_admin_subtab_panel('admin-maintenance-content', (string) ob_get_clean(), $activeMaintenanceTab === 'admin-maintenance-content');
 
     ob_start();
     view_render_admin_dashboard_media_tools($model);
-    view_render_admin_subtab_panel('admin-maintenance-media', (string) ob_get_clean(), false);
+    view_render_admin_subtab_panel('admin-maintenance-media', (string) ob_get_clean(), $activeMaintenanceTab === 'admin-maintenance-media');
 
     ob_start();
     view_render_admin_dashboard_navigation_tools($model);
