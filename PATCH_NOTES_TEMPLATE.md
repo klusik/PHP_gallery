@@ -94,5 +94,18 @@ A complete release entry should include:
 - New services, controllers, scripts, or tools.
 - Tests added or changed.
 - Compatibility notes when relevant.
+- For schema-sensitive changes, state whether each affected operation treats
+  `available`, confirmed `missing`, `unknown`, and configuration `disabled`
+  differently where applicable. For security/authentication, describe fail-closed
+  behavior. For destructive or ingestion workflows, explicitly document the
+  preflight point, any proven legacy compatibility/bootstrap path, recoverability on
+  refusal, and whether credential revocation intentionally uses a narrower schema
+  than issuance/authentication. For optional presentation/reporting features, state
+  whether an unavailable read can be omitted safely, which writes still require
+  conclusive schema, and whether feature-disabled health checks avoid unnecessary
+  metadata probes.
+- When System Health or Runtime Diagnostics changes, list the new capability keys or
+  groups and confirm that visible/logged context is bounded and does not expose raw
+  SQL, database exceptions, credentials, tokens, or private filesystem paths.
 
 Keep entries detailed enough that users can understand the release without reading Git diffs.

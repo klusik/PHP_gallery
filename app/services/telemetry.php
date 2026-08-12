@@ -61,13 +61,7 @@ use function Gallery\Core\url_for;
  */
 function telemetry_schema_ready(): bool
 {
-    try {
-        // $stmt stores the metadata lookup result for the telemetry events table.
-        $stmt = db()->query("SHOW TABLES LIKE 'telemetry_events'");
-        return $stmt && (bool) $stmt->fetch();
-    } catch (Throwable) {
-        return false;
-    }
+    return presentation_schema_render_available(presentation_telemetry_schema_status(), 'telemetry_runtime');
 }
 
 /**
@@ -529,7 +523,7 @@ function telemetry_append_public_script(array $context = []): void
  */
 function telemetry_metric_sum(string $metricName, int $days = 30): float
 {
-    if (!telemetry_settings_schema_ready()) {
+    if (!telemetry_schema_ready()) {
         return 0.0;
     }
     // $stmt stores the aggregate read query for one metric name.
@@ -547,7 +541,7 @@ function telemetry_metric_sum(string $metricName, int $days = 30): float
  */
 function telemetry_metric_events(string $metricName, int $days = 30): int
 {
-    if (!telemetry_settings_schema_ready()) {
+    if (!telemetry_schema_ready()) {
         return 0;
     }
     // $stmt stores the aggregate count query for one metric name.
@@ -565,7 +559,7 @@ function telemetry_metric_events(string $metricName, int $days = 30): int
  */
 function telemetry_top_photos(int $days = 30, int $limit = 15): array
 {
-    if (!telemetry_settings_schema_ready()) {
+    if (!telemetry_schema_ready()) {
         return [];
     }
     // $stmt stores the top photo view query.
@@ -590,7 +584,7 @@ function telemetry_top_photos(int $days = 30, int $limit = 15): array
  */
 function telemetry_longest_viewed_photos(int $days = 30, int $limit = 15): array
 {
-    if (!telemetry_settings_schema_ready()) {
+    if (!telemetry_schema_ready()) {
         return [];
     }
     // $stmt stores the average capped view-time query.
@@ -615,7 +609,7 @@ function telemetry_longest_viewed_photos(int $days = 30, int $limit = 15): array
  */
 function telemetry_browser_mix(int $days = 30): array
 {
-    if (!telemetry_settings_schema_ready()) {
+    if (!telemetry_schema_ready()) {
         return [];
     }
     // $stmt stores the browser mix query.
@@ -632,7 +626,7 @@ function telemetry_browser_mix(int $days = 30): array
  */
 function telemetry_cache_mix(int $days = 30): array
 {
-    if (!telemetry_settings_schema_ready()) {
+    if (!telemetry_schema_ready()) {
         return [];
     }
     // $stmt stores the cache mix query.

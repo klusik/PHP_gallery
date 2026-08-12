@@ -40,6 +40,8 @@ use function Gallery\Services\gallery_lightbox_browsing_mode_label;
 use function Gallery\Services\gallery_lightbox_browsing_mode_normalize;
 use function Gallery\Services\gallery_lightbox_browsing_mode_storage_value;
 use function Gallery\Services\theme_lightbox_browsing_mode;
+use function Gallery\Services\schema_inspection_reset_request_cache;
+use function Gallery\Services\schema_inspection_set_query_executor_for_tests;
 
 require_once __DIR__ . '/../app/services/app_settings.php';
 
@@ -63,21 +65,14 @@ if (!function_exists('t')) {
 
 $GLOBALS['gallery_lightbox_mode_test_schema_ready'] = true;
 
-if (!function_exists('db_column_exists')) {
-        /**
-     * Minimal schema shim used to exercise both migrated and pre-migration flows.
-     *
-     * @param string $table Table value.
-     * @param string $column Column value.
-     * @return bool True when the condition matches.
-     */
-    function db_column_exists(string $table, string $column): bool
-    {
-        return $table === 'galleries'
-            && $column === 'lightbox_browsing_mode'
-            && !empty($GLOBALS['gallery_lightbox_mode_test_schema_ready']);
-    }
-}
+require_once __DIR__ . '/../app/services/schema_inspection.php';
+require_once __DIR__ . '/../app/services/presentation_schema_policy.php';
+
+schema_inspection_set_query_executor_for_tests(static function (string $objectType, string $table, string $object, string $token = ''): bool {
+    return $table === 'galleries'
+        && $object === 'lightbox_browsing_mode'
+        && !empty($GLOBALS['gallery_lightbox_mode_test_schema_ready']);
+});
 
 require_once __DIR__ . '/../app/services/gallery_lightbox_mode.php';
 
@@ -122,12 +117,14 @@ assert_gallery_lightbox_mode_same(null, gallery_lightbox_browsing_mode_storage_v
 // A gallery-level override wins over the Theme default after the migration exists.
 $GLOBALS['cms_app_settings_cache'] = ['theme_lightbox_browsing_mode' => '3d_carousel'];
 $GLOBALS['gallery_lightbox_mode_test_schema_ready'] = true;
+schema_inspection_reset_request_cache();
 assert_gallery_lightbox_mode_same('single', gallery_effective_lightbox_browsing_mode(['lightbox_browsing_mode' => 'single']), 'Gallery override must win over Theme default.');
 assert_gallery_lightbox_mode_same('3d_carousel', gallery_effective_lightbox_browsing_mode(['lightbox_browsing_mode' => null]), 'Null gallery value must inherit Theme default.');
 assert_gallery_lightbox_mode_same('3d_carousel', gallery_effective_lightbox_browsing_mode([]), 'Missing gallery value must inherit Theme default.');
 
 // Before the gallery column is migrated in, the public site remains stable and uses Theme only.
 $GLOBALS['gallery_lightbox_mode_test_schema_ready'] = false;
+schema_inspection_reset_request_cache();
 assert_gallery_lightbox_mode_same('3d_carousel', gallery_effective_lightbox_browsing_mode(['lightbox_browsing_mode' => 'single']), 'Pre-migration installs must ignore unavailable gallery override columns.');
 
 // Labels are intentionally driven by normalized values so Admin forms cannot display raw invalid data.

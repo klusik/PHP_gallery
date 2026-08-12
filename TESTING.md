@@ -63,6 +63,451 @@ The public thumbnail rendering model test covers responsive default/fallback nor
 
 These tests are maintained against the current namespaced production code. They are best for pure logic, helper functions, and regression checks that do not require a browser session. A release patch should not be published while `php tests/run.php` reports a failure.
 
+### Schema-inspection reliability regression coverage
+
+The schema-inspection reliability conversion is complete. Repository-wide review
+should still search for `SHOW COLUMNS`, `SHOW TABLES`, `information_schema`,
+`db_column_exists`, `db_table_exists`, `schema_ready`, `column_exists`, and
+`table_exists` when adding or modifying schema-sensitive code. A direct metadata
+query is acceptable only when its purpose cannot be represented as inspection of a
+known table/column/index/definition and the exception is documented and tested.
+
+Behavioral coverage must preserve all three inspection states:
+
+- successful inspection with the object available;
+- successful inspection with the object missing;
+- failed inspection with state unknown.
+
+Tests must prove that unknown state cannot become a permissive access default,
+an unthrottled authentication path, an accepted upload, a partial destructive
+mutation, or a misleading “migration missing” diagnostic. Presentation-only
+fallback tests should prove that the base page can continue only when omitting
+the optional feature cannot reveal protected content or authorize a write.
+Migration tests must also prove that request-local inspection state is reset
+after successful DDL when inspection and validation happen in one PHP process.
+
+The Phase 2 primitive test is available now:
+
+```text
+php tests/schema_inspection_model_test.php
+```
+
+It covers table, column, and index availability and absence; generic and PDO
+inspection failures; safe SQLSTATE handling; secret and hostname redaction;
+identifier rejection before query execution; request-local cache reuse and
+reset; state predicates; feature requirement preservation; and
+`unknown > missing > available` aggregation. The dedicated Phase 3 hardening
+also verifies the production `information_schema` query definitions and bound
+parameters, `DATABASE()` scoping, registration before consumers, independent
+cache identities, cached missing/unknown results, executor-triggered cache
+reset, mutually exclusive predicates, private-path/token redaction, and
+rejection of incomplete aggregate requirements. It uses a narrow executor seam
+and does not connect to a live database.
+
+The first security-sensitive caller test is available now:
+
+```text
+php tests/nsfw_schema_policy_test.php
+```
+
+It verifies unchanged gallery-level and image-level NSFW enforcement with a
+complete schema, the documented historical compatibility path for confirmed
+pre-feature schemas, and fail-closed behavior for unknown inspection state. An
+isolated dispatcher fixture runs the real dispatcher and 503 response helper to
+prove that unknown state blocks media, thumbnails, lazy lightbox metadata, and
+map metadata before their handlers emit output; returns translated HTML, JSON,
+or plain text with status 503 and a safe request reference; and never exposes
+fixture SQL or secrets. The same test distinguishes missing from unknown Admin
+health, proves unknown never becomes disabled, verifies logged-in anonymous
+preview follows the same safe public policy, preserves complete-schema route
+behavior, and protects the explicit bulk-mutation refusal contract. It uses the
+isolated schema query executor and does not connect to a live database.
+
+The response boundary has an additional focused test:
+
+```text
+php tests/service_unavailable_response_test.php
+```
+
+It renders the real response helper with isolated translation, request-ID, and
+Admin-log doubles. The test verifies HTTP 503 status; HTML, JSON, and plain-text
+bodies; stable public and internal error codes; request correlation; bounded
+security log context; absence of representative SQL, credential, token, stack,
+and private-path values; and the no-store, retry, crawler, and content-type
+header contract. It requires no database or web server.
+
+Admin health interpretation has a focused pure-model test:
+
+```text
+php tests/admin_nsfw_system_health_test.php
+```
+
+It covers available, confirmed missing, unknown, intentionally disabled, and
+malformed states; request-reference ownership; migration and operational
+suggested-check keys; validated affected-object identities; rejection of raw
+diagnostics and malformed object names; dashboard Maintenance/System Health
+action badges; and shared Runtime Diagnostics ownership. The disabled case
+protects the common health vocabulary. NSFW Guard itself currently has no
+configuration feature flag and therefore does not produce disabled in normal
+runtime operation.
+
+Phase 8 adds migration/cache integration coverage:
+
+```text
+php tests/migration_schema_cache_reset_test.php
+```
+
+The test uses a minimal PDO double plus the schema-inspection executor seam, so
+it needs no live MySQL or MariaDB service. It first proves that a cached
+`missing` result is reused during the request and remains cached across a
+data-only migration statement. It then executes the real
+`apply_migration_statement()` boundary with simulated DDL and proves that the
+next capability check performs a fresh inspection and sees the changed schema.
+The duplicate-DDL replay path is covered as well because interrupted shared-host
+updates can encounter objects that already exist. Source contracts additionally
+protect cache invalidation after the `schema_migrations` bootstrap and after
+successful migration repair callbacks, which may perform their own DDL.
+
+`tests/nsfw_schema_policy_test.php` also counts the pilot's metadata calls. A
+complete NSFW capability requires exactly one request-local lookup for
+`galleries.nsfw_enabled` and one for `images.nsfw_enabled`; repeated readiness,
+gallery, and image policy helpers must not add more `information_schema`
+queries in the same request.
+
+For Phase 8 pilot review, run the focused set before the full suite:
+
+```text
+php tests/schema_inspection_model_test.php
+php tests/nsfw_schema_policy_test.php
+php tests/service_unavailable_response_test.php
+php tests/admin_nsfw_system_health_test.php
+php tests/migration_schema_cache_reset_test.php
+php tests/migration_consistency_test.php
+php tests/run.php
+```
+
+Manual NSFW outage verification should simulate an inspection failure on a
+disposable installation. Confirm that gallery pages receive translated 503
+HTML, lightbox/map/search requests receive 503 JSON, media and thumbnail routes
+receive 503 plain text, no protected URL or metadata appears, and Admin System
+Health shows an inspection failure with a safe reference. Confirm that gallery,
+image, and bulk NSFW changes are refused, then restore database access and
+verify existing restrictions behave unchanged.
+
+### Phase 9 security and authentication schema policy tests
+
+Phase 9 adds three focused test scripts plus an isolated dispatcher fixture:
+
+```text
+php tests/gallery_access_schema_policy_test.php
+php tests/auth_schema_policy_test.php
+php tests/security_schema_system_health_test.php
+```
+
+`tests/gallery_access_schema_policy_test.php` covers the public authorization
+side of the conversion. It verifies:
+
+- complete gallery-access schema preserves password inheritance and unlisted
+  behavior;
+- confirmed legacy compatibility is permitted only when all five core access
+  columns are absent;
+- a partially applied access migration fails closed instead of substituting
+  `normal`/`listed`;
+- access metadata inspection failure remains `unknown` and redacts simulated SQL
+  and credential material;
+- confirmed historical visibility vocabulary stores canonical `unpublished` as
+  `draft`, while unknown enum inspection refuses to guess;
+- missing share-token display storage disables token use, while unknown storage
+  raises the dedicated policy exception;
+- the real dispatcher returns 503 before gallery, public-media, public-thumbnail,
+  lazy-lightbox-data, and gallery-download sentinel handlers for partial access,
+  unknown access, and unknown visibility states;
+- response representation remains HTML, JSON, or plain text according to route;
+- bounded logs contain only the feature, state, route, response format, and
+  request correlation, never fixture secrets, DSNs, passwords, or SQL.
+
+`tests/support/security_schema_policy_dispatch_fixture.php` provides the isolated
+real-dispatcher environment for those route tests. Keep it aligned with the
+central sensitive-route preflight in `app/bootstrap/dispatch.php` whenever a new
+public endpoint can expose protected gallery state, metadata, archives, or media.
+
+`tests/auth_schema_policy_test.php` covers authentication capabilities without a
+live database. It verifies:
+
+- `admin_remember_tokens`, `users.email`, `password_reset_tokens`, and
+  `user_google_accounts` available/missing/unknown states;
+- request-local cache reuse, including one metadata query for `users.email` even
+  when both email-login and password-reset status request it;
+- confirmed missing remember-token storage degrades to ordinary PHP-session login
+  instead of failing authentication;
+- unknown remember-token storage refuses persistent-token issuance/use and logs
+  only bounded feature/operation context;
+- password reset becomes incomplete when either its table or `users.email` is
+  missing and remains unknown when the shared email dependency cannot be
+  inspected;
+- confirmed missing external-identity storage can safely disable read/link UI,
+  while unknown storage refuses both lookup and mutation;
+- configuration-disabled persistent login short-circuits before metadata queries;
+- schema-policy-only checks do not touch application data tables.
+
+`tests/security_schema_system_health_test.php` protects the generic four-state
+Admin health model, bounded affected-object normalization, request-reference
+behavior, the complete Phase 9 capability registry, the System Health action
+badge contract, and Runtime Diagnostics use of the same status set.
+
+For Phase 9 regression work, run the focused security set first:
+
+```text
+php tests/schema_inspection_model_test.php
+php tests/gallery_access_schema_policy_test.php
+php tests/nsfw_schema_policy_test.php
+php tests/auth_schema_policy_test.php
+php tests/security_schema_system_health_test.php
+php tests/admin_nsfw_system_health_test.php
+php tests/service_unavailable_response_test.php
+php tests/migration_schema_cache_reset_test.php
+php tests/translation_catalog_consistency_test.php
+php tests/run.php
+```
+
+Manual Phase 9 outage verification should use a disposable installation and
+exercise more than the NSFW card. Temporarily deny metadata inspection or make
+the selected database unavailable, then confirm: public gallery/media/thumb/
+lightbox/download requests fail before protected output; System Health shows the
+affected access/visibility/auth capability as unknown; password login does not
+turn an inspection failure into an invalid-credential result; persistent login
+is not issued; password reset and Google link/login operations report temporary
+storage unavailability; an already authenticated PHP session remains usable
+where the failed optional capability is not needed. Restore metadata access and
+confirm normal behavior without restarting the PHP process when testing through
+a same-process migration path.
+
+Manual partial-migration verification should remove or rename one access column
+only on a disposable database. Confirm that the installation is not treated as a
+fully legacy unprotected gallery. Restore/apply the migration and verify the
+existing password, unlisted, share-link, media, and download rules again.
+
+### Phase 10 destructive and ingestion schema policy tests
+
+Phase 10 adds `tests/mutation_schema_policy_test.php` and extends the updater
+safety fixture. The focused test is intentionally mixed behavioral/static
+coverage because the mutation policy itself is database-independent while many
+production mutation functions also require filesystem, HTTP upload, or full Admin
+runtime context.
+
+`tests/mutation_schema_policy_test.php` verifies:
+
+- available, confirmed missing, and unknown aggregate state for a destructive
+  gallery capability;
+- redaction of simulated database connection/SQL/credential details from unknown
+  inspection results;
+- confirmed missing optional columns return the documented compatibility answer,
+  while an unknown optional column raises `MutationSchemaUnavailableException`
+  instead of being converted to `false`;
+- upload-automation issuance/authentication requires the complete token schema,
+  while `upload_automation_revocation_schema_status()` remains available with the
+  smaller identity/revocation column set;
+- mobile WebDAV issuance/authentication requires the complete credential schema,
+  while the independently verified deletion capability can remain available;
+- `upload_ingestion_schema_status()` uses exactly twelve metadata probes for its
+  complete gallery/image requirement set on first use and zero additional probes
+  when repeated in the same request;
+- every converted Phase 10 mutation service is free of `db_table_exists()` and
+  `db_column_exists()` authorization logic;
+- `mutation_schema_policy.php` is loaded before destructive consumers;
+- all ten mutation capability keys are registered in Admin System Health and the
+  same set is consumed by Runtime Diagnostics;
+- classic upload performs thumbnail-write compatibility preflight before
+  `move_uploaded_file()` can commit a source to the gallery;
+- prepared browser upload performs the same preflight before writing an original
+  gallery file;
+- thumbnail generation checks its complete metadata write shape before creating
+  the derivative directory;
+- each beta/stable/reinstall/restore updater activation calls
+  `application_update_assert_activation_schema_known()` before
+  `application_update_copy_files()`;
+- updater source validation requires both `app/services/schema_inspection.php`
+  and `app/services/mutation_schema_policy.php`.
+
+`tests/updater_safety_model_test.php` now builds a Phase 10-capable incomplete
+snapshot fixture. The fixture contains the two schema-policy services so its
+historical assertion still proves that a missing core runtime file such as
+`app/views.php` prevents update activation.
+
+Run the Phase 10 focused regression set after any deletion, ingestion, token,
+migration, thumbnail, database-maintenance, updater, or mutation-health change:
+
+```text
+php tests/mutation_schema_policy_test.php
+php tests/schema_inspection_model_test.php
+php tests/migration_schema_cache_reset_test.php
+php tests/duplicate_photo_ledger_test.php
+php tests/browser_upload_settings_test.php
+php tests/gallery_migration_model_test.php
+php tests/thumbnail_compatibility_model_test.php
+php tests/thumbnail_warmup_model_test.php
+php tests/database_maintenance_schema_repair_test.php
+php tests/updater_safety_model_test.php
+php tests/security_schema_system_health_test.php
+php tests/translation_catalog_consistency_test.php
+php tests/run.php
+```
+
+Manual Phase 10 outage verification must use a disposable installation with a
+coordinated filesystem/database backup. Temporarily deny metadata inspection or
+select an unavailable database, then verify these workflows are refused **before**
+their target mutation:
+
+1. Delete a gallery/image and confirm the source file, gallery folder, and rows are
+   unchanged.
+2. Move/copy an image or gallery and confirm both old path/ownership and target
+   location are unchanged.
+3. Add/clear a Duplicate Photo Detector ledger item and confirm the existing ledger
+   remains unchanged while System Health shows the ledger capability as unknown.
+4. Submit a classic upload and a prepared browser ZIP. Confirm no source image is
+   moved/written into the gallery. The PHP temporary upload or prepared package
+   should remain the recoverable source for the failed request where the hosting
+   runtime permits it.
+5. Attempt upload-automation and mobile-WebDAV credential creation/use. Confirm no
+   credential is created/trusted. Separately verify revocation still works when the
+   full schema is intentionally incomplete but the narrow revocation columns are
+   present and inspectable.
+6. Start/resume a gallery migration and confirm the job remains resumable with no
+   new target original/thumbnail when the relevant preflight is unknown.
+7. Generate/repair/delete thumbnails and confirm derivative files are untouched on
+   unknown metadata schema. Repeat with a **confirmed absent** metadata table on an
+   old-schema fixture to verify the documented file-only compatibility path.
+8. Start database cleanup/schema repair and confirm no cleanup batch or repair DDL
+   executes while metadata inspection is unknown.
+9. Stage an application update and confirm download/extraction may complete, but
+   active files are not replaced when activation schema readiness is unknown.
+10. Open Admin System Health and Runtime Diagnostics. Confirm all ten mutation
+    capability cards use the same state, missing/unknown produces an Action signal,
+    and visible/copied diagnostics contain no SQL, raw exception text, DSN,
+    password, API/WebDAV token, upload path, migration source path, or staging path.
+
+Restore metadata access and rerun the operations. Also test confirmed-missing states
+separately from unknown states: pending migrations should be reported as migration
+requirements, while explicitly audited compatibility/bootstrap paths continue only
+where documented. This distinction is the core Phase 10 acceptance criterion.
+
+### Phase 11 optional presentation and reporting schema policy tests
+
+Phase 11 adds `tests/presentation_schema_policy_test.php` and extends existing
+lightbox, translation, upload-automation, telemetry, dashboard and report source
+contracts. The focused policy test is intentionally database-free and uses the
+schema-inspection executor seam so `available`, confirmed `missing`, and `unknown`
+can be reproduced deterministically.
+
+`tests/presentation_schema_policy_test.php` verifies:
+
+- complete voting storage resolves to `available` and requires exactly **ten**
+  first-use metadata probes; checking the same voting capability again in the same
+  request performs zero additional probes because object results are cached;
+- a confirmed absent voting column produces `missing`, safe optional rendering is
+  omitted, `presentation_schema_assert_known()` allows only the audited
+  compatibility path, and `presentation_schema_assert_write_available()` blocks a
+  write that requires the feature;
+- an injected metadata exception produces `unknown`, safe optional rendering is
+  omitted, dependent writes throw `PresentationSchemaUnavailableException`, and
+  bounded logs contain neither the injected secret marker nor a credential-bearing
+  DSN;
+- `presentation_schema_health_definitions()` registers exactly fifteen Phase 11
+  capabilities and is **lazy**: building the registry performs zero metadata queries.
+  Resolving only the voting health entry performs only the ten voting probes;
+- complete Picture Game requirements aggregate correctly after composing the voting
+  and game-specific storage requirements;
+- converted Phase 11 service files, including gallery sidecar creation/import and
+  metadata-organizer capture-date readiness, do not contain legacy `db_table_exists()`,
+  `db_column_exists()`, or direct `SHOW COLUMNS` policy probes;
+- gallery creation/import verifies voting storage before enabling voting and refuses
+  unknown lightbox override persistence instead of silently dropping an explicit or
+  inherited override;
+- the Complete Admin Gallery Report uses structured named-object checks for known
+  dependencies, retains the explicitly justified dynamic
+  `information_schema.TABLES` base-table inventory query, and does not export raw
+  `$exception->getMessage()` database text;
+- the AI worker endpoint preflights the AI metadata capability before queue writes
+  and its Phase 11 action handler does not return or log raw service/database
+  exception text;
+- Picture Game bulk mutation uses the exact Picture Game status instead of the old
+  unrelated `admin_feature_schema_ready()` aggregate;
+- Admin System Health and Runtime Diagnostics consume the final Phase 11 registry.
+
+`tests/gallery_lightbox_mode_model_test.php` now drives lightbox schema readiness
+through the structured schema-inspection executor instead of stubbing the old
+boolean database helper. This keeps model coverage representative of production
+policy.
+
+Run the Phase 11 focused regression set after changes to maps, voting, Picture Game,
+lightbox overrides, OpenAI/AI metadata, SimBrief, navigation data, telemetry, the
+Admin report, presentation health, or the schema inspector:
+
+```text
+php tests/presentation_schema_policy_test.php
+php tests/gallery_lightbox_mode_model_test.php
+php tests/openai_text_assist_model_test.php
+php tests/simbrief_description_model_test.php
+php tests/schema_inspection_model_test.php
+php tests/migration_schema_cache_reset_test.php
+php tests/security_schema_system_health_test.php
+php tests/mutation_schema_policy_test.php
+php tests/translation_catalog_consistency_test.php
+php tests/run.php
+```
+
+Manual Phase 11 verification should use a disposable database or a database user
+whose metadata permissions can be temporarily restricted. Verify both confirmed
+missing and unknown states separately:
+
+1. Enable GPS maps, then make one required GPS/EXIF metadata object uninspectable.
+   The public gallery must remain usable without the optional map, while System
+   Health reports the GPS capability as unknown. Restore access and confirm the map
+   returns.
+2. Attempt to change the per-gallery GPS override while its nullability/column
+   definition is unknown. Confirm the setting is not changed and the Admin notice
+   points to System Health rather than claiming a migration is missing.
+3. For image voting and Picture Game, confirm read-only UI omission where applicable,
+   but vote submission, displayed-pair recording, game votes and Admin bulk game
+   toggles refuse unknown schema. A confirmed missing migration should instead show
+   migration guidance.
+4. Make the lightbox override definition uninspectable. Existing gallery viewing may
+   use the safe inherited/default mode, but a submitted per-gallery override must not
+   be persisted until inspection succeeds.
+5. Make OpenAI settings or AI image-analysis storage uninspectable. OpenAI settings
+   saves and AI queue mutations must refuse the write. The companion AI worker must
+   receive a bounded operational error with no SQL, DSN, raw PDO message, token, or
+   private path.
+6. Test SimBrief with route-map storage confirmed missing and then unknown. Draft/OFP
+   generation may continue, but no route-map database write may be claimed. Unknown
+   must appear in diagnostics.
+7. Test navigation account persistence with a confirmed pre-account schema and with
+   an inspection outage. Session-only compatibility is allowed only for confirmed
+   absence. Unknown storage must refuse persistence. Separately verify the narrow
+   verified disconnect/delete capability can still remove stored credentials.
+8. Test telemetry dashboard/export/settings/maintenance. Confirm a missing schema is
+   presented as migration-required, while unknown is presented as database status
+   unavailable. Setting changes, rollup, and purge must not silently succeed on
+   unknown schema.
+9. Export the Complete Admin Gallery Report with one optional section absent and with
+   a simulated inventory/read failure. Confirm absent sections degrade safely and
+   report output contains generic unavailable text, not raw database exception text.
+   Confirm Picture Game statistics show completed selections versus
+   displayed-without-selection rows.
+10. Disable each feature-flagged Phase 11 capability and load System Health. Confirm
+    it reports `disabled` without inspecting that feature's schema. Re-enable the
+    feature and confirm the resolver runs and shows available/missing/unknown.
+11. Copy Runtime Diagnostics and confirm the same fifteen capability states are
+    represented with only validated object identities, safe suggested checks, and a
+    request reference for unknown state.
+
+After restoring metadata access, rerun the complete suite. The final Phase 11 release
+acceptance baseline is **55/55 PHP regression tests passing**, translation catalogs
+aligned across English/Czech/German/Swedish, all changed PHP files passing `php -l`,
+the integrity manifest current, the administrator manual rebuilt and visually
+verified, and no temporary schema-reliability roadmap present in the repository or
+release package.
+
 When checking Admin dashboard performance, verify that opening `?page=admin` does not request `admin_dashboard_maintenance` until `#admin-tab-maintenance` is selected. Then verify that the authenticated JSON response replaces the placeholder, nested maintenance tabs initialize, and direct or no-JavaScript fallback links remain usable.
 
 ### 3. Manual Functional Smoke Tests

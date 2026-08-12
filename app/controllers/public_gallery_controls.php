@@ -73,6 +73,10 @@ use function Gallery\Services\gallery_access_lifetime_seconds;
 use function Gallery\Services\gallery_benchmark_record_public_render;
 use function Gallery\Services\gallery_access_requirement;
 use function Gallery\Services\gallery_access_schema_ready;
+use function Gallery\Services\schema_inspection_is_unknown;
+use function Gallery\Services\schema_inspection_is_available;
+use function Gallery\Services\gallery_access_share_token_schema_status;
+use function Gallery\Services\gallery_access_assert_public_policy_available;
 use function Gallery\Services\gallery_allows_direct_public_request;
 use function Gallery\Services\gallery_allows_gps_maps;
 use function Gallery\Services\gallery_background_asset_url;
@@ -630,7 +634,16 @@ function cms_share(): void
 {
     // $token stores an intermediate value used by the surrounding gallery workflow.
     $token = trim((string) ($_GET['token'] ?? ''));
-    if ($token === '' || !gallery_access_schema_ready()) {
+    if ($token === '') {
+        cms_not_found();
+        return;
+    }
+    gallery_access_assert_public_policy_available();
+    $shareSchemaStatus = gallery_access_share_token_schema_status();
+    if (schema_inspection_is_unknown($shareSchemaStatus)) {
+        throw new \Gallery\Services\GalleryShareTokenSchemaUnavailableException();
+    }
+    if (!gallery_access_schema_ready() || !schema_inspection_is_available($shareSchemaStatus)) {
         cms_not_found();
         return;
     }

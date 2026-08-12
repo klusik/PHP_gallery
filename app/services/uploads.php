@@ -853,6 +853,13 @@ function store_uploaded_gallery_images(int $galleryId, array $entries, ?bool $re
     if (!$gallery) {
         throw new RuntimeException(t('gallery.error.not_found', 'Gallery not found.'));
     }
+    mutation_schema_assert_available(
+        upload_ingestion_schema_status(),
+        'upload.store_gallery_images',
+        'Image upload requires the current gallery/image database schema. Run pending migrations first.',
+        'Image upload is temporarily unavailable because the required database schema could not be verified. No uploaded file was moved into the gallery.'
+    );
+    thumbnail_metadata_preflight_write_schema('upload.thumbnail_metadata_preflight');
     // $galleryRoot stores an intermediate value used by the surrounding gallery workflow.
     $galleryRoot = gallery_abs_path((string) $gallery['folder_path']);
     if (!is_dir($galleryRoot) || !is_writable($galleryRoot)) {

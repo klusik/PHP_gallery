@@ -106,6 +106,8 @@ try {
         'app/migrations.php',
         'app/security.php',
         'app/services.php',
+        'app/services/schema_inspection.php',
+        'app/services/mutation_schema_policy.php',
         'app/services/updates.php',
         'app/services/updates_filesystem.php',
         'app/services/updates_install.php',

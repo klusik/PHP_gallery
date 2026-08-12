@@ -84,6 +84,14 @@ function delete_gallery_subtrees(array $galleryIds): array
         return ['root_count' => 0, 'row_count' => 0, 'missing_folders' => 0];
     }
 
+    // Refuse before database or filesystem deletion when core ownership schema cannot be verified.
+    mutation_schema_assert_available(
+        gallery_deletion_schema_status(),
+        'gallery.delete_subtree',
+        'Gallery deletion requires the current core gallery/image database schema. Run pending migrations first.',
+        'Gallery deletion is temporarily unavailable because the required database schema could not be verified.'
+    );
+
     // Variable $roots stores this steps working value.
     $roots = [];
     foreach ($rootIds as $galleryId) {
@@ -184,6 +192,13 @@ function gallery_delete_database_subtree_rows(array $galleryIds): int
         return 0;
     }
 
+    mutation_schema_assert_available(
+        gallery_deletion_schema_status(),
+        'gallery.delete_database_subtree',
+        'Gallery deletion requires the current core gallery/image database schema. Run pending migrations first.',
+        'Gallery deletion is temporarily unavailable because the required database schema could not be verified.'
+    );
+
     // $imageIds stores all images that belong to the removed gallery rows.
     $imageIds = gallery_image_ids_for_gallery_ids($galleryIds);
     // $pdo stores the active connection for the atomic database cleanup.
@@ -271,9 +286,15 @@ function gallery_image_ids_for_gallery_ids(array $galleryIds): array
 {
     // $galleryIds stores unique positive ids accepted by the image lookup.
     $galleryIds = array_values(array_unique(array_filter(array_map('intval', $galleryIds), static fn (int $galleryId): bool => $galleryId > 0)));
-    if (!$galleryIds || !db_table_exists('images') || !db_column_exists('images', 'gallery_id') || !db_column_exists('images', 'id')) {
+    if (!$galleryIds) {
         return [];
     }
+    mutation_schema_assert_available(
+        mutation_schema_tables_status('mutation.gallery_delete_image_lookup', ['images' => ['gallery_id', 'id']]),
+        'gallery.delete_image_lookup',
+        'Gallery image ownership schema is incomplete. Run pending migrations first.',
+        'Gallery image ownership schema could not be verified. The deletion was not started.'
+    );
 
     // $imageIds stores the merged image ids from chunked SELECT queries.
     $imageIds = [];
@@ -302,7 +323,10 @@ function gallery_delete_rows_by_ids(string $table, string $column, array $ids): 
 {
     // $ids stores unique positive ids accepted by this SQL mutation.
     $ids = array_values(array_unique(array_filter(array_map('intval', $ids), static fn (int $id): bool => $id > 0)));
-    if (!$ids || !db_table_exists($table) || !db_column_exists($table, $column)) {
+    if (!$ids) {
+        return 0;
+    }
+    if (!mutation_schema_optional_table_column_available('mutation.gallery_delete_dependency', $table, $column, 'gallery.delete_dependency_rows')) {
         return 0;
     }
 
@@ -335,7 +359,10 @@ function gallery_null_rows_by_ids(string $table, string $column, array $ids): in
 {
     // $ids stores unique positive ids accepted by this SQL mutation.
     $ids = array_values(array_unique(array_filter(array_map('intval', $ids), static fn (int $id): bool => $id > 0)));
-    if (!$ids || !db_table_exists($table) || !db_column_exists($table, $column)) {
+    if (!$ids) {
+        return 0;
+    }
+    if (!mutation_schema_optional_table_column_available('mutation.gallery_delete_dependency', $table, $column, 'gallery.null_dependency_rows')) {
         return 0;
     }
 
@@ -435,6 +462,13 @@ function delete_gallery_images(int $galleryId, array $imageIds): array
     if (!$normalizedIds) {
         return ['requested' => 0, 'deleted' => 0, 'files_deleted' => 0, 'derivatives_deleted' => 0, 'missing_files' => 0];
     }
+
+    mutation_schema_assert_available(
+        gallery_deletion_schema_status(),
+        'gallery.delete_images',
+        'Image deletion requires the current core gallery/image database schema. Run pending migrations first.',
+        'Image deletion is temporarily unavailable because the required database schema could not be verified.'
+    );
 
     // $gallery stores the parent gallery row used for path safety and sidecar updates.
     $gallery = find_gallery($galleryId);
@@ -577,6 +611,13 @@ function delete_gallery_images(int $galleryId, array $imageIds): array
  */
 function move_gallery_images(int $sourceGalleryId, int $destinationGalleryId, array $imageIds, array $options = []): array
 {
+    mutation_schema_assert_available(
+        gallery_move_schema_status(),
+        'gallery.move_images',
+        'Image moves require the current gallery/image ownership schema. Run pending migrations first.',
+        'Image moves are temporarily unavailable because the required database schema could not be verified.'
+    );
+
     // $normalizedIds stores the unique positive image ids selected by the admin.
     $normalizedIds = array_values(array_unique(array_filter(array_map('intval', $imageIds), static fn (int $imageId): bool => $imageId > 0)));
     if (!$normalizedIds) {
@@ -1077,6 +1118,13 @@ function gallery_image_belongs_to_gallery_branch(int $imageId, int $galleryId): 
  */
 function move_gallery_folder_to_parent(int $galleryId, ?int $parentId, ?string $folderName = null): array
 {
+    mutation_schema_assert_available(
+        gallery_move_schema_status(),
+        'gallery.move_folder',
+        'Gallery folder moves require the current gallery/image ownership schema. Run pending migrations first.',
+        'Gallery folder moves are temporarily unavailable because the required database schema could not be verified.'
+    );
+
     // $gallery stores an intermediate value used by the surrounding gallery workflow.
     $gallery = find_gallery($galleryId);
     if (!$gallery) {

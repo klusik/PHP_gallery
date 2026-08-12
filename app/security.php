@@ -36,10 +36,13 @@ declare(strict_types=1);
 
 namespace Gallery\Core;
 
-use PDOException;
 use Throwable;
 use function Gallery\Services\app_setting;
 use function Gallery\Services\auth_restore_persistent_login;
+use function Gallery\Services\auth_log_schema_unavailable;
+use function Gallery\Services\schema_inspection_is_unknown;
+use function Gallery\Services\schema_inspection_is_available;
+use function Gallery\Services\auth_user_email_schema_status;
 use function Gallery\Services\t;
 
 /**
@@ -92,32 +95,38 @@ function current_user(): ?array
     }
     if (empty($_SESSION['user_id'])) {
         // $restoredUser stores a durable login restored from a hashed database token when PHP session storage expired.
-        $restoredUser = function_exists('Gallery\\Services\\auth_restore_persistent_login') ? auth_restore_persistent_login() : null;
+        $restoredUser = function_exists('Gallery\Services\auth_restore_persistent_login') ? auth_restore_persistent_login() : null;
         if (!$restoredUser) {
             // $cache stores an intermediate value used by the surrounding gallery workflow.
             $cache = true;
             return $cachedUser = null;
         }
     }
-    try {
-        // Variable $stmt stores this steps working value.
-        $stmt = db()->prepare('SELECT id, username, email, role FROM users WHERE id = ?');
-        $stmt->execute([(int) $_SESSION['user_id']]);
-        // Variable $user stores this steps working value.
-        $user = $stmt->fetch();
-    } catch (PDOException $exception) {
-        // Existing installations can briefly run the updated PHP code before
-        // the email migration has been applied. Keep the admin session alive so
-        // the migration page remains reachable instead of failing during header rendering.
-        // Variable $stmt stores this steps working value.
-        $stmt = db()->prepare('SELECT id, username, role FROM users WHERE id = ?');
-        $stmt->execute([(int) $_SESSION['user_id']]);
-        // Variable $user stores this steps working value.
-        $user = $stmt->fetch();
-        if ($user) {
-            $user['email'] = null;
-        }
+
+    // Email is optional for an already authenticated session. Confirmed missing or
+    // operationally unknown email metadata must not be converted by catching an
+    // arbitrary PDO failure from the full user query. Use the verified capability
+    // when available and the authentication-minimal row shape otherwise.
+    $emailSchemaStatus = function_exists('Gallery\Services\auth_user_email_schema_status')
+        ? auth_user_email_schema_status()
+        : ['state' => 'missing'];
+    if (function_exists('Gallery\Services\schema_inspection_is_unknown') && schema_inspection_is_unknown($emailSchemaStatus)) {
+        auth_log_schema_unavailable('auth_user_email', 'current_user_optional_email');
     }
+
+    // Variable $stmt stores this steps working value.
+    $stmt = db()->prepare(
+        function_exists('Gallery\Services\schema_inspection_is_available') && schema_inspection_is_available($emailSchemaStatus)
+            ? 'SELECT id, username, email, role FROM users WHERE id = ?'
+            : 'SELECT id, username, role FROM users WHERE id = ?'
+    );
+    $stmt->execute([(int) $_SESSION['user_id']]);
+    // Variable $user stores this steps working value.
+    $user = $stmt->fetch();
+    if ($user && !array_key_exists('email', $user)) {
+        $user['email'] = null;
+    }
+
     // $cache stores an intermediate value used by the surrounding gallery workflow.
     $cache = true;
     return $cachedUser = ($user ?: null);

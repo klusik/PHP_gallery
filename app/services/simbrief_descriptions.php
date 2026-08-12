@@ -654,13 +654,23 @@ function simbrief_description_save_route_map_from_ofp(int $galleryId, array $pay
     }
 
     $saved = false;
+    $schemaState = 'missing';
     if (count($points) >= 2 && function_exists('Gallery\\Services\\save_gallery_flight_path_resolved_points')) {
-        save_gallery_flight_path_resolved_points($galleryId, $routeText, $points, $unresolved);
-        $saved = true;
+        $schemaStatus = presentation_flight_map_schema_status();
+        $schemaState = (string) ($schemaStatus['state'] ?? 'unknown');
+        if (schema_inspection_is_available($schemaStatus)) {
+            save_gallery_flight_path_resolved_points($galleryId, $routeText, $points, $unresolved);
+            $saved = true;
+        } elseif (schema_inspection_is_unknown($schemaStatus)) {
+            // Draft generation is independent from route persistence. Refuse only
+            // the database write and keep the generated description/OFP usable.
+            presentation_schema_log_degraded($schemaStatus, 'simbrief_route_map_save');
+        }
     }
 
     return [
         'saved' => $saved,
+        'schema_state' => $schemaState,
         'route_text' => $routeText,
         'points' => $points,
         'point_count' => count($points),

@@ -376,6 +376,7 @@ function write_gallery_sidecar(array $gallery): void
             $data['thumbnail_max_size'] = (int) $gallery['thumbnail_max_size'];
         }
     }
+    gallery_access_assert_public_policy_available();
     if (gallery_access_schema_ready()) {
         $data['access_mode'] = $gallery['access_mode'] ?? 'normal';
         $data['access_listing'] = $gallery['access_listing'] ?? 'listed';
@@ -477,6 +478,19 @@ function create_gallery_row_for_folder(string $folderPath): ?array
 
     // Variable $candidate stores this steps working value.
     $candidate = gallery_folder_candidate_metadata($folderPath);
+    if ((int) ($candidate['voting_enabled'] ?? 0) === 1) {
+        presentation_schema_assert_write_available(
+            presentation_voting_schema_status(),
+            'gallery_sidecar_import.voting_enabled',
+            'Image voting requires the current database migration before it can be enabled for an imported gallery.'
+        );
+    }
+    if (($candidate['lightbox_browsing_mode'] ?? null) !== null) {
+        presentation_schema_assert_known(
+            presentation_lightbox_override_schema_status(),
+            'gallery_sidecar_import.lightbox_override'
+        );
+    }
     // Variable $visibility stores this steps working value.
     $visibility = gallery_visibility_storage_value((string) ($candidate['visibility'] ?? 'unpublished'));
     // $votingEnabled stores an intermediate value used by the surrounding gallery workflow.
@@ -495,6 +509,8 @@ function create_gallery_row_for_folder(string $folderPath): ?array
     $galleryDate = $galleryDateRange['start'];
     // $galleryDateEnd stores the optional manual gallery date range end read from gallery.json.
     $galleryDateEnd = $galleryDateRange['end'];
+    // Access policy must not interpret partial/unknown schema as an unprotected gallery.
+    gallery_access_assert_public_policy_available();
     // $accessMode stores an intermediate value used by the surrounding gallery workflow.
     $accessMode = gallery_access_schema_ready() && ($candidate['access_mode'] ?? '') === 'password' ? 'password' : 'normal';
     // $candidateHasGrid stores whether gallery.json defines a complete custom display grid.
@@ -634,6 +650,19 @@ function create_empty_gallery(array $input): array
     }
     // $description stores an intermediate value used by the surrounding gallery workflow.
     $description = (string) ($input['description'] ?? '');
+    if (!empty($input['voting_enabled'])) {
+        presentation_schema_assert_write_available(
+            presentation_voting_schema_status(),
+            'gallery_create.voting_enabled',
+            'Image voting requires the current database migration before it can be enabled for a new gallery.'
+        );
+    }
+    if (array_key_exists('lightbox_browsing_mode', $input)) {
+        presentation_schema_assert_known(
+            presentation_lightbox_override_schema_status(),
+            'gallery_create.lightbox_override'
+        );
+    }
     // $galleryDateRange stores the optional manual date range for this gallery, independent from upload dates.
     $galleryDateRange = gallery_date_schema_ready()
         ? gallery_date_range_storage_values($input['gallery_date'] ?? '', $input['gallery_date_end'] ?? '')

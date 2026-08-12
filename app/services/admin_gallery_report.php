@@ -335,7 +335,7 @@ function admin_gallery_report_image_rows_after_id(int $lastImageId, int $limit):
  */
 function admin_gallery_report_column_select(string $table, string $column, string $alias, string $fallback, string $outputAlias): string
 {
-    if (function_exists('Gallery\\Services\\db_column_exists') && db_column_exists($table, $column)) {
+    if (admin_gallery_report_column_exists($table, $column)) {
         return $alias . '.' . $column . ' AS ' . $outputAlias;
     }
     return $fallback . ' AS ' . $outputAlias;
@@ -1148,7 +1148,7 @@ function admin_gallery_report_exact_database_table_counts(string $databaseName):
         $stmt->execute(['database_name' => $databaseName]);
         $tables = $stmt->fetchAll();
     } catch (Throwable $exception) {
-        $result['errors'][] = $exception->getMessage();
+        $result['errors'][] = 'Database table inventory could not be read.';
         return $result;
     }
 
@@ -1163,7 +1163,7 @@ function admin_gallery_report_exact_database_table_counts(string $databaseName):
             $result['counts'][$tableName] = $count;
             $result['total_rows'] = (int) ($result['total_rows'] ?? 0) + $count;
         } catch (Throwable $exception) {
-            $result['errors'][] = $tableName . ': ' . $exception->getMessage();
+            $result['errors'][] = $tableName . ': exact row count unavailable.';
         }
     }
 
@@ -1254,14 +1254,14 @@ function admin_gallery_report_table_counts(): array
     ];
     $rows = [];
     foreach ($tables as $table) {
-        if (!function_exists('Gallery\\Services\\db_table_exists') || !db_table_exists($table)) {
+        if (!admin_gallery_report_table_exists($table)) {
             $rows[] = ['table_name' => $table, 'exists' => 'no', 'rows' => null];
             continue;
         }
         try {
             $rows[] = ['table_name' => $table, 'exists' => 'yes', 'rows' => (int) (db()->query('SELECT COUNT(*) FROM `' . str_replace('`', '``', $table) . '`')->fetchColumn() ?: 0)];
         } catch (Throwable $exception) {
-            $rows[] = ['table_name' => $table, 'exists' => 'yes', 'rows' => null, 'error' => $exception->getMessage()];
+            $rows[] = ['table_name' => $table, 'exists' => 'yes', 'rows' => null, 'error' => 'Exact row count unavailable.'];
         }
     }
     return $rows;
@@ -1286,10 +1286,10 @@ function admin_gallery_report_gallery_summary(): array
         'largest_rows' => admin_gallery_report_rows('SELECT g.id, g.title, g.folder_path, g.visibility, COUNT(i.id) AS image_count, COALESCE(SUM(COALESCE(i.file_size, 0)), 0) AS source_bytes FROM galleries g LEFT JOIN images i ON i.gallery_id = g.id GROUP BY g.id, g.title, g.folder_path, g.visibility ORDER BY image_count DESC, source_bytes DESC LIMIT 80'),
         'deepest_depth' => admin_gallery_report_deepest_gallery_depth(),
     ];
-    if (function_exists('Gallery\\Services\\db_column_exists') && db_column_exists('galleries', 'date_start')) {
+    if (admin_gallery_report_column_exists('galleries', 'date_start')) {
         $summary['dated_gallery_count'] = admin_gallery_report_scalar_int('SELECT COUNT(*) FROM galleries WHERE date_start IS NOT NULL OR date_end IS NOT NULL');
     }
-    if (function_exists('Gallery\\Services\\db_column_exists') && db_column_exists('galleries', 'gps_map_enabled')) {
+    if (admin_gallery_report_column_exists('galleries', 'gps_map_enabled')) {
         $summary['gps_map_override_rows'] = admin_gallery_report_group_query('SELECT gps_map_enabled AS label, COUNT(*) AS count FROM galleries GROUP BY gps_map_enabled ORDER BY gps_map_enabled ASC');
     }
     return $summary;
@@ -1333,7 +1333,7 @@ function admin_gallery_report_deepest_gallery_depth(): int
  */
 function admin_gallery_report_gallery_detail_rows(): array
 {
-    $gpsImageExpression = (db_column_exists('images', 'gps_lat') && db_column_exists('images', 'gps_lng'))
+    $gpsImageExpression = (admin_gallery_report_column_exists('images', 'gps_lat') && admin_gallery_report_column_exists('images', 'gps_lng'))
         ? 'SUM(CASE WHEN i.gps_lat IS NOT NULL AND i.gps_lng IS NOT NULL THEN 1 ELSE 0 END) AS gps_images'
         : '0 AS gps_images';
     $selects = [
@@ -1348,13 +1348,13 @@ function admin_gallery_report_gallery_detail_rows(): array
         admin_gallery_report_column_select('galleries', 'picture_game_enabled', 'g', 'NULL', 'picture_game_enabled'),
     ];
     $groupBy = 'g.id, g.parent_id, g.title, g.folder_path, g.slug, g.visibility, g.access_mode, g.access_listing, g.sort_order, g.created_at, g.updated_at';
-    if (function_exists('Gallery\\Services\\db_column_exists') && db_column_exists('galleries', 'date_start')) {
+    if (admin_gallery_report_column_exists('galleries', 'date_start')) {
         $groupBy .= ', g.date_start, g.date_end';
     }
-    if (function_exists('Gallery\\Services\\db_column_exists') && db_column_exists('galleries', 'gps_map_enabled')) {
+    if (admin_gallery_report_column_exists('galleries', 'gps_map_enabled')) {
         $groupBy .= ', g.gps_map_enabled';
     }
-    if (function_exists('Gallery\\Services\\db_column_exists') && db_column_exists('galleries', 'picture_game_enabled')) {
+    if (admin_gallery_report_column_exists('galleries', 'picture_game_enabled')) {
         $groupBy .= ', g.picture_game_enabled';
     }
     return admin_gallery_report_rows('SELECT ' . implode(', ', $selects) . ' FROM galleries g LEFT JOIN images i ON i.gallery_id = g.id GROUP BY ' . $groupBy . ' ORDER BY g.folder_path ASC');
@@ -1383,7 +1383,7 @@ function admin_gallery_report_vote_summary(): array
 {
     return [
         'image_vote_rows' => admin_gallery_report_table_exists('image_votes') ? admin_gallery_report_group_query('SELECT vote AS label, COUNT(*) AS count FROM image_votes GROUP BY vote ORDER BY vote DESC') : [],
-        'picture_game_vote_rows' => admin_gallery_report_table_exists('picture_game_votes') ? admin_gallery_report_group_query('SELECT vote AS label, COUNT(*) AS count FROM picture_game_votes GROUP BY vote ORDER BY vote DESC') : [],
+        'picture_game_vote_rows' => admin_gallery_report_table_exists('picture_game_votes') ? admin_gallery_report_group_query("SELECT CASE WHEN winner_image_id IS NULL THEN 'shown_without_vote' ELSE 'completed_vote' END AS label, COUNT(*) AS count FROM picture_game_votes GROUP BY CASE WHEN winner_image_id IS NULL THEN 'shown_without_vote' ELSE 'completed_vote' END ORDER BY label ASC") : [],
     ];
 }
 
@@ -1418,8 +1418,8 @@ function admin_gallery_report_admin_log_summary(): array
     if (!admin_gallery_report_table_exists('admin_logs')) {
         return ['available' => false, 'level_rows' => [], 'severity_rows' => [], 'category_rows' => [], 'recent_errors' => []];
     }
-    $hasSeverity = function_exists('Gallery\\Services\\db_column_exists') && db_column_exists('admin_logs', 'severity');
-    $hasCategory = function_exists('Gallery\\Services\\db_column_exists') && db_column_exists('admin_logs', 'category');
+    $hasSeverity = admin_gallery_report_column_exists('admin_logs', 'severity');
+    $hasCategory = admin_gallery_report_column_exists('admin_logs', 'category');
     return [
         'available' => true,
         'total' => admin_gallery_report_scalar_int('SELECT COUNT(*) FROM admin_logs'),
@@ -1501,7 +1501,29 @@ function admin_gallery_report_largest_images(int $limit = 200): array
  */
 function admin_gallery_report_table_exists(string $table): bool
 {
-    return function_exists('Gallery\\Services\\db_table_exists') && db_table_exists($table);
+    $status = schema_inspection_feature('presentation.admin_report.table.' . $table, [
+        schema_inspection_table($table),
+    ]);
+    return presentation_schema_render_available($status, 'admin_gallery_report_table');
+}
+
+/**
+ * Return whether one optional report column is positively available.
+ *
+ * Unknown inspection state omits only the affected report field and is logged
+ * through the Phase 11 presentation policy. Confirmed absence remains a normal
+ * compatibility state for reports generated against older installations.
+ *
+ * @param string $table Table name.
+ * @param string $column Column name.
+ * @return bool True only when the column is verified available.
+ */
+function admin_gallery_report_column_exists(string $table, string $column): bool
+{
+    $status = schema_inspection_feature('presentation.admin_report.column.' . $table . '.' . $column, [
+        schema_inspection_column($table, $column),
+    ]);
+    return presentation_schema_render_available($status, 'admin_gallery_report_column');
 }
 
 /**

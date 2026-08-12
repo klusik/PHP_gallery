@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-04
+ *   2026-08-12
  */
 
 declare(strict_types=1);
@@ -43,6 +43,22 @@ use PDOException;
 use Throwable;
 use function Gallery\Services\admin_log_event;
 use function Gallery\Services\thumbnail_metadata_storage_snapshot;
+
+/**
+ * Invalidate request-local schema inspection results after schema changes.
+ *
+ * The migration core is loaded before services during bootstrap, so this
+ * boundary remains optional at load time. Normal migration execution happens
+ * after services are registered. When the three-state inspection service is
+ * available, successful DDL and schema-repair callbacks must invalidate cached
+ * capability answers before any same-request validation can reuse them.
+ */
+function migration_reset_schema_inspection_cache(): void
+{
+    if (function_exists('Gallery\\Services\\schema_inspection_reset_request_cache')) {
+        \Gallery\Services\schema_inspection_reset_request_cache();
+    }
+}
 
 /**
  * Apply all pending database migrations in filename order.
@@ -62,6 +78,7 @@ function run_migrations(): array
         version VARCHAR(64) NOT NULL PRIMARY KEY,
         applied_at DATETIME NOT NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    migration_reset_schema_inspection_cache();
 
     // $appliedVersions stores the immutable audit rows already recorded by this database.
     $appliedVersions = $pdo->query('SELECT version FROM schema_migrations')->fetchAll(PDO::FETCH_COLUMN);
@@ -105,6 +122,7 @@ function run_migrations(): array
             if ($after !== null) {
                 $afterStartedAt = microtime(true);
                 $after($pdo);
+                migration_reset_schema_inspection_cache();
                 $afterDiagnostic = [
                     'status' => 'applied',
                     'duration_seconds' => round(microtime(true) - $afterStartedAt, 4),
@@ -178,6 +196,10 @@ function apply_migration_statement(PDO $pdo, string $statement): array
         $diagnostic['status'] = 'duplicate_ddl_replayed';
         $diagnostic['error_code'] = (int) ($exception->errorInfo[1] ?? $exception->getCode());
         $diagnostic['error_message'] = $exception->getMessage();
+    }
+
+    if (in_array((string) ($diagnostic['operation'] ?? ''), ['ALTER', 'CREATE', 'DROP', 'RENAME'], true)) {
+        migration_reset_schema_inspection_cache();
     }
 
     $diagnostic['duration_seconds'] = round(microtime(true) - $startedAt, 4);

@@ -49,7 +49,7 @@ namespace Gallery\Services;
  */
 function gallery_lightbox_browsing_mode_schema_ready(): bool
 {
-    return db_column_exists('galleries', 'lightbox_browsing_mode');
+    return presentation_schema_render_available(presentation_lightbox_override_schema_status(), 'lightbox_override_render');
 }
 
 /**

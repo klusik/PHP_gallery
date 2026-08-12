@@ -107,16 +107,7 @@ function navigation_data_default_bundled_path(): string
  */
 function navigation_data_cache_schema_ready(): bool
 {
-    try {
-        $table = db()->query("SHOW TABLES LIKE 'navigation_data_cache'");
-        if (!$table || !$table->fetch()) {
-            return false;
-        }
-        $column = db()->query("SHOW COLUMNS FROM navigation_data_cache LIKE 'cache_key'");
-        return $column && (bool) $column->fetch();
-    } catch (PDOException) {
-        return false;
-    }
+    return presentation_schema_render_available(presentation_navigation_cache_schema_status(), 'navigation_cache_render');
 }
 
 /**
@@ -126,16 +117,7 @@ function navigation_data_cache_schema_ready(): bool
  */
 function navigation_data_account_schema_ready(): bool
 {
-    try {
-        $table = db()->query("SHOW TABLES LIKE 'navigation_data_accounts'");
-        if (!$table || !$table->fetch()) {
-            return false;
-        }
-        $column = db()->query("SHOW COLUMNS FROM navigation_data_accounts LIKE 'refresh_token_cipher'");
-        return $column && (bool) $column->fetch();
-    } catch (PDOException) {
-        return false;
-    }
+    return presentation_schema_render_available(presentation_navigation_account_schema_status(), 'navigation_account_render');
 }
 
 /**
@@ -145,16 +127,7 @@ function navigation_data_account_schema_ready(): bool
  */
 function navigation_data_local_db_schema_ready(): bool
 {
-    try {
-        $table = db()->query("SHOW TABLES LIKE 'flight_map_nav_points'");
-        if (!$table || !$table->fetch()) {
-            return false;
-        }
-        $column = db()->query("SHOW COLUMNS FROM flight_map_nav_points LIKE 'ident'");
-        return $column && (bool) $column->fetch();
-    } catch (PDOException) {
-        return false;
-    }
+    return presentation_schema_render_available(presentation_navigation_local_schema_status(), 'navigation_local_render');
 }
 
 /**
@@ -674,6 +647,13 @@ function navigation_data_navigraph_session(): array
  */
 function navigation_data_navigraph_store_tokens(array $tokenPayload): void
 {
+    $schemaStatus = presentation_navigation_account_schema_status();
+    presentation_schema_assert_known(
+        $schemaStatus,
+        'navigation_account_token_store',
+        'Navigation account storage could not be verified. The OAuth token exchange was not committed to the session.'
+    );
+    $persistentStorageAvailable = schema_inspection_is_available($schemaStatus);
     $previousSession = navigation_data_navigraph_session();
     $accessToken = (string) ($tokenPayload['access_token'] ?? '');
     $refreshToken = (string) ($tokenPayload['refresh_token'] ?? '');
@@ -699,7 +679,9 @@ function navigation_data_navigraph_store_tokens(array $tokenPayload): void
         'updated_at' => now_sql(),
     ];
 
-    navigation_data_navigraph_persist_session($_SESSION['navigation_data_navigraph']);
+    if ($persistentStorageAvailable) {
+        navigation_data_navigraph_persist_session($_SESSION['navigation_data_navigraph']);
+    }
 }
 
 /**
@@ -844,7 +826,16 @@ function navigation_data_navigraph_load_account_session(): array
  */
 function navigation_data_navigraph_persist_session(array $session): void
 {
-    if (!navigation_data_account_schema_ready()) {
+    $schemaStatus = presentation_navigation_account_schema_status();
+    presentation_schema_assert_known(
+        $schemaStatus,
+        'navigation_account_save',
+        'Navigation account storage could not be verified. Credentials were not persisted.'
+    );
+    if (!schema_inspection_is_available($schemaStatus)) {
+        // Confirmed pre-migration installations retain the historical session-only
+        // Navigraph connection. Unknown state is refused above and cannot silently
+        // become that legacy fallback.
         return;
     }
     $userId = navigation_data_current_user_id();
@@ -912,7 +903,7 @@ function navigation_data_navigraph_persist_session(array $session): void
         ]);
     } catch (PDOException $exception) {
         admin_log_event('warning', 'navigation_data.navigraph_persist_failed', 'Navigraph account session could not be persisted.', [
-            'exception' => $exception->getMessage(),
+            'error_code' => schema_inspection_error_code($exception),
         ]);
     }
 }
@@ -922,7 +913,15 @@ function navigation_data_navigraph_persist_session(array $session): void
  */
 function navigation_data_navigraph_delete_account_session(): void
 {
-    if (!navigation_data_account_schema_ready()) {
+    $schemaStatus = presentation_navigation_account_delete_schema_status();
+    presentation_schema_assert_known(
+        $schemaStatus,
+        'navigation_account_delete',
+        'Navigation account revocation could not verify its database schema. No credential row was changed.'
+    );
+    if (!schema_inspection_is_available($schemaStatus)) {
+        // No persistent account table exists on confirmed legacy installations, so
+        // disconnect can safely continue by clearing only the PHP session.
         return;
     }
     $userId = navigation_data_current_user_id();
@@ -935,7 +934,7 @@ function navigation_data_navigraph_delete_account_session(): void
         $stmt->execute([$userId]);
     } catch (PDOException $exception) {
         admin_log_event('warning', 'navigation_data.navigraph_delete_failed', 'Navigraph account session could not be deleted.', [
-            'exception' => $exception->getMessage(),
+            'error_code' => schema_inspection_error_code($exception),
         ]);
     }
 }
@@ -1165,7 +1164,7 @@ function navigation_data_navigraph_refresh_token_if_needed(): bool
         return true;
     } catch (Throwable $exception) {
         admin_log_event('warning', 'navigation_data.navigraph_refresh_failed', 'Navigraph token refresh failed.', [
-            'exception' => $exception->getMessage(),
+            'error_code' => schema_inspection_error_code($exception),
         ]);
         return false;
     }
@@ -1300,7 +1299,7 @@ function navigation_data_navigraph_lookup(string $ident): ?array
     } catch (Throwable $exception) {
         admin_log_event('warning', 'navigation_data.navigraph_lookup_failed', 'Navigraph point lookup failed.', [
             'ident' => $ident,
-            'exception' => $exception->getMessage(),
+            'error_code' => schema_inspection_error_code($exception),
         ]);
         return null;
     }

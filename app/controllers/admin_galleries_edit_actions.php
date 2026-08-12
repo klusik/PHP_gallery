@@ -72,6 +72,10 @@ use function Gallery\Services\find_gallery;
 use function Gallery\Services\find_image;
 use function Gallery\Services\flight_map_schema_ready;
 use function Gallery\Services\gallery_access_schema_ready;
+use function Gallery\Services\schema_inspection_is_available;
+use function Gallery\Services\gallery_share_token_assert_mutation_available;
+use function Gallery\Services\gallery_access_schema_is_confirmed_legacy;
+use function Gallery\Services\gallery_access_schema_status;
 use function Gallery\Services\gallery_access_share_token_schema_ready;
 use function Gallery\Services\gallery_background_source;
 use function Gallery\Services\gallery_background_source_schema_ready;
@@ -136,8 +140,15 @@ use function Gallery\Services\media_renamer_normalize_pattern;
 use function Gallery\Services\move_gallery_folder_to_parent;
 use function Gallery\Services\normalize_gallery_visibility;
 use function Gallery\Services\nsfw_guard_schema_ready;
+use function Gallery\Services\nsfw_guard_schema_status;
 use function Gallery\Services\pagination_dimension_value;
 use function Gallery\Services\picture_game_schema_ready;
+use function Gallery\Services\presentation_lightbox_override_schema_status;
+use function Gallery\Services\presentation_flight_map_schema_status;
+use function Gallery\Services\presentation_gps_override_schema_status;
+use function Gallery\Services\presentation_voting_schema_status;
+use function Gallery\Services\presentation_picture_game_schema_status;
+use function Gallery\Services\presentation_schema_assert_known;
 use function Gallery\Services\public_path_schema_ready;
 use function Gallery\Services\refresh_gallery_public_paths;
 use function Gallery\Services\regenerate_gallery_share_token;
@@ -449,6 +460,28 @@ function admin_gallery_checkbox_input(array $input, string $key, bool $defaultWh
  */
 function admin_save_gallery_from_input(array $gallery, array $input, array $files, string $returnTab, bool $completeForm = true): array
 {
+    if (!empty($input['nsfw_field_present']) && !nsfw_guard_schema_ready()) {
+        throw new RuntimeException(admin_nsfw_guard_mutation_error());
+    }
+    // Stale admin forms must not turn a Phase 11 inspection outage into an implicit
+    // field omission. Only fields that were actually submitted are preflighted so
+    // unrelated gallery edits can continue when an optional presentation feature
+    // is not part of the request.
+    if (array_key_exists('picture_game_enabled', $input)) {
+        presentation_schema_assert_known(presentation_picture_game_schema_status(), 'gallery_picture_game_setting_save');
+    }
+    if (array_key_exists('voting_enabled', $input)) {
+        presentation_schema_assert_known(presentation_voting_schema_status(), 'gallery_voting_setting_save');
+    }
+    if (array_key_exists('gps_map_enabled', $input)) {
+        presentation_schema_assert_known(presentation_gps_override_schema_status(), 'gallery_gps_override_save');
+    }
+    if (array_key_exists('lightbox_browsing_mode', $input)) {
+        presentation_schema_assert_known(presentation_lightbox_override_schema_status(), 'gallery_lightbox_override_save');
+    }
+    if (array_key_exists('flight_route_text', $input)) {
+        presentation_schema_assert_known(presentation_flight_map_schema_status(), 'gallery_flight_map_setting_save');
+    }
     // $pictureGameReady stores this steps working value.
     $pictureGameReady = picture_game_schema_ready() && (!function_exists('Gallery\\Services\\feature_flag_enabled') || (feature_flag_enabled('picture_game') && feature_flag_enabled('image_voting')));
     // $gpsMapReady stores this steps working value.
@@ -461,8 +494,10 @@ function admin_save_gallery_from_input(array $gallery, array $input, array $file
     $votingReady = gallery_voting_schema_ready() && (!function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('image_voting'));
     // $lightboxModeReady stores this steps working value.
     $lightboxModeReady = gallery_lightbox_browsing_mode_schema_ready() && (!function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('lightbox_modes'));
-    // $accessReady stores this steps working value.
-    $accessReady = gallery_access_schema_ready();
+    // Structured gallery-access state prevents partial/unknown migrations from becoming permissive saves.
+    $accessSchemaStatus = gallery_access_schema_status();
+    $accessReady = schema_inspection_is_available($accessSchemaStatus);
+    $accessLegacy = gallery_access_schema_is_confirmed_legacy($accessSchemaStatus);
     // $galleryId stores the gallery being edited.
     $galleryId = (int) ($gallery['id'] ?? 0);
     // $title stores the submitted or preserved public gallery title.
@@ -667,9 +702,18 @@ function admin_save_gallery_from_input(array $gallery, array $input, array $file
     // $thumbnailBoundsRecursive stores whether descendants should receive the same saved thumbnail bounds.
     $thumbnailBoundsRecursive = thumbnail_bounds_schema_ready() && !empty($input['gallery_thumbnail_bounds_recursive']);
     // $shouldUpdateAccess stores whether access controls are part of this request.
-    $shouldUpdateAccess = $completeForm || admin_gallery_input_has_any_key($input, ['access_action', 'access_type', 'clear_access_password', 'access_password', 'access_token_expires_at']);
+    $accessInputPresent = admin_gallery_input_has_any_key($input, ['access_action', 'access_type', 'clear_access_password', 'access_password', 'access_token_expires_at']);
+    $shouldUpdateAccess = $accessInputPresent || ($completeForm && $accessReady);
+    if (!$accessReady && !$accessLegacy && ($completeForm || $accessInputPresent)) {
+        throw new RuntimeException(t('admin.gallery_editor.access_schema_save_refused', 'Gallery save was refused because password/access schema is incomplete or could not be inspected. Check System Health before changing gallery visibility or protection.'));
+    }
     // $accessAction stores an intermediate value used by the surrounding gallery workflow.
     $accessAction = $accessReady ? (string) ($input['access_action'] ?? 'save') : 'save';
+    if ($accessReady && $shouldUpdateAccess && $accessAction === 'generate_link') {
+        // Refuse before the gallery UPDATE so a missing/unknown token column cannot
+        // leave the rest of the form saved while link generation fails afterwards.
+        gallery_share_token_assert_mutation_available();
+    }
     // Variable $accessType stores this steps working value.
     $accessType = $accessReady && ($input['access_type'] ?? '') === 'password' ? 'password' : 'normal';
     // Variable $accessListing stores this steps working value.
@@ -834,4 +878,21 @@ function admin_save_gallery_from_input(array $gallery, array $input, array $file
         'return_tab' => $returnTab,
         'moved' => !empty($moveResult['moved']),
     ];
+}
+
+/**
+ * Return a safe Admin message explaining why an NSFW mutation was refused.
+ *
+ * The wording distinguishes a confirmed migration requirement from an
+ * operational schema-inspection failure without exposing database internals.
+ *
+ * @return string Translated refusal message.
+ */
+function admin_nsfw_guard_mutation_error(): string
+{
+    // $status stores the complete NSFW schema state used for actionable wording.
+    $status = nsfw_guard_schema_status();
+    return ($status['state'] ?? '') === 'unknown'
+        ? t('admin.gallery_editor.nsfw_change_inspection_failed', 'NSFW Guard was not changed because the required database schema could not be inspected. Check System Health and try again.')
+        : t('admin.gallery_editor.nsfw_change_migration_required', 'NSFW Guard was not changed because its database migration has not been applied.');
 }

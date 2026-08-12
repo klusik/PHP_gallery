@@ -801,6 +801,12 @@ function gallery_migration_source_asset_descriptor(int $galleryId, array $reques
  */
 function gallery_migration_prepare_target_job(int $targetGalleryId, array $manifest, string $mode): array
 {
+    mutation_schema_assert_available(
+        gallery_migration_schema_status(),
+        'gallery_migration.prepare_target_job',
+        'Gallery migration requires the current gallery/image database schema. Run pending migrations first.',
+        'Gallery migration is temporarily unavailable because the required database schema could not be verified. No migration job was started.'
+    );
     $targetGallery = find_gallery($targetGalleryId, true) ?: find_gallery($targetGalleryId);
     if (!$targetGallery) {
         throw new RuntimeException(gallery_migration_t('gallery_migration.error.target_missing', 'Target gallery was not found.'));
@@ -921,6 +927,12 @@ function gallery_migration_validate_manifest(array $manifest): void
  */
 function gallery_migration_apply_gallery_metadata(int $targetGalleryId, array $manifest): void
 {
+    mutation_schema_assert_available(
+        gallery_migration_schema_status(),
+        'gallery_migration.apply_gallery_metadata',
+        'Gallery migration requires the current gallery/image database schema. Run pending migrations first.',
+        'Gallery migration metadata could not be applied because the database schema could not be verified.'
+    );
     $metadata = (array) ($manifest['gallery'] ?? []);
     $fields = [];
     $values = [];
@@ -947,14 +959,18 @@ function gallery_migration_apply_gallery_metadata(int $targetGalleryId, array $m
     ];
 
     foreach ($allowed as $column) {
-        if (!array_key_exists($column, $metadata) || !db_column_exists('galleries', $column)) {
+        if (!array_key_exists($column, $metadata)) {
+            continue;
+        }
+        if (!mutation_schema_optional_column_available('mutation.gallery_migration_gallery_metadata', 'galleries', $column, 'gallery_migration.apply_gallery_metadata')) {
             continue;
         }
         $fields[] = $column . ' = ?';
         $values[] = gallery_migration_gallery_column_value($column, $metadata[$column]);
     }
 
-    if (array_key_exists('slug', $metadata) && db_column_exists('galleries', 'slug')) {
+    if (array_key_exists('slug', $metadata)
+        && mutation_schema_optional_column_available('mutation.gallery_migration_gallery_metadata', 'galleries', 'slug', 'gallery_migration.apply_gallery_metadata')) {
         $fields[] = 'slug = ?';
         $values[] = unique_slug(db(), (string) $metadata['slug'], $targetGalleryId);
     }
@@ -1070,6 +1086,12 @@ function gallery_migration_apply_flight_map(int $targetGalleryId, array $manifes
  */
 function gallery_migration_install_asset_file(string $jobId, int $targetGalleryId, array $request, string $sourcePath): array
 {
+    mutation_schema_assert_available(
+        gallery_migration_schema_status(),
+        'gallery_migration.install_asset',
+        'Gallery migration requires the current gallery/image database schema. Run pending migrations first.',
+        'Gallery migration asset installation is temporarily unavailable because the database schema could not be verified. No target asset was changed.'
+    );
     $job = gallery_migration_load_job($jobId);
     if ((int) ($job['target_gallery_id'] ?? 0) !== $targetGalleryId) {
         throw new RuntimeException(gallery_migration_t('gallery_migration.error.job_target_mismatch', 'Migration job does not belong to this target gallery.'));
@@ -1265,7 +1287,8 @@ function gallery_migration_recover_existing_gallery_asset(int $targetGalleryId, 
     }
 
     $column = (string) ($asset['kind'] ?? '');
-    if (in_array($column, ['cover_image_path', 'banner_image_path', 'logo_image_path', 'separator_image_path'], true) && db_column_exists('galleries', $column)) {
+    if (in_array($column, ['cover_image_path', 'banner_image_path', 'logo_image_path', 'separator_image_path'], true)
+        && mutation_schema_optional_column_available('mutation.gallery_migration_gallery_asset', 'galleries', $column, 'gallery_migration.recover_gallery_asset')) {
         db()->prepare('UPDATE galleries SET ' . $column . ' = ?, updated_at = ? WHERE id = ?')->execute([$relativePath, now_sql(), $targetGalleryId]);
         $updated = find_gallery($targetGalleryId, true) ?: $gallery;
         write_gallery_sidecar($updated);
@@ -1439,8 +1462,11 @@ function gallery_migration_install_gallery_asset(int $targetGalleryId, array $as
         throw new RuntimeException(gallery_migration_t('gallery_migration.error.target_missing', 'Target gallery was not found.'));
     }
     $column = (string) ($asset['kind'] ?? '');
-    if (!in_array($column, ['cover_image_path', 'banner_image_path', 'logo_image_path', 'separator_image_path'], true) || !db_column_exists('galleries', $column)) {
+    if (!in_array($column, ['cover_image_path', 'banner_image_path', 'logo_image_path', 'separator_image_path'], true)) {
         throw new RuntimeException(gallery_migration_t('gallery_migration.error.asset_invalid', 'Requested migration asset is invalid.'));
+    }
+    if (!mutation_schema_optional_column_available('mutation.gallery_migration_gallery_asset', 'galleries', $column, 'gallery_migration.install_gallery_asset')) {
+        throw new RuntimeException(gallery_migration_t('gallery_migration.error.asset_invalid', 'Requested migration asset is not supported by the current database schema.'));
     }
 
     $relativePath = normalize_relative_path((string) ($asset['relative_path'] ?? ''));
@@ -1561,6 +1587,10 @@ function gallery_migration_install_original(int $targetGalleryId, array $imageMa
         throw new RuntimeException(gallery_migration_t('gallery_migration.error.image_invalid', 'Migration original is not a valid image.'));
     }
 
+    foreach (['filename', 'title', 'description', 'width', 'height', 'mime_type', 'file_size', 'modified_at', 'checksum_sha256', 'sort_order', 'visibility', 'exif_taken_at', 'exif_camera_make', 'exif_camera_model', 'exif_lens_model', 'exif_focal_length', 'exif_aperture', 'exif_exposure_time', 'exif_iso', 'gps_lat', 'gps_lng', 'gps_altitude', 'gps_extracted_at', 'nsfw_enabled', 'thumbnail_min_size', 'thumbnail_max_size'] as $column) {
+        mutation_schema_optional_column_available('mutation.gallery_migration_image_metadata', 'images', $column, 'gallery_migration.install_original');
+    }
+
     $galleryRoot = gallery_abs_path((string) $gallery['folder_path']);
     $targetPath = $galleryRoot . DIRECTORY_SEPARATOR . $relativePath;
     if (!path_inside($galleryRoot, dirname($targetPath))) {
@@ -1619,7 +1649,8 @@ function gallery_migration_upsert_image_metadata(int $targetGalleryId, array $im
 
     $columns = [];
     foreach ($base as $column => $value) {
-        if (in_array($column, ['relative_path_hash'], true) || db_column_exists('images', $column)) {
+        if (in_array($column, ['relative_path', 'relative_path_hash'], true)
+            || mutation_schema_optional_column_available('mutation.gallery_migration_image_metadata', 'images', $column, 'gallery_migration.upsert_image_metadata')) {
             $columns[$column] = $value;
         }
     }
@@ -1700,6 +1731,7 @@ function gallery_migration_install_thumbnail(int $targetGalleryId, int $imageId,
     if (max((int) ($info[0] ?? 0), (int) ($info[1] ?? 0)) > $size + 4) {
         throw new RuntimeException(gallery_migration_t('gallery_migration.error.thumbnail_size_mismatch', 'Migration thumbnail is larger than its declared size.'));
     }
+    thumbnail_metadata_preflight_write_schema('gallery_migration.install_thumbnail');
 
     gallery_thumbs_dir($gallery, true);
     $targetPath = thumbnail_abs_path($image, $gallery, $size, $format);
@@ -1722,6 +1754,12 @@ function gallery_migration_install_thumbnail(int $targetGalleryId, int $imageId,
  */
 function gallery_migration_complete_job(string $jobId, int $targetGalleryId): array
 {
+    mutation_schema_assert_available(
+        gallery_migration_schema_status(),
+        'gallery_migration.complete_job',
+        'Gallery migration requires the current gallery/image database schema. Run pending migrations first.',
+        'Gallery migration completion is temporarily unavailable because the database schema could not be verified. The resumable job was left intact.'
+    );
     $job = gallery_migration_load_job($jobId);
     if ((int) ($job['target_gallery_id'] ?? 0) !== $targetGalleryId) {
         throw new RuntimeException(gallery_migration_t('gallery_migration.error.job_target_mismatch', 'Migration job does not belong to this target gallery.'));

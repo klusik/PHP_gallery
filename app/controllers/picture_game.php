@@ -37,6 +37,7 @@ declare(strict_types=1);
 namespace Gallery\Controllers;
 
 use RuntimeException;
+use Gallery\Services\PresentationSchemaUnavailableException;
 use function Gallery\Core\csrf_field;
 use function Gallery\Core\e;
 use function Gallery\Core\gallery_public_url;
@@ -48,6 +49,10 @@ use function Gallery\Core\url_for;
 use function Gallery\Core\verify_csrf;
 use function Gallery\Services\find_gallery;
 use function Gallery\Services\next_picture_game_pair;
+use function Gallery\Services\schema_inspection_is_missing;
+use function Gallery\Services\schema_inspection_is_available;
+use function Gallery\Services\presentation_schema_log_degraded;
+use function Gallery\Services\presentation_picture_game_schema_status;
 use function Gallery\Services\picture_game_top_images;
 use function Gallery\Services\public_image_display_title;
 use function Gallery\Services\record_picture_game_vote;
@@ -76,6 +81,19 @@ function cms_picture_game(): void
         cms_not_found();
         return;
     }
+    $schemaStatus = presentation_picture_game_schema_status();
+    if (!schema_inspection_is_available($schemaStatus)) {
+        if (schema_inspection_is_missing($schemaStatus)) {
+            cms_not_found();
+            return;
+        }
+        presentation_schema_log_degraded($schemaStatus, 'picture_game_route');
+        http_response_code(503);
+        render_header(t('public.service_unavailable_title', 'Temporarily unavailable'));
+        echo '<section class="panel"><h1>' . e(t('public.service_unavailable_title', 'Temporarily unavailable')) . '</h1><p>' . e(t('public.presentation_schema_unavailable', 'This optional gallery feature is temporarily unavailable because its database schema could not be verified. The main gallery remains available.')) . '</p></section>';
+        render_footer();
+        return;
+    }
     if (request_method() === 'POST') {
         verify_csrf();
         try {
@@ -85,6 +103,12 @@ function cms_picture_game(): void
                 (int) ($_POST['right_image_id'] ?? 0),
                 (int) ($_POST['winner_image_id'] ?? 0)
             );
+        } catch (PresentationSchemaUnavailableException $exception) {
+            http_response_code(503);
+            render_header(t('public.service_unavailable_title', 'Temporarily unavailable'));
+            echo '<section class="panel"><h1>' . e(t('public.service_unavailable_title', 'Temporarily unavailable')) . '</h1><p>' . e($exception->getMessage()) . '</p></section>';
+            render_footer();
+            return;
         } catch (RuntimeException) {
             admin_log_event('warning', 'picture_game.vote_rejected', t('picture_game.log_vote_rejected'), [
                 'gallery_id' => (int) $gallery['id'],

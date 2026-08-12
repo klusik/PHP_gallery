@@ -51,7 +51,10 @@ use function Gallery\Core\db;
  */
 function gallery_metadata_organizer_schema_ready(): bool
 {
-    return function_exists('Gallery\\Services\\db_column_exists') && db_column_exists('images', 'exif_taken_at');
+    return presentation_schema_render_available(
+        presentation_metadata_organizer_schema_status(),
+        'gallery_metadata_organizer.capture_date'
+    );
 }
 
 /**
@@ -416,6 +419,10 @@ function gallery_metadata_organizer_create_child_gallery(array $sourceGallery, a
     if (gallery_count_badge_schema_ready()) {
         $input['count_badge_visibility'] = gallery_count_badge_storage_value($sourceGallery['count_badge_visibility'] ?? null) ?? 'inherit';
     }
+    presentation_schema_assert_known(
+        presentation_lightbox_override_schema_status(),
+        'gallery_metadata_organizer.inherit_lightbox_override'
+    );
     if (gallery_lightbox_browsing_mode_schema_ready()) {
         $input['lightbox_browsing_mode'] = gallery_lightbox_browsing_mode_storage_value($sourceGallery['lightbox_browsing_mode'] ?? null) ?? 'inherit';
     }

@@ -50,8 +50,7 @@ const DUPLICATE_PHOTO_LEDGER_GALLERY_TABLE = 'duplicate_photo_ledger_galleries';
  */
 function duplicate_photo_ledger_schema_ready(): bool
 {
-    return db_table_exists(DUPLICATE_PHOTO_LEDGER_PAIR_TABLE)
-        && db_table_exists(DUPLICATE_PHOTO_LEDGER_GALLERY_TABLE);
+    return schema_inspection_is_available(duplicate_photo_ledger_schema_status());
 }
 
 /**
@@ -89,12 +88,13 @@ function duplicate_photo_ledger_pair_key(int $firstImageId, int $secondImageId):
  * Return an empty ledger snapshot, optionally marking schema availability.
  *
  * @param bool $ready Whether the persistent schema is available.
- * @return array{ready:bool,pairs:array<string,bool>,galleries:array<int,bool>,pair_count:int,gallery_count:int} Ledger snapshot.
+ * @return array{ready:bool,schema_state:string,pairs:array<string,bool>,galleries:array<int,bool>,pair_count:int,gallery_count:int} Ledger snapshot.
  */
-function duplicate_photo_ledger_empty_snapshot(bool $ready = true): array
+function duplicate_photo_ledger_empty_snapshot(bool $ready = true, string $state = 'available'): array
 {
     return [
         'ready' => $ready,
+        'schema_state' => $state,
         'pairs' => [],
         'galleries' => [],
         'pair_count' => 0,
@@ -110,15 +110,16 @@ function duplicate_photo_ledger_empty_snapshot(bool $ready = true): array
  * implied so a parent and one of its child galleries can be ledgered separately.
  *
  * @param int $adminUserId Authenticated administrator user id.
- * @return array{ready:bool,pairs:array<string,bool>,galleries:array<int,bool>,pair_count:int,gallery_count:int} Ledger snapshot.
+ * @return array{ready:bool,schema_state:string,pairs:array<string,bool>,galleries:array<int,bool>,pair_count:int,gallery_count:int} Ledger snapshot.
  */
 function duplicate_photo_ledger_snapshot(int $adminUserId): array
 {
-    if ($adminUserId <= 0 || !duplicate_photo_ledger_schema_ready()) {
-        return duplicate_photo_ledger_empty_snapshot(false);
+    $schemaStatus = duplicate_photo_ledger_schema_status();
+    if ($adminUserId <= 0 || !schema_inspection_is_available($schemaStatus)) {
+        return duplicate_photo_ledger_empty_snapshot(false, (string) ($schemaStatus['state'] ?? 'unknown'));
     }
 
-    $snapshot = duplicate_photo_ledger_empty_snapshot(true);
+    $snapshot = duplicate_photo_ledger_empty_snapshot(true, 'available');
 
     $pairStmt = db()->prepare(
         'SELECT image_id_low, image_id_high
@@ -201,9 +202,12 @@ function duplicate_photo_ledger_add_pair(int $adminUserId, int $firstImageId, in
     if ($adminUserId <= 0) {
         throw new InvalidArgumentException('A duplicate ledger pair requires an authenticated administrator.');
     }
-    if (!duplicate_photo_ledger_schema_ready()) {
-        throw new RuntimeException('Duplicate photo ledger migration is required.');
-    }
+    mutation_schema_assert_available(
+        duplicate_photo_ledger_schema_status(),
+        'duplicate_photo_ledger.mutate',
+        'Duplicate photo ledger migration is required.',
+        'Duplicate photo ledger storage could not be verified. No ledger change was made.'
+    );
 
     [$lowId, $highId] = duplicate_photo_ledger_normalize_pair($firstImageId, $secondImageId);
     $stmt = db()->prepare(
@@ -225,9 +229,12 @@ function duplicate_photo_ledger_add_gallery(int $adminUserId, int $galleryId): v
     if ($adminUserId <= 0 || $galleryId <= 0) {
         throw new InvalidArgumentException('A duplicate ledger gallery rule requires positive administrator and gallery ids.');
     }
-    if (!duplicate_photo_ledger_schema_ready()) {
-        throw new RuntimeException('Duplicate photo ledger migration is required.');
-    }
+    mutation_schema_assert_available(
+        duplicate_photo_ledger_schema_status(),
+        'duplicate_photo_ledger.mutate',
+        'Duplicate photo ledger migration is required.',
+        'Duplicate photo ledger storage could not be verified. No ledger change was made.'
+    );
 
     $stmt = db()->prepare(
         'INSERT IGNORE INTO duplicate_photo_ledger_galleries (user_id, gallery_id, created_at)
@@ -247,9 +254,12 @@ function duplicate_photo_ledger_clear(int $adminUserId): array
     if ($adminUserId <= 0) {
         throw new InvalidArgumentException('Clearing the duplicate ledger requires an authenticated administrator.');
     }
-    if (!duplicate_photo_ledger_schema_ready()) {
-        throw new RuntimeException('Duplicate photo ledger migration is required.');
-    }
+    mutation_schema_assert_available(
+        duplicate_photo_ledger_schema_status(),
+        'duplicate_photo_ledger.mutate',
+        'Duplicate photo ledger migration is required.',
+        'Duplicate photo ledger storage could not be verified. No ledger change was made.'
+    );
 
     $pdo = db();
     $pdo->beginTransaction();

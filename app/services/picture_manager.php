@@ -120,6 +120,13 @@ function picture_manager_owned_images_for_selection(int $sourceGalleryId, array 
  */
 function copy_gallery_images(int $sourceGalleryId, int $destinationGalleryId, array $imageIds): array
 {
+    mutation_schema_assert_available(
+        gallery_move_schema_status(),
+        'picture_manager.copy_images',
+        'Image copies require the current gallery/image ownership schema. Run pending migrations first.',
+        'Image copies are temporarily unavailable because the required database schema could not be verified.'
+    );
+
     // $normalizedIds stores unique positive IDs from the browser selection.
     $normalizedIds = picture_manager_normalize_image_ids($imageIds);
     if (!$normalizedIds) {
@@ -313,7 +320,7 @@ function copy_gallery_images(int $sourceGalleryId, int $destinationGalleryId, ar
             $createdImageIds[$sourceImageId] = (int) $pdo->lastInsertId();
         }
 
-        if (db_table_exists('image_tags') && $createdImageIds) {
+        if (mutation_schema_optional_table_columns_available('mutation.picture_copy_tags', 'image_tags', ['image_id', 'tag_id'], 'picture_manager.copy_tags') && $createdImageIds) {
             // $tagStmt copies tag assignments without copying votes or visitor interaction data.
             $tagStmt = $pdo->prepare('INSERT IGNORE INTO image_tags (image_id, tag_id) SELECT ?, tag_id FROM image_tags WHERE image_id = ?');
             foreach ($createdImageIds as $sourceImageId => $destinationImageId) {

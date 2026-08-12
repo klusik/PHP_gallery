@@ -996,6 +996,12 @@ function thumbnail_inventory_fingerprint(?array $galleryIds = null): string
  */
 function delete_all_thumbnail_files(): array
 {
+    $metadataSchemaStatus = thumbnail_metadata_mutation_schema_status();
+    mutation_schema_assert_known(
+        $metadataSchemaStatus,
+        'thumbnail_maintenance.delete_all_files',
+        'Thumbnail cleanup is temporarily unavailable because thumbnail metadata schema could not be verified. No thumbnail files were deleted.'
+    );
     // $filesDeleted counts individual thumbnail files removed from disk.
     $filesDeleted = 0;
     // $directoriesRemoved counts thumbs directories removed after their files are gone.
@@ -1005,7 +1011,7 @@ function delete_all_thumbnail_files(): array
     // $galleryRoot stores the configured root boundary for all filesystem checks.
     $galleryRoot = galleries_root();
 
-    if (function_exists('Gallery\\Services\\thumbnail_metadata_schema_ready') && thumbnail_metadata_schema_ready()) {
+    if (schema_inspection_is_available($metadataSchemaStatus)) {
         db()->exec('DELETE FROM image_thumbnail_variants');
     }
 

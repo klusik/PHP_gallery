@@ -56,7 +56,13 @@ use function Gallery\Core\now_sql;
  */
 function telemetry_rollup_daily(?string $fromDate = null, ?string $toDate = null): int
 {
-    if (!telemetry_settings_schema_ready()) {
+    $schemaStatus = presentation_telemetry_schema_status();
+    presentation_schema_assert_known(
+        $schemaStatus,
+        'telemetry_daily_rollup',
+        'Telemetry report schema could not be verified. No rollup was performed.'
+    );
+    if (schema_inspection_is_missing($schemaStatus)) {
         return 0;
     }
     // $fromDate stores the inclusive start date for daily rollup.
@@ -95,7 +101,13 @@ function telemetry_rollup_daily(?string $fromDate = null, ?string $toDate = null
  */
 function telemetry_purge_expired(): array
 {
-    if (!telemetry_settings_schema_ready()) {
+    $schemaStatus = presentation_telemetry_schema_status();
+    presentation_schema_assert_known(
+        $schemaStatus,
+        'telemetry_retention_purge',
+        'Telemetry report schema could not be verified. No retention purge was performed.'
+    );
+    if (schema_inspection_is_missing($schemaStatus)) {
         return [];
     }
     // $deleted stores deleted row counts by table.

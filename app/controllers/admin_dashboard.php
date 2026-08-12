@@ -60,6 +60,10 @@ use function Gallery\Services\admin_storage_statistics_process_job;
 use function Gallery\Services\admin_storage_statistics_start_job;
 use function Gallery\Services\exif_gps_default_enabled;
 use function Gallery\Services\exif_gps_override_schema_ready;
+use function Gallery\Services\presentation_schema_log_degraded;
+use function Gallery\Services\schema_inspection_is_unknown;
+use function Gallery\Services\schema_inspection_is_available;
+use function Gallery\Services\presentation_gps_override_schema_status;
 use function Gallery\Services\feature_flag_enabled;
 use function Gallery\Services\flight_map_update_navdata_from_ourairports;
 use function Gallery\Services\public_home_search_enabled;
@@ -372,8 +376,14 @@ function cms_admin_exif_gps_settings(): void
         return;
     }
     verify_csrf();
-    if (!exif_gps_override_schema_ready()) {
-        flash_message('admin_notice', t('admin.dashboard.exif_gps_requires_migration', 'EXIF/GPS default controls will be available after the database migration is applied.'));
+    $schemaStatus = presentation_gps_override_schema_status();
+    if (!schema_inspection_is_available($schemaStatus)) {
+        if (schema_inspection_is_unknown($schemaStatus)) {
+            presentation_schema_log_degraded($schemaStatus, 'gps_default_setting_save');
+            flash_message('admin_notice', t('admin.dashboard.exif_gps_schema_unknown', 'EXIF/GPS defaults were not changed because the gallery override schema could not be verified. Check System Health.'));
+        } else {
+            flash_message('admin_notice', t('admin.dashboard.exif_gps_requires_migration', 'EXIF/GPS default controls will be available after the database migration is applied.'));
+        }
         redirect_to(url_for('admin'));
     }
 

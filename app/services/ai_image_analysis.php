@@ -70,67 +70,24 @@ const AI_IMAGE_ANALYSIS_ERROR_LIMIT = 2000;
  */
 function ai_image_analysis_schema_ready(): bool
 {
-    if (function_exists('Gallery\\Services\\feature_flag_enabled') && !feature_flag_enabled('ai_image_metadata')) {
-        return false;
-    }
-    if (!db_table_exists('image_ai_analysis_jobs') || !db_table_exists('image_ai_metadata')) {
-        return false;
-    }
+    return presentation_schema_render_available(presentation_ai_image_analysis_schema_status(), 'ai_image_analysis_render');
+}
 
-    // $jobColumns stores the minimum queue columns used by the worker API.
-    $jobColumns = [
-        'id',
-        'gallery_id',
-        'image_id',
-        'job_key',
-        'model_name',
-        'model_version',
-        'source_checksum_sha256',
-        'source_file_size',
-        'source_modified_at',
-        'state',
-        'claim_owner',
-        'claim_token_hash',
-        'claim_expires_at',
-        'claimed_at',
-        'heartbeat_at',
-        'progress_percent',
-        'progress_message',
-        'attempt_count',
-        'available_at',
-        'completed_at',
-        'last_error',
-        'created_at',
-        'updated_at',
-    ];
-    foreach ($jobColumns as $column) {
-        if (!db_column_exists('image_ai_analysis_jobs', $column)) {
-            return false;
-        }
-    }
-
-    // $metadataColumns stores the internal result columns used by public search.
-    $metadataColumns = [
-        'id',
-        'image_id',
-        'model_name',
-        'model_version',
-        'source_checksum_sha256',
-        'source_file_size',
-        'source_modified_at',
-        'metadata_json',
-        'searchable_text',
-        'generated_at',
-        'created_at',
-        'updated_at',
-    ];
-    foreach ($metadataColumns as $column) {
-        if (!db_column_exists('image_ai_metadata', $column)) {
-            return false;
-        }
-    }
-
-    return true;
+/**
+ * Verify AI-analysis storage before an operation that mutates queue or metadata rows.
+ *
+ * Confirmed absence remains a legacy disabled state. Unknown inspection state is
+ * never converted into "no jobs", because doing so would make a database outage
+ * indistinguishable from an idle worker queue.
+ *
+ * @param string $operation Stable write-operation identifier.
+ * @return bool True when the complete AI-analysis schema is verified available.
+ */
+function ai_image_analysis_write_schema_ready(string $operation): bool
+{
+    $schemaStatus = presentation_ai_image_analysis_schema_status();
+    presentation_schema_assert_known($schemaStatus, $operation, 'AI image-analysis storage could not be verified. No queue or metadata row was changed.');
+    return schema_inspection_is_available($schemaStatus);
 }
 
 /**
@@ -225,7 +182,7 @@ function ai_image_analysis_claim_token_hash(string $claimToken): string
  */
 function ai_image_analysis_enqueue_missing_jobs(int $galleryId, string $modelName, string $modelVersion, int $limit = AI_IMAGE_ANALYSIS_ENQUEUE_BATCH_SIZE): int
 {
-    if (!ai_image_analysis_schema_ready()) {
+    if (!ai_image_analysis_write_schema_ready('ai_analysis_enqueue')) {
         return 0;
     }
 
@@ -311,7 +268,7 @@ function ai_image_analysis_enqueue_missing_jobs(int $galleryId, string $modelNam
  */
 function ai_image_analysis_release_expired_claims(int $galleryId): int
 {
-    if (!ai_image_analysis_schema_ready()) {
+    if (!ai_image_analysis_write_schema_ready('ai_analysis_release_expired')) {
         return 0;
     }
 
@@ -343,7 +300,7 @@ function ai_image_analysis_release_expired_claims(int $galleryId): int
  */
 function ai_image_analysis_claim_next_job(int $galleryId, string $workerId, string $modelName, string $modelVersion, int $leaseSeconds): ?array
 {
-    if (!ai_image_analysis_schema_ready()) {
+    if (!ai_image_analysis_write_schema_ready('ai_analysis_claim')) {
         return null;
     }
 
@@ -551,6 +508,9 @@ function ai_image_analysis_claim_already_completed(int $galleryId, int $jobId, s
  */
 function ai_image_analysis_record_heartbeat(int $galleryId, int $jobId, string $claimToken, int $leaseSeconds, int $progressPercent, string $message): bool
 {
+    if (!ai_image_analysis_write_schema_ready('ai_analysis_heartbeat')) {
+        return false;
+    }
     $job = ai_image_analysis_validate_claim($galleryId, $jobId, $claimToken);
     if (!$job) {
         return false;
@@ -592,6 +552,9 @@ function ai_image_analysis_record_heartbeat(int $galleryId, int $jobId, string $
  */
 function ai_image_analysis_complete_success(int $galleryId, int $jobId, string $claimToken, array $metadata, string $searchableText): bool
 {
+    if (!ai_image_analysis_write_schema_ready('ai_analysis_complete_success')) {
+        return false;
+    }
     $job = ai_image_analysis_validate_claim($galleryId, $jobId, $claimToken);
     if (!$job) {
         return ai_image_analysis_claim_already_completed($galleryId, $jobId, $claimToken);
@@ -693,6 +656,9 @@ function ai_image_analysis_complete_success(int $galleryId, int $jobId, string $
  */
 function ai_image_analysis_complete_failure(int $galleryId, int $jobId, string $claimToken, string $errorMessage): bool
 {
+    if (!ai_image_analysis_write_schema_ready('ai_analysis_complete_failure')) {
+        return false;
+    }
     $job = ai_image_analysis_validate_claim($galleryId, $jobId, $claimToken);
     if (!$job) {
         return false;
@@ -791,7 +757,7 @@ function ai_image_analysis_claimed_asset(int $galleryId, int $jobId, string $cla
  */
 function ai_image_analysis_force_gallery_reprocess(int $galleryId): array
 {
-    if ($galleryId <= 0 || !ai_image_analysis_schema_ready()) {
+    if ($galleryId <= 0 || !ai_image_analysis_write_schema_ready('ai_analysis_force_reprocess')) {
         return [
             'galleries' => 0,
             'images' => 0,

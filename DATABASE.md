@@ -257,7 +257,7 @@ Important columns:
 | `gps_lat`, `gps_lng`, `gps_altitude`, `gps_extracted_at` | GPS metadata. Public display is controlled by the global EXIF/GPS default and the nearest non-null gallery `gps_map_enabled` override. |
 | `sort_order` | Order inside gallery. |
 | `visibility` | `draft`, `public`, or `private`. |
-| `nsfw_enabled` | Image-level restricted flag. |
+| `nsfw_enabled` | Image-level restricted flag. The migration creates it as `NOT NULL DEFAULT 0`. |
 | `thumbnail_min_size`, `thumbnail_max_size` | Optional image-level thumbnail bounds. |
 | `created_at`, `updated_at` | Audit timestamps. |
 
@@ -272,6 +272,212 @@ Important indexes and constraints:
 | `images_gps_gallery_index` | Map data queries. |
 | `images_gallery_nsfw_visibility_index` | Public filtering with NSFW state. |
 | `images_thumbnail_bounds_index` | Thumbnail override queries. |
+
+NSFW Guard readiness requires both `galleries.nsfw_enabled` and
+`images.nsfw_enabled`. A successful inspection that confirms either column is
+absent identifies a pre-feature or incomplete migration state. An inspection
+failure is reported separately as unknown and does not authorize public media
+delivery or an NSFW setting change. This diagnostic policy adds no table or
+migration of its own.
+
+Schema capability answers are cached only for the current PHP request. The
+migration runner therefore invalidates that cache after schema-changing
+`CREATE`, `ALTER`, `DROP`, and `RENAME` statements, after the migration ledger
+table bootstrap, and after successful migration repair callbacks. This matters
+when one Admin, installer, updater, or CLI process inspects a column before a
+migration and validates it again afterward. Data-only migration statements keep
+the cache because they cannot change table, column, or index availability.
+
+### Phase 9 security/authentication schema capabilities
+
+Security policy must distinguish a database object that is **confirmed absent**
+from an object whose metadata **could not be inspected**. The shared inspection
+service therefore returns `available`, `missing`, or `unknown`; aggregate
+capabilities preserve individual requirements and apply `unknown > missing >
+available` precedence.
+
+| Capability | Database requirements | Confirmed missing behavior | Unknown behavior |
+| --- | --- | --- | --- |
+| `gallery_access` | `galleries.access_mode`, `access_listing`, `access_password_hash`, `access_token_hash`, `access_token_expires_at` | Legacy compatibility only when all five columns are absent | Public access/listing policy and related mutations fail closed |
+| `gallery_visibility` | `galleries.visibility`, plus definition support for `unpublished` | Historical enum vocabulary uses `draft` for canonical unpublished | Storage/public policy is refused until the enum can be inspected |
+| `gallery_share_token` | `galleries.access_share_token` | Generation/display-token use unavailable; validating hash may still be revoked | Generation/use unavailable; validating hash may still be revoked when core access schema is verified |
+| `auth_persistent_login` | `admin_remember_tokens` | Ordinary PHP-session login continues without durable browser token | Token issue/use is refused; session authentication remains independent |
+| `auth_user_email` | `users.email` | Username-only login/account compatibility remains available | Email identity/recovery operations are not guessed as absent |
+| `auth_password_reset` | `password_reset_tokens` and `users.email` | Reset issue/consume requires migration | Reset issue/consume is temporarily refused |
+| `auth_external_identity` | `user_google_accounts` | Google link/login storage requires migration | Linked-account lookup/login/link/disconnect is temporarily refused |
+
+The gallery-access legacy rule is intentionally stronger than aggregate
+`missing`. A partially applied password-protection migration can report
+`missing` while some access columns already exist and contain protection state.
+`gallery_access_schema_is_confirmed_legacy()` therefore requires every one of
+the five core access columns to be confirmed absent before the application may
+substitute historical `normal`/`listed` behavior.
+
+`access_share_token` is not part of that five-column core decision because it is
+optional encrypted/display storage for the raw share token. Authorization is
+validated with `access_token_hash` and `access_token_expires_at`. Generation and
+use of a current share token require the applicable schema to be verified.
+Revocation is deliberately stricter in the safe direction: when the core hash
+columns are verified, the application clears the validating hash even if
+`access_share_token` is missing or unknown. Clearing the hash invalidates every
+copy of the link and avoids making revocation dependent on optional display
+storage.
+
+The visibility compatibility check uses the trusted column-definition helper,
+not a broad SQL exception fallback. A successful metadata result that proves the
+`visibility` definition lacks `unpublished` identifies the historical `draft`
+vocabulary. An exception produces `unknown`; it never selects `draft` merely
+because inspection failed.
+
+Authentication tables contain credentials or credential-derived state. Schema
+health output and logs may expose only validated table/column identifiers,
+normalized capability names, bounded status/error categories, and request
+correlation IDs. They must never include password hashes, reset/share token
+values, remember-login cookies, OAuth client secrets, CSRF values, DSNs, raw SQL,
+or raw database exception messages.
+
+### Phase 10 destructive/ingestion schema capabilities
+
+Destructive and ingestion operations use `app/services/mutation_schema_policy.php`
+on top of the shared three-state inspector. These checks are mutation guards, not
+new migrations. Their purpose is to prove that the database shape needed by an
+existing write/delete workflow is known before persistent state changes.
+
+| Capability | Database requirements | Confirmed missing behavior | Unknown behavior |
+| --- | --- | --- | --- |
+| `mutation.gallery_delete` | `galleries.id`, `folder_path`, `cover_image_id`, `parent_id`, `updated_at`; `images.id`, `gallery_id` | Core deletion requires migration; optional dependency cleanup skips only objects independently confirmed absent | Refuse before row or filesystem deletion |
+| `mutation.gallery_move` | Gallery id/path/hash/parent/cover/update fields; image id/gallery/path/hash/order/update fields | Require current core schema; optional tag propagation may skip only proven absence | Refuse before move/copy/path mutation |
+| `mutation.duplicate_photo_ledger` | Both duplicate ledger tables and their user/entity/timestamp fields | Ledger UI reports migration requirement and does not write | Refuse ledger writes as temporary inspection failure |
+| `mutation.upload_ingestion` | Gallery target id/path and image identity/path/hash/filename/order/timestamps | Require current ingestion migration | Refuse before uploaded source is committed to gallery |
+| `mutation.upload_automation` | Full `gallery_upload_tokens` issuance/authentication shape | Require migration for token creation/auth/use | Refuse token creation/auth/use |
+| `mutation.gallery_migration` | Core target gallery/image identity, path, and timestamps | Core migration required; confirmed absent optional imported metadata is omitted | Pause resumable migration before target mutation |
+| `mutation.mobile_webdav` | Full `mobile_webdav_upload_tokens` credential/authentication shape | Require migration for create/auth/upload | Refuse create/auth/PUT |
+| `mutation.thumbnail_metadata` | Core `image_thumbnail_variants` identity, geometry, file-state, status, and timestamps | Confirmed absent table preserves documented file-only derivative compatibility | Refuse derivative/metadata mutation before file changes |
+| `mutation.database_maintenance` | Inspectable `schema_migrations` table state | Confirmed absence may be handled by migration/repair bootstrap | Refuse cleanup/repair mutation |
+| `mutation.application_update` | Inspectable `schema_migrations` table state | Confirmed absence is allowed because activation can bootstrap/apply migrations | Refuse before active application files are replaced |
+
+The upload-ingestion capability deliberately contains only core registration
+columns that every accepted source needs. Optional image metadata remains
+compatibility-aware at the service that owns that metadata. Gallery migration,
+for example, probes each optional destination column before copying source
+metadata into it. A confirmed missing optional field is omitted. An inspection
+failure is `unknown` and stops the import instead of producing a partially
+registered image.
+
+Thumbnail writes have a second compatibility preflight because old installations
+may not have `image_thumbnail_variants` at all. If the table is confirmed absent,
+the established derivative-file-only mode may continue. If the table exists,
+`thumbnail_metadata_preflight_write_schema()` also checks optional variant columns
+`derivative_version`, `gallery_id`, and `thumbnail_rel_path`, plus optional source
+geometry/status columns `images.display_width`, `display_height`,
+`exif_orientation`, and `thumbnail_metadata_refreshed_at`. Missing optional fields
+are omitted from writes; unknown fields block the derivative mutation before a
+thumbnail is generated, replaced, or deleted.
+
+Upload-token revocation uses narrower capabilities than token issuance:
+
+- `mutation.upload_automation_revoke` requires `gallery_upload_tokens.id`,
+  `gallery_id`, `active`, and `revoked_at`, allowing an existing API key to be
+  disabled even when unrelated issuance/authentication fields are missing;
+- `mutation.mobile_webdav_revoke` requires the WebDAV credential `id`, which is
+  sufficient for the existing credential-delete operation.
+
+This is a security-tightening exception, not a general partial-schema fallback.
+If the columns required for revocation cannot themselves be inspected, revocation
+is refused rather than guessed.
+
+The legacy `db_table_exists()` and `db_column_exists()` helpers remain for
+unconverted compatibility callers, but they are no longer valid mutation-policy
+evidence in the Phase 10 paths. Their boolean `false` can mean either absence or
+an inspection error. Converted deletion, upload, token, migration, thumbnail,
+database-maintenance, and updater code instead uses explicit `missing` versus
+`unknown` results.
+
+Mutation-schema refusal diagnostics use the event
+`database.mutation_schema_refused`. Its context is intentionally limited to a
+bounded capability identifier, normalized state, stable operation identifier,
+and validated affected table/column names. It must not contain SQL, PDO exception
+messages, DSNs, database credentials, API/WebDAV secrets, upload filenames or
+paths, migration source paths, or updater staging paths.
+
+### Phase 11 optional presentation/reporting schema capabilities
+
+Phase 11 completes the schema-reliability conversion for optional presentation,
+reporting, map, AI, navigation, and telemetry features. It adds no database
+migration by itself. `app/services/presentation_schema_policy.php` describes the
+shape that existing migrations are expected to provide and applies read/write policy
+to the structured inspector results.
+
+The database-state interpretation is intentionally different from destructive
+Phase 10 mutation policy:
+
+- `available`: use the optional database-backed feature normally;
+- confirmed `missing`: omit the optional read surface or show migration guidance. A
+  write is allowed to skip persistence only where the exact legacy behavior has
+  been audited;
+- `unknown`: a safe base page may omit the optional surface, but the failure is
+  logged and visible in System Health. A write must not interpret `unknown` as
+  evidence that a table or column is absent;
+- `disabled`: an administrator-disabled optional feature is reported without
+  resolving its schema capability, so System Health does not spend metadata queries
+  on an inactive feature.
+
+The final capability set is shown below. Metadata-organizer capture-date grouping
+also uses a narrow internal structured check for `images.exif_taken_at`; it is not a
+separate System Health card because it is a derivative consumer of the EXIF metadata
+surface rather than an independently configured feature.
+
+The final capability set is:
+
+| Capability | Database requirements | Confirmed missing behavior | Unknown behavior |
+| --- | --- | --- | --- |
+| `presentation.gps_exif` | `galleries.gps_map_enabled`; image EXIF/GPS date, camera, lens, coordinate, altitude, direction and source columns | Omit GPS/EXIF map presentation | Omit optional map, log degraded state, show System Health warning |
+| `presentation.gps_override` | Nullable definition of `galleries.gps_map_enabled` | Use global/default map behavior | Do not save/guess a per-gallery override; surface unknown |
+| `presentation.flight_map` | `gallery_flight_maps` route/source/saved-route fields | Omit stored route map or route persistence | Omit read-only map; refuse dependent DB write |
+| `presentation.flight_navdata` | `flight_map_nav_points` identity/location/source/search fields | Omit local navigation dataset | Omit read results; refuse DB-dependent navdata mutation |
+| `presentation.image_voting` | `galleries.voting_enabled` plus complete `image_votes` shape | Hide voting / require migration for vote writes | Hide optional UI but return operational failure for vote write |
+| `presentation.picture_game` | Voting requirements, `galleries.picture_game_enabled`, complete `picture_game_votes` shape | Hide game / require migration for stored pair and vote state | Core gallery continues; game route/write is unavailable |
+| `presentation.lightbox_override` | `galleries.lightbox_browsing_mode` and supported definition tokens including `picture_strip` and `3d_carousel` | Use inherited/global lightbox mode; legacy gallery creation/import may omit the unavailable column | Safe display may fall back; submitted, sidecar-imported, or organizer-inherited override persistence is refused rather than silently discarded |
+| `presentation.openai_text` | Core `user_openai_text_settings` profile/endpoint/model/prompt fields | OpenAI profile persistence unavailable | Settings write is refused as schema unavailable |
+| `presentation.openai_image_input` | `user_openai_text_settings.allow_image_input` | Preserve old text-only settings behavior | Do not guess/persist image-input setting |
+| `presentation.ai_image_analysis` | `image_ai_metadata` and `image_ai_analysis_jobs` identity, queue, lease, result and timestamp fields | AI metadata UI/queue unavailable until migration | Read-only metadata may be omitted; worker/queue mutations return bounded unavailable response |
+| `presentation.simbrief_route_map` | Same stored route-map requirements as flight maps | SimBrief draft may continue without route persistence | SimBrief draft may continue; only optional route DB write is omitted and diagnosed |
+| `presentation.navigation_cache` | Complete `navigation_data_cache` cache-key/provider/payload/expiry fields | Perform lookup without persistent cache | Incidental cache write/read may be skipped; unknown is diagnosed |
+| `presentation.navigation_account` | Complete `navigation_data_accounts` provider/account/token/expiry fields | Proven old install may use session-only OAuth state | Unknown account storage is not treated as legacy; persistence is refused |
+| `presentation.telemetry_reporting` | Telemetry settings, sessions, events, hourly/daily aggregates, DB query metrics and job-run tables | Telemetry report is unavailable; maintenance may no-op on proven pre-telemetry install | Dashboard/export distinguish outage from migration; rollup/purge refuse silent success |
+| `presentation.admin_gallery_report` | Known report dependency tables including galleries/images/tags/votes/settings/log/telemetry/navigation/flight-map/AI tables | Omit only report sections whose dependencies are proven absent | Keep report operational where safe, mark unavailable sections, never export raw database exception text |
+
+`schema_inspection_column_nullable()` is part of the final observation API. It
+queries `information_schema.COLUMNS.IS_NULLABLE` through the same validated,
+request-cached executor boundary as table/column/index/definition inspection. The
+GPS override capability uses this to distinguish the intended nullable per-gallery
+override shape from a schema that cannot safely represent inheritance.
+
+The presentation health registry is lazy. Calling
+`presentation_schema_health_definitions()` builds resolver metadata only and performs
+zero database metadata queries. `admin_presentation_schema_health_statuses()` checks
+feature flags first, resolves enabled capabilities only, and reuses the request-local
+cache. The voting aggregate has ten first-use metadata requirements and performs no
+additional metadata queries when re-evaluated within the same PHP request.
+
+#### Intentional dynamic Admin-report inventory query
+
+`admin_gallery_report_exact_database_table_counts()` still queries
+`information_schema.TABLES` directly for the active database. This is intentional
+and is not an existence-policy bypass. The Complete Admin Gallery Report must
+enumerate every base table present at runtime, including future/plugin tables whose
+names are not known in advance. Named-object helpers cannot express that dynamic
+inventory. Failure produces generic report-unavailable text and never includes raw
+SQL or the database exception message in the exported report. All known optional
+report section dependencies use structured schema inspection.
+
+#### No Phase 11 migration
+
+No new schema objects are introduced by the policy conversion. Existing migrations
+remain the source of truth for the optional tables and columns above. A `missing`
+result therefore means either an older installation or pending migration, while an
+`unknown` result is an operational metadata-inspection problem and must not be fixed
+by guessing or applying migrations blindly.
 
 ### `duplicate_photo_ledger_pairs`
 
@@ -763,7 +969,7 @@ The only repository-proven obsolete schema objects are the legacy pre-compaction
 5. Deleting a user sets some historical references to null but cascades private account token/config rows.
 6. Mutable runtime options belong in `app_settings`, not in `config.php`.
 7. New schema changes should be added through new migrations only.
-8. Code that may execute before all migrations are applied should use `db_table_exists()` or `db_column_exists()` guards.
+8. Legacy compatibility code may still contain `db_table_exists()` or `db_column_exists()` guards where a boolean fallback is explicitly harmless. These helpers return `false` after inspection errors and therefore must never authorize security, authentication, destructive/ingestion, or optional-feature writes. Security/authentication callers use explicit three-state access policy, destructive/ingestion callers use `app/services/mutation_schema_policy.php`, and converted optional presentation/reporting callers use `app/services/presentation_schema_policy.php`. New schema-sensitive code must choose the appropriate structured policy instead of adding another ambiguous existence guard.
 
 ## Common Query Patterns
 

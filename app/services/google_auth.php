@@ -86,21 +86,70 @@ function google_auth_ready(): bool
 {
     // $config stores normalized Google auth settings.
     $config = google_auth_config();
-    return (bool) $config['enabled']
-        && $config['client_id'] !== ''
-        && $config['client_secret'] !== ''
-        && function_exists('Gallery\\Services\\db_table_exists')
-        && db_table_exists('user_google_accounts');
+    return google_auth_configuration_ready($config)
+        && schema_inspection_is_available(google_auth_schema_status());
 }
 
 /**
- * Return true when the Google account link table exists.
+ * Return true when Google login has complete non-secret configuration.
+ *
+ * @param ?array $config Optional preloaded Google configuration.
+ * @return bool True when Google OAuth is configured.
+ */
+function google_auth_configuration_ready(?array $config = null): bool
+{
+    $config ??= google_auth_config();
+    return (bool) ($config['enabled'] ?? false)
+        && trim((string) ($config['client_id'] ?? '')) !== ''
+        && (string) ($config['client_secret'] ?? '') !== '';
+}
+
+/**
+ * Return structured schema status for external Google identity links.
+ *
+ * @return array Structured schema-inspection result.
+ */
+function google_auth_schema_status(): array
+{
+    return schema_inspection_feature('auth_external_identity', [
+        schema_inspection_table('user_google_accounts'),
+    ]);
+}
+
+/**
+ * Return true when the Google account link table is verified available.
+ *
+ * This compatibility wrapper is retained for audited UI callers. Security
+ * decisions that distinguish missing from unknown use google_auth_schema_status().
  *
  * @return bool True when the condition matches.
  */
 function google_auth_schema_ready(): bool
 {
-    return function_exists('Gallery\\Services\\db_table_exists') && db_table_exists('user_google_accounts');
+    return schema_inspection_is_available(google_auth_schema_status());
+}
+
+/**
+ * Apply external-identity schema policy before a security-sensitive operation.
+ *
+ * @param string $operation Fixed operation identifier for bounded diagnostics.
+ * @param bool $missingAllowed Whether confirmed pre-migration absence may degrade safely.
+ * @return bool True when identity-link storage is available.
+ */
+function google_auth_schema_operation_available(string $operation, bool $missingAllowed = false): bool
+{
+    $status = google_auth_schema_status();
+    if (schema_inspection_is_unknown($status)) {
+        auth_log_schema_unavailable('auth_external_identity', $operation);
+        throw new AuthenticationSchemaUnavailableException('auth_external_identity');
+    }
+    if (schema_inspection_is_missing($status)) {
+        if ($missingAllowed) {
+            return false;
+        }
+        throw new RuntimeException('Google login migration has not been applied.');
+    }
+    return true;
 }
 
 /**
@@ -550,7 +599,7 @@ function google_auth_claims_from_code(string $code): array
  */
 function google_auth_linked_account(int $userId): ?array
 {
-    if (!google_auth_schema_ready()) {
+    if (!google_auth_schema_operation_available('linked_account_read', true)) {
         return null;
     }
 
@@ -570,7 +619,10 @@ function google_auth_linked_account(int $userId): ?array
  */
 function google_auth_user_by_subject(string $subject): ?array
 {
-    if (!google_auth_schema_ready() || $subject === '') {
+    if ($subject === '') {
+        return null;
+    }
+    if (!google_auth_schema_operation_available('subject_login_lookup', true)) {
         return null;
     }
 
@@ -590,9 +642,7 @@ function google_auth_user_by_subject(string $subject): ?array
  */
 function google_auth_link_account(int $userId, array $claims): void
 {
-    if (!google_auth_schema_ready()) {
-        throw new RuntimeException('Google login migration has not been applied.');
-    }
+    google_auth_schema_operation_available('link_account');
 
     // $subject stores Google's stable account identifier.
     $subject = (string) ($claims['sub'] ?? '');
@@ -627,7 +677,7 @@ function google_auth_link_account(int $userId, array $claims): void
  */
 function google_auth_disconnect_account(int $userId): void
 {
-    if (!google_auth_schema_ready()) {
+    if (!google_auth_schema_operation_available('disconnect_account', true)) {
         return;
     }
 
@@ -643,7 +693,13 @@ function google_auth_disconnect_account(int $userId): void
  */
 function google_auth_touch_login(int $googleAccountId): void
 {
-    if (!google_auth_schema_ready()) {
+    try {
+        if (!google_auth_schema_operation_available('touch_login', true)) {
+            return;
+        }
+    } catch (AuthenticationSchemaUnavailableException) {
+        // Login authorization has already completed. Do not invalidate a valid
+        // admin session only because the non-authorizing audit timestamp failed.
         return;
     }
 

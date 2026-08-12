@@ -55,6 +55,7 @@ use function Gallery\Services\gallery_shows_filenames;
 use function Gallery\Services\gallery_visibility_storage_value;
 use function Gallery\Services\move_gallery_images;
 use function Gallery\Services\nsfw_guard_schema_ready;
+use function Gallery\Services\nsfw_guard_schema_status;
 use function Gallery\Services\t;
 use function Gallery\Services\thumbnail_maintenance_summary_cache_clear;
 use function Gallery\Services\admin_log_event;
@@ -290,7 +291,16 @@ function cms_admin_bulk_images(): void
         $stmt = db()->prepare('UPDATE images SET visibility = ?, updated_at = ? WHERE id IN (' . $placeholders . ')');
         $stmt->execute(array_merge([$action, now_sql()], $ownedIds));
     }
-    if (in_array($action, ['nsfw_on', 'nsfw_off'], true) && nsfw_guard_schema_ready()) {
+    if (in_array($action, ['nsfw_on', 'nsfw_off'], true) && !nsfw_guard_schema_ready()) {
+        // $nsfwSchemaStatus distinguishes a migration requirement from an inspection outage.
+        $nsfwSchemaStatus = nsfw_guard_schema_status();
+        $notice = ($nsfwSchemaStatus['state'] ?? '') === 'unknown'
+            ? t('admin.gallery_editor.nsfw_change_inspection_failed', 'NSFW Guard was not changed because the required database schema could not be inspected. Check System Health and try again.')
+            : t('admin.gallery_editor.nsfw_change_migration_required', 'NSFW Guard was not changed because its database migration has not been applied.');
+        flash_message('admin_notice', $notice);
+        redirect_to(admin_edit_gallery_tab_url($galleryId, $returnTab));
+    }
+    if (in_array($action, ['nsfw_on', 'nsfw_off'], true)) {
         // $placeholders stores this steps working value.
         $placeholders = implode(',', array_fill(0, count($ownedIds), '?'));
         // $stmt stores this steps working value.

@@ -521,6 +521,221 @@ On shared hosting with limited resources:
 - Token regenerated per-session
 - Validated on every POST/PUT/DELETE
 
+### NSFW Guard schema safety
+
+NSFW Guard verifies both gallery-level and image-level protection columns before
+making public access decisions. A complete schema uses the normal inherited
+gallery and per-image restrictions. A confirmed older schema follows the
+documented pre-feature compatibility path and Admin System Health recommends
+the migration. If the database cannot provide a trustworthy schema answer,
+NSFW-sensitive gallery, media, thumbnail, lightbox, map, and metadata requests
+receive a temporary 503 response. Explicit NSFW setting changes are paused
+until verification succeeds.
+
+Schema readiness results are cached only for one request. Migration execution
+clears that cache after schema changes and repair callbacks, so an Admin,
+installer, updater, or CLI migration process can immediately validate the new
+schema instead of reusing a pre-migration answer. Repeated NSFW checks within a
+normal request reuse the same two column inspections.
+
+### Security and authentication schema safety
+
+The same three-state inspection model now covers gallery password/access policy,
+gallery visibility compatibility, share-token storage, persistent administrator
+login, password reset, and Google identity links. The operational distinction is
+important:
+
+- **available** means the required database objects were verified and the normal
+  feature behavior is used;
+- **missing** means metadata inspection succeeded and confirmed an older or
+  incomplete schema. Only explicitly documented compatibility behavior is used;
+- **unknown** means the application could not verify the schema. Security-sensitive
+  behavior is temporarily refused rather than silently downgraded.
+
+Gallery password/access compatibility is deliberately conservative. The old
+unprotected/listed behavior is used only when all five core access columns are
+confirmed absent. If even one access column exists while another is missing, the
+database is considered partially migrated and protected public routes fail closed.
+This prevents an interrupted migration from turning stored password, listing, or
+token state into permissive defaults.
+
+Gallery visibility also verifies the database vocabulary. A confirmed historical
+`visibility` definition that lacks `unpublished` stores that value as legacy
+`draft`. If the column definition cannot be inspected, the application does not
+guess which vocabulary is active.
+
+Protected gallery pages, media, thumbnails, lazy lightbox/map metadata, search,
+sitemap output, gallery assets, and gallery downloads pass through the shared
+public schema-policy boundary before their controller can emit protected output.
+An unknown access/privacy capability receives the same route-appropriate 503
+behavior used by the NSFW pilot, with bounded request correlation and no SQL,
+credentials, tokens, DSNs, or filesystem paths in the public response.
+
+Authentication keeps the primary PHP session separate from optional persistent
+storage. A confirmed missing `admin_remember_tokens` table disables only “Keep me
+signed in”; ordinary password/session login remains available. Password reset
+requires both `users.email` and `password_reset_tokens`. Google login requires a
+verified `user_google_accounts` table in addition to valid OAuth configuration.
+Unknown metadata state never masquerades as “feature not configured” or “invalid
+credentials”.
+
+Share-token generation/use requires verified token storage. Revocation is a safe
+exception: once the core validating hash columns are verified, the application can
+always clear the hash even when the optional encrypted display-token column is
+missing or uninspectable. This means a schema problem cannot prevent an existing
+share link from being revoked.
+
+Admin **System Health** and **Runtime Diagnostics** now show the same bounded state
+for gallery access, visibility, share tokens, NSFW Guard, persistent login,
+password reset, and external identity links. Missing/unknown states produce an
+Action signal and operator guidance without exposing raw database errors.
+
+### Destructive and ingestion schema safety
+
+Phase 10 extends the same distinction to operations that change persistent data or
+files. Gallery/image deletion and moves, Duplicate Photo Detector ledger writes,
+classic/browser uploads, upload automation, gallery migration, mobile WebDAV,
+thumbnail metadata maintenance, database cleanup/repair, and application update
+activation now use `app/services/mutation_schema_policy.php`.
+
+The practical rule is:
+
+- **available**: the workflow continues with its established behavior;
+- **missing**: the workflow either requires the pending migration or uses a narrow
+  compatibility/bootstrap path that was specifically audited for that operation;
+- **unknown**: the workflow is paused before it changes target files, database rows,
+  credentials, resumable migration state, derivative files, or active application
+  files.
+
+This matters most during temporary database or metadata-permission problems. A
+legacy boolean “exists” helper can return `false` both when a column is genuinely
+absent and when inspection itself failed. That ambiguity is acceptable only in
+older non-sensitive compatibility code. It is no longer used to authorize the
+Phase 10 mutation paths.
+
+Uploads preflight the core gallery/image registration schema and thumbnail write
+shape before a source file is moved from temporary/prepared storage into the
+gallery. Gallery migration performs equivalent checks before target assets,
+originals, metadata, thumbnails, or completion state are committed, so a refusal
+leaves the job resumable. Thumbnail generation and maintenance verify the metadata
+write shape before derivative directories/files are changed. A confirmed old
+installation without the thumbnail metadata table can still use the documented
+file-only compatibility mode; an **unknown** metadata state cannot.
+
+Credential revocation is intentionally narrower than credential creation or use.
+Upload automation and mobile WebDAV require their complete verified token schema
+for issuance/authentication, but an administrator may still revoke/delete an
+existing credential when the smaller set of columns needed for revocation is
+verified. This keeps a schema problem from unnecessarily preventing a
+security-tightening action.
+
+Database repair and application updates also distinguish confirmed absence from
+inspection failure. A confirmed missing `schema_migrations` table may be handled by
+the migration/bootstrap workflow itself. An unknown state blocks live cleanup or
+active-file replacement. Update archives may still be downloaded and extracted to
+staging, but activation checks the schema immediately before replacing active
+application files. Source snapshots must include both `schema_inspection.php` and
+`mutation_schema_policy.php`.
+
+Admin **System Health** and **Runtime Diagnostics** show ten additional mutation
+capabilities covering these workflows. Missing and unknown states raise the
+Maintenance **Action** badge. Unknown entries can include validated affected
+table/column names, safe connectivity/permission guidance, and a request reference.
+They do not expose raw SQL, database exception messages, DSNs, passwords, API keys,
+WebDAV secrets, upload paths, migration source paths, or updater staging paths.
+
+If an administrator sees a mutation-schema warning, first verify database
+connectivity, the selected database, and metadata-inspection permissions. Apply a
+pending migration only when System Health confirms a **missing** state or the normal
+migration page reports it. After the database becomes inspectable again, retry the
+operation. A refused Phase 10 workflow is designed to leave its target state
+recoverable rather than guessing through an indeterminate schema.
+
+### Optional presentation and reporting schema safety
+
+The final schema-reliability phase covers features that enrich the gallery but are
+not required to render its basic public content: GPS/EXIF maps, flight maps, image
+voting, Picture Game, lightbox mode overrides, OpenAI assistance, local AI image
+metadata, SimBrief route-map persistence, navigation datasets/accounts, telemetry,
+and the Complete Admin Gallery Report. These features now use
+`app/services/presentation_schema_policy.php`.
+
+The important difference from access control and destructive operations is that a
+safe optional **read** can sometimes disappear without taking the whole gallery
+offline. For example, if a GPS-map table/column cannot be inspected, the main gallery
+may still render without the map because omitting a map does not make protected
+content public. The unavailable map is logged with bounded context and Admin System
+Health shows the capability as **unknown**. By contrast, a vote, Picture Game pair
+record, telemetry setting, AI queue transition, navigation-account token update, or
+other database-backed write is never authorized by an unknown schema result.
+
+Administrator-visible states are now consistent across all three schema-policy
+layers:
+
+- **available**: the required database objects were verified;
+- **missing**: inspection succeeded and confirmed that a migration/optional object is
+  absent;
+- **unknown**: the database structure could not be verified reliably;
+- **disabled**: an optional feature with a real feature flag is intentionally off.
+
+System Health evaluates optional feature flags before inspecting their database
+shape. A disabled feature therefore reports **disabled** without spending metadata
+queries on tables/columns that cannot affect the current request. Enabled capability
+checks share the request-local schema cache.
+
+Several compatibility details are deliberate:
+
+- a proven old installation may omit an optional presentation feature, but a partial
+  migration or inspection outage is not silently relabeled as legacy;
+- GPS per-gallery inheritance verifies that `galleries.gps_map_enabled` is nullable
+  before treating `NULL` as a real inherit/default state;
+- lightbox override compatibility verifies the stored column vocabulary before
+  accepting override values. Gallery creation, sidecar import, and metadata-organizer
+  child creation also distinguish confirmed legacy absence from an inspection outage,
+  so an explicit/inherited override is not silently discarded during persistence;
+- enabling voting on a newly created or sidecar-imported gallery requires verified
+  voting storage rather than persisting a feature flag against an indeterminate vote
+  schema;
+- Picture Game pair selection is treated as a write because displaying a new pair
+  records that pair before a vote occurs;
+- Navigraph/OAuth can use historical session-only behavior only when persistent
+  account storage is positively confirmed missing. An inspection outage cannot be
+  treated as a session-only legacy installation;
+- disconnect/revocation uses the smaller verified account identity shape needed to
+  remove stored credentials, so a security-tightening disconnect is not blocked by
+  unrelated optional account columns;
+- SimBrief description/OFP generation can remain useful even when optional flight
+  route persistence is unavailable. The draft may continue while only the database
+  route-map write is skipped;
+- telemetry dashboards/exports distinguish “migration not installed” from “database
+  status cannot be inspected.” Telemetry setting changes and maintenance do not
+  silently succeed on unknown schema;
+- AI worker requests return bounded operational errors when AI queue storage cannot
+  be verified and do not echo raw database/service exception text back to the worker;
+- the Complete Admin Gallery Report uses structured checks for known optional
+  sections. Its database table inventory intentionally enumerates
+  `information_schema.TABLES` dynamically because it must count every base table,
+  including future/plugin tables whose names are not known in advance. Inventory
+  failures produce generic report text rather than raw database errors.
+
+Admin **System Health** and **Runtime Diagnostics** expose fifteen optional
+presentation/reporting capability entries using the same underlying policy results.
+An unknown entry may show validated affected table/column names, safe database
+connectivity/permission guidance, and a request reference. It never includes raw SQL,
+PDO exception text, DSNs, credentials, OAuth/API tokens, cookies, reset/share tokens,
+CSRF values, or private filesystem paths.
+
+For troubleshooting, treat **missing** and **unknown** differently. Apply migrations
+when the migration runner or System Health confirms required objects are missing. If
+the state is **unknown**, first restore database connectivity, select the correct
+database, and ensure the application account may read metadata from
+`information_schema`; then retry. Do not apply migrations merely because an optional
+feature disappeared during an inspection outage.
+
+This completes the planned repository-wide schema-inspection reliability conversion.
+The permanent architecture, database, testing, operator guidance, and administrator
+manual now own the final rules; there is no release-time temporary phase roadmap.
+
 ### Admin Audit
 
 - Every admin action logged with:

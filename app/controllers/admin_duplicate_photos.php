@@ -61,6 +61,8 @@ use function Gallery\Services\duplicate_photo_ledger_add_gallery;
 use function Gallery\Services\duplicate_photo_ledger_add_pair;
 use function Gallery\Services\duplicate_photo_ledger_clear;
 use function Gallery\Services\duplicate_photo_ledger_schema_ready;
+use function Gallery\Services\duplicate_photo_ledger_schema_status;
+use function Gallery\Services\schema_inspection_is_unknown;
 use function Gallery\Services\duplicate_photo_ledger_snapshot;
 use function Gallery\Services\delete_gallery_images;
 use function Gallery\Services\find_gallery;
@@ -202,9 +204,14 @@ function admin_duplicate_photos_handle_post(): void
             flash_message('admin_notice', $message);
             redirect_to(admin_duplicate_photos_url((int) $gallery['id'], $token, $page));
         }
+        $ledgerSchemaStatus = duplicate_photo_ledger_schema_status();
         if (!duplicate_photo_ledger_schema_ready()) {
-            $message = t('admin.duplicate_photos.ledger_migration_required', 'Run database migrations before using the duplicate review ledger.');
+            $ledgerSchemaUnknown = schema_inspection_is_unknown($ledgerSchemaStatus);
+            $message = $ledgerSchemaUnknown
+                ? t('admin.duplicate_photos.ledger_schema_unknown', 'The duplicate review ledger is temporarily unavailable because its database schema could not be verified. No ledger change was made.')
+                : t('admin.duplicate_photos.ledger_migration_required', 'Run database migrations before using the duplicate review ledger.');
             if ($wantsJson) {
+                http_response_code($ledgerSchemaUnknown ? 503 : 409);
                 admin_duplicate_photos_json_response(false, $message, ['error' => $message]);
                 return;
             }

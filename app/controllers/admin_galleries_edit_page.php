@@ -72,6 +72,11 @@ use function Gallery\Services\find_gallery;
 use function Gallery\Services\find_image;
 use function Gallery\Services\flight_map_schema_ready;
 use function Gallery\Services\gallery_access_schema_ready;
+use function Gallery\Services\schema_inspection_is_unknown;
+use function Gallery\Services\schema_inspection_is_missing;
+use function Gallery\Services\schema_inspection_is_available;
+use function Gallery\Services\gallery_access_share_token_schema_status;
+use function Gallery\Services\gallery_access_schema_status;
 use function Gallery\Services\gallery_access_share_token_schema_ready;
 use function Gallery\Services\gallery_background_source;
 use function Gallery\Services\gallery_background_source_schema_ready;
@@ -136,6 +141,7 @@ use function Gallery\Services\media_renamer_normalize_pattern;
 use function Gallery\Services\move_gallery_folder_to_parent;
 use function Gallery\Services\normalize_gallery_visibility;
 use function Gallery\Services\nsfw_guard_schema_ready;
+use function Gallery\Services\nsfw_guard_schema_status;
 use function Gallery\Services\pagination_dimension_value;
 use function Gallery\Services\picture_game_schema_ready;
 use function Gallery\Services\public_path_schema_ready;
@@ -217,8 +223,12 @@ function cms_admin_edit_gallery(): void
     $uploadApiFeatureEnabled = !function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('upload_api');
     // $galleryMigrationFeatureEnabled stores whether gallery transfer controls should be visible.
     $galleryMigrationFeatureEnabled = !function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('gallery_migration');
-    // Variable $accessReady stores this steps working value.
-    $accessReady = gallery_access_schema_ready();
+    // Structured access capability status distinguishes migration absence from inspection failure.
+    $accessSchemaStatus = gallery_access_schema_status();
+    $accessReady = schema_inspection_is_available($accessSchemaStatus);
+    // Share-token persistence is independently migrated and can therefore differ from core access readiness.
+    $shareTokenSchemaStatus = gallery_access_share_token_schema_status();
+    $shareTokenReady = schema_inspection_is_available($shareTokenSchemaStatus);
     if (request_method() === 'POST') {
         // Media-renamer AJAX requests need JSON CSRF failures and diagnostics.
         // The normal verifier exits with plain text, which makes fetch() report
@@ -556,8 +566,8 @@ function cms_admin_edit_gallery(): void
         }
         echo '</div>';
         echo '<div class="admin-edit-card is-wide"><label>' . e(t('admin.gallery_editor.share_link_expiry', 'Share link expiry')) . '<input name="access_token_expires_at" type="datetime-local" value="' . e(!empty($gallery['access_token_expires_at']) ? date('Y-m-d\TH:i', strtotime((string) $gallery['access_token_expires_at'])) : '') . '"><span class="muted">' . e(t('admin.gallery_editor.non_expiring_link_help', 'Leave empty for a non-expiring generated link.')) . '</span></label>';
-        // $visibleShareToken stores an intermediate value used by the surrounding gallery workflow.
-        $visibleShareToken = $newShareToken !== '' ? $newShareToken : gallery_share_token_for_admin($gallery);
+        // $visibleShareToken is readable only when encrypted token persistence is verified.
+        $visibleShareToken = $newShareToken !== '' ? $newShareToken : ($shareTokenReady ? gallery_share_token_for_admin($gallery) : null);
         if ($visibleShareToken !== null && $visibleShareToken !== '') {
             // $shareLabel stores an intermediate value used by the surrounding gallery workflow.
             $shareLabel = $newShareToken !== '' ? t('admin.gallery_editor.generated_share_link', 'Generated share link') : t('admin.gallery_editor.active_share_link', 'Active share link');
@@ -570,12 +580,35 @@ function cms_admin_edit_gallery(): void
         } else {
             echo '<p class="muted">' . e(t('admin.gallery_editor.no_active_share_link', 'No share link is active.')) . '</p>';
         }
-        echo '<div class="bulk-row"><button type="submit" class="secondary" name="access_action" value="generate_link">' . e(t('admin.gallery_editor.generate_regenerate_share_link', 'Generate/regenerate share link')) . '</button><button type="submit" class="secondary" name="access_action" value="revoke_link">' . e(t('admin.gallery_editor.revoke_share_link', 'Revoke share link')) . '</button></div><p class="muted">' . e(t('admin.gallery_editor.share_link_help', 'Generated direct links use the existing hash-token path. They remain useful for private galleries without making them appear in listings.')) . '</p></div>';
+        echo '<div class="bulk-row">';
+        if ($shareTokenReady) {
+            echo '<button type="submit" class="secondary" name="access_action" value="generate_link">' . e(t('admin.gallery_editor.generate_regenerate_share_link', 'Generate/regenerate share link')) . '</button>';
+        }
+        if (!empty($gallery['access_token_hash'])) {
+            echo '<button type="submit" class="secondary" name="access_action" value="revoke_link">' . e(t('admin.gallery_editor.revoke_share_link', 'Revoke share link')) . '</button>';
+        }
+        echo '</div>';
+        if ($shareTokenReady) {
+            echo '<p class="muted">' . e(t('admin.gallery_editor.share_link_help', 'Generated direct links use the verified protected-token path. They remain useful for private galleries without making them appear in listings.')) . '</p>';
+        } elseif (schema_inspection_is_unknown($shareTokenSchemaStatus)) {
+            echo '<p class="muted">' . e(t('admin.gallery_editor.share_token_schema_unknown', 'Share-link generation is temporarily disabled because the token-storage schema could not be verified. Existing validating hashes can still be revoked. Check System Health.')) . '</p>';
+        } else {
+            echo '<p class="muted">' . e(t('admin.gallery_editor.share_token_migration_required', 'Share-link generation requires the current share-token migration. Existing validating hashes can still be revoked.')) . '</p>';
+        }
+        echo '</div>';
     } else {
-        echo '<div class="notice">' . e(t('admin.gallery_editor.protected_settings_migration_hidden', 'Protected gallery settings are hidden until the v0.13 database migration is applied.')) . '</div>';
+        if (schema_inspection_is_unknown($accessSchemaStatus)) {
+            echo '<div class="notice">' . e(t('admin.gallery_editor.access_schema_unknown', 'Protected gallery settings are unavailable because the required access schema could not be inspected. Check System Health before changing access policy.')) . '</div>';
+        } else {
+            echo '<div class="notice">' . e(t('admin.gallery_editor.protected_settings_migration_hidden', 'Protected gallery settings are hidden until the gallery access database migration is fully applied.')) . '</div>';
+        }
     }
-    if (nsfw_guard_schema_ready()) {
-        echo '<div class="admin-edit-card is-wide"><label class="checkbox-label"><input type="checkbox" name="nsfw_enabled" value="1"' . ((int) ($gallery['nsfw_enabled'] ?? 0) === 1 ? ' checked' : '') . '> ' . e(t('admin.gallery_editor.mark_nsfw', 'Mark as NSFW / 18+')) . '</label><p class="muted">' . e(t('admin.gallery_editor.nsfw_help', 'When enabled, this gallery and all subgalleries require an 18+ confirmation before anonymous visitors can view photos or media files. Before publishing NSFW content, make sure your hosting provider or web hosting terms allow it.')) . '</p></div>';
+    // $nsfwSchemaStatus distinguishes a pending migration from an operational inspection failure.
+    $nsfwSchemaStatus = nsfw_guard_schema_status();
+    if (($nsfwSchemaStatus['state'] ?? '') === 'available') {
+        echo '<div class="admin-edit-card is-wide"><input type="hidden" name="nsfw_field_present" value="1"><label class="checkbox-label"><input type="checkbox" name="nsfw_enabled" value="1"' . ((int) ($gallery['nsfw_enabled'] ?? 0) === 1 ? ' checked' : '') . '> ' . e(t('admin.gallery_editor.mark_nsfw', 'Mark as NSFW / 18+')) . '</label><p class="muted">' . e(t('admin.gallery_editor.nsfw_help', 'When enabled, this gallery and all subgalleries require an 18+ confirmation before anonymous visitors can view photos or media files. Before publishing NSFW content, make sure your hosting provider or web hosting terms allow it.')) . '</p></div>';
+    } elseif (($nsfwSchemaStatus['state'] ?? '') === 'unknown') {
+        echo '<div class="admin-edit-card is-wide"><p class="muted">' . e(t('admin.gallery_editor.nsfw_inspection_failed', 'NSFW Guard controls are unavailable because the application could not inspect the required database schema. Check System Health for diagnostic guidance.')) . '</p></div>';
     } else {
         echo '<div class="admin-edit-card is-wide"><p class="muted">' . e(t('admin.gallery_editor.nsfw_migration_hidden', 'NSFW Guard controls will be available after the database migration is applied.')) . '</p></div>';
     }

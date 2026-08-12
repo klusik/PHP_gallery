@@ -50,40 +50,46 @@ use function Gallery\Core\now_sql;
  */
 function thumbnail_metadata_schema_ready(): bool
 {
-    static $ready = null;
-    if ($ready !== null) {
-        return $ready;
-    }
+    return schema_inspection_is_available(thumbnail_metadata_mutation_schema_status());
+}
 
-    if (!function_exists('Gallery\\Services\\db_table_exists') || !db_table_exists('image_thumbnail_variants')) {
-        return $ready = false;
+/**
+ * Verify optional thumbnail-write compatibility columns before any derivative mutation begins.
+ *
+ * A confirmed missing optional column is an intentional legacy compatibility state. An
+ * inspection failure is different: callers must stop before deleting, replacing, or
+ * generating a derivative because the database cannot prove which write shape is safe.
+ *
+ * @param string $operation Stable operation identifier used by bounded diagnostics.
+ */
+function thumbnail_metadata_preflight_write_schema(string $operation): void
+{
+    $schemaStatus = thumbnail_metadata_mutation_schema_status();
+    if (schema_inspection_is_missing($schemaStatus)) {
+        return;
     }
+    mutation_schema_assert_known(
+        $schemaStatus,
+        $operation,
+        'Thumbnail metadata mutation is temporarily unavailable because its database schema could not be verified.'
+    );
 
-    // $requiredColumns stores the durable variant columns common to the legacy
-    // and compact schemas. Treat partially edited tables as unavailable so
-    // optional thumbnail metadata cannot break uploads or thumbnail generation.
-    $requiredColumns = [
-        'image_id',
-        'size_px',
-        'format',
-        'width',
-        'height',
-        'file_size',
-        'modified_at',
-        'status',
-        'status_reason',
-        'checked_at',
-        'created_at',
-        'updated_at',
-    ];
-    $columns = thumbnail_metadata_table_columns('image_thumbnail_variants', true);
-    foreach ($requiredColumns as $column) {
-        if (!isset($columns[$column])) {
-            return $ready = false;
-        }
+    foreach (['derivative_version', 'gallery_id', 'thumbnail_rel_path'] as $column) {
+        mutation_schema_optional_column_available(
+            'mutation.thumbnail_metadata_optional',
+            'image_thumbnail_variants',
+            $column,
+            $operation
+        );
     }
-
-    return $ready = true;
+    foreach (['display_width', 'display_height', 'exif_orientation', 'thumbnail_metadata_refreshed_at'] as $column) {
+        mutation_schema_optional_column_available(
+            'mutation.thumbnail_metadata_image_source',
+            'images',
+            $column,
+            $operation
+        );
+    }
 }
 
 
@@ -642,9 +648,15 @@ function thumbnail_metadata_image_has_rows(array $image): bool
  */
 function thumbnail_metadata_delete_variant(array|int $image, int $size, string $format): void
 {
-    if (!thumbnail_metadata_schema_ready()) {
+    $schemaStatus = thumbnail_metadata_mutation_schema_status();
+    if (schema_inspection_is_missing($schemaStatus)) {
         return;
     }
+    mutation_schema_assert_known(
+        $schemaStatus,
+        'thumbnail_metadata.delete_variant',
+        'Thumbnail metadata could not be modified because its database schema could not be verified.'
+    );
     if (!in_array($format, ['jpg', 'webp'], true) || !in_array($size, thumbnail_sizes(), true)) {
         return;
     }
@@ -668,9 +680,15 @@ function thumbnail_metadata_delete_variant(array|int $image, int $size, string $
  */
 function thumbnail_metadata_delete_image_variants(array|int $image): void
 {
-    if (!thumbnail_metadata_schema_ready()) {
+    $schemaStatus = thumbnail_metadata_mutation_schema_status();
+    if (schema_inspection_is_missing($schemaStatus)) {
         return;
     }
+    mutation_schema_assert_known(
+        $schemaStatus,
+        'thumbnail_metadata.delete_image_variants',
+        'Thumbnail metadata could not be modified because its database schema could not be verified.'
+    );
 
     $imageId = is_array($image) ? (int) ($image['id'] ?? 0) : (int) $image;
     if ($imageId <= 0) {
@@ -730,7 +748,7 @@ function thumbnail_metadata_sync_image_source_payload(array $image, array $sourc
 
     $available = [];
     foreach ($wanted as $column => $value) {
-        if (thumbnail_metadata_image_column_exists($column)) {
+        if (mutation_schema_optional_column_available('mutation.thumbnail_metadata_image_source', 'images', $column, 'thumbnail_metadata.sync_image_source')) {
             $available[$column] = $value;
         }
     }
@@ -790,9 +808,16 @@ function thumbnail_metadata_sync_image_source_payload(array $image, array $sourc
  */
 function thumbnail_metadata_record_file(array $image, array $gallery, int $size, string $format, string $thumbnailPath, ?string $sourcePath = null, bool $deleteInvalid = false): array
 {
-    if (!thumbnail_metadata_schema_ready()) {
+    $schemaStatus = thumbnail_metadata_mutation_schema_status();
+    if (schema_inspection_is_missing($schemaStatus)) {
         return ['status' => 'metadata_unavailable', 'valid' => false, 'deleted' => false, 'metadata_written' => false];
     }
+    mutation_schema_assert_known(
+        $schemaStatus,
+        'thumbnail_metadata.record_file',
+        'Thumbnail metadata could not be written because its database schema could not be verified.'
+    );
+    thumbnail_metadata_preflight_write_schema('thumbnail_metadata.record_file');
     if (!in_array($format, ['jpg', 'webp'], true) || !in_array($size, thumbnail_sizes(), true)) {
         return ['status' => 'unsupported_variant', 'valid' => false, 'deleted' => false, 'metadata_written' => false];
     }
@@ -810,6 +835,8 @@ function thumbnail_metadata_record_file(array $image, array $gallery, int $size,
     $metadataError = null;
     try {
         $sourceSynced = thumbnail_metadata_sync_image_source_payload($image, $source);
+    } catch (MutationSchemaUnavailableException $exception) {
+        throw $exception;
     } catch (Throwable $exception) {
         // $metadataError stores an optional SQL diagnostic without failing the source upload.
         $metadataError = $exception->getMessage();
@@ -854,7 +881,7 @@ function thumbnail_metadata_record_file(array $image, array $gallery, int $size,
         'updated_at' => $now,
     ];
 
-    if (thumbnail_metadata_variant_column_exists('derivative_version')) {
+    if (mutation_schema_optional_column_available('mutation.thumbnail_metadata_optional', 'image_thumbnail_variants', 'derivative_version', 'thumbnail_metadata.record_variant')) {
         $variantColumns = array_merge(
             array_slice($variantColumns, 0, 3, true),
             ['derivative_version' => max(1, (int) ($image['thumbnail_derivative_version'] ?? 1))],
@@ -862,14 +889,14 @@ function thumbnail_metadata_record_file(array $image, array $gallery, int $size,
         );
     }
 
-    if (thumbnail_metadata_variant_column_exists('gallery_id')) {
+    if (mutation_schema_optional_column_available('mutation.thumbnail_metadata_optional', 'image_thumbnail_variants', 'gallery_id', 'thumbnail_metadata.record_variant')) {
         $variantColumns = array_merge(
             array_slice($variantColumns, 0, 1, true),
             ['gallery_id' => (int) ($gallery['id'] ?? ($image['gallery_id'] ?? 0))],
             array_slice($variantColumns, 1, null, true)
         );
     }
-    if (thumbnail_metadata_variant_column_exists('thumbnail_rel_path')) {
+    if (mutation_schema_optional_column_available('mutation.thumbnail_metadata_optional', 'image_thumbnail_variants', 'thumbnail_rel_path', 'thumbnail_metadata.record_variant')) {
         $variantColumns = array_merge(
             array_slice($variantColumns, 0, 5, true),
             ['thumbnail_rel_path' => thumbnail_metadata_relative_path($image, $size, $format)],
@@ -924,9 +951,16 @@ function thumbnail_metadata_record_file(array $image, array $gallery, int $size,
  */
 function thumbnail_metadata_record_prepared_variant(array $image, array $gallery, int $size, string $format, string $thumbnailPath, int $width, int $height): array
 {
-    if (!thumbnail_metadata_schema_ready()) {
+    $schemaStatus = thumbnail_metadata_mutation_schema_status();
+    if (schema_inspection_is_missing($schemaStatus)) {
         return ['status' => 'metadata_unavailable', 'valid' => false, 'deleted' => false, 'metadata_written' => false];
     }
+    mutation_schema_assert_known(
+        $schemaStatus,
+        'thumbnail_metadata.record_prepared',
+        'Thumbnail metadata could not be written because its database schema could not be verified.'
+    );
+    thumbnail_metadata_preflight_write_schema('thumbnail_metadata.record_prepared');
     if (!in_array($format, ['jpg', 'webp'], true) || !in_array($size, thumbnail_sizes(), true)) {
         return ['status' => 'unsupported_variant', 'valid' => false, 'deleted' => false, 'metadata_written' => false];
     }
@@ -958,7 +992,7 @@ function thumbnail_metadata_record_prepared_variant(array $image, array $gallery
         'updated_at' => $now,
     ];
 
-    if (thumbnail_metadata_variant_column_exists('derivative_version')) {
+    if (mutation_schema_optional_column_available('mutation.thumbnail_metadata_optional', 'image_thumbnail_variants', 'derivative_version', 'thumbnail_metadata.record_variant')) {
         $variantColumns = array_merge(
             array_slice($variantColumns, 0, 3, true),
             ['derivative_version' => max(1, (int) ($image['thumbnail_derivative_version'] ?? 1))],
@@ -966,14 +1000,14 @@ function thumbnail_metadata_record_prepared_variant(array $image, array $gallery
         );
     }
 
-    if (thumbnail_metadata_variant_column_exists('gallery_id')) {
+    if (mutation_schema_optional_column_available('mutation.thumbnail_metadata_optional', 'image_thumbnail_variants', 'gallery_id', 'thumbnail_metadata.record_variant')) {
         $variantColumns = array_merge(
             array_slice($variantColumns, 0, 1, true),
             ['gallery_id' => (int) ($gallery['id'] ?? ($image['gallery_id'] ?? 0))],
             array_slice($variantColumns, 1, null, true)
         );
     }
-    if (thumbnail_metadata_variant_column_exists('thumbnail_rel_path')) {
+    if (mutation_schema_optional_column_available('mutation.thumbnail_metadata_optional', 'image_thumbnail_variants', 'thumbnail_rel_path', 'thumbnail_metadata.record_variant')) {
         $variantColumns = array_merge(
             array_slice($variantColumns, 0, 5, true),
             ['thumbnail_rel_path' => thumbnail_metadata_relative_path($image, $size, $format)],

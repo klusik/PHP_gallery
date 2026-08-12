@@ -63,6 +63,24 @@ use function Gallery\Core\run_migrations;
  */
 
 /**
+ * Refuse active application-file replacement when migration schema metadata cannot be inspected.
+ *
+ * Confirmed absence of schema_migrations is allowed because the migration runner can
+ * bootstrap it after activation. Unknown state is not allowed because replacing code
+ * while migration state is indeterminate can leave the installation unrecoverable.
+ *
+ * @param string $operation Stable updater operation identifier.
+ */
+function application_update_assert_activation_schema_known(string $operation): void
+{
+    mutation_schema_assert_known(
+        application_update_activation_schema_status(),
+        $operation,
+        'Application update activation is temporarily unavailable because migration schema state could not be verified. Downloaded update files were left outside the active installation.'
+    );
+}
+
+/**
  * Return a cached update check for small UI badges.
  *
  * @param int $ttlSeconds Ttl seconds value.
@@ -542,6 +560,7 @@ function install_application_beta(string $commitId): array
     application_update_cleanup_transient_extracts($updateDir, $extractDir);
     // $backupPath stores an intermediate value used by the surrounding gallery workflow.
     $backupPath = $backupDir . '/before-beta-' . $stamp . '.zip';
+    application_update_assert_activation_schema_known('application_update.install_beta');
     // $copyResult stores copy and cleanup diagnostics for this updater run.
     $copyResult = application_update_copy_files($sourceRoot, $root, $backupPath);
     // $copied stores the number of files copied from the downloaded snapshot.
@@ -615,6 +634,7 @@ function restore_application_stable_release(): array
     application_update_cleanup_transient_extracts($updateDir, $restoreDir);
     // $backupPath stores the rollback archive created before stable files are restored.
     $backupPath = $root . '/cache/updates/rollback-' . date('Ymd-His') . '.zip';
+    application_update_assert_activation_schema_known('application_update.restore_stable');
     // $copyResult stores copy and cleanup diagnostics for this updater run.
     $copyResult = application_update_copy_files($sourceRoot, $root, $backupPath);
     // $copied stores the number of files copied from the downloaded snapshot.
@@ -709,6 +729,7 @@ function clean_reinstall_current_application_version(): array
     application_update_cleanup_transient_extracts($updateDir, $extractDir);
     // $backupPath stores the rollback archive for replaced and removed application files.
     $backupPath = $backupDir . '/before-clean-reinstall-' . $stamp . '.zip';
+    application_update_assert_activation_schema_known('application_update.clean_reinstall');
     // $copyResult stores copy and full cleanup diagnostics for this reinstall.
     $copyResult = application_update_copy_files($sourceRoot, $root, $backupPath, true);
     // $migrations stores database migrations applied after the clean file reinstall.
@@ -810,6 +831,7 @@ function install_application_update(): array
     application_update_cleanup_transient_extracts($updateDir, $extractDir);
     // $backupPath stores an intermediate value used by the surrounding gallery workflow.
     $backupPath = $backupDir . '/before-update-' . $stamp . '.zip';
+    application_update_assert_activation_schema_known('application_update.install_stable');
     // $copyResult stores copy and cleanup diagnostics for this updater run.
     $copyResult = application_update_copy_files($sourceRoot, $root, $backupPath);
     // $copied stores the number of files copied from the downloaded snapshot.
