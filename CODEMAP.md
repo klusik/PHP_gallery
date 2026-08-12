@@ -14,7 +14,13 @@ This file maps features to source files. It is optimized for fast maintenance an
 
 | Area | Files |
 | --- | --- |
-| Bootstrap, constants, route table | `app/bootstrap.php` |
+| Bootstrap coordinator and version constants | `app/bootstrap.php` |
+| Configuration bootstrap | `app/bootstrap/configuration.php` |
+| Request and security-header lifecycle | `app/bootstrap/request.php` |
+| Session lifecycle | `app/bootstrap/session.php` |
+| Public-path and query routing | `app/bootstrap/routing.php` |
+| Scheduled-maintenance request hooks | `app/bootstrap/maintenance.php` |
+| Route table and controller dispatch | `app/bootstrap/dispatch.php` |
 | Controller loader | `app/controllers.php` |
 | Service loader | `app/services.php` |
 | View loader | `app/views.php` |
@@ -90,6 +96,7 @@ This file maps features to source files. It is optimized for fast maintenance an
 | Path | Responsibility |
 | --- | --- |
 | `app/controllers/admin_settings.php` | Admin-authenticated Settings hub controller, per-section validation, delegated saves, flash/redirect handling and safe audit metadata. |
+| `app/services/admin_settings_registry.php`, `app/views/admin_settings.php`, `public/assets/gallery-modules/admin-settings-search.js` | Canonical Settings ownership plus complete global-control discovery, Spotlight-style local search, keyboard navigation, section activation, and specialist deep links. |
 | `app/services/admin_settings_registry.php` | Stable section taxonomy, setting ownership metadata, current/default/source resolution, central-edit whitelist, canonical normalizers/save delegation and deep-link helpers. |
 | `app/views/admin_settings.php` | Accessible Settings overview, tab/section navigation, scoped fieldsets, error summary, current-source labels, redacted summaries and specialized-page links. |
 | `app/views/admin_chrome.php` | Persistent Admin navigation entry for Settings. |

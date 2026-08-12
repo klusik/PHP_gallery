@@ -49,7 +49,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.87.1}
+\newcommand{\version}{0.88}
 \newcommand{\manualdate}{12 August 2026}
 
 \hypersetup{
@@ -151,6 +151,13 @@
 This manual is written for the person who owns or manages that collection. It explains what each feature is useful for, where to find it, how choices affect visitors, and what to check afterward. You can read it from beginning to end or use the linked contents and index to answer a specific question.
 
 Start with Section~\ref{sec:first-hour} when the site has just been installed. Section~\ref{sec:planning} helps you plan a collection before adding hundreds of photographs. Sections~\ref{sec:create-edit-gallery} and~\ref{sec:photo-workflow} explain ordinary gallery work. Section~\ref{sec:audiences} provides complete examples for common audiences. Technical background remains near the end for readers who want to understand hosting, backups, or how the application works behind the screen.
+
+\subsection{What is new in Version 0.88}
+\index{Version 0.88}
+
+Version~0.88 makes a large installation easier to configure, deploy, and maintain. The central \ui{Settings} page now includes a Spotlight-style search over global settings and specialist tools. Theme controls include dedicated public tag-page presentation and configurable gallery hero tags. Dashboard maintenance data is loaded only when requested, with direct thumbnail-maintenance links and diagnostic Admin logs when loading fails.
+
+Behind the interface, the bootstrap lifecycle, gallery and Theme controllers, public renderer, shared helpers, and updater are divided into focused modules while their established entrypoints remain compatible. Deployment archives include the complete application tree and portable path separators, and the updater can safely clean misplaced managed files created by limited web-hosting extractors. The supported English, Czech, German, and Swedish language catalogs are synchronized for the release.
 
 \subsection{How to use this manual}
 \index{manual!how to use}
