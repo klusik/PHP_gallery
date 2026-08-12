@@ -835,7 +835,7 @@ export function setupAdminGalleryReordering() {
 
         const controller = new AbortController();
         saveController = controller;
-        setStatus('Saving gallery order and nesting...', 'saving');
+        setStatus(i18n('admin.gallery_list.saving_order', 'Saving gallery order and nesting...'), 'saving');
         try {
             const response = await fetch(reorderUrl, {
                 method: 'POST',
@@ -851,17 +851,17 @@ export function setupAdminGalleryReordering() {
                 throw new Error(cleanAdminJsonParseMessage(responseText));
             }
             if (!response.ok) {
-                throw new Error(result.message || 'The server rejected the gallery reorder request.');
+                throw new Error(result.message || i18n('admin.gallery_list.reorder_rejected', 'The server rejected the gallery reorder request.'));
             }
             if (!result.ok) {
-                throw new Error(result.message || 'Gallery order could not be saved.');
+                throw new Error(result.message || i18n('admin.gallery_list.save_failed', 'Gallery order could not be saved.'));
             }
-            setStatus(result.message || 'Gallery order saved.', 'saved');
+            setStatus(result.message || i18n('admin.gallery_list.saved', 'Gallery order saved.'), 'saved');
         } catch (error) {
             if (error.name === 'AbortError') {
                 return;
             }
-            setStatus(error.message || 'Gallery order could not be saved.', 'error');
+            setStatus(error.message || i18n('admin.gallery_list.save_failed', 'Gallery order could not be saved.'), 'error');
         } finally {
             if (saveController === controller) {
                 saveController = null;
@@ -921,7 +921,7 @@ export function setupAdminGalleryReordering() {
         if (!cleanupVisuals(false)) {
             return;
         }
-        setStatus('Gallery order unchanged.', 'idle');
+        setStatus(i18n('admin.gallery_list.unchanged', 'Gallery order unchanged.'), 'idle');
     }
 
         /**
@@ -940,7 +940,7 @@ export function setupAdminGalleryReordering() {
             saveGalleryTree();
             return;
         }
-        setStatus('Gallery order unchanged.', 'idle');
+        setStatus(i18n('admin.gallery_list.unchanged', 'Gallery order unchanged.'), 'idle');
     }
 
         /**
@@ -1224,7 +1224,7 @@ export function setupAdminGalleryReordering() {
         });
     });
 
-    setStatus('Gallery ordering ready.', 'idle');
+    setStatus(i18n('admin.gallery_list.ready', 'Gallery ordering ready.'), 'idle');
 }
 
 /**
@@ -1366,7 +1366,7 @@ export function setupPublicGalleryPageReordering() {
             if (draggedItems.length > 1) {
                 const count = document.createElement('span');
                 count.className = 'public-reorder-ghost-count';
-                count.textContent = `${draggedItems.length} photos`;
+                count.textContent = i18n('admin.gallery_list.photo_count', '{count} photos', {count: draggedItems.length});
                 ghost.appendChild(count);
             }
             ghost.style.left = `${box.left}px`;
@@ -1608,7 +1608,7 @@ export function setupPublicGalleryPageReordering() {
                 body.set('reorder_scope', 'visible_page');
             }
 
-            setStatus('Saving visible page order...', 'saving');
+            setStatus(i18n('admin.gallery_list.saving_visible_page', 'Saving visible page order...'), 'saving');
             try {
                 const response = await fetch(reorderUrl, {
                     method: 'POST',
@@ -1623,9 +1623,9 @@ export function setupPublicGalleryPageReordering() {
                     throw new Error(i18n('admin.gallery_list.json_html_text_response', 'The server returned HTML or text instead of JSON. Check the admin logs or PHP error log.'));
                 }
                 if (!response.ok || !result.ok) {
-                    throw new Error(result.message || 'Visible page order could not be saved.');
+                    throw new Error(result.message || i18n('admin.gallery_list.visible_page_save_failed', 'Visible page order could not be saved.'));
                 }
-                setStatus(result.message || 'Visible page order saved.', 'saved');
+                setStatus(result.message || i18n('admin.gallery_list.visible_page_saved', 'Visible page order saved.'), 'saved');
                 syncLightboxSourceOrder(orderedIds);
                 document.dispatchEvent(new CustomEvent('php-gallery:public-visible-order-saved', {
                     detail: {
@@ -1637,7 +1637,7 @@ export function setupPublicGalleryPageReordering() {
                 }));
             } catch (error) {
                 restoreOriginalOrder();
-                setStatus(error.message || 'Visible page order could not be saved.', 'error');
+                setStatus(error.message || i18n('admin.gallery_list.visible_page_save_failed', 'Visible page order could not be saved.'), 'error');
             }
         }
 
@@ -1707,13 +1707,13 @@ export function setupPublicGalleryPageReordering() {
                 const draggedImageIds = draggedMoveImageIds.length > 0 ? draggedMoveImageIds : publicPhotoImageIdsFromItems(draggedItems);
                 cleanupDrag(false);
                 dispatchPublicPhotoMove(destinationGalleryId, draggedImageIds);
-                setStatus(`Moving ${draggedImageIds.length} photo${draggedImageIds.length === 1 ? '' : 's'} to gallery ${destinationGalleryId}...`, 'dragging');
+                setStatus(i18n('admin.gallery_list.moving_photos_to_gallery', 'Moving {count} photo(s) to gallery {gallery}...', {count: draggedImageIds.length, gallery: destinationGalleryId}), 'dragging');
                 return;
             }
             cleanupDrag(true);
             const nextSignature = currentSignature();
             if (nextSignature === originalSignature) {
-                setStatus('Order unchanged.', 'idle');
+                setStatus(i18n('admin.gallery_list.order_unchanged', 'Order unchanged.'), 'idle');
                 return;
             }
             saveOrder(currentOrder());
@@ -1730,7 +1730,7 @@ export function setupPublicGalleryPageReordering() {
             }
             event.preventDefault();
             cleanupDrag(false);
-            setStatus('Order unchanged.', 'idle');
+            setStatus(i18n('admin.gallery_list.order_unchanged', 'Order unchanged.'), 'idle');
         }
 
                 /**
@@ -1851,7 +1851,7 @@ export function setupPublicGalleryPageReordering() {
                 setPictureManagerTargetsActive(true);
             }
             const draggedStatusCount = kind === 'photo' && draggedMoveImageIds.length > draggedItems.length ? draggedMoveImageIds.length : draggedItems.length;
-            setStatus(draggedStatusCount > 1 ? `Dragging ${draggedStatusCount} selected photos...` : `Dragging visible ${kind === 'gallery' ? 'gallery' : 'photo'}...`, 'dragging');
+            setStatus(draggedStatusCount > 1 ? i18n('admin.gallery_list.dragging_selected_photos', 'Dragging {count} selected photos...', {count: draggedStatusCount}) : (kind === 'gallery' ? i18n('admin.gallery_list.dragging_visible_gallery', 'Dragging visible gallery...') : i18n('admin.gallery_list.dragging_visible_photo', 'Dragging visible photo...')), 'dragging');
             moveGhost(event.clientX, event.clientY);
             movePlaceholder(event.clientX, event.clientY);
 
@@ -1887,6 +1887,6 @@ export function setupPublicGalleryPageReordering() {
             });
         });
 
-        setStatus('Drag handles ready.', 'idle');
+        setStatus(i18n('admin.gallery_list.drag_handles_ready', 'Drag handles ready.'), 'idle');
     });
 }

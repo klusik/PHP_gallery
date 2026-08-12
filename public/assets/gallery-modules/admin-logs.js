@@ -30,6 +30,8 @@
  *   2026-05-12
  */
 
+import { i18n } from './admin-core.js?v=20260512-modular-admin-v1';
+
 // Function `setupAdminLogStatusForms` executes this focused behavior.
 /**
  * Handle setup admin log status forms.
@@ -124,7 +126,7 @@ function setupAdminLogGroupMembers(root = document) {
                 moreButton.disabled = true;
             }
             if (state) {
-                state.textContent = 'Loading instances...';
+                state.textContent = i18n('admin.logs.loading_instances', 'Loading instances...');
             }
 
             try {
@@ -138,7 +140,7 @@ function setupAdminLogGroupMembers(root = document) {
                 }
                 const result = await response.json();
                 if (!result.ok) {
-                    throw new Error(result.error || 'Unable to load grouped log instances.');
+                    throw new Error(result.error || i18n('admin.logs.load_instances_failed', 'Unable to load grouped log instances.'));
                 }
 
                 if (!loadedOnce) {
@@ -153,11 +155,11 @@ function setupAdminLogGroupMembers(root = document) {
                     moreButton.hidden = !result.has_more;
                 }
                 if (state) {
-                    state.textContent = result.state_text || `${nextOffset} raw instances loaded.`;
+                    state.textContent = result.state_text || i18n('admin.logs.instances_loaded', '{count} raw instances loaded.', {count: nextOffset});
                 }
             } catch {
                 if (state) {
-                    state.textContent = 'Unable to load grouped instances.';
+                    state.textContent = i18n('admin.logs.load_instances_failed', 'Unable to load grouped log instances.');
                 }
             } finally {
                 loading = false;
@@ -214,11 +216,11 @@ export function setupAdminLogLiveFilters() {
 
     // Variable `liveText` stores translated labels passed from the server-rendered form.
     const liveText = {
-        searching: form.dataset.adminLogSearchingText || 'Searching...',
-        updated: form.dataset.adminLogUpdatedText || 'Updated.',
-        failed: form.dataset.adminLogFailedText || 'Live search failed. Use Apply filters.',
+        searching: form.dataset.adminLogSearchingText || i18n('admin.logs.searching', 'Searching...'),
+        updated: form.dataset.adminLogUpdatedText || i18n('admin.logs.updated', 'Updated.'),
+        failed: form.dataset.adminLogFailedText || i18n('admin.logs.live_search_failed', 'Live search failed. Use Apply filters.'),
         shown: form.dataset.adminLogShownText || 'shown',
-        when: form.dataset.adminLogWhenText || 'When',
+        when: form.dataset.adminLogWhenText || i18n('admin.logs.when', 'When'),
     };
 
     // Function `setLiveState` writes compact search progress text for screen readers and admins.
@@ -270,10 +272,10 @@ export function setupAdminLogLiveFilters() {
             countBadge.classList.toggle('is-empty', checkedLabels.length === 0);
         }
         if (checkedLabels.length === 0) {
-            summary.textContent = severityField.dataset.allText || 'All severities are shown.';
+            summary.textContent = severityField.dataset.allText || i18n('admin.logs.severity_filter_all_summary', 'All severities are shown.');
             return;
         }
-        const template = severityField.dataset.activeTemplate || 'Active severities: {values}';
+        const template = severityField.dataset.activeTemplate || i18n('admin.logs.severity_filter_active_summary', 'Active severities: {values}');
         summary.textContent = template.replace('{values}', checkedLabels.join(', '));
     };
 

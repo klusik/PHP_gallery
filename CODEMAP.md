@@ -286,11 +286,17 @@ The Gallery tags Theme subsection is rendered by app/controllers/admin_theme.php
 
 | Task | Files |
 | --- | --- |
-| Language bootstrap | `app/services/translations.php` |
-| Czech JSON pack | `app/lang/cs.json` |
-| English JSON pack | `app/lang/en.json` |
-| PHP fallback packs | `app/lang/cs.php`, `app/lang/en.php` |
-| Public/admin language settings | `app/controllers/admin_theme.php`, `app/services/app_settings.php` |
+| Language bootstrap, discovery, fallback, diagnostics | `app/services/translations.php` |
+| Canonical English JSON pack | `app/lang/en.json` |
+| Complete maintained JSON packs | `app/lang/en.json`, `app/lang/cs.json`, `app/lang/de.json`, `app/lang/sv.json` |
+| Dormant future-language skeletons | `app/lang/no.json`, `app/lang/is.json`, `app/lang/da.json`, `app/lang/fr.json`, `app/lang/it.json`, `app/lang/es.json` |
+| PHP compatibility fallbacks | `app/lang/en.php`, `app/lang/cs.php`, `app/lang/de.php`, `app/lang/sv.php` |
+| Admin and public language selectors, pack editor | `app/controllers/admin_theme.php` |
+| Public language centralized setting | `app/services/admin_settings_registry.php`, `app/services/app_settings.php` |
+| Browser translation payload | `app/views/layout.php`, `app/controllers/theme_assets.php` |
+| Catalog regression coverage | `tests/translation_catalog_consistency_test.php` |
+
+English is the canonical default and fallback. English, Czech, German, and Swedish are the only selectable languages and their JSON catalogs remain key-for-key complete. Dormant future-language skeletons may contain validated subsets of English keys, but file discovery alone does not make them selectable.
 
 ## Database and Migrations
 
@@ -346,7 +352,7 @@ The Gallery tags Theme subsection is rendered by app/controllers/admin_theme.php
 2. Add or update the specialized page first.
 3. Register the global setting in `app/services/admin_settings_registry.php` as summary-only, with a stable ID and specialized route.
 4. Enable `central_editable` only when central save can delegate to the exact same service boundary and preserve all feature/schema guards and side effects.
-5. Add English/Czech PHP and JSON translation keys, navigation/rendering tests, and update `docs/ADMIN_SETTINGS_INVENTORY.md`.
+5. Add English, Czech, German, and Swedish PHP/JSON translation keys, navigation/rendering tests, and update `docs/ADMIN_SETTINGS_INVENTORY.md`.
 
 
 ### Add a database column

@@ -1101,24 +1101,24 @@ function render_gallery_access_gate(array $gallery, string $error = '', ?array $
         echo '<div class="notice">' . e($error) . '</div>';
     }
     if ($nsfwRequirement !== null && !visitor_can_access_nsfw_content()) {
-        echo '<p>This gallery or photo is marked as restricted 18+ content. Anonymous visitors must confirm they are at least 18 before access is granted for this browser session. If you are an administrator planning to publish NSFW content, please verify that your hosting provider or web hosting terms allow it before enabling access.</p>';
+        echo '<p>' . e(t('gallery.access.nsfw_gate_intro', 'This gallery or photo is marked as restricted 18+ content. Anonymous visitors must confirm they are at least 18 before access is granted for this browser session. If you are an administrator planning to publish NSFW content, please verify that your hosting provider or web hosting terms allow it before enabling access.')) . '</p>';
         echo '<form method="post" action="' . e(url_for('gallery_access')) . '" class="form-grid">' . csrf_field();
         echo '<input type="hidden" name="gallery_id" value="' . (int) $gallery['id'] . '">';
         if ($image !== null) {
             echo '<input type="hidden" name="image_id" value="' . (int) $image['id'] . '">';
         }
         echo '<input type="hidden" name="access_action" value="confirm_nsfw_age">';
-        echo '<label><input type="checkbox" name="adult_confirmed" value="1" required> I confirm that I am at least 18 years old.</label>';
-        echo '<button type="submit">Continue</button></form>';
+        echo '<label><input type="checkbox" name="adult_confirmed" value="1" required> ' . e(t('gallery.access.nsfw_confirm_label', 'I confirm that I am at least 18 years old.')) . '</label>';
+        echo '<button type="submit">' . e(t('common.continue', 'Continue')) . '</button></form>';
     } elseif (empty($requirement['access_password_hash'])) {
-        echo '<p>This gallery is available only through its share link.</p>';
+        echo '<p>' . e(t('gallery.access.share_link_only', 'This gallery is available only through its share link.')) . '</p>';
     } else {
-        echo '<p>This gallery is password protected. Access closes after ' . (int) (gallery_access_lifetime_seconds() / 60) . ' minutes of session time.</p>';
+        echo '<p>' . e(t('gallery.access.password_protected_duration', 'This gallery is password protected. Access closes after {minutes} minutes of session time.', ['minutes' => (string) (int) (gallery_access_lifetime_seconds() / 60)])) . '</p>';
         echo '<form method="post" action="' . e(url_for('gallery_access')) . '" class="form-grid">' . csrf_field();
         echo '<input type="hidden" name="gallery_id" value="' . (int) $gallery['id'] . '">';
         echo '<input type="hidden" name="requirement_id" value="' . (int) $requirement['id'] . '">';
-        echo '<label>Password<input name="gallery_password" type="password" required autocomplete="current-password"></label>';
-        echo '<button type="submit">Open gallery</button></form>';
+        echo '<label>' . e(t('common.password', 'Password')) . '<input name="gallery_password" type="password" required autocomplete="current-password"></label>';
+        echo '<button type="submit">' . e(t('gallery.access.open_gallery', 'Open gallery')) . '</button></form>';
     }
     echo '</section>';
     render_footer();

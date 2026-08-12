@@ -64,7 +64,7 @@ function cms_site_maintenance_cron(): void
 
     if (!site_maintenance_token_is_valid($token)) {
         http_response_code(403);
-        echo json_encode(['ok' => false, 'error' => 'Invalid maintenance token.'], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        echo json_encode(['ok' => false, 'error' => t('site_maintenance.invalid_token', 'Invalid maintenance token.') ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
         return;
     }
 

@@ -45,6 +45,7 @@ use function Gallery\Services\admin_settings_section_normalize;
 use function Gallery\Services\admin_settings_sections;
 use function Gallery\Services\admin_settings_url;
 use function Gallery\Services\t;
+use function Gallery\Services\translation_load_language;
 
 /**
  * Render the centralized Admin Settings page.
@@ -316,6 +317,13 @@ function view_admin_settings_option_label(string $id, string $value): string
         return $value === 'progressive'
             ? t('admin.settings.thumbnail.progressive', 'Progressive')
             : t('admin.settings.thumbnail.responsive', 'Responsive');
+    }
+    if ($id === 'public_language') {
+        // $languageStrings stores pack metadata so the central selector matches the Theme language selector.
+        $languageStrings = translation_load_language($value);
+        // $languageName stores the native human-readable name declared by the language pack.
+        $languageName = trim((string) ($languageStrings['_language_name'] ?? ''));
+        return $languageName !== '' ? $languageName . ' (' . $value . ')' : strtoupper($value);
     }
     return strtoupper($value);
 }

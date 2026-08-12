@@ -284,11 +284,11 @@ async function runThumbnailMaintenanceCheck(form) {
                 headers: {'Accept': 'application/json'},
             });
             if (!response.ok) {
-                throw new Error('Thumbnail check request failed.');
+                throw new Error(i18n('admin.thumbnails.check_request_failed', 'Thumbnail check request failed.'));
             }
             const result = await response.json();
             if (!result.ok) {
-                throw new Error(result.error || 'Thumbnail check request failed.');
+                throw new Error(result.error || i18n('admin.thumbnails.check_request_failed', 'Thumbnail check request failed.'));
             }
 
             jobToken = result.job_token || jobToken;
@@ -381,11 +381,11 @@ async function runLegacyJpegThumbnailCleanup(form) {
                 headers: {'Accept': 'application/json'},
             });
             if (!response.ok) {
-                throw new Error('Legacy JPG cleanup request failed.');
+                throw new Error(i18n('admin.thumbnails.legacy_cleanup_request_failed', 'Legacy JPG cleanup request failed.'));
             }
             const result = await response.json();
             if (!result.ok) {
-                throw new Error(result.error || 'Legacy JPG cleanup request failed.');
+                throw new Error(result.error || i18n('admin.thumbnails.legacy_cleanup_request_failed', 'Legacy JPG cleanup request failed.'));
             }
             total = result.total || 0;
             offset = result.next_offset || 0;
@@ -470,12 +470,12 @@ async function runImportWithThumbnailProgress(form) {
             headers: {'Accept': 'application/json'},
         });
         if (!importResponse.ok) {
-            throw new Error('Import request failed.');
+            throw new Error(i18n('admin.thumbnails.import_request_failed', 'Import request failed.'));
         }
         // importResult stores state or configuration for the gallery front-end flow.
         const importResult = await importResponse.json();
         if (importResult.ok === false) {
-            throw new Error(importResult.error || importResult.message || 'Import request failed.');
+            throw new Error(importResult.error || importResult.message || i18n('admin.thumbnails.import_request_failed', 'Import request failed.'));
         }
         // galleryIds stores state or configuration for the gallery front-end flow.
         const galleryIds = Array.isArray(importResult.gallery_ids) ? importResult.gallery_ids : [];
@@ -512,12 +512,12 @@ async function runImportWithThumbnailProgress(form) {
                 headers: {'Accept': 'application/json'},
             });
             if (!response.ok) {
-                throw new Error('Thumbnail request failed.');
+                throw new Error(i18n('admin.thumbnails.request_failed', 'Thumbnail request failed.'));
             }
             // result stores state or configuration for the gallery front-end flow.
             const result = await response.json();
             if (result.ok === false) {
-                throw new Error(result.error || 'Thumbnail request failed.');
+                throw new Error(result.error || i18n('admin.thumbnails.request_failed', 'Thumbnail request failed.'));
             }
             total = result.total || 0;
             offset = result.next_offset || 0;
@@ -633,12 +633,12 @@ async function runThumbnailJob(form, submitter, options = {}) {
                 headers: {'Accept': 'application/json'},
             });
             if (!response.ok) {
-                throw new Error('Thumbnail request failed.');
+                throw new Error(i18n('admin.thumbnails.request_failed', 'Thumbnail request failed.'));
             }
             // Variable `result` stores this steps working value.
             const result = await response.json();
             if (result.ok === false) {
-                throw new Error(result.error || 'Thumbnail request failed.');
+                throw new Error(result.error || i18n('admin.thumbnails.request_failed', 'Thumbnail request failed.'));
             }
             total = result.total || 0;
             offset = result.next_offset || 0;

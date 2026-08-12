@@ -30,6 +30,8 @@
  *   2026-06-08
  */
 
+import { i18n } from './admin-core.js?v=20260512-modular-admin-v1';
+
 const legacyAdminTabHashes = new Map([
     ['#admin-galleries', '#admin-tab-galleries'],
     ['#admin-ordering', '#admin-tab-galleries'],
@@ -112,7 +114,7 @@ async function loadDeferredAdminPanel(panel) {
         panel.dataset.adminPanelLoaded = '1';
         setupAdminTabsInRoot(panel);
     } catch (error) {
-        placeholder.textContent = 'Unable to load maintenance tools. Please reload the page.';
+        placeholder.textContent = i18n('admin.dashboard.maintenance_load_failed', 'Unable to load maintenance tools. Please reload the page.');
         placeholder.classList.add('error');
     } finally {
         delete panel.dataset.adminPanelLoading;

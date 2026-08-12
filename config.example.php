@@ -79,12 +79,13 @@ return [
         'cache_ttl_seconds' => 2592000,
     ],
 
-    // Language configuration is intentionally small for the first localization
-    // foundation. Add app/lang/<code>.json files and list their codes here.
-    // Legacy app/lang/<code>.php files are still accepted as fallback dictionaries.
+    // English is the canonical source and fallback language. English, Czech,
+    // German, and Swedish are the currently maintained selectable languages.
+    // Other app/lang files may exist as dormant future packs, but their presence
+    // does not make them selectable. PHP files are used only when JSON is absent.
     'language' => [
         'default' => 'en',
-        'available' => ['en', 'cs'],
+        'available' => ['en', 'cs', 'de', 'sv'],
         'show_missing_keys_to_admins' => false,
         'append_missing_keys_to_ui' => false,
     ],

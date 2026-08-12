@@ -133,6 +133,7 @@ use function Gallery\Services\translation_language_pack_json_text;
 use function Gallery\Services\translation_missing_diagnostics;
 use function Gallery\Services\translation_normalize_language_code;
 use function Gallery\Services\translation_public_language;
+use function Gallery\Services\translation_supported_languages;
 use function Gallery\Services\translation_save_language_json;
 use function Gallery\Services\translation_set_active_language;
 use function Gallery\Services\translation_set_public_language;
@@ -910,7 +911,7 @@ function cms_admin_theme(): void
         echo '<span class="admin-theme-description-card-copy"><strong>' . e(gallery_description_layout_label($descriptionLayoutOption)) . '</strong><span>' . e($isHorizontalPreview ? t('admin.theme.layout.description_layout_horizontal_summary', 'Image first, then a compact story card below it.') : t('admin.theme.layout.description_layout_vertical_summary', 'Image and text side by side, close to the classic gallery look.')) . '</span></span>';
         echo '<span class="admin-theme-description-card-preview is-' . e($descriptionLayoutOption) . '" aria-hidden="true">';
         echo '<span class="admin-theme-description-media"><span></span></span>';
-        echo '<span class="admin-theme-description-body"><span class="admin-theme-description-title">' . e(t('admin.theme.layout.description_preview_title', 'Summer gallery')) . '</span><span class="admin-theme-description-meta">' . e(t('admin.theme.layout.description_preview_meta', '12 photos')) . '</span><span class="admin-theme-description-tags"><i>travel</i><i>family</i><i>2026</i></span><span class="admin-theme-description-line is-wide"></span><span class="admin-theme-description-line"></span></span>';
+        echo '<span class="admin-theme-description-body"><span class="admin-theme-description-title">' . e(t('admin.theme.layout.description_preview_title', 'Summer gallery')) . '</span><span class="admin-theme-description-meta">' . e(t('admin.theme.layout.description_preview_meta', '12 photos')) . '</span><span class="admin-theme-description-tags"><i>' . e(t('admin.theme.layout.description_preview_tag_travel', 'travel')) . '</i><i>' . e(t('admin.theme.layout.description_preview_tag_family', 'family')) . '</i><i>2026</i></span><span class="admin-theme-description-line is-wide"></span><span class="admin-theme-description-line"></span></span>';
         echo '</span>';
         echo '</button>';
     }
@@ -967,8 +968,13 @@ function cms_admin_theme(): void
     render_admin_tab_panel('admin-theme-tab-layout', $layoutHtml, false);
 
     ob_start();
-    // $languagePacks stores language files detected from the app/lang directory.
-    $languagePacks = translation_detected_language_packs();
+    // $supportedLanguages stores the language codes currently exposed to Admin and public selectors.
+    $supportedLanguages = translation_supported_languages();
+    // $languagePacks stores only detected packs that are currently selectable.
+    $languagePacks = array_values(array_filter(
+        translation_detected_language_packs(),
+        static fn (array $pack): bool => in_array((string) ($pack['code'] ?? ''), $supportedLanguages, true)
+    ));
     // $adminLanguage stores the language selected for the admin interface.
     $adminLanguage = translation_admin_language();
     // $publicLanguage stores the saved default language for anonymous public visitors.
@@ -1045,9 +1051,10 @@ function cms_admin_theme(): void
     }
     echo '</select><span class="muted">' . e(t('admin.theme.language.public_hint', 'Saved globally. Anonymous users and public gallery pages use this language by default.')) . '</span></label>';
     echo '<p class="muted"><strong>' . e(t('admin.theme.language.default_label', 'Default language')) . ':</strong> ' . e($defaultLanguage) . '</p>';
+    echo '<p class="muted">' . e(t('admin.theme.language.fallback_note', 'English is the source and fallback language. English, Czech, German, and Swedish are the maintained selectable catalogs and are expected to stay complete; fallback protects against accidental gaps.')) . '</p>';
     echo '</fieldset>';
-    echo '<fieldset class="form-grid admin-language-packs"><legend>' . e(t('admin.theme.language.detected_legend', 'Detected language packs')) . '</legend>';
-    echo '<p class="muted">' . e(t('admin.theme.language.detected_hint', 'Language packs are loaded from app/lang/*.json first. Legacy app/lang/*.php files still work as fallback.')) . '</p>';
+    echo '<fieldset class="form-grid admin-language-packs"><legend>' . e(t('admin.theme.language.detected_legend', 'Supported language packs')) . '</legend>';
+    echo '<p class="muted">' . e(t('admin.theme.language.detected_hint', 'Supported language packs are loaded from app/lang/*.json first. Additional dormant files do not become selectable automatically. Legacy app/lang/*.php files still work as fallback.')) . '</p>';
     echo '<div class="admin-language-table-wrap"><table class="admin-table admin-language-table"><thead><tr><th>' . e(t('admin.theme.language.pack_language', 'Language')) . '</th><th>' . e(t('admin.theme.language.pack_code', 'Code')) . '</th><th>' . e(t('admin.theme.language.pack_format', 'Format')) . '</th><th>' . e(t('admin.theme.language.pack_strings', 'Strings')) . '</th><th>' . e(t('admin.theme.language.coverage', 'Coverage')) . '</th><th>' . e(t('admin.theme.language.pack_status', 'Status')) . '</th></tr></thead><tbody>';
     foreach ($languagePacks as $languagePack) {
         // $hasJson stores whether the editable JSON dictionary exists.
@@ -1060,8 +1067,18 @@ function cms_admin_theme(): void
         $packCoverage = translation_language_coverage($packCode);
         // $formatLabel stores the display label for available dictionary files.
         $formatLabel = $hasJson && $hasPhp ? t('admin.theme.language.format_mixed', 'JSON + PHP fallback') : ($hasJson ? t('admin.theme.language.format_json', 'JSON') : t('admin.theme.language.format_php', 'PHP fallback'));
-        // $statusLabel stores whether the language dictionary loaded at least one key.
-        $statusLabel = !empty($languagePack['loaded']) ? t('admin.theme.language.status_loaded', 'Loaded') : t('admin.theme.language.status_empty', 'Empty or invalid');
+        // $statusLabel stores translation maturity without pretending that a skeleton pack is complete.
+        if (empty($languagePack['loaded'])) {
+            $statusLabel = t('admin.theme.language.status_empty', 'Empty or invalid');
+        } elseif ($packCode === $defaultLanguage) {
+            $statusLabel = t('admin.theme.language.status_source', 'Source / default');
+        } elseif ((int) ($packCoverage['missing_count'] ?? 0) === 0) {
+            $statusLabel = t('admin.theme.language.status_complete', 'Complete');
+        } elseif ((int) ($packCoverage['translated_count'] ?? 0) === 0) {
+            $statusLabel = t('admin.theme.language.status_skeleton', 'Skeleton, fallback: {language}', ['language' => strtoupper($defaultLanguage)]);
+        } else {
+            $statusLabel = t('admin.theme.language.status_partial', 'Partial, fallback: {language}', ['language' => strtoupper($defaultLanguage)]);
+        }
         echo '<tr><td>' . e((string) ($languagePack['name'] ?? '')) . '</td><td><code>' . e($packCode) . '</code></td><td>' . e($formatLabel) . '</td><td>' . (int) ($languagePack['string_count'] ?? 0) . '</td><td>' . e(t('admin.theme.language.coverage_ratio', '{translated} / {total}', ['translated' => (int) $packCoverage['translated_count'], 'total' => (int) $packCoverage['default_count']])) . '</td><td>' . e($statusLabel) . '</td></tr>';
     }
     echo '</tbody></table></div></fieldset>';

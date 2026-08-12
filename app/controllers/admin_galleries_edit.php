@@ -1567,7 +1567,7 @@ function cms_admin_edit_gallery(): void
         }
         echo '<div class="admin-edit-card"><label>' . e(t('admin.gallery_editor.password_lock', 'Password lock')) . '<select name="access_type"><option value="normal"' . ($currentAccessType === 'normal' ? ' selected' : '') . '>' . e(t('admin.gallery_editor.no_password', 'No password')) . '</option><option value="password"' . ($currentAccessType === 'password' ? ' selected' : '') . '>' . e(t('admin.gallery_editor.require_password', 'Require password')) . '</option></select><span class="muted">' . e(t('admin.gallery_editor.password_lock_help', 'Password locking is independent of public, unpublished, or private visibility.')) . '</span></label><label>' . e(t('admin.gallery_editor.new_gallery_password', 'New gallery password')) . '<input name="access_password" type="password" autocomplete="new-password"><span class="muted">' . e(t('admin.gallery_editor.keep_password_help', 'Leave empty to keep the current gallery password.')) . '</span></label>';
         if (!empty($gallery['access_password_hash'])) {
-            echo '<label class="checkbox-label"><input type="checkbox" name="clear_access_password" value="1"> Clear current gallery password</label>';
+            echo '<label class="checkbox-label"><input type="checkbox" name="clear_access_password" value="1"> ' . e(t('admin.gallery_editor.clear_password', 'Clear current gallery password')) . '</label>';
         }
         echo '</div>';
         echo '<div class="admin-edit-card is-wide"><label>' . e(t('admin.gallery_editor.share_link_expiry', 'Share link expiry')) . '<input name="access_token_expires_at" type="datetime-local" value="' . e(!empty($gallery['access_token_expires_at']) ? date('Y-m-d\TH:i', strtotime((string) $gallery['access_token_expires_at'])) : '') . '"><span class="muted">' . e(t('admin.gallery_editor.non_expiring_link_help', 'Leave empty for a non-expiring generated link.')) . '</span></label>';
@@ -1575,12 +1575,15 @@ function cms_admin_edit_gallery(): void
         $visibleShareToken = $newShareToken !== '' ? $newShareToken : gallery_share_token_for_admin($gallery);
         if ($visibleShareToken !== null && $visibleShareToken !== '') {
             // $shareLabel stores an intermediate value used by the surrounding gallery workflow.
-            $shareLabel = $newShareToken !== '' ? 'Generated share link' : 'Active share link';
+            $shareLabel = $newShareToken !== '' ? t('admin.gallery_editor.generated_share_link', 'Generated share link') : t('admin.gallery_editor.active_share_link', 'Active share link');
             echo '<label>' . $shareLabel . '<input readonly value="' . e(gallery_share_url((int) $gallery['id'], $visibleShareToken)) . '"></label>';
         } elseif (!empty($gallery['access_token_hash'])) {
-            echo '<p class="muted">A share link is active' . (!empty($gallery['access_token_expires_at']) ? ' until ' . e((string) $gallery['access_token_expires_at']) : ' with no expiry') . ', but the original token cannot be displayed because it is stored as hash-only or cannot be decrypted on this server. Regenerate the link once to make a new copyable link visible here.</p>';
+            $shareExpiry = !empty($gallery['access_token_expires_at'])
+                ? t('admin.gallery_editor.share_link_until', 'until {time}', ['time' => (string) $gallery['access_token_expires_at']])
+                : t('admin.gallery_editor.share_link_no_expiry', 'with no expiry');
+            echo '<p class="muted">' . e(t('admin.gallery_editor.share_link_hidden_token', 'A share link is active {expiry}, but the original token cannot be displayed because it is stored as hash-only or cannot be decrypted on this server. Regenerate the link once to make a new copyable link visible here.', ['expiry' => $shareExpiry])) . '</p>';
         } else {
-            echo '<p class="muted">No share link is active.</p>';
+            echo '<p class="muted">' . e(t('admin.gallery_editor.no_active_share_link', 'No share link is active.')) . '</p>';
         }
         echo '<div class="bulk-row"><button type="submit" class="secondary" name="access_action" value="generate_link">' . e(t('admin.gallery_editor.generate_regenerate_share_link', 'Generate/regenerate share link')) . '</button><button type="submit" class="secondary" name="access_action" value="revoke_link">' . e(t('admin.gallery_editor.revoke_share_link', 'Revoke share link')) . '</button></div><p class="muted">' . e(t('admin.gallery_editor.share_link_help', 'Generated direct links use the existing hash-token path. They remain useful for private galleries without making them appear in listings.')) . '</p></div>';
     } else {
@@ -1923,12 +1926,12 @@ function render_admin_image_bulk_toolbar(array $gallery): void
 function render_admin_gallery_branding_fields(array $gallery): void
 {
     if (!gallery_branding_schema_ready()) {
-        echo '<p class="muted">Gallery branding assets will be available after the branding migration is applied.</p>';
+        echo '<p class="muted">' . e(t('admin.gallery_editor.branding_migration_required', 'Gallery branding assets will be available after the branding migration is applied.')) . '</p>';
         return;
     }
 
     echo '<fieldset class="form-grid admin-branding-assets"><legend>' . e(t('admin.gallery_editor.gallery_branding', 'Gallery branding')) . '</legend>';
-    echo '<p class="muted">All branding images are optional. Existing galleries render exactly as before until one of these assets is uploaded.</p>';
+    echo '<p class="muted">' . e(t('admin.gallery_editor.branding_optional_help', 'All branding images are optional. Existing galleries render exactly as before until one of these assets is uploaded.')) . '</p>';
     foreach (gallery_branding_asset_types() as $kind => $definition) {
         // $label stores the user-facing asset label.
         $label = (string) $definition['label'];
@@ -1939,11 +1942,11 @@ function render_admin_gallery_branding_fields(array $gallery): void
         echo '<div class="admin-branding-asset">';
         echo '<div class="admin-branding-copy"><strong>' . e($label) . '</strong><span class="muted">' . e($description) . '</span></div>';
         if ($assetUrl !== '') {
-            echo '<div class="admin-branding-current"><img class="admin-branding-preview admin-branding-preview-' . e((string) $kind) . '" src="' . e($assetUrl) . '" alt=""><label class="checkbox-label"><input type="checkbox" name="remove_branding_' . e((string) $kind) . '" value="1"> Remove current ' . e(strtolower($label)) . '</label></div>';
+            echo '<div class="admin-branding-current"><img class="admin-branding-preview admin-branding-preview-' . e((string) $kind) . '" src="' . e($assetUrl) . '" alt=""><label class="checkbox-label"><input type="checkbox" name="remove_branding_' . e((string) $kind) . '" value="1"> ' . e(t('admin.gallery_editor.branding_remove_current', 'Remove current {asset}', ['asset' => strtolower($label)])) . '</label></div>';
         } else {
-            echo '<p class="muted">No ' . e(strtolower($label)) . ' is configured.</p>';
+            echo '<p class="muted">' . e(t('admin.gallery_editor.branding_not_configured', 'No {asset} is configured.', ['asset' => strtolower($label)])) . '</p>';
         }
-        echo '<label>Upload or replace ' . e(strtolower($label)) . '<input type="file" name="branding_' . e((string) $kind) . '_upload" accept="image/jpeg,image/png,image/gif,image/webp"><span class="muted">Accepted formats: JPG, PNG, GIF, WebP. Maximum size: 8 MB.</span></label>';
+        echo '<label>' . e(t('admin.gallery_editor.branding_upload_replace', 'Upload or replace {asset}', ['asset' => strtolower($label)])) . '<input type="file" name="branding_' . e((string) $kind) . '_upload" accept="image/jpeg,image/png,image/gif,image/webp"><span class="muted">' . e(t('admin.gallery_editor.branding_formats_help', 'Accepted formats: JPG, PNG, GIF, WebP. Maximum size: 8 MB.')) . '</span></label>';
         echo '</div>';
     }
     echo '</fieldset>';

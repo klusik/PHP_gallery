@@ -357,7 +357,7 @@ export function setupAdminGallerySidePanel() {
         if (source === 'gallery-image-bulk') {
             reflectGalleryImageBulkInCurrentView(result);
             if (panel instanceof HTMLElement && shouldKeepPanelOpen) {
-                writeAdminGallerySidePanelStatus(panel, String(result.message || 'Gallery title picture saved.'), false);
+                writeAdminGallerySidePanelStatus(panel, String(result.message || i18n('admin.side_panel.title_picture_saved', 'Gallery title picture saved.')), false);
             }
             return;
         }
@@ -375,7 +375,7 @@ export function setupAdminGallerySidePanel() {
         }
         if (source === 'upload') {
             if (panel instanceof HTMLElement) {
-                writeAdminGallerySidePanelStatus(panel, String(result.message || 'Upload complete.'), false);
+                writeAdminGallerySidePanelStatus(panel, String(result.message || i18n('admin.side_panel.upload_complete', 'Upload complete.')), false);
             }
             reflectUploadedGalleryInCurrentView(result);
             return;
@@ -444,8 +444,8 @@ function sidePanelWorkflowFromLink(link) {
     if (name === 'gallery-edit') {
         return {
             name,
-            kicker: link.dataset.adminSidePanelKicker || 'Gallery editor',
-            title: link.dataset.adminSidePanelTitle || 'Edit gallery',
+            kicker: link.dataset.adminSidePanelKicker || i18n('admin.side_panel.gallery_editor_kicker', 'Gallery editor'),
+            title: link.dataset.adminSidePanelTitle || i18n('admin.side_panel.edit_gallery', 'Edit gallery'),
             loadingMessage: 'Loading gallery editor...',
             loadErrorMessage: 'The gallery editor could not be loaded.',
         };
@@ -453,8 +453,8 @@ function sidePanelWorkflowFromLink(link) {
         if (name === 'image-edit') {
             return {
                 name,
-                kicker: link.dataset.adminSidePanelKicker || 'Photo editor',
-                title: link.dataset.adminSidePanelTitle || 'Edit photo',
+                kicker: link.dataset.adminSidePanelKicker || i18n('admin.side_panel.photo_editor_kicker', 'Photo editor'),
+                title: link.dataset.adminSidePanelTitle || i18n('admin.side_panel.edit_photo', 'Edit photo'),
                 loadingMessage: 'Loading photo editor...',
                 loadErrorMessage: 'The photo editor could not be loaded.',
             };
@@ -462,8 +462,8 @@ function sidePanelWorkflowFromLink(link) {
         if (name === 'tag-edit') {
             return {
                 name,
-                kicker: link.dataset.adminSidePanelKicker || 'Tag editor',
-                title: link.dataset.adminSidePanelTitle || 'Edit tag',
+                kicker: link.dataset.adminSidePanelKicker || i18n('admin.side_panel.tag_editor_kicker', 'Tag editor'),
+                title: link.dataset.adminSidePanelTitle || i18n('admin.side_panel.edit_tag', 'Edit tag'),
                 loadingMessage: 'Loading tag editor...',
                 loadErrorMessage: 'The tag editor could not be loaded.',
             };
@@ -471,8 +471,8 @@ function sidePanelWorkflowFromLink(link) {
         if (name === 'upload') {
             return {
                 name,
-                kicker: link.dataset.adminSidePanelKicker || 'Upload workflow',
-                title: link.dataset.adminSidePanelTitle || 'Upload photos',
+                kicker: link.dataset.adminSidePanelKicker || i18n('admin.side_panel.upload_workflow_kicker', 'Upload workflow'),
+                title: link.dataset.adminSidePanelTitle || i18n('admin.side_panel.upload_photos', 'Upload photos'),
                 loadingMessage: 'Loading upload workflow...',
                 loadErrorMessage: 'The upload workflow could not be loaded.',
             };
@@ -488,8 +488,8 @@ function sidePanelWorkflowFromLink(link) {
         }
         return {
             name: 'create',
-            kicker: link.dataset.adminSidePanelKicker || 'Admin shortcut',
-            title: link.dataset.adminSidePanelTitle || 'Add gallery here',
+            kicker: link.dataset.adminSidePanelKicker || i18n('admin.side_panel.admin_shortcut_kicker', 'Admin shortcut'),
+            title: link.dataset.adminSidePanelTitle || i18n('admin.side_panel.add_gallery_here', 'Add gallery here'),
             loadingMessage: 'Loading gallery workflow...',
         loadErrorMessage: 'The gallery workflow could not be loaded.',
     };
@@ -872,7 +872,7 @@ async function submitAdminGalleryPanelCreateForm(form) {
         });
         const result = await readJsonResponseSafely(response, 'Gallery creation failed.');
         if (!response.ok || !result.ok) {
-            throw new Error(result.error || 'Gallery creation failed.');
+            throw new Error(result.error || i18n('admin.side_panel.gallery_creation_failed', 'Gallery creation failed.'));
         }
         form.dispatchEvent(new CustomEvent('php-gallery:side-panel-success', {
             bubbles: true,
@@ -882,7 +882,7 @@ async function submitAdminGalleryPanelCreateForm(form) {
             },
         }));
     } catch (error) {
-        writeAdminGallerySidePanelStatus(panel, error.message || 'Gallery creation failed.', true);
+        writeAdminGallerySidePanelStatus(panel, error.message || i18n('admin.side_panel.gallery_creation_failed', 'Gallery creation failed.'), true);
     } finally {
         buttons.forEach((button) => {
             button.disabled = false;
@@ -1201,7 +1201,7 @@ async function reflectSavedTagInCurrentView(result) {
     const publicUrl = String(result.public_url || '');
     const editUrl = String(result.edit_url || '');
     if (panel instanceof HTMLElement) {
-        writeAdminGallerySidePanelStatus(panel, String(result.message || 'Tag saved.'), false);
+        writeAdminGallerySidePanelStatus(panel, String(result.message || i18n('admin.tags.saved', 'Tag saved.')), false);
         if (editUrl !== '') {
             panel.dataset.adminSidePanelSourceUrl = editUrl;
             await refreshAdminSidePanelFromServer(editUrl);
@@ -1212,7 +1212,7 @@ async function reflectSavedTagInCurrentView(result) {
             window.history.replaceState({}, '', publicUrl);
             await refreshCurrentGalleryContextFromServer(publicUrl);
         } else {
-            showAdminGallerySidePanelResultNotice(String(result.message || 'Tag saved.'), publicUrl);
+            showAdminGallerySidePanelResultNotice(String(result.message || i18n('admin.tags.saved', 'Tag saved.')), publicUrl);
         }
     }
 }
@@ -1226,7 +1226,7 @@ async function reflectSavedTagInCurrentView(result) {
  * @return {Promise<void>} Resolves after the visible gallery state is refreshed.
  */
 async function reflectSavedGalleryInCurrentView(result) {
-    const galleryTitle = String(result.gallery_title || 'Gallery');
+    const galleryTitle = String(result.gallery_title || i18n('admin.gallery_list.gallery_fallback', 'Gallery'));
     await refreshAdminSidePanelFromServer(String(result.edit_url || ''));
     const refreshed = await refreshCurrentGalleryContextFromServer('');
     if (!refreshed) {
@@ -1254,7 +1254,7 @@ async function reflectSavedImageInCurrentView(result) {
     // Refreshing from the bare gallery URL would silently redraw page one.
     // Using the current browser URL preserves pagination, filters, and hash state.
     await refreshCurrentGalleryContextFromServer(currentVisiblePageRefreshUrl());
-    showAdminGallerySidePanelResultNotice(String(result.message || 'Photo saved.'), String(result.image_url || ''));
+    showAdminGallerySidePanelResultNotice(String(result.message || i18n('admin.side_panel.photo_saved', 'Photo saved.')), String(result.image_url || ''));
 }
 
 /**
@@ -1488,7 +1488,7 @@ async function switchAdminSidePanelToGalleryEditor(result) {
     panel.dataset.adminSidePanelWorkflow = 'gallery-edit';
     panel.dataset.adminSidePanelSourceUrl = editUrl;
     panel.classList.add('is-edit-panel');
-    setAdminGallerySidePanelHeading(panel, 'Gallery editor', String(result.gallery_title || 'Edit gallery'));
+    setAdminGallerySidePanelHeading(panel, i18n('admin.side_panel.gallery_editor_kicker', 'Gallery editor'), String(result.gallery_title || i18n('admin.side_panel.edit_gallery', 'Edit gallery')));
     writeAdminGallerySidePanelStatus(panel, 'Loading gallery editor...', false);
     const refreshed = await refreshAdminSidePanelFromServer(editUrl);
     writeAdminGallerySidePanelStatus(panel, '', false);
@@ -1506,7 +1506,7 @@ async function switchAdminSidePanelToGalleryEditor(result) {
  */
 async function reflectCreatedGalleryInCurrentView(result) {
     const galleryUrl = String(result.gallery_url || '');
-    const galleryTitle = String(result.gallery_title || 'New gallery');
+    const galleryTitle = String(result.gallery_title || i18n('admin.side_panel.new_gallery', 'New gallery'));
     const galleryId = String(result.gallery_id || '');
     const refreshUrl = String(result.refresh_url || result.parent_gallery_url || '');
     if (!galleryUrl) {

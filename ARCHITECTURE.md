@@ -101,6 +101,21 @@ app/integrity.php
 app/controllers.php
 ```
 
+
+## Localization Model
+
+`app/services/translations.php` owns language normalization, pack discovery, request bootstrap, Admin/public language persistence, JSON editing support, key fallback, interpolation, and missing-key diagnostics.
+
+English (`en`) is the canonical source, configured default, and runtime fallback. English, Czech (`cs`), German (`de`), and Swedish (`sv`) are the maintained selectable languages and their JSON catalogs are kept key-for-key complete. Other `app/lang` JSON skeletons may remain in the repository for future work, but pack discovery does not grant selectability. The selectable-language allowlist is intentionally limited to `en`, `cs`, `de`, and `sv`; missing keys still resolve from English defensively.
+
+The two UI language contexts are intentionally separate. Admin routes resolve `translation_admin_language()` from the Admin session and Admin language cookie. Public routes resolve the saved `public_language` application setting, then allow a supported `?lang=<code>` request override that is remembered in the public-language cookie. `translation_bootstrap_request()` records the request context and `translation_active_language()` selects the appropriate language without coupling the two preferences.
+
+The maintained catalog format is `app/lang/<code>.json`. `translation_load_language()` prefers JSON and loads a legacy PHP dictionary only when the JSON file is absent. The `en.php`, `cs.php`, `de.php`, and `sv.php` dictionaries therefore exist only for compatibility and are not the canonical catalogs.
+
+Server-side `t()` lookup order is active JSON/PHP pack, configured default English pack, provided inline English fallback, then the key itself. Browser modules receive the same semantics through `view_cms_browser_i18n_strings()`, which merges default English strings with the active pack before emitting the cacheable browser i18n asset. Placeholder interpolation uses stable `{name}` tokens, and translated values must preserve the same placeholder names as English.
+
+The Theme > Language page intersects detected packs with `translation_supported_languages()` before building the `cms_language`, `public_language`, and pack-editor selectors. This prevents dormant future packs from becoming selectable just because a file exists. The page reports coverage relative to English. JSON pack edit/import/export stays on that specialized page for the four supported languages. Missing-key diagnostics are collected for authenticated administrators and can be cleared from the same UI.
+
 ## Routing Model
 
 Routing is intentionally simple. `cms_route_from_request()` converts the incoming request into a page name and parameter list. `cms_run()` maps the page name to a controller function.

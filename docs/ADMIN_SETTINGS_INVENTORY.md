@@ -37,7 +37,7 @@ The Settings work audited the requested sources and their effective owners:
 | Canonical key | Owner / current Admin location | Type and accepted values | Default and invalid/missing fallback | Side effects / migration | Central | Specialized link | Sensitivity |
 |---|---|---|---|---|---|---|---|
 | `site_name` | `app_settings.php`; Theme | string, trimmed and clamped to 120 chars | `Gallery CMS`; empty central submission falls back to default | no revision; no migration | Edit | Theme Appearance | normal |
-| `public_language` | `translations.php`; Theme Language | installed/allowed language code such as `en`, `cs` | `en`; unsupported values rejected by canonical language validation | no revision; no migration | Edit | Theme Language | normal |
+| `public_language` | `translations.php`; Theme Language | installed/allowed language code: `en`, `cs`, `de`, `sv`, `no`, `is`, `da`, `fr`, `it`, `es`, plus future detected packs | `en`; unsupported values rejected by canonical language validation; missing optional-pack keys fall back to English | no revision; no migration | Edit | Theme Language | normal |
 | `url_rewrite_enabled` | `app_settings.php`; Dashboard Maintenance | boolean `0/1` | `1`; generated URLs use non-rewrite fallbacks where compatibility requires | no revision; no migration | Edit | Dashboard Maintenance | operational |
 | `public_home_search_enabled` | `public_search.php`; Dashboard Maintenance | boolean `0/1` | `0`; feature flag can force effective disabled | no revision; no migration | Edit only while feature is available | Dashboard Maintenance | normal |
 

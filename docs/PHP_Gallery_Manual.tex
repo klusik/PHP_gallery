@@ -50,7 +50,7 @@
 
 % Edition metadata lives here so a release update requires one version edit.
 \newcommand{\version}{0.87.1}
-\newcommand{\manualdate}{11 August 2026}
+\newcommand{\manualdate}{12 August 2026}
 
 \hypersetup{
   colorlinks=true,
@@ -1005,7 +1005,73 @@ Recommended practices include:
 
 The Theme area controls site identity, colors, dimensions, page width, backgrounds, branding, language, gallery-card presentation, lightbox defaults, GPS presentation, favorite navigation, and public thumbnail rendering. Settings use normalized scalar values or focused service models.
 
-English and Czech catalogs provide server and browser strings. PHP and JSON catalogs must remain synchronized according to the translation workflow. New interface text should use stable semantic keys and retain safe English fallbacks.
+\subsection{Choosing the interface language}
+\label{sec:language-selection}
+\index{language}
+\index{localization!language selection}
+\index{translation packs}
+
+PHP Gallery treats the language of the program interface separately from the text that you write yourself. Changing the interface language changes buttons, menu items, help text, status messages, dialogs, and other application wording. It does \emph{not} automatically translate gallery titles, gallery descriptions, photo descriptions, tags, or other content entered by the gallery owner.
+
+Open \ui{Theme > Language}. Two independent selectors are available:
+
+\begin{itemize}
+  \item \ui{Admin interface language} changes the language seen by the administrator. The choice is remembered for that administrator in the current browser.
+  \item \ui{Public visitor language} changes the default interface language shown on public gallery pages. This is a site-wide setting for anonymous visitors.
+\end{itemize}
+
+These choices do not have to match. For example, an administrator may work in Czech while the public gallery uses English, Swedish, or German. A public visitor can also request one of the same four supported languages with an address parameter such as \codeword{?lang=sv}; PHP Gallery remembers that visitor choice in the browser.
+
+\subsubsection{Available languages and their current state}
+\index{language!English}
+\index{language!Czech}
+\index{language!German}
+\index{language!Swedish}
+
+English is special. It is the canonical source language, the default language for a new installation, and the defensive fallback language. Czech, German, and Swedish are also maintained as complete catalogs. For now, these four languages are the only selectable interface languages. Additional starter files may exist for future translation work, but they are intentionally not offered to administrators or public visitors yet.
+
+\begin{longtable}{>{\raggedright\arraybackslash}p{0.20\textwidth} >{\raggedright\arraybackslash}p{0.10\textwidth} >{\raggedright\arraybackslash}p{0.58\textwidth}}
+\toprule
+\textbf{Language} & \textbf{Code} & \textbf{Current role}\\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Language} & \textbf{Code} & \textbf{Current role}\\
+\midrule
+\endhead
+English & \codeword{en} & Complete canonical source, new-installation default, and fallback language.\\
+Čeština & \codeword{cs} & Complete maintained selectable Czech translation.\\
+Deutsch & \codeword{de} & Complete maintained selectable German translation.\\
+Svenska & \codeword{sv} & Complete maintained selectable Swedish translation.\\
+\bottomrule
+\end{longtable}
+
+\important{Only English, Czech, German, and Swedish are selectable for now. The application still keeps English fallback behavior as a safety mechanism, but the maintained selectable catalogs are expected to stay complete. A future language can be prepared as a file without becoming selectable until it is deliberately added to the supported-language set.}
+
+\subsubsection{How translation packs work}
+\index{translation packs!fallback}
+\index{translation packs!JSON}
+\index{translation packs!diagnostics}
+
+A translation pack is simply a dictionary of named interface messages. The program asks for a stable message key such as ``save gallery'' or ``delete selected photos'', and the active language pack supplies the wording that should be shown. The internal key stays the same in every language; only the displayed text changes.
+
+For non-technical administration, the important behavior is:
+
+\begin{enumerate}
+  \item English contains the reference wording for the application.
+  \item Czech, German, and Swedish contain a translated value for every maintained English key.
+  \item Only English, Czech, German, and Swedish are currently offered in the Admin and Public language selectors.
+  \item English fallback remains active defensively if a maintained pack ever misses a value.
+  \item Future language files may be prepared in \filepath{app/lang/}, but they stay dormant until deliberately added to the supported-language set.
+  \item The \ui{Detected language packs} table shows coverage for the currently supported languages.
+  \item The \ui{Diagnostics} subsection records missing keys seen during an authenticated Admin session, which helps locate remaining translation work.
+\end{enumerate}
+
+The \ui{Pack editor} is intended for careful maintenance or for importing a prepared translation. Language data is stored as JSON. In that editor, the text on the left side of each JSON pair is the stable key and should not be translated. The text on the right side is the value that may be translated. Placeholders such as \codeword{\{count\}}, \codeword{\{gallery\}}, or \codeword{\{time\}} represent live values inserted by PHP Gallery and must keep the same names in every language.
+
+A language pack can also be exported as JSON, translated outside PHP Gallery, and imported again. The application validates that the imported file is a JSON object containing text values. This makes it possible to work with a translator without giving that person access to the gallery server.
+
+For developers and maintainers, the maintained catalogs live under \filepath{app/lang/}. JSON is the canonical editable format. English, Czech, German, and Swedish PHP dictionaries are retained only as compatibility fallbacks for installations that do not have the corresponding JSON file. Server-rendered pages and browser JavaScript use the same active-language plus English-fallback model, so a translation does not need to be duplicated in separate front-end and back-end catalogs.
 
 Custom CSS supports installation-specific visual refinement. Theme-generated CSS exposes validated variables and computed selectors through a dedicated route. Gallery branding can override selected site-level assets while preserving effective fallback behavior.
 

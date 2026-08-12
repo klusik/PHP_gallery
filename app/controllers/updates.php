@@ -383,7 +383,7 @@ function cms_admin_update(): void
         $groupCount = count($groupEntries);
         echo '<div class="patch-notes-version-group">';
         echo '<div class="patch-notes-version-heading">';
-        echo '<span>Version ' . e((string) $groupVersion) . '</span>';
+        echo '<span>' . e(t('admin.updates.version_label', 'Version {version}', ['version' => (string) $groupVersion])) . '</span>';
         echo '<small>' . e(t($groupCount === 1 ? 'admin.updates.patch_notes_one_release' : 'admin.updates.patch_notes_release_count', $groupCount === 1 ? '1 release' : '{count} releases', ['count' => (string) $groupCount])) . '</small>';
         echo '</div>';
         foreach ($groupEntries as $version => $entry) {
@@ -391,7 +391,7 @@ function cms_admin_update(): void
             $isInstalled = (string) $version === cms_current_version();
             $isLatest = empty($status['error']) && !empty($status['latest_version']) && (string) $version === (string) $status['latest_version'];
             $itemClass = 'patch-notes-version-option' . ($isSelected ? ' is-selected' : '') . ($isInstalled ? ' is-installed' : '') . ($isLatest ? ' is-latest' : '');
-            $optionLabel = (string) ($entry['title'] ?? ('Version ' . $version));
+            $optionLabel = (string) ($entry['title'] ?? t('admin.updates.version_label', 'Version {version}', ['version' => (string) $version]));
             if (!empty($entry['released_label'])) {
                 $optionLabel .= ' · ' . (string) $entry['released_label'];
             }

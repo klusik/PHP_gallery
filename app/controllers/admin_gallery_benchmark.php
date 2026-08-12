@@ -274,13 +274,13 @@ function cms_admin_gallery_benchmark_download(): void
 {
     if (!current_user()) {
         http_response_code(403);
-        echo 'Admin session expired.';
+        echo t('admin.gallery_benchmark.session_expired', 'Admin session expired.');
         return;
     }
     $token = strtolower(trim((string) ($_GET['token'] ?? '')));
     if (!gallery_benchmark_token_is_valid($token)) {
         http_response_code(400);
-        echo 'Invalid benchmark token.';
+        echo t('admin.gallery_benchmark.invalid_token', 'Invalid benchmark token.');
         return;
     }
 
@@ -289,7 +289,7 @@ function cms_admin_gallery_benchmark_download(): void
         $log['summary'] = gallery_benchmark_build_summary($log);
         $json = json_encode($log, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         if (!is_string($json)) {
-            throw new \RuntimeException('Benchmark log could not be encoded.');
+            throw new \RuntimeException(t('admin.gallery_benchmark.log_encode_failed', 'Benchmark log could not be encoded.'));
         }
         $filename = gallery_benchmark_download_filename($log);
         header('Content-Type: application/json; charset=utf-8');
@@ -298,6 +298,6 @@ function cms_admin_gallery_benchmark_download(): void
         echo $json . "\n";
     } catch (Throwable $exception) {
         http_response_code(404);
-        echo 'Benchmark log was not found or could not be read.';
+        echo t('admin.gallery_benchmark.log_unavailable', 'Benchmark log was not found or could not be read.');
     }
 }
