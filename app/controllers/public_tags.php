@@ -105,13 +105,18 @@ function cms_tag(): void
     echo '<p class="muted">' . e(t('public.tag.gallery_count', '{count} galleries', ['count' => count($galleries)])) . '</p></section>';
     if ($galleries) {
         echo '<div class="gallery-list-frame" data-back-to-top-scope>';
+        // Keep pagination and the gallery grid together in the frame's main column.
+        // Without this wrapper, a rendered pagination control becomes the first grid
+        // child and pushes the gallery section into the zero-width back-to-top column.
+        echo '<div class="gallery-list-content" data-back-to-top-list>';
         render_pagination_controls(!empty($tagGridSettings['enabled']) ? $tagPagination : [], t('public.tag.pagination_label', 'Tagged gallery pages'));
-        echo '<section class="grid gallery-list-content' . e(pagination_grid_columns_class($tagGridSettings)) . '" data-back-to-top-list>';
+        echo '<section class="grid' . e(pagination_grid_columns_class($tagGridSettings)) . '">';
         foreach ($visibleGalleries as $cardIndex => $gallery) {
             render_gallery_card($gallery, true, false, false, (int) $cardIndex, ['description_layout' => $tagCardLayout]);
         }
         echo '</section>';
         render_pagination_controls(!empty($tagGridSettings['enabled']) ? $tagPagination : [], t('public.tag.pagination_label', 'Tagged gallery pages'));
+        echo '</div>';
         render_back_to_top_button();
         echo '</div>';
     }
