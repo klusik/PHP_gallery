@@ -552,6 +552,7 @@ function view_render_footer(): void
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/tag-suggestions.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/votes.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-operations.js',
+        dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-update-jobs.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-core.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-nested-tabs.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-side-panel.js',

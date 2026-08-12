@@ -56,6 +56,16 @@ use function Gallery\Services\application_autoupdate_status;
 use function Gallery\Services\application_patch_notes_viewer_data;
 use function Gallery\Services\application_update_beta_active;
 use function Gallery\Services\application_update_beta_commit;
+use function Gallery\Services\application_update_cancel_job;
+use function Gallery\Services\application_update_active_job;
+use function Gallery\Services\application_update_job_public_state;
+use function Gallery\Services\application_update_load_job;
+use function Gallery\Services\application_update_last_job;
+use function Gallery\Services\application_update_process_job;
+use function Gallery\Services\application_update_retry_job;
+use function Gallery\Services\application_update_safe_error;
+use function Gallery\Services\application_update_start_job;
+use function Gallery\Services\application_update_start_rollback_job;
 use function Gallery\Services\application_update_cleanup_malformed_root_files;
 use function Gallery\Services\application_update_github_api_status;
 use function Gallery\Services\application_update_normalize_version;
@@ -144,6 +154,139 @@ function cms_render_update_patch_notes_fragment(array $patchNotesModel): string
     return (string) ob_get_clean();
 }
 
+
+/**
+ * Return true when the update request expects an in-place JSON response.
+ *
+ * @return bool True for JavaScript continuation requests.
+ */
+function cms_update_async_request(): bool
+{
+    return (string) ($_POST['update_async'] ?? $_GET['update_async'] ?? '') === '1'
+        || strtolower((string) ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '')) === 'xmlhttprequest';
+}
+
+/**
+ * Emit one Admin-safe update job JSON response.
+ *
+ * @param array $job Safe update job state.
+ */
+function cms_update_json_job_response(array $job): void
+{
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: no-store, private');
+    echo json_encode(['ok' => true, 'job' => $job], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+}
+
+/**
+ * Start the resumable job represented by one Admin update action.
+ *
+ * @param string $action Admin action identifier.
+ * @return array Safe update job state.
+ */
+function cms_update_start_job_for_action(string $action): array
+{
+    if ($action === 'beta_install') {
+        return application_update_start_job('beta_install', ['commit' => (string) ($_POST['beta_commit'] ?? '')], 'admin');
+    }
+    if ($action === 'beta_revert') {
+        return application_update_start_job('stable_restore', [], 'admin');
+    }
+    if ($action === 'clean_reinstall') {
+        if (strtoupper(trim((string) ($_POST['clean_reinstall_confirm'] ?? ''))) !== 'REINSTALL') {
+            throw new RuntimeException(t('admin.updates.confirm_reinstall_error'));
+        }
+        return application_update_start_job('clean_reinstall', [], 'admin');
+    }
+
+    $status = application_update_status_for_admin(false);
+    return application_update_start_job('stable_update', [
+        'branch' => (string) ($status['branch'] ?? ''),
+        'target_version' => (string) ($status['latest_version'] ?? ''),
+    ], 'admin');
+}
+
+/**
+ * Return a concise localized stage label for an update job.
+ *
+ * @param string $stage Stage identifier.
+ * @return string Human-readable label.
+ */
+function cms_update_stage_label(string $stage): string
+{
+    $labels = [
+        'download' => 'Downloading package',
+        'archive_validate' => 'Checking archive',
+        'extract' => 'Extracting package',
+        'package_validate' => 'Verifying integrity',
+        'plan' => 'Preparing activation plan',
+        'stage_files' => 'Staging files',
+        'backup' => 'Preparing rollback data',
+        'ready' => 'Ready to activate',
+        'activate' => 'Activating prepared release',
+        'migrate' => 'Applying migrations',
+        'finalize' => 'Finalizing update',
+        'cleanup' => 'Cleaning temporary files',
+        'completed' => 'Completed',
+    ];
+    return $labels[$stage] ?? ucfirst(str_replace('_', ' ', $stage));
+}
+
+/**
+ * Render the durable update-job card used by JavaScript and non-JavaScript flows.
+ *
+ * @param array|null $job Safe job state or null when no job is active.
+ */
+function cms_render_update_job_card(?array $job): void
+{
+    echo '<section class="admin-update-job" data-update-job-scope';
+    if ($job === null) {
+        echo ' hidden></section>';
+        return;
+    }
+    echo ' data-update-job-id="' . e((string) ($job['id'] ?? '')) . '" data-update-job-status="' . e((string) ($job['status'] ?? '')) . '">';
+    echo '<div class="admin-update-job-heading"><div><p class="admin-kicker">Resumable update job</p><h3 data-update-job-title>' . e(cms_update_stage_label((string) ($job['stage'] ?? ''))) . '</h3></div><code>' . e((string) ($job['id'] ?? '')) . '</code></div>';
+    $progress = (array) ($job['progress'] ?? []);
+    $percent = isset($progress['percent']) ? (int) $progress['percent'] : (int) ($job['stage_percent'] ?? 0);
+    echo '<div class="admin-update-job-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' . e((string) $percent) . '"><span data-update-job-progress style="width:' . e((string) max(0, min(100, $percent))) . '%"></span></div>';
+    echo '<p class="muted" data-update-job-message>' . e((string) ($progress['message'] ?? 'Update job is ready to continue.')) . '</p>';
+    echo '<p class="muted"><strong>Stage:</strong> <span data-update-job-stage>' . e(cms_update_stage_label((string) ($job['stage'] ?? ''))) . '</span> · <strong>Attempts:</strong> <span data-update-job-attempts>' . e((string) (int) ($job['attempts'] ?? 0)) . '</span></p>';
+    if (!empty($job['error']) && is_array($job['error'])) {
+        echo '<div class="notice" data-update-job-error>' . e((string) ($job['error']['message'] ?? 'Update failed.')) . ' Reference: <code>' . e((string) ($job['error']['reference'] ?? '')) . '</code></div>';
+    } else {
+        echo '<div class="notice" data-update-job-error hidden></div>';
+    }
+    if ((string) ($job['status'] ?? '') === 'completed') {
+        echo '<div class="notice" data-update-job-complete>Update completed successfully. The saved pre-update snapshot remains available for rollback.</div>';
+    } elseif ((string) ($job['status'] ?? '') === 'cancelled') {
+        echo '<div class="notice" data-update-job-cancelled>Prepared update cancelled before activation. No application files were changed.</div>';
+    }
+    echo '<div data-update-job-actions>';
+    if (!empty($job['can_resume'])) {
+        echo '<form method="post" class="inline-action-form" data-update-job-control>' . csrf_field();
+        echo '<input type="hidden" name="update_action" value="' . ((string) ($job['status'] ?? '') === 'failed' ? 'job_retry' : 'job_continue') . '">';
+        echo '<input type="hidden" name="job_id" value="' . e((string) ($job['id'] ?? '')) . '">';
+        echo '<button type="submit" class="button secondary">' . e((string) ($job['status'] ?? '') === 'failed' ? 'Retry from checkpoint' : 'Continue update') . '</button>';
+        echo '</form>';
+    }
+    if (!empty($job['can_cancel'])) {
+        echo '<form method="post" class="inline-action-form" data-update-job-control onsubmit="return confirm(\'Cancel this prepared update? Active application files have not been changed.\');">' . csrf_field();
+        echo '<input type="hidden" name="update_action" value="job_cancel">';
+        echo '<input type="hidden" name="job_id" value="' . e((string) ($job['id'] ?? '')) . '">';
+        echo '<button type="submit" class="button secondary">Cancel prepared update</button>';
+        echo '</form>';
+    }
+    if (!empty($job['can_rollback'])) {
+        echo '<form method="post" class="inline-action-form" data-update-job-control onsubmit="return confirm(\'Restore the application files from the pre-update snapshot? Database migrations are not reversed.\');">' . csrf_field();
+        echo '<input type="hidden" name="update_action" value="job_rollback">';
+        echo '<input type="hidden" name="job_id" value="' . e((string) ($job['id'] ?? '')) . '">';
+        echo '<button type="submit" class="button secondary">Rollback application files</button>';
+        echo '</form>';
+    }
+    echo '</div>';
+    echo '</section>';
+}
+
 /**
  * Check GitHub for newer application versions and install them on request.
  */
@@ -153,64 +296,135 @@ function cms_admin_update(): void
     // $error stores an intermediate value used by the surrounding gallery workflow.
     $error = null;
 
+    if (isset($_GET['update_job_status'])) {
+        $requestedJobId = trim((string) ($_GET['job_id'] ?? ''));
+        $job = $requestedJobId !== ''
+            ? application_update_job_public_state(application_update_load_job($requestedJobId))
+            : (($active = application_update_active_job()) !== null ? application_update_job_public_state($active) : []);
+        header('Content-Type: application/json; charset=utf-8');
+        header('Cache-Control: no-store, private');
+        echo json_encode(['ok' => true, 'job' => $job], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        return;
+    }
+
     if (request_method() === 'POST') {
         verify_csrf();
         try {
-            // $action stores an intermediate value used by the surrounding gallery workflow.
             $action = (string) ($_POST['update_action'] ?? 'stable_update');
             if ($action === 'autoupdate_settings') {
                 set_application_autoupdate_enabled(!empty($_POST['application_autoupdate_enabled']));
                 $_SESSION['admin_update_notice'] = t('admin.updates.autoupdate_settings_saved', 'Automatic update settings were saved.');
             } elseif ($action === 'autoupdate_dry_run') {
-                // $dryRunStatus stores the refreshed automatic update diagnostics after a safe metadata-only check.
                 $dryRunStatus = application_autoupdate_dry_run(true);
                 $_SESSION['admin_update_notice'] = t('admin.updates.autoupdate_dry_run_completed', 'Automatic update dry run completed. Last result: {result}', ['result' => (string) ($dryRunStatus['last_result'] ?? '')]);
             } elseif ($action === 'force_check') {
-                // $forcedStatus stores a manual administrator check that bypasses the local five-hour cache but still records GitHub headers.
                 $forcedStatus = application_update_status_for_admin(true);
-                $_SESSION['admin_update_notice'] = empty($forcedStatus['error'])
-                    ? t('admin.updates.force_check_completed', 'Forced GitHub update check completed.')
-                    : t('admin.updates.force_check_completed_with_error', 'Forced GitHub update check completed with a warning: {error}', ['error' => (string) $forcedStatus['error']]);
-            } elseif ($action === 'beta_install') {
-                // $result stores an intermediate value used by the surrounding gallery workflow.
-                $result = install_application_beta((string) ($_POST['beta_commit'] ?? ''));
-                admin_log_event('info', 'update.beta_installed', t('admin.updates.log_beta_installed'), $result, ['category' => 'update', 'severity' => 'notice']);
-                $_SESSION['admin_update_notice'] = t('admin.updates.notice_beta_installed', 'Installed beta code {version}. Copied {files} files, removed {removed} obsolete path(s), and applied {migrations} migrations.', ['version' => (string) $result['version'], 'files' => (string) (int) $result['files_copied'], 'removed' => (string) (int) ($result['removed_count'] ?? 0), 'migrations' => (string) count((array) $result['migrations'])]);
-            } elseif ($action === 'beta_revert') {
-                // $result stores an intermediate value used by the surrounding gallery workflow.
-                $result = restore_application_stable_release();
-                admin_log_event('info', 'update.beta_reverted', t('admin.updates.log_beta_reverted'), $result, ['category' => 'update', 'severity' => 'notice']);
-                $_SESSION['admin_update_notice'] = t('admin.updates.notice_beta_reverted', 'Restored the stable release from the GitHub branch head. Copied {files} files and removed {removed} obsolete path(s).', ['files' => (string) (int) $result['files_copied'], 'removed' => (string) (int) ($result['removed_count'] ?? 0)]);
-            } elseif ($action === 'clean_reinstall') {
-                if (strtoupper(trim((string) ($_POST['clean_reinstall_confirm'] ?? ''))) !== 'REINSTALL') {
-                    throw new RuntimeException(t('admin.updates.confirm_reinstall_error'));
+                if (empty($forcedStatus['error'])) {
+                    $_SESSION['admin_update_notice'] = t('admin.updates.force_check_completed', 'Forced GitHub update check completed.');
+                } else {
+                    $safe = application_update_safe_error((string) $forcedStatus['error']);
+                    $_SESSION['admin_update_notice'] = 'Forced GitHub update check completed with a warning. Reference: ' . $safe['reference'];
                 }
-                // $result stores clean reinstall diagnostics for the admin log and user-facing notice.
-                $result = clean_reinstall_current_application_version();
-                admin_log_event('info', 'update.clean_reinstalled', t('admin.updates.log_clean_reinstalled'), $result, ['category' => 'update', 'severity' => 'warning']);
-                $_SESSION['admin_update_notice'] = t('admin.updates.notice_clean_reinstalled', 'Clean reinstall finished. Copied {files} files, removed {removed} unexpected path(s), removed {zips} cached ZIP file(s), and applied {migrations} migrations.', ['files' => (string) (int) $result['files_copied'], 'removed' => (string) (int) ($result['removed_count'] ?? 0), 'zips' => (string) (int) ($result['cache_cleanup']['zip_files_removed'] ?? 0), 'migrations' => (string) count((array) $result['migrations'])]);
             } elseif ($action === 'cleanup_malformed_root_files') {
-                // $result stores diagnostics from the narrowly scoped malformed ZIP extraction cleanup.
                 $result = application_update_cleanup_malformed_root_files();
                 admin_log_event('info', 'update.malformed_root_files_cleaned', t('admin.updates.log_malformed_root_files_cleaned'), $result, ['category' => 'update', 'severity' => 'notice']);
                 $_SESSION['admin_update_notice'] = t('admin.updates.notice_malformed_root_files_cleaned', 'Malformed root-file cleanup finished. Removed {removed} file(s). Backup: {backup}', ['removed' => (string) (int) $result['removed_count'], 'backup' => (string) $result['backup']]);
+            } elseif ($action === 'job_cancel') {
+                $jobId = trim((string) ($_POST['job_id'] ?? ''));
+                $job = application_update_cancel_job($jobId);
+                admin_log_event('info', 'update.job_cancelled', 'Prepared application update job cancelled before activation.', [
+                    'job_id' => (string) $job['id'],
+                    'operation' => (string) $job['operation'],
+                    'stage' => (string) $job['stage'],
+                ], ['category' => 'update', 'severity' => 'notice']);
+                if (cms_update_async_request()) {
+                    cms_update_json_job_response($job);
+                    return;
+                }
+                $_SESSION['admin_update_notice'] = 'Prepared update cancelled before activation. No application files were changed.';
+            } elseif ($action === 'job_rollback') {
+                $jobId = trim((string) ($_POST['job_id'] ?? ''));
+                $job = application_update_start_rollback_job($jobId, 'admin');
+                $job = application_update_process_job((string) $job['id'], 7.0);
+                admin_log_event('warning', 'update.rollback_started', 'Application rollback job started from a durable update snapshot.', [
+                    'job_id' => (string) $job['id'],
+                    'source_job_id' => $jobId,
+                    'stage' => (string) $job['stage'],
+                ], ['category' => 'update', 'severity' => 'warning']);
+                if (cms_update_async_request()) {
+                    cms_update_json_job_response($job);
+                    return;
+                }
+                $_SESSION['admin_update_notice'] = 'Rollback job started from the saved pre-update snapshot.';
+            } elseif ($action === 'job_continue' || $action === 'job_retry') {
+                $jobId = trim((string) ($_POST['job_id'] ?? ''));
+                $job = $action === 'job_retry' ? application_update_retry_job($jobId) : application_update_job_public_state(application_update_load_job($jobId));
+                if ((string) ($job['status'] ?? '') === 'running') {
+                    $job = application_update_process_job((string) $job['id'], 7.0);
+                }
+                if ((string) ($job['status'] ?? '') === 'completed') {
+                    admin_log_event('info', 'update.job_completed', 'Application update job completed.', [
+                        'job_id' => (string) $job['id'],
+                        'operation' => (string) $job['operation'],
+                        'result' => (array) ($job['result'] ?? []),
+                    ], ['category' => 'update', 'severity' => 'notice']);
+                    $_SESSION['admin_update_notice'] = 'Update job completed successfully.';
+                } elseif ((string) ($job['status'] ?? '') === 'failed') {
+                    admin_log_event('warning', 'update.job_failed', 'Application update job stopped at a safe recovery checkpoint.', [
+                        'job_id' => (string) $job['id'],
+                        'operation' => (string) $job['operation'],
+                        'stage' => (string) $job['stage'],
+                        'error_reference' => (string) ($job['error']['reference'] ?? ''),
+                    ], ['category' => 'update', 'severity' => 'error']);
+                }
+                if (cms_update_async_request()) {
+                    cms_update_json_job_response($job);
+                    return;
+                }
+                $_SESSION['admin_update_notice'] = $_SESSION['admin_update_notice'] ?? ('Update job checkpoint saved at stage: ' . cms_update_stage_label((string) ($job['stage'] ?? '')) . '.');
+            } elseif (in_array($action, ['stable_update', 'beta_install', 'beta_revert', 'clean_reinstall'], true)) {
+                $job = cms_update_start_job_for_action($action);
+                $job = application_update_process_job((string) $job['id'], 7.0);
+                if ((string) ($job['status'] ?? '') === 'failed') {
+                    admin_log_event('warning', 'update.job_failed', 'Application update job stopped at a safe recovery checkpoint.', [
+                        'job_id' => (string) $job['id'],
+                        'operation' => (string) $job['operation'],
+                        'stage' => (string) $job['stage'],
+                        'error_reference' => (string) ($job['error']['reference'] ?? ''),
+                    ], ['category' => 'update', 'severity' => 'error']);
+                } else {
+                    admin_log_event('info', 'update.job_started', 'Application update job started.', [
+                        'job_id' => (string) $job['id'],
+                        'operation' => (string) $job['operation'],
+                        'stage' => (string) $job['stage'],
+                    ], ['category' => 'update', 'severity' => 'notice']);
+                }
+                if (cms_update_async_request()) {
+                    cms_update_json_job_response($job);
+                    return;
+                }
+                $_SESSION['admin_update_notice'] = 'Update job started. Continue from the saved checkpoint if the host stops this request.';
             } else {
-                // $result stores an intermediate value used by the surrounding gallery workflow.
-                $result = install_application_update();
-                admin_log_event('info', 'update.installed', t('admin.updates.log_installed'), $result, ['category' => 'update', 'severity' => 'notice']);
-                $_SESSION['admin_update_notice'] = t('admin.updates.notice_updated', 'Updated to version {version}. Copied {files} files, removed {removed} obsolete path(s), and applied {migrations} migrations.', ['version' => (string) $result['version'], 'files' => (string) (int) $result['files_copied'], 'removed' => (string) (int) ($result['removed_count'] ?? 0), 'migrations' => (string) count((array) $result['migrations'])]);
+                throw new RuntimeException('Unsupported update action.');
             }
             redirect_to(url_for('admin_update'));
         } catch (Throwable $exception) {
+            $safe = application_update_safe_error($exception);
             admin_log_event('warning', 'update.failed', t('admin.updates.log_failed'), [
                 'action' => (string) ($_POST['update_action'] ?? 'stable_update'),
-                'error' => $exception->getMessage(),
+                'error_reference' => $safe['reference'],
                 'current_version' => cms_current_version(),
                 'beta_active' => application_update_beta_active(),
                 'php_version' => PHP_VERSION,
             ], ['category' => 'update', 'severity' => 'error']);
-            // $error stores an intermediate value used by the surrounding gallery workflow.
-            $error = $exception->getMessage();
+            if (cms_update_async_request()) {
+                header('Content-Type: application/json; charset=utf-8');
+                header('Cache-Control: no-store, private');
+                http_response_code(400);
+                echo json_encode(['ok' => false, 'error' => $safe], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+                return;
+            }
+            $error = $safe['message'] . ' Reference: ' . $safe['reference'];
         }
     }
 
@@ -227,6 +441,15 @@ function cms_admin_update(): void
     $autoupdateStatus = application_autoupdate_status();
     // $githubApiStatus stores the latest GitHub API headers and policy backoff diagnostics.
     $githubApiStatus = application_update_github_api_status();
+    // $activeUpdateJob stores the durable update state rendered for in-place continuation.
+    $activeUpdateJobPrivate = application_update_active_job();
+    if ($activeUpdateJobPrivate !== null) {
+        $activeUpdateJob = application_update_job_public_state($activeUpdateJobPrivate);
+    } else {
+        $lastUpdateJobPrivate = application_update_last_job();
+        $lastUpdateJob = $lastUpdateJobPrivate !== null ? application_update_job_public_state($lastUpdateJobPrivate) : null;
+        $activeUpdateJob = $lastUpdateJob !== null && !empty($lastUpdateJob['can_rollback']) ? $lastUpdateJob : null;
+    }
     // $patchNotesModel stores the selectable release-note data for full-page and AJAX rendering.
     $patchNotesModel = cms_update_patch_notes_model($status, (string) ($_GET['patch_version'] ?? cms_current_version()));
     // $patchNotesVersions stores the release-note sections available to the admin selector.
@@ -272,7 +495,8 @@ function cms_admin_update(): void
     ], 'admin-update-tab-status');
 
     ob_start();
-    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.updates.status_kicker', 'Release status')) . '</p><h2>' . e(t('admin.updates.status')) . '</h2></div><p class="muted">' . e(t('admin.updates.status_hint', 'The updater checks GitHub metadata through the service layer and keeps the install action on the existing ZIP based workflow.')) . '</p></div>';
+    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.updates.status_kicker', 'Release status')) . '</p><h2>' . e(t('admin.updates.status')) . '</h2></div><p class="muted">' . e(t('admin.updates.status_hint', 'The updater checks GitHub metadata through the service layer and runs installs as durable, resumable jobs with bounded request-time slices.')) . '</p></div>';
+    cms_render_update_job_card($activeUpdateJob);
     echo '<div class="admin-metric-grid admin-update-metric-grid">';
     echo '<article class="admin-metric-card"><span>' . e(t('admin.updates.installed_version')) . '</span><strong>' . e(cms_current_version()) . '</strong><small>' . e(t('admin.updates.installed_version_hint', 'Version currently running on this installation.')) . '</small></article>';
     echo '<article class="admin-metric-card"><span>' . e(t('admin.updates.latest_version')) . '</span><strong>' . e($latestVersion) . '</strong><small>' . e(empty($status['branch']) ? t('admin.updates.branch_unknown', 'Branch not available') : t('admin.updates.checked_branch_value', ['branch' => (string) $status['branch']])) . '</small></article>';
@@ -337,9 +561,10 @@ function cms_admin_update(): void
     echo '<article class="admin-update-card ' . (!empty($status['update_available']) ? 'is-attention' : '') . '">';
     echo '<div><p class="admin-kicker">' . e(t('admin.updates.primary_action', 'Primary action')) . '</p><h3>' . e($updateStateLabel) . '</h3></div>';
     if (!empty($status['error'])) {
-        echo '<p class="muted">' . e(t('admin.updates.check_failed_value', ['error' => (string) $status['error']])) . '</p>';
+        $statusSafeError = application_update_safe_error((string) $status['error']);
+        echo '<p class="muted">Update metadata check failed. Reference: <code>' . e($statusSafeError['reference']) . '</code></p>';
     } elseif (!empty($status['update_available'])) {
-        echo '<form method="post" class="form-grid admin-update-action-form">' . csrf_field();
+        echo '<form method="post" class="form-grid admin-update-action-form" data-update-job-form>' . csrf_field();
         echo '<input type="hidden" name="update_action" value="stable_update">';
         echo '<p>' . t('admin.updates.newer_available_description') . '</p>';
         echo '<button type="submit" class="is-update-pending">' . e(t('admin.updates.update_button')) . '</button></form>';
@@ -468,14 +693,14 @@ function cms_admin_update(): void
     echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.updates.advanced_kicker', 'Recovery and testing')) . '</p><h2>' . e(t('admin.updates.advanced_tools', 'Advanced tools')) . '</h2></div><p class="muted">' . e(t('admin.updates.advanced_hint', 'Use beta installs and clean reinstall only when you intentionally need to test or repair the deployed code.')) . '</p></div>';
     echo '<div class="admin-maintenance-grid admin-update-tools-grid">';
     echo '<article class="admin-maintenance-card admin-update-tool-card"><strong>' . e(t('admin.updates.beta_build')) . '</strong><span>' . e(t('admin.updates.beta_code_help')) . '</span>';
-    echo '<form method="post" class="form-grid">' . csrf_field();
+    echo '<form method="post" class="form-grid" data-update-job-form>' . csrf_field();
     echo '<input type="hidden" name="update_action" value="beta_install">';
     echo '<label>' . e(t('admin.updates.beta_code')) . '<input name="beta_commit" value="' . e(application_update_beta_commit()) . '" placeholder="abcdef1234567890"></label>';
     echo '<button type="submit">' . e(t('admin.updates.install_beta')) . '</button>';
     echo '</form></article>';
     if ($betaActive) {
         echo '<article class="admin-maintenance-card admin-update-tool-card"><strong>' . e(t('admin.updates.restore_stable')) . '</strong><span>' . e(t('admin.updates.restore_stable_help')) . '</span>';
-        echo '<form method="post" class="form-grid">' . csrf_field();
+        echo '<form method="post" class="form-grid" data-update-job-form>' . csrf_field();
         echo '<input type="hidden" name="update_action" value="beta_revert">';
         echo '<button type="submit" class="button secondary">' . e(t('admin.updates.restore_stable')) . '</button>';
         echo '</form></article>';
@@ -486,7 +711,7 @@ function cms_admin_update(): void
     echo '<button type="submit" class="button secondary">' . e(t('admin.updates.malformed_root_cleanup_button', 'Run misplaced file cleanup')) . '</button>';
     echo '</form></article>';
     echo '<article class="admin-maintenance-card admin-update-tool-card is-danger"><strong>' . e(t('admin.updates.clean_reinstall_title')) . '</strong><span>' . e(t('admin.updates.clean_reinstall_description')) . '</span>';
-    echo '<form method="post" class="form-grid danger-zone">' . csrf_field();
+    echo '<form method="post" class="form-grid danger-zone" data-update-job-form>' . csrf_field();
     echo '<input type="hidden" name="update_action" value="clean_reinstall">';
     echo '<p class="muted">' . t('admin.updates.clean_reinstall_protected') . '</p>';
     echo '<label>' . e(t('admin.updates.confirm_reinstall_label')) . '<input name="clean_reinstall_confirm" autocomplete="off" placeholder="REINSTALL"></label>';

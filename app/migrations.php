@@ -165,6 +165,75 @@ function run_migrations(): array
     return $ran;
 }
 
+
+
+/**
+ * Apply a bounded number of pending migration files and report remaining work.
+ *
+ * This is the updater-facing migration runner. schema_migrations remains the
+ * durable checkpoint boundary, so completed migration files are never repeated
+ * after an interrupted update request. A migration interrupted before its audit
+ * row is recorded may replay and therefore must use replay-safe SQL/repair logic.
+ *
+ * @param int $maxMigrations Maximum migration files to apply in this invocation.
+ * @return array{ran: array<int,string>, remaining: int} Bounded migration result.
+ */
+function run_migrations_bounded(int $maxMigrations = 1): array
+{
+    $maxMigrations = max(1, $maxMigrations);
+    $pdo = db();
+    $pdo->exec("CREATE TABLE IF NOT EXISTS schema_migrations (
+        version VARCHAR(64) NOT NULL PRIMARY KEY,
+        applied_at DATETIME NOT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    migration_reset_schema_inspection_cache();
+
+    $appliedVersions = $pdo->query('SELECT version FROM schema_migrations')->fetchAll(PDO::FETCH_COLUMN);
+    $pendingFiles = pending_migration_files(
+        discover_migration_files(dirname(__DIR__) . '/database/migrations'),
+        $appliedVersions
+    );
+    if ($pendingFiles === []) {
+        return ['ran' => [], 'remaining' => 0];
+    }
+
+    // Validate the complete pending set before applying even the first bounded unit.
+    $definitionsByFile = load_migration_definitions($pendingFiles);
+    $ran = [];
+    foreach (array_slice($pendingFiles, 0, $maxMigrations) as $file) {
+        $version = basename($file, '.php');
+        $definition = $definitionsByFile[$file];
+        try {
+            foreach ($definition['statements'] as $statement) {
+                apply_migration_statement($pdo, $statement);
+            }
+            if ($definition['after'] !== null) {
+                $definition['after']($pdo);
+                migration_reset_schema_inspection_cache();
+            }
+            $stmt = $pdo->prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)');
+            $stmt->execute([$version, now_sql()]);
+            $ran[] = $version;
+        } catch (Throwable $exception) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $exception;
+        }
+    }
+
+    $remaining = max(0, count($pendingFiles) - count($ran));
+    if ($ran && function_exists('Gallery\\Services\\admin_log_event')) {
+        admin_log_event('info', 'migrations.ran_bounded', 'Database migration checkpoint completed.', [
+            'versions' => $ran,
+            'migration_count' => count($ran),
+            'remaining' => $remaining,
+        ], ['category' => 'database', 'severity' => 'notice']);
+    }
+
+    return ['ran' => $ran, 'remaining' => $remaining];
+}
+
 /**
  * Execute one migration statement, allowing safe replay of already-applied DDL.
  *
@@ -188,14 +257,12 @@ function apply_migration_statement(PDO $pdo, string $statement): array
         if (!migration_duplicate_ddl_error($exception)) {
             $diagnostic['status'] = 'failed';
             $diagnostic['error_code'] = (int) ($exception->errorInfo[1] ?? $exception->getCode());
-            $diagnostic['error_message'] = $exception->getMessage();
             $diagnostic['duration_seconds'] = round(microtime(true) - $startedAt, 4);
             throw $exception;
         }
 
         $diagnostic['status'] = 'duplicate_ddl_replayed';
         $diagnostic['error_code'] = (int) ($exception->errorInfo[1] ?? $exception->getCode());
-        $diagnostic['error_message'] = $exception->getMessage();
     }
 
     if (in_array((string) ($diagnostic['operation'] ?? ''), ['ALTER', 'CREATE', 'DROP', 'RENAME'], true)) {
@@ -230,7 +297,6 @@ function migration_statement_diagnostic(string $statement): array
         'object' => $object,
         'length_bytes' => strlen($statement),
         'signature' => substr(hash('sha256', $normalized), 0, 16),
-        'preview' => substr($normalized, 0, 240),
     ];
 }
 

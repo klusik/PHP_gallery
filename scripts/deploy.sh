@@ -172,21 +172,21 @@ parse_arguments() {
 # Function invoke_manifest_generator handles manifest refresh before deployment.
 invoke_manifest_generator() {
     if ! command -v php >/dev/null 2>&1; then
-        printf 'Warning: PHP executable was not found in PATH. Integrity manifest update was skipped.\n' >&2
-        return 0
+        printf 'Error: PHP executable was not found in PATH. Cannot build a manifest-validated deployment.\n' >&2
+        return 1
     fi
 
     # Variable manifest_script stores this scripts working value.
     local manifest_script="${root}/scripts/generate_manifest.php"
     if [[ ! -f "$manifest_script" ]]; then
-        printf 'Warning: Manifest generator was not found: %s. Integrity manifest update was skipped.\n' "$manifest_script" >&2
-        return 0
+        printf 'Error: Manifest generator was not found: %s. Cannot build a manifest-validated deployment.\n' "$manifest_script" >&2
+        return 1
     fi
 
     printf 'Updating integrity manifest...\n'
     if ! php "$manifest_script"; then
-        printf 'Warning: Manifest generator failed. Deploy will continue without updating the integrity manifest.\n' >&2
-        return 0
+        printf 'Error: Manifest generator failed. Deployment aborted to avoid publishing an unverifiable package.\n' >&2
+        return 1
     fi
 }
 

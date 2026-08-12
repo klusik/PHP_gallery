@@ -100,7 +100,8 @@ use function Gallery\Services\openai_text_assist_normalize_model;
 use function Gallery\Services\openai_text_assist_save_user_settings;
 use function Gallery\Services\openai_text_assist_schema_ready;
 use function Gallery\Services\openai_text_assist_user_settings;
-use function Gallery\Services\restore_application_stable_release;
+use function Gallery\Services\application_update_safe_error;
+use function Gallery\Services\application_update_start_job;
 use function Gallery\Services\set_app_setting;
 use function Gallery\Services\site_name;
 use function Gallery\Services\t;
@@ -1596,15 +1597,22 @@ function cms_admin_reset(): void
     if (request_method() === 'POST') {
         verify_csrf();
         try {
-            // $result stores an intermediate value used by the surrounding gallery workflow.
-            $result = restore_application_stable_release();
-            admin_log_event('info', 'update.stable_restored', t('admin.reset.log_stable_restored'), $result);
+            // $result stores the durable restore job returned by the shared updater engine.
+            $result = application_update_start_job('stable_restore', [], 'admin');
+            admin_log_event('info', 'update.stable_restore_started', t('admin.reset.log_restore_started'), [
+                'job_id' => (string) ($result['id'] ?? ''),
+                'stage' => (string) ($result['stage'] ?? ''),
+            ]);
             // $notice stores an intermediate value used by the surrounding gallery workflow.
-            $notice = t('admin.reset.restored_notice', ['files' => (string) (int) $result['files_copied']]);
+            $notice = t('admin.reset.restore_started_notice');
         } catch (Throwable $exception) {
-            admin_log_event('warning', 'update.reset_failed', t('admin.reset.log_reset_failed'), ['error' => $exception->getMessage()]);
-            // $error stores an intermediate value used by the surrounding gallery workflow.
-            $error = $exception->getMessage();
+            $safeError = application_update_safe_error($exception);
+            admin_log_event('warning', 'update.reset_failed', t('admin.reset.log_reset_failed'), [
+                'reference' => (string) ($safeError['reference'] ?? ''),
+            ]);
+            // $error stores only the updater redaction boundary result.
+            $error = (string) ($safeError['message'] ?? t('admin.reset.log_reset_failed'))
+                . ' Reference: ' . (string) ($safeError['reference'] ?? '');
         }
     }
 

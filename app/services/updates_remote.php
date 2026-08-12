@@ -164,12 +164,39 @@ function application_update_remote_version_candidates(string $branch): array
 }
 
 /**
+ * Return a safe HTTP timeout that fits inside an optional wall-clock deadline.
+ *
+ * A zero result means the caller should checkpoint or stop instead of beginning
+ * another external request. The deadline is deliberately independent from PHP's
+ * execution-time setting because hosting proxies may impose a shorter limit.
+ *
+ * @param ?float $deadline Absolute microtime deadline, or null for the legacy timeout.
+ * @param int $defaultSeconds Maximum timeout when no tighter deadline applies.
+ * @return int Timeout seconds, or zero when the budget is exhausted.
+ */
+function application_update_remote_timeout_seconds(?float $deadline, int $defaultSeconds = 12): int
+{
+    $defaultSeconds = max(1, min(15, $defaultSeconds));
+    if ($deadline === null) {
+        return $defaultSeconds;
+    }
+
+    $remaining = $deadline - microtime(true) - 0.25;
+    if ($remaining < 0.75) {
+        return 0;
+    }
+
+    return max(1, min($defaultSeconds, (int) floor($remaining)));
+}
+
+/**
  * Read remote version markers and keep diagnostics for branches without a marker.
  *
  * @param string $branch Branch value.
+ * @param ?float $deadline Absolute microtime deadline for external I/O.
  * @return array Structured result data for the caller.
  */
-function application_update_remote_version_result(string $branch): array
+function application_update_remote_version_result(string $branch, ?float $deadline = null): array
 {
     // $versionCandidates stores trusted version markers found in remote files.
     $versionCandidates = [];
@@ -178,9 +205,13 @@ function application_update_remote_version_result(string $branch): array
     // $reachable stores whether at least one trusted GitHub file was fetched successfully.
     $reachable = false;
 
+    $bootstrapTimeout = application_update_remote_timeout_seconds($deadline, 12);
     try {
+        if ($bootstrapTimeout < 1) {
+            throw new RuntimeException('Remote update metadata request budget exhausted before bootstrap fetch.');
+        }
         // $bootstrap stores the remote bootstrap file fetched through GitHub Contents API.
-        $bootstrap = application_update_fetch_github_content($branch, 'app/bootstrap.php', 12);
+        $bootstrap = application_update_fetch_github_content($branch, 'app/bootstrap.php', $bootstrapTimeout);
         $reachable = true;
         // $bootstrapVersion stores the version parsed from the bootstrap constant when present.
         $bootstrapVersion = application_update_version_from_bootstrap($bootstrap);
@@ -190,13 +221,17 @@ function application_update_remote_version_result(string $branch): array
             $diagnostics[] = 'No CMS_VERSION marker was found in app/bootstrap.php on branch ' . $branch . '.';
         }
     } catch (Throwable $exception) {
-        $diagnostics[] = 'app/bootstrap.php: ' . $exception->getMessage();
+        $diagnostics[] = 'app/bootstrap.php fetch failed. Reference: ' . application_update_safe_error($exception)['reference'];
     }
 
     if ($versionCandidates === []) {
+        $patchTimeout = application_update_remote_timeout_seconds($deadline, 12);
         try {
+            if ($patchTimeout < 1) {
+                throw new RuntimeException('Remote update metadata request budget exhausted before patch-notes fetch.');
+            }
             // $patchNotes stores the remote release notes used as a secondary version signal.
-            $patchNotes = application_update_fetch_github_content($branch, 'PATCH_NOTES.md', 12);
+            $patchNotes = application_update_fetch_github_content($branch, 'PATCH_NOTES.md', $patchTimeout);
             $reachable = true;
             // $patchNotesVersion stores the newest heading parsed from the release notes.
             $patchNotesVersion = application_update_version_from_patch_notes($patchNotes);
@@ -206,7 +241,7 @@ function application_update_remote_version_result(string $branch): array
                 $diagnostics[] = 'No version heading was found in PATCH_NOTES.md on branch ' . $branch . '.';
             }
         } catch (Throwable $exception) {
-            $diagnostics[] = 'PATCH_NOTES.md: ' . $exception->getMessage();
+            $diagnostics[] = 'PATCH_NOTES.md fetch failed. Reference: ' . application_update_safe_error($exception)['reference'];
         }
     }
 
@@ -214,6 +249,7 @@ function application_update_remote_version_result(string $branch): array
         'candidates' => array_filter($versionCandidates, static fn ($value): bool => is_string($value) && application_update_normalize_version($value) !== null),
         'reachable' => $reachable,
         'diagnostic' => implode(' ', array_filter($diagnostics)),
+        'budget_exhausted' => application_update_remote_timeout_seconds($deadline, 12) < 1,
     ];
 }
 

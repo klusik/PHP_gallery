@@ -36,6 +36,7 @@ php tests/migration_legacy_runner_compatibility_test.php
 php tests/database_maintenance_test.php
 php tests/database_maintenance_schema_repair_test.php
 php tests/updater_safety_model_test.php
+php tests/updater_resumable_state_machine_test.php
 php tests/thumbnail_warmup_model_test.php
 php tests/public_thumbnail_rendering_model_test.php
 php tests/public_thumbnail_markup_test.php
@@ -55,7 +56,7 @@ The legacy migration-runner compatibility test verifies that PHP repair migratio
 The database maintenance test covers information_schema normalization, compact and legacy schema detection, SQL-literal reference scoping, obsolete thumbnail objects, orphan and expiry rules, deterministic duplicate survivor selection, protected content/log/telemetry tables, report-only unsupported thumbnail variants, Admin authentication, CSRF, confirmation contracts, and the absence of filesystem cleanup side effects.
 The Admin log scaling test covers indexed age/grouping migration contracts, grouped browsing, bounded keyset exports, retention normalization, and the archive-first deletion boundary. The Admin log archive maintenance test covers protected day archive paths, self-describing JSON/HTML output, row-count verification, interrupted-work recovery, resumable state, and retention cleanup without exposing archive data publicly.
 The database maintenance schema-repair test uses a mutable PDO fixture to verify audit-table creation, absent thumbnail tables, partially compacted schemas, geometry migration before destructive DDL, obsolete index/foreign-key cleanup, already compact schemas, idempotent retry, and the absence of row or filesystem deletion.
-The updater safety test verifies that critical runtime files are required before deployment starts and that valid top-level app entries such as `app/views.php`, `app/views/`, `app/lang/`, and migration support modules are never classified as misplaced project copies.
+The updater safety test verifies that critical runtime files, the core manifest, and the resumable update service are required before deployment starts and that valid top-level app entries such as `app/views.php`, `app/views/`, `app/lang/`, and migration support modules are never classified as misplaced project copies. `tests/updater_resumable_state_machine_test.php` additionally covers ordered stage transitions, bounded time budgets, package-path rejection, manifest coverage, corrupt-archive rejection, safe error redaction, worker locking, stale-lock recovery, rollback snapshot copying, activation ordering, stable/beta/reinstall/restore job routing, background continuation, migration checkpoint wiring, Admin in-place controls, side-panel event delegation, browser reopen continuation, and the absence of page reload/navigation in the JavaScript updater.
 
 The translation catalog consistency test requires English, Czech, German, and Swedish to remain key-for-key complete, verifies placeholder parity across all four maintained catalogs, statically checks that literal PHP/JavaScript translation calls exist in English, validates dormant future-language skeletons as safe subsets of English, confirms that only `en`, `cs`, `de`, and `sv` are selectable in `config.example.php`, and guards the Admin/Public selector filtering plus the English default/fallback contract.
 
@@ -323,11 +324,16 @@ runtime context.
   gallery file;
 - thumbnail generation checks its complete metadata write shape before creating
   the derivative directory;
-- each beta/stable/reinstall/restore updater activation calls
-  `application_update_assert_activation_schema_known()` before
-  `application_update_copy_files()`;
-- updater source validation requires both `app/services/schema_inspection.php`
-  and `app/services/mutation_schema_policy.php`.
+- each beta/stable/reinstall/restore/rollback update job calls
+  `application_update_assert_activation_schema_known()` before the `ready`/activation boundary;
+- updater source validation requires `app/services/schema_inspection.php`,
+  `app/services/mutation_schema_policy.php`, `app/services/updates_jobs.php`, and
+  `app/core-manifest.json`;
+- all normal preparation stages checkpoint before active files change, while
+  `activate` contains only prepared local replacements and is retry-safe rather
+  than pretending to be interruptible;
+- migration continuation uses `run_migrations_bounded(1)` and the
+  `schema_migrations` row as its durable file-level checkpoint.
 
 `tests/updater_safety_model_test.php` now builds a Phase 10-capable incomplete
 snapshot fixture. The fixture contains the two schema-policy services so its
@@ -646,6 +652,26 @@ Ask these questions before and after the change:
 - If an action starts in the Admin right-side panel, does the JavaScript path keep the panel open and avoid page navigation/reload?
 
 If the answer is yes to any of those, run the manual smoke test in addition to syntax checks.
+
+
+### Resumable application-update verification
+
+Do not run destructive update tests against a real installation. Automated updater tests must use temporary directories, fake job state, corrupt synthetic archives, or static wiring assertions unless a disposable filesystem and database are explicitly configured.
+
+For a disposable shared-hosting test instance, verify these interruption points separately:
+
+1. Start a stable update and close the browser during download, extraction, manifest validation, file staging, and backup. Reopen **Updates** and confirm the same job id resumes from its persisted cursor.
+2. Kill a worker after a bounded request returns and confirm completed stages do not repeat. Create a synthetic archive with more than 500 entries and confirm `archive_validate_index` advances in multiple requests. For a package-stage failure, confirm Retry discards untrusted archive/extract artifacts, Range validators, and source URL state before restarting download.
+3. Open the update page in two browser sessions and confirm only one worker advances the job. Address an older failed/running job id directly while another job owns `active-job.json` and confirm the old job cannot execute, retry, cancel, or clear the active owner. Also leave stale text in `worker.lock` without holding the OS lock and confirm the next worker proceeds.
+4. Corrupt or truncate a ZIP, add a traversal entry, add a symbolic link, add a file above 32 MiB, exceed the expanded-size cap, remove a required runtime file, modify a manifest-covered file without updating its hash, and add an installable managed file without adding it to the manifest. Each case must fail before `activate`. For a resumed stable download, change the branch snapshot between slices and confirm `If-Range` causes a clean restart rather than an append across two snapshots.
+5. Confirm byte-identical release files are excluded from `activation_files`, then confirm `ready/` and `rollback/original/` are complete before the first active-file replacement. Also confirm a managed symbolic-link destination and an oversized (>128 MiB) active rollback file fail before activation. A pre-activation failure must leave the active tree byte-for-byte unchanged.
+6. Interrupt activation only on a disposable installation. The next worker must recognize already matching prepared hashes and finish the remaining files. This test documents the unavoidable mixed-tree window on hosts without atomic release-directory switching.
+7. Add a disposable migration whose callback is intentionally interrupted once, then rerun it. Verify the migration definition is safe to replay and that a recorded `schema_migrations` version never runs again.
+8. Before activation, use **Cancel prepared update** and confirm the active job is released and application files remain byte-for-byte unchanged. After a completed or failed post-activation update, run **Rollback application files**. Confirm the pre-update file snapshot is restored through a new resumable job and that database migrations are not reversed. Confirm cancellation is rejected once activation has begun.
+9. Initiate the update from the Admin side panel. Progress must refresh in place, dynamic forms must remain intercepted, and no normal success path may call `window.location.reload()` or assign `window.location.href`. Repeat with JavaScript disabled and use the normal Continue/Retry POST fallback.
+10. Close the browser with a running Admin job, reopen the update UI, and confirm continuation starts from durable server state. For unattended stable updates on an idle site, run `php scripts/application_update.php --time-budget=8` repeatedly or from cron and confirm it advances only `trigger=background` jobs. When no job exists, confirm one invocation performs bounded metadata discovery and only creates the job; package work starts on the next invocation.
+11. Run with low `max_execution_time` where possible. Confirm the reported worker budget stays below the PHP limit reserve and remote metadata discovery stops at its own request budget. Do not treat successful `set_time_limit()` calls as evidence of safety; the updater must remain correct when that function is disabled or ignored by hosting.
+12. Inspect Admin JSON/log output from induced transport, ZIP, migration, and filesystem errors. Only generic text plus a short reference fingerprint may be exposed. Paths, URLs containing tokens, raw SQL, credentials, stack traces, and exception messages must not appear.
 
 For side-panel work, full-page POST/redirect behavior is a fallback test, not the expected JavaScript behavior. Test the in-panel path first. A panel action should update its fragment or affected page elements in place. If the feature is specified as one-click, also verify that no unrequested `window.confirm()` or other intermediate prompt was introduced.
 For persistent side-panel mutations such as ignore/review ledgers, verify every action through the JavaScript path first: the request must ask for JSON, the browser URL must not change, the panel shell must stay open, only owned fragments/page elements may refresh, and controls rendered by the replacement fragment must still be intercepted by delegated handlers.

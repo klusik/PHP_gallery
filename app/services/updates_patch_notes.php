@@ -88,7 +88,7 @@ function application_patch_notes_viewer_data(?string $preferredBranch = null, in
 
     try {
         // $markdown stores the remote PATCH_NOTES.md text fetched from GitHub Contents API.
-        $markdown = application_update_fetch_github_content($branch, 'PATCH_NOTES.md', 15);
+        $markdown = application_update_fetch_github_content($branch, 'PATCH_NOTES.md', 5);
         // $versions stores the parsed version sections keyed by normalized version number.
         $versions = application_patch_notes_parse_versions($markdown);
         // $data stores the viewer payload cached for subsequent page views.
@@ -113,7 +113,7 @@ function application_patch_notes_viewer_data(?string $preferredBranch = null, in
             'cached_at' => time(),
             'source' => 'local',
             'versions' => $localMarkdown !== '' ? application_patch_notes_parse_versions($localMarkdown) : [],
-            'error' => $exception->getMessage(),
+            'error' => 'Remote patch notes unavailable. Reference: ' . application_update_safe_error($exception)['reference'],
         ];
     }
 }

@@ -99,7 +99,7 @@ Progressive rendering prioritizes perceived initial responsiveness, not minimum 
 - **One-click updates** - Check GitHub and install newer versions from admin dashboard
 - **Update channels** - Follow stable or beta release branches
 - **Patch notes viewer** - Cached release notes with version browsing
-- **Backup on update** - Overwritten files preserved under `cache/updates/backups`
+- **Backup on update** - Changed/removed application files preserved in each durable job under `cache/updates/jobs/<job-id>/rollback/`
 - **Emergency recovery** - Revert to stable branch from `reset.php`
 - **Database migrations** - Automatic schema evolution with admin-triggerable execution
 - **Database inspection** - Explicit full-schema inventory with migration/code audit, cleanup reasons, and protected-table policies
@@ -388,13 +388,18 @@ Public tag pages can use a dedicated presentation. In Theme > Appearance > Galle
 
 #### Updating the Application
 
-1. Go to **Updates** to check GitHub for new versions
-2. See available versions and read patch notes
-3. Click **Update** to download and install
-4. The updater validates required release files before touching the installation
-5. Incoming files are staged, size-checked, and activated before obsolete managed files are removed
-6. Backups of overwritten and removed files are saved under `cache/updates/backups/`
-7. Your `config.php`, galleries, and custom CSS are never overwritten
+1. Go to **Updates** to check GitHub for new versions and read patch notes.
+2. Click **Update**. The Admin panel starts a durable job under `cache/updates/jobs/` and advances it through short authenticated requests instead of holding one PHP request open for the whole release.
+3. The job checkpoints `download`, archive validation, bounded extraction, manifest verification, activation planning, file staging, rollback backup, readiness, activation, migrations, finalization, cleanup, and completion. Archive validation itself checkpoints every 500 entries; individual archive files are capped at 32 MiB and total expanded size at 512 MiB so one extraction unit cannot become an unbounded application payload.
+4. Downloaded archives, extracted files, and the ready tree stay outside the active installation. Every installable release file must be covered by `app/core-manifest.json`; unsafe ZIP paths, symbolic links, oversized archives, missing files, stale manifests, and hash mismatches are rejected before activation.
+5. Preflight hashes the incoming release against the active tree, so byte-identical files are excluded from activation. The complete pre-update snapshot of files that can change or be removed is made durable before activation. `config.php`, gallery media, cache data, custom CSS, hosting INI files, and other protected paths are never replaced by the updater.
+6. If PHP, the browser, FastCGI, or a proxy stops a normal stage, reopen **Updates** and continue. Completed checkpoints are not repeated unnecessarily. Worker access is serialized with per-job `flock()` plus a global active-job start lock; direct requests for an old job cannot run beside the active update, and active-pointer release is compare-and-clear safe. Stale lock-file text cannot keep a job blocked after the operating-system lock is released. A failed or running job can also be **Cancel prepared update** before activation starts; this clears its active-job slot without touching application files.
+7. Activation is the only intentionally non-yielding critical section. It contains prepared local replacements for changed files only. Each replacement uses a sibling temporary file plus `rename()`, and replay recognizes files already matching the prepared hash. A host kill can still expose a brief mixed-version tree because ordinary shared hosting has no portable atomic directory swap; the next worker invocation completes the same activation stage.
+8. Migrations run one migration file per updater checkpoint. Individual file copy/hash operations and one migration file remain inherently non-interruptible units; archive entries are capped at 32 MiB and rollback refuses an individual managed active file above 128 MiB rather than starting an unbounded snapshot copy. A completed migration is recorded in `schema_migrations`. If PHP dies inside one migration file, that file may replay, so migration definitions and repair callbacks must remain safely rerunnable.
+9. After activation begins, the Admin job card can roll application files back from the saved snapshot. File rollback does not reverse database migrations. Stable restore and clean reinstall are separate resumable download/install operations.
+10. With JavaScript enabled the Admin side panel stays open and refreshes progress in place. Without JavaScript, **Continue update** and **Retry from checkpoint** submit ordinary authenticated POST requests and preserve the direct-request fallback.
+
+Automatic stable updates use the same state machine. The standalone first-install `setup-gallery.php` bootstrap predates the application and therefore cannot use the authenticated updater engine; it remains a separate one-request bootstrap path and manual ZIP upload remains the fallback on hosts that terminate that initial download/extract request. Remote version discovery has its own approximately eight-second wall-clock budget shared fairly across configured GitHub branches, and a discovery request only creates the durable background job; package work begins on a later invocation. Normal safe page requests can then advance a short background slice. A caught background failure waits at least 60 seconds and then goes through the same stage-aware retry cleanup before another worker attempt. On an idle site, schedule `php scripts/application_update.php` from hosting cron, for example every five minutes; each invocation either performs bounded discovery or advances the existing background job, not both. The CLI runner does not advance manual/Admin beta jobs. Correctness never depends on `set_time_limit()` or `ignore_user_abort()`.
 
 #### Customizing Appearance
 

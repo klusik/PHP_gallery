@@ -173,6 +173,7 @@ $phase10MutationSources = [
     'app/services/thumbnail_maintenance.php',
     'app/services/database_maintenance.php',
     'app/services/updates_install.php',
+    'app/services/updates_jobs.php',
 ];
 foreach ($phase10MutationSources as $relativePath) {
     $source = (string) file_get_contents(__DIR__ . '/../' . $relativePath);
@@ -228,17 +229,32 @@ $generationPreflight = strpos($thumbnailGenerationSource, "thumbnail_metadata_pr
 $generationDirectoryMutation = strpos($thumbnailGenerationSource, 'gallery_thumbs_dir($gallery, true)', $generationFunctionStart);
 mutation_policy_assert_true($generationPreflight !== false && $generationDirectoryMutation !== false && $generationPreflight < $generationDirectoryMutation, 'thumbnail schema preflight occurs before derivative directory mutation');
 
-$updateSource = (string) file_get_contents(__DIR__ . '/../app/services/updates_install.php');
-foreach ([
-    'application_update.install_beta',
-    'application_update.restore_stable',
-    'application_update.clean_reinstall',
-    'application_update.install_stable',
-] as $operation) {
-    $preflight = strpos($updateSource, "application_update_assert_activation_schema_known('" . $operation . "')");
-    $copy = $preflight === false ? false : strpos($updateSource, 'application_update_copy_files(', $preflight);
-    mutation_policy_assert_true($preflight !== false && $copy !== false && $preflight < $copy, 'updater activation preflight before active copy for ' . $operation);
-}
+$updateJobsSource = (string) file_get_contents(__DIR__ . '/../app/services/updates_jobs.php');
+$updatePlanStart = strpos($updateJobsSource, 'function application_update_job_build_plan');
+$updatePlanPreflight = $updatePlanStart === false
+    ? false
+    : strpos($updateJobsSource, "application_update_assert_activation_schema_known('application_update.job_activation')", $updatePlanStart);
+$updateReadyStart = strpos($updateJobsSource, 'function application_update_job_assert_ready');
+$updateReadyPreflight = $updateReadyStart === false
+    ? false
+    : strpos($updateJobsSource, "application_update_assert_activation_schema_known('application_update.job_activation_ready')", $updateReadyStart);
+$updateActivateStart = strpos($updateJobsSource, 'function application_update_job_activate');
+mutation_policy_assert_true(
+    $updatePlanStart !== false
+        && $updatePlanPreflight !== false
+        && $updateReadyStart !== false
+        && $updateReadyPreflight !== false
+        && $updateActivateStart !== false
+        && $updatePlanStart < $updatePlanPreflight
+        && $updatePlanPreflight < $updateReadyStart
+        && $updateReadyStart < $updateReadyPreflight
+        && $updateReadyPreflight < $updateActivateStart,
+    'updater schema preflights occur before activation stage'
+);
+mutation_policy_assert_true(
+    !str_contains(substr($updateJobsSource, 0, $updateActivateStart), 'application_update_activate_prepared_file('),
+    'updater performs no prepared active-file replacement before activation stage'
+);
 
 $updateFilesystemSource = (string) file_get_contents(__DIR__ . '/../app/services/updates_filesystem.php');
 mutation_policy_assert_true(str_contains($updateFilesystemSource, "'app/services/schema_inspection.php'"), 'updater snapshot requires schema inspection service');

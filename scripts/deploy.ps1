@@ -102,21 +102,21 @@ function Invoke-ManifestGenerator {
     # Variable $phpCommand stores this scripts working value.
     $phpCommand = Get-Command php -ErrorAction SilentlyContinue
     if (-not $phpCommand) {
-        Write-Warning "PHP executable was not found in PATH. Integrity manifest update was skipped."
+        Write-Error "PHP executable was not found in PATH. Cannot build a manifest-validated deployment."
         return $false
     }
 
     # Variable $manifestScript stores this scripts working value.
     $manifestScript = Join-Path $root 'scripts\generate_manifest.php'
     if (-not (Test-Path $manifestScript)) {
-        Write-Warning "Manifest generator was not found: $manifestScript. Integrity manifest update was skipped."
+        Write-Error "Manifest generator was not found: $manifestScript. Cannot build a manifest-validated deployment."
         return $false
     }
 
     Write-Host "Updating integrity manifest..."
     & php $manifestScript
     if ($LASTEXITCODE -ne 0) {
-        Write-Warning "Manifest generator failed with exit code $LASTEXITCODE. Deploy will continue without updating the integrity manifest."
+        Write-Error "Manifest generator failed with exit code $LASTEXITCODE. Deployment aborted to avoid publishing an unverifiable package."
         return $false
     }
 
@@ -284,7 +284,9 @@ if ($PSBoundParameters.ContainsKey('UpdateManifest')) {
 }
 
 if ($refreshManifest) {
-    Invoke-ManifestGenerator
+    if (-not (Invoke-ManifestGenerator)) {
+        throw 'Integrity manifest refresh failed. Deployment was not created.'
+    }
 }
 if ($Mode -eq 'local') {
     $script:DeployTarget = if ([System.IO.Path]::IsPathRooted($DeployFolder)) {

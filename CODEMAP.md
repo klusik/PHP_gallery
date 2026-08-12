@@ -280,14 +280,16 @@ The Gallery tags Theme subsection is rendered by app/controllers/admin_theme.php
 
 ## Updates and GitHub Integration
 
-| Task | Files |
-| --- | --- |
-| GitHub API helper/cache | `app/services/github.php` |
-| Update status model | `app/services/updates.php` |
-| Admin update UI | `app/controllers/updates.php` |
-| Patch notes | `PATCH_NOTES.md` |
-| Release metadata | `release-metadata.json` |
-| Updater safety regression test | `tests/updater_safety_model_test.php` |
+| Task | Files | Notes |
+| --- | --- | --- |
+| GitHub API helper/cache | `app/services/github.php` | Shared GitHub metadata/content transport. |
+| Update status/service router | `app/services/updates.php`, `app/services/updates_status.php`, `app/services/updates_remote.php` | Bounded release discovery and updater service composition. |
+| Resumable update state machine | `app/services/updates_jobs.php` | Durable jobs, bounded download/archive/extract/verify/stage/backup checkpoints, Range/If-Range resume, worker locks, pre-activation cancellation, changed-file activation, migration continuation, rollback and cleanup. |
+| Update install/background entry points | `app/services/updates_install.php`, `scripts/application_update.php` | Legacy API starters plus request-triggered/cron continuation; discovery and package work are split across invocations. |
+| Admin update UI | `app/controllers/updates.php`, `public/assets/gallery-modules/admin-update-jobs.js` | Authenticated CSRF-protected start/continue/retry/cancel/rollback controls with delegated in-panel progress refresh and non-JavaScript POST fallback. |
+| Patch notes | `PATCH_NOTES.md` | Release-note source, not modified as part of updater hardening. |
+| Release metadata | `release-metadata.json` | Version/channel metadata consumed during discovery. |
+| Updater safety regression tests | `tests/updater_safety_model_test.php`, `tests/updater_resumable_state_machine_test.php` | State, interruption, locking, package, rollback, migration, UI, and redaction contracts. |
 
 ## Language and Translations
 

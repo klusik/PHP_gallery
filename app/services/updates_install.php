@@ -332,28 +332,28 @@ function application_autoupdate_relative_time_label(int $lastCheckedAt): string
  */
 function application_autoupdate_maybe_run(int $ttlSeconds = 18000): void
 {
+    // Finish a previously started background job before considering a new remote check.
+    $activeJob = application_update_active_job();
+    if ($activeJob !== null) {
+        application_update_continue_background_job(3.0);
+        return;
+    }
+
     // $ttlSeconds stores the minimum remote check interval. Five hours is the default
     // so shared hosting installations do not burn anonymous GitHub API quota on
     // normal page traffic. Manual dry checks intentionally bypass this throttle.
     $ttlSeconds = max(18000, $ttlSeconds);
     // $method stores the current HTTP verb so uploads, votes, edits, and CSRF flows are not interrupted.
     $method = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
-    if (!in_array($method, ['GET', 'HEAD'], true)) {
-        return;
-    }
-    if (!application_autoupdate_enabled()) {
+    if (!in_array($method, ['GET', 'HEAD'], true) || !application_autoupdate_enabled()) {
         return;
     }
 
-    // $now stores one timestamp used consistently for throttle and lock state.
     $now = time();
-    // $lastCheckedAt stores the latest automatic update check timestamp.
     $lastCheckedAt = (int) app_setting('application_autoupdate_last_checked_at', '0');
     if ($lastCheckedAt > 0 && $now - $lastCheckedAt < $ttlSeconds) {
         return;
     }
-
-    // $lockUntil stores a soft process lock so concurrent requests do not all update at once.
     $lockUntil = (int) app_setting('application_autoupdate_lock_until', '0');
     if ($lockUntil > $now) {
         return;
@@ -363,7 +363,6 @@ function application_autoupdate_maybe_run(int $ttlSeconds = 18000): void
         application_autoupdate_dry_run(false, $now);
         return;
     }
-
     application_autoupdate_run_installing_check(false, $now);
 }
 
@@ -411,9 +410,10 @@ function application_autoupdate_dry_run(bool $force = false, ?int $checkedAt = n
         ], ['category' => 'update', 'severity' => 'notice']);
         return application_autoupdate_status();
     } catch (Throwable $exception) {
-        set_app_setting('application_autoupdate_last_result', 'dry_run_failed:' . $exception->getMessage());
+        $safe = application_update_safe_error($exception);
+        set_app_setting('application_autoupdate_last_result', 'dry_run_failed:' . $safe['reference']);
         admin_log_event('warning', 'update.autoupdate_dry_run_failed', t('admin.updates.log_autoupdate_dry_run_failed', 'Automatic update dry run failed.'), [
-            'error' => $exception->getMessage(),
+            'error_reference' => $safe['reference'],
             'current_version' => cms_current_version(),
             'beta_active' => application_update_beta_active(),
             'php_version' => PHP_VERSION,
@@ -453,19 +453,15 @@ function application_autoupdate_dry_run_result_label(array $status): string
  */
 function application_autoupdate_run_installing_check(bool $force = false, ?int $checkedAt = null): array
 {
-    // $now stores the timestamp written to the shared automatic update diagnostics.
     $now = $checkedAt ?? time();
-    // $lockUntil stores a soft process lock so concurrent requests do not all update at once.
     $lockUntil = (int) app_setting('application_autoupdate_lock_until', '0');
     if (!$force && $lockUntil > $now) {
         return application_autoupdate_status();
     }
 
     set_app_setting('application_autoupdate_last_checked_at', (string) $now);
-    set_app_setting('application_autoupdate_lock_until', (string) ($now + 600));
-
+    set_app_setting('application_autoupdate_lock_until', (string) ($now + 120));
     try {
-        // $status stores the same update payload used by the manual update page.
         $status = check_application_update();
         cache_application_update_check($status);
         if (!application_update_status_is_pending($status)) {
@@ -473,18 +469,26 @@ function application_autoupdate_run_installing_check(bool $force = false, ?int $
             return application_autoupdate_status();
         }
 
-        // $result stores manual-updater diagnostics for the automatic update log entry.
-        $result = install_application_update();
-        set_app_setting('application_autoupdate_last_result', 'updated:' . (string) ($result['version'] ?? 'unknown'));
-        admin_log_event('info', 'update.autoupdate_installed', t('admin.updates.log_autoupdate_installed', 'Automatic application update installed a newer stable release.'), $result, ['category' => 'update', 'severity' => 'notice']);
+        $job = application_update_start_job('stable_update', [
+            'branch' => (string) ($status['branch'] ?? ''),
+            'target_version' => (string) ($status['latest_version'] ?? ''),
+        ], 'background');
+        // Do not combine remote discovery and package processing in one request.
+        // The next safe page request, Admin poll, or cron invocation advances the job.
+        set_app_setting('application_autoupdate_last_result', 'job:' . (string) $job['id'] . ':' . (string) $job['stage']);
+        admin_log_event('info', 'update.autoupdate_started', t('admin.updates.log_autoupdate_installed', 'Automatic application update started a resumable stable release job.'), [
+            'job_id' => (string) $job['id'],
+            'stage' => (string) $job['stage'],
+            'status' => (string) $job['status'],
+        ], ['category' => 'update', 'severity' => 'notice']);
         return application_autoupdate_status();
     } catch (Throwable $exception) {
-        set_app_setting('application_autoupdate_last_result', 'failed:' . $exception->getMessage());
+        $safe = application_update_safe_error($exception);
+        set_app_setting('application_autoupdate_last_result', 'failed:' . $safe['reference']);
         admin_log_event('warning', 'update.autoupdate_failed', t('admin.updates.log_autoupdate_failed', 'Automatic application update failed.'), [
-            'error' => $exception->getMessage(),
+            'error_reference' => $safe['reference'],
             'current_version' => cms_current_version(),
             'beta_active' => application_update_beta_active(),
-            'php_version' => PHP_VERSION,
             'forced' => $force,
         ], ['category' => 'update', 'severity' => 'error']);
         return application_autoupdate_status();
@@ -511,79 +515,7 @@ function application_update_beta_backup_path(): string
  */
 function install_application_beta(string $commitId): array
 {
-    if (!class_exists(ZipArchive::class)) {
-        throw new RuntimeException('The PHP ZipArchive extension is required for one-button updates.');
-    }
-    // $commitId stores an intermediate value used by the surrounding gallery workflow.
-    $commitId = strtolower(trim($commitId));
-    if (!preg_match('/^[0-9a-f]{7,40}$/', $commitId)) {
-        throw new RuntimeException('Enter a valid beta code.');
-    }
-
-    // $root stores an intermediate value used by the surrounding gallery workflow.
-    $root = application_update_project_root();
-    // $updateDir stores an intermediate value used by the surrounding gallery workflow.
-    $updateDir = $root . '/cache/updates';
-    // $backupDir stores an intermediate value used by the surrounding gallery workflow.
-    $backupDir = $updateDir . '/backups';
-    application_update_ensure_dir($updateDir);
-    application_update_ensure_dir($backupDir);
-
-    // $stamp stores an intermediate value used by the surrounding gallery workflow.
-    $stamp = date('Ymd-His');
-    // $zipPath stores an intermediate value used by the surrounding gallery workflow.
-    $zipPath = $updateDir . '/beta-' . $stamp . '.zip';
-    // $extractDir stores an intermediate value used by the surrounding gallery workflow.
-    $extractDir = $updateDir . '/beta-extract-' . $stamp;
-    application_update_ensure_dir($extractDir);
-
-    // $archive stores an intermediate value used by the surrounding gallery workflow.
-    $archive = http_fetch(application_update_commit_zip_url($commitId), 60);
-    if (file_put_contents($zipPath, $archive, LOCK_EX) === false) {
-        throw new RuntimeException('Could not write beta archive into cache/updates.');
-    }
-
-    // $zip stores an intermediate value used by the surrounding gallery workflow.
-    $zip = new ZipArchive();
-    if ($zip->open($zipPath) !== true) {
-        throw new RuntimeException('Downloaded beta archive could not be opened.');
-    }
-    if (!$zip->extractTo($extractDir)) {
-        $zip->close();
-        throw new RuntimeException('Downloaded beta archive could not be extracted.');
-    }
-    $zip->close();
-
-    // $sourceRoot stores an intermediate value used by the surrounding gallery workflow.
-    $sourceRoot = application_update_extracted_root($extractDir);
-    application_update_assert_source_root($sourceRoot);
-    application_update_cleanup_transient_extracts($updateDir, $extractDir);
-    // $backupPath stores an intermediate value used by the surrounding gallery workflow.
-    $backupPath = $backupDir . '/before-beta-' . $stamp . '.zip';
-    application_update_assert_activation_schema_known('application_update.install_beta');
-    // $copyResult stores copy and cleanup diagnostics for this updater run.
-    $copyResult = application_update_copy_files($sourceRoot, $root, $backupPath);
-    // $copied stores the number of files copied from the downloaded snapshot.
-    $copied = (int) $copyResult['files_copied'];
-    // $migrations stores an intermediate value used by the surrounding gallery workflow.
-    $migrations = run_migrations();
-    application_update_invalidate_opcache($root, $sourceRoot);
-    cache_application_update_check(check_application_update());
-    application_patch_notes_clear_cache();
-    set_app_setting('application_update_channel', 'beta');
-    set_app_setting('application_update_beta_commit', $commitId);
-    set_app_setting('application_update_beta_backup_path', str_replace('\\', '/', substr($backupPath, strlen($root) + 1)));
-    delete_app_settings(['application_update_check_cache', 'application_update_check_status_json', 'application_update_check_cached_at']);
-
-    return [
-        'version' => $commitId,
-        'branch' => 'beta',
-        'files_copied' => $copied,
-        'removed_paths' => $copyResult['removed_paths'],
-        'removed_count' => $copyResult['removed_count'],
-        'backup' => str_replace('\\', '/', substr($backupPath, strlen($root) + 1)),
-        'migrations' => $migrations,
-    ];
+    return application_update_start_job('beta_install', ['commit' => $commitId], 'api');
 }
 
 /**
@@ -593,74 +525,7 @@ function install_application_beta(string $commitId): array
  */
 function restore_application_stable_release(): array
 {
-    // $root stores an intermediate value used by the surrounding gallery workflow.
-    $root = application_update_project_root();
-    // $branch stores an intermediate value used by the surrounding gallery workflow.
-    $branch = application_update_branch_candidates()[0] ?? '';
-    if ($branch === '') {
-        throw new RuntimeException('No stable release branch is configured.');
-    }
-    // $updateDir stores an intermediate value used by the surrounding gallery workflow.
-    $updateDir = $root . '/cache/updates';
-    // $stamp stores an intermediate value used by the surrounding gallery workflow.
-    $stamp = date('Ymd-His');
-    // $restoreDir stores an intermediate value used by the surrounding gallery workflow.
-    $restoreDir = $updateDir . '/stable-restore-' . $stamp;
-    application_update_ensure_dir($updateDir);
-    application_update_ensure_dir($restoreDir);
-
-    // $archive stores an intermediate value used by the surrounding gallery workflow.
-    $archive = http_fetch(application_update_zip_url($branch), 60);
-    // $zipPath stores an intermediate value used by the surrounding gallery workflow.
-    $zipPath = $updateDir . '/stable-restore-' . $stamp . '.zip';
-    if (file_put_contents($zipPath, $archive, LOCK_EX) === false) {
-        throw new RuntimeException('Could not write stable restore archive into cache/updates.');
-    }
-
-    // $zip stores an intermediate value used by the surrounding gallery workflow.
-    $zip = new ZipArchive();
-    if ($zip->open($zipPath) !== true) {
-        throw new RuntimeException('Downloaded stable restore archive could not be opened.');
-    }
-    if (!$zip->extractTo($restoreDir)) {
-        $zip->close();
-        throw new RuntimeException('Downloaded stable restore archive could not be extracted.');
-    }
-    $zip->close();
-
-    // $sourceRoot stores an intermediate value used by the surrounding gallery workflow.
-    $sourceRoot = application_update_extracted_root($restoreDir);
-    application_update_assert_source_root($sourceRoot);
-    application_update_cleanup_transient_extracts($updateDir, $restoreDir);
-    // $backupPath stores the rollback archive created before stable files are restored.
-    $backupPath = $root . '/cache/updates/rollback-' . date('Ymd-His') . '.zip';
-    application_update_assert_activation_schema_known('application_update.restore_stable');
-    // $copyResult stores copy and cleanup diagnostics for this updater run.
-    $copyResult = application_update_copy_files($sourceRoot, $root, $backupPath);
-    // $copied stores the number of files copied from the downloaded snapshot.
-    $copied = (int) $copyResult['files_copied'];
-    application_update_invalidate_opcache($root, $sourceRoot);
-    delete_app_settings([
-        'application_update_channel',
-        'application_update_beta_commit',
-        'application_update_beta_backup_path',
-        'application_update_check_cache',
-    ]);
-    application_patch_notes_clear_cache();
-
-    // $restoredVersion stores an intermediate value used by the surrounding gallery workflow.
-    $restoredVersion = application_update_version_from_local_bootstrap($root . '/app/bootstrap.php') ?? cms_current_version();
-
-    return [
-        'version' => $restoredVersion,
-        'branch' => 'stable',
-        'files_copied' => $copied,
-        'removed_paths' => $copyResult['removed_paths'],
-        'removed_count' => $copyResult['removed_count'],
-        'backup' => str_replace('\\', '/', substr($backupPath, strlen($root) + 1)),
-        'archive' => str_replace('\\', '/', substr($zipPath, strlen($root) + 1)),
-        'migrations' => [],
-    ];
+    return application_update_start_job('stable_restore', [], 'api');
 }
 
 /**
@@ -681,82 +546,7 @@ function restore_application_stable_backup(): array
  */
 function clean_reinstall_current_application_version(): array
 {
-    if (!class_exists(ZipArchive::class)) {
-        throw new RuntimeException('The PHP ZipArchive extension is required for clean reinstall.');
-    }
-    // $root stores the verified project root that will be repaired.
-    $root = application_update_project_root();
-    // $branch stores the stable branch used as the clean source of truth.
-    $branch = application_update_branch_candidates()[0] ?? '';
-    if ($branch === '') {
-        throw new RuntimeException('No stable release branch is configured.');
-    }
-    // $updateDir stores the local updater workspace.
-    $updateDir = $root . '/cache/updates';
-    // $backupDir stores rollback archives for files removed or replaced by this reinstall.
-    $backupDir = $updateDir . '/backups';
-    application_update_ensure_dir($updateDir);
-    application_update_ensure_dir($backupDir);
-
-    // $stamp stores a deterministic timestamp used by all artifacts from this run.
-    $stamp = date('Ymd-His');
-    // $zipPath stores the downloaded GitHub archive.
-    $zipPath = $updateDir . '/clean-reinstall-' . $stamp . '.zip';
-    // $extractDir stores the temporary extraction directory.
-    $extractDir = $updateDir . '/stable-restore-' . $stamp;
-    application_update_ensure_dir($extractDir);
-
-    // $archive stores the downloaded repository snapshot bytes.
-    $archive = http_fetch(application_update_zip_url($branch), 60);
-    if (file_put_contents($zipPath, $archive, LOCK_EX) === false) {
-        throw new RuntimeException('Could not write clean reinstall archive into cache/updates.');
-    }
-
-    // $zip stores the extracted repository archive.
-    $zip = new ZipArchive();
-    if ($zip->open($zipPath) !== true) {
-        throw new RuntimeException('Downloaded clean reinstall archive could not be opened.');
-    }
-    if (!$zip->extractTo($extractDir)) {
-        $zip->close();
-        throw new RuntimeException('Downloaded clean reinstall archive could not be extracted.');
-    }
-    $zip->close();
-
-    // $sourceRoot stores the clean repository root from the extracted GitHub archive.
-    $sourceRoot = application_update_extracted_root($extractDir);
-    application_update_assert_source_root($sourceRoot);
-    application_update_cleanup_transient_extracts($updateDir, $extractDir);
-    // $backupPath stores the rollback archive for replaced and removed application files.
-    $backupPath = $backupDir . '/before-clean-reinstall-' . $stamp . '.zip';
-    application_update_assert_activation_schema_known('application_update.clean_reinstall');
-    // $copyResult stores copy and full cleanup diagnostics for this reinstall.
-    $copyResult = application_update_copy_files($sourceRoot, $root, $backupPath, true);
-    // $migrations stores database migrations applied after the clean file reinstall.
-    $migrations = run_migrations();
-    application_update_invalidate_opcache($root, $sourceRoot);
-    delete_app_settings([
-        'application_update_channel',
-        'application_update_beta_commit',
-        'application_update_beta_backup_path',
-        'application_update_check_cache',
-    ]);
-    // $cacheCleanup stores generated ZIP and temporary cache cleanup diagnostics.
-    $cacheCleanup = application_update_clean_cache_artifacts($root, $backupPath);
-
-    // $installedVersion stores the version now visible from the reinstalled bootstrap.
-    $installedVersion = application_update_version_from_local_bootstrap($root . '/app/bootstrap.php') ?? cms_current_version();
-    return [
-        'version' => $installedVersion,
-        'branch' => $branch,
-        'files_copied' => (int) $copyResult['files_copied'],
-        'removed_paths' => $copyResult['removed_paths'],
-        'removed_count' => $copyResult['removed_count'],
-        'cache_cleanup' => $cacheCleanup,
-        'backup' => str_replace('\\', '/', substr($backupPath, strlen($root) + 1)),
-        'archive' => str_replace('\\', '/', substr($zipPath, strlen($root) + 1)),
-        'migrations' => $migrations,
-    ];
+    return application_update_start_job('clean_reinstall', [], 'api');
 }
 
 
@@ -778,77 +568,5 @@ function application_update_nav_label(bool $pending): string
  */
 function install_application_update(): array
 {
-    if (!class_exists(ZipArchive::class)) {
-        throw new RuntimeException('The PHP ZipArchive extension is required for one-button updates.');
-    }
-
-    // $status stores an intermediate value used by the surrounding gallery workflow.
-    $status = check_application_update();
-    if (!empty($status['error'])) {
-        throw new RuntimeException((string) $status['error']);
-    }
-    if (empty($status['update_available'])) {
-        throw new RuntimeException('No newer version is available.');
-    }
-
-    // $root stores an intermediate value used by the surrounding gallery workflow.
-    $root = application_update_project_root();
-    // $updateDir stores an intermediate value used by the surrounding gallery workflow.
-    $updateDir = $root . '/cache/updates';
-    // $backupDir stores an intermediate value used by the surrounding gallery workflow.
-    $backupDir = $updateDir . '/backups';
-    application_update_ensure_dir($updateDir);
-    application_update_ensure_dir($backupDir);
-
-    // $stamp stores an intermediate value used by the surrounding gallery workflow.
-    $stamp = date('Ymd-His');
-    // $zipPath stores an intermediate value used by the surrounding gallery workflow.
-    $zipPath = $updateDir . '/update-' . $stamp . '.zip';
-    // $extractDir stores an intermediate value used by the surrounding gallery workflow.
-    $extractDir = $updateDir . '/extract-' . $stamp;
-    application_update_ensure_dir($extractDir);
-
-    // $archive stores an intermediate value used by the surrounding gallery workflow.
-    $archive = http_fetch(application_update_zip_url((string) $status['branch']), 60);
-    if (file_put_contents($zipPath, $archive, LOCK_EX) === false) {
-        throw new RuntimeException('Could not write update archive into cache/updates.');
-    }
-
-    // $zip stores an intermediate value used by the surrounding gallery workflow.
-    $zip = new ZipArchive();
-    if ($zip->open($zipPath) !== true) {
-        throw new RuntimeException('Downloaded update archive could not be opened.');
-    }
-    if (!$zip->extractTo($extractDir)) {
-        $zip->close();
-        throw new RuntimeException('Downloaded update archive could not be extracted.');
-    }
-    $zip->close();
-
-    // $sourceRoot stores an intermediate value used by the surrounding gallery workflow.
-    $sourceRoot = application_update_extracted_root($extractDir);
-    application_update_assert_source_root($sourceRoot);
-    application_update_cleanup_transient_extracts($updateDir, $extractDir);
-    // $backupPath stores an intermediate value used by the surrounding gallery workflow.
-    $backupPath = $backupDir . '/before-update-' . $stamp . '.zip';
-    application_update_assert_activation_schema_known('application_update.install_stable');
-    // $copyResult stores copy and cleanup diagnostics for this updater run.
-    $copyResult = application_update_copy_files($sourceRoot, $root, $backupPath);
-    // $copied stores the number of files copied from the downloaded snapshot.
-    $copied = (int) $copyResult['files_copied'];
-    // $migrations stores an intermediate value used by the surrounding gallery workflow.
-    $migrations = run_migrations();
-    application_update_invalidate_opcache($root, $sourceRoot);
-    delete_app_settings(['application_update_check_cache', 'application_update_check_status_json', 'application_update_check_cached_at']);
-    application_patch_notes_clear_cache();
-
-    return [
-        'version' => (string) $status['latest_version'],
-        'branch' => (string) $status['branch'],
-        'files_copied' => $copied,
-        'removed_paths' => $copyResult['removed_paths'],
-        'removed_count' => $copyResult['removed_count'],
-        'backup' => str_replace('\\', '/', substr($backupPath, strlen($root) + 1)),
-        'migrations' => $migrations,
-    ];
+    return application_update_start_job('stable_update', [], 'api');
 }
