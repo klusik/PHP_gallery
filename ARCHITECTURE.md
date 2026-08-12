@@ -9,7 +9,7 @@ This document is intended to help future maintainers and AI coding agents unders
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.87.1';
+const CMS_VERSION = '0.88';
 ```
 
 Update-related code uses:
@@ -76,7 +76,7 @@ Root-level operational files:
 
 ## Bootstrap Responsibilities
 
-`app/bootstrap.php` is the central runtime loader. It does the following:
+`app/bootstrap.php` is the thin runtime coordinator. Focused modules under `app/bootstrap/` own configuration loading, request preparation, session startup, routing, maintenance scheduling, and dispatch while preserving the original entrypoint contract. The coordinator does the following:
 
 1. Defines application constants.
 2. Requires core files in a fixed order.
@@ -146,7 +146,7 @@ Pretty URL generation is controlled by URL rewrite settings in `app/services/app
 
 ## Main Route Groups
 
-The definitive route table is in `cms_run()` inside `app/bootstrap.php`. Important groups are listed here for orientation.
+The definitive route table and request dispatch live in `app/bootstrap/dispatch.php`, with path interpretation in `app/bootstrap/routing.php`. `cms_run()` remains the stable coordinator called by the public entrypoint. Important groups are listed here for orientation.
 
 ### Public gallery routes
 
@@ -231,7 +231,7 @@ The definitive route table is in `cms_run()` inside `app/bootstrap.php`. Importa
 
 ### Centralized Admin Settings ownership
 
-`app/services/admin_settings_registry.php` is the ownership registry for the central Settings hub. Stable section IDs are `general`, `appearance`, `content`, `media`, `uploads`, `privacy`, and `advanced`. Registry entries describe canonical keys, current/default resolvers, validation metadata, sensitivity, migration readiness and specialized destinations. The registry does not replace the domain services that own normalization or persistence.
+`app/services/admin_settings_registry.php` is the ownership and discovery registry for the central Settings hub. Stable section IDs are `general`, `appearance`, `content`, `media`, `uploads`, `privacy`, and `advanced`. Registry entries describe canonical keys, current/default resolvers, validation metadata, sensitivity, migration readiness and specialized destinations. Discovery-only entries index every global specialist control and registered feature flag without rendering hundreds of duplicate cards. The registry does not replace the domain services that own normalization or persistence.
 
 `app/controllers/admin_settings.php` accepts only registry-whitelisted centrally editable IDs. POST requests require Admin authentication and CSRF validation, retain field-level errors, and save through `admin_settings_save_editable_value()`. That function delegates to the same focused setters used elsewhere, including `set_site_name()`, `translation_set_public_language()`, `set_url_rewrite_enabled()`, `set_public_home_search_enabled()`, `public_thumbnail_rendering_mode_save()`, `set_exif_gps_default_enabled()`, and `set_dev_mode_enabled()`. Unknown IDs and specialized-only entries are rejected. No generic submitted key can be written directly to `app_settings`.
 
