@@ -152,7 +152,8 @@ function settings_test_literal(string $expression): string
 }
 
 $registrySource = file_get_contents(__DIR__ . '/../app/services/admin_settings_registry.php');
-$bootstrapSource = file_get_contents(__DIR__ . '/../app/bootstrap.php');
+$bootstrapSource = (string) file_get_contents(__DIR__ . '/../app/bootstrap.php')
+    . (string) file_get_contents(__DIR__ . '/../app/bootstrap/dispatch.php');
 if (!is_string($registrySource) || !is_string($bootstrapSource)) {
     throw new RuntimeException('Unable to read Settings registry or router source.');
 }

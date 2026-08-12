@@ -19,7 +19,8 @@ $serviceSource = (string) file_get_contents(__DIR__ . '/../app/services/admin_da
 $controllerSource = (string) file_get_contents(__DIR__ . '/../app/controllers/admin_dashboard.php');
 $viewSource = (string) file_get_contents(__DIR__ . '/../app/views/admin_dashboard.php');
 $tabsSource = (string) file_get_contents(__DIR__ . '/../public/assets/gallery-modules/admin-tabs.js');
-$bootstrapSource = (string) file_get_contents(__DIR__ . '/../app/bootstrap.php');
+$bootstrapSource = (string) file_get_contents(__DIR__ . '/../app/bootstrap.php')
+    . (string) file_get_contents(__DIR__ . '/../app/bootstrap/dispatch.php');
 
 assert_admin_dashboard_deferred_contains($serviceSource, 'function admin_dashboard_view_model(bool $includeMaintenance = false): array', 'dashboard model has an explicit maintenance loading flag');
 assert_admin_dashboard_deferred_contains($serviceSource, '$databaseUsage = $includeMaintenance &&', 'database usage is maintenance-only');

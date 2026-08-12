@@ -30,8 +30,14 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../app/services/updates.php';
 
+$updatesController = (string) file_get_contents(__DIR__ . '/../app/controllers/updates.php');
+if (!str_contains($updatesController, 'value="cleanup_malformed_root_files"')) {
+    throw new RuntimeException('Advanced updater tools no longer expose malformed root-file cleanup.');
+}
+
 use function Gallery\Services\application_update_assert_source_root;
 use function Gallery\Services\application_update_misplaced_project_paths;
+use function Gallery\Services\application_update_remove_malformed_root_files;
 
 $root = dirname(__DIR__);
 application_update_assert_source_root($root);
@@ -62,14 +68,50 @@ try {
         'index.php',
         'public/index.php',
         'app/bootstrap.php',
+        'app/bootstrap/configuration.php',
+        'app/bootstrap/dispatch.php',
+        'app/bootstrap/maintenance.php',
+        'app/bootstrap/request.php',
+        'app/bootstrap/routing.php',
+        'app/bootstrap/session.php',
         'app/controllers.php',
+        'app/controllers/admin_galleries_edit.php',
+        'app/controllers/admin_galleries_edit_actions.php',
+        'app/controllers/admin_galleries_edit_metadata.php',
+        'app/controllers/admin_galleries_edit_page.php',
+        'app/controllers/admin_galleries_edit_views.php',
+        'app/controllers/admin_theme.php',
+        'app/controllers/admin_theme_actions.php',
+        'app/controllers/admin_theme_appearance.php',
+        'app/controllers/admin_theme_custom_css.php',
+        'app/controllers/admin_theme_language.php',
+        'app/controllers/admin_theme_layout.php',
+        'app/controllers/admin_theme_media.php',
+        'app/controllers/admin_theme_page.php',
+        'app/controllers/public_gallery.php',
+        'app/controllers/public_gallery_cards.php',
+        'app/controllers/public_gallery_controls.php',
+        'app/controllers/public_gallery_home.php',
+        'app/controllers/public_gallery_lightbox.php',
+        'app/controllers/public_gallery_page.php',
         'app/database.php',
         'app/helpers.php',
+        'app/helpers_admin_rendering.php',
+        'app/helpers_files.php',
+        'app/helpers_page_rendering.php',
+        'app/helpers_public_urls.php',
+        'app/helpers_request.php',
+        'app/helpers_runtime.php',
         'app/integrity.php',
         'app/migrations.php',
         'app/security.php',
         'app/services.php',
         'app/services/updates.php',
+        'app/services/updates_filesystem.php',
+        'app/services/updates_install.php',
+        'app/services/updates_patch_notes.php',
+        'app/services/updates_remote.php',
+        'app/services/updates_status.php',
         'app/views/layout.php',
         'app/lang/en.php',
         'public/assets/styles.css',
@@ -100,6 +142,54 @@ try {
         $item->isDir() ? rmdir($item->getPathname()) : unlink($item->getPathname());
     }
     rmdir($tempRoot);
+}
+
+if (class_exists(ZipArchive::class) && DIRECTORY_SEPARATOR !== '\\') {
+    $cleanupRoot = sys_get_temp_dir() . '/php-gallery-malformed-root-cleanup-' . bin2hex(random_bytes(6));
+    mkdir($cleanupRoot . '/app/services', 0775, true);
+    mkdir($cleanupRoot . '/public/assets', 0775, true);
+    mkdir($cleanupRoot . '/cache', 0775, true);
+    foreach (['index.php', 'app/bootstrap.php', 'app/services/updates.php', 'public/assets/styles.css'] as $requiredPath) {
+        file_put_contents($cleanupRoot . '/' . $requiredPath, "<?php\n");
+    }
+    $malformedName = 'app\\controllers\\admin_auth.php';
+    file_put_contents($cleanupRoot . '/' . $malformedName, "<?php\n");
+    file_put_contents($cleanupRoot . '/bootstrap.php', "<?php\n");
+    file_put_contents($cleanupRoot . '/google-site-verification.html', "verification\n");
+    file_put_contents($cleanupRoot . '/custom-tracker.php', "<?php\n");
+    mkdir($cleanupRoot . '/nested', 0775, true);
+    file_put_contents($cleanupRoot . '/nested/keep\\file.php', "<?php\n");
+    mkdir($cleanupRoot . '/keep\\directory', 0775, true);
+
+    $backupPath = $cleanupRoot . '/cache/malformed-cleanup.zip';
+    $backup = new ZipArchive();
+    if ($backup->open($backupPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+        throw new RuntimeException('Could not create malformed-root cleanup test archive.');
+    }
+    try {
+        $removed = application_update_remove_malformed_root_files($cleanupRoot, $backup);
+    } finally {
+        $backup->close();
+    }
+
+    sort($removed);
+    $expectedRemoved = [$malformedName, 'bootstrap.php'];
+    sort($expectedRemoved);
+    if ($removed !== $expectedRemoved || file_exists($cleanupRoot . '/' . $malformedName) || file_exists($cleanupRoot . '/bootstrap.php')) {
+        throw new RuntimeException('Updater did not remove the malformed root file safely.');
+    }
+    if (!is_file($cleanupRoot . '/nested/keep\\file.php') || !is_dir($cleanupRoot . '/keep\\directory') || !is_file($cleanupRoot . '/google-site-verification.html') || !is_file($cleanupRoot . '/custom-tracker.php')) {
+        throw new RuntimeException('Malformed-root cleanup escaped its direct regular-file scope.');
+    }
+
+    $iterator = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($cleanupRoot, FilesystemIterator::SKIP_DOTS),
+        RecursiveIteratorIterator::CHILD_FIRST
+    );
+    foreach ($iterator as $item) {
+        $item->isDir() ? rmdir($item->getPathname()) : unlink($item->getPathname());
+    }
+    rmdir($cleanupRoot);
 }
 
 echo "Updater safety model tests passed.\n";

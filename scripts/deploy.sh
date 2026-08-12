@@ -65,7 +65,7 @@ exclude_dir_names_anywhere=("__pycache__")
 # Array exclude_files stores file name patterns skipped by deployment.
 exclude_files=(".gitignore" "config.php" ".env" "*.log" "*.tmp")
 # Array always_include_relatives stores deploy paths that must stay packaged even as filters evolve.
-always_include_relatives=("app/lang")
+always_include_relatives=("app")
 
 # Function print_usage prints supported command-line arguments.
 print_usage() {

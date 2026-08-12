@@ -94,7 +94,7 @@ if (-not $includeMedia) { $excludeDirs += 'galleries' }
 # Variable $excludeFiles stores this scripts working value.
 $excludeFiles = @('.gitignore', 'config.php', '.env', '*.log', '*.tmp')
 # Variable $alwaysIncludeRelatives stores deploy paths that must stay packaged even as filters evolve.
-$alwaysIncludeRelatives = @('app/lang')
+$alwaysIncludeRelatives = @('app')
 
 
 # Function `Invoke-ManifestGenerator` handles manifest refresh before deployment.
@@ -223,15 +223,27 @@ function New-CompatibleZipArchive($SourceDirectory, $DestinationZip) {
         Remove-Item -LiteralPath $DestinationZip -Force
     }
 
+    Add-Type -AssemblyName System.IO.Compression
     Add-Type -AssemblyName System.IO.Compression.FileSystem
-
-    # NoCompression creates a plain stored ZIP archive. That keeps the file format simple for older hosting tools.
-    [System.IO.Compression.ZipFile]::CreateFromDirectory(
-        $SourceDirectory,
-        $DestinationZip,
-        [System.IO.Compression.CompressionLevel]::NoCompression,
-        $false
-    )
+    # Variable $sourcePath stores the normalized staging directory used to derive portable entry names.
+    $sourcePath = [System.IO.Path]::GetFullPath($SourceDirectory).TrimEnd('\', '/')
+    # Variable $archive stores the writable ZIP container.
+    $archive = [System.IO.Compression.ZipFile]::Open($DestinationZip, [System.IO.Compression.ZipArchiveMode]::Create)
+    try {
+        Get-ChildItem -LiteralPath $sourcePath -Recurse -File | ForEach-Object {
+            # ZIP entry paths must use forward slashes. Some web extractors treat Windows backslashes as literal filename characters.
+            $entryName = $_.FullName.Substring($sourcePath.Length).TrimStart('\', '/').Replace('\', '/')
+            # NoCompression creates plain stored entries that remain compatible with older hosting tools.
+            [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+                $archive,
+                $_.FullName,
+                $entryName,
+                [System.IO.Compression.CompressionLevel]::NoCompression
+            ) | Out-Null
+        }
+    } finally {
+        $archive.Dispose()
+    }
 }
 
 # Function `Ensure-RemoteDirectory` handles this script step.

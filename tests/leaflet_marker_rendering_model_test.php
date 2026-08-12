@@ -83,7 +83,8 @@ function leaflet_marker_assert_not_contains(string $source, string $needle, stri
 $lightbox = leaflet_marker_read_source('public/assets/gallery-modules/lightbox.js');
 $deferred = leaflet_marker_read_source('public/assets/gallery-modules/lightbox-deferred.js');
 $sharedCss = leaflet_marker_read_source('public/assets/styles/public-shared.css');
-$helpers = leaflet_marker_read_source('app/helpers.php');
+$helpers = leaflet_marker_read_source('app/helpers.php')
+    . leaflet_marker_read_source('app/helpers_page_rendering.php');
 $layout = leaflet_marker_read_source('app/views/layout.php');
 
 leaflet_marker_assert_contains($lightbox, 'L.divIcon({', 'lightbox marker factory');

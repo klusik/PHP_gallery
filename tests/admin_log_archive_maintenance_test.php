@@ -61,7 +61,9 @@ function assert_admin_log_archive_maintenance(bool $condition, string $label): v
 
 $archiveServiceSource = (string) file_get_contents(__DIR__ . '/../app/services/admin_log_archives.php');
 $controllerSource = (string) file_get_contents(__DIR__ . '/../app/controllers/admin_logs.php');
-$bootstrapSource = (string) file_get_contents(__DIR__ . '/../app/bootstrap.php');
+$bootstrapSource = (string) file_get_contents(__DIR__ . '/../app/bootstrap.php')
+    . (string) file_get_contents(__DIR__ . '/../app/bootstrap/maintenance.php')
+    . (string) file_get_contents(__DIR__ . '/../app/bootstrap/dispatch.php');
 $servicesSource = (string) file_get_contents(__DIR__ . '/../app/services.php');
 $siteMaintenanceSource = (string) file_get_contents(__DIR__ . '/../app/services/site_maintenance.php');
 $siteMaintenanceViewSource = (string) file_get_contents(__DIR__ . '/../app/views/admin_dashboard_sections.php');

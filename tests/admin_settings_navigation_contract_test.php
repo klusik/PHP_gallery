@@ -23,10 +23,12 @@
 declare(strict_types=1);
 
 $files = [
-    'bootstrap' => file_get_contents(__DIR__ . '/../app/bootstrap.php'),
+    'bootstrap' => (string) file_get_contents(__DIR__ . '/../app/bootstrap.php')
+        . (string) file_get_contents(__DIR__ . '/../app/bootstrap/dispatch.php'),
     'chrome' => file_get_contents(__DIR__ . '/../app/views/admin_chrome.php'),
     'registry' => file_get_contents(__DIR__ . '/../app/services/admin_settings_registry.php'),
-    'theme' => file_get_contents(__DIR__ . '/../app/controllers/admin_theme.php'),
+    'theme' => (string) file_get_contents(__DIR__ . '/../app/controllers/admin_theme.php')
+        . (string) file_get_contents(__DIR__ . '/../app/controllers/admin_theme_page.php'),
     'tags' => file_get_contents(__DIR__ . '/../app/controllers/admin_tags.php'),
     'uploads' => file_get_contents(__DIR__ . '/../app/views/admin_upload_settings.php'),
     'telemetry' => file_get_contents(__DIR__ . '/../app/controllers/admin_telemetry.php'),

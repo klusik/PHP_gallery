@@ -241,7 +241,7 @@ foreach (array_keys($dormantLanguages) as $languageCode) {
     }
 }
 
-$adminThemeSource = @file_get_contents($root . '/app/controllers/admin_theme.php');
+$adminThemeSource = @file_get_contents($root . '/app/controllers/admin_theme_language.php');
 if (
     !is_string($adminThemeSource)
     || !str_contains($adminThemeSource, '<select name="cms_language">')

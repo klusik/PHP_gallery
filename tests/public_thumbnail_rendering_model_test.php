@@ -179,7 +179,7 @@ assert_public_thumbnail_rendering_same(
 );
 
 // Confirm the Admin controller routes posted values through the centralized validated persistence helper.
-$adminThemeSource = file_get_contents(__DIR__ . '/../app/controllers/admin_theme.php');
+$adminThemeSource = file_get_contents(__DIR__ . '/../app/controllers/admin_theme_actions.php');
 if (!is_string($adminThemeSource) || !str_contains($adminThemeSource, "public_thumbnail_rendering_mode_save_with_revision(\$_POST['public_thumbnail_rendering_mode'] ?? null)")) {
     throw new RuntimeException('Admin Theme form does not persist the renderer through the shared revision-aware service helper.');
 }
