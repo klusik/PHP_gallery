@@ -75,6 +75,7 @@ use function Gallery\Services\set_url_rewrite_enabled;
 use function Gallery\Services\t;
 use function Gallery\Views\view_admin_storage_snapshot_status;
 use function Gallery\Views\view_render_admin_dashboard;
+use function Gallery\Views\view_render_admin_dashboard_maintenance_panel;
 use function Gallery\Views\view_render_admin_devmode_panel;
 use function Gallery\Views\view_render_admin_migration_notice;
 use function Gallery\Views\view_render_admin_navdata_maintenance_card;
@@ -91,9 +92,71 @@ function cms_admin(): void
 {
     require_admin();
     admin_render_profile_start('admin_dashboard');
-    $dashboardModel = admin_dashboard_view_model();
+    // Explicit maintenance deep links render their target during the main request so the requested tool is
+    // immediately usable and does not depend on a second deferred AJAX request succeeding.
+    $requestedMaintenanceTab = strtolower(trim((string) ($_GET['maintenance_tab'] ?? '')));
+    $dashboardModel = admin_dashboard_view_model($requestedMaintenanceTab === 'media');
     $dashboardModel['notices'] = admin_dashboard_notice_messages($_GET, (string) flash_message('admin_notice'));
     view_render_admin_dashboard($dashboardModel);
+}
+
+/**
+ * Render the deferred Admin dashboard Maintenance tab.
+ *
+ * This endpoint keeps database metadata, navdata, and maintenance status
+ * queries out of the initial dashboard navigation request.
+ */
+function cms_admin_dashboard_maintenance(): void
+{
+    require_admin();
+    header('Content-Type: application/json; charset=utf-8');
+    $bufferLevel = ob_get_level();
+    try {
+        $model = admin_dashboard_view_model(true);
+        ob_start();
+        view_render_admin_dashboard_maintenance_panel($model);
+        $html = (string) ob_get_clean();
+        echo json_encode(['ok' => true, 'html' => $html], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+    } catch (Throwable $exception) {
+        while (ob_get_level() > $bufferLevel) {
+            ob_end_clean();
+        }
+        http_response_code(500);
+        $diagnosticId = bin2hex(random_bytes(6));
+        admin_log_event('warning', 'admin.dashboard_maintenance_load_failed', 'Admin dashboard maintenance panel failed to render.', [
+            'diagnostic_id' => $diagnosticId,
+            'exception_class' => $exception::class,
+            'error' => $exception->getMessage(),
+            'file' => $exception->getFile(),
+            'line' => $exception->getLine(),
+            'maintenance_tab' => (string) ($_GET['maintenance_tab'] ?? ''),
+        ], ['category' => 'admin', 'severity' => 'warning']);
+        echo json_encode(['ok' => false, 'error' => 'Maintenance rendering failed.', 'diagnostic_id' => $diagnosticId], JSON_UNESCAPED_SLASHES);
+    }
+}
+
+/**
+ * Record browser-observed failures from the deferred Admin maintenance request.
+ */
+function cms_admin_dashboard_maintenance_client_log(): void
+{
+    require_admin();
+    if (request_method() !== 'POST') {
+        http_response_code(405);
+        return;
+    }
+    verify_csrf();
+    $context = [
+        'endpoint' => substr((string) ($_POST['endpoint'] ?? ''), 0, 1000),
+        'http_status' => (int) ($_POST['http_status'] ?? 0),
+        'content_type' => substr((string) ($_POST['content_type'] ?? ''), 0, 200),
+        'browser_error' => substr((string) ($_POST['browser_error'] ?? ''), 0, 1000),
+        'response_snippet' => substr((string) ($_POST['response_snippet'] ?? ''), 0, 2000),
+        'page_url' => substr((string) ($_POST['page_url'] ?? ''), 0, 1000),
+    ];
+    admin_log_event('warning', 'admin.dashboard_maintenance_browser_failed', 'Browser could not load the Admin dashboard maintenance panel.', $context, ['category' => 'admin', 'severity' => 'warning']);
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode(['ok' => true], JSON_UNESCAPED_SLASHES);
 }
 
 

@@ -31,6 +31,7 @@
  */
 
 import { createTableDragGhost, createTableDragPlaceholder, moveTableDragGhostY } from './admin-table-drag-ghost.js?v=20260519-drag-ghost-v1';
+import { i18n } from './admin-core.js?v=20260512-modular-admin-v1';
 
 /**
  * Enables visible pointer ordering for the Admin edit-gallery image table.
@@ -161,7 +162,7 @@ export function setupAdminImageReordering() {
         const sortHeader = button.closest('th');
         const arrow = button.querySelector('[aria-hidden="true"]');
         button.dataset.sortDirection = nextDirection;
-        button.setAttribute('aria-label', nextDirection === 'asc' ? 'Sort photos by name from A to Z' : 'Sort photos by name from Z to A');
+        button.setAttribute('aria-label', nextDirection === 'asc' ? i18n('admin.image_order.sort_name_asc_aria', 'Sort photos by name from A to Z') : i18n('admin.image_order.sort_name_desc_aria', 'Sort photos by name from Z to A'));
         sortHeader?.setAttribute('aria-sort', activeDirection === 'asc' ? 'ascending' : 'descending');
         if (arrow) {
             arrow.textContent = activeDirection === 'asc' ? '↑' : '↓';
@@ -191,7 +192,7 @@ export function setupAdminImageReordering() {
         const multiplier = direction === 'asc' ? 1 : -1;
         const rows = Array.from(body.querySelectorAll('[data-admin-image-order-row]'));
         if (rows.length < 2) {
-            setStatus('There is only one image, so sorting is not needed.', 'idle');
+            setStatus(i18n('admin.image_order.sort_not_needed', 'There is only one image, so sorting is not needed.'), 'idle');
             return;
         }
 
@@ -292,7 +293,7 @@ export function setupAdminImageReordering() {
 
         const controller = new AbortController();
         saveController = controller;
-        setStatus('Saving new image order...', 'saving');
+        setStatus(i18n('admin.image_order.saving', 'Saving new image order...'), 'saving');
         try {
             const response = await fetch(reorderUrl, {
                 method: 'POST',
@@ -301,13 +302,13 @@ export function setupAdminImageReordering() {
                 signal: controller.signal,
             });
             if (!response.ok) {
-                throw new Error('The server rejected the reorder request.');
+                throw new Error(i18n('admin.image_order.reorder_rejected', 'The server rejected the reorder request.'));
             }
             const result = await response.json();
             if (!result.ok) {
-                throw new Error(result.message || 'Image order could not be saved.');
+                throw new Error(result.message || i18n('admin.image_order.save_failed', 'Image order could not be saved.'));
             }
-            setStatus(result.message || 'Image order saved.', 'saved');
+            setStatus(result.message || i18n('admin.image_order.saved', 'Image order saved.'), 'saved');
             document.dispatchEvent(new CustomEvent('php-gallery:admin-image-order-saved', {
                 detail: {
                     galleryId: galleryInput.value,
@@ -318,7 +319,7 @@ export function setupAdminImageReordering() {
             if (error.name === 'AbortError') {
                 return;
             }
-            setStatus(error.message || 'Image order could not be saved.', 'error');
+            setStatus(error.message || i18n('admin.image_order.save_failed', 'Image order could not be saved.'), 'error');
         } finally {
             if (saveController === controller) {
                 saveController = null;
@@ -347,7 +348,7 @@ export function setupAdminImageReordering() {
         }
         const row = draggedRow;
         cleanupReorderVisuals(false);
-        setStatus('Order unchanged.', 'idle');
+        setStatus(i18n('admin.image_order.unchanged', 'Order unchanged.'), 'idle');
         row.focus?.();
     }
 
@@ -399,7 +400,7 @@ export function setupAdminImageReordering() {
             saveOrder();
             return;
         }
-        setStatus('Order unchanged.', 'idle');
+        setStatus(i18n('admin.image_order.unchanged', 'Order unchanged.'), 'idle');
     }
 
         /**
@@ -502,7 +503,7 @@ export function setupAdminImageReordering() {
         handle.classList.add('is-dragging');
         document.body.classList.add('admin-image-order-active');
         moveGhost(clientY);
-        setStatus('Move the photo to its new position, then release.', 'dragging');
+        setStatus(i18n('admin.image_order.drag_release', 'Move the photo to its new position, then release.'), 'dragging');
 
         document.addEventListener('pointermove', handleDocumentPointerMove, true);
         document.addEventListener('pointerup', handleDocumentPointerEnd, true);

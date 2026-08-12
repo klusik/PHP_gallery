@@ -8,11 +8,13 @@
  * Module Type: Service Module
  *
  * Purpose:
- *   Provides the first lightweight translation layer for user-facing text.
+ *   Provides the application translation layer for user-facing text.
  *
  * Responsibilities:
  *   - Resolve the active language for the current request
  *   - Load JSON and legacy PHP language files from app/lang
+ *   - Keep English as the canonical default and fallback language
+ *   - Restrict selectable languages to the maintained English/Czech/German/Swedish set
  *   - Return translated strings with safe fallback behavior
  *   - Record admin-visible diagnostics for missing translation keys
  *
@@ -30,7 +32,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-10
+ *   2026-08-12
  */
 
 declare(strict_types=1);
@@ -44,6 +46,7 @@ use function Gallery\Core\request_is_https;
 const CMS_LANGUAGE_COOKIE = 'cms_language';
 const CMS_ADMIN_LANGUAGE_COOKIE = 'cms_admin_language';
 const CMS_PUBLIC_LANGUAGE_COOKIE = 'cms_public_language';
+const CMS_SELECTABLE_LANGUAGES = ['en', 'cs', 'de', 'sv'];
 
 /**
  * Return the directory where application language files are stored.
@@ -85,7 +88,10 @@ function translation_default_language(): string
     if ($language === '') {
         $language = translation_normalize_language_code((string) ($config['default_language'] ?? ''));
     }
-    return $language !== '' ? $language : 'en';
+    if ($language !== '' && in_array($language, CMS_SELECTABLE_LANGUAGES, true)) {
+        return $language;
+    }
+    return 'en';
 }
 
 /**
@@ -178,7 +184,7 @@ function translation_detected_language_packs(): array
 }
 
 /**
- * Return the configured and detected list of languages that may be selected.
+ * Return the configured subset of the maintained languages that may be selected.
  *
  * @return array Structured result data for the caller.
  */
@@ -193,23 +199,28 @@ function translation_supported_languages(): array
         $configured = [];
     }
 
+    // Only the explicitly maintained UI languages are selectable. Merely adding
+    // another app/lang file must not make an unfinished pack active in selectors.
+    $selectable = array_fill_keys(CMS_SELECTABLE_LANGUAGES, true);
     $languages = [];
     foreach ($configured as $language) {
         $normalized = translation_normalize_language_code((string) $language);
-        if ($normalized !== '') {
+        if ($normalized !== '' && isset($selectable[$normalized])) {
             $languages[$normalized] = true;
         }
     }
-    foreach (translation_detected_language_packs() as $pack) {
-        $normalized = translation_normalize_language_code((string) ($pack['code'] ?? ''));
-        if ($normalized !== '') {
-            $languages[$normalized] = true;
-        }
+    if ($languages === []) {
+        $languages = $selectable;
     }
 
     $default = translation_default_language();
     $languages[$default] = true;
-    return array_keys($languages);
+
+    // Preserve the canonical selector order regardless of config ordering.
+    return array_values(array_filter(
+        CMS_SELECTABLE_LANGUAGES,
+        static fn (string $language): bool => isset($languages[$language])
+    ));
 }
 
 /**

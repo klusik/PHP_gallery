@@ -49,8 +49,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.87.1}
-\newcommand{\manualdate}{11 August 2026}
+\newcommand{\version}{0.88}
+\newcommand{\manualdate}{12 August 2026}
 
 \hypersetup{
   colorlinks=true,
@@ -151,6 +151,13 @@
 This manual is written for the person who owns or manages that collection. It explains what each feature is useful for, where to find it, how choices affect visitors, and what to check afterward. You can read it from beginning to end or use the linked contents and index to answer a specific question.
 
 Start with Section~\ref{sec:first-hour} when the site has just been installed. Section~\ref{sec:planning} helps you plan a collection before adding hundreds of photographs. Sections~\ref{sec:create-edit-gallery} and~\ref{sec:photo-workflow} explain ordinary gallery work. Section~\ref{sec:audiences} provides complete examples for common audiences. Technical background remains near the end for readers who want to understand hosting, backups, or how the application works behind the screen.
+
+\subsection{What is new in Version 0.88}
+\index{Version 0.88}
+
+Version~0.88 makes a large installation easier to configure, deploy, and maintain. The central \ui{Settings} page now includes a Spotlight-style search over global settings and specialist tools. Theme controls include dedicated public tag-page presentation and configurable gallery hero tags. Dashboard maintenance data is loaded only when requested, with direct thumbnail-maintenance links and diagnostic Admin logs when loading fails.
+
+Behind the interface, the bootstrap lifecycle, gallery and Theme controllers, public renderer, shared helpers, and updater are divided into focused modules while their established entrypoints remain compatible. Deployment archives include the complete application tree and portable path separators, and the updater can safely clean misplaced managed files created by limited web-hosting extractors. The supported English, Czech, German, and Swedish language catalogs are synchronized for the release.
 
 \subsection{How to use this manual}
 \index{manual!how to use}
@@ -685,6 +692,23 @@ Tags provide another route through the archive. A \emph{night photography} tag c
 
 After signing in, an administrator sees private controls for the dashboard, galleries, photographs, theme, tags, maintenance, updates, logs, and account settings. Many editing actions open in a panel on the right so the gallery remains visible in the background. This makes it easier to edit one item, save it, and continue working through the same collection.\footnote{A full Admin page remains available for workflows that need more space or when browser enhancement is unavailable.}
 
+\subsection{Central Settings hub}
+\index{Settings!central hub}
+
+The Admin navigation includes a central \textbf{Settings} page for discovering important site-wide configuration without replacing the existing specialist screens. The page is divided into a small set of peer sections: General, Public appearance, Content, Media and browsing, Uploads and automation, Privacy and diagnostics, and Advanced. Each section has a matching visible heading and a stable URL, so bookmarks, browser history, refresh, keyboard navigation, and the no-JavaScript fallback all lead back to the same category.
+
+Immediately below the Settings title, a Spotlight-style search field searches the complete central registry as text is entered. It matches translated setting names, descriptions, categories, and stable technical names without sending a request to the server. A short query such as \texttt{thum} can therefore reveal thumbnail rendering, thumbnail checks, and related media tools even when they live in different parts of the interface. Choosing a result opens its owning section and focuses the exact setting or status card. The result list supports the arrow keys, Enter, Escape, and a clear button; the ordinary section navigation remains the no-JavaScript fallback.
+
+The search registry includes each global control from the specialist Admin screens, not merely the small centrally editable subset. Theme colors, dimensions, typography, map pins, gallery cards, grids, shortcuts, branding media, language tools and custom CSS; upload limits; telemetry collection and retention; thumbnail and scheduled-maintenance tools; navigation data; logs, updates, integrity, diagnostics, reports, features and database operations; and Account mail, linked-login and AI-assistance controls all have individual discovery entries. These entries route to the screen that owns validation and saving, and do not duplicate hundreds of controls in the normal Settings section panels. Gallery-specific and photograph-specific values remain in their contextual editors, and secret values themselves are never indexed.
+
+The hub deliberately does not behave like one enormous form. Safe settings with an existing canonical service setter can be edited in their own small section form. Current central editing covers site name, public language, URL rewrite, public search when available, the public thumbnail renderer, the global EXIF/GPS display default when its existing schema is ready, and development diagnostics. Saving one group does not submit unrelated settings.
+
+More contextual configuration remains on the page that already owns it. Theme layout, Gallery tags presentation, uploads, telemetry, Account passwords, Google and OpenAI credentials, raw CSS, branding uploads, language packs, API keys, database repair and destructive maintenance stay specialized. The central hub shows safe status and current-value summaries and provides explicit links such as \textbf{Open specialized page}. Specialist pages also provide \textbf{Open centralized settings} links back to the relevant section.
+
+Tag-page presentation retains inheritance instead of silently creating new values. Dedicated tag columns and rows inherit the global pagination dimensions when absent, and the tag-page card layout inherits the global Theme card layout. Hero-tag display controls are separate. Gallery-specific card layout, lightbox and EXIF/GPS overrides remain attached to each gallery and are not rewritten by the global Settings page.
+
+Secrets are never displayed as raw summaries. SMTP passwords, maintenance tokens, OpenAI/API credentials and upload automation keys are represented only by safe state such as Configured, Not configured, or Specialized page only. The central Settings feature requires no new database migration and does not rename or duplicate existing keys.
+
 \subsection{Gallery management}
 
 Gallery administration covers the full life of a collection: creation, discovery, naming, description, dates, tags, privacy, passwords, branding, covers, layout, ordering, moving, and eventual deletion. A child gallery can inherit useful choices from its parent. For example, every gallery inside a private family branch can follow the parent's protection, and an individual child can use its own presentation choice where the editor offers an override.
@@ -992,9 +1016,91 @@ Recommended practices include:
 
 The Theme area controls site identity, colors, dimensions, page width, backgrounds, branding, language, gallery-card presentation, lightbox defaults, GPS presentation, favorite navigation, and public thumbnail rendering. Settings use normalized scalar values or focused service models.
 
-English and Czech catalogs provide server and browser strings. PHP and JSON catalogs must remain synchronized according to the translation workflow. New interface text should use stable semantic keys and retain safe English fallbacks.
+\subsection{Choosing the interface language}
+\label{sec:language-selection}
+\index{language}
+\index{localization!language selection}
+\index{translation packs}
+
+PHP Gallery treats the language of the program interface separately from the text that you write yourself. Changing the interface language changes buttons, menu items, help text, status messages, dialogs, and other application wording. It does \emph{not} automatically translate gallery titles, gallery descriptions, photo descriptions, tags, or other content entered by the gallery owner.
+
+Open \ui{Theme > Language}. Two independent selectors are available:
+
+\begin{itemize}
+  \item \ui{Admin interface language} changes the language seen by the administrator. The choice is remembered for that administrator in the current browser.
+  \item \ui{Public visitor language} changes the default interface language shown on public gallery pages. This is a site-wide setting for anonymous visitors.
+\end{itemize}
+
+These choices do not have to match. For example, an administrator may work in Czech while the public gallery uses English, Swedish, or German. A public visitor can also request one of the same four supported languages with an address parameter such as \codeword{?lang=sv}; PHP Gallery remembers that visitor choice in the browser.
+
+\subsubsection{Available languages and their current state}
+\index{language!English}
+\index{language!Czech}
+\index{language!German}
+\index{language!Swedish}
+
+English is special. It is the canonical source language, the default language for a new installation, and the defensive fallback language. Czech, German, and Swedish are also maintained as complete catalogs. For now, these four languages are the only selectable interface languages. Additional starter files may exist for future translation work, but they are intentionally not offered to administrators or public visitors yet.
+
+\begin{longtable}{>{\raggedright\arraybackslash}p{0.20\textwidth} >{\raggedright\arraybackslash}p{0.10\textwidth} >{\raggedright\arraybackslash}p{0.58\textwidth}}
+\toprule
+\textbf{Language} & \textbf{Code} & \textbf{Current role}\\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Language} & \textbf{Code} & \textbf{Current role}\\
+\midrule
+\endhead
+English & \codeword{en} & Complete canonical source, new-installation default, and fallback language.\\
+Čeština & \codeword{cs} & Complete maintained selectable Czech translation.\\
+Deutsch & \codeword{de} & Complete maintained selectable German translation.\\
+Svenska & \codeword{sv} & Complete maintained selectable Swedish translation.\\
+\bottomrule
+\end{longtable}
+
+\important{Only English, Czech, German, and Swedish are selectable for now. The application still keeps English fallback behavior as a safety mechanism, but the maintained selectable catalogs are expected to stay complete. A future language can be prepared as a file without becoming selectable until it is deliberately added to the supported-language set.}
+
+\subsubsection{How translation packs work}
+\index{translation packs!fallback}
+\index{translation packs!JSON}
+\index{translation packs!diagnostics}
+
+A translation pack is simply a dictionary of named interface messages. The program asks for a stable message key such as ``save gallery'' or ``delete selected photos'', and the active language pack supplies the wording that should be shown. The internal key stays the same in every language; only the displayed text changes.
+
+For non-technical administration, the important behavior is:
+
+\begin{enumerate}
+  \item English contains the reference wording for the application.
+  \item Czech, German, and Swedish contain a translated value for every maintained English key.
+  \item Only English, Czech, German, and Swedish are currently offered in the Admin and Public language selectors.
+  \item English fallback remains active defensively if a maintained pack ever misses a value.
+  \item Future language files may be prepared in \filepath{app/lang/}, but they stay dormant until deliberately added to the supported-language set.
+  \item The \ui{Detected language packs} table shows coverage for the currently supported languages.
+  \item The \ui{Diagnostics} subsection records missing keys seen during an authenticated Admin session, which helps locate remaining translation work.
+\end{enumerate}
+
+The \ui{Pack editor} is intended for careful maintenance or for importing a prepared translation. Language data is stored as JSON. In that editor, the text on the left side of each JSON pair is the stable key and should not be translated. The text on the right side is the value that may be translated. Placeholders such as \codeword{\{count\}}, \codeword{\{gallery\}}, or \codeword{\{time\}} represent live values inserted by PHP Gallery and must keep the same names in every language.
+
+A language pack can also be exported as JSON, translated outside PHP Gallery, and imported again. The application validates that the imported file is a JSON object containing text values. This makes it possible to work with a translator without giving that person access to the gallery server.
+
+For developers and maintainers, the maintained catalogs live under \filepath{app/lang/}. JSON is the canonical editable format. English, Czech, German, and Swedish PHP dictionaries are retained only as compatibility fallbacks for installations that do not have the corresponding JSON file. Server-rendered pages and browser JavaScript use the same active-language plus English-fallback model, so a translation does not need to be duplicated in separate front-end and back-end catalogs.
 
 Custom CSS supports installation-specific visual refinement. Theme-generated CSS exposes validated variables and computed selectors through a dedicated route. Gallery branding can override selected site-level assets while preserving effective fallback behavior.
+
+\subsection{Gallery hero tags}
+\index{tags!gallery hero}
+\index{theme!gallery tags}
+
+The \ui{Appearance > Gallery tags} subsection controls the compact tag collection below the title of an open gallery. The tag area uses the complete width of the hero panel, so tags can continue wrapping toward the right edge instead of being limited by the normal readable paragraph width. Direct gallery tags and tags collected from contained content remain separate semantic groups, but each group follows the same global display policy.
+
+The same subsection also controls the public tag landing page. \ui{Galleries per row} and \ui{Rows per page} define the tag-result gallery grid and its page capacity, while \ui{Gallery-card design} selects the vertical or horizontal card presentation for those results. These values affect public pages opened through a tag; they do not change ordinary gallery pages. If the dedicated values have not been saved, the global Theme grid and gallery-card design remain the fallback. The global pagination switch still determines whether a long tag result is split into pages. From \ui{Edit tags}, \ui{Configure tag display} opens this subsection directly, and \ui{Manage tag metadata} provides the reverse contextual link.
+
+By default, the browser initially shows 20 tags. The limit can be changed from 1 to 200 with either a range slider or an exact number field. When more tags exist, \ui{Display all tags} appears and expands the existing tag elements in place with JavaScript; no page reload or additional server request is used. The same control can collapse the collection again. Administrators who do not want progressive disclosure can enable \ui{Display every tag immediately}. All tags are still emitted in the server-rendered HTML in every mode, so disabling JavaScript leaves the complete tag collection visible and usable rather than hiding content permanently.
+
+Tag ordering is configurable as \ui{Most used first} or \ui{Alphabetical}. \ui{Most used first} is the default. Usage is the total number of direct tag assignments to galleries plus direct tag assignments to photographs across the installation. Equal usage counts fall back to a natural case-insensitive alphabetical order and then a stable identifier tie-break. Direct gallery tags are sorted within their group and contained tags are sorted within their group; the groups are not mixed together.
+
+Long tag collections can also use a responsive internal scrollbar. This option is enabled by default and defaults to five visible rows. The row threshold can be configured from 1 to 12 with a slider or exact number field. The browser measures the rows after the tags have actually wrapped at the current hero width, and it enables scrolling only when the measured row count exceeds the configured threshold. Resizing the page causes the measurement to be recalculated. Disabling the scrollbar option removes the height constraint and allows the hero to grow naturally.
+
+These controls are stored as scalar values in the existing application settings table: \texttt{theme\_hero\_tag\_visible\_limit}, \texttt{theme\_hero\_tag\_display\_all}, \texttt{theme\_hero\_tag\_scrollbar\_enabled}, \texttt{theme\_hero\_tag\_scrollbar\_rows}, and \texttt{theme\_hero\_tag\_sort\_mode}. The tag landing-page controls use \texttt{tag\_page\_gallery\_grid\_columns}, \texttt{tag\_page\_gallery\_grid\_rows}, and \texttt{tag\_page\_gallery\_description\_layout}. They therefore require no database schema migration. Server-side normalization protects the supported numeric ranges, layout values, and sort modes even when a form is submitted without the browser controls.
 
 \section{Downloads, sharing, and transfer}
 \label{sec:sharing}
@@ -1448,6 +1554,9 @@ PHP Gallery project, \emph{DATABASE.md}, local migration and persistent schema r
 
 \bibitem{codemap}
 PHP Gallery project, \emph{CODEMAP.md}, local source ownership and maintenance map, version \version.
+
+\bibitem{settingsinventory}
+PHP Gallery project, \emph{docs/ADMIN\_SETTINGS\_INVENTORY.md}, canonical global Settings ownership, fallback, sensitivity, and migration inventory, version \version.
 
 \bibitem{testing}
 PHP Gallery project, \emph{TESTING.md}, local automated and manual verification guide, version \version.

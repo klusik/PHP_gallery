@@ -413,12 +413,14 @@ function admin_log_archive_write_html_header($handle, array $snapshot): void
 {
     $date = admin_log_archive_html_escape((string) ($snapshot['date'] ?? ''));
     $rowCount = admin_log_archive_html_escape((string) ($snapshot['row_count'] ?? 0));
-    fwrite($handle, '<!doctype html><html lang="en"><head><meta charset="utf-8">');
+    $language = function_exists(__NAMESPACE__ . '\\translation_active_language') ? translation_active_language() : 'en';
+    $title = t('admin.logs.archive.html.title', 'PHP Gallery Admin Logs {date}', ['date' => (string) ($snapshot['date'] ?? '')]);
+    fwrite($handle, '<!doctype html><html lang="' . admin_log_archive_html_escape($language) . '"><head><meta charset="utf-8">');
     fwrite($handle, '<meta name="viewport" content="width=device-width,initial-scale=1">');
-    fwrite($handle, '<title>PHP Gallery Admin Logs ' . $date . '</title>');
+    fwrite($handle, '<title>' . admin_log_archive_html_escape($title) . '</title>');
     fwrite($handle, '<style>body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;background:#f4f5f7;color:#17191c}main{max-width:1400px;margin:0 auto;padding:24px}header{margin-bottom:24px}.meta{color:#5b616b}.log{background:#fff;border:1px solid #d9dde3;border-radius:10px;padding:16px;margin:0 0 14px}.log h2{font-size:1rem;margin:0 0 10px;overflow-wrap:anywhere}.fields{display:grid;grid-template-columns:minmax(150px,220px) minmax(0,1fr);gap:6px 14px;margin:0}.fields dt{font-weight:700}.fields dd{margin:0;overflow-wrap:anywhere}.message,.context{white-space:pre-wrap;overflow-wrap:anywhere;background:#f7f8fa;border:1px solid #e2e5e9;border-radius:7px;padding:10px}.context{overflow:auto}code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}@media(max-width:700px){main{padding:12px}.fields{grid-template-columns:1fr}.fields dd{margin-bottom:8px}}</style>');
-    fwrite($handle, '</head><body><main><header><h1>PHP Gallery Admin Logs: ' . $date . '</h1>');
-    fwrite($handle, '<p class="meta">Static archive. ' . $rowCount . ' log entries. Everything is expanded and requires no JavaScript or server-side code.</p></header>');
+    fwrite($handle, '</head><body><main><header><h1>' . admin_log_archive_html_escape(t('admin.logs.archive.html.heading', 'PHP Gallery Admin Logs: {date}', ['date' => (string) ($snapshot['date'] ?? '')])) . '</h1>');
+    fwrite($handle, '<p class="meta">' . admin_log_archive_html_escape(t('admin.logs.archive.html.description', 'Static archive. {count} log entries. Everything is expanded and requires no JavaScript or server-side code.', ['count' => (string) ($snapshot['row_count'] ?? 0)])) . '</p></header>');
 }
 
 /**
@@ -442,30 +444,30 @@ function admin_log_archive_write_html_entry($handle, array $entry, int $index): 
 
     fwrite($handle, '<article class="log"><h2>#' . $index . ' <code>' . $eventKey . '</code></h2><dl class="fields">');
     $fields = [
-        'Log ID' => $entry['id'] ?? '',
-        'Created at' => $entry['created_at'] ?? '',
-        'Status' => $entry['status'] ?? '',
-        'Status label' => $entry['status_label'] ?? '',
-        'Status updated at' => $entry['status_updated_at'] ?? '',
-        'Level' => $entry['level'] ?? '',
-        'Severity' => $entry['severity'] ?? '',
-        'Category' => $entry['category'] ?? '',
-        'User ID' => $entry['user_id'] ?? '',
-        'Username' => $entry['username'] ?? '',
-        'Subject type' => $entry['subject_type'] ?? '',
-        'Subject ID' => $entry['subject_id'] ?? '',
-        'Request ID' => $entry['request_id'] ?? '',
-        'Route' => $entry['route_name'] ?? '',
-        'HTTP method' => $entry['http_method'] ?? '',
-        'AJAX' => !empty($entry['is_ajax']) ? 'yes' : 'no',
-        'Fingerprint' => $entry['fingerprint'] ?? '',
-        'Resolved at' => $entry['resolved_at'] ?? '',
-        'Resolution note' => $entry['resolution_note'] ?? '',
+        t('admin.logs.archive.html.log_id', 'Log ID') => $entry['id'] ?? '',
+        t('admin.logs.archive.html.created_at', 'Created at') => $entry['created_at'] ?? '',
+        t('admin.logs.archive.html.status', 'Status') => $entry['status'] ?? '',
+        t('admin.logs.archive.html.status_label', 'Status label') => $entry['status_label'] ?? '',
+        t('admin.logs.archive.html.status_updated_at', 'Status updated at') => $entry['status_updated_at'] ?? '',
+        t('admin.logs.archive.html.level', 'Level') => $entry['level'] ?? '',
+        t('admin.logs.archive.html.severity', 'Severity') => $entry['severity'] ?? '',
+        t('admin.logs.archive.html.category', 'Category') => $entry['category'] ?? '',
+        t('admin.logs.archive.html.user_id', 'User ID') => $entry['user_id'] ?? '',
+        t('admin.logs.archive.html.username', 'Username') => $entry['username'] ?? '',
+        t('admin.logs.archive.html.subject_type', 'Subject type') => $entry['subject_type'] ?? '',
+        t('admin.logs.archive.html.subject_id', 'Subject ID') => $entry['subject_id'] ?? '',
+        t('admin.logs.archive.html.request_id', 'Request ID') => $entry['request_id'] ?? '',
+        t('admin.logs.archive.html.route', 'Route') => $entry['route_name'] ?? '',
+        t('admin.logs.archive.html.http_method', 'HTTP method') => $entry['http_method'] ?? '',
+        'AJAX' => !empty($entry['is_ajax']) ? t('admin.logs.archive.html.yes', 'yes') : t('admin.logs.archive.html.no', 'no'),
+        t('admin.logs.archive.html.fingerprint', 'Fingerprint') => $entry['fingerprint'] ?? '',
+        t('admin.logs.archive.html.resolved_at', 'Resolved at') => $entry['resolved_at'] ?? '',
+        t('admin.logs.archive.html.resolution_note', 'Resolution note') => $entry['resolution_note'] ?? '',
     ];
     foreach ($fields as $label => $value) {
         fwrite($handle, '<dt>' . admin_log_archive_html_escape($label) . '</dt><dd>' . admin_log_archive_html_escape($value) . '</dd>');
     }
-    fwrite($handle, '</dl><h3>Message</h3><div class="message">' . $message . '</div><h3>Context</h3><pre class="context">' . admin_log_archive_html_escape($contextJson) . '</pre></article>');
+    fwrite($handle, '</dl><h3>' . admin_log_archive_html_escape(t('admin.logs.archive.html.message', 'Message')) . '</h3><div class="message">' . $message . '</div><h3>' . admin_log_archive_html_escape(t('admin.logs.archive.html.context', 'Context')) . '</h3><pre class="context">' . admin_log_archive_html_escape($contextJson) . '</pre></article>');
 }
 
 /**

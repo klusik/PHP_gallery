@@ -30,6 +30,9 @@
  *   2026-06-08
  */
 
+import { i18n } from './admin-core.js?v=20260512-modular-admin-v1';
+import { setupAdminNestedTabs } from './admin-nested-tabs.js?v=20260812-deferred-maintenance-v1';
+
 const legacyAdminTabHashes = new Map([
     ['#admin-galleries', '#admin-tab-galleries'],
     ['#admin-ordering', '#admin-tab-galleries'],
@@ -80,6 +83,68 @@ function setAdminPanelVisibility(panel, isVisible) {
         window.requestAnimationFrame(() => {
             panel.classList.remove('is-admin-panel-entering');
         });
+    }
+}
+
+/**
+ * Load a deferred dashboard panel the first time it becomes visible.
+ *
+ * @param {HTMLElement} panel Dashboard panel.
+ * @return {Promise<void>} Completion promise.
+ */
+async function loadDeferredAdminPanel(panel) {
+    if (!(panel instanceof HTMLElement) || panel.dataset.adminPanelLoaded === '1' || panel.dataset.adminPanelLoading === '1') {
+        return;
+    }
+    const placeholder = panel.querySelector('[data-admin-dashboard-maintenance-placeholder]');
+    const endpoint = placeholder instanceof HTMLElement ? String(placeholder.dataset.maintenanceEndpoint || '') : '';
+    if (!endpoint) {
+        return;
+    }
+    panel.dataset.adminPanelLoading = '1';
+    let responseStatus = 0;
+    let responseContentType = '';
+    let responseSnippet = '';
+    try {
+        const response = await fetch(endpoint, {headers: {'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest'}});
+        responseStatus = response.status;
+        responseContentType = response.headers.get('content-type') || '';
+        const responseText = await response.text();
+        responseSnippet = responseText.slice(0, 2000);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        let payload;
+        try {
+            payload = JSON.parse(responseText);
+        } catch (error) {
+            throw new Error(`Invalid JSON response: ${error instanceof Error ? error.message : String(error)}`);
+        }
+        if (!payload || payload.ok !== true || typeof payload.html !== 'string') {
+            throw new Error(`Invalid deferred Admin panel response${payload?.diagnostic_id ? ` (${payload.diagnostic_id})` : ''}`);
+        }
+        panel.innerHTML = payload.html;
+        panel.dataset.adminPanelLoaded = '1';
+        setupAdminTabsInRoot(panel);
+        setupAdminNestedTabs(panel);
+    } catch (error) {
+        const logEndpoint = placeholder.dataset.maintenanceLogEndpoint || '';
+        const csrfToken = placeholder.dataset.csrfToken || '';
+        if (logEndpoint && csrfToken) {
+            const body = new URLSearchParams();
+            body.set('csrf_token', csrfToken);
+            body.set('endpoint', endpoint);
+            body.set('http_status', String(responseStatus));
+            body.set('content_type', responseContentType);
+            body.set('browser_error', error instanceof Error ? error.message : String(error));
+            body.set('response_snippet', responseSnippet);
+            body.set('page_url', window.location.href);
+            fetch(logEndpoint, {method: 'POST', body, credentials: 'same-origin'}).catch(() => {});
+        }
+        placeholder.textContent = i18n('admin.dashboard.maintenance_load_failed', 'Unable to load maintenance tools. Please reload the page.');
+        placeholder.classList.add('error');
+    } finally {
+        delete panel.dataset.adminPanelLoading;
     }
 }
 
@@ -180,6 +245,8 @@ export function setupAdminTabsInRoot(root) {
         }
         // shouldManageHash stores whether this tab group owns the browser URL hash.
         const shouldManageHash = !tabsRoot.closest('[data-admin-side-panel]');
+        // urlMode keeps specialized tab groups synchronized with query parameters as well as hashes.
+        const urlMode = String(tabsRoot.dataset.adminTabsUrlMode || 'hash');
 
         // activateTab stores behavior for selecting one tab and hiding the other panels.
         /**
@@ -208,13 +275,28 @@ export function setupAdminTabsInRoot(root) {
                 const isSelected = panel.id === targetPanel.id;
                 setAdminPanelVisibility(panel, isSelected);
             });
+            if (targetPanel.id === 'admin-tab-maintenance') {
+                void loadDeferredAdminPanel(targetPanel);
+            }
             if (options.focusTab) {
                 tabs.find((tab) => tab.dataset.adminTabTarget === targetPanel.id)?.focus();
             }
             if (options.updateHash && shouldManageHash) {
-                const nextHash = `#${targetPanel.id}`;
-                if (window.location.hash !== nextHash) {
-                    window.history.pushState(null, '', nextHash);
+                if (urlMode === 'href') {
+                    const selectedTab = tabs.find((tab) => tab.dataset.adminTabTarget === targetPanel.id);
+                    if (selectedTab instanceof HTMLAnchorElement) {
+                        const nextUrl = new URL(selectedTab.href, window.location.href);
+                        const nextLocation = `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`;
+                        const currentLocation = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+                        if (nextLocation !== currentLocation) {
+                            window.history.pushState(null, '', nextLocation);
+                        }
+                    }
+                } else {
+                    const nextHash = `#${targetPanel.id}`;
+                    if (window.location.hash !== nextHash) {
+                        window.history.pushState(null, '', nextHash);
+                    }
                 }
             }
             if (shouldManageHash) {
@@ -234,6 +316,17 @@ export function setupAdminTabsInRoot(root) {
         }
         const initialTargetId = (activeHash || '').replace(/^#/, '') || tabs.find((tab) => tab.getAttribute('aria-selected') === 'true')?.dataset.adminTabTarget || tabs[0].dataset.adminTabTarget || '';
         activateTab(initialTargetId);
+        if (shouldManageHash && urlMode === 'href') {
+            const initialTab = tabs.find((tab) => tab.dataset.adminTabTarget === initialTargetId);
+            if (initialTab instanceof HTMLAnchorElement) {
+                const initialUrl = new URL(initialTab.href, window.location.href);
+                const normalizedLocation = `${initialUrl.pathname}${initialUrl.search}${initialUrl.hash}`;
+                const currentLocation = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+                if (normalizedLocation !== currentLocation) {
+                    window.history.replaceState(null, '', normalizedLocation);
+                }
+            }
+        }
         syncAdminSidebarHashSelection(initialTargetId ? `#${initialTargetId}` : '');
 
         tabs.forEach((tab) => {

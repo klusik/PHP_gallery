@@ -323,7 +323,7 @@ function cms_admin_edit_image(): void
         }
         redirect_to(url_for('admin_edit_image', ['id' => $image['id'], 'saved' => 1]));
     }
-    render_header('Edit image');
+    render_header(t('admin.gallery_editor.edit_image', 'Edit image'));
     echo '<section class="panel"><h1>' . e(t('admin.gallery_editor.edit_image', 'Edit image')) . '</h1><p><img decoding="async" loading="lazy" src="' . e(thumbnail_url($image, 800)) . '" alt=""></p>';
     echo '<form method="post" class="form-grid">' . csrf_field();
     echo '<input type="hidden" name="id" value="' . (int) $image['id'] . '">';
@@ -334,14 +334,14 @@ function cms_admin_edit_image(): void
     }
     echo '<label>' . e(t('admin.gallery_editor.visibility', 'Visibility')) . '<select name="visibility">' . image_visibility_options((string) $image['visibility']) . '</select></label>';
     if (nsfw_guard_schema_ready()) {
-        echo '<label><input type="checkbox" name="nsfw_enabled" value="1"' . ((int) ($image['nsfw_enabled'] ?? 0) === 1 ? ' checked' : '') . '> Mark this photo as NSFW / 18+</label>';
-        echo '<p class="muted">When enabled, anonymous visitors must confirm they are 18+ before this photo, thumbnail, or original media file is served. Before using NSFW content, please verify that your hosting provider or web hosting plan permits it, as adult content may violate their policies.</p>';
+        echo '<label><input type="checkbox" name="nsfw_enabled" value="1"' . ((int) ($image['nsfw_enabled'] ?? 0) === 1 ? ' checked' : '') . '> ' . e(t('admin.gallery_editor.mark_photo_nsfw', 'Mark this photo as NSFW / 18+')) . '</label>';
+        echo '<p class="muted">' . e(t('admin.gallery_editor.photo_nsfw_help', 'When enabled, anonymous visitors must confirm they are 18+ before this photo, thumbnail, or original media file is served. Before using NSFW content, please verify that your hosting provider or web hosting plan permits it, as adult content may violate their policies.')) . '</p>';
     }
     echo '<label>' . e(t('admin.gallery_editor.sort_order', 'Sort order')) . '<input name="sort_order" type="number" value="' . (int) $image['sort_order'] . '"></label>';
     if (thumbnail_bounds_schema_ready()) {
-        render_admin_thumbnail_bound_slider('image_thumbnail', isset($image['thumbnail_min_size']) ? (int) $image['thumbnail_min_size'] : null, isset($image['thumbnail_max_size']) ? (int) $image['thumbnail_max_size'] : null, 'Responsive thumbnail quality bounds', 'Optional per-photo guardrails. These can override gallery-level guardrails when the public selection logic is wired in the next step.');
+        render_admin_thumbnail_bound_slider('image_thumbnail', isset($image['thumbnail_min_size']) ? (int) $image['thumbnail_min_size'] : null, isset($image['thumbnail_max_size']) ? (int) $image['thumbnail_max_size'] : null, t('admin.gallery_editor.thumbnail_bounds_title', 'Responsive thumbnail quality bounds'), t('admin.gallery_editor.thumbnail_bounds_help', 'Optional per-photo guardrails. These can override gallery-level guardrails when the public selection logic is wired in the next step.'));
     } else {
-        echo '<p class="muted">Thumbnail quality bounds will be available after the database migration is applied.</p>';
+        echo '<p class="muted">' . e(t('admin.gallery_editor.thumbnail_bounds_migration_required', 'Thumbnail quality bounds will be available after the database migration is applied.')) . '</p>';
     }
     echo '<label>' . e(t('admin.gallery_editor.tags', 'Tags')) . '<input name="tags" value="' . e(tag_names_for_entity('image', (int) $image['id'])) . '" list="tag-suggestions" data-tag-input><span class="muted">' . e(t('admin.gallery_editor.tags_help', 'Separate tags with commas.')) . '</span></label>';
     render_tag_datalist();
@@ -352,7 +352,7 @@ function cms_admin_edit_image(): void
         echo '<dt>' . e(t('admin.gallery_editor.lens', 'Lens')) . '</dt><dd>' . e((string) ($image['exif_lens_model'] ?? '')) . '</dd>';
         echo '<dt>' . e(t('admin.gallery_editor.exposure', 'Exposure')) . '</dt><dd>' . e(trim((string) ($image['exif_focal_length'] ?? '') . ' ' . (string) ($image['exif_aperture'] ?? '') . ' ' . (string) ($image['exif_exposure_time'] ?? '') . ' ISO ' . (string) ($image['exif_iso'] ?? ''))) . '</dd>';
         echo '<dt>' . e(t('admin.gallery_editor.gps', 'GPS')) . '</dt><dd>' . (image_has_gps($image) ? e((string) $image['gps_lat'] . ', ' . (string) $image['gps_lng']) : t('admin.gallery_editor.no_gps', 'No GPS coordinates found')) . '</dd>';
-        echo '</dl><p class="muted">EXIF and GPS values are refreshed when the image is scanned again.</p></div>';
+        echo '</dl><p class="muted">' . e(t('admin.gallery_editor.exif_refresh_hint', 'EXIF and GPS values are refreshed when the image is scanned again.')) . '</p></div>';
     }
     render_admin_image_ai_metadata_panel($image);
     echo '<button type="submit">' . e(t('admin.gallery_editor.save_image', 'Save image')) . '</button></form></section>';

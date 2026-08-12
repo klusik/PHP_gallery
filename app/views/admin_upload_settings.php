@@ -42,6 +42,7 @@ use function Gallery\Core\e;
 use function Gallery\Core\render_footer;
 use function Gallery\Core\render_header;
 use function Gallery\Core\url_for;
+use function Gallery\Services\admin_settings_url;
 use function Gallery\Services\media_renamer_default_pattern;
 use function Gallery\Services\t;
 
@@ -96,6 +97,7 @@ function view_render_admin_upload_settings_page(array $model): void
         'title' => t('admin.upload_settings.title', 'Upload settings'),
         'description' => t('admin.upload_settings.description', 'Configure upload preferences separately from the upload workflow. Browser-side preparation is the default when enabled, and the upload form can still be unchecked to use the normal server fallback.'),
         'actions' => [
+            ['label' => t('admin.settings.open_centralized', 'Open centralized settings'), 'url' => admin_settings_url('uploads'), 'class' => 'button secondary'],
             ['label' => t('admin.upload_settings.back_to_upload', 'Upload photos'), 'url' => url_for('admin_upload'), 'class' => 'button secondary'],
             ['label' => t('admin.common.back_to_dashboard', 'Back to dashboard'), 'url' => url_for('admin'), 'class' => 'button secondary'],
         ],

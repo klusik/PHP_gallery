@@ -396,11 +396,11 @@ export function setupPictureManager() {
      */
     function downloadSelectionFallback(imageIds) {
         if (!downloadUrl) {
-            setStatus('Native sharing is not available and the ZIP fallback is not configured.', 'error');
+            setStatus(i18n('picture_manager.share_unavailable_no_zip', 'Native sharing is not available and the ZIP fallback is not configured.'), 'error');
             return;
         }
         if (imageIds.length === 0) {
-            setStatus('Select at least one photo first.', 'error');
+            setStatus(i18n('picture_manager.select_photo_first', 'Select at least one photo first.'), 'error');
             return;
         }
         const frameName = 'picture-manager-download-frame';
@@ -439,7 +439,7 @@ export function setupPictureManager() {
         document.body.appendChild(form);
         form.submit();
         form.remove();
-        setStatus('Native sharing is not available here. A ZIP download was started with the selected photos.', 'ok');
+        setStatus(i18n('picture_manager.share_zip_started', 'Native sharing is not available here. A ZIP download was started with the selected photos.'), 'ok');
     }
 
         /**
@@ -455,7 +455,7 @@ export function setupPictureManager() {
             return;
         }
         if (selectedCards.length === 0 || imageIds.length === 0) {
-            setStatus('Select at least one photo first.', 'error');
+            setStatus(i18n('picture_manager.select_photo_first', 'Select at least one photo first.'), 'error');
             return;
         }
         if (typeof File !== 'function' || !navigator.share) {
@@ -464,7 +464,7 @@ export function setupPictureManager() {
         }
 
         setRequestActive(true);
-        setStatus(`Preparing ${selectedCards.length} selected photo${selectedCards.length === 1 ? '' : 's'} for sharing...`, 'working');
+        setStatus(i18n('picture_manager.share_preparing', 'Preparing {count} selected photo(s) for sharing...', {count: selectedCards.length}), 'working');
         try {
             const files = [];
             for (let index = 0; index < selectedCards.length; index += 1) {
@@ -477,16 +477,16 @@ export function setupPictureManager() {
                 return;
             }
             await navigator.share(payload);
-            setStatus('Share sheet opened. Finish the Instagram Story, Reel, or another share target in the receiving app.', 'ok');
+            setStatus(i18n('picture_manager.share_opened', 'Share sheet opened. Finish the Instagram Story, Reel, or another share target in the receiving app.'), 'ok');
             setRequestActive(false);
         } catch (error) {
             setRequestActive(false);
             const name = typeof DOMException !== 'undefined' && error instanceof DOMException ? error.name : '';
             if (name === 'AbortError') {
-                setStatus('Sharing was cancelled.', 'idle');
+                setStatus(i18n('picture_manager.share_cancelled', 'Sharing was cancelled.'), 'idle');
                 return;
             }
-            setStatus(error instanceof Error ? `${error.message} Downloading ZIP fallback.` : 'Sharing failed. Downloading ZIP fallback.', 'error');
+            setStatus(error instanceof Error ? i18n('picture_manager.share_failed_with_error_zip', '{error} Downloading ZIP fallback.', {error: error.message}) : i18n('picture_manager.share_failed_zip', 'Sharing failed. Downloading ZIP fallback.'), 'error');
             downloadSelectionFallback(imageIds);
         }
     }
@@ -514,7 +514,7 @@ export function setupPictureManager() {
      */
     function selectAllVisible() {
         replaceSelection(cards, cards[0] || null);
-        setStatus(`Selected all ${cards.length} visible photo${cards.length === 1 ? '' : 's'}.`, 'ok');
+        setStatus(i18n('picture_manager.selected_all_visible', 'Selected all {count} visible photo(s).', {count: cards.length}), 'ok');
     }
 
         /**
@@ -525,7 +525,7 @@ export function setupPictureManager() {
         anchorCard = null;
         syncSelectionState();
         setPanelExpanded(false);
-        setStatus('Selection cleared.', 'idle');
+        setStatus(i18n('picture_manager.selection_cleared', 'Selection cleared.'), 'idle');
     }
 
         /**
@@ -639,7 +639,7 @@ export function setupPictureManager() {
             return;
         }
         setPanelExpanded(false);
-        setStatus('Ready.', 'idle');
+        setStatus(i18n('picture_manager.ready', 'Ready.'), 'idle');
     }
 
         /**
@@ -677,7 +677,7 @@ export function setupPictureManager() {
         }
         const payload = await response.json();
         if (!response.ok || payload.ok === false) {
-            throw new Error(payload.message || 'The action failed.');
+            throw new Error(payload.message || i18n('picture_manager.action_failed', 'The action failed.'));
         }
         return payload;
     }
@@ -706,15 +706,15 @@ export function setupPictureManager() {
             return;
         }
         if (imageIds.length === 0) {
-            setStatus('Select at least one photo first.', 'error');
+            setStatus(i18n('picture_manager.select_photo_first', 'Select at least one photo first.'), 'error');
             return;
         }
         if (!destinationGalleryId) {
-            setStatus('Choose a destination gallery first.', 'error');
+            setStatus(i18n('picture_manager.choose_destination_first', 'Choose a destination gallery first.'), 'error');
             return;
         }
         if (!moveUrl) {
-            setStatus('Move endpoint is not configured.', 'error');
+            setStatus(i18n('picture_manager.move_endpoint_missing', 'Move endpoint is not configured.'), 'error');
             return;
         }
 
@@ -723,13 +723,13 @@ export function setupPictureManager() {
         formData.append('destination_gallery_id', destinationGalleryId);
 
         setRequestActive(true);
-        setStatus(`Moving ${imageIds.length} selected photo${imageIds.length === 1 ? '' : 's'}...`, 'working');
+        setStatus(i18n('picture_manager.moving_selected', 'Moving {count} selected photo(s)...', {count: imageIds.length}), 'working');
         try {
             const payload = await postManagerAction(moveUrl, formData);
-            setStatus(payload.message || 'Selected photos were moved.', 'ok');
+            setStatus(payload.message || i18n('picture_manager.move_complete', 'Selected photos were moved.'), 'ok');
             reloadAfterSuccess(payload);
         } catch (error) {
-            setStatus(error instanceof Error ? error.message : 'Image move failed.', 'error');
+            setStatus(error instanceof Error ? error.message : i18n('picture_manager.move_failed', 'Image move failed.'), 'error');
             setRequestActive(false);
         }
     }
@@ -745,15 +745,15 @@ export function setupPictureManager() {
             return;
         }
         if (imageIds.length === 0) {
-            setStatus('Select at least one photo first.', 'error');
+            setStatus(i18n('picture_manager.select_photo_first', 'Select at least one photo first.'), 'error');
             return;
         }
         if (!destinationGalleryId) {
-            setStatus('Choose a destination gallery first.', 'error');
+            setStatus(i18n('picture_manager.choose_destination_first', 'Choose a destination gallery first.'), 'error');
             return;
         }
         if (!copyUrl) {
-            setStatus('Copy endpoint is not configured.', 'error');
+            setStatus(i18n('picture_manager.copy_endpoint_missing', 'Copy endpoint is not configured.'), 'error');
             return;
         }
 
@@ -762,13 +762,13 @@ export function setupPictureManager() {
         formData.append('destination_gallery_id', destinationGalleryId);
 
         setRequestActive(true);
-        setStatus(`Copying ${imageIds.length} selected photo${imageIds.length === 1 ? '' : 's'}...`, 'working');
+        setStatus(i18n('picture_manager.copying_selected', 'Copying {count} selected photo(s)...', {count: imageIds.length}), 'working');
         try {
             const payload = await postManagerAction(copyUrl, formData);
-            setStatus(payload.message || 'Selected photos were copied.', 'ok');
+            setStatus(payload.message || i18n('picture_manager.copy_complete', 'Selected photos were copied.'), 'ok');
             reloadAfterSuccess(payload);
         } catch (error) {
-            setStatus(error instanceof Error ? error.message : 'Image copy failed.', 'error');
+            setStatus(error instanceof Error ? error.message : i18n('picture_manager.copy_failed', 'Image copy failed.'), 'error');
             setRequestActive(false);
         }
     }
@@ -784,15 +784,15 @@ export function setupPictureManager() {
             return;
         }
         if (imageIds.length === 0) {
-            setStatus('Select at least one photo first.', 'error');
+            setStatus(i18n('picture_manager.select_photo_first', 'Select at least one photo first.'), 'error');
             return;
         }
         if (title === '') {
-            setStatus('Enter a title for the new gallery first.', 'error');
+            setStatus(i18n('picture_manager.enter_new_gallery_title', 'Enter a title for the new gallery first.'), 'error');
             return;
         }
         if (!createUrl) {
-            setStatus('Create-gallery endpoint is not configured.', 'error');
+            setStatus(i18n('picture_manager.create_endpoint_missing', 'Create-gallery endpoint is not configured.'), 'error');
             return;
         }
 
@@ -802,13 +802,13 @@ export function setupPictureManager() {
         formData.append('new_gallery_folder_name', folderName);
 
         setRequestActive(true);
-        setStatus(`Copying ${imageIds.length} selected photo${imageIds.length === 1 ? '' : 's'} into the new gallery...`, 'working');
+        setStatus(i18n('picture_manager.copying_into_new_gallery', 'Copying {count} selected photo(s) into the new gallery...', {count: imageIds.length}), 'working');
         try {
             const payload = await postManagerAction(createUrl, formData);
-            setStatus(payload.message || 'Gallery created from selected photos.', 'ok');
+            setStatus(payload.message || i18n('picture_manager.create_complete', 'Gallery created from selected photos.'), 'ok');
             reloadAfterSuccess(payload);
         } catch (error) {
-            setStatus(error instanceof Error ? error.message : 'Create gallery failed.', 'error');
+            setStatus(error instanceof Error ? error.message : i18n('picture_manager.create_failed', 'Create gallery failed.'), 'error');
             setRequestActive(false);
         }
     }
@@ -884,7 +884,7 @@ export function setupPictureManager() {
         writePublicPhotoImageIdsToDataTransfer(event.dataTransfer, dragSelection);
         document.body.classList.add('picture-manager-drag-active');
         setDropTargetsActive(true);
-        setStatus(`Dragging ${dragSelection.length} selected photo${dragSelection.length === 1 ? '' : 's'}. Drop onto a subgallery.`, 'working');
+        setStatus(i18n('picture_manager.dragging_selected', 'Dragging {count} selected photo(s). Drop onto a subgallery.', {count: dragSelection.length}), 'working');
     }
 
         /**
@@ -895,7 +895,7 @@ export function setupPictureManager() {
         document.body.classList.remove('picture-manager-drag-active');
         setDropTargetsActive(false);
         if (!activeRequest) {
-            setStatus(selectedIds.size > 0 ? 'Selection ready.' : 'Ready.', 'idle');
+            setStatus(selectedIds.size > 0 ? i18n('picture_manager.selection_ready', 'Selection ready.') : i18n('picture_manager.ready', 'Ready.'), 'idle');
         }
     }
 
@@ -943,7 +943,7 @@ export function setupPictureManager() {
         highlightDropTarget(null);
         const destinationGalleryId = publicPhotoDropTargetGalleryId(target);
         if (destinationGalleryId === '' || destinationGalleryId === sourceGalleryId) {
-            setStatus('Selected photos cannot be moved to this target.', 'error');
+            setStatus(i18n('picture_manager.invalid_move_target', 'Selected photos cannot be moved to this target.'), 'error');
             return;
         }
         const explicitImageIds = publicPhotoImageIdsFromDataTransfer(event.dataTransfer || null);
@@ -966,7 +966,7 @@ export function setupPictureManager() {
             ? detail.imageIds.map((imageId) => String(imageId)).filter((imageId) => imageId !== '')
             : null;
         if (destinationGalleryId === '') {
-            setStatus('Selected photos cannot be moved to this target.', 'error');
+            setStatus(i18n('picture_manager.invalid_move_target', 'Selected photos cannot be moved to this target.'), 'error');
             return;
         }
         moveSelectedToGallery(destinationGalleryId, explicitImageIds);
@@ -1018,7 +1018,7 @@ export function setupPictureManager() {
     function handleDocumentKeyDown(event) {
         if (event.key === 'Escape' && selectedIds.size === 0 && toolbar.dataset.pictureManagerExpanded === '1') {
             setPanelExpanded(false);
-            setStatus('Ready.', 'idle');
+            setStatus(i18n('picture_manager.ready', 'Ready.'), 'idle');
             return;
         }
         if ((!event.ctrlKey && !event.metaKey) || event.key.toLowerCase() !== 'a') {

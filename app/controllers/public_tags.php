@@ -44,9 +44,16 @@ use function Gallery\Core\render_footer;
 use function Gallery\Core\render_header;
 use function Gallery\Core\url_for;
 use function Gallery\Services\find_tag_by_slug;
+use function Gallery\Services\pagination_current_page;
+use function Gallery\Services\pagination_grid_columns_class;
+use function Gallery\Services\pagination_model;
+use function Gallery\Services\pagination_slice_items;
 use function Gallery\Services\public_galleries_for_tag;
+use function Gallery\Services\render_pagination_controls;
 use function Gallery\Services\t;
 use function Gallery\Services\tag_description_schema_ready;
+use function Gallery\Services\tag_page_gallery_description_layout;
+use function Gallery\Services\tag_page_gallery_grid_settings;
 
 /**
  * Tag and voting controllers.
@@ -70,6 +77,23 @@ function cms_tag(): void
     }
     // Variable $galleries stores this steps working value.
     $galleries = public_galleries_for_tag((int) $tag['id']);
+    // $tagGridSettings stores the Theme override dedicated to public tag pages.
+    $tagGridSettings = tag_page_gallery_grid_settings();
+    // $tagPagination stores page links and slicing bounds for the tagged gallery list.
+    $tagPagination = pagination_model(
+        count($galleries),
+        pagination_current_page('tag_gallery_page'),
+        (int) $tagGridSettings['columns'],
+        (int) $tagGridSettings['rows'],
+        'tag_gallery_page',
+        null,
+        static function (int $pageNumber) use ($tag): string {
+            $baseUrl = url_for('tag', ['slug' => (string) $tag['slug']]);
+            return $pageNumber <= 1 ? $baseUrl : $baseUrl . (str_contains($baseUrl, '?') ? '&' : '?') . 'tag_gallery_page=' . $pageNumber;
+        }
+    );
+    $visibleGalleries = !empty($tagGridSettings['enabled']) ? pagination_slice_items($galleries, $tagPagination) : $galleries;
+    $tagCardLayout = tag_page_gallery_description_layout();
     render_header(t('public.tag.title_value', 'Tag: {tag}', ['tag' => (string) $tag['name']]));
     echo '<nav class="breadcrumbs" aria-label="' . e(t('public.common.breadcrumbs', 'Breadcrumbs')) . '"><a href="' . e(url_for('home')) . '">' . e(t('public.gallery.galleries', 'Galleries')) . '</a><span aria-hidden="true">/</span><span>' . e(t('public.tag.title_value', 'Tag: {tag}', ['tag' => (string) $tag['name']])) . '</span></nav>';
     echo '<section class="hero" data-public-tag-page data-tag-id="' . (int) $tag['id'] . '"><div class="hero-title-row"><div><h1>' . e(t('public.tag.title_value', 'Tag: {tag}', ['tag' => (string) $tag['name']])) . '</h1></div>';
@@ -81,11 +105,18 @@ function cms_tag(): void
     echo '<p class="muted">' . e(t('public.tag.gallery_count', '{count} galleries', ['count' => count($galleries)])) . '</p></section>';
     if ($galleries) {
         echo '<div class="gallery-list-frame" data-back-to-top-scope>';
-        echo '<section class="grid gallery-list-content" data-back-to-top-list>';
-        foreach ($galleries as $gallery) {
-            render_gallery_card($gallery, true);
+        // Keep pagination and the gallery grid together in the frame's main column.
+        // Without this wrapper, a rendered pagination control becomes the first grid
+        // child and pushes the gallery section into the zero-width back-to-top column.
+        echo '<div class="gallery-list-content" data-back-to-top-list>';
+        render_pagination_controls(!empty($tagGridSettings['enabled']) ? $tagPagination : [], t('public.tag.pagination_label', 'Tagged gallery pages'));
+        echo '<section class="grid' . e(pagination_grid_columns_class($tagGridSettings)) . '">';
+        foreach ($visibleGalleries as $cardIndex => $gallery) {
+            render_gallery_card($gallery, true, false, false, (int) $cardIndex, ['description_layout' => $tagCardLayout]);
         }
         echo '</section>';
+        render_pagination_controls(!empty($tagGridSettings['enabled']) ? $tagPagination : [], t('public.tag.pagination_label', 'Tagged gallery pages'));
+        echo '</div>';
         render_back_to_top_button();
         echo '</div>';
     }

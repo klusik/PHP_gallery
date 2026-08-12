@@ -101,6 +101,32 @@ function pagination_global_settings(?array $context = null): array
 }
 
 /**
+ * Return the dedicated grid used by public tag landing pages.
+ *
+ * Missing values inherit the global dimensions so upgraded installations keep
+ * their current appearance until an administrator saves the Gallery tags form.
+ * The global pagination switch remains authoritative; this setting only
+ * overrides the tag-page grid dimensions and resulting page capacity.
+ *
+ * @return array{enabled: bool, columns: int, rows: int, items_per_page: int, grid_columns_enabled: bool, grid_source: string}
+ */
+function tag_page_gallery_grid_settings(): array
+{
+    $global = pagination_global_settings(['listing' => 'tag_galleries']);
+    $columns = pagination_dimension_value(app_setting('tag_page_gallery_grid_columns', (string) $global['columns']), (int) $global['columns'], CMS_PAGINATION_MAX_COLUMNS);
+    $rows = pagination_dimension_value(app_setting('tag_page_gallery_grid_rows', (string) $global['rows']), (int) $global['rows'], CMS_PAGINATION_MAX_ROWS);
+
+    return [
+        'enabled' => !empty($global['enabled']),
+        'columns' => $columns,
+        'rows' => $rows,
+        'items_per_page' => $columns * $rows,
+        'grid_columns_enabled' => true,
+        'grid_source' => 'tag-page',
+    ];
+}
+
+/**
  * Return a safe current page number from one GET parameter.
  *
  * @param string $parameterName Parameter name value.

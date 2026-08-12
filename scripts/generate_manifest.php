@@ -187,6 +187,7 @@ function manifest_ignored_patterns(): array
         '#^custom_css/#',
         '#^config\.php$#',
         '#^config\.example\.php$#',
+        '#^app/bootstrap/config\.php$#',
         '#^\.git/#',
         '#^\.idea/#',
         '#^\.vscode/#',

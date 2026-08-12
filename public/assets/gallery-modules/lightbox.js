@@ -790,7 +790,7 @@ export function setupGalleryLightbox() {
         // shell stores state or configuration for the gallery front-end flow.
         const shell = document.createElement('section');
         shell.className = 'gallery-dev-overlay';
-        shell.setAttribute('aria-label', 'Gallery dev mode diagnostics');
+        shell.setAttribute('aria-label', i18n('lightbox.dev_diagnostics_aria', 'Gallery dev mode diagnostics'));
         shell.innerHTML = '<header><strong>DEV</strong><span data-dev-title>viewer diagnostics</span></header><pre data-dev-text></pre><canvas width="340" height="72" data-dev-canvas></canvas><footer><span>Drag disabled</span><span>admin only</span></footer>';
         galleryDevModeState.overlay = shell;
         galleryDevModeState.text = shell.querySelector('[data-dev-text]');
@@ -3512,7 +3512,7 @@ export function setupGalleryLightbox() {
             if (galleryButton) {
                 event.preventDefault();
                 event.stopPropagation();
-                await openGalleryMap(galleryButton.dataset.galleryMapUrl || '', galleryButton.dataset.galleryMapTitle || 'Gallery map');
+                await openGalleryMap(galleryButton.dataset.galleryMapUrl || '', galleryButton.dataset.galleryMapTitle || i18n('lightbox.gallery_map', 'Gallery map'));
             }
         }, {capture: true, signal});
     }

@@ -56,6 +56,7 @@ use function Gallery\Services\application_autoupdate_status;
 use function Gallery\Services\application_patch_notes_viewer_data;
 use function Gallery\Services\application_update_beta_active;
 use function Gallery\Services\application_update_beta_commit;
+use function Gallery\Services\application_update_cleanup_malformed_root_files;
 use function Gallery\Services\application_update_github_api_status;
 use function Gallery\Services\application_update_normalize_version;
 use function Gallery\Services\application_update_status_for_admin;
@@ -188,6 +189,11 @@ function cms_admin_update(): void
                 $result = clean_reinstall_current_application_version();
                 admin_log_event('info', 'update.clean_reinstalled', t('admin.updates.log_clean_reinstalled'), $result, ['category' => 'update', 'severity' => 'warning']);
                 $_SESSION['admin_update_notice'] = t('admin.updates.notice_clean_reinstalled', 'Clean reinstall finished. Copied {files} files, removed {removed} unexpected path(s), removed {zips} cached ZIP file(s), and applied {migrations} migrations.', ['files' => (string) (int) $result['files_copied'], 'removed' => (string) (int) ($result['removed_count'] ?? 0), 'zips' => (string) (int) ($result['cache_cleanup']['zip_files_removed'] ?? 0), 'migrations' => (string) count((array) $result['migrations'])]);
+            } elseif ($action === 'cleanup_malformed_root_files') {
+                // $result stores diagnostics from the narrowly scoped malformed ZIP extraction cleanup.
+                $result = application_update_cleanup_malformed_root_files();
+                admin_log_event('info', 'update.malformed_root_files_cleaned', t('admin.updates.log_malformed_root_files_cleaned'), $result, ['category' => 'update', 'severity' => 'notice']);
+                $_SESSION['admin_update_notice'] = t('admin.updates.notice_malformed_root_files_cleaned', 'Malformed root-file cleanup finished. Removed {removed} file(s). Backup: {backup}', ['removed' => (string) (int) $result['removed_count'], 'backup' => (string) $result['backup']]);
             } else {
                 // $result stores an intermediate value used by the surrounding gallery workflow.
                 $result = install_application_update();
@@ -383,7 +389,7 @@ function cms_admin_update(): void
         $groupCount = count($groupEntries);
         echo '<div class="patch-notes-version-group">';
         echo '<div class="patch-notes-version-heading">';
-        echo '<span>Version ' . e((string) $groupVersion) . '</span>';
+        echo '<span>' . e(t('admin.updates.version_label', 'Version {version}', ['version' => (string) $groupVersion])) . '</span>';
         echo '<small>' . e(t($groupCount === 1 ? 'admin.updates.patch_notes_one_release' : 'admin.updates.patch_notes_release_count', $groupCount === 1 ? '1 release' : '{count} releases', ['count' => (string) $groupCount])) . '</small>';
         echo '</div>';
         foreach ($groupEntries as $version => $entry) {
@@ -391,7 +397,7 @@ function cms_admin_update(): void
             $isInstalled = (string) $version === cms_current_version();
             $isLatest = empty($status['error']) && !empty($status['latest_version']) && (string) $version === (string) $status['latest_version'];
             $itemClass = 'patch-notes-version-option' . ($isSelected ? ' is-selected' : '') . ($isInstalled ? ' is-installed' : '') . ($isLatest ? ' is-latest' : '');
-            $optionLabel = (string) ($entry['title'] ?? ('Version ' . $version));
+            $optionLabel = (string) ($entry['title'] ?? t('admin.updates.version_label', 'Version {version}', ['version' => (string) $version]));
             if (!empty($entry['released_label'])) {
                 $optionLabel .= ' · ' . (string) $entry['released_label'];
             }
@@ -474,6 +480,11 @@ function cms_admin_update(): void
         echo '<button type="submit" class="button secondary">' . e(t('admin.updates.restore_stable')) . '</button>';
         echo '</form></article>';
     }
+    echo '<article class="admin-maintenance-card admin-update-tool-card"><strong>' . e(t('admin.updates.malformed_root_cleanup_title', 'Clean misplaced deployment files')) . '</strong><span>' . e(t('admin.updates.malformed_root_cleanup_description', 'Back up and remove root files with literal backslashes and known application modules that belong under app/. Unrelated files are preserved. No reinstall or migrations are performed.')) . '</span>';
+    echo '<form method="post" class="form-grid">' . csrf_field();
+    echo '<input type="hidden" name="update_action" value="cleanup_malformed_root_files">';
+    echo '<button type="submit" class="button secondary">' . e(t('admin.updates.malformed_root_cleanup_button', 'Run misplaced file cleanup')) . '</button>';
+    echo '</form></article>';
     echo '<article class="admin-maintenance-card admin-update-tool-card is-danger"><strong>' . e(t('admin.updates.clean_reinstall_title')) . '</strong><span>' . e(t('admin.updates.clean_reinstall_description')) . '</span>';
     echo '<form method="post" class="form-grid danger-zone">' . csrf_field();
     echo '<input type="hidden" name="update_action" value="clean_reinstall">';

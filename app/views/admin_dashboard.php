@@ -37,6 +37,7 @@ declare(strict_types=1);
 namespace Gallery\Views;
 
 use function Gallery\Core\csrf_field;
+use function Gallery\Core\csrf_token;
 use function Gallery\Core\e;
 use function Gallery\Core\gallery_public_url;
 use function Gallery\Core\render_admin_tab_panel;
@@ -45,6 +46,7 @@ use function Gallery\Core\render_footer;
 use function Gallery\Core\render_header;
 use function Gallery\Core\url_for;
 use function Gallery\Services\admin_render_profile_span;
+use function Gallery\Services\admin_settings_url;
 use function Gallery\Services\dev_mode_enabled;
 use function Gallery\Services\gallery_background_source;
 use function Gallery\Services\gallery_effective_gps_map_enabled;
@@ -194,7 +196,12 @@ function view_render_admin_dashboard(array $model): void
     admin_render_profile_span('render_galleries_tab_panel', static function () use ($galleriesHtml): void { render_admin_tab_panel('admin-tab-galleries', $galleriesHtml, false); });
 
     ob_start();
-    view_render_admin_dashboard_maintenance_panel($model);
+    if (!empty($model['maintenance_loaded'])) {
+        view_render_admin_dashboard_maintenance_panel($model);
+    } else {
+        $maintenanceEndpointParams = strtolower(trim((string) ($_GET['maintenance_tab'] ?? ''))) === 'media' ? ['maintenance_tab' => 'media'] : [];
+        echo '<div class="admin-dashboard-deferred-panel" data-admin-dashboard-maintenance-placeholder data-maintenance-endpoint="' . e(url_for('admin_dashboard_maintenance', $maintenanceEndpointParams)) . '" data-maintenance-log-endpoint="' . e(url_for('admin_dashboard_maintenance_client_log')) . '" data-csrf-token="' . e(csrf_token()) . '" role="status"><p class="muted">' . e(t('admin.dashboard.maintenance_loading', 'Loading maintenance tools…')) . '</p><noscript><a href="' . e(url_for('admin_storage_statistics')) . '">' . e(t('admin.storage.open_details', 'Open storage and maintenance details')) . '</a></noscript></div>';
+    }
     $maintenanceHtml = (string) ob_get_clean();
     admin_render_profile_span('render_maintenance_tab_panel', static function () use ($maintenanceHtml): void { render_admin_tab_panel('admin-tab-maintenance', $maintenanceHtml, false); });
 
@@ -252,7 +259,7 @@ function view_render_admin_exif_gps_defaults_card(string $className, bool $defau
     echo '<label class="checkbox-label"><input type="checkbox" name="exif_gps_default_enabled" value="1"' . ($defaultEnabled ? ' checked' : '') . '> ' . e(t('admin.dashboard.exif_gps_default_enabled_label', 'Show EXIF GPS maps by default for all galleries')) . '</label>';
     echo '<label class="checkbox-label"><input type="checkbox" name="reset_gallery_overrides" value="1"> ' . e(t('admin.dashboard.exif_gps_reset_overrides_label', 'Reset all per-gallery EXIF / GPS display overrides')) . '</label>';
     echo '<span class="muted">' . e(t('admin.dashboard.exif_gps_override_count', 'Gallery override(s): {count}', ['count' => (string) $overrideCount])) . '</span>';
-    echo '<button type="submit" class="secondary">' . e(t('admin.dashboard.save_exif_gps_defaults', 'Save EXIF / GPS defaults')) . '</button></form>';
+    echo '<div class="nav"><button type="submit" class="secondary">' . e(t('admin.dashboard.save_exif_gps_defaults', 'Save EXIF / GPS defaults')) . '</button><a class="button secondary" href="' . e(admin_settings_url('media')) . '">' . e(t('admin.settings.open_centralized', 'Open centralized settings')) . '</a></div></form>';
 }
 
 /**

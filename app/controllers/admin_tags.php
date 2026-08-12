@@ -46,6 +46,7 @@ use function Gallery\Core\request_method;
 use function Gallery\Core\require_admin;
 use function Gallery\Core\url_for;
 use function Gallery\Core\verify_csrf;
+use function Gallery\Services\admin_settings_url;
 use function Gallery\Services\admin_tag_rows;
 use function Gallery\Services\admin_tag_usage_rows;
 use function Gallery\Services\app_setting;
@@ -207,6 +208,7 @@ function cms_admin_tags(): void
     echo '<p class="admin-kicker">' . e(t('admin.tags.kicker', 'Metadata')) . '</p>';
     echo '<h1>' . e(t('admin.tags.title', 'Edit tags')) . '</h1>';
     echo '<p class="muted">' . e(t('admin.tags.description', 'Rename reusable tags, adjust their clean URL slug, and add public text for tag landing pages. Tags are always stored as safe lowercase values.')) . '</p>';
+    echo '<nav class="nav"><a class="button secondary" href="' . e(admin_settings_url('content')) . '">' . e(t('admin.settings.open_centralized', 'Open centralized settings')) . '</a></nav>';
     echo '</section>';
 
     if ($notice) {
@@ -263,7 +265,7 @@ function cms_admin_tags(): void
                 echo '<h4>' . e(t('admin.tags.used_in_galleries', 'Galleries')) . '</h4>';
                 echo '<ul class="admin-tags-usage-list">';
                 foreach ($selectedTagUsage['galleries'] as $gallery) {
-                    echo '<li><a href="' . e((string) $gallery['edit_url']) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="gallery-edit" data-admin-side-panel-kicker="' . e(t('gallery.editor', 'Gallery editor')) . '" data-admin-side-panel-title="' . e(t('gallery.edit', 'Edit gallery')) . '" data-gallery-side-panel-url="' . e(url_for('admin_edit_gallery', ['id' => (int) $gallery['id'], 'panel' => 1])) . '">';
+                    echo '<li><a href="' . e((string) $gallery['public_url']) . '" target="_blank" rel="noopener">';
                     echo e((string) $gallery['title']);
                     echo '</a></li>';
                 }
@@ -312,6 +314,7 @@ function render_admin_tag_form(array $tag, string $sortMode = 'usage'): void
     echo '<div class="bulk-row">';
     echo '<button type="submit">' . e(t('admin.tags.save', 'Save tag')) . '</button>';
     echo '<a class="button secondary" href="' . e(url_for('tag', ['slug' => (string) $tag['slug']])) . '">' . e(t('admin.tags.view_public', 'View public tag')) . '</a>';
+    echo '<a class="button secondary" href="' . e(url_for('admin_theme', ['appearance_subtab' => 'admin-theme-appearance-subtab-gallery-tags']) . '#admin-theme-tab-appearance') . '">' . e(t('admin.tags.configure_display', 'Configure tag display')) . '</a>';
     echo '</div>';
     echo '</form>';
 }

@@ -243,7 +243,7 @@ namespace {
     assert_public_thumbnail_markup_contains('data-thumbnail-warmup-test="1"', $mediaFallbackMarkup, 'media fallback remains eligible for thumbnail warm-up');
 
     // The selected-gallery controller must complete the restricted NSFW placeholder branch before any URL bundle/render work.
-    $controllerSource = file_get_contents(__DIR__ . '/../app/controllers/public_gallery.php');
+    $controllerSource = file_get_contents(__DIR__ . '/../app/controllers/public_gallery_page.php');
     assert_public_thumbnail_markup(is_string($controllerSource), 'public gallery controller source is readable');
     $gatePosition = strpos($controllerSource, '$imageNeedsNsfwGate =');
     $continuePosition = strpos($controllerSource, 'continue;', $gatePosition === false ? 0 : $gatePosition);

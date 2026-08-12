@@ -1,5 +1,7 @@
 # Testing Guide
 
+This guide applies to PHP Gallery Version 0.88. Release verification must include the modular runtime boundaries, complete deployment packaging, updater cleanup safety, deferred dashboard maintenance, centralized Settings discovery, and the supported English, Czech, German, and Swedish catalogs.
+
 ## Purpose
 This project is a plain PHP gallery CMS without a formal browser automation stack. The most reliable testing approach is a mix of fast syntax checks, focused script-level checks, and a repeatable manual smoke-test scenario that exercises the core gallery lifecycle.
 
@@ -37,6 +39,9 @@ php tests/updater_safety_model_test.php
 php tests/thumbnail_warmup_model_test.php
 php tests/public_thumbnail_rendering_model_test.php
 php tests/public_thumbnail_markup_test.php
+php tests/hero_tag_theme_model_test.php
+php tests/tag_metadata_mysql_compatibility_test.php
+php tests/translation_catalog_consistency_test.php
 node tests/progressive_thumbnail_renderer_test.mjs
 ```
 
@@ -44,6 +49,7 @@ The favorite shortcut test covers zero configured shortcuts, direct gallery link
 The gallery dates test covers manual date range normalization, reversed-range rejection, public display formatting with en dash separators, rendered date attributes, and branch matching used by scoped EXIF suggestion reviews.
 The duplicate photo detector tests cover exact checksum matches, normalized EXIF candidates, file-size-only rejection, selected-branch/global scope, deterministic and bounded pair expansion, persistent pair/exact-gallery filtering, parent/child gallery independence, clickable public context links, delete and ledger scope validation, detector-job pruning, database migration contracts, reuse of the existing image deletion service, and in-place AJAX side-panel integration for delete/ignore/clear actions. The ledger test separately covers canonical pair storage, per-administrator keys, exact-gallery semantics, cascade constraints, current-admin clearing, and protected maintenance policy.
 The gallery public-path test covers Czech transliteration, decomposed accents, invisible Unicode characters, HTML entities, hierarchical paths, and sibling slug collisions.
+The tag metadata MySQL compatibility test guards the Admin tag-usage query against MySQL error 3065 by requiring every DISTINCT ordering expression that is not already projected to be included in the SELECT list.
 The migration consistency test validates every migration definition, preflights the complete migration set, and proves that old schema_migrations rows remain harmless after obsolete migration files are removed.
 The legacy migration-runner compatibility test verifies that PHP repair migrations work both with the current definition-aware runner and with the former SQL-only runner that may still be present during a partial patch deployment.
 The database maintenance test covers information_schema normalization, compact and legacy schema detection, SQL-literal reference scoping, obsolete thumbnail objects, orphan and expiry rules, deterministic duplicate survivor selection, protected content/log/telemetry tables, report-only unsupported thumbnail variants, Admin authentication, CSRF, confirmation contracts, and the absence of filesystem cleanup side effects.
@@ -51,9 +57,13 @@ The Admin log scaling test covers indexed age/grouping migration contracts, grou
 The database maintenance schema-repair test uses a mutable PDO fixture to verify audit-table creation, absent thumbnail tables, partially compacted schemas, geometry migration before destructive DDL, obsolete index/foreign-key cleanup, already compact schemas, idempotent retry, and the absence of row or filesystem deletion.
 The updater safety test verifies that critical runtime files are required before deployment starts and that valid top-level app entries such as `app/views.php`, `app/views/`, `app/lang/`, and migration support modules are never classified as misplaced project copies.
 
-The public thumbnail rendering model test covers responsive default/fallback normalization, supported setting persistence, invalid Admin input normalization, the narrow renderer dispatch boundary, the unchanged responsive eager/lazy/fetchpriority thresholds, and progressive small-thumbnail thresholds. The public thumbnail markup test covers complete responsive srcsets, small-only progressive active srcsets, inert larger candidates, WebP/JPEG structures, missing variants, synthetic bounds, intrinsic dimensions, media fallback, warm-up attributes, and selected-gallery NSFW gate ordering. `tests/progressive_thumbnail_renderer_test.mjs` covers browser-independent candidate parsing, smallest-adequate selection, capped DPR width calculation, queue deduplication, visible priority, and the two-worker concurrency bound. DOM intersection, actual browser network order, decode timing, cache reuse, lightbox/maps/votes interaction, and reduced-motion rendering remain manual checks.
+The translation catalog consistency test requires English, Czech, German, and Swedish to remain key-for-key complete, verifies placeholder parity across all four maintained catalogs, statically checks that literal PHP/JavaScript translation calls exist in English, validates dormant future-language skeletons as safe subsets of English, confirms that only `en`, `cs`, `de`, and `sv` are selectable in `config.example.php`, and guards the Admin/Public selector filtering plus the English default/fallback contract.
+
+The public thumbnail rendering model test covers responsive default/fallback normalization, supported setting persistence, invalid Admin input normalization, the narrow renderer dispatch boundary, the unchanged responsive eager/lazy/fetchpriority thresholds, and progressive small-thumbnail thresholds. The public thumbnail markup test covers complete responsive srcsets, small-only progressive active srcsets, inert larger candidates, WebP/JPEG structures, missing variants, synthetic bounds, intrinsic dimensions, media fallback, warm-up attributes, and selected-gallery NSFW gate ordering. The hero tag Theme model test covers 20-tag and five-row defaults, server-side clamping, display-all and scrollbar booleans, usage/alphabetical mode normalization, Admin persistence wiring, complete server-rendered hero groups, full-width CSS overrides, anonymous/logged-in browser entrypoints, accessible disclosure state, row-based scrollbar activation, and English/Czech public strings. `tests/progressive_thumbnail_renderer_test.mjs` covers browser-independent candidate parsing, smallest-adequate selection, capped DPR width calculation, queue deduplication, visible priority, and the two-worker concurrency bound. DOM intersection, actual browser network order, decode timing, cache reuse, lightbox/maps/votes interaction, hero tag wrapping at real browser widths, and reduced-motion rendering remain manual checks.
 
 These tests are maintained against the current namespaced production code. They are best for pure logic, helper functions, and regression checks that do not require a browser session. A release patch should not be published while `php tests/run.php` reports a failure.
+
+When checking Admin dashboard performance, verify that opening `?page=admin` does not request `admin_dashboard_maintenance` until `#admin-tab-maintenance` is selected. Then verify that the authenticated JSON response replaces the placeholder, nested maintenance tabs initialize, and direct or no-JavaScript fallback links remain usable.
 
 ### 3. Manual Functional Smoke Tests
 For feature work, use the same end-to-end scenario every time. Keep one dedicated test installation or local database so you can create and remove test content freely.
@@ -76,6 +86,32 @@ Recommended flow:
 14. Delete the test gallery and confirm cleanup succeeds.
 
 
+### Centralized Admin Settings Tests
+
+Run the focused contracts after changing the Settings hub, any registered setting owner, Admin navigation, or shared tab behavior:
+
+```bash
+php tests/admin_settings_registry_test.php
+php tests/admin_settings_normalization_test.php
+php tests/admin_settings_navigation_contract_test.php
+php tests/admin_settings_rendering_contract_test.php
+```
+
+The registry test checks stable unique IDs/keys, known sections, ownership metadata, secret redaction and specialized routes. The normalization test locks safe thumbnail fallback, browser-upload numeric clamping, central site-name normalization and unknown-write rejection. The navigation test locks the route, Admin menu, specialized backlinks, Gallery tags deep link, stable section IDs and href-history tab mode. The rendering contract checks headings, fieldsets, labels/help wiring, tab ARIA state, hidden inactive panels, error summary and secret redaction.
+
+Manual browser verification:
+
+1. Load every direct section URL from `general` through `advanced` and confirm the query plus `#settings-*` fragment agree with the visible heading.
+2. Change sections with pointer and keyboard. Verify arrow/Home/End tab movement, Browser Back/Forward, and refresh preserve the active section.
+3. Disable JavaScript and use the section links. Each link must load the correct server-selected section and all specialized links must remain usable.
+4. At mobile width, confirm the top-level tab strip remains a single horizontally scrollable row rather than a multi-line wall.
+5. Submit each centrally editable group and verify only that group is posted. Confirm success notice and redirect stay on the same section.
+6. Force an invalid language/renderer value with a direct POST test and verify a page-level error summary plus field error. Unrelated fields must retain submitted values, including unchecked checkboxes.
+7. Verify Theme, Tags, Upload settings, Telemetry, Account and Dashboard settings still save directly when opened without visiting the central hub.
+8. Verify central links to Theme Gallery tags use `appearance_subtab=admin-theme-appearance-subtab-gallery-tags#admin-theme-tab-appearance`.
+9. Confirm `password_reset_smtp_password`, site-maintenance tokens, OpenAI keys and upload API keys never appear in central page source, error output or Admin logs.
+10. Re-run `hero_tag_theme_model_test.php`, `tag_page_theme_model_test.php`, upload/settings tests, telemetry tests and the complete `php tests/run.php` suite.
+
 ### Public Thumbnail Rendering Smoke Test
 
 Use a gallery with enough photos to create several viewport lengths. Test with browser DevTools, an empty cache, and a simulated slow connection. Perform the checks both anonymously and while logged in.
@@ -97,6 +133,24 @@ Use a gallery with enough photos to create several viewport lengths. Test with b
 15. Compare perceived readiness rather than claiming total bytes are lower. Progressive mode can transfer both the small image and a larger replacement, so record transfer totals separately from first useful paint/interaction observations.
 
 The browser/network observations above are manual verification only. The standalone PHP and Node tests do not claim coverage of real browser request scheduling or visual decode behavior.
+
+### Gallery Hero Tag Theme Smoke Test
+
+Also verify the adjacent public tag-page settings: use Configure tag display from Edit tags and confirm it opens Theme > Appearance > Gallery tags; set columns, rows, and card design; save; and verify the dedicated grid, pagination capacity, and card layout on a public tag page without changing ordinary gallery pages. Use Manage tag metadata to verify the reverse link. Run php tests/tag_page_theme_model_test.php.
+
+Use a gallery with more than 20 direct and/or contained tags, including several tags with deliberately different assignment frequencies. Perform the public checks both anonymously and while logged in, because the two render pipelines use different browser entrypoints.
+
+1. Open **Admin > Theme > Appearance > Gallery tags**. With a fresh installation or missing settings, confirm **Most used first** is selected, **Display every tag immediately** is off, the initial tag limit is 20, scrollbar support is enabled, and its row threshold is 5.
+2. Move the visible-tag slider and confirm the exact number field follows it. Edit the number field and confirm the slider follows it. Repeat for the scrollbar-row slider and number field. Values must remain within 1 to 200 tags and 1 to 12 rows.
+3. Enable **Display every tag immediately** and confirm the initial-limit controls are hidden because they no longer affect public disclosure. Disable it and confirm the controls return with the previous value. Disable the scrollbar and confirm its row controls are hidden; re-enable it and confirm the saved row value remains available.
+4. Save the Theme page, reload it, and confirm all five values persist. No database migration should be required because the settings use `app_settings`.
+5. Open the tagged public gallery at desktop width. Confirm the hero tag panel itself and each tag list use the full available hero width. Tags must continue wrapping toward the right edge rather than stopping at the normal readable paragraph width.
+6. With the default 20-tag limit and more than 20 available tags, confirm only the first 20 tags are visible after JavaScript initializes and **Display all tags** appears. Click it and confirm all already-rendered tags appear immediately with no page navigation, reload, XHR, or fetch. The button must change to **Show fewer tags** and expose `aria-expanded="true"`. Collapse again and confirm the content returns to the configured limit.
+7. When the collapse boundary falls before all tags in the contained-tag group, confirm a **Containing tags** label is hidden if that group has no visible tag. Expand the collection and confirm the label returns with its tags.
+8. Switch to **Alphabetical**, save, and verify each semantic group is alphabetically ordered. Switch back to **Most used first** and verify tags with more direct gallery plus photo assignments appear first within their own group; equal counts should be alphabetical. Direct gallery and contained groups must not be merged together.
+9. Resize the browser until tags wrap across different numbers of lines. With the scrollbar enabled and its threshold set low enough to trigger, confirm scrolling appears only after the measured visual row count exceeds the configured threshold. Resize wider so the rows fall below the threshold and confirm the internal scrollbar disappears automatically. Disable the scrollbar setting and confirm the hero grows naturally at all widths.
+10. Disable JavaScript and reload the gallery. Confirm every tag is visible, usable and server-rendered, and the progressive disclosure control stays hidden. Re-enable JavaScript and repeat anonymously plus in the logged-in public view.
+11. Run `php tests/hero_tag_theme_model_test.php`, JavaScript syntax checks for `hero-tags.js`, `theme-form.js`, both public entrypoints, and then the full `php tests/run.php` suite.
 
 ### Duplicate Photo Detector Smoke Test
 

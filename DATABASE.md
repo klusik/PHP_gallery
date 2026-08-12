@@ -1,6 +1,6 @@
 # PHP Gallery Database Documentation
 
-This document describes the database schema used by PHP Gallery as of application version 0.87.1. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
+This document describes the database schema used by PHP Gallery as of application version 0.88. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
 
 ## Database Engine
 
@@ -338,6 +338,8 @@ Primary key is `(image_id, tag_id)`.
 
 Key-value storage for mutable runtime settings.
 
+Public tag-page presentation uses scalar settings in this existing table: tag_page_gallery_grid_columns, tag_page_gallery_grid_rows, and tag_page_gallery_description_layout. Missing values inherit the global pagination dimensions and Theme gallery-card layout, so no schema migration is required.
+
 | Column | Meaning |
 | --- | --- |
 | `setting_key` | Primary setting key. |
@@ -351,6 +353,16 @@ Use `app/services/app_settings.php` to access this table.
 Browser-side uploads store their mutable admin configuration in `app_settings` through `app/services/browser_uploads.php`. Current keys are `browser_upload_enabled`, `browser_upload_default_worker_count`, `browser_upload_max_worker_count`, `browser_upload_hard_worker_cap`, `browser_upload_batch_size_policy`, `browser_upload_zip_size_threshold_ratio`, `browser_upload_max_items_per_batch`, `browser_upload_max_zip_batch_bytes` and `browser_thumbnail_rebuild_source_chunk_bytes`. Values are normalized defensively at read time, with worker counts clamped to 1 through 32, the ZIP threshold ratio clamped to 0.10 through 0.95, ZIP item count clamped to 1 through 64, the absolute ZIP upload batch cap clamped to 1 MB through 128 MB, and the browser-assisted thumbnail rebuild source-download chunk clamped to 16 MB through 3 GB. The browser uses the smallest effective upload limit from PHP upload settings, the configured ratio, and the absolute ZIP cap so shared hosting does not need to parse very large browser-prepared upload packages in one request. The source-download chunk setting is larger by design because it streams originals from the server to the browser and does not pass through PHP multipart upload limits.
 
 `theme_favorite_gallery_ids` stores the optional top-navigation shortcuts as a JSON array of up to three entries. Numeric entries are gallery IDs, and the `home` token represents the main gallery page. The value is resolved by `app/services/favorite_galleries.php`; duplicate entries, missing galleries and unavailable public rows are ignored defensively.
+
+### Centralized Settings and schema behavior
+
+The Admin Settings hub does not introduce a table, column or migration. Scalar global settings continue to use their existing storage, primarily `app_settings`, while telemetry continues to use `telemetry_settings` and user/account integrations keep their existing account-specific tables. `app/services/admin_settings_registry.php` is application metadata, not persistent configuration.
+
+The hub does not rename keys or copy values. Missing and invalid values are still resolved by the owning service. In particular, tag landing-page grid keys inherit global pagination values, tag landing-page card layout inherits the global Theme card layout, the public thumbnail renderer falls back to `responsive`, and the lightbox default falls back to `single`. Per-gallery overrides remain in the `galleries` schema and are not flattened into global settings.
+
+Sensitive values such as `password_reset_smtp_password`, site-maintenance cron tokens, OpenAI keys and upload API keys are never copied into a second table or rendered as raw central summaries. The central page stores no secret shadow values. Existing optional migrations still gate the specialized subsystem that owns them. For example, the central EXIF/GPS checkbox is editable only when the existing per-gallery EXIF/GPS override schema is ready.
+
+See `docs/ADMIN_SETTINGS_INVENTORY.md` for the key-by-key storage and migration classification.
 
 ## Voting and Game Tables
 

@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-12
+ *   2026-08-11
  */
 
 declare(strict_types=1);
@@ -181,6 +181,111 @@ function tags_for_entity(string $type, int $id): array
     } catch (PDOException) {
         return $cache[$cacheKey] = [];
     }
+}
+
+
+/**
+ * Return direct gallery and image assignment counts for the supplied tag IDs.
+ *
+ * The public hero usage sort uses the same definition of tag usage as the
+ * administration: every direct gallery assignment and every direct image
+ * assignment contributes one use. The query is restricted to the IDs present
+ * in the current hero so unrelated tags are not aggregated on every request.
+ *
+ * @param array $tagIds Tag identifiers required by the current render.
+ * @return array<int,int> Usage counts keyed by tag ID.
+ */
+function tag_usage_counts(array $tagIds): array
+{
+    static $cache = [];
+    // $ids stores normalized unique positive identifiers for a bounded SQL query.
+    $ids = array_values(array_unique(array_filter(array_map('intval', $tagIds), static fn (int $id): bool => $id > 0)));
+    sort($ids, SORT_NUMERIC);
+    if (!$ids) {
+        return [];
+    }
+    // $cacheKey lets repeated hero groups in the same request reuse the aggregate.
+    $cacheKey = implode(',', $ids);
+    if (array_key_exists($cacheKey, $cache)) {
+        return $cache[$cacheKey];
+    }
+    // $placeholders safely scopes both assignment-table branches to the requested tags.
+    $placeholders = implode(',', array_fill(0, count($ids), '?'));
+    // $parameters repeats the same tag IDs for the gallery and image branches.
+    $parameters = array_merge($ids, $ids);
+    try {
+        // $stmt aggregates both supported direct assignment types before returning one count per tag.
+        $stmt = db()->prepare(
+            'SELECT usage_rows.tag_id, SUM(usage_rows.usage_count) AS usage_count
+             FROM (
+                 SELECT tag_id, COUNT(*) AS usage_count
+                 FROM gallery_tags
+                 WHERE tag_id IN (' . $placeholders . ')
+                 GROUP BY tag_id
+                 UNION ALL
+                 SELECT tag_id, COUNT(*) AS usage_count
+                 FROM image_tags
+                 WHERE tag_id IN (' . $placeholders . ')
+                 GROUP BY tag_id
+             ) usage_rows
+             GROUP BY usage_rows.tag_id'
+        );
+        $stmt->execute($parameters);
+        // $counts is initialized with zeroes so tags without assignments remain sortable.
+        $counts = array_fill_keys($ids, 0);
+        foreach ($stmt->fetchAll() as $row) {
+            $counts[(int) $row['tag_id']] = (int) $row['usage_count'];
+        }
+        return $cache[$cacheKey] = $counts;
+    } catch (PDOException) {
+        return $cache[$cacheKey] = array_fill_keys($ids, 0);
+    }
+}
+
+/**
+ * Sort public gallery hero tag groups without mixing their semantic sections.
+ *
+ * Direct gallery tags remain before contained tags. Within each group the
+ * configured mode is applied independently. Usage ties use a natural,
+ * case-insensitive alphabetical comparison and finally the tag ID for a stable
+ * deterministic order.
+ *
+ * @param array<string,array> $groups Hero tag groups keyed by their semantic role.
+ * @param string $sortMode Requested sort mode, normally usage or alphabetical.
+ * @return array<string,array> Sorted groups with their original keys preserved.
+ */
+function sort_public_hero_tag_groups(array $groups, string $sortMode): array
+{
+    // $mode defensively normalizes callers that do not pass the Theme service result.
+    $mode = in_array($sortMode, ['usage', 'alphabetical'], true) ? $sortMode : 'usage';
+    // $tagIds collects all tag IDs once so usage mode needs only one aggregate query.
+    $tagIds = [];
+    foreach ($groups as $tags) {
+        foreach ($tags as $tag) {
+            $tagIds[] = (int) ($tag['id'] ?? 0);
+        }
+    }
+    // $usageCounts is empty for alphabetical mode, avoiding an unnecessary database query.
+    $usageCounts = $mode === 'usage' ? tag_usage_counts($tagIds) : [];
+    foreach ($groups as $groupKey => $tags) {
+        usort($tags, static function (array $left, array $right) use ($mode, $usageCounts): int {
+            if ($mode === 'usage') {
+                // $usageComparison sorts larger aggregate assignment counts first.
+                $usageComparison = ($usageCounts[(int) ($right['id'] ?? 0)] ?? 0) <=> ($usageCounts[(int) ($left['id'] ?? 0)] ?? 0);
+                if ($usageComparison !== 0) {
+                    return $usageComparison;
+                }
+            }
+            // $nameComparison keeps ties human-readable and stable across render pipelines.
+            $nameComparison = strnatcasecmp((string) ($left['name'] ?? ''), (string) ($right['name'] ?? ''));
+            if ($nameComparison !== 0) {
+                return $nameComparison;
+            }
+            return ((int) ($left['id'] ?? 0)) <=> ((int) ($right['id'] ?? 0));
+        });
+        $groups[$groupKey] = $tags;
+    }
+    return $groups;
 }
 
 /**
@@ -499,7 +604,7 @@ function admin_tag_usage_rows(int $tagId): array
     // Variable $galleries stores this steps working value.
     $galleries = [];
     // Variable $galleryStmt stores this steps working value.
-    $galleryStmt = db()->prepare("SELECT DISTINCT g.id, g.title, g.slug, g.folder_path
+    $galleryStmt = db()->prepare("SELECT DISTINCT g.id, g.title, g.slug, g.url_path, g.folder_path
         FROM gallery_tags gt
         JOIN galleries g ON g.id = gt.gallery_id
         WHERE gt.tag_id = ?
@@ -510,6 +615,7 @@ function admin_tag_usage_rows(int $tagId): array
             'id' => (int) $row['id'],
             'title' => (string) ($row['title'] ?? ''),
             'slug' => (string) ($row['slug'] ?? ''),
+            'url_path' => (string) ($row['url_path'] ?? ''),
             'folder_path' => (string) ($row['folder_path'] ?? ''),
             'edit_url' => url_for('admin_edit_gallery', ['id' => (int) $row['id']]),
             'public_url' => gallery_public_url($row),
@@ -519,7 +625,7 @@ function admin_tag_usage_rows(int $tagId): array
     // Variable $images stores this steps working value.
     $images = [];
     // Variable $imageStmt stores this steps working value.
-    $imageStmt = db()->prepare("SELECT DISTINCT i.id, i.relative_path, i.filename, i.gallery_id, g.title AS gallery_title, g.slug AS gallery_slug
+    $imageStmt = db()->prepare("SELECT DISTINCT i.id, i.relative_path, i.filename, i.gallery_id, i.sort_order AS image_sort_order, g.title AS gallery_title, g.slug AS gallery_slug
         FROM image_tags it
         JOIN images i ON i.id = it.image_id
         JOIN galleries g ON g.id = i.gallery_id

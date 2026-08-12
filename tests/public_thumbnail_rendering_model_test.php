@@ -44,6 +44,7 @@ use function Gallery\Services\public_thumbnail_render_picture_html;
 use function Gallery\Services\public_thumbnail_rendering_mode;
 use function Gallery\Services\public_thumbnail_rendering_mode_normalize;
 use function Gallery\Services\public_thumbnail_rendering_mode_save;
+use function Gallery\Services\public_thumbnail_rendering_mode_save_with_revision;
 
 $GLOBALS['public_thumbnail_rendering_test_settings'] = [];
 
@@ -139,6 +140,16 @@ public_thumbnail_rendering_mode_save('unsupported');
 assert_public_thumbnail_rendering_same('responsive', $GLOBALS['public_thumbnail_rendering_test_settings'][PUBLIC_THUMBNAIL_RENDERING_SETTING_KEY] ?? null, 'unsupported submitted value persists only safe responsive fallback');
 assert_public_thumbnail_rendering_same('responsive', public_thumbnail_rendering_mode(), 'invalid saved submission resolves to responsive');
 
+$GLOBALS['public_thumbnail_rendering_test_settings'] = [];
+public_thumbnail_rendering_mode_save_with_revision('progressive');
+assert_public_thumbnail_rendering_same('progressive', public_thumbnail_rendering_mode(), 'revision-aware save persists the selected mode');
+if (trim((string) ($GLOBALS['public_thumbnail_rendering_test_settings']['theme_public_content_revision'] ?? '')) === '') {
+    throw new RuntimeException('Revision-aware thumbnail save did not bump theme_public_content_revision.');
+}
+$revision = $GLOBALS['public_thumbnail_rendering_test_settings']['theme_public_content_revision'];
+public_thumbnail_rendering_mode_save_with_revision('progressive');
+assert_public_thumbnail_rendering_same($revision, $GLOBALS['public_thumbnail_rendering_test_settings']['theme_public_content_revision'] ?? null, 'unchanged renderer does not bump content revision');
+
 assert_public_thumbnail_rendering_same('loading="eager" fetchpriority="high"', public_responsive_thumbnail_loading_attributes(0), 'responsive first card loading policy unchanged');
 assert_public_thumbnail_rendering_same('loading="eager" fetchpriority="high"', public_responsive_thumbnail_loading_attributes(1), 'responsive second card loading policy unchanged');
 assert_public_thumbnail_rendering_same('loading="eager" fetchpriority="auto"', public_responsive_thumbnail_loading_attributes(2), 'responsive middle eager policy unchanged');
@@ -168,9 +179,9 @@ assert_public_thumbnail_rendering_same(
 );
 
 // Confirm the Admin controller routes posted values through the centralized validated persistence helper.
-$adminThemeSource = file_get_contents(__DIR__ . '/../app/controllers/admin_theme.php');
-if (!is_string($adminThemeSource) || !str_contains($adminThemeSource, "public_thumbnail_rendering_mode_save(\$_POST['public_thumbnail_rendering_mode'] ?? null)")) {
-    throw new RuntimeException('Admin Theme form does not persist the renderer through the validated service helper.');
+$adminThemeSource = file_get_contents(__DIR__ . '/../app/controllers/admin_theme_actions.php');
+if (!is_string($adminThemeSource) || !str_contains($adminThemeSource, "public_thumbnail_rendering_mode_save_with_revision(\$_POST['public_thumbnail_rendering_mode'] ?? null)")) {
+    throw new RuntimeException('Admin Theme form does not persist the renderer through the shared revision-aware service helper.');
 }
 
 assert_public_thumbnail_rendering_same(PUBLIC_THUMBNAIL_RENDERING_RESPONSIVE, 'responsive', 'responsive machine value remains stable');

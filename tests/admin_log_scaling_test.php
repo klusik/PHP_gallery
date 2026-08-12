@@ -53,7 +53,8 @@ function assert_admin_log_scaling(bool $condition, string $label): void
 
 $serviceSource = (string) file_get_contents(__DIR__ . '/../app/services/logs.php');
 $controllerSource = (string) file_get_contents(__DIR__ . '/../app/controllers/admin_logs.php');
-$bootstrapSource = (string) file_get_contents(__DIR__ . '/../app/bootstrap.php');
+$bootstrapSource = (string) file_get_contents(__DIR__ . '/../app/bootstrap.php')
+    . (string) file_get_contents(__DIR__ . '/../app/bootstrap/dispatch.php');
 $maintenanceSource = (string) file_get_contents(__DIR__ . '/../app/services/site_maintenance.php');
 $maintenanceViewSource = (string) file_get_contents(__DIR__ . '/../app/views/admin_dashboard_sections.php');
 $browserSource = (string) file_get_contents(__DIR__ . '/../public/assets/gallery-modules/admin-logs.js');

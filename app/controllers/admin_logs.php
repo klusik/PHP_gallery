@@ -52,6 +52,7 @@ use function Gallery\Core\verify_csrf;
 use function Gallery\Services\app_setting;
 use function Gallery\Services\delete_app_settings;
 use function Gallery\Services\set_app_setting;
+use function Gallery\Services\t;
 use function Gallery\Services\translation_interpolate;
 use function Gallery\Services\translation_load_language;
 use function Gallery\Views\view_render_admin_feature_flag;
@@ -105,13 +106,15 @@ use const Gallery\Services\ADMIN_LOG_GROUP_MEMBER_PAGE_SIZE;
  */
 
 /**
- * Translate admin-log UI labels in English even when the rest of the admin zone
- * uses another language. This fallback keeps the logs page alive if only this
- * controller is updated during a partial deployment.
+ * Translate Admin log UI labels using the active language.
+ *
+ * The explicit English dictionary fallback keeps the logs page alive if only
+ * this controller is updated during a partial deployment where the translation
+ * service or active language pack is incomplete.
  */
 if (!function_exists('admin_log_english_t')) {
     /**
-     * Handle admin log english t.
+     * Handle admin log translation with a safe partial-deployment fallback.
      *
      * Used by HTTP controller routing for this workflow.
      *
@@ -125,6 +128,10 @@ if (!function_exists('admin_log_english_t')) {
         if (is_array($fallback)) {
             $parameters = $fallback;
             $fallback = null;
+        }
+
+        if (function_exists('Gallery\\Services\\t')) {
+            return t($key, $fallback, $parameters);
         }
 
         $text = null;
@@ -695,13 +702,16 @@ function render_admin_log_archive_pagination(int $page, int $pages): string
     if ($pages <= 1) {
         return '';
     }
-    $html = '<nav class="pagination admin-log-archive-pagination" aria-label="Archived log pages">';
+    $html = '<nav class="pagination admin-log-archive-pagination" aria-label="' . e(admin_log_english_t('admin.logs.archive.pagination_aria', 'Archived log pages')) . '">';
     if ($page > 1) {
-        $html .= '<a class="pagination-link" href="' . e(admin_log_archive_page_url($page - 1)) . '">Previous</a>';
+        $html .= '<a class="pagination-link" href="' . e(admin_log_archive_page_url($page - 1)) . '">' . e(admin_log_english_t('pagination.previous', 'Previous')) . '</a>';
     }
-    $html .= '<span class="pagination-status">Page ' . e((string) $page) . ' of ' . e((string) $pages) . '</span>';
+    $html .= '<span class="pagination-status">' . e(admin_log_english_t('pagination.page_of', 'Page {page} of {pages}', [
+        'page' => (string) $page,
+        'pages' => (string) $pages,
+    ])) . '</span>';
     if ($page < $pages) {
-        $html .= '<a class="pagination-link" href="' . e(admin_log_archive_page_url($page + 1)) . '">Next</a>';
+        $html .= '<a class="pagination-link" href="' . e(admin_log_archive_page_url($page + 1)) . '">' . e(admin_log_english_t('pagination.next', 'Next')) . '</a>';
     }
     $html .= '</nav>';
     return $html;
@@ -724,40 +734,48 @@ function render_admin_log_archive_panel(array $status, array $archiveList): void
     $items = is_array($archiveList['items'] ?? null) ? $archiveList['items'] : [];
 
     echo '<section class="panel admin-log-archive-panel">';
-    echo '<div class="admin-log-archive-heading"><div><h2>Planned Admin log maintenance</h2><p class="muted">Recent logs stay live in MariaDB. Older completed days are archived as permanent daily ZIP files containing JSON, a fully expanded static HTML report, and a verification manifest. Database rows are deleted only after that ZIP has been verified.</p></div></div>';
+    echo '<div class="admin-log-archive-heading"><div><h2>' . e(admin_log_english_t('admin.logs.archive.maintenance_title', 'Planned Admin log maintenance')) . '</h2><p class="muted">' . e(admin_log_english_t('admin.logs.archive.maintenance_intro', 'Recent logs stay live in MariaDB. Older completed days are archived as permanent daily ZIP files containing JSON, a fully expanded static HTML report, and a verification manifest. Database rows are deleted only after that ZIP has been verified.')) . '</p></div></div>';
 
     if (empty($status['zip_available'])) {
-        echo '<div class="notice">PHP ZipArchive is not available. Automatic Admin log archival cannot run safely until the ZIP extension is enabled.</div>';
+        echo '<div class="notice">' . e(admin_log_english_t('admin.logs.archive.zip_unavailable', 'PHP ZipArchive is not available. Automatic Admin log archival cannot run safely until the ZIP extension is enabled.')) . '</div>';
     }
 
     echo '<div class="admin-log-archive-controls">';
     echo '<form method="post" action="' . e(url_for('admin_log_archive_maintenance')) . '" class="admin-log-archive-retention-form">' . csrf_field();
     echo '<input type="hidden" name="action" value="save_retention">';
-    echo '<label><span>Keep live logs</span><select name="retention_days">';
+    echo '<label><span>' . e(admin_log_english_t('admin.logs.archive.keep_live_logs', 'Keep live logs')) . '</span><select name="retention_days">';
     foreach (admin_log_archive_retention_options() as $days) {
-        $label = $days === 0 ? 'Forever, disable automatic archiving' : $days . ' days';
+        $label = $days === 0
+            ? admin_log_english_t('admin.logs.archive.retention_forever_option', 'Forever, disable automatic archiving')
+            : admin_log_english_t('common.days_count', '{count} days', ['count' => (string) $days]);
         echo '<option value="' . (int) $days . '"' . ($retentionDays === $days ? ' selected' : '') . '>' . e($label) . '</option>';
     }
-    echo '</select></label><button type="submit" class="secondary">Save retention</button></form>';
+    echo '</select></label><button type="submit" class="secondary">' . e(admin_log_english_t('admin.logs.archive.save_retention', 'Save retention')) . '</button></form>';
 
     echo '<form method="post" action="' . e(url_for('admin_log_archive_maintenance')) . '" class="admin-log-archive-run-form">' . csrf_field();
     echo '<input type="hidden" name="action" value="run_now">';
-    echo '<button type="submit">Run maintenance cycle now</button>';
+    echo '<button type="submit">' . e(admin_log_english_t('admin.logs.archive.run_now', 'Run maintenance cycle now')) . '</button>';
     echo '</form>';
     echo '</div>';
 
-    echo '<p class="muted admin-log-archive-policy">The lightweight due counter is checked on normal gallery and Admin page loads. When due, one safe daily archive cycle runs after the visible response. A backlog is retried shortly; once caught up, the next normal check is approximately 24 hours later. Archived ZIP files are never deleted automatically.</p>';
+    echo '<p class="muted admin-log-archive-policy">' . e(admin_log_english_t('admin.logs.archive.policy', 'The lightweight due counter is checked on normal gallery and Admin page loads. When due, one safe daily archive cycle runs after the visible response. A backlog is retried shortly; once caught up, the next normal check is approximately 24 hours later. Archived ZIP files are never deleted automatically.')) . '</p>';
+
+    $retentionLabel = $retentionDays === 0
+        ? admin_log_english_t('common.forever', 'Forever')
+        : admin_log_english_t('common.days_count', '{count} days', ['count' => (string) $retentionDays]);
+    $oldestDate = (string) (($inventory['oldest_date'] ?? '') !== '' ? $inventory['oldest_date'] : admin_log_english_t('common.none', 'none'));
+    $newestDate = (string) (($inventory['newest_date'] ?? '') !== '' ? $inventory['newest_date'] : admin_log_english_t('common.none', 'none'));
+    $nextRunLabel = $retentionDays === 0
+        ? admin_log_english_t('common.disabled', 'disabled')
+        : ($nextRunAt <= time() ? admin_log_english_t('admin.logs.archive.due_now', 'due now') : date('Y-m-d H:i:s', $nextRunAt));
 
     echo '<dl class="admin-log-archive-metrics">';
-    echo '<div><dt>Live retention</dt><dd>' . e($retentionDays === 0 ? 'Forever' : $retentionDays . ' days') . '</dd></div>';
-    echo '<div><dt>Archived ZIPs</dt><dd>' . e((string) max(0, (int) ($inventory['count'] ?? 0))) . '</dd></div>';
-    echo '<div><dt>Archive storage</dt><dd>' . e(admin_dashboard_format_bytes(max(0, (int) ($inventory['total_bytes'] ?? 0)))) . '</dd></div>';
-    echo '<div><dt>Oldest archive</dt><dd>' . e((string) (($inventory['oldest_date'] ?? '') !== '' ? $inventory['oldest_date'] : 'none')) . '</dd></div>';
-    echo '<div><dt>Newest archive</dt><dd>' . e((string) (($inventory['newest_date'] ?? '') !== '' ? $inventory['newest_date'] : 'none')) . '</dd></div>';
-    $nextRunLabel = $retentionDays === 0
-        ? 'disabled'
-        : ($nextRunAt <= time() ? 'due now' : date('Y-m-d H:i:s', $nextRunAt));
-    echo '<div><dt>Next automatic check</dt><dd>' . e($nextRunLabel) . '</dd></div>';
+    echo '<div><dt>' . e(admin_log_english_t('admin.logs.archive.live_retention', 'Live retention')) . '</dt><dd>' . e($retentionLabel) . '</dd></div>';
+    echo '<div><dt>' . e(admin_log_english_t('admin.logs.archive.archived_zips', 'Archived ZIPs')) . '</dt><dd>' . e((string) max(0, (int) ($inventory['count'] ?? 0))) . '</dd></div>';
+    echo '<div><dt>' . e(admin_log_english_t('admin.logs.archive.storage', 'Archive storage')) . '</dt><dd>' . e(admin_dashboard_format_bytes(max(0, (int) ($inventory['total_bytes'] ?? 0)))) . '</dd></div>';
+    echo '<div><dt>' . e(admin_log_english_t('admin.logs.archive.oldest', 'Oldest archive')) . '</dt><dd>' . e($oldestDate) . '</dd></div>';
+    echo '<div><dt>' . e(admin_log_english_t('admin.logs.archive.newest', 'Newest archive')) . '</dt><dd>' . e($newestDate) . '</dd></div>';
+    echo '<div><dt>' . e(admin_log_english_t('admin.logs.archive.next_check', 'Next automatic check')) . '</dt><dd>' . e($nextRunLabel) . '</dd></div>';
     echo '</dl>';
 
     if ($lastResult !== []) {
@@ -765,38 +783,61 @@ function render_admin_log_archive_panel(array $status, array $archiveList): void
         $lastDate = (string) ($lastResult['archive_date'] ?? '');
         $lastRows = max(0, (int) ($lastResult['archived_rows'] ?? 0));
         $lastDeleted = max(0, (int) ($lastResult['deleted_rows'] ?? 0));
-        $lastSummary = 'Last cycle: ' . ($lastReason !== '' ? $lastReason : (!empty($lastResult['ok']) ? 'completed' : 'failed')) . '.';
+        $fallbackState = !empty($lastResult['ok'])
+            ? admin_log_english_t('common.completed', 'completed')
+            : admin_log_english_t('common.failed', 'failed');
+        $lastSummary = admin_log_english_t('admin.logs.archive.last_cycle', 'Last cycle: {state}.', [
+            'state' => $lastReason !== '' ? $lastReason : $fallbackState,
+        ]);
         if ($lastDate !== '') {
-            $lastSummary .= ' Archive day ' . $lastDate . ', ' . $lastRows . ' rows preserved, ' . $lastDeleted . ' live rows removed.';
+            $lastSummary .= ' ' . admin_log_english_t('admin.logs.archive.last_cycle_archive', 'Archive day {date}, {preserved} rows preserved, {removed} live rows removed.', [
+                'date' => $lastDate,
+                'preserved' => (string) $lastRows,
+                'removed' => (string) $lastDeleted,
+            ]);
         }
         if (!empty($lastResult['error'])) {
-            $lastSummary .= ' Error: ' . (string) $lastResult['error'];
+            $lastSummary .= ' ' . admin_log_english_t('common.error_detail', 'Error: {error}', ['error' => (string) $lastResult['error']]);
         }
         echo '<p class="muted admin-log-archive-last-result">' . e($lastSummary) . '</p>';
     }
 
-    echo '<div class="admin-log-archive-heading admin-log-archive-files-heading"><div><h3>Archived logs</h3><p class="muted">These rows come directly from ZIP files on disk. View the frozen HTML/JSON through authenticated routes, download the original ZIP, or delete a selected archive manually.</p></div></div>';
+    echo '<div class="admin-log-archive-heading admin-log-archive-files-heading"><div><h3>' . e(admin_log_english_t('admin.logs.archive.files_title', 'Archived logs')) . '</h3><p class="muted">' . e(admin_log_english_t('admin.logs.archive.files_intro', 'These rows come directly from ZIP files on disk. View the frozen HTML/JSON through authenticated routes, download the original ZIP, or delete a selected archive manually.')) . '</p></div></div>';
     echo render_admin_log_archive_pagination($archivePage, $archivePages);
     if ($items === []) {
-        echo '<p class="muted">No Admin log ZIP archives exist yet.</p>';
+        echo '<p class="muted">' . e(admin_log_english_t('admin.logs.archive.none_yet', 'No Admin log ZIP archives exist yet.')) . '</p>';
     } else {
-        echo '<div class="admin-log-table-wrap"><table class="admin-log-archive-table"><thead><tr><th>Date</th><th>Records</th><th>ZIP size</th><th>Created</th><th>Actions</th></tr></thead><tbody>';
+        echo '<div class="admin-log-table-wrap"><table class="admin-log-archive-table"><thead><tr>';
+        echo '<th>' . e(admin_log_english_t('common.date', 'Date')) . '</th>';
+        echo '<th>' . e(admin_log_english_t('admin.logs.archive.records', 'Records')) . '</th>';
+        echo '<th>' . e(admin_log_english_t('admin.logs.archive.zip_size', 'ZIP size')) . '</th>';
+        echo '<th>' . e(admin_log_english_t('common.created', 'Created')) . '</th>';
+        echo '<th>' . e(admin_log_english_t('common.actions', 'Actions')) . '</th>';
+        echo '</tr></thead><tbody>';
         foreach ($items as $item) {
             $date = (string) ($item['date'] ?? '');
             if (!admin_log_archive_valid_date($date)) {
                 continue;
             }
+            $manifestValue = !empty($item['manifest_available'])
+                ? (string) max(0, (int) ($item['row_count'] ?? 0))
+                : admin_log_english_t('admin.logs.archive.manifest_unavailable', 'manifest unavailable');
+            $createdAt = (string) (($item['created_at'] ?? '') !== '' ? $item['created_at'] : admin_log_english_t('common.unknown', 'unknown'));
+            $deleteConfirm = admin_log_english_t('admin.logs.archive.delete_confirm', 'Permanently delete {file}? This archived log data cannot be recovered from PHP Gallery.', [
+                'file' => admin_log_archive_file_name($date),
+            ]);
+
             echo '<tr><td><strong>' . e($date) . '</strong><div class="muted">' . e((string) ($item['file_name'] ?? admin_log_archive_file_name($date))) . '</div></td>';
-            echo '<td>' . e(!empty($item['manifest_available']) ? (string) max(0, (int) ($item['row_count'] ?? 0)) : 'manifest unavailable') . '</td>';
+            echo '<td>' . e($manifestValue) . '</td>';
             echo '<td>' . e(admin_dashboard_format_bytes(max(0, (int) ($item['bytes'] ?? 0)))) . '</td>';
-            echo '<td>' . e((string) (($item['created_at'] ?? '') !== '' ? $item['created_at'] : 'unknown')) . '</td>';
+            echo '<td>' . e($createdAt) . '</td>';
             echo '<td><div class="admin-log-archive-actions">';
-            echo '<a class="button secondary" target="_blank" rel="noopener" href="' . e(url_for('admin_log_archive_view', ['date' => $date, 'kind' => 'html'])) . '">View HTML</a>';
-            echo '<a class="button secondary" target="_blank" rel="noopener" href="' . e(url_for('admin_log_archive_view', ['date' => $date, 'kind' => 'json'])) . '">View JSON</a>';
-            echo '<a class="button secondary" href="' . e(url_for('admin_log_archive_download', ['date' => $date])) . '">Download ZIP</a>';
+            echo '<a class="button secondary" target="_blank" rel="noopener" href="' . e(url_for('admin_log_archive_view', ['date' => $date, 'kind' => 'html'])) . '">' . e(admin_log_english_t('admin.logs.archive.view_html', 'View HTML')) . '</a>';
+            echo '<a class="button secondary" target="_blank" rel="noopener" href="' . e(url_for('admin_log_archive_view', ['date' => $date, 'kind' => 'json'])) . '">' . e(admin_log_english_t('admin.logs.archive.view_json', 'View JSON')) . '</a>';
+            echo '<a class="button secondary" href="' . e(url_for('admin_log_archive_download', ['date' => $date])) . '">' . e(admin_log_english_t('admin.logs.archive.download_zip', 'Download ZIP')) . '</a>';
             echo '<form method="post" action="' . e(url_for('admin_log_archive_maintenance')) . '" class="admin-log-archive-delete-form">' . csrf_field();
             echo '<input type="hidden" name="action" value="delete_archive"><input type="hidden" name="date" value="' . e($date) . '">';
-            echo '<button type="submit" class="secondary danger" onclick="return confirm(' . e(json_encode('Permanently delete ' . admin_log_archive_file_name($date) . '? This archived log data cannot be recovered from PHP Gallery.', JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) . ');">Delete</button>';
+            echo '<button type="submit" class="secondary danger" onclick="return confirm(' . e(json_encode($deleteConfirm, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) . ');">' . e(admin_log_english_t('common.delete', 'Delete')) . '</button>';
             echo '</form></div></td></tr>';
         }
         echo '</tbody></table></div>';
@@ -834,10 +875,10 @@ function render_admin_log_section_tabs(string $activeSection): void
     $logsUrl = url_for('admin_logs', $preservedParams);
     $maintenanceUrl = url_for('admin_logs', array_merge($preservedParams, ['section' => 'maintenance']));
 
-    echo '<nav class="admin-subtabs admin-log-section-tabs" aria-label="Admin log sections">';
+    echo '<nav class="admin-subtabs admin-log-section-tabs" aria-label="' . e(admin_log_english_t('admin.logs.sections_aria', 'Admin log sections')) . '">';
     echo '<div class="admin-subtab-list">';
-    echo '<a class="admin-subtab' . ($activeSection === 'logs' ? ' is-active' : '') . '" href="' . e($logsUrl) . '"' . ($activeSection === 'logs' ? ' aria-current="page"' : '') . '>Logs</a>';
-    echo '<a class="admin-subtab' . ($activeSection === 'maintenance' ? ' is-active' : '') . '" href="' . e($maintenanceUrl) . '"' . ($activeSection === 'maintenance' ? ' aria-current="page"' : '') . '>Maintenance &amp; archives</a>';
+    echo '<a class="admin-subtab' . ($activeSection === 'logs' ? ' is-active' : '') . '" href="' . e($logsUrl) . '"' . ($activeSection === 'logs' ? ' aria-current="page"' : '') . '>' . e(admin_log_english_t('admin.logs.section_logs', 'Logs')) . '</a>';
+    echo '<a class="admin-subtab' . ($activeSection === 'maintenance' ? ' is-active' : '') . '" href="' . e($maintenanceUrl) . '"' . ($activeSection === 'maintenance' ? ' aria-current="page"' : '') . '>' . e(admin_log_english_t('admin.logs.section_maintenance', 'Maintenance & archives')) . '</a>';
     echo '</div></nav>';
 }
 
@@ -1060,8 +1101,12 @@ function cms_admin_log_archive_maintenance(): void
 
     if ($action === 'save_retention') {
         $days = admin_log_archive_set_retention_days((int) ($_POST['retention_days'] ?? 30));
-        $label = $days === 0 ? 'Forever' : $days . ' days';
-        flash_message('admin_notice', 'Admin log live retention saved: ' . $label . '. Archived ZIP files are never deleted automatically.');
+        $label = $days === 0
+            ? admin_log_english_t('common.forever', 'Forever')
+            : admin_log_english_t('common.days_count', '{count} days', ['count' => (string) $days]);
+        flash_message('admin_notice', admin_log_english_t('admin.logs.archive.retention_saved', 'Admin log live retention saved: {retention}. Archived ZIP files are never deleted automatically.', [
+            'retention' => $label,
+        ]));
         redirect_to(url_for('admin_logs', ['section' => 'maintenance']));
     }
 
@@ -1071,23 +1116,27 @@ function cms_admin_log_archive_maintenance(): void
             'force' => true,
         ]);
         if (!empty($result['busy'])) {
-            flash_message('admin_notice', 'Admin log archive maintenance is already running in another request.');
+            flash_message('admin_notice', admin_log_english_t('admin.logs.archive.already_running', 'Admin log archive maintenance is already running in another request.'));
         } elseif (empty($result['ok'])) {
-            flash_message('admin_notice', 'Admin log archive maintenance failed: ' . (string) ($result['error'] ?? $result['reason'] ?? 'unknown error'));
+            flash_message('admin_notice', admin_log_english_t('admin.logs.archive.failed_with_error', 'Admin log archive maintenance failed: {error}', [
+                'error' => (string) ($result['error'] ?? $result['reason'] ?? admin_log_english_t('common.unknown_error', 'unknown error')),
+            ]));
         } elseif ((string) ($result['reason'] ?? '') === 'retention_forever') {
-            flash_message('admin_notice', 'Admin log archive maintenance is disabled because live retention is set to Forever.');
+            flash_message('admin_notice', admin_log_english_t('admin.logs.archive.disabled_forever', 'Admin log archive maintenance is disabled because live retention is set to Forever.'));
         } elseif (!empty($result['archive_date'])) {
-            $message = 'Admin log maintenance archived ' . (string) $result['archive_date']
-                . ': ' . max(0, (int) ($result['archived_rows'] ?? 0)) . ' rows preserved in ZIP, '
-                . max(0, (int) ($result['deleted_rows'] ?? 0)) . ' represented live rows removed.';
+            $message = admin_log_english_t('admin.logs.archive.cycle_archived', 'Admin log maintenance archived {date}: {archived} rows preserved in ZIP, {deleted} represented live rows removed.', [
+                'date' => (string) $result['archive_date'],
+                'archived' => (string) max(0, (int) ($result['archived_rows'] ?? 0)),
+                'deleted' => (string) max(0, (int) ($result['deleted_rows'] ?? 0)),
+            ]);
             if (!empty($result['has_more'])) {
-                $message .= ' More eligible days remain and will continue in later safe cycles.';
+                $message .= ' ' . admin_log_english_t('admin.logs.archive.more_days', 'More eligible days remain and will continue in later safe cycles.');
             } else {
-                $message .= ' The archive backlog is caught up.';
+                $message .= ' ' . admin_log_english_t('admin.logs.archive.backlog_caught_up', 'The archive backlog is caught up.');
             }
             flash_message('admin_notice', $message);
         } else {
-            flash_message('admin_notice', 'Admin log maintenance found no completed days old enough to archive.');
+            flash_message('admin_notice', admin_log_english_t('admin.logs.archive.nothing_to_archive', 'Admin log maintenance found no completed days old enough to archive.'));
         }
         redirect_to(url_for('admin_logs', ['section' => 'maintenance']));
     }
@@ -1095,7 +1144,7 @@ function cms_admin_log_archive_maintenance(): void
     if ($action === 'delete_archive') {
         $date = trim((string) ($_POST['date'] ?? ''));
         if (!admin_log_archive_valid_date($date)) {
-            flash_message('admin_notice', 'Invalid Admin log archive date.');
+            flash_message('admin_notice', admin_log_english_t('admin.logs.archive.invalid_date', 'Invalid Admin log archive date.'));
             redirect_to(url_for('admin_logs', ['section' => 'maintenance']));
         }
         try {
@@ -1108,12 +1157,16 @@ function cms_admin_log_archive_maintenance(): void
                     'severity' => 'warning',
                     'category' => 'admin',
                 ]);
-                flash_message('admin_notice', 'Deleted archived Admin log file ' . admin_log_archive_file_name($date) . '.');
+                flash_message('admin_notice', admin_log_english_t('admin.logs.archive.deleted_file', 'Deleted archived Admin log file {file}.', [
+                    'file' => admin_log_archive_file_name($date),
+                ]));
             } else {
-                flash_message('admin_notice', 'The selected Admin log archive file no longer exists.');
+                flash_message('admin_notice', admin_log_english_t('admin.logs.archive.file_missing', 'The selected Admin log archive file no longer exists.'));
             }
         } catch (Throwable $exception) {
-            flash_message('admin_notice', 'Unable to delete the selected Admin log archive: ' . $exception->getMessage());
+            flash_message('admin_notice', admin_log_english_t('admin.logs.archive.delete_failed', 'Unable to delete the selected Admin log archive: {error}', [
+                'error' => $exception->getMessage(),
+            ]));
         }
         redirect_to(url_for('admin_logs', ['section' => 'maintenance']));
     }

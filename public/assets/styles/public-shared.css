@@ -197,7 +197,8 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(16rem, min(30rem, 36vw));
     align-items: start;
-    gap: clamp(1rem, 3vw, 2.25rem);
+    column-gap: clamp(1rem, 3vw, 2.25rem);
+    row-gap: 0.55rem;
 }
 
 /* Holds the readable story part of the hero: title, date, description, and breadcrumbs. */
@@ -275,28 +276,59 @@
 }
 
 .public-page .hero-tags {
+    grid-column: 1 / -1;
     display: grid;
-    justify-items: end;
-    gap: 0.35rem;
+    justify-items: stretch;
+    gap: 0.28rem;
     width: 100%;
     max-width: 100%;
-    max-height: 8.2rem;
-    overflow: auto;
+    min-width: 0;
     padding: 0.35rem;
     border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
     border-radius: max(0.7rem, calc(var(--radius, 16px) * 0.72));
     background: color-mix(in srgb, var(--panel) 44%, transparent);
+}
+
+/* The browser applies row-based scrolling only when the configured threshold is exceeded. */
+.public-page .hero-tags-content {
+    display: grid;
+    justify-items: stretch;
+    gap: 0.28rem;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+}
+
+.public-page .hero-tags-content.is-scrollable {
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
     scrollbar-width: thin;
 }
 
-/* Keeps very heavily tagged galleries compact while still exposing every tag. */
-.public-page .hero-tags:empty {
+.public-page .hero-tags-controls {
+    display: flex;
+    justify-content: flex-end;
+    width: 100%;
+    padding-top: 0.05rem;
+}
+
+.public-page .hero-tags-toggle {
+    min-height: 0;
+    padding: 0.22rem 0.55rem;
+    font-size: 0.74rem;
+    line-height: 1.25;
+}
+
+.public-page .hero-tags-toggle[hidden] {
     display: none;
 }
 
 .public-page .hero .tag-list {
-    justify-content: flex-end;
+    justify-content: flex-start;
     gap: 0.28rem;
+    width: 100%;
+    max-width: none;
     opacity: 0.92;
 }
 
@@ -349,8 +381,7 @@
     }
 
     .public-page .hero-tags {
-        justify-items: start;
-        max-height: 9.5rem;
+        justify-items: stretch;
     }
 
     .public-page .hero h1 {

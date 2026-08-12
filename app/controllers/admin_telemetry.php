@@ -45,6 +45,7 @@ use function Gallery\Core\render_header;
 use function Gallery\Core\require_admin;
 use function Gallery\Core\url_for;
 use function Gallery\Core\verify_csrf;
+use function Gallery\Services\admin_settings_url;
 use function Gallery\Services\t;
 use function Gallery\Services\translation_active_language;
 use function Gallery\Services\admin_log_event;
@@ -112,6 +113,7 @@ function cms_admin_telemetry(): void
     $schemaReady = telemetry_settings_schema_ready();
     render_header(t('admin.telemetry.page_title', 'Telemetry'));
     echo '<section class="hero"><h1>' . e(t('admin.telemetry.title', 'Anonymous telemetry')) . '</h1><p>' . e(t('admin.telemetry.description', 'Local, privacy-safe usage and performance statistics for tuning the gallery.')) . '</p><nav class="nav">';
+    echo '<a class="button secondary" href="' . e(admin_settings_url('privacy')) . '">' . e(t('admin.settings.open_centralized', 'Open centralized settings')) . '</a>';
     echo '<a class="button secondary" href="' . e(url_for('admin_logs')) . '">' . e(t('admin.telemetry.operational_logs', 'Operational logs')) . '</a>';
     echo '<a class="button secondary" href="' . e(url_for('admin_telemetry_export')) . '">' . e(t('admin.telemetry.export_html_report', 'Export HTML report')) . '</a>';
     echo '<a class="button secondary" href="' . e(url_for('admin')) . '">' . e(t('admin.common.dashboard', 'Dashboard')) . '</a>';
@@ -468,157 +470,264 @@ function cms_admin_telemetry_export(): void
 
     $style = ':root{color-scheme:light dark;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f4f6fb;color:#172033}body{margin:0;padding:32px}main{max-width:1320px;margin:0 auto}header,.panel{background:rgba(255,255,255,.94);border:1px solid rgba(90,108,140,.22);border-radius:24px;box-shadow:0 18px 55px rgba(28,43,70,.10);padding:24px;margin-bottom:22px}h1{margin:0 0 8px;font-size:34px}h2{margin:0 0 16px;font-size:22px}h3{margin:18px 0 10px;font-size:16px}.muted,p{color:#5b667a;line-height:1.55}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px}.metric{border:1px solid rgba(90,108,140,.20);border-radius:18px;padding:16px;background:linear-gradient(180deg,rgba(255,255,255,.98),rgba(246,248,252,.94))}.metric strong{display:block;font-size:28px;margin-bottom:4px}.metric span{display:block;color:#5b667a}.metric small{display:block;margin-top:8px;color:#6d778a}.split{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:18px}.table-scroll{overflow:auto;border-radius:16px;border:1px solid rgba(90,108,140,.18)}table{width:100%;border-collapse:collapse;min-width:680px}th,td{text-align:left;padding:11px 12px;border-bottom:1px solid rgba(90,108,140,.18);vertical-align:top;white-space:nowrap}th{background:rgba(77,105,165,.10);font-size:13px;text-transform:uppercase;letter-spacing:.03em}tr:last-child td{border-bottom:0}.privacy{background:#eef7f0;border-color:#b7dfc1}.bars{display:grid;gap:10px}.bar-row{display:grid;grid-template-columns:minmax(90px,160px) 1fr auto;align-items:center;gap:10px}.bar-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.bar-track{height:12px;border-radius:999px;background:rgba(77,105,165,.14);overflow:hidden}.bar-fill{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,#5d7df2,#53b987)}.trend-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px}.trend{height:160px;display:flex;align-items:end;gap:4px;border:1px solid rgba(90,108,140,.18);border-radius:18px;padding:12px;background:linear-gradient(180deg,rgba(255,255,255,.7),rgba(77,105,165,.07))}.trend-column{flex:1;min-width:4px;height:100%;display:flex;align-items:end}.trend-column i{display:block;width:100%;border-radius:8px 8px 3px 3px;background:linear-gradient(180deg,#5d7df2,#8aa2ff)}.chart-caption{margin:8px 0 0;font-size:13px}.pill{display:inline-flex;align-items:center;border-radius:999px;padding:3px 8px;background:rgba(77,105,165,.12);font-size:12px;color:#384969}.section-note{margin-top:-6px}.summary-list{display:grid;gap:8px;margin:0;padding:0;list-style:none}.summary-list li{display:flex;justify-content:space-between;gap:14px;border-bottom:1px solid rgba(90,108,140,.14);padding:8px 0}.summary-list li:last-child{border-bottom:0}@media (prefers-color-scheme:dark){:root{background:#101521;color:#eef2fb}header,.panel{background:#171e2d;border-color:#303a50}.metric{background:#1c2435;border-color:#303a50}.muted,p,.metric span,.metric small{color:#aeb8cc}th{background:#222d43}.table-scroll,td,th{border-color:#303a50}.privacy{background:#18291e;border-color:#31563c}.bar-track{background:#263148}.pill{background:#263148;color:#d6dded}.trend{background:#182032;border-color:#303a50}.summary-list li{border-color:#303a50}}';
 
+    $labels = [
+        'executive_overview' => t('admin.telemetry.export.executive_overview', 'Executive overview'),
+        'anonymous_sessions' => t('admin.telemetry.export.anonymous_sessions', 'Anonymous sessions'),
+        'session_hashes_only' => t('admin.telemetry.export.session_hashes_only', 'Session hashes only, no raw visitor identifiers'),
+        'page_views' => t('admin.telemetry.export.page_views', 'Page views'),
+        'photo_opens' => t('admin.telemetry.export.photo_opens', 'Photo opens'),
+        'capped_photo_time' => t('admin.telemetry.export.capped_photo_time', 'Capped photo time'),
+        'bounce_rate' => t('admin.telemetry.export.bounce_rate', 'Bounce rate'),
+        'client_errors' => t('admin.telemetry.export.client_errors', 'Client errors'),
+        'javascript_error_events' => t('admin.telemetry.export.javascript_error_events', 'JavaScript error events'),
+        'media_measured' => t('admin.telemetry.export.media_measured', 'Media measured'),
+        'images_thumbnails_downloads' => t('admin.telemetry.export.images_thumbnails_downloads', 'Images, thumbnails, and downloads'),
+        'cache_efficiency' => t('admin.telemetry.export.cache_efficiency', 'Cache efficiency'),
+        'db_queries' => t('admin.telemetry.export.db_queries', 'DB queries'),
+        'daily_trends' => t('admin.telemetry.export.daily_trends', 'Daily trends'),
+        'sessions_per_day' => t('admin.telemetry.export.sessions_per_day', 'Sessions per day'),
+        'page_views_per_day' => t('admin.telemetry.export.page_views_per_day', 'Page views per day'),
+        'photo_opens_per_day' => t('admin.telemetry.export.photo_opens_per_day', 'Photo opens per day'),
+        'media_bytes_per_day' => t('admin.telemetry.export.media_bytes_per_day', 'Measured media bytes per day'),
+        'client_errors_per_day' => t('admin.telemetry.export.client_errors_per_day', 'Client errors per day'),
+        'traffic_sources' => t('admin.telemetry.export.traffic_sources', 'Traffic sources'),
+        'device_type' => t('admin.telemetry.export.device_type', 'Device type'),
+        'browser_family' => t('admin.telemetry.export.browser_family', 'Browser family'),
+        'operating_system' => t('admin.telemetry.export.operating_system', 'Operating system'),
+        'viewport_class' => t('admin.telemetry.export.viewport_class', 'Viewport class'),
+        'page_kind' => t('admin.telemetry.export.page_kind', 'Page kind'),
+        'top_galleries' => t('admin.telemetry.export.top_galleries', 'Top galleries'),
+        'gallery' => t('admin.telemetry.export.gallery', 'Gallery'),
+        'slug' => t('admin.telemetry.export.slug', 'Slug'),
+        'photo_time' => t('admin.telemetry.export.photo_time', 'Photo time'),
+        'media_bytes' => t('admin.telemetry.export.media_bytes', 'Media bytes'),
+        'top_routes' => t('admin.telemetry.export.top_routes', 'Top routes'),
+        'route' => t('admin.telemetry.export.route', 'Route'),
+        'landing_routes' => t('admin.telemetry.export.landing_routes', 'Landing routes'),
+        'exit_routes' => t('admin.telemetry.export.exit_routes', 'Exit routes'),
+        'sessions' => t('admin.telemetry.export.sessions', 'Sessions'),
+        'avg_duration' => t('admin.telemetry.export.avg_duration', 'Avg duration'),
+        'photo_engagement' => t('admin.telemetry.export.photo_engagement', 'Photo engagement'),
+        'top_viewed_photos' => t('admin.telemetry.export.top_viewed_photos', 'Top viewed photos'),
+        'longest_viewed_photos' => t('admin.telemetry.export.longest_viewed_photos', 'Longest viewed photos'),
+        'thumbnail_bytes_by_variant' => t('admin.telemetry.export.thumbnail_bytes_by_variant', 'Thumbnail bytes by variant'),
+        'image_bytes_by_variant' => t('admin.telemetry.export.image_bytes_by_variant', 'Image bytes by variant'),
+        'variant' => t('admin.telemetry.export.variant', 'Variant'),
+        'events' => t('admin.telemetry.export.events', 'Events'),
+        'bytes' => t('admin.telemetry.export.bytes', 'Bytes'),
+        'media_byte_split' => t('admin.telemetry.export.media_byte_split', 'Media byte split'),
+        'full_images' => t('admin.telemetry.export.full_images', 'Full images'),
+        'thumbnails' => t('admin.telemetry.export.thumbnails', 'Thumbnails'),
+        'downloads' => t('admin.telemetry.export.downloads', 'Downloads'),
+        'all_measured_media' => t('admin.telemetry.export.all_measured_media', 'All measured media'),
+        'thumbnail_cache_hit_events' => t('admin.telemetry.export.thumbnail_cache_hit_events', 'Thumbnail cache hit events'),
+        'thumbnail_cache_miss_events' => t('admin.telemetry.export.thumbnail_cache_miss_events', 'Thumbnail cache miss events'),
+        'cache_result' => t('admin.telemetry.export.cache_result', 'Cache result'),
+        'browser_performance' => t('admin.telemetry.export.browser_performance', 'Browser performance'),
+        'metric' => t('admin.telemetry.export.metric', 'Metric'),
+        'samples' => t('admin.telemetry.export.samples', 'Samples'),
+        'average_ms_value' => t('admin.telemetry.export.average_ms_value', 'Average ms/value'),
+        'minimum' => t('admin.telemetry.export.minimum', 'Minimum'),
+        'maximum' => t('admin.telemetry.export.maximum', 'Maximum'),
+        'error_kind' => t('admin.telemetry.export.error_kind', 'Error kind'),
+        'last_seen' => t('admin.telemetry.export.last_seen', 'Last seen'),
+        'database_telemetry' => t('admin.telemetry.export.database_telemetry', 'Database telemetry'),
+        'queries' => t('admin.telemetry.export.queries', 'Queries'),
+        'slow_queries' => t('admin.telemetry.export.slow_queries', 'Slow queries'),
+        'failed_queries' => t('admin.telemetry.export.failed_queries', 'Failed queries'),
+        'routes_operations_tables' => t('admin.telemetry.export.routes_operations_tables', 'Routes, operations, and tables'),
+        'operation' => t('admin.telemetry.export.operation', 'Operation'),
+        'table' => t('admin.telemetry.export.table', 'Table'),
+        'failed' => t('admin.telemetry.export.failed', 'Failed'),
+        'slow' => t('admin.telemetry.export.slow', 'Slow'),
+        'total_latency' => t('admin.telemetry.export.total_latency', 'Total latency'),
+        'max_latency' => t('admin.telemetry.export.max_latency', 'Max latency'),
+        'rows_returned' => t('admin.telemetry.export.rows_returned', 'Rows returned'),
+        'rows_affected' => t('admin.telemetry.export.rows_affected', 'Rows affected'),
+        'query_fingerprints' => t('admin.telemetry.export.query_fingerprints', 'Query fingerprints'),
+        'fingerprint' => t('admin.telemetry.export.fingerprint', 'Fingerprint'),
+        'avg_latency' => t('admin.telemetry.export.avg_latency', 'Avg latency'),
+        'telemetry_access_log' => t('admin.telemetry.export.telemetry_access_log', 'Telemetry access log'),
+        'time' => t('admin.telemetry.export.time', 'Time'),
+        'event' => t('admin.telemetry.export.event', 'Event'),
+        'source' => t('admin.telemetry.export.source', 'Source'),
+        'kind' => t('admin.telemetry.export.kind', 'Kind'),
+        'image' => t('admin.telemetry.export.image', 'Image'),
+        'referrer' => t('admin.telemetry.export.referrer', 'Referrer'),
+        'browser' => t('admin.telemetry.export.browser', 'Browser'),
+        'os' => t('admin.telemetry.export.os', 'OS'),
+        'device' => t('admin.telemetry.export.device', 'Device'),
+        'viewport' => t('admin.telemetry.export.viewport', 'Viewport'),
+        'cache' => t('admin.telemetry.export.cache', 'Cache'),
+        'status' => t('admin.telemetry.export.status', 'Status'),
+        'error' => t('admin.telemetry.export.error', 'Error'),
+        'value_ms' => t('admin.telemetry.export.value_ms', 'Value ms'),
+        'duration' => t('admin.telemetry.export.duration', 'Duration'),
+        'telemetry_job_runs' => t('admin.telemetry.export.telemetry_job_runs', 'Telemetry job runs'),
+        'job' => t('admin.telemetry.export.job', 'Job'),
+        'started' => t('admin.telemetry.export.started', 'Started'),
+        'finished' => t('admin.telemetry.export.finished', 'Finished'),
+        'items' => t('admin.telemetry.export.items', 'Items'),
+        'retries' => t('admin.telemetry.export.retries', 'Retries'),
+        'stored_telemetry_volume' => t('admin.telemetry.export.stored_telemetry_volume', 'Stored telemetry volume'),
+        'raw_events' => t('admin.telemetry.export.raw_events', 'Raw events'),
+        'hourly_metrics' => t('admin.telemetry.export.hourly_metrics', 'Hourly metrics'),
+        'daily_metrics' => t('admin.telemetry.export.daily_metrics', 'Daily metrics'),
+        'db_query_metrics' => t('admin.telemetry.export.db_query_metrics', 'DB query metrics'),
+        'job_runs' => t('admin.telemetry.export.job_runs', 'Job runs'),
+    ];
+
     $html = '<!doctype html><html lang="' . e(translation_active_language()) . '"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
         . '<title>' . e(t('admin.telemetry.export_title', 'PHP Gallery telemetry report')) . '</title><style>' . $style . '</style></head><body><main>'
-        . '<header><h1>' . e(t('admin.telemetry.export_heading', 'Anonymous telemetry report')) . '</h1><p>' . e(t('admin.telemetry.generated', 'Generated')) . ' ' . e($generatedAt) . '. ' . e(t('admin.telemetry.export_description', 'Local, privacy-safe usage and performance statistics for PHP Gallery.')) . '</p><p class="section-note">Report window: last ' . e((string) $days) . ' days. Inspired by common analytics reporting patterns: traffic, sessions, content engagement, acquisition source, device mix, performance, errors, cache efficiency, and operational database telemetry.</p></header>'
+        . '<header><h1>' . e(t('admin.telemetry.export_heading', 'Anonymous telemetry report')) . '</h1><p>' . e(t('admin.telemetry.generated', 'Generated')) . ' ' . e($generatedAt) . '. ' . e(t('admin.telemetry.export_description', 'Local, privacy-safe usage and performance statistics for PHP Gallery.')) . '</p><p class="section-note">' . e(t('admin.telemetry.export.report_window_note', 'Report window: last {days} days. Inspired by common analytics reporting patterns: traffic, sessions, content engagement, acquisition source, device mix, performance, errors, cache efficiency, and operational database telemetry.', ['days' => (string) $days])) . '</p></header>'
         . '<section class="panel privacy"><h2>' . e(t('admin.telemetry.privacy_status', 'Privacy status')) . '</h2><p>' . e(t('admin.telemetry.export_privacy_text', 'This export contains aggregated anonymous telemetry only. It does not include raw IP addresses, raw browser user-agent strings, raw referrer URLs, names, email addresses, account identifiers, request bodies, or exact locations.')) . '</p><p>' . e(t('admin.telemetry.public_telemetry_is', 'Public telemetry is')) . ' ' . (telemetry_public_usage_enabled() ? '<strong>' . e(t('admin.common.enabled', 'enabled')) . '</strong>' : '<strong>' . e(t('admin.common.disabled', 'disabled')) . '</strong>') . '. ' . e(t('admin.telemetry.raw_events_retained_for', 'Raw events are retained for')) . ' ' . e((string) telemetry_retention_days('telemetry_raw_retention_days', 7, 1, 90)) . ' ' . e(t('admin.common.days', 'days')) . '.</p></section>'
-        . '<section class="panel"><h2>Executive overview</h2><div class="grid">'
-        . telemetry_export_metric_card('Anonymous sessions', telemetry_report_number($sessions), 'Session hashes only, no raw visitor identifiers')
-        . telemetry_export_metric_card('Page views', telemetry_report_number($pageViews), telemetry_report_number($avgPagesPerSession, 2) . ' per session')
-        . telemetry_export_metric_card('Photo opens', telemetry_report_number($photoViews), telemetry_report_number($avgPhotosPerSession, 2) . ' per session')
-        . telemetry_export_metric_card('Capped photo time', telemetry_report_duration($photoSeconds), 'Average session duration ' . telemetry_report_duration($avgDurationSeconds))
-        . telemetry_export_metric_card('Bounce rate', telemetry_report_number($bounceRate, 1) . ' %', telemetry_report_number($bouncedSessions) . ' single-page sessions')
-        . telemetry_export_metric_card('Client errors', telemetry_report_number($clientErrorCount), 'JavaScript error events')
-        . telemetry_export_metric_card('Media measured', telemetry_format_bytes($mediaBytes, 1), 'Images, thumbnails, and downloads')
-        . telemetry_export_metric_card('Cache efficiency', telemetry_report_number($cacheEfficiency, 1) . ' %', telemetry_report_number($cacheHitEvents) . ' hits, ' . telemetry_report_number($cacheMissEvents) . ' misses')
-        . telemetry_export_metric_card('DB queries', telemetry_report_number($dbQueryCount), telemetry_report_number($dbSlowCount) . ' slow, ' . telemetry_report_number($dbFailedCount) . ' failed')
+        . '<section class="panel"><h2>' . e($labels['executive_overview']) . '</h2><div class="grid">'
+        . telemetry_export_metric_card($labels['anonymous_sessions'], telemetry_report_number($sessions), $labels['session_hashes_only'])
+        . telemetry_export_metric_card($labels['page_views'], telemetry_report_number($pageViews), t('admin.telemetry.export.per_session', '{count} per session', ['count' => telemetry_report_number($avgPagesPerSession, 2)]))
+        . telemetry_export_metric_card($labels['photo_opens'], telemetry_report_number($photoViews), t('admin.telemetry.export.per_session', '{count} per session', ['count' => telemetry_report_number($avgPhotosPerSession, 2)]))
+        . telemetry_export_metric_card($labels['capped_photo_time'], telemetry_report_duration($photoSeconds), t('admin.telemetry.export.average_session_duration', 'Average session duration {duration}', ['duration' => telemetry_report_duration($avgDurationSeconds)]))
+        . telemetry_export_metric_card($labels['bounce_rate'], telemetry_report_number($bounceRate, 1) . ' %', t('admin.telemetry.export.single_page_sessions', '{count} single-page sessions', ['count' => telemetry_report_number($bouncedSessions)]))
+        . telemetry_export_metric_card($labels['client_errors'], telemetry_report_number($clientErrorCount), $labels['javascript_error_events'])
+        . telemetry_export_metric_card($labels['media_measured'], telemetry_format_bytes($mediaBytes, 1), $labels['images_thumbnails_downloads'])
+        . telemetry_export_metric_card($labels['cache_efficiency'], telemetry_report_number($cacheEfficiency, 1) . ' %', t('admin.telemetry.export.cache_hits_misses', '{hits} hits, {misses} misses', ['hits' => telemetry_report_number($cacheHitEvents), 'misses' => telemetry_report_number($cacheMissEvents)]))
+        . telemetry_export_metric_card($labels['db_queries'], telemetry_report_number($dbQueryCount), t('admin.telemetry.export.db_slow_failed', '{slow} slow, {failed} failed', ['slow' => telemetry_report_number($dbSlowCount), 'failed' => telemetry_report_number($dbFailedCount)]))
         . '</div></section>'
-        . '<section class="panel"><h2>Daily trends</h2><div class="trend-grid">'
-        . telemetry_export_trend_chart($dailyTrends, 'sessions', 'Sessions per day')
-        . telemetry_export_trend_chart($dailyTrends, 'page_views', 'Page views per day')
-        . telemetry_export_trend_chart($dailyTrends, 'photo_views', 'Photo opens per day')
-        . telemetry_export_trend_chart($dailyTrends, 'media_bytes', 'Measured media bytes per day')
-        . telemetry_export_trend_chart($dailyTrends, 'client_errors', 'Client errors per day')
+        . '<section class="panel"><h2>' . e($labels['daily_trends']) . '</h2><div class="trend-grid">'
+        . telemetry_export_trend_chart($dailyTrends, 'sessions', $labels['sessions_per_day'])
+        . telemetry_export_trend_chart($dailyTrends, 'page_views', $labels['page_views_per_day'])
+        . telemetry_export_trend_chart($dailyTrends, 'photo_views', $labels['photo_opens_per_day'])
+        . telemetry_export_trend_chart($dailyTrends, 'media_bytes', $labels['media_bytes_per_day'])
+        . telemetry_export_trend_chart($dailyTrends, 'client_errors', $labels['client_errors_per_day'])
         . '</div></section>'
-        . '<section class="panel split"><div><h2>Traffic sources</h2>' . telemetry_export_bar_chart($entryReferrers, 'label', 'sessions') . '</div><div><h2>Device type</h2>' . telemetry_export_bar_chart($deviceSessions, 'label', 'sessions') . '</div><div><h2>Browser family</h2>' . telemetry_export_bar_chart($browserSessions, 'label', 'sessions') . '</div><div><h2>Operating system</h2>' . telemetry_export_bar_chart($osSessions, 'label', 'sessions') . '</div><div><h2>Viewport class</h2>' . telemetry_export_bar_chart($viewportSessions, 'label', 'sessions') . '</div><div><h2>Page kind</h2>' . telemetry_export_bar_chart($pageKinds, 'label', 'events') . '</div></section>'
-        . '<section class="panel"><h2>Top galleries</h2>' . telemetry_export_table($topGalleries, [
-            ['key' => 'title', 'label' => 'Gallery'],
-            ['key' => 'slug', 'label' => 'Slug'],
-            ['key' => 'page_views', 'label' => 'Page views', 'format' => fn($v) => telemetry_report_number($v)],
-            ['key' => 'photo_views', 'label' => 'Photo opens', 'format' => fn($v) => telemetry_report_number($v)],
-            ['key' => 'photo_seconds', 'label' => 'Photo time', 'format' => fn($v) => telemetry_report_duration($v)],
-            ['key' => 'media_bytes', 'label' => 'Media bytes', 'format' => fn($v) => telemetry_format_bytes((float) $v, 1)],
+        . '<section class="panel split"><div><h2>' . e($labels['traffic_sources']) . '</h2>' . telemetry_export_bar_chart($entryReferrers, 'label', 'sessions') . '</div><div><h2>' . e($labels['device_type']) . '</h2>' . telemetry_export_bar_chart($deviceSessions, 'label', 'sessions') . '</div><div><h2>' . e($labels['browser_family']) . '</h2>' . telemetry_export_bar_chart($browserSessions, 'label', 'sessions') . '</div><div><h2>' . e($labels['operating_system']) . '</h2>' . telemetry_export_bar_chart($osSessions, 'label', 'sessions') . '</div><div><h2>' . e($labels['viewport_class']) . '</h2>' . telemetry_export_bar_chart($viewportSessions, 'label', 'sessions') . '</div><div><h2>' . e($labels['page_kind']) . '</h2>' . telemetry_export_bar_chart($pageKinds, 'label', 'events') . '</div></section>'
+        . '<section class="panel"><h2>' . e($labels['top_galleries']) . '</h2>' . telemetry_export_table($topGalleries, [
+            ['key' => 'title', 'label' => $labels['gallery']],
+            ['key' => 'slug', 'label' => $labels['slug']],
+            ['key' => 'page_views', 'label' => $labels['page_views'], 'format' => fn($v) => telemetry_report_number($v)],
+            ['key' => 'photo_views', 'label' => $labels['photo_opens'], 'format' => fn($v) => telemetry_report_number($v)],
+            ['key' => 'photo_seconds', 'label' => $labels['photo_time'], 'format' => fn($v) => telemetry_report_duration($v)],
+            ['key' => 'media_bytes', 'label' => $labels['media_bytes'], 'format' => fn($v) => telemetry_format_bytes((float) $v, 1)],
         ]) . '</section>'
-        . '<section class="panel"><h2>Top routes</h2>' . telemetry_export_table($topRoutes, [
-            ['key' => 'route_name', 'label' => 'Route'],
-            ['key' => 'page_views', 'label' => 'Page views', 'format' => fn($v) => telemetry_report_number($v)],
-            ['key' => 'photo_views', 'label' => 'Photo opens', 'format' => fn($v) => telemetry_report_number($v)],
-            ['key' => 'client_errors', 'label' => 'Client errors', 'format' => fn($v) => telemetry_report_number($v)],
-            ['key' => 'media_bytes', 'label' => 'Media bytes', 'format' => fn($v) => telemetry_format_bytes((float) $v, 1)],
+        . '<section class="panel"><h2>' . e($labels['top_routes']) . '</h2>' . telemetry_export_table($topRoutes, [
+            ['key' => 'route_name', 'label' => $labels['route']],
+            ['key' => 'page_views', 'label' => $labels['page_views'], 'format' => fn($v) => telemetry_report_number($v)],
+            ['key' => 'photo_views', 'label' => $labels['photo_opens'], 'format' => fn($v) => telemetry_report_number($v)],
+            ['key' => 'client_errors', 'label' => $labels['client_errors'], 'format' => fn($v) => telemetry_report_number($v)],
+            ['key' => 'media_bytes', 'label' => $labels['media_bytes'], 'format' => fn($v) => telemetry_format_bytes((float) $v, 1)],
         ]) . '</section>'
-        . '<section class="panel split"><div><h2>Landing routes</h2>' . telemetry_export_table($landingRoutes, [
-            ['key' => 'label', 'label' => 'Route'],
-            ['key' => 'sessions', 'label' => 'Sessions', 'format' => fn($v) => telemetry_report_number($v)],
-            ['key' => 'page_views', 'label' => 'Page views', 'format' => fn($v) => telemetry_report_number($v)],
-            ['key' => 'avg_duration_seconds', 'label' => 'Avg duration', 'format' => fn($v) => telemetry_report_duration($v)],
-        ]) . '</div><div><h2>Exit routes</h2>' . telemetry_export_table($exitRoutes, [
-            ['key' => 'label', 'label' => 'Route'],
-            ['key' => 'sessions', 'label' => 'Sessions', 'format' => fn($v) => telemetry_report_number($v)],
-            ['key' => 'page_views', 'label' => 'Page views', 'format' => fn($v) => telemetry_report_number($v)],
-            ['key' => 'avg_duration_seconds', 'label' => 'Avg duration', 'format' => fn($v) => telemetry_report_duration($v)],
+        . '<section class="panel split"><div><h2>' . e($labels['landing_routes']) . '</h2>' . telemetry_export_table($landingRoutes, [
+            ['key' => 'label', 'label' => $labels['route']],
+            ['key' => 'sessions', 'label' => $labels['sessions'], 'format' => fn($v) => telemetry_report_number($v)],
+            ['key' => 'page_views', 'label' => $labels['page_views'], 'format' => fn($v) => telemetry_report_number($v)],
+            ['key' => 'avg_duration_seconds', 'label' => $labels['avg_duration'], 'format' => fn($v) => telemetry_report_duration($v)],
+        ]) . '</div><div><h2>' . e($labels['exit_routes']) . '</h2>' . telemetry_export_table($exitRoutes, [
+            ['key' => 'label', 'label' => $labels['route']],
+            ['key' => 'sessions', 'label' => $labels['sessions'], 'format' => fn($v) => telemetry_report_number($v)],
+            ['key' => 'page_views', 'label' => $labels['page_views'], 'format' => fn($v) => telemetry_report_number($v)],
+            ['key' => 'avg_duration_seconds', 'label' => $labels['avg_duration'], 'format' => fn($v) => telemetry_report_duration($v)],
         ]) . '</div></section>'
-        . '<section class="panel"><h2>Photo engagement</h2><div class="split"><div><h3>Top viewed photos</h3>' . telemetry_export_photo_table(telemetry_top_photos($days, 25), 'photo_views', t('admin.telemetry.views', 'Views')) . '</div><div><h3>Longest viewed photos</h3>' . telemetry_export_photo_table(telemetry_longest_viewed_photos($days, 25), 'avg_view_seconds', t('admin.telemetry.average_capped_seconds', 'Average capped seconds')) . '</div></div></section>'
-        . '<section class="panel split"><div><h2>Thumbnail bytes by variant</h2>' . telemetry_export_table($mediaVariants, [
-            ['key' => 'label', 'label' => 'Variant'],
-            ['key' => 'events', 'label' => 'Events', 'format' => fn($v) => telemetry_report_number($v)],
-            ['key' => 'value_sum', 'label' => 'Bytes', 'format' => fn($v) => telemetry_format_bytes((float) $v, 1)],
-        ]) . '</div><div><h2>Image bytes by variant</h2>' . telemetry_export_table($imageVariants, [
-            ['key' => 'label', 'label' => 'Variant'],
-            ['key' => 'events', 'label' => 'Events', 'format' => fn($v) => telemetry_report_number($v)],
-            ['key' => 'value_sum', 'label' => 'Bytes', 'format' => fn($v) => telemetry_format_bytes((float) $v, 1)],
+        . '<section class="panel"><h2>' . e($labels['photo_engagement']) . '</h2><div class="split"><div><h3>' . e($labels['top_viewed_photos']) . '</h3>' . telemetry_export_photo_table(telemetry_top_photos($days, 25), 'photo_views', t('admin.telemetry.views', 'Views')) . '</div><div><h3>' . e($labels['longest_viewed_photos']) . '</h3>' . telemetry_export_photo_table(telemetry_longest_viewed_photos($days, 25), 'avg_view_seconds', t('admin.telemetry.average_capped_seconds', 'Average capped seconds')) . '</div></div></section>'
+        . '<section class="panel split"><div><h2>' . e($labels['thumbnail_bytes_by_variant']) . '</h2>' . telemetry_export_table($mediaVariants, [
+            ['key' => 'label', 'label' => $labels['variant']],
+            ['key' => 'events', 'label' => $labels['events'], 'format' => fn($v) => telemetry_report_number($v)],
+            ['key' => 'value_sum', 'label' => $labels['bytes'], 'format' => fn($v) => telemetry_format_bytes((float) $v, 1)],
+        ]) . '</div><div><h2>' . e($labels['image_bytes_by_variant']) . '</h2>' . telemetry_export_table($imageVariants, [
+            ['key' => 'label', 'label' => $labels['variant']],
+            ['key' => 'events', 'label' => $labels['events'], 'format' => fn($v) => telemetry_report_number($v)],
+            ['key' => 'value_sum', 'label' => $labels['bytes'], 'format' => fn($v) => telemetry_format_bytes((float) $v, 1)],
         ]) . '</div></section>'
-        . '<section class="panel"><h2>Media byte split</h2><div class="grid">'
-        . telemetry_export_metric_card('Full images', telemetry_format_bytes($imageBytes, 1))
-        . telemetry_export_metric_card('Thumbnails', telemetry_format_bytes($thumbnailBytes, 1))
-        . telemetry_export_metric_card('Downloads', telemetry_format_bytes($downloadBytes, 1))
-        . telemetry_export_metric_card('All measured media', telemetry_format_bytes($mediaBytes, 1))
+        . '<section class="panel"><h2>' . e($labels['media_byte_split']) . '</h2><div class="grid">'
+        . telemetry_export_metric_card($labels['full_images'], telemetry_format_bytes($imageBytes, 1))
+        . telemetry_export_metric_card($labels['thumbnails'], telemetry_format_bytes($thumbnailBytes, 1))
+        . telemetry_export_metric_card($labels['downloads'], telemetry_format_bytes($downloadBytes, 1))
+        . telemetry_export_metric_card($labels['all_measured_media'], telemetry_format_bytes($mediaBytes, 1))
         . '</div></section>'
-        . '<section class="panel split"><div><h2>Thumbnail cache hit events</h2>' . telemetry_export_table($cacheThumbnail, [
-            ['key' => 'label', 'label' => 'Cache result'],
-            ['key' => 'events', 'label' => 'Events', 'format' => fn($v) => telemetry_report_number($v)],
-        ]) . '</div><div><h2>Thumbnail cache miss events</h2>' . telemetry_export_table($cacheMisses, [
-            ['key' => 'label', 'label' => 'Cache result'],
-            ['key' => 'events', 'label' => 'Events', 'format' => fn($v) => telemetry_report_number($v)],
+        . '<section class="panel split"><div><h2>' . e($labels['thumbnail_cache_hit_events']) . '</h2>' . telemetry_export_table($cacheThumbnail, [
+            ['key' => 'label', 'label' => $labels['cache_result']],
+            ['key' => 'events', 'label' => $labels['events'], 'format' => fn($v) => telemetry_report_number($v)],
+        ]) . '</div><div><h2>' . e($labels['thumbnail_cache_miss_events']) . '</h2>' . telemetry_export_table($cacheMisses, [
+            ['key' => 'label', 'label' => $labels['cache_result']],
+            ['key' => 'events', 'label' => $labels['events'], 'format' => fn($v) => telemetry_report_number($v)],
         ]) . '</div></section>'
-        . '<section class="panel"><h2>Browser performance</h2>' . telemetry_export_table($performanceMetrics, [
-            ['key' => 'metric_name', 'label' => 'Metric'],
-            ['key' => 'samples', 'label' => 'Samples', 'format' => fn($v) => telemetry_report_number($v)],
-            ['key' => 'avg_value', 'label' => 'Average ms/value', 'format' => fn($v) => telemetry_report_number($v, 2)],
-            ['key' => 'min_value', 'label' => 'Minimum', 'format' => fn($v) => telemetry_report_number($v, 2)],
-            ['key' => 'max_value', 'label' => 'Maximum', 'format' => fn($v) => telemetry_report_number($v, 2)],
+        . '<section class="panel"><h2>' . e($labels['browser_performance']) . '</h2>' . telemetry_export_table($performanceMetrics, [
+            ['key' => 'metric_name', 'label' => $labels['metric']],
+            ['key' => 'samples', 'label' => $labels['samples'], 'format' => fn($v) => telemetry_report_number($v)],
+            ['key' => 'avg_value', 'label' => $labels['average_ms_value'], 'format' => fn($v) => telemetry_report_number($v, 2)],
+            ['key' => 'min_value', 'label' => $labels['minimum'], 'format' => fn($v) => telemetry_report_number($v, 2)],
+            ['key' => 'max_value', 'label' => $labels['maximum'], 'format' => fn($v) => telemetry_report_number($v, 2)],
         ]) . '</section>'
-        . '<section class="panel"><h2>Client errors</h2>' . telemetry_export_table($clientErrors, [
-            ['key' => 'error_kind', 'label' => 'Error kind'],
-            ['key' => 'route_name', 'label' => 'Route'],
-            ['key' => 'events', 'label' => 'Events', 'format' => fn($v) => telemetry_report_number($v)],
-            ['key' => 'last_seen', 'label' => 'Last seen'],
+        . '<section class="panel"><h2>' . e($labels['client_errors']) . '</h2>' . telemetry_export_table($clientErrors, [
+            ['key' => 'error_kind', 'label' => $labels['error_kind']],
+            ['key' => 'route_name', 'label' => $labels['route']],
+            ['key' => 'events', 'label' => $labels['events'], 'format' => fn($v) => telemetry_report_number($v)],
+            ['key' => 'last_seen', 'label' => $labels['last_seen']],
         ]) . '</section>'
-        . '<section class="panel"><h2>Database telemetry</h2><div class="grid">'
-        . telemetry_export_metric_card('Queries', telemetry_report_number($dbQueryCount))
-        . telemetry_export_metric_card('Slow queries', telemetry_report_number($dbSlowCount))
-        . telemetry_export_metric_card('Failed queries', telemetry_report_number($dbFailedCount))
-        . '</div><h3>Routes, operations, and tables</h3>' . telemetry_export_table($databaseSummary, [
-            ['key' => 'route_name', 'label' => 'Route'],
-            ['key' => 'operation', 'label' => 'Operation'],
-            ['key' => 'table_name', 'label' => 'Table'],
-            ['key' => 'query_count', 'label' => 'Queries', 'format' => fn($v) => telemetry_report_number($v)],
-            ['key' => 'failed_count', 'label' => 'Failed', 'format' => fn($v) => telemetry_report_number($v)],
-            ['key' => 'slow_count', 'label' => 'Slow', 'format' => fn($v) => telemetry_report_number($v)],
-            ['key' => 'latency_ms_sum', 'label' => 'Total latency', 'format' => fn($v) => telemetry_report_number($v) . ' ms'],
-            ['key' => 'latency_ms_max', 'label' => 'Max latency', 'format' => fn($v) => telemetry_report_number($v) . ' ms'],
-            ['key' => 'rows_returned_sum', 'label' => 'Rows returned', 'format' => fn($v) => telemetry_report_number($v)],
-            ['key' => 'rows_affected_sum', 'label' => 'Rows affected', 'format' => fn($v) => telemetry_report_number($v)],
-        ]) . '<h3>Query fingerprints</h3>' . telemetry_export_table($databaseFingerprints, [
-            ['key' => 'query_fingerprint', 'label' => 'Fingerprint'],
-            ['key' => 'route_name', 'label' => 'Route'],
-            ['key' => 'operation', 'label' => 'Operation'],
-            ['key' => 'table_name', 'label' => 'Table'],
-            ['key' => 'query_count', 'label' => 'Queries', 'format' => fn($v) => telemetry_report_number($v)],
-            ['key' => 'failed_count', 'label' => 'Failed', 'format' => fn($v) => telemetry_report_number($v)],
-            ['key' => 'slow_count', 'label' => 'Slow', 'format' => fn($v) => telemetry_report_number($v)],
-            ['key' => 'avg_latency_ms', 'label' => 'Avg latency', 'format' => fn($v) => telemetry_report_number($v, 2) . ' ms'],
-            ['key' => 'max_latency_ms', 'label' => 'Max latency', 'format' => fn($v) => telemetry_report_number($v) . ' ms'],
+        . '<section class="panel"><h2>' . e($labels['database_telemetry']) . '</h2><div class="grid">'
+        . telemetry_export_metric_card($labels['queries'], telemetry_report_number($dbQueryCount))
+        . telemetry_export_metric_card($labels['slow_queries'], telemetry_report_number($dbSlowCount))
+        . telemetry_export_metric_card($labels['failed_queries'], telemetry_report_number($dbFailedCount))
+        . '</div><h3>' . e($labels['routes_operations_tables']) . '</h3>' . telemetry_export_table($databaseSummary, [
+            ['key' => 'route_name', 'label' => $labels['route']],
+            ['key' => 'operation', 'label' => $labels['operation']],
+            ['key' => 'table_name', 'label' => $labels['table']],
+            ['key' => 'query_count', 'label' => $labels['queries'], 'format' => fn($v) => telemetry_report_number($v)],
+            ['key' => 'failed_count', 'label' => $labels['failed'], 'format' => fn($v) => telemetry_report_number($v)],
+            ['key' => 'slow_count', 'label' => $labels['slow'], 'format' => fn($v) => telemetry_report_number($v)],
+            ['key' => 'latency_ms_sum', 'label' => $labels['total_latency'], 'format' => fn($v) => telemetry_report_number($v) . ' ms'],
+            ['key' => 'latency_ms_max', 'label' => $labels['max_latency'], 'format' => fn($v) => telemetry_report_number($v) . ' ms'],
+            ['key' => 'rows_returned_sum', 'label' => $labels['rows_returned'], 'format' => fn($v) => telemetry_report_number($v)],
+            ['key' => 'rows_affected_sum', 'label' => $labels['rows_affected'], 'format' => fn($v) => telemetry_report_number($v)],
+        ]) . '<h3>' . e($labels['query_fingerprints']) . '</h3>' . telemetry_export_table($databaseFingerprints, [
+            ['key' => 'query_fingerprint', 'label' => $labels['fingerprint']],
+            ['key' => 'route_name', 'label' => $labels['route']],
+            ['key' => 'operation', 'label' => $labels['operation']],
+            ['key' => 'table_name', 'label' => $labels['table']],
+            ['key' => 'query_count', 'label' => $labels['queries'], 'format' => fn($v) => telemetry_report_number($v)],
+            ['key' => 'failed_count', 'label' => $labels['failed'], 'format' => fn($v) => telemetry_report_number($v)],
+            ['key' => 'slow_count', 'label' => $labels['slow'], 'format' => fn($v) => telemetry_report_number($v)],
+            ['key' => 'avg_latency_ms', 'label' => $labels['avg_latency'], 'format' => fn($v) => telemetry_report_number($v, 2) . ' ms'],
+            ['key' => 'max_latency_ms', 'label' => $labels['max_latency'], 'format' => fn($v) => telemetry_report_number($v) . ' ms'],
         ]) . '</section>'
-        . '<section class="panel"><h2>Telemetry access log</h2><p class="muted">This is an anonymized event log. It shows normalized buckets and object ids, not raw IP addresses, raw user agents, raw referrer URLs, request bodies, or personal identifiers.</p>' . telemetry_export_table($recentEvents, [
-            ['key' => 'occurred_at', 'label' => 'Time'],
-            ['key' => 'event_name', 'label' => 'Event'],
-            ['key' => 'source', 'label' => 'Source'],
-            ['key' => 'route_name', 'label' => 'Route'],
-            ['key' => 'page_kind', 'label' => 'Kind'],
-            ['key' => 'gallery_id', 'label' => 'Gallery'],
-            ['key' => 'image_id', 'label' => 'Image'],
-            ['key' => 'referrer_category', 'label' => 'Referrer'],
-            ['key' => 'browser_family', 'label' => 'Browser'],
-            ['key' => 'os_family', 'label' => 'OS'],
-            ['key' => 'device_type', 'label' => 'Device'],
-            ['key' => 'viewport_class', 'label' => 'Viewport'],
-            ['key' => 'media_variant', 'label' => 'Variant'],
-            ['key' => 'cache_result', 'label' => 'Cache'],
-            ['key' => 'http_status', 'label' => 'Status'],
-            ['key' => 'error_kind', 'label' => 'Error'],
-            ['key' => 'value_bytes', 'label' => 'Bytes', 'format' => fn($v) => $v === null || $v === '' ? '' : telemetry_format_bytes((float) $v, 1)],
-            ['key' => 'value_ms', 'label' => 'Value ms', 'format' => fn($v) => $v === null || $v === '' ? '' : telemetry_report_number($v) . ' ms'],
-            ['key' => 'duration_ms_capped', 'label' => 'Duration', 'format' => fn($v) => $v === null || $v === '' ? '' : telemetry_report_number((float) $v / 1000, 2) . ' s'],
+        . '<section class="panel"><h2>' . e($labels['telemetry_access_log']) . '</h2><p class="muted">' . e(t('admin.telemetry.export.access_log_privacy', 'This is an anonymized event log. It shows normalized buckets and object ids, not raw IP addresses, raw user agents, raw referrer URLs, request bodies, or personal identifiers.')) . '</p>' . telemetry_export_table($recentEvents, [
+            ['key' => 'occurred_at', 'label' => $labels['time']],
+            ['key' => 'event_name', 'label' => $labels['event']],
+            ['key' => 'source', 'label' => $labels['source']],
+            ['key' => 'route_name', 'label' => $labels['route']],
+            ['key' => 'page_kind', 'label' => $labels['kind']],
+            ['key' => 'gallery_id', 'label' => $labels['gallery']],
+            ['key' => 'image_id', 'label' => $labels['image']],
+            ['key' => 'referrer_category', 'label' => $labels['referrer']],
+            ['key' => 'browser_family', 'label' => $labels['browser']],
+            ['key' => 'os_family', 'label' => $labels['os']],
+            ['key' => 'device_type', 'label' => $labels['device']],
+            ['key' => 'viewport_class', 'label' => $labels['viewport']],
+            ['key' => 'media_variant', 'label' => $labels['variant']],
+            ['key' => 'cache_result', 'label' => $labels['cache']],
+            ['key' => 'http_status', 'label' => $labels['status']],
+            ['key' => 'error_kind', 'label' => $labels['error']],
+            ['key' => 'value_bytes', 'label' => $labels['bytes'], 'format' => fn($v) => $v === null || $v === '' ? '' : telemetry_format_bytes((float) $v, 1)],
+            ['key' => 'value_ms', 'label' => $labels['value_ms'], 'format' => fn($v) => $v === null || $v === '' ? '' : telemetry_report_number($v) . ' ms'],
+            ['key' => 'duration_ms_capped', 'label' => $labels['duration'], 'format' => fn($v) => $v === null || $v === '' ? '' : telemetry_report_number((float) $v / 1000, 2) . ' s'],
         ]) . '</section>'
-        . '<section class="panel"><h2>Telemetry job runs</h2>' . telemetry_export_table($jobRuns, [
-            ['key' => 'job_name', 'label' => 'Job'],
-            ['key' => 'status', 'label' => 'Status'],
-            ['key' => 'started_at', 'label' => 'Started'],
-            ['key' => 'finished_at', 'label' => 'Finished'],
-            ['key' => 'duration_ms', 'label' => 'Duration', 'format' => fn($v) => $v === null || $v === '' ? '' : telemetry_report_number((float) $v / 1000, 2) . ' s'],
-            ['key' => 'gallery_id', 'label' => 'Gallery'],
-            ['key' => 'image_id', 'label' => 'Image'],
-            ['key' => 'item_count', 'label' => 'Items', 'format' => fn($v) => $v === null || $v === '' ? '' : telemetry_report_number($v)],
-            ['key' => 'retry_count', 'label' => 'Retries', 'format' => fn($v) => telemetry_report_number($v)],
-            ['key' => 'error_kind', 'label' => 'Error'],
+        . '<section class="panel"><h2>' . e($labels['telemetry_job_runs']) . '</h2>' . telemetry_export_table($jobRuns, [
+            ['key' => 'job_name', 'label' => $labels['job']],
+            ['key' => 'status', 'label' => $labels['status']],
+            ['key' => 'started_at', 'label' => $labels['started']],
+            ['key' => 'finished_at', 'label' => $labels['finished']],
+            ['key' => 'duration_ms', 'label' => $labels['duration'], 'format' => fn($v) => $v === null || $v === '' ? '' : telemetry_report_number((float) $v / 1000, 2) . ' s'],
+            ['key' => 'gallery_id', 'label' => $labels['gallery']],
+            ['key' => 'image_id', 'label' => $labels['image']],
+            ['key' => 'item_count', 'label' => $labels['items'], 'format' => fn($v) => $v === null || $v === '' ? '' : telemetry_report_number($v)],
+            ['key' => 'retry_count', 'label' => $labels['retries'], 'format' => fn($v) => telemetry_report_number($v)],
+            ['key' => 'error_kind', 'label' => $labels['error']],
         ]) . '</section>'
-        . '<section class="panel"><h2>Stored telemetry volume</h2><div class="grid">'
-        . telemetry_export_metric_card('Raw events', telemetry_report_number(telemetry_report_table_count('telemetry_events')))
-        . telemetry_export_metric_card('Sessions', telemetry_report_number(telemetry_report_table_count('telemetry_sessions')))
-        . telemetry_export_metric_card('Hourly metrics', telemetry_report_number(telemetry_report_table_count('telemetry_hourly_metrics')))
-        . telemetry_export_metric_card('Daily metrics', telemetry_report_number(telemetry_report_table_count('telemetry_daily_metrics')))
-        . telemetry_export_metric_card('DB query metrics', telemetry_report_number(telemetry_report_table_count('telemetry_db_query_metrics')))
-        . telemetry_export_metric_card('Job runs', telemetry_report_number(telemetry_report_table_count('telemetry_job_runs')))
+        . '<section class="panel"><h2>' . e($labels['stored_telemetry_volume']) . '</h2><div class="grid">'
+        . telemetry_export_metric_card($labels['raw_events'], telemetry_report_number(telemetry_report_table_count('telemetry_events')))
+        . telemetry_export_metric_card($labels['sessions'], telemetry_report_number(telemetry_report_table_count('telemetry_sessions')))
+        . telemetry_export_metric_card($labels['hourly_metrics'], telemetry_report_number(telemetry_report_table_count('telemetry_hourly_metrics')))
+        . telemetry_export_metric_card($labels['daily_metrics'], telemetry_report_number(telemetry_report_table_count('telemetry_daily_metrics')))
+        . telemetry_export_metric_card($labels['db_query_metrics'], telemetry_report_number(telemetry_report_table_count('telemetry_db_query_metrics')))
+        . telemetry_export_metric_card($labels['job_runs'], telemetry_report_number(telemetry_report_table_count('telemetry_job_runs')))
         . '</div></section>'
         . '</main></body></html>';
 

@@ -1,5 +1,108 @@
 # Patch notes
 
+## Version 0.88
+
+Version 0.88 is a maintainability, deployment-safety, localization, and Admin usability release. It breaks the largest runtime coordinators into focused modules without changing the public entrypoints, hardens complete-package deployment and update cleanup for shared-hosting extractors, completes the supported English, Czech, German, and Swedish language surface, adds configurable public tag presentation, and turns the centralized Settings hub into a searchable index of global configuration and specialist tools.
+
+  ### Highlights
+
+  #### Modularized the application runtime
+
+  - Split bootstrap configuration, request preparation, session startup, route interpretation, scheduled-maintenance hooks, and controller dispatch into focused modules under `app/bootstrap/`.
+  - Kept `app/bootstrap.php` as the stable thin coordinator so existing public entrypoints and hosting configurations continue working.
+  - Split the largest Admin gallery editor, Theme editor, public gallery renderer, shared helper, and updater implementations into feature-focused controller, helper, and service modules.
+  - Preserved the original coordinator files as compatibility entrypoints while reducing mixed responsibilities and regression risk.
+
+  #### Hardened deployment and updater cleanup
+
+  - Updated both deployment helpers so the complete `app/` tree, including the new bootstrap modules, is included in release archives.
+  - Made ZIP entry names use portable forward slashes so limited web-hosting extractors create real directories instead of root files whose names contain backslashes.
+  - Added guarded cleanup for flattened or misplaced managed application files created by previous archive extraction, while preserving unrelated root files such as verification and analytics files.
+  - Added a dedicated Advanced maintenance action for running only the misplaced-file cleanup without reinstalling the application.
+  - Extended updater validation, backup, rollback, logging, and safety coverage for modular runtime files and obsolete managed paths.
+
+  #### Added centralized and searchable Settings
+
+  - Added the central Admin Settings page with stable General, Public appearance, Content, Media and browsing, Uploads and automation, Privacy and diagnostics, and Advanced sections.
+  - Preserved each existing service or specialist page as the canonical owner for normalization, validation, persistence, secrets, file uploads, and destructive actions.
+  - Added safe central editing for the narrow set of settings that already have canonical shared setters, with current/default/inherited status and specialist deep links for everything else.
+  - Added a Spotlight-style contextual search beneath the Settings title with live token filtering, accent-insensitive matching, relevance ordering, keyboard navigation, ARIA combobox/listbox behavior, clearing, section activation, and exact-control highlighting.
+  - Indexed every global specialist control through discovery-only registry entries, including Theme, uploads, telemetry, thumbnails, maintenance, navigation data, feature flags, database tools, account mail, Google, and OpenAI settings, without exposing secret values or duplicating hundreds of normal section cards.
+
+  #### Improved Theme and public tag presentation
+
+  - Added configurable gallery hero-tag ordering, initial visible limits, display-all behavior, and optional row-bounded scrolling.
+  - Added dedicated public tag-page gallery columns, rows, and gallery-card layout settings with safe fallback to the existing global Theme values.
+  - Added contextual navigation between tag management and the relevant Theme subsection.
+  - Fixed tag-result pagination, Admin tag usage links, local rewritten thumbnail URLs, and full-width public hero/tag presentation.
+  - Limited the selectable built-in language set to the complete English, Czech, German, and Swedish catalogs.
+
+  #### Improved Admin dashboard maintenance
+
+  - Removed maintenance-only schema, database usage, navigation-data, and system work from the ordinary dashboard request.
+  - Added an authenticated deferred maintenance endpoint that loads the panel only when Maintenance is opened.
+  - Added grouped Content and display, Media and cache, Maps and navdata, and System health subtabs, including correct initialization after deferred HTML insertion.
+  - Linked the dashboard thumbnail-gap warning directly to the exact Media and cache maintenance group.
+  - Added server and browser warning logs with diagnostic IDs, exception details, HTTP status, content type, response snippets, route context, and requested maintenance tab when deferred loading fails.
+
+  ### Technical Details
+
+  #### Backend
+
+  - Added `app/bootstrap/configuration.php`, `app/bootstrap/request.php`, `app/bootstrap/session.php`, `app/bootstrap/routing.php`, `app/bootstrap/maintenance.php`, and `app/bootstrap/dispatch.php`.
+  - Added focused Admin gallery editor modules in `app/controllers/admin_galleries_edit_actions.php`, `app/controllers/admin_galleries_edit_metadata.php`, `app/controllers/admin_galleries_edit_page.php`, and `app/controllers/admin_galleries_edit_views.php`.
+  - Added focused Theme modules in `app/controllers/admin_theme_actions.php`, `app/controllers/admin_theme_appearance.php`, `app/controllers/admin_theme_layout.php`, `app/controllers/admin_theme_media.php`, `app/controllers/admin_theme_language.php`, `app/controllers/admin_theme_custom_css.php`, and `app/controllers/admin_theme_page.php`.
+  - Added focused public gallery modules for cards, controls, home rendering, lightbox rendering, and page orchestration.
+  - Split shared helpers into Admin rendering, files, page rendering, public URLs, requests, and runtime modules while retaining `app/helpers.php` as the loader.
+  - Split updater behavior into filesystem, install, patch-note, remote, and status services while retaining `app/services/updates.php` as the coordinator.
+  - Added `app/controllers/admin_settings.php`, `app/services/admin_settings_registry.php`, and `app/views/admin_settings.php` for centralized ownership, safe editing, redaction, discovery, and specialist navigation.
+
+  #### Database
+
+  - Added no new database migration for Version 0.88.
+  - Stored new Theme and central Settings preferences through existing canonical settings tables and services.
+  - Kept telemetry, account integrations, secrets, per-gallery overrides, and destructive maintenance state in their existing owners without shadow copies.
+
+  #### Frontend
+
+  - Added `public/assets/gallery-modules/admin-settings-search.js` for local Settings discovery and accessible keyboard interaction.
+  - Added `public/assets/gallery-modules/hero-tags.js` for in-place hero-tag disclosure and row-aware scrolling.
+  - Updated Admin tabs and side-panel lifecycle code to initialize dynamically inserted nested controls and preserve URL state.
+  - Updated Theme, tag, public gallery, maintenance, and Settings styling for responsive layouts and consistent Admin panel geometry.
+  - Updated browser cache-busting dependencies for changed Admin and public modules.
+
+  #### Localization and documentation
+
+  - Completed and synchronized the supported English, Czech, German, and Swedish JSON/PHP language catalogs.
+  - Added `docs/ADMIN_SETTINGS_INVENTORY.md` as the canonical ownership, fallback, sensitivity, migration, and discovery reference.
+  - Updated `README.md`, `ARCHITECTURE.md`, `CODEMAP.md`, `DATABASE.md`, `TESTING.md`, and `docs/PHP_Gallery_Manual.tex` for the modular runtime, tag presentation, deferred maintenance, centralized Settings, and Settings search.
+  - Updated `AGENTS.md` to require PHP syntax validation for changed PHP files and release/deployment surfaces.
+
+  #### Tests
+
+  - Added runtime-boundary tests for thin coordinators, module loading, compatibility entrypoints, and manifest inclusion.
+  - Added deployment packaging tests for the complete `app/` tree and portable ZIP paths.
+  - Added updater safety tests for flattened-file cleanup, root-file preservation, backups, rollback, and Advanced cleanup routing.
+  - Added Settings registry, normalization, rendering, navigation, accessibility, search filtering, specialist discovery, and sensitive-value tests.
+  - Added hero-tag, tag-page Theme, public media URL rewrite, translation-catalog consistency, deferred maintenance, and MySQL compatibility coverage.
+
+  ### User Impact
+
+  #### For visitors
+
+  - Public tag pages can use a dedicated grid and card presentation while preserving global defaults when no override is saved.
+  - Gallery hero tags can remain compact, expand in place, or use bounded scrolling according to the selected Theme policy.
+  - Rewritten local thumbnails, tag pagination, gallery links, and full-width hero presentation behave consistently.
+  - Existing gallery access, password, NSFW, media authorization, semantic markup, and no-JavaScript behavior remain unchanged.
+
+  #### For administrators
+
+  - Global configuration can be found quickly from one searchable Settings surface without learning which specialist page owns each control.
+  - Dashboard opening remains faster because expensive maintenance data is loaded only when requested.
+  - Thumbnail warnings open the exact maintenance group, and deferred-panel failures now leave actionable Admin log diagnostics.
+  - Shared-hosting deployments include the complete runtime tree, extract into correct directories, and can clean old flattened application files without deleting unrelated root content.
+  - The smaller runtime modules make future maintenance and review safer while preserving familiar routes and workflows.
+
 ## Version 0.87.1
 
 Version 0.87.1 is a focused Safari compatibility patch for the public Leaflet maps shown in the lightbox. It restores visible map pins in Safari while preserving the existing Chrome behavior, map access rules, and fullscreen lightbox workflows.

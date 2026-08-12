@@ -17,6 +17,18 @@ Use `declare(strict_types=1);` in new PHP files and follow the existing 4-space 
 ## Testing Guidelines
 Tests are plain PHP scripts rather than PHPUnit cases. Keep new tests executable from the command line with `php tests/<name>_test.php`. Favor focused tests that validate a single behavior without requiring a browser or live database unless the feature truly depends on one. When changing schema logic, add or update a migration and include a test where practical.
 
+### Mandatory PHP Syntax Validation
+Before handing off or committing any change that creates or modifies PHP files, run `php -l` on every changed PHP file. A convenient Git-aware PowerShell check is:
+
+```powershell
+$changedPhp = git diff --name-only --diff-filter=ACMR HEAD -- '*.php'
+foreach ($file in $changedPhp) { php -l $file; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE } }
+```
+
+Also include staged PHP files when validating a staged-only change, for example with `git diff --cached --name-only --diff-filter=ACMR -- '*.php'`. Do not rely on visual review, substring assertions, or a focused behavioral test as a substitute for PHP parsing. Pay particular attention after editing nested calls, null-coalescing expressions, concatenated HTML, arrays, and ternaries, where a missing `)`, `]`, quote, or semicolon can take down the whole application.
+
+If `php` is unavailable in the execution environment, do not claim PHP syntax validation passed. State clearly that linting is blocked, perform the strongest available static checks, and tell the user that `php -l` must run before deployment. For changes intended for immediate deployment, treat unavailable PHP linting as an unresolved verification gap rather than silently proceeding as fully verified.
+
 ## Admin Side-Panel Interaction Priority
 Treat the existing Admin right-side panel as the primary interaction surface for every action launched from that panel. When JavaScript is enabled, panel forms and buttons must complete in place through the existing side-panel/AJAX workflow: keep the panel open, do not navigate to a standalone Admin route, do not change `window.location`, and do not reload the page. A normal POST/redirect route may remain only as a non-JavaScript or direct-page fallback; it must not be the normal behavior of an action initiated inside the panel.
 

@@ -14,7 +14,13 @@ This file maps features to source files. It is optimized for fast maintenance an
 
 | Area | Files |
 | --- | --- |
-| Bootstrap, constants, route table | `app/bootstrap.php` |
+| Bootstrap coordinator and version constants | `app/bootstrap.php` |
+| Configuration bootstrap | `app/bootstrap/configuration.php` |
+| Request and security-header lifecycle | `app/bootstrap/request.php` |
+| Session lifecycle | `app/bootstrap/session.php` |
+| Public-path and query routing | `app/bootstrap/routing.php` |
+| Scheduled-maintenance request hooks | `app/bootstrap/maintenance.php` |
+| Route table and controller dispatch | `app/bootstrap/dispatch.php` |
 | Controller loader | `app/controllers.php` |
 | Service loader | `app/services.php` |
 | View loader | `app/views.php` |
@@ -42,6 +48,7 @@ This file maps features to source files. It is optimized for fast maintenance an
 | Lightbox JSON | `app/controllers/gallery_lightbox.php` | `app/services/lightbox_metadata.php` |
 | Lightbox browsing modes | `app/services/gallery_lightbox_mode.php` | Theme default plus per-gallery override resolution for single-image, picture-strip, and 3D-carousel modes. |
 | Public tags | `app/controllers/public_tags.php` | `app/services/tags.php`, `app/services/tag_metadata.php` |
+| Gallery hero tags | `app/controllers/public_gallery.php`, `app/services/tag_metadata.php` | Full-width server-rendered tag groups with usage/alphabetical sorting and browser disclosure. |
 | Picture game | `app/controllers/picture_game.php` | `app/services/picture_game.php` |
 | Voting | `app/controllers/votes.php` | `app/services/votes.php`, `app/services/picture_game.php` |
 
@@ -83,6 +90,22 @@ This file maps features to source files. It is optimized for fast maintenance an
 | Admin account page | `app/controllers/admin_auth.php` |
 | Google OAuth config and token handling | `app/services/google_auth.php` |
 | Google login routes | `app/controllers/admin_auth.php`, handlers `cms_admin_google_start`, `cms_admin_google_callback` |
+
+## Centralized Admin Settings
+
+| Path | Responsibility |
+| --- | --- |
+| `app/controllers/admin_settings.php` | Admin-authenticated Settings hub controller, per-section validation, delegated saves, flash/redirect handling and safe audit metadata. |
+| `app/services/admin_settings_registry.php`, `app/views/admin_settings.php`, `public/assets/gallery-modules/admin-settings-search.js` | Canonical Settings ownership plus complete global-control discovery, Spotlight-style local search, keyboard navigation, section activation, and specialist deep links. |
+| `app/services/admin_settings_registry.php` | Stable section taxonomy, setting ownership metadata, current/default/source resolution, central-edit whitelist, canonical normalizers/save delegation and deep-link helpers. |
+| `app/views/admin_settings.php` | Accessible Settings overview, tab/section navigation, scoped fieldsets, error summary, current-source labels, redacted summaries and specialized-page links. |
+| `app/views/admin_chrome.php` | Persistent Admin navigation entry for Settings. |
+| `public/assets/gallery-modules/admin-tabs.js` | Shared Admin tab behavior; Settings opts into href-history mode so query and hash remain synchronized. |
+| `public/assets/styles/admin.css` | Responsive Settings tab strip and field/summary layout. |
+| `docs/ADMIN_SETTINGS_INVENTORY.md` | Canonical ownership, defaults, fallbacks, migration and sensitivity inventory. |
+| `tests/admin_settings_*_test.php` | Registry, normalization, navigation and rendering/accessibility contracts. |
+
+Future global settings should be registered summary-only first. Enable central editing only after the entry can call the same service normalizer and setter as its specialized owner. Never register per-gallery/per-image values, raw secrets, file editors or destructive actions as generic centrally editable keys.
 
 ## Admin Dashboard and Maintenance
 
@@ -138,6 +161,8 @@ This file maps features to source files. It is optimized for fast maintenance an
 
 ## Tags
 
+Public tag-page grid and card overrides are implemented by app/controllers/public_tags.php with app/services/pagination.php and app/services/gallery_description_layout.php.
+
 | Task | Files |
 | --- | --- |
 | Tag creation and syncing | `app/services/tag_metadata.php`, `app/services/tags.php` |
@@ -145,14 +170,19 @@ This file maps features to source files. It is optimized for fast maintenance an
 | Public tag pages | `app/controllers/public_tags.php` |
 | Tag suggestions | `app/services/tag_metadata.php`, `app/controllers/admin_gallery_renderers.php` |
 | Gallery/image tag relations | Tables `gallery_tags`, `image_tags` |
+| Hero tag usage sorting | `app/services/tag_metadata.php`, `app/controllers/public_gallery.php` |
+| Hero tag disclosure and row-based scrolling | `public/assets/gallery-modules/hero-tags.js`, `public/assets/styles/public-shared.css`, `public/assets/styles/admin-layout.css`, `public/assets/styles/admin.css` |
 
 ## Theme, Layout and Branding
+
+The Gallery tags Theme subsection is rendered by app/controllers/admin_theme.php and persisted through app_settings; public resolution is shared with the public tag controller through the pagination and description-layout services.
 
 | Task | Files |
 | --- | --- |
 | Admin theme page | `app/controllers/admin_theme.php` |
 | Public thumbnail renderer control | `app/controllers/admin_theme.php`, `app/services/public_thumbnail_rendering.php`, `app/lang/en.php`, `app/lang/cs.php`, `app/lang/en.json`, `app/lang/cs.json` |
 | Theme settings and CSS variables | `app/services/theme.php` |
+| Gallery hero tag Theme controls | `app/controllers/admin_theme.php`, `app/services/theme.php`, `public/assets/gallery-modules/theme-form.js`, `public/assets/styles/admin-theme-editor.css` |
 | Dynamic theme CSS | `app/controllers/theme_assets.php`, handler `cms_theme_css` |
 | Custom CSS presets | `app/services/custom_css.php`, `custom_css/*.css` |
 | Favicon | `app/services/favicon.php`, `app/controllers/theme_assets.php` |
@@ -160,7 +190,7 @@ This file maps features to source files. It is optimized for fast maintenance an
 | Lightbox browsing-mode resolution | `app/services/gallery_lightbox_mode.php`, `app/controllers/admin_theme.php`, `app/controllers/admin_galleries_edit.php`, `app/controllers/public_gallery.php` |
 | Picture-strip and 3D-carousel lightbox UI | `public/assets/gallery-modules/lightbox.js`, `public/assets/styles/lightbox.css`, `public/assets/styles/mobile-gallery.css` |
 | Public/admin styling | `public/assets/styles.css`, `public/assets/custom.css` |
-| Browser UI behavior | `public/assets/gallery.js`, `public/assets/gallery-modules/admin-gallery-date-suggestion.js`, `public/assets/gallery-modules/admin-refresh-progress.js` |
+| Browser UI behavior | `public/assets/gallery.js`, `public/assets/public-gallery.js`, `public/assets/gallery-modules/hero-tags.js`, `public/assets/gallery-modules/admin-gallery-date-suggestion.js`, `public/assets/gallery-modules/admin-refresh-progress.js` |
 
 ## Access, Sharing and Downloads
 
@@ -263,11 +293,17 @@ This file maps features to source files. It is optimized for fast maintenance an
 
 | Task | Files |
 | --- | --- |
-| Language bootstrap | `app/services/translations.php` |
-| Czech JSON pack | `app/lang/cs.json` |
-| English JSON pack | `app/lang/en.json` |
-| PHP fallback packs | `app/lang/cs.php`, `app/lang/en.php` |
-| Public/admin language settings | `app/controllers/admin_theme.php`, `app/services/app_settings.php` |
+| Language bootstrap, discovery, fallback, diagnostics | `app/services/translations.php` |
+| Canonical English JSON pack | `app/lang/en.json` |
+| Complete maintained JSON packs | `app/lang/en.json`, `app/lang/cs.json`, `app/lang/de.json`, `app/lang/sv.json` |
+| Dormant future-language skeletons | `app/lang/no.json`, `app/lang/is.json`, `app/lang/da.json`, `app/lang/fr.json`, `app/lang/it.json`, `app/lang/es.json` |
+| PHP compatibility fallbacks | `app/lang/en.php`, `app/lang/cs.php`, `app/lang/de.php`, `app/lang/sv.php` |
+| Admin and public language selectors, pack editor | `app/controllers/admin_theme.php` |
+| Public language centralized setting | `app/services/admin_settings_registry.php`, `app/services/app_settings.php` |
+| Browser translation payload | `app/views/layout.php`, `app/controllers/theme_assets.php` |
+| Catalog regression coverage | `tests/translation_catalog_consistency_test.php` |
+
+English is the canonical default and fallback. English, Czech, German, and Swedish are the only selectable languages and their JSON catalogs remain key-for-key complete. Dormant future-language skeletons may contain validated subsets of English keys, but file discovery alone does not make them selectable.
 
 ## Database and Migrations
 
@@ -319,11 +355,12 @@ This file maps features to source files. It is optimized for fast maintenance an
 
 ### Add an admin setting
 
-1. Add a helper in the relevant service or `app/services/app_settings.php`.
-2. Add form fields to the relevant admin controller/view.
-3. Validate and save POST data after CSRF validation.
-4. Apply setting in service/rendering layer.
-5. Update docs if the setting changes architecture.
+1. Identify the existing canonical service normalizer/setter and whether the setting is global, per-gallery, sensitive, file-backed or destructive.
+2. Add or update the specialized page first.
+3. Register the global setting in `app/services/admin_settings_registry.php` as summary-only, with a stable ID and specialized route.
+4. Enable `central_editable` only when central save can delegate to the exact same service boundary and preserve all feature/schema guards and side effects.
+5. Add English, Czech, German, and Swedish PHP/JSON translation keys, navigation/rendering tests, and update `docs/ADMIN_SETTINGS_INVENTORY.md`.
+
 
 ### Add a database column
 

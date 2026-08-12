@@ -31,12 +31,15 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-13
+ *   2026-08-11
  */
 
 declare(strict_types=1);
 
 use function Gallery\Core\gallery_public_url;
+use function Gallery\Core\image_public_media_url;
+use function Gallery\Core\image_public_thumbnail_url;
+use function Gallery\Core\image_public_url;
 use function Gallery\Core\url_for;
 use function Gallery\Services\url_rewrite_compatibility;
 use function Gallery\Services\url_rewrite_enabled;
@@ -140,7 +143,12 @@ try {
     assert_url_rewrite_same('disabled', $disabled['status'], 'manual disabled status');
     assert_url_rewrite_same(false, url_rewrite_should_emit_clean_urls(), 'manual disabled emit clean URLs');
     assert_url_rewrite_same('https://example.test/index.php?page=tag&slug=friedrichshafen', url_for('tag', ['slug' => 'friedrichshafen']), 'manual disabled tag fallback URL');
-    assert_url_rewrite_same('https://example.test/index.php?page=gallery&public_path=Trips%2FPrague', gallery_public_url(['url_path' => 'Trips/Prague', 'folder_path' => 'Trips/Prague', 'slug' => 'prague']), 'manual disabled gallery fallback URL');
+    $gallery = ['url_path' => 'Trips/Prague', 'folder_path' => 'Trips/Prague', 'slug' => 'prague'];
+    $image = ['url_slug' => 'Evening Flight', 'filename' => 'DSC_0001.JPG'];
+    assert_url_rewrite_same('https://example.test/index.php?page=gallery&public_path=Trips%2FPrague', gallery_public_url($gallery), 'manual disabled gallery fallback URL');
+    assert_url_rewrite_same('https://example.test/index.php?page=gallery&public_path=Trips%2FPrague%2Fevening-flight', image_public_url($image, $gallery), 'manual disabled image fallback URL');
+    assert_url_rewrite_same('https://example.test/index.php?page=public_media&public_path=Trips%2FPrague%2Fevening-flight', image_public_media_url($image, $gallery), 'manual disabled media fallback URL');
+    assert_url_rewrite_same('https://example.test/index.php?page=public_thumb&public_path=Trips%2FPrague%2Fevening-flight&size=300&format=webp', image_public_thumbnail_url($image, $gallery, 300, 'webp'), 'manual disabled thumbnail fallback URL');
 
     $GLOBALS['cms_app_settings_cache'] = ['url_rewrite_enabled' => '1'];
     $_SERVER['SERVER_SOFTWARE'] = 'Apache/2.4';
@@ -148,6 +156,9 @@ try {
     $_SERVER['SCRIPT_NAME'] = '/index.php';
     assert_url_rewrite_same(true, url_rewrite_should_emit_clean_urls(), 'default enabled emit clean URLs');
     assert_url_rewrite_same('https://example.test/tag/friedrichshafen', url_for('tag', ['slug' => 'friedrichshafen']), 'default enabled tag clean URL');
+    assert_url_rewrite_same('https://example.test/gallery/Trips/Prague/evening-flight/', image_public_url($image, $gallery), 'default enabled image clean URL');
+    assert_url_rewrite_same('https://example.test/gallery/Trips/Prague/evening-flight/media', image_public_media_url($image, $gallery), 'default enabled media clean URL');
+    assert_url_rewrite_same('https://example.test/gallery/Trips/Prague/evening-flight/thumb-300.webp', image_public_thumbnail_url($image, $gallery, 300, 'webp'), 'default enabled thumbnail clean URL');
     assert_url_rewrite_same(
         'https://example.test/gallery/testovaci-fotky',
         rtrim(gallery_public_url([

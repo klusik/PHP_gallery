@@ -9,7 +9,7 @@ This document is intended to help future maintainers and AI coding agents unders
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.87.1';
+const CMS_VERSION = '0.88';
 ```
 
 Update-related code uses:
@@ -76,7 +76,7 @@ Root-level operational files:
 
 ## Bootstrap Responsibilities
 
-`app/bootstrap.php` is the central runtime loader. It does the following:
+`app/bootstrap.php` is the thin runtime coordinator. Focused modules under `app/bootstrap/` own configuration loading, request preparation, session startup, routing, maintenance scheduling, and dispatch while preserving the original entrypoint contract. The coordinator does the following:
 
 1. Defines application constants.
 2. Requires core files in a fixed order.
@@ -100,6 +100,21 @@ app/views.php
 app/integrity.php
 app/controllers.php
 ```
+
+
+## Localization Model
+
+`app/services/translations.php` owns language normalization, pack discovery, request bootstrap, Admin/public language persistence, JSON editing support, key fallback, interpolation, and missing-key diagnostics.
+
+English (`en`) is the canonical source, configured default, and runtime fallback. English, Czech (`cs`), German (`de`), and Swedish (`sv`) are the maintained selectable languages and their JSON catalogs are kept key-for-key complete. Other `app/lang` JSON skeletons may remain in the repository for future work, but pack discovery does not grant selectability. The selectable-language allowlist is intentionally limited to `en`, `cs`, `de`, and `sv`; missing keys still resolve from English defensively.
+
+The two UI language contexts are intentionally separate. Admin routes resolve `translation_admin_language()` from the Admin session and Admin language cookie. Public routes resolve the saved `public_language` application setting, then allow a supported `?lang=<code>` request override that is remembered in the public-language cookie. `translation_bootstrap_request()` records the request context and `translation_active_language()` selects the appropriate language without coupling the two preferences.
+
+The maintained catalog format is `app/lang/<code>.json`. `translation_load_language()` prefers JSON and loads a legacy PHP dictionary only when the JSON file is absent. The `en.php`, `cs.php`, `de.php`, and `sv.php` dictionaries therefore exist only for compatibility and are not the canonical catalogs.
+
+Server-side `t()` lookup order is active JSON/PHP pack, configured default English pack, provided inline English fallback, then the key itself. Browser modules receive the same semantics through `view_cms_browser_i18n_strings()`, which merges default English strings with the active pack before emitting the cacheable browser i18n asset. Placeholder interpolation uses stable `{name}` tokens, and translated values must preserve the same placeholder names as English.
+
+The Theme > Language page intersects detected packs with `translation_supported_languages()` before building the `cms_language`, `public_language`, and pack-editor selectors. This prevents dormant future packs from becoming selectable just because a file exists. The page reports coverage relative to English. JSON pack edit/import/export stays on that specialized page for the four supported languages. Missing-key diagnostics are collected for authenticated administrators and can be cleared from the same UI.
 
 ## Routing Model
 
@@ -131,7 +146,7 @@ Pretty URL generation is controlled by URL rewrite settings in `app/services/app
 
 ## Main Route Groups
 
-The definitive route table is in `cms_run()` inside `app/bootstrap.php`. Important groups are listed here for orientation.
+The definitive route table and request dispatch live in `app/bootstrap/dispatch.php`, with path interpretation in `app/bootstrap/routing.php`. `cms_run()` remains the stable coordinator called by the public entrypoint. Important groups are listed here for orientation.
 
 ### Public gallery routes
 
@@ -178,6 +193,7 @@ The definitive route table is in `cms_run()` inside `app/bootstrap.php`. Importa
 | Page | Handler | Responsibility |
 | --- | --- | --- |
 | `admin` | `cms_admin` | Admin dashboard. |
+| `admin_settings` | `cms_admin_settings` | Central global Settings overview and safe delegated edits. |
 | `admin_login` | `cms_admin_login` | Admin login. |
 | `admin_logout` | `cms_admin_logout` | Logout and token cleanup. |
 | `admin_forgot_password` | `cms_admin_forgot_password` | Password reset request. |
@@ -212,6 +228,20 @@ The definitive route table is in `cms_run()` inside `app/bootstrap.php`. Importa
 | `admin_run_migrations` | `cms_admin_run_migrations` | Browser-triggered migration runner. |
 | `admin_devmode` | `cms_admin_devmode` | Development diagnostics. |
 | `admin_exif_gps_settings` | `cms_admin_exif_gps_settings` | Saves the global EXIF/GPS display default and can reset all per-gallery overrides. |
+
+### Centralized Admin Settings ownership
+
+`app/services/admin_settings_registry.php` is the ownership and discovery registry for the central Settings hub. Stable section IDs are `general`, `appearance`, `content`, `media`, `uploads`, `privacy`, and `advanced`. Registry entries describe canonical keys, current/default resolvers, validation metadata, sensitivity, migration readiness and specialized destinations. Discovery-only entries index every global specialist control and registered feature flag without rendering hundreds of duplicate cards. The registry does not replace the domain services that own normalization or persistence.
+
+`app/controllers/admin_settings.php` accepts only registry-whitelisted centrally editable IDs. POST requests require Admin authentication and CSRF validation, retain field-level errors, and save through `admin_settings_save_editable_value()`. That function delegates to the same focused setters used elsewhere, including `set_site_name()`, `translation_set_public_language()`, `set_url_rewrite_enabled()`, `set_public_home_search_enabled()`, `public_thumbnail_rendering_mode_save()`, `set_exif_gps_default_enabled()`, and `set_dev_mode_enabled()`. Unknown IDs and specialized-only entries are rejected. No generic submitted key can be written directly to `app_settings`.
+
+The central page starts from a read-only ownership model and enables editing only for the narrow safe set above. Complex Theme persistence, upload pipeline settings, telemetry retention, Account/Google/OpenAI credentials, raw CSS, uploaded branding, language packs, API keys, database repair/migrations and destructive maintenance stay at their existing mutation boundaries. Sensitive values are resolved to status labels before rendering and are never placed into central HTML or logs.
+
+Tag-page presentation keeps its existing inheritance rules: `tag_page_gallery_grid_columns` and `tag_page_gallery_grid_rows` fall back to global pagination dimensions, while `tag_page_gallery_description_layout` falls back to the global Theme card layout. Hero-tag controls are distinct settings. Per-gallery description layout, lightbox and EXIF/GPS overrides remain per-gallery.
+
+The navigation contract is implemented by `admin_settings_url()` and `admin_settings_section_id()`. Central links contain both `section=<stable-id>` and `#settings-<stable-id>`. The existing Admin tab module has an opt-in `data-admin-tabs-url-mode="href"` mode for this page so JavaScript activation updates the complete href in browser history rather than changing only the hash. Existing tabs retain their original hash-only behavior. Normal links remain the JavaScript-disabled fallback.
+
+The complete source audit and setting inventory is maintained in `docs/ADMIN_SETTINGS_INVENTORY.md`. The central page itself requires no database migration. Optional existing schemas, for example telemetry or per-gallery EXIF/GPS overrides, continue to gate only the features that already depend on them.
 
 ### Integration and automation routes
 
@@ -340,6 +370,8 @@ Important view files:
 | `app/views/admin_chrome.php` | Admin navigation and shared admin page shell. |
 | `app/views/admin_dashboard.php` | Dashboard page composition, top-level Admin tabs, and gallery table rendering. |
 | `app/views/admin_dashboard_sections.php` | Reusable dashboard overview and grouped maintenance subtab sections. |
+
+The main Admin dashboard keeps its initial request bounded: the Maintenance tab is rendered through the authenticated `admin_dashboard_maintenance` JSON endpoint only when the tab is first activated. This keeps database usage metadata, navigation-data status, maintenance state, and related optional-schema checks out of ordinary gallery navigation. The server-rendered placeholder remains safe without JavaScript and links to the dedicated maintenance details page as a fallback.
 | `app/views/admin_gallery_forms.php` | Gallery admin form sections. |
 | `app/views/gallery_descriptions.php` | Gallery description rendering helpers. |
 | `app/views/navigation_data.php` | Navigation data admin rendering. |
@@ -419,6 +451,8 @@ Schema repair and data cleanup are independent. DDL uses a new timestamped migra
 
 ## Settings System
 
+Public tag-page presentation is stored in app_settings. The pagination service resolves the dedicated grid columns and rows with global pagination as the compatibility fallback, while the description-layout service resolves the dedicated vertical or horizontal card design with the global Theme card layout as fallback. The public tag controller applies these values only to tag-result pages. The Edit tags contextual link carries the Appearance subsection target so the Theme page opens Gallery tags directly.
+
 DB-backed settings live in `app_settings` and are accessed through `app/services/app_settings.php`.
 
 Core helpers:
@@ -434,6 +468,10 @@ Settings are used for URL rewrites, site name, dev mode, collapsed admin state, 
 `public_thumbnail_rendering_mode` is a scalar site setting owned by `app/services/public_thumbnail_rendering.php`. Its only machine values are `responsive` and `progressive`; missing, empty, unknown, malformed, or obsolete values normalize to `responsive`. Admin Theme persists the setting after the existing administrator and CSRF checks. No schema migration is required because the setting uses the existing `app_settings` key/value table.
 
 Theme favorite shortcuts are stored as a JSON array in `theme_favorite_gallery_ids`. The array may contain numeric gallery IDs and the `home` token for the main gallery page. `app/services/favorite_galleries.php` normalizes the value, removes duplicates, validates that selected galleries still exist before saving, and resolves public header navigation items in configured order. Anonymous visitors only receive gallery shortcuts that remain public and listed; the main page shortcut is always safe to render.
+
+Gallery hero tag presentation also uses the existing `app_settings` table and therefore needs no schema migration. `app/services/theme.php` owns normalization and defaults for `theme_hero_tag_visible_limit` (default 20, range 1 to 200), `theme_hero_tag_display_all` (default off, so progressive disclosure is active), `theme_hero_tag_scrollbar_enabled` (default on), `theme_hero_tag_scrollbar_rows` (default 5, range 1 to 12), and `theme_hero_tag_sort_mode` (`usage` or `alphabetical`, default `usage`). `app/controllers/admin_theme.php` persists the values after the existing Admin and CSRF checks and bumps `theme_public_content_revision` when this public rendering policy changes.
+
+`app/services/tag_metadata.php` owns hero usage sorting. Usage is the sum of direct `gallery_tags` and `image_tags` assignments, restricted to tag IDs required by the current hero. The service sorts direct and contained tag groups independently, with usage descending and natural case-insensitive name ordering as the tie-break. `app/controllers/public_gallery.php` emits every tag in the HTML plus validated data attributes. `public/assets/gallery-modules/hero-tags.js` progressively hides tags above the initial limit, expands/collapses them without requests, and measures actual wrapped rows before applying a scrollbar. No-JavaScript rendering remains complete because the server never omits tags for this feature.
 
 When adding a setting:
 
@@ -543,8 +581,10 @@ Site-level theme logic is in:
 app/controllers/admin_theme.php
 app/controllers/theme_assets.php
 app/services/theme.php
+app/services/tag_metadata.php
 app/services/custom_css.php
 app/services/favicon.php
+public/assets/gallery-modules/hero-tags.js
 public/assets/styles.css
 custom_css/*.css
 ```
@@ -569,7 +609,8 @@ Supported branding concepts include:
 8. Count badge visibility.
 9. Lightbox browsing mode.
 10. Thumbnail size bounds.
-11. Custom CSS presets.
+11. Gallery hero tag disclosure, ordering and row-based scrolling.
+12. Custom CSS presets.
 
 ## Lightbox Browsing Mode Model
 

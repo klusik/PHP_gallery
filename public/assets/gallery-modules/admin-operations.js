@@ -30,7 +30,7 @@
  *   2026-08-11
  */
 
-export { setupAdminTabs } from './admin-tabs.js?v=20260608-admin-cinematic-v1';
+export { setupAdminTabs } from './admin-tabs.js?v=20260812-deferred-maintenance-v2';
 export { setupAdminNestedTabs } from './admin-nested-tabs.js?v=20260608-admin-cinematic-v1';
 export { setupGalleryRefreshProgress } from './admin-refresh-progress.js?v=20260611-admin-discovery-actions-v1';
 export { setupGalleryUploadProgress, setupAdminGallerySidePanel } from './admin-side-panel.js?v=20260811-leaflet-safari-marker-v1';

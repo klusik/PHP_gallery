@@ -117,7 +117,7 @@ function gallery_migration_api_gallery(): array
 function cms_gallery_migration_manifest(): void
 {
     if (!in_array(request_method(), ['GET', 'POST'], true)) {
-        gallery_migration_json(['ok' => false, 'error' => 'Method not allowed.'], 405);
+        gallery_migration_json(['ok' => false, 'error' => gallery_migration_t('gallery_migration.error.method_not_allowed', 'Method not allowed.')], 405);
         return;
     }
 
@@ -126,7 +126,7 @@ function cms_gallery_migration_manifest(): void
         $gallery = $authorized['gallery'];
         $requestedGalleryId = (int) ($_GET['gallery_id'] ?? $_POST['gallery_id'] ?? 0);
         if ($requestedGalleryId > 0 && $requestedGalleryId !== (int) ($gallery['id'] ?? 0)) {
-            gallery_migration_json(['ok' => false, 'error' => 'API key is not allowed to export the requested gallery.'], 403);
+            gallery_migration_json(['ok' => false, 'error' => gallery_migration_t('gallery_migration.error.api_key_scope', 'API key is not allowed to export the requested gallery.')], 403);
             return;
         }
 
@@ -155,7 +155,7 @@ function cms_gallery_migration_manifest(): void
 function cms_gallery_migration_asset(): void
 {
     if (!in_array(request_method(), ['GET', 'POST'], true)) {
-        gallery_migration_json(['ok' => false, 'error' => 'Method not allowed.'], 405);
+        gallery_migration_json(['ok' => false, 'error' => gallery_migration_t('gallery_migration.error.method_not_allowed', 'Method not allowed.')], 405);
         return;
     }
 
@@ -181,7 +181,7 @@ function cms_gallery_migration_asset(): void
 function cms_gallery_migration_receive_manifest(): void
 {
     if (request_method() !== 'POST') {
-        gallery_migration_json(['ok' => false, 'error' => 'Method not allowed.'], 405);
+        gallery_migration_json(['ok' => false, 'error' => gallery_migration_t('gallery_migration.error.method_not_allowed', 'Method not allowed.')], 405);
         return;
     }
 
@@ -216,7 +216,7 @@ function cms_gallery_migration_receive_manifest(): void
 function cms_gallery_migration_receive_asset(): void
 {
     if (request_method() !== 'POST') {
-        gallery_migration_json(['ok' => false, 'error' => 'Method not allowed.'], 405);
+        gallery_migration_json(['ok' => false, 'error' => gallery_migration_t('gallery_migration.error.method_not_allowed', 'Method not allowed.')], 405);
         return;
     }
 
@@ -251,7 +251,7 @@ function cms_gallery_migration_receive_asset(): void
 function cms_gallery_migration_receive_complete(): void
 {
     if (request_method() !== 'POST') {
-        gallery_migration_json(['ok' => false, 'error' => 'Method not allowed.'], 405);
+        gallery_migration_json(['ok' => false, 'error' => gallery_migration_t('gallery_migration.error.method_not_allowed', 'Method not allowed.')], 405);
         return;
     }
 
@@ -272,7 +272,7 @@ function cms_gallery_migration_receive_complete(): void
 function cms_gallery_migration_receive_status(): void
 {
     if (!in_array(request_method(), ['GET', 'POST'], true)) {
-        gallery_migration_json(['ok' => false, 'error' => 'Method not allowed.'], 405);
+        gallery_migration_json(['ok' => false, 'error' => gallery_migration_t('gallery_migration.error.method_not_allowed', 'Method not allowed.')], 405);
         return;
     }
 
@@ -296,7 +296,7 @@ function cms_admin_gallery_migration(): void
 {
     require_admin();
     if (request_method() !== 'POST') {
-        gallery_migration_json(['ok' => false, 'error' => 'Method not allowed.'], 405);
+        gallery_migration_json(['ok' => false, 'error' => gallery_migration_t('gallery_migration.error.method_not_allowed', 'Method not allowed.')], 405);
         return;
     }
     if (!upload_automation_token_csrf_valid()) {

@@ -2,7 +2,7 @@
 
 A modern PHP 8.0+ gallery CMS designed for ordinary shared hosting. The application uses the filesystem as the authoritative source for gallery structure, while storing all metadata, access rules, votes, user accounts, and audit logs in MySQL or MariaDB.
 
-**Current Version:** 0.87.1
+**Current Version:** 0.88
 
 **Key Benefit:** Deploy in minutes on shared hosting. No npm, no Composer, no framework overhead. Just PHP + MySQL.
 
@@ -89,7 +89,7 @@ Progressive rendering prioritizes perceived initial responsiveness, not minimum 
 - **Theme editor** - Customize colors, fonts, spacing and default lightbox browsing mode from the admin interface
 - **Lightbox browsing modes** - Use the classic single image viewer, a picture strip, or a focused 3D carousel as a Theme default with per-gallery overrides
 - **Dark mode** - Switch between light and dark themes
-- **Language support** - English and Czech; easily extensible
+- **Language support** - English, Czech, German, and Swedish; English fallback retained
 - **Gallery branding** - Per-gallery logo, background, cover image
 - **Site branding** - Site-wide logo and background
 - **Custom CSS** - Direct CSS editing for advanced customization
@@ -280,6 +280,16 @@ Then open `http://localhost:8000/` in your browser.
 
 ## Admin Workflow
 
+### Centralized Settings
+
+Use **Settings** in the Admin navigation as the central overview for important global configuration. The hub is intentionally not one giant form. It groups stable peer sections for General, Public appearance, Content, Media and browsing, Uploads and automation, Privacy and diagnostics, and Advanced configuration. Each section shows current values and whether a value is explicitly configured, inherited, or using its default.
+
+The hub can directly edit only settings that already have a safe canonical service setter: site name, public language, URL rewrite, public search when available, the public thumbnail renderer, the global EXIF/GPS display default when its existing schema is ready, and development diagnostics. Theme layout, tag presentation, upload tuning, telemetry, Account credentials, language-pack editing, raw CSS, API keys, database tools and destructive maintenance remain on their existing specialized pages. Those pages remain fully supported and link back to the relevant Settings section.
+
+Version 0.88 adds a Spotlight-style search directly below the Settings title. It searches the complete global configuration registry while typing, including discovery-only entries for specialized Theme, upload, telemetry, thumbnail, maintenance, navigation-data, feature, database, account, mail, Google, and OpenAI controls. Results use contextual labels and descriptions, support keyboard navigation, and open the canonical owning page without copying secret values or duplicating specialist persistence.
+
+Deep links use stable identifiers such as `?page=admin_settings&section=appearance#settings-appearance`. JavaScript tab changes update the complete query plus hash URL so Back/Forward and refresh preserve the selected section. Without JavaScript, the tab links load the same section as normal pages. See `docs/ADMIN_SETTINGS_INVENTORY.md` for canonical ownership, defaults, fallbacks, sensitivity and migration status.
+
 ### Initial Setup (First Time)
 
 1. Log in at `?page=admin_login` with the admin account you created during installation
@@ -349,6 +359,8 @@ Then open `http://localhost:8000/` in your browser.
 
 #### Managing Tags
 
+Public tag pages can use a dedicated presentation. In Theme > Appearance > Gallery tags, configure galleries per row, rows per page, and the gallery-card design. The Edit tags screen provides a Configure tag display shortcut to these settings.
+
 1. Go to **Tags** in the admin menu
 2. Create new tags with display names, slugs, and descriptions
 3. View usage statistics for each tag
@@ -386,10 +398,12 @@ Then open `http://localhost:8000/` in your browser.
 
 #### Customizing Appearance
 
+Theme > Appearance > Gallery tags controls the public tag-page grid and card design independently from the normal gallery defaults.
+
 1. Go to **Theme** to customize colors, fonts, layout, the default lightbox browsing mode, and selected-gallery public thumbnail rendering
 2. Choose light or dark mode
 3. Set default gallery card layout (vertical or horizontal)
-4. Choose language (English, Czech, etc.)
+4. Choose language (English, Czech, German, or Swedish)
 5. Upload site-wide logo and background
 6. Edit raw CSS if you need advanced styling
 
@@ -516,6 +530,33 @@ On shared hosting with limited resources:
   - HTTP method and IP fingerprint
 - Logs exportable for compliance
 
+
+## Localization and Language Packs
+
+PHP Gallery keeps English (`en`) as the canonical source language and the runtime fallback. English, Czech (`cs`), German (`de`), and Swedish (`sv`) are the currently maintained and selectable interface languages. All four catalogs are kept key-for-key complete.
+
+`app/services/translations.php` restricts language selection to the maintained set above. Additional JSON skeletons may remain under `app/lang/` for future translation work, but simply placing a file there does not make that language selectable. English remains the runtime fallback if a maintained translation ever lacks a key.
+
+Admin and public language choices are independent:
+
+- **Admin interface language** is stored for the administrator in the session and browser cookie.
+- **Public visitor language** is a site-wide default stored in application settings.
+- Public requests may override the site default with a supported `?lang=<code>` value; the visitor override is remembered in a public-language cookie.
+- Changing the interface language does not translate gallery titles, descriptions, tags, photo captions, or other owner-authored content.
+
+Editable catalogs live in `app/lang/<code>.json`. JSON is the maintained format. The `en.php`, `cs.php`, `de.php`, and `sv.php` dictionaries remain compatibility fallbacks and are loaded only when a JSON pack for that code does not exist. Theme > Language exposes only the currently supported four languages in the Admin and Public selectors and pack editor, reports key coverage against English, and provides JSON edit/import/export tools plus missing-key diagnostics.
+
+Current selectable language packs:
+
+| Code | Display name | Current role |
+| --- | --- | --- |
+| `en` | English | Complete canonical source, default, and fallback |
+| `cs` | Čeština | Complete maintained selectable translation |
+| `de` | Deutsch | Complete maintained selectable translation |
+| `sv` | Svenska | Complete maintained selectable translation |
+
+When adding interface text, add the canonical English key to `app/lang/en.json` first and keep Czech, German, and Swedish synchronized. Placeholder names such as `{count}`, `{gallery}`, or `{time}` are part of the translation contract and must remain unchanged across all four maintained languages. Dormant future-language skeletons may be translated separately without becoming selectable.
+
 ## Extending & Contributing
 
 ### Adding Features
@@ -526,7 +567,7 @@ The codebase is organized for easy extension:
 2. **New service** - Add file in `app/services/` for business logic
 3. **New route** - Register in `app/bootstrap.php` route table
 4. **New migration** - Add dated file in `database/migrations/`
-5. **Translations** - Add strings to `app/lang/en.json`, `cs.json`
+5. **Translations** - Add the canonical key to `app/lang/en.json` and keep `app/lang/cs.json`, `app/lang/de.json`, and `app/lang/sv.json` synchronized
 
 ### Code Standards
 

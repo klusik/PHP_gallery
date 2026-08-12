@@ -61,6 +61,7 @@ function view_admin_menu_structure(): array
             'label' => t('admin.menu.dashboard', 'Dashboard'),
             'items' => [
                 ['label' => t('admin.menu.overview', 'Overview'), 'page' => 'admin', 'url' => url_for('admin')],
+                ['label' => t('admin.menu.settings', 'Settings'), 'page' => 'admin_settings', 'url' => url_for('admin_settings')],
             ],
         ],
         [
