@@ -49,6 +49,14 @@ use RuntimeException;
  */
 class MutationSchemaUnavailableException extends RuntimeException
 {
+    /**
+     * Create an exception describing a mutation refused by schema policy.
+     *
+     * @param string $feature Stable mutation capability identifier.
+     * @param string $state Observed schema capability state.
+     * @param string $operation Stable refused-operation identifier.
+     * @param string $message Safe caller-facing exception message.
+     */
     public function __construct(
         public readonly string $feature,
         public readonly string $state,

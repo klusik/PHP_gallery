@@ -52,6 +52,9 @@ use function Gallery\Services\application_update_safe_error;
 use function Gallery\Services\application_update_safe_zip_entry;
 use function Gallery\Services\application_update_time_budget;
 
+/**
+ * Assert an updater state-machine condition.
+ */
 function assert_updater_resumable(bool $condition, string $message): void
 {
     if (!$condition) {
@@ -59,6 +62,9 @@ function assert_updater_resumable(bool $condition, string $message): void
     }
 }
 
+/**
+ * Recursively remove a temporary updater fixture tree.
+ */
 function remove_updater_test_tree(string $path): void
 {
     if (!is_dir($path)) {

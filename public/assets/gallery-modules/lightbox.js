@@ -1373,6 +1373,7 @@ export function setupGalleryLightbox() {
         if (lightboxPreloadDrainHandle || controller.signal.aborted) {
             return;
         }
+        /** Drain the preload queue when the selected idle mechanism fires. */
         const drain = () => {
             lightboxPreloadDrainHandle = 0;
             lightboxPreloadDrainUsesIdleCallback = false;
@@ -3952,6 +3953,7 @@ export function setupGalleryLightbox() {
     function addMapViewportControls(map, bounds, options, isCurrent, viewKey, currentLocationPoint = null) {
         const ViewportControl = L.Control.extend({
             options: {position: 'topleft'},
+            /** Build and return the Leaflet viewport-control container. */
             onAdd() {
                 const container = L.DomUtil.create('div', 'leaflet-bar gallery-map-viewport-control');
                 const resetButton = createMapControlButton(i18n('lightbox.reset', 'Reset'), i18n('lightbox.reset_map_zoom', 'Reset map zoom'), () => {

@@ -31,12 +31,14 @@ function setupAdminSettingsSearchRoot(root) {
 
     let visibleItems = [];
     let activeIndex = -1;
+    /** Close the result popover and clear its active descendant. */
     const closeResults = () => {
         results.hidden = true;
         input.setAttribute('aria-expanded', 'false');
         input.removeAttribute('aria-activedescendant');
         activeIndex = -1;
     };
+    /** Move keyboard focus styling to the requested visible result. */
     const setActive = (index) => {
         if (!visibleItems.length) {
             activeIndex = -1;
@@ -52,6 +54,7 @@ function setupAdminSettingsSearchRoot(root) {
         input.setAttribute('aria-activedescendant', visibleItems[activeIndex].id);
         visibleItems[activeIndex].scrollIntoView({block: 'nearest'});
     };
+    /** Score one registry item against normalized search tokens. */
     const scoreItem = (item, tokens) => {
         const text = normalizeSettingsSearchText(item.dataset.searchText);
         const label = normalizeSettingsSearchText(item.dataset.searchLabel);
@@ -60,6 +63,7 @@ function setupAdminSettingsSearchRoot(root) {
         }
         return tokens.reduce((score, token) => score + (label.startsWith(token) ? 100 : label.includes(` ${token}`) ? 70 : label.includes(token) ? 50 : 10), 0);
     };
+    /** Recompute and render results for the current query. */
     const update = () => {
         const query = normalizeSettingsSearchText(input.value);
         const tokens = query.split(/\s+/).filter(Boolean);
@@ -84,6 +88,7 @@ function setupAdminSettingsSearchRoot(root) {
         input.setAttribute('aria-expanded', 'true');
         setActive(visibleItems.length ? 0 : -1);
     };
+    /** Open and highlight the settings control represented by a result link. */
     const activate = (item) => {
         if (!(item instanceof HTMLAnchorElement)) {
             return;

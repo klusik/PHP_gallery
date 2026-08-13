@@ -1018,6 +1018,12 @@ function regenerate_gallery_image_public_slugs(int $galleryId): int
     return $count;
 }
 
+/**
+ * Regenerate unique public slugs for every image in gallery order.
+ *
+ * @param PDO $pdo Active application database connection.
+ * @return int Number of image records assigned a public slug.
+ */
 function regenerate_image_public_slugs(PDO $pdo): int
 {
     // $stmt stores an intermediate value used by the surrounding gallery workflow.

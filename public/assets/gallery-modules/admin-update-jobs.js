@@ -46,10 +46,12 @@ const STAGE_LABELS = {
     completed: 'Completed',
 };
 
+/** Return the administrator-facing label for an updater stage. */
 function stageLabel(stage) {
     return STAGE_LABELS[stage] || String(stage || '').replaceAll('_', ' ').replace(/^./, (value) => value.toUpperCase());
 }
 
+/** Find all updater job surfaces relevant to a DOM context. */
 function findUpdateScopes(context = document) {
     if (context instanceof Element && context.matches('[data-update-job-scope]')) {
         return [context];
@@ -61,14 +63,17 @@ function findUpdateScopes(context = document) {
     return Array.from(document.querySelectorAll('[data-update-job-scope]'));
 }
 
+/** Return the first updater job surface relevant to a DOM context. */
 function findUpdateScope(context = document) {
     return findUpdateScopes(context)[0] || null;
 }
 
+/** Read the nearest available CSRF token without leaving the current panel. */
 function csrfTokenFrom(context) {
     return String(context?.querySelector?.('input[name="csrf_token"]')?.value || document.querySelector('input[name="csrf_token"]')?.value || '');
 }
 
+/** Create the updater progress-card markup when a scope is initially empty. */
 function ensureScopeMarkup(scope) {
     if (!scope || scope.querySelector('[data-update-job-title]')) {
         return;
@@ -87,6 +92,7 @@ function ensureScopeMarkup(scope) {
         <div data-update-job-actions></div>`;
 }
 
+/** Render a durable update job into every synchronized Admin surface. */
 function renderJob(job, context = document) {
     if (!job || !job.id) {
         return;
@@ -171,6 +177,7 @@ function renderJobInScope(scope, job) {
     }
 }
 
+/** Post one bounded updater transition and return its durable job state. */
 async function postJob(endpoint, csrfToken, action, jobId = '', sourceBody = null) {
     const body = sourceBody instanceof FormData ? sourceBody : new FormData();
     if (!(sourceBody instanceof FormData)) {
@@ -194,6 +201,7 @@ async function postJob(endpoint, csrfToken, action, jobId = '', sourceBody = nul
     return payload.job;
 }
 
+/** Resolve the updater endpoint from a form or the current page fallback. */
 function endpointFor(formOrScope) {
     if (formOrScope instanceof HTMLFormElement && formOrScope.action) {
         return formOrScope.action;
@@ -201,6 +209,7 @@ function endpointFor(formOrScope) {
     return window.location.href;
 }
 
+/** Schedule the next bounded request for a running updater job. */
 function scheduleContinuation(job, endpoint, csrfToken, context = document) {
     if (!job?.id || job.status !== 'running' || ACTIVE_REQUESTS.has(String(job.id))) {
         return;
@@ -228,6 +237,7 @@ function scheduleContinuation(job, endpoint, csrfToken, context = document) {
     }, 250);
 }
 
+/** Start an update job from an intercepted Admin form without navigation. */
 async function handleStartForm(form) {
     const endpoint = endpointFor(form);
     const csrfToken = csrfTokenFrom(form);
@@ -253,6 +263,7 @@ async function handleStartForm(form) {
     }
 }
 
+/** Retry a failed updater job from its saved checkpoint. */
 async function retryJob(button) {
     const scope = button.closest('[data-update-job-scope]');
     const id = String(button.dataset.updateJobRetry || scope?.dataset.updateJobId || '');
@@ -274,6 +285,7 @@ async function retryJob(button) {
     }
 }
 
+/** Cancel a prepared update before active files are replaced. */
 async function cancelJob(button) {
     const scope = button.closest('[data-update-job-scope]');
     const id = String(button.dataset.updateJobCancel || scope?.dataset.updateJobId || '');
@@ -294,6 +306,7 @@ async function cancelJob(button) {
     }
 }
 
+/** Restore application files from the updater's pre-activation snapshot. */
 async function rollbackJob(button) {
     const scope = button.closest('[data-update-job-scope]');
     const id = String(button.dataset.updateJobRollback || scope?.dataset.updateJobId || '');

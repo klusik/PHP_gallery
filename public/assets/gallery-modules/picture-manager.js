@@ -81,6 +81,7 @@ export function setupPictureManager() {
     if (cards.length === 0) {
         activePictureManager = {
             toolbar,
+            /** Clear the empty-state manager's expanded toolbar marker. */
             teardown() {
                 if (toolbar.dataset.pictureManagerExpanded) {
                     delete toolbar.dataset.pictureManagerExpanded;
@@ -1098,6 +1099,7 @@ export function setupPictureManager() {
 
     activePictureManager = {
         toolbar,
+        /** Release event handlers, drag state, and toolbar state for this manager. */
         teardown() {
             eventController.abort();
             dragSelection = [];

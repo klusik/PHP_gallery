@@ -54,6 +54,11 @@ final class AuthenticationSchemaUnavailableException extends RuntimeException
 {
     private string $feature;
 
+    /**
+     * Create a bounded storage-unavailable exception for an authentication feature.
+     *
+     * @param string $feature Stable authentication feature identifier.
+     */
     public function __construct(string $feature)
     {
         $this->feature = preg_match('/^[a-z0-9_]+$/', $feature) === 1 ? $feature : 'authentication';

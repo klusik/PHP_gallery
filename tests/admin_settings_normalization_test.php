@@ -30,16 +30,25 @@ declare(strict_types=1);
 
 $GLOBALS['admin_settings_test_store'] = [];
 
+/**
+ * Read an application setting from the test-local in-memory store.
+ */
 function app_setting(string $key, ?string $default = null): ?string
 {
     return array_key_exists($key, $GLOBALS['admin_settings_test_store']) ? (string) $GLOBALS['admin_settings_test_store'][$key] : $default;
 }
 
+/**
+ * Persist an application setting in the test-local in-memory store.
+ */
 function set_app_setting(string $key, string $value): void
 {
     $GLOBALS['admin_settings_test_store'][$key] = $value;
 }
 
+/**
+ * Build the minimal Admin URL required by settings normalization tests.
+ */
 function url_for(string $page, array $params = []): string
 {
     return '/index.php?page=' . rawurlencode($page);
@@ -54,6 +63,9 @@ use function Gallery\Services\admin_settings_save_editable_value;
 use function Gallery\Services\browser_upload_normalize_settings;
 use function Gallery\Services\public_thumbnail_rendering_mode_save;
 
+/**
+ * Assert strict equality and report a descriptive settings-test failure.
+ */
 function assert_admin_settings_same(mixed $expected, mixed $actual, string $label): void
 {
     if ($expected !== $actual) {

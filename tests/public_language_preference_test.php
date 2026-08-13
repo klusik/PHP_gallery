@@ -34,16 +34,25 @@
 declare(strict_types=1);
 
 namespace Gallery\Core {
+    /**
+     * Return the language configuration fixture used by this test.
+     */
     function cms_config(): array
     {
         return ['language' => ['default' => 'en', 'available' => ['en', 'cs', 'de', 'sv']]];
     }
 
+    /**
+     * Simulate an unauthenticated public visitor.
+     */
     function current_user(): ?array
     {
         return null;
     }
 
+    /**
+     * Keep cookie assertions on the test's plain-HTTP path.
+     */
     function request_is_https(): bool
     {
         return false;
@@ -53,6 +62,9 @@ namespace Gallery\Core {
 namespace Gallery\Services {
     $GLOBALS['public_language_test_settings'] = [];
 
+    /**
+     * Read a language preference from the test-local settings store.
+     */
     function app_setting(string $key, mixed $default = null): mixed
     {
         if ($key === 'public_language') {
@@ -61,6 +73,9 @@ namespace Gallery\Services {
         return $GLOBALS['public_language_test_settings'][$key] ?? $default;
     }
 
+    /**
+     * Write a language preference to the test-local settings store.
+     */
     function set_app_setting(string $key, string $value): void
     {
         $GLOBALS['public_language_test_settings'][$key] = $value;

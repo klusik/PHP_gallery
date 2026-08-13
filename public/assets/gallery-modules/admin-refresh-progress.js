@@ -341,6 +341,7 @@ function discoveryMoveTargetOptions(container) {
  * @param {HTMLFormElement} form Discovery action form.
  */
 function setupDiscoveryActionControls(form) {
+    /** Synchronize discovery controls with the currently selected action. */
     const update = () => updateDiscoveryActionControls(form);
     form.querySelectorAll('input[name="discovery_action"]').forEach((radio) => {
         radio.addEventListener('change', update);

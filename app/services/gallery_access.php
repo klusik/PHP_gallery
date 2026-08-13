@@ -65,6 +65,13 @@ class PublicSchemaPolicyUnavailableException extends RuntimeException
     private string $schemaState;
     private string $errorCode;
 
+    /**
+     * Create a bounded public-schema policy exception.
+     *
+     * @param string $feature Stable public feature identifier.
+     * @param string $schemaState Confirmed missing or unknown schema state.
+     * @param string $errorCode Safe inspection error category.
+     */
     public function __construct(string $feature, string $schemaState = 'unknown', string $errorCode = 'inspection_failed')
     {
         $this->feature = preg_match('/^[A-Za-z0-9_.-]{1,120}$/D', $feature) === 1 ? $feature : 'public_schema';
@@ -109,6 +116,9 @@ class PublicSchemaPolicyUnavailableException extends RuntimeException
  */
 final class GalleryAccessSchemaUnavailableException extends PublicSchemaPolicyUnavailableException
 {
+    /**
+     * Create an exception for unavailable gallery access schema.
+     */
     public function __construct(string $schemaState = 'unknown', string $errorCode = 'inspection_failed')
     {
         parent::__construct('gallery_access', $schemaState, $errorCode);
@@ -120,6 +130,9 @@ final class GalleryAccessSchemaUnavailableException extends PublicSchemaPolicyUn
  */
 final class GalleryVisibilitySchemaUnavailableException extends PublicSchemaPolicyUnavailableException
 {
+    /**
+     * Create an exception for unavailable gallery visibility schema.
+     */
     public function __construct()
     {
         parent::__construct('gallery_visibility');
@@ -131,6 +144,9 @@ final class GalleryVisibilitySchemaUnavailableException extends PublicSchemaPoli
  */
 final class GalleryShareTokenSchemaUnavailableException extends PublicSchemaPolicyUnavailableException
 {
+    /**
+     * Create an exception for unavailable gallery share-token schema.
+     */
     public function __construct()
     {
         parent::__construct('gallery_share_token');
@@ -366,6 +382,9 @@ function gallery_access_assert_public_policy_available(): void
  */
 final class NsfwGuardSchemaUnavailableException extends PublicSchemaPolicyUnavailableException
 {
+    /**
+     * Create an exception for unavailable NSFW Guard schema.
+     */
     public function __construct()
     {
         parent::__construct('nsfw_guard');

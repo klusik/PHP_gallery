@@ -47,6 +47,14 @@ use RuntimeException;
  */
 final class PresentationSchemaUnavailableException extends RuntimeException
 {
+    /**
+     * Create an exception describing an unavailable presentation capability.
+     *
+     * @param string $feature Stable presentation capability identifier.
+     * @param string $state Observed schema capability state.
+     * @param string $operation Stable attempted-operation identifier.
+     * @param string $message Safe caller-facing exception message.
+     */
     public function __construct(
         private readonly string $feature,
         private readonly string $state,
@@ -56,16 +64,25 @@ final class PresentationSchemaUnavailableException extends RuntimeException
         parent::__construct($message);
     }
 
+    /**
+     * Return the affected presentation feature identifier.
+     */
     public function feature(): string
     {
         return $this->feature;
     }
 
+    /**
+     * Return the observed schema capability state.
+     */
     public function state(): string
     {
         return $this->state;
     }
 
+    /**
+     * Return the attempted operation identifier.
+     */
     public function operation(): string
     {
         return $this->operation;

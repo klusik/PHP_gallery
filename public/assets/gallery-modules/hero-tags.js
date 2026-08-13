@@ -175,6 +175,7 @@ function setupHeroTagRoot(root) {
     // own max-height changes cannot create a ResizeObserver feedback loop.
     let lastObservedWidth = Math.round(root.getBoundingClientRect().width);
     let resizeFrame = 0;
+    /** Coalesce scrollbar measurements into the next animation frame. */
     const scheduleScrollbarSync = () => {
         if (resizeFrame !== 0) {
             cancelAnimationFrame(resizeFrame);

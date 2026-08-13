@@ -8,6 +8,9 @@
 
 declare(strict_types=1);
 
+/**
+ * Assert that dashboard source contains a required deferred-maintenance marker.
+ */
 function assert_admin_dashboard_deferred_contains(string $source, string $needle, string $label): void
 {
     if (!str_contains($source, $needle)) {
