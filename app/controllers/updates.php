@@ -691,6 +691,8 @@ function cms_admin_update(): void
 
     ob_start();
     echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.updates.advanced_kicker', 'Recovery and testing')) . '</p><h2>' . e(t('admin.updates.advanced_tools', 'Advanced tools')) . '</h2></div><p class="muted">' . e(t('admin.updates.advanced_hint', 'Use beta installs and clean reinstall only when you intentionally need to test or repair the deployed code.')) . '</p></div>';
+    echo '<p class="muted admin-update-progress-location">' . e(t('admin.updates.advanced_progress_hint', 'Update progress stays visible here after an advanced operation starts. You can leave and reopen this page; the saved job resumes from its last safe checkpoint.')) . '</p>';
+    cms_render_update_job_card($activeUpdateJob);
     echo '<div class="admin-maintenance-grid admin-update-tools-grid">';
     echo '<article class="admin-maintenance-card admin-update-tool-card"><strong>' . e(t('admin.updates.beta_build')) . '</strong><span>' . e(t('admin.updates.beta_code_help')) . '</span>';
     echo '<form method="post" class="form-grid" data-update-job-form>' . csrf_field();

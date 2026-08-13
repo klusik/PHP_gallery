@@ -1663,7 +1663,17 @@ Open \ui{Theme > Language}. Two independent selectors are available:
   \item \ui{Public visitor language} changes the default interface language shown on public gallery pages. This is a site-wide setting for anonymous visitors.
 \end{itemize}
 
-These choices do not have to match. For example, an administrator may work in Czech while the public gallery uses English, Swedish, or German. A public visitor can also request one of the same four supported languages with an address parameter such as \codeword{?lang=sv}; PHP Gallery remembers that visitor choice in the browser.
+Beside these selections, the reusable \ui{Viewer language selector} panel controls whether public visitors may choose a personal interface language. It appears in both \ui{Theme > Language} and \ui{Settings > General}; both copies edit the same settings and therefore always stay synchronized. The feature is enabled by default. The language checklist underneath it enables English, Czech, German, and Swedish by default, and at least one language must remain selected when the panel is saved.
+
+The checklist controls only the choices offered to public viewers. For example, removing Swedish hides the Swedish button and refuses Swedish viewer overrides, but Swedish remains available as the administrator's language, as the site-wide public default, and in the language-pack editor. Disabling the whole viewer feature removes the public language buttons and makes public pages follow \ui{Public visitor language}; saved viewer query parameters, session choices, and cookies are ignored until the feature is enabled again.
+
+These choices do not have to match. For example, an administrator may work in Czech while the public gallery uses English, Swedish, or German.
+
+Every public page includes a compact language control in the shared header. It uses locally bundled SVG artwork for the United Kingdom, Czechia, Germany, and Sweden as visual cues for English, Czech, German, and Swedish. Each control retains the language's native name as its accessible label, so the choice does not depend on recognizing a national flag. Selecting a language keeps the visitor on the same gallery or public page, including applicable filters, and remembers the per-viewer choice in that browser for later visits. The equivalent address parameter, such as \codeword{?lang=sv}, remains supported for direct links and no-JavaScript use.
+
+The flag files are stored under \filepath{public/assets/flags/} and are served by the gallery itself; the visitor's browser does not contact an external flag service. The artwork is pinned from \codeword{lipis/flag-icons} version 7.2.3 and is distributed under the bundled MIT license in \filepath{public/assets/flags/LICENSE.flag-icons.md}.
+
+When the viewer feature is enabled, the menu also provides \ui{Use site default}. This removes the visitor's personal override from both the current session and the browser cookie. The public interface then follows the administrator's \ui{Public visitor language} setting again, including any later change to that site-wide default. This preference changes application wording only; it does not change access permissions or translate owner-written gallery content.
 
 \subsubsection{Available languages and their current state}
 \index{language!English}
@@ -1910,7 +1920,9 @@ Administrators should still include the database and the \filepath{data/admin-lo
 
 \subsection{Application updates}
 
-The updater checks configured channels, validates packages, stages content, verifies required runtime files and sizes, preserves overwritten files in recovery storage, and activates the update. Rate-limit handling and retry state prevent repeated remote requests during provider wait periods.
+The updater checks configured channels, validates packages, stages content, verifies required runtime files and sizes, preserves overwritten files in recovery storage, and activates the update. Rate-limit handling and retry state prevent repeated remote requests during provider wait periods. A resumable job card appears in both \ui{Status} and \ui{Advanced tools}, so a beta install, restore, or reinstall continues to show its progress where it was started. The page may be closed and reopened without discarding completed checkpoints.
+
+Temporary download or hosting failures may be retried safely. A package whose files do not match its own integrity manifest is different: downloading the same published build again cannot change those bytes. PHP Gallery therefore asks the administrator to cancel that prepared job and choose a newer release or beta code instead of offering an endless retry loop.
 
 \important{Run a coordinated backup before an application update. Keep the backup available until runtime checks, migrations, public galleries, protected access, uploads, and Admin operations have been verified.}
 
@@ -2081,7 +2093,7 @@ Foreign keys express ownership where schema evolution and compatibility permit i
 
 \subsection{Application settings}
 
-The \codeword{app_settings} table stores key-value configuration. \codeword{app_setting()} reads values, \codeword{set_app_setting()} persists normalized values, and focused services interpret domain-specific settings. The public thumbnail renderer uses \setting{public_thumbnail_rendering_mode} with \setting{responsive} and \setting{progressive} values.
+The \codeword{app_settings} table stores key-value configuration. \codeword{app_setting()} reads values, \codeword{set_app_setting()} persists normalized values, and focused services interpret domain-specific settings. Public language configuration uses \setting{public_language} for the site default, \setting{public_language_selector_enabled} for the default-on viewer override feature, and \setting{public_language_selector_languages} for its ordered non-empty language list. The public thumbnail renderer uses \setting{public_thumbnail_rendering_mode} with \setting{responsive} and \setting{progressive} values.
 
 \section{Optional reference for developers}
 \label{sec:development}

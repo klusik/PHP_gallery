@@ -4246,5 +4246,18 @@
   "upload_automation.title": "API pro upload sledované složky",
   "vote.error.too_many_votes": "Hlasujete příliš rychle. Zkuste to za chvíli znovu.",
   "vote.like": "To se mi líbí",
-  "vote.no_like": "Bez hlasu"
+  "vote.no_like": "Bez hlasu",
+  "public.language.selector_label": "Jazyk",
+  "public.language.use_site_default": "Použít výchozí nastavení webu",
+  "admin.settings.item.public_language_selector_enabled": "Přepínač jazyka návštěvníka",
+  "admin.settings.item.public_language_selector_enabled.hint": "Povolit návštěvníkům veřejné části zvolit si jazyk rozhraní.",
+  "admin.settings.item.public_language_selector_languages": "Jazyky návštěvníků",
+  "admin.settings.item.public_language_selector_languages.hint": "Udržované jazyky nabízené ve veřejném přepínači jazyků.",
+  "admin.theme.language.viewer_selector_title": "Přepínač jazyka návštěvníka",
+  "admin.theme.language.viewer_selector_hint": "Zobrazit tlačítka jazyků na veřejných stránkách a zvolit, které udržované jazyky mohou návštěvníci použít.",
+  "admin.theme.language.viewer_selector_enabled": "Povolit návštěvníkům volbu jazyka rozhraní",
+  "admin.theme.language.viewer_languages_legend": "Jazyky dostupné návštěvníkům",
+  "admin.theme.language.viewer_languages_hint": "Vyberte alespoň jeden jazyk. Tato volba ovlivňuje pouze veřejný přepínač; všechny udržované jazyky zůstávají dostupné správcům a překladovým nástrojům.",
+  "admin.theme.language.viewer_languages_required": "Povolte alespoň jeden jazyk návštěvníka.",
+  "admin.updates.advanced_progress_hint": "Po spuštění pokročilé operace zde zůstane zobrazen její průběh. Tuto stránku můžete opustit a znovu otevřít; uložená úloha bude pokračovat od posledního bezpečného kontrolního bodu."
 }

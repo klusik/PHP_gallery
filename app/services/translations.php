@@ -32,7 +32,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-08-12
+ *   2026-08-13
  */
 
 declare(strict_types=1);
@@ -47,6 +47,26 @@ const CMS_LANGUAGE_COOKIE = 'cms_language';
 const CMS_ADMIN_LANGUAGE_COOKIE = 'cms_admin_language';
 const CMS_PUBLIC_LANGUAGE_COOKIE = 'cms_public_language';
 const CMS_SELECTABLE_LANGUAGES = ['en', 'cs', 'de', 'sv'];
+const CMS_PUBLIC_LANGUAGE_SELECTOR_ENABLED_KEY = 'public_language_selector_enabled';
+const CMS_PUBLIC_LANGUAGE_SELECTOR_LANGUAGES_KEY = 'public_language_selector_languages';
+
+/**
+ * Return stable presentation metadata for maintained selectable languages.
+ *
+ * Flags are a compact visual aid only. Public controls must expose the native
+ * language name through accessible labels so language selection is not flag-only.
+ *
+ * @return array<string,array{name:string,flag_asset:string}>
+ */
+function translation_language_presentation(): array
+{
+    return [
+        'en' => ['name' => 'English', 'flag_asset' => 'assets/flags/gb.svg'],
+        'cs' => ['name' => 'Čeština', 'flag_asset' => 'assets/flags/cz.svg'],
+        'de' => ['name' => 'Deutsch', 'flag_asset' => 'assets/flags/de.svg'],
+        'sv' => ['name' => 'Svenska', 'flag_asset' => 'assets/flags/se.svg'],
+    ];
+}
 
 /**
  * Return the directory where application language files are stored.
@@ -239,6 +259,111 @@ function translation_language_allowed(string $language): bool
 }
 
 /**
+ * Return whether visitors may choose a personal public interface language.
+ *
+ * Missing storage means enabled so existing and new installations retain the
+ * established public selector behavior until an administrator opts out.
+ */
+function translation_public_language_selector_enabled(): bool
+{
+    if (!function_exists('Gallery\\Services\\app_setting')) {
+        return true;
+    }
+    return (string) app_setting(CMS_PUBLIC_LANGUAGE_SELECTOR_ENABLED_KEY, '1') !== '0';
+}
+
+/**
+ * Return the maintained languages exposed by the public viewer selector.
+ *
+ * @return array<int,string> Ordered selectable language codes.
+ */
+function translation_public_language_selector_languages(): array
+{
+    $supported = translation_supported_languages();
+    if (!function_exists('Gallery\\Services\\app_setting')) {
+        return $supported;
+    }
+
+    $stored = trim((string) app_setting(CMS_PUBLIC_LANGUAGE_SELECTOR_LANGUAGES_KEY, ''));
+    if ($stored === '') {
+        return $supported;
+    }
+    $decoded = json_decode($stored, true);
+    $candidates = is_array($decoded) ? $decoded : preg_split('/[\s,]+/', $stored, -1, PREG_SPLIT_NO_EMPTY);
+    if (!is_array($candidates)) {
+        return $supported;
+    }
+
+    $enabled = [];
+    foreach ($candidates as $candidate) {
+        $language = translation_normalize_language_code((string) $candidate);
+        if ($language !== '' && in_array($language, $supported, true)) {
+            $enabled[$language] = true;
+        }
+    }
+
+    $resolved = array_values(array_filter(
+        $supported,
+        static fn (string $language): bool => isset($enabled[$language])
+    ));
+    return $resolved !== [] ? $resolved : $supported;
+}
+
+/**
+ * Return whether one language may be selected by a public visitor.
+ */
+function translation_public_language_selector_language_allowed(string $language): bool
+{
+    $language = translation_normalize_language_code($language);
+    return $language !== ''
+        && translation_public_language_selector_enabled()
+        && in_array($language, translation_public_language_selector_languages(), true);
+}
+
+/**
+ * Normalize one submitted public viewer-language selection.
+ *
+ * @param mixed $languages Submitted language-code list.
+ * @return array<int,string> Ordered unique maintained language codes.
+ */
+function translation_public_language_selector_normalize_languages(mixed $languages): array
+{
+    if (!is_array($languages)) {
+        $languages = [];
+    }
+    $submitted = [];
+    foreach ($languages as $language) {
+        $normalized = translation_normalize_language_code((string) $language);
+        if ($normalized !== '' && translation_language_allowed($normalized)) {
+            $submitted[$normalized] = true;
+        }
+    }
+
+    return array_values(array_filter(
+        translation_supported_languages(),
+        static fn (string $language): bool => isset($submitted[$language])
+    ));
+}
+
+/**
+ * Persist the complete public viewer-language selector configuration.
+ *
+ * @param array<int,string> $languages Maintained language codes.
+ */
+function translation_save_public_language_selector_settings(bool $enabled, array $languages): void
+{
+    $languages = translation_public_language_selector_normalize_languages($languages);
+    if ($languages === []) {
+        throw new \InvalidArgumentException(t('admin.theme.language.viewer_languages_required', 'Enable at least one viewer language.'));
+    }
+    if (!function_exists('Gallery\\Services\\set_app_setting')) {
+        return;
+    }
+    set_app_setting(CMS_PUBLIC_LANGUAGE_SELECTOR_ENABLED_KEY, $enabled ? '1' : '0');
+    set_app_setting(CMS_PUBLIC_LANGUAGE_SELECTOR_LANGUAGES_KEY, (string) json_encode($languages, JSON_UNESCAPED_SLASHES));
+}
+
+/**
  * Return true when a route belongs to the administration interface.
  *
  * @param string $route Route value.
@@ -318,9 +443,29 @@ function translation_bootstrap_request(?string $route = null): void
     }
 
     $selected = '';
-    if (isset($_GET['lang'])) {
-        $candidate = translation_normalize_language_code((string) $_GET['lang']);
-        if ($candidate !== '' && translation_language_allowed($candidate)) {
+    // The browser i18n controller uses lang as an immutable asset cache key.
+    // It must never create or reset a viewer preference merely because a page
+    // loaded its translated JavaScript payload.
+    $acceptViewerLanguageRequest = $route !== 'browser_i18n' && translation_public_language_selector_enabled();
+    if ($acceptViewerLanguageRequest && isset($_GET['lang'])) {
+        $requestedLanguage = strtolower(trim((string) $_GET['lang']));
+        if ($requestedLanguage === 'default') {
+            unset($_SESSION['cms_public_language_override']);
+            unset($_COOKIE[CMS_PUBLIC_LANGUAGE_COOKIE]);
+            if (!headers_sent()) {
+                setcookie(CMS_PUBLIC_LANGUAGE_COOKIE, '', [
+                    'expires' => time() - 3600,
+                    'path' => '/',
+                    'secure' => request_is_https(),
+                    'httponly' => false,
+                    'samesite' => 'Lax',
+                ]);
+            }
+            $selected = translation_public_language();
+        }
+
+        $candidate = translation_normalize_language_code($requestedLanguage);
+        if ($selected === '' && $candidate !== '' && translation_public_language_selector_language_allowed($candidate)) {
             $selected = $candidate;
             $_SESSION['cms_public_language_override'] = $selected;
             if (!headers_sent()) {
@@ -337,14 +482,14 @@ function translation_bootstrap_request(?string $route = null): void
 
     if ($selected === '') {
         $candidate = translation_normalize_language_code((string) ($_SESSION['cms_public_language_override'] ?? ''));
-        if ($candidate !== '' && translation_language_allowed($candidate)) {
+        if ($candidate !== '' && translation_public_language_selector_language_allowed($candidate)) {
             $selected = $candidate;
         }
     }
 
     if ($selected === '') {
         $candidate = translation_normalize_language_code((string) ($_COOKIE[CMS_PUBLIC_LANGUAGE_COOKIE] ?? ''));
-        if ($candidate !== '' && translation_language_allowed($candidate)) {
+        if ($candidate !== '' && translation_public_language_selector_language_allowed($candidate)) {
             $selected = $candidate;
             $_SESSION['cms_public_language_override'] = $selected;
         }
@@ -355,6 +500,59 @@ function translation_bootstrap_request(?string $route = null): void
     }
 
     $_SESSION['cms_language'] = $selected;
+}
+
+/**
+ * Return whether the public visitor currently has a valid personal override.
+ */
+function translation_public_language_override_active(): bool
+{
+    if (!translation_public_language_selector_enabled()) {
+        return false;
+    }
+    $sessionLanguage = translation_normalize_language_code((string) ($_SESSION['cms_public_language_override'] ?? ''));
+    if ($sessionLanguage !== '' && translation_public_language_selector_language_allowed($sessionLanguage)) {
+        return true;
+    }
+
+    $cookieLanguage = translation_normalize_language_code((string) ($_COOKIE[CMS_PUBLIC_LANGUAGE_COOKIE] ?? ''));
+    return $cookieLanguage !== '' && translation_public_language_selector_language_allowed($cookieLanguage);
+}
+
+/**
+ * Build a same-page public language link while preserving route state.
+ *
+ * Only the language parameter is replaced. The cookie established by the next
+ * request carries the selection to later pages without polluting ordinary URLs.
+ */
+function translation_public_language_url(string $language): string
+{
+    $language = strtolower(trim($language));
+    if ($language !== 'default') {
+        $language = translation_normalize_language_code($language);
+        if ($language === '' || !translation_public_language_selector_language_allowed($language)) {
+            $language = translation_public_language();
+        }
+    }
+
+    $requestUri = (string) ($_SERVER['REQUEST_URI'] ?? '');
+    $parts = parse_url($requestUri);
+    $path = is_array($parts) ? (string) ($parts['path'] ?? '') : '';
+    if ($path === '') {
+        $path = (string) ($_SERVER['SCRIPT_NAME'] ?? '/index.php');
+    }
+
+    $query = [];
+    if (is_array($parts)) {
+        parse_str((string) ($parts['query'] ?? ''), $query);
+    }
+    $query['lang'] = $language;
+
+    $url = $path . '?' . http_build_query($query, '', '&', PHP_QUERY_RFC3986);
+    if (is_array($parts) && isset($parts['fragment'])) {
+        $url .= '#' . rawurlencode((string) $parts['fragment']);
+    }
+    return $url;
 }
 
 /**

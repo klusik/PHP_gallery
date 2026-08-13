@@ -50,11 +50,19 @@ function stageLabel(stage) {
     return STAGE_LABELS[stage] || String(stage || '').replaceAll('_', ' ').replace(/^./, (value) => value.toUpperCase());
 }
 
-function findUpdateScope(context = document) {
+function findUpdateScopes(context = document) {
     if (context instanceof Element && context.matches('[data-update-job-scope]')) {
-        return context;
+        return [context];
     }
-    return context.querySelector?.('[data-update-job-scope]') || document.querySelector('[data-update-job-scope]');
+    const localScopes = Array.from(context.querySelectorAll?.('[data-update-job-scope]') || []);
+    if (localScopes.length > 0 || context === document) {
+        return localScopes;
+    }
+    return Array.from(document.querySelectorAll('[data-update-job-scope]'));
+}
+
+function findUpdateScope(context = document) {
+    return findUpdateScopes(context)[0] || null;
 }
 
 function csrfTokenFrom(context) {
@@ -80,10 +88,23 @@ function ensureScopeMarkup(scope) {
 }
 
 function renderJob(job, context = document) {
-    const scope = findUpdateScope(context) || findUpdateScope(document);
-    if (!scope || !job || !job.id) {
+    if (!job || !job.id) {
         return;
     }
+    const documentScopes = findUpdateScopes(document);
+    const scopes = documentScopes.length > 0 ? documentScopes : findUpdateScopes(context);
+    for (const scope of scopes) {
+        renderJobInScope(scope, job);
+    }
+}
+
+/**
+ * Render one synchronized copy of the durable job card.
+ *
+ * Status and Advanced tools intentionally contain the same job surface so an
+ * operation remains visible in the tab where the administrator launched it.
+ */
+function renderJobInScope(scope, job) {
     ensureScopeMarkup(scope);
     scope.hidden = false;
     scope.dataset.updateJobId = String(job.id);
@@ -118,7 +139,7 @@ function renderJob(job, context = document) {
     const actions = scope.querySelector('[data-update-job-actions]');
     if (actions) {
         actions.replaceChildren();
-        if (job.status === 'failed') {
+        if (job.status === 'failed' && job.can_resume !== false) {
             const retry = document.createElement('button');
             retry.type = 'button';
             retry.className = 'button secondary';

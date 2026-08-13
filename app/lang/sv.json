@@ -4246,5 +4246,18 @@
   "upload_automation.title": "API för uppladdning från bevakad mapp",
   "vote.error.too_many_votes": "För många röster. Försök igen om en stund.",
   "vote.like": "Gilla",
-  "vote.no_like": "Inte gilla"
+  "vote.no_like": "Inte gilla",
+  "public.language.selector_label": "Språk",
+  "public.language.use_site_default": "Använd webbplatsens standard",
+  "admin.settings.item.public_language_selector_enabled": "Språkväljare för besökare",
+  "admin.settings.item.public_language_selector_enabled.hint": "Tillåt offentliga besökare att välja ett personligt gränssnittsspråk.",
+  "admin.settings.item.public_language_selector_languages": "Besökarspråk",
+  "admin.settings.item.public_language_selector_languages.hint": "Underhållna språk som erbjuds i den offentliga språkväljaren.",
+  "admin.theme.language.viewer_selector_title": "Språkväljare för besökare",
+  "admin.theme.language.viewer_selector_hint": "Visa språkknappar på offentliga sidor och välj vilka underhållna språk besökare får använda.",
+  "admin.theme.language.viewer_selector_enabled": "Tillåt besökare att välja gränssnittsspråk",
+  "admin.theme.language.viewer_languages_legend": "Språk tillgängliga för besökare",
+  "admin.theme.language.viewer_languages_hint": "Välj minst ett språk. Valen påverkar bara den offentliga språkväljaren; alla underhållna språk förblir tillgängliga för administratörer och översättningsverktyg.",
+  "admin.theme.language.viewer_languages_required": "Aktivera minst ett besökarspråk.",
+  "admin.updates.advanced_progress_hint": "Uppdateringsförloppet förblir synligt här när en avancerad åtgärd har startats. Du kan lämna och öppna sidan igen; det sparade jobbet fortsätter från den senaste säkra kontrollpunkten."
 }

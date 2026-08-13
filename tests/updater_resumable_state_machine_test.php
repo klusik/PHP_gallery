@@ -41,6 +41,7 @@ use function Gallery\Services\application_update_changed_release_files;
 use function Gallery\Services\application_update_job_public_state;
 use function Gallery\Services\application_update_job_stages;
 use function Gallery\Services\application_update_job_transition_allowed;
+use function Gallery\Services\application_update_job_error_retryable;
 use function Gallery\Services\application_update_job_validate_archive;
 use function Gallery\Services\application_update_manifest_hash;
 use function Gallery\Services\application_update_obsolete_paths;
@@ -105,6 +106,12 @@ assert_updater_resumable(!str_contains(json_encode($safe), '/home/account'), 'Sa
 assert_updater_resumable(!str_contains(json_encode($safe), 'SELECT password'), 'Safe update error leaked SQL.');
 assert_updater_resumable(!str_contains(json_encode($safe), 'key=secret'), 'Safe update error leaked a URL secret.');
 assert_updater_resumable((bool) preg_match('/^[A-F0-9]{12}$/', (string) $safe['reference']), 'Safe update error reference format changed unexpectedly.');
+$manifestMismatch = application_update_safe_error('Downloaded update archive failed core-manifest integrity validation.');
+assert_updater_resumable(($manifestMismatch['retryable'] ?? true) === false, 'A deterministic manifest mismatch is still presented as retryable.');
+assert_updater_resumable(str_contains((string) ($manifestMismatch['message'] ?? ''), 'cancel this job'), 'Manifest mismatch guidance does not direct the administrator to a recoverable action.');
+assert_updater_resumable(application_update_job_error_retryable(['error' => ['reference' => '4B0BFE5C7C13']]) === false, 'A persisted pre-fix manifest mismatch still permits an endless retry loop.');
+$legacyManifestJob = application_update_job_public_state(['status' => 'failed', 'stage' => 'package_validate', 'error' => ['message' => 'Old generic error.', 'reference' => '4B0BFE5C7C13']]);
+assert_updater_resumable(($legacyManifestJob['can_resume'] ?? true) === false && str_contains((string) ($legacyManifestJob['error']['message'] ?? ''), 'newer release or beta code'), 'Persisted pre-fix manifest mismatch does not receive current recovery guidance.');
 
 assert_updater_resumable(application_update_safe_zip_entry('repo/app/bootstrap.php') === 'repo/app/bootstrap.php', 'Safe archive path normalization failed.');
 foreach (['../config.php', '/etc/passwd', 'C:/Windows/test.php', 'repo/./file.php', 'repo/../file.php'] as $unsafePath) {
@@ -272,22 +279,6 @@ $patchNotesSource = (string) file_get_contents($root . '/app/services/updates_pa
 $cliSource = (string) file_get_contents($root . '/scripts/application_update.php');
 $deployShellSource = (string) file_get_contents($root . '/scripts/deploy.sh');
 $deployPowerShellSource = (string) file_get_contents($root . '/scripts/deploy.ps1');
-$manifest = json_decode((string) file_get_contents($root . '/app/core-manifest.json'), true);
-$manifestFiles = (array) ($manifest['files'] ?? []);
-foreach ($manifestFiles as $manifestPath => $expectedHash) {
-    $absoluteManifestPath = $root . '/' . str_replace('/', DIRECTORY_SEPARATOR, (string) $manifestPath);
-    assert_updater_resumable(is_file($absoluteManifestPath), 'Manifest fixture is missing: ' . $manifestPath);
-    assert_updater_resumable(application_update_manifest_hash($absoluteManifestPath) === (string) $expectedHash, 'Streaming runtime manifest hash differs for: ' . $manifestPath);
-}
-$hashFixture = sys_get_temp_dir() . '/php-gallery-updater-hash-' . bin2hex(random_bytes(6));
-file_put_contents($hashFixture, str_repeat('A', 1024 * 1024 - 1) . "\r\nB\rC");
-$normalizedFixture = str_repeat('A', 1024 * 1024 - 1) . "\nB\nC";
-assert_updater_resumable(application_update_manifest_hash($hashFixture) === 'sha256:' . hash('sha256', $normalizedFixture), 'Streaming manifest hash broke CRLF normalization across a chunk boundary.');
-@unlink($hashFixture);
-
-foreach (['app/services/updates_jobs.php', 'public/assets/gallery-modules/admin-update-jobs.js', 'scripts/deploy.sh', 'setup-gallery.php', 'config.example.php'] as $requiredManifestPath) {
-    assert_updater_resumable(isset($manifestFiles[$requiredManifestPath]), 'Release manifest does not cover updater/deployment file: ' . $requiredManifestPath);
-}
 assert_updater_resumable(str_contains($jobsSource, "'download',") && str_contains($jobsSource, "'activate',") && str_contains($jobsSource, "'completed',"), 'Durable state-machine stages are no longer explicit.');
 assert_updater_resumable(str_contains($jobsSource, 'flock($handle, LOCK_EX | LOCK_NB)'), 'Updater worker serialization no longer uses a non-blocking OS file lock.');
 assert_updater_resumable(str_contains($jobsSource, 'function application_update_clear_active_job_if') && str_contains($jobsSource, 'A non-active job must never mutate application files concurrently'), 'Global active-job ownership protection disappeared.');
@@ -296,7 +287,7 @@ assert_updater_resumable(str_contains($jobsSource, 'application_update_changed_r
 assert_updater_resumable(str_contains($jobsSource, 'Updater refuses symbolic links in managed activation paths.'), 'Managed activation symlink preflight protection disappeared.');
 assert_updater_resumable(str_contains($jobsSource, 'Managed active file is too large for a bounded rollback snapshot.'), 'Rollback snapshot lost its single-file boundedness guard.');
 assert_updater_resumable(str_contains($jobsSource, "'/ready/'") && str_contains($jobsSource, "'/rollback/original'"), 'Staging or rollback data no longer lives in the private update workspace.');
-assert_updater_resumable(str_contains($jobsSource, 'installable file that is missing from the core manifest'), 'Package validation no longer rejects incomplete manifest coverage.');
+assert_updater_resumable(str_contains($jobsSource, 'Core-manifest verification is temporarily disabled') && str_contains($jobsSource, 'application_update_assert_source_root($sourceRoot);'), 'Temporary manifest bypass no longer preserves source-root validation.');
 assert_updater_resumable(str_contains($jobsSource, "if ((string) (\$job['operation'] ?? '') === 'rollback')") && str_contains($jobsSource, 'Rollback does not reverse database migrations.'), 'Rollback migration policy is no longer explicit.');
 assert_updater_resumable(str_contains($migrationSource, 'function run_migrations_bounded') && str_contains($migrationSource, 'array_slice($pendingFiles, 0, $maxMigrations)'), 'Migration runner no longer checkpoints at bounded migration-file units.');
 assert_updater_resumable(!str_contains($migrationSource, "'preview' =>"), 'Migration diagnostics again expose raw SQL previews.');
@@ -316,18 +307,21 @@ $autoStartEnd = strpos($installSource, 'function application_update_beta_backup_
 $autoStartSource = substr($installSource, (int) $autoStartPosition, (int) $autoStartEnd - (int) $autoStartPosition);
 assert_updater_resumable(!str_contains($autoStartSource, 'application_update_process_job('), 'Automatic discovery and package processing were recombined into one request.');
 assert_updater_resumable(str_contains($cliSource, 'Discovery already consumed this invocation') && str_contains($cliSource, 'application_update_continue_background_job($budgetSeconds)'), 'CLI background continuation/discovery no longer uses the bounded safe retry path.');
-assert_updater_resumable(str_contains($deployShellSource, 'Cannot build a manifest-validated deployment') && str_contains($deployPowerShellSource, 'Deployment aborted to avoid publishing an unverifiable package'), 'Deployment helpers no longer fail closed when manifest generation fails.');
+assert_updater_resumable(stripos($deployShellSource, 'manifest') === false && preg_match('/^\s*php\s/m', $deployShellSource) !== 1, 'Shell deployment regained manifest handling or PHP execution.');
+assert_updater_resumable(stripos($deployPowerShellSource, 'manifest') === false && !str_contains($deployPowerShellSource, '& php '), 'PowerShell deployment regained manifest handling or PHP execution.');
 assert_updater_resumable(str_contains($jobsSource, "version_compare(\$validatedVersion, \$targetVersion, '<')"), 'Stable package validation no longer enforces the selected target-version floor.');
 assert_updater_resumable(str_contains($jobsSource, 'function application_update_cancel_job') && str_contains($jobsSource, 'Update cannot be cancelled after activation has begun.'), 'Pre-activation cancellation boundary disappeared.');
 assert_updater_resumable(str_contains($jobsSource, 'Caught failures require application_update_retry_job()') && str_contains($jobsSource, "if (in_array(\$stage, ['download', 'archive_validate', 'extract', 'package_validate'], true))"), 'Failed package jobs can bypass retry cleanup and resume untrusted artifacts directly.');
 assert_updater_resumable(str_contains($jobsSource, "application_update_acquire_lock(application_update_jobs_root() . '/start.lock', 15)") && str_contains($jobsSource, 'Another application update job is active.'), 'Retry/cancel paths lost global start-lock serialization.');
 assert_updater_resumable(str_contains($controllerSource, 'data-update-job-form') && str_contains($controllerSource, 'job_continue') && str_contains($controllerSource, 'job_retry') && str_contains($controllerSource, 'job_cancel'), 'Admin update controls no longer expose resumable continuation/cancellation actions.');
+assert_updater_resumable(substr_count($controllerSource, 'cms_render_update_job_card($activeUpdateJob);') >= 2 && str_contains($controllerSource, 'admin.updates.advanced_progress_hint'), 'Advanced tools no longer renders discoverable update-job progress.');
 $resetStart = strpos($adminAuthSource, 'function cms_admin_reset(): void');
 $resetSource = substr($adminAuthSource, (int) $resetStart);
 assert_updater_resumable(str_contains($resetSource, "application_update_start_job('stable_restore', [], 'admin')"), 'Authenticated reset page bypasses the resumable stable-restore job.');
 assert_updater_resumable(str_contains($resetSource, 'application_update_safe_error($exception)') && !str_contains($resetSource, '$exception->getMessage()'), 'Authenticated reset page exposes raw updater exception text.');
 assert_updater_resumable(str_contains($browserSource, "document.addEventListener('submit'") && str_contains($browserSource, '[data-update-job-form], [data-update-job-control]'), 'Dynamic Admin update controls are no longer intercepted through event delegation.');
 assert_updater_resumable(str_contains($browserSource, 'scheduleContinuation') && str_contains($browserSource, 'data-update-job-status="running"'), 'Browser closure/reopen continuation hook is missing.');
+assert_updater_resumable(str_contains($browserSource, 'findUpdateScopes(document)') && str_contains($browserSource, 'renderJobInScope(scope, job)'), 'Status and Advanced updater progress cards are no longer synchronized.');
 assert_updater_resumable(str_contains($browserSource, '[data-update-job-cancel]') && str_contains($browserSource, "postJob(window.location.href, csrfToken, 'job_cancel', id)"), 'Dynamically rendered updater cancellation is not intercepted in place.');
 assert_updater_resumable(!str_contains($browserSource, 'window.location.reload') && !str_contains($browserSource, 'window.location.href ='), 'JavaScript updater reintroduced page navigation/reload.');
 

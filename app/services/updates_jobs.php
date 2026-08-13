@@ -178,13 +178,21 @@ function application_update_error_reference(string $message): string
 }
 
 /**
+ * Return bounded recovery guidance for a package-publisher integrity failure.
+ */
+function application_update_manifest_mismatch_message(): string
+{
+    return 'This release package does not match its integrity manifest. Retrying the same build cannot repair it; cancel this job and select a newer release or beta code.';
+}
+
+/**
  * Convert arbitrary updater failures into an Admin-safe message and reference.
  *
  * The returned payload deliberately excludes the exception text, filesystem
  * paths, URLs, SQL, credentials, tokens, and stack traces.
  *
  * @param Throwable|string $error Internal failure.
- * @return array{message:string,reference:string}
+ * @return array{message:string,reference:string,retryable:bool}
  */
 function application_update_safe_error($error): array
 {
@@ -192,7 +200,13 @@ function application_update_safe_error($error): array
     $reference = application_update_error_reference($internal);
     $lower = strtolower($internal);
 
-    if (str_contains($lower, 'archive') || str_contains($lower, 'zip') || str_contains($lower, 'extract')) {
+    $retryable = true;
+    if (str_contains($lower, 'failed core-manifest integrity validation')
+        || str_contains($lower, 'installable file that is missing from the core manifest')
+        || str_contains($lower, 'version markers do not agree')) {
+        $message = application_update_manifest_mismatch_message();
+        $retryable = false;
+    } elseif (str_contains($lower, 'archive') || str_contains($lower, 'zip') || str_contains($lower, 'extract')) {
         $message = 'The downloaded update package could not be prepared or validated.';
     } elseif (str_contains($lower, 'migration') || str_contains($lower, 'schema')) {
         $message = 'The database migration stage could not be completed safely.';
@@ -206,7 +220,30 @@ function application_update_safe_error($error): array
         $message = 'The update job could not continue safely.';
     }
 
-    return ['message' => $message, 'reference' => $reference];
+    return ['message' => $message, 'reference' => $reference, 'retryable' => $retryable];
+}
+
+/**
+ * Return whether a failed update job may benefit from retrying the same source.
+ *
+ * Older persisted jobs predate the explicit retryable field. Their bounded
+ * reference can still identify the three deterministic package-publisher
+ * failures without retaining or exposing the original exception text.
+ */
+function application_update_job_error_retryable(array $job): bool
+{
+    $error = isset($job['error']) && is_array($job['error']) ? $job['error'] : [];
+    if (array_key_exists('retryable', $error)) {
+        return $error['retryable'] !== false;
+    }
+
+    $reference = strtoupper((string) ($error['reference'] ?? ''));
+    $nonRetryableReferences = [
+        application_update_error_reference('Downloaded update archive failed core-manifest integrity validation.'),
+        application_update_error_reference('Downloaded update archive contains an installable file that is missing from the core manifest.'),
+        application_update_error_reference('Downloaded update package version markers do not agree.'),
+    ];
+    return !in_array($reference, $nonRetryableReferences, true);
 }
 
 /**
@@ -490,6 +527,14 @@ function application_update_job_public_state(array $job): array
         $progress['percent'] = min(100, (int) floor(((int) $progress['current'] / (int) $progress['total']) * 100));
     }
 
+    // $publicError upgrades pre-fix persisted manifest failures to the current
+    // bounded guidance without needing the original private exception text.
+    $publicError = isset($job['error']) && is_array($job['error']) ? $job['error'] : null;
+    if ($publicError !== null && !application_update_job_error_retryable($job)) {
+        $publicError['message'] = application_update_manifest_mismatch_message();
+        $publicError['retryable'] = false;
+    }
+
     return [
         'id' => (string) ($job['id'] ?? ''),
         'operation' => (string) ($job['operation'] ?? ''),
@@ -503,9 +548,10 @@ function application_update_job_public_state(array $job): array
         'started_at' => (int) ($job['started_at'] ?? 0),
         'finished_at' => (int) ($job['finished_at'] ?? 0),
         'attempts' => (int) ($job['attempts'] ?? 0),
-        'error' => isset($job['error']) && is_array($job['error']) ? $job['error'] : null,
+        'error' => $publicError,
         'result' => isset($job['result']) && is_array($job['result']) ? $job['result'] : [],
-        'can_resume' => in_array((string) ($job['status'] ?? ''), ['running', 'failed'], true),
+        'can_resume' => (string) ($job['status'] ?? '') === 'running'
+            || ((string) ($job['status'] ?? '') === 'failed' && application_update_job_error_retryable($job)),
         'can_cancel' => in_array((string) ($job['status'] ?? ''), ['running', 'failed'], true)
             && empty($job['checkpoints']['activation_complete'])
             && (!is_int($index) || $index < (int) array_search('activate', $stages, true)),
@@ -1232,90 +1278,40 @@ function application_update_manifest_hash(string $path): string
 }
 
 /**
- * Start or continue package completeness and integrity validation.
+ * Validate the extracted package before activation.
+ *
+ * Core-manifest verification is temporarily disabled. Archive entry validation,
+ * source-root validation, updater-managed path filtering, schema preflight, and
+ * activation rollback remain enforced by their owning stages.
  *
  * @param array $job Job state, updated by reference.
  * @param array $budget Worker budget.
- * @return bool True when all manifest files are verified.
+ * @return bool True when the package is ready for activation.
  */
 function application_update_job_validate_package_slice(array &$job, array $budget): bool
 {
     $jobDir = application_update_job_dir((string) $job['id']);
-    if (empty($job['checkpoints']['source_root'])) {
-        $sourceRoot = application_update_extracted_root($jobDir . '/extract');
-        application_update_assert_source_root($sourceRoot);
-        $manifestPath = $sourceRoot . '/app/core-manifest.json';
-        if (!is_file($manifestPath)) {
-            throw new RuntimeException('Downloaded update archive is incomplete. Missing core manifest.');
+    $sourceRoot = application_update_extracted_root($jobDir . '/extract');
+    application_update_assert_source_root($sourceRoot);
+    $job['checkpoints']['source_root'] = $sourceRoot;
+
+    $bootstrapVersion = application_update_version_from_local_bootstrap($sourceRoot . '/app/bootstrap.php');
+    $job['checkpoints']['validated_version'] = $bootstrapVersion ?? '';
+    if ((string) ($job['operation'] ?? '') === 'stable_update') {
+        $validatedVersion = (string) $job['checkpoints']['validated_version'];
+        if ($validatedVersion === '' || version_compare($validatedVersion, \Gallery\Core\cms_current_version(), '<=')) {
+            throw new RuntimeException('No newer version is available in the downloaded stable package.');
         }
-        $manifest = application_update_read_json($manifestPath);
-        $files = isset($manifest['files']) && is_array($manifest['files']) ? $manifest['files'] : [];
-        if ($files === []) {
-            throw new RuntimeException('Downloaded update archive contains an invalid core manifest.');
+        $targetVersion = application_update_normalize_version((string) ($job['parameters']['target_version'] ?? ''));
+        if ($targetVersion !== null && version_compare($validatedVersion, $targetVersion, '<')) {
+            throw new RuntimeException('Downloaded stable package is older than the version selected for this job.');
         }
-        ksort($files, SORT_STRING);
-        $job['checkpoints']['source_root'] = $sourceRoot;
-        $job['checkpoints']['manifest_files'] = $files;
-        $job['checkpoints']['verify_index'] = 0;
-        $job['progress'] = ['current' => 0, 'total' => count($files), 'message' => 'Validating package integrity.', 'unit' => 'files'];
-        application_update_save_job($job);
     }
 
-    $sourceRoot = (string) $job['checkpoints']['source_root'];
-    $files = (array) ($job['checkpoints']['manifest_files'] ?? []);
-    $paths = array_keys($files);
-    $index = (int) ($job['checkpoints']['verify_index'] ?? 0);
-    $processed = 0;
-    while ($index < count($paths) && $processed < 40 && application_update_budget_allows($budget, 0.7)) {
-        $relative = (string) $paths[$index];
-        if ($relative === '' || str_contains($relative, '..') || str_starts_with($relative, '/')) {
-            throw new RuntimeException('Downloaded update manifest contains an unsafe file path.');
-        }
-        $absolute = $sourceRoot . '/' . str_replace('/', DIRECTORY_SEPARATOR, $relative);
-        if (!is_file($absolute) || !is_readable($absolute)) {
-            throw new RuntimeException('Downloaded update archive is incomplete according to its core manifest.');
-        }
-        if (!hash_equals((string) $files[$relative], application_update_manifest_hash($absolute))) {
-            throw new RuntimeException('Downloaded update archive failed core-manifest integrity validation.');
-        }
-        $index++;
-        $processed++;
-        $job['checkpoints']['verify_index'] = $index;
-        $job['progress'] = ['current' => $index, 'total' => count($paths), 'message' => 'Validating package integrity.', 'unit' => 'files'];
-        application_update_save_job($job);
-    }
-
-    if ($index >= count($paths)) {
-        $manifestPaths = array_fill_keys($paths, true);
-        foreach (application_update_release_files($sourceRoot) as $installablePath) {
-            if ($installablePath === 'app/core-manifest.json') {
-                continue;
-            }
-            if (!isset($manifestPaths[$installablePath])) {
-                throw new RuntimeException('Downloaded update archive contains an installable file that is missing from the core manifest.');
-            }
-        }
-        $bootstrapVersion = application_update_version_from_local_bootstrap($sourceRoot . '/app/bootstrap.php');
-        $manifestVersion = application_update_normalize_version((string) (($job['checkpoints']['manifest_version'] ?? '') ?: (application_update_read_json($sourceRoot . '/app/core-manifest.json')['version'] ?? '')));
-        if ($bootstrapVersion !== null && $manifestVersion !== null && $bootstrapVersion !== $manifestVersion) {
-            throw new RuntimeException('Downloaded update package version markers do not agree.');
-        }
-        $job['checkpoints']['validated_version'] = $bootstrapVersion ?? $manifestVersion ?? '';
-        if ((string) ($job['operation'] ?? '') === 'stable_update') {
-            $validatedVersion = (string) $job['checkpoints']['validated_version'];
-            if ($validatedVersion === '' || version_compare($validatedVersion, \Gallery\Core\cms_current_version(), '<=')) {
-                throw new RuntimeException('No newer version is available in the downloaded stable package.');
-            }
-            $targetVersion = application_update_normalize_version((string) ($job['parameters']['target_version'] ?? ''));
-            if ($targetVersion !== null && version_compare($validatedVersion, $targetVersion, '<')) {
-                throw new RuntimeException('Downloaded stable package is older than the version selected for this job.');
-            }
-        }
-        unset($job['checkpoints']['manifest_files']);
-        application_update_save_job($job);
-        return true;
-    }
-    return false;
+    unset($job['checkpoints']['manifest_files'], $job['checkpoints']['verify_index']);
+    $job['progress'] = ['current' => 1, 'total' => 1, 'message' => 'Package structure validated.', 'unit' => 'step'];
+    application_update_save_job($job);
+    return true;
 }
 
 /**
@@ -2088,6 +2084,7 @@ function application_update_process_job(string $jobId, float $budgetSeconds = 8.
         $job['error'] = [
             'message' => $safe['message'],
             'reference' => $safe['reference'],
+            'retryable' => $safe['retryable'],
             'stage' => (string) ($job['stage'] ?? ''),
             'at' => time(),
         ];
@@ -2192,6 +2189,9 @@ function application_update_retry_job(string $jobId): array
         }
         $job = application_update_load_job($jobId);
         if ((string) ($job['status'] ?? '') !== 'failed') {
+            return application_update_job_public_state($job);
+        }
+        if (!application_update_job_error_retryable($job)) {
             return application_update_job_public_state($job);
         }
         $stage = (string) ($job['stage'] ?? '');

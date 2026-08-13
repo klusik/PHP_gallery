@@ -4246,5 +4246,18 @@
   "upload_automation.title": "Upload-API für überwachte Ordner",
   "vote.error.too_many_votes": "Zu viele Bewertungen. Versuchen Sie es gleich noch einmal.",
   "vote.like": "Gefällt mir",
-  "vote.no_like": "Gefällt mir nicht"
+  "vote.no_like": "Gefällt mir nicht",
+  "public.language.selector_label": "Sprache",
+  "public.language.use_site_default": "Website-Standard verwenden",
+  "admin.settings.item.public_language_selector_enabled": "Sprachauswahl für Besucher",
+  "admin.settings.item.public_language_selector_enabled.hint": "Öffentlichen Besuchern erlauben, ihre persönliche Oberflächensprache auszuwählen.",
+  "admin.settings.item.public_language_selector_languages": "Besuchersprachen",
+  "admin.settings.item.public_language_selector_languages.hint": "Gepflegte Sprachen, die in der öffentlichen Sprachauswahl angeboten werden.",
+  "admin.theme.language.viewer_selector_title": "Sprachauswahl für Besucher",
+  "admin.theme.language.viewer_selector_hint": "Sprachschaltflächen auf öffentlichen Seiten anzeigen und festlegen, welche gepflegten Sprachen Besucher auswählen dürfen.",
+  "admin.theme.language.viewer_selector_enabled": "Besuchern die Auswahl ihrer Oberflächensprache erlauben",
+  "admin.theme.language.viewer_languages_legend": "Für Besucher verfügbare Sprachen",
+  "admin.theme.language.viewer_languages_hint": "Wählen Sie mindestens eine Sprache. Diese Auswahl betrifft nur die öffentliche Sprachauswahl; alle gepflegten Sprachen bleiben für Administratoren und Übersetzungswerkzeuge verfügbar.",
+  "admin.theme.language.viewer_languages_required": "Aktivieren Sie mindestens eine Besuchersprache.",
+  "admin.updates.advanced_progress_hint": "Der Aktualisierungsfortschritt bleibt nach dem Start eines erweiterten Vorgangs hier sichtbar. Sie können diese Seite verlassen und erneut öffnen; der gespeicherte Auftrag wird am letzten sicheren Prüfpunkt fortgesetzt."
 }

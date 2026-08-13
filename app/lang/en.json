@@ -4246,5 +4246,18 @@
   "upload_automation.title": "Watched-folder upload API",
   "vote.error.too_many_votes": "Too many votes. Try again in a moment.",
   "vote.like": "Like",
-  "vote.no_like": "No like"
+  "vote.no_like": "No like",
+  "public.language.selector_label": "Language",
+  "public.language.use_site_default": "Use site default",
+  "admin.settings.item.public_language_selector_enabled": "Viewer language selector",
+  "admin.settings.item.public_language_selector_enabled.hint": "Allow public visitors to choose a personal interface language.",
+  "admin.settings.item.public_language_selector_languages": "Viewer languages",
+  "admin.settings.item.public_language_selector_languages.hint": "Maintained languages offered by the public viewer selector.",
+  "admin.theme.language.viewer_selector_title": "Viewer language selector",
+  "admin.theme.language.viewer_selector_hint": "Show the language buttons on public pages and choose which maintained languages visitors may select.",
+  "admin.theme.language.viewer_selector_enabled": "Allow visitors to choose their interface language",
+  "admin.theme.language.viewer_languages_legend": "Languages available to viewers",
+  "admin.theme.language.viewer_languages_hint": "Select at least one language. These choices affect only the public viewer selector; all maintained languages remain available to administrators and translation tools.",
+  "admin.theme.language.viewer_languages_required": "Enable at least one viewer language.",
+  "admin.updates.advanced_progress_hint": "Update progress stays visible here after an advanced operation starts. You can leave and reopen this page; the saved job resumes from its last safe checkpoint."
 }

@@ -133,12 +133,15 @@ use function Gallery\Services\translation_language_pack_json_text;
 use function Gallery\Services\translation_missing_diagnostics;
 use function Gallery\Services\translation_normalize_language_code;
 use function Gallery\Services\translation_public_language;
+use function Gallery\Services\translation_public_language_selector_enabled;
+use function Gallery\Services\translation_public_language_selector_languages;
 use function Gallery\Services\translation_supported_languages;
 use function Gallery\Services\translation_save_language_json;
 use function Gallery\Services\translation_set_active_language;
 use function Gallery\Services\translation_set_public_language;
 use function Gallery\Views\view_render_admin_hero;
 use function Gallery\Views\view_render_admin_tab_intro;
+use function Gallery\Views\view_render_public_language_selector_settings_panel;
 
 /**
  * Admin theme controller.
@@ -288,6 +291,18 @@ function render_admin_theme_language_tab(): void
     if (!is_array($languageEditorErrors)) {
         $languageEditorErrors = [];
     }
+    // $viewerSettingsErrors stores validation messages from the shared selector settings panel.
+    $viewerSettingsErrors = $_SESSION['cms_public_language_selector_errors'] ?? [];
+    unset($_SESSION['cms_public_language_selector_errors']);
+    if (!is_array($viewerSettingsErrors)) {
+        $viewerSettingsErrors = [];
+    }
+    // $viewerSettingsSubmitted preserves checkbox state after a rejected Theme save.
+    $viewerSettingsSubmitted = $_SESSION['cms_public_language_selector_submitted'] ?? [];
+    unset($_SESSION['cms_public_language_selector_submitted']);
+    if (!is_array($viewerSettingsSubmitted)) {
+        $viewerSettingsSubmitted = [];
+    }
     // $languageCoverage stores the key coverage comparison against the default language.
     $languageCoverage = translation_language_coverage($languageEditCode);
 
@@ -342,6 +357,19 @@ function render_admin_theme_language_tab(): void
         echo '<option value="' . e($languageCode) . '"' . ($publicLanguage === $languageCode ? ' selected' : '') . '>' . e($languageName) . ' (' . e($languageCode) . ')</option>';
     }
     echo '</select><span class="muted">' . e(t('admin.theme.language.public_hint', 'Saved globally. Anonymous users and public gallery pages use this language by default.')) . '</span></label>';
+    view_render_public_language_selector_settings_panel([
+        'id_prefix' => 'admin-theme-public-language-selector',
+        'enabled_name' => 'public_language_selector_enabled',
+        'languages_name' => 'public_language_selector_languages[]',
+        'marker_name' => 'public_language_selector_settings_present',
+        'enabled' => $viewerSettingsSubmitted !== []
+            ? !empty($viewerSettingsSubmitted['enabled'])
+            : translation_public_language_selector_enabled(),
+        'languages' => $viewerSettingsSubmitted !== []
+            ? (array) ($viewerSettingsSubmitted['languages'] ?? [])
+            : translation_public_language_selector_languages(),
+        'errors' => $viewerSettingsErrors,
+    ]);
     echo '<p class="muted"><strong>' . e(t('admin.theme.language.default_label', 'Default language')) . ':</strong> ' . e($defaultLanguage) . '</p>';
     echo '<p class="muted">' . e(t('admin.theme.language.fallback_note', 'English is the source and fallback language. English, Czech, German, and Swedish are the maintained selectable catalogs and are expected to stay complete; fallback protects against accidental gaps.')) . '</p>';
     echo '</fieldset>';

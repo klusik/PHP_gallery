@@ -166,6 +166,7 @@ function manifest_allowed_extensions(): array
         'php' => true,
         'js' => true,
         'css' => true,
+        'svg' => true,
         'md' => true,
         'bat' => true,
         'ps1' => true,

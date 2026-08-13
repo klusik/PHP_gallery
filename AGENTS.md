@@ -47,6 +47,9 @@ The selected-gallery mode is stored as `public_thumbnail_rendering_mode` with on
 
 `PATCH_NOTES.md` is intentionally not changed as part of renderer implementation work unless a separate task explicitly requests release notes.
 
+## Release Manifest Handoff Requirement
+Every change to an updater-managed release file must refresh `app/core-manifest.json` before a deploy archive, affected-files ZIP, release commit, or handoff is created. Run `php scripts/generate_manifest.php` after the final source edit, then run `php scripts/generate_manifest.php --check`. The deployment helpers enforce this automatically and must never offer a path that skips it. If an affected-files ZIP contains any managed application file whose hash is covered by the manifest, include the freshly generated `app/core-manifest.json` in that ZIP as well. A stale manifest makes an otherwise valid GitHub release deterministically uninstallable.
+
 ## Commit & Pull Request Guidelines
 Git history uses short, imperative messages, often with a feature prefix, for example `feat(admin): add media renamer workflow` or `Feature selector`. Keep commits focused and descriptive. Pull requests should explain the behavioral change, mention any schema or file-system impact, and include screenshots for UI changes when relevant. Note any setup steps needed to verify the change.
 

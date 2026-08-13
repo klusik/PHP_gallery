@@ -27,8 +27,15 @@ $registry = file_get_contents(__DIR__ . '/../app/services/admin_settings_registr
 $search = file_get_contents(__DIR__ . '/../public/assets/gallery-modules/admin-settings-search.js');
 $gallery = file_get_contents(__DIR__ . '/../public/assets/gallery.js');
 $styles = file_get_contents(__DIR__ . '/../public/assets/styles/admin.css');
-if (!is_string($view) || !is_string($registry) || !is_string($search) || !is_string($gallery) || !is_string($styles)) {
+$languageSettings = file_get_contents(__DIR__ . '/../app/views/admin_language_settings.php');
+if (!is_string($view) || !is_string($registry) || !is_string($search) || !is_string($gallery) || !is_string($styles) || !is_string($languageSettings)) {
     throw new RuntimeException('Unable to read Admin Settings source files.');
+}
+
+foreach (['public_language_selector_enabled', 'public_language_selector_languages'] as $languageSettingId) {
+    if (!str_contains($registry, "'{$languageSettingId}' => admin_settings_entry") || !str_contains($languageSettings, $languageSettingId)) {
+        throw new RuntimeException('Viewer language setting is missing from the registry or shared panel: ' . $languageSettingId);
+    }
 }
 
 foreach ([

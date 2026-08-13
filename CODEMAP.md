@@ -289,7 +289,7 @@ The Gallery tags Theme subsection is rendered by app/controllers/admin_theme.php
 | Admin update UI | `app/controllers/updates.php`, `public/assets/gallery-modules/admin-update-jobs.js` | Authenticated CSRF-protected start/continue/retry/cancel/rollback controls with delegated in-panel progress refresh and non-JavaScript POST fallback. |
 | Patch notes | `PATCH_NOTES.md` | Release-note source, not modified as part of updater hardening. |
 | Release metadata | `release-metadata.json` | Version/channel metadata consumed during discovery. |
-| Updater safety regression tests | `tests/updater_safety_model_test.php`, `tests/updater_resumable_state_machine_test.php` | State, interruption, locking, package, rollback, migration, UI, and redaction contracts. |
+| Updater safety regression tests | `tests/updater_safety_model_test.php`, `tests/updater_resumable_state_machine_test.php` | State, interruption, locking, package, rollback, migration, synchronized Status/Advanced progress UI, deterministic non-retryable manifest failures, and redaction contracts. |
 
 ## Language and Translations
 
@@ -300,12 +300,15 @@ The Gallery tags Theme subsection is rendered by app/controllers/admin_theme.php
 | Complete maintained JSON packs | `app/lang/en.json`, `app/lang/cs.json`, `app/lang/de.json`, `app/lang/sv.json` |
 | Dormant future-language skeletons | `app/lang/no.json`, `app/lang/is.json`, `app/lang/da.json`, `app/lang/fr.json`, `app/lang/it.json`, `app/lang/es.json` |
 | PHP compatibility fallbacks | `app/lang/en.php`, `app/lang/cs.php`, `app/lang/de.php`, `app/lang/sv.php` |
-| Admin and public language selectors, pack editor | `app/controllers/admin_theme.php` |
-| Public language centralized setting | `app/services/admin_settings_registry.php`, `app/services/app_settings.php` |
+| Admin/public default language selectors and pack editor | `app/controllers/admin_theme.php` |
+| Reusable viewer-language settings panel | `app/views/admin_language_settings.php`, reused by `app/controllers/admin_theme_language.php` and `app/views/admin_settings.php` |
+| Public language and viewer-selector centralized settings/search | `app/services/admin_settings_registry.php`, `app/controllers/admin_settings.php` |
+| Per-viewer public flag/native-name selector and override policy | `app/services/translations.php`, `app/views/layout.php`, `public/assets/styles/public.css`, `public/assets/flags/*.svg` |
+| Bundled flag artwork license | `public/assets/flags/LICENSE.flag-icons.md` |
 | Browser translation payload | `app/views/layout.php`, `app/controllers/theme_assets.php` |
-| Catalog regression coverage | `tests/translation_catalog_consistency_test.php` |
+| Catalog and viewer-preference regression coverage | `tests/translation_catalog_consistency_test.php`, `tests/public_language_preference_test.php` |
 
-English is the canonical default and fallback. English, Czech, German, and Swedish are the only selectable languages and their JSON catalogs remain key-for-key complete. Dormant future-language skeletons may contain validated subsets of English keys, but file discovery alone does not make them selectable.
+English is the canonical default and fallback. English, Czech, German, and Swedish are the only selectable languages and their JSON catalogs remain key-for-key complete. Public visitors can override the site default from the shared header and reset to the site default; the preference is local to their browser. Dormant future-language skeletons may contain validated subsets of English keys, but file discovery alone does not make them selectable.
 
 ## Database and Migrations
 

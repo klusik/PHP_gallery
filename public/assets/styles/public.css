@@ -43,7 +43,66 @@
 .nav {
     display: flex;
     flex-wrap: wrap;
+    align-items: center;
     gap: 0.75rem;
+}
+
+/* Public language preference: compact code + flag links stay visible without a dropdown. */
+.public-language-switcher {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.3rem;
+}
+
+.nav .public-language-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.28rem;
+    min-height: 2rem;
+    box-sizing: border-box;
+    padding: 0.3rem 0.48rem;
+    border: 1px solid color-mix(in srgb, var(--accent-dark, #1d4ed8) 55%, transparent);
+    border-radius: calc(var(--radius, 16px) * 0.55);
+    background: color-mix(in srgb, var(--accent, #2563eb) 9%, var(--surface, #fffaf0));
+    color: var(--ink, #2d2118);
+    font-weight: 800;
+    line-height: 1;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.nav .public-language-button:hover,
+.nav .public-language-button:focus {
+    background: color-mix(in srgb, var(--accent, #2563eb) 18%, var(--surface, #fffaf0));
+    color: var(--accent-dark, #1d4ed8);
+}
+
+.nav .public-language-button.is-active {
+    border-color: var(--accent-dark, #1d4ed8);
+    background: var(--accent, #2563eb);
+    color: #fffdf8;
+}
+
+.nav .public-language-button:focus-visible {
+    outline: 3px solid color-mix(in srgb, var(--accent, #2563eb) 35%, white);
+    outline-offset: 2px;
+}
+
+.public-language-code {
+    font-size: 0.7rem;
+    letter-spacing: 0.04em;
+}
+
+.public-language-flag {
+    display: block;
+    width: 1.25rem;
+    height: 0.9375rem;
+    border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+    border-radius: 0.12rem;
+    object-fit: cover;
+    flex: 0 0 auto;
 }
 
 .nav a,

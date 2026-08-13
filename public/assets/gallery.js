@@ -66,7 +66,7 @@ import { setupAdminNavigationDataPanel } from './gallery-modules/admin-navdata-p
 import { setupOpenAITextAssist } from './gallery-modules/admin-openai-text-assist.js?v=20260529-openai-text-assist-v2';
 import { setupPublicHomeSearch } from './gallery-modules/public-home-search.js?v=20260528-public-search-context-v1';
 import { setupAdminSettingsSearch } from './gallery-modules/admin-settings-search.js?v=20260812-settings-spotlight-v1';
-import { setupAdminUpdateJobs } from './gallery-modules/admin-update-jobs.js?v=20260812-resumable-updates-v2';
+import { setupAdminUpdateJobs } from './gallery-modules/admin-update-jobs.js?v=20260813-resumable-updates-v3';
 import { setupAdminGalleryMigration } from './gallery-modules/admin-gallery-migration.js?v=20260527-gallery-migration-reconnect-v1';
 import { setupAdminGalleryDateSuggestions } from './gallery-modules/admin-gallery-date-suggestion.js?v=20260607-date-suggestion-endpoint-v2';
 import { setupAdminDuplicatePhotoDetector } from './gallery-modules/admin-duplicate-photo-detector.js?v=20260808-duplicate-photo-detector-ledger-v4';

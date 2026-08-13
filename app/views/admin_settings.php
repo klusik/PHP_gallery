@@ -46,6 +46,8 @@ use function Gallery\Services\admin_settings_sections;
 use function Gallery\Services\admin_settings_url;
 use function Gallery\Services\t;
 use function Gallery\Services\translation_load_language;
+use function Gallery\Services\translation_public_language_selector_enabled;
+use function Gallery\Services\translation_public_language_selector_languages;
 
 /**
  * Render the centralized Admin Settings page.
@@ -193,6 +195,29 @@ function view_render_admin_settings_section(string $sectionId, array $entries, a
         echo '<fieldset class="form-grid"><legend>' . e(t('admin.settings.quick_settings', 'Central settings')) . '</legend>';
         echo '<p class="muted">' . e(t('admin.settings.quick_settings_hint', 'Only settings with a shared canonical normalizer and safe service-level save path are editable here.')) . '</p>';
         foreach ($editable as $id => $entry) {
+            if ($id === 'public_language_selector_enabled') {
+                view_render_public_language_selector_settings_panel([
+                    'id_prefix' => 'admin-setting-result-public_language_selector_enabled',
+                    'languages_target_id' => 'admin-setting-result-public_language_selector_languages',
+                    'admin_setting_target' => true,
+                    'enabled_name' => 'settings[public_language_selector_enabled]',
+                    'languages_name' => 'settings[public_language_selector_languages][]',
+                    'enabled' => array_key_exists('public_language_selector_enabled', $submittedValues)
+                        ? !empty($submittedValues['public_language_selector_enabled'])
+                        : translation_public_language_selector_enabled(),
+                    'languages' => array_key_exists('public_language_selector_languages', $submittedValues)
+                        ? (array) $submittedValues['public_language_selector_languages']
+                        : translation_public_language_selector_languages(),
+                    'errors' => [
+                        'enabled' => $errors['public_language_selector_enabled'] ?? '',
+                        'languages' => $errors['public_language_selector_languages'] ?? '',
+                    ],
+                ]);
+                continue;
+            }
+            if ($id === 'public_language_selector_languages') {
+                continue;
+            }
             view_render_admin_settings_input((string) $id, $entry, $errors, $submittedValues);
         }
         echo '<div class="bulk-row"><button type="submit">' . e(t('admin.settings.save_section', 'Save this section')) . '</button></div>';

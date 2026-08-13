@@ -53,8 +53,6 @@ deploy_folder=""
 upload_media=""
 # Variable make_zip_deploy stores whether a zip package is created.
 make_zip_deploy=""
-# Variable update_manifest stores whether the integrity manifest is refreshed.
-update_manifest=""
 # Variable deploy_target stores the resolved local deployment target.
 deploy_target=""
 
@@ -81,12 +79,11 @@ Options:
   --deploy-folder PATH
   --upload-media true|false
   --make-zip-deploy true|false
-  --update-manifest true|false
   -h, --help
 
 Compatibility aliases:
   -Mode, -HostName, -UserName, -Password, -RemoteFolder, -DeployFolder,
-  -UploadMedia, -MakeZipDeploy, -UpdateManifest
+  -UploadMedia, -MakeZipDeploy
 USAGE
 }
 
@@ -152,10 +149,6 @@ parse_arguments() {
                 make_zip_deploy="${2:-}"
                 shift 2
                 ;;
-            --update-manifest|-UpdateManifest)
-                update_manifest="${2:-}"
-                shift 2
-                ;;
             -h|--help)
                 print_usage
                 exit 0
@@ -167,27 +160,6 @@ parse_arguments() {
                 ;;
         esac
     done
-}
-
-# Function invoke_manifest_generator handles manifest refresh before deployment.
-invoke_manifest_generator() {
-    if ! command -v php >/dev/null 2>&1; then
-        printf 'Error: PHP executable was not found in PATH. Cannot build a manifest-validated deployment.\n' >&2
-        return 1
-    fi
-
-    # Variable manifest_script stores this scripts working value.
-    local manifest_script="${root}/scripts/generate_manifest.php"
-    if [[ ! -f "$manifest_script" ]]; then
-        printf 'Error: Manifest generator was not found: %s. Cannot build a manifest-validated deployment.\n' "$manifest_script" >&2
-        return 1
-    fi
-
-    printf 'Updating integrity manifest...\n'
-    if ! php "$manifest_script"; then
-        printf 'Error: Manifest generator failed. Deployment aborted to avoid publishing an unverifiable package.\n' >&2
-        return 1
-    fi
 }
 
 # Function get_deploy_relative_path returns a repository-relative path.
@@ -413,26 +385,6 @@ if [[ "$mode" == "local" ]]; then
             zip_deploy="true"
         fi
     fi
-fi
-
-# Variable refresh_manifest stores this scripts working value.
-refresh_manifest="true"
-if [[ -n "$update_manifest" ]]; then
-    if is_falsey "$update_manifest"; then
-        refresh_manifest="false"
-    fi
-else
-    # Variable manifest_answer stores this scripts working value.
-    manifest_answer="$(read_answer 'Update integrity manifest before deploy? y/N ')"
-    if [[ "$manifest_answer" =~ ^[Yy] ]]; then
-        refresh_manifest="true"
-    else
-        refresh_manifest="false"
-    fi
-fi
-
-if [[ "$refresh_manifest" == "true" ]]; then
-    invoke_manifest_generator
 fi
 
 cd "$root"

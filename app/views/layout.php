@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-08-11
+ *   2026-08-13
  */
 
 declare(strict_types=1);
@@ -67,8 +67,43 @@ use function Gallery\Services\translation_active_language;
 use function Gallery\Services\translation_default_language;
 use function Gallery\Services\translation_language_allowed;
 use function Gallery\Services\translation_language_dir;
+use function Gallery\Services\translation_language_presentation;
 use function Gallery\Services\translation_load_language;
 use function Gallery\Services\translation_normalize_language_code;
+use function Gallery\Services\translation_public_language_url;
+use function Gallery\Services\translation_public_language_selector_enabled;
+use function Gallery\Services\translation_public_language_selector_languages;
+
+/**
+ * Render the public visitor language selector in the shared header.
+ *
+ * The compact links work without JavaScript. Each language keeps the current
+ * public route and query state; the following request stores the choice.
+ */
+function view_render_public_language_selector(): void
+{
+    if (!translation_public_language_selector_enabled()) {
+        return;
+    }
+    $activeLanguage = translation_active_language();
+    $presentations = translation_language_presentation();
+    $label = t('public.language.selector_label', 'Language');
+
+    echo '<div class="public-language-switcher" role="group" aria-label="' . e($label) . '">';
+    foreach (translation_public_language_selector_languages() as $language) {
+        $presentation = $presentations[$language] ?? ['name' => strtoupper($language), 'flag_asset' => ''];
+        $isActive = $language === $activeLanguage;
+        $languageName = trim((string) ($presentation['name'] ?? strtoupper($language)));
+        $flagAsset = trim((string) ($presentation['flag_asset'] ?? ''));
+        echo '<a class="public-language-button' . ($isActive ? ' is-active' : '') . '" href="' . e(translation_public_language_url($language)) . '" hreflang="' . e($language) . '" lang="' . e($language) . '" aria-label="' . e($languageName) . '" title="' . e($languageName) . '"' . ($isActive ? ' aria-current="true"' : '') . '>';
+        echo '<span class="public-language-code" aria-hidden="true">' . e(strtoupper($language)) . '</span>';
+        if ($flagAsset !== '') {
+            echo '<img class="public-language-flag" src="' . e(asset_url($flagAsset)) . '" alt="" aria-hidden="true" width="20" height="15" decoding="async">';
+        }
+        echo '</a>';
+    }
+    echo '</div>';
+}
 
 /**
  * Handle view public header branding model.
@@ -296,6 +331,9 @@ function view_render_header(string $title, ?array $currentGallery = null, bool $
         echo e($siteName);
     }
     echo '</a><nav class="nav">';
+    if ($bodyClass === 'public-page') {
+        view_render_public_language_selector();
+    }
     // $favoritePublicOnly stores whether shortcuts should be restricted to public listed galleries.
     $favoritePublicOnly = !$user || $anonymousPreview;
     // $favoriteGalleryItems stores resolved gallery shortcuts for the top navigation.
