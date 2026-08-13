@@ -38,6 +38,15 @@ foreach (['public_language_selector_enabled', 'public_language_selector_language
     }
 }
 
+foreach (["only for public viewers", "saved only in that viewer\\'s browser", "does not change the site default"] as $viewerLanguageExplanation) {
+    if (!str_contains($languageSettings, $viewerLanguageExplanation)) {
+        throw new RuntimeException('Viewer-language browser-local explanation is missing: ' . $viewerLanguageExplanation);
+    }
+}
+if (!str_contains($registry, "stored only in that viewer\\'s browser") || !str_contains($registry, 'site-wide language settings are unchanged')) {
+    throw new RuntimeException('Settings search does not explain the browser-local viewer-language scope.');
+}
+
 foreach ([
     'data-admin-settings-search',
     'data-admin-settings-search-input',

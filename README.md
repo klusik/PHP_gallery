@@ -761,8 +761,8 @@ Admin and public language choices are independent:
 
 - **Admin interface language** is stored for the administrator in the session and browser cookie.
 - **Public visitor language** is a site-wide default stored in application settings.
-- **Viewer language selector** is enabled by default and can be disabled from Theme > Language or Settings > General. When disabled, public pages follow the site-wide public language and ignore personal language query/cookie overrides.
-- **Viewer languages** controls which maintained languages appear in the public selector. All four are enabled by default, and at least one must remain selected when saving.
+- **Viewer language selector** is enabled by default and can be disabled from Theme > Language or Settings > General. It applies only to public viewers: each viewer's personal selection is persisted in that viewer's browser cookie, not in an account or as a site-wide language change. When disabled, public pages follow the site-wide public language and ignore personal language query/cookie overrides.
+- **Viewer languages** controls which maintained languages are offered for that browser-local viewer preference. All four are enabled by default, and at least one must remain selected when saving. This availability list is site configuration; choosing one of its languages affects only the viewer who makes the choice in that browser.
 - Every public page provides the enabled language control in the shared header. Locally bundled SVG flags provide a visual cue; native language names remain the accessible labels.
 - Selecting a maintained language keeps the current page and its filters, then remembers the per-viewer override in a public-language cookie. The same behavior remains available through `?lang=<code>` links.
 - **Use site default** clears both the visitor session override and public-language cookie so later site-wide default changes apply again.

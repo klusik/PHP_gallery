@@ -708,7 +708,7 @@ These focused scripts verify that only complete maintained languages appear, eac
 Manual Admin regression:
 
 1. Open Theme > Language and confirm the viewer-language panel appears beside the Admin and public default selectors with all four languages selected on an installation without explicit settings.
-2. Open Settings > General and confirm the same panel structure and current values appear. Search for “viewer language selector” and “viewer languages”; each result must open General and focus its owned control.
+2. Open Settings > General and confirm the same panel structure and current values appear. Both the panel and Settings search descriptions must explicitly say that the selector is only for public viewers, that each personal choice is saved in that viewer's browser, and that it does not change the site default, Admin language, or another viewer. Search for “viewer language selector” and “viewer languages”; each result must open General and focus its owned control.
 3. Disable Swedish, save, and confirm the Swedish flag disappears from public headers while Swedish remains available for Admin language, public site default, and pack editing.
 4. Disable the viewer feature, save, and confirm public headers render no language buttons and `?lang=de` plus an existing public-language cookie no longer override the site-wide public language.
 5. Re-enable the feature from the other Admin surface and confirm the saved language subset returns. Dynamically revisit both pages and verify their values remain synchronized.

@@ -54,19 +54,19 @@ function view_render_public_language_selector_settings_panel(array $model = []):
 
     echo '<section class="admin-language-selector-settings" id="' . e($idPrefix) . '" data-public-language-selector-settings' . (!empty($model['admin_setting_target']) ? ' data-admin-setting-target tabindex="-1"' : '') . '>';
     echo '<div class="admin-language-selector-settings-copy"><strong>' . e(t('admin.theme.language.viewer_selector_title', 'Viewer language selector')) . '</strong>';
-    echo '<p class="muted">' . e(t('admin.theme.language.viewer_selector_hint', 'Show the language buttons on public pages and choose which maintained languages visitors may select.')) . '</p></div>';
+    echo '<p class="muted">' . e(t('admin.theme.language.viewer_selector_hint', 'This selector is only for public viewers. Each viewer\'s personal language is saved only in that viewer\'s browser; it does not change the site default, the Admin language, or any other viewer.')) . '</p></div>';
     if ($markerName !== '') {
         echo '<input type="hidden" name="' . e($markerName) . '" value="1">';
     }
 
     $enabledId = $idPrefix . '-enabled';
-    echo '<label class="checkbox-label admin-language-selector-enabled" for="' . e($enabledId) . '"><input id="' . e($enabledId) . '" type="checkbox" name="' . e($enabledName) . '" value="1"' . ($enabled ? ' checked' : '') . ($enabledError !== '' ? ' aria-invalid="true"' : '') . '> ' . e(t('admin.theme.language.viewer_selector_enabled', 'Allow visitors to choose their interface language')) . '</label>';
+    echo '<label class="checkbox-label admin-language-selector-enabled" for="' . e($enabledId) . '"><input id="' . e($enabledId) . '" type="checkbox" name="' . e($enabledName) . '" value="1"' . ($enabled ? ' checked' : '') . ($enabledError !== '' ? ' aria-invalid="true"' : '') . '> ' . e(t('admin.theme.language.viewer_selector_enabled', 'Allow each public viewer to choose a browser-only interface language')) . '</label>';
     if ($enabledError !== '') {
         echo '<span class="error">' . e($enabledError) . '</span>';
     }
 
     echo '<fieldset class="admin-language-selector-language-list"' . ($languagesTargetId !== '' ? ' id="' . e($languagesTargetId) . '" data-admin-setting-target tabindex="-1"' : '') . ($languagesError !== '' ? ' aria-invalid="true"' : '') . '><legend>' . e(t('admin.theme.language.viewer_languages_legend', 'Languages available to viewers')) . '</legend>';
-    echo '<p class="muted">' . e(t('admin.theme.language.viewer_languages_hint', 'Select at least one language. These choices affect only the public viewer selector; all maintained languages remain available to administrators and translation tools.')) . '</p>';
+    echo '<p class="muted">' . e(t('admin.theme.language.viewer_languages_hint', 'Select at least one language to offer. This list affects only the public viewer selector. A viewer\'s selection is stored in that viewer\'s browser, never as an account or site-wide language setting.')) . '</p>';
     echo '<div class="admin-language-selector-language-grid">';
     foreach (translation_supported_languages() as $language) {
         $presentation = $presentations[$language] ?? ['name' => strtoupper($language), 'flag_asset' => ''];
