@@ -97,7 +97,7 @@ try {
 
     $status = application_autoupdate_status();
     $lastCheckedAt = (int) ($status['last_checked_at'] ?? 0);
-    if (!$forceCheck && $lastCheckedAt > 0 && time() - $lastCheckedAt < 18000) {
+    if (!$forceCheck && $lastCheckedAt > 0 && time() - $lastCheckedAt < 3600) {
         echo json_encode(['ok' => true, 'skipped' => true, 'reason' => 'check_not_due', 'status' => $status], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . PHP_EOL;
         exit(0);
     }

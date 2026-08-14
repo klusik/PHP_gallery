@@ -126,7 +126,7 @@ return [
     'admin.updates.force_check_button' => 'Tvinga kontroll',
     'admin.updates.force_check_completed' => 'Tvingad GitHub-kontroll av uppdateringar slutförd.',
     'admin.updates.force_check_completed_with_error' => 'Tvingad GitHub-kontroll av uppdateringar slutförd med en varning: {error}',
-    'admin.updates.force_check_hint' => 'Gå förbi den lokala femtimmarscachen och fråga GitHub nu. GitHubs rate-limit-huvuden registreras och respekteras fortfarande efter svaret.',
+    'admin.updates.force_check_hint' => 'Gå förbi den lokala entimmescachen och fråga GitHub nu. GitHubs rate-limit-huvuden registreras och respekteras fortfarande efter svaret.',
     'admin.updates.github_api_etag' => 'ETag',
     'admin.updates.github_api_hint' => 'Uppdateraren använder svarshuvuden från vanliga GitHub API-anrop. Den anropar inte /rate_limit enbart för att kontrollera gränser.',
     'admin.updates.github_api_kicker' => 'GitHub API-policy',

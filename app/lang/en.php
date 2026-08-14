@@ -126,7 +126,7 @@ return [
     'admin.updates.force_check_button' => 'Force check',
     'admin.updates.force_check_completed' => 'Forced GitHub update check completed.',
     'admin.updates.force_check_completed_with_error' => 'Forced GitHub update check completed with a warning: {error}',
-    'admin.updates.force_check_hint' => 'Bypass the local five-hour cache and ask GitHub now. GitHub rate-limit headers are still recorded and respected after the response.',
+    'admin.updates.force_check_hint' => 'Bypass the local one-hour cache and ask GitHub now. GitHub rate-limit headers are still recorded and respected after the response.',
     'admin.updates.github_api_etag' => 'ETag',
     'admin.updates.github_api_hint' => 'The updater uses response headers from normal GitHub API calls. It does not call /rate_limit just to inspect limits.',
     'admin.updates.github_api_kicker' => 'GitHub API policy',
