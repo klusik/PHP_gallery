@@ -59,31 +59,7 @@ use function Gallery\Core\now_sql;
  */
 function upload_automation_schema_ready(): bool
 {
-    if (!db_table_exists('gallery_upload_tokens')) {
-        return false;
-    }
-
-    // $requiredColumns stores the minimum schema used by the upload automation service.
-    // Checking columns prevents partially-applied migrations from causing fatal SQL errors.
-    $requiredColumns = [
-        'id',
-        'gallery_id',
-        'token_hash',
-        'label',
-        'active',
-        'created_by_user_id',
-        'created_at',
-        'last_used_at',
-        'revoked_at',
-    ];
-
-    foreach ($requiredColumns as $column) {
-        if (!db_column_exists('gallery_upload_tokens', $column)) {
-            return false;
-        }
-    }
-
-    return true;
+    return schema_inspection_is_available(upload_automation_schema_status());
 }
 
 /**
@@ -146,9 +122,12 @@ function upload_automation_normalize_label(string $label): string
  */
 function create_gallery_upload_automation_token(int $galleryId, ?int $createdByUserId, string $label = ''): array
 {
-    if (!upload_automation_schema_ready()) {
-        throw new RuntimeException(t('upload_automation.error.migration_required', 'Upload automation database table is missing. Run pending migrations first.'));
-    }
+    mutation_schema_assert_available(
+        upload_automation_schema_status(),
+        'upload_automation.create_token',
+        t('upload_automation.error.migration_required', 'Upload automation database table is missing. Run pending migrations first.'),
+        t('upload_automation.error.schema_unknown', 'Upload automation is temporarily unavailable because its database schema could not be verified. No API key was created.')
+    );
 
     // $gallery stores the gallery that owns the new API key.
     $gallery = find_gallery($galleryId, true) ?: find_gallery($galleryId);
@@ -185,9 +164,15 @@ function create_gallery_upload_automation_token(int $galleryId, ?int $createdByU
  */
 function gallery_upload_automation_tokens(int $galleryId): array
 {
-    if (!upload_automation_schema_ready()) {
+    $schemaStatus = upload_automation_schema_status();
+    if (schema_inspection_is_missing($schemaStatus)) {
         return [];
     }
+    mutation_schema_assert_known(
+        $schemaStatus,
+        'upload_automation.list_tokens',
+        t('upload_automation.error.schema_unknown', 'Upload automation is temporarily unavailable because its database schema could not be verified.')
+    );
 
     // $stmt stores the active tokens listed in the gallery editor.
     $stmt = db()->prepare('SELECT id, gallery_id, label, active, created_at, last_used_at, revoked_at FROM gallery_upload_tokens WHERE gallery_id = ? AND active = 1 AND revoked_at IS NULL ORDER BY created_at DESC, id DESC');
@@ -202,9 +187,15 @@ function gallery_upload_automation_tokens(int $galleryId): array
  */
 function upload_automation_tokens_for_manager(): array
 {
-    if (!upload_automation_schema_ready()) {
+    $schemaStatus = upload_automation_schema_status();
+    if (schema_inspection_is_missing($schemaStatus)) {
         return [];
     }
+    mutation_schema_assert_known(
+        $schemaStatus,
+        'upload_automation.list_tokens',
+        t('upload_automation.error.schema_unknown', 'Upload automation is temporarily unavailable because its database schema could not be verified.')
+    );
 
     // $sql stores the manager query. The users table in the base schema has
     // username but no display_name column, so both admin identity aliases use
@@ -228,9 +219,12 @@ function upload_automation_tokens_for_manager(): array
  */
 function revoke_gallery_upload_automation_token(int $galleryId, int $tokenId): bool
 {
-    if (!upload_automation_schema_ready()) {
-        return false;
-    }
+    mutation_schema_assert_available(
+        upload_automation_revocation_schema_status(),
+        'upload_automation.revoke_token',
+        t('upload_automation.error.migration_required', 'Upload automation database table is missing. Run pending migrations first.'),
+        t('upload_automation.error.schema_unknown', 'Upload automation is temporarily unavailable because the API-key revocation schema could not be verified. No API key was changed.')
+    );
 
     // $stmt stores the revoke update. The gallery predicate prevents cross-gallery revocation.
     $stmt = db()->prepare('UPDATE gallery_upload_tokens SET active = 0, revoked_at = ? WHERE id = ? AND gallery_id = ?');
@@ -246,15 +240,17 @@ function revoke_gallery_upload_automation_token(int $galleryId, int $tokenId): b
  */
 function find_upload_automation_token(string $token): ?array
 {
-    if (!upload_automation_schema_ready()) {
-        return null;
-    }
-
     // $normalizedToken stores the trimmed token as sent by the watcher app.
     $normalizedToken = trim($token);
     if ($normalizedToken === '') {
         return null;
     }
+    mutation_schema_assert_available(
+        upload_automation_schema_status(),
+        'upload_automation.authenticate',
+        t('upload_automation.error.migration_required', 'Upload automation database table is missing. Run pending migrations first.'),
+        t('upload_automation.error.schema_unknown', 'Upload automation authentication is temporarily unavailable because its database schema could not be verified.')
+    );
 
     // $stmt stores the lookup by hash so raw API keys are never stored server-side.
     $stmt = db()->prepare('SELECT id, gallery_id, label, active, created_at, last_used_at FROM gallery_upload_tokens WHERE token_hash = ? AND active = 1 AND revoked_at IS NULL LIMIT 1');
@@ -271,9 +267,12 @@ function find_upload_automation_token(string $token): ?array
  */
 function mark_upload_automation_token_used(int $tokenId): void
 {
-    if (!upload_automation_schema_ready()) {
-        return;
-    }
+    mutation_schema_assert_available(
+        upload_automation_schema_status(),
+        'upload_automation.mark_used',
+        t('upload_automation.error.migration_required', 'Upload automation database table is missing. Run pending migrations first.'),
+        t('upload_automation.error.schema_unknown', 'Upload automation usage metadata could not be updated because its database schema could not be verified.')
+    );
 
     // $stmt stores a lightweight audit timestamp for the admin UI.
     $stmt = db()->prepare('UPDATE gallery_upload_tokens SET last_used_at = ? WHERE id = ?');

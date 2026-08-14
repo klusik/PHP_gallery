@@ -42,3 +42,4 @@ require_once __DIR__ . '/updates_patch_notes.php';
 require_once __DIR__ . '/updates_install.php';
 require_once __DIR__ . '/updates_remote.php';
 require_once __DIR__ . '/updates_filesystem.php';
+require_once __DIR__ . '/updates_jobs.php';

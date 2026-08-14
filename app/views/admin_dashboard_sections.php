@@ -254,12 +254,20 @@ function view_render_admin_dashboard_maintenance_panel(array $model): void
 {
     $migrationPending = view_admin_dashboard_bool($model, 'migration_pending');
     $missingThumbnailVariants = view_admin_dashboard_int($model, 'missing_thumbnail_variants');
+    $securitySchemaStatuses = view_admin_dashboard_array($model, 'security_schema_statuses');
+    $systemHealthActionRequired = $migrationPending;
+    foreach ($securitySchemaStatuses as $securityStatus) {
+        if (is_array($securityStatus) && in_array((string) ($securityStatus['state'] ?? 'unknown'), ['missing', 'unknown'], true)) {
+            $systemHealthActionRequired = true;
+            break;
+        }
+    }
 
     $maintenanceSubtabs = [
         ['id' => 'admin-maintenance-content', 'label' => t('admin.dashboard.maintenance_content_display_tab', 'Content and display')],
         ['id' => 'admin-maintenance-media', 'label' => t('admin.dashboard.maintenance_media_cache_tab', 'Media and cache'), 'badge' => $missingThumbnailVariants > 0 ? (string) $missingThumbnailVariants : null],
         ['id' => 'admin-maintenance-navigation', 'label' => t('admin.dashboard.maintenance_navigation_tab', 'Maps and navdata')],
-        ['id' => 'admin-maintenance-system', 'label' => t('admin.dashboard.maintenance_system_health_tab', 'System health'), 'badge' => $migrationPending ? t('admin.dashboard.badge_action', 'Action') : null],
+        ['id' => 'admin-maintenance-system', 'label' => t('admin.dashboard.maintenance_system_health_tab', 'System health'), 'badge' => $systemHealthActionRequired ? t('admin.dashboard.badge_action', 'Action') : null],
     ];
 
     view_render_admin_tab_intro([
@@ -391,6 +399,16 @@ function view_render_admin_dashboard_system_tools(array $model): void
     $updateButtonClass = (string) ($model['update_button_class'] ?? 'button secondary');
     $updateLabel = (string) ($model['update_label'] ?? t('admin.menu.updates', 'Updates'));
     $migrationPending = view_admin_dashboard_bool($model, 'migration_pending');
+    $securitySchemaStatuses = view_admin_dashboard_array($model, 'security_schema_statuses');
+    $mutationSchemaStatuses = view_admin_dashboard_array($model, 'mutation_schema_statuses');
+    $presentationSchemaStatuses = view_admin_dashboard_array($model, 'presentation_schema_statuses');
+    $schemaActionRequired = false;
+    foreach (array_merge($securitySchemaStatuses, $mutationSchemaStatuses, $presentationSchemaStatuses) as $schemaStatus) {
+        if (is_array($schemaStatus) && in_array((string) ($schemaStatus['state'] ?? 'unknown'), ['missing', 'unknown'], true)) {
+            $schemaActionRequired = true;
+            break;
+        }
+    }
 
     view_render_admin_tab_intro([
         'kicker' => t('admin.dashboard.system_health_kicker', 'System'),
@@ -411,10 +429,199 @@ function view_render_admin_dashboard_system_tools(array $model): void
     if ($migrationPending) {
         view_render_admin_dashboard_migration_card('admin-maintenance-card');
     }
-    if (!$updatePending && !$migrationPending) {
+    foreach ($securitySchemaStatuses as $feature => $securityStatus) {
+        if (is_array($securityStatus)) {
+            view_render_admin_dashboard_security_schema_card((string) $feature, $securityStatus, 'admin-maintenance-card');
+        }
+    }
+    foreach ($mutationSchemaStatuses as $feature => $mutationStatus) {
+        if (is_array($mutationStatus)) {
+            view_render_admin_dashboard_mutation_schema_card((string) $feature, $mutationStatus, 'admin-maintenance-card');
+        }
+    }
+    foreach ($presentationSchemaStatuses as $feature => $presentationStatus) {
+        if (is_array($presentationStatus)) {
+            view_render_admin_dashboard_presentation_schema_card((string) $feature, $presentationStatus, 'admin-maintenance-card');
+        }
+    }
+    if (!$updatePending && !$migrationPending && !$schemaActionRequired) {
         echo '<article class="admin-maintenance-card"><strong>' . e(t('admin.dashboard.system_ready_title', 'System ready')) . '</strong><span>' . e(t('admin.dashboard.system_ready_hint', 'No update or migration warning is currently active on the dashboard.')) . '</span></article>';
     }
     echo '</div>';
+}
+
+/**
+ * Render one Phase 9 security/authentication schema diagnosis.
+ *
+ * @param string $feature Bounded capability key.
+ * @param array $status Normalized Admin schema-health result.
+ * @param string $className CSS class name for the card wrapper.
+ */
+function view_render_admin_dashboard_security_schema_card(string $feature, array $status, string $className): void
+{
+    if ($feature === 'nsfw_guard') {
+        view_render_admin_dashboard_nsfw_schema_card($status, $className);
+        return;
+    }
+
+    $labels = [
+        'gallery_access' => 'Gallery password and access policy',
+        'gallery_visibility' => 'Gallery visibility compatibility',
+        'gallery_share_token' => 'Gallery share-token storage',
+        'auth_persistent_login' => 'Persistent administrator login',
+        'auth_password_reset' => 'Password reset storage',
+        'auth_external_identity' => 'External identity links',
+    ];
+    $title = $labels[$feature] ?? 'Security schema capability';
+    $state = (string) ($status['state'] ?? 'unknown');
+    echo '<article class="' . e($className) . '"><strong>' . e($title) . '</strong>';
+    if ($state === 'available') {
+        echo '<span>' . e(t('admin.dashboard.security_schema_available', 'Required database objects are installed and verified.')) . '</span>';
+    } elseif ($state === 'missing') {
+        echo '<span>' . e(t('admin.dashboard.security_schema_missing', 'Database inspection succeeded and confirmed required objects are missing. Apply pending migrations; only explicitly documented legacy compatibility remains active.')) . '</span>';
+    } elseif ($state === 'disabled') {
+        echo '<span>' . e(t('admin.dashboard.security_schema_disabled', 'This integration is intentionally disabled by configuration.')) . '</span>';
+    } else {
+        echo '<span>' . e(t('admin.dashboard.security_schema_unknown', 'Required database schema could not be verified. Security-sensitive operations for this capability are temporarily refused until connectivity, selected database, and metadata permissions are healthy.')) . '</span>';
+        $requestId = trim((string) ($status['request_id'] ?? ''));
+        if ($requestId !== '') {
+            echo '<span>' . e(t('public.request_reference', 'Reference: {request_id}', ['request_id' => $requestId])) . '</span>';
+        }
+    }
+    $affectedObjects = array_values(array_filter(array_map('strval', (array) ($status['affected_objects'] ?? []))));
+    if ($affectedObjects !== []) {
+        echo '<span>' . e(t('admin.dashboard.security_schema_objects', 'Affected database objects: {objects}', ['objects' => implode(', ', $affectedObjects)])) . '</span>';
+    }
+    echo '</article>';
+}
+
+/**
+ * Render one Phase 10 destructive/ingestion schema diagnosis.
+ *
+ * @param string $feature Bounded capability key.
+ * @param array $status Normalized Admin schema-health result.
+ * @param string $className CSS class name for the card wrapper.
+ */
+function view_render_admin_dashboard_mutation_schema_card(string $feature, array $status, string $className): void
+{
+    $labels = [
+        'mutation_gallery_delete' => t('admin.dashboard.mutation_schema_feature_gallery_delete', 'Gallery and image deletion'),
+        'mutation_gallery_move' => t('admin.dashboard.mutation_schema_feature_gallery_move', 'Gallery and image move/copy'),
+        'mutation_duplicate_photo_ledger' => t('admin.dashboard.mutation_schema_feature_duplicate_ledger', 'Duplicate Photo Detector ledger'),
+        'mutation_upload_ingestion' => t('admin.dashboard.mutation_schema_feature_upload_ingestion', 'Gallery upload ingestion'),
+        'mutation_upload_automation' => t('admin.dashboard.mutation_schema_feature_upload_automation', 'Upload automation tokens'),
+        'mutation_gallery_migration' => t('admin.dashboard.mutation_schema_feature_gallery_migration', 'Gallery migration'),
+        'mutation_mobile_webdav' => t('admin.dashboard.mutation_schema_feature_mobile_webdav', 'Mobile WebDAV uploads'),
+        'mutation_thumbnail_metadata' => t('admin.dashboard.mutation_schema_feature_thumbnail_metadata', 'Thumbnail metadata maintenance'),
+        'mutation_database_maintenance' => t('admin.dashboard.mutation_schema_feature_database_maintenance', 'Database cleanup and repair'),
+        'mutation_application_update' => t('admin.dashboard.mutation_schema_feature_application_update', 'Application update activation'),
+    ];
+    $title = $labels[$feature] ?? 'Mutation schema capability';
+    $state = (string) ($status['state'] ?? 'unknown');
+
+    echo '<article class="' . e($className) . '"><strong>' . e($title) . '</strong>';
+    if ($state === 'available') {
+        echo '<span>' . e(t('admin.dashboard.mutation_schema_available', 'Required mutation database objects are installed and verified.')) . '</span>';
+    } elseif ($state === 'missing') {
+        echo '<span>' . e(t('admin.dashboard.mutation_schema_missing', 'Database inspection succeeded and confirmed required mutation objects are missing. Apply pending migrations before using this workflow, except where a documented legacy compatibility path explicitly applies.')) . '</span>';
+    } else {
+        echo '<span>' . e(t('admin.dashboard.mutation_schema_unknown', 'Required database schema could not be verified. This mutation is temporarily refused so files, rows, credentials, migration state, or active application files are not changed on an indeterminate schema.')) . '</span>';
+        $requestId = trim((string) ($status['request_id'] ?? ''));
+        if ($requestId !== '') {
+            echo '<span>' . e(t('public.request_reference', 'Reference: {request_id}', ['request_id' => $requestId])) . '</span>';
+        }
+    }
+    $affectedObjects = array_values(array_filter(array_map('strval', (array) ($status['affected_objects'] ?? []))));
+    if ($affectedObjects !== []) {
+        echo '<span>' . e(t('admin.dashboard.security_schema_objects', 'Affected database objects: {objects}', ['objects' => implode(', ', $affectedObjects)])) . '</span>';
+    }
+    echo '</article>';
+}
+
+/**
+ * Render one Phase 11 optional presentation/reporting schema diagnosis.
+ *
+ * @param string $feature Bounded capability key.
+ * @param array $status Normalized Admin schema-health result.
+ * @param string $className CSS class name for the card wrapper.
+ */
+function view_render_admin_dashboard_presentation_schema_card(string $feature, array $status, string $className): void
+{
+    $labels = [
+        'presentation_gps_exif' => t('admin.dashboard.presentation_schema_feature_gps_exif', 'GPS and EXIF maps'),
+        'presentation_gps_override' => t('admin.dashboard.presentation_schema_feature_gps_override', 'Per-gallery GPS map overrides'),
+        'presentation_flight_map' => t('admin.dashboard.presentation_schema_feature_flight_map', 'Flight route maps'),
+        'presentation_flight_navdata' => t('admin.dashboard.presentation_schema_feature_flight_navdata', 'Flight-map navigation data'),
+        'presentation_image_voting' => t('admin.dashboard.presentation_schema_feature_image_voting', 'Image voting'),
+        'presentation_picture_game' => t('admin.dashboard.presentation_schema_feature_picture_game', 'Picture game'),
+        'presentation_lightbox_override' => t('admin.dashboard.presentation_schema_feature_lightbox_override', 'Lightbox mode overrides'),
+        'presentation_openai_text' => t('admin.dashboard.presentation_schema_feature_openai_text', 'OpenAI text assistance'),
+        'presentation_openai_image_input' => t('admin.dashboard.presentation_schema_feature_openai_image_input', 'OpenAI image input'),
+        'presentation_ai_image_analysis' => t('admin.dashboard.presentation_schema_feature_ai_image_analysis', 'AI image metadata'),
+        'presentation_simbrief_route_map' => t('admin.dashboard.presentation_schema_feature_simbrief_route_map', 'SimBrief route-map persistence'),
+        'presentation_navigation_cache' => t('admin.dashboard.presentation_schema_feature_navigation_cache', 'Navigation data cache'),
+        'presentation_navigation_account' => t('admin.dashboard.presentation_schema_feature_navigation_account', 'Navigation account storage'),
+        'presentation_telemetry_reporting' => t('admin.dashboard.presentation_schema_feature_telemetry', 'Telemetry reporting'),
+        'presentation_admin_gallery_report' => t('admin.dashboard.presentation_schema_feature_admin_report', 'Complete Admin gallery report'),
+    ];
+    $title = $labels[$feature] ?? t('admin.dashboard.presentation_schema_feature_default', 'Optional presentation schema capability');
+    $state = (string) ($status['state'] ?? 'unknown');
+
+    echo '<article class="' . e($className) . '"><strong>' . e($title) . '</strong>';
+    if ($state === 'available') {
+        echo '<span>' . e(t('admin.dashboard.presentation_schema_available', 'Required optional database objects are installed and verified.')) . '</span>';
+    } elseif ($state === 'missing') {
+        echo '<span>' . e(t('admin.dashboard.presentation_schema_missing', 'Database inspection succeeded and confirmed optional objects are missing. The affected presentation/report feature is omitted until its migration is applied.')) . '</span>';
+    } elseif ($state === 'disabled') {
+        echo '<span>' . e(t('admin.dashboard.presentation_schema_disabled', 'This optional feature is intentionally disabled by configuration.')) . '</span>';
+    } else {
+        echo '<span>' . e(t('admin.dashboard.presentation_schema_unknown', 'Optional database schema could not be verified. Safe core pages may continue without the affected presentation feature, while writes that depend on it are refused until inspection is healthy.')) . '</span>';
+        $requestId = trim((string) ($status['request_id'] ?? ''));
+        if ($requestId !== '') {
+            echo '<span>' . e(t('public.request_reference', 'Reference: {request_id}', ['request_id' => $requestId])) . '</span>';
+        }
+    }
+    $affectedObjects = array_values(array_filter(array_map('strval', (array) ($status['affected_objects'] ?? []))));
+    if ($affectedObjects !== []) {
+        echo '<span>' . e(t('admin.dashboard.security_schema_objects', 'Affected database objects: {objects}', ['objects' => implode(', ', $affectedObjects)])) . '</span>';
+    }
+    echo '</article>';
+}
+
+/**
+ * Render the three-state NSFW Guard schema diagnosis.
+ *
+ * The card provides actionable operational guidance without exposing raw PDO
+ * exceptions, SQL statements, connection details, or filesystem paths.
+ *
+ * @param array $status Aggregate NSFW Guard schema inspection result.
+ * @param string $className CSS class name for the card wrapper.
+ */
+function view_render_admin_dashboard_nsfw_schema_card(array $status, string $className): void
+{
+    // $state stores the normalized feature state displayed to administrators.
+    $state = (string) ($status['state'] ?? 'unknown');
+    echo '<article class="' . e($className) . '"><strong>' . e(t('admin.dashboard.nsfw_schema_title', 'NSFW Guard database status')) . '</strong>';
+    if ($state === 'available') {
+        echo '<span>' . e(t('admin.dashboard.nsfw_schema_available', 'Required gallery and image protection columns are installed and verified.')) . '</span>';
+    } elseif ($state === 'missing') {
+        echo '<span>' . e(t('admin.dashboard.nsfw_schema_missing', 'Database inspection succeeded and confirmed that an NSFW Guard column is missing. Apply pending database migrations before enabling this protection.')) . '</span>';
+    } elseif ($state === 'disabled') {
+        echo '<span>' . e(t('admin.dashboard.nsfw_schema_disabled', 'This feature is intentionally disabled by configuration. Its database readiness does not currently affect public requests.')) . '</span>';
+    } else {
+        echo '<span>' . e(t('admin.dashboard.nsfw_schema_unknown', 'The application could not inspect the database schema required by NSFW Guard. Check database connectivity, the selected database, and schema-inspection permissions. Public NSFW-sensitive requests are temporarily refused.')) . '</span>';
+        // $requestId stores a safe correlation value when telemetry initialized one.
+        $requestId = trim((string) ($status['request_id'] ?? ''));
+        if ($requestId !== '') {
+            echo '<span>' . e(t('public.request_reference', 'Reference: {request_id}', ['request_id' => $requestId])) . '</span>';
+        }
+    }
+    // $affectedObjects contains only validated table.column identities from the health model.
+    $affectedObjects = array_values(array_filter(array_map('strval', (array) ($status['affected_objects'] ?? []))));
+    if ($affectedObjects !== []) {
+        echo '<span>' . e(t('admin.dashboard.nsfw_schema_objects', 'Affected database objects: {objects}', ['objects' => implode(', ', $affectedObjects)])) . '</span>';
+    }
+    echo '</article>';
 }
 
 /**

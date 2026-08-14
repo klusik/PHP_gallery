@@ -2,7 +2,7 @@
 
 A modern PHP 8.0+ gallery CMS designed for ordinary shared hosting. The application uses the filesystem as the authoritative source for gallery structure, while storing all metadata, access rules, votes, user accounts, and audit logs in MySQL or MariaDB.
 
-**Current Version:** 0.88
+**Current Version:** 0.89
 
 **Key Benefit:** Deploy in minutes on shared hosting. No npm, no Composer, no framework overhead. Just PHP + MySQL.
 
@@ -99,7 +99,7 @@ Progressive rendering prioritizes perceived initial responsiveness, not minimum 
 - **One-click updates** - Check GitHub and install newer versions from admin dashboard
 - **Update channels** - Follow stable or beta release branches
 - **Patch notes viewer** - Cached release notes with version browsing
-- **Backup on update** - Overwritten files preserved under `cache/updates/backups`
+- **Backup on update** - Changed/removed application files preserved in each durable job under `cache/updates/jobs/<job-id>/rollback/`
 - **Emergency recovery** - Revert to stable branch from `reset.php`
 - **Database migrations** - Automatic schema evolution with admin-triggerable execution
 - **Database inspection** - Explicit full-schema inventory with migration/code audit, cleanup reasons, and protected-table policies
@@ -286,7 +286,7 @@ Use **Settings** in the Admin navigation as the central overview for important g
 
 The hub can directly edit only settings that already have a safe canonical service setter: site name, public language, URL rewrite, public search when available, the public thumbnail renderer, the global EXIF/GPS display default when its existing schema is ready, and development diagnostics. Theme layout, tag presentation, upload tuning, telemetry, Account credentials, language-pack editing, raw CSS, API keys, database tools and destructive maintenance remain on their existing specialized pages. Those pages remain fully supported and link back to the relevant Settings section.
 
-Version 0.88 adds a Spotlight-style search directly below the Settings title. It searches the complete global configuration registry while typing, including discovery-only entries for specialized Theme, upload, telemetry, thumbnail, maintenance, navigation-data, feature, database, account, mail, Google, and OpenAI controls. Results use contextual labels and descriptions, support keyboard navigation, and open the canonical owning page without copying secret values or duplicating specialist persistence.
+Version 0.89 adds a Spotlight-style search directly below the Settings title and a configurable public viewer language selector. The selector supports five visual presets, validated colors and spacing, transparent color fields, flag/code/name visibility, live preview, and unsaved reset controls. The Settings search indexes the complete global configuration registry while typing, including discovery-only entries for specialized Theme, upload, telemetry, thumbnail, maintenance, navigation-data, feature, database, account, mail, Google, and OpenAI controls. Results use contextual labels and descriptions, support keyboard navigation, and open the canonical owning page without copying secret values or duplicating specialist persistence.
 
 Deep links use stable identifiers such as `?page=admin_settings&section=appearance#settings-appearance`. JavaScript tab changes update the complete query plus hash URL so Back/Forward and refresh preserve the selected section. Without JavaScript, the tab links load the same section as normal pages. See `docs/ADMIN_SETTINGS_INVENTORY.md` for canonical ownership, defaults, fallbacks, sensitivity and migration status.
 
@@ -388,13 +388,18 @@ Public tag pages can use a dedicated presentation. In Theme > Appearance > Galle
 
 #### Updating the Application
 
-1. Go to **Updates** to check GitHub for new versions
-2. See available versions and read patch notes
-3. Click **Update** to download and install
-4. The updater validates required release files before touching the installation
-5. Incoming files are staged, size-checked, and activated before obsolete managed files are removed
-6. Backups of overwritten and removed files are saved under `cache/updates/backups/`
-7. Your `config.php`, galleries, and custom CSS are never overwritten
+1. Go to **Updates** to check GitHub for new versions and read patch notes.
+2. Click **Update**. The Admin panel starts a durable job under `cache/updates/jobs/` and advances it through short authenticated requests instead of holding one PHP request open for the whole release.
+3. The job checkpoints `download`, archive validation, bounded extraction, manifest verification, activation planning, file staging, rollback backup, readiness, activation, migrations, finalization, cleanup, and completion. Archive validation itself checkpoints every 500 entries; individual archive files are capped at 32 MiB and total expanded size at 512 MiB so one extraction unit cannot become an unbounded application payload.
+4. Downloaded archives, extracted files, and the ready tree stay outside the active installation. Every installable release file must be covered by `app/core-manifest.json`; unsafe ZIP paths, symbolic links, oversized archives, missing files, stale manifests, and hash mismatches are rejected before activation.
+5. Preflight hashes the incoming release against the active tree, so byte-identical files are excluded from activation. The complete pre-update snapshot of files that can change or be removed is made durable before activation. `config.php`, gallery media, cache data, custom CSS, hosting INI files, and other protected paths are never replaced by the updater.
+6. If PHP, the browser, FastCGI, or a proxy stops a normal stage, reopen **Updates** and continue. Completed checkpoints are not repeated unnecessarily. The same live job card is visible on both **Status** and **Advanced tools**, so beta/reinstall progress remains visible where the operation starts. Worker access is serialized with per-job `flock()` plus a global active-job start lock; direct requests for an old job cannot run beside the active update, and active-pointer release is compare-and-clear safe. Stale lock-file text cannot keep a job blocked after the operating-system lock is released. A failed or running job can also be **Cancel prepared update** before activation starts; this clears its active-job slot without touching application files. Deterministic release-manifest mismatches are not offered as retryable because downloading the same invalid build again cannot repair it; cancel that job and select a newer release or beta code.
+7. Activation is the only intentionally non-yielding critical section. It contains prepared local replacements for changed files only. Each replacement uses a sibling temporary file plus `rename()`, and replay recognizes files already matching the prepared hash. A host kill can still expose a brief mixed-version tree because ordinary shared hosting has no portable atomic directory swap; the next worker invocation completes the same activation stage.
+8. Migrations run one migration file per updater checkpoint. Individual file copy/hash operations and one migration file remain inherently non-interruptible units; archive entries are capped at 32 MiB and rollback refuses an individual managed active file above 128 MiB rather than starting an unbounded snapshot copy. A completed migration is recorded in `schema_migrations`. If PHP dies inside one migration file, that file may replay, so migration definitions and repair callbacks must remain safely rerunnable.
+9. After activation begins, the Admin job card can roll application files back from the saved snapshot. File rollback does not reverse database migrations. Stable restore and clean reinstall are separate resumable download/install operations.
+10. With JavaScript enabled the Admin side panel stays open and refreshes progress in place. Without JavaScript, **Continue update** and **Retry from checkpoint** submit ordinary authenticated POST requests and preserve the direct-request fallback.
+
+Automatic stable updates use the same state machine. The standalone first-install `setup-gallery.php` bootstrap predates the application and therefore cannot use the authenticated updater engine; it remains a separate one-request bootstrap path and manual ZIP upload remains the fallback on hosts that terminate that initial download/extract request. Remote version discovery has its own approximately eight-second wall-clock budget shared fairly across configured GitHub branches, and a discovery request only creates the durable background job; package work begins on a later invocation. Normal safe page requests can then advance a short background slice. A caught background failure waits at least 60 seconds and then goes through the same stage-aware retry cleanup before another worker attempt. On an idle site, schedule `php scripts/application_update.php` from hosting cron, for example every five minutes; each invocation either performs bounded discovery or advances the existing background job, not both. The CLI runner does not advance manual/Admin beta jobs. Correctness never depends on `set_time_limit()` or `ignore_user_abort()`.
 
 #### Customizing Appearance
 
@@ -521,6 +526,221 @@ On shared hosting with limited resources:
 - Token regenerated per-session
 - Validated on every POST/PUT/DELETE
 
+### NSFW Guard schema safety
+
+NSFW Guard verifies both gallery-level and image-level protection columns before
+making public access decisions. A complete schema uses the normal inherited
+gallery and per-image restrictions. A confirmed older schema follows the
+documented pre-feature compatibility path and Admin System Health recommends
+the migration. If the database cannot provide a trustworthy schema answer,
+NSFW-sensitive gallery, media, thumbnail, lightbox, map, and metadata requests
+receive a temporary 503 response. Explicit NSFW setting changes are paused
+until verification succeeds.
+
+Schema readiness results are cached only for one request. Migration execution
+clears that cache after schema changes and repair callbacks, so an Admin,
+installer, updater, or CLI migration process can immediately validate the new
+schema instead of reusing a pre-migration answer. Repeated NSFW checks within a
+normal request reuse the same two column inspections.
+
+### Security and authentication schema safety
+
+The same three-state inspection model now covers gallery password/access policy,
+gallery visibility compatibility, share-token storage, persistent administrator
+login, password reset, and Google identity links. The operational distinction is
+important:
+
+- **available** means the required database objects were verified and the normal
+  feature behavior is used;
+- **missing** means metadata inspection succeeded and confirmed an older or
+  incomplete schema. Only explicitly documented compatibility behavior is used;
+- **unknown** means the application could not verify the schema. Security-sensitive
+  behavior is temporarily refused rather than silently downgraded.
+
+Gallery password/access compatibility is deliberately conservative. The old
+unprotected/listed behavior is used only when all five core access columns are
+confirmed absent. If even one access column exists while another is missing, the
+database is considered partially migrated and protected public routes fail closed.
+This prevents an interrupted migration from turning stored password, listing, or
+token state into permissive defaults.
+
+Gallery visibility also verifies the database vocabulary. A confirmed historical
+`visibility` definition that lacks `unpublished` stores that value as legacy
+`draft`. If the column definition cannot be inspected, the application does not
+guess which vocabulary is active.
+
+Protected gallery pages, media, thumbnails, lazy lightbox/map metadata, search,
+sitemap output, gallery assets, and gallery downloads pass through the shared
+public schema-policy boundary before their controller can emit protected output.
+An unknown access/privacy capability receives the same route-appropriate 503
+behavior used by the NSFW pilot, with bounded request correlation and no SQL,
+credentials, tokens, DSNs, or filesystem paths in the public response.
+
+Authentication keeps the primary PHP session separate from optional persistent
+storage. A confirmed missing `admin_remember_tokens` table disables only “Keep me
+signed in”; ordinary password/session login remains available. Password reset
+requires both `users.email` and `password_reset_tokens`. Google login requires a
+verified `user_google_accounts` table in addition to valid OAuth configuration.
+Unknown metadata state never masquerades as “feature not configured” or “invalid
+credentials”.
+
+Share-token generation/use requires verified token storage. Revocation is a safe
+exception: once the core validating hash columns are verified, the application can
+always clear the hash even when the optional encrypted display-token column is
+missing or uninspectable. This means a schema problem cannot prevent an existing
+share link from being revoked.
+
+Admin **System Health** and **Runtime Diagnostics** now show the same bounded state
+for gallery access, visibility, share tokens, NSFW Guard, persistent login,
+password reset, and external identity links. Missing/unknown states produce an
+Action signal and operator guidance without exposing raw database errors.
+
+### Destructive and ingestion schema safety
+
+Phase 10 extends the same distinction to operations that change persistent data or
+files. Gallery/image deletion and moves, Duplicate Photo Detector ledger writes,
+classic/browser uploads, upload automation, gallery migration, mobile WebDAV,
+thumbnail metadata maintenance, database cleanup/repair, and application update
+activation now use `app/services/mutation_schema_policy.php`.
+
+The practical rule is:
+
+- **available**: the workflow continues with its established behavior;
+- **missing**: the workflow either requires the pending migration or uses a narrow
+  compatibility/bootstrap path that was specifically audited for that operation;
+- **unknown**: the workflow is paused before it changes target files, database rows,
+  credentials, resumable migration state, derivative files, or active application
+  files.
+
+This matters most during temporary database or metadata-permission problems. A
+legacy boolean “exists” helper can return `false` both when a column is genuinely
+absent and when inspection itself failed. That ambiguity is acceptable only in
+older non-sensitive compatibility code. It is no longer used to authorize the
+Phase 10 mutation paths.
+
+Uploads preflight the core gallery/image registration schema and thumbnail write
+shape before a source file is moved from temporary/prepared storage into the
+gallery. Gallery migration performs equivalent checks before target assets,
+originals, metadata, thumbnails, or completion state are committed, so a refusal
+leaves the job resumable. Thumbnail generation and maintenance verify the metadata
+write shape before derivative directories/files are changed. A confirmed old
+installation without the thumbnail metadata table can still use the documented
+file-only compatibility mode; an **unknown** metadata state cannot.
+
+Credential revocation is intentionally narrower than credential creation or use.
+Upload automation and mobile WebDAV require their complete verified token schema
+for issuance/authentication, but an administrator may still revoke/delete an
+existing credential when the smaller set of columns needed for revocation is
+verified. This keeps a schema problem from unnecessarily preventing a
+security-tightening action.
+
+Database repair and application updates also distinguish confirmed absence from
+inspection failure. A confirmed missing `schema_migrations` table may be handled by
+the migration/bootstrap workflow itself. An unknown state blocks live cleanup or
+active-file replacement. Update archives may still be downloaded and extracted to
+staging, but activation checks the schema immediately before replacing active
+application files. Source snapshots must include both `schema_inspection.php` and
+`mutation_schema_policy.php`.
+
+Admin **System Health** and **Runtime Diagnostics** show ten additional mutation
+capabilities covering these workflows. Missing and unknown states raise the
+Maintenance **Action** badge. Unknown entries can include validated affected
+table/column names, safe connectivity/permission guidance, and a request reference.
+They do not expose raw SQL, database exception messages, DSNs, passwords, API keys,
+WebDAV secrets, upload paths, migration source paths, or updater staging paths.
+
+If an administrator sees a mutation-schema warning, first verify database
+connectivity, the selected database, and metadata-inspection permissions. Apply a
+pending migration only when System Health confirms a **missing** state or the normal
+migration page reports it. After the database becomes inspectable again, retry the
+operation. A refused Phase 10 workflow is designed to leave its target state
+recoverable rather than guessing through an indeterminate schema.
+
+### Optional presentation and reporting schema safety
+
+The final schema-reliability phase covers features that enrich the gallery but are
+not required to render its basic public content: GPS/EXIF maps, flight maps, image
+voting, Picture Game, lightbox mode overrides, OpenAI assistance, local AI image
+metadata, SimBrief route-map persistence, navigation datasets/accounts, telemetry,
+and the Complete Admin Gallery Report. These features now use
+`app/services/presentation_schema_policy.php`.
+
+The important difference from access control and destructive operations is that a
+safe optional **read** can sometimes disappear without taking the whole gallery
+offline. For example, if a GPS-map table/column cannot be inspected, the main gallery
+may still render without the map because omitting a map does not make protected
+content public. The unavailable map is logged with bounded context and Admin System
+Health shows the capability as **unknown**. By contrast, a vote, Picture Game pair
+record, telemetry setting, AI queue transition, navigation-account token update, or
+other database-backed write is never authorized by an unknown schema result.
+
+Administrator-visible states are now consistent across all three schema-policy
+layers:
+
+- **available**: the required database objects were verified;
+- **missing**: inspection succeeded and confirmed that a migration/optional object is
+  absent;
+- **unknown**: the database structure could not be verified reliably;
+- **disabled**: an optional feature with a real feature flag is intentionally off.
+
+System Health evaluates optional feature flags before inspecting their database
+shape. A disabled feature therefore reports **disabled** without spending metadata
+queries on tables/columns that cannot affect the current request. Enabled capability
+checks share the request-local schema cache.
+
+Several compatibility details are deliberate:
+
+- a proven old installation may omit an optional presentation feature, but a partial
+  migration or inspection outage is not silently relabeled as legacy;
+- GPS per-gallery inheritance verifies that `galleries.gps_map_enabled` is nullable
+  before treating `NULL` as a real inherit/default state;
+- lightbox override compatibility verifies the stored column vocabulary before
+  accepting override values. Gallery creation, sidecar import, and metadata-organizer
+  child creation also distinguish confirmed legacy absence from an inspection outage,
+  so an explicit/inherited override is not silently discarded during persistence;
+- enabling voting on a newly created or sidecar-imported gallery requires verified
+  voting storage rather than persisting a feature flag against an indeterminate vote
+  schema;
+- Picture Game pair selection is treated as a write because displaying a new pair
+  records that pair before a vote occurs;
+- Navigraph/OAuth can use historical session-only behavior only when persistent
+  account storage is positively confirmed missing. An inspection outage cannot be
+  treated as a session-only legacy installation;
+- disconnect/revocation uses the smaller verified account identity shape needed to
+  remove stored credentials, so a security-tightening disconnect is not blocked by
+  unrelated optional account columns;
+- SimBrief description/OFP generation can remain useful even when optional flight
+  route persistence is unavailable. The draft may continue while only the database
+  route-map write is skipped;
+- telemetry dashboards/exports distinguish “migration not installed” from “database
+  status cannot be inspected.” Telemetry setting changes and maintenance do not
+  silently succeed on unknown schema;
+- AI worker requests return bounded operational errors when AI queue storage cannot
+  be verified and do not echo raw database/service exception text back to the worker;
+- the Complete Admin Gallery Report uses structured checks for known optional
+  sections. Its database table inventory intentionally enumerates
+  `information_schema.TABLES` dynamically because it must count every base table,
+  including future/plugin tables whose names are not known in advance. Inventory
+  failures produce generic report text rather than raw database errors.
+
+Admin **System Health** and **Runtime Diagnostics** expose fifteen optional
+presentation/reporting capability entries using the same underlying policy results.
+An unknown entry may show validated affected table/column names, safe database
+connectivity/permission guidance, and a request reference. It never includes raw SQL,
+PDO exception text, DSNs, credentials, OAuth/API tokens, cookies, reset/share tokens,
+CSRF values, or private filesystem paths.
+
+For troubleshooting, treat **missing** and **unknown** differently. Apply migrations
+when the migration runner or System Health confirms required objects are missing. If
+the state is **unknown**, first restore database connectivity, select the correct
+database, and ensure the application account may read metadata from
+`information_schema`; then retry. Do not apply migrations merely because an optional
+feature disappeared during an inspection outage.
+
+This completes the planned repository-wide schema-inspection reliability conversion.
+The permanent architecture, database, testing, operator guidance, and administrator
+manual now own the final rules; there is no release-time temporary phase roadmap.
+
 ### Admin Audit
 
 - Every admin action logged with:
@@ -541,10 +761,18 @@ Admin and public language choices are independent:
 
 - **Admin interface language** is stored for the administrator in the session and browser cookie.
 - **Public visitor language** is a site-wide default stored in application settings.
-- Public requests may override the site default with a supported `?lang=<code>` value; the visitor override is remembered in a public-language cookie.
+- **Viewer language selector** is enabled by default and can be disabled from Theme > Language or Settings > General. It applies only to public viewers: each viewer's personal selection is persisted in that viewer's browser cookie, not in an account or as a site-wide language change. When disabled, public pages follow the site-wide public language and ignore personal language query/cookie overrides.
+- **Viewer languages** controls which maintained languages are offered for that browser-local viewer preference. All four are enabled by default, and at least one must remain selected when saving. This availability list is site configuration; choosing one of its languages affects only the viewer who makes the choice in that browser.
+- Every public page provides the enabled language control in the shared header. Locally bundled SVG flags provide a visual cue; native language names remain the accessible labels.
+- Selecting a maintained language keeps the current page and its filters, then remembers the per-viewer override in a public-language cookie. The same behavior remains available through `?lang=<code>` links.
+- **Use site default** clears both the visitor session override and public-language cookie so later site-wide default changes apply again.
 - Changing the interface language does not translate gallery titles, descriptions, tags, photo captions, or other owner-authored content.
 
 Editable catalogs live in `app/lang/<code>.json`. JSON is the maintained format. The `en.php`, `cs.php`, `de.php`, and `sv.php` dictionaries remain compatibility fallbacks and are loaded only when a JSON pack for that code does not exist. Theme > Language exposes only the currently supported four languages in the Admin and Public selectors and pack editor, reports key coverage against English, and provides JSON edit/import/export tools plus missing-key diagnostics.
+
+The reusable viewer-language settings panel is rendered by `app/views/admin_language_settings.php` in both Theme > Language and Settings > General. Both surfaces persist through the same translation service and `app_settings` keys: `public_language_selector_enabled` (`1` by default) and `public_language_selector_languages` (an ordered JSON list defaulting to all maintained languages). Disabling a language affects only visitor overrides; it does not remove that catalog from Admin language selection, the public site-default selector, editing, import/export, or diagnostics.
+
+The same panel also owns the public selector design. Settings > General intentionally exposes only the basic preset and flag controls and links to Theme > Language for detailed editing without overwriting saved custom values. Five presets are available: Classic (the backward-compatible default), Solid pills, Outline, Soft cards, and Minimal. The compact Theme editor configures codes, native names, orientation, density, alignment, active emphasis, theme/custom colors (each color may instead be transparent), padding, margins, gaps, borders, radii, flag dimensions, and text size while an actual-flag preview appears above the fine controls and updates without saving. Reset all returns the complete design to Classic defaults, Reset this preset restores only the active preset, and every individual control has its own reset. All reset operations remain unsaved until the parent form is submitted and never alter the selector feature switch, enabled viewer languages, public default, or a viewer's browser-local language choice.
 
 Current selectable language packs:
 
@@ -554,6 +782,8 @@ Current selectable language packs:
 | `cs` | Čeština | Complete maintained selectable translation |
 | `de` | Deutsch | Complete maintained selectable translation |
 | `sv` | Svenska | Complete maintained selectable translation |
+
+The selector flag artwork lives in `public/assets/flags/`: United Kingdom for English, Czechia for Czech, Germany for German, and Sweden for Swedish. The SVGs are pinned from `lipis/flag-icons` v7.2.3 and distributed under its MIT license, included as `public/assets/flags/LICENSE.flag-icons.md`. They are served locally and never fetched from a third party at runtime.
 
 When adding interface text, add the canonical English key to `app/lang/en.json` first and keep Czech, German, and Swedish synchronized. Placeholder names such as `{count}`, `{gallery}`, or `{time}` are part of the translation contract and must remain unchanged across all four maintained languages. Dormant future-language skeletons may be translated separately without becoming selectable.
 
@@ -585,7 +815,11 @@ Run the complete standalone regression suite:
 php tests/run.php
 ```
 
-The runner currently executes 28 focused PHP tests covering gallery models, paths, migrations, uploads, thumbnails, public assets, URL rewrites, AI settings, and updater safety. Individual scripts can still be run directly when isolating a behavior. The project intentionally has no Composer or PHPUnit dependency.
+### Release preparation
+
+Release work is performed from a clean reviewable branch. Compare the branch with the previous release tag, update the runtime version, `release-metadata.json`, `PATCH_NOTES.md`, and the relevant documentation, then compile and inspect `docs/PHP_Gallery_Manual.pdf`. Run the complete regression suite, focused tests, PHP and JavaScript syntax checks, and `git diff --check`. Finally run `php scripts/generate_manifest.php` followed by `php scripts/generate_manifest.php --check`; the generated `app/core-manifest.json` must be included in any affected-files ZIP. The deployment helpers only collect files and create a folder or ZIP, so manifest generation and verification remain explicit release steps. See `TESTING.md` and `docs/LATEX_BUILD.md` for the authoritative checklist.
+
+The runner currently executes 58 focused PHP tests covering gallery models, paths, migrations, uploads, thumbnails, public assets, URL rewrites, AI settings, schema policy, language settings, and updater safety. Individual scripts can still be run directly when isolating a behavior. The project intentionally has no Composer or PHPUnit dependency.
 
 ## Troubleshooting
 

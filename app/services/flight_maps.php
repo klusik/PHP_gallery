@@ -60,16 +60,7 @@ const FLIGHT_MAP_NAVDATA_URL_NAVAIDS = 'https://davidmegginson.github.io/ourairp
  */
 function flight_map_schema_ready(): bool
 {
-    try {
-        $table = db()->query("SHOW TABLES LIKE 'gallery_flight_maps'");
-        if (!$table || !$table->fetch()) {
-            return false;
-        }
-        $column = db()->query("SHOW COLUMNS FROM gallery_flight_maps LIKE 'resolved_points_json'");
-        return $column && (bool) $column->fetch();
-    } catch (PDOException) {
-        return false;
-    }
+    return presentation_schema_render_available(presentation_flight_map_schema_status(), 'flight_map_render');
 }
 
 /**
@@ -79,16 +70,7 @@ function flight_map_schema_ready(): bool
  */
 function flight_map_navdata_schema_ready(): bool
 {
-    try {
-        $table = db()->query("SHOW TABLES LIKE 'flight_map_nav_points'");
-        if (!$table || !$table->fetch()) {
-            return false;
-        }
-        $column = db()->query("SHOW COLUMNS FROM flight_map_nav_points LIKE 'ident'");
-        return $column && (bool) $column->fetch();
-    } catch (PDOException) {
-        return false;
-    }
+    return presentation_schema_render_available(presentation_flight_navdata_schema_status(), 'flight_navdata_render');
 }
 
 /**
@@ -148,7 +130,12 @@ function gallery_has_flight_path_map(array $gallery): bool
  */
 function delete_gallery_flight_path_map(int $galleryId): void
 {
-    if ($galleryId <= 0 || !flight_map_schema_ready()) {
+    if ($galleryId <= 0) {
+        return;
+    }
+    $schemaStatus = presentation_flight_map_schema_status();
+    presentation_schema_assert_known($schemaStatus, 'flight_map_delete');
+    if (!schema_inspection_is_available($schemaStatus)) {
         return;
     }
     $stmt = db()->prepare('DELETE FROM gallery_flight_maps WHERE gallery_id = ?');
@@ -169,7 +156,12 @@ function delete_gallery_flight_path_map(int $galleryId): void
  */
 function save_gallery_flight_path_route(int $galleryId, string $routeText): array
 {
-    if ($galleryId <= 0 || !flight_map_schema_ready()) {
+    if ($galleryId <= 0) {
+        return ['point_count' => 0, 'unresolved_count' => 0, 'points' => [], 'unresolved' => []];
+    }
+    $schemaStatus = presentation_flight_map_schema_status();
+    presentation_schema_assert_known($schemaStatus, 'flight_map_save');
+    if (!schema_inspection_is_available($schemaStatus)) {
         return ['point_count' => 0, 'unresolved_count' => 0, 'points' => [], 'unresolved' => []];
     }
 
@@ -303,7 +295,12 @@ function flight_map_points_are_simbrief_ofp(array $points): bool
  */
 function save_gallery_flight_path_resolved_points(int $galleryId, string $routeText, array $points, array $unresolved = []): array
 {
-    if ($galleryId <= 0 || !flight_map_schema_ready()) {
+    if ($galleryId <= 0) {
+        return ['point_count' => 0, 'unresolved_count' => 0, 'points' => [], 'unresolved' => $unresolved];
+    }
+    $schemaStatus = presentation_flight_map_schema_status();
+    presentation_schema_assert_known($schemaStatus, 'flight_map_resolved_save');
+    if (!schema_inspection_is_available($schemaStatus)) {
         return ['point_count' => 0, 'unresolved_count' => 0, 'points' => [], 'unresolved' => $unresolved];
     }
 

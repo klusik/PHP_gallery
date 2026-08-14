@@ -37,6 +37,8 @@ declare(strict_types=1);
 
 namespace Gallery\Controllers;
 
+use Gallery\Services\MutationSchemaUnavailableException;
+use Gallery\Services\PresentationSchemaUnavailableException;
 use JsonException;
 use RuntimeException;
 use Throwable;
@@ -65,7 +67,9 @@ use function Gallery\Services\ai_image_analysis_normalize_label;
 use function Gallery\Services\ai_image_analysis_normalize_lease_seconds;
 use function Gallery\Services\ai_image_analysis_normalize_worker_id;
 use function Gallery\Services\ai_image_analysis_record_heartbeat;
-use function Gallery\Services\ai_image_analysis_schema_ready;
+use function Gallery\Services\presentation_ai_image_analysis_schema_status;
+use function Gallery\Services\presentation_schema_log_degraded;
+use function Gallery\Services\schema_inspection_error_code;
 use function Gallery\Services\create_gallery_upload_automation_token;
 use function Gallery\Services\create_image_thumbnails_result;
 use function Gallery\Services\find_gallery;
@@ -86,6 +90,9 @@ use function Gallery\Services\upload_automation_install_client_thumbnails;
 use function Gallery\Services\upload_automation_inventory_candidates;
 use function Gallery\Services\upload_automation_request_token;
 use function Gallery\Services\upload_automation_schema_ready;
+use function Gallery\Services\upload_automation_schema_status;
+use function Gallery\Services\schema_inspection_is_missing;
+use function Gallery\Services\schema_inspection_is_unknown;
 use function Gallery\Services\upload_automation_sim_camera_metadata;
 use function Gallery\Services\upload_automation_tokens_for_manager;
 use function Gallery\Services\upload_automation_uploaded_files;
@@ -177,8 +184,14 @@ function upload_automation_request_action(array $jsonPayload): string
  */
 function upload_automation_handle_ai_action(string $action, int $galleryId, array $gallery, array $tokenRow, array $jsonPayload): void
 {
-    if (!ai_image_analysis_schema_ready()) {
-        upload_automation_json(['ok' => false, 'error' => 'AI image analysis queue is not installed. Run pending database migrations first.'], 503);
+    $schemaStatus = presentation_ai_image_analysis_schema_status();
+    if (!schema_inspection_is_available($schemaStatus)) {
+        if (schema_inspection_is_unknown($schemaStatus)) {
+            presentation_schema_log_degraded($schemaStatus, 'ai_worker_request');
+            upload_automation_json(['ok' => false, 'error' => 'AI image analysis storage could not be verified. Check Admin System Health and try again.'], 503);
+        } else {
+            upload_automation_json(['ok' => false, 'error' => 'AI image analysis queue is not installed. Run pending database migrations first.'], 409);
+        }
         return;
     }
 
@@ -201,14 +214,16 @@ function upload_automation_handle_ai_action(string $action, int $galleryId, arra
         }
 
         upload_automation_json(['ok' => false, 'error' => 'Unknown AI analysis action.'], 400);
+    } catch (PresentationSchemaUnavailableException $exception) {
+        upload_automation_json(['ok' => false, 'error' => 'AI image analysis storage could not be verified. Check Admin System Health and try again.'], 503);
     } catch (Throwable $exception) {
         admin_log_event('error', 'upload_automation.ai_action_failed', 'AI image-analysis automation request failed.', [
             'token_id' => (int) ($tokenRow['id'] ?? 0),
             'gallery_id' => $galleryId,
             'action' => $action,
-            'error' => $exception->getMessage(),
+            'error_code' => schema_inspection_error_code($exception),
         ]);
-        upload_automation_json(['ok' => false, 'error' => $exception->getMessage()], 422);
+        upload_automation_json(['ok' => false, 'error' => 'AI image analysis request could not be completed. Check the server log for the request context.'], 422);
     }
 }
 
@@ -380,8 +395,12 @@ function cms_upload_automation_upload(): void
         return;
     }
 
+    $automationSchemaStatus = upload_automation_schema_status();
     if (!upload_automation_schema_ready()) {
-        upload_automation_json(['ok' => false, 'error' => 'Upload automation is not installed. Run pending database migrations first.'], 503);
+        $error = schema_inspection_is_missing($automationSchemaStatus)
+            ? 'Upload automation is not installed. Run pending database migrations first.'
+            : 'Upload automation is temporarily unavailable because its database schema could not be verified.';
+        upload_automation_json(['ok' => false, 'error' => $error], 503);
         return;
     }
 
@@ -672,6 +691,8 @@ function cms_admin_upload_automation_token(): void
     $notice = '';
     // $actionOk records whether the mutation completed or failed before the response is emitted.
     $actionOk = true;
+    // $failureStatus stores the HTTP code for JSON callers without exposing raw database errors.
+    $failureStatus = 422;
 
     try {
         if ($action === 'revoke') {
@@ -704,9 +725,13 @@ function cms_admin_upload_automation_token(): void
     } catch (Throwable $exception) {
         $actionOk = false;
         $notice = $exception->getMessage();
+        if ($exception instanceof MutationSchemaUnavailableException) {
+            $failureStatus = $exception->state === 'unknown' ? 503 : 409;
+        }
         admin_log_event('error', 'upload_automation.token_action_failed', 'Upload automation API-key management failed.', [
             'gallery_id' => $galleryId,
-            'error' => $notice,
+            'action' => $action === 'revoke' ? 'revoke' : 'create',
+            'schema_state' => $exception instanceof MutationSchemaUnavailableException ? $exception->state : 'not_schema_policy',
         ]);
         flash_message('admin_notice', $notice);
     }
@@ -721,7 +746,7 @@ function cms_admin_upload_automation_token(): void
             'gallery_id' => $galleryId,
             'action' => $action === 'revoke' ? 'revoke' : 'create',
             'token_id' => $tokenId,
-        ], $actionOk ? 200 : 422);
+        ], $actionOk ? 200 : $failureStatus);
         return;
     }
 
@@ -860,7 +885,11 @@ function render_admin_gallery_upload_automation_panel(array $gallery, string $re
     echo '<div class="admin-upload-automation-head"><div><p class="admin-kicker">' . e(t('upload_automation.kicker', 'Automation')) . '</p><h3>' . e(t('upload_automation.title', 'Watched-folder upload API')) . '</h3><p class="muted">' . e(t('upload_automation.help', 'Generate a gallery-scoped API key for the Windows companion app. The key can upload only into this gallery and can be revoked at any time.')) . '</p></div></div>';
 
     if (!upload_automation_schema_ready()) {
-        echo '<div class="notice">' . e(t('upload_automation.migration_required', 'Upload automation needs a pending database migration before API keys can be generated.')) . '</div>';
+        $schemaStatus = upload_automation_schema_status();
+        $schemaMessage = schema_inspection_is_unknown($schemaStatus)
+            ? t('upload_automation.schema_unknown', 'Upload automation is temporarily unavailable because its database schema could not be verified. No API-key changes are allowed until the database inspection succeeds.')
+            : t('upload_automation.migration_required', 'Upload automation needs a pending database migration before API keys can be generated.');
+        echo '<div class="notice">' . e($schemaMessage) . '</div>';
         echo '</section>';
         return;
     }
@@ -943,7 +972,11 @@ function cms_admin_api_manager(): void
     echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.upload_automation.active_keys_kicker', 'Active keys')) . '</p><h2>' . e(t('admin.upload_automation.active_keys_title', 'Active upload API keys')) . '</h2></div><p class="muted">' . e(t('admin.upload_automation.active_keys_help', 'Keys remain scoped to one gallery. Revoke a key here to disable upload access immediately.')) . '</p></div>';
 
     if (!upload_automation_schema_ready()) {
-        echo '<div class="notice">' . e(t('upload_automation.migration_required', 'Upload automation needs a pending database migration before API keys can be generated.')) . '</div>';
+        $schemaStatus = upload_automation_schema_status();
+        $schemaMessage = schema_inspection_is_unknown($schemaStatus)
+            ? t('upload_automation.schema_unknown', 'Upload automation is temporarily unavailable because its database schema could not be verified. No API-key changes are allowed until the database inspection succeeds.')
+            : t('upload_automation.migration_required', 'Upload automation needs a pending database migration before API keys can be generated.');
+        echo '<div class="notice">' . e($schemaMessage) . '</div>';
         echo '</section>';
         render_footer();
         return;

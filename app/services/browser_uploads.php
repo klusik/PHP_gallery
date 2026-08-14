@@ -1140,6 +1140,14 @@ function browser_upload_store_prepared_zip_batch(int $galleryId, array $uploaded
         return $cached;
     }
 
+    mutation_schema_assert_available(
+        upload_ingestion_schema_status(),
+        'browser_upload.store_prepared_batch',
+        'Browser upload requires the current gallery/image database schema. Run pending migrations first.',
+        'Browser upload is temporarily unavailable because the required database schema could not be verified. The prepared ZIP remains uncommitted.'
+    );
+    thumbnail_metadata_preflight_write_schema('browser_upload.thumbnail_metadata_preflight');
+
     $gallery = find_gallery($galleryId);
     if (!$gallery) {
         throw new RuntimeException(t('gallery.error.not_found', 'Gallery not found.'));

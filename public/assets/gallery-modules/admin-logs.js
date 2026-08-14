@@ -112,7 +112,11 @@ function setupAdminLogGroupMembers(root = document) {
         let loadedOnce = false;
         let loading = false;
 
-        // Function `loadNextPage` requests one bounded server page and appends it in place.
+        /**
+         * Request one bounded server page and append its log entries in place.
+         *
+         * @return {Promise<void>}
+         */
         const loadNextPage = async () => {
             if (loading || !list) {
                 return;

@@ -196,6 +196,10 @@ function cms_admin_public_update_image(): void
         $visibility = 'private';
     }
     // Variable $fields stores this steps working value.
+    if (!empty($_POST['nsfw_field_present']) && !nsfw_guard_schema_ready()) {
+        flash_message('admin_notice', admin_nsfw_guard_mutation_error());
+        redirect_to((string) ($_SERVER['HTTP_REFERER'] ?? url_for('home')));
+    }
     $fields = [
         'title = ?' => trim((string) ($_POST['title'] ?? '')),
         'description = ?' => (string) ($_POST['description'] ?? ''),
@@ -288,6 +292,14 @@ function cms_admin_edit_image(): void
     }
     if (request_method() === 'POST') {
         verify_csrf();
+        if (!empty($_POST['nsfw_field_present']) && !nsfw_guard_schema_ready()) {
+            if (str_contains((string) ($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json')) {
+                admin_panel_error_response(admin_nsfw_guard_mutation_error(), 503);
+                return;
+            }
+            flash_message('admin_notice', admin_nsfw_guard_mutation_error());
+            redirect_to(url_for('admin_edit_image', ['id' => $image['id']]));
+        }
         // Variable $visibility stores this steps working value.
         $visibility = in_array($_POST['visibility'] ?? '', ['draft', 'public', 'private'], true) ? (string) $_POST['visibility'] : 'public';
         // Variable $fields stores this steps working value.
@@ -334,7 +346,7 @@ function cms_admin_edit_image(): void
     }
     echo '<label>' . e(t('admin.gallery_editor.visibility', 'Visibility')) . '<select name="visibility">' . image_visibility_options((string) $image['visibility']) . '</select></label>';
     if (nsfw_guard_schema_ready()) {
-        echo '<label><input type="checkbox" name="nsfw_enabled" value="1"' . ((int) ($image['nsfw_enabled'] ?? 0) === 1 ? ' checked' : '') . '> ' . e(t('admin.gallery_editor.mark_photo_nsfw', 'Mark this photo as NSFW / 18+')) . '</label>';
+        echo '<input type="hidden" name="nsfw_field_present" value="1"><label><input type="checkbox" name="nsfw_enabled" value="1"' . ((int) ($image['nsfw_enabled'] ?? 0) === 1 ? ' checked' : '') . '> ' . e(t('admin.gallery_editor.mark_photo_nsfw', 'Mark this photo as NSFW / 18+')) . '</label>';
         echo '<p class="muted">' . e(t('admin.gallery_editor.photo_nsfw_help', 'When enabled, anonymous visitors must confirm they are 18+ before this photo, thumbnail, or original media file is served. Before using NSFW content, please verify that your hosting provider or web hosting plan permits it, as adult content may violate their policies.')) . '</p>';
     }
     echo '<label>' . e(t('admin.gallery_editor.sort_order', 'Sort order')) . '<input name="sort_order" type="number" value="' . (int) $image['sort_order'] . '"></label>';

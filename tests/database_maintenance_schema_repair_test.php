@@ -62,6 +62,9 @@ final class DatabaseMaintenanceRepairStatement extends PDOStatement
     /** @var array<int|string,mixed> */
     private array $parameters = [];
 
+    /**
+     * Create a repair statement double bound to its fake PDO connection.
+     */
     public function __construct(DatabaseMaintenanceRepairPdo $pdo, string $sql)
     {
         $this->pdo = $pdo;

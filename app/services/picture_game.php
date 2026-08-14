@@ -61,18 +61,7 @@ use function Gallery\Core\visitor_hash;
  */
 function picture_game_schema_ready(): bool
 {
-    try {
-        // $stmt stores an intermediate value used by the surrounding gallery workflow.
-        $stmt = db()->query("SHOW COLUMNS FROM galleries LIKE 'picture_game_enabled'");
-        if (!$stmt || !$stmt->fetch()) {
-            return false;
-        }
-        // $stmt stores an intermediate value used by the surrounding gallery workflow.
-        $stmt = db()->query("SHOW TABLES LIKE 'picture_game_votes'");
-        return $stmt && (bool) $stmt->fetch();
-    } catch (PDOException) {
-        return false;
-    }
+    return presentation_schema_render_available(presentation_picture_game_schema_status(), 'picture_game_render');
 }
 
 /**
@@ -82,13 +71,7 @@ function picture_game_schema_ready(): bool
  */
 function gallery_voting_schema_ready(): bool
 {
-    try {
-        // $stmt stores an intermediate value used by the surrounding gallery workflow.
-        $stmt = db()->query("SHOW COLUMNS FROM galleries LIKE 'voting_enabled'");
-        return $stmt && (bool) $stmt->fetch();
-    } catch (PDOException) {
-        return false;
-    }
+    return presentation_schema_render_available(presentation_voting_schema_status(), 'image_voting_render');
 }
 
 /**
@@ -112,7 +95,9 @@ function gallery_voting_allowed(array $gallery): bool
  */
 function sync_gallery_voting_game_state(): int
 {
-    if (!gallery_voting_schema_ready() || !picture_game_schema_ready()) {
+    $schemaStatus = presentation_picture_game_schema_status();
+    presentation_schema_assert_known($schemaStatus, 'picture_game_state_sync');
+    if (!schema_inspection_is_available($schemaStatus)) {
         return 0;
     }
     // $stmt stores an intermediate value used by the surrounding gallery workflow.
@@ -317,6 +302,8 @@ function picture_game_pair_key(int $firstImageId, int $secondImageId): array
  */
 function next_picture_game_pair(array $gallery, ?array $images = null): ?array
 {
+    $schemaStatus = presentation_picture_game_schema_status();
+    presentation_schema_assert_write_available($schemaStatus, 'picture_game_pair_display');
     // Variable $images stores this steps working value.
     $images ??= picture_game_images($gallery);
     if (count($images) < 2) {
@@ -383,6 +370,7 @@ function next_picture_game_pair(array $gallery, ?array $images = null): ?array
  */
 function record_picture_game_vote(array $gallery, int $leftImageId, int $rightImageId, int $winnerImageId, ?array $images = null): void
 {
+    presentation_schema_assert_write_available(presentation_picture_game_schema_status(), 'picture_game_vote');
     [$imageAId, $imageBId] = picture_game_pair_key($leftImageId, $rightImageId);
     if (!in_array($winnerImageId, [$imageAId, $imageBId], true)) {
         throw new RuntimeException('Selected image is not part of this pair.');

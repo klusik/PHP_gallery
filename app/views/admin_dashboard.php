@@ -82,7 +82,18 @@ function view_render_admin_dashboard(array $model): void
     $totalImages = (int) ($model['total_images'] ?? 0);
     $missingThumbnailVariants = (int) ($model['missing_thumbnail_variants'] ?? 0);
     $notices = is_array($model['notices'] ?? null) ? $model['notices'] : [];
-    $maintenanceBadge = $migrationPending ? t('admin.dashboard.badge_action', 'Action') : ($missingThumbnailVariants > 0 ? (string) $missingThumbnailVariants : null);
+    // Security/auth schema health surfaces before the deferred Maintenance panel opens.
+    $securitySchemaStatuses = is_array($model['security_schema_statuses'] ?? null) ? $model['security_schema_statuses'] : [];
+    // Destructive/ingestion schema health uses the same badge so paused mutations are visible immediately.
+    $mutationSchemaStatuses = is_array($model['mutation_schema_statuses'] ?? null) ? $model['mutation_schema_statuses'] : [];
+    $systemHealthActionRequired = false;
+    foreach (array_merge($securitySchemaStatuses, $mutationSchemaStatuses) as $schemaStatus) {
+        if (is_array($schemaStatus) && in_array((string) ($schemaStatus['state'] ?? 'unknown'), ['missing', 'unknown'], true)) {
+            $systemHealthActionRequired = true;
+            break;
+        }
+    }
+    $maintenanceBadge = $migrationPending || $systemHealthActionRequired ? t('admin.dashboard.badge_action', 'Action') : ($missingThumbnailVariants > 0 ? (string) $missingThumbnailVariants : null);
 
     $adminTabs = [
         ['id' => 'admin-tab-overview', 'label' => t('admin.dashboard.tab_overview', 'Overview')],

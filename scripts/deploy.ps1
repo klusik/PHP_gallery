@@ -39,8 +39,7 @@ param(
     [string]$RemoteFolder,
     [string]$DeployFolder,
     [string]$UploadMedia,
-    [string]$MakeZipDeploy,
-    [string]$UpdateManifest
+    [string]$MakeZipDeploy
 )
 
 if (-not $Mode) {
@@ -96,32 +95,6 @@ $excludeFiles = @('.gitignore', 'config.php', '.env', '*.log', '*.tmp')
 # Variable $alwaysIncludeRelatives stores deploy paths that must stay packaged even as filters evolve.
 $alwaysIncludeRelatives = @('app')
 
-
-# Function `Invoke-ManifestGenerator` handles manifest refresh before deployment.
-function Invoke-ManifestGenerator {
-    # Variable $phpCommand stores this scripts working value.
-    $phpCommand = Get-Command php -ErrorAction SilentlyContinue
-    if (-not $phpCommand) {
-        Write-Warning "PHP executable was not found in PATH. Integrity manifest update was skipped."
-        return $false
-    }
-
-    # Variable $manifestScript stores this scripts working value.
-    $manifestScript = Join-Path $root 'scripts\generate_manifest.php'
-    if (-not (Test-Path $manifestScript)) {
-        Write-Warning "Manifest generator was not found: $manifestScript. Integrity manifest update was skipped."
-        return $false
-    }
-
-    Write-Host "Updating integrity manifest..."
-    & php $manifestScript
-    if ($LASTEXITCODE -ne 0) {
-        Write-Warning "Manifest generator failed with exit code $LASTEXITCODE. Deploy will continue without updating the integrity manifest."
-        return $false
-    }
-
-    return $true
-}
 
 # Function `Get-DeployRelativePath` handles this script step.
 function Get-DeployRelativePath($Path) {
@@ -271,21 +244,6 @@ function Ensure-RemoteDirectory($Uri) {
 
 Set-Location $root
 
-# Variable $refreshManifest stores this scripts working value.
-$refreshManifest = $true
-if ($PSBoundParameters.ContainsKey('UpdateManifest')) {
-    # Variable $refreshManifest stores this scripts working value.
-    $refreshManifest = ($UpdateManifest -match '^(1|true|yes|y)$')
-} else {
-    # Variable $manifestAnswer stores this scripts working value.
-    $manifestAnswer = Read-Host "Update integrity manifest before deploy? y/N"
-    # Variable $refreshManifest stores this scripts working value.
-    $refreshManifest = ($manifestAnswer -match '^[Yy]')
-}
-
-if ($refreshManifest) {
-    Invoke-ManifestGenerator
-}
 if ($Mode -eq 'local') {
     $script:DeployTarget = if ([System.IO.Path]::IsPathRooted($DeployFolder)) {
         $DeployFolder

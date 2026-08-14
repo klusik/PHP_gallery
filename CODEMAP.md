@@ -280,14 +280,16 @@ The Gallery tags Theme subsection is rendered by app/controllers/admin_theme.php
 
 ## Updates and GitHub Integration
 
-| Task | Files |
-| --- | --- |
-| GitHub API helper/cache | `app/services/github.php` |
-| Update status model | `app/services/updates.php` |
-| Admin update UI | `app/controllers/updates.php` |
-| Patch notes | `PATCH_NOTES.md` |
-| Release metadata | `release-metadata.json` |
-| Updater safety regression test | `tests/updater_safety_model_test.php` |
+| Task | Files | Notes |
+| --- | --- | --- |
+| GitHub API helper/cache | `app/services/github.php` | Shared GitHub metadata/content transport. |
+| Update status/service router | `app/services/updates.php`, `app/services/updates_status.php`, `app/services/updates_remote.php` | Bounded release discovery and updater service composition. |
+| Resumable update state machine | `app/services/updates_jobs.php` | Durable jobs, bounded download/archive/extract/verify/stage/backup checkpoints, Range/If-Range resume, worker locks, pre-activation cancellation, changed-file activation, migration continuation, rollback and cleanup. |
+| Update install/background entry points | `app/services/updates_install.php`, `scripts/application_update.php` | Legacy API starters plus request-triggered/cron continuation; discovery and package work are split across invocations. |
+| Admin update UI | `app/controllers/updates.php`, `public/assets/gallery-modules/admin-update-jobs.js` | Authenticated CSRF-protected start/continue/retry/cancel/rollback controls with delegated in-panel progress refresh and non-JavaScript POST fallback. |
+| Patch notes | `PATCH_NOTES.md` | Release-note source, not modified as part of updater hardening. |
+| Release metadata | `release-metadata.json` | Version/channel metadata consumed during discovery. |
+| Updater safety regression tests | `tests/updater_safety_model_test.php`, `tests/updater_resumable_state_machine_test.php` | State, interruption, locking, package, rollback, migration, synchronized Status/Advanced progress UI, deterministic non-retryable manifest failures, and redaction contracts. |
 
 ## Language and Translations
 
@@ -298,12 +300,15 @@ The Gallery tags Theme subsection is rendered by app/controllers/admin_theme.php
 | Complete maintained JSON packs | `app/lang/en.json`, `app/lang/cs.json`, `app/lang/de.json`, `app/lang/sv.json` |
 | Dormant future-language skeletons | `app/lang/no.json`, `app/lang/is.json`, `app/lang/da.json`, `app/lang/fr.json`, `app/lang/it.json`, `app/lang/es.json` |
 | PHP compatibility fallbacks | `app/lang/en.php`, `app/lang/cs.php`, `app/lang/de.php`, `app/lang/sv.php` |
-| Admin and public language selectors, pack editor | `app/controllers/admin_theme.php` |
-| Public language centralized setting | `app/services/admin_settings_registry.php`, `app/services/app_settings.php` |
+| Admin/public default language selectors and pack editor | `app/controllers/admin_theme.php` |
+| Reusable viewer-language settings panel | `app/views/admin_language_settings.php`, reused by `app/controllers/admin_theme_language.php` and `app/views/admin_settings.php` |
+| Public language and viewer-selector centralized settings/search | `app/services/admin_settings_registry.php`, `app/controllers/admin_settings.php` |
+| Per-viewer public flag/native-name selector and override policy | `app/services/translations.php`, `app/views/layout.php`, `public/assets/styles/public.css`, `public/assets/flags/*.svg` |
+| Bundled flag artwork license | `public/assets/flags/LICENSE.flag-icons.md` |
 | Browser translation payload | `app/views/layout.php`, `app/controllers/theme_assets.php` |
-| Catalog regression coverage | `tests/translation_catalog_consistency_test.php` |
+| Catalog and viewer-preference regression coverage | `tests/translation_catalog_consistency_test.php`, `tests/public_language_preference_test.php` |
 
-English is the canonical default and fallback. English, Czech, German, and Swedish are the only selectable languages and their JSON catalogs remain key-for-key complete. Dormant future-language skeletons may contain validated subsets of English keys, but file discovery alone does not make them selectable.
+English is the canonical default and fallback. English, Czech, German, and Swedish are the only selectable languages and their JSON catalogs remain key-for-key complete. Public visitors can override the site default from the shared header and reset to the site default; the preference is local to their browser. Dormant future-language skeletons may contain validated subsets of English keys, but file discovery alone does not make them selectable.
 
 ## Database and Migrations
 
@@ -312,8 +317,79 @@ English is the canonical default and fallback. English, Czech, German, and Swedi
 | DB connection | `app/database.php` |
 | Migration runner | `app/migrations.php` |
 | Schema helpers | `app/services/database_helpers.php` |
+| Three-state schema inspection | `app/services/schema_inspection.php`, `tests/schema_inspection_model_test.php` for structured table/column/index and column-definition results, production metadata-query definitions, request cache/reset, safe diagnostics, aggregate feature state, registration contract, and isolated available/missing/unknown coverage. `app/migrations.php` is the cache-invalidation boundary after schema DDL and repair callbacks. |
+| Security/public policy conversion | `app/services/gallery_access.php`, `app/bootstrap/dispatch.php`, `app/controllers/http_helpers.php`, `app/services/public_paths.php`, `app/services/favorite_galleries.php`, `app/services/gallery_sidecars.php`, `app/controllers/public_gallery_controls.php` for gallery access, visibility vocabulary, NSFW, share-token, sitemap/listing/sidecar, media/metadata, and protected-download fail-closed policy. `tests/gallery_access_schema_policy_test.php`, `tests/support/security_schema_policy_dispatch_fixture.php`, `tests/nsfw_schema_policy_test.php`, and `tests/service_unavailable_response_test.php` cover current/legacy/partial/unknown states, handler preflight, response formats, and redaction. |
+| Authentication schema conversion | `app/services/auth_persistence.php`, `app/services/google_auth.php`, `app/controllers/admin_auth.php`, `app/security.php` for persistent login, `users.email`, password reset, external identity links, account editing, and safe session continuity. `tests/auth_schema_policy_test.php` covers available/missing/unknown policy, query caching, disabled persistent login, and bounded logs. |
+| Security System Health | `app/services/admin_dashboard.php`, `app/views/admin_dashboard.php`, `app/views/admin_dashboard_sections.php`, `app/controllers/admin_diagnostics.php` for `gallery_access`, `gallery_visibility`, `gallery_share_token`, `nsfw_guard`, `auth_persistent_login`, `auth_password_reset`, and `auth_external_identity`. `tests/security_schema_system_health_test.php` and `tests/admin_nsfw_system_health_test.php` protect the four-state bounded model and Runtime Diagnostics integration. |
+| Mutation schema policy | `app/services/mutation_schema_policy.php` defines the Phase 10 capability registry, fail-closed assertions, optional-dependency compatibility checks, narrow credential-revocation capabilities, bounded `database.mutation_schema_refused` diagnostics, and the shared `MutationSchemaUnavailableException`. `tests/mutation_schema_policy_test.php` protects state semantics, request-cache budgets, preflight ordering, health registration, updater package requirements, and removal of legacy boolean probes from converted mutation paths. |
+| Gallery destructive mutations | `app/services/gallery_mutations.php`, `app/services/picture_manager.php` preflight gallery/image ownership, path, hash, ordering, tag-propagation, and dependency cleanup before deletion, move, or copy. Confirmed absent optional dependency tables/columns may be skipped; unknown dependencies stop the mutation. |
+| Duplicate Photo Detector ledger schema | `app/services/duplicate_photo_ledger.php`, `app/controllers/admin_duplicate_photos.php` distinguish missing ledger migration from unknown inspection state and refuse per-admin ignore/reset writes on unknown schema. |
+| Upload ingestion schema | `app/services/uploads.php`, `app/services/browser_uploads.php` require current gallery/image registration schema plus conclusive thumbnail write-shape inspection before source files are moved or prepared ZIP entries are written into a gallery. |
+| Upload automation schema | `app/services/upload_automation.php`, `app/controllers/upload_automation.php` require the complete `gallery_upload_tokens` shape for issuance/authentication/usage and a smaller verified revocation shape for disabling an existing API key. |
+| Gallery migration schema | `app/services/gallery_migration.php` preflights target gallery/image schema, optional imported metadata columns, thumbnail write compatibility, asset installation, and job completion so an inspection outage pauses the resumable job before target mutation. |
+| Mobile WebDAV schema | `app/services/mobile_webdav.php`, `app/controllers/mobile_webdav.php` separate full credential/authentication readiness from narrow credential deletion and verify upload-ingestion schema before PUT storage crosses into a gallery. |
+| Thumbnail mutation schema | `app/services/thumbnail_metadata.php`, `app/services/thumbnail_generation.php`, `app/services/thumbnail_maintenance.php` preserve confirmed table-absent file-only compatibility while refusing unknown metadata/write-shape state before generation, variant deletion, repair, or bulk derivative deletion. |
+| Database maintenance mutation schema | `app/services/database_maintenance.php` requires conclusive `schema_migrations` inspection before cleanup/repair. Confirmed absence may enter the migration bootstrap path; unknown state refuses mutation. |
+| Update activation schema | `app/services/updates_install.php`, `app/services/updates_filesystem.php` allow staging/download first, then require conclusive schema inspection immediately before active-file copy. Update snapshots must contain `schema_inspection.php` and `mutation_schema_policy.php`. |
+| Mutation System Health | `app/services/admin_dashboard.php`, `app/views/admin_dashboard.php`, `app/views/admin_dashboard_sections.php`, `app/controllers/admin_diagnostics.php` register and render the ten Phase 10 mutation capabilities through the same bounded Admin-health model used by Phase 9. Missing and unknown states raise the Maintenance/System Health Action signal. |
+| Presentation/reporting schema policy | `app/services/presentation_schema_policy.php` defines the fifteen Phase 11 capability resolvers, safe read degradation, write/known assertions, bounded `database.presentation_schema_degraded` logging, affected-object normalization, and the `PresentationSchemaUnavailableException` boundary. |
+| GPS and flight-map presentation | `app/services/exif.php`, `app/services/flight_maps.php`, `app/services/gallery_metadata_organizer.php`, `app/controllers/admin_dashboard.php`, `app/controllers/admin_galleries_edit_actions.php` use structured GPS/EXIF, narrow capture-date organizer readiness, nullable override, route-map, and local navdata capabilities. |
+| Voting and Picture Game | `app/services/picture_game.php`, `app/services/gallery_sidecars.php`, `app/controllers/votes.php`, `app/controllers/picture_game.php`, `app/controllers/admin_galleries_bulk.php` separate optional rendering from writes that record votes, displayed pairs, gallery feature state, and voting-enabled gallery creation/import. |
+| Lightbox presentation override | `app/services/gallery_lightbox_mode.php`, `app/services/gallery_sidecars.php`, `app/services/gallery_metadata_organizer.php`, `app/controllers/admin_galleries_edit_actions.php` verify the override column and supported stored vocabulary before explicit or inherited persistence while safe reads may fall back to the global/default mode. |
+| OpenAI and local AI presentation schema | `app/services/openai_text_assist.php`, `app/services/ai_image_analysis.php`, `app/controllers/upload_automation.php` distinguish core OpenAI settings, optional image input, and AI metadata/queue storage; worker schema failures use bounded responses instead of raw exceptions. |
+| SimBrief and navigation integration | `app/services/simbrief_descriptions.php`, `app/services/navigation_data.php` keep remote/session behavior independent from optional persistent route/account/cache storage while refusing unknown account persistence and using a narrow verified disconnect capability. |
+| Telemetry presentation/reporting | `app/services/telemetry.php`, `app/services/telemetry_settings.php`, `app/services/telemetry_rollup.php`, `app/controllers/admin_telemetry.php` distinguish safe read omission, verified settings writes, complete report shape, and maintenance refusal on unknown schema. |
+| Complete Admin Gallery Report | `app/services/admin_gallery_report.php` uses structured named-object inspection for known optional sections, retains a justified dynamic `information_schema.TABLES` inventory query, and suppresses raw database exception text. |
+| Presentation System Health | `app/services/admin_dashboard.php`, `app/views/admin_dashboard_sections.php`, `app/controllers/admin_diagnostics.php` expose the same fifteen lazy Phase 11 capability resolvers as `available`, `missing`, `unknown`, or feature-flag `disabled`. |
 | Migration files | `database/migrations/*.php` |
 | Schema documentation | `DATABASE.md` |
+
+`app/services/database_helpers.php` continues to expose compatibility boolean
+table and column checks for narrow legacy/read callers, but those helpers are not
+policy evidence when confirmed absence must be distinguished from inspection
+failure. `app/services/schema_inspection.php` provides the audited `available`,
+`missing`, and `unknown` API, request-local cache, safe diagnostics, feature
+aggregation, trusted column-definition token inspection, and column-nullability
+inspection. `app/migrations.php` invalidates the request cache after
+schema-changing statements and successful repair callbacks so a single migration
+process can inspect, modify, and re-inspect safely.
+
+Phase 10 mutation callers use `app/services/mutation_schema_policy.php` instead
+of the legacy boolean schema helpers. Every converted destructive or ingestion
+workflow has a named aggregate status and performs its conclusive preflight before
+the first irreversible target mutation. Confirmed absence may select only a
+documented compatibility or migration-bootstrap path. Unknown metadata state is
+never treated as absence. `admin_mutation_schema_health_statuses()` exposes those
+same ten capabilities to System Health and Runtime Diagnostics.
+
+For gallery access, do not treat feature-level `missing` as legacy by itself.
+`gallery_access_schema_is_confirmed_legacy()` requires all five access columns to
+be confirmed absent; partial migration and unknown state fail closed. For
+authentication, distinguish optional durable conveniences from the primary PHP
+session: confirmed missing remember-token storage preserves session login, while
+unknown storage never authorizes token issue/use. Share-token revocation is the
+security-tightening exception and may clear the verified validating hash even
+when the optional encrypted display-token column is unavailable.
+
+Phase 11 optional presentation/reporting callers use
+`app/services/presentation_schema_policy.php`. The policy registry owns named
+status aggregates for GPS/EXIF maps, nullable GPS overrides, flight maps and local
+navdata, voting, Picture Game, lightbox overrides, OpenAI text/image-input
+settings, local AI image-analysis storage, SimBrief route-map persistence,
+navigation cache/account storage, telemetry reporting, and the Complete Admin
+Gallery Report. Read-only presentation wrappers may omit a feature when doing so is
+safe; state-changing callers use explicit write/known assertions instead of the
+boolean wrapper.
+
+`presentation_schema_health_definitions()` is intentionally lazy. It stores
+feature resolvers plus feature-flag identifiers.
+`admin_presentation_schema_health_statuses()` resolves only enabled capabilities,
+so a disabled optional feature reports `disabled` without metadata queries. The
+resolved objects reuse the same request cache as all other schema policy. The
+Complete Admin Gallery Report is the one intentional direct-schema-query exception:
+`admin_gallery_report_exact_database_table_counts()` queries
+`information_schema.TABLES` because it must enumerate every current base table
+dynamically, not test one known table identity.
 
 ## Deployment and Tooling
 
@@ -331,6 +407,7 @@ English is the canonical default and fallback. English, Czech, German, and Swedi
 
 | Test | Purpose |
 | --- | --- |
+| `tests/presentation_schema_policy_test.php` | Final Phase 11 optional presentation/reporting state policy, lazy health registry, query-budget, redaction, write-boundary, source-audit, and diagnostics contracts. |
 | `tests/admin_log_severity_filter_test.php` | Log filtering behavior. |
 | `tests/admin_log_scaling_test.php` | Indexed grouped browsing, bounded exports, and retention contracts. |
 | `tests/admin_log_archive_maintenance_test.php` | Protected day archives, resumable archive state, row-count safety, and archive cleanup behavior. |

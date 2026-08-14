@@ -153,6 +153,14 @@ function admin_dashboard_parent_sync_fingerprint(): string
  */
 function admin_dashboard_view_model(bool $includeMaintenance = false): array
 {
+    // $securitySchemaStatuses preserves normalized security/auth capability state for System Health.
+    $securitySchemaStatuses = admin_security_schema_health_statuses();
+    // $mutationSchemaStatuses preserves Phase 10 destructive/ingestion capability state for System Health.
+    $mutationSchemaStatuses = admin_mutation_schema_health_statuses();
+    // $presentationSchemaStatuses preserves Phase 11 optional presentation/reporting readiness for System Health.
+    $presentationSchemaStatuses = admin_presentation_schema_health_statuses();
+    // $nsfwSchemaStatus retains the established key for compatibility with existing view/tests.
+    $nsfwSchemaStatus = $securitySchemaStatuses['nsfw_guard'];
     // Variable $pictureGameReady stores this steps working value.
     $pictureGameReady = admin_render_profile_schema('schema_picture_game', static fn (): bool => picture_game_schema_ready()) && (!function_exists('Gallery\\Services\\feature_flag_enabled') || (feature_flag_enabled('picture_game') && feature_flag_enabled('image_voting')));
     // Variable $gpsMapReady stores this steps working value.
@@ -279,6 +287,10 @@ function admin_dashboard_view_model(bool $includeMaintenance = false): array
         'filename_display_ready' => $filenameDisplayReady,
         'gallery_date_range_ready' => $galleryDateRangeReady,
         'migration_pending' => $migrationPending,
+        'nsfw_schema_status' => $nsfwSchemaStatus,
+        'security_schema_statuses' => $securitySchemaStatuses,
+        'mutation_schema_statuses' => $mutationSchemaStatuses,
+        'presentation_schema_statuses' => $presentationSchemaStatuses,
         'access_ready' => $accessReady,
         'background_source_ready' => $backgroundSourceReady,
         'flight_navdata_ready' => $flightNavdataReady,
@@ -301,6 +313,198 @@ function admin_dashboard_view_model(bool $includeMaintenance = false): array
         'private_galleries' => $privateGalleries,
         'missing_thumbnail_variants' => $missingThumbnailVariants,
     ];
+}
+
+/**
+ * Build a bounded Admin-health model from one NSFW schema inspection result.
+ *
+ * This pure normalization boundary keeps dashboard and Runtime Diagnostics
+ * wording synchronized. The disabled state is supported for features that are
+ * intentionally configuration-gated; NSFW Guard currently has no such feature
+ * flag and therefore calls this model with enabled=true.
+ *
+ * @param array $schemaStatus Aggregate feature inspection result.
+ * @param bool $enabled Whether configuration intentionally enables the feature.
+ * @param string $requestId Safe request correlation identifier for unknown state.
+ * @return array{state:string,feature:string,request_id:string,affected_objects:array<int,string>,suggested_checks:array<int,string>}
+ */
+function admin_schema_health_model(array $schemaStatus, string $feature, bool $enabled = true, string $requestId = ''): array
+{
+    $safeFeature = preg_match('/^[a-z0-9_]+$/D', $feature) === 1 ? $feature : 'schema_capability';
+    if (!$enabled) {
+        return [
+            'state' => 'disabled',
+            'feature' => $safeFeature,
+            'request_id' => '',
+            'affected_objects' => [],
+            'suggested_checks' => [],
+        ];
+    }
+
+    // $state stores one trusted state from the shared inspection vocabulary.
+    $state = in_array($schemaStatus['state'] ?? '', ['available', 'missing', 'unknown'], true)
+        ? (string) $schemaStatus['state']
+        : 'unknown';
+    // $affectedObjects stores only bounded schema identities, never SQL or exception text.
+    $affectedObjects = [];
+    foreach ((array) ($schemaStatus['requirements'] ?? []) as $requirement) {
+        if (!is_array($requirement) || ($requirement['state'] ?? '') === 'available') {
+            continue;
+        }
+        $table = (string) ($requirement['table'] ?? '');
+        $object = (string) ($requirement['object'] ?? '');
+        $objectType = (string) ($requirement['object_type'] ?? '');
+        if (strlen($table) > 64 || strlen($object) > 64 || preg_match('/^[A-Za-z0-9_]+$/D', $table) !== 1 || preg_match('/^[A-Za-z0-9_]+$/D', $object) !== 1) {
+            continue;
+        }
+        $affectedObjects[] = $objectType === 'table' || $table === $object ? $table : $table . '.' . $object;
+    }
+
+    return [
+        'state' => $state,
+        'feature' => $safeFeature,
+        'request_id' => $state === 'unknown' ? substr($requestId, 0, 64) : '',
+        'affected_objects' => array_values(array_unique($affectedObjects)),
+        'suggested_checks' => $state === 'unknown'
+            ? ['database_connection', 'selected_database', 'schema_inspection_permissions']
+            : ($state === 'missing' ? ['pending_migrations'] : []),
+    ];
+}
+
+/**
+ * Build the established NSFW health model through the generic security normalizer.
+ *
+ * @param array $schemaStatus Aggregate feature inspection result.
+ * @param bool $enabled Whether configuration intentionally enables the feature.
+ * @param string $requestId Safe request correlation identifier for unknown state.
+ * @return array{state:string,feature:string,request_id:string,affected_objects:array<int,string>,suggested_checks:array<int,string>}
+ */
+function admin_nsfw_schema_health_model(array $schemaStatus, bool $enabled = true, string $requestId = ''): array
+{
+    return admin_schema_health_model($schemaStatus, 'nsfw_guard', $enabled, $requestId);
+}
+
+/**
+ * Inspect all Phase 9 security/authentication capabilities for Admin System Health.
+ *
+ * Missing means inspection succeeded and migration/legacy policy can be applied.
+ * Unknown means metadata inspection failed and security-sensitive operations are
+ * refused rather than silently downgraded. Configuration-disabled Google login is
+ * represented as disabled so an unused OAuth integration does not create noise.
+ *
+ * @return array<string,array{state:string,feature:string,request_id:string,affected_objects:array<int,string>,suggested_checks:array<int,string>}>
+ */
+function admin_security_schema_health_statuses(): array
+{
+    $requestId = function_exists('Gallery\Services\telemetry_request_id') ? telemetry_request_id() : '';
+    $definitions = [
+        'gallery_access' => [gallery_access_schema_status(), true],
+        'gallery_visibility' => [gallery_visibility_schema_status(), true],
+        'gallery_share_token' => [gallery_access_share_token_schema_status(), true],
+        'nsfw_guard' => [nsfw_guard_schema_status(), true],
+        'auth_persistent_login' => [auth_persistent_login_schema_status(), (bool) (auth_persistence_config()['persistent_login_enabled'] ?? true)],
+        'auth_password_reset' => [auth_password_reset_schema_status(), true],
+        'auth_external_identity' => [google_auth_schema_status(), google_auth_configuration_ready()],
+    ];
+
+    $statuses = [];
+    foreach ($definitions as $feature => [$schemaStatus, $enabled]) {
+        $statuses[$feature] = admin_schema_health_model(
+            $schemaStatus,
+            $feature,
+            (bool) $enabled,
+            schema_inspection_is_unknown($schemaStatus) ? $requestId : ''
+        );
+    }
+    return $statuses;
+}
+
+/**
+ * Inspect all Phase 10 destructive and ingestion capabilities for Admin System Health.
+ *
+ * The dashboard deliberately exposes the same available/missing/unknown vocabulary
+ * used by mutation boundaries. Missing means metadata inspection completed and a
+ * migration or explicitly documented compatibility path can be selected. Unknown
+ * means metadata inspection itself failed, so the affected mutation is paused before
+ * files, rows, credentials, migration state, or active application files are changed.
+ *
+ * @return array<string,array{state:string,feature:string,request_id:string,affected_objects:array<int,string>,suggested_checks:array<int,string>}>
+ */
+function admin_mutation_schema_health_statuses(): array
+{
+    $requestId = function_exists('Gallery\Services\telemetry_request_id') ? telemetry_request_id() : '';
+    $definitions = [
+        'mutation_gallery_delete' => gallery_deletion_schema_status(),
+        'mutation_gallery_move' => gallery_move_schema_status(),
+        'mutation_duplicate_photo_ledger' => duplicate_photo_ledger_schema_status(),
+        'mutation_upload_ingestion' => upload_ingestion_schema_status(),
+        'mutation_upload_automation' => upload_automation_schema_status(),
+        'mutation_gallery_migration' => gallery_migration_schema_status(),
+        'mutation_mobile_webdav' => mobile_webdav_schema_status(),
+        'mutation_thumbnail_metadata' => thumbnail_metadata_mutation_schema_status(),
+        'mutation_database_maintenance' => database_maintenance_mutation_schema_status(),
+        'mutation_application_update' => application_update_activation_schema_status(),
+    ];
+
+    $statuses = [];
+    foreach ($definitions as $feature => $schemaStatus) {
+        $statuses[$feature] = admin_schema_health_model(
+            $schemaStatus,
+            $feature,
+            true,
+            schema_inspection_is_unknown($schemaStatus) ? $requestId : ''
+        );
+    }
+    return $statuses;
+}
+
+/**
+ * Inspect all Phase 11 optional presentation/reporting capabilities for Admin System Health.
+ *
+ * Disabled feature flags are represented explicitly. Missing means the optional
+ * capability is not installed and may be omitted according to its compatibility
+ * policy. Unknown means metadata inspection itself failed, so safe reads may be
+ * omitted while writes that depend on the capability remain refused.
+ *
+ * @return array<string,array{state:string,feature:string,request_id:string,affected_objects:array<int,string>,suggested_checks:array<int,string>}>
+ */
+function admin_presentation_schema_health_statuses(): array
+{
+    $requestId = function_exists('Gallery\Services\telemetry_request_id') ? telemetry_request_id() : '';
+    $statuses = [];
+    foreach (presentation_schema_health_definitions() as $feature => $definition) {
+        $flag = trim((string) ($definition['flag'] ?? ''));
+        $enabled = $flag === '' || !function_exists('Gallery\Services\feature_flag_enabled') || feature_flag_enabled($flag);
+        if (!$enabled) {
+            // Disabled optional features do not need metadata inspection. This keeps
+            // System Health explicit while avoiding queries for schema that cannot
+            // affect the current request.
+            $statuses[$feature] = admin_schema_health_model([], $feature, false, '');
+            continue;
+        }
+
+        $resolver = $definition['resolver'] ?? null;
+        $schemaStatus = is_callable($resolver)
+            ? $resolver()
+            : ['state' => 'unknown', 'requirements' => []];
+        $statuses[$feature] = admin_schema_health_model(
+            $schemaStatus,
+            $feature,
+            true,
+            schema_inspection_is_unknown($schemaStatus) ? $requestId : ''
+        );
+    }
+    return $statuses;
+}
+
+/**
+ * Inspect NSFW Guard and return its normalized Admin-health model.
+ *
+ * @return array{state:string,feature:string,request_id:string,affected_objects:array<int,string>,suggested_checks:array<int,string>}
+ */
+function admin_nsfw_schema_health_status(): array
+{
+    return admin_security_schema_health_statuses()['nsfw_guard'];
 }
 
 /**

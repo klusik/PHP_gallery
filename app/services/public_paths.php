@@ -85,6 +85,9 @@ function public_gallery_sitemap_entries(): array
  */
 function public_sitemap_entries(): array
 {
+    // Sitemap generation is public policy and must not query visibility/access state before it is verified.
+    gallery_visibility_assert_public_policy_available();
+    gallery_access_assert_public_policy_available();
     $entries = [public_homepage_sitemap_entry()];
     foreach (public_sitemap_gallery_rows() as $gallery) {
         if (gallery_access_schema_ready() && gallery_access_requirement($gallery) !== null) {
@@ -140,6 +143,8 @@ function public_homepage_sitemap_entry(): array
  */
 function public_sitemap_gallery_rows(): array
 {
+    gallery_visibility_assert_public_policy_available();
+    gallery_access_assert_public_policy_available();
     $columns = gallery_access_schema_ready() ? '*' : 'id, parent_id, folder_path, slug, title, description, visibility, cover_image_id, created_at, updated_at';
     $stmt = db()->query("SELECT $columns
         FROM galleries
@@ -596,6 +601,9 @@ function find_image_by_public_slug(int $galleryId, string $slug): ?array
  */
 function public_gallery_listing_sql_fragment(string $alias = 'g'): string
 {
+    gallery_visibility_assert_public_policy_available();
+    gallery_access_assert_public_policy_available();
+
     // $prefix stores an intermediate value used by the surrounding gallery workflow.
     $prefix = $alias . '.';
     // $sql stores an intermediate value used by the surrounding gallery workflow.
@@ -1010,6 +1018,12 @@ function regenerate_gallery_image_public_slugs(int $galleryId): int
     return $count;
 }
 
+/**
+ * Regenerate unique public slugs for every image in gallery order.
+ *
+ * @param PDO $pdo Active application database connection.
+ * @return int Number of image records assigned a public slug.
+ */
 function regenerate_image_public_slugs(PDO $pdo): int
 {
     // $stmt stores an intermediate value used by the surrounding gallery workflow.

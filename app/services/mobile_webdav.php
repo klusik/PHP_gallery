@@ -50,7 +50,7 @@ use function Gallery\Core\now_sql;
  */
 function mobile_webdav_ready(): bool
 {
-    return function_exists('Gallery\\Services\\db_table_exists') && db_table_exists('mobile_webdav_upload_tokens');
+    return schema_inspection_is_available(mobile_webdav_schema_status());
 }
 
 /**
@@ -60,9 +60,15 @@ function mobile_webdav_ready(): bool
  */
 function mobile_webdav_tokens(): array
 {
-    if (!mobile_webdav_ready()) {
+    $schemaStatus = mobile_webdav_schema_status();
+    if (schema_inspection_is_missing($schemaStatus)) {
         return [];
     }
+    mutation_schema_assert_known(
+        $schemaStatus,
+        'mobile_webdav.list_tokens',
+        t('mobile_webdav.error_schema_unknown', 'Mobile upload connections are temporarily unavailable because their database schema could not be verified.')
+    );
     $stmt = db()->query("SELECT t.*, g.title AS gallery_title, g.folder_path AS gallery_folder_path
         FROM mobile_webdav_upload_tokens t
         INNER JOIN galleries g ON g.id = t.gallery_id
@@ -80,9 +86,12 @@ function mobile_webdav_tokens(): array
  */
 function mobile_webdav_create_token(int $userId, int $galleryId, string $label): array
 {
-    if (!mobile_webdav_ready()) {
-        throw new RuntimeException(t('mobile_webdav.error_migration_required', 'Run database migrations before creating mobile upload connections.'));
-    }
+    mutation_schema_assert_available(
+        mobile_webdav_schema_status(),
+        'mobile_webdav.create_token',
+        t('mobile_webdav.error_migration_required', 'Run database migrations before creating mobile upload connections.'),
+        t('mobile_webdav.error_schema_unknown', 'Mobile upload connections are temporarily unavailable because their database schema could not be verified. No credential was created.')
+    );
     $gallery = find_gallery($galleryId);
     if (!$gallery) {
         throw new RuntimeException(t('gallery.error.not_found', 'Gallery not found.'));
@@ -112,9 +121,12 @@ function mobile_webdav_create_token(int $userId, int $galleryId, string $label):
  */
 function mobile_webdav_delete_token(int $tokenId): void
 {
-    if (!mobile_webdav_ready()) {
-        return;
-    }
+    mutation_schema_assert_available(
+        mobile_webdav_revocation_schema_status(),
+        'mobile_webdav.delete_token',
+        t('mobile_webdav.error_migration_required', 'Run database migrations before managing mobile upload connections.'),
+        t('mobile_webdav.error_schema_unknown', 'The mobile upload credential could not be deleted because its database schema could not be verified. No credential was changed.')
+    );
     $stmt = db()->prepare('DELETE FROM mobile_webdav_upload_tokens WHERE id = ?');
     $stmt->execute([$tokenId]);
 }
@@ -148,9 +160,15 @@ function mobile_webdav_absolute_url(string $pathToken): string
  */
 function mobile_webdav_find_by_path_token(string $pathToken): ?array
 {
-    if (!mobile_webdav_ready() || $pathToken === '') {
+    if ($pathToken === '') {
         return null;
     }
+    mutation_schema_assert_available(
+        mobile_webdav_schema_status(),
+        'mobile_webdav.authenticate',
+        t('mobile_webdav.error_migration_required', 'Run database migrations before using mobile upload connections.'),
+        t('mobile_webdav.error_schema_unknown', 'Mobile upload authentication is temporarily unavailable because its database schema could not be verified.')
+    );
     $stmt = db()->prepare("SELECT t.*, g.folder_path, g.title AS gallery_title
         FROM mobile_webdav_upload_tokens t
         INNER JOIN galleries g ON g.id = t.gallery_id
@@ -234,6 +252,18 @@ function mobile_webdav_filename_from_path(string $path): string
  */
 function mobile_webdav_store_put(array $token, string $filename, string $sourcePath): array
 {
+    mutation_schema_assert_available(
+        mobile_webdav_schema_status(),
+        'mobile_webdav.store_put_token',
+        t('mobile_webdav.error_migration_required', 'Run database migrations before using mobile upload connections.'),
+        t('mobile_webdav.error_schema_unknown', 'Mobile upload is temporarily unavailable because its credential schema could not be verified. No gallery file was changed.')
+    );
+    mutation_schema_assert_available(
+        upload_ingestion_schema_status(),
+        'mobile_webdav.store_put_gallery',
+        'Mobile upload requires the current gallery/image database schema. Run pending migrations first.',
+        'Mobile upload is temporarily unavailable because the gallery/image database schema could not be verified. No gallery file was changed.'
+    );
     if (!is_file($sourcePath)) {
         throw new RuntimeException(t('mobile_webdav.error_empty_upload', 'The WebDAV upload body was empty.'));
     }

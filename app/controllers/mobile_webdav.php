@@ -36,6 +36,7 @@ declare(strict_types=1);
 
 namespace Gallery\Controllers;
 
+use Gallery\Services\MutationSchemaUnavailableException;
 use Throwable;
 use function Gallery\Core\base_url;
 use function Gallery\Core\csrf_field;
@@ -55,6 +56,11 @@ use function Gallery\Services\mobile_webdav_create_token;
 use function Gallery\Services\mobile_webdav_delete_token;
 use function Gallery\Services\mobile_webdav_filename_from_path;
 use function Gallery\Services\mobile_webdav_ready;
+use function Gallery\Services\mobile_webdav_schema_status;
+use function Gallery\Services\schema_inspection_is_missing;
+use function Gallery\Services\schema_inspection_is_unknown;
+use function Gallery\Services\mutation_schema_assert_available;
+use function Gallery\Services\upload_ingestion_schema_status;
 use function Gallery\Services\mobile_webdav_store_put;
 use function Gallery\Services\mobile_webdav_tokens;
 use function Gallery\Services\t;
@@ -92,7 +98,14 @@ function cms_admin_mobile_uploads(): void
         echo '<div class="notice">' . e((string) $notice) . '</div>';
     }
     if (!mobile_webdav_ready()) {
-        echo '<section class="panel"><h2>' . e(t('mobile_webdav.migration_required_title', 'Database migration required')) . '</h2><p class="muted">' . e(t('mobile_webdav.migration_required_help', 'Run database migrations from the dashboard before creating mobile upload connections.')) . '</p></section>';
+        $schemaStatus = mobile_webdav_schema_status();
+        $title = schema_inspection_is_unknown($schemaStatus)
+            ? t('mobile_webdav.schema_unknown_title', 'Database schema temporarily unavailable')
+            : t('mobile_webdav.migration_required_title', 'Database migration required');
+        $help = schema_inspection_is_unknown($schemaStatus)
+            ? t('mobile_webdav.schema_unknown_help', 'The mobile-upload schema could not be verified. Credential creation and upload authentication are paused until database metadata inspection succeeds.')
+            : t('mobile_webdav.migration_required_help', 'Run database migrations from the dashboard before creating mobile upload connections.');
+        echo '<section class="panel"><h2>' . e($title) . '</h2><p class="muted">' . e($help) . '</p></section>';
         render_footer();
         return;
     }
@@ -174,6 +187,16 @@ function cms_mobile_webdav(): void
         return;
     }
 
+    $webdavSchemaStatus = mobile_webdav_schema_status();
+    if (!mobile_webdav_ready()) {
+        http_response_code(503);
+        header('Content-Type: text/plain; charset=UTF-8');
+        echo schema_inspection_is_missing($webdavSchemaStatus)
+            ? t('mobile_webdav.error_migration_required', 'Run database migrations before using mobile upload connections.')
+            : t('mobile_webdav.error_schema_unknown', 'Mobile upload is temporarily unavailable because its database schema could not be verified.');
+        return;
+    }
+
     $token = mobile_webdav_authenticated_token($pathToken);
     if (!$token) {
         header('WWW-Authenticate: Basic realm="PHP Gallery Mobile Upload"');
@@ -193,6 +216,20 @@ function cms_mobile_webdav(): void
     if ($method !== 'PUT') {
         header('Allow: OPTIONS, PROPFIND, PUT, MKCOL');
         http_response_code(405);
+        return;
+    }
+
+    try {
+        mutation_schema_assert_available(
+            upload_ingestion_schema_status(),
+            'mobile_webdav.put_preflight',
+            'Mobile upload requires the current gallery/image database schema. Run pending migrations first.',
+            'Mobile upload is temporarily unavailable because the gallery/image database schema could not be verified. No upload body was committed.'
+        );
+    } catch (MutationSchemaUnavailableException $exception) {
+        http_response_code($exception->state === 'unknown' ? 503 : 409);
+        header('Content-Type: text/plain; charset=UTF-8');
+        echo $exception->getMessage();
         return;
     }
 
@@ -220,8 +257,10 @@ function cms_mobile_webdav(): void
         http_response_code(201);
     } catch (Throwable $exception) {
         @unlink($tmpPath);
-        admin_log_event('warning', 'mobile_webdav.upload_failed', 'Mobile WebDAV upload failed.', ['error' => $exception->getMessage()]);
-        http_response_code(422);
+        admin_log_event('warning', 'mobile_webdav.upload_failed', 'Mobile WebDAV upload failed.', [
+            'schema_state' => $exception instanceof MutationSchemaUnavailableException ? $exception->state : 'not_schema_policy',
+        ]);
+        http_response_code($exception instanceof MutationSchemaUnavailableException && $exception->state === 'unknown' ? 503 : 422);
         echo $exception->getMessage();
     }
 }

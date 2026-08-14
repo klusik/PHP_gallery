@@ -133,6 +133,9 @@ use function Gallery\Services\translation_language_pack_json_text;
 use function Gallery\Services\translation_missing_diagnostics;
 use function Gallery\Services\translation_normalize_language_code;
 use function Gallery\Services\translation_public_language;
+use function Gallery\Services\translation_public_language_selector_normalize_languages;
+use function Gallery\Services\translation_save_public_language_selector_settings;
+use function Gallery\Services\translation_save_public_language_selector_design;
 use function Gallery\Services\translation_supported_languages;
 use function Gallery\Services\translation_save_language_json;
 use function Gallery\Services\translation_set_active_language;
@@ -280,6 +283,23 @@ function admin_theme_download_language_pack(): void
 function admin_theme_process_post(bool $gpsMapsFeatureEnabled, bool $lightboxModesFeatureEnabled): void
 {
     verify_csrf();
+    if (!empty($_POST['public_language_selector_settings_present'])) {
+        $viewerSelectorEnabled = !empty($_POST['public_language_selector_enabled']);
+        $viewerSelectorLanguages = translation_public_language_selector_normalize_languages($_POST['public_language_selector_languages'] ?? []);
+        if ($viewerSelectorLanguages === []) {
+            $_SESSION['cms_public_language_selector_errors'] = [
+                'languages' => t('admin.theme.language.viewer_languages_required', 'Enable at least one viewer language.'),
+            ];
+            $_SESSION['cms_public_language_selector_submitted'] = [
+                'enabled' => $viewerSelectorEnabled,
+                'languages' => [],
+                'design' => $_POST['public_language_selector_design'] ?? [],
+            ];
+            redirect_to(url_for('admin_theme', ['language_error' => 'viewer_languages_required']) . '#admin-theme-tab-language');
+        }
+        translation_save_public_language_selector_settings($viewerSelectorEnabled, $viewerSelectorLanguages);
+        translation_save_public_language_selector_design($_POST['public_language_selector_design'] ?? []);
+    }
     if (isset($_POST['cms_language'])) {
         translation_set_active_language((string) $_POST['cms_language']);
     }

@@ -76,9 +76,10 @@ function cms_github_project_url(): string
  * Check GitHub release metadata for the newest published application version.
  *
  * @param bool $force Force value.
+ * @param float $requestedBudgetSeconds Preferred wall-clock budget for remote metadata I/O.
  * @return array Structured result data for the caller.
  */
-function check_application_update(bool $force = false): array
+function check_application_update(bool $force = false, float $requestedBudgetSeconds = 8.0): array
 {
     // $force bypasses only PHP Gallery's local metadata cache. It never bypasses
     // GitHub Retry-After or x-ratelimit-reset wait windows.
@@ -87,6 +88,15 @@ function check_application_update(bool $force = false): array
     if (!empty($waitState['active'])) {
         return application_update_rate_limited_status($waitState);
     }
+
+    // Keep remote metadata discovery bounded too. This is separate from package
+    // processing, but it still runs inside browser/background PHP requests.
+    $requestedBudgetSeconds = max(2.0, min(10.0, $requestedBudgetSeconds));
+    $phpMax = (int) ini_get('max_execution_time');
+    if ($phpMax > 0) {
+        $requestedBudgetSeconds = min($requestedBudgetSeconds, max(1.0, (float) $phpMax - 5.0));
+    }
+    $deadline = microtime(true) + $requestedBudgetSeconds;
     // $lastError stores the newest transport or parsing error from the remote checks.
     $lastError = null;
     // $latestStatus stores the newest valid remote version payload found across allowed branches.
@@ -96,10 +106,21 @@ function check_application_update(bool $force = false): array
     // $markerDiagnostics stores human-readable marker failures for admin diagnostics and dry-run logs.
     $markerDiagnostics = [];
 
-    foreach (application_update_branch_candidates() as $branch) {
+    $branches = array_values(application_update_branch_candidates());
+    foreach ($branches as $branchIndex => $branch) {
+        $remaining = $deadline - microtime(true);
+        if ($remaining < 0.75) {
+            $markerDiagnostics['budget'] = 'Remote update check stopped at its per-request wall-clock budget.';
+            break;
+        }
+
+        // Share the remaining budget across unprobed branches so a dead preferred
+        // branch cannot consume the complete request and starve the fallback branch.
+        $branchesRemaining = max(1, count($branches) - $branchIndex);
+        $branchDeadline = min($deadline, microtime(true) + max(0.75, $remaining / $branchesRemaining));
         try {
             // $versionResult stores valid version candidates plus fetch diagnostics for the current branch.
-            $versionResult = application_update_remote_version_result($branch);
+            $versionResult = application_update_remote_version_result($branch, $branchDeadline);
             if (!empty($versionResult['reachable']) && $reachableBranch === null) {
                 $reachableBranch = $branch;
             }
@@ -135,8 +156,9 @@ function check_application_update(bool $force = false): array
                 $latestStatus = $status;
             }
         } catch (Throwable $exception) {
-            $lastError = $exception->getMessage();
-            $markerDiagnostics[$branch] = $exception->getMessage();
+            $safe = application_update_safe_error($exception);
+            $lastError = $safe['message'] . ' Reference: ' . $safe['reference'];
+            $markerDiagnostics[$branch] = 'Remote update check failed. Reference: ' . $safe['reference'];
         }
     }
 

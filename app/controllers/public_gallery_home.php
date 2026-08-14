@@ -170,6 +170,9 @@ use function Gallery\Services\admin_log_event;
  */
 const PUBLIC_SUBGALLERY_DATE_SORT_PARAM = 'subgallery_date_sort';
 
+/**
+ * Render the public gallery landing page and its filtered gallery listing.
+ */
 function cms_home(): void
 {
     public_render_profile_start('home');

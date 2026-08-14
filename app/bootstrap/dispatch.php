@@ -36,8 +36,13 @@ declare(strict_types=1);
 
 namespace Gallery\Core;
 
+use Gallery\Services\PublicSchemaPolicyUnavailableException;
+use function Gallery\Controllers\cms_public_schema_unavailable;
 use function Gallery\Services\feature_flag_render_disabled_route;
 use function Gallery\Services\feature_flag_route_enabled;
+use function Gallery\Services\gallery_access_assert_public_policy_available;
+use function Gallery\Services\gallery_visibility_assert_public_policy_available;
+use function Gallery\Services\nsfw_guard_assert_public_policy_available;
 
 /**
  * Dispatch a resolved page identifier to the existing controller route table.
@@ -193,6 +198,16 @@ function cms_dispatch_page(string $page): void
 
     // Variable $handler stores this steps working value.
     $handler = $routes[$page] ?? '\\Gallery\\Controllers\\cms_not_found';
-    $handler();
+    try {
+        // Verify access/privacy policy before a sensitive controller can emit partial HTML, metadata, archives, or media bytes.
+        if (in_array($page, ['home', 'gallery', 'gallery_access', 'share', 'tag', 'sitemap', 'picture_game', 'media', 'thumb', 'public_media', 'public_thumb', 'thumbnail_warmup', 'gallery_cover_asset', 'gallery_branding_asset', 'vote', 'gallery_map_data', 'gallery_lightbox_data', 'public_search', 'download_gallery'], true)) {
+            gallery_visibility_assert_public_policy_available();
+            gallery_access_assert_public_policy_available();
+            nsfw_guard_assert_public_policy_available();
+        }
+        $handler();
+    } catch (PublicSchemaPolicyUnavailableException $exception) {
+        cms_public_schema_unavailable($page, $exception->feature(), $exception->schemaState(), $exception->errorCode());
+    }
 
 }

@@ -20,6 +20,14 @@ if (!str_contains($powershellDeploy, ".Replace('\\', '/')")) {
     $failures[] = 'The PowerShell deploy ZIP must use portable forward-slash entry paths.';
 }
 
+foreach ([$powershellDeploy, $shellDeploy] as $deploySource) {
+    if (stripos($deploySource, 'manifest') !== false
+        || str_contains($deploySource, '& php ')
+        || preg_match('/^\s*php\s/m', $deploySource) === 1) {
+        $failures[] = 'Deploy helpers must package files without manifest handling or PHP execution.';
+    }
+}
+
 foreach (['app/bootstrap/dispatch.php', 'app/controllers/public_gallery_page.php', 'app/lang/en.json'] as $relativePath) {
     if (!is_file($root . '/' . $relativePath)) {
         $failures[] = 'Expected application fixture is missing: ' . $relativePath;

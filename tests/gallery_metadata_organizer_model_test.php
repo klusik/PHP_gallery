@@ -15,6 +15,7 @@
  *   - Cover phase-1 grouping option normalization
  *   - Cover daily title formatting and image-id extraction
  *   - Cover admin result notice rendering
+ *   - Cover structured EXIF capture-date schema readiness without a live database
  *
  * Author:
  *   Rudolf Klusal
@@ -42,8 +43,11 @@ use function Gallery\Services\gallery_metadata_organizer_default_min_date;
 use function Gallery\Services\gallery_metadata_organizer_group_image_ids;
 use function Gallery\Services\gallery_metadata_organizer_options;
 use function Gallery\Services\gallery_metadata_organizer_schema_ready;
+use function Gallery\Services\schema_inspection_set_query_executor_for_tests;
 
 require_once __DIR__ . '/support/namespaced_shims.php';
+require_once __DIR__ . '/../app/services/schema_inspection.php';
+require_once __DIR__ . '/../app/services/presentation_schema_policy.php';
 require_once __DIR__ . '/../app/services/gallery_dates.php';
 require_once __DIR__ . '/../app/services/gallery_metadata_organizer.php';
 
@@ -75,7 +79,8 @@ function assert_metadata_organizer_contains(string $needle, string $haystack, st
     }
 }
 
-assert_metadata_organizer_same(true, gallery_metadata_organizer_schema_ready(), 'schema readiness sees EXIF date column through the shim');
+schema_inspection_set_query_executor_for_tests(static fn (string $objectType, string $table, string $object, string $token = ''): bool => true);
+assert_metadata_organizer_same(true, gallery_metadata_organizer_schema_ready(), 'schema readiness sees the EXIF date column through structured inspection');
 
 $options = gallery_metadata_organizer_options([]);
 assert_metadata_organizer_same('date', $options['primary'], 'default primary grouping is date');
@@ -125,4 +130,5 @@ assert_metadata_organizer_contains('Created 2', $notice, 'notice includes create
 assert_metadata_organizer_contains('moved 7 of 8', $notice, 'notice includes moved count');
 assert_metadata_organizer_contains('Warnings:', $notice, 'notice includes warnings when failures exist');
 
+schema_inspection_set_query_executor_for_tests(null);
 echo "Gallery metadata organizer model tests passed.\n";

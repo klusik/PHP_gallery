@@ -335,6 +335,7 @@ function create_image_thumbnails(array $image, array $gallery): int
  */
 function create_image_thumbnails_result(array $image, array $gallery, ?array $requestedSizes = null, array $options = []): array
 {
+    thumbnail_metadata_preflight_write_schema('thumbnail_generation.create_image_thumbnails');
     // Variable $sourcePath stores this steps working value.
     $sourcePath = image_abs_path($image, $gallery);
     if (!is_file($sourcePath)) {

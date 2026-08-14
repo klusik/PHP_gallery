@@ -78,28 +78,7 @@ function openai_text_assist_t(string $key, string $fallback, array $parameters =
  */
 function openai_text_assist_schema_ready(): bool
 {
-    if (!function_exists('Gallery\\Services\\db_table_exists') || !function_exists('Gallery\\Services\\db_column_exists')) {
-        return false;
-    }
-    if (!db_table_exists('user_openai_text_settings')) {
-        return false;
-    }
-
-    $requiredColumns = [
-        'user_id',
-        'enabled',
-        'api_key_cipher',
-        'api_key_hint',
-        'model',
-        'created_at',
-        'updated_at',
-    ];
-    foreach ($requiredColumns as $column) {
-        if (!db_column_exists('user_openai_text_settings', $column)) {
-            return false;
-        }
-    }
-    return true;
+    return presentation_schema_render_available(presentation_openai_text_schema_status(), 'openai_text_settings_render');
 }
 
 /**
@@ -152,7 +131,7 @@ function openai_text_assist_user_settings(int $userId): array
  */
 function openai_text_assist_image_input_column_ready(): bool
 {
-    return function_exists('Gallery\\Services\\db_column_exists') && db_column_exists('user_openai_text_settings', 'allow_image_input');
+    return presentation_schema_render_available(presentation_openai_image_input_schema_status(), 'openai_image_input_render');
 }
 
 /**
@@ -343,16 +322,25 @@ function openai_text_assist_save_user_settings(int $userId, array $input): array
     if ($userId <= 0) {
         $errors[] = openai_text_assist_t('admin.openai.error_user_missing', 'The current user account could not be resolved.');
     }
-    if (!openai_text_assist_schema_ready()) {
+    $schemaStatus = presentation_openai_text_schema_status();
+    if (schema_inspection_is_missing($schemaStatus)) {
         $errors[] = openai_text_assist_t('admin.openai.error_migration_required', 'OpenAI profile settings are not available until database migrations are applied.');
+    } elseif (schema_inspection_is_unknown($schemaStatus)) {
+        presentation_schema_log_degraded($schemaStatus, 'openai_text_settings_save');
+        $errors[] = openai_text_assist_t('admin.openai.error_schema_unavailable', 'OpenAI profile settings cannot be saved because the database schema could not be verified.');
+    }
+    $imageInputSchemaStatus = presentation_openai_image_input_schema_status();
+    if (schema_inspection_is_unknown($imageInputSchemaStatus)) {
+        presentation_schema_log_degraded($imageInputSchemaStatus, 'openai_image_input_settings_save');
+        $errors[] = openai_text_assist_t('admin.openai.error_image_input_schema_unavailable', 'OpenAI image-input settings cannot be saved because the optional database column could not be verified.');
     }
 
-    $existing = openai_text_assist_user_settings($userId);
+    $existing = schema_inspection_is_available($schemaStatus) ? openai_text_assist_user_settings($userId) : [];
     $enabled = !empty($input['openai_text_enabled']);
     $clearKey = !empty($input['openai_text_clear_key']);
     $submittedKey = trim((string) ($input['openai_text_api_key'] ?? ''));
     $model = openai_text_assist_normalize_model((string) ($input['openai_text_model'] ?? OPENAI_TEXT_ASSIST_DEFAULT_MODEL));
-    $allowImageInput = !empty($input['openai_text_allow_image_input']) && openai_text_assist_image_input_column_ready();
+    $allowImageInput = !empty($input['openai_text_allow_image_input']) && schema_inspection_is_available($imageInputSchemaStatus);
     $cipher = (string) ($existing['api_key_cipher'] ?? '');
     $hint = (string) ($existing['api_key_hint'] ?? '');
 
@@ -390,7 +378,7 @@ function openai_text_assist_save_user_settings(int $userId, array $input): array
     }
 
     $now = function_exists('Gallery\\Core\\now_sql') ? now_sql() : date('Y-m-d H:i:s');
-    if (openai_text_assist_image_input_column_ready()) {
+    if (schema_inspection_is_available($imageInputSchemaStatus)) {
         $stmt = db()->prepare('INSERT INTO user_openai_text_settings (user_id, enabled, api_key_cipher, api_key_hint, model, allow_image_input, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE enabled = VALUES(enabled), api_key_cipher = VALUES(api_key_cipher), api_key_hint = VALUES(api_key_hint), model = VALUES(model), allow_image_input = VALUES(allow_image_input), updated_at = VALUES(updated_at)');
         $stmt->execute([
             $userId,

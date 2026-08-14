@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-08-11
+ *   2026-08-13
  */
 
 declare(strict_types=1);
@@ -67,8 +67,57 @@ use function Gallery\Services\translation_active_language;
 use function Gallery\Services\translation_default_language;
 use function Gallery\Services\translation_language_allowed;
 use function Gallery\Services\translation_language_dir;
+use function Gallery\Services\translation_language_presentation;
 use function Gallery\Services\translation_load_language;
 use function Gallery\Services\translation_normalize_language_code;
+use function Gallery\Services\translation_public_language_url;
+use function Gallery\Services\translation_public_language_selector_enabled;
+use function Gallery\Services\translation_public_language_selector_languages;
+use function Gallery\Services\translation_public_language_selector_design;
+use function Gallery\Services\translation_public_language_selector_design_style;
+
+/**
+ * Render the public visitor language selector in the shared header.
+ *
+ * The compact links work without JavaScript. Each language keeps the current
+ * public route and query state; the following request stores the choice.
+ */
+function view_render_public_language_selector(): void
+{
+    if (!translation_public_language_selector_enabled()) {
+        return;
+    }
+    $activeLanguage = translation_active_language();
+    $presentations = translation_language_presentation();
+    $label = t('public.language.selector_label', 'Language');
+    $design = translation_public_language_selector_design();
+    $preset = (string) $design['preset'];
+    $classes = 'public-language-switcher language-preset-' . $preset
+        . ' language-orientation-' . $design['orientation']
+        . ' language-density-' . $design['density']
+        . ' language-align-' . $design['alignment']
+        . ' language-active-' . $design['active_style'];
+
+    echo '<div class="' . e($classes) . '" role="group" aria-label="' . e($label) . '" style="' . e(translation_public_language_selector_design_style($design)) . '">';
+    foreach (translation_public_language_selector_languages() as $language) {
+        $presentation = $presentations[$language] ?? ['name' => strtoupper($language), 'flag_asset' => ''];
+        $isActive = $language === $activeLanguage;
+        $languageName = trim((string) ($presentation['name'] ?? strtoupper($language)));
+        $flagAsset = trim((string) ($presentation['flag_asset'] ?? ''));
+        echo '<a class="public-language-button' . ($isActive ? ' is-active' : '') . '" href="' . e(translation_public_language_url($language)) . '" hreflang="' . e($language) . '" lang="' . e($language) . '" aria-label="' . e($languageName) . '" title="' . e($languageName) . '"' . ($isActive ? ' aria-current="true"' : '') . '>';
+        if (!empty($design['show_codes'])) {
+            echo '<span class="public-language-code" aria-hidden="true">' . e(strtoupper($language)) . '</span>';
+        }
+        if (!empty($design['show_names'])) {
+            echo '<span class="public-language-name" aria-hidden="true">' . e($languageName) . '</span>';
+        }
+        if (!empty($design['show_flags']) && $flagAsset !== '') {
+            echo '<img class="public-language-flag" src="' . e(asset_url($flagAsset)) . '" alt="" aria-hidden="true" width="20" height="15" decoding="async">';
+        }
+        echo '</a>';
+    }
+    echo '</div>';
+}
 
 /**
  * Handle view public header branding model.
@@ -296,6 +345,9 @@ function view_render_header(string $title, ?array $currentGallery = null, bool $
         echo e($siteName);
     }
     echo '</a><nav class="nav">';
+    if ($bodyClass === 'public-page') {
+        view_render_public_language_selector();
+    }
     // $favoritePublicOnly stores whether shortcuts should be restricted to public listed galleries.
     $favoritePublicOnly = !$user || $anonymousPreview;
     // $favoriteGalleryItems stores resolved gallery shortcuts for the top navigation.
@@ -552,6 +604,7 @@ function view_render_footer(): void
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/tag-suggestions.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/votes.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-operations.js',
+        dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-update-jobs.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-core.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-nested-tabs.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-side-panel.js',

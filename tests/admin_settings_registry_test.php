@@ -225,7 +225,7 @@ if (!str_contains($registrySource, "admin_settings_sensitive_status('password_re
     throw new RuntimeException('Sensitive Settings values are not summarized through the redaction helper.');
 }
 
-foreach (['site_name', 'public_language', 'url_rewrite_enabled', 'public_home_search_enabled', 'public_thumbnail_rendering_mode', 'exif_gps_maps_default_enabled', 'dev_mode_enabled'] as $centralId) {
+foreach (['site_name', 'public_language', 'public_language_selector_enabled', 'public_language_selector_languages', 'url_rewrite_enabled', 'public_home_search_enabled', 'public_thumbnail_rendering_mode', 'exif_gps_maps_default_enabled', 'dev_mode_enabled'] as $centralId) {
     if (!isset($ids[$centralId])) {
         throw new RuntimeException('Expected centrally editable registry id missing: ' . $centralId);
     }

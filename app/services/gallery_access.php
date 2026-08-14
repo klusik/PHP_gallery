@@ -14,6 +14,7 @@
  *   - Keep domain logic reusable outside controllers
  *   - Protect existing behavior with small focused functions
  *   - Return predictable values for callers
+ *   - Preserve explicit three-state policy for access, visibility, NSFW, and share tokens
  *
  * Author:
  *   Rudolf Klusal
@@ -36,8 +37,8 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
-use PDOException;
-use Throwable;
+use RuntimeException;
+
 use function Gallery\Core\cms_config;
 use function Gallery\Core\current_user;
 use function Gallery\Core\db;
@@ -49,6 +50,108 @@ use function Gallery\Core\now_sql;
  * This module owns password protection, share token handling, visitor access checks, and public listing rules for galleries. It does not alter theme or admin styling settings.
  */
 
+
+/**
+ * Base exception for public access policy that cannot be verified safely.
+ *
+ * The exception exposes only a stable feature key. Database exception messages,
+ * SQL text, credentials, paths, tokens, and other private state never cross the
+ * controller boundary. The dispatcher converts this exception into the generic
+ * route-appropriate 503 response used by protected public requests.
+ */
+class PublicSchemaPolicyUnavailableException extends RuntimeException
+{
+    private string $feature;
+    private string $schemaState;
+    private string $errorCode;
+
+    /**
+     * Create a bounded public-schema policy exception.
+     *
+     * @param string $feature Stable public feature identifier.
+     * @param string $schemaState Confirmed missing or unknown schema state.
+     * @param string $errorCode Safe inspection error category.
+     */
+    public function __construct(string $feature, string $schemaState = 'unknown', string $errorCode = 'inspection_failed')
+    {
+        $this->feature = preg_match('/^[A-Za-z0-9_.-]{1,120}$/D', $feature) === 1 ? $feature : 'public_schema';
+        $this->schemaState = in_array($schemaState, ['missing', 'unknown'], true) ? $schemaState : 'unknown';
+        $this->errorCode = preg_match('/^[a-z0-9_]{1,80}$/D', $errorCode) === 1 ? $errorCode : 'inspection_failed';
+        parent::__construct('Public schema policy is unavailable for ' . $this->feature . '.');
+    }
+
+    /**
+     * Return the stable feature key used by bounded logging and diagnostics.
+     *
+     * @return string Feature identifier.
+     */
+    public function feature(): string
+    {
+        return $this->feature;
+    }
+
+    /**
+     * Return the bounded schema state without exposing database diagnostics.
+     *
+     * @return string Either missing or unknown.
+     */
+    public function schemaState(): string
+    {
+        return $this->schemaState;
+    }
+
+    /**
+     * Return the bounded operational reason used by protected-request logging.
+     *
+     * @return string Stable machine-readable reason.
+     */
+    public function errorCode(): string
+    {
+        return $this->errorCode;
+    }
+}
+
+/**
+ * Signal that gallery password/access policy cannot be verified safely.
+ */
+final class GalleryAccessSchemaUnavailableException extends PublicSchemaPolicyUnavailableException
+{
+    /**
+     * Create an exception for unavailable gallery access schema.
+     */
+    public function __construct(string $schemaState = 'unknown', string $errorCode = 'inspection_failed')
+    {
+        parent::__construct('gallery_access', $schemaState, $errorCode);
+    }
+}
+
+/**
+ * Signal that gallery visibility compatibility cannot be verified safely.
+ */
+final class GalleryVisibilitySchemaUnavailableException extends PublicSchemaPolicyUnavailableException
+{
+    /**
+     * Create an exception for unavailable gallery visibility schema.
+     */
+    public function __construct()
+    {
+        parent::__construct('gallery_visibility');
+    }
+}
+
+/**
+ * Signal that share-token schema policy cannot be verified safely.
+ */
+final class GalleryShareTokenSchemaUnavailableException extends PublicSchemaPolicyUnavailableException
+{
+    /**
+     * Create an exception for unavailable gallery share-token schema.
+     */
+    public function __construct()
+    {
+        parent::__construct('gallery_share_token');
+    }
+}
 
 /**
  * Return canonical gallery visibility values used by the simplified public model.
@@ -99,29 +202,58 @@ function gallery_effective_visibility(array $gallery): string
 function gallery_visibility_storage_value(string $visibility): string
 {
     $visibility = normalize_gallery_visibility($visibility);
-    if ($visibility === 'unpublished' && !gallery_visibility_schema_supports_unpublished()) {
+    $status = gallery_visibility_schema_status();
+    if (schema_inspection_is_unknown($status)) {
+        throw new GalleryVisibilitySchemaUnavailableException();
+    }
+    if ($visibility === 'unpublished' && schema_inspection_is_missing($status)) {
+        // A successful inspection that lacks the unpublished enum value is the
+        // proven pre-migration vocabulary. Store the historical draft value.
         return 'draft';
     }
     return $visibility;
 }
 
 /**
+ * Inspect whether galleries.visibility supports the canonical unpublished value.
+ *
+ * Confirmed absence means the installation uses the historical draft vocabulary.
+ * Unknown means the application could not inspect the enum definition and must
+ * not guess which value a public or mutation path should use.
+ *
+ * @return array{state:string,feature:string,requirements:array} Aggregate schema status.
+ */
+function gallery_visibility_schema_status(): array
+{
+    return schema_inspection_feature('gallery_visibility', [
+        schema_inspection_column_definition_contains('galleries', 'visibility', 'unpublished'),
+    ]);
+}
+
+/**
  * Return true when the current galleries.visibility enum accepts unpublished.
+ *
+ * This compatibility wrapper is retained for audited callers that only need a
+ * boolean after policy has already been established. New security-sensitive
+ * callers should consume gallery_visibility_schema_status().
  *
  * @return bool True when the condition matches.
  */
 function gallery_visibility_schema_supports_unpublished(): bool
 {
-    static $supports = null;
-    if ($supports !== null) {
-        return $supports;
-    }
-    try {
-        // $column stores the database enum definition used by compatibility installs.
-        $column = db()->query("SHOW COLUMNS FROM galleries LIKE 'visibility'")->fetch();
-        return $supports = $column && str_contains((string) ($column['Type'] ?? ''), "'unpublished'");
-    } catch (Throwable) {
-        return $supports = false;
+    return schema_inspection_is_available(gallery_visibility_schema_status());
+}
+
+/**
+ * Refuse public visibility decisions when the enum definition cannot be inspected.
+ *
+ * Confirmed missing support is intentionally compatible: legacy draft values are
+ * normalized to unpublished by normalize_gallery_visibility().
+ */
+function gallery_visibility_assert_public_policy_available(): void
+{
+    if (schema_inspection_is_unknown(gallery_visibility_schema_status())) {
+        throw new GalleryVisibilitySchemaUnavailableException();
     }
 }
 
@@ -148,15 +280,19 @@ function gallery_visibility_label(string $visibility): string
  */
 function gallery_allows_direct_public_request(array $gallery): bool
 {
+    gallery_visibility_assert_public_policy_available();
     return in_array(gallery_effective_visibility($gallery), ['public', 'unpublished'], true);
 }
 
 /**
- * Handle admin feature schema ready.
+ * Return the legacy aggregate Admin-readiness boolean.
  *
- * Part of the related application service.
+ * This compatibility helper is intentionally retained for older UI callers only.
+ * It must not be used for security decisions, optional-feature writes, or mutation
+ * authorization because it collapses unrelated capabilities into one boolean. Use
+ * the exact named security, mutation, or presentation schema status instead.
  *
- * @return bool True when the condition matches.
+ * @return bool True only when all historical aggregate capabilities are available.
  */
 function admin_feature_schema_ready(): bool
 {
@@ -168,45 +304,136 @@ function admin_feature_schema_ready(): bool
  *
  * @return mixed Result produced by this operation.
  */
+function gallery_access_schema_status(): array
+{
+    return schema_inspection_feature('gallery_access', [
+        schema_inspection_column('galleries', 'access_mode'),
+        schema_inspection_column('galleries', 'access_listing'),
+        schema_inspection_column('galleries', 'access_password_hash'),
+        schema_inspection_column('galleries', 'access_token_hash'),
+        schema_inspection_column('galleries', 'access_token_expires_at'),
+    ]);
+}
+
+/**
+ * Return true only when every gallery password/access column is verified.
+ *
+ * @return bool True when the complete capability is available.
+ */
 function gallery_access_schema_ready(): bool
 {
-    try {
-        // $stmt stores an intermediate value used by the surrounding gallery workflow.
-        $stmt = db()->query("SHOW COLUMNS FROM galleries LIKE 'access_mode'");
-        if (!$stmt || !$stmt->fetch()) {
+    return schema_inspection_is_available(gallery_access_schema_status());
+}
+
+/**
+ * Return true only for the proven pre-password-protection schema.
+ *
+ * A partially applied migration is intentionally not considered legacy. If one
+ * access column exists while another is missing, rows may already contain
+ * protection state and public requests must not substitute permissive defaults.
+ *
+ * @param ?array $status Optional previously inspected aggregate status.
+ * @return bool True when every required access column is confirmed absent.
+ */
+function gallery_access_schema_is_confirmed_legacy(?array $status = null): bool
+{
+    $status = $status ?? gallery_access_schema_status();
+    if (!schema_inspection_is_missing($status)) {
+        return false;
+    }
+    $requirements = (array) ($status['requirements'] ?? []);
+    if ($requirements === []) {
+        return false;
+    }
+    foreach ($requirements as $requirement) {
+        if (!is_array($requirement) || !schema_inspection_is_missing($requirement)) {
             return false;
         }
-        // $stmt stores an intermediate value used by the surrounding gallery workflow.
-        $stmt = db()->query("SHOW COLUMNS FROM galleries LIKE 'access_token_hash'");
-        return $stmt && (bool) $stmt->fetch();
-    } catch (PDOException) {
-        return false;
+    }
+    return true;
+}
+
+/**
+ * Refuse public gallery access decisions for unknown or partial schema state.
+ *
+ * Complete current schema preserves existing password/token behavior. Complete
+ * confirmed legacy schema preserves the historical no-password path because it
+ * could not have stored gallery access restrictions. Unknown and partial schema
+ * fail closed.
+ */
+function gallery_access_assert_public_policy_available(): void
+{
+    $status = gallery_access_schema_status();
+    if (schema_inspection_is_unknown($status)) {
+        throw new GalleryAccessSchemaUnavailableException();
+    }
+    if (schema_inspection_is_missing($status) && !gallery_access_schema_is_confirmed_legacy($status)) {
+        throw new GalleryAccessSchemaUnavailableException('missing', 'partial_schema');
     }
 }
 
 
 /**
- * Return true when the NSFW Guard database columns are available.
+ * Signal that NSFW Guard cannot make a safe public access decision.
  *
- * @return bool True when the condition matches.
+ * The exception carries no database message or private context. The central
+ * request dispatcher converts it into the route-appropriate generic 503
+ * response, while Admin System Health exposes bounded diagnostic guidance.
+ */
+final class NsfwGuardSchemaUnavailableException extends PublicSchemaPolicyUnavailableException
+{
+    /**
+     * Create an exception for unavailable NSFW Guard schema.
+     */
+    public function __construct()
+    {
+        parent::__construct('nsfw_guard');
+    }
+}
+
+/**
+ * Inspect every database column required by NSFW Guard.
+ *
+ * The aggregate preserves the distinction between a confirmed pre-migration
+ * schema and an operational inspection failure. Results are request-cached by
+ * the shared schema inspection service.
+ *
+ * @return array{state:string,feature:string,requirements:array} Aggregate schema status.
+ */
+function nsfw_guard_schema_status(): array
+{
+    return schema_inspection_feature('nsfw_guard', [
+        schema_inspection_column('galleries', 'nsfw_enabled'),
+        schema_inspection_column('images', 'nsfw_enabled'),
+    ]);
+}
+
+/**
+ * Return true only when the complete NSFW Guard schema was verified.
+ *
+ * This compatibility predicate remains useful for Admin control visibility.
+ * Public access decisions use the full status through
+ * nsfw_guard_assert_public_policy_available().
+ *
+ * @return bool True when every required column is available.
  */
 function nsfw_guard_schema_ready(): bool
 {
-    static $ready = null;
-    if ($ready !== null) {
-        return $ready;
-    }
-    try {
-        // $galleryColumn stores the galleries schema probe result.
-        $galleryColumn = db()->query("SHOW COLUMNS FROM galleries LIKE 'nsfw_enabled'");
-        if (!$galleryColumn || !$galleryColumn->fetch()) {
-            return $ready = false;
-        }
-        // $imageColumn stores the images schema probe result.
-        $imageColumn = db()->query("SHOW COLUMNS FROM images LIKE 'nsfw_enabled'");
-        return $ready = $imageColumn && (bool) $imageColumn->fetch();
-    } catch (PDOException) {
-        return $ready = false;
+    return schema_inspection_is_available(nsfw_guard_schema_status());
+}
+
+/**
+ * Refuse public NSFW-sensitive processing when schema state is unknown.
+ *
+ * Confirmed missing columns preserve the historical pre-NSFW compatibility
+ * path because such schemas could not have stored NSFW flags. Unknown means
+ * the application could not establish whether restrictions exist and must
+ * therefore fail closed.
+ */
+function nsfw_guard_assert_public_policy_available(): void
+{
+    if (schema_inspection_is_unknown(nsfw_guard_schema_status())) {
+        throw new NsfwGuardSchemaUnavailableException();
     }
 }
 
@@ -218,6 +445,7 @@ function nsfw_guard_schema_ready(): bool
  */
 function gallery_nsfw_requirement(array $gallery): ?array
 {
+    nsfw_guard_assert_public_policy_available();
     if (!nsfw_guard_schema_ready()) {
         return null;
     }
@@ -245,6 +473,7 @@ function gallery_nsfw_requirement(array $gallery): ?array
  */
 function image_nsfw_restricted(array $image, array $gallery): bool
 {
+    nsfw_guard_assert_public_policy_available();
     if (!nsfw_guard_schema_ready()) {
         return false;
     }
@@ -376,6 +605,7 @@ function visitor_can_access_nsfw_content(): bool
  */
 function gallery_has_password_policy(array $gallery): bool
 {
+    gallery_access_assert_public_policy_available();
     return gallery_access_schema_ready() && (string) ($gallery['access_mode'] ?? 'normal') === 'password';
 }
 
@@ -387,7 +617,9 @@ function gallery_has_password_policy(array $gallery): bool
  */
 function gallery_access_requirement(array $gallery): ?array
 {
+    gallery_access_assert_public_policy_available();
     if (!gallery_access_schema_ready()) {
+        // Only the fully confirmed legacy schema can reach this compatibility path.
         return null;
     }
     // $current stores an intermediate value used by the surrounding gallery workflow.
@@ -471,6 +703,15 @@ function request_share_token_allows_gallery(array $gallery): bool
     if ($token === '') {
         return false;
     }
+    // Share-token use is optional, but it must not interpret an unavailable or
+    // pre-migration persistence capability as a valid protected-token path.
+    $shareSchemaStatus = gallery_access_share_token_schema_status();
+    if (schema_inspection_is_unknown($shareSchemaStatus)) {
+        throw new GalleryShareTokenSchemaUnavailableException();
+    }
+    if (schema_inspection_is_missing($shareSchemaStatus)) {
+        return false;
+    }
     // $requirement stores an intermediate value used by the surrounding gallery workflow.
     $requirement = gallery_access_requirement($gallery);
     if (!$requirement || empty($requirement['access_token_hash'])) {
@@ -527,10 +768,13 @@ function visitor_can_access_gallery(array $gallery): bool
  */
 function gallery_is_public_listed(array $gallery): bool
 {
+    gallery_visibility_assert_public_policy_available();
+    gallery_access_assert_public_policy_available();
     if (gallery_effective_visibility($gallery) !== 'public') {
         return false;
     }
     if (!gallery_access_schema_ready()) {
+        // Fully confirmed legacy schemas had no access_listing column.
         return true;
     }
     return (string) ($gallery['access_listing'] ?? 'listed') === 'listed';
@@ -545,19 +789,14 @@ function gallery_is_public_listed(array $gallery): bool
  */
 function regenerate_gallery_share_token(int $galleryId, ?string $expiresAt): string
 {
+    gallery_share_token_assert_mutation_available();
     // $token stores an intermediate value used by the surrounding gallery workflow.
     $token = bin2hex(random_bytes(24));
     // $storedToken stores an intermediate value used by the surrounding gallery workflow.
     $storedToken = encrypt_gallery_share_token($token);
-    // $shareColumn stores an intermediate value used by the surrounding gallery workflow.
-    $shareColumn = gallery_access_share_token_schema_ready() ? 'access_share_token = ?, ' : '';
     // $stmt stores an intermediate value used by the surrounding gallery workflow.
-    $stmt = db()->prepare('UPDATE galleries SET ' . $shareColumn . 'access_token_hash = ?, access_token_expires_at = ?, updated_at = ? WHERE id = ?');
-    // $params stores an intermediate value used by the surrounding gallery workflow.
-    $params = gallery_access_share_token_schema_ready()
-        ? [$storedToken, hash('sha256', $token), $expiresAt, now_sql(), $galleryId]
-        : [hash('sha256', $token), $expiresAt, now_sql(), $galleryId];
-    $stmt->execute($params);
+    $stmt = db()->prepare('UPDATE galleries SET access_share_token = ?, access_token_hash = ?, access_token_expires_at = ?, updated_at = ? WHERE id = ?');
+    $stmt->execute([$storedToken, hash('sha256', $token), $expiresAt, now_sql(), $galleryId]);
     return $token;
 }
 
@@ -568,10 +807,25 @@ function regenerate_gallery_share_token(int $galleryId, ?string $expiresAt): str
  */
 function revoke_gallery_share_token(int $galleryId): void
 {
-    // $shareColumn stores an intermediate value used by the surrounding gallery workflow.
-    $shareColumn = gallery_access_share_token_schema_ready() ? 'access_share_token = NULL, ' : '';
-    // $stmt stores an intermediate value used by the surrounding gallery workflow.
-    $stmt = db()->prepare('UPDATE galleries SET ' . $shareColumn . 'access_token_hash = NULL, access_token_expires_at = NULL, updated_at = ? WHERE id = ?');
+    // Revocation is security-tightening. Once the core hash/expiry columns are
+    // verified, they can always be cleared even when the optional encrypted
+    // display-token column is confirmed missing or cannot be inspected.
+    $accessStatus = gallery_access_schema_status();
+    if (!schema_inspection_is_available($accessStatus)) {
+        if (schema_inspection_is_unknown($accessStatus)) {
+            throw new GalleryAccessSchemaUnavailableException();
+        }
+        throw new RuntimeException('Gallery password/access schema is not ready for share-token revocation.');
+    }
+
+    $shareStatus = gallery_access_share_token_schema_status();
+    if (schema_inspection_is_available($shareStatus)) {
+        // $stmt stores an intermediate value used by the surrounding gallery workflow.
+        $stmt = db()->prepare('UPDATE galleries SET access_share_token = NULL, access_token_hash = NULL, access_token_expires_at = NULL, updated_at = ? WHERE id = ?');
+    } else {
+        // Clearing the validating hash is sufficient to revoke every copy of the token.
+        $stmt = db()->prepare('UPDATE galleries SET access_token_hash = NULL, access_token_expires_at = NULL, updated_at = ? WHERE id = ?');
+    }
     $stmt->execute([now_sql(), $galleryId]);
 }
 
@@ -580,14 +834,46 @@ function revoke_gallery_share_token(int $galleryId): void
  *
  * @return mixed Result produced by this operation.
  */
+function gallery_access_share_token_schema_status(): array
+{
+    return schema_inspection_feature('gallery_share_token', [
+        schema_inspection_column('galleries', 'access_share_token'),
+    ]);
+}
+
+/**
+ * Return true when encrypted share-token persistence is verified.
+ *
+ * @return bool True when the column is available.
+ */
 function gallery_access_share_token_schema_ready(): bool
 {
-    try {
-        // $stmt stores an intermediate value used by the surrounding gallery workflow.
-        $stmt = db()->query("SHOW COLUMNS FROM galleries LIKE 'access_share_token'");
-        return $stmt && (bool) $stmt->fetch();
-    } catch (PDOException) {
-        return false;
+    return schema_inspection_is_available(gallery_access_share_token_schema_status());
+}
+
+/**
+ * Require the share-token persistence column before token generation.
+ *
+ * Confirmed missing schema receives migration guidance rather than silently
+ * issuing a hash-only link. Unknown schema is an operational failure. Revocation
+ * has a separate security-tightening path that can always clear the verified
+ * validating hash once the core access schema is available.
+ */
+function gallery_share_token_assert_mutation_available(): void
+{
+    $accessStatus = gallery_access_schema_status();
+    if (schema_inspection_is_unknown($accessStatus)) {
+        throw new GalleryAccessSchemaUnavailableException();
+    }
+    if (!schema_inspection_is_available($accessStatus)) {
+        throw new RuntimeException('Gallery password/access schema is not ready for share-token mutation.');
+    }
+    $status = gallery_access_share_token_schema_status();
+    if (schema_inspection_is_unknown($status)) {
+        throw new GalleryShareTokenSchemaUnavailableException();
+    }
+    if (schema_inspection_is_missing($status)) {
+        throw new RuntimeException('Gallery share-token migration has not been applied.');
     }
 }
 
@@ -599,6 +885,13 @@ function gallery_access_share_token_schema_ready(): bool
  */
 function gallery_share_token_for_admin(array $gallery): ?string
 {
+    $status = gallery_access_share_token_schema_status();
+    if (schema_inspection_is_unknown($status)) {
+        throw new GalleryShareTokenSchemaUnavailableException();
+    }
+    if (!schema_inspection_is_available($status)) {
+        return null;
+    }
     // $stored stores an intermediate value used by the surrounding gallery workflow.
     $stored = (string) ($gallery['access_share_token'] ?? '');
     // $hash stores an intermediate value used by the surrounding gallery workflow.

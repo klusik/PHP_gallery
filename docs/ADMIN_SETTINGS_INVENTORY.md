@@ -47,7 +47,10 @@ Per-gallery and per-image values are intentionally not global registry entries. 
 | Canonical key | Owner / current Admin location | Type and accepted values | Default and invalid/missing fallback | Side effects / migration | Central | Specialized link | Sensitivity |
 |---|---|---|---|---|---|---|---|
 | `site_name` | `app_settings.php`; Theme | string, trimmed and clamped to 120 chars | `Gallery CMS`; empty central submission falls back to default | no revision; no migration | Edit | Theme Appearance | normal |
-| `public_language` | `translations.php`; Theme Language | installed/allowed language code: `en`, `cs`, `de`, `sv`, `no`, `is`, `da`, `fr`, `it`, `es`, plus future detected packs | `en`; unsupported values rejected by canonical language validation; missing optional-pack keys fall back to English | no revision; no migration | Edit | Theme Language | normal |
+| `public_language` | `translations.php`; Theme Language | maintained language code: `en`, `cs`, `de`, `sv` | `en`; unsupported values rejected by canonical language validation; missing keys fall back to English | no revision; no migration | Edit | Theme Language | normal |
+| `public_language_selector_enabled` | `translations.php`; shared Theme/Settings viewer-language panel | boolean `0/1` | `1`; missing values preserve the enabled historical behavior | enables a browser-local preference for each public viewer; disables the switcher and ignores viewer query/cookie/session overrides when off; does not store the viewer's choice | Edit | Theme Language | normal |
+| `public_language_selector_languages` | `translations.php`; shared Theme/Settings viewer-language panel | ordered non-empty JSON subset of `en`, `cs`, `de`, `sv` | all four; malformed/empty persisted values fall back to all, while empty submissions are rejected | limits languages offered for browser-local viewer choices only; Admin/default/pack tools keep all maintained languages; no migration | Edit | Theme Language | normal |
+| `public_language_selector_design` | `translations.php`; shared Theme/Settings viewer-language design panel | normalized JSON with preset, visibility/layout choices, and per-preset bounded styles | Classic, flags/codes on, names off; malformed values fall back field-by-field | Settings exposes a merge-safe basic subset; Theme owns compact details, transparent colors, preview, and unsaved all/preset/field resets; no migration | Edit | Theme Language | normal |
 | `url_rewrite_enabled` | `app_settings.php`; Dashboard Maintenance | boolean `0/1` | `1`; generated URLs use non-rewrite fallbacks where compatibility requires | no revision; no migration | Edit | Dashboard Maintenance | operational |
 | `public_home_search_enabled` | `public_search.php`; Dashboard Maintenance | boolean `0/1` | `0`; feature flag can force effective disabled | no revision; no migration | Edit only while feature is available | Dashboard Maintenance | normal |
 
@@ -170,7 +173,8 @@ Maintenance run state, last-result and completion marker settings are runtime st
 4. Gallery description layout, lightbox mode and EXIF/GPS display can have per-gallery overrides. The central page displays the global fallback only and never rewrites per-gallery values.
 5. `public_thumbnail_rendering_mode` accepts only `responsive` and `progressive`; invalid/missing state falls back to `responsive`.
 6. `theme_lightbox_browsing_mode` accepts only `single`, `picture_strip` and `3d_carousel`; invalid state falls back to `single` and the feature flag can force `single`.
-7. Sensitive resources are represented only as status such as `Configured`, `Not configured` or `Specialized page only`.
+7. The viewer-language selector is independent from Admin language and the site-wide public default. Disabling the feature suppresses personal overrides; filtering its languages never removes maintained catalogs from administrative tools.
+8. Sensitive resources are represented only as status such as `Configured`, `Not configured` or `Specialized page only`.
 
 ## Future registration rule
 

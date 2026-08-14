@@ -129,3 +129,53 @@
     }
 }
 
+
+
+.admin-update-job {
+    display: grid;
+    gap: 0.75rem;
+    margin: 0 0 1rem;
+    padding: 1rem;
+    border: 1px solid var(--admin-border);
+    border-radius: 14px;
+    background: #fbfcfd;
+}
+
+.admin-update-job[hidden] {
+    display: none;
+}
+
+.admin-update-job-heading {
+    display: flex;
+    align-items: start;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.admin-update-job-heading h3,
+.admin-update-job-heading p {
+    margin: 0;
+}
+
+.admin-update-job-progress {
+    overflow: hidden;
+    height: 0.65rem;
+    border-radius: 999px;
+    background: rgba(100, 116, 139, 0.16);
+}
+
+.admin-update-job-progress > span {
+    display: block;
+    width: 0;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--admin-accent, #2271b1);
+    transition: width 160ms ease;
+}
+
+.admin-update-job [data-update-job-actions] {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+}

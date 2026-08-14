@@ -57,13 +57,7 @@ use function Gallery\Core\now_sql;
  */
 function telemetry_settings_schema_ready(): bool
 {
-    try {
-        // $stmt stores the metadata lookup result for the telemetry settings table.
-        $stmt = db()->query("SHOW TABLES LIKE 'telemetry_settings'");
-        return $stmt && (bool) $stmt->fetch();
-    } catch (Throwable) {
-        return false;
-    }
+    return presentation_schema_render_available(presentation_telemetry_settings_schema_status(), 'telemetry_settings_render');
 }
 
 /**
@@ -98,9 +92,12 @@ function telemetry_setting(string $key, ?string $default = null): ?string
  */
 function telemetry_set_setting(string $key, string $value): void
 {
-    if (!telemetry_settings_schema_ready()) {
-        throw new RuntimeException('Telemetry settings schema is not ready. Run migrations first.');
-    }
+    presentation_schema_assert_write_available(
+        presentation_telemetry_settings_schema_status(),
+        'telemetry_setting_save',
+        'Telemetry settings schema is not ready. Run migrations first.',
+        'Telemetry settings schema could not be verified. No telemetry setting was changed.'
+    );
     // $stmt stores the upsert query for the setting value.
     $stmt = db()->prepare('INSERT INTO telemetry_settings (setting_key, setting_value, updated_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), updated_at = VALUES(updated_at)');
     $stmt->execute([$key, $value, now_sql()]);

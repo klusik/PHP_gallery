@@ -75,7 +75,13 @@ use function Gallery\Services\telemetry_retention_days;
 use function Gallery\Services\telemetry_run_maintenance;
 use function Gallery\Services\telemetry_set_setting;
 use function Gallery\Services\telemetry_setting_enabled;
-use function Gallery\Services\telemetry_settings_schema_ready;
+use function Gallery\Services\telemetry_schema_ready;
+use function Gallery\Services\presentation_schema_log_degraded;
+use function Gallery\Services\presentation_telemetry_schema_status;
+use function Gallery\Services\presentation_telemetry_settings_schema_status;
+use function Gallery\Services\schema_inspection_is_available;
+use function Gallery\Services\schema_inspection_is_missing;
+use function Gallery\Services\schema_inspection_is_unknown;
 use function Gallery\Services\telemetry_top_photos;
 
 /**
@@ -107,10 +113,13 @@ function render_telemetry_metric_card(string $label, string $value, string $hint
 function cms_admin_telemetry(): void
 {
     require_admin();
-    // $settings stores the telemetry configuration displayed on the page.
-    $settings = telemetry_all_settings();
-    // $schemaReady stores whether migrations have created telemetry tables.
-    $schemaReady = telemetry_settings_schema_ready();
+    // $schemaStatus preserves the distinction between a confirmed old schema and
+    // a temporary metadata-inspection failure for this optional report surface.
+    $schemaStatus = presentation_telemetry_schema_status();
+    $schemaReady = schema_inspection_is_available($schemaStatus);
+    // Settings are read only after the report schema is verified so a partial or
+    // unknown telemetry migration cannot be presented as a valid empty report.
+    $settings = $schemaReady ? telemetry_all_settings() : [];
     render_header(t('admin.telemetry.page_title', 'Telemetry'));
     echo '<section class="hero"><h1>' . e(t('admin.telemetry.title', 'Anonymous telemetry')) . '</h1><p>' . e(t('admin.telemetry.description', 'Local, privacy-safe usage and performance statistics for tuning the gallery.')) . '</p><nav class="nav">';
     echo '<a class="button secondary" href="' . e(admin_settings_url('privacy')) . '">' . e(t('admin.settings.open_centralized', 'Open centralized settings')) . '</a>';
@@ -120,7 +129,12 @@ function cms_admin_telemetry(): void
     echo '</nav></section>';
 
     if (!$schemaReady) {
-        echo '<section class="panel"><h2>' . e(t('admin.telemetry.migrations_required', 'Migrations required')) . '</h2><p>' . e(t('admin.telemetry.migrations_required_text', 'Telemetry tables are not available yet. Run database migrations first.')) . '</p></section>';
+        if (schema_inspection_is_unknown($schemaStatus)) {
+            presentation_schema_log_degraded($schemaStatus, 'admin_telemetry_dashboard');
+            echo '<section class="panel"><h2>' . e(t('admin.telemetry.schema_unavailable', 'Telemetry database status unavailable')) . '</h2><p>' . e(t('admin.telemetry.schema_unavailable_text', 'The gallery could not verify the telemetry database structure. No telemetry report or maintenance action was attempted. Check System Health and database connectivity, then try again.')) . '</p></section>';
+        } else {
+            echo '<section class="panel"><h2>' . e(t('admin.telemetry.migrations_required', 'Migrations required')) . '</h2><p>' . e(t('admin.telemetry.migrations_required_text', 'Telemetry tables are not available yet. Run database migrations first.')) . '</p></section>';
+        }
         render_footer();
         return;
     }
@@ -411,10 +425,17 @@ function telemetry_export_trend_chart(array $rows, string $valueKey, string $lab
 function cms_admin_telemetry_export(): void
 {
     require_admin();
-    if (!telemetry_settings_schema_ready()) {
-        http_response_code(409);
+    $schemaStatus = presentation_telemetry_schema_status();
+    if (!schema_inspection_is_available($schemaStatus)) {
         header('Content-Type: text/plain; charset=utf-8');
-        echo t('admin.telemetry.migrations_required_text', 'Telemetry tables are not available yet. Run database migrations first.');
+        if (schema_inspection_is_unknown($schemaStatus)) {
+            presentation_schema_log_degraded($schemaStatus, 'admin_telemetry_export');
+            http_response_code(503);
+            echo t('admin.telemetry.schema_unavailable_text', 'The gallery could not verify the telemetry database structure. No telemetry report or maintenance action was attempted. Check System Health and database connectivity, then try again.');
+        } else {
+            http_response_code(409);
+            echo t('admin.telemetry.migrations_required_text', 'Telemetry tables are not available yet. Run database migrations first.');
+        }
         return;
     }
 
@@ -743,6 +764,16 @@ function cms_admin_telemetry_settings(): void
 {
     require_admin();
     verify_csrf();
+    $schemaStatus = presentation_telemetry_settings_schema_status();
+    if (!schema_inspection_is_available($schemaStatus)) {
+        if (schema_inspection_is_unknown($schemaStatus)) {
+            presentation_schema_log_degraded($schemaStatus, 'admin_telemetry_settings_save');
+            flash_message('admin_notice', t('admin.telemetry.schema_unavailable_text', 'The gallery could not verify the telemetry database structure. No telemetry report or maintenance action was attempted. Check System Health and database connectivity, then try again.'));
+        } else {
+            flash_message('admin_notice', t('admin.telemetry.migrations_required_text', 'Telemetry tables are not available yet. Run database migrations first.'));
+        }
+        redirect_to(url_for('admin_telemetry'));
+    }
     // $checkboxKeys stores boolean setting names handled by the form.
     $checkboxKeys = [
         'telemetry_enabled',
@@ -775,6 +806,16 @@ function cms_admin_telemetry_settings(): void
 function cms_admin_telemetry_maintenance(): void
 {
     require_admin();
+    $schemaStatus = presentation_telemetry_schema_status();
+    if (!schema_inspection_is_available($schemaStatus)) {
+        if (schema_inspection_is_unknown($schemaStatus)) {
+            presentation_schema_log_degraded($schemaStatus, 'admin_telemetry_maintenance');
+            flash_message('admin_notice', t('admin.telemetry.schema_unavailable_text', 'The gallery could not verify the telemetry database structure. No telemetry report or maintenance action was attempted. Check System Health and database connectivity, then try again.'));
+        } else {
+            flash_message('admin_notice', t('admin.telemetry.migrations_required_text', 'Telemetry tables are not available yet. Run database migrations first.'));
+        }
+        redirect_to(url_for('admin_telemetry'));
+    }
     // $result stores the rollup and purge result.
     $result = telemetry_run_maintenance();
     render_header(t('admin.telemetry.maintenance_title', 'Telemetry maintenance'));

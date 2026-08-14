@@ -49,8 +49,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.88}
-\newcommand{\manualdate}{12 August 2026}
+\newcommand{\version}{0.89}
+\newcommand{\manualdate}{14 August 2026}
 
 \hypersetup{
   colorlinks=true,
@@ -152,10 +152,10 @@ This manual is written for the person who owns or manages that collection. It ex
 
 Start with Section~\ref{sec:first-hour} when the site has just been installed. Section~\ref{sec:planning} helps you plan a collection before adding hundreds of photographs. Sections~\ref{sec:create-edit-gallery} and~\ref{sec:photo-workflow} explain ordinary gallery work. Section~\ref{sec:audiences} provides complete examples for common audiences. Technical background remains near the end for readers who want to understand hosting, backups, or how the application works behind the screen.
 
-\subsection{What is new in Version 0.88}
-\index{Version 0.88}
+\subsection{What is new in Version 0.89}
+\index{Version 0.89}
 
-Version~0.88 makes a large installation easier to configure, deploy, and maintain. The central \ui{Settings} page now includes a Spotlight-style search over global settings and specialist tools. Theme controls include dedicated public tag-page presentation and configurable gallery hero tags. Dashboard maintenance data is loaded only when requested, with direct thumbnail-maintenance links and diagnostic Admin logs when loading fails.
+Version~0.89 makes a large installation easier to configure, deploy, and maintain. The central \ui{Settings} page includes a Spotlight-style search over global settings and specialist tools, while Theme~>~Language provides a compact, validated design editor for the public viewer language selector. Administrators can choose five presets, toggle flags/codes/names, use transparent colors, preview the real selector immediately, and reset individual values, a preset, or the complete design without saving until the parent form is submitted.
 
 Behind the interface, the bootstrap lifecycle, gallery and Theme controllers, public renderer, shared helpers, and updater are divided into focused modules while their established entrypoints remain compatible. Deployment archives include the complete application tree and portable path separators, and the updater can safely clean misplaced managed files created by limited web-hosting extractors. The supported English, Czech, German, and Swedish language catalogs are synchronized for the release.
 
@@ -995,6 +995,638 @@ Protected galleries store password hashes and grant session-scoped access after 
 
 Password reset uses one-time hashed tokens, optional recovery email, configured lifetime, and selectable mail transport. Administrators should use HTTPS, strong credentials, restricted database accounts, and protected mail secrets.
 
+\subsection{NSFW Guard and temporary database problems}
+\index{NSFW Guard}
+\index{age confirmation}
+\index{System Health!NSFW Guard}
+\index{503 response}
+\index{troubleshooting!NSFW Guard}
+
+NSFW Guard lets an administrator mark a complete gallery or one photograph as
+adult material. A gallery setting also protects its child galleries through
+the normal inherited access rules. Visitors receive an age-confirmation step
+before protected photographs, thumbnails, map information, previews, and
+original files are supplied.\footnote{The age confirmation is an application
+access control. Gallery owners remain responsible for local law, hosting terms,
+content classification, and any stronger identity or age-verification duties
+that apply to their publication.}
+
+The protection choices live in two database fields, one for galleries and one
+for photographs. The application checks both fields before it relies on them.
+Three clear outcomes help the owner respond correctly:
+
+\begin{description}
+  \item[Protection is ready.] Both fields are present. Existing gallery
+  inheritance, individual photograph settings, and visitor confirmation work
+  normally.
+  \item[An older database is confirmed.] The database answered successfully and
+  confirmed that a protection field is absent. This describes an installation
+  from before NSFW Guard, or an incomplete update. System Health directs the
+  owner to pending migrations. Such an older database could not have stored an
+  NSFW choice, so the application preserves its established pre-feature
+  behavior until the migration is applied.
+  \item[The answer is unknown.] The database could not provide a trustworthy
+  answer. Public requests that could reveal protected photographs or related
+  information receive a temporary service-unavailable response. Admin controls
+  explain the inspection problem, and setting changes wait for a reliable
+  answer.
+\end{description}
+
+This temporary refusal protects a collection during a database outage,
+permission change, server move, or incorrect database selection. The visitor
+sees a short translated message and may see a reference identifier. The message
+contains no database address, SQL statement, credential, private path, or
+photograph metadata. Image and thumbnail addresses receive plain text, while
+lightbox, map, and search requests receive structured JSON so the browser can
+handle the interruption cleanly.
+
+At the same moment, the application makes one bounded operational log entry
+with a stable security event name. It records the affected feature, the unknown
+readiness state, the requested route, the response type, and the same request
+reference shown to the visitor.\footnote{The event name is
+\codeword{security.nsfw\_schema\_inspection\_unavailable}. Its context uses a
+fixed diagnostic category and contains no SQL statement, exception text,
+credential, token, or private filesystem path.} This gives an administrator a
+useful correlation point while keeping sensitive connection details out of the
+public response. If the Admin log table is also unavailable, the gallery still
+returns the protective response normally.
+
+An owner can resolve the warning with the following sequence:
+
+\begin{enumerate}
+  \item Open Admin System Health and read the NSFW Guard database card.
+  \item Note whether the card reports a confirmed missing migration or an
+  inspection failure.
+  \item For an inspection failure, verify the database server, selected database,
+  application credentials, and permission to read database metadata.
+  \item For confirmed missing fields, create a backup and apply the pending
+  migrations through the normal maintenance workflow.
+  \item Reload System Health and confirm that the card reports the protection
+  fields as installed and verified.
+  \item Open one protected gallery as an anonymous visitor and confirm the age
+  prompt, thumbnail protection, lightbox behavior, map behavior, and original
+  media protection.
+\end{enumerate}
+
+The Admin dashboard brings attention to this condition before the detailed
+card is opened. A confirmed missing field or an unknown database answer places
+an \ui{Action} badge on Maintenance and System Health. The System Health card
+and the separate Runtime Diagnostics page use the same status information, so
+their explanation, affected database-field names, suggested checks, and request
+reference remain consistent. Runtime Diagnostics also places this bounded
+information in its copyable report for an owner who needs help from a hosting
+provider.\footnote{Affected-object labels are accepted only when they are valid
+database table and field identifiers. Database error text and malformed names
+are excluded from the Admin health model.}
+
+The health vocabulary can also describe a feature that an owner intentionally
+disabled in configuration. NSFW Guard currently remains a core access policy
+without such an on/off feature switch, so its normal statuses are ready,
+confirmed older database, and unknown. This distinction keeps an operational
+database problem separate from a deliberate configuration choice.
+
+Gallery, photograph, and bulk NSFW controls accept changes only while both
+fields are verified. Other unrelated editing can continue where its own data is
+healthy. This keeps a temporary database inspection problem from silently
+clearing or weakening an existing protection choice.
+
+
+\subsection{Password, share-link, and administrator database readiness}
+\index{System Health!security and authentication}
+\index{password protection!database readiness}
+\index{share links!database readiness}
+\index{authentication!database readiness}
+\index{password reset!database readiness}
+\index{Google login!database readiness}
+
+The same database-readiness protection now covers the other access and account
+features that can authorize a visitor or administrator. This is important during
+an interrupted update: seeing that ``something is missing'' is not enough to
+justify a permissive fallback. The gallery first distinguishes a confirmed older
+database from a database whose structure cannot currently be inspected.
+
+Admin \ui{System Health} and \ui{Runtime Diagnostics} show these security areas
+separately:
+
+\begin{itemize}
+  \item gallery password and access policy;
+  \item gallery visibility compatibility;
+  \item gallery share-link storage;
+  \item NSFW Guard;
+  \item persistent administrator login;
+  \item password-reset storage; and
+  \item external identity links, currently used by optional Google login.
+\end{itemize}
+
+A green or ready result means the required database objects were verified. A
+confirmed missing result means the database answered successfully and the owner
+should normally apply a pending migration. An unknown result means the
+application could not obtain a trustworthy answer, for example because the
+database is unreachable, the wrong database is selected, or metadata inspection
+permission changed. Security-sensitive behavior does not treat that unknown
+answer as if the feature had never existed.
+
+\subsubsection{Gallery passwords and interrupted migrations}
+
+Password protection uses several related fields rather than one switch. They
+record the access mode, whether the gallery is listed, the password hash, the
+share-link validating hash, and its optional expiry. The historical
+pre-password-protection database contained none of those fields.
+
+For compatibility, PHP Gallery therefore considers the database genuinely
+legacy only when \emph{all} core access fields are successfully inspected and
+confirmed absent. If some are present and another is missing, the database is
+partially migrated. The public gallery does not replace that mixed state with
+``normal'' and ``listed'', because an existing row may already contain a
+password, unlisted choice, or share-link hash in one of the fields that is
+present. Public pages and protected media wait for the migration to be repaired.
+
+This check happens before sensitive route handlers can send gallery HTML,
+thumbnail bytes, original or preview media, lazy lightbox/map metadata, search
+results, sitemap information, gallery assets, or a protected gallery download.
+Visitors receive the same minimal temporary-service response described for NSFW
+Guard, with the response format matched to the route. The controller that would
+have produced the protected content is not allowed to begin first.
+
+\subsubsection{Public, unpublished, and the older draft value}
+
+Older PHP Gallery databases used the word \codeword{draft} where the current
+interface uses \codeword{unpublished}. The application now verifies the actual
+database field definition before choosing between those storage words. If the
+database successfully confirms the historical definition, saving an unpublished
+gallery uses the old \codeword{draft} value for compatibility. If the definition
+cannot be inspected, the gallery does not guess which vocabulary is active.
+
+This distinction matters because an SQL failure and a historical enum definition
+can otherwise look identical to code that asks only a yes/no question. The
+three-state check keeps a database outage from changing publication behavior.
+
+\subsubsection{Share links and safe revocation}
+
+A share link has a secret value given to the visitor and a validating hash kept
+by the gallery. Current installations can also keep an encrypted copy used by
+Admin to display the existing link. Creating or using a current share link
+requires the relevant storage to be verified.
+
+Revocation has a deliberately different safety rule. Revoking access makes the
+site more restrictive, not less restrictive. Once the core validating hash and
+expiry fields are verified, PHP Gallery can clear that hash even if the optional
+encrypted display-token field is missing or cannot be inspected. Clearing the
+hash invalidates every external copy of the link. A database problem therefore
+cannot make an existing share link impossible to revoke merely because Admin
+cannot inspect the optional display copy.
+
+\subsubsection{Administrator login and ``Keep me signed in''}
+
+The ordinary authenticated PHP session and the optional persistent browser login
+are separate layers. The persistent option uses a database table of hashed
+remember-login tokens. If that table is successfully confirmed absent on an
+older installation, password login still works for the current PHP session; the
+site simply cannot issue the longer-lived browser token until the migration is
+applied.
+
+If the table's readiness is unknown, PHP Gallery does not issue or trust a new
+persistent token. A browser restoration attempt is refused safely. When a normal
+password or Google login has already established the PHP session, a temporary
+problem with the optional remember-token table does not discard that successful
+session. Admin can continue in the current session and System Health explains why
+persistent login could not be established.
+
+\subsubsection{Recovery email and password reset}
+
+The recovery-email field was added after the original username/password account
+model. A database that successfully confirms the email field is absent can still
+support username login. Account editing therefore keeps username and password
+work available on that proven older schema while recovery-email controls remain
+unavailable.
+
+Password reset is stricter because it needs both the recovery-email field and the
+one-time reset-token table. Issuing or consuming a reset link requires both to be
+verified. If either is confirmed missing, Admin receives migration guidance. If
+the structure is unknown, the reset workflow reports a temporary storage problem
+instead of pretending that the account or token is invalid. This also prevents a
+metadata outage from being counted as a bad password attempt.
+
+Reset secrets remain one-time credentials. Visible diagnostics and Admin logs do
+not contain the reset token, its URL secret, a password, mail password, cookie,
+CSRF token, raw SQL statement, database connection string, or raw database
+exception message.
+
+\subsubsection{Google identity links}
+
+Google login has two independent readiness questions. First, the site needs its
+OAuth client configuration. Second, the database must be able to store and look
+up the link between a Google identity and a local Admin account. A complete OAuth
+configuration does not prove that the identity-link table is healthy.
+
+A confirmed missing identity-link table is shown as a migration requirement. An
+unknown table state temporarily disables linked-account lookup, Google login,
+linking, and disconnect operations until inspection is reliable. Password login
+remains independent. Callback and schema-failure logs use bounded categories and
+identifiers rather than copying raw external or database exception text.
+
+\subsubsection{What the owner should do}
+
+When any security/authentication card shows an action state:
+
+\begin{enumerate}
+  \item Open \ui{System Health} and identify whether the state is confirmed
+  missing or unknown.
+  \item If it is unknown, check database reachability, selected database, and
+  metadata-inspection permissions before applying migrations repeatedly.
+  \item If it is confirmed missing, make a backup and apply the pending migration
+  through the normal maintenance workflow.
+  \item Reload System Health. A migration performed in the same Admin or command
+  process clears the request-local readiness cache after schema changes, so the
+  new structure can be inspected immediately.
+  \item Re-test the affected behavior. For gallery access, include an anonymous
+  password-protected gallery, an unlisted gallery, a share link, a thumbnail,
+  original media, and gallery download. For account storage, test ordinary login,
+  persistent login if enabled, password reset if configured, and Google login if
+  used.
+\end{enumerate}
+
+The copyable Runtime Diagnostics report uses the same bounded health model as
+System Health. It may include validated table or field names, a safe status,
+suggested checks, and a request reference. It does not include the private data
+that caused or accompanied a database exception.
+
+\subsection{Destructive operations, uploads, and database readiness}
+\index{System Health!destructive operations}
+\index{uploads!database readiness}
+\index{database!mutation safety}
+\index{gallery deletion!database readiness}
+\index{gallery migration!database readiness}
+\index{WebDAV!database readiness}
+\index{thumbnails!database readiness}
+\index{updates!database readiness}
+
+Some database checks protect more than whether a page can be displayed. Deleting
+a gallery, moving a photograph, accepting an upload, creating an upload key,
+installing migration files, rebuilding thumbnail metadata, cleaning a database,
+or activating an application update can change information that is difficult to
+reconstruct after only half of the operation succeeds. PHP Gallery therefore uses
+the same three readiness states for these data-changing workflows, but applies a
+stricter rule than it can use for optional visual features.
+
+The three states mean:
+
+\begin{description}
+  \item[Available.] The database confirmed the tables and fields required by the
+  operation. The existing workflow continues normally.
+  \item[Missing.] The database inspection worked and positively confirmed that a
+  required item is absent. Usually this means a pending migration. A small number
+  of workflows have an explicitly supported older-database or migration-bootstrap
+  mode, which is described below.
+  \item[Unknown.] PHP Gallery could not obtain a trustworthy answer about the
+  required database structure. The affected data-changing operation is paused
+  before its target is changed. The application does not interpret an inspection
+  error as proof that the table or field is absent.
+\end{description}
+
+This distinction is especially useful on shared hosting. A temporary database
+outage, a changed metadata permission, or accidentally selecting the wrong
+database can make an old yes/no existence check look exactly like a genuinely
+missing field. For a deletion or upload those two situations must not be treated
+the same. Confirmed absence can lead the owner to a migration. Unknown readiness
+means the database connection or inspection problem should be solved first.
+
+\subsubsection{Which operations are protected}
+
+Admin \ui{System Health} reports separate readiness for the Phase 10 workflows:
+
+\begin{itemize}
+  \item gallery and photograph deletion;
+  \item gallery and photograph move/copy operations;
+  \item the per-administrator Duplicate Photo Detector review ledger;
+  \item normal browser uploads and browser-prepared ZIP uploads;
+  \item gallery-scoped upload automation API keys;
+  \item gallery migration/import jobs;
+  \item mobile WebDAV upload credentials and uploads;
+  \item thumbnail metadata generation and maintenance;
+  \item database cleanup and schema repair;
+  \item application update activation.
+\end{itemize}
+
+A \ui{Missing} or \ui{Unknown} state contributes to the \ui{Action} badge on
+Maintenance. Runtime Diagnostics shows the same capability list in a separate
+destructive/ingestion section. The two screens intentionally use the same database
+readiness model, so an owner should not see one page claim a workflow is healthy
+while the other reports it as uninspectable.
+
+\subsubsection{The safety check happens before the target changes}
+
+The important protection is the order of events. The application checks the
+database shape before the first irreversible change to the operation's target.
+Examples include:
+
+\begin{itemize}
+  \item A classic upload is checked before PHP moves the uploaded source file from
+  temporary storage into the gallery folder.
+  \item A browser-prepared ZIP is checked before an original image from the package
+  is written into the gallery.
+  \item A WebDAV PUT checks both credential storage and gallery-ingestion storage
+  before the request becomes a gallery file.
+  \item A gallery migration checks the target schema before it writes imported
+  metadata, installs originals or thumbnails, or completes the job.
+  \item Thumbnail generation checks the metadata write shape before creating or
+  replacing derivative files.
+  \item Gallery deletion and move/copy operations check ownership and path fields
+  before database or filesystem changes begin.
+  \item Database cleanup and repair require a conclusive schema-history check before
+  live mutation.
+  \item An application update may already have been downloaded and extracted into
+  staging, but the final activation check runs immediately before active application
+  files are replaced.
+\end{itemize}
+
+The purpose is recoverability. When readiness is unknown, an original gallery file
+should remain where it was, a prepared upload should not become a half-indexed
+gallery item, a migration job should remain resumable, an existing credential
+should remain unchanged, and the currently running application should not be
+partially replaced by an update.
+
+\subsubsection{Confirmed older schemas and thumbnail compatibility}
+
+Not every confirmed missing item means data must be destroyed or the whole site
+must stop. Some compatibility behavior is safe only because the database has
+positively answered that the newer object is absent.
+
+Thumbnail metadata is one example. Older installations can have generated
+thumbnail files without the newer \texttt{image\_thumbnail\_variants} metadata
+table. If the table is confirmed absent, PHP Gallery can preserve its documented
+file-only thumbnail compatibility. If the table exists, the application also
+checks optional fields used by the newer metadata write format before generating,
+repairing, replacing, or deleting derivatives. An inspection failure at that point
+does not fall back to file-only mode, because the table may actually exist and
+contain authoritative state.
+
+Gallery migration uses the same principle for optional imported metadata. A field
+that is confirmed absent may be omitted from an older target database. A field that
+cannot be inspected is not silently discarded. The migration pauses so the owner
+does not receive an apparently successful import with an unpredictable subset of
+metadata.
+
+Database maintenance and application update activation have a different documented
+bootstrap case. If the database positively confirms that
+\texttt{schema\_migrations} is absent, the migration system can create or initialize
+its own history table as part of the established workflow. If the existence of that
+table is unknown, cleanup, repair, or active-file replacement waits for reliable
+inspection instead.
+
+\subsubsection{Upload keys and WebDAV revocation}
+\index{upload automation!revocation}
+\index{WebDAV!credential revocation}
+
+Creating or trusting an upload credential requires the complete database shape
+used by that authentication method. PHP Gallery must be able to verify the token
+hash and the other fields needed by the existing authentication workflow before it
+creates or accepts the credential.
+
+Revocation is intentionally narrower because it makes access more restrictive. If
+the smaller set of fields needed to disable an upload-automation key is verified,
+the administrator can revoke that key even when an unrelated token field is
+missing. Mobile WebDAV credential deletion follows the same principle with the
+verified row identity used by the delete operation. This is not permission to
+guess through an inspection outage: if the fields needed for revocation themselves
+cannot be inspected, the revocation operation is also paused.
+
+This asymmetry avoids an undesirable result in which an incomplete but inspectable
+upgrade prevents the owner from shutting off an existing external upload path.
+
+\subsubsection{What the owner sees when an operation is paused}
+
+The exact screen depends on the workflow. An Admin page may show a migration-required
+message, a temporary database-schema warning, or a normal failed-operation notice.
+JSON-based side panels and upload managers can return a conflict or temporary-service
+status appropriate to the cause. WebDAV and public automation endpoints return a
+temporary failure instead of pretending an inspection outage is simply an invalid
+credential.
+
+The diagnostic information is deliberately limited. System Health and Runtime
+Diagnostics can show a capability name, \ui{Available}, \ui{Missing}, or
+\ui{Unknown}, validated table/field names, suggested checks, and a request reference.
+The mutation refusal log uses the same bounded identifiers. These surfaces do not
+show raw SQL, raw database exception text, DSNs, passwords, API keys, WebDAV
+passwords, uploaded private paths, migration source paths, or update staging paths.
+
+\subsubsection{Recommended recovery procedure}
+
+If a deletion, upload, migration, thumbnail operation, database repair, or update is
+paused because its schema is unknown:
+
+\begin{enumerate}
+  \item Do not repeatedly retry a destructive operation while the database state is
+  still unclear.
+  \item Open \ui{System Health} and identify the exact mutation capability that is
+  \ui{Unknown}.
+  \item Check normal database connectivity, the configured/selected database, and
+  whether the application account can read database metadata.
+  \item Check the Admin log using the visible request reference when one is shown.
+  The useful entry should describe the bounded capability and operation, not expose
+  private database details.
+  \item Restore reliable database inspection and reload System Health.
+  \item If the state becomes \ui{Missing}, make a coordinated backup and apply the
+  pending migration through the normal maintenance workflow. Do not use repeated
+  migrations as the first response to an \ui{Unknown} state.
+  \item If the state becomes \ui{Available}, retry the original operation and verify
+  both its filesystem result and its database result.
+  \item For a gallery migration, resume the existing job instead of starting a
+  second import when the first job remains available.
+  \item For an update that was downloaded but not activated, re-run the normal update
+  action after readiness is healthy. The staged package can be replaced or reused by
+  the normal updater workflow; the important point is that the active application
+  was not partially copied during the refusal.
+\end{enumerate}
+
+For high-value galleries, test these safeguards on a disposable copy after a major
+server move or database restore. A useful manual exercise is to temporarily remove
+metadata-inspection permission, attempt one upload and one deletion, and verify that
+the target gallery remains unchanged while System Health reports \ui{Unknown}. Then
+restore permission, confirm the state becomes \ui{Available}, and repeat the normal
+operation.
+
+\subsection{Optional maps, games, AI, and reporting database readiness}
+\index{System Health!optional presentation}
+\index{maps!database readiness}
+\index{Picture Game!database readiness}
+\index{voting!database readiness}
+\index{OpenAI!database readiness}
+\index{AI metadata!database readiness}
+\index{SimBrief!database readiness}
+\index{navigation data!database readiness}
+\index{telemetry!database readiness}
+\index{Admin report!database readiness}
+
+Not every database-backed feature controls access or deletes data. Some features add
+information or interaction around the main gallery: a GPS map, a stored flight
+route, voting, Picture Game, a special lightbox mode, AI-assisted text, internal AI
+search metadata, navigation data, telemetry, or a detailed administrator report.
+PHP Gallery treats these as optional presentation and reporting capabilities.
+
+The important owner-facing rule is that a safe optional display failure does not
+have to take the whole gallery offline. If the database cannot verify the GPS map
+fields, for example, the main gallery can still show its photographs without the
+map. Omitting the map does not reveal a protected photograph and does not grant a
+visitor any additional permission. System Health still records the map capability
+as \ui{Unknown}, so the problem is visible instead of being silently mistaken for a
+feature that was never installed.
+
+A database-backed \emph{write} is different. Recording a vote, remembering which two
+photographs Picture Game displayed, saving a per-gallery lightbox or GPS override,
+enabling voting while creating or importing a gallery, carrying an inherited
+lightbox choice into an organizer-created child gallery, changing an OpenAI profile,
+changing an AI analysis job, storing navigation account tokens, or running telemetry
+maintenance changes persistent state. An \ui{Unknown} database shape is never
+permission to perform those writes or silently discard the requested optional value.
+
+\subsubsection{The four states shown in System Health}
+
+Optional capabilities can show four states:
+
+\begin{description}
+  \item[Available.] The required database objects were verified and the optional
+  feature can use its normal behavior.
+  \item[Missing.] The database was inspected successfully and the optional object is
+  genuinely absent. The feature may be hidden or may ask for a pending migration.
+  Some explicitly supported old installations can continue without storing the
+  newer optional information.
+  \item[Unknown.] PHP Gallery could not verify the database shape. A safe visual
+  surface may be omitted, but dependent writes are paused and the problem appears in
+  diagnostics.
+  \item[Disabled.] The optional feature is intentionally turned off by configuration.
+  System Health reports that fact directly. It does not query the database merely to
+  inspect a feature that cannot affect the current request.
+\end{description}
+
+The \ui{Disabled} state is also a performance feature. The System Health registry
+checks the real feature flag before asking about its tables and fields. Enabled
+features reuse the same request-local database-readiness cache described later in
+this manual.
+
+\subsubsection{Maps and lightbox overrides}
+
+GPS/EXIF presentation verifies the gallery switch and the image metadata used by the
+map. Metadata-organizer capture-date grouping uses the same structured inspection
+model for the narrower \filepath{images.exif\_taken\_at} requirement instead of an
+older yes/no column probe. The per-gallery GPS choice is a true inherited setting: a database value of
+\texttt{NULL} means that the gallery follows the global/default choice. PHP Gallery
+therefore verifies that the field is actually nullable before it treats this
+inheritance state as available. If nullability cannot be inspected, the gallery can
+still omit the optional map, but Admin does not save a guessed override.
+
+Flight maps use their own route and navigation-data storage. A missing or unknown
+route map can be omitted from an otherwise usable gallery. Saving or deleting a
+stored route requires the appropriate database shape to be known. The same principle
+applies to a per-gallery lightbox browsing-mode override: public viewing may use the
+safe global/default mode, while an Admin-submitted override waits until the stored
+field and supported mode vocabulary can be verified. The same protection applies
+when a gallery is created from \filepath{gallery.json} or when the metadata organizer
+creates a child gallery. A confirmed old database may omit the unavailable optional
+column, but an inspection outage does not silently throw away an explicit or inherited
+lightbox choice. Likewise, a new or imported gallery is not allowed to switch voting
+on until the vote-storage capability is verified.
+
+\subsubsection{Voting and Picture Game}
+
+Voting and Picture Game are optional visitor interactions, but both write state. A
+confirmed missing migration can hide the feature or show migration guidance. An
+inspection failure is not treated as an empty vote table.
+
+Picture Game has one subtle write boundary: when PHP Gallery chooses a pair of
+photographs to display, it records that pair before the visitor chooses a winner.
+Consequently, opening the next game pair is not a purely read-only operation. If the
+Picture Game schema is unknown, the main gallery remains usable but the game route
+returns a temporary unavailable state and no pair is recorded. Bulk Admin toggles
+use this exact Picture Game capability instead of an unrelated all-features-ready
+check.
+
+The Complete Admin Gallery Report also uses the real Picture Game data model. Its
+statistics distinguish pairs with a recorded \texttt{winner\_image\_id} from pairs
+that were displayed without a completed selection. It does not query a nonexistent
+\texttt{vote} field in the Picture Game table.
+
+\subsubsection{OpenAI and local AI metadata}
+
+OpenAI text assistance has a core per-user settings shape and a separate optional
+field for image input. A confirmed older text-only settings schema can preserve that
+older behavior. If the settings shape is unknown, PHP Gallery does not save a partial
+profile while pretending that the missing answer was confirmed.
+
+Local AI image metadata uses result and queue tables. Public/Admin read surfaces may
+omit optional AI metadata when the database cannot be inspected, but queue claims,
+heartbeats, completions, retries, and forced reprocessing require a known database
+shape. The upload-automation companion worker receives a bounded operational error
+when storage cannot be verified. Raw SQL, a database connection string, or the raw
+server exception is not returned to the worker.
+
+\subsubsection{SimBrief and navigation accounts}
+
+SimBrief description generation is intentionally separated from route-map
+persistence. PHP Gallery can obtain and render a useful SimBrief/OFP-based draft even
+when the optional flight-route database storage is absent or temporarily
+uninspectable. In that situation the draft remains usable, but the application does
+not claim that the route map was saved.
+
+Navigation data makes a similar distinction between temporary session state and
+persistent account storage. A database positively confirmed to predate persistent
+navigation accounts may keep the historical session-only OAuth behavior. An
+\ui{Unknown} account schema cannot be reinterpreted as that old installation, so new
+persistent token storage is paused.
+
+Disconnecting an existing navigation account is deliberately narrower. If the row
+identity and provider ownership needed to remove the stored account are verified,
+the administrator can still delete that stored credential even when unrelated
+optional account fields are absent. This mirrors the security principle used for
+upload-key revocation: making access more restrictive should not require fields that
+the delete operation does not use.
+
+\subsubsection{Telemetry and the Complete Admin Gallery Report}
+
+Telemetry has separate database needs for settings and for the complete report and
+maintenance data set. The telemetry page and HTML export distinguish a confirmed
+missing migration from an inspection outage. Setting changes require verified
+settings storage. Rollup and retention cleanup can quietly have nothing to do on a
+proven pre-telemetry database, but they do not silently report success when the
+reporting schema is \ui{Unknown}.
+
+The Complete Admin Gallery Report checks its known optional sections through the
+same structured readiness service. One database query is intentionally different:
+the report enumerates all base tables in the currently selected database so it can
+show exact table counts, including future or extension tables whose names the core
+application does not know in advance. This dynamic inventory uses
+\texttt{information\_schema.TABLES} directly. If that inventory fails, the report
+shows generic unavailable text instead of embedding the raw database exception.
+
+\subsubsection{What System Health and Runtime Diagnostics expose}
+
+System Health and Runtime Diagnostics use the same fifteen optional capability
+entries. An \ui{Unknown} entry may name a validated table or field, suggest checking
+database connectivity, the selected database, or metadata permissions, and include a
+request reference that helps correlate Admin logs. It does not expose raw SQL, PDO
+exception messages, DSNs, passwords, OAuth or API tokens, browser cookies, reset or
+share tokens, CSRF values, or private filesystem paths.
+
+A useful troubleshooting sequence is:
+
+\begin{enumerate}
+  \item Check whether the feature is intentionally \ui{Disabled}.
+  \item If System Health says \ui{Missing}, review pending migrations and the version
+  of the restored database before changing anything manually.
+  \item If it says \ui{Unknown}, check database connectivity, the selected database,
+  and permission to inspect metadata before repeatedly applying migrations.
+  \item Retry the optional feature after readiness becomes \ui{Available}. If it was
+  a write, verify that the earlier failed attempt did not change persistent state.
+  \item For SimBrief or other split workflows, distinguish the primary result from
+  optional persistence. A generated draft can be valid even when its optional map
+  write was intentionally omitted.
+\end{enumerate}
+
+\important{A temporarily missing map, game, AI panel, telemetry report, or optional
+report section does not by itself prove that a migration disappeared. Read the exact
+System Health state first. \ui{Missing} means the database positively confirmed
+absence; \ui{Unknown} means the application could not obtain a trustworthy answer.}
+
 \subsection{Operational security}
 
 Recommended practices include:
@@ -1031,7 +1663,19 @@ Open \ui{Theme > Language}. Two independent selectors are available:
   \item \ui{Public visitor language} changes the default interface language shown on public gallery pages. This is a site-wide setting for anonymous visitors.
 \end{itemize}
 
-These choices do not have to match. For example, an administrator may work in Czech while the public gallery uses English, Swedish, or German. A public visitor can also request one of the same four supported languages with an address parameter such as \codeword{?lang=sv}; PHP Gallery remembers that visitor choice in the browser.
+Beside these selections, the reusable \ui{Viewer language selector} panel controls whether public visitors may choose a personal interface language. It appears in both \ui{Theme > Language} and \ui{Settings > General}; both copies edit the same availability settings and therefore always stay synchronized. The feature is enabled by default. The language checklist underneath it enables English, Czech, German, and Swedish by default, and at least one language must remain selected when the panel is saved. This panel does not select a language for the site or for an account: each public viewer makes an independent choice, and that personal choice is saved only in that viewer's browser cookie.
+
+The checklist is site-wide configuration of which choices are offered, but selecting one of those choices affects only the viewer who selects it in that browser. For example, removing Swedish hides the Swedish button and refuses Swedish viewer overrides, but Swedish remains available as the administrator's language, as the site-wide public default, and in the language-pack editor. Disabling the whole viewer feature removes the public language buttons and makes public pages follow \ui{Public visitor language}; saved viewer query parameters, session choices, and cookies are ignored until the feature is enabled again.
+
+These choices do not have to match. For example, an administrator may work in Czech while the public gallery uses English, Swedish, or German.
+
+Every public page includes a compact language control in the shared header. It uses locally bundled SVG artwork for the United Kingdom, Czechia, Germany, and Sweden as visual cues for English, Czech, German, and Swedish. Each control retains the language's native name as its accessible label, so the choice does not depend on recognizing a national flag. Selecting a language keeps the visitor on the same gallery or public page, including applicable filters, and remembers the per-viewer choice in that browser for later visits. The equivalent address parameter, such as \codeword{?lang=sv}, remains supported for direct links and no-JavaScript use.
+
+The \ui{Viewer language selector design} editor offers five presets: \ui{Classic}, \ui{Solid pills}, \ui{Outline}, \ui{Soft cards}, and \ui{Minimal}. Classic preserves the original appearance. \ui{Settings > General} shows only the basic preset and flag choices plus a link to the detailed \ui{Theme > Language} editor; saving there preserves every detailed override. Theme uses compact one-line controls and places the live preview above them. The preview uses the real language labels and bundled flags while flags, codes, native names, layout, active emphasis, colors, padding, margins, gaps, borders, radii, flag size, and text size are adjusted. Every color can use its selected value or explicit transparency. Values are bounded and validated; malformed saved values return safely to canonical defaults. \ui{Reset all language selector settings} selects Classic and restores the complete design, \ui{Reset this preset} restores only the active preset, and each field has its own reset. Resets update the preview but are not persisted until the language form is saved, and they never change the selector feature switch, offered languages, site default, Admin language, or a visitor's browser-local choice.
+
+The flag files are stored under \filepath{public/assets/flags/} and are served by the gallery itself; the visitor's browser does not contact an external flag service. The artwork is pinned from \codeword{lipis/flag-icons} version 7.2.3 and is distributed under the bundled MIT license in \filepath{public/assets/flags/LICENSE.flag-icons.md}.
+
+When the viewer feature is enabled, the menu also provides \ui{Use site default}. This removes the visitor's personal override from both the current session and the browser cookie. The public interface then follows the administrator's \ui{Public visitor language} setting again, including any later change to that site-wide default. This preference changes application wording only; it does not change access permissions or translate owner-written gallery content.
 
 \subsubsection{Available languages and their current state}
 \index{language!English}
@@ -1124,6 +1768,136 @@ Mobile WebDAV tokens associate a user, gallery scope, credential state, and path
 
 Schema changes live in timestamped PHP files under \filepath{database/migrations/}. The migration runner prevalidates pending definitions, applies them in filename order, and records successful versions. New schema work receives a new migration file so existing installations retain a deterministic history.\footnote{Some migrations include repair callbacks in addition to SQL. Compatibility tests protect partial-update scenarios where an older runner encounters newer migration definitions.}
 
+Database-readiness checks are remembered only for the current PHP request. This
+normally reduces repeated metadata queries, but a migration can change the
+answer while the same Admin, installer, updater, or command-line process is
+still running. The migration runner therefore clears those remembered answers
+after schema-changing statements and after successful repair callbacks. A
+post-migration check then reads the new database catalog instead of reusing an
+answer from before the migration. Ordinary data-only migration statements do
+not clear the readiness cache because they cannot create or remove a table,
+field, or index.
+
+\subsection{How the gallery checks database readiness}
+\index{database!readiness}
+\index{schema inspection}
+\index{migrations!missing objects}
+\index{System Health!database inspection}
+\index{troubleshooting!database connection}
+
+Many gallery features need particular places in the database catalog. Password
+reset needs a secure token table. NSFW Guard needs fields that remember the
+gallery and photograph protection choices. Upload automation needs a table for
+hashed upload keys. Thumbnail maintenance needs records that describe generated
+image sizes. Before using these features, the application can ask the database
+whether the required table or field is available.
+
+This readiness check protects owners during upgrades. A web host may copy the
+new application files before the database migration has been applied. A careful
+feature can recognize the older catalog and guide the administrator toward the
+pending migration instead of sending a query for a field that has not yet been
+created. Optional visual features can often use a familiar default while the
+upgrade is completed. Security and data-changing features deserve stricter
+handling because their database records participate in protection, ownership,
+or recovery.
+
+Two situations can look similar on the screen while requiring different
+solutions:
+
+\begin{description}
+  \item[Confirmed absence.] The connection
+  worked, and the database confirmed that a required table, field, or index is
+  absent. This usually points to a pending migration, an interrupted update, or
+  a restored database from an older application version.
+  \item[Unknown readiness.] The application could
+  not obtain a trustworthy answer. Possible causes include a temporary database
+  outage, incorrect connection details, a hosting permission change, the wrong
+  selected database, or a query failure. Repeatedly applying migrations before
+  checking connectivity can obscure the original problem.
+\end{description}
+
+The application now contains a shared inspection foundation that records three
+clear outcomes: \emph{available}, \emph{missing}, and \emph{unknown}. It checks
+tables, fields, and indexes through database metadata, remembers repeated
+answers for the current page request, and keeps technical failure details
+bounded so credentials and private connection information stay out of visible
+diagnostics.\footnote{The repository-wide conversion is complete. NSFW Guard was the
+first security-sensitive pilot. Gallery access/authentication now use explicit
+security policy; destructive and ingestion workflows use a stricter mutation policy;
+and optional maps, voting, Picture Game, lightbox overrides, AI assistance,
+navigation integrations, telemetry, SimBrief route persistence, and Admin reporting
+use the final presentation/reporting policy.}
+
+When a feature needs several database items, the foundation keeps the result for
+every item. An unknown answer receives priority over a missing answer because
+the complete condition could not be verified. This gives future System Health
+messages enough detail to identify a confirmed pending migration separately
+from a connection or permission problem.
+
+The first production pilot, NSFW Guard, needs exactly two database fields. The
+first NSFW readiness check in one page request therefore asks the database
+catalog about those two fields once each. Later gallery, photograph, thumbnail,
+lightbox, map, or media checks in the same request reuse the same answers. Phase
+9 applies the same request-local reuse to access and authentication capabilities,
+including the shared recovery-email field used by both login identity lookup and
+password reset. Another browser request starts with a fresh cache. This keeps the
+safety check predictable without adding repeated catalog queries to every
+protected item or authentication screen.
+
+Mutation checks reuse the same cache. For example, the complete gallery
+upload-ingestion capability needs twelve first-use metadata probes for its two
+required tables and core columns, while another request for the same capability
+inside that PHP request adds no further catalog probes. Thumbnail-write preflight can
+add checks for optional metadata columns when the metadata table exists; those
+answers are also reused by later thumbnail registration in the same request.
+
+Optional presentation health checks share this cache as well. The image-voting
+capability has ten first-use table/field requirements and does not repeat them in the
+same request. The optional health registry is lazy: merely building the registry
+performs no database metadata queries, and a feature that is switched off reports
+\ui{Disabled} before its resolver is called.
+
+The readiness foundation has focused safety tests that recreate successful,
+missing, connection-failure, and permission-failure answers without altering an
+owner's database. They also check that repeated questions share one answer
+during the current page request, that a fresh inspection follows successful
+schema DDL or a safely replayed duplicate DDL operation, and that simulated
+passwords, tokens, hostnames, and private paths stay outside the diagnostic
+result.\footnote{The tests also verify that table, field, and index lookups
+remain limited to the database selected by the application's connection, pass
+object names as prepared-query values, and reset cached readiness after
+migration repair callbacks. These checks support the permanent security, mutation, and optional-presentation
+policy layers that now share the foundation.}
+
+For an owner, the practical response is straightforward:
+
+\begin{enumerate}
+  \item Open Admin System Health and review database connectivity and pending
+  migrations together.
+  \item Confirm that the application is connected to the intended database,
+  especially after a server move, restore, or hosting control-panel change.
+  \item Create a coordinated backup before applying pending migrations.
+  \item Apply migrations through the normal authenticated maintenance workflow.
+  \item Reload System Health and verify the affected feature again.
+  \item If inspection still fails, preserve the exact time, visible reference
+  identifier, application version, and relevant server log entry for the hosting
+  provider or maintainer.
+\end{enumerate}
+
+An unknown readiness result deserves a cautious response. Public access and
+privacy decisions should stop safely, login-related operations should preserve
+their security controls, and uploads or deletions should wait for a reliable
+database answer. Optional appearance/reporting controls may use a safe default or omit only the
+affected surface while the main gallery continues, provided omission cannot weaken
+access or authorize a write. Admin diagnostics can still present the portions they
+could inspect and clearly identify the failed portion. This approach gives the
+owner useful pages while protecting photographs, accounts, and persistent data.
+
+\important{When a feature suddenly disappears after working normally, check database
+connectivity and permissions before assuming that its migration vanished. A
+genuinely missing migration is usually associated with an update, a fresh
+installation, or restoration of an older database backup.}
+
 \subsection{Thumbnail maintenance}
 
 Maintenance tools inspect generated variants, identify missing or stale derivatives, and rebuild selected sizes. Browser-assisted rebuilding can prepare source chunks where configured. Background warm-up handles small public-rendering gaps with bounded requests, while explicit Admin maintenance remains the primary large-scale repair path.
@@ -1148,7 +1922,9 @@ Administrators should still include the database and the \filepath{data/admin-lo
 
 \subsection{Application updates}
 
-The updater checks configured channels, validates packages, stages content, verifies required runtime files and sizes, preserves overwritten files in recovery storage, and activates the update. Rate-limit handling and retry state prevent repeated remote requests during provider wait periods.
+The updater checks configured channels, validates packages, stages content, verifies required runtime files and sizes, preserves overwritten files in recovery storage, and activates the update. Rate-limit handling and retry state prevent repeated remote requests during provider wait periods. A resumable job card appears in both \ui{Status} and \ui{Advanced tools}, so a beta install, restore, or reinstall continues to show its progress where it was started. The page may be closed and reopened without discarding completed checkpoints.
+
+Temporary download or hosting failures may be retried safely. A package whose files do not match its own integrity manifest is different: downloading the same published build again cannot change those bytes. PHP Gallery therefore asks the administrator to cancel that prepared job and choose a newer release or beta code instead of offering an endless retry loop.
 
 \important{Run a coordinated backup before an application update. Keep the backup available until runtime checks, migrations, public galleries, protected access, uploads, and Admin operations have been verified.}
 
@@ -1319,7 +2095,7 @@ Foreign keys express ownership where schema evolution and compatibility permit i
 
 \subsection{Application settings}
 
-The \codeword{app_settings} table stores key-value configuration. \codeword{app_setting()} reads values, \codeword{set_app_setting()} persists normalized values, and focused services interpret domain-specific settings. The public thumbnail renderer uses \setting{public_thumbnail_rendering_mode} with \setting{responsive} and \setting{progressive} values.
+The \codeword{app_settings} table stores key-value configuration. \codeword{app_setting()} reads values, \codeword{set_app_setting()} persists normalized values, and focused services interpret domain-specific settings. Public language configuration uses \setting{public_language} for the site default, \setting{public_language_selector_enabled} for the default-on viewer override feature, and \setting{public_language_selector_languages} for its ordered non-empty language list. The public thumbnail renderer uses \setting{public_thumbnail_rendering_mode} with \setting{responsive} and \setting{progressive} values.
 
 \section{Optional reference for developers}
 \label{sec:development}
@@ -1420,7 +2196,7 @@ For public thumbnail rendering, inspect the Elements and Network panels. Respons
 
 \subsection{Release hygiene}
 
-A release review confirms runtime version consistency, migrations, manifest hashes, documentation, translations, tests, package exclusions, and user-data safety. Test failures caused by missing local dependencies should be reported with exact commands and environment details.
+A release review confirms runtime version consistency, migrations, manifest hashes, documentation, translations, tests, package exclusions, and user-data safety. The maintainer compares the branch with the previous release tag, updates \filepath{app/bootstrap.php}, \filepath{release-metadata.json}, and the newest \filepath{PATCH_NOTES.md} entry, rebuilds this PDF, runs the complete and focused test suites plus PHP/JavaScript syntax checks, and verifies \codeword{git diff --check}. Only after the final source edit does the maintainer run \codeword{php scripts/generate_manifest.php} and its \codeword{--check} mode. The deployment helper then creates the requested local folder or ZIP; it only packages files and does not execute PHP or repair a stale manifest. The final archive review confirms that protected configuration, caches, logs, temporary files, and user media follow the packaging policy and that \filepath{app/core-manifest.json} is current. Test failures caused by missing local dependencies should be reported with exact commands and environment details.
 
 \section{Making the gallery feel fast}
 \label{sec:performance}

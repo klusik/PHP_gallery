@@ -45,7 +45,6 @@ use function Gallery\Core\request_method;
 use function Gallery\Core\require_admin;
 use function Gallery\Core\url_for;
 use function Gallery\Core\verify_csrf;
-use function Gallery\Services\admin_feature_schema_ready;
 use function Gallery\Services\create_gallery_thumbnails;
 use function Gallery\Services\delete_gallery_subtrees;
 use function Gallery\Services\exif_gps_override_schema_ready;
@@ -56,6 +55,10 @@ use function Gallery\Services\gallery_subtree_ids;
 use function Gallery\Services\gallery_visibility_storage_value;
 use function Gallery\Services\gallery_visibility_values;
 use function Gallery\Services\gallery_voting_schema_ready;
+use function Gallery\Services\presentation_picture_game_schema_status;
+use function Gallery\Services\presentation_schema_log_degraded;
+use function Gallery\Services\schema_inspection_is_available;
+use function Gallery\Services\schema_inspection_is_unknown;
 use function Gallery\Services\regenerate_public_paths;
 use function Gallery\Services\scan_gallery_images;
 use function Gallery\Services\set_collapsed_gallery_ids;
@@ -229,12 +232,18 @@ function cms_admin_bulk_galleries(): void
         redirect_to(url_for('admin'));
     }
     if (in_array($action, ['game_on', 'game_off'], true) && $galleryIds) {
-        if (!admin_feature_schema_ready()) {
-            admin_log_event('warning', 'picture_game.schema_missing', t('admin.galleries.log_picture_game_schema_missing'), [
-                'gallery_ids' => $galleryIds,
-                'action' => $action,
-            ]);
-            flash_message('admin_notice', t('admin.galleries.picture_game_requires_migration'));
+        $pictureGameStatus = presentation_picture_game_schema_status();
+        if (!schema_inspection_is_available($pictureGameStatus)) {
+            if (schema_inspection_is_unknown($pictureGameStatus)) {
+                presentation_schema_log_degraded($pictureGameStatus, 'admin_bulk_picture_game');
+                flash_message('admin_notice', t('admin.galleries.picture_game_schema_unavailable', 'Picture Game database status could not be verified. No galleries were changed. Check System Health and try again.'));
+            } else {
+                admin_log_event('warning', 'picture_game.schema_missing', t('admin.galleries.log_picture_game_schema_missing'), [
+                    'gallery_ids' => $galleryIds,
+                    'action' => $action,
+                ]);
+                flash_message('admin_notice', t('admin.galleries.picture_game_requires_migration'));
+            }
             redirect_to(url_for('admin'));
         }
         // Variable $expandedIds stores this steps working value.

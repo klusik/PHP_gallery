@@ -32,7 +32,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-08-12
+ *   2026-08-13
  */
 
 declare(strict_types=1);
@@ -47,6 +47,211 @@ const CMS_LANGUAGE_COOKIE = 'cms_language';
 const CMS_ADMIN_LANGUAGE_COOKIE = 'cms_admin_language';
 const CMS_PUBLIC_LANGUAGE_COOKIE = 'cms_public_language';
 const CMS_SELECTABLE_LANGUAGES = ['en', 'cs', 'de', 'sv'];
+const CMS_PUBLIC_LANGUAGE_SELECTOR_ENABLED_KEY = 'public_language_selector_enabled';
+const CMS_PUBLIC_LANGUAGE_SELECTOR_LANGUAGES_KEY = 'public_language_selector_languages';
+const CMS_PUBLIC_LANGUAGE_SELECTOR_DESIGN_KEY = 'public_language_selector_design';
+
+/**
+ * Return the five stable selector preset definitions and their complete defaults.
+ *
+ * @return array<string,array<string,mixed>> Presets keyed by architecture identifier.
+ */
+function translation_public_language_selector_design_presets(): array
+{
+    $base = [
+        'use_theme_colors' => false,
+        'container_bg' => '#fffaf0', 'text_color' => '#2d2118', 'border_color' => '#1d4ed8',
+        'active_bg' => '#2563eb', 'active_text' => '#fffdf8', 'hover_bg' => '#dbeafe', 'focus_color' => '#93c5fd',
+        'selector_padding_x' => 0, 'selector_padding_y' => 0, 'selector_margin' => 0, 'gap' => 5,
+        'button_padding_x' => 8, 'button_padding_y' => 5, 'border_width' => 1, 'border_style' => 'solid',
+        'selector_radius' => 0, 'button_radius' => 9, 'flag_width' => 20, 'flag_height' => 15, 'font_size' => 11,
+    ];
+    return [
+        'classic' => array_replace($base, ['label' => 'Classic', 'use_theme_colors' => true]),
+        'solid_pills' => array_replace($base, ['label' => 'Solid pills', 'container_bg' => '#e2e8f0', 'text_color' => '#0f172a', 'border_color' => '#cbd5e1', 'active_bg' => '#0f766e', 'hover_bg' => '#ccfbf1', 'focus_color' => '#2dd4bf', 'selector_padding_x' => 6, 'selector_padding_y' => 6, 'selector_radius' => 999, 'button_radius' => 999]),
+        'outline' => array_replace($base, ['label' => 'Outline', 'container_bg' => '#ffffff', 'text_color' => '#1e3a8a', 'border_color' => '#3b82f6', 'active_bg' => '#eff6ff', 'active_text' => '#1d4ed8', 'hover_bg' => '#dbeafe', 'focus_color' => '#60a5fa', 'gap' => 7, 'button_radius' => 6]),
+        'soft_cards' => array_replace($base, ['label' => 'Soft cards', 'container_bg' => '#f5f3ff', 'text_color' => '#4c1d95', 'border_color' => '#ddd6fe', 'active_bg' => '#7c3aed', 'hover_bg' => '#ede9fe', 'focus_color' => '#a78bfa', 'selector_padding_x' => 8, 'selector_padding_y' => 8, 'gap' => 8, 'button_padding_x' => 10, 'button_padding_y' => 8, 'selector_radius' => 14, 'button_radius' => 10]),
+        'minimal' => array_replace($base, ['label' => 'Minimal', 'container_bg' => '#ffffff', 'text_color' => '#334155', 'border_color' => '#94a3b8', 'active_bg' => '#ffffff', 'active_text' => '#0f172a', 'hover_bg' => '#f1f5f9', 'focus_color' => '#475569', 'gap' => 10, 'button_padding_x' => 3, 'button_padding_y' => 3, 'border_width' => 0, 'button_radius' => 0, 'font_size' => 12]),
+    ];
+}
+
+/**
+ * Return the complete canonical selector design configuration.
+ *
+ * @return array<string,mixed> Default global choices and per-preset values.
+ */
+function translation_public_language_selector_design_defaults(): array
+{
+    return [
+        'preset' => 'classic', 'show_flags' => true, 'show_codes' => true, 'show_names' => false,
+        'orientation' => 'wrap', 'density' => 'comfortable', 'alignment' => 'start', 'active_style' => 'filled',
+        'presets' => translation_public_language_selector_design_presets(),
+    ];
+}
+
+/**
+ * Return validation bounds for numeric selector design fields.
+ *
+ * @return array<string,array{0:int,1:int}> Inclusive minimum and maximum values.
+ */
+function translation_public_language_selector_design_numeric_bounds(): array
+{
+    return [
+        'selector_padding_x' => [0, 40], 'selector_padding_y' => [0, 40], 'selector_margin' => [0, 64],
+        'gap' => [0, 32], 'button_padding_x' => [0, 32], 'button_padding_y' => [0, 24],
+        'border_width' => [0, 8], 'selector_radius' => [0, 999], 'button_radius' => [0, 999],
+        'flag_width' => [12, 48], 'flag_height' => [9, 36], 'font_size' => [9, 24],
+    ];
+}
+
+/**
+ * Normalize an untrusted selector design configuration against canonical defaults.
+ *
+ * @param mixed $value Submitted array or decoded persisted value.
+ * @return array<string,mixed> Complete safe configuration.
+ */
+function translation_public_language_selector_design_normalize(mixed $value): array
+{
+    $defaults = translation_public_language_selector_design_defaults();
+    if (!is_array($value)) {
+        return $defaults;
+    }
+    $preset = (string) ($value['preset'] ?? 'classic');
+    $defaults['preset'] = isset($defaults['presets'][$preset]) ? $preset : 'classic';
+    foreach (['show_flags', 'show_codes', 'show_names'] as $field) {
+        if (array_key_exists($field, $value)) {
+            $normalizedBoolean = filter_var($value[$field], FILTER_VALIDATE_BOOL, FILTER_NULL_ON_FAILURE);
+            if ($normalizedBoolean !== null) {
+                $defaults[$field] = $normalizedBoolean;
+            }
+        }
+    }
+    if (!$defaults['show_flags'] && !$defaults['show_codes'] && !$defaults['show_names']) {
+        $defaults['show_codes'] = true;
+    }
+    foreach (['orientation' => ['horizontal', 'wrap', 'vertical'], 'density' => ['comfortable', 'compact'], 'alignment' => ['start', 'center', 'end'], 'active_style' => ['filled', 'outline', 'underline']] as $field => $allowed) {
+        $candidate = (string) ($value[$field] ?? '');
+        if (in_array($candidate, $allowed, true)) {
+            $defaults[$field] = $candidate;
+        }
+    }
+    $colorFields = ['container_bg', 'text_color', 'border_color', 'active_bg', 'active_text', 'hover_bg', 'focus_color'];
+    $bounds = translation_public_language_selector_design_numeric_bounds();
+    $submittedPresets = is_array($value['presets'] ?? null) ? $value['presets'] : [];
+    foreach ($defaults['presets'] as $presetId => &$presetValues) {
+        $submitted = is_array($submittedPresets[$presetId] ?? null) ? $submittedPresets[$presetId] : [];
+        if (array_key_exists('use_theme_colors', $submitted)) {
+            $normalizedThemeColors = filter_var($submitted['use_theme_colors'], FILTER_VALIDATE_BOOL, FILTER_NULL_ON_FAILURE);
+            if ($normalizedThemeColors !== null) {
+                $presetValues['use_theme_colors'] = $normalizedThemeColors;
+            }
+        }
+        foreach ($colorFields as $field) {
+            $candidate = !empty($submitted[$field . '_transparent']) ? 'transparent' : trim((string) ($submitted[$field] ?? ''));
+            if ($candidate === 'transparent') {
+                $presetValues[$field] = 'transparent';
+            } elseif (preg_match('/^#[0-9a-f]{6}$/i', $candidate) === 1) {
+                $presetValues[$field] = strtolower($candidate);
+            }
+        }
+        foreach ($bounds as $field => [$minimum, $maximum]) {
+            if (isset($submitted[$field]) && is_numeric($submitted[$field])) {
+                $presetValues[$field] = max($minimum, min($maximum, (int) round((float) $submitted[$field])));
+            }
+        }
+        $borderStyle = (string) ($submitted['border_style'] ?? '');
+        if (in_array($borderStyle, ['solid', 'dashed', 'dotted', 'double'], true)) {
+            $presetValues['border_style'] = $borderStyle;
+        }
+    }
+    unset($presetValues);
+    return $defaults;
+}
+
+/**
+ * Return the normalized persisted public selector design configuration.
+ *
+ * @return array<string,mixed> Complete safe configuration.
+ */
+function translation_public_language_selector_design(): array
+{
+    if (!function_exists('Gallery\\Services\\app_setting')) {
+        return translation_public_language_selector_design_defaults();
+    }
+    $stored = trim((string) app_setting(CMS_PUBLIC_LANGUAGE_SELECTOR_DESIGN_KEY, ''));
+    if ($stored === '') {
+        return translation_public_language_selector_design_defaults();
+    }
+    $decoded = json_decode($stored, true);
+    return translation_public_language_selector_design_normalize($decoded);
+}
+
+/**
+ * Persist a complete normalized public selector design configuration.
+ *
+ * @param mixed $value Submitted configuration.
+ */
+function translation_save_public_language_selector_design(mixed $value): void
+{
+    if (!function_exists('Gallery\\Services\\set_app_setting')) {
+        return;
+    }
+    set_app_setting(CMS_PUBLIC_LANGUAGE_SELECTOR_DESIGN_KEY, (string) json_encode(translation_public_language_selector_design_normalize($value), JSON_UNESCAPED_SLASHES));
+}
+
+/**
+ * Return safe CSS custom properties for the active selector preset.
+ */
+function translation_public_language_selector_design_style(array $design): string
+{
+    $design = translation_public_language_selector_design_normalize($design);
+    $canonicalPresets = translation_public_language_selector_design_presets();
+    $preset = isset($canonicalPresets[$design['preset']]) ? (string) $design['preset'] : 'classic';
+    $values = array_replace($canonicalPresets[$preset], is_array($design['presets'][$preset] ?? null) ? $design['presets'][$preset] : []);
+    $properties = [
+        '--language-selector-bg' => $values['container_bg'], '--language-selector-text' => $values['text_color'],
+        '--language-selector-border' => $values['border_color'], '--language-selector-active-bg' => $values['active_bg'],
+        '--language-selector-active-text' => $values['active_text'], '--language-selector-hover-bg' => $values['hover_bg'],
+        '--language-selector-focus' => $values['focus_color'], '--language-selector-padding-x' => $values['selector_padding_x'] . 'px',
+        '--language-selector-padding-y' => $values['selector_padding_y'] . 'px', '--language-selector-margin' => $values['selector_margin'] . 'px',
+        '--language-selector-gap' => $values['gap'] . 'px', '--language-button-padding-x' => $values['button_padding_x'] . 'px',
+        '--language-button-padding-y' => $values['button_padding_y'] . 'px', '--language-selector-border-width' => $values['border_width'] . 'px',
+        '--language-selector-border-style' => $values['border_style'], '--language-selector-radius' => $values['selector_radius'] . 'px',
+        '--language-button-radius' => $values['button_radius'] . 'px', '--language-flag-width' => $values['flag_width'] . 'px',
+        '--language-flag-height' => $values['flag_height'] . 'px', '--language-code-size' => $values['font_size'] . 'px',
+    ];
+    if (!empty($values['use_theme_colors'])) {
+        $properties['--language-selector-bg'] = 'transparent';
+        $properties['--language-selector-text'] = 'var(--ink,#2d2118)';
+        $properties['--language-selector-border'] = 'color-mix(in srgb,var(--accent-dark,#1d4ed8) 55%,transparent)';
+        $properties['--language-selector-active-bg'] = 'var(--accent,#2563eb)';
+        $properties['--language-selector-active-text'] = '#fffdf8';
+        $properties['--language-selector-hover-bg'] = 'color-mix(in srgb,var(--accent,#2563eb) 18%,var(--surface,#fffaf0))';
+        $properties['--language-selector-focus'] = 'color-mix(in srgb,var(--accent,#2563eb) 35%,white)';
+        $properties['--language-button-bg'] = 'color-mix(in srgb,var(--accent,#2563eb) 9%,var(--surface,#fffaf0))';
+    } else {
+        $properties['--language-button-bg'] = 'transparent';
+    }
+    return implode(';', array_map(static fn (string $name, string $propertyValue): string => $name . ':' . $propertyValue, array_keys($properties), $properties));
+}
+
+/**
+ * Return stable presentation metadata for maintained selectable languages.
+ *
+ * Flags are a compact visual aid only. Public controls must expose the native
+ * language name through accessible labels so language selection is not flag-only.
+ *
+ * @return array<string,array{name:string,flag_asset:string}>
+ */
+function translation_language_presentation(): array
+{
+    return [
+        'en' => ['name' => 'English', 'flag_asset' => 'assets/flags/gb.svg'],
+        'cs' => ['name' => 'Čeština', 'flag_asset' => 'assets/flags/cz.svg'],
+        'de' => ['name' => 'Deutsch', 'flag_asset' => 'assets/flags/de.svg'],
+        'sv' => ['name' => 'Svenska', 'flag_asset' => 'assets/flags/se.svg'],
+    ];
+}
 
 /**
  * Return the directory where application language files are stored.
@@ -239,6 +444,111 @@ function translation_language_allowed(string $language): bool
 }
 
 /**
+ * Return whether visitors may choose a personal public interface language.
+ *
+ * Missing storage means enabled so existing and new installations retain the
+ * established public selector behavior until an administrator opts out.
+ */
+function translation_public_language_selector_enabled(): bool
+{
+    if (!function_exists('Gallery\\Services\\app_setting')) {
+        return true;
+    }
+    return (string) app_setting(CMS_PUBLIC_LANGUAGE_SELECTOR_ENABLED_KEY, '1') !== '0';
+}
+
+/**
+ * Return the maintained languages exposed by the public viewer selector.
+ *
+ * @return array<int,string> Ordered selectable language codes.
+ */
+function translation_public_language_selector_languages(): array
+{
+    $supported = translation_supported_languages();
+    if (!function_exists('Gallery\\Services\\app_setting')) {
+        return $supported;
+    }
+
+    $stored = trim((string) app_setting(CMS_PUBLIC_LANGUAGE_SELECTOR_LANGUAGES_KEY, ''));
+    if ($stored === '') {
+        return $supported;
+    }
+    $decoded = json_decode($stored, true);
+    $candidates = is_array($decoded) ? $decoded : preg_split('/[\s,]+/', $stored, -1, PREG_SPLIT_NO_EMPTY);
+    if (!is_array($candidates)) {
+        return $supported;
+    }
+
+    $enabled = [];
+    foreach ($candidates as $candidate) {
+        $language = translation_normalize_language_code((string) $candidate);
+        if ($language !== '' && in_array($language, $supported, true)) {
+            $enabled[$language] = true;
+        }
+    }
+
+    $resolved = array_values(array_filter(
+        $supported,
+        static fn (string $language): bool => isset($enabled[$language])
+    ));
+    return $resolved !== [] ? $resolved : $supported;
+}
+
+/**
+ * Return whether one language may be selected by a public visitor.
+ */
+function translation_public_language_selector_language_allowed(string $language): bool
+{
+    $language = translation_normalize_language_code($language);
+    return $language !== ''
+        && translation_public_language_selector_enabled()
+        && in_array($language, translation_public_language_selector_languages(), true);
+}
+
+/**
+ * Normalize one submitted public viewer-language selection.
+ *
+ * @param mixed $languages Submitted language-code list.
+ * @return array<int,string> Ordered unique maintained language codes.
+ */
+function translation_public_language_selector_normalize_languages(mixed $languages): array
+{
+    if (!is_array($languages)) {
+        $languages = [];
+    }
+    $submitted = [];
+    foreach ($languages as $language) {
+        $normalized = translation_normalize_language_code((string) $language);
+        if ($normalized !== '' && translation_language_allowed($normalized)) {
+            $submitted[$normalized] = true;
+        }
+    }
+
+    return array_values(array_filter(
+        translation_supported_languages(),
+        static fn (string $language): bool => isset($submitted[$language])
+    ));
+}
+
+/**
+ * Persist the complete public viewer-language selector configuration.
+ *
+ * @param array<int,string> $languages Maintained language codes.
+ */
+function translation_save_public_language_selector_settings(bool $enabled, array $languages): void
+{
+    $languages = translation_public_language_selector_normalize_languages($languages);
+    if ($languages === []) {
+        throw new \InvalidArgumentException(t('admin.theme.language.viewer_languages_required', 'Enable at least one viewer language.'));
+    }
+    if (!function_exists('Gallery\\Services\\set_app_setting')) {
+        return;
+    }
+    set_app_setting(CMS_PUBLIC_LANGUAGE_SELECTOR_ENABLED_KEY, $enabled ? '1' : '0');
+    set_app_setting(CMS_PUBLIC_LANGUAGE_SELECTOR_LANGUAGES_KEY, (string) json_encode($languages, JSON_UNESCAPED_SLASHES));
+}
+
+/**
  * Return true when a route belongs to the administration interface.
  *
  * @param string $route Route value.
@@ -318,9 +628,29 @@ function translation_bootstrap_request(?string $route = null): void
     }
 
     $selected = '';
-    if (isset($_GET['lang'])) {
-        $candidate = translation_normalize_language_code((string) $_GET['lang']);
-        if ($candidate !== '' && translation_language_allowed($candidate)) {
+    // The browser i18n controller uses lang as an immutable asset cache key.
+    // It must never create or reset a viewer preference merely because a page
+    // loaded its translated JavaScript payload.
+    $acceptViewerLanguageRequest = $route !== 'browser_i18n' && translation_public_language_selector_enabled();
+    if ($acceptViewerLanguageRequest && isset($_GET['lang'])) {
+        $requestedLanguage = strtolower(trim((string) $_GET['lang']));
+        if ($requestedLanguage === 'default') {
+            unset($_SESSION['cms_public_language_override']);
+            unset($_COOKIE[CMS_PUBLIC_LANGUAGE_COOKIE]);
+            if (!headers_sent()) {
+                setcookie(CMS_PUBLIC_LANGUAGE_COOKIE, '', [
+                    'expires' => time() - 3600,
+                    'path' => '/',
+                    'secure' => request_is_https(),
+                    'httponly' => false,
+                    'samesite' => 'Lax',
+                ]);
+            }
+            $selected = translation_public_language();
+        }
+
+        $candidate = translation_normalize_language_code($requestedLanguage);
+        if ($selected === '' && $candidate !== '' && translation_public_language_selector_language_allowed($candidate)) {
             $selected = $candidate;
             $_SESSION['cms_public_language_override'] = $selected;
             if (!headers_sent()) {
@@ -337,14 +667,14 @@ function translation_bootstrap_request(?string $route = null): void
 
     if ($selected === '') {
         $candidate = translation_normalize_language_code((string) ($_SESSION['cms_public_language_override'] ?? ''));
-        if ($candidate !== '' && translation_language_allowed($candidate)) {
+        if ($candidate !== '' && translation_public_language_selector_language_allowed($candidate)) {
             $selected = $candidate;
         }
     }
 
     if ($selected === '') {
         $candidate = translation_normalize_language_code((string) ($_COOKIE[CMS_PUBLIC_LANGUAGE_COOKIE] ?? ''));
-        if ($candidate !== '' && translation_language_allowed($candidate)) {
+        if ($candidate !== '' && translation_public_language_selector_language_allowed($candidate)) {
             $selected = $candidate;
             $_SESSION['cms_public_language_override'] = $selected;
         }
@@ -355,6 +685,59 @@ function translation_bootstrap_request(?string $route = null): void
     }
 
     $_SESSION['cms_language'] = $selected;
+}
+
+/**
+ * Return whether the public visitor currently has a valid personal override.
+ */
+function translation_public_language_override_active(): bool
+{
+    if (!translation_public_language_selector_enabled()) {
+        return false;
+    }
+    $sessionLanguage = translation_normalize_language_code((string) ($_SESSION['cms_public_language_override'] ?? ''));
+    if ($sessionLanguage !== '' && translation_public_language_selector_language_allowed($sessionLanguage)) {
+        return true;
+    }
+
+    $cookieLanguage = translation_normalize_language_code((string) ($_COOKIE[CMS_PUBLIC_LANGUAGE_COOKIE] ?? ''));
+    return $cookieLanguage !== '' && translation_public_language_selector_language_allowed($cookieLanguage);
+}
+
+/**
+ * Build a same-page public language link while preserving route state.
+ *
+ * Only the language parameter is replaced. The cookie established by the next
+ * request carries the selection to later pages without polluting ordinary URLs.
+ */
+function translation_public_language_url(string $language): string
+{
+    $language = strtolower(trim($language));
+    if ($language !== 'default') {
+        $language = translation_normalize_language_code($language);
+        if ($language === '' || !translation_public_language_selector_language_allowed($language)) {
+            $language = translation_public_language();
+        }
+    }
+
+    $requestUri = (string) ($_SERVER['REQUEST_URI'] ?? '');
+    $parts = parse_url($requestUri);
+    $path = is_array($parts) ? (string) ($parts['path'] ?? '') : '';
+    if ($path === '') {
+        $path = (string) ($_SERVER['SCRIPT_NAME'] ?? '/index.php');
+    }
+
+    $query = [];
+    if (is_array($parts)) {
+        parse_str((string) ($parts['query'] ?? ''), $query);
+    }
+    $query['lang'] = $language;
+
+    $url = $path . '?' . http_build_query($query, '', '&', PHP_QUERY_RFC3986);
+    if (is_array($parts) && isset($parts['fragment'])) {
+        $url .= '#' . rawurlencode((string) $parts['fragment']);
+    }
+    return $url;
 }
 
 /**

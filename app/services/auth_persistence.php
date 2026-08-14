@@ -37,10 +37,135 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 use PDO;
+use RuntimeException;
+use Throwable;
 use function Gallery\Core\cms_config;
 use function Gallery\Core\db;
 use function Gallery\Core\now_sql;
 use function Gallery\Core\request_is_https;
+
+/**
+ * Raised when authentication policy cannot safely determine required schema state.
+ *
+ * The exception exposes only a bounded feature key. Database error text and
+ * credentials remain inside the structured schema-inspection diagnostic.
+ */
+final class AuthenticationSchemaUnavailableException extends RuntimeException
+{
+    private string $feature;
+
+    /**
+     * Create a bounded storage-unavailable exception for an authentication feature.
+     *
+     * @param string $feature Stable authentication feature identifier.
+     */
+    public function __construct(string $feature)
+    {
+        $this->feature = preg_match('/^[a-z0-9_]+$/', $feature) === 1 ? $feature : 'authentication';
+        parent::__construct('Authentication storage is temporarily unavailable.');
+    }
+
+    /**
+     * Return the bounded capability key used by diagnostics.
+     *
+     * @return string Text result for the caller.
+     */
+    public function feature(): string
+    {
+        return $this->feature;
+    }
+}
+
+/**
+ * Return structured schema status for DB-backed persistent administrator login.
+ *
+ * @return array Structured schema-inspection result.
+ */
+function auth_persistent_login_schema_status(): array
+{
+    return schema_inspection_feature('auth_persistent_login', [
+        schema_inspection_table('admin_remember_tokens'),
+    ]);
+}
+
+/**
+ * Return structured schema status for the optional administrator email column.
+ *
+ * Missing is a supported pre-email compatibility state for username login.
+ * Unknown must not be interpreted as missing because that could silently change
+ * identity lookup semantics while metadata inspection is failing.
+ *
+ * @return array Structured schema-inspection result.
+ */
+function auth_user_email_schema_status(): array
+{
+    return schema_inspection_feature('auth_user_email', [
+        schema_inspection_column('users', 'email'),
+    ]);
+}
+
+/**
+ * Return structured schema status for password-reset issue and consume operations.
+ *
+ * @return array Structured schema-inspection result.
+ */
+function auth_password_reset_schema_status(): array
+{
+    return schema_inspection_feature('auth_password_reset', [
+        schema_inspection_table('password_reset_tokens'),
+        schema_inspection_column('users', 'email'),
+    ]);
+}
+
+/**
+ * Return true when a schema capability is verified available.
+ *
+ * @param array $status Structured schema-inspection status.
+ * @return bool True when the capability is available.
+ */
+function auth_schema_status_available(array $status): bool
+{
+    return schema_inspection_is_available($status);
+}
+
+/**
+ * Throw when an authentication schema capability is operationally unknown.
+ *
+ * Confirmed missing state is handled by each feature's explicit migration or
+ * compatibility policy. This helper prevents metadata failures from being
+ * silently converted into confirmed absence.
+ *
+ * @param array $status Structured schema-inspection status.
+ * @param string $feature Bounded feature key.
+ */
+function auth_schema_assert_known(array $status, string $feature): void
+{
+    if (schema_inspection_is_unknown($status)) {
+        throw new AuthenticationSchemaUnavailableException($feature);
+    }
+}
+
+/**
+ * Log one authentication schema inspection failure without credential material.
+ *
+ * @param string $feature Bounded capability key.
+ * @param string $operation Fixed operation identifier.
+ */
+function auth_log_schema_unavailable(string $feature, string $operation): void
+{
+    $safeFeature = preg_match('/^[a-z0-9_]+$/', $feature) === 1 ? $feature : 'authentication';
+    $safeOperation = preg_match('/^[a-z0-9_.]+$/', $operation) === 1 ? $operation : 'operation';
+    try {
+        if (function_exists('Gallery\\Services\\admin_log_event')) {
+            admin_log_event('warning', 'auth.schema_inspection_unavailable', 'Authentication schema inspection unavailable.', [
+                'feature' => $safeFeature,
+                'operation' => $safeOperation,
+            ]);
+        }
+    } catch (Throwable) {
+        // Logging must never hide the original authentication policy result.
+    }
+}
 
 /**
  * Return authentication configuration merged with safe defaults.
@@ -96,8 +221,32 @@ function auth_persistent_login_ready(): bool
     // $settings stores normalized authentication settings.
     $settings = auth_persistence_config();
     return (bool) $settings['persistent_login_enabled']
-        && function_exists('Gallery\\Services\\db_table_exists')
-        && db_table_exists('admin_remember_tokens');
+        && auth_schema_status_available(auth_persistent_login_schema_status());
+}
+
+/**
+ * Apply persistent-login schema policy for an operation that may issue or use a token.
+ *
+ * Confirmed missing storage disables only durable login so ordinary session login
+ * remains available. Unknown metadata state is an operational failure and must not
+ * be treated as the same compatibility state.
+ *
+ * @param string $operation Fixed operation identifier for bounded diagnostics.
+ * @return bool True when persistent-token storage is available.
+ */
+function auth_persistent_login_operation_available(string $operation): bool
+{
+    $settings = auth_persistence_config();
+    if (!(bool) $settings['persistent_login_enabled']) {
+        return false;
+    }
+
+    $status = auth_persistent_login_schema_status();
+    if (schema_inspection_is_unknown($status)) {
+        auth_log_schema_unavailable('auth_persistent_login', $operation);
+        throw new AuthenticationSchemaUnavailableException('auth_persistent_login');
+    }
+    return schema_inspection_is_available($status);
 }
 
 /**
@@ -146,7 +295,7 @@ function auth_set_remember_cookie(string $value, int $expiresAt): void
  */
 function auth_prune_persistent_tokens(?int $userId = null): void
 {
-    if (!auth_persistent_login_ready()) {
+    if (!auth_persistent_login_operation_available('prune')) {
         return;
     }
 
@@ -167,7 +316,7 @@ function auth_prune_persistent_tokens(?int $userId = null): void
  */
 function auth_issue_persistent_login(int $userId): void
 {
-    if (!auth_persistent_login_ready()) {
+    if (!auth_persistent_login_operation_available('issue')) {
         return;
     }
 
@@ -232,7 +381,15 @@ function auth_parse_remember_cookie(): ?array
  */
 function auth_restore_persistent_login(): ?array
 {
-    if (!auth_persistent_login_ready() || session_status() !== PHP_SESSION_ACTIVE) {
+    if (session_status() !== PHP_SESSION_ACTIVE) {
+        return null;
+    }
+    try {
+        if (!auth_persistent_login_operation_available('restore')) {
+            return null;
+        }
+    } catch (AuthenticationSchemaUnavailableException) {
+        auth_set_remember_cookie('', time() - 3600);
         return null;
     }
 
@@ -285,7 +442,12 @@ function auth_restore_persistent_login(): ?array
  */
 function auth_revoke_current_persistent_login(): void
 {
-    if (!auth_persistent_login_ready()) {
+    try {
+        if (!auth_persistent_login_operation_available('revoke_current')) {
+            auth_set_remember_cookie('', time() - 3600);
+            return;
+        }
+    } catch (AuthenticationSchemaUnavailableException) {
         auth_set_remember_cookie('', time() - 3600);
         return;
     }
@@ -308,7 +470,12 @@ function auth_revoke_current_persistent_login(): void
  */
 function auth_revoke_user_persistent_logins(int $userId): void
 {
-    if (!auth_persistent_login_ready()) {
+    try {
+        if (!auth_persistent_login_operation_available('revoke_user')) {
+            auth_set_remember_cookie('', time() - 3600);
+            return;
+        }
+    } catch (AuthenticationSchemaUnavailableException) {
         auth_set_remember_cookie('', time() - 3600);
         return;
     }

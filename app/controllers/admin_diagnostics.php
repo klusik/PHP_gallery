@@ -60,6 +60,10 @@ use function Gallery\Services\dng_normalize_conversion_source_policy;
 use function Gallery\Services\set_app_setting;
 use function Gallery\Services\t;
 use function Gallery\Services\admin_log_event;
+use function Gallery\Services\admin_mutation_schema_health_statuses;
+use function Gallery\Services\admin_presentation_schema_health_statuses;
+use function Gallery\Services\admin_nsfw_schema_health_status;
+use function Gallery\Services\admin_security_schema_health_statuses;
 
 /**
  * Handle cms admin diagnostics.
@@ -118,6 +122,56 @@ function cms_admin_diagnostics(): void
         'capabilities' => dng_conversion_runtime_capabilities(),
         'attempts' => dng_conversion_attempt_order(dng_conversion_source_policy(), dng_conversion_runtime_capabilities()),
     ];
+    // $securitySchemaHealth stores the same bounded models rendered by Admin System Health.
+    $securitySchemaHealth = admin_security_schema_health_statuses();
+    // $mutationSchemaHealth stores Phase 10 destructive/ingestion readiness using the same bounded models.
+    $mutationSchemaHealth = admin_mutation_schema_health_statuses();
+    // $presentationSchemaHealth stores Phase 11 optional presentation/reporting readiness.
+    $presentationSchemaHealth = admin_presentation_schema_health_statuses();
+    // Preserve the established NSFW variable for compatibility with diagnostics tests and extensions.
+    $nsfwSchemaHealth = $securitySchemaHealth['nsfw_guard'] ?? admin_nsfw_schema_health_status();
+    // $schemaFeatureLabels maps bounded capability identifiers to operator-readable report labels.
+    $schemaFeatureLabels = [
+        'gallery_access' => 'Gallery password and access policy',
+        'gallery_visibility' => 'Gallery visibility compatibility',
+        'gallery_share_token' => 'Gallery share-token storage',
+        'nsfw_guard' => 'NSFW Guard',
+        'auth_persistent_login' => 'Persistent administrator login',
+        'auth_password_reset' => 'Password reset storage',
+        'auth_external_identity' => 'External identity links',
+        'presentation_gps_exif' => 'GPS and EXIF maps',
+        'presentation_gps_override' => 'Per-gallery GPS map overrides',
+        'presentation_flight_map' => 'Flight route maps',
+        'presentation_flight_navdata' => 'Flight-map navigation data',
+        'presentation_image_voting' => 'Image voting',
+        'presentation_picture_game' => 'Picture game',
+        'presentation_lightbox_override' => 'Lightbox mode overrides',
+        'presentation_openai_text' => 'OpenAI text assistance',
+        'presentation_openai_image_input' => 'OpenAI image input',
+        'presentation_ai_image_analysis' => 'AI image metadata',
+        'presentation_simbrief_route_map' => 'SimBrief route-map persistence',
+        'presentation_navigation_cache' => 'Navigation data cache',
+        'presentation_navigation_account' => 'Navigation account storage',
+        'presentation_telemetry_reporting' => 'Telemetry reporting',
+        'presentation_admin_gallery_report' => 'Complete Admin gallery report',
+        'mutation_gallery_delete' => t('admin.dashboard.mutation_schema_feature_gallery_delete', 'Gallery and image deletion'),
+        'mutation_gallery_move' => t('admin.dashboard.mutation_schema_feature_gallery_move', 'Gallery and image move/copy'),
+        'mutation_duplicate_photo_ledger' => t('admin.dashboard.mutation_schema_feature_duplicate_ledger', 'Duplicate Photo Detector ledger'),
+        'mutation_upload_ingestion' => t('admin.dashboard.mutation_schema_feature_upload_ingestion', 'Gallery upload ingestion'),
+        'mutation_upload_automation' => t('admin.dashboard.mutation_schema_feature_upload_automation', 'Upload automation tokens'),
+        'mutation_gallery_migration' => t('admin.dashboard.mutation_schema_feature_gallery_migration', 'Gallery migration'),
+        'mutation_mobile_webdav' => t('admin.dashboard.mutation_schema_feature_mobile_webdav', 'Mobile WebDAV uploads'),
+        'mutation_thumbnail_metadata' => t('admin.dashboard.mutation_schema_feature_thumbnail_metadata', 'Thumbnail metadata maintenance'),
+        'mutation_database_maintenance' => t('admin.dashboard.mutation_schema_feature_database_maintenance', 'Database cleanup and repair'),
+        'mutation_application_update' => t('admin.dashboard.mutation_schema_feature_application_update', 'Application update activation'),
+    ];
+    // $schemaSuggestedCheckLabels turns bounded model identifiers into copy-report guidance.
+    $schemaSuggestedCheckLabels = [
+        'database_connection' => 'verify database connectivity',
+        'selected_database' => 'verify the configured database name',
+        'schema_inspection_permissions' => 'verify permission to inspect database metadata',
+        'pending_migrations' => 'review and apply pending database migrations',
+    ];
     $reportLines = [
         'PHP Gallery runtime diagnostics',
         'PHP version: ' . ($diagnostics[0]['value'] ?? ''),
@@ -132,6 +186,59 @@ function cms_admin_diagnostics(): void
         'post_max_size: ' . ($diagnostics[9]['value'] ?? ''),
         'memory_limit: ' . ($diagnostics[10]['value'] ?? ''),
         '',
+        'Security and authentication database status',
+    ];
+    foreach ($securitySchemaHealth as $feature => $schemaHealth) {
+        if (!is_array($schemaHealth)) {
+            continue;
+        }
+        $suggestedChecks = array_values(array_map(
+            static fn (string $check): string => $schemaSuggestedCheckLabels[$check] ?? $check,
+            array_map('strval', (array) ($schemaHealth['suggested_checks'] ?? []))
+        ));
+        $reportLines[] = ($schemaFeatureLabels[$feature] ?? $feature) . ': ' . (string) ($schemaHealth['state'] ?? 'unknown');
+        $reportLines[] = '  Affected objects: ' . implode(', ', array_map('strval', (array) ($schemaHealth['affected_objects'] ?? [])));
+        $reportLines[] = '  Suggested checks: ' . implode(', ', $suggestedChecks);
+        if ((string) ($schemaHealth['request_id'] ?? '') !== '') {
+            $reportLines[] = '  Request reference: ' . (string) $schemaHealth['request_id'];
+        }
+    }
+    $reportLines[] = '';
+    $reportLines[] = 'Destructive and ingestion database status';
+    foreach ($mutationSchemaHealth as $feature => $schemaHealth) {
+        if (!is_array($schemaHealth)) {
+            continue;
+        }
+        $suggestedChecks = array_values(array_map(
+            static fn (string $check): string => $schemaSuggestedCheckLabels[$check] ?? $check,
+            array_map('strval', (array) ($schemaHealth['suggested_checks'] ?? []))
+        ));
+        $reportLines[] = ($schemaFeatureLabels[$feature] ?? $feature) . ': ' . (string) ($schemaHealth['state'] ?? 'unknown');
+        $reportLines[] = '  Affected objects: ' . implode(', ', array_map('strval', (array) ($schemaHealth['affected_objects'] ?? [])));
+        $reportLines[] = '  Suggested checks: ' . implode(', ', $suggestedChecks);
+        if ((string) ($schemaHealth['request_id'] ?? '') !== '') {
+            $reportLines[] = '  Request reference: ' . (string) $schemaHealth['request_id'];
+        }
+    }
+    $reportLines[] = '';
+    $reportLines[] = 'Optional presentation and reporting database status';
+    foreach ($presentationSchemaHealth as $feature => $schemaHealth) {
+        if (!is_array($schemaHealth)) {
+            continue;
+        }
+        $suggestedChecks = array_values(array_map(
+            static fn (string $check): string => $schemaSuggestedCheckLabels[$check] ?? $check,
+            array_map('strval', (array) ($schemaHealth['suggested_checks'] ?? []))
+        ));
+        $reportLines[] = ($schemaFeatureLabels[$feature] ?? $feature) . ': ' . (string) ($schemaHealth['state'] ?? 'unknown');
+        $reportLines[] = '  Affected objects: ' . implode(', ', array_map('strval', (array) ($schemaHealth['affected_objects'] ?? [])));
+        $reportLines[] = '  Suggested checks: ' . implode(', ', $suggestedChecks);
+        if ((string) ($schemaHealth['request_id'] ?? '') !== '') {
+            $reportLines[] = '  Request reference: ' . (string) $schemaHealth['request_id'];
+        }
+    }
+    $reportLines = array_merge($reportLines, [
+        '',
         'DNG conversion policy',
         'Source policy: ' . $dngPolicy['source'],
         'Color policy: ' . $dngPolicy['color'],
@@ -139,7 +246,7 @@ function cms_admin_diagnostics(): void
         'Status: ' . (string) ($dngPolicy['status']['reason'] ?? ''),
         '',
         'Imagick format support',
-    ];
+    ]);
     if (!$imagickLoaded) {
         $reportLines[] = 'Imagick: not loaded';
     } else {
@@ -169,6 +276,95 @@ function cms_admin_diagnostics(): void
     if ($notice !== '') {
         echo '<div class="notice">' . e($notice) . '</div>';
     }
+
+    echo '<section class="panel"><div class="admin-panel-heading"><div><p class="admin-kicker">' . e(t('admin.diagnostics.security_schema_kicker', 'Database protection')) . '</p><h2>' . e(t('admin.diagnostics.security_schema_title', 'Security and authentication database status')) . '</h2></div><p class="muted">' . e(t('admin.diagnostics.security_schema_description', 'These checks distinguish verified schema, confirmed pending migrations, and temporary metadata-inspection failures. Security-sensitive operations never use an unknown state as a legacy fallback.')) . '</p></div>';
+    foreach ($securitySchemaHealth as $feature => $schemaHealth) {
+        if (!is_array($schemaHealth)) {
+            continue;
+        }
+        $state = (string) ($schemaHealth['state'] ?? 'unknown');
+        echo '<div class="account-settings-readiness ' . ($state === 'available' || $state === 'disabled' ? 'is-ready' : 'is-incomplete') . '"><strong>' . e($schemaFeatureLabels[$feature] ?? $feature) . '</strong> ';
+        if ($feature === 'nsfw_guard') {
+            if ($state === 'available') {
+                echo e(t('admin.dashboard.nsfw_schema_available', 'Required gallery and image protection columns are installed and verified.'));
+            } elseif ($state === 'missing') {
+                echo e(t('admin.dashboard.nsfw_schema_missing', 'Database inspection succeeded and confirmed that an NSFW Guard column is missing. Apply pending database migrations before enabling this protection.'));
+            } elseif ($state === 'disabled') {
+                echo e(t('admin.dashboard.nsfw_schema_disabled', 'This feature is intentionally disabled by configuration. Its database readiness does not currently affect public requests.'));
+            } else {
+                echo e(t('admin.dashboard.nsfw_schema_unknown', 'The application could not inspect the database schema required by NSFW Guard. Check database connectivity, the selected database, and schema-inspection permissions. Public NSFW-sensitive requests are temporarily refused.'));
+            }
+        } elseif ($state === 'available') {
+            echo e(t('admin.dashboard.security_schema_available', 'Required database objects are installed and verified.'));
+        } elseif ($state === 'missing') {
+            echo e(t('admin.dashboard.security_schema_missing', 'Database inspection succeeded and confirmed required objects are missing. Apply pending migrations; only explicitly documented legacy compatibility remains active.'));
+        } elseif ($state === 'disabled') {
+            echo e(t('admin.dashboard.security_schema_disabled', 'This integration is intentionally disabled by configuration.'));
+        } else {
+            echo e(t('admin.dashboard.security_schema_unknown', 'Required database schema could not be verified. Security-sensitive operations for this capability are temporarily refused until connectivity, selected database, and metadata permissions are healthy.'));
+        }
+        $affectedObjects = array_values(array_filter(array_map('strval', (array) ($schemaHealth['affected_objects'] ?? []))));
+        if ($affectedObjects !== []) {
+            echo '<small>' . e(t('admin.dashboard.security_schema_objects', 'Affected database objects: {objects}', ['objects' => implode(', ', $affectedObjects)])) . '</small>';
+        }
+        if ((string) ($schemaHealth['request_id'] ?? '') !== '') {
+            echo '<small>' . e(t('public.request_reference', 'Reference: {request_id}', ['request_id' => (string) $schemaHealth['request_id']])) . '</small>';
+        }
+        echo '</div>';
+    }
+    echo '</section>';
+
+    echo '<section class="panel"><div class="admin-panel-heading"><div><p class="admin-kicker">' . e(t('admin.diagnostics.mutation_schema_kicker', 'Mutation safety')) . '</p><h2>' . e(t('admin.diagnostics.mutation_schema_title', 'Destructive and ingestion database status')) . '</h2></div><p class="muted">' . e(t('admin.diagnostics.mutation_schema_description', 'These checks cover deletion, moves, uploads, migration, thumbnail maintenance, database repair, and update activation. Unknown schema state pauses the affected mutation before irreversible filesystem or credential changes.')) . '</p></div>';
+    foreach ($mutationSchemaHealth as $feature => $schemaHealth) {
+        if (!is_array($schemaHealth)) {
+            continue;
+        }
+        $state = (string) ($schemaHealth['state'] ?? 'unknown');
+        echo '<div class="account-settings-readiness ' . ($state === 'available' ? 'is-ready' : 'is-incomplete') . '"><strong>' . e($schemaFeatureLabels[$feature] ?? $feature) . '</strong> ';
+        if ($state === 'available') {
+            echo e(t('admin.dashboard.mutation_schema_available', 'Required mutation database objects are installed and verified.'));
+        } elseif ($state === 'missing') {
+            echo e(t('admin.dashboard.mutation_schema_missing', 'Database inspection succeeded and confirmed required mutation objects are missing. Apply pending migrations before using this workflow, except where a documented legacy compatibility path explicitly applies.'));
+        } else {
+            echo e(t('admin.dashboard.mutation_schema_unknown', 'Required database schema could not be verified. This mutation is temporarily refused so files, rows, credentials, migration state, or active application files are not changed on an indeterminate schema.'));
+        }
+        $affectedObjects = array_values(array_filter(array_map('strval', (array) ($schemaHealth['affected_objects'] ?? []))));
+        if ($affectedObjects !== []) {
+            echo '<small>' . e(t('admin.dashboard.security_schema_objects', 'Affected database objects: {objects}', ['objects' => implode(', ', $affectedObjects)])) . '</small>';
+        }
+        if ((string) ($schemaHealth['request_id'] ?? '') !== '') {
+            echo '<small>' . e(t('public.request_reference', 'Reference: {request_id}', ['request_id' => (string) $schemaHealth['request_id']])) . '</small>';
+        }
+        echo '</div>';
+    }
+    echo '</section>';
+
+    echo '<section class="panel"><div class="admin-panel-heading"><div><p class="admin-kicker">' . e(t('admin.diagnostics.presentation_schema_kicker', 'Optional features')) . '</p><h2>' . e(t('admin.diagnostics.presentation_schema_title', 'Presentation and reporting database status')) . '</h2></div><p class="muted">' . e(t('admin.diagnostics.presentation_schema_description', 'These checks cover maps, voting, picture game, lightbox overrides, AI assistance, navigation data, telemetry reports, SimBrief route persistence, and the complete Admin report. Unknown read-only capabilities may be omitted safely; dependent writes are refused.')) . '</p></div>';
+    foreach ($presentationSchemaHealth as $feature => $schemaHealth) {
+        if (!is_array($schemaHealth)) {
+            continue;
+        }
+        $state = (string) ($schemaHealth['state'] ?? 'unknown');
+        echo '<div class="account-settings-readiness ' . ($state === 'available' || $state === 'disabled' ? 'is-ready' : 'is-incomplete') . '"><strong>' . e($schemaFeatureLabels[$feature] ?? $feature) . '</strong> ';
+        if ($state === 'available') {
+            echo e(t('admin.dashboard.presentation_schema_available', 'Required optional database objects are installed and verified.'));
+        } elseif ($state === 'missing') {
+            echo e(t('admin.dashboard.presentation_schema_missing', 'Database inspection succeeded and confirmed optional objects are missing. The affected presentation/report feature is omitted until its migration is applied.'));
+        } elseif ($state === 'disabled') {
+            echo e(t('admin.dashboard.presentation_schema_disabled', 'This optional feature is intentionally disabled by configuration.'));
+        } else {
+            echo e(t('admin.dashboard.presentation_schema_unknown', 'Optional database schema could not be verified. Safe core pages may continue without the affected presentation feature, while writes that depend on it are refused until inspection is healthy.'));
+        }
+        $affectedObjects = array_values(array_filter(array_map('strval', (array) ($schemaHealth['affected_objects'] ?? []))));
+        if ($affectedObjects !== []) {
+            echo '<small>' . e(t('admin.dashboard.security_schema_objects', 'Affected database objects: {objects}', ['objects' => implode(', ', $affectedObjects)])) . '</small>';
+        }
+        if ((string) ($schemaHealth['request_id'] ?? '') !== '') {
+            echo '<small>' . e(t('public.request_reference', 'Reference: {request_id}', ['request_id' => (string) $schemaHealth['request_id']])) . '</small>';
+        }
+        echo '</div>';
+    }
+    echo '</section>';
 
     echo '<section class="panel"><div class="admin-panel-heading"><div><p class="admin-kicker">' . e(t('admin.diagnostics.dng_policy_kicker', 'DNG conversion')) . '</p><h2>' . e(t('admin.diagnostics.dng_policy_title', 'DNG conversion policy')) . '</h2></div><p class="muted">' . e(t('admin.diagnostics.dng_policy_description', 'Choose whether DNG web derivatives prefer the full RAW decode or the embedded camera preview. The default keeps the original fallback behavior.')) . '</p></div>';
     echo '<form method="post" class="settings-form">' . csrf_field();

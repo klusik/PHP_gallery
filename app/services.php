@@ -47,6 +47,12 @@ require_once __DIR__ . '/services/seo_request_guard.php';
 require_once __DIR__ . '/services/feature_flags.php';
 // Load schema helpers before feature modules perform optional-column checks.
 require_once __DIR__ . '/services/database_helpers.php';
+// Load explicit three-state schema inspection before audited feature consumers migrate to it.
+require_once __DIR__ . '/services/schema_inspection.php';
+// Load fail-closed mutation schema policy before destructive and ingestion services.
+require_once __DIR__ . '/services/mutation_schema_policy.php';
+// Load optional presentation schema policy before render/report feature services.
+require_once __DIR__ . '/services/presentation_schema_policy.php';
 // Load public render profiling helpers before public gallery services can record timings.
 require_once __DIR__ . '/services/public_render_profiler.php';
 // Load admin render profiling helpers before admin controllers can record dashboard timings.

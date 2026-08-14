@@ -1307,6 +1307,11 @@ function database_maintenance_record_live_progress(array $state, array $rule, in
  */
 function database_maintenance_cleanup_step(bool $dryRun, int $batchSize = DATABASE_MAINTENANCE_DEFAULT_BATCH_SIZE, bool $restart = false): array
 {
+    mutation_schema_assert_known(
+        database_maintenance_mutation_schema_status(),
+        $dryRun ? 'database_maintenance.cleanup_dry_run' : 'database_maintenance.cleanup_live',
+        'Database cleanup is temporarily unavailable because migration schema state could not be verified. No cleanup step was started.'
+    );
     $batchSize = max(1, min(DATABASE_MAINTENANCE_MAX_BATCH_SIZE, $batchSize));
     $inventory = database_maintenance_schema_inventory();
     $rules = array_values(array_filter(database_maintenance_cleanup_rules($inventory), static fn (array $rule): bool => !empty($rule['automatic']) && (string) ($rule['confidence'] ?? '') === 'high'));
@@ -1542,14 +1547,16 @@ function database_maintenance_schema_repair_plan(): array
  */
 function database_maintenance_schema_repair_readiness(): array
 {
+    $schemaStatus = database_maintenance_mutation_schema_status();
+    mutation_schema_assert_known(
+        $schemaStatus,
+        'database_maintenance.schema_repair_readiness',
+        'Database schema repair is temporarily unavailable because migration schema state could not be verified. No migration was started.'
+    );
     $files = discover_migration_files(database_maintenance_project_root() . '/database/migrations');
     $applied = [];
-    try {
-        if (db_table_exists('schema_migrations')) {
-            $applied = db()->query('SELECT version FROM schema_migrations')->fetchAll(PDO::FETCH_COLUMN);
-        }
-    } catch (Throwable) {
-        $applied = [];
+    if (schema_inspection_is_available($schemaStatus)) {
+        $applied = db()->query('SELECT version FROM schema_migrations')->fetchAll(PDO::FETCH_COLUMN);
     }
     $pendingFiles = pending_migration_files($files, array_map('strval', $applied));
     $pendingVersions = array_map(static fn (string $file): string => basename($file, '.php'), $pendingFiles);

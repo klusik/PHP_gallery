@@ -160,6 +160,9 @@ namespace {
         public int $rollbackCount = 0;
         public bool $auditTableCreated = false;
 
+        /**
+         * Initialize the legacy migration PDO double outside a real connection.
+         */
         public function __construct()
         {
         }
@@ -211,6 +214,9 @@ namespace {
             throw new RuntimeException('Unexpected information_schema probe: ' . $query);
         }
 
+        /**
+         * Return deterministic statement doubles for legacy migration queries.
+         */
         public function query(string $query, ?int $fetchMode = null, mixed ...$fetchModeArgs): PDOStatement|false
         {
             if (str_contains($query, 'COUNT(*) FROM galleries')) {
@@ -238,17 +244,26 @@ namespace {
             throw new RuntimeException('Unexpected migration test exec: ' . $statement);
         }
 
+        /**
+         * Mark the fake transaction as active.
+         */
         public function beginTransaction(): bool
         {
             $this->transactionActive = true;
             return true;
         }
 
+        /**
+         * Report whether the fake transaction is active.
+         */
         public function inTransaction(): bool
         {
             return $this->transactionActive;
         }
 
+        /**
+         * Commit and count the fake transaction.
+         */
         public function commit(): bool
         {
             $this->transactionActive = false;
@@ -256,6 +271,9 @@ namespace {
             return true;
         }
 
+        /**
+         * Roll back and count the fake transaction.
+         */
         public function rollBack(): bool
         {
             $this->transactionActive = false;

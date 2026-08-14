@@ -1,0 +1,8 @@
+PHASE 11 affected-files overlay deletion list
+============================================
+
+Remove these repository paths when applying this affected-files ZIP:
+
+- TEMP_SCHEMA_INSPECTION_PLAN.md
+
+The temporary schema-inspection roadmap was intentionally retired after its durable rules were moved into permanent documentation.

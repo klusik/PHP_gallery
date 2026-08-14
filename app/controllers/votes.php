@@ -51,6 +51,10 @@ use function Gallery\Services\current_vote_for_image;
 use function Gallery\Services\find_gallery;
 use function Gallery\Services\find_image;
 use function Gallery\Services\gallery_voting_allowed;
+use function Gallery\Services\schema_inspection_is_missing;
+use function Gallery\Services\schema_inspection_is_available;
+use function Gallery\Services\presentation_schema_log_degraded;
+use function Gallery\Services\presentation_voting_schema_status;
 use function Gallery\Services\t;
 use function Gallery\Services\visitor_can_access_gallery;
 use function Gallery\Services\vote_score;
@@ -103,6 +107,20 @@ function cms_vote(): void
         return;
     }
     verify_csrf();
+    $schemaStatus = presentation_voting_schema_status();
+    if (!schema_inspection_is_available($schemaStatus)) {
+        if (!schema_inspection_is_missing($schemaStatus)) {
+            presentation_schema_log_degraded($schemaStatus, 'image_vote_write');
+        }
+        http_response_code(schema_inspection_is_missing($schemaStatus) ? 409 : 503);
+        header('Content-Type: application/json');
+        echo json_encode([
+            'error' => schema_inspection_is_missing($schemaStatus)
+                ? t('public.presentation_schema_missing', 'This optional feature requires a pending database migration.')
+                : t('public.presentation_schema_unavailable', 'This optional gallery feature is temporarily unavailable because its database schema could not be verified. The main gallery remains available.'),
+        ]);
+        return;
+    }
     // Variable $imageId stores this steps working value.
     $imageId = (int) ($_POST['image_id'] ?? 0);
     // Variable $vote stores this steps working value.
