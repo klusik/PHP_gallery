@@ -1,6 +1,6 @@
 # Testing Guide
 
-This guide applies to PHP Gallery Version 0.89. Release verification must include the modular runtime boundaries, complete deployment packaging, updater cleanup safety, deferred dashboard maintenance, centralized Settings discovery, the configurable public language selector, and the supported English, Czech, German, and Swedish catalogs.
+This guide applies to PHP Gallery Version 0.89.1. Release verification must include the modular runtime boundaries, complete deployment packaging, updater cleanup safety, deferred dashboard maintenance, centralized Settings discovery, the configurable public language selector, hourly automatic-update throttling, and the supported English, Czech, German, and Swedish catalogs.
 
 ## Purpose
 This project is a plain PHP gallery CMS without a formal browser automation stack. The most reliable testing approach is a mix of fast syntax checks, focused script-level checks, and a repeatable manual smoke-test scenario that exercises the core gallery lifecycle.

@@ -49,7 +49,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.89}
+\newcommand{\version}{0.89.1}
 \newcommand{\manualdate}{14 August 2026}
 
 \hypersetup{
@@ -152,10 +152,10 @@ This manual is written for the person who owns or manages that collection. It ex
 
 Start with Section~\ref{sec:first-hour} when the site has just been installed. Section~\ref{sec:planning} helps you plan a collection before adding hundreds of photographs. Sections~\ref{sec:create-edit-gallery} and~\ref{sec:photo-workflow} explain ordinary gallery work. Section~\ref{sec:audiences} provides complete examples for common audiences. Technical background remains near the end for readers who want to understand hosting, backups, or how the application works behind the screen.
 
-\subsection{What is new in Version 0.89}
-\index{Version 0.89}
+\subsection{What is new in Version 0.89.1}
+\index{Version 0.89.1}
 
-Version~0.89 makes a large installation easier to configure, deploy, and maintain. The central \ui{Settings} page includes a Spotlight-style search over global settings and specialist tools, while Theme~>~Language provides a compact, validated design editor for the public viewer language selector. Administrators can choose five presets, toggle flags/codes/names, use transparent colors, preview the real selector immediately, and reset individual values, a preset, or the complete design without saving until the parent form is submitted.
+Version~0.89.1 is a focused automatic-update reliability patch. Enabled installations check stable release metadata at most once per hour instead of once every five hours, while GitHub rate-limit and backoff responses remain authoritative. The release preserves the 0.89 Settings search, configurable public viewer language selector, resumable updater jobs, and existing no-JavaScript behavior.
 
 Behind the interface, the bootstrap lifecycle, gallery and Theme controllers, public renderer, shared helpers, and updater are divided into focused modules while their established entrypoints remain compatible. Deployment archives include the complete application tree and portable path separators, and the updater can safely clean misplaced managed files created by limited web-hosting extractors. The supported English, Czech, German, and Swedish language catalogs are synchronized for the release.
 
