@@ -49,8 +49,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.88}
-\newcommand{\manualdate}{12 August 2026}
+\newcommand{\version}{0.89}
+\newcommand{\manualdate}{14 August 2026}
 
 \hypersetup{
   colorlinks=true,
@@ -152,10 +152,10 @@ This manual is written for the person who owns or manages that collection. It ex
 
 Start with Section~\ref{sec:first-hour} when the site has just been installed. Section~\ref{sec:planning} helps you plan a collection before adding hundreds of photographs. Sections~\ref{sec:create-edit-gallery} and~\ref{sec:photo-workflow} explain ordinary gallery work. Section~\ref{sec:audiences} provides complete examples for common audiences. Technical background remains near the end for readers who want to understand hosting, backups, or how the application works behind the screen.
 
-\subsection{What is new in Version 0.88}
-\index{Version 0.88}
+\subsection{What is new in Version 0.89}
+\index{Version 0.89}
 
-Version~0.88 makes a large installation easier to configure, deploy, and maintain. The central \ui{Settings} page now includes a Spotlight-style search over global settings and specialist tools. Theme controls include dedicated public tag-page presentation and configurable gallery hero tags. Dashboard maintenance data is loaded only when requested, with direct thumbnail-maintenance links and diagnostic Admin logs when loading fails.
+Version~0.89 makes a large installation easier to configure, deploy, and maintain. The central \ui{Settings} page includes a Spotlight-style search over global settings and specialist tools, while Theme~>~Language provides a compact, validated design editor for the public viewer language selector. Administrators can choose five presets, toggle flags/codes/names, use transparent colors, preview the real selector immediately, and reset individual values, a preset, or the complete design without saving until the parent form is submitted.
 
 Behind the interface, the bootstrap lifecycle, gallery and Theme controllers, public renderer, shared helpers, and updater are divided into focused modules while their established entrypoints remain compatible. Deployment archives include the complete application tree and portable path separators, and the updater can safely clean misplaced managed files created by limited web-hosting extractors. The supported English, Czech, German, and Swedish language catalogs are synchronized for the release.
 
@@ -2196,7 +2196,7 @@ For public thumbnail rendering, inspect the Elements and Network panels. Respons
 
 \subsection{Release hygiene}
 
-A release review confirms runtime version consistency, migrations, manifest hashes, documentation, translations, tests, package exclusions, and user-data safety. Test failures caused by missing local dependencies should be reported with exact commands and environment details.
+A release review confirms runtime version consistency, migrations, manifest hashes, documentation, translations, tests, package exclusions, and user-data safety. The maintainer compares the branch with the previous release tag, updates \filepath{app/bootstrap.php}, \filepath{release-metadata.json}, and the newest \filepath{PATCH_NOTES.md} entry, rebuilds this PDF, runs the complete and focused test suites plus PHP/JavaScript syntax checks, and verifies \codeword{git diff --check}. Only after the final source edit does the maintainer run \codeword{php scripts/generate_manifest.php} and its \codeword{--check} mode. The deployment helper then creates the requested local folder or ZIP; it only packages files and does not execute PHP or repair a stale manifest. The final archive review confirms that protected configuration, caches, logs, temporary files, and user media follow the packaging policy and that \filepath{app/core-manifest.json} is current. Test failures caused by missing local dependencies should be reported with exact commands and environment details.
 
 \section{Making the gallery feel fast}
 \label{sec:performance}

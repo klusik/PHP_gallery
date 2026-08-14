@@ -1,6 +1,6 @@
 # Testing Guide
 
-This guide applies to PHP Gallery Version 0.88. Release verification must include the modular runtime boundaries, complete deployment packaging, updater cleanup safety, deferred dashboard maintenance, centralized Settings discovery, and the supported English, Czech, German, and Swedish catalogs.
+This guide applies to PHP Gallery Version 0.89. Release verification must include the modular runtime boundaries, complete deployment packaging, updater cleanup safety, deferred dashboard maintenance, centralized Settings discovery, the configurable public language selector, and the supported English, Czech, German, and Swedish catalogs.
 
 ## Purpose
 This project is a plain PHP gallery CMS without a formal browser automation stack. The most reliable testing approach is a mix of fast syntax checks, focused script-level checks, and a repeatable manual smoke-test scenario that exercises the core gallery lifecycle.
@@ -508,11 +508,25 @@ missing and unknown states separately:
     request reference for unknown state.
 
 After restoring metadata access, rerun the complete suite. The final Phase 11 release
-acceptance baseline is **55/55 PHP regression tests passing**, translation catalogs
+acceptance baseline is **58/58 PHP regression tests passing**, translation catalogs
 aligned across English/Czech/German/Swedish, all changed PHP files passing `php -l`,
 the integrity manifest current, the administrator manual rebuilt and visually
 verified, and no temporary schema-reliability roadmap present in the repository or
 release package.
+
+### 2.1 Release preparation and handoff
+
+Use this order for each release so generated integrity data describes the final tree:
+
+1. Compare the current branch with the previous release tag and review every changed path, including migrations, protected files, package exclusions, translations, browser modules, and documentation.
+2. Update `app/bootstrap.php`, `release-metadata.json`, `PATCH_NOTES.md`, and all user/developer documentation. Keep the newest patch-note entry above historical entries and follow `PATCH_NOTES_TEMPLATE.md`.
+3. Compile and visually inspect `docs/PHP_Gallery_Manual.pdf` using the commands in `docs/LATEX_BUILD.md`.
+4. Run the complete PHP suite, all focused tests relevant to the change, `php -l` on every changed PHP file, JavaScript syntax checks, and `git diff --check`.
+5. Run `php scripts/generate_manifest.php`, then `php scripts/generate_manifest.php --check`. Confirm the manifest version matches `CMS_VERSION` and that all managed release files are covered.
+6. Run the deployment helper to create the requested local folder or ZIP. The helper packages files only; it does not execute PHP or silently repair a stale manifest. Re-run the manifest check after any source edit made during packaging.
+7. Inspect the final diff and archive contents for `config.php`, caches, logs, temporary files, gallery media policy, the current manual PDF, patch notes, and `app/core-manifest.json`. Only then create the release commit/tag and publish the archive.
+
+If a local dependency such as PHP, Node, or a TeX tool is unavailable, record the exact blocked command and environment in the handoff. Do not describe the release as fully verified until that command has been run successfully.
 
 When checking Admin dashboard performance, verify that opening `?page=admin` does not request `admin_dashboard_maintenance` until `#admin-tab-maintenance` is selected. Then verify that the authenticated JSON response replaces the placeholder, nested maintenance tabs initialize, and direct or no-JavaScript fallback links remain usable.
 
