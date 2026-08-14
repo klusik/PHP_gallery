@@ -1,5 +1,53 @@
 # Patch notes
 
+## Version 0.89.1
+
+Version 0.89.1 is a focused automatic-update reliability patch for installations that should receive newly published stable releases without waiting several hours. It shortens the normal stable metadata-check interval to one hour while preserving GitHub rate-limit handling, resumable update jobs, safe package validation, and all 0.89 public-language and schema-safety behavior.
+
+  ### Highlights
+
+  #### Faster stable release discovery
+
+  - Updated request-triggered automatic checks to run at most once per hour per installation instead of once every five hours.
+  - Updated the unattended CLI worker to use the same one-hour throttle, so hosting cron and normal page requests cannot drift apart.
+  - Kept GitHub `Retry-After`, rate-limit reset, and local backoff handling authoritative; the shorter interval does not bypass provider protection.
+  - Preserved the distinction between metadata discovery and resumable package processing, including bounded request-time worker slices and cron continuation.
+
+  #### Maintained updater safety and release integrity
+
+  - Kept stable, beta, rollback, cancellation, manifest, migration, and schema-safety boundaries unchanged.
+  - Corrected the resumable-updater redaction audit so its intentional internal exception-message extraction boundary is excluded precisely without weakening the runtime redaction behavior.
+  - Refreshed the release documentation, synchronized language fallback strings, and regenerated `app/core-manifest.json` for version 0.89.1.
+
+  ### Technical Details
+
+  #### Backend
+
+  - Updated automatic-update TTL defaults and minimums in `app/services/updates_install.php`, `app/services/updates_status.php`, `app/controllers/updates.php`, and `scripts/application_update.php` to 3,600 seconds.
+  - Kept automatic updates opt-in/opt-out through the existing Admin setting and left beta installations intentionally passive.
+
+  #### Frontend and localization
+
+  - Updated the Admin fallback copy and maintained English, Czech, German, and Swedish catalogs to describe the one-hour interval accurately.
+  - Updated `README.md`, `ARCHITECTURE.md`, `DATABASE.md`, `TESTING.md`, and `docs/PHP_Gallery_Manual.tex` with the current release behavior.
+
+  #### Tests and release artifacts
+
+  - Verified the complete 58-test PHP regression suite, focused updater and translation tests, PHP syntax checks, and `git diff --check`.
+  - Rebuilt `docs/PHP_Gallery_Manual.pdf` for the 0.89.1 edition.
+  - Regenerated and checked `app/core-manifest.json`; all 377 managed files remain covered.
+
+  ### User Impact
+
+  #### For administrators
+
+  - Newly published stable releases are normally discovered within one hour when the site receives eligible requests or the CLI worker is scheduled.
+  - GitHub API protection remains respected, and the updater still refuses unsafe, stale, malformed, or unverifiable packages before activation.
+
+  #### For visitors
+
+  - No public rendering, language preference, gallery access, or no-JavaScript behavior changes in this patch release.
+
 ## Version 0.89
 
 Version 0.89 is a release-readiness, updater reliability, schema-safety, and localization design release. It completes the repository-wide three-state schema inspection conversion, introduces resumable authenticated update jobs, and adds a fully configurable public viewer language selector with safe live preview and reset workflows. The release keeps existing public entrypoints, no-JavaScript fallbacks, protected data, and the viewer's browser-local language preference intact.
