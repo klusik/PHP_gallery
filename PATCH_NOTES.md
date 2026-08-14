@@ -1,5 +1,76 @@
 # Patch notes
 
+## Version 0.89
+
+Version 0.89 is a release-readiness, updater reliability, schema-safety, and localization design release. It completes the repository-wide three-state schema inspection conversion, introduces resumable authenticated update jobs, and adds a fully configurable public viewer language selector with safe live preview and reset workflows. The release keeps existing public entrypoints, no-JavaScript fallbacks, protected data, and the viewer's browser-local language preference intact.
+
+  ### Highlights
+
+  #### Added configurable public viewer language designs
+
+  - Added five stable selector presets, including the unchanged Classic appearance as the default plus Solid pills, Outline, Soft cards, and Minimal designs.
+  - Added safe controls for preset selection, flag visibility, language codes and names, density, alignment, active-state emphasis, spacing, padding, margins, borders, radii, flag dimensions, typography, theme colors, custom colors, and transparent color fields.
+  - Added a reusable language-settings panel shared by Theme > Language and the central Settings page, with basic Settings controls linking administrators to the detailed Theme editor.
+  - Added an in-place preview using the production selector structure, bundled SVG flags, real language names, and the same normalized values used by public rendering.
+  - Added individual-field reset controls, current-preset reset, and reset-all behavior. Resets remain unsaved until the containing settings form is submitted and never modify enabled languages, selector availability, site language, or a viewer's browser cookie.
+  - Preserved semantic links, `hreflang`, `lang`, `aria-label`, `aria-current`, keyboard focus, narrow-screen behavior, and meaningful language text when flags are disabled.
+
+  #### Completed schema reliability and updater hardening
+
+  - Completed the eleven-phase conversion to explicit `available`, confirmed `missing`, and `unknown` schema states across security, authentication, mutation, ingestion, and optional presentation/reporting boundaries.
+  - Preserved fail-closed behavior for NSFW-sensitive requests, authentication storage uncertainty, destructive operations, upload/migration writes, thumbnail metadata changes, voting, Picture Game, telemetry, navigation persistence, AI queues, and other state-changing workflows.
+  - Added bounded System Health and Runtime Diagnostics models and redacted diagnostics for degraded schema inspection; raw SQL, database exceptions, credentials, tokens, DSNs, and private paths are not exposed.
+  - Added resumable, checkpointed updater jobs for stable, beta, reinstall, rollback, and background work, including bounded download/extraction, manifest validation, locking, cancellation, rollback snapshots, and in-place Admin side-panel continuation.
+  - Kept deployment helpers focused on producing local folders or ZIP archives. Release integrity is refreshed explicitly with `scripts/generate_manifest.php` before packaging or handoff.
+
+  #### Improved maintainability and language coverage
+
+  - Unified missing PHP and JavaScript function documentation across the changed runtime and browser modules.
+  - Synchronized English, Czech, German, and Swedish catalogs, including all new selector design, preview, reset, validation, and fallback strings.
+  - Bundled local SVG flags under `public/assets/flags/` with the upstream license notice so public rendering does not depend on an external flag service.
+
+  ### Technical Details
+
+  #### Backend
+
+  - Added canonical selector defaults, preset definitions, normalization, persistence, and safe CSS-variable projection to `app/services/translations.php`.
+  - Extended `app/services/admin_settings_registry.php`, `app/controllers/admin_theme_language.php`, `app/controllers/admin_theme_actions.php`, and `app/views/admin_language_settings.php` without duplicating the language panel.
+  - Added defensive fallback handling for missing or malformed structured settings, including transparent-color flags and legacy partial preset values.
+  - Added focused updater and schema-policy services while retaining compatibility coordinators and established routes.
+
+  #### Database
+
+  - Added no new database migration for Version 0.89.
+  - Stored selector design values through the existing canonical application-settings service; viewer language selection remains a browser-local preference.
+  - Kept schema capability observation request-local and separated from security, mutation, and optional-presentation policy decisions.
+
+  #### Frontend
+
+  - Added `public/assets/gallery-modules/admin-language-selector-design.js` with delegated handlers that survive dynamic Admin side-panel rendering.
+  - Updated `public/assets/styles/admin.css`, `public/assets/styles/public.css`, `app/views/layout.php`, and the compatibility renderer for compact controls, live preview, preset classes, validated custom properties, transparent colors, and clean flag removal.
+  - Updated cache-busting imports for changed browser modules and preserved the primary AJAX/in-place side-panel interaction contract.
+
+  #### Tests and release integrity
+
+  - Added and extended service, rendering, catalog, updater, schema-policy, documentation, and side-panel contract tests.
+  - The release baseline requires `php tests/run.php`, focused translation/language/settings/updater/schema tests, `php -l` for every changed PHP file, `node --check` for changed JavaScript, `git diff --check`, and a current manifest verified with both generator modes.
+  - Rebuilt `docs/PHP_Gallery_Manual.pdf` from `docs/PHP_Gallery_Manual.tex` after updating the edition metadata and release workflow instructions.
+
+  ### User Impact
+
+  #### For visitors
+
+  - The public language selector keeps its existing default appearance while allowing administrators to select a more suitable visual treatment.
+  - Flags can be hidden without losing native language labels or accessible codes, and each visitor's selected language continues to be remembered only in that visitor's browser.
+  - Existing gallery access, password, NSFW, media authorization, semantic markup, and no-JavaScript behavior remain unchanged.
+
+  #### For administrators
+
+  - Theme > Language is the detailed owner for selector design; central Settings exposes only the basic selector controls and links to the detailed editor.
+  - Live preview and reset controls make experimentation reversible before saving, while server-side normalization remains authoritative for every submitted value.
+  - Updates can resume after ordinary request or hosting interruptions, and deterministic manifest/version/hash mismatches are rejected before activation.
+  - System Health and Runtime Diagnostics distinguish unavailable schema from a confirmed pre-feature installation and provide bounded next steps.
+
 ## Version 0.88
 
 Version 0.88 is a maintainability, deployment-safety, localization, and Admin usability release. It breaks the largest runtime coordinators into focused modules without changing the public entrypoints, hardens complete-package deployment and update cleanup for shared-hosting extractors, completes the supported English, Czech, German, and Swedish language surface, adds configurable public tag presentation, and turns the centralized Settings hub into a searchable index of global configuration and specialist tools.
