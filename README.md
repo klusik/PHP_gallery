@@ -772,6 +772,8 @@ Editable catalogs live in `app/lang/<code>.json`. JSON is the maintained format.
 
 The reusable viewer-language settings panel is rendered by `app/views/admin_language_settings.php` in both Theme > Language and Settings > General. Both surfaces persist through the same translation service and `app_settings` keys: `public_language_selector_enabled` (`1` by default) and `public_language_selector_languages` (an ordered JSON list defaulting to all maintained languages). Disabling a language affects only visitor overrides; it does not remove that catalog from Admin language selection, the public site-default selector, editing, import/export, or diagnostics.
 
+The same panel also owns the public selector design. Settings > General intentionally exposes only the basic preset and flag controls and links to Theme > Language for detailed editing without overwriting saved custom values. Five presets are available: Classic (the backward-compatible default), Solid pills, Outline, Soft cards, and Minimal. The compact Theme editor configures codes, native names, orientation, density, alignment, active emphasis, theme/custom colors (each color may instead be transparent), padding, margins, gaps, borders, radii, flag dimensions, and text size while an actual-flag preview appears above the fine controls and updates without saving. Reset all returns the complete design to Classic defaults, Reset this preset restores only the active preset, and every individual control has its own reset. All reset operations remain unsaved until the parent form is submitted and never alter the selector feature switch, enabled viewer languages, public default, or a viewer's browser-local language choice.
+
 Current selectable language packs:
 
 | Code | Display name | Current role |

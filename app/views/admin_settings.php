@@ -48,6 +48,7 @@ use function Gallery\Services\t;
 use function Gallery\Services\translation_load_language;
 use function Gallery\Services\translation_public_language_selector_enabled;
 use function Gallery\Services\translation_public_language_selector_languages;
+use function Gallery\Services\translation_public_language_selector_design;
 
 /**
  * Render the centralized Admin Settings page.
@@ -202,12 +203,17 @@ function view_render_admin_settings_section(string $sectionId, array $entries, a
                     'admin_setting_target' => true,
                     'enabled_name' => 'settings[public_language_selector_enabled]',
                     'languages_name' => 'settings[public_language_selector_languages][]',
+                    'design_name' => 'settings[public_language_selector_design]',
+                    'detailed_design' => false,
                     'enabled' => array_key_exists('public_language_selector_enabled', $submittedValues)
                         ? !empty($submittedValues['public_language_selector_enabled'])
                         : translation_public_language_selector_enabled(),
                     'languages' => array_key_exists('public_language_selector_languages', $submittedValues)
                         ? (array) $submittedValues['public_language_selector_languages']
                         : translation_public_language_selector_languages(),
+                    'design' => array_key_exists('public_language_selector_design', $submittedValues)
+                        ? (array) $submittedValues['public_language_selector_design']
+                        : translation_public_language_selector_design(),
                     'errors' => [
                         'enabled' => $errors['public_language_selector_enabled'] ?? '',
                         'languages' => $errors['public_language_selector_languages'] ?? '',
@@ -215,7 +221,7 @@ function view_render_admin_settings_section(string $sectionId, array $entries, a
                 ]);
                 continue;
             }
-            if ($id === 'public_language_selector_languages') {
+            if ($id === 'public_language_selector_languages' || $id === 'public_language_selector_design') {
                 continue;
             }
             view_render_admin_settings_input((string) $id, $entry, $errors, $submittedValues);

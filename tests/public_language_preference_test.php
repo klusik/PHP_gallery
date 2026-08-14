@@ -91,6 +91,10 @@ namespace {
     use function Gallery\Services\translation_public_language_override_active;
     use function Gallery\Services\translation_public_language_selector_enabled;
     use function Gallery\Services\translation_public_language_selector_languages;
+    use function Gallery\Services\translation_public_language_selector_design;
+    use function Gallery\Services\translation_public_language_selector_design_defaults;
+    use function Gallery\Services\translation_public_language_selector_design_normalize;
+    use function Gallery\Services\translation_save_public_language_selector_design;
     use function Gallery\Services\translation_public_language_url;
     use function Gallery\Services\translation_save_public_language_selector_settings;
     use function Gallery\Services\translation_supported_languages;
@@ -114,6 +118,34 @@ namespace {
     public_language_assert_same(['en', 'cs', 'de', 'sv'], translation_supported_languages(), 'Maintained selector order');
     public_language_assert_same(true, translation_public_language_selector_enabled(), 'Viewer selector defaults enabled');
     public_language_assert_same(['en', 'cs', 'de', 'sv'], translation_public_language_selector_languages(), 'All viewer languages default enabled');
+    $designDefaults = translation_public_language_selector_design_defaults();
+    public_language_assert_same('classic', $designDefaults['preset'], 'Classic selector design defaults selected');
+    public_language_assert_same(true, $designDefaults['show_flags'], 'Viewer flags default visible');
+    public_language_assert_same(['classic', 'solid_pills', 'outline', 'soft_cards', 'minimal'], array_keys($designDefaults['presets']), 'Five stable selector presets');
+    foreach ($designDefaults['presets'] as $presetId => $presetDefaults) {
+        public_language_assert_same(true, array_key_exists('use_theme_colors', $presetDefaults), 'Complete theme-color default for ' . $presetId);
+        public_language_assert_same(array_keys($designDefaults['presets']['classic']), array_keys($presetDefaults), 'Complete preset shape for ' . $presetId);
+    }
+    $normalizedDesign = translation_public_language_selector_design_normalize([
+        'preset' => 'unknown', 'show_flags' => '0', 'orientation' => 'unsafe',
+        'presets' => ['classic' => ['container_bg' => 'url(javascript:bad)', 'gap' => 999, 'border_style' => 'expression']],
+    ]);
+    public_language_assert_same('classic', $normalizedDesign['preset'], 'Invalid selector preset falls back');
+    public_language_assert_same(false, $normalizedDesign['show_flags'], 'Flag visibility normalizes');
+    public_language_assert_same('wrap', $normalizedDesign['orientation'], 'Invalid orientation falls back');
+    public_language_assert_same('#fffaf0', $normalizedDesign['presets']['classic']['container_bg'], 'Unsafe color falls back');
+    public_language_assert_same(32, $normalizedDesign['presets']['classic']['gap'], 'Spacing is clamped');
+    public_language_assert_same('solid', $normalizedDesign['presets']['classic']['border_style'], 'Unsafe border style falls back');
+    $transparentDesign = translation_public_language_selector_design_normalize([
+        'preset' => 'outline',
+        'presets' => ['outline' => ['container_bg' => '#123456', 'container_bg_transparent' => '1']],
+    ]);
+    public_language_assert_same('transparent', $transparentDesign['presets']['outline']['container_bg'], 'Explicit transparent color mode');
+    translation_save_public_language_selector_design($transparentDesign);
+    public_language_assert_same('transparent', translation_public_language_selector_design()['presets']['outline']['container_bg'], 'Transparent color survives persistence and reload normalization');
+    translation_save_public_language_selector_design(['preset' => 'outline', 'show_flags' => false]);
+    public_language_assert_same('outline', translation_public_language_selector_design()['preset'], 'Selector design persists canonically');
+    public_language_assert_same(false, translation_public_language_selector_design()['show_flags'], 'Hidden flags persist canonically');
     $languagePresentation = translation_language_presentation();
     public_language_assert_same(['en', 'cs', 'de', 'sv'], array_keys($languagePresentation), 'Presentation metadata coverage');
     public_language_assert_same(
@@ -196,6 +228,8 @@ namespace {
     public_language_assert_same(true, str_contains($layoutSource, 'translation_public_language_selector_enabled()') && str_contains($layoutSource, 'translation_public_language_selector_languages()'), 'Public selector honors persisted viewer settings');
     public_language_assert_same(true, str_contains($languageSettingsViewSource, 'function view_render_public_language_selector_settings_panel') && str_contains($settingsViewSource, 'view_render_public_language_selector_settings_panel(['), 'Theme and centralized Settings share the language-selector panel module');
     public_language_assert_same(true, str_contains($publicCssSource, '.public-language-switcher') && str_contains($publicCssSource, '.public-language-button'), 'Public selector styling');
+    public_language_assert_same(true, str_contains($languageSettingsViewSource, 'data-language-design-reset-all') && str_contains($languageSettingsViewSource, 'data-language-design-reset-preset') && str_contains($languageSettingsViewSource, 'data-language-design-reset-field'), 'Three selector design reset levels');
+    public_language_assert_same(true, str_contains($languageSettingsViewSource, 'data-language-design-transparent') && str_contains($settingsViewSource, "'detailed_design' => false"), 'Transparent colors and basic central Settings mode');
 
     fwrite(STDOUT, "Public language preference query, cookie, reset, metadata, URL, and header behavior passed.\n");
 }

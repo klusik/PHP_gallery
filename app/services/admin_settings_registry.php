@@ -351,6 +351,7 @@ function admin_settings_registry(): array
         'public_language' => admin_settings_entry('public_language', 'general', 'Public language', 'Default language for anonymous visitors.', 'public_language', 'select', 'en', translation_public_language(), 'admin_theme', [], 'admin-theme-tab-language', true, 'normal', ['allowed' => function_exists('Gallery\\Services\\translation_supported_languages') ? translation_supported_languages() : ['en', 'cs', 'de', 'sv']]),
         'public_language_selector_enabled' => admin_settings_entry('public_language_selector_enabled', 'general', 'Viewer language selector', 'Allow each public viewer to choose a language stored only in that viewer\'s browser; this never changes the site default or another viewer.', 'public_language_selector_enabled', 'checkbox', '1', translation_public_language_selector_enabled() ? '1' : '0', 'admin_theme', [], 'admin-theme-tab-language', true),
         'public_language_selector_languages' => admin_settings_entry('public_language_selector_languages', 'general', 'Viewer languages', 'Languages offered for each public viewer\'s browser-only preference; Admin and site-wide language settings are unchanged.', 'public_language_selector_languages', 'language-multicheckbox', CMS_SELECTABLE_LANGUAGES, translation_public_language_selector_languages(), 'admin_theme', [], 'admin-theme-tab-language', true, 'normal', ['allowed' => translation_supported_languages()]),
+        'public_language_selector_design' => admin_settings_entry('public_language_selector_design', 'general', 'Viewer selector design', 'Choose five live-preview presets; configure flags, names, codes, colors, padding, margins, borders, sizing, layout, and reset controls.', CMS_PUBLIC_LANGUAGE_SELECTOR_DESIGN_KEY, 'language-selector-design', translation_public_language_selector_design_defaults(), translation_public_language_selector_design(), 'admin_theme', [], 'admin-theme-tab-language', true),
         'url_rewrite_enabled' => admin_settings_entry('url_rewrite_enabled', 'general', 'Clean public URLs', 'Controls whether generated public links prefer URL rewriting.', 'url_rewrite_enabled', 'checkbox', '1', url_rewrite_enabled() ? '1' : '0', 'admin', [], 'admin-tab-maintenance', true),
         'public_home_search_enabled' => admin_settings_entry('public_home_search_enabled', 'general', 'Public search', 'Shows the public search interface when the feature is enabled.', 'public_home_search_enabled', 'checkbox', '0', public_home_search_enabled() ? '1' : '0', 'admin', [], 'admin-tab-maintenance', (!function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('public_search'))),
 
@@ -547,6 +548,18 @@ function admin_settings_normalize_editable_value(array $entry, mixed $value): mi
         }
         return $normalized;
     }
+    if ($id === 'public_language_selector_design') {
+        if (is_array($value) && !empty($value['basic_only'])) {
+            $current = translation_public_language_selector_design();
+            foreach (['preset', 'show_flags'] as $field) {
+                if (array_key_exists($field, $value)) {
+                    $current[$field] = $value[$field];
+                }
+            }
+            return translation_public_language_selector_design_normalize($current);
+        }
+        return translation_public_language_selector_design_normalize($value);
+    }
     if ($id === 'public_thumbnail_rendering_mode') {
         return public_thumbnail_rendering_mode_normalize($value);
     }
@@ -577,6 +590,7 @@ function admin_settings_save_editable_value(string $id, mixed $value): void
         'public_language' => translation_set_public_language((string) $value),
         'public_language_selector_enabled' => translation_save_public_language_selector_settings((string) $value === '1', translation_public_language_selector_languages()),
         'public_language_selector_languages' => translation_save_public_language_selector_settings(translation_public_language_selector_enabled(), is_array($value) ? $value : []),
+        'public_language_selector_design' => translation_save_public_language_selector_design($value),
         'url_rewrite_enabled' => set_url_rewrite_enabled((string) $value === '1'),
         'public_home_search_enabled' => set_public_home_search_enabled((string) $value === '1'),
         'public_thumbnail_rendering_mode' => public_thumbnail_rendering_mode_save_with_revision((string) $value),

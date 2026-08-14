@@ -28,7 +28,8 @@ $search = file_get_contents(__DIR__ . '/../public/assets/gallery-modules/admin-s
 $gallery = file_get_contents(__DIR__ . '/../public/assets/gallery.js');
 $styles = file_get_contents(__DIR__ . '/../public/assets/styles/admin.css');
 $languageSettings = file_get_contents(__DIR__ . '/../app/views/admin_language_settings.php');
-if (!is_string($view) || !is_string($registry) || !is_string($search) || !is_string($gallery) || !is_string($styles) || !is_string($languageSettings)) {
+$languageDesign = file_get_contents(__DIR__ . '/../public/assets/gallery-modules/admin-language-selector-design.js');
+if (!is_string($view) || !is_string($registry) || !is_string($search) || !is_string($gallery) || !is_string($styles) || !is_string($languageSettings) || !is_string($languageDesign)) {
     throw new RuntimeException('Unable to read Admin Settings source files.');
 }
 
@@ -36,6 +37,33 @@ foreach (['public_language_selector_enabled', 'public_language_selector_language
     if (!str_contains($registry, "'{$languageSettingId}' => admin_settings_entry") || !str_contains($languageSettings, $languageSettingId)) {
         throw new RuntimeException('Viewer language setting is missing from the registry or shared panel: ' . $languageSettingId);
     }
+}
+if (!str_contains($registry, "'public_language_selector_design' => admin_settings_entry") || !str_contains($languageSettings, 'data-language-design-preview')) {
+    throw new RuntimeException('Viewer selector design is missing from Settings search or the shared live-preview panel.');
+}
+foreach (['data-language-design-reset-all', 'data-language-design-reset-preset', 'data-language-design-reset-field', 'data-default-value'] as $resetContract) {
+    if (!str_contains($languageSettings, $resetContract)) {
+        throw new RuntimeException('Viewer selector reset contract is missing: ' . $resetContract);
+    }
+}
+foreach (['data-language-design-transparent', 'design_detailed_elsewhere', 'design_open_detailed'] as $designScopeContract) {
+    if (!str_contains($languageSettings, $designScopeContract)) {
+        throw new RuntimeException('Viewer selector basic/detailed design contract is missing: ' . $designScopeContract);
+    }
+}
+if (!str_contains($languageSettings, "substr(\$name, 0, -1) . '_transparent]'")) {
+    throw new RuntimeException('Transparent color controls do not submit inside the preset color array.');
+}
+if (!str_contains($view, "'detailed_design' => false")) {
+    throw new RuntimeException('Central Settings must render only the basic viewer-selector design controls.');
+}
+foreach (['MutationObserver', "document.addEventListener('input'", "document.addEventListener('change'", "document.addEventListener('click'", 'renderLanguageDesignPreview', 'data-language-design-transparent', "return 'transparent'", 'colorInput.disabled = transparent.checked', 'event.preventDefault()'] as $interactionContract) {
+    if (!str_contains($languageDesign, $interactionContract)) {
+        throw new RuntimeException('Viewer selector dynamic preview contract is missing: ' . $interactionContract);
+    }
+}
+if (str_contains($languageDesign, 'window.location') || str_contains($languageDesign, 'location.reload')) {
+    throw new RuntimeException('Viewer selector design interactions must remain in place without navigation or reload.');
 }
 
 foreach (["only for public viewers", "saved only in that viewer\\'s browser", "does not change the site default"] as $viewerLanguageExplanation) {

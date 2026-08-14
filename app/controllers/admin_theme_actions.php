@@ -135,6 +135,7 @@ use function Gallery\Services\translation_normalize_language_code;
 use function Gallery\Services\translation_public_language;
 use function Gallery\Services\translation_public_language_selector_normalize_languages;
 use function Gallery\Services\translation_save_public_language_selector_settings;
+use function Gallery\Services\translation_save_public_language_selector_design;
 use function Gallery\Services\translation_supported_languages;
 use function Gallery\Services\translation_save_language_json;
 use function Gallery\Services\translation_set_active_language;
@@ -292,10 +293,12 @@ function admin_theme_process_post(bool $gpsMapsFeatureEnabled, bool $lightboxMod
             $_SESSION['cms_public_language_selector_submitted'] = [
                 'enabled' => $viewerSelectorEnabled,
                 'languages' => [],
+                'design' => $_POST['public_language_selector_design'] ?? [],
             ];
             redirect_to(url_for('admin_theme', ['language_error' => 'viewer_languages_required']) . '#admin-theme-tab-language');
         }
         translation_save_public_language_selector_settings($viewerSelectorEnabled, $viewerSelectorLanguages);
+        translation_save_public_language_selector_design($_POST['public_language_selector_design'] ?? []);
     }
     if (isset($_POST['cms_language'])) {
         translation_set_active_language((string) $_POST['cms_language']);

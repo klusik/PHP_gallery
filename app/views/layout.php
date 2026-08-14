@@ -73,6 +73,8 @@ use function Gallery\Services\translation_normalize_language_code;
 use function Gallery\Services\translation_public_language_url;
 use function Gallery\Services\translation_public_language_selector_enabled;
 use function Gallery\Services\translation_public_language_selector_languages;
+use function Gallery\Services\translation_public_language_selector_design;
+use function Gallery\Services\translation_public_language_selector_design_style;
 
 /**
  * Render the public visitor language selector in the shared header.
@@ -88,16 +90,28 @@ function view_render_public_language_selector(): void
     $activeLanguage = translation_active_language();
     $presentations = translation_language_presentation();
     $label = t('public.language.selector_label', 'Language');
+    $design = translation_public_language_selector_design();
+    $preset = (string) $design['preset'];
+    $classes = 'public-language-switcher language-preset-' . $preset
+        . ' language-orientation-' . $design['orientation']
+        . ' language-density-' . $design['density']
+        . ' language-align-' . $design['alignment']
+        . ' language-active-' . $design['active_style'];
 
-    echo '<div class="public-language-switcher" role="group" aria-label="' . e($label) . '">';
+    echo '<div class="' . e($classes) . '" role="group" aria-label="' . e($label) . '" style="' . e(translation_public_language_selector_design_style($design)) . '">';
     foreach (translation_public_language_selector_languages() as $language) {
         $presentation = $presentations[$language] ?? ['name' => strtoupper($language), 'flag_asset' => ''];
         $isActive = $language === $activeLanguage;
         $languageName = trim((string) ($presentation['name'] ?? strtoupper($language)));
         $flagAsset = trim((string) ($presentation['flag_asset'] ?? ''));
         echo '<a class="public-language-button' . ($isActive ? ' is-active' : '') . '" href="' . e(translation_public_language_url($language)) . '" hreflang="' . e($language) . '" lang="' . e($language) . '" aria-label="' . e($languageName) . '" title="' . e($languageName) . '"' . ($isActive ? ' aria-current="true"' : '') . '>';
-        echo '<span class="public-language-code" aria-hidden="true">' . e(strtoupper($language)) . '</span>';
-        if ($flagAsset !== '') {
+        if (!empty($design['show_codes'])) {
+            echo '<span class="public-language-code" aria-hidden="true">' . e(strtoupper($language)) . '</span>';
+        }
+        if (!empty($design['show_names'])) {
+            echo '<span class="public-language-name" aria-hidden="true">' . e($languageName) . '</span>';
+        }
+        if (!empty($design['show_flags']) && $flagAsset !== '') {
             echo '<img class="public-language-flag" src="' . e(asset_url($flagAsset)) . '" alt="" aria-hidden="true" width="20" height="15" decoding="async">';
         }
         echo '</a>';

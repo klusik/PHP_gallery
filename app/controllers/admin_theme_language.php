@@ -135,6 +135,7 @@ use function Gallery\Services\translation_normalize_language_code;
 use function Gallery\Services\translation_public_language;
 use function Gallery\Services\translation_public_language_selector_enabled;
 use function Gallery\Services\translation_public_language_selector_languages;
+use function Gallery\Services\translation_public_language_selector_design;
 use function Gallery\Services\translation_supported_languages;
 use function Gallery\Services\translation_save_language_json;
 use function Gallery\Services\translation_set_active_language;
@@ -361,6 +362,7 @@ function render_admin_theme_language_tab(): void
         'id_prefix' => 'admin-theme-public-language-selector',
         'enabled_name' => 'public_language_selector_enabled',
         'languages_name' => 'public_language_selector_languages[]',
+        'design_name' => 'public_language_selector_design',
         'marker_name' => 'public_language_selector_settings_present',
         'enabled' => $viewerSettingsSubmitted !== []
             ? !empty($viewerSettingsSubmitted['enabled'])
@@ -368,6 +370,9 @@ function render_admin_theme_language_tab(): void
         'languages' => $viewerSettingsSubmitted !== []
             ? (array) ($viewerSettingsSubmitted['languages'] ?? [])
             : translation_public_language_selector_languages(),
+        'design' => $viewerSettingsSubmitted !== []
+            ? (array) ($viewerSettingsSubmitted['design'] ?? [])
+            : translation_public_language_selector_design(),
         'errors' => $viewerSettingsErrors,
     ]);
     echo '<p class="muted"><strong>' . e(t('admin.theme.language.default_label', 'Default language')) . ':</strong> ' . e($defaultLanguage) . '</p>';
