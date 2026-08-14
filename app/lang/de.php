@@ -126,7 +126,7 @@ return [
     'admin.updates.force_check_button' => 'Prüfung erzwingen',
     'admin.updates.force_check_completed' => 'Erzwungene GitHub-Updateprüfung abgeschlossen.',
     'admin.updates.force_check_completed_with_error' => 'Erzwungene GitHub-Updateprüfung mit Warnung abgeschlossen: {error}',
-    'admin.updates.force_check_hint' => 'Den lokalen Fünf-Stunden-Cache umgehen und GitHub jetzt abfragen. GitHub-Rate-Limit-Header werden weiterhin protokolliert und nach der Antwort berücksichtigt.',
+    'admin.updates.force_check_hint' => 'Den lokalen Ein-Stunden-Cache umgehen und GitHub jetzt abfragen. GitHub-Rate-Limit-Header werden weiterhin protokolliert und nach der Antwort berücksichtigt.',
     'admin.updates.github_api_etag' => 'ETag',
     'admin.updates.github_api_hint' => 'Der Updater verwendet Antwort-Header normaler GitHub-API-Aufrufe. Er ruft /rate_limit nicht nur zur Prüfung von Limits auf.',
     'admin.updates.github_api_kicker' => 'GitHub-API-Richtlinie',

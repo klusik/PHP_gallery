@@ -121,7 +121,7 @@ return [
     'admin.updates.force_check_button' => 'Vynutit kontrolu',
     'admin.updates.force_check_completed' => 'Vynucená kontrola aktualizací přes GitHub byla dokončena.',
     'admin.updates.force_check_completed_with_error' => 'Vynucená kontrola přes GitHub byla dokončena s varováním: {error}',
-    'admin.updates.force_check_hint' => 'Obejde místní pětihodinovou cache a zeptá se GitHubu hned. Hlavičky rate limitu z GitHubu se po odpovědi stále uloží a respektují.',
+    'admin.updates.force_check_hint' => 'Obejde místní hodinovou cache a zeptá se GitHubu hned. Hlavičky rate limitu z GitHubu se po odpovědi stále uloží a respektují.',
     'admin.updates.github_api_etag' => 'ETag',
     'admin.updates.github_api_hint' => 'Updater používá hlavičky z běžných odpovědí GitHub API. Nevolá /rate_limit jen kvůli zjištění limitů.',
     'admin.updates.github_api_kicker' => 'Zásady GitHub API',

@@ -330,7 +330,7 @@ function application_autoupdate_relative_time_label(int $lastCheckedAt): string
  *
  * @param int $ttlSeconds Ttl seconds value.
  */
-function application_autoupdate_maybe_run(int $ttlSeconds = 18000): void
+function application_autoupdate_maybe_run(int $ttlSeconds = 3600): void
 {
     // Finish a previously started background job before considering a new remote check.
     $activeJob = application_update_active_job();
@@ -339,10 +339,10 @@ function application_autoupdate_maybe_run(int $ttlSeconds = 18000): void
         return;
     }
 
-    // $ttlSeconds stores the minimum remote check interval. Five hours is the default
+    // $ttlSeconds stores the minimum remote check interval. One hour is the default
     // so shared hosting installations do not burn anonymous GitHub API quota on
     // normal page traffic. Manual dry checks intentionally bypass this throttle.
-    $ttlSeconds = max(18000, $ttlSeconds);
+    $ttlSeconds = max(3600, $ttlSeconds);
     // $method stores the current HTTP verb so uploads, votes, edits, and CSRF flows are not interrupted.
     $method = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
     if (!in_array($method, ['GET', 'HEAD'], true) || !application_autoupdate_enabled()) {

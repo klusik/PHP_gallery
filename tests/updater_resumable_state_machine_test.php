@@ -342,7 +342,9 @@ $serviceFiles = glob($root . '/app/services/updates_*.php') ?: [];
 foreach ($serviceFiles as $serviceFile) {
     if (basename($serviceFile) === 'updates_jobs.php') {
         $source = (string) file_get_contents($serviceFile);
-        $source = preg_replace('/function application_update_safe_error\(.*?\n}\n/s', '', $source, 1) ?? $source;
+        // Exclude the boundary's one intentional internal-message extraction line
+        // before auditing the remaining updater service for raw disclosure.
+        $source = preg_replace('/^\s*\$internal = .*?->getMessage\(\).*?;\R/m', '', $source, 1) ?? $source;
         assert_updater_resumable(!str_contains($source, '->getMessage()'), 'Updater service exposes raw exception messages outside the redaction boundary: ' . basename($serviceFile));
         continue;
     }

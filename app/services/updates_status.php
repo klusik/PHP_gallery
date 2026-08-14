@@ -202,7 +202,7 @@ function check_application_update(bool $force = false, float $requestedBudgetSec
  * @param int $ttlSeconds Ttl seconds value.
  * @return array Structured result data for the caller.
  */
-function application_update_status_for_admin(bool $force = false, int $ttlSeconds = 18000): array
+function application_update_status_for_admin(bool $force = false, int $ttlSeconds = 3600): array
 {
     if (!$force) {
         // $cachedStatus stores GitHub metadata already fetched by automatic or manual checks.

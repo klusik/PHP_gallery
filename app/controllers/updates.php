@@ -96,7 +96,7 @@ use function Gallery\Services\admin_log_event;
  * @param int $ttlSeconds Ttl seconds value.
  * @return array Structured result data for the caller.
  */
-function cms_update_patch_notes_model(array $status, ?string $requestedVersion = null, int $ttlSeconds = 18000): array
+function cms_update_patch_notes_model(array $status, ?string $requestedVersion = null, int $ttlSeconds = 3600): array
 {
     // $patchNotesData stores parsed release notes fetched from GitHub or the bundled fallback file.
     $patchNotesData = application_patch_notes_viewer_data(!empty($status['branch']) ? (string) $status['branch'] : null, $ttlSeconds);
@@ -525,7 +525,7 @@ function cms_admin_update(): void
     }
     echo '<form method="post" class="form-grid admin-update-action-form">' . csrf_field();
     echo '<input type="hidden" name="update_action" value="force_check">';
-    echo '<p class="muted">' . e(t('admin.updates.force_check_hint', 'Bypass the local five-hour cache and ask GitHub now. GitHub rate-limit headers are still recorded and respected after the response.')) . '</p>';
+    echo '<p class="muted">' . e(t('admin.updates.force_check_hint', 'Bypass the local one-hour cache and ask GitHub now. GitHub rate-limit headers are still recorded and respected after the response.')) . '</p>';
     echo '<button type="submit" class="button secondary">' . e(t('admin.updates.force_check_button', 'Force check')) . '</button>';
     echo '</form>';
     echo '</article>';
@@ -534,7 +534,7 @@ function cms_admin_update(): void
     if (!empty($autoupdateStatus['beta_active'])) {
         echo '<p class="muted">' . e(t('admin.updates.autoupdate_beta_disabled_hint', 'Automatic updates are checked in settings, but ignored while beta code is installed. The setting is not changed.')) . '</p>';
     } else {
-        echo '<p class="muted">' . e(t('admin.updates.autoupdate_hint', 'When enabled, normal page requests check for a stable update at most once every five hours and install it automatically when available. The dry check button forces a fresh metadata-only check immediately.')) . '</p>';
+    echo '<p class="muted">' . e(t('admin.updates.autoupdate_hint', 'When enabled, normal page requests check for a stable update at most once every hour and install it automatically when available. The dry check button forces a fresh metadata-only check immediately.')) . '</p>';
     }
     // $autoupdateLastCheckedLabel stores either a formatted timestamp or a localized never-checked fallback.
     $autoupdateLastCheckedLabel = (string) ($autoupdateStatus['last_checked_label'] ?? t('admin.updates.autoupdate_last_check_never', 'never'));
