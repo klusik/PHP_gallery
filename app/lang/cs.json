@@ -1,4 +1,11 @@
 {
+  "admin.upload.browser_zip_help": "Můžete vybrat také archivy ZIP. Podporované obrázky se rozbalí místně, ostatní položky se přeskočí. Import ZIP nikdy nepoužije záložní zpracování PHP.",
+  "admin.browser_upload.extracting_archives": "Kontrola vybraných archivů ZIP v prohlížeči...",
+  "admin.browser_upload.log_extracting_zip": "Kontrola ZIP: {name} ({bytes}).",
+  "admin.browser_upload.log_extracted_zip": "ZIP {name}: přidáno {added} podporovaných obrázků, přeskočeno dalších položek: {skipped}.",
+  "admin.browser_upload.zip_browser_required": "Import ZIP vyžaduje nahrávání s podporou prohlížeče a kompatibilní prohlížeč.",
+  "admin.browser_upload.zip_extract_failed": "Vybraný archiv ZIP se nepodařilo přečíst.",
+  "admin.browser_upload.zip_no_supported_images": "Ve vybraných archivech ZIP nebyly nalezeny žádné podporované obrázky.",
   "_language_name": "Čeština",
   "admin.account.before_save": "Před uložením:",
   "admin.account.before_save_help": "Při změně uživatelského jména, e-mailu pro obnovu nebo hesla je nutné zadat aktuální heslo. Chrání to účet, pokud někde zůstane otevřené administrátorské přihlášení.",

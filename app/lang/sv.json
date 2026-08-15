@@ -1,4 +1,11 @@
 {
+  "admin.upload.browser_zip_help": "Du kan också välja ZIP-arkiv. Bilder som stöds packas upp lokalt och andra poster hoppas över. ZIP-import använder aldrig PHP-reservvägen.",
+  "admin.browser_upload.extracting_archives": "Kontrollerar valda ZIP-arkiv i webbläsaren...",
+  "admin.browser_upload.log_extracting_zip": "Kontrollerar ZIP: {name} ({bytes}).",
+  "admin.browser_upload.log_extracted_zip": "ZIP {name}: lade till {added} bilder som stöds och hoppade över {skipped} andra poster.",
+  "admin.browser_upload.zip_browser_required": "ZIP-import kräver webbläsarassisterad uppladdning och en kompatibel webbläsare.",
+  "admin.browser_upload.zip_extract_failed": "Det valda ZIP-arkivet kunde inte läsas.",
+  "admin.browser_upload.zip_no_supported_images": "Inga bilder som stöds hittades i de valda ZIP-arkiven.",
   "_language_name": "Svenska",
   "admin.account.before_save": "Innan du sparar:",
   "admin.account.before_save_help": "Det aktuella lösenordet krävs när du ändrar användarnamn, återställningsadress eller lösenord. Detta skyddar kontot om en administratörssession lämnas öppen.",

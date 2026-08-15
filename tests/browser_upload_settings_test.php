@@ -124,4 +124,14 @@ browser_upload_test_assert(browser_thumbnail_rebuild_normalized_formats([], fals
 browser_upload_test_assert(browser_thumbnail_rebuild_expected_variant_count(['webp']) === 6, 'thumbnail rebuild expected variant count follows one-format policy');
 browser_upload_test_assert(browser_thumbnail_rebuild_expected_variant_count(['jpg', 'webp']) === 12, 'thumbnail rebuild expected variant count follows compatibility policy');
 
+$browserUploadSource = file_get_contents(__DIR__ . '/../public/assets/gallery-modules/admin-browser-upload.js');
+$browserWorkerSource = file_get_contents(__DIR__ . '/../public/assets/gallery-modules/browser-image-worker.js');
+$sidePanelSource = file_get_contents(__DIR__ . '/../public/assets/gallery-modules/admin-side-panel.js');
+$uploadControllerSource = file_get_contents(__DIR__ . '/../app/controllers/admin_uploads.php');
+browser_upload_test_assert(is_string($browserUploadSource) && str_contains($browserUploadSource, 'expandBrowserUploadArchives') && str_contains($browserUploadSource, "action: 'extractUploadZip'"), 'browser upload expands selected ZIP archives before image preparation');
+browser_upload_test_assert(is_string($browserWorkerSource) && str_contains($browserWorkerSource, '0x02014b50') && str_contains($browserWorkerSource, "DecompressionStream('deflate-raw')"), 'browser worker parses central-directory entries and supports normal Deflate ZIP payloads');
+browser_upload_test_assert(str_contains((string) $browserWorkerSource, 'safeUploadZipImagePath') && str_contains((string) $browserWorkerSource, 'uncompressedSize > compressedSize * 250'), 'browser ZIP extraction rejects unsafe paths and suspicious expansion ratios');
+browser_upload_test_assert(is_string($sidePanelSource) && str_contains($sidePanelSource, 'browserUploadZipSelected(form) && !browserUploadRequested(form)'), 'ZIP selections cannot fall through to classic PHP upload');
+browser_upload_test_assert(is_string($uploadControllerSource) && str_contains($uploadControllerSource, "',.zip,application/zip,application/x-zip-compressed'") && str_contains($uploadControllerSource, 'admin_browser_upload_accept_value()'), 'browser-enabled upload inputs advertise ZIP selection');
+
 fwrite(STDOUT, "browser_upload_settings_test passed\n");

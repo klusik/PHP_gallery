@@ -127,7 +127,7 @@ Progressive rendering prioritizes perceived initial responsiveness, not minimum 
 - Progress bar for transfer and thumbnail generation
 - Immediate scanning after upload
 - Validation of file types and sizes
-- Optional browser-side preparation with client thumbnails, EXIF metadata, bounded ZIP batches, and server-side validation
+- Optional browser-side preparation with client thumbnails, EXIF metadata, bounded ZIP batches, and server-side validation; user-selected ZIP archives are unpacked locally and contribute only supported images
 - Automatic fallback to normal server-side uploads when browser preparation is unavailable
 
 #### Gallery Management

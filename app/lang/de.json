@@ -1,4 +1,11 @@
 {
+  "admin.upload.browser_zip_help": "Sie können auch ZIP-Archive auswählen. Unterstützte Bilder werden lokal entpackt, andere Einträge übersprungen. Der ZIP-Import verwendet nie den PHP-Ausweichpfad.",
+  "admin.browser_upload.extracting_archives": "Ausgewählte ZIP-Archive werden im Browser geprüft...",
+  "admin.browser_upload.log_extracting_zip": "ZIP wird geprüft: {name} ({bytes}).",
+  "admin.browser_upload.log_extracted_zip": "ZIP {name}: {added} unterstützte Bilder hinzugefügt, {skipped} andere Einträge übersprungen.",
+  "admin.browser_upload.zip_browser_required": "Der ZIP-Import erfordert den browsergestützten Upload und einen kompatiblen Browser.",
+  "admin.browser_upload.zip_extract_failed": "Das ausgewählte ZIP-Archiv konnte nicht gelesen werden.",
+  "admin.browser_upload.zip_no_supported_images": "In den ausgewählten ZIP-Archiven wurden keine unterstützten Bilder gefunden.",
   "_language_name": "Deutsch",
   "admin.account.before_save": "Vor dem Speichern:",
   "admin.account.before_save_help": "Das aktuelle Passwort ist erforderlich, wenn Benutzername, Wiederherstellungs-E-Mail-Adresse oder Passwort geändert werden. Dies schützt das Konto, falls eine Admin-Sitzung offen bleibt.",

@@ -97,7 +97,7 @@ import {
     setupAdminNavdataUpdateFeedback,
     setupAdminMediaRenamer,
     setupAdminMetadataOrganizer,
-} from './gallery-modules/admin-operations.js?v=20260812-deferred-maintenance-v2';
+} from './gallery-modules/admin-operations.js?v=20260815-upload-zip-import-v1';
 
 /**
  * Runs a setup callback after the DOM is ready.

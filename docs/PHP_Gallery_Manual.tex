@@ -738,6 +738,8 @@ Filesystem discovery is useful when photographs have already been copied to the 
 
 Browser upload is the friendliest choice for routine work. Select the destination, choose files, and follow the progress display. Large sets can be prepared in bounded groups so the browser and server remain responsive. The application checks the destination and file information before accepting each result.
 
+When browser-assisted upload is enabled, the chooser also accepts ZIP archives such as an iCloud Photos export. The browser inspects the archive locally, adds supported JPEG, PNG, WebP, and GIF images to the ordinary preparation queue, and skips folders, hidden metadata, and unsupported entries. The selected ZIP itself is never uploaded to PHP. Stored and Deflate archives are supported; encrypted, multi-disk, ZIP64, damaged, suspiciously compressed, or excessively large archives fail safely before any server-side upload begins. Keep browser-assisted upload checked when selecting a ZIP because this convenience is intentionally unavailable in the classic PHP upload path.
+
 \section{Thumbnail generation and public rendering}
 \label{sec:thumbnails}
 \index{thumbnails}

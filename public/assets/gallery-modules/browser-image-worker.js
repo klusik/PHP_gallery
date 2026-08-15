@@ -59,6 +59,18 @@ self.addEventListener('message', (event) => {
         });
         return;
     }
+    if (action === 'extractUploadZip') {
+        extractUploadZipEntries(payload.zipBlob, payload.limits || {}).then((result) => {
+            self.postMessage({ok: true, id: payload.id, result});
+        }).catch((error) => {
+            self.postMessage({
+                ok: false,
+                id: payload.id,
+                error: error instanceof Error ? error.message : String(error),
+            });
+        });
+        return;
+    }
     if (action === 'prepareRebuildImage') {
         processRebuildImage(payload).catch((error) => {
             self.postMessage({
@@ -926,6 +938,132 @@ async function parseStoreOnlyZipBlob(zipBlob) {
         throw new Error('ZIP manifest is missing.');
     }
     return {manifest, entries};
+}
+
+/**
+ * Extract supported images from a standard user-selected ZIP archive.
+ *
+ * Central-directory sizes are authoritative, so data descriptors do not make
+ * entry boundaries ambiguous. Unsupported and unsafe entries are counted and
+ * skipped instead of being sent to the server.
+ *
+ * @param {Blob} zipBlob User-selected ZIP payload.
+ * @param {Record<string, *>} limits Bounded extraction limits.
+ * @return {Promise<{entries: Array<Record<string, *>>, skipped: number, totalEntries: number}>} Extraction result.
+ */
+async function extractUploadZipEntries(zipBlob, limits) {
+    if (!(zipBlob instanceof Blob)) throw new Error('ZIP extraction expected a Blob payload.');
+    const maximumEntries = Math.max(1, Math.min(Number(limits.maximumEntries || 10000), 10000));
+    const maximumEntryBytes = Math.max(1, Number(limits.maximumEntryBytes || 64 * 1024 * 1024));
+    const maximumTotalBytes = Math.max(maximumEntryBytes, Math.min(Number(limits.maximumTotalBytes || 2 * 1024 * 1024 * 1024), 2 * 1024 * 1024 * 1024));
+    const end = await findZipEndRecord(zipBlob);
+    if (end.entryCount > maximumEntries) throw new Error(`ZIP contains too many entries (${end.entryCount}; maximum ${maximumEntries}).`);
+    const centralBlob = zipBlob.slice(end.centralOffset, end.centralOffset + end.centralSize);
+    const centralBytes = new Uint8Array(await centralBlob.arrayBuffer());
+    const centralView = new DataView(centralBytes.buffer);
+    const entries = [];
+    let skipped = 0;
+    let totalUncompressed = 0;
+    let offset = 0;
+    for (let index = 0; index < end.entryCount; index++) {
+        if (offset + 46 > centralBytes.length || centralView.getUint32(offset, true) !== 0x02014b50) throw new Error('ZIP central directory is truncated or invalid.');
+        const flags = centralView.getUint16(offset + 8, true);
+        const method = centralView.getUint16(offset + 10, true);
+        const expectedCrc = centralView.getUint32(offset + 16, true);
+        const compressedSize = centralView.getUint32(offset + 20, true);
+        const uncompressedSize = centralView.getUint32(offset + 24, true);
+        const nameLength = centralView.getUint16(offset + 28, true);
+        const extraLength = centralView.getUint16(offset + 30, true);
+        const commentLength = centralView.getUint16(offset + 32, true);
+        const localOffset = centralView.getUint32(offset + 42, true);
+        const nextOffset = offset + 46 + nameLength + extraLength + commentLength;
+        if (nextOffset > centralBytes.length) throw new Error('ZIP central-directory entry boundary is invalid.');
+        const path = decodeUploadZipName(centralBytes.slice(offset + 46, offset + 46 + nameLength), (flags & 0x0800) !== 0);
+        offset = nextOffset;
+        if (!safeUploadZipImagePath(path) || (flags & 0x0001) !== 0 || ![0, 8].includes(method)) {
+            skipped++;
+            continue;
+        }
+        if ([compressedSize, uncompressedSize, localOffset].includes(0xffffffff) || uncompressedSize <= 0 || uncompressedSize > maximumEntryBytes) {
+            skipped++;
+            continue;
+        }
+        if (uncompressedSize > compressedSize * 250 + 1024 * 1024) {
+            skipped++;
+            continue;
+        }
+        totalUncompressed += uncompressedSize;
+        if (totalUncompressed > maximumTotalBytes) throw new Error('ZIP expanded data exceeds the browser extraction safety limit.');
+        const payload = await extractUploadZipPayload(zipBlob, localOffset, compressedSize, uncompressedSize, method);
+        const payloadBytes = new Uint8Array(await payload.arrayBuffer());
+        if (crc32(payloadBytes) !== expectedCrc || !detectImageFormatFromSignature(payloadBytes.slice(0, 16))) {
+            skipped++;
+            continue;
+        }
+        entries.push({name: uploadZipBasename(path), path, blob: new Blob([payloadBytes])});
+    }
+    return {entries, skipped, totalEntries: end.entryCount};
+}
+
+/** Locate and validate the classic single-disk ZIP end record. */
+async function findZipEndRecord(zipBlob) {
+    const tailLength = Math.min(zipBlob.size, 65557);
+    const tail = new Uint8Array(await zipBlob.slice(zipBlob.size - tailLength).arrayBuffer());
+    const view = new DataView(tail.buffer);
+    for (let offset = tail.length - 22; offset >= 0; offset--) {
+        if (view.getUint32(offset, true) !== 0x06054b50) continue;
+        const disk = view.getUint16(offset + 4, true);
+        const centralDisk = view.getUint16(offset + 6, true);
+        const diskEntries = view.getUint16(offset + 8, true);
+        const entryCount = view.getUint16(offset + 10, true);
+        const centralSize = view.getUint32(offset + 12, true);
+        const centralOffset = view.getUint32(offset + 16, true);
+        if (disk !== 0 || centralDisk !== 0 || diskEntries !== entryCount) throw new Error('Multi-disk ZIP archives are not supported.');
+        if (entryCount === 0xffff || centralSize === 0xffffffff || centralOffset === 0xffffffff) throw new Error('ZIP64 archives are not supported by browser upload yet.');
+        if (centralOffset + centralSize > zipBlob.size) throw new Error('ZIP central-directory boundary is invalid.');
+        return {entryCount, centralSize, centralOffset};
+    }
+    throw new Error('ZIP end record was not found. The archive may be damaged.');
+}
+
+/** Decode a ZIP path using UTF-8 or the browser's legacy Western fallback. */
+function decodeUploadZipName(bytes, utf8) {
+    try {
+        return new TextDecoder(utf8 ? 'utf-8' : 'windows-1252', {fatal: utf8}).decode(bytes).replace(/\\/g, '/');
+    } catch (error) {
+        return '';
+    }
+}
+
+/** Return whether an archive path is safe and has a supported image suffix. */
+function safeUploadZipImagePath(path) {
+    const normalized = String(path || '').replace(/^\/+/, '');
+    if (normalized === '' || normalized.endsWith('/') || normalized.includes('\0')) return false;
+    const segments = normalized.split('/');
+    if (segments.some((segment) => segment === '' || segment === '.' || segment === '..' || segment.startsWith('.')) || segments[0] === '__MACOSX') return false;
+    return /\.(?:jpe?g|png|webp|gif)$/i.test(normalized);
+}
+
+/** Return only the final safe filename component of an archive path. */
+function uploadZipBasename(path) {
+    return String(path || '').split('/').pop() || 'archive-image';
+}
+
+/** Extract and optionally inflate one central-directory-described ZIP entry. */
+async function extractUploadZipPayload(zipBlob, localOffset, compressedSize, uncompressedSize, method) {
+    const header = new Uint8Array(await zipBlob.slice(localOffset, localOffset + 30).arrayBuffer());
+    if (header.length !== 30 || new DataView(header.buffer).getUint32(0, true) !== 0x04034b50) throw new Error('ZIP local header is invalid.');
+    const view = new DataView(header.buffer);
+    const dataStart = localOffset + 30 + view.getUint16(26, true) + view.getUint16(28, true);
+    if (dataStart + compressedSize > zipBlob.size) throw new Error('ZIP entry payload boundary is invalid.');
+    const compressed = zipBlob.slice(dataStart, dataStart + compressedSize);
+    let payload = compressed;
+    if (method === 8) {
+        if (!self.DecompressionStream) throw new Error('This browser cannot decompress Deflate ZIP entries.');
+        payload = await new Response(compressed.stream().pipeThrough(new DecompressionStream('deflate-raw'))).blob();
+    }
+    if (payload.size !== uncompressedSize) throw new Error('ZIP entry expanded to an unexpected size.');
+    return payload;
 }
 
 /**

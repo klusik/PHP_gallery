@@ -1,4 +1,11 @@
 {
+  "admin.upload.browser_zip_help": "You may also select ZIP archives. Supported images are extracted locally; other entries are skipped. ZIP import never uses the PHP fallback.",
+  "admin.browser_upload.extracting_archives": "Inspecting selected ZIP archives in the browser...",
+  "admin.browser_upload.log_extracting_zip": "Inspecting ZIP: {name} ({bytes}).",
+  "admin.browser_upload.log_extracted_zip": "ZIP {name}: added {added} supported image(s), skipped {skipped} other entry or entries.",
+  "admin.browser_upload.zip_browser_required": "ZIP import requires the browser-assisted upload path and a compatible browser.",
+  "admin.browser_upload.zip_extract_failed": "The selected ZIP archive could not be read.",
+  "admin.browser_upload.zip_no_supported_images": "No supported images were found in the selected ZIP archives.",
   "_language_name": "English",
   "admin.account.before_save": "Before you save:",
   "admin.account.before_save_help": "Current password is required when changing username, recovery email, or password. This protects the account if an admin session is left open.",

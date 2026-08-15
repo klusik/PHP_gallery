@@ -23,6 +23,10 @@ The repository uses current direct PHP regression tests under `tests/`. Run the 
 php tests/run.php
 ```
 
+Browser ZIP-import changes must additionally verify stored and Deflate archives, nested image paths, mixed supported and unsupported entries, empty archives, damaged central directories, encrypted/ZIP64 archives, traversal names, hidden `__MACOSX` metadata, oversized entries, expansion-ratio limits, duplicate filenames, and a ZIP selected while browser-assisted upload is unchecked or unsupported. The archive itself must never reach the classic PHP upload request; extracted valid images must still use the existing browser preparation, batching, server validation, thumbnail, and Admin side-panel progress pipeline.
+
+Run `node tests/browser_upload_zip_worker_test.mjs` for the generated stored/Deflate mixed-archive worker fixture. Node is a development-only test convenience; it is not required by the deployed PHP application.
+
 Run one focused test directly when diagnosing a failure:
 
 ```bash

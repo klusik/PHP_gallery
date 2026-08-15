@@ -626,7 +626,15 @@ function render_admin_upload_browser_checkbox(bool $panelMode = false): void
     $disabled = empty($config['enabled']);
     $checked = $disabled ? '' : ' checked';
     $className = $panelMode ? 'admin-side-panel-browser-upload-toggle' : 'browser-upload-toggle';
-    echo '<label class="' . e($className) . '"><input type="checkbox" name="browser_client_upload" value="1" data-browser-upload-toggle data-browser-upload-config="' . e($encodedConfig) . '"' . $checked . ($disabled ? ' disabled' : '') . '> <span>' . e(t('admin.upload.browser_client_upload_label', 'Prepare thumbnails and ZIP batches in this browser')) . '</span><span class="muted">' . e(t('admin.upload.browser_client_upload_help', 'Checked by default. If browser preparation fails before any server-side write starts, the upload automatically uses the normal server fallback. Uncheck this to use the standard server-side upload path immediately.')) . '</span></label>';
+    echo '<label class="' . e($className) . '"><input type="checkbox" name="browser_client_upload" value="1" data-browser-upload-toggle data-browser-upload-config="' . e($encodedConfig) . '"' . $checked . ($disabled ? ' disabled' : '') . '> <span>' . e(t('admin.upload.browser_client_upload_label', 'Prepare thumbnails and ZIP batches in this browser')) . '</span><span class="muted">' . e(t('admin.upload.browser_client_upload_help', 'Checked by default. If browser preparation fails before any server-side write starts, the upload automatically uses the normal server fallback. Uncheck this to use the standard server-side upload path immediately.')) . '</span><span class="muted">' . e(t('admin.upload.browser_zip_help', 'You may also select ZIP archives. Supported images are extracted locally; other entries are skipped. ZIP import never uses the PHP fallback.')) . '</span></label>';
+}
+
+/** Return image accept hints plus ZIP only when browser-assisted upload is enabled. */
+function admin_browser_upload_accept_value(): string
+{
+    $accept = admin_upload_accept_value();
+    $config = function_exists('Gallery\\Services\\browser_upload_browser_config') ? browser_upload_browser_config() : ['enabled' => false];
+    return !empty($config['enabled']) ? $accept . ',.zip,application/zip,application/x-zip-compressed' : $accept;
 }
 
 /**
@@ -638,7 +646,7 @@ function render_admin_upload_browser_checkbox(bool $panelMode = false): void
 function render_admin_upload_existing_gallery_form(int $prefillGalleryId, bool $panelMode = false): void
 {
     // $acceptValue stores an intermediate value used by the surrounding gallery workflow.
-    $acceptValue = admin_upload_accept_value();
+    $acceptValue = admin_browser_upload_accept_value();
     if ($panelMode) {
         echo '<section class="admin-side-panel-card admin-side-panel-upload-card"><div class="admin-side-panel-card-heading"><div><p class="admin-kicker">' . e(t('admin.upload.existing_gallery', 'Existing gallery')) . '</p><h3>' . e(t('admin.upload.upload_existing_title', 'Upload into an existing gallery')) . '</h3></div><p class="muted">' . e(t('admin.upload.upload_existing_help', 'Choose a gallery and upload photos without leaving the drawer.')) . '</p></div><form method="post" action="' . e(url_for('admin_upload')) . '" enctype="multipart/form-data" class="admin-side-panel-form" data-gallery-upload-form data-gallery-panel-close-on-success="1">' . csrf_field();
         echo '<input type="hidden" name="panel" value="1">';
@@ -693,7 +701,7 @@ function render_admin_upload_new_gallery_panel_form(int $prefillParentId): void
 function render_admin_upload_new_gallery_form_shell(int $prefillParentId, bool $panelMode): void
 {
     // $acceptValue stores an intermediate value used by the surrounding gallery workflow.
-    $acceptValue = admin_upload_accept_value();
+    $acceptValue = admin_browser_upload_accept_value();
     if (!$panelMode) {
         echo '<section class="panel"><h2>' . e(t('admin.upload.create_and_upload_title', 'Create gallery and upload photos')) . '</h2>';
         echo '<form method="post" action="' . e(url_for('admin_upload')) . '" enctype="multipart/form-data" class="form-grid" data-gallery-upload-form>' . csrf_field();
