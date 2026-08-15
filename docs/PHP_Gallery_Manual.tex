@@ -1656,7 +1656,7 @@ The Theme area controls site identity, colors, dimensions, page width, backgroun
 \index{localization!language selection}
 \index{translation packs}
 
-PHP Gallery treats the language of the program interface separately from the text that you write yourself. Changing the interface language changes buttons, menu items, help text, status messages, dialogs, and other application wording. It does \emph{not} automatically translate gallery titles, gallery descriptions, photo descriptions, tags, or other content entered by the gallery owner.
+PHP Gallery treats the language of the program interface separately from the text that you write yourself. Changing the interface language changes buttons, menu items, help text, status messages, dialogs, and other application wording. Gallery and photo titles/descriptions can have optional maintained-language versions, but they are edited and saved separately; tags and other owner content remain unchanged.
 
 Open \ui{Theme > Language}. Two independent selectors are available:
 
@@ -1677,7 +1677,19 @@ The \ui{Viewer language selector design} editor offers five presets: \ui{Classic
 
 The flag files are stored under \filepath{public/assets/flags/} and are served by the gallery itself; the visitor's browser does not contact an external flag service. The artwork is pinned from \codeword{lipis/flag-icons} version 7.2.3 and is distributed under the bundled MIT license in \filepath{public/assets/flags/LICENSE.flag-icons.md}.
 
-When the viewer feature is enabled, the menu also provides \ui{Use site default}. This removes the visitor's personal override from both the current session and the browser cookie. The public interface then follows the administrator's \ui{Public visitor language} setting again, including any later change to that site-wide default. This preference changes application wording only; it does not change access permissions or translate owner-written gallery content.
+When the viewer feature is enabled, the menu also provides \ui{Use site default}. This removes the visitor's personal override from both the current session and the browser cookie. The public interface then follows the administrator's \ui{Public visitor language} setting again, including any later change to that site-wide default. This preference also selects matching saved gallery/photo title and description versions when available. It does not change access permissions, generate translations, or alter source content.
+
+\subsubsection{Multilingual gallery and photo text}
+\index{localization!gallery content}
+\index{localization!photo titles}
+
+Gallery and photo editors keep the existing title and description as source content. Use \ui{Language of the current title and description} to classify that text as English, Czech, German, Swedish, or leave it \ui{Not specified}. Existing installations are not automatically classified as English.
+
+Open \ui{Other languages} with the globe control to enter optional translated titles and descriptions. Gallery titles and descriptions fall back independently. A saved photo-language row is instead treated as one caption variant: blank fields remain hidden rather than mixing source-language text underneath translated photo text. Leaving both translated fields blank removes that language row. Saving occurs through the normal gallery/photo form and remains in the existing Admin side panel.
+
+Public pages use the viewer's selected maintained language. Matching text is shown on cards, gallery descriptions, photo overlays, lightbox metadata, search results, alt text, and SEO metadata. Missing gallery fields fall back to source content; a present photo caption variant displays only its saved translated fields. Translations do not change URLs, slugs, folders, filenames, ordering, visibility, passwords, NSFW rules, or media authorization.
+
+If OpenAI text assistance is configured, \ui{Suggest translation with OpenAI} sends the source field and inserts a reviewable draft in the target field. The draft is never saved or published automatically. Manual translation remains fully available without a provider.
 
 \subsubsection{Available languages and their current state}
 \index{language!English}

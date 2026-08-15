@@ -64,6 +64,8 @@ use function Gallery\Services\child_galleries_tree_preload;
 use function Gallery\Services\contained_tags_for_gallery;
 use function Gallery\Services\current_user_is_known_under_18;
 use function Gallery\Services\current_votes_for_images;
+use function Gallery\Services\content_localize_entities;
+use function Gallery\Services\content_localize_entity;
 use function Gallery\Services\feature_flag_enabled;
 use function Gallery\Services\find_gallery;
 use function Gallery\Services\find_gallery_by_folder_path;
@@ -142,6 +144,7 @@ use function Gallery\Services\render_public_render_profile_panel;
 use function Gallery\Services\resolve_public_gallery_path;
 use function Gallery\Services\site_name;
 use function Gallery\Services\t;
+use function Gallery\Services\translation_active_language;
 use function Gallery\Services\tags_for_entities;
 use function Gallery\Services\tags_for_entity;
 use function Gallery\Services\sort_public_hero_tag_groups;
@@ -305,6 +308,21 @@ function cms_gallery(): void
         // $images stores all rows only when the gallery grid explicitly has pagination disabled.
         $images = public_render_profile_db('gallery_image_full_query', static fn (): array => gallery_lightbox_fetch_images($gallery, $publicOnly, 0, null, false));
     }
+    // Resolve optional content overlays only after access policy and pagination have selected safe rows.
+    $contentLanguage = translation_active_language();
+    $gallery = content_localize_entity('gallery', $gallery, $contentLanguage);
+    $physicalChildrenForLocalization = array_values(array_filter($children, static fn (array $child): bool => empty($child['__smart_gallery'])));
+    $localizedChildrenById = [];
+    foreach (content_localize_entities('gallery', $physicalChildrenForLocalization, $contentLanguage) as $localizedChild) {
+        $localizedChildrenById[(int) ($localizedChild['id'] ?? 0)] = $localizedChild;
+    }
+    foreach ($children as &$child) {
+        if (empty($child['__smart_gallery']) && isset($localizedChildrenById[(int) ($child['id'] ?? 0)])) {
+            $child = $localizedChildrenById[(int) $child['id']];
+        }
+    }
+    unset($child);
+    $images = content_localize_entities('image', $images, $contentLanguage);
     // Variable $allImages stores only the visible image set for crawler metadata and social preview fallback.
     $allImages = $images;
     // Variable $imageIds stores this steps working value.
@@ -440,7 +458,13 @@ function cms_gallery(): void
         }
         render_public_page_reorder_toolbar('photo', $gallery, !empty($paginationSettings['enabled']) ? $photoPagination : [], count($images), $imageTotalCount);
         render_pagination_controls(!empty($paginationSettings['enabled']) ? $photoPagination : [], t('pagination.photo_pages', 'Photo pages'));
-        $lightboxEndpointParams = ['id' => (int) $gallery['id']];
+        // Pin lazy single-photo metadata to the same language as the rendered page.
+        // This avoids a direct-photo lightbox falling back to a stale/default
+        // session language while its server-rendered card is already localized.
+        $lightboxEndpointParams = [
+            'id' => (int) $gallery['id'],
+            'lang' => $contentLanguage,
+        ];
         if ($anonymousPreview) {
             $lightboxEndpointParams['view_as'] = 'anonymous';
         }

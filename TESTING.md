@@ -5,6 +5,12 @@ This guide applies to PHP Gallery Version 0.89.1. Release verification must incl
 ## Purpose
 This project is a plain PHP gallery CMS without a formal browser automation stack. The most reliable testing approach is a mix of fast syntax checks, focused script-level checks, and a repeatable manual smoke-test scenario that exercises the core gallery lifecycle.
 
+## Multilingual Content
+
+Run `php tests/content_localization_model_test.php`, `php tests/admin_content_localization_test.php`, `php tests/public_content_localization_test.php`, `php tests/openai_text_assist_model_test.php`, `php tests/public_language_preference_test.php`, `php tests/translation_catalog_consistency_test.php`, and `php tests/migration_consistency_test.php`.
+
+Coverage includes unclassified existing content, all maintained languages, invalid-language rejection, independent gallery-field fallback, non-mixed photo caption variants, blank-row deletion, batch/cache behavior, side-panel FormData ownership, access-before-localization ordering, server-rendered cards/lightbox/SEO, translated search terms, sidecar transfer, and review-only provider drafts. Translation behavior must not alter slugs, paths, ordering, filenames, visibility, access, NSFW, or media authorization. Finish with syntax checks for changed PHP files and `php tests/run.php`.
+
 ## Test Layers
 
 ### 1. Syntax Checks

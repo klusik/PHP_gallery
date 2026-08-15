@@ -755,6 +755,8 @@ manual now own the final rules; there is no release-time temporary phase roadmap
 
 PHP Gallery keeps English (`en`) as the canonical source language and the runtime fallback. English, Czech (`cs`), German (`de`), and Swedish (`sv`) are the currently maintained and selectable interface languages. All four catalogs are kept key-for-key complete.
 
+Gallery and photo titles/descriptions may be tagged with their source language and optionally translated into any maintained language. Existing text remains unchanged when unclassified. The viewer-language choice selects matching content where available. Gallery title and description fields fall back independently; a saved photo-language variant is treated as one caption and does not mix blank fields with source-language text. Other-language fields remain behind the language control in gallery and photo editors. Configured OpenAI text assistance can insert a reviewable translation draft; nothing is published until the normal editor form is saved.
+
 `app/services/translations.php` restricts language selection to the maintained set above. Additional JSON skeletons may remain under `app/lang/` for future translation work, but simply placing a file there does not make that language selectable. English remains the runtime fallback if a maintained translation ever lacks a key.
 
 Admin and public language choices are independent:

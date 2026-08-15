@@ -277,7 +277,8 @@ function public_gallery_metadata(array $gallery): array
     }
 
     // Variable $title stores this steps working value.
-    $title = trim((string) ($sidecar['title'] ?? ''));
+    $localized = isset($gallery['_content_localization']) && is_array($gallery['_content_localization']);
+    $title = $localized ? trim((string) ($gallery['title'] ?? '')) : trim((string) ($sidecar['title'] ?? ''));
     if ($title === '') {
         // $title stores an intermediate value used by the surrounding gallery workflow.
         $title = trim((string) ($gallery['title'] ?? ''));
@@ -288,7 +289,7 @@ function public_gallery_metadata(array $gallery): array
     }
 
     // Variable $description stores this steps working value.
-    $description = trim((string) ($sidecar['description'] ?? ''));
+    $description = $localized ? trim((string) ($gallery['description'] ?? '')) : trim((string) ($sidecar['description'] ?? ''));
     if ($description === '') {
         // $description stores an intermediate value used by the surrounding gallery workflow.
         $description = trim((string) ($gallery['description'] ?? ''));
@@ -336,6 +337,11 @@ function write_gallery_sidecar(array $gallery): void
         'voting_enabled' => (int) ($gallery['voting_enabled'] ?? 0),
         'show_filenames' => (int) ($gallery['show_filenames'] ?? 0),
     ];
+    if (content_localization_schema_ready('gallery')) {
+        $data['content_language'] = content_language_normalize($gallery['content_language'] ?? null);
+        $translationRows = content_translation_rows('gallery', [(int) $gallery['id']]);
+        $data['translations'] = $translationRows[(int) $gallery['id']] ?? [];
+    }
     if (gallery_date_schema_ready() && !empty($gallery['gallery_date'])) {
         $data['gallery_date'] = gallery_date_storage_value($gallery['gallery_date']);
     }
@@ -427,6 +433,8 @@ function gallery_folder_candidate_metadata(string $folderPath): array
         'folder_path' => $folderPath,
         'title' => $metadata['title'] ?? basename($folderPath),
         'description' => $metadata['description'] ?? '',
+        'content_language' => content_language_normalize($metadata['content_language'] ?? null),
+        'translations' => is_array($metadata['translations'] ?? null) ? $metadata['translations'] : [],
         'gallery_date' => gallery_date_schema_ready() ? gallery_date_sidecar_value($metadata['gallery_date'] ?? '') : null,
         'gallery_date_end' => gallery_date_range_schema_ready() ? gallery_date_sidecar_range_values($metadata['gallery_date'] ?? '', $metadata['gallery_date_end'] ?? '')['end'] : null,
         'visibility' => gallery_visibility_storage_value((string) ($metadata['visibility'] ?? 'unpublished')),
@@ -541,6 +549,10 @@ function create_gallery_row_for_folder(string $folderPath): ?array
         $columns[] = 'show_filenames';
         $values[] = $showFilenames;
     }
+    if (content_localization_schema_ready('gallery')) {
+        $columns[] = 'content_language';
+        $values[] = content_language_normalize($candidate['content_language'] ?? null);
+    }
     if (gallery_description_layout_schema_ready()) {
         $columns[] = 'description_layout';
         $values[] = $descriptionLayout;
@@ -597,8 +609,13 @@ function create_gallery_row_for_folder(string $folderPath): ?array
     $stmt = $pdo->prepare('INSERT INTO galleries (' . implode(', ', $columns) . ') VALUES (' . implode(', ', array_fill(0, count($columns), '?')) . ')');
     $stmt->execute($values);
 
+    $createdGalleryId = (int) $pdo->lastInsertId();
+    if (content_localization_schema_ready('gallery')) {
+        content_save_localizations('gallery', $createdGalleryId, $candidate['content_language'] ?? null, $candidate['translations'] ?? []);
+    }
+
     // Variable $gallery stores this steps working value.
-    $gallery = find_gallery((int) $pdo->lastInsertId());
+    $gallery = find_gallery($createdGalleryId);
     if ($gallery) {
         write_gallery_sidecar($gallery);
     }

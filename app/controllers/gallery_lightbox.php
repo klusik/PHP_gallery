@@ -43,6 +43,8 @@ use function Gallery\Core\image_public_url;
 use function Gallery\Core\url_for;
 use function Gallery\Services\current_user_is_known_under_18;
 use function Gallery\Services\current_votes_for_images;
+use function Gallery\Services\content_localize_entities;
+use function Gallery\Services\content_localize_entity;
 use function Gallery\Services\find_gallery;
 use function Gallery\Services\gallery_allows_gps_maps;
 use function Gallery\Services\gallery_lightbox_fetch_images;
@@ -55,6 +57,7 @@ use function Gallery\Services\public_image_display_title;
 use function Gallery\Services\public_render_profile_with_thumbnail_purpose;
 use function Gallery\Services\thumbnail_bundle;
 use function Gallery\Services\thumbnail_bundle_url;
+use function Gallery\Services\translation_active_language;
 use function Gallery\Services\visitor_can_access_gallery;
 use function Gallery\Services\visitor_can_access_nsfw_content;
 
@@ -142,6 +145,9 @@ function cms_gallery_lightbox_data(): void
     }
 
     $images = gallery_lightbox_fetch_images($gallery, $publicOnly, $offset, $limit, true);
+    $contentLanguage = translation_active_language();
+    $gallery = content_localize_entity('gallery', $gallery, $contentLanguage);
+    $images = content_localize_entities('image', $images, $contentLanguage);
     $imageIds = array_map(static fn (array $image): int => (int) $image['id'], $images);
     $votesById = current_votes_for_images($imageIds);
     $mapsAllowed = gallery_allows_gps_maps($gallery);

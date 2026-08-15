@@ -325,6 +325,11 @@ function gallery_migration_gallery_metadata(array $gallery): array
 
     $metadata['tags'] = function_exists('Gallery\\Services\\tag_names_for_entity') ? tag_names_for_entity('gallery', (int) ($gallery['id'] ?? 0)) : '';
     $metadata['cover_source_id'] = (int) ($gallery['cover_image_id'] ?? 0);
+    if (content_localization_schema_ready('gallery')) {
+        $metadata['content_language'] = content_language_normalize($gallery['content_language'] ?? null);
+        $translationRows = content_translation_rows('gallery', [(int) ($gallery['id'] ?? 0)]);
+        $metadata['translations'] = $translationRows[(int) ($gallery['id'] ?? 0)] ?? [];
+    }
     return $metadata;
 }
 
@@ -374,6 +379,11 @@ function gallery_migration_image_metadata(array $image): array
         if (array_key_exists($field, $image)) {
             $metadata[$field] = $image[$field];
         }
+    }
+    if (content_localization_schema_ready('image')) {
+        $metadata['content_language'] = content_language_normalize($image['content_language'] ?? null);
+        $translationRows = content_translation_rows('image', [(int) ($image['id'] ?? 0)]);
+        $metadata['translations'] = $translationRows[(int) ($image['id'] ?? 0)] ?? [];
     }
 
     return $metadata;
@@ -986,6 +996,9 @@ function gallery_migration_apply_gallery_metadata(int $targetGalleryId, array $m
 
     if (function_exists('Gallery\\Services\\sync_entity_tags')) {
         sync_entity_tags('gallery', $targetGalleryId, (string) ($metadata['tags'] ?? ''));
+    }
+    if (content_localization_schema_ready('gallery') && (array_key_exists('content_language', $metadata) || array_key_exists('translations', $metadata))) {
+        content_save_localizations('gallery', $targetGalleryId, $metadata['content_language'] ?? null, $metadata['translations'] ?? []);
     }
 }
 
@@ -1622,6 +1635,7 @@ function gallery_migration_upsert_image_metadata(int $targetGalleryId, array $im
         'filename' => basename($relativePath),
         'title' => (string) ($imageManifest['title'] ?? pathinfo($relativePath, PATHINFO_FILENAME)),
         'description' => (string) ($imageManifest['description'] ?? ''),
+        'content_language' => content_language_normalize($imageManifest['content_language'] ?? null),
         'width' => (int) ($imageManifest['width'] ?? $info['width'] ?? 0),
         'height' => (int) ($imageManifest['height'] ?? $info['height'] ?? 0),
         'mime_type' => (string) ($imageManifest['mime_type'] ?? $info['mime'] ?? ''),
@@ -1682,6 +1696,9 @@ function gallery_migration_upsert_image_metadata(int $targetGalleryId, array $im
 
     if (function_exists('Gallery\\Services\\sync_entity_tags')) {
         sync_entity_tags('image', $imageId, (string) ($imageManifest['tags'] ?? ''));
+    }
+    if (content_localization_schema_ready('image') && (array_key_exists('content_language', $imageManifest) || array_key_exists('translations', $imageManifest))) {
+        content_save_localizations('image', $imageId, $imageManifest['content_language'] ?? null, $imageManifest['translations'] ?? []);
     }
 
     return $imageId;

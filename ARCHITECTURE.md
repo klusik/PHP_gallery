@@ -104,6 +104,14 @@ app/controllers.php
 
 ## Localization Model
 
+### Multilingual gallery and photo content
+
+Interface catalogs and user-authored content localization are separate systems. `app/services/translations.php` remains the authority for maintained languages (`en`, `cs`, `de`, `sv`) and viewer preference. `app/services/content_localization.php` uses only that set for optional gallery/image title and description overlays.
+
+The base `galleries.title`, `galleries.description`, `images.title`, and `images.description` fields remain source content for compatibility. Nullable `content_language` columns classify that source without assuming English. `gallery_translations` and `image_translations` store one optional row per owner/language. Resolution is field-independent, so a translated title can use a source-description fallback.
+
+Public controllers localize only after access, visibility, NSFW, and pagination policy selects safe rows. Batch loading prevents per-card queries. Translations never affect slugs, paths, ordering, filenames, access policy, or media authorization. Admin forms keep source fields visible and put other maintained languages behind a disclosure. Configured OpenAI assistance inserts review-only drafts and never auto-saves.
+
 `app/services/translations.php` owns language normalization, pack discovery, request bootstrap, Admin/public language persistence, JSON editing support, key fallback, interpolation, and missing-key diagnostics.
 
 English (`en`) is the canonical source, configured default, and runtime fallback. English, Czech (`cs`), German (`de`), and Swedish (`sv`) are the maintained selectable languages and their JSON catalogs are kept key-for-key complete. Other `app/lang` JSON skeletons may remain in the repository for future work, but pack discovery does not grant selectability. The selectable-language allowlist is intentionally limited to `en`, `cs`, `de`, and `sv`; missing keys still resolve from English defensively.

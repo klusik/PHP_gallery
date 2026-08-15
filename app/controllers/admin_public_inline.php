@@ -74,7 +74,10 @@ use function Gallery\Services\tag_names_for_entity;
 use function Gallery\Services\thumbnail_bound_pair_from_post;
 use function Gallery\Services\thumbnail_bounds_schema_ready;
 use function Gallery\Services\thumbnail_url;
+use function Gallery\Services\content_localization_schema_ready;
+use function Gallery\Services\content_save_localizations;
 use function Gallery\Views\view_render_admin_openai_text_assist_tool;
+use function Gallery\Views\view_render_content_localization_fields;
 
 /**
  * Handles cms admin public update gallery logic for the gallery application.
@@ -294,6 +297,15 @@ function cms_admin_edit_image(): void
     }
     if (request_method() === 'POST') {
         verify_csrf();
+        $shouldUpdateLocalization = array_key_exists('content_language', $_POST) || array_key_exists('translations', $_POST);
+        if ($shouldUpdateLocalization && !content_localization_schema_ready('image')) {
+            if (admin_wants_json()) {
+                admin_panel_error_response(t('admin.content_localization.save_unavailable', 'Multilingual content was not saved because its database migration is unavailable.'), 503);
+                return;
+            }
+            flash_message('admin_notice', t('admin.content_localization.save_unavailable', 'Multilingual content was not saved because its database migration is unavailable.'));
+            redirect_to(url_for('admin_edit_image', ['id' => $image['id']]));
+        }
         if (isset($_POST['editorial_rating'])) {
             smart_gallery_assert_mutation_ready('image.editorial_rating');
         }
@@ -331,6 +343,9 @@ function cms_admin_edit_image(): void
         // Variable $stmt stores this steps working value.
         $stmt = db()->prepare('UPDATE images SET ' . implode(', ', array_keys($fields)) . ' WHERE id = ?');
         $stmt->execute(array_merge(array_values($fields), [(int) $image['id']]));
+        if ($shouldUpdateLocalization) {
+            content_save_localizations('image', (int) $image['id'], $_POST['content_language'] ?? null, $_POST['translations'] ?? []);
+        }
         sync_entity_tags('image', (int) $image['id'], (string) ($_POST['tags'] ?? ''));
         if (public_path_schema_ready()) {
             regenerate_public_paths();
@@ -350,6 +365,7 @@ function cms_admin_edit_image(): void
     echo '<input type="hidden" name="id" value="' . (int) $image['id'] . '">';
     echo '<label>' . e(t('admin.gallery_editor.title', 'Title')) . '<input name="title" value="' . e($image['title']) . '"></label>';
     echo '<label>' . e(t('admin.gallery_editor.description', 'Description')) . '<textarea name="description" data-openai-description-textarea>' . e($image['description']) . '</textarea></label>';
+    view_render_content_localization_fields('image', $image);
     if (function_exists('Gallery\\Views\\view_render_admin_openai_text_assist_tool')) {
         view_render_admin_openai_text_assist_tool((int) ($image['gallery_id'] ?? 0), (int) $image['id'], 'image');
     }

@@ -171,6 +171,7 @@ use function Gallery\Views\view_render_admin_metric_grid;
 use function Gallery\Views\view_render_admin_openai_text_assist_tool;
 use function Gallery\Views\view_render_admin_simbrief_description_tool;
 use function Gallery\Views\view_render_admin_tab_intro;
+use function Gallery\Views\view_render_content_localization_fields;
 use function Gallery\Services\admin_log_event;
 
 /**
@@ -536,6 +537,7 @@ function cms_admin_edit_gallery(): void
     }
     echo '<label>' . e(t('admin.gallery_editor.description', 'Description')) . '<textarea name="description" data-gallery-description-textarea data-openai-description-textarea>' . e($gallery['description']) . '</textarea></label>';
     render_gallery_description_formatting_hint();
+    view_render_content_localization_fields('gallery', $gallery);
     render_admin_simbrief_description_tool((int) $gallery['id']);
     if ((!function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('openai_text_assist')) && function_exists('Gallery\\Views\\view_render_admin_openai_text_assist_tool')) {
         view_render_admin_openai_text_assist_tool((int) $gallery['id'], 0, 'gallery');
@@ -863,4 +865,3 @@ function cms_admin_edit_gallery(): void
     render_admin_devmode_panel();
     render_footer();
 }
-

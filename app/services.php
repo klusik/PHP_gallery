@@ -53,6 +53,8 @@ require_once __DIR__ . '/services/schema_inspection.php';
 require_once __DIR__ . '/services/mutation_schema_policy.php';
 // Load optional presentation schema policy before render/report feature services.
 require_once __DIR__ . '/services/presentation_schema_policy.php';
+// Load multilingual content resolution before gallery/image readers and public renderers.
+require_once __DIR__ . '/services/content_localization.php';
 // Load public render profiling helpers before public gallery services can record timings.
 require_once __DIR__ . '/services/public_render_profiler.php';
 // Load admin render profiling helpers before admin controllers can record dashboard timings.

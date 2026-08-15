@@ -1675,3 +1675,43 @@ body.has-admin-side-panel {
         grid-template-columns: 1fr;
     }
 }
+
+.admin-content-localization {
+    display: grid;
+    gap: 12px;
+    grid-column: 1 / -1;
+}
+
+.admin-content-source-language {
+    max-width: 520px;
+}
+
+.admin-content-translations {
+    border: 1px solid var(--border, #d8d2c8);
+    border-radius: 12px;
+    background: var(--surface, #fff);
+}
+
+.admin-content-translations > summary {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding: 12px 14px;
+    cursor: pointer;
+    font-weight: 700;
+}
+
+.admin-content-translation-list {
+    display: grid;
+    gap: 12px;
+    padding: 0 14px 14px;
+}
+
+.admin-content-translation {
+    display: grid;
+    gap: 10px;
+    margin: 0;
+    padding: 12px;
+    border: 1px solid var(--border, #d8d2c8);
+    border-radius: 10px;
+}

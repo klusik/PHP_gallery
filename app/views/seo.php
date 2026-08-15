@@ -51,6 +51,8 @@ use function Gallery\Services\public_render_profile_with_thumbnail_purpose;
 use function Gallery\Services\public_sitemap_image_last_modified;
 use function Gallery\Services\public_sitemap_lastmod;
 use function Gallery\Services\site_name;
+use function Gallery\Services\content_language_og_locale;
+use function Gallery\Services\translation_active_language;
 use function Gallery\Services\thumbnail_url;
 
 /**
@@ -103,7 +105,7 @@ function view_render_public_seo_tags(array $gallery, array $images = []): void
     view_render_meta_tag('property', 'og:description', $description);
     view_render_meta_tag('property', 'og:url', $canonical);
     view_render_meta_tag('property', 'og:site_name', site_name());
-    view_render_meta_tag('property', 'og:locale', 'cs_CZ');
+    view_render_meta_tag('property', 'og:locale', content_language_og_locale(translation_active_language()));
     if ($previewImage !== null) {
         view_render_meta_tag('property', 'og:image', $previewImage['url']);
         view_render_meta_tag('property', 'og:image:url', $previewImage['url']);

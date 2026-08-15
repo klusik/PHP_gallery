@@ -4,6 +4,12 @@ This document describes the database schema used by PHP Gallery as of applicatio
 
 ## Database Engine
 
+### Multilingual content
+
+Migration `202608150001_multilingual_content.php` adds nullable `content_language` tags to `galleries` and `images`, plus `gallery_translations` and `image_translations`. Existing titles/descriptions are not copied or reclassified; null means the source language is unspecified. Translation tables use owner/language unique keys and cascading foreign keys. Nullable title and description fields permit independent fallback, and rows with both fields blank are removed.
+
+Base fields remain the compatibility/source representation. Additional-language rows never affect slugs, filesystem paths, ordering, visibility, passwords, NSFW policy, or media authorization. Gallery sidecars may contain validated `content_language` and `translations` data; unsupported language keys are ignored by persistence normalization.
+
 The migrations target MySQL or MariaDB through PDO.
 
 Default table options used by migrations:
