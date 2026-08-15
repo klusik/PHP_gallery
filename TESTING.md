@@ -710,6 +710,12 @@ That makes regressions easier to track and helps future changes focus on the hig
 5. Verify only the detector fragment refreshes in place, the deleted photo disappears immediately, and a group with only one surviving member is removed.
 6. Repeat from a result belonging to a nested subgallery and, separately, from **Search all galleries** scope.
 7. Refresh the underlying gallery afterward and verify the deleted image remains deleted and no unrelated image was removed.
+### Smart Galleries
+
+Run `php tests/smart_gallery_rules_test.php` and `php tests/run.php`. Manually create a tag-plus-rating collection, preview and publish it, verify multiple pages, then move one image between three and five stars and confirm membership changes immediately. Test nested logic, deleted references, query-string and clean URLs, search conversion, and inaccessible matching images. Logged-out counts and cards must exclude private, locked, unpublished, share-only, and otherwise inaccessible source galleries.
+
+Test all placement modes: unlisted must remain absent from listings; root must participate in homepage pagination; gallery mode must participate in every selected physical gallery's child pagination. Attach the same Smart Gallery beneath multiple physical galleries, remove it from one, and verify the other assignments remain intact. Disabled or private Smart Galleries must remain absent regardless of placement.
+
 ### Public language preference
 
 ```powershell

@@ -158,6 +158,8 @@ require_once __DIR__ . '/services/navigation_data.php';
 require_once __DIR__ . '/services/picture_game.php';
 require_once __DIR__ . '/services/tags.php';
 require_once __DIR__ . '/services/public_search.php';
+// Load versioned Smart Gallery rules after tags, search, and gallery access helpers.
+require_once __DIR__ . '/services/smart_galleries.php';
 require_once __DIR__ . '/services/flight_maps.php';
 require_once __DIR__ . '/services/exif.php';
 require_once __DIR__ . '/services/admin_gallery_report.php';

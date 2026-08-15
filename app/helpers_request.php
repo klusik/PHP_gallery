@@ -336,6 +336,10 @@ function sanitize_login_return_target(string $target, string $fallback = ''): st
  */
 function url_for(string $page, array $params = []): string
 {
+    if ($page === 'smart_gallery' && isset($params['slug']) && url_rewrite_should_emit_clean_urls()) {
+        $pageNumber = max(1, (int) ($params['photo_page'] ?? 1));
+        return base_url('smart/' . rawurlencode((string) $params['slug']) . ($pageNumber > 1 ? '/' . $pageNumber : ''));
+    }
     if ($page === 'tag' && isset($params['slug']) && count($params) === 1 && url_rewrite_should_emit_clean_urls()) {
         return base_url('tag/' . rawurlencode((string) $params['slug']));
     }

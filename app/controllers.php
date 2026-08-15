@@ -80,3 +80,5 @@ require_once __DIR__ . '/controllers/admin_diagnostics.php';
 require_once __DIR__ . '/controllers/picture_game.php';
 require_once __DIR__ . '/controllers/tags.php';
 require_once __DIR__ . '/controllers/exif.php';
+// Load Smart Gallery Admin and public routes after the shared gallery controllers.
+require_once __DIR__ . '/controllers/smart_galleries.php';

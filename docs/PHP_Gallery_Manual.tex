@@ -2317,6 +2317,16 @@ Updater-created backups preserve overwritten application files for update recove
 \section{References}
 \label{sec:references}
 
+\section{Smart Galleries}
+
+A Smart Gallery is a saved query, not a folder. Open \textbf{Admin > Galleries > Smart Galleries}, add conditions, and combine them with nested \textbf{AND}, \textbf{OR}, and \textbf{NOT} groups. Fields cover source galleries and descendants, tags, capture dates, EXIF/GPS, text, AI metadata, duplicate state, file characteristics, and private editorial ratings.
+
+Use \textbf{Preview count}, save, and optionally publish. Images and files remain in their physical galleries, so metadata or rating changes alter membership immediately. The editorial rating is private and independent from visitor voting. Administrators may also use \textbf{Save search as Smart Gallery} from public search.
+
+Choose \textbf{Unlisted} for URL-only access, \textbf{Root gallery} to show the Smart Gallery on the homepage, or \textbf{Subgallery placement} to keep it off the homepage while allowing physical galleries to list it. Each physical gallery editor contains a Smart Gallery checklist. The same virtual gallery may be selected beneath any number of physical galleries, and removing one placement does not disturb the others. The Smart Gallery editor's \textbf{Used in physical galleries} section lists every attachment, links to each physical gallery editor, and provides an independent \textbf{Hide from here} action. It must still be enabled and published before visitors see its card.
+
+Public results and counts always intersect rules with access to the physical source gallery. Query-string routes work without rewriting and clean \texttt{/smart/<slug>} URLs are optional. Rules are readable versioned JSON, never user SQL: fields/operators are allowlisted, values are prepared parameters, depth is limited to five, and no more than 50 conditions are accepted. Deleted references match nothing and malformed or unknown rule versions fail safely. The normal migration workflow adds storage and ratings; no metadata rebuild is required.
+
 \begin{thebibliography}{99}
 
 \bibitem{readme}

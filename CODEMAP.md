@@ -470,3 +470,11 @@ dynamically, not test one known table identity.
 3. Apply CSS through dynamic variables or `public/assets/styles.css`.
 4. Use asset routes for uploaded theme images.
 5. Update `ARCHITECTURE.md` if a new theme concept is introduced.
+
+### Smart Galleries
+
+- `database/migrations/202608140001_smart_galleries.php`: definition storage, ratings, and focused indexes.
+- `app/services/smart_galleries.php`: schema capability, rule validation/compiler, summaries, CRUD, access intersection, pagination queries, search conversion, and rating writer.
+- `app/controllers/smart_galleries.php`: Admin management/preview and published route.
+- `public/assets/gallery-modules/admin-smart-galleries.js`: nested visual rule editor.
+- `tests/smart_gallery_rules_test.php`: validation, nesting, version, injection, and compiler contracts.

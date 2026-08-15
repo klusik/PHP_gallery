@@ -155,6 +155,9 @@ use function Gallery\Services\scan_gallery_images;
 use function Gallery\Services\store_uploaded_gallery_branding_asset;
 use function Gallery\Services\store_uploaded_gallery_cover;
 use function Gallery\Services\sync_entity_tags;
+use function Gallery\Services\smart_galleries_all;
+use function Gallery\Services\smart_gallery_assign_children_to_gallery;
+use function Gallery\Services\smart_gallery_schema_ready;
 use function Gallery\Services\t;
 use function Gallery\Services\tag_names_for_entity;
 use function Gallery\Services\thumbnail_bound_pair_from_post;
@@ -361,6 +364,9 @@ function cms_admin_edit_gallery(): void
         try {
             // $saveResult stores the shared gallery save outcome used by both page and panel workflows.
             $saveResult = admin_save_gallery_from_input($gallery, $_POST, $_FILES, $returnTab, true);
+            if (isset($_POST['smart_gallery_children_present'])) {
+                smart_gallery_assign_children_to_gallery((int) $gallery['id'], (array) ($_POST['smart_gallery_children'] ?? []));
+            }
         } catch (Throwable $exception) {
             if (admin_wants_json()) {
                 admin_panel_error_response($exception->getMessage());
@@ -538,6 +544,21 @@ function cms_admin_edit_gallery(): void
     echo '<div class="admin-edit-card"><label>' . e(t('admin.gallery_editor.slug', 'Slug')) . '<input name="slug" value="' . e($gallery['slug']) . '" autocomplete="off" required><span class="muted">' . e(t('admin.gallery_editor.slug_help', 'Used in the public gallery URL.')) . '</span></label><label>' . e(t('admin.gallery_editor.folder_name', 'Folder name')) . '<input name="folder_name" value="' . e(gallery_folder_name_from_path((string) $gallery['folder_path'])) . '" autocomplete="off" required><span class="muted">' . e(t('admin.gallery_editor.folder_rename_help', 'Changing this renames the folder on disk.')) . '</span></label></div>';
     echo '<div class="admin-edit-card"><label>' . e(t('admin.gallery_editor.parent_gallery', 'Parent gallery')) . '<select name="parent_id"><option value="0">' . e(t('admin.gallery_editor.no_parent', 'No parent')) . '</option>' . gallery_parent_options($gallery) . '</select></label><label>' . e(t('admin.gallery_editor.sort_order', 'Sort order')) . '<input name="sort_order" type="number" value="' . (int) $gallery['sort_order'] . '"></label></div>';
     echo '<div class="admin-edit-card is-wide"><label>' . e(t('admin.gallery_editor.tags', 'Tags')) . '<input name="tags" value="' . e(tag_names_for_entity('gallery', (int) $gallery['id'])) . '" list="tag-suggestions" data-tag-input' . admin_weighted_tag_suggestions_attribute((int) $gallery['id']) . '><span class="muted">' . e(t('admin.gallery_editor.tags_help', 'Separate tags with commas. Suggested tags are ranked by nearby galleries, images, and folder context.')) . '</span></label></div>';
+    if (smart_gallery_schema_ready()) {
+        $smartGalleryDefinitions = smart_galleries_all();
+        echo '<div class="admin-edit-card is-wide"><input type="hidden" name="smart_gallery_children_present" value="1"><h3>' . e(t('smart_gallery.children_title', 'Smart Gallery subgalleries')) . '</h3><p class="muted">' . e(t('smart_gallery.children_help', 'Select virtual galleries that should appear beneath this physical gallery. A Smart Gallery can be attached beneath multiple galleries.')) . '</p>';
+        if (!$smartGalleryDefinitions) {
+            echo '<p class="muted">' . e(t('smart_gallery.children_empty', 'No Smart Galleries exist yet.')) . '</p>';
+        } else {
+            echo '<div class="admin-smart-gallery-child-list">';
+            foreach ($smartGalleryDefinitions as $smartDefinition) {
+                $assignedHere = ($smartDefinition['placement_mode'] ?? '') === 'gallery' && in_array((int) $gallery['id'], (array) ($smartDefinition['placement_gallery_ids'] ?? []), true);
+                echo '<label class="checkbox-label"><input type="checkbox" name="smart_gallery_children[]" value="' . (int) $smartDefinition['id'] . '"' . ($assignedHere ? ' checked' : '') . '> <span><strong>' . e((string) $smartDefinition['title']) . '</strong><small>' . e(($smartDefinition['visibility'] ?? '') === 'public' && !empty($smartDefinition['enabled']) ? t('smart_gallery.public', 'Published') : t('smart_gallery.not_public', 'Not publicly visible')) . '</small></span></label>';
+            }
+            echo '</div>';
+        }
+        echo '</div>';
+    }
     echo '</div>';
     render_tag_datalist();
     render_admin_tab_panel('admin-edit-identity', (string) ob_get_clean(), $activeEditTab === 'admin-edit-identity');

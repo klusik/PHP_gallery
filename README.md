@@ -858,6 +858,16 @@ If you lose the admin password and can't log in:
 2. Check rewrite module: `apache2ctl -M | grep rewrite`
 3. Query-string routes always work (fallback): `?page=gallery&slug=...`
 
+## Smart Galleries
+
+Smart Galleries are saved, dynamic image queries. Create one from **Admin > Galleries > Smart Galleries**, combine conditions with nested **AND**, **OR**, and **NOT** groups, preview its current count, then optionally publish it. Images stay in their original galleries and filesystem locations; changing metadata or the private 1–5-star editorial rating changes membership immediately.
+
+Published Smart Galleries use `?page=smart_gallery&slug=...` everywhere and `/smart/<slug>` when clean URLs are enabled. Results are database-paginated and include only images whose physical galleries the current visitor may access. Editorial ratings are separate from public voting. Logged-in administrators can use **Save search as Smart Gallery** on public text search results.
+
+Placement can remain **Unlisted** for URL-only sharing, appear as a **Root gallery** on the homepage, or use **Subgallery placement**. In subgallery mode, administrators may attach the same Smart Gallery beneath any number of physical galleries from those galleries' editors. The Smart Gallery editor lists every current attachment with a direct parent-editor link and an independent **Hide from here** control. Placement never bypasses the enabled and published requirements.
+
+Deleted gallery/tag references retain their stable numeric identity and safely match nothing until repaired.
+
 ## Support & Resources
 
 - **Source Code:** https://github.com/klusik/PHP_gallery

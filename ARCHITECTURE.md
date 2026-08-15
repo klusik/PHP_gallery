@@ -1428,6 +1428,14 @@ For small changes, the agent should first inspect `CODEMAP.md` and only open the
 
 After any structural change, update these docs in the same patch.
 
+## Smart Gallery Architecture
+
+`app/services/smart_galleries.php` owns the versioned rule format, allowlisted catalog, limits, parameterized SQL compiler, persistence, count, and paginated queries. Search conversion produces the same representation. Public queries intersect compiled rules with gallery IDs accepted by `visitor_can_access_gallery()` and public image visibility. Returned rows keep their physical `gallery_id`, so existing thumbnail, media, and authorization services remain authoritative.
+
+There is no membership table or synchronization job. `images.editorial_rating` is private metadata and remains independent from `image_votes`. Three-state schema inspection guards reads and refuses writes when Smart Gallery storage is missing or unknown.
+
+Placement uses `placement_mode` for listing intent and `smart_gallery_placements` for many-to-many physical parents. `unlisted` retains URL-only access, `root` joins homepage gallery pagination, and `gallery` may join any number of physical galleries' direct child pagination. Editing one physical gallery replaces only that parent's junction rows transactionally, so the same Smart Gallery can remain attached elsewhere.
+
 ## Release Documentation
 
 Patch note formatting is standardized in `PATCH_NOTES_TEMPLATE.md`. AI coding agents and maintainers should use it when preparing new `PATCH_NOTES.md` entries so releases keep consistent structure, technical references, filename citation style, and user impact descriptions.

@@ -67,6 +67,8 @@ use function Gallery\Services\public_path_schema_ready;
 use function Gallery\Services\regenerate_public_paths;
 use function Gallery\Services\render_admin_thumbnail_bound_slider;
 use function Gallery\Services\sync_entity_tags;
+use function Gallery\Services\smart_gallery_assert_mutation_ready;
+use function Gallery\Services\smart_gallery_schema_ready;
 use function Gallery\Services\t;
 use function Gallery\Services\tag_names_for_entity;
 use function Gallery\Services\thumbnail_bound_pair_from_post;
@@ -292,6 +294,9 @@ function cms_admin_edit_image(): void
     }
     if (request_method() === 'POST') {
         verify_csrf();
+        if (isset($_POST['editorial_rating'])) {
+            smart_gallery_assert_mutation_ready('image.editorial_rating');
+        }
         if (!empty($_POST['nsfw_field_present']) && !nsfw_guard_schema_ready()) {
             if (str_contains((string) ($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json')) {
                 admin_panel_error_response(admin_nsfw_guard_mutation_error(), 503);
@@ -309,6 +314,10 @@ function cms_admin_edit_image(): void
             'visibility = ?' => $visibility,
             'sort_order = ?' => (int) $_POST['sort_order'],
         ];
+        if (isset($_POST['editorial_rating'])) {
+            $rating = max(0, min(5, (int) $_POST['editorial_rating']));
+            $fields['editorial_rating = ?'] = $rating > 0 ? $rating : null;
+        }
         if (nsfw_guard_schema_ready()) {
             $fields['nsfw_enabled = ?'] = !empty($_POST['nsfw_enabled']) ? 1 : 0;
         }
@@ -350,6 +359,13 @@ function cms_admin_edit_image(): void
         echo '<p class="muted">' . e(t('admin.gallery_editor.photo_nsfw_help', 'When enabled, anonymous visitors must confirm they are 18+ before this photo, thumbnail, or original media file is served. Before using NSFW content, please verify that your hosting provider or web hosting plan permits it, as adult content may violate their policies.')) . '</p>';
     }
     echo '<label>' . e(t('admin.gallery_editor.sort_order', 'Sort order')) . '<input name="sort_order" type="number" value="' . (int) $image['sort_order'] . '"></label>';
+    if (smart_gallery_schema_ready()) {
+        echo '<label>' . e(t('smart_gallery.editorial_rating', 'Editorial rating')) . '<select name="editorial_rating"><option value="0">' . e(t('smart_gallery.unrated', 'Unrated')) . '</option>';
+        for ($ratingOption = 1; $ratingOption <= 5; $ratingOption++) {
+            echo '<option value="' . $ratingOption . '"' . ((int) ($image['editorial_rating'] ?? 0) === $ratingOption ? ' selected' : '') . '>' . e(t('smart_gallery.rating_stars', '{count} stars', ['count' => $ratingOption])) . '</option>';
+        }
+        echo '</select><span class="muted">' . e(t('smart_gallery.rating_private_help', 'Private editorial metadata used by Smart Gallery rules; unrelated to visitor voting.')) . '</span></label>';
+    }
     if (thumbnail_bounds_schema_ready()) {
         render_admin_thumbnail_bound_slider('image_thumbnail', isset($image['thumbnail_min_size']) ? (int) $image['thumbnail_min_size'] : null, isset($image['thumbnail_max_size']) ? (int) $image['thumbnail_max_size'] : null, t('admin.gallery_editor.thumbnail_bounds_title', 'Responsive thumbnail quality bounds'), t('admin.gallery_editor.thumbnail_bounds_help', 'Optional per-photo guardrails. These can override gallery-level guardrails when the public selection logic is wired in the next step.'));
     } else {

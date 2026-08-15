@@ -995,6 +995,14 @@ Uses public gallery and image rows plus derived filesystem timestamps. Current s
 
 Uses `images` and filesystem-derived thumbnail inventory. Thumbnail files are derived artifacts and should be regenerated rather than treated as source truth.
 
+## Smart Galleries and editorial ratings
+
+Migration `202608140001_smart_galleries.php` adds `smart_galleries` and nullable `images.editorial_rating`. Definitions contain title, unique slug, description, versioned `rules_json`, rule version, enabled/public state, allowlisted sorting, and timestamps. No image membership is duplicated. The public index covers `(enabled, visibility, title)`; the rating lookup index covers `(editorial_rating, gallery_id, visibility)`.
+
+Rule version 1 contains `version` and `root`. Nodes are boolean groups (`AND`, `OR`, or single-child `NOT`) or conditions containing an allowlisted field/operator/value. The maximum depth is five and maximum condition count is 50. Missing stable references and malformed/unknown versions fail safely.
+
+Migration `202608140002_smart_gallery_placement.php` introduces the `unlisted`, `root`, and `gallery` listing modes. Migration `202608140003_smart_gallery_multiple_placements.php` adds the `smart_gallery_placements` junction table and migrates existing single-parent assignments. Each `(smart_gallery_id, gallery_id)` pair is unique; deleting either record removes its junction rows through foreign-key cascades. A gallery-mode Smart Gallery may be attached beneath any number of physical galleries.
+
 ## Migration Authoring Guidelines
 
 Use this pattern for future migration files:
