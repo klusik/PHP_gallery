@@ -136,7 +136,7 @@ async function generateOpenAITextSuggestion(tool, button) {
 
     const targetSelector = String(tool.dataset.openaiTargetSelector || '[data-gallery-description-textarea], [data-openai-description-textarea]').trim();
     const textarea = form.querySelector(targetSelector);
-    if (!(textarea instanceof HTMLTextAreaElement)) {
+    if (!(textarea instanceof HTMLTextAreaElement) && !(textarea instanceof HTMLInputElement)) {
         setOpenAIStatus(tool, i18n('admin.openai.js_missing_textarea', 'The description field could not be found.'), true);
         return;
     }
@@ -144,6 +144,13 @@ async function generateOpenAITextSuggestion(tool, button) {
     const task = String(tool.querySelector('[data-openai-task]')?.value || 'gallery_description').trim();
     const language = String(tool.querySelector('[data-openai-language]')?.value || 'auto').trim();
     const currentText = textarea.value.trim();
+    const sourceSelector = String(tool.dataset.openaiSourceSelector || '').trim();
+    const sourceField = sourceSelector !== '' ? form.querySelector(sourceSelector) : textarea;
+    const sourceText = sourceField instanceof HTMLTextAreaElement || sourceField instanceof HTMLInputElement ? sourceField.value.trim() : '';
+    if (task === 'translate_text' && sourceText === '') {
+        setOpenAIStatus(tool, i18n('admin.openai.js_translation_requires_text', 'Add source text before requesting a translation suggestion.'), true);
+        return;
+    }
     if ((task === 'cleanup_text' || task === 'expand_text') && currentText === '') {
         setOpenAIStatus(tool, i18n('admin.openai.js_requires_text', 'This action needs existing description text first.'), true);
         return;
@@ -167,7 +174,7 @@ async function generateOpenAITextSuggestion(tool, button) {
     const body = buildOpenAIBaseBody(tool, form);
     body.set('task', task);
     body.set('language', language);
-    body.set('text', textarea.value);
+    body.set('text', task === 'translate_text' ? sourceText : textarea.value);
     body.set('title', String(form.querySelector('input[name="title"]')?.value || ''));
 
     button.disabled = true;

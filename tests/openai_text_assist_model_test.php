@@ -118,7 +118,9 @@ assert_openai_text_assist_same(true, openai_text_assist_task_uses_images('galler
 assert_openai_text_assist_same(false, openai_text_assist_task_uses_images('cleanup_text'), 'cleanup task does not use images');
 assert_openai_text_assist_same('cs', openai_text_assist_normalize_language('cs-CZ'), 'Czech language normalization');
 assert_openai_text_assist_same('en', openai_text_assist_normalize_language('en_US'), 'English language normalization');
-assert_openai_text_assist_same('auto', openai_text_assist_normalize_language('de'), 'unsupported language fallback');
+assert_openai_text_assist_same('de', openai_text_assist_normalize_language('de'), 'German language normalization');
+assert_openai_text_assist_same('sv', openai_text_assist_normalize_language('sv-SE'), 'Swedish language normalization');
+assert_openai_text_assist_same('auto', openai_text_assist_normalize_language('fr'), 'unsupported language fallback');
 assert_openai_text_assist_contains('Write the final output in Czech', openai_text_assist_language_instruction('cs'), 'Czech language instruction');
 
 $context = [
@@ -164,6 +166,7 @@ assert_openai_text_assist_contains('parent-gallery summary', $summaryPrompt['ins
 assert_openai_text_assist_contains('Hory', $summaryPrompt['input'], 'subgallery title in prompt input');
 
 $cleanupPrompt = openai_text_assist_prompt('cleanup_text', $context, 'bad txt');
+assert_openai_text_assist_contains('Translate the existing text faithfully', openai_text_assist_prompt('translate_text', $context, 'Ahoj', 'de')['instructions'], 'Translation draft instruction');
 assert_openai_text_assist_same(900, $cleanupPrompt['max_output_tokens'], 'cleanup token bound');
 
 $visualPrompt = openai_text_assist_prompt('image_visual_description', $context + [

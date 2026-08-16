@@ -567,7 +567,7 @@ function openai_text_assist_text_limit(string $value, int $limit): string
 function openai_text_assist_normalize_task(string $task): string
 {
     $task = strtolower(trim($task));
-    $allowed = ['gallery_description', 'gallery_summary', 'image_description', 'image_visual_description', 'gallery_visual_description', 'cleanup_text', 'expand_text'];
+    $allowed = ['gallery_description', 'gallery_summary', 'image_description', 'image_visual_description', 'gallery_visual_description', 'cleanup_text', 'expand_text', 'translate_text'];
     return in_array($task, $allowed, true) ? $task : 'gallery_description';
 }
 
@@ -605,6 +605,16 @@ function openai_text_assist_language_catalog(): array
             'label' => openai_text_assist_t('admin.openai.language_en', 'English'),
             'flag' => '🇬🇧',
             'instruction' => 'Write the final output in English.',
+        ],
+        'de' => [
+            'label' => openai_text_assist_t('admin.openai.language_de', 'German'),
+            'flag' => '🇩🇪',
+            'instruction' => 'Write the final output in German.',
+        ],
+        'sv' => [
+            'label' => openai_text_assist_t('admin.openai.language_sv', 'Swedish'),
+            'flag' => '🇸🇪',
+            'instruction' => 'Write the final output in Swedish.',
         ],
     ];
 }
@@ -684,6 +694,7 @@ function openai_text_assist_prompt(string $task, array $context, string $existin
         'gallery_visual_description' => 'Write a concise gallery description in one or two short paragraphs based on the provided gallery thumbnails. Describe the overall theme and visible content without pretending to have seen more photos than were supplied.',
         'cleanup_text' => 'Clean up spelling, grammar, punctuation, and readability. Preserve meaning and keep roughly the same length.',
         'expand_text' => 'Rewrite the existing text into a richer but still compact gallery description. Preserve meaning and avoid unsupported claims.',
+        'translate_text' => 'Translate the existing text faithfully into the requested output language. Preserve names, meaning, tone, paragraph structure, and basic Markdown. Return only the translation.',
     ];
 
     $promptContext = $context;
@@ -706,7 +717,7 @@ function openai_text_assist_prompt(string $task, array $context, string $existin
     return [
         'instructions' => $baseInstructions . "\n" . $taskInstructions[$task],
         'input' => openai_text_assist_text_limit($encoded, OPENAI_TEXT_ASSIST_MAX_CONTEXT_CHARS),
-        'max_output_tokens' => $task === 'cleanup_text' ? 900 : 1200,
+        'max_output_tokens' => in_array($task, ['cleanup_text', 'translate_text'], true) ? 900 : 1200,
     ];
 }
 

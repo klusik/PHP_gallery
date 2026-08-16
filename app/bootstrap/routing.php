@@ -160,6 +160,13 @@ function cms_route_from_request(): array
     if ($segments[0] === 'tag' && isset($segments[1])) {
         return ['page' => 'tag', 'params' => ['slug' => rawurldecode($segments[1])]];
     }
+    if ($segments[0] === 'smart' && isset($segments[1])) {
+        $params = ['slug' => rawurldecode($segments[1])];
+        if (isset($segments[2]) && preg_match('/^[0-9]+$/', $segments[2]) === 1) {
+            $params['photo_page'] = max(1, (int) $segments[2]);
+        }
+        return ['page' => 'smart_gallery', 'params' => $params];
+    }
     if ($segments[0] === 'admin') {
         return ['page' => 'admin', 'params' => []];
     }

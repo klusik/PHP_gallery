@@ -1,5 +1,104 @@
 # Patch notes
 
+## Version 0.90
+
+Version 0.90 is a gallery organization, upload convenience, and multilingual-content release. It introduces dynamic Smart Galleries built from secure nested rules, lets browser-assisted uploads consume ordinary photo ZIP exports without server-side archive extraction, and adds optional translated gallery and photo titles/descriptions for every maintained viewer language. Existing physical galleries, source files, access rules, source metadata, and public voting remain authoritative and compatible.
+
+  ### Highlights
+
+  #### Dynamic Smart Galleries
+
+  - Added saved virtual galleries whose membership is evaluated from current image and gallery metadata without copying image records or moving files.
+  - Added a non-technical nested rule builder with bounded `AND`, `OR`, and `NOT` groups, validation diagnostics, human-readable summaries, result counts, preview controls, duplication, enable/disable, publication, and deletion workflows.
+  - Added filters for physical gallery membership and descendants, direct and inherited tags, capture dates, EXIF and GPS data, titles/descriptions/filenames/searchable text, AI metadata, duplicate state, file characteristics, and private editorial ratings.
+  - Added private administrator 0–5-star editorial ratings as a Smart Gallery criterion without changing or exposing public visitor voting.
+  - Added deterministic database pagination and sorting, stable query-string and clean URLs, existing public gallery cards and lightbox behavior, and automatic membership changes when source metadata or ratings change.
+  - Added unlisted, homepage-root, and physical-subgallery placement modes. One Smart Gallery can appear beneath multiple physical galleries; administrators can manage placements from either side and hide one placement without affecting the others.
+  - Added **Save search as Smart Gallery** for compatible public-search state while keeping the structured rule format independent from raw SQL.
+
+  #### Secure public virtual collections
+
+  - Intersected every public Smart Gallery result and count with the existing physical-gallery access policy so private, locked, unpublished, share-only, NSFW-restricted, or otherwise inaccessible source images cannot leak through a published virtual collection.
+  - Compiled only server-allowlisted fields and operators into parameterized SQL; submitted values never become SQL identifiers, operators, or fragments.
+  - Limited rule depth and condition counts, used stable IDs for gallery/tag references, and made deleted references, malformed JSON, unsupported rule versions, and disabled/private definitions fail safely.
+  - Reused existing thumbnail, metadata, voting, lightbox, responsive-layout, clean/query-string routing, and no-JavaScript infrastructure instead of creating a second gallery renderer.
+
+  #### Browser-local ZIP photo import
+
+  - Extended browser-assisted gallery upload inputs to accept user ZIP archives such as iCloud Photos exports.
+  - Added local extraction for classic single-disk ZIPs using stored and Deflate compression. Supported JPEG, PNG, WebP, and GIF entries join the ordinary browser preparation and bounded upload-batch pipeline.
+  - Kept the selected archive in the browser: the ZIP itself is never posted to PHP, and classic PHP upload remains unchanged.
+  - Skipped folders, hidden macOS metadata, unsupported media, encrypted entries, unsupported compression, corrupt payloads, and unsafe paths while validating signatures and CRC values for accepted images.
+  - Rejected traversal, malformed boundaries, multi-disk/ZIP64 archives, excessive entry counts, oversized expansion, and suspicious compression ratios before server upload.
+  - Added translated extraction progress and actionable failure messages to all maintained Admin catalogs.
+
+  #### Multilingual gallery and photo content
+
+  - Added optional source-language classification and translated title/description variants for galleries and photographs in English, Czech, German, and Swedish.
+  - Kept base title and description fields as the compatibility/source representation. Existing content is not reclassified or rewritten during migration.
+  - Added compact **Other languages** controls to the existing gallery and photo editors, including dynamically rendered Admin side panels and their in-place AJAX save behavior.
+  - Applied the viewer's browser-local language choice to public galleries, subgallery cards, photo cards, direct-photo pages, lazy lightbox payloads, SEO metadata, structured data, accessible alternative text, and public search results.
+  - Used independent title/description fallback for galleries while treating a saved translated photo caption as one variant, preventing accidental mixed-language photo captions.
+  - Preserved translations and source-language metadata through gallery sidecars and gallery migration packages.
+  - Added optional OpenAI translation drafts that populate reviewable editor fields but never publish or save automatically.
+  - Kept language selection separate from access control, slugs, filesystem paths, filenames, ordering, visibility, passwords, NSFW policy, and media authorization.
+
+  ### Technical Details
+
+  #### Backend and rule engine
+
+  - Added `app/services/smart_galleries.php` as the centralized versioned rule validator, field/operator registry, parameterized SQL compiler, query/count service, CRUD owner, placement service, readable-summary generator, and search conversion boundary.
+  - Added `app/controllers/smart_galleries.php` for Admin management, JSON/AJAX preview and placement actions, public routing, and safe unavailable-state handling.
+  - Updated public routing, cards, home/gallery pagination, lightbox loading, search, and Admin gallery editing to reuse Smart Gallery presentation and reverse-placement controls.
+  - Added bounded Admin log context for Smart Gallery success, validation failure, and placement operations without logging raw SQL, credentials, tokens, or private paths.
+  - Extended mutation-schema policy so Smart Gallery and rating writes require conclusively available storage before any persistent mutation; confirmed missing or unknown schema refuses the write with migration guidance.
+
+  #### Multilingual service and rendering
+
+  - Added `app/services/content_localization.php` for maintained-language normalization, three-state schema readiness, batched loading, request-local caching, fallback resolution, validation, and canonical persistence.
+  - Updated gallery/photo Admin save paths, public renderers, SEO, lazy lightbox metadata, search, sidecars, gallery migration, and OpenAI text assistance to use the centralized localization model.
+  - Preserved access checks before localized content loading and avoided public N+1 translation queries through batched presentation overlays.
+
+  #### Database
+
+  - Added `database/migrations/202608140001_smart_galleries.php` with `smart_galleries`, versioned rule storage, visibility/sorting indexes, and nullable indexed `images.editorial_rating`.
+  - Added `database/migrations/202608140002_smart_gallery_placement.php` with root/gallery/unlisted placement state and legacy single-parent linkage.
+  - Added `database/migrations/202608140003_smart_gallery_multiple_placements.php` with the `smart_gallery_placements` junction table and an idempotent copy of existing single-gallery placements.
+  - Added `database/migrations/202608150001_multilingual_content.php` with nullable source-language columns plus unique, indexed, cascading `gallery_translations` and `image_translations` tables.
+  - Kept upgrade work metadata-only: no image movement, Smart Gallery membership synchronization, translation backfill, or image metadata rebuild is required.
+
+  #### Frontend and localization
+
+  - Added `public/assets/gallery-modules/admin-smart-galleries.js` and supporting CSS for delegated nested-rule editing, dynamic Admin fragments, previews, and in-place placement controls.
+  - Extended the existing browser upload worker with validated ZIP central-directory parsing and extraction, then reused the established image worker pool and prepared-batch endpoint.
+  - Updated browser-module cache-busting imports so deployed clients load the Smart Gallery, multilingual editor, and ZIP-import behavior immediately.
+  - Added every new Admin/public string to the synchronized English, Czech, German, and Swedish catalogs with English fallback preserved.
+
+  #### Tests and release artifacts
+
+  - Added focused Smart Gallery rule, Boolean logic, SQL-injection, access-intersection, pagination, CRUD, placement, missing-reference, malformed-version, and rendering contracts in `tests/smart_gallery_rules_test.php`.
+  - Added `tests/browser_upload_zip_worker_test.mjs` with generated stored/Deflate fixtures and unsafe, unsupported, encrypted, and corrupt entries; extended browser-upload static contracts to prohibit PHP fallback for ZIP selections.
+  - Added `tests/content_localization_model_test.php`, `tests/admin_content_localization_test.php`, and `tests/public_content_localization_test.php`; extended OpenAI, migration, search, rendering, and language-preference coverage.
+  - Verified all 62 registered PHP regression scripts, focused Node browser fixtures, PHP/JavaScript syntax, translation alignment, migration compatibility, function documentation, updater safety, and deployment packaging contracts for the release candidate.
+  - Updated `README.md`, `ARCHITECTURE.md`, `CODEMAP.md`, `DATABASE.md`, `TESTING.md`, `docs/LATEX_BUILD.md`, and `docs/PHP_Gallery_Manual.tex`; rebuilt the indexed PDF manual for Version 0.90.
+  - Expanded the documented release workflow with migration ordering, cache-busting, complete Node/PHP checks, archive inventory, cross-artifact version agreement, annotated tagging, and previous-version updater smoke testing.
+  - Regenerated and verified `app/core-manifest.json` after the final Version 0.90 source and documentation edits.
+
+  ### User Impact
+
+  #### For visitors
+
+  - Published Smart Galleries behave like normal paginated collections while showing only photographs the current visitor may access.
+  - A viewer's existing browser-local language choice can now select matching gallery and photograph text without becoming an account or site-wide preference.
+  - Normal galleries, URLs, lightbox navigation, downloads, maps, voting, responsive thumbnails, and no-JavaScript behavior remain available under their existing policies.
+
+  #### For administrators
+
+  - Administrators can build and publish reusable dynamic collections, place them in multiple navigation locations, save compatible searches, and curate results with private ratings.
+  - iCloud-style ZIP exports can be selected directly in browser-assisted upload; supported photographs are extracted locally and unsupported entries are reported and skipped.
+  - Gallery and photo translations can be reviewed and saved in the existing editors, with optional AI drafts and predictable fallback behavior.
+  - Upgrading from Version 0.89.1 requires the normal migration run. No manual SQL, file movement, membership rebuild, or translation backfill is required.
+
 ## Version 0.89.1
 
 Version 0.89.1 is a focused automatic-update reliability patch for installations that should receive newly published stable releases without waiting several hours. It shortens the normal stable metadata-check interval to one hour while preserving GitHub rate-limit handling, resumable update jobs, safe package validation, and all 0.89 public-language and schema-safety behavior.

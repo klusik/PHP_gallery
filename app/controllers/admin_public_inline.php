@@ -67,12 +67,17 @@ use function Gallery\Services\public_path_schema_ready;
 use function Gallery\Services\regenerate_public_paths;
 use function Gallery\Services\render_admin_thumbnail_bound_slider;
 use function Gallery\Services\sync_entity_tags;
+use function Gallery\Services\smart_gallery_assert_mutation_ready;
+use function Gallery\Services\smart_gallery_schema_ready;
 use function Gallery\Services\t;
 use function Gallery\Services\tag_names_for_entity;
 use function Gallery\Services\thumbnail_bound_pair_from_post;
 use function Gallery\Services\thumbnail_bounds_schema_ready;
 use function Gallery\Services\thumbnail_url;
+use function Gallery\Services\content_localization_schema_ready;
+use function Gallery\Services\content_save_localizations;
 use function Gallery\Views\view_render_admin_openai_text_assist_tool;
+use function Gallery\Views\view_render_content_localization_fields;
 
 /**
  * Handles cms admin public update gallery logic for the gallery application.
@@ -292,6 +297,18 @@ function cms_admin_edit_image(): void
     }
     if (request_method() === 'POST') {
         verify_csrf();
+        $shouldUpdateLocalization = array_key_exists('content_language', $_POST) || array_key_exists('translations', $_POST);
+        if ($shouldUpdateLocalization && !content_localization_schema_ready('image')) {
+            if (admin_wants_json()) {
+                admin_panel_error_response(t('admin.content_localization.save_unavailable', 'Multilingual content was not saved because its database migration is unavailable.'), 503);
+                return;
+            }
+            flash_message('admin_notice', t('admin.content_localization.save_unavailable', 'Multilingual content was not saved because its database migration is unavailable.'));
+            redirect_to(url_for('admin_edit_image', ['id' => $image['id']]));
+        }
+        if (isset($_POST['editorial_rating'])) {
+            smart_gallery_assert_mutation_ready('image.editorial_rating');
+        }
         if (!empty($_POST['nsfw_field_present']) && !nsfw_guard_schema_ready()) {
             if (str_contains((string) ($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json')) {
                 admin_panel_error_response(admin_nsfw_guard_mutation_error(), 503);
@@ -309,6 +326,10 @@ function cms_admin_edit_image(): void
             'visibility = ?' => $visibility,
             'sort_order = ?' => (int) $_POST['sort_order'],
         ];
+        if (isset($_POST['editorial_rating'])) {
+            $rating = max(0, min(5, (int) $_POST['editorial_rating']));
+            $fields['editorial_rating = ?'] = $rating > 0 ? $rating : null;
+        }
         if (nsfw_guard_schema_ready()) {
             $fields['nsfw_enabled = ?'] = !empty($_POST['nsfw_enabled']) ? 1 : 0;
         }
@@ -322,6 +343,9 @@ function cms_admin_edit_image(): void
         // Variable $stmt stores this steps working value.
         $stmt = db()->prepare('UPDATE images SET ' . implode(', ', array_keys($fields)) . ' WHERE id = ?');
         $stmt->execute(array_merge(array_values($fields), [(int) $image['id']]));
+        if ($shouldUpdateLocalization) {
+            content_save_localizations('image', (int) $image['id'], $_POST['content_language'] ?? null, $_POST['translations'] ?? []);
+        }
         sync_entity_tags('image', (int) $image['id'], (string) ($_POST['tags'] ?? ''));
         if (public_path_schema_ready()) {
             regenerate_public_paths();
@@ -341,6 +365,7 @@ function cms_admin_edit_image(): void
     echo '<input type="hidden" name="id" value="' . (int) $image['id'] . '">';
     echo '<label>' . e(t('admin.gallery_editor.title', 'Title')) . '<input name="title" value="' . e($image['title']) . '"></label>';
     echo '<label>' . e(t('admin.gallery_editor.description', 'Description')) . '<textarea name="description" data-openai-description-textarea>' . e($image['description']) . '</textarea></label>';
+    view_render_content_localization_fields('image', $image);
     if (function_exists('Gallery\\Views\\view_render_admin_openai_text_assist_tool')) {
         view_render_admin_openai_text_assist_tool((int) ($image['gallery_id'] ?? 0), (int) $image['id'], 'image');
     }
@@ -350,6 +375,13 @@ function cms_admin_edit_image(): void
         echo '<p class="muted">' . e(t('admin.gallery_editor.photo_nsfw_help', 'When enabled, anonymous visitors must confirm they are 18+ before this photo, thumbnail, or original media file is served. Before using NSFW content, please verify that your hosting provider or web hosting plan permits it, as adult content may violate their policies.')) . '</p>';
     }
     echo '<label>' . e(t('admin.gallery_editor.sort_order', 'Sort order')) . '<input name="sort_order" type="number" value="' . (int) $image['sort_order'] . '"></label>';
+    if (smart_gallery_schema_ready()) {
+        echo '<label>' . e(t('smart_gallery.editorial_rating', 'Editorial rating')) . '<select name="editorial_rating"><option value="0">' . e(t('smart_gallery.unrated', 'Unrated')) . '</option>';
+        for ($ratingOption = 1; $ratingOption <= 5; $ratingOption++) {
+            echo '<option value="' . $ratingOption . '"' . ((int) ($image['editorial_rating'] ?? 0) === $ratingOption ? ' selected' : '') . '>' . e(t('smart_gallery.rating_stars', '{count} stars', ['count' => $ratingOption])) . '</option>';
+        }
+        echo '</select><span class="muted">' . e(t('smart_gallery.rating_private_help', 'Private editorial metadata used by Smart Gallery rules; unrelated to visitor voting.')) . '</span></label>';
+    }
     if (thumbnail_bounds_schema_ready()) {
         render_admin_thumbnail_bound_slider('image_thumbnail', isset($image['thumbnail_min_size']) ? (int) $image['thumbnail_min_size'] : null, isset($image['thumbnail_max_size']) ? (int) $image['thumbnail_max_size'] : null, t('admin.gallery_editor.thumbnail_bounds_title', 'Responsive thumbnail quality bounds'), t('admin.gallery_editor.thumbnail_bounds_help', 'Optional per-photo guardrails. These can override gallery-level guardrails when the public selection logic is wired in the next step.'));
     } else {

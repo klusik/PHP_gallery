@@ -55,6 +55,7 @@ function cms_dispatch_page(string $page): void
     $routes = [
         'home' => '\\Gallery\\Controllers\\cms_home',
         'gallery' => '\\Gallery\\Controllers\\cms_gallery',
+        'smart_gallery' => '\\Gallery\\Controllers\\cms_smart_gallery',
         'gallery_access' => '\\Gallery\\Controllers\\cms_gallery_access',
         'share' => '\\Gallery\\Controllers\\cms_share',
         'tag' => '\\Gallery\\Controllers\\cms_tag',
@@ -146,6 +147,7 @@ function cms_dispatch_page(string $page): void
         'admin_duplicate_photos' => '\\Gallery\\Controllers\\cms_admin_duplicate_photos',
         'admin_bulk_galleries' => '\\Gallery\\Controllers\\cms_admin_bulk_galleries',
         'admin_tags' => '\\Gallery\\Controllers\\cms_admin_tags',
+        'admin_smart_galleries' => '\\Gallery\\Controllers\\cms_admin_smart_galleries',
         'admin_run_migrations' => '\\Gallery\\Controllers\\cms_admin_run_migrations',
         'admin_update_navdata' => '\\Gallery\\Controllers\\cms_admin_update_navdata',
         'admin_navdata' => '\\Gallery\\Controllers\\cms_admin_navdata',
@@ -200,7 +202,7 @@ function cms_dispatch_page(string $page): void
     $handler = $routes[$page] ?? '\\Gallery\\Controllers\\cms_not_found';
     try {
         // Verify access/privacy policy before a sensitive controller can emit partial HTML, metadata, archives, or media bytes.
-        if (in_array($page, ['home', 'gallery', 'gallery_access', 'share', 'tag', 'sitemap', 'picture_game', 'media', 'thumb', 'public_media', 'public_thumb', 'thumbnail_warmup', 'gallery_cover_asset', 'gallery_branding_asset', 'vote', 'gallery_map_data', 'gallery_lightbox_data', 'public_search', 'download_gallery'], true)) {
+        if (in_array($page, ['home', 'gallery', 'smart_gallery', 'gallery_access', 'share', 'tag', 'sitemap', 'picture_game', 'media', 'thumb', 'public_media', 'public_thumb', 'thumbnail_warmup', 'gallery_cover_asset', 'gallery_branding_asset', 'vote', 'gallery_map_data', 'gallery_lightbox_data', 'public_search', 'download_gallery'], true)) {
             gallery_visibility_assert_public_policy_available();
             gallery_access_assert_public_policy_available();
             nsfw_guard_assert_public_policy_available();

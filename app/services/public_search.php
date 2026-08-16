@@ -291,6 +291,9 @@ function public_search_image_results(string $query, int $limit, ?array $contextG
     $aiJoin = $aiSearchReady ? 'LEFT JOIN image_ai_metadata image_ai ON image_ai.image_id = i.id' : '';
     $aiScoreSql = $aiSearchReady ? ', MAX(CASE WHEN image_ai.searchable_text LIKE ? THEN 14 ELSE 0 END) AS ai_score' : ', 0 AS ai_score';
     $aiWhereSql = $aiSearchReady ? ' OR image_ai.searchable_text LIKE ?' : '';
+    $contentLanguage = translation_active_language();
+    $localizedSearchReady = content_localization_schema_ready('image') && content_localization_schema_ready('gallery');
+    $localizedWhereSql = $localizedSearchReady ? ' OR EXISTS (SELECT 1 FROM image_translations content_image_translation WHERE content_image_translation.image_id = i.id AND content_image_translation.language_code = ? AND (content_image_translation.title LIKE ? OR content_image_translation.description LIKE ?)) OR EXISTS (SELECT 1 FROM gallery_translations content_gallery_translation WHERE content_gallery_translation.gallery_id = g.id AND content_gallery_translation.language_code = ? AND (content_gallery_translation.title LIKE ? OR content_gallery_translation.description LIKE ?))' : '';
     $sql = "SELECT i.*, g.id AS matched_gallery_id, g.parent_id AS matched_gallery_parent_id,
             g.folder_path AS matched_gallery_folder_path, g.folder_path_hash AS matched_gallery_folder_path_hash,
             g.slug AS matched_gallery_slug, g.title AS matched_gallery_title, g.description AS matched_gallery_description,
@@ -324,6 +327,7 @@ function public_search_image_results(string $query, int $limit, ?array $contextG
               OR g.title LIKE ? OR g.description LIKE ?
               OR gallery_tag.name LIKE ? OR gallery_tag.description LIKE ?
               $aiWhereSql
+              $localizedWhereSql
           )
         GROUP BY i.id
         ORDER BY exact_name_score DESC, name_score DESC, tag_score DESC, gallery_score DESC, ai_score DESC, i.filename ASC
@@ -336,13 +340,29 @@ function public_search_image_results(string $query, int $limit, ?array $contextG
     if ($aiSearchReady) {
         $whereParams[] = $like;
     }
+    if ($localizedSearchReady) {
+        array_push($whereParams, $contentLanguage, $like, $like, $contentLanguage, $like, $like);
+    }
     $params = array_merge($scoreParams, $contextParams, $whereParams);
     $stmt = db()->prepare($sql);
     $stmt->execute($params);
 
-    $results = [];
-    foreach ($stmt->fetchAll() as $row) {
+    $rows = $stmt->fetchAll();
+    $rows = content_localize_entities('image', $rows, $contentLanguage);
+    $galleries = [];
+    foreach ($rows as $row) {
         $gallery = public_search_gallery_from_image_row($row);
+        $galleries[(int) ($gallery['id'] ?? 0)] = $gallery;
+    }
+    $localizedGalleries = content_localize_entities('gallery', array_values($galleries), $contentLanguage);
+    $galleries = [];
+    foreach ($localizedGalleries as $localizedGallery) {
+        $galleries[(int) ($localizedGallery['id'] ?? 0)] = $localizedGallery;
+    }
+    $results = [];
+    foreach ($rows as $row) {
+        $galleryId = (int) ($row['matched_gallery_id'] ?? 0);
+        $gallery = $galleries[$galleryId] ?? public_search_gallery_from_image_row($row);
         $title = trim((string) ($row['title'] ?? ''));
         if ($title === '') {
             $title = (string) ($row['filename'] ?? t('search.untitled_photo', 'Untitled photo'));

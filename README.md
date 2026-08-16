@@ -2,7 +2,7 @@
 
 A modern PHP 8.0+ gallery CMS designed for ordinary shared hosting. The application uses the filesystem as the authoritative source for gallery structure, while storing all metadata, access rules, votes, user accounts, and audit logs in MySQL or MariaDB.
 
-**Current Version:** 0.89.1
+**Current Version:** 0.90
 
 **Key Benefit:** Deploy in minutes on shared hosting. No npm, no Composer, no framework overhead. Just PHP + MySQL.
 
@@ -127,7 +127,7 @@ Progressive rendering prioritizes perceived initial responsiveness, not minimum 
 - Progress bar for transfer and thumbnail generation
 - Immediate scanning after upload
 - Validation of file types and sizes
-- Optional browser-side preparation with client thumbnails, EXIF metadata, bounded ZIP batches, and server-side validation
+- Optional browser-side preparation with client thumbnails, EXIF metadata, bounded ZIP batches, and server-side validation; user-selected ZIP archives are unpacked locally and contribute only supported images
 - Automatic fallback to normal server-side uploads when browser preparation is unavailable
 
 #### Gallery Management
@@ -286,7 +286,7 @@ Use **Settings** in the Admin navigation as the central overview for important g
 
 The hub can directly edit only settings that already have a safe canonical service setter: site name, public language, URL rewrite, public search when available, the public thumbnail renderer, the global EXIF/GPS display default when its existing schema is ready, and development diagnostics. Theme layout, tag presentation, upload tuning, telemetry, Account credentials, language-pack editing, raw CSS, API keys, database tools and destructive maintenance remain on their existing specialized pages. Those pages remain fully supported and link back to the relevant Settings section.
 
-Version 0.89.1 is a focused automatic-update reliability patch. It checks stable release metadata at most once per hour instead of once every five hours, while respecting GitHub rate-limit and backoff responses. It also keeps the 0.89 configurable public viewer language selector, searchable Settings, and resumable updater behavior documented below.
+Version 0.90 adds dynamic Smart Galleries, browser-local ZIP photo import, and optional multilingual gallery and photo metadata. Administrators can publish securely filtered virtual collections without moving files, unpack ordinary iCloud-style ZIP exports directly in the browser, and save reviewed title/description translations for the maintained viewer languages. Existing installations upgrade through four ordered migrations and retain the hourly stable-update checks introduced in 0.89.1.
 
 Deep links use stable identifiers such as `?page=admin_settings&section=appearance#settings-appearance`. JavaScript tab changes update the complete query plus hash URL so Back/Forward and refresh preserve the selected section. Without JavaScript, the tab links load the same section as normal pages. See `docs/ADMIN_SETTINGS_INVENTORY.md` for canonical ownership, defaults, fallbacks, sensitivity and migration status.
 
@@ -755,6 +755,8 @@ manual now own the final rules; there is no release-time temporary phase roadmap
 
 PHP Gallery keeps English (`en`) as the canonical source language and the runtime fallback. English, Czech (`cs`), German (`de`), and Swedish (`sv`) are the currently maintained and selectable interface languages. All four catalogs are kept key-for-key complete.
 
+Gallery and photo titles/descriptions may be tagged with their source language and optionally translated into any maintained language. Existing text remains unchanged when unclassified. The viewer-language choice selects matching content where available. Gallery title and description fields fall back independently; a saved photo-language variant is treated as one caption and does not mix blank fields with source-language text. Other-language fields remain behind the language control in gallery and photo editors. Configured OpenAI text assistance can insert a reviewable translation draft; nothing is published until the normal editor form is saved.
+
 `app/services/translations.php` restricts language selection to the maintained set above. Additional JSON skeletons may remain under `app/lang/` for future translation work, but simply placing a file there does not make that language selectable. English remains the runtime fallback if a maintained translation ever lacks a key.
 
 Admin and public language choices are independent:
@@ -817,7 +819,7 @@ php tests/run.php
 
 ### Release preparation
 
-Release work is performed from a clean reviewable branch. Compare the branch with the previous release tag, update the runtime version, `release-metadata.json`, `PATCH_NOTES.md`, and the relevant documentation, then compile and inspect `docs/PHP_Gallery_Manual.pdf`. Run the complete regression suite, focused tests, PHP and JavaScript syntax checks, and `git diff --check`. Finally run `php scripts/generate_manifest.php` followed by `php scripts/generate_manifest.php --check`; the generated `app/core-manifest.json` must be included in any affected-files ZIP. The deployment helpers only collect files and create a folder or ZIP, so manifest generation and verification remain explicit release steps. See `TESTING.md` and `docs/LATEX_BUILD.md` for the authoritative checklist.
+Release work is performed from a clean reviewable branch. Compare the branch with the previous release tag, inspect every commit and changed path, and confirm new migrations are ordered, idempotent under the project runner, and included in upgrade coverage. Update the runtime version, `release-metadata.json`, `PATCH_NOTES.md`, documentation version markers, cache-busting browser imports, and all affected user/developer documentation. Compile and visually inspect `docs/PHP_Gallery_Manual.pdf`; run the complete regression suite, focused PHP/Node tests, PHP and JavaScript syntax checks, migration consistency checks, translation consistency, and `git diff --check`. Finally run `php scripts/generate_manifest.php` followed by `php scripts/generate_manifest.php --check`; the generated `app/core-manifest.json` must be included in every release package. Inspect the packaged tree and confirm its version, patch-note heading, release-metadata tag, migration set, manual edition, and manifest agree before creating the release commit and `v_<version>` tag. The deployment helpers only collect files and create a folder or ZIP, so manifest generation and verification remain explicit release steps. See `TESTING.md` and `docs/LATEX_BUILD.md` for the authoritative checklist.
 
 The runner currently executes 58 focused PHP tests covering gallery models, paths, migrations, uploads, thumbnails, public assets, URL rewrites, AI settings, schema policy, language settings, and updater safety. Individual scripts can still be run directly when isolating a behavior. The project intentionally has no Composer or PHPUnit dependency.
 
@@ -857,6 +859,16 @@ If you lose the admin password and can't log in:
 1. Verify Apache `.htaccess` support is enabled
 2. Check rewrite module: `apache2ctl -M | grep rewrite`
 3. Query-string routes always work (fallback): `?page=gallery&slug=...`
+
+## Smart Galleries
+
+Smart Galleries are saved, dynamic image queries. Create one from **Admin > Galleries > Smart Galleries**, combine conditions with nested **AND**, **OR**, and **NOT** groups, preview its current count, then optionally publish it. Images stay in their original galleries and filesystem locations; changing metadata or the private 1–5-star editorial rating changes membership immediately.
+
+Published Smart Galleries use `?page=smart_gallery&slug=...` everywhere and `/smart/<slug>` when clean URLs are enabled. Results are database-paginated and include only images whose physical galleries the current visitor may access. Editorial ratings are separate from public voting. Logged-in administrators can use **Save search as Smart Gallery** on public text search results.
+
+Placement can remain **Unlisted** for URL-only sharing, appear as a **Root gallery** on the homepage, or use **Subgallery placement**. In subgallery mode, administrators may attach the same Smart Gallery beneath any number of physical galleries from those galleries' editors. The Smart Gallery editor lists every current attachment with a direct parent-editor link and an independent **Hide from here** control. Placement never bypasses the enabled and published requirements.
+
+Deleted gallery/tag references retain their stable numeric identity and safely match nothing until repaired.
 
 ## Support & Resources
 

@@ -41,7 +41,7 @@ import { setupAdminNestedTabs } from './admin-nested-tabs.js?v=20260608-admin-ci
 import { setupAdminImageReordering } from './admin-image-reordering.js?v=20260512-modular-admin-v1';
 import { setupPublicGalleryPageReordering } from './admin-gallery-list.js?v=20260512-modular-admin-v1';
 import { appendUploadProgressLog, escapeHtmlAttribute, escapeHtmlText, i18n, isThumbnailSubmission, thumbnailEndpoint, updateBasicProgress, updateThumbnailProgress, ensureThumbnailProgress, updateUploadProgressMetrics } from './admin-core.js?v=20260614-upload-order-v2';
-import { browserUploadRequested, runBrowserGalleryUpload } from './admin-browser-upload.js?v=20260614-upload-original-diagnostics-v1';
+import { browserUploadRequested, browserUploadZipSelected, runBrowserGalleryUpload } from './admin-browser-upload.js?v=20260815-upload-zip-import-v1';
 
 const adminSidePanelMotionDurationMs = 280;
 
@@ -91,6 +91,9 @@ async function runGalleryUpload(form) {
         const createThumbnails = Boolean(form.querySelector('input[name="create_thumbnails"]')?.checked);
         // result stores state or configuration for the gallery front-end flow.
         let result;
+        if (browserUploadZipSelected(form) && !browserUploadRequested(form)) {
+            throw new Error(i18n('admin.browser_upload.zip_browser_required', 'ZIP import requires the browser-assisted upload path and a compatible browser.'));
+        }
         if (browserUploadRequested(form)) {
             result = await runBrowserGalleryUpload(form, progress);
         }

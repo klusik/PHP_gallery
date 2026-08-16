@@ -154,6 +154,14 @@ function setupOnePublicSearch(root) {
             list.append(link);
         }
 
+        if (typeof payload.save_smart_gallery_url === 'string' && payload.save_smart_gallery_url !== '') {
+            const saveLink = document.createElement('a');
+            saveLink.className = 'button secondary public-search-save-smart-gallery';
+            saveLink.href = payload.save_smart_gallery_url;
+            saveLink.textContent = payload.save_smart_gallery_label || 'Save search as Smart Gallery';
+            list.append(saveLink);
+        }
+
         results.hidden = false;
         results.append(list);
         root.classList.add('has-results');

@@ -1,8 +1,14 @@
 # PHP Gallery Database Documentation
 
-This document describes the database schema used by PHP Gallery as of application version 0.89.1. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
+This document describes the database schema used by PHP Gallery as of application version 0.90. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
 
 ## Database Engine
+
+### Multilingual content
+
+Migration `202608150001_multilingual_content.php` adds nullable `content_language` tags to `galleries` and `images`, plus `gallery_translations` and `image_translations`. Existing titles/descriptions are not copied or reclassified; null means the source language is unspecified. Translation tables use owner/language unique keys and cascading foreign keys. Nullable title and description fields permit independent fallback, and rows with both fields blank are removed.
+
+Base fields remain the compatibility/source representation. Additional-language rows never affect slugs, filesystem paths, ordering, visibility, passwords, NSFW policy, or media authorization. Gallery sidecars may contain validated `content_language` and `translations` data; unsupported language keys are ignored by persistence normalization.
 
 The migrations target MySQL or MariaDB through PDO.
 
@@ -994,6 +1000,14 @@ Uses public gallery and image rows plus derived filesystem timestamps. Current s
 ### Thumbnail maintenance
 
 Uses `images` and filesystem-derived thumbnail inventory. Thumbnail files are derived artifacts and should be regenerated rather than treated as source truth.
+
+## Smart Galleries and editorial ratings
+
+Migration `202608140001_smart_galleries.php` adds `smart_galleries` and nullable `images.editorial_rating`. Definitions contain title, unique slug, description, versioned `rules_json`, rule version, enabled/public state, allowlisted sorting, and timestamps. No image membership is duplicated. The public index covers `(enabled, visibility, title)`; the rating lookup index covers `(editorial_rating, gallery_id, visibility)`.
+
+Rule version 1 contains `version` and `root`. Nodes are boolean groups (`AND`, `OR`, or single-child `NOT`) or conditions containing an allowlisted field/operator/value. The maximum depth is five and maximum condition count is 50. Missing stable references and malformed/unknown versions fail safely.
+
+Migration `202608140002_smart_gallery_placement.php` introduces the `unlisted`, `root`, and `gallery` listing modes. Migration `202608140003_smart_gallery_multiple_placements.php` adds the `smart_gallery_placements` junction table and migrates existing single-parent assignments. Each `(smart_gallery_id, gallery_id)` pair is unique; deleting either record removes its junction rows through foreign-key cascades. A gallery-mode Smart Gallery may be attached beneath any number of physical galleries.
 
 ## Migration Authoring Guidelines
 

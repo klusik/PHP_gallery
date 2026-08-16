@@ -145,6 +145,8 @@ use function Gallery\Services\t;
 use function Gallery\Services\tags_for_entities;
 use function Gallery\Services\tags_for_entity;
 use function Gallery\Services\sort_public_hero_tag_groups;
+use function Gallery\Services\smart_gallery_count_images;
+use function Gallery\Services\smart_gallery_query_images;
 use function Gallery\Services\theme_hero_tag_display_all_enabled;
 use function Gallery\Services\theme_hero_tag_scrollbar_enabled;
 use function Gallery\Services\theme_hero_tag_scrollbar_rows;
@@ -352,6 +354,31 @@ function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicR
     render_public_gallery_admin_edit_link($gallery, 'card');
     render_public_gallery_admin_delete_form($gallery, 'card');
     echo '</article>';
+}
+
+/** Render a placed Smart Gallery with the established public gallery-card structure. */
+function render_smart_gallery_card(array $smartGallery, int $cardIndex = 0): void
+{
+    try {
+        $count = smart_gallery_count_images($smartGallery, true);
+        $coverRows = $count > 0 ? smart_gallery_query_images($smartGallery, true, 1, 0) : [];
+    } catch (\InvalidArgumentException) {
+        return;
+    }
+    $cover = $coverRows[0] ?? null;
+    $url = url_for('smart_gallery', ['slug' => (string) $smartGallery['slug']]);
+    echo '<article class="gallery-card smart-gallery-card" data-smart-gallery-id="' . (int) $smartGallery['id'] . '">';
+    echo '<a class="gallery-card-media" href="' . e($url) . '" aria-label="' . e(t('smart_gallery.open_named', 'Open Smart Gallery {title}', ['title' => (string) $smartGallery['title']])) . '">';
+    echo '<span class="subgallery-stack-badge" aria-label="' . e(t('gallery.card.subgallery_image_count', 'Subgallery containing {count} images', ['count' => $count])) . '"><span class="subgallery-stack-icon" aria-hidden="true"><span></span><span></span><span></span></span><span class="subgallery-stack-count">' . $count . '</span></span>';
+    if (is_array($cover)) {
+        $bundle = thumbnail_bundle($cover);
+        echo public_thumbnail_render_picture_html($cover, 300, [300, 600, 800], '(max-width: 520px) 300px, 420px', '', $cardIndex, $bundle, public_thumbnail_rendering_mode());
+    } else {
+        echo '<span class="gallery-collage gallery-empty-preview" aria-hidden="true">' . e(t('smart_gallery.empty_card', 'Smart Gallery')) . '</span>';
+    }
+    echo '</a><div class="gallery-card-body"><p class="admin-kicker">' . e(t('smart_gallery.public_kicker', 'Smart Gallery')) . '</p><h2><a class="gallery-card-title-link" href="' . e($url) . '">' . e((string) $smartGallery['title']) . '</a></h2>';
+    if (trim((string) ($smartGallery['description'] ?? '')) !== '') echo '<p class="gallery-card-description">' . e((string) $smartGallery['description']) . '</p>';
+    echo '<p class="muted gallery-card-count">' . e(t('gallery.image_count', '{count} images', ['count' => $count])) . '</p></div></article>';
 }
 
 

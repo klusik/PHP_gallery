@@ -63,10 +63,11 @@ import { setupPictureManager } from './gallery-modules/picture-manager.js?v=2026
 import { setupAdminDatePickers } from './gallery-modules/admin-date-picker.js?v=20260512-admin-date-picker-v1';
 import { setupSimbriefDescriptionGenerator } from './gallery-modules/admin-simbrief-description.js?v=20260527-simbrief-ofp-route-v1';
 import { setupAdminNavigationDataPanel } from './gallery-modules/admin-navdata-panel.js?v=20260527-navdata-panel-v1';
-import { setupOpenAITextAssist } from './gallery-modules/admin-openai-text-assist.js?v=20260529-openai-text-assist-v2';
+import { setupOpenAITextAssist } from './gallery-modules/admin-openai-text-assist.js?v=20260815-content-translation-v1';
 import { setupPublicHomeSearch } from './gallery-modules/public-home-search.js?v=20260528-public-search-context-v1';
 import { setupAdminSettingsSearch } from './gallery-modules/admin-settings-search.js?v=20260812-settings-spotlight-v1';
 import { setupAdminLanguageSelectorDesign } from './gallery-modules/admin-language-selector-design.js?v=20260814-language-selector-design-v1';
+import { setupAdminSmartGalleries } from './gallery-modules/admin-smart-galleries.js?v=20260814-smart-galleries-v6';
 import { setupAdminUpdateJobs } from './gallery-modules/admin-update-jobs.js?v=20260813-resumable-updates-v3';
 import { setupAdminGalleryMigration } from './gallery-modules/admin-gallery-migration.js?v=20260527-gallery-migration-reconnect-v1';
 import { setupAdminGalleryDateSuggestions } from './gallery-modules/admin-gallery-date-suggestion.js?v=20260607-date-suggestion-endpoint-v2';
@@ -96,7 +97,7 @@ import {
     setupAdminNavdataUpdateFeedback,
     setupAdminMediaRenamer,
     setupAdminMetadataOrganizer,
-} from './gallery-modules/admin-operations.js?v=20260812-deferred-maintenance-v2';
+} from './gallery-modules/admin-operations.js?v=20260815-upload-zip-import-v1';
 
 /**
  * Runs a setup callback after the DOM is ready.
@@ -179,6 +180,7 @@ function bootGalleryBrowserFeatures() {
     setupPublicHomeSearch();
     setupAdminSettingsSearch();
     setupAdminLanguageSelectorDesign();
+    setupAdminSmartGalleries();
     setupAdminUpdateJobs();
 
     runWhenDomReady(setupAdminNavdataUpdateFeedback);

@@ -69,6 +69,7 @@ function view_admin_menu_structure(): array
             'items' => [
                 ['label' => t('admin.menu.all_galleries', 'All galleries'), 'page' => 'admin', 'url' => url_for('admin') . '#admin-tab-galleries'],
                 ['label' => t('admin.menu.create_gallery', 'Create gallery'), 'page' => 'admin_new_gallery', 'url' => url_for('admin_new_gallery')],
+                ['label' => t('admin.menu.smart_galleries', 'Smart Galleries'), 'page' => 'admin_smart_galleries', 'url' => url_for('admin_smart_galleries')],
                 ['label' => t('admin.menu.upload_photos', 'Upload photos'), 'page' => 'admin_upload', 'url' => url_for('admin_upload')],
                 ['label' => t('admin.menu.upload_settings', 'Upload settings'), 'page' => 'admin_upload_settings', 'url' => url_for('admin_upload_settings')],
                 ['label' => t('admin.menu.mobile_uploads', 'Mobile uploads'), 'page' => 'admin_mobile_uploads', 'url' => url_for('admin_mobile_uploads'), 'feature' => 'mobile_webdav'],

@@ -56,7 +56,77 @@ use function Gallery\Services\openai_text_assist_available;
 use function Gallery\Services\openai_text_assist_default_language;
 use function Gallery\Services\openai_text_assist_image_input_allowed;
 use function Gallery\Services\openai_text_assist_language_catalog;
+use function Gallery\Services\content_localization_schema_ready;
+use function Gallery\Services\content_supported_languages;
+use function Gallery\Services\content_translation_rows;
 use function Gallery\Services\t;
+use function Gallery\Services\translation_language_presentation;
+
+/**
+ * Render optional source-language and translated title/description fields.
+ *
+ * @param string $entityType Gallery or image architecture identifier.
+ * @param array<string,mixed> $entity Entity row being edited.
+ */
+function view_render_content_localization_fields(string $entityType, array $entity): void
+{
+    if (!content_localization_schema_ready($entityType)) {
+        echo '<p class="muted">' . e(t('admin.content_localization.migration_required', 'Other-language content will be available after the multilingual-content database migration is applied.')) . '</p>';
+        return;
+    }
+    $languages = content_supported_languages();
+    $presentation = translation_language_presentation();
+    $sourceLanguage = (string) ($entity['content_language'] ?? '');
+    $translations = content_translation_rows($entityType, [(int) ($entity['id'] ?? 0)]);
+    $translations = $translations[(int) ($entity['id'] ?? 0)] ?? [];
+
+    echo '<div class="admin-content-localization" data-content-localization>';
+    echo '<label class="admin-content-source-language"><span>' . e(t('admin.content_localization.source_language', 'Language of the current title and description')) . '</span><select name="content_language">';
+    echo '<option value="">' . e(t('admin.content_localization.not_specified', 'Not specified')) . '</option>';
+    foreach ($languages as $language) {
+        $name = (string) ($presentation[$language]['name'] ?? strtoupper($language));
+        echo '<option value="' . e($language) . '"' . ($sourceLanguage === $language ? ' selected' : '') . '>' . e($name . ' (' . strtoupper($language) . ')') . '</option>';
+    }
+    echo '</select><small class="muted">' . e(t('admin.content_localization.source_help', 'Existing fields remain the source content. Missing translations fall back to them.')) . '</small></label>';
+    echo '<details class="admin-content-translations"><summary><span aria-hidden="true">&#127760;</span><span>' . e(t('admin.content_localization.other_languages', 'Other languages')) . '</span></summary>';
+    echo '<div class="admin-content-translation-list">';
+    foreach ($languages as $language) {
+        $row = is_array($translations[$language] ?? null) ? $translations[$language] : [];
+        $name = (string) ($presentation[$language]['name'] ?? strtoupper($language));
+        echo '<fieldset class="admin-content-translation" data-content-translation-language="' . e($language) . '"><legend>' . e($name . ' (' . strtoupper($language) . ')') . '</legend>';
+        echo '<label><span>' . e(t('admin.content_localization.translated_title', 'Translated title')) . '</span><input name="translations[' . e($language) . '][title]" value="' . e((string) ($row['title'] ?? '')) . '" maxlength="255" data-content-translation-title="' . e($language) . '"></label>';
+        view_render_content_translation_suggestion_tool($entityType, $entity, $language, 'title');
+        echo '<label><span>' . e(t('admin.content_localization.translated_description', 'Translated description')) . '</span><textarea name="translations[' . e($language) . '][description]" rows="4" data-content-translation-description="' . e($language) . '">' . e((string) ($row['description'] ?? '')) . '</textarea></label>';
+        view_render_content_translation_suggestion_tool($entityType, $entity, $language, 'description');
+        echo '<small class="muted">' . e(t('admin.content_localization.blank_fallback', 'Leave a field blank to use the source content for that field.')) . '</small></fieldset>';
+    }
+    echo '</div></details></div>';
+}
+
+/**
+ * Render an optional OpenAI translation-draft action for one target field.
+ *
+ * @param string $entityType Gallery or image architecture identifier.
+ * @param array<string,mixed> $entity Entity row being edited.
+ * @param string $language Target language code.
+ * @param string $field Title or description field.
+ */
+function view_render_content_translation_suggestion_tool(string $entityType, array $entity, string $language, string $field): void
+{
+    $user = current_user();
+    $userId = is_array($user) ? (int) ($user['id'] ?? 0) : 0;
+    if ($userId < 1 || !openai_text_assist_available($userId)) {
+        return;
+    }
+    $galleryId = $entityType === 'gallery' ? (int) ($entity['id'] ?? 0) : (int) ($entity['gallery_id'] ?? 0);
+    $imageId = $entityType === 'image' ? (int) ($entity['id'] ?? 0) : 0;
+    $targetSelector = '[data-content-translation-' . $field . '="' . $language . '"]';
+    $sourceSelector = $field === 'title' ? 'input[name="title"]' : 'textarea[name="description"]';
+    echo '<div class="admin-openai-text-assist admin-content-translation-suggestion" data-openai-text-assist data-openai-endpoint="' . e(url_for('admin_openai_text_assist')) . '" data-gallery-id="' . $galleryId . '" data-image-id="' . $imageId . '" data-openai-target-selector="' . e($targetSelector) . '" data-openai-source-selector="' . e($sourceSelector) . '">';
+    echo '<input type="hidden" value="translate_text" data-openai-task><input type="hidden" value="' . e($language) . '" data-openai-language>';
+    echo '<button type="button" class="button secondary" data-openai-generate>' . e(t('admin.content_localization.suggest_translation', 'Suggest translation with OpenAI')) . '</button>';
+    echo '<span class="muted" data-openai-status role="status" aria-live="polite"></span></div>';
+}
 
 /**
  * Handle view render gallery description formatting hint.

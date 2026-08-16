@@ -34,7 +34,7 @@
 
 import { appendUploadProgressLog, i18n, updateBasicProgress, updateUploadProgressMetrics } from './admin-core.js?v=20260614-upload-original-diagnostics-v1';
 
-const workerScriptUrl = new URL('./browser-image-worker.js?v=20260614-upload-original-diagnostics-v1', import.meta.url);
+const workerScriptUrl = new URL('./browser-image-worker.js?v=20260815-upload-zip-import-v1', import.meta.url);
 const tempDatabaseName = 'php_gallery_browser_uploads';
 const tempStoreName = 'prepared_batches';
 
@@ -58,16 +58,22 @@ export function browserUploadRequested(form) {
  */
 export async function runBrowserGalleryUpload(form, progress) {
     const config = browserUploadConfig(form);
-    const files = selectedBrowserUploadFiles(form);
+    const selectedFiles = selectedBrowserUploadFiles(form);
+    const archiveSelected = selectedFiles.some(isBrowserUploadZipFile);
     const allowEmptyPanelGallery = form.dataset.galleryPanelCloseOnSuccess === '1' && String(form.querySelector('input[name="upload_mode"]')?.value || '') === 'new';
-    if (!config.enabled || files.length === 0 || allowEmptyPanelGallery && files.length === 0) {
+    if (!config.enabled || selectedFiles.length === 0 || allowEmptyPanelGallery && selectedFiles.length === 0) {
         return {fallback: true, reason: 'not_applicable'};
     }
-    const capability = browserUploadCapability(config, files);
+    const capability = browserUploadCapability(config, selectedFiles);
     if (!capability.ok) {
+        if (archiveSelected) throw new Error(i18n('admin.browser_upload.zip_browser_required', 'ZIP import requires the browser-assisted upload path and a compatible browser.'));
         return {fallback: true, reason: capability.reason};
     }
 
+    updateBasicProgress(progress, 1, archiveSelected ? i18n('admin.browser_upload.extracting_archives', 'Inspecting selected ZIP archives in the browser...') : i18n('admin.browser_upload.preparing', 'Preparing images in the browser...'));
+    const expanded = await expandBrowserUploadArchives(selectedFiles, config, progress);
+    const files = expanded.files;
+    if (files.length === 0) throw new Error(i18n('admin.browser_upload.zip_no_supported_images', 'No supported images were found in the selected ZIP archives.'));
     const progressState = createBrowserProgressState(files);
     updateBasicProgress(progress, 1, i18n('admin.browser_upload.preparing', 'Preparing images in the browser...'));
     updateUploadProgressMetrics(progress, browserProgressMetrics(progressState));
@@ -165,7 +171,7 @@ export async function runBrowserGalleryUpload(form, progress) {
         if (batcher) {
             await batcher.abort();
         }
-        if (!serverSideStarted) {
+        if (!serverSideStarted && !archiveSelected) {
             return {fallback: true, reason: error instanceof Error ? error.message : 'preparation_failed'};
         }
         throw error;
@@ -351,6 +357,84 @@ function selectedBrowserUploadFiles(form) {
         .sort(compareUploadFilesByDefaultFolderOrder);
 }
 
+/** Return whether the current selection contains a user ZIP archive. */
+export function browserUploadZipSelected(form) {
+    return selectedBrowserUploadFiles(form).some(isBrowserUploadZipFile);
+}
+
+/** Return whether one selected file is a ZIP archive intended for browser import. */
+function isBrowserUploadZipFile(file) {
+    const type = String(file?.type || '').toLowerCase();
+    return file instanceof File && (/\.zip$/i.test(file.name) || ['application/zip', 'application/x-zip-compressed'].includes(type));
+}
+
+/**
+ * Replace selected ZIPs with their supported image entries before preparation.
+ *
+ * @param {File[]} selectedFiles Original browser selection.
+ * @param {Record<string, *>} config Browser upload configuration.
+ * @param {HTMLElement} progress Progress container.
+ * @return {Promise<{files: File[], skipped: number}>} Expanded upload selection.
+ */
+async function expandBrowserUploadArchives(selectedFiles, config, progress) {
+    const files = [];
+    let skipped = 0;
+    for (const selectedFile of selectedFiles) {
+        if (!isBrowserUploadZipFile(selectedFile)) {
+            files.push(selectedFile);
+            continue;
+        }
+        appendUploadProgressLog(progress, i18n('admin.browser_upload.log_extracting_zip', 'Inspecting ZIP: {name} ({bytes}).', {name: selectedFile.name, bytes: formatFileSize(selectedFile.size)}));
+        const result = await extractBrowserUploadZip(selectedFile, config);
+        skipped += Number(result.skipped || 0);
+        const archiveFiles = (result.entries || []).map((entry) => new File([entry.blob], String(entry.name || 'archive-image'), {
+            type: browserUploadMimeFromFilename(String(entry.name || '')),
+            lastModified: selectedFile.lastModified,
+        }));
+        files.push(...archiveFiles);
+        appendUploadProgressLog(progress, i18n('admin.browser_upload.log_extracted_zip', 'ZIP {name}: added {added} supported image(s), skipped {skipped} other entry or entries.', {name: selectedFile.name, added: archiveFiles.length, skipped: Number(result.skipped || 0)}));
+    }
+    return {files: files.sort(compareUploadFilesByDefaultFolderOrder), skipped};
+}
+
+/** Ask a short-lived worker to safely extract one selected user ZIP. */
+function extractBrowserUploadZip(zipFile, config) {
+    return new Promise((resolve, reject) => {
+        const worker = new Worker(workerScriptUrl);
+        /** Release the archive worker after its single extraction request. */
+        const finish = () => worker.terminate();
+        worker.addEventListener('message', (event) => {
+            const data = event.data || {};
+            finish();
+            if (!data.ok) {
+                reject(new Error(data.error || i18n('admin.browser_upload.zip_extract_failed', 'The selected ZIP archive could not be read.')));
+                return;
+            }
+            resolve(data.result || {entries: [], skipped: 0, totalEntries: 0});
+        }, {once: true});
+        worker.addEventListener('error', (event) => {
+            finish();
+            reject(new Error(event.message || i18n('admin.browser_upload.zip_extract_failed', 'The selected ZIP archive could not be read.')));
+        }, {once: true});
+        worker.postMessage({
+            action: 'extractUploadZip',
+            id: 1,
+            zipBlob: zipFile,
+            limits: {
+                maximumEntries: 10000,
+                maximumEntryBytes: Number(config.uploadLimitBytes || 8 * 1024 * 1024),
+                maximumTotalBytes: Math.min(2 * 1024 * 1024 * 1024, Math.max(Number(config.uploadLimitBytes || 1), Number(config.uploadLimitBytes || 1) * 1000)),
+            },
+        });
+    });
+}
+
+/** Return the browser MIME hint for one extracted supported filename. */
+function browserUploadMimeFromFilename(filename) {
+    const extension = String(filename || '').split('.').pop()?.toLowerCase() || '';
+    return {jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif'}[extension] || 'application/octet-stream';
+}
+
 /**
  * Compare selected files by the default folder order used by the upload pipeline.
  *
@@ -420,6 +504,7 @@ function browserUploadCapability(config, files) {
     }
     const supportedTypes = new Set(config.supportedMimeTypes || []);
     for (const file of files) {
+        if (isBrowserUploadZipFile(file)) continue;
         const type = String(file.type || '').toLowerCase();
         const extension = file.name.split('.').pop()?.toLowerCase() || '';
         const extensionAllowed = ['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(extension);

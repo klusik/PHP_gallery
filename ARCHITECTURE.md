@@ -9,7 +9,7 @@ This document is intended to help future maintainers and AI coding agents unders
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.89.1';
+const CMS_VERSION = '0.90';
 ```
 
 Update-related code uses:
@@ -103,6 +103,14 @@ app/controllers.php
 
 
 ## Localization Model
+
+### Multilingual gallery and photo content
+
+Interface catalogs and user-authored content localization are separate systems. `app/services/translations.php` remains the authority for maintained languages (`en`, `cs`, `de`, `sv`) and viewer preference. `app/services/content_localization.php` uses only that set for optional gallery/image title and description overlays.
+
+The base `galleries.title`, `galleries.description`, `images.title`, and `images.description` fields remain source content for compatibility. Nullable `content_language` columns classify that source without assuming English. `gallery_translations` and `image_translations` store one optional row per owner/language. Resolution is field-independent, so a translated title can use a source-description fallback.
+
+Public controllers localize only after access, visibility, NSFW, and pagination policy selects safe rows. Batch loading prevents per-card queries. Translations never affect slugs, paths, ordering, filenames, access policy, or media authorization. Admin forms keep source fields visible and put other maintained languages behind a disclosure. Configured OpenAI assistance inserts review-only drafts and never auto-saves.
 
 `app/services/translations.php` owns language normalization, pack discovery, request bootstrap, Admin/public language persistence, JSON editing support, key fallback, interpolation, and missing-key diagnostics.
 
@@ -946,6 +954,8 @@ The default upload form now uses browser-side preparation when the browser pipel
 
 The browser implementation lives in `public/assets/gallery-modules/admin-browser-upload.js` and `public/assets/gallery-modules/browser-image-worker.js`. The server orchestration and guard logic live in `app/services/browser_uploads.php`; the dedicated settings view lives in `app/views/admin_upload_settings.php`. Controllers only handle HTTP validation, persistence orchestration, and response formatting.
 
+When browser-assisted upload is selected, the file input also accepts user ZIP archives such as iCloud Photos exports. Archives are inspected and expanded entirely in a short-lived browser worker before the normal image-preparation pool runs; the original user ZIP is never posted to PHP. The parser reads the central directory, supports stored and Deflate entries, skips directories, hidden metadata, encrypted entries, unsupported compression and unsupported media, and verifies image signatures. It refuses traversal paths, multi-disk/ZIP64 structures, excessive entry counts, oversized entries, suspicious compression ratios, invalid boundaries, and excessive total expansion. Extracted supported images then follow exactly the same thumbnail, manifest, bounded-batch, server validation, access, and mutation-schema path as individually selected images. A ZIP selection cannot fall back to classic PHP upload.
+
 The same browser settings also control the optional browser-assisted thumbnail rebuild path exposed from the admin maintenance thumbnail card. The normal server-side job remains the default. When enabled, the server streams originals as deterministic store-only source ZIP chunks; browser workers create thumbnails and upload prepared derivative batches. The server remains authoritative for image identity, source selection, thumbnail paths, payload validation, final writes, and metadata refresh. Bounded repair passes can revisit missing-thumbnail inventory after the main pass.
 
 ## Migration Compatibility and Repairs
@@ -1427,6 +1437,14 @@ DATABASE.md
 For small changes, the agent should first inspect `CODEMAP.md` and only open the relevant files. For database changes, the agent should inspect `DATABASE.md`, then create a new migration instead of editing historical migrations.
 
 After any structural change, update these docs in the same patch.
+
+## Smart Gallery Architecture
+
+`app/services/smart_galleries.php` owns the versioned rule format, allowlisted catalog, limits, parameterized SQL compiler, persistence, count, and paginated queries. Search conversion produces the same representation. Public queries intersect compiled rules with gallery IDs accepted by `visitor_can_access_gallery()` and public image visibility. Returned rows keep their physical `gallery_id`, so existing thumbnail, media, and authorization services remain authoritative.
+
+There is no membership table or synchronization job. `images.editorial_rating` is private metadata and remains independent from `image_votes`. Three-state schema inspection guards reads and refuses writes when Smart Gallery storage is missing or unknown.
+
+Placement uses `placement_mode` for listing intent and `smart_gallery_placements` for many-to-many physical parents. `unlisted` retains URL-only access, `root` joins homepage gallery pagination, and `gallery` may join any number of physical galleries' direct child pagination. Editing one physical gallery replaces only that parent's junction rows transactionally, so the same Smart Gallery can remain attached elsewhere.
 
 ## Release Documentation
 

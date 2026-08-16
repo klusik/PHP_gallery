@@ -73,6 +73,8 @@ use function Gallery\Services\find_image;
 use function Gallery\Services\flight_map_schema_ready;
 use function Gallery\Services\gallery_access_schema_ready;
 use function Gallery\Services\schema_inspection_is_available;
+use function Gallery\Services\content_localization_schema_ready;
+use function Gallery\Services\content_save_localizations;
 use function Gallery\Services\gallery_share_token_assert_mutation_available;
 use function Gallery\Services\gallery_access_schema_is_confirmed_legacy;
 use function Gallery\Services\gallery_access_schema_status;
@@ -460,6 +462,10 @@ function admin_gallery_checkbox_input(array $input, string $key, bool $defaultWh
  */
 function admin_save_gallery_from_input(array $gallery, array $input, array $files, string $returnTab, bool $completeForm = true): array
 {
+    $shouldUpdateLocalization = array_key_exists('content_language', $input) || array_key_exists('translations', $input);
+    if ($shouldUpdateLocalization && !content_localization_schema_ready('gallery')) {
+        throw new RuntimeException(t('admin.content_localization.save_unavailable', 'Multilingual content was not saved because its database migration is unavailable.'));
+    }
     if (!empty($input['nsfw_field_present']) && !nsfw_guard_schema_ready()) {
         throw new RuntimeException(admin_nsfw_guard_mutation_error());
     }
@@ -825,6 +831,9 @@ function admin_save_gallery_from_input(array $gallery, array $input, array $file
     // $stmt stores an intermediate value used by the surrounding gallery workflow.
     $stmt = db()->prepare('UPDATE galleries SET ' . implode(', ', array_keys($fields)) . ' WHERE id = ?');
     $stmt->execute(array_merge(array_values($fields), [$galleryId]));
+    if ($shouldUpdateLocalization) {
+        content_save_localizations('gallery', $galleryId, $input['content_language'] ?? null, $input['translations'] ?? []);
+    }
     if (public_path_schema_ready()) {
         refresh_gallery_public_paths();
     }

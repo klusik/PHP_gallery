@@ -1,9 +1,15 @@
 # Testing Guide
 
-This guide applies to PHP Gallery Version 0.89.1. Release verification must include the modular runtime boundaries, complete deployment packaging, updater cleanup safety, deferred dashboard maintenance, centralized Settings discovery, the configurable public language selector, hourly automatic-update throttling, and the supported English, Czech, German, and Swedish catalogs.
+This guide applies to PHP Gallery Version 0.90. Release verification must include Smart Gallery rules, placement, access intersection and pagination; multilingual gallery/photo content and fallbacks; browser-local ZIP imports; ordered migration upgrades; complete deployment packaging; updater safety; the configurable public language selector; hourly automatic-update throttling; and the supported English, Czech, German, and Swedish catalogs.
 
 ## Purpose
 This project is a plain PHP gallery CMS without a formal browser automation stack. The most reliable testing approach is a mix of fast syntax checks, focused script-level checks, and a repeatable manual smoke-test scenario that exercises the core gallery lifecycle.
+
+## Multilingual Content
+
+Run `php tests/content_localization_model_test.php`, `php tests/admin_content_localization_test.php`, `php tests/public_content_localization_test.php`, `php tests/openai_text_assist_model_test.php`, `php tests/public_language_preference_test.php`, `php tests/translation_catalog_consistency_test.php`, and `php tests/migration_consistency_test.php`.
+
+Coverage includes unclassified existing content, all maintained languages, invalid-language rejection, independent gallery-field fallback, non-mixed photo caption variants, blank-row deletion, batch/cache behavior, side-panel FormData ownership, access-before-localization ordering, server-rendered cards/lightbox/SEO, translated search terms, sidecar transfer, and review-only provider drafts. Translation behavior must not alter slugs, paths, ordering, filenames, visibility, access, NSFW, or media authorization. Finish with syntax checks for changed PHP files and `php tests/run.php`.
 
 ## Test Layers
 
@@ -22,6 +28,10 @@ The repository uses current direct PHP regression tests under `tests/`. Run the 
 ```bash
 php tests/run.php
 ```
+
+Browser ZIP-import changes must additionally verify stored and Deflate archives, nested image paths, mixed supported and unsupported entries, empty archives, damaged central directories, encrypted/ZIP64 archives, traversal names, hidden `__MACOSX` metadata, oversized entries, expansion-ratio limits, duplicate filenames, and a ZIP selected while browser-assisted upload is unchecked or unsupported. The archive itself must never reach the classic PHP upload request; extracted valid images must still use the existing browser preparation, batching, server validation, thumbnail, and Admin side-panel progress pipeline.
+
+Run `node tests/browser_upload_zip_worker_test.mjs` for the generated stored/Deflate mixed-archive worker fixture. Node is a development-only test convenience; it is not required by the deployed PHP application.
 
 Run one focused test directly when diagnosing a failure:
 
@@ -507,24 +517,26 @@ missing and unknown states separately:
     represented with only validated object identities, safe suggested checks, and a
     request reference for unknown state.
 
-After restoring metadata access, rerun the complete suite. The final Phase 11 release
-acceptance baseline is **58/58 PHP regression tests passing**, translation catalogs
-aligned across English/Czech/German/Swedish, all changed PHP files passing `php -l`,
-the integrity manifest current, the administrator manual rebuilt and visually
-verified, and no temporary schema-reliability roadmap present in the repository or
-release package.
+After restoring metadata access, rerun the complete suite. Release acceptance requires
+every currently registered PHP regression test to pass, translation catalogs to remain
+aligned across English/Czech/German/Swedish, all changed PHP files to pass `php -l`,
+all changed JavaScript modules and Node fixtures to parse and pass, the integrity
+manifest to be current, the administrator manual to be rebuilt and visually verified,
+and no temporary implementation roadmap to remain in the repository or release package.
 
 ### 2.1 Release preparation and handoff
 
 Use this order for each release so generated integrity data describes the final tree:
 
-1. Compare the current branch with the previous release tag and review every changed path, including migrations, protected files, package exclusions, translations, browser modules, and documentation.
-2. Update `app/bootstrap.php`, `release-metadata.json`, `PATCH_NOTES.md`, and all user/developer documentation. Keep the newest patch-note entry above historical entries and follow `PATCH_NOTES_TEMPLATE.md`.
-3. Compile and visually inspect `docs/PHP_Gallery_Manual.pdf` using the commands in `docs/LATEX_BUILD.md`.
-4. Run the complete PHP suite, all focused tests relevant to the change, `php -l` on every changed PHP file, JavaScript syntax checks, and `git diff --check`.
-5. Run `php scripts/generate_manifest.php`, then `php scripts/generate_manifest.php --check`. Confirm the manifest version matches `CMS_VERSION` and that all managed release files are covered.
-6. Run the deployment helper to create the requested local folder or ZIP. The helper packages files only; it does not execute PHP or silently repair a stale manifest. Re-run the manifest check after any source edit made during packaging.
-7. Inspect the final diff and archive contents for `config.php`, caches, logs, temporary files, gallery media policy, the current manual PDF, patch notes, and `app/core-manifest.json`. Only then create the release commit/tag and publish the archive.
+1. Start from a clean release branch. Compare it with the exact previous release tag, inspect every intervening commit, and review every changed path, including migrations, protected files, package exclusions, translations, browser modules, generated artifacts, and documentation. Record intentionally excluded work.
+2. Audit every new migration in timestamp order. Run migration consistency and legacy-runner compatibility tests, confirm upgrades require no manual schema edits or metadata rebuild unless explicitly documented, and verify partial/unknown schema states still follow the applicable security, mutation, or presentation policy.
+3. Update `app/bootstrap.php`, `release-metadata.json`, `PATCH_NOTES.md`, README/architecture/database/testing version markers, and all affected user/developer documentation. Keep the newest patch-note entry above historical entries and follow `PATCH_NOTES_TEMPLATE.md`. Confirm changed browser modules have a fresh cache-busting import chain.
+4. Compile and visually inspect `docs/PHP_Gallery_Manual.pdf` using all commands in `docs/LATEX_BUILD.md`. Check the title/version/date, release overview, table of contents, bookmarks, index, page breaks, and newly changed feature sections.
+5. Run `php -l` on every changed PHP file, JavaScript syntax checks for every changed module, all relevant focused PHP/Node tests, translation consistency, function-documentation coverage, migration tests, and the complete `php tests/run.php` suite. Run `git diff --check` after the final textual edit.
+6. Run `php scripts/generate_manifest.php`, then `php scripts/generate_manifest.php --check`. Confirm its version matches `CMS_VERSION`, newly managed files and migrations are covered, and no source edit follows generation without another refresh.
+7. Run the deployment helper to create the requested local folder or ZIP. The helper packages files only; it does not execute PHP or silently repair a stale manifest. Re-run the manifest check after packaging and inspect the archive with a listing tool before publishing.
+8. Confirm the archive contains the current manual PDF, patch notes, release metadata, all migrations, and `app/core-manifest.json`, while excluding `config.php`, caches, logs, temporary files, local tooling, gallery media according to the chosen package policy, and deploy output. Confirm `CMS_VERSION`, the newest patch-note heading, release-metadata key/tag, manifest version, archive/release name, and intended Git tag all identify the same version.
+9. Review `git status`, the staged diff, and the final archive inventory. Create the release commit and annotated `v_<version>` tag only after all checks pass; publish that exact commit and archive, then perform an updater smoke test from the previous stable version and verify migrations, Admin login, public rendering, and integrity status.
 
 If a local dependency such as PHP, Node, or a TeX tool is unavailable, record the exact blocked command and environment in the handoff. Do not describe the release as fully verified until that command has been run successfully.
 
@@ -710,6 +722,12 @@ That makes regressions easier to track and helps future changes focus on the hig
 5. Verify only the detector fragment refreshes in place, the deleted photo disappears immediately, and a group with only one surviving member is removed.
 6. Repeat from a result belonging to a nested subgallery and, separately, from **Search all galleries** scope.
 7. Refresh the underlying gallery afterward and verify the deleted image remains deleted and no unrelated image was removed.
+### Smart Galleries
+
+Run `php tests/smart_gallery_rules_test.php` and `php tests/run.php`. Manually create a tag-plus-rating collection, preview and publish it, verify multiple pages, then move one image between three and five stars and confirm membership changes immediately. Test nested logic, deleted references, query-string and clean URLs, search conversion, and inaccessible matching images. Logged-out counts and cards must exclude private, locked, unpublished, share-only, and otherwise inaccessible source galleries.
+
+Test all placement modes: unlisted must remain absent from listings; root must participate in homepage pagination; gallery mode must participate in every selected physical gallery's child pagination. Attach the same Smart Gallery beneath multiple physical galleries, remove it from one, and verify the other assignments remain intact. Disabled or private Smart Galleries must remain absent regardless of placement.
+
 ### Public language preference
 
 ```powershell
