@@ -2,7 +2,7 @@
 
 A modern PHP 8.0+ gallery CMS designed for ordinary shared hosting. The application uses the filesystem as the authoritative source for gallery structure, while storing all metadata, access rules, votes, user accounts, and audit logs in MySQL or MariaDB.
 
-**Current Version:** 0.89.1
+**Current Version:** 0.90
 
 **Key Benefit:** Deploy in minutes on shared hosting. No npm, no Composer, no framework overhead. Just PHP + MySQL.
 
@@ -286,7 +286,7 @@ Use **Settings** in the Admin navigation as the central overview for important g
 
 The hub can directly edit only settings that already have a safe canonical service setter: site name, public language, URL rewrite, public search when available, the public thumbnail renderer, the global EXIF/GPS display default when its existing schema is ready, and development diagnostics. Theme layout, tag presentation, upload tuning, telemetry, Account credentials, language-pack editing, raw CSS, API keys, database tools and destructive maintenance remain on their existing specialized pages. Those pages remain fully supported and link back to the relevant Settings section.
 
-Version 0.89.1 is a focused automatic-update reliability patch. It checks stable release metadata at most once per hour instead of once every five hours, while respecting GitHub rate-limit and backoff responses. It also keeps the 0.89 configurable public viewer language selector, searchable Settings, and resumable updater behavior documented below.
+Version 0.90 adds dynamic Smart Galleries, browser-local ZIP photo import, and optional multilingual gallery and photo metadata. Administrators can publish securely filtered virtual collections without moving files, unpack ordinary iCloud-style ZIP exports directly in the browser, and save reviewed title/description translations for the maintained viewer languages. Existing installations upgrade through four ordered migrations and retain the hourly stable-update checks introduced in 0.89.1.
 
 Deep links use stable identifiers such as `?page=admin_settings&section=appearance#settings-appearance`. JavaScript tab changes update the complete query plus hash URL so Back/Forward and refresh preserve the selected section. Without JavaScript, the tab links load the same section as normal pages. See `docs/ADMIN_SETTINGS_INVENTORY.md` for canonical ownership, defaults, fallbacks, sensitivity and migration status.
 
@@ -819,7 +819,7 @@ php tests/run.php
 
 ### Release preparation
 
-Release work is performed from a clean reviewable branch. Compare the branch with the previous release tag, update the runtime version, `release-metadata.json`, `PATCH_NOTES.md`, and the relevant documentation, then compile and inspect `docs/PHP_Gallery_Manual.pdf`. Run the complete regression suite, focused tests, PHP and JavaScript syntax checks, and `git diff --check`. Finally run `php scripts/generate_manifest.php` followed by `php scripts/generate_manifest.php --check`; the generated `app/core-manifest.json` must be included in any affected-files ZIP. The deployment helpers only collect files and create a folder or ZIP, so manifest generation and verification remain explicit release steps. See `TESTING.md` and `docs/LATEX_BUILD.md` for the authoritative checklist.
+Release work is performed from a clean reviewable branch. Compare the branch with the previous release tag, inspect every commit and changed path, and confirm new migrations are ordered, idempotent under the project runner, and included in upgrade coverage. Update the runtime version, `release-metadata.json`, `PATCH_NOTES.md`, documentation version markers, cache-busting browser imports, and all affected user/developer documentation. Compile and visually inspect `docs/PHP_Gallery_Manual.pdf`; run the complete regression suite, focused PHP/Node tests, PHP and JavaScript syntax checks, migration consistency checks, translation consistency, and `git diff --check`. Finally run `php scripts/generate_manifest.php` followed by `php scripts/generate_manifest.php --check`; the generated `app/core-manifest.json` must be included in every release package. Inspect the packaged tree and confirm its version, patch-note heading, release-metadata tag, migration set, manual edition, and manifest agree before creating the release commit and `v_<version>` tag. The deployment helpers only collect files and create a folder or ZIP, so manifest generation and verification remain explicit release steps. See `TESTING.md` and `docs/LATEX_BUILD.md` for the authoritative checklist.
 
 The runner currently executes 58 focused PHP tests covering gallery models, paths, migrations, uploads, thumbnails, public assets, URL rewrites, AI settings, schema policy, language settings, and updater safety. Individual scripts can still be run directly when isolating a behavior. The project intentionally has no Composer or PHPUnit dependency.
 
