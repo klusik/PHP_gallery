@@ -67,6 +67,21 @@ function i18n(key, fallback, parameters = {}) {
 }
 export { setupTagSuggestions } from './tag-suggestions.js?v=20260528-tag-pills-v1';
 import { currentLightboxVoteForm, syncLightboxVote, updateLightboxVoteButtons } from './lightbox-votes.js?v=20260512-modular-lightbox-v1';
+import {
+    LIGHTBOX_ZOOM_MAX_SCALE,
+    LIGHTBOX_ZOOM_MIN_SCALE,
+    LIGHTBOX_ZOOM_STEP,
+    createLightboxZoomState,
+    lightboxZoomPercentage,
+    lightboxZoomRequiredSourceWidth,
+    normalizeLightboxZoomState,
+    normalizeLightboxZoomQualityCandidates,
+    panLightboxZoomState,
+    selectLightboxZoomQualityCandidate,
+    zoomLightboxStateAtAnchor,
+    zoomLightboxStateAtPhotoAnchor,
+    zoomLightboxStateAtRenderedAnchor,
+} from './lightbox-zoom-model.js?v=20260817-lightbox-zoom-centered-frame-v5';
 
 const galleryLightboxState = {
     controller: null,
@@ -228,6 +243,9 @@ export function setupGalleryLightbox() {
         card.dataset.galleryId = String(item.gallery_id ?? '');
         card.dataset.fullSrc = String(item.full_src || '');
         card.dataset.previewSrc = String(item.preview_src || item.full_src || '');
+        if (Array.isArray(item.quality_sources)) {
+            card.dataset.lightboxQualitySources = JSON.stringify(item.quality_sources);
+        }
         card.dataset.pageUrl = String(item.page_url || '');
         card.dataset.galleryUrl = String(item.gallery_url || '');
         card.dataset.title = String(item.title || '');
@@ -395,9 +413,15 @@ export function setupGalleryLightbox() {
     document.addEventListener('publicGalleryPhotoOrderChanged', refreshLightboxOrderFromDom, {signal: controller.signal});
 
     // Variable `image` stores this steps working value.
-    const image = overlay.querySelector('[data-lightbox-img]');
+    let image = overlay.querySelector('[data-lightbox-img]');
+    // zoomSurface is the real fitted photograph frame. It stays centered in the stage and grows symmetrically with zoom.
+    const zoomSurface = overlay.querySelector('[data-lightbox-zoom-surface]');
     // stageLink stores state or configuration for the gallery front-end flow.
     const stageLink = image ? image.closest('.lightbox-stage-link') : null;
+    // zoomStatuses mirror the current scale in the normal toolbar and fullscreen HUD.
+    const zoomStatuses = Array.from(overlay.querySelectorAll('[data-lightbox-zoom-status]'));
+    // zoomAnnouncement is the single polite screen-reader status for deliberate scale changes.
+    const zoomAnnouncement = overlay.querySelector('[data-lightbox-zoom-announcement]');
     // previousButtons keeps every rendered previous-photo control synchronized.
     const previousButtons = Array.from(overlay.querySelectorAll('[data-lightbox-action="previous"]'));
     // nextButtons keeps every rendered next-photo control synchronized.
@@ -422,16 +446,24 @@ export function setupGalleryLightbox() {
     const lightboxPreviewPreloadRadius = 4;
     // lightboxFullPreloadRadius stays zero so adjacent navigation warms previews without downloading full media early.
     const lightboxFullPreloadRadius = 0;
-    // lightboxFullSwapIdleDelay stores state or configuration for the gallery front-end flow.
-    const lightboxFullSwapIdleDelay = 80;
+    // lightboxQualityUpgradeDelay coalesces passive viewport/layout quality checks; explicit zoom requests promote immediately.
+    const lightboxQualityUpgradeDelay = 140;
     // lightboxDecodedImageCacheLimit stores state or configuration for the gallery front-end flow.
     const lightboxDecodedImageCacheLimit = 48;
     // transitionImage stores state or configuration for the gallery front-end flow.
     let transitionImage = null;
     // activeLightboxTransitionToken stores state or configuration for the gallery front-end flow.
     let activeLightboxTransitionToken = 0;
-    // pendingFullImageSwapTimer stores state or configuration for the gallery front-end flow.
-    let pendingFullImageSwapTimer = null;
+    // pendingLightboxQualityTimer owns the current debounced source-density evaluation.
+    let pendingLightboxQualityTimer = 0;
+    // activeLightboxQualityRequestToken invalidates late high-resolution decodes after navigation or close.
+    let activeLightboxQualityRequestToken = 0;
+    // activeLightboxQualitySource records the current image source without relying on absolute URL normalization.
+    let activeLightboxQualitySource = '';
+    // pendingLightboxQualitySource prevents duplicate decodes while one larger source is already in flight.
+    let pendingLightboxQualitySource = '';
+    // failedLightboxQualitySources prevents a broken full source from retrying on every gesture.
+    const failedLightboxQualitySources = new Set();
     // pendingLightboxNavigationTimer delays the busy indicator so hot cached images do not flash a spinner.
     let pendingLightboxNavigationTimer = 0;
     // pendingLightboxNavigationToken owns the delayed busy indicator for the latest requested image.
@@ -512,6 +544,20 @@ export function setupGalleryLightbox() {
     let mobileSwipeVisualTimer = 0;
     // suppressNextStageClick prevents a completed swipe from also toggling controls through a synthetic tap.
     let suppressNextStageClick = false;
+    // lightboxZoomState is presentation-only state for the current decoded image.
+    let lightboxZoomState = createLightboxZoomState();
+    // lightboxZoomAnimationTimer removes the short transform transition after button or keyboard zooming.
+    let lightboxZoomAnimationTimer = 0;
+    // lightboxZoomPan owns one captured pointer while a zoomed image is dragged.
+    let lightboxZoomPan = null;
+    // lightboxZoomPointerPosition remembers the latest desktop pointer position over the photo stage.
+    let lightboxZoomPointerPosition = null;
+    // lightboxZoomPointers tracks only touch pointers that may form a two-pointer pinch.
+    const lightboxZoomPointers = new Map();
+    // lightboxZoomPinch stores the immutable start geometry for the active pinch.
+    let lightboxZoomPinch = null;
+    // lightboxZoomReclampFrame waits for fullscreen and responsive layout changes before measuring again.
+    let lightboxZoomReclampFrame = 0;
     // isMobileTouchDevice stores state or configuration for the gallery front-end flow.
     const isMobileTouchDevice = detectMobileTouchDevice();
     // galleryDevModeEnabled stores state or configuration for the gallery front-end flow.
@@ -562,7 +608,7 @@ export function setupGalleryLightbox() {
     galleryLightboxState.cleanup = () => {
         controller.abort();
         cards = [];
-        clearPendingFullImageSwap();
+        clearPendingLightboxQualityUpgrade();
         clearLightboxNavigationPending();
         clearLightboxHudTimer();
         activeLightboxImageToken += 1;
@@ -675,13 +721,42 @@ export function setupGalleryLightbox() {
     // activeLightboxImageToken stores state or configuration for the gallery front-end flow.
     let activeLightboxImageToken = 0;
 
-        /**
-     * Handles clear pending full image swap behavior for the gallery UI.
+    /**
+     * Cancel pending quality evaluation and invalidate any background decode.
      */
-    function clearPendingFullImageSwap() {
-        if (pendingFullImageSwapTimer) {
-            window.clearTimeout(pendingFullImageSwapTimer);
-            pendingFullImageSwapTimer = null;
+    function clearPendingLightboxQualityUpgrade() {
+        if (pendingLightboxQualityTimer) {
+            window.clearTimeout(pendingLightboxQualityTimer);
+            pendingLightboxQualityTimer = 0;
+        }
+        activeLightboxQualityRequestToken += 1;
+        pendingLightboxQualitySource = '';
+        setLightboxQualityLoading(false);
+    }
+
+    /**
+     * Synchronize the visible spinner and accessible full-quality loading status.
+     *
+     * @param {boolean} loading Whether an active-photo quality decode is in progress.
+     */
+    function setLightboxQualityLoading(loading) {
+        const isLoading = Boolean(loading && !overlay.hidden);
+        overlay.classList.toggle('is-quality-loading', isLoading);
+        if (stageLink instanceof HTMLElement) {
+            if (isLoading) {
+                const label = i18n('lightbox.quality_loading', 'Loading full-quality image...');
+                stageLink.setAttribute('aria-busy', 'true');
+                stageLink.dataset.qualityLoadingLabel = label;
+                if (zoomAnnouncement instanceof HTMLElement) {
+                    zoomAnnouncement.textContent = label;
+                }
+            } else {
+                stageLink.removeAttribute('aria-busy');
+                delete stageLink.dataset.qualityLoadingLabel;
+                if (zoomAnnouncement instanceof HTMLElement) {
+                    zoomAnnouncement.textContent = '';
+                }
+            }
         }
     }
 
@@ -1583,6 +1658,7 @@ export function setupGalleryLightbox() {
             return;
         }
         updateNormalLightboxStageSizeFromDimensions(loadedImage.naturalWidth || 0, loadedImage.naturalHeight || 0);
+        scheduleLightboxZoomReclamp();
     }
 
         /**
@@ -1590,12 +1666,16 @@ export function setupGalleryLightbox() {
      *
      * @param {*} src Value supplied by the caller or event context.
      * @param {*} altText Value supplied by the caller or event context.
+     * @param {string} imageId Stable active-photo identifier.
      */
-    function applyLightboxImageSource(src, altText) {
+    function applyLightboxImageSource(src, altText, imageId) {
+        image.dataset.lightboxImageId = imageId;
+        delete image.dataset.lightboxExplicitZoomQuality;
         if (!src) {
             image.alt = altText;
             return;
         }
+        activeLightboxQualitySource = src;
         galleryDevModeState.currentSource = src;
         galleryDevModeState.currentSourceKind = devFindSourceKind(src);
         devMarkSource(src, 'ready', 'display');
@@ -1607,7 +1687,72 @@ export function setupGalleryLightbox() {
         image.alt = altText;
     }
 
-        /**
+    /**
+     * Install an already-decoded quality image inside the stable zoom surface.
+     *
+     * Passive 100% quality promotion may still decode off-DOM before installation.
+     * The replacement inherits the current image layout, then the shared zoom model
+     * reapplies real enlarged CSS dimensions and translation-only pan when zoomed.
+     * This avoids compositor scale magnification of a preview raster.
+     *
+     * Loader callbacks are cleared before installation so later navigation on the
+     * same node cannot re-enter an earlier decode promise. Completion is reported
+     * after the next animation frame confirms that the decoded child still owns
+     * the active lightbox image.
+     *
+     * @param {HTMLImageElement} loadedImage Detached decoded full-quality image.
+     * @param {string} src Authorized source URL represented by the decoded node.
+     * @param {string} altText Accessible image alternative text.
+     * @param {string} imageId Stable active-photo identifier.
+     * @return {Promise<boolean>} True when the decoded child remains installed after the paint boundary.
+     */
+    function installDecodedLightboxQualityImage(loadedImage, src, altText, imageId) {
+        if (
+            !(loadedImage instanceof HTMLImageElement)
+            || !(image instanceof HTMLImageElement)
+            || !(zoomSurface instanceof HTMLElement)
+            || !src
+        ) {
+            return Promise.resolve(false);
+        }
+        const previousImage = image;
+        loadedImage.onload = null;
+        loadedImage.onerror = null;
+        loadedImage.removeAttribute('loading');
+        loadedImage.removeAttribute('fetchpriority');
+        loadedImage.setAttribute('data-lightbox-img', '');
+        loadedImage.dataset.lightboxImageId = imageId;
+        loadedImage.className = previousImage.className;
+        loadedImage.alt = altText;
+        loadedImage.decoding = 'async';
+        loadedImage.style.cssText = previousImage.style.cssText;
+
+        // Discard any stale pan transform copied from the previous node. The shared
+        // zoom renderer immediately reapplies enlarged dimensions and current pan.
+        loadedImage.style.removeProperty('transform');
+        loadedImage.style.removeProperty('will-change');
+        previousImage.replaceWith(loadedImage);
+        image = loadedImage;
+        activeLightboxQualitySource = src;
+        galleryDevModeState.currentSource = src;
+        galleryDevModeState.currentSourceKind = devFindSourceKind(src);
+        devMarkSource(src, 'ready', 'quality-display');
+        applyLightboxZoomState(false);
+        loadedImage.getBoundingClientRect();
+
+        return new Promise((resolve) => {
+            window.requestAnimationFrame(() => {
+                resolve(
+                    image === loadedImage
+                    && loadedImage.isConnected
+                    && loadedImage.getAttribute('src') === src
+                    && loadedImage.dataset.lightboxImageId === imageId
+                );
+            });
+        });
+    }
+
+    /**
      * Handles show lightbox image source behavior for the gallery UI.
      *
      * @param {*} index Value supplied by the caller or event context.
@@ -1631,7 +1776,7 @@ export function setupGalleryLightbox() {
             if (!isCurrentLightboxImageRequest(index, token)) {
                 return Promise.resolve(false);
             }
-            applyLightboxImageSource(src, altText);
+            applyLightboxImageSource(src, altText, String(cards[index]?.dataset.imageId || index));
             return loadDecodedLightboxImage(src, {priority: 'high'}).then((loadedImage) => {
                 if (!isCurrentLightboxImageRequest(index, token) || image.getAttribute('src') !== src) {
                     return false;
@@ -1656,6 +1801,7 @@ export function setupGalleryLightbox() {
             updateNormalLightboxStageSizeFromLoadedImage(loadedImage);
             if (image.getAttribute('src') === src) {
                 image.alt = altText;
+                image.dataset.lightboxImageId = String(cards[index]?.dataset.imageId || index);
                 clearLightboxNavigationPending(token);
                 resolve(true);
                 return;
@@ -1702,7 +1848,7 @@ export function setupGalleryLightbox() {
                             resolve(false);
                             return;
                         }
-                        applyLightboxImageSource(src, altText);
+                        applyLightboxImageSource(src, altText, String(cards[index]?.dataset.imageId || index));
                         clearLightboxNavigationPending(token);
                         requestAnimationFrame(() => {
                             removeTransitionImage(transitionNode);
@@ -1714,39 +1860,287 @@ export function setupGalleryLightbox() {
         })).catch(() => false);
     }
 
-        /**
-     * Handles swap lightbox image after decode behavior for the gallery UI.
+    /**
+     * Parse the server-authorized quality candidates attached to one lightbox card.
      *
-     * @param {*} index Value supplied by the caller or event context.
-     * @param {*} token Value supplied by the caller or event context.
-     * @param {*} previewSrc Value supplied by the caller or event context.
-     * @param {*} fullSrc Value supplied by the caller or event context.
-     * @param {*} altText Value supplied by the caller or event context.
-     * @return {*} Result of the UI operation, when a value is produced.
+     * Legacy cached markup receives a conservative preview/full fallback derived
+     * only from its existing protected URLs and known display dimensions.
+     *
+     * @param {HTMLElement|null} card Active server-rendered or lazy lightbox card.
+     * @return {Array<{src:string,width:number,height:number,kind:string}>} Normalized candidates.
      */
-    function swapLightboxImageAfterDecode(index, token, previewSrc, fullSrc, altText) {
-        if (!fullSrc || !previewSrc || fullSrc === previewSrc) {
+    function lightboxQualityCandidatesForCard(card) {
+        if (!(card instanceof HTMLElement)) {
+            return [];
+        }
+        let candidates = [];
+        try {
+            candidates = JSON.parse(card.dataset.lightboxQualitySources || '[]');
+        } catch {
+            candidates = [];
+        }
+        const normalized = normalizeLightboxZoomQualityCandidates(candidates);
+        if (normalized.length > 0) {
+            return normalized;
+        }
+        const sourceWidth = Math.max(0, Number.parseInt(card.dataset.imageWidth || '0', 10) || 0);
+        const sourceHeight = Math.max(0, Number.parseInt(card.dataset.imageHeight || '0', 10) || 0);
+        if (!sourceWidth || !sourceHeight) {
+            return [];
+        }
+        const previewSrc = card.dataset.previewSrc || '';
+        const fullSrc = card.dataset.fullSrc || previewSrc;
+        const previewScale = Math.min(1, 1600 / Math.max(sourceWidth, sourceHeight));
+        return normalizeLightboxZoomQualityCandidates([
+            previewSrc ? {
+                src: previewSrc,
+                width: Math.max(1, Math.round(sourceWidth * previewScale)),
+                height: Math.max(1, Math.round(sourceHeight * previewScale)),
+                kind: 'preview',
+            } : null,
+            fullSrc ? {src: fullSrc, width: sourceWidth, height: sourceHeight, kind: 'full'} : null,
+        ]);
+    }
+
+    /**
+     * Return the bounded display density used for active-photo quality selection.
+     *
+     * Data-saving mode avoids multiplying the initial demand by high-DPI density,
+     * while deeper zoom can still request the full source when it is necessary.
+     *
+     * @return {number} Browser density supplied to the pure quality model.
+     */
+    function lightboxQualityDevicePixelRatio() {
+        if (window.navigator?.connection?.saveData) {
+            return 1;
+        }
+        return Math.max(1, Number(window.devicePixelRatio) || 1);
+    }
+
+    /**
+     * Decode and promote the active photograph when its current source is undersized.
+     *
+     * @param {number} index Active lightbox index.
+     * @param {number} imageToken Navigation generation captured by openAt().
+     * @return {Promise<boolean>} True only when a larger source became visible.
+     */
+    function promoteLightboxQualityIfNeeded(index, imageToken) {
+        if (!isCurrentLightboxImageRequest(index, imageToken) || overlay.hidden) {
             return Promise.resolve(false);
         }
-        clearPendingFullImageSwap();
-        return new Promise((resolve) => {
-            pendingFullImageSwapTimer = window.setTimeout(() => {
-                pendingFullImageSwapTimer = null;
-                if (!isCurrentLightboxImageRequest(index, token)) {
-                    resolve(false);
-                    return;
-                }
-                loadDecodedLightboxImage(fullSrc, {priority: 'auto'}).then((loadedImage) => {
-                    if (!isCurrentLightboxImageRequest(index, token)) {
-                        resolve(false);
-                        return;
+        const card = cards[index];
+        const imageId = String(card?.dataset.imageId || index);
+        if (!(card instanceof HTMLElement) || image.dataset.lightboxImageId !== imageId) {
+            return Promise.resolve(false);
+        }
+        const metrics = measureLightboxZoomMetrics();
+        const candidates = lightboxQualityCandidatesForCard(card);
+        const requiredWidth = lightboxZoomRequiredSourceWidth(
+            metrics.imageWidth,
+            lightboxZoomState.scale,
+            lightboxQualityDevicePixelRatio(),
+        );
+        const fullCandidate = lightboxZoomState.scale > LIGHTBOX_ZOOM_MIN_SCALE
+            ? (candidates.find((candidate) => candidate.kind === 'full') || candidates[candidates.length - 1] || null)
+            : null;
+        const desired = fullCandidate || selectLightboxZoomQualityCandidate(candidates, requiredWidth, activeLightboxQualitySource);
+        if (!desired || desired.src === activeLightboxQualitySource || desired.src === pendingLightboxQualitySource) {
+            return Promise.resolve(false);
+        }
+        const current = candidates.find((candidate) => candidate.src === activeLightboxQualitySource) || null;
+        if (current && desired.width <= current.width) {
+            return Promise.resolve(false);
+        }
+        const failureKey = `${card?.dataset.imageId || index}:${desired.src}`;
+        if (failedLightboxQualitySources.has(failureKey)) {
+            return Promise.resolve(false);
+        }
+
+        activeLightboxQualityRequestToken += 1;
+        const qualityToken = activeLightboxQualityRequestToken;
+        pendingLightboxQualitySource = desired.src;
+        setLightboxQualityLoading(true);
+        return loadFreshDecodedLightboxImage(desired.src, {priority: 'high'}).then((loadedImage) => {
+            if (
+                !isCurrentLightboxImageRequest(index, imageToken)
+                || qualityToken !== activeLightboxQualityRequestToken
+                || pendingLightboxQualitySource !== desired.src
+            ) {
+                return false;
+            }
+            pendingLightboxQualitySource = '';
+            return installDecodedLightboxQualityImage(loadedImage, desired.src, card.dataset.title || '', imageId).then((installed) => {
+                if (
+                    !installed
+                    || !isCurrentLightboxImageRequest(index, imageToken)
+                    || qualityToken !== activeLightboxQualityRequestToken
+                    || image.dataset.lightboxImageId !== imageId
+                ) {
+                    if (qualityToken === activeLightboxQualityRequestToken) {
+                        setLightboxQualityLoading(false);
                     }
-                    updateNormalLightboxStageSizeFromLoadedImage(loadedImage);
-                    applyLightboxImageSource(fullSrc, altText);
-                    resolve(true);
-                }).catch(() => resolve(false));
-            }, lightboxFullSwapIdleDelay);
+                    return false;
+                }
+                updateNormalLightboxStageSizeFromLoadedImage(loadedImage);
+                applyLightboxZoomState(false);
+                setLightboxQualityLoading(false);
+                return true;
+            });
+        }).catch(() => {
+            if (qualityToken === activeLightboxQualityRequestToken) {
+                pendingLightboxQualitySource = '';
+                failedLightboxQualitySources.add(failureKey);
+                setLightboxQualityLoading(false);
+            }
+            return false;
         });
+    }
+
+    /**
+     * Debounce passive active-photo quality evaluation after open or viewport changes.
+     *
+     * @param {number} delay Delay in milliseconds; zero schedules after the current task.
+     */
+    function scheduleLightboxQualityUpgrade(delay = lightboxQualityUpgradeDelay) {
+        if (pendingLightboxQualityTimer) {
+            window.clearTimeout(pendingLightboxQualityTimer);
+        }
+        const index = currentIndex;
+        const imageToken = activeLightboxImageToken;
+        pendingLightboxQualityTimer = window.setTimeout(() => {
+            pendingLightboxQualityTimer = 0;
+            promoteLightboxQualityIfNeeded(index, imageToken);
+        }, Math.max(0, delay));
+    }
+
+    /**
+     * Switch the live lightbox image to the protected original on deliberate zoom.
+     *
+     * Explicit zoom must change the source on the image that is already visible.
+     * The browser therefore starts the original request in the same input task as
+     * the scale change instead of waiting for a detached decode, fullscreen change,
+     * resize, or passive quality timer. The preview remains the browser's current
+     * decoded pixels only until the live element receives the original response.
+     *
+     * A failed original request restores the authorized preview when one exists.
+     * Navigation and close invalidate the request token so late load/error events
+     * cannot alter the next photograph.
+     *
+     * @return {boolean} True when the live image was switched to the original.
+     */
+    function requestLightboxQualityUpgradeNow() {
+        if (lightboxZoomState.scale <= LIGHTBOX_ZOOM_MIN_SCALE || overlay.hidden || currentIndex < 0) {
+            return false;
+        }
+        const card = cards[currentIndex];
+        const imageId = String(card?.dataset.imageId || currentIndex);
+        const fullSrc = String(card?.dataset.fullSrc || '').trim();
+        if (!(card instanceof HTMLElement) || !(image instanceof HTMLImageElement) || !fullSrc) {
+            return false;
+        }
+
+        activeLightboxTransitionToken += 1;
+        removeTransitionImage();
+        image.dataset.lightboxImageId = imageId;
+
+        if (pendingLightboxQualityTimer) {
+            window.clearTimeout(pendingLightboxQualityTimer);
+            pendingLightboxQualityTimer = 0;
+        }
+
+        if (
+            image.dataset.lightboxExplicitZoomQuality === imageId
+            && image.getAttribute('src') === fullSrc
+        ) {
+            return false;
+        }
+
+        activeLightboxQualityRequestToken += 1;
+        const qualityToken = activeLightboxQualityRequestToken;
+        const index = currentIndex;
+        const imageToken = activeLightboxImageToken;
+        const previewSrc = String(card.dataset.previewSrc || '').trim();
+        const targetImage = image;
+
+        pendingLightboxQualitySource = fullSrc;
+        targetImage.dataset.lightboxExplicitZoomQuality = imageId;
+        targetImage.loading = 'eager';
+        targetImage.decoding = 'async';
+        if ('fetchPriority' in targetImage) {
+            targetImage.fetchPriority = 'high';
+        }
+        setLightboxQualityLoading(true);
+        devMarkSource(fullSrc, 'loading', 'zoom-live-original');
+
+        /**
+         * Remove the paired live-original completion listeners from the active image.
+         */
+        const clearOriginalListeners = () => {
+            targetImage.removeEventListener('load', finishOriginalLoad);
+            targetImage.removeEventListener('error', handleOriginalError);
+        };
+
+        /**
+         * Finalize a successful live original-source load for the active photograph.
+         */
+        const finishOriginalLoad = () => {
+            clearOriginalListeners();
+            if (
+                image !== targetImage
+                || !isCurrentLightboxImageRequest(index, imageToken)
+                || qualityToken !== activeLightboxQualityRequestToken
+                || targetImage.dataset.lightboxImageId !== imageId
+                || targetImage.getAttribute('src') !== fullSrc
+            ) {
+                return;
+            }
+            pendingLightboxQualitySource = '';
+            activeLightboxQualitySource = fullSrc;
+            galleryDevModeState.currentSource = fullSrc;
+            galleryDevModeState.currentSourceKind = devFindSourceKind(fullSrc);
+            devMarkSource(fullSrc, 'ready', 'zoom-live-original', targetImage);
+            updateNormalLightboxStageSizeFromLoadedImage(targetImage);
+            applyLightboxZoomState(false);
+            setLightboxQualityLoading(false);
+        };
+
+        /**
+         * Restore the protected preview when the explicit original-source request fails.
+         */
+        const handleOriginalError = () => {
+            clearOriginalListeners();
+            if (
+                image !== targetImage
+                || !isCurrentLightboxImageRequest(index, imageToken)
+                || qualityToken !== activeLightboxQualityRequestToken
+                || targetImage.dataset.lightboxImageId !== imageId
+            ) {
+                return;
+            }
+            pendingLightboxQualitySource = '';
+            failedLightboxQualitySources.add(`${imageId}:${fullSrc}`);
+            delete targetImage.dataset.lightboxExplicitZoomQuality;
+            setLightboxQualityLoading(false);
+            if (previewSrc && targetImage.getAttribute('src') === fullSrc) {
+                activeLightboxQualitySource = previewSrc;
+                targetImage.src = previewSrc;
+            }
+        };
+
+        targetImage.addEventListener('load', finishOriginalLoad);
+        targetImage.addEventListener('error', handleOriginalError);
+
+        // This assignment is deliberately synchronous with the user's zoom input.
+        // No application-controlled decode or mode transition sits in front of it.
+        activeLightboxQualitySource = fullSrc;
+        galleryDevModeState.currentSource = fullSrc;
+        galleryDevModeState.currentSourceKind = devFindSourceKind(fullSrc);
+        targetImage.src = fullSrc;
+
+        if (targetImage.complete && targetImage.naturalWidth > 0) {
+            finishOriginalLoad();
+        }
+        return true;
     }
 
         /**
@@ -2164,6 +2558,638 @@ export function setupGalleryLightbox() {
         return Math.max(12, Math.min(90, (expectedAfter / cards.length) * 100));
     }
 
+    /**
+     * Measure the stage and contained image at its unscaled object-fit dimensions.
+     *
+     * @return {{viewportWidth: number, viewportHeight: number, imageWidth: number, imageHeight: number, panViewportWidth: number, panViewportHeight: number}} Current zoom metrics.
+     */
+    function measureLightboxZoomMetrics() {
+        const stageRect = stageLink?.getBoundingClientRect();
+        const viewportWidth = Math.max(0, stageRect?.width || stageLink?.clientWidth || 0);
+        const viewportHeight = Math.max(0, stageRect?.height || stageLink?.clientHeight || 0);
+        const naturalWidth = Math.max(0, image?.naturalWidth || 0);
+        const naturalHeight = Math.max(0, image?.naturalHeight || 0);
+        if (!viewportWidth || !viewportHeight || !naturalWidth || !naturalHeight) {
+            return {
+                viewportWidth,
+                viewportHeight,
+                imageWidth: viewportWidth,
+                imageHeight: viewportHeight,
+                panViewportWidth: viewportWidth,
+                panViewportHeight: viewportHeight,
+            };
+        }
+        const containScale = Math.min(viewportWidth / naturalWidth, viewportHeight / naturalHeight);
+        const imageWidth = naturalWidth * containScale;
+        const imageHeight = naturalHeight * containScale;
+        const fullscreen = isLightboxFullscreen();
+        return {
+            viewportWidth,
+            viewportHeight,
+            imageWidth,
+            imageHeight,
+            // Normal lightbox already sizes the stage to the fitted image. Fullscreen
+            // uses the complete screen as its stage, including letterbox space. Pan
+            // against the fitted 100% image rectangle instead so a wide/tall photo
+            // can move on both axes immediately after zooming.
+            panViewportWidth: fullscreen ? imageWidth : viewportWidth,
+            panViewportHeight: fullscreen ? imageHeight : viewportHeight,
+        };
+    }
+
+    /**
+     * Cancel a pending post-layout zoom measurement.
+     */
+    function cancelLightboxZoomReclamp() {
+        if (lightboxZoomReclampFrame) {
+            window.cancelAnimationFrame(lightboxZoomReclampFrame);
+            lightboxZoomReclampFrame = 0;
+        }
+    }
+
+    /**
+     * Recalculate stage size and clamp zoom after fullscreen or split-layout changes settle.
+     */
+    function scheduleLightboxZoomReclamp() {
+        cancelLightboxZoomReclamp();
+        lightboxZoomReclampFrame = window.requestAnimationFrame(() => {
+            lightboxZoomReclampFrame = 0;
+            if (controller.signal.aborted || overlay.hidden) {
+                return;
+            }
+            updateNormalLightboxStageSize(cards[currentIndex]);
+            applyLightboxZoomState(false);
+            scheduleLightboxQualityUpgrade();
+        });
+    }
+
+    /**
+     * Synchronize visible scale values, button availability, and the polite announcement.
+     *
+     * @param {boolean} announce Whether to notify assistive technology about this deliberate change.
+     */
+    function syncLightboxZoomControls(announce = false) {
+        const percentage = lightboxZoomPercentage(lightboxZoomState.scale);
+        zoomStatuses.forEach((status) => {
+            status.textContent = percentage;
+        });
+        overlay.querySelectorAll('[data-lightbox-action="zoom-out"]').forEach((button) => {
+            button.disabled = lightboxZoomState.scale <= LIGHTBOX_ZOOM_MIN_SCALE;
+        });
+        overlay.querySelectorAll('[data-lightbox-action="zoom-reset"]').forEach((button) => {
+            button.disabled = lightboxZoomState.scale <= LIGHTBOX_ZOOM_MIN_SCALE;
+        });
+        overlay.querySelectorAll('[data-lightbox-action="zoom-in"]').forEach((button) => {
+            button.disabled = lightboxZoomState.scale >= LIGHTBOX_ZOOM_MAX_SCALE;
+        });
+        if (announce && zoomAnnouncement instanceof HTMLElement) {
+            const template = overlay.dataset.lightboxZoomStatusTemplate || 'Zoom {percent}';
+            zoomAnnouncement.textContent = template.replace('{percent}', percentage);
+        }
+    }
+
+    /**
+     * Render the current zoom state without changing media sources.
+     *
+     * The zoom surface is always the actual fitted photograph rectangle, including
+     * at 100%. Its center is fixed to the stage center plus the model translation,
+     * and width/height grow symmetrically around that center. Keeping this geometry
+     * explicit avoids the fullscreen `object-fit` box discontinuity and prevents
+     * repeated animated zoom steps from accumulating a top-left or bottom-right drift.
+     *
+     * A deliberate zoom may change `src` before the new resource has dimensions.
+     * Callers can therefore pass geometry measured from the still-loaded preview so
+     * the same input task keeps the correct aspect ratio while the original loads.
+     *
+     * @param {boolean} announce Whether to announce the resulting percentage.
+     * @param {{viewportWidth:number,viewportHeight:number,imageWidth:number,imageHeight:number,panViewportWidth?:number,panViewportHeight?:number}|null} measuredMetrics Stable pre-source-change geometry when available.
+     */
+    function applyLightboxZoomState(announce = false, measuredMetrics = null) {
+        const metrics = measuredMetrics || measureLightboxZoomMetrics();
+        lightboxZoomState = normalizeLightboxZoomState(lightboxZoomState, metrics);
+        const isZoomed = lightboxZoomState.scale > LIGHTBOX_ZOOM_MIN_SCALE;
+        const frameWidth = Math.max(1, metrics.imageWidth * lightboxZoomState.scale);
+        const frameHeight = Math.max(1, metrics.imageHeight * lightboxZoomState.scale);
+
+        if (zoomSurface instanceof HTMLElement) {
+            zoomSurface.style.width = `${frameWidth}px`;
+            zoomSurface.style.height = `${frameHeight}px`;
+            zoomSurface.style.transform = `translate3d(calc(-50% + ${lightboxZoomState.translateX}px), calc(-50% + ${lightboxZoomState.translateY}px), 0)`;
+            if (isZoomed) {
+                zoomSurface.style.willChange = 'width, height, transform';
+            } else {
+                zoomSurface.style.removeProperty('will-change');
+            }
+            zoomSurface.style.removeProperty('overflow');
+        }
+        if (image instanceof HTMLImageElement) {
+            image.style.width = '100%';
+            image.style.height = '100%';
+            image.style.maxWidth = 'none';
+            image.style.maxHeight = 'none';
+            image.style.removeProperty('transform');
+            image.style.removeProperty('will-change');
+        }
+        overlay.classList.toggle('is-zoomed', isZoomed);
+        syncLightboxZoomControls(announce);
+    }
+
+    /**
+     * Briefly animate a discrete button or keyboard scale change.
+     */
+    function animateLightboxZoomChange() {
+        if (lightboxZoomAnimationTimer) {
+            window.clearTimeout(lightboxZoomAnimationTimer);
+        }
+        overlay.classList.add('is-zoom-animating');
+        lightboxZoomAnimationTimer = window.setTimeout(() => {
+            lightboxZoomAnimationTimer = 0;
+            overlay.classList.remove('is-zoom-animating');
+        }, 140);
+    }
+
+    /**
+     * Measure the current rendered image rectangle in stage-relative coordinates.
+     *
+     * The DOM rectangle is authoritative once the zoom frame has grown or moved.
+     * Reusing only the original fitted dimensions would make successive cursor
+     * zoom steps drift toward a corner because the anchor would be resolved in an
+     * outdated coordinate system.
+     *
+     * @return {{left:number,top:number,width:number,height:number}|null} Rendered image rectangle relative to the stage.
+     */
+    function currentLightboxRenderedImageRect() {
+        if (!(stageLink instanceof HTMLElement) || !(image instanceof HTMLImageElement)) {
+            return null;
+        }
+        const stageRect = stageLink.getBoundingClientRect();
+        const imageRect = image.getBoundingClientRect();
+        if (!stageRect.width || !stageRect.height || !imageRect.width || !imageRect.height) {
+            return null;
+        }
+        return {
+            left: imageRect.left - stageRect.left,
+            top: imageRect.top - stageRect.top,
+            width: imageRect.width,
+            height: imageRect.height,
+        };
+    }
+
+    /**
+     * Resolve a requested scale against the image rectangle that is visible now.
+     *
+     * @param {number} scale Requested scale.
+     * @param {{x?: number, y?: number}|null} anchor Stage-relative cursor anchor.
+     * @param {{viewportWidth:number,viewportHeight:number,imageWidth:number,imageHeight:number,panViewportWidth?:number,panViewportHeight?:number}} metrics Current 100% zoom metrics.
+     * @return {{scale:number,translateX:number,translateY:number}} Anchored bounded state.
+     */
+    function lightboxZoomStateForRenderedAnchor(scale, anchor, metrics) {
+        const resolvedAnchor = anchor || {
+            x: metrics.viewportWidth / 2,
+            y: metrics.viewportHeight / 2,
+        };
+        const renderedImageRect = currentLightboxRenderedImageRect();
+        if (!renderedImageRect) {
+            return zoomLightboxStateAtAnchor(lightboxZoomState, scale, resolvedAnchor, metrics);
+        }
+        return zoomLightboxStateAtRenderedAnchor(
+            lightboxZoomState,
+            scale,
+            resolvedAnchor,
+            metrics,
+            renderedImageRect,
+        );
+    }
+
+    /**
+     * Resolve a requested scale around the current photograph point under an anchor.
+     *
+     * The calculation uses only canonical model state plus fitted image dimensions.
+     * It deliberately does not read an in-flight animated DOM rectangle, because a
+     * rapid sequence of zoom inputs can otherwise mix visual intermediate geometry
+     * with already-committed model state and accumulate drift toward a corner.
+     *
+     * @param {number} scale Requested scale.
+     * @param {{x?: number, y?: number}|null} anchor Stage-relative cursor anchor.
+     * @param {{viewportWidth:number,viewportHeight:number,imageWidth:number,imageHeight:number,panViewportWidth?:number,panViewportHeight?:number}} metrics Current 100% zoom metrics.
+     * @return {{scale:number,translateX:number,translateY:number}} Anchored bounded state.
+     */
+    function lightboxZoomStateForAnchor(scale, anchor, metrics) {
+        const resolvedAnchor = anchor || {
+            x: metrics.viewportWidth / 2,
+            y: metrics.viewportHeight / 2,
+        };
+        return zoomLightboxStateAtPhotoAnchor(
+            lightboxZoomState,
+            scale,
+            resolvedAnchor,
+            metrics,
+        );
+    }
+
+    /**
+     * Set scale around a viewport-relative anchor and update all zoom controls.
+     *
+     * @param {number} scale Requested scale.
+     * @param {{x?: number, y?: number}|null} anchor Optional viewport-relative anchor; center is the default.
+     * @param {boolean} announce Whether to announce the resulting percentage.
+     * @param {boolean} animate Whether to use the short discrete-control transition.
+     */
+    function setLightboxZoomScale(scale, anchor = null, announce = true, animate = true) {
+        const metrics = measureLightboxZoomMetrics();
+        lightboxZoomState = lightboxZoomStateForAnchor(scale, anchor, metrics);
+        if (animate) {
+            animateLightboxZoomChange();
+        }
+        requestLightboxQualityUpgradeNow();
+        applyLightboxZoomState(announce, metrics);
+    }
+
+    /**
+     * Restore the canonical centered 100% state for navigation and teardown.
+     *
+     * @param {boolean} announce Whether to announce the reset.
+     */
+    function resetLightboxZoom(announce = false) {
+        cancelLightboxZoomReclamp();
+        clearLightboxZoomPointers();
+        clearLightboxZoomPan();
+        lightboxZoomState = createLightboxZoomState();
+        if (lightboxZoomAnimationTimer) {
+            window.clearTimeout(lightboxZoomAnimationTimer);
+            lightboxZoomAnimationTimer = 0;
+        }
+        overlay.classList.remove('is-zoom-animating', 'is-zoom-panning', 'is-zoomed');
+        if (zoomSurface instanceof HTMLElement) {
+            zoomSurface.style.removeProperty('transform');
+            zoomSurface.style.removeProperty('will-change');
+            zoomSurface.style.removeProperty('width');
+            zoomSurface.style.removeProperty('height');
+            zoomSurface.style.removeProperty('overflow');
+        }
+        if (image instanceof HTMLImageElement) {
+            image.style.removeProperty('width');
+            image.style.removeProperty('height');
+            image.style.removeProperty('max-width');
+            image.style.removeProperty('max-height');
+            image.style.removeProperty('transform');
+            image.style.removeProperty('will-change');
+        }
+        syncLightboxZoomControls(announce);
+    }
+
+    /**
+     * Return whether a keyboard event originated in an editable control.
+     *
+     * @param {KeyboardEvent} event Keyboard event to inspect.
+     * @return {boolean} True when gallery shortcuts must not replace text editing.
+     */
+    function isLightboxEditableKeyboardTarget(event) {
+        const target = event.target instanceof Element ? event.target : null;
+        return Boolean(target?.closest('input, textarea, select, [contenteditable="true"]'));
+    }
+
+    /**
+     * Remember the latest pointer position while it is over the zoomable photo stage.
+     *
+     * Keeping client coordinates rather than stage-relative coordinates lets the
+     * anchor survive fullscreen/layout changes and be resolved against the stage
+     * rectangle that exists at the exact moment a later zoom action runs.
+     *
+     * @param {PointerEvent|MouseEvent|WheelEvent} event Pointer-bearing stage event.
+     */
+    function rememberLightboxZoomPointerPosition(event) {
+        if (!(stageLink instanceof HTMLElement)) {
+            lightboxZoomPointerPosition = null;
+            return;
+        }
+        const clientX = Number(event?.clientX);
+        const clientY = Number(event?.clientY);
+        if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) {
+            return;
+        }
+        lightboxZoomPointerPosition = {clientX, clientY};
+    }
+
+    /**
+     * Resolve the remembered pointer to the current stage coordinate system.
+     *
+     * @return {{x:number,y:number}|null} Current viewport-relative zoom anchor, or null when unavailable.
+     */
+    function currentLightboxZoomPointerAnchor() {
+        if (!(stageLink instanceof HTMLElement) || !lightboxZoomPointerPosition) {
+            return null;
+        }
+        const stageRect = stageLink.getBoundingClientRect();
+        const {clientX, clientY} = lightboxZoomPointerPosition;
+        return {
+            x: clientX - stageRect.left,
+            y: clientY - stageRect.top,
+        };
+    }
+
+    /**
+     * Return whether a stage event came from a nested interactive control rather than the stage button itself.
+     *
+     * @param {Element|null} target Event target inside the zoom viewport.
+     * @return {boolean} True only for a nested control that zoom must not intercept.
+     */
+    function isLightboxZoomControlTarget(target) {
+        if (!target) {
+            return false;
+        }
+        const interactiveTarget = target.closest('button, a, input, textarea, select, form, [contenteditable="true"]');
+        return Boolean(interactiveTarget && interactiveTarget !== stageLink);
+    }
+
+    /**
+     * Zoom the active photograph around the wheel pointer without hijacking browser page zoom.
+     *
+     * @param {WheelEvent} event Stage wheel or trackpad event.
+     */
+    function handleLightboxZoomWheel(event) {
+        if (overlay.hidden || initialLightboxLoadActive || event.ctrlKey || event.metaKey || event.altKey) {
+            return;
+        }
+        const target = event.target instanceof Element ? event.target : null;
+        if (!target?.closest('[data-lightbox-zoom-viewport]') || isLightboxZoomControlTarget(target)) {
+            return;
+        }
+        const metrics = measureLightboxZoomMetrics();
+        if (!metrics.viewportWidth || !metrics.viewportHeight) {
+            return;
+        }
+        rememberLightboxZoomPointerPosition(event);
+        const pointerAnchor = currentLightboxZoomPointerAnchor();
+        const deltaUnit = event.deltaMode === WheelEvent.DOM_DELTA_LINE
+            ? 18
+            : (event.deltaMode === WheelEvent.DOM_DELTA_PAGE ? metrics.viewportHeight : 1);
+        const normalizedDelta = event.deltaY * deltaUnit;
+        if (!Number.isFinite(normalizedDelta) || normalizedDelta === 0) {
+            return;
+        }
+        const requestedScale = lightboxZoomState.scale - normalizedDelta * 0.0025;
+        const nextState = lightboxZoomStateForAnchor(
+            requestedScale,
+            pointerAnchor || {x: metrics.viewportWidth / 2, y: metrics.viewportHeight / 2},
+            metrics,
+        );
+        if (nextState.scale === lightboxZoomState.scale) {
+            return;
+        }
+        event.preventDefault();
+        lightboxZoomState = nextState;
+        requestLightboxQualityUpgradeNow();
+        applyLightboxZoomState(true, metrics);
+        showLightboxHud();
+    }
+
+    /**
+     * Release the active zoom-pan pointer and clear its transient cursor state.
+     */
+    function clearLightboxZoomPan() {
+        if (lightboxZoomPan?.captureElement && lightboxZoomPan.pointerId !== null) {
+            try {
+                lightboxZoomPan.captureElement.releasePointerCapture?.(lightboxZoomPan.pointerId);
+            } catch {
+                // Pointer capture release is best-effort after navigation or browser cancellation.
+            }
+        }
+        lightboxZoomPan = null;
+        overlay.classList.remove('is-zoom-panning');
+    }
+
+    /**
+     * Start a captured one-pointer pan only when the active photograph is enlarged.
+     *
+     * @param {PointerEvent} event Stage pointer-down event.
+     */
+    function startLightboxZoomPan(event) {
+        if (overlay.hidden || initialLightboxLoadActive || lightboxZoomState.scale <= LIGHTBOX_ZOOM_MIN_SCALE) {
+            return;
+        }
+        if (event.button !== 0 || event.isPrimary === false) {
+            return;
+        }
+        const target = event.target instanceof Element ? event.target : null;
+        if (!target?.closest('[data-lightbox-zoom-viewport]') || isLightboxZoomControlTarget(target)) {
+            return;
+        }
+        event.preventDefault();
+        const captureElement = event.currentTarget instanceof Element ? event.currentTarget : stageLink;
+        lightboxZoomPan = {
+            pointerId: event.pointerId,
+            captureElement,
+            lastX: event.clientX,
+            lastY: event.clientY,
+            moved: false,
+        };
+        overlay.classList.add('is-zoom-panning');
+        try {
+            captureElement?.setPointerCapture?.(event.pointerId);
+        } catch {
+            // Pointer capture is optional; window-level cancellation still clears state.
+        }
+    }
+
+    /**
+     * Pan the enlarged photograph by the captured pointer delta.
+     *
+     * @param {PointerEvent} event Captured pointer-move event.
+     */
+    function trackLightboxZoomPan(event) {
+        if (!lightboxZoomPan || event.pointerId !== lightboxZoomPan.pointerId) {
+            return;
+        }
+        const deltaX = event.clientX - lightboxZoomPan.lastX;
+        const deltaY = event.clientY - lightboxZoomPan.lastY;
+        lightboxZoomPan.lastX = event.clientX;
+        lightboxZoomPan.lastY = event.clientY;
+        if (!deltaX && !deltaY) {
+            return;
+        }
+        event.preventDefault();
+        lightboxZoomPan.moved = lightboxZoomPan.moved || Math.abs(deltaX) + Math.abs(deltaY) > 2;
+        lightboxZoomState = panLightboxZoomState(lightboxZoomState, deltaX, deltaY, measureLightboxZoomMetrics());
+        applyLightboxZoomState(false);
+        hideLightboxHud();
+    }
+
+    /**
+     * Finish or cancel a captured zoom pan without triggering fullscreen from the synthetic click.
+     *
+     * @param {PointerEvent} event Pointer completion event.
+     */
+    function finishLightboxZoomPan(event) {
+        if (!lightboxZoomPan || event.pointerId !== lightboxZoomPan.pointerId) {
+            return;
+        }
+        const moved = lightboxZoomPan.moved;
+        clearLightboxZoomPan();
+        if (moved) {
+            event.preventDefault();
+            suppressNextStageClick = true;
+        }
+        showLightboxHud();
+    }
+
+    /**
+     * Return distance and midpoint geometry for two tracked pointer positions.
+     *
+     * @param {{x: number, y: number}} first First pointer position.
+     * @param {{x: number, y: number}} second Second pointer position.
+     * @return {{distance: number, midpointX: number, midpointY: number}} Pair geometry.
+     */
+    function lightboxZoomPointerPairGeometry(first, second) {
+        const deltaX = second.x - first.x;
+        const deltaY = second.y - first.y;
+        return {
+            distance: Math.max(1, Math.hypot(deltaX, deltaY)),
+            midpointX: (first.x + second.x) / 2,
+            midpointY: (first.y + second.y) / 2,
+        };
+    }
+
+    /**
+     * Release tracked pinch pointers and remove all transient pinch state.
+     */
+    function clearLightboxZoomPointers() {
+        lightboxZoomPointers.forEach((pointer) => {
+            try {
+                pointer.captureElement?.releasePointerCapture?.(pointer.pointerId);
+            } catch {
+                // Ignore capture release failures after cancellation or DOM replacement.
+            }
+        });
+        lightboxZoomPointers.clear();
+        lightboxZoomPinch = null;
+        overlay.classList.remove('is-zoom-pinching');
+    }
+
+    /**
+     * Track touch pointers and enter pinch mode when the second pointer arrives.
+     *
+     * @param {PointerEvent} event Stage pointer-down event.
+     */
+    function startLightboxZoomPinch(event) {
+        if (overlay.hidden || initialLightboxLoadActive || event.pointerType !== 'touch') {
+            return;
+        }
+        const target = event.target instanceof Element ? event.target : null;
+        if (!target?.closest('[data-lightbox-zoom-viewport]') || isLightboxZoomControlTarget(target)) {
+            return;
+        }
+        if (lightboxZoomPointers.size >= 2) {
+            event.preventDefault();
+            return;
+        }
+        const captureElement = event.currentTarget instanceof Element ? event.currentTarget : stageLink;
+        lightboxZoomPointers.set(event.pointerId, {
+            pointerId: event.pointerId,
+            captureElement,
+            x: event.clientX,
+            y: event.clientY,
+        });
+        try {
+            captureElement?.setPointerCapture?.(event.pointerId);
+        } catch {
+            // Pointer capture is best-effort on older touch browsers.
+        }
+        if (lightboxZoomPointers.size < 2) {
+            return;
+        }
+        event.preventDefault();
+        clearTouchGesture();
+        resetMobileSwipeVisuals(false);
+        clearLightboxZoomPan();
+        lightboxZoomPointers.forEach((pointer) => {
+            try {
+                pointer.captureElement?.setPointerCapture?.(pointer.pointerId);
+            } catch {
+                // Re-capturing the first pointer after pan handoff is best-effort.
+            }
+        });
+        const [first, second] = Array.from(lightboxZoomPointers.values()).slice(0, 2);
+        const geometry = lightboxZoomPointerPairGeometry(first, second);
+        lightboxZoomPinch = {
+            startDistance: geometry.distance,
+            startMidpointX: geometry.midpointX,
+            startMidpointY: geometry.midpointY,
+            startState: {...lightboxZoomState},
+        };
+        overlay.classList.add('is-zoom-pinching');
+        hideLightboxHud();
+    }
+
+    /**
+     * Scale and translate the image around the moving midpoint of an active pinch.
+     *
+     * @param {PointerEvent} event Tracked touch pointer-move event.
+     */
+    function trackLightboxZoomPinch(event) {
+        const pointer = lightboxZoomPointers.get(event.pointerId);
+        if (!pointer) {
+            return;
+        }
+        pointer.x = event.clientX;
+        pointer.y = event.clientY;
+        if (!lightboxZoomPinch || lightboxZoomPointers.size < 2) {
+            return;
+        }
+        event.preventDefault();
+        const [first, second] = Array.from(lightboxZoomPointers.values()).slice(0, 2);
+        const geometry = lightboxZoomPointerPairGeometry(first, second);
+        const metrics = measureLightboxZoomMetrics();
+        const stageRect = stageLink.getBoundingClientRect();
+        const requestedScale = lightboxZoomPinch.startState.scale * (geometry.distance / lightboxZoomPinch.startDistance);
+        const anchoredState = zoomLightboxStateAtPhotoAnchor(
+            lightboxZoomPinch.startState,
+            requestedScale,
+            {
+                x: lightboxZoomPinch.startMidpointX - stageRect.left,
+                y: lightboxZoomPinch.startMidpointY - stageRect.top,
+            },
+            metrics,
+        );
+        lightboxZoomState = panLightboxZoomState(
+            anchoredState,
+            geometry.midpointX - lightboxZoomPinch.startMidpointX,
+            geometry.midpointY - lightboxZoomPinch.startMidpointY,
+            metrics,
+        );
+        requestLightboxQualityUpgradeNow();
+        applyLightboxZoomState(false, metrics);
+    }
+
+    /**
+     * Remove a completed pinch pointer and leave the resulting bounded zoom state active.
+     *
+     * @param {PointerEvent} event Pointer completion or cancellation event.
+     */
+    function finishLightboxZoomPinch(event) {
+        const pointer = lightboxZoomPointers.get(event.pointerId);
+        if (!pointer) {
+            return;
+        }
+        const wasPinching = Boolean(lightboxZoomPinch);
+        try {
+            pointer.captureElement?.releasePointerCapture?.(event.pointerId);
+        } catch {
+            // Ignore capture release failures after browser cancellation.
+        }
+        lightboxZoomPointers.delete(event.pointerId);
+        if (!wasPinching) {
+            return;
+        }
+        event.preventDefault();
+        suppressNextStageClick = true;
+        lightboxZoomPinch = null;
+        overlay.classList.remove('is-zoom-pinching');
+        requestLightboxQualityUpgradeNow();
+        applyLightboxZoomState(true);
+        showLightboxHud();
+    }
+
         /**
      * Open the lightbox at a specific index.
      *
@@ -2177,6 +3203,7 @@ export function setupGalleryLightbox() {
         const revealHud = options.revealHud !== false;
         clearLightboxSlideshowTimer();
         const normalizedIndex = ((index % cards.length) + cards.length) % cards.length;
+        resetLightboxZoom(false);
         // Variable `card` stores this steps working value.
         const card = cards[normalizedIndex];
         const isInitialPhotoOpen = overlay.hidden || !image.getAttribute('src') || overlay.classList.contains('is-initial-loading');
@@ -2202,7 +3229,8 @@ export function setupGalleryLightbox() {
         galleryDevModeState.currentIndex = normalizedIndex;
         activeLightboxImageToken += 1;
         activeLightboxTransitionToken += 1;
-        clearPendingFullImageSwap();
+        clearPendingLightboxQualityUpgrade();
+        activeLightboxQualitySource = '';
         removeTransitionImage();
         resetLightboxPreloadQueue();
         // imageToken stores state or configuration for the gallery front-end flow.
@@ -2224,9 +3252,9 @@ export function setupGalleryLightbox() {
         }
         // previewSrc stores the lightweight thumbnail source used for nearby previews and fallback loading.
         const previewSrc = card.dataset.previewSrc || '';
-        // fullSrc stores the browser-displayable media source that must drive the main lightbox stage.
+        // fullSrc stores the protected browser-displayable source available for fallback or quality promotion.
         const fullSrc = card.dataset.fullSrc || previewSrc;
-        // mainSrc stores the source used for normal and fullscreen picture viewing.
+        // mainSrc provides a safe fallback when no generated preview can be displayed.
         const mainSrc = fullSrc || previewSrc;
         // altText stores state or configuration for the gallery front-end flow.
         const altText = card.dataset.title || '';
@@ -2270,29 +3298,17 @@ export function setupGalleryLightbox() {
          * @return {*} Result value for the caller.
          */
         const showMainImage = (loadedImage = null) => showLightboxImageSource(normalizedIndex, imageToken, mainSrc, altText, shouldSwapImmediately, loadedImage);
-        /**
-         * Handle full media swap after the preview is already visible.
-         *
-         * Used by browser-side gallery behavior.
-         *
-         * @return {*} Result value for the caller.
-         */
-        const scheduleFullMediaSwap = () => {
-            if (!previewSrc || !mainSrc || previewSrc === mainSrc) {
-                return Promise.resolve(false);
-            }
-            return swapLightboxImageAfterDecode(normalizedIndex, imageToken, previewSrc, mainSrc, altText);
-        };
-        const initialMainPromise = previewSrc && mainSrc && previewSrc !== mainSrc
+        const initialMainPromise = previewSrc
             ? showPreviewFirst().then((wasDisplayed) => {
                 if (!isCurrentLightboxImageRequest(normalizedIndex, imageToken)) {
                     return false;
                 }
                 if (wasDisplayed) {
-                    scheduleFullMediaSwap();
                     return true;
                 }
-                return loadDecodedLightboxImage(mainSrc, {priority: 'high'}).then(showMainImage).catch(() => false);
+                return mainSrc
+                    ? loadDecodedLightboxImage(mainSrc, {priority: 'high'}).then(showMainImage).catch(() => false)
+                    : false;
             })
             : (mainSrc
                 ? (shouldShowImmediately
@@ -2305,6 +3321,7 @@ export function setupGalleryLightbox() {
             }
             clearLightboxNavigationPending(imageToken);
             hideInitialLightboxLoader();
+            scheduleLightboxQualityUpgrade(0);
             scheduleLightboxSlideshowNext();
         });
         syncPictureStrip(normalizedIndex);
@@ -2415,6 +3432,7 @@ export function setupGalleryLightbox() {
             scheduleLightboxSlideshowNext();
             return;
         }
+        resetLightboxZoom(false);
         lightboxSlideshowActive = true;
         syncLightboxSlideshowControls();
         if (!isLightboxFullscreen()) {
@@ -2489,6 +3507,7 @@ export function setupGalleryLightbox() {
      */
     function close() {
         telemetryPhotoClosed();
+        resetLightboxZoom(false);
         stopLightboxSlideshow();
         hideLightboxHelpPanel();
         exitLightboxFullscreen();
@@ -2508,9 +3527,10 @@ export function setupGalleryLightbox() {
         updateLightboxViewportMode();
         hideInitialLightboxLoader();
         overlay.hidden = true;
-        clearPendingFullImageSwap();
+        clearPendingLightboxQualityUpgrade();
         removeTransitionImage();
         image.removeAttribute('src');
+        activeLightboxQualitySource = '';
         galleryDevModeState.currentSource = '';
         galleryDevModeState.currentSourceKind = '';
         galleryDevModeState.currentIndex = -1;
@@ -2659,6 +3679,8 @@ export function setupGalleryLightbox() {
         return ['slow-2g', '2g'].includes(connection.effectiveType);
     }
 
+    resetLightboxZoom(false);
+
     document.addEventListener('click', (event) => {
         if (controller.signal.aborted || !(event.target instanceof Element)) {
             return;
@@ -2719,6 +3741,24 @@ export function setupGalleryLightbox() {
             close();
             return;
         }
+        if (action === 'zoom-in') {
+            event.preventDefault();
+            event.stopPropagation();
+            setLightboxZoomScale(lightboxZoomState.scale + LIGHTBOX_ZOOM_STEP, currentLightboxZoomPointerAnchor());
+            return;
+        }
+        if (action === 'zoom-out') {
+            event.preventDefault();
+            event.stopPropagation();
+            setLightboxZoomScale(lightboxZoomState.scale - LIGHTBOX_ZOOM_STEP, currentLightboxZoomPointerAnchor());
+            return;
+        }
+        if (action === 'zoom-reset') {
+            event.preventDefault();
+            event.stopPropagation();
+            setLightboxZoomScale(LIGHTBOX_ZOOM_MIN_SCALE);
+            return;
+        }
         if (target?.closest('[data-lightbox-stage]')) {
             event.preventDefault();
             if (suppressNextStageClick) {
@@ -2726,6 +3766,9 @@ export function setupGalleryLightbox() {
                 return;
             }
             if (initialLightboxLoadActive) {
+                return;
+            }
+            if (lightboxZoomState.scale > LIGHTBOX_ZOOM_MIN_SCALE) {
                 return;
             }
             clearLightboxStageFocus();
@@ -2783,6 +3826,25 @@ export function setupGalleryLightbox() {
                 event.preventDefault();
             }
         }, {signal: controller.signal});
+        stageLink.addEventListener('wheel', handleLightboxZoomWheel, {passive: false, signal: controller.signal});
+        stageLink.addEventListener('pointermove', rememberLightboxZoomPointerPosition, {signal: controller.signal});
+        stageLink.addEventListener('pointerleave', () => {
+            lightboxZoomPointerPosition = null;
+        }, {signal: controller.signal});
+        if (supportsPointerGestures) {
+            stageLink.addEventListener('pointerdown', startLightboxZoomPinch, {capture: true, signal: controller.signal});
+            stageLink.addEventListener('pointermove', trackLightboxZoomPinch, {capture: true, signal: controller.signal});
+            stageLink.addEventListener('pointerup', finishLightboxZoomPinch, {capture: true, signal: controller.signal});
+            stageLink.addEventListener('pointercancel', finishLightboxZoomPinch, {capture: true, signal: controller.signal});
+            stageLink.addEventListener('pointerdown', startLightboxZoomPan, {capture: true, signal: controller.signal});
+            stageLink.addEventListener('pointermove', trackLightboxZoomPan, {capture: true, signal: controller.signal});
+            stageLink.addEventListener('pointerup', finishLightboxZoomPan, {capture: true, signal: controller.signal});
+            stageLink.addEventListener('pointercancel', finishLightboxZoomPan, {capture: true, signal: controller.signal});
+            window.addEventListener('pointerup', finishLightboxZoomPan, {capture: true, signal: controller.signal});
+            window.addEventListener('pointercancel', finishLightboxZoomPan, {capture: true, signal: controller.signal});
+            window.addEventListener('pointerup', finishLightboxZoomPinch, {capture: true, signal: controller.signal});
+            window.addEventListener('pointercancel', finishLightboxZoomPinch, {capture: true, signal: controller.signal});
+        }
     }
 
     overlay.addEventListener('mousemove', showLightboxHud, {signal: controller.signal});
@@ -2814,6 +3876,8 @@ export function setupGalleryLightbox() {
         updateNormalLightboxStageSize(cards[currentIndex]);
         renderPictureStrip(currentIndex, false);
         updateFullscreenMapImageFit(cards[currentIndex]);
+        applyLightboxZoomState(false);
+        scheduleLightboxQualityUpgrade();
     }, {signal: controller.signal});
     window.visualViewport?.addEventListener('resize', updateMobileLightboxViewport, {signal: controller.signal});
     window.visualViewport?.addEventListener('scroll', updateMobileLightboxViewport, {signal: controller.signal});
@@ -2830,6 +3894,23 @@ export function setupGalleryLightbox() {
             }
             close();
             return;
+        }
+        if (!event.altKey && !event.ctrlKey && !event.metaKey && !isLightboxEditableKeyboardTarget(event)) {
+            if (event.key === '+' || event.key === '=') {
+                event.preventDefault();
+                setLightboxZoomScale(lightboxZoomState.scale + LIGHTBOX_ZOOM_STEP, currentLightboxZoomPointerAnchor());
+                return;
+            }
+            if (event.key === '-' || event.key === '_') {
+                event.preventDefault();
+                setLightboxZoomScale(lightboxZoomState.scale - LIGHTBOX_ZOOM_STEP, currentLightboxZoomPointerAnchor());
+                return;
+            }
+            if (event.key === '0') {
+                event.preventDefault();
+                setLightboxZoomScale(LIGHTBOX_ZOOM_MIN_SCALE);
+                return;
+            }
         }
         if (!event.altKey && !event.ctrlKey && !event.metaKey && event.key.toLowerCase() === 'x') {
             event.preventDefault();
@@ -2938,6 +4019,7 @@ export function setupGalleryLightbox() {
         overlay.classList.remove('is-fullscreen');
         document.documentElement.classList.add('has-mobile-lightbox');
         document.body.classList.add('has-mobile-lightbox');
+        scheduleLightboxZoomReclamp();
         debugLightbox('enter:mobile-auto');
     }
 
@@ -2955,6 +4037,7 @@ export function setupGalleryLightbox() {
         try {
             if (overlay.requestFullscreen) {
                 await overlay.requestFullscreen();
+                scheduleLightboxZoomReclamp();
                 debugLightbox('enter:native');
                 return;
             }
@@ -2983,6 +4066,7 @@ export function setupGalleryLightbox() {
                 // Ignore fullscreen exit failures.
             }
         }
+        scheduleLightboxZoomReclamp();
         clearLightboxStageFocus();
         debugLightbox('exit');
     }
@@ -3001,6 +4085,7 @@ export function setupGalleryLightbox() {
             document.documentElement.classList.remove('has-mobile-lightbox');
             document.body.classList.remove('has-mobile-lightbox');
             stopLightboxSlideshow();
+            scheduleLightboxZoomReclamp();
             clearLightboxStageFocus();
             debugLightbox('sync:browser-exit');
             return;
@@ -3011,6 +4096,7 @@ export function setupGalleryLightbox() {
             document.documentElement.classList.remove('has-mobile-lightbox');
             document.body.classList.remove('has-mobile-lightbox');
             overlay.classList.remove('is-ui-visible');
+            scheduleLightboxZoomReclamp();
             debugLightbox('sync:browser-enter');
         }
     }
@@ -3260,7 +4346,7 @@ export function setupGalleryLightbox() {
      * @param {*} event Value supplied by the caller or event context.
      */
     function startTouchGesture(event) {
-        if (!isActiveMobileLightbox() || initialLightboxLoadActive || cards.length <= 1) {
+        if (!isActiveMobileLightbox() || initialLightboxLoadActive || cards.length <= 1 || lightboxZoomState.scale > LIGHTBOX_ZOOM_MIN_SCALE) {
             return;
         }
         if (event.touches && event.touches.length > 1) {
@@ -3270,7 +4356,7 @@ export function setupGalleryLightbox() {
             return;
         }
         const target = event.target instanceof Element ? event.target : null;
-        if (!target?.closest('[data-lightbox-stage]') || isLightboxControlTarget(target)) {
+        if (!target?.closest('[data-lightbox-stage]') || isLightboxZoomControlTarget(target)) {
             return;
         }
         const point = lightboxGesturePoint(event);
@@ -3411,25 +4497,6 @@ export function setupGalleryLightbox() {
             return event;
         }
         return null;
-    }
-
-        /**
-     * Handles is lightbox control target behavior for the gallery UI.
-     *
-     * @param {*} target Value supplied by the caller or event context.
-     * @return {*} Result of the UI operation, when a value is produced.
-     */
-    function isLightboxControlTarget(target) {
-        if (!target) {
-            return false;
-        }
-        if (target.closest('.lightbox-hud')) {
-            return true;
-        }
-        if (target.closest('.lightbox-meta')) {
-            return Boolean(target.closest('button, a, input, textarea, select, form'));
-        }
-        return Boolean(target.closest('button, input, textarea, select, form'));
     }
 
         /**
@@ -4491,6 +5558,7 @@ export function setupGalleryLightbox() {
         lightboxMapSplit.classList.add('is-map-unavailable');
         lightboxMapSplit.setAttribute('aria-disabled', 'true');
         overlay.classList.add('is-map-split', 'is-map-split-disabled');
+        scheduleLightboxZoomReclamp();
         if (lightboxMapSplitTitle) {
             lightboxMapSplitTitle.textContent = title || i18n('lightbox.map', 'Map');
         }
@@ -4647,6 +5715,7 @@ export function setupGalleryLightbox() {
         lightboxMapSplitTitle.textContent = title || i18n('lightbox.map', 'Map');
         overlay.classList.add('is-map-split');
         overlay.classList.remove('is-map-split-disabled');
+        scheduleLightboxZoomReclamp();
         requestAnimationFrame(() => updateFullscreenMapImageFit(cards[currentIndex] || null));
         await waitForElementSize(lightboxMapSplitCanvas);
         lightboxMapSplitCanvas.innerHTML = '';
@@ -4795,6 +5864,7 @@ export function setupGalleryLightbox() {
             lightboxMapSplit.removeAttribute('aria-disabled');
         }
         overlay.classList.remove('is-map-split', 'is-map-split-disabled');
+        scheduleLightboxZoomReclamp();
         if (lightboxMapSplitCanvas) {
             lightboxMapSplitCanvas.innerHTML = '';
         }

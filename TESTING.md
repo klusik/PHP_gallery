@@ -53,6 +53,14 @@ php tests/public_thumbnail_markup_test.php
 php tests/hero_tag_theme_model_test.php
 php tests/tag_metadata_mysql_compatibility_test.php
 php tests/translation_catalog_consistency_test.php
+php tests/lightbox_zoom_lifecycle_test.php
+php tests/lightbox_zoom_integration_test.php
+php tests/lightbox_zoom_translation_test.php
+php tests/lightbox_zoom_quality_candidates_test.php
+php tests/lightbox_zoom_quality_rendering_test.php
+php tests/lightbox_zoom_quality_lifecycle_test.php
+php tests/lightbox_zoom_quality_indicator_test.php
+node tests/lightbox_zoom_model_test.mjs
 node tests/progressive_thumbnail_renderer_test.mjs
 ```
 
@@ -541,6 +549,56 @@ Use this order for each release so generated integrity data describes the final 
 If a local dependency such as PHP, Node, or a TeX tool is unavailable, record the exact blocked command and environment in the handoff. Do not describe the release as fully verified until that command has been run successfully.
 
 When checking Admin dashboard performance, verify that opening `?page=admin` does not request `admin_dashboard_maintenance` until `#admin-tab-maintenance` is selected. Then verify that the authenticated JSON response replaces the placeholder, nested maintenance tabs initialize, and direct or no-JavaScript fallback links remain usable.
+
+### Public Lightbox Zoom Verification
+
+Run all seven PHP zoom contracts and the Node model test listed above after changing lightbox markup, browser events,
+fullscreen/mobile CSS, quality candidates, cache-busting, translations, maps, voting, or lazy metadata. The model test
+covers scale bounds, reset, two-axis pan clamping, centered and fractional anchors, repeated off-center zoom through 400%,
+required source pixels, density caps, malformed candidates, and no-downgrade selection. PHP contracts cover semantic
+controls, reset ordering, server/lazy candidate rendering, immediate deliberate-zoom source promotion, passive 100%
+quality evaluation, accessible loading feedback, stale-request cancellation, failure fallback, fullscreen/map
+remeasurement, event scope, browser-modifier preservation, catalog coverage, and the existing gallery/NSFW access
+boundary. Also run `node --check` on every changed JavaScript module and `php -l` on every changed PHP file.
+
+Manual browser coverage remains required because the repository has no production browser-automation dependency:
+
+1. In current Chromium/Edge, Firefox, and Safari/WebKit where available, open a normal gallery photo and use `+`, `−`,
+   percentage reset, `+`/`=`, `-`/`_`, `0`, wheel/trackpad, drag, and pinch. Verify the limits at exactly 100% and 400%.
+2. Verify the 100% photograph is centered and the photograph frame itself grows when zooming. In normal lightbox the
+   enlarged frame may extend beyond the original stage instead of behaving like a fixed crop window. In fullscreen the
+   browser viewport remains the clip boundary.
+3. Put the pointer on a recognizable off-center detail and zoom repeatedly from 100% toward 400%. The same photograph
+   point must remain under the cursor after every step, including rapid wheel input while the 120 ms transition is still
+   animating. Repeat with touch pinch around an off-center midpoint. Confirm there is no cumulative top-left or
+   bottom-right drift.
+4. While zoomed, drag to all photograph edges. In fullscreen verify both horizontal and vertical pan are available for a
+   wide image once zoom creates overflow. Confirm the close button and other fullscreen HUD controls remain clickable at
+   125%, 200%, and 400%, and that photo pan does not steal their pointer events.
+5. Confirm Ctrl/Command-wheel still performs browser page zoom and scrolling outside the active photo stage is not
+   intercepted. At 100%, one-finger mobile swipe must retain photo navigation; above 100%, one pointer pans and two
+   pointers pinch.
+6. With Network and Elements tools open, use an image substantially wider than the generated preview. A sufficiently
+   small 100% stage may remain on the preview, while a large/high-DPI stage may be promoted passively. Perform one
+   deliberate zoom-in action and confirm a high-priority request for the protected `data-full-src` begins in that same
+   input task. The request must not wait for resize, fullscreen, an animation frame, or a mode toggle. While it transfers,
+   the existing preview remains usable and the translated loading pill/ring plus `aria-busy` are present. When the live
+   image finishes loading the original, sharpness must improve in the current mode without changing scale, pan, or
+   fullscreen state.
+7. Navigate previous/next while an original request is pending, select picture-strip and 3D-carousel neighbors, and open
+   a lazy non-visible item. A late result must never mutate the new photograph. Each new image starts centered at 100%,
+   and zooming one photograph must not prefetch adjacent originals. Simulate a failed full-media request and confirm the
+   protected preview is restored without repeated retries.
+8. Toggle browser/CSS mobile fullscreen while enlarged and confirm scale is preserved, the fitted frame is recentered for
+   the new viewport, and translation is safely reclamped. Start slideshow and confirm zoom resets before automatic
+   navigation. Open/close fullscreen map split and confirm Leaflet, votes, help, metadata, strip/carousel items, navigation,
+   and the close button remain independent controls.
+9. After changing `lightbox.js`, reload page source and confirm `data-gallery-asset-revision` changes even if another
+   dependency has a later filesystem modification time. Confirm the deferred `lightbox.js?v=...` request uses the new
+   revision. Disable JavaScript and confirm the ordinary server-rendered photo/navigation fallback remains usable. Watch
+   the console and memory while repeatedly opening, zooming, promoting, navigating, toggling fullscreen, and closing;
+   there must be no stuck pointer capture, stale pan state, uncancelled listener, unbounded decoded-source cache, or
+   zoom-caused URL/history change.
 
 ### 3. Manual Functional Smoke Tests
 For feature work, use the same end-to-end scenario every time. Keep one dedicated test installation or local database so you can create and remove test content freely.

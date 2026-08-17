@@ -1150,6 +1150,71 @@ galleries.lightbox_browsing_mode ENUM('single','picture_strip','3d_carousel') NU
 gallery.json key: lightbox_browsing_mode
 ```
 
+## Lightbox Client Zoom Model
+
+`app/controllers/public_gallery_lightbox.php` renders one semantic zoom-control group in the normal toolbar and a mirror
+for the existing fullscreen HUD. Both control the same server-rendered `data-lightbox-stage`; there is no parallel viewer.
+The stage contains one `.lightbox-zoom-surface`, which is the fitted photograph frame, and the active
+`data-lightbox-img`. At 100% the surface is explicitly centered on the fitted photograph. Above 100% its real CSS width and
+height grow from those fitted dimensions, while a translation-only transform moves the enlarged frame for pan. The image
+fills the surface instead of being independently compositor-scaled.
+
+`public/assets/gallery-modules/lightbox-zoom-model.js` owns browser-independent constants and geometry. Scale is clamped to
+`1..4`, discrete controls use `0.25`, and translation is bounded from the fitted 100% image dimensions, current scale,
+viewport size, and current pan. `zoomLightboxStateAtPhotoAnchor()` preserves the exact fractional photograph point under a
+pointer or pinch midpoint. It derives the current rendered rectangle from canonical model state, not from
+`getBoundingClientRect()` during the 120 ms CSS transition, so rapid repeated zoom cannot mix an intermediate visual frame
+with already-committed JavaScript state and drift toward a corner. `tests/lightbox_zoom_model_test.mjs` exercises bounds,
+pan clamping, centered/fractional anchors, repeated off-center zoom through 400%, and quality-candidate math without a DOM.
+
+`public/assets/gallery-modules/lightbox.js` owns DOM state, status synchronization, wheel input, pointer pan, pinch capture,
+fullscreen remeasurement, and teardown. Wheel/trackpad input resolves the pointer against the current stage, while
+keyboard/discrete controls use the remembered in-stage pointer only when one is valid and otherwise fall back to the image
+center. `openAt()` is the reset boundary for direct opens, previous/next, picture-strip, 3D-carousel, lazy hydration,
+mobile swipe, and slideshow advance. `close()` clears zoom/pointer state. Pure fullscreen entry/exit preserves scale and
+reclamps translation. At 100%, the established one-finger horizontal swipe remains the navigation owner; above 100%, one
+pointer pans and two touch pointers own pinch.
+
+Normal lightbox and fullscreen intentionally clip differently. The ordinary lightbox allows the enlarged zoom surface to
+extend beyond the original fitted stage so the photograph frame grows with zoom instead of behaving like a fixed window.
+Fullscreen keeps the stage as the clipping viewport and computes both horizontal and vertical pan bounds from the fitted
+100% photograph, which allows vertical inspection of wide images as soon as scale creates additional photograph area.
+Fullscreen HUD and close controls have an explicit stacking order above the transformed zoom surface so hit testing does
+not disappear while zoomed. Map, strip, carousel, voting, help, and navigation controls remain outside the photo zoom
+target.
+
+Progressive zoom quality reuses the authorized preview and browser-displayable media URLs already owned by the public
+renderer. `lightbox_zoom_quality_candidates()` in `app/services/thumbnail_bundles.php` attaches bounded source dimensions
+to those URLs, preserving aspect ratio and collapsing duplicate fallback URLs. Visible physical and Smart Gallery cards
+emit the list in `data-lightbox-quality-sources`; `app/controllers/gallery_lightbox.php` emits the same `quality_sources`
+model for lazy pagination. Neither path exposes a filesystem path or constructs a new original-file route, and the lazy
+endpoint still performs gallery and per-image NSFW checks before returning media metadata.
+
+At exactly 100%, passive quality evaluation computes demand from fitted CSS image width, bounded device density, and a 1.5
+rendering-detail factor. This can promote a large ordinary desktop stage or high-DPI display while allowing smaller stages
+to retain the generated preview. Deliberate zoom is stricter: the first button, keyboard, wheel, trackpad, or pinch action
+that raises scale above 100% synchronously assigns the already-authorized `data-full-src` to the live
+`data-lightbox-img` in that same input task. Pending preview transitions and passive quality work are invalidated first;
+`srcset`/`sizes` cannot override the explicit source. The request does not wait for resize, fullscreen, a quality debounce,
+a detached image decode, or an animation frame.
+
+The live image keeps its existing DOM identity while the original transfers. Loading/error listeners are scoped to the
+active image ID, navigation token, and quality token. Success keeps the current zoom surface geometry and clears the
+loading state; failure restores the protected preview and leaves controls usable. Full originals are never eagerly queued
+for neighboring photos. While a larger source is pending, `setLightboxQualityLoading()` applies `aria-busy`, translated
+loading text, and the existing pointer-transparent activity indicator; navigation, close, teardown, success, and failure
+all clear it.
+
+`public/assets/styles/lightbox.css` owns the centered/growing zoom surface, normal-lightbox overflow, fullscreen clipping,
+cursor states, HUD stacking, focus, and reduced-motion behavior. `public/assets/styles/mobile-gallery.css` keeps controls
+inside the existing safe-area toolbar. Zoom has no database, URL, cookie, storage, or telemetry state. Existing
+gallery/media, share, NSFW, and lazy-lightbox authorization remains authoritative, and the unenhanced server-rendered path
+is unchanged.
+
+The shared browser entrypoint revision is content-sensitive across its dependency graph. `asset_dependency_revision()`
+hashes dependency bytes instead of taking only the greatest modification time, so a changed `lightbox.js` always produces
+a new module URL even when another asset has a newer or future timestamp.
+
 ## Thumbnail Model
 
 Thumbnails are generated and served through the thumbnail service family.

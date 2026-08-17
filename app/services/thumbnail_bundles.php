@@ -335,6 +335,69 @@ function thumbnail_bundle_url(array $bundle, int $preferredSize, string $preferr
 }
 
 /**
+ * Build the authorized pixel-density candidates used by progressive lightbox zoom.
+ *
+ * URLs are supplied by the existing protected thumbnail and media presentation
+ * paths. This helper adds only bounded geometry metadata; it never constructs a
+ * raw-file URL or performs filesystem work.
+ *
+ * @param array $image Image row or image data.
+ * @param string $previewUrl Existing protected preview URL.
+ * @param string $fullUrl Existing protected browser-displayable media URL.
+ * @param ?array $bundle Optional request-local thumbnail bundle used to identify the preview size.
+ * @return array<int,array{src:string,width:int,height:int,kind:string}> Ordered safe source candidates.
+ */
+function lightbox_zoom_quality_candidates(array $image, string $previewUrl, string $fullUrl, ?array $bundle = null): array
+{
+    $dimensions = function_exists('Gallery\\Services\\thumbnail_metadata_image_display_dimensions')
+        ? thumbnail_metadata_image_display_dimensions($image)
+        : null;
+    $sourceWidth = max(0, min(100000, (int) ($dimensions['width'] ?? $image['width'] ?? 0)));
+    $sourceHeight = max(0, min(100000, (int) ($dimensions['height'] ?? $image['height'] ?? 0)));
+    if ($sourceWidth <= 0 || $sourceHeight <= 0) {
+        return [];
+    }
+
+    $candidatesByUrl = [];
+    if ($previewUrl !== '') {
+        $previewMaxSide = 1600;
+        if (is_array($bundle)) {
+            foreach (['jpg', 'webp'] as $format) {
+                foreach ((array) ($bundle['variants'][$format] ?? []) as $size => $variantUrl) {
+                    if ((string) $variantUrl === $previewUrl) {
+                        $previewMaxSide = max(1, min(100000, (int) $size));
+                        break 2;
+                    }
+                }
+            }
+        }
+        $previewDimensions = thumbnail_expected_dimensions($sourceWidth, $sourceHeight, $previewMaxSide);
+        $candidatesByUrl[$previewUrl] = [
+            'src' => $previewUrl,
+            'width' => (int) $previewDimensions['width'],
+            'height' => (int) $previewDimensions['height'],
+            'kind' => 'preview',
+        ];
+    }
+
+    if ($fullUrl !== '') {
+        $fullCandidate = [
+            'src' => $fullUrl,
+            'width' => $sourceWidth,
+            'height' => $sourceHeight,
+            'kind' => 'full',
+        ];
+        if (!isset($candidatesByUrl[$fullUrl]) || (int) $candidatesByUrl[$fullUrl]['width'] < $sourceWidth) {
+            $candidatesByUrl[$fullUrl] = $fullCandidate;
+        }
+    }
+
+    $candidates = array_values($candidatesByUrl);
+    usort($candidates, static fn (array $left, array $right): int => (int) $left['width'] <=> (int) $right['width']);
+    return $candidates;
+}
+
+/**
  * Return a srcset string using only variants already resolved in a thumbnail bundle.
  *
  * @param array $bundle Bundle value.
