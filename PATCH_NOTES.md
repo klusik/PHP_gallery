@@ -1,10 +1,83 @@
 # Patch notes
 
-## Version 0.91.1
+## Version 0.91.2
 
-Version 0.91.1 is a focused lightbox navigation refinement for the Version 0.91 zoom and progressive image-quality release. It adds a fast, accessible ten-photo navigation shortcut while preserving the existing single-photo arrows and all gallery, Smart Gallery, access-control, zoom, fullscreen, map, slideshow, responsive, and no-JavaScript behavior.
+Version 0.91.2 is the complete consolidated release of the Version 0.91 and 0.91.1 viewer and Smart Gallery work. It is intentionally documented as a full release handoff so the public zoom, progressive image quality, Smart Gallery visibility, presentation, placement, cycle safety, and navigation changes are all represented together.
 
   ### Highlights
+
+  #### Smart Galleries for public viewers
+
+  - Published and enabled Smart Galleries can appear to anonymous viewers when attached to an accessible public gallery.
+  - Public Smart Gallery routes, navigation entries, direct links, downloads, SEO guards, and no-JavaScript fallbacks use the same centralized access and visibility policies as normal galleries.
+  - Matched results are intersected with the current viewer’s permissions, including private galleries, password/share protection, hidden media, NSFW protection, and image-level authorization. Protected images and counts are not leaked.
+  - Smart Galleries reuse normal cards, thumbnails, metadata, pagination, responsive rendering, and lightbox infrastructure.
+
+  #### Configurable Smart Gallery presentation
+
+  - Added per-Smart-Gallery presentation configuration for supported gallery layout, rows/page size, thumbnail size and quality, renderer selection, spacing, metadata visibility, and related display controls.
+  - Added canonical normalization and safe backward-compatible defaults for missing or malformed values.
+  - Added Admin and side-panel controls, localized labels, effective rendering support, documentation, and migrations without copying images or moving source files.
+
+  #### Placement and ordering
+
+  - Multiple Smart Galleries can be attached to the same parent gallery.
+  - Each attachment can render above the normal gallery content or below it, with bottom placement preserved as the default.
+  - Top and bottom attachments have independent deterministic ordering with stable tie-breaking.
+  - Admin controls support attachment management, placement, ordering, duplicate prevention, and safe in-place side-panel updates.
+
+  #### Cycle safety
+
+  - Direct self-attachments and indirect Smart Gallery/gallery cycles are rejected server-side.
+  - Runtime visited-node tracking, recursion depth limits, expanded-node/result bounds, and deduplication protect public requests from legacy or malformed loops.
+  - Invalid existing relationships terminate safely and remain diagnosable and repairable in Admin.
+
+  #### Viewer zoom, quality, and navigation
+
+  - Retained the Version 0.91 accessible 100%–400% zoom system with toolbar, keyboard, wheel/trackpad, pointer, touch pinch, bounded pan, fullscreen, map, slideshow, and reduced-motion behavior.
+  - Retained demand-driven promotion from authorized previews to sharper browser-displayable sources, active-photo-only loading, translated progress feedback, immediate compositor repaint, stale lifecycle rejection, and no raw-file URL exposure.
+  - Ordinary Left/Right arrows move one photograph; Shift+Left/Right moves ten photographs in the current ordered result set.
+  - Corrected backward ten-photo modular navigation at the beginning of a gallery and updated translated keyboard-help text in all maintained catalogs.
+
+  ### Upgrade and verification
+
+  - Existing installations must run the normal updater to apply the Smart Gallery presentation and attachment-order migrations. No source files are moved or duplicated.
+  - Updated runtime version, release metadata, README, architecture/database/testing references, Smart Gallery documentation, and the administrator manual.
+  - Rebuilt the indexed 0.91.2 manual PDF and regenerated the 388-file `app/core-manifest.json` after final edits.
+  - Verified the complete PHP regression suite, focused Smart Gallery and lightbox/browser tests, syntax validation, translation consistency, migration checks, manifest freshness, and `git diff --check`.
+
+## Version 0.91.1
+
+Version 0.91.1 is a Smart Gallery hardening and presentation release built on the Version 0.91 zoom and progressive image-quality foundation. It makes published Smart Galleries behave like genuine public gallery destinations, adds configurable presentation and placement controls, hardens recursive relationships, and improves rapid lightbox navigation.
+
+  ### Highlights
+
+  #### Public Smart Gallery behavior
+
+  - Published and enabled Smart Galleries can now appear to anonymous viewers when attached to an accessible public gallery, instead of being visible only to administrators.
+  - Public rendering applies the same centralized visibility, publication, parent-gallery, share/password, NSFW, and image-level access rules as normal galleries. Protected images and protected result counts are not leaked through a public Smart Gallery.
+  - Smart Gallery public routes, navigation entries, attachment locations, download behavior, SEO guards, and no-JavaScript links now use the public access contract consistently.
+  - Smart Gallery result rendering reuses the normal gallery card, thumbnail, metadata, lightbox, responsive, and pagination infrastructure rather than creating a parallel gallery pipeline.
+
+  #### Configurable Smart Gallery presentation
+
+  - Added per-Smart-Gallery presentation settings for layout columns, rows/page size, thumbnail sizing and quality, renderer selection, spacing, metadata visibility, and related gallery display options supported by the existing architecture.
+  - Added canonical normalization and safe defaults so missing or malformed presentation values remain compatible with existing Smart Galleries.
+  - Added Admin editor controls, side-panel integration, localized labels, live/effective rendering support, and documentation for Smart Gallery presentation configuration.
+  - Added migration support for presentation data without duplicating image records or changing the filesystem. Existing Smart Galleries retain their prior appearance and behavior by default.
+
+  #### Safe attachment placement and ordering
+
+  - A parent gallery can now contain multiple Smart Galleries in deterministic order.
+  - Each attachment can be placed above the normal gallery content or below it; bottom placement remains the default for existing attachments.
+  - Ordering is stored per parent attachment and is independent for top and bottom groups, with stable tie-breaking for equal order values.
+  - Added Admin controls and translated validation for placement, ordering, duplicate attachments, and attachment management.
+
+  #### Cycle prevention and bounded evaluation
+
+  - Added server-side rejection of direct self-attachments and indirect Smart Gallery/gallery cycles.
+  - Added runtime visited-node tracking, recursion depth limits, expanded-node/result bounds, and deduplication so legacy or malformed relationships cannot render indefinitely or exhaust the request.
+  - Added safe diagnostics and repair-oriented Admin behavior for invalid existing relationships without changing unrelated normal galleries.
 
   #### Faster lightbox navigation
 
@@ -12,12 +85,12 @@ Version 0.91.1 is a focused lightbox navigation refinement for the Version 0.91 
   - Kept ordinary `Left` and `Right` arrows as single-photo navigation, so existing workflows remain unchanged.
   - Updated the translated lightbox keyboard-help text in English, Czech, German, and Swedish so the shortcut is discoverable.
   - Corrected modular index handling for backward ten-photo movement, including wraparound at the beginning of a result set.
-  - Preserved the current Smart Gallery ordering, pagination, access filtering, zoom state, progressive quality lifecycle, fullscreen/map behavior, slideshow behavior, and stale-navigation protections.
+  - Preserved Smart Gallery ordering, pagination, access filtering, zoom state, progressive quality lifecycle, fullscreen/map behavior, slideshow behavior, and stale-navigation protections while adding the shortcut.
 
   ### Compatibility and release verification
 
-  - No database migration or filesystem change is required.
-  - Updated `CMS_VERSION`, release metadata, README, architecture/database/testing references, and the administrator manual to Version 0.91.1.
+  - Added idempotent migrations for Smart Gallery presentation settings and per-parent attachment placement/order. Existing installations must run the normal migration updater; no image files are moved or duplicated.
+  - Updated `CMS_VERSION`, release metadata, README, architecture/database/testing references, Smart Gallery documentation, and the administrator manual to Version 0.91.1.
   - Rebuilt the indexed manual PDF and regenerated `app/core-manifest.json` after the final source and documentation edits.
   - Verified the full PHP regression suite, focused lightbox/browser tests, syntax validation, translation consistency, manifest freshness, and `git diff --check`.
 
