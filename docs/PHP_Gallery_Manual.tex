@@ -213,6 +213,9 @@ Ordinary PHP/MySQL web hosting is~the~primary deployment target. The~owner keeps
   \item Protect family, client, or~sensitive collections with access controls and~share methods.
   \item Find likely duplicate photographs and~review them with direct links to~both locations.
   \item Keep the~installation current through guided updates, health checks, backups, and~maintenance tools.
+  \item Automate scoped uploads, exchange galleries with compatible installations, and~prepare selected-photo or~gallery downloads.
+  \item Generate optional AI metadata and~translation drafts, while keeping every generated value reviewable before publication.
+  \item Publish crawler-friendly robots and~image-sitemap output for~the~public content that visitors can~actually access.
 \end{itemize}
 
 \subsection{Filesystem and~database partnership}
@@ -305,6 +308,17 @@ After installation, review:
   \item Rewrite compatibility and~canonical public URLs.
   \item System Health diagnostics and~pending migrations.
 \end{itemize}
+
+\subsection{Clean URLs and~rewrite compatibility}
+\index{URL rewriting}
+\index{query-string routing}
+\index{clean URLs}
+
+PHP Gallery supports clean public paths when the~hosting environment applies the~project's rewrite rules. Clean URLs are~a~presentation and~routing preference, not~a~requirement for~the~gallery data model. Query-string routes remain the~compatibility path and~continue to~work when rewriting is~disabled or~cannot be~verified reliably.
+
+The~URL rewriting setting controls which form PHP Gallery emits in~generated links. When rewriting is~off, helpers use query-style addresses for~galleries, photographs, thumbnails, and~other application routes instead of~assuming that the~web server will translate a~clean path. Slugs, gallery folders, database rows, and~source photographs do~not~need to~be~renamed when this setting changes.
+
+If~clean paths fail on~a~new host, first disable URL rewriting in~Admin and~confirm that the~query-string form, such as~\codeword{?page=gallery}, works. On~Apache or~LiteSpeed, then verify that the~project's \filepath{.htaccess} is~honored and~that rewrite support is~available. On~other web servers, keep the~compatibility mode unless equivalent routing rules have~been configured.
 
 \section{Your first hour with PHP Gallery}
 \label{sec:first-hour}
@@ -452,6 +466,62 @@ The~editor lets you improve a~gallery over time. Titles and~descriptions can~cha
 
 Use date suggestions as~a~helpful starting point. Scanned photographs, screenshots, edited exports, and~cameras with an~incorrect clock can~produce dates that deserve human review.\footnote{Applying an~EXIF-derived suggestion updates the~proposed gallery fields through the~existing editor workflow. The~administrator remains responsible for~the~final dates shown to~visitors.}
 
+\subsubsection{Review date suggestions across galleries}
+\index{gallery dates!EXIF review}
+
+The~dedicated \ui{Gallery dates} maintenance page applies the~same EXIF evidence across many galleries. It~can~review the~whole installation or~one selected gallery branch. Each row shows the~current manual date range, the~suggested range, the~number of~EXIF photographs and~gallery nodes that contributed evidence, and~editable \ui{From}/\ui{To} fields. Rows without an~existing manual date are~selected for~application by~default; rows that already have a~manual date are~left unchecked so~a~bulk review does~not~silently overwrite owner-entered chronology.
+
+Only checked rows are~saved. Unchecked suggestions are~ignored, and~the~administrator can~edit either date before applying the~selection. If~older imported photographs do~not~have scanned EXIF capture dates yet, run the~normal gallery image scan/import first. The~same focused suggestion action is~available inside an~individual gallery editor and~can~refresh that editor in~place.
+
+Admin date fields keep the~native browser date input as~the~submitted value but~add a~compact calendar opener plus \ui{Today} and~\ui{Delete} helpers. \ui{Today} writes the~browser's current local calendar date; \ui{Delete} clears the~field. The~enhancement is~re-applied to~forms loaded into~the~Admin side panel, while the~underlying native date field remains usable without the~extra JavaScript controls.
+
+\subsection{Gallery editor control reference}
+\index{gallery editor!controls}
+\index{gallery!visibility}
+\index{gallery!display overrides}
+
+The~gallery editor is~the~authoritative place for~settings that belong to~one physical gallery. The~controls are~grouped as~Identity, Access, Display, Media, Images, Organizer, Renamer, and~API-related tools where the~corresponding optional feature is~enabled. The~following table summarizes the~current gallery-owned controls in~Version~\version{}.
+
+\begin{longtable}{>{\raggedright\arraybackslash}p{0.21\textwidth} >{\raggedright\arraybackslash}p{0.27\textwidth} >{\raggedright\arraybackslash}p{0.43\textwidth}}
+\toprule
+\textbf{Area} & \textbf{Control} & \textbf{Current behavior}\\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Area} & \textbf{Control} & \textbf{Current behavior}\\
+\midrule
+\endhead
+Identity & Title and~description & Public editorial text. Maintained translations can~be~stored separately without changing the~source text.\\
+Identity & Manual date and~date range & Optional event or~shooting date plus supported start/end range. EXIF-derived suggestions remain editable before save.\\
+Identity & Slug & Controls the~public gallery URL identity. Keep established slugs stable when possible because bookmarks and~external links can~depend on~them.\\
+Identity & Folder name & Renames the~physical gallery folder on~disk through the~normal mutation path. It~is~not~only a~display label.\\
+Identity & Parent and~sort order & Changes hierarchy and~sibling ordering. Moving a~gallery physically relocates its folder tree where the~configured gallery root permits it.\\
+Identity & Tags & Reusable tags separated by~commas. Suggestions are~weighted by~nearby galleries, photographs, and~folder context rather than~being a~flat random list.\\
+Access & Visibility & \ui{Public} is~listed normally. \ui{Unpublished} is~hidden from normal listings but~can~still open from its normal URL when access rules allow it. \ui{Private} is~administrator-only except through supported direct-token access.\\
+Access & Password lock & Independent from visibility. A~public, unpublished, or~private gallery can~have its own password policy where the~access schema is~available. Leaving the~new-password field empty preserves the~existing password.\\
+Access & Share link & Can~be~generated, regenerated, revoked, and~optionally given an~expiry. Stored token material is~hash-protected; an~older or~non-decryptable token may~need regeneration before a~copyable link can~be~shown again.\\
+Access & NSFW / 18+ & Marks the~gallery branch for~anonymous age confirmation. The~protection also applies to~subgalleries and~served media according to~the~effective access policy.\\
+Display & Picture Game & Enables the~comparison game for~the~gallery branch. Enabling the~game also requires image voting to~be~available.\\
+Display & Image voting & Enables public image likes for~this gallery. Disabling it~leaves stored scores intact but~removes new vote controls and~blocks new submissions.\\
+Display & Show file names & Off by~default. Raw uploaded filenames remain hidden unless enabled; custom photo titles and~descriptions are~still shown.\\
+Display & EXIF/GPS display & \ui{Use global default}, \ui{Force on}, or~\ui{Force off}. The~effective state controls public GPS pins, gallery EXIF maps, and~GPS coordinate display.\\
+Display & Gallery-card description format & Inherits Theme by~default and~can~override the~card layout for~this gallery where supported.\\
+Display & Contained-picture badge & Inherits Theme or~overrides the~stacked-picture icon and~contained-image count shown on~gallery cards.\\
+Display & Lightbox browsing mode & Inherit Theme, classic single image, picture strip, or~3D carousel. Fullscreen and~slideshow behavior remain available across the~modes.\\
+Display & Custom grid & Optional columns and~rows for~this gallery. A~gallery without an~explicit grid inherits the~nearest parent grid that permits subgallery inheritance, then falls back to~Theme.\\
+Display & Responsive thumbnail bounds & Optional minimum/maximum thumbnail-size guardrails. A~save can~copy gallery bounds recursively to~descendants; recursive save is~off by~default.\\
+Media & Title picture & Automatic or~a~selected photograph, including eligible photographs from descendants when the~picker offers them.\\
+Media & Uploaded gallery thumbnail & Separate gallery-card media asset stored independently from ordinary gallery photographs.\\
+Media & Background source & Inherit Theme, upload a~new background, choose an~existing gallery image, or~generate a~collage from public galleries.\\
+Media & Branding assets & Optional gallery-specific banner/logo/separator assets override Theme fallbacks only for~that gallery where configured.\\
+Media & Flight route & Manual route text supports local identifier lookup and~explicit \codeword{NAME@latitude,longitude} points. SimBrief can~save an~OFP, description draft, and~resolved route coordinates.\\
+Images & Scan/import & Re-scans the~physical gallery folder and~synchronizes supported media into the~catalog.\\
+Tools & Organizer, Renamer, API & Date organizer, physical Media Renamer, upload API key management, AI regeneration, and~gallery migration appear only when their schemas/features are~available.\\
+\bottomrule
+\end{longtable}
+
+\important{Gallery-specific controls are intentionally not flattened into the~global Settings hub. Inheritance is~part of~the~data model, so~a~global search result may~link to~the~gallery editor without turning that gallery-owned value into a~site-wide setting.}
+
 \subsection{Choose a~cover and~visual identity}
 \index{gallery cover}
 \index{gallery branding}
@@ -467,6 +537,10 @@ Gallery branding can~provide a~logo, banner, background, separator, or~presentat
 Moving a~gallery changes its place in~the~hierarchy and~can~affect inherited access or~presentation. Review the~destination before confirming the~move. Reordering changes the~sequence shown among siblings and~supports a~curated reading order.
 
 Ordering may~be~chronological, geographical, narrative, alphabetical, or~manually featured. Within one parent gallery, keep the~choice consistent enough that visitors can~anticipate the~next item.
+
+A~signed-in administrator can~also reorder the~direct subgallery cards on~the~public gallery page. The~compact public reorder toolbar is~limited to~the~cards visible on~the~current pagination page. The~save request includes that page's offset and~visible count, and~the~server refuses the~change if~the~submitted IDs no~longer match the~same current slice. It~changes sibling \codeword{sort_order} values only; it~does not~change gallery parents or~nest galleries.
+
+When an~administrator is~signed in~while viewing a~public gallery, direct child galleries that have~a~filled \ui{From} date can~also be~preview-sorted from~oldest to~newest or~newest to~oldest. Child galleries without a~usable date keep their existing positions. The~preview is~temporary until \ui{Save} is~chosen; saving writes the~result as~the~real sibling order seen by~all visitors. At~least two dated direct child galleries are~required before the~date order can~be~saved.
 
 \subsection{Delete a~gallery thoughtfully}
 \index{gallery!deletion}
@@ -556,13 +630,15 @@ Create a~small vocabulary before adding many near-duplicate tags. Prefer one sta
 
 For~a~travel archive, galleries can~represent trips and~tags can~represent recurring themes. For~a~family archive, galleries can~represent years and~events while tags identify people. For~a~professional portfolio, galleries can~represent clients and~tags can~identify deliverable type, location, and~specialty.
 
+Tag entry fields can~suggest existing tags while you type. Reusing a~suggestion avoids accidental spelling variants and~keeps tag landing pages coherent. The~suggestion is~an~editing aid only; the~ordinary save action still decides which tags are~stored for~the~gallery or~photograph.
+
 \subsection{Arrange the~viewing order}
 \index{photo ordering}
 \index{storytelling}
 
 Ordering turns a~collection into a~sequence. Start with an~inviting image, establish place or~context, vary wide and~close views, keep closely related details together, and~finish with a~natural conclusion. Chronological order works well for~events, while visual rhythm can~suit portfolios and~exhibitions.
 
-The~public reorder controls help administrators adjust visible cards. Pagination can~divide a~large collection, so~review transitions around page boundaries as~well as~the~first page.
+The~public reorder controls help administrators adjust visible cards. Photo reordering on~a~public page is~also scoped to~the~current visible pagination slice and~saves through the~authenticated image-order endpoint. When Picture Manager is~active, dragging selected photo cards over a~visible child-gallery card changes the~gesture from~reordering to~a~validated move into~that child gallery. Pagination can~divide a~large collection, so~review transitions around page boundaries as~well as~the~first page.
 
 \subsection{Review EXIF and~location information}
 \index{EXIF!user review}
@@ -726,11 +802,15 @@ A~gallery can~show smaller galleries first and~photographs afterward. For~exampl
 
 Pagination divides a~long collection into manageable pages. This helps the~first page appear promptly and~keeps scrolling comfortable. A~small exhibition may~look best on~one page. A~wedding with 1,500 photographs will usually benefit from pages or~child galleries. The~large photo viewer can~continue through the~wider gallery sequence while loading additional information as~needed.\footnote{Pagination changes how many cards appear at~once. It~leaves the~underlying photographs and~their order intact.}
 
+Long public listings include a~floating \ui{Top} control after the~visitor has~scrolled into the~gallery listing. It~uses smooth browser scrolling, disappears outside the~active listing, and~stays hidden while the~lightbox or~fullscreen viewer is~open so~it~does not~compete with photo controls.
+
 \subsection{Search, tags, and~navigation}
 \index{search}
 \index{tags}
 
-Search can~look across the~whole public site or~stay within the~current gallery and~its children. A~visitor looking at~\emph{Family archive} can~search only that branch for~a~person's name, while a~visitor on~the~home page can~search across every public collection.
+Search can~look across the~whole public site or~stay within the~current gallery and~its children. A~visitor looking at~\emph{Family archive} can~search only that branch for~a~person's name, while a~visitor on~the~home page can~search across every public collection. The~current search service begins at~two visible query characters, returns a~bounded mixture of~gallery and~photo results, and~ranks stronger title/name/tag matches ahead of~weaker text matches. The~default request returns up~to~12 merged results and~the~service clamps a~request to~at~most~30 results.
+
+Searchable evidence includes public gallery/photo titles and~descriptions, image filenames, gallery and~photo tags and~their public descriptions, active maintained-language content where its schema is~available, and~internal AI searchable text when AI metadata is~ready. Access filtering happens as~part of~the~query: private, inaccessible, or~non-public image content is~not~returned merely because its text matches. A~branch search also constrains the~listing context to~that gallery subtree rather than~searching the~whole catalog and~hiding unrelated matches afterward.
 
 Tags provide another route through the~archive. A~\emph{night photography} tag can~connect Prague, London, and~Tokyo even when those photographs live in~separate travel galleries. Breadcrumbs show the~current place in~the~hierarchy, and~favorite shortcuts place important galleries directly in~the~site header.
 
@@ -741,6 +821,12 @@ Tags provide another route through the~archive. A~\emph{night photography} tag c
 \subsection{Admin workspace}
 
 After signing in, an~administrator sees private controls for~the~dashboard, galleries, photographs, theme, tags, maintenance, updates, logs, and~account settings. Many edits open in~the~right-side panel, leaving the~gallery visible while one item is~changed and~saved.\footnote{A~full Admin page remains available for~workflows that need more space or~when browser enhancement is~unavailable.}
+
+The~public gallery itself also exposes contextual Admin controls while a~normal administrator session is~active. Gallery and~photo pencil controls open the~same full editors in~the~side panel. Compact gallery removal uses the~normal subtree-deletion service, including the~owned filesystem tree and~database rows. Compact photo removal is~deliberately labeled \ui{Remove photo ... from CMS}: that quick public-page action removes the~catalog image row and~does not~run the~full source-file deletion service. Use the~normal photo/bulk deletion workflow when the~original file and~generated derivatives should also be~deleted. Anonymous-preview mode hides these contextual Admin controls.
+
+The~Admin gallery table can~filter rows by~visibility: all, unpublished, public, or~private. Filtering is~a~browser-side view aid, not~an~access-policy change. A~row hidden by~the~filter is~also unchecked, and~the~master selection is~cleared, so~a~hidden stale checkbox cannot accidentally enter the~next bulk action. The~summary reports the~displayed/eligible gallery count.
+
+The~gallery tree supports per-branch expand/collapse plus \ui{Collapse all} and~\ui{Expand all}. It~remembers which gallery branches the~administrator collapsed. The~browser sends the~collapsed gallery IDs through an~authenticated CSRF-protected action and~the~application stores that UI state, so~returning to~the~Admin tree keeps the~same branches closed rather than~expanding the~entire hierarchy again. Descendants hidden by~a~collapsed branch are~also unchecked before bulk work. Reordering refreshes the~tree controls when a~gallery gains or~loses children.
 
 \subsection{Central Settings hub}
 \index{Settings!central hub}
@@ -755,9 +841,53 @@ The~hub does not~flatten existing inheritance. Tag-page layout can~continue inhe
 
 Secrets are~never shown in~search results or~summaries. Passwords, tokens, API credentials, and~similar values appear only as~safe states such as~Configured, Not~configured, or~a~link to~their specialist page.
 
+\subsection{Tag metadata administration}
+\index{tags!administration}
+\index{tags!metadata}
+
+\ui{Admin > Edit tags} is~the~central editor for~the~reusable tag vocabulary. The~list can~be~sorted by~total usage or~alphabetically and~shows each tag's current gallery-plus-photo use count. Selecting a~tag exposes its canonical lowercase name, clean public URL slug, and~optional public description for~the~tag landing page. The~same view lists the~galleries and~photographs that currently use the~tag, with links back to~the~relevant public or~photo-editor context.
+
+Renaming a~tag or~changing its slug updates the~shared tag record, so~every gallery/photo assignment continues to~reference that one reusable tag. Names and~slugs are~normalized to~the~safe tag convention on~save and~a~duplicate slug is~rejected. Deleting a~tag is~different: the~application transactionally detaches it~from both galleries and~photographs and~then removes the~tag record. Use \ui{View public tag} to~review the~landing page and~\ui{Configure tag display} to~open the~Theme controls for~tag-page/card and~hero-tag presentation.
+
+\subsection{Feature switches}
+\index{feature switches}
+\index{Features!Admin}
+
+\ui{Appearance > Features} provides global switches for~optional parts of~the~application. Registered features are~enabled by~default so~an~upgrade does~not~silently remove behavior that an~existing installation already uses. An~administrator can~disable individual visitor features, maps and~flight-simulation tools, AI/upload integrations, or~special-purpose Admin tools when a~simpler installation is~preferred.
+
+A~disabled feature is~hidden from~normal navigation and~its guarded routes refuse the~feature workflow. Disabling a~switch does~not~delete the~feature's code, photographs, database records, credentials, or~configuration. Re-enabling it therefore restores the~normal entry points subject to~the~same schema, access, and~configuration checks as~before. Examples of~switchable features include public search, lightbox browsing modes, Picture Manager, voting, Picture Game, downloads, gallery and~flight maps, navigation data, SimBrief, OpenAI assistance, local AI metadata, API uploads, mobile WebDAV, gallery migration, Media Renamer, and~anonymous telemetry.
+
 \subsection{Gallery management}
 
-Gallery administration covers the~full life of~a~collection: creation, discovery, naming, description, dates, tags, privacy, passwords, branding, covers, layout, ordering, moving, and~eventual deletion. A~child gallery can~inherit useful choices from its parent. For~example, every gallery inside a~private family branch can~follow the~parent's protection, and~an~individual child can~use its own presentation choice where the~editor offers an~override.
+Gallery administration covers the~full life of~a~collection: creation, discovery, naming, description, dates, tags, privacy, passwords, branding, covers, layout, ordering, moving, and~eventual deletion. A~child gallery can~inherit useful choices from its parent. For~example, every gallery inside a~private family branch can~follow the~parent's protection, and~an~individual child can~use its own presentation choice where the~editor offers an~override. The~bulk gallery screen provides corresponding multi-gallery operations where the~same change is~appropriate for~several collections at~once.
+
+When clean public-path storage is~available, \ui{Regenerate clean public paths} rebuilds the~stored gallery and~image paths from~the~current hierarchy and~reports separate gallery/image counts. Reordering and~selected editor saves also refresh paths when their changes require it. This maintenance action is~useful after hierarchy repair, migration, or~older imports; it~does not~turn URL rewriting on~by~itself, so~query-string routing remains the~fallback when rewriting is~disabled or~unsupported by~the~host.
+
+\subsection{Metadata organizer}
+\index{metadata organizer}
+\index{EXIF!date organizer}
+\index{gallery!automatic organization}
+
+The~gallery editor includes an~\ui{Organizer} workflow for~turning a~flat set of~direct photographs into date-based child galleries. The~current implementation groups by~EXIF capture date already stored in~the~image database. Location-based secondary grouping is~reserved for~future use and~is~not~an~active organizer strategy in~Version~\version{}.
+
+Choose minimum and~maximum EXIF dates, then build a~preview. Previewing reads database metadata in~small batches and~does not~scan, rename, or~move source files. The~draft shows the~number of~direct photographs, matching candidates, proposed child galleries, and~photographs ignored because they have~no~usable EXIF date or~fall outside the~chosen range. A~minimum date is~particularly useful for~excluding photographs from~a~camera whose clock was~unset.
+
+For~each accepted calendar date, the~proposed child folder name is~the~stable ISO date \codeword{YYYY-MM-DD}. Its~display title uses the~gallery date-display formatter and~falls back to~a~human-readable day/month/year value if~that formatter cannot supply a~label. Before proposing a~new child, the~organizer looks for~an~existing direct child with the~same organizer title and~reuses it. This makes a~repeated preview/apply cycle append to~the~same daily destination instead of~creating another equivalent day gallery.
+
+Applying the~draft requires a~separate confirmation. PHP Gallery creates or~reuses the~proposed date child galleries and~moves matching photographs through the~same physical move service used by~the~ordinary bulk image mover. Originals and~known generated derivatives therefore move together with the~database ownership update. Large applies are~split into bounded browser-driven requests instead of~one long PHP request. Review the~draft and~maintain a~backup before reorganizing a~large gallery.
+
+\subsection{Media renamer}
+\index{Media Renamer}
+\index{filenames!renaming}
+\index{media maintenance}
+
+\ui{Galleries > Media renamer}, and~the~renamer panel available for~an~individual gallery, can~normalize physical image filenames from~gallery context and~the~current photo order. This is~a~filesystem operation, not~a~cosmetic title change, so~the~tool always begins with a~dry-run plan. The~preview lists each old and~proposed filename and~marks files that already match, are~missing, would~collide, or~must be~skipped by~a~safety rule.
+
+Only direct image files inside the~selected gallery folder are~eligible. Missing sources, paths outside the~gallery, and~unsafe targets are~not~renamed. If~the~preferred target name is~already occupied but~a~safe deterministic suffix can~resolve the~collision, the~preview shows that adjustment. Applying a~plan requires confirming that the~preview was~reviewed.
+
+The~default pattern is~\codeword{\{gallery_path\}_\{seq4\}}. A~custom pattern may~use \codeword{\{gallery_path\}}, \codeword{\{gallery_title\}}, \codeword{\{photo_title\}}, \codeword{\{old_name\}}, \codeword{\{old_stem\}}, \codeword{\{image_id\}}, and~sequence placeholders \codeword{\{seq\}} through \codeword{\{seq5\}}. The~numbered sequence variants pad to~two, three, four, or~five digits. Textual components are~normalized to~lowercase filesystem-safe ASCII-style underscore stems, the~source extension is~preserved in~sanitized form, and~an~empty custom pattern falls back to~the~default.
+
+After a~successful physical rename, PHP Gallery keeps the~database row and~public path references aligned, updates derived titles where the~renamer owns them, moves or~invalidates generated derivatives as~appropriate, and~removes stale cached ZIP archive records that refer to~the~old source identity. Derivative cleanup warnings do~not~justify reverting an~otherwise completed source rename because reproducible derivatives can~be~generated again. For~site-wide selections, the~browser advances the~work in~bounded portions and~shows the~result for~each gallery.
 
 \subsection{Image management}
 \label{sec:media}
@@ -766,25 +896,72 @@ Gallery administration covers the~full life of~a~collection: creation, discovery
 
 Photographs can~be~uploaded in~the~browser, copied into folders and~discovered, received through configured automation, transferred from another compatible installation, or~added through a~scoped mobile workflow. After a~photograph arrives, the~gallery records its size and~available camera information and~prepares the~smaller display copies used throughout the~site.
 
-Image tools include:
+The~individual photo editor currently covers title, description, maintained-language variants, visibility, sort order, tags, NSFW / 18+ state, the~private editorial rating used by~Smart Gallery rules, optional per-photo responsive-thumbnail bounds, and~read-only EXIF/GPS details. Where local AI metadata exists, the~editor shows the~generated model/source, searchable internal text, and~raw metadata JSON separately from~the~public caption. OpenAI controls insert reviewable drafts into editable text fields and~do~not~replace saved editorial text automatically.
+
+Bulk image operations are intentionally narrower than the~individual editor and~perform server-side ownership checks again. Current bulk actions include:
 
 \begin{itemize}
-  \item title, description, visibility, tags, and~ordering;
-  \item EXIF-derived information and~date suggestions;
-  \item GPS visibility and~maps;
-  \item bulk selection, move, copy, download, and~deletion;
-  \item public voting and~score state;
-  \item duplicate review and~cleanup.
+  \item move selected photographs to~an~existing gallery;
+  \item create a~new destination gallery and~move the~selection into it, with cleanup of~an~empty newly created destination if~the~move fails before files are~committed;
+  \item delete selected photograph records together with their owned originals and~known generated derivatives through the~normal deletion service;
+  \item set a~selected photograph as~the~gallery title/cover image;
+  \item change photo visibility among the~supported draft/public/private states;
+  \item turn per-photo NSFW protection on~or~off when its schema is~known;
+  \item create thumbnails for~the~selected photographs.
 \end{itemize}
+
+Photo ordering can~be~changed by~dragging the~row handle, and~the~gallery can~be~sorted by~filename from~the~Name column. Changes are~saved through the~normal ordering route rather than~being a~browser-only arrangement.
+
+When the~optional \ui{Picture Manager} feature is~enabled, a~normal signed-in administrator can~select photographs directly in~the~public gallery grid. Checkmarks select individual cards; Shift-click selects a~range; Ctrl-click or~Cmd-click toggles a~card; \ui{Select all}, \ui{Clear}, and~Ctrl/Cmd+A support larger visible-page selections. Dragging an~unselected photo starts with that photo as~the~selection, while dragging an~existing selection moves the~selected photographs together. A~visible child-gallery card becomes a~drop target, and~dropping there performs the~same validated move as~the~destination picker.
+
+From the~toolbar the~administrator can~move the~selection, copy it~to~an~existing gallery, create a~child gallery by~copying the~selected originals and~metadata, or~share the~selection. \ui{Share} fetches the~authorized browser-displayable image versions as~browser \codeword{File} objects and~opens the~native Web Share sheet when the~browser/device supports multi-file sharing. The~browser chooses the~available receiving apps, so~PHP Gallery cannot force Instagram Story, Reel, or~another specific target. If~native sharing is~unavailable, cannot accept the~files, or~fails after preparation, the~manager starts the~authenticated selected-photo ZIP download as~a~fallback. The~same ZIP endpoint can~therefore serve both an~explicit selected-photo download and~share fallback. Ordinary visitors never receive these controls, and~the~server revalidates the~logged-in account, CSRF token, source ownership, and~destination gallery for~every mutation or~ZIP request.
 
 \subsection{Uploads and~discovery}
 \index{discovery}
 
-Filesystem discovery is~useful when photographs have already been copied to~the~server through FTP, a~hosting file manager, or~a~restored backup. The~discovery screen shows what the~application found and~lets the~administrator bring those folders and~files into the~catalog.
+Filesystem discovery is~useful when photographs have already been copied to~the~server through FTP, a~hosting file manager, or~a~restored backup. The~discovery screen shows what the~application found and~lets the~administrator bring those folders and~files into the~catalog. Discovery runs as~a~session-backed browser job in~small AJAX batches rather than scanning the~entire tree during the~initial Admin page request. The~current default examines up~to~80 directories per~batch, accepts a~bounded batch size up~to~300, and~expires abandoned discovery job state after two hours. This keeps a~large folder tree responsive on~slower hosting while still showing progress and~a~final actionable result list.
 
-Browser upload is~the~friendliest choice for~routine work. Select the~destination, choose files, and~follow the~progress display. Large sets can~be~prepared in~limited groups so~the~browser and~server remain responsive. The~application checks the~destination and~file information before accepting each result.
+The~scanner walks below the~configured gallery root and~does not~follow directory symlinks. Hidden directories and~known generated/cache directory names such as~\filepath{cache}, \filepath{thumbs}, \filepath{thumbnail}, \filepath{thumbnails}, \filepath{preview}, and~\filepath{previews} are~ignored. A~new candidate branch must contain at~least one supported image somewhere below it. Empty structural parent folders can~still become galleries when they are~needed to~preserve the~hierarchy above image-bearing descendants. A~folder containing only a~\filepath{gallery.json} sidecar and~no~supported image anywhere in~its branch is~reported as~metadata-only rather than imported as~a~gallery by~the~current discovery workflow. Already indexed gallery folders are~suppressed from the~candidate list, and~an~import candidate whose display title would duplicate an~existing sibling title is~not~silently created.
 
-When browser-assisted upload is~enabled, the~chooser also accepts ZIP archives such as~an~iCloud Photos export. The~browser inspects the~archive locally, adds supported JPEG, PNG, WebP, and~GIF images to~the~ordinary preparation queue, and~skips folders, hidden metadata, and~unsupported entries. The~selected ZIP itself is~never uploaded to~PHP. Stored and~Deflate archives are~supported; encrypted, multi-disk, ZIP64, damaged, suspiciously compressed, or~excessively large archives are~rejected before any server-side upload begins. Keep browser-assisted upload checked when selecting a~ZIP because this convenience is~intentionally unavailable in~the~classic PHP upload path.
+For~each unmanaged result, the~administrator can~import the~folder tree in~place, move supported photographs from selected unmanaged folders into an~existing gallery, or~delete selected unmanaged folders from~disk. Import expands the~selection in~parent-to-child order and~can~include missing image-bearing ancestors and~descendants. The~move action avoids overwriting an~existing destination filename by~choosing a~deterministic unique name, scans the~destination gallery after successful moves, and~removes source directories only when they become empty. The~discovery-specific disk-delete action is~deliberately restricted to~safe non-root unmanaged paths below the~gallery root and~refuses folders that are~already represented by~database galleries. Use the~normal gallery deletion workflow for~an~imported CMS gallery.
+
+\subsubsection{The~gallery.json metadata sidecar}
+\index{gallery.json}
+\index{sidecar metadata}
+
+PHP Gallery keeps its active catalog and~relationships in~the~database, while an~optional \filepath{gallery.json} file beside a~gallery folder preserves useful editable metadata with the~filesystem. Normal gallery saves write the~sidecar back to~the~gallery folder. Current sidecar output includes the~title, description, normalized gallery tags, visibility, order, voting and~filename-display state, maintained content language/translations when available, manual gallery dates, selected card/count/lightbox/grid overrides, responsive-thumbnail bounds, access/listing policy, cover references, and~configured gallery branding assets where those schemas are~available. Sidecar writing follows the~same schema checks as~the~corresponding gallery features.
+
+During discovery and~missing-parent repair, PHP Gallery can~read supported values from~the~sidecar instead of~deriving everything from the~folder name. Imported rows conservatively default to~unpublished when no~visibility is~specified. The~current import path restores the~sidecar fields explicitly supported by~the~importer, including title/description/localization, visibility, manual dates, voting/filename presentation, selected card/count/lightbox/grid/thumbnail overrides, access/listing policy, order, and~branding paths. The~sidecar should therefore be~treated as~portable gallery-folder metadata, not~as~a~complete database backup: relational state, credentials, logs, votes, game state, Smart Gallery definitions, and~other database-owned records still require the~normal backup procedure.
+
+\securitynote{The~\ui{Delete from disk} action on~the~discovery screen is~a~real recursive filesystem deletion for~unmanaged candidate folders. Review the~selected relative paths before confirming it. The~guard against known imported gallery paths is~an~additional safety boundary, not~a~replacement for~a~backup.}
+
+Browser upload is~the~friendliest choice for~routine work. It~can~upload into an~existing gallery or~create a~child gallery and~upload optional photographs in~the~same side-panel workflow. Select the~destination, choose files, and~follow the~progress display. The~application checks the~destination and~file information before accepting each result.
+
+The~upload settings distinguish the~ordinary server path from~browser-assisted preparation. \ui{Allow all server-supported formats} leaves the~picker aligned with~the~server's detected capabilities. \ui{Prefer phone-rendered JPG/PNG/WebP, no RAW/DNG} asks mobile browsers for~a~rendered image representation when possible, which is~useful when an~iPhone ProRAW/DNG workflow produces unsuitable color. The~browser hint is~not~a~guaranteed transcoder, so~the~server still validates the~actual uploaded media.
+
+Browser-assisted preparation is~enabled independently and~is~checked by~default in~the~upload workflow. The~browser can~prepare optimized thumbnails and~bounded ZIP batches before sending them. If~browser preparation fails before any server-side write starts, ordinary image selections can~fall back automatically to~the~classic server upload path. Administrators can~bound the~default and~maximum browser worker counts, images per~batch, ZIP-to-PHP-upload-limit ratio, maximum ZIP batch bytes, and~source chunk size used by~browser-side thumbnail rebuild. The~normalizer also enforces a~hard worker cap so~an~accidental setting cannot create unbounded parallel requests on~shared hosting.
+
+Current browser-pipeline defaults are~8 workers, an~80\% target of~the~detected PHP upload limit for~each store-only ZIP batch, at~most 8 images per~ZIP batch, and~a~24~MiB absolute ZIP-batch cap. The~validated ranges are~1--32 workers, 10--95\% of~the~PHP upload limit, 1--64 images per~batch, and~1--128~MiB for~the~absolute ZIP cap. Browser thumbnail rebuilding uses a~512~MiB source-ZIP chunk by~default, clamped to~16~MiB--3~GiB, and~the~source builder normally caps a~chunk at~96 items with an~internal hard limit of~512. These are safety ceilings and~defaults, not~a~recommendation to~raise a~slow shared host to~the~maximum.
+
+When browser-assisted upload is~enabled, the~chooser also accepts ZIP archives such as~an~iCloud Photos export. The~browser inspects the~archive locally, adds supported JPEG, PNG, WebP, and~GIF images to~the~ordinary preparation queue, and~skips folders, hidden metadata, and~unsupported entries. The~selected ZIP itself is~never uploaded to~PHP. Stored and~Deflate archives are~supported; encrypted, multi-disk, ZIP64, damaged, suspiciously compressed, or~excessively large archives are~rejected before any server-side upload begins. ZIP import has~no~classic-PHP fallback, so~keep browser-assisted preparation enabled when selecting an~archive.
+
+The~global automatic-upload rename option can~run the~same post-scan naming policy used by~the~Media Renamer after browser, API, or~WebDAV ingestion. Leave it~off when external filenames are~part of~your archival convention; enable it~when all arrival paths should converge on~the~gallery's normalized naming scheme.
+
+\subsection{Generated metadata and~automation}
+\index{AI metadata}
+\index{OpenAI}
+\index{upload automation}
+\index{WebDAV}
+
+The~optional local or~worker-based image-analysis queue can~record visual metadata separately from the~human title, description, tags, and~EXIF fields. Administrators can~review that metadata in~the~photo editor and~use it~as~searchable evidence without silently replacing editorial text. Configured OpenAI assistance can~generate a~photo or~gallery description, clean up~existing text, summarize context, describe visible content from safe generated thumbnails, or~suggest a~translation. These actions insert reviewable drafts; they do~not~publish or~save text automatically unless the~administrator completes the~ordinary save operation.
+
+For~repeated transfers, create a~scoped upload-automation token for~the~intended gallery and~send supported files to~the~upload endpoint. Tokens can~be~revoked independently and~must be~treated like passwords. The~raw API key is~shown only when it~is~created; only its hash is~stored afterward, so~copy the~new key to~the~intended client at~creation time. The~global \ui{API manager} lists automation credentials across galleries and~provides a~central revocation workflow without exposing the~original secrets. Gallery-level controls remain available for~the~same scoped credentials.
+
+The~Windows companion uses the~same gallery-scoped upload contract. It~has~two normal upload modes. \ui{Watch folder} ignores files that were already present when watching begins, waits for~new files to~become stable, remembers confirmed uploads locally, and~retries transient failures with backoff. It~can~optionally attach the~current Microsoft Flight Simulator camera latitude/longitude/altitude through SimConnect immediately before each watched upload, and~can~delete a~watched source only after the~gallery confirms a~successful upload. \ui{Manual upload} accepts a~file selection independently of~the~watch folder and~can~either generate responsive thumbnails on~the~PC with worker processes or~ask the~gallery server to~generate them. Thumbnail work and~network uploads are~pipelined rather than~staging an~entire large selection first. Tray support lets the~watcher or~manual job continue while the~main window is~hidden.
+
+The~same Windows application can~optionally run a~low-priority AI metadata worker. It~claims one authenticated analysis job, downloads only the~claimed asset, produces internal searchable metadata with the~selected local backend/model generation, and~returns the~result to~the~existing upload-automation endpoint. This worker is~separate from~human captions. A~gallery-level \ui{Force AI metadata regeneration} action clears the~stored generated rows/old queue state for~that gallery branch and~queues fresh work; the~heavy analysis still runs on~the~Windows worker.
+
+Mobile WebDAV credentials are~gallery-scoped and~use HTTP Basic authentication plus an~unguessable path token. Creating a~connection shows its generated password once; the~server keeps only a~password hash afterward. The~Admin page lists the~connection label, target gallery, server URL, and~last-use time and~can~revoke the~connection. The~WebDAV endpoint supports the~minimal \codeword{OPTIONS}, \codeword{PROPFIND}, \codeword{MKCOL}, and~\codeword{PUT} behavior needed by~photo-transfer clients such as~PhotoSync. Current WebDAV ingestion accepts JPG, PNG, GIF, and~WebP. Configure the~mobile client to~convert HEIC to~JPEG before transfer where available. Uploaded media then enters the~same scan, optional auto-rename, database, and~thumbnail pipeline as~other uploads.
 
 \section{Thumbnail generation and~public rendering}
 \label{sec:thumbnails}
@@ -848,6 +1025,14 @@ A~gallery owner should review thumbnail maintenance after:
 \end{itemize}
 
 Generated thumbnails are~reproducible cache data and~can~be~rebuilt from the~source photographs. The~sources themselves require permanent backup protection.
+
+\subsection{DNG and~RAW display masters}
+\index{DNG}
+\index{RAW photographs}
+
+DNG photographs can~remain the~archival source while PHP Gallery creates a~browser-display master for~thumbnail generation and~public viewing. The~display master is~generated derivative data, not~a~replacement for~the~original DNG. If~the~required local conversion tool is~unavailable or~conversion fails, the~Admin upload and~thumbnail reports identify the~failed DNG derivative. Thumbnail maintenance can~rebuild the~master later; deleting generated derivatives does~not~delete the~source DNG.
+
+\ui{Runtime diagnostics} exposes the~active DNG conversion policy together with the~server's actual GD, Imagick/ImageMagick, and~format capabilities. The~source policy can~use automatic fallback with full RAW decoding first and~the~embedded camera preview second, explicitly prefer full RAW decode, or~prefer the~embedded preview. Color handling can~force browser-safe sRGB, preserve the~decoded appearance as~closely as~possible, or~use camera white balance when available. These choices affect generated browser derivatives only. They never rewrite the~archival DNG source, and~their availability still depends on~the~image delegates and~memory limits provided by~the~host.
 
 \subsection{What visitors receive}
 \index{thumbnail!browser selection}
@@ -946,6 +1131,29 @@ Higher quality preserves more fine detail and~can~create larger files. Lower qua
 
 Every additional enabled size and~format uses storage because it~creates another copy for~each photograph. The~benefit is~more precise delivery to~different screens. System Health and~storage statistics help an~owner understand the~resulting cache. A~large source archive may~produce a~substantial thumbnail collection, yet~those files remain reproducible from the~originals.
 
+\subsection{Thumbnail compatibility and~maintenance modes}
+\index{thumbnail compatibility}
+\index{thumbnail maintenance}
+\index{browser-side thumbnail rebuild}
+
+The~maintenance panel has~two compatibility policies. \ui{Modern} generates WebP thumbnails wherever the~server can~write WebP. \ui{Legacy} generates JPEG fallback thumbnails as~well as~WebP. After switching an~installation permanently to~Modern, \ui{Remove legacy JPG thumbnails} deletes only generated JPEG thumbnail files; originals, WebP derivatives, and~DNG display masters are~preserved.
+
+A~full \ui{Check missing thumbnails} pass inspects imported photographs and~records galleries with missing, stale, metadata-missing, or~wrong-ratio generated variants without creating anything. The~stored result enables \ui{Create missing thumbnails}, which targets only the~reported images. \ui{Create all thumbnails} runs the~broader creation path. These Admin operations remain the~primary deliberate maintenance workflow. Public browsing does~not~start an~unbounded repair sweep, but~the~current renderer has~a~small guarded background warmup for~specific cards that had~to~fall back to~authorized original media because an~expected derivative was~missing.
+
+\ui{Refresh thumbnail database} reconciles database metadata with existing generated files and~removes wrong-ratio generated files instead of~publishing them. \ui{Delete all thumbnails} is~a~separately confirmed destructive cache operation; source photographs remain untouched and~the~derivatives can~be~rebuilt later.
+
+For~hosts where server-side image processing is~the~bottleneck, an~optional \ui{Browser-side thumbnail rebuild} is~available and~is~off by~default. The~server sends original files to~the~authenticated browser in~bounded source ZIP chunks, the~browser generates thumbnail variants, and~prepared thumbnail ZIP batches are>uploaded back for~server validation and~installation. The~source-chunk and~batch limits are~configured with the~browser-upload settings so~the~workflow does~not~depend on~one oversized PHP request.
+
+\subsubsection{Guarded public thumbnail warmup}
+\index{thumbnail warmup}
+\index{thumbnail!self-healing}
+
+When the~server has~rendered a~publicly authorized photograph through an~original-media fallback, it~can~mark that exact photograph and~the~missing supported sizes as~a~background warmup candidate. The~browser waits for~idle time, stops when the~page is~hidden, sends at~most two candidates per~request, makes at~most four requests from one page load, and~spaces requests by~about 1.8 seconds. The~server independently caps the~normalized submitted list at~24 image IDs, but~the~actual generation budget is~smaller: an~anonymous request processes at~most two source images within roughly four seconds, while an~authenticated administrator request processes at~most four within roughly eight seconds.
+
+A~candidate carries an~HMAC token tied to~the~image ID, gallery ID, filename, relative path, and~gallery folder that the~server originally rendered. Before generating anything, the~endpoint reloads the~image/gallery, verifies that token, repeats current visitor access checks, normalizes the~requested sizes to~the~configured thumbnail set, consults thumbnail metadata when available, and~skips variants that are~already renderable. A~per-image 60-second cooldown prevents repeated expensive retries. A~single global non-waiting worker lock means concurrent public traffic cannot stack several image-decoding jobs; a~busy request simply reports that another warmup worker is~active. The~warmup is~enabled by~default through the~internal \setting{thumbnail_background_warmup_enabled} application setting and~writes bounded diagnostic events to~the~Admin log when logging storage is~available.
+
+\securitynote{Background warmup does not~turn a~private or~otherwise inaccessible photograph into~a~public repair target. The~signed candidate proves that the~server rendered that image as~a~fallback candidate, and~the~endpoint still repeats the~current access policy before opening the~source or~writing derivatives.}
+
 \subsection{If~a~thumbnail is~missing}
 \index{thumbnail!missing}
 \index{thumbnail!rebuild}
@@ -966,6 +1174,8 @@ After repair, open the~gallery with an~empty browser cache and~confirm that cove
 The~lightbox is~the~large photograph viewer that opens above the~gallery page. It~lets visitors concentrate on~one photograph while retaining forward, backward, close, full-screen, slideshow, map, and~other available controls.
 
 The~gallery prepares the~viewer when it~becomes useful and~obtains information for~nearby photographs in~manageable groups. A~visitor can~therefore move through a~large gallery without requiring the~first page to~carry every title, preview, map point, and~vote at~once.\footnote{The~current viewer normally requests information in~nearby groups of~photographs. Access checks are~repeated for~each request so~private gallery rules continue to~apply.}
+
+The~Left and~Right arrow keys move one photograph backward or~forward. \codeword{Shift+Left} and~\codeword{Shift+Right} move ten positions for~faster travel through a~large result set. The~jump follows the~same stable ordered sequence as~ordinary navigation, wraps at~the~ends, and~also works when the~active result set is~a~Smart Gallery. The~translated keyboard-help text lists these shortcuts; no~separate graphical jump buttons are~added.
 
 The~viewer usually starts with an~appropriately sized preview. A~larger or~original source can~be~used where the~action and~access policy call for~it. Nearby previews may~be~prepared quietly so~the~next photograph appears smoothly.
 
@@ -990,13 +1200,32 @@ Zoom affects presentation only. It~does not~alter the~stored photograph or~bypas
 
 EXIF is~information many cameras and~phones save inside a~photograph. It~can~include capture date, camera, lens, exposure, dimensions, orientation, and~GPS coordinates. PHP Gallery can~use this information for~date suggestions, maps, technical details, ordering assistance, and~duplicate review.
 
-Maps load when a~visitor asks to~see them, which saves work for~visitors interested only in~the~photographs. A~gallery can~show individual photo locations and~an~overview of~available points. Parent and~child settings determine which galleries expose this information.
+Maps load when a~visitor asks to~see them, which saves work for~visitors interested only in~the~photographs. A~gallery can~show individual photo locations and~an~overview of~available points. Parent and~child settings determine which galleries expose this information. The~global EXIF/GPS public-display setting is~the~fallback for~galleries whose override is~set to~inherit. Admin also shows how many galleries currently have~an~explicit override and~can~reset all of~those overrides back to~inherit in~one confirmed settings save. The~reset is~schema-guarded: if~the~override state cannot~be~verified, the~application refuses the~change and~directs the~administrator to~System Health instead of~guessing.
 
 \securitynote{GPS data can~reveal sensitive locations. Administrators should review inherited map settings, image metadata, and~public access before publishing personal photographs.}
 
+\subsection{Flight maps and~navigation data}
+\index{SimBrief}
+\index{flight maps}
+\index{navigation data}
+
+Flight-oriented collections can~use the~optional SimBrief integration to~retrieve the~latest operational flight plan for~a~Pilot ID or~pilot name. The~gallery editor saves the~OFP with the~gallery, creates an~editable Markdown description draft, and~writes the~OFP route coordinates into the~gallery flight-map record. If~both identifiers are~provided, the~Pilot ID is~preferred. A~failed SimBrief request leaves the~ordinary description field and~manual route editor available.
+
+Manual route text is~resolved offline-first. Imported OurAirports database rows are~checked first, then the~small bundled CSV fallback. A~valid cached provider result may~be~used next; when an~administrator has~linked a~configured Navigraph account and~remote lookup is~allowed, an~unknown identifier can~be~resolved through Navigraph and~cached under the~known AIRAC cycle. The~Navigation Data manager shows local database and~bundled counts, provides a~lookup tester for~identifiers such as~airports/navaids/fixes, and~can~refresh the~local OurAirports airport/navaid dataset. Navigraph OAuth/account storage is~optional and~can~be~disconnected without removing local data.
+
+Public map rendering never calls SimBrief, Navigraph, or~another live planning service. It~renders only coordinates already stored with the~gallery. Saved SimBrief OFP coordinates therefore remain usable even if~the~remote provider is~later unavailable. Manual route text can~also bypass identifier lookup completely with explicit \codeword{NAME@latitude,longitude} points.
+
 \subsection{Voting}
 
-Public cards and~lightbox controls share vote state. Server-rendered forms provide direct behavior, while JavaScript submits normal interactions asynchronously and~synchronizes the~score across matching views. The~server validates image identity, gallery policy, and~request integrity.
+Public cards and~lightbox controls share image-vote state. The~current public vote is~a~reversible positive vote: pressing the~active up-vote again removes it. The~displayed score is~the~sum of~stored image votes; there is~no~separate whole-gallery voting endpoint in~the~current implementation. Logged-in votes are~associated with the~account, while anonymous votes use the~application's privacy-preserving visitor hash. New positive votes are~rate-limited; revoking an~existing vote is~allowed immediately. Server-rendered forms provide direct behavior, while JavaScript submits normal interactions asynchronously and~synchronizes the~score across matching views. The~server validates image identity, gallery policy, access, schema readiness, CSRF, and~request integrity.
+
+\subsection{Picture Game}
+\index{Picture Game}
+\index{image comparison}
+
+Picture Game is~an~optional public comparison mode. An~administrator enables it~for~a~gallery branch; eligible public photographs from~that gallery and~its descendants can~then participate subject to~the~ordinary access and~visibility rules. The~public game shows two photographs side by~side, records which pair was~presented, and~lets the~visitor choose the~preferred image before moving to~the~next comparison. The~gallery can~also present leading results accumulated by~the~game.
+
+Because presenting a~new pair creates persistent game state even before the~visitor chooses a~winner, Picture Game requires its database schema to~be~known and~available. If~the~required storage cannot~be~verified, the~write is~refused rather than~silently falling back to~an~untracked comparison. The~global feature switch can~hide Picture Game without deleting existing game data or~per-gallery enable settings.
 
 \section{Duplicate Photo Detector}
 \label{sec:duplicates}
@@ -1050,6 +1279,21 @@ Admin operations require an~authenticated account. Forms include a~private reque
 \index{share links}
 
 Protected galleries store password hashes and~grant session-scoped access after successful verification. Share links use server-generated token state and~expiry policy. Password reset uses one-time hashed tokens, an~optional recovery email, configured lifetime, and~the~selected mail transport. Use HTTPS, strong administrator credentials, restricted database accounts, and~protected mail/API secrets.
+
+\subsection{Administrator account and~mail settings}
+\index{administrator account}
+\index{SMTP}
+\index{Google login}
+
+The~account area supports username and~password changes, an~optional recovery address, password-reset lifetime, and~a~test message. Recovery mail can~use PHP \codeword{mail()} or~an~authenticated SMTP transport with host, port, encryption, username, and~password settings. Treat SMTP credentials like database credentials and~never include them in~exports or~diagnostic screenshots.
+
+Google login is~optional. The~administrator configures the~OAuth client and~authorized callback/redirect URI, then links a~Google identity only while already authenticated with the~normal administrator password session. An~unlinked Google identity is~rejected at~the~login page and~is~not~allowed to~create or~claim an~administrator profile. After linking, only that stored Google identity can~sign in~through the~Google button for~the~profile. Disconnecting the~link requires the~current administrator password. External login does~not~replace password login; if~OAuth configuration or~identity-link storage is~missing or~cannot be~verified, ordinary password authentication remains independent.
+
+The~login form accepts the~administrator username or~the~configured recovery email. Authentication attempts are~throttled by~both visitor and~normalized submitted identifier when the~rate-limit schema is~available. The~throttle table stores hashed subjects rather than~raw IP addresses or~raw submitted identifiers. Current policy limits repeated failed logins within a~15-minute window and~password-reset requests within longer bounded windows; successful login clears the~relevant login throttle state.
+
+Password recovery deliberately returns a~generic request result so~the~public form does not~confirm whether a~submitted username/email exists. Reset links use one-time hashed token storage and~the~configured 15-to-1440-minute lifetime. Completing a~reset changes the~password, marks the~token used, and~revokes persistent-login tokens for~that account. The~Account page can~send a~test recovery email through the~configured PHP \codeword{mail()} or~SMTP transport.
+
+The~\ui{Keep me signed in} option uses a~hashed browser token so~an~administrator can~survive ordinary shared-host PHP session cleanup without storing the~raw persistent credential in~the~database. Persistent login remains optional. It~is~revoked by~the~appropriate account/logout security workflows and~can~be~unavailable while its schema state cannot~be~verified, without disabling the~current ordinary PHP session.
 
 \subsection{Database readiness contract}
 \label{sec:db-readiness-contract}
@@ -1136,7 +1380,61 @@ Recommended practices include:
 \index{theme}
 \index{localization}
 
-The~Theme area controls site identity, colors, dimensions, page width, backgrounds, branding, language, gallery-card presentation, lightbox defaults, GPS presentation, favorite navigation, and~public thumbnail rendering. Settings use normalized scalar values or~focused service models.
+The~Theme area controls site identity, colors, dimensions, page width, backgrounds, branding, favicon assets, language, gallery-card presentation, lightbox defaults, GPS presentation, favorite navigation, and~public thumbnail rendering. Settings use normalized scalar values or~focused service models.
+
+The~Theme editor does not use a~separate light/dark-mode switch. Instead, the~saved color controls and~an~optional Custom CSS skin define the~public visual palette directly. It~also sets gallery-card and~subgallery layouts and~can~configure up~to~three header shortcuts. Each shortcut can~target the~main page, one gallery, or~remain empty. Anonymous visitors see only configured gallery shortcuts that are~still public and~listed; duplicate or~deleted gallery selections are~discarded when the~settings are~saved. Leaving all three slots empty hides those favorite-gallery buttons. Gallery cards may~also show a~configurable contained-picture count badge. Per-gallery presentation can~inherit the~site defaults or~override the~choices offered by~the~gallery editor.
+
+\subsection{Theme control reference}
+\index{theme!controls}
+\index{pagination!Theme settings}
+\index{favicon}
+\index{Custom CSS}
+
+The~current Theme page is~divided into \ui{Appearance}, \ui{Branding \& media}, \ui{Layout}, \ui{Language}, and~\ui{Custom CSS}. The~following reference records the~owner-visible controls and~the~normalization enforced by~the~current build.
+
+\begin{longtable}{>{\raggedright\arraybackslash}p{0.20\textwidth} >{\raggedright\arraybackslash}p{0.27\textwidth} >{\raggedright\arraybackslash}p{0.41\textwidth}}
+\toprule
+\textbf{Area} & \textbf{Control} & \textbf{Current behavior}\\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Area} & \textbf{Control} & \textbf{Current behavior}\\
+\midrule
+\endhead
+Appearance & Site identity and~colors & Site name plus accent, dark-accent, page-background, panel, open-gallery panel, header-title, and~gallery-title colors. The~``dark accent'' is~a~hover/outline color, not~a~dark-mode selector.\\
+Appearance & Corners and~font & Corner radius is~0--32 pixels. Font mode is~\ui{Classic serif} or~\ui{Clean sans-serif}. The~live preview updates while these controls are~edited.\\
+Appearance & Public page width & \ui{Default}, \ui{Wider}, \ui{Full width}, or~\ui{Custom}. Custom width is~clamped to~1024--2048 pixels and~defaults to~1440 when no~valid value exists.\\
+Appearance & GPS pin & When the~GPS-maps feature is~enabled, photo-card pins and~their background underlay can~be~shown or~hidden separately. Pin size is~14--48 pixels with~26 as~the~default. The~underlay slider is~displayed as~0--48 pixels, but~the~current server normalizer treats 0 or~another non-positive value as~unset and~restores 22 pixels; use the~separate underlay checkbox to~hide the~background.\\
+Appearance & Public tag pages & Dedicated tag-page columns and~rows use the~same safe maxima as~other public grids: 1--12 columns and~1--50 rows. Tag-result cards can~use the~vertical or~horizontal gallery-card design independently from ordinary gallery listings.\\
+Appearance & Gallery hero tags & Sort by~usage or~alphabetically. Either show all immediately or~show 1--200 tags before the~in-place expansion control; the~default threshold is~20. Optional scrolling uses 1--12 visible rows, default~5, and~activates only when the~rendered tags actually wrap beyond the~configured rows.\\
+Layout & Header shortcuts & Three ordered slots. A~slot can~be~empty, point to~the~main page, or~point to~a~gallery found by~the~gallery picker. Public visitors see only public/listed gallery targets.\\
+Layout & Gallery-card design & Global default is~\ui{Vertical system} or~\ui{Horizontal system}. A~physical gallery can~inherit or~override this default where the~presentation schema is~available.\\
+Layout & Picture-count badge & Global contained-picture badge is~enabled by~default. Individual galleries can~inherit it~or~save an~override.\\
+Layout & Public thumbnail renderer & \ui{Responsive browser selection} is~the~default; \ui{Progressive thumbnail sharpening} is~the~optional beta mode for~photo cards inside an~open gallery. Gallery covers and~collages continue to~use responsive browser selection.\\
+Layout & Pagination & Global pagination is~off by~default. Columns default to~3 and~are~clamped to~1--12; rows default to~3 and~are~clamped to~1--50. Effective items per~page are~columns multiplied by~rows.\\
+Layout & Main-page grid & The~front page has~its own 1--12-column and~1--50-row grid. This does not~change grids inside galleries.\\
+Layout & Per-gallery grid reset & \ui{Reset all custom gallery grids} clears database overrides, restores default subgallery-inheritance state, and~removes matching grid keys from~\filepath{gallery.json} sidecars so~a~later discovery pass cannot re-import stale grid settings.\\
+Layout & Lightbox default & \ui{Single image}, \ui{Picture strip}, or~\ui{3D carousel} while the~lightbox-modes feature is~enabled. The~classic single-image mode is~the~fallback and~the~only mode exposed when that feature is~disabled.\\
+Branding & Public header banner & Optional Theme-level JPG/PNG/GIF/WebP banner, maximum 8~MB. It~replaces the~visible site title when no~gallery-specific banner is~configured.\\
+Branding & Header separator & Optional JPG/PNG/GIF/WebP separator, maximum 8~MB. Width~0 follows the~responsive page width; a~positive width is~clamped to~160--3840 pixels. Height defaults to~72 and~is~clamped to~8--512 pixels. Normal mode preserves aspect ratio and~treats height as~a~maximum; stretch mode uses the~configured render box exactly and~can~distort the~image intentionally.\\
+Branding & Favicon & Upload JPG/PNG/GIF/WebP, drag a~square crop, and~zoom the~crop from~1--3 times. Saving produces 32-, 48-, and~180-pixel PNG favicon variants.\\
+Branding & Theme background & Preserve the~original upload and~optionally generate a~WebP derivative when GD/WebP support is~available. The~optimized longest side is~1024--3840 pixels, default~1920, with~128-pixel slider steps. It~can~be~regenerated or~removed without deleting the~original.\\
+Branding & Background visibility/fallback & Background visibility is~0--100 percent, default~65. The~gallery fallback source can~be~none, a~new Theme upload, an~existing gallery image, or~a~collage generated from~public galleries. Separate actions reset all per-gallery background selections, remove the~Theme background, or~remove the~favicon.\\
+Custom CSS & Preset skin or~upload & Presets are~the~CSS files currently present in~\filepath{custom_css/}; selecting one copies it~to~\filepath{public/assets/custom.css}. A~manually uploaded \filepath{.css} file replaces that active file. The~active custom stylesheet loads after built-in CSS and~saved Theme controls.\\
+Custom CSS & Reset actions & \ui{Reset custom CSS} deletes the~active custom stylesheet and~clears its preset marker. \ui{Reset to CSS} clears saved palette/font/radius/background-source/GPS visual overrides so~the~underlying CSS becomes authoritative again; structural page-width settings are~intentionally preserved.\\
+Language & Admin/public language & Admin language is~stored for~the~administrator's session/browser; the~public language is~the~site-wide anonymous default. The~viewer selector is~an~independent visitor override, described below.\\
+Language & Pack maintenance & Supported packs show string counts and~coverage. The~JSON editor validates an~object containing string values, imports/exports JSON, and~can~clear authenticated missing-key diagnostics. English remains the~source/fallback catalog.\\
+\bottomrule
+\end{longtable}
+
+\subsection{Lightbox browsing modes}
+\index{lightbox!browsing modes}
+\index{picture strip}
+\index{3D carousel}
+
+The~Theme editor defines the~default public lightbox presentation. \ui{Single image} keeps the~classic viewer. \ui{Picture strip} adds nearby thumbnail previews below the~active photograph. \ui{3D carousel} places a~small set of~neighboring photographs behind the~active one to~provide more visual context while browsing.
+
+A~physical gallery can~inherit the~Theme default or~save its~own lightbox-mode override. Smart Gallery presentation can~also resolve an~effective lightbox mode from~its own presentation settings and~the~site defaults. The~modes share the~same authorized lightbox metadata and~navigation pipeline, so~fullscreen, slideshow, zoom, maps, voting, and~progressive quality behavior continue to~follow their ordinary rules. Disabling the~global lightbox-modes feature switch hides these browsing controls without changing stored photographs.
 
 \subsection{Choosing the~interface language}
 \label{sec:language-selection}
@@ -1238,11 +1536,36 @@ Long tag collections can~also use a~responsive internal scrollbar. This option i
 \index{ZIP}
 \index{WebDAV}
 
-Gallery downloads stream authorized content as~ZIP archives. Selection downloads package chosen images, while full-gallery operations traverse the~permitted scope. Archive paths require normalization to~prevent traversal and~preserve deterministic names.
+Gallery downloads prepare authorized content as~ZIP archives and~stream the~finished archive to~the~browser. A~normal gallery download traverses the~permitted gallery subtree; Smart Gallery downloads re-evaluate the~saved query and~current access rules; Picture Manager selection downloads package only the~currently selected owned photographs; the~administrator can~also request an~all-galleries archive. Archive entry names are~normalized to~prevent traversal and~keep deterministic paths.
 
-Gallery migration exchanges manifests and~assets between compatible installations. Resumable status endpoints allow the~receiver to~report completed work and~avoid retransmitting accepted assets after interruption. Browser upload preparation similarly uses manifests and~limited batches, followed by~server validation.
+Generated gallery/all/selection ZIPs use a~content signature derived from~the~relevant gallery/image metadata so~a~still-current cached archive can~be~reused and~a~changed collection produces a~new cache identity. This \emph{content signature} is~cache invalidation metadata, not~a~public HMAC download authorization token. Authorization is~checked by~the~download controller before an~archive is~served.
 
-Mobile WebDAV tokens associate a~user, gallery scope, credential state, and~path behavior. Operators should treat these tokens as~credentials and~revoke unused entries through the~corresponding controls.
+\subsection{Gallery-to-gallery migration}
+\index{gallery migration}
+\index{API migration}
+
+The~gallery editor's API area supports both transfer directions between compatible PHP Gallery installations. \ui{Export this gallery to~another instance} treats the~current gallery as~the~source and~uses a~gallery-scoped API key created for~the~receiving target gallery. \ui{Import into this gallery from~another instance} treats the~current gallery as~the~target and~uses an~API key created for~the~remote source gallery. Import fills the~existing target gallery folder; it~does not~move that target to~a~different place in~its local hierarchy.
+
+A~transfer begins with a~versioned manifest containing gallery metadata, image metadata, flight-map state, and~descriptors for~the~owned source/thumbnail/branding assets. The~current compatibility policy requires source and~target to~run exactly the~same application version. Assets carry SHA-256 checksums and~are~staged/validated before final installation. The~workflow intentionally sends or~receives one manifest or~one asset per~bounded request rather than~holding a~whole gallery transfer open in~one PHP request.
+
+The~administrator chooses a~reconnect interval from~5 to~300 seconds. After a~timeout, reload, or~interrupted connection, the~active side asks the~target job which asset references were already accepted and~continues with the~remaining work instead of~blindly retransmitting everything. Completion is~a~separate step after the~manifest assets have~been installed. Cancelling the~browser workflow stops further requests; credentials should still be~revoked when a~temporary migration key is~no~longer needed.
+
+\subsection{Mobile WebDAV transfer}
+\index{WebDAV!mobile upload}
+
+\ui{Galleries > Mobile uploads} creates a~WebDAV-compatible connection for~one selected gallery. Record a~recognizable label, choose the~gallery, create the~connection, and~copy the~generated server URL, username, and~password into the~mobile application. The~password is~shown only once and~stored as~a~hash. Existing rows show their last-use time and~can~be~deleted immediately from~Admin.
+
+Use the~WebDAV target type in~clients such as~PhotoSync. Current server ingestion accepts JPG, PNG, GIF, and~WebP, so~enable HEIC-to-JPEG conversion in~the~client where available. WebDAV uploads do~not~bypass gallery ingestion rules: the~credential is~gallery-scoped, authentication is~required on~every write, the~gallery/image schema must~be~known, and~accepted media is~then scanned, optionally auto-renamed, and~processed through the~ordinary thumbnail pipeline.
+
+\subsection{Public discovery and~selected-photo tools}
+\index{robots.txt}
+\index{sitemap.xml}
+\index{image sitemap}
+\index{picture manager}
+
+The~public \codeword{/robots.txt} response describes crawler boundaries, while \codeword{/sitemap.xml} lists eligible public gallery and~image URLs with image metadata and~last-modified information. Unpublished, private, password-protected, age-restricted, or~otherwise unauthorized content is~not~made public through these outputs. Canonical URLs, social metadata, and~structured image data use the~same access-aware public path model.
+
+The~Picture Manager is~a~logged-in administrator overlay on~the~public gallery view, not~a~visitor feature. An~administrator can~select photographs in~the~public grid, drag them onto a~visible child gallery, move or~copy them through the~searchable destination picker, create a~child gallery by~copying the~selection, and~use the~native device share sheet where supported. Native sharing falls back to~the~selected-photo ZIP when the~browser cannot share the~prepared files. The~selection itself is~only browser state and~does not~grant permission. Every mutation/ZIP request rechecks the~normal logged-in account, CSRF token, source gallery, selected image ownership, and~destination where applicable. Ordinary visitors do~not~receive these controls.
 
 \section{Maintenance, updates, and~recovery}
 \label{sec:maintenance}
@@ -1276,9 +1599,58 @@ After repair, reload \ui{System Health} and~retest the~affected feature. Keep an
 
 Maintenance tools inspect generated variants, identify missing or~stale derivatives, and~rebuild selected sizes. Browser-assisted rebuilding can~prepare source chunks where configured. Background warm-up~handles small public-rendering gaps with limited requests, while explicit Admin maintenance remains the~primary large-scale repair path.
 
+\subsection{SEO request guard and~public query hygiene}
+\index{SEO request guard}
+\index{query-string spam}
+\index{canonical URL}
+
+The~maintenance area includes an~optional public SEO request guard, enabled by~default. For~anonymous public GET requests it~keeps an~explicit allowlist of~query parameters for~each route. Known analytics parameters such as~UTM fields and~common ad-click identifiers are~ignored because they do~not~change rendered content. Unexpected parameters are~rejected before the~normal public renderer with~a~404, \codeword{noindex,nofollow}, and~no-cache response so~crawler-generated parameter spam does~not~multiply indexable gallery URLs.
+
+Admin routes and~machine endpoints such as~setup, WebDAV, upload automation, gallery-migration receivers, and~the~maintenance cron endpoint are~outside this public query guard. Signed-in administrators are~also exempt so~diagnostic/admin workflows are~not~blocked by~public crawler rules. Rejected-query logging can~be~enabled independently and~is~sample-limited per~UTC day to~prevent a~crawler flood from~filling the~Admin log. The~same service supplies fallback canonical URLs when a~public page has~not~already emitted its own canonical tag.
+
 \subsection{Database maintenance}
 
-Database inspection inventories schema objects, references, ownership categories, retention policy, and~cleanup confidence. Logical cleanup uses allow-listed rules with deterministic selection, limited batches, and~audit records. Schema repair provides a~dry-run and~idempotent migration path. Physical table optimization remains a~separately confirmed selected-table operation.\footnote{Storage-engine allocation values such as~data-free estimates describe engine state and~do~not~guarantee a~precise number of~filesystem bytes returned after optimization.}
+Database inspection inventories schema objects, references, ownership categories, retention policy, and~cleanup confidence. Logical cleanup uses allow-listed rules with deterministic selection, limited batches, and~audit records. Schema repair provides a~dry-run and~idempotent migration path. \codeword{ANALYZE TABLE} can~refresh optimizer statistics for~selected tables. Physical \codeword{OPTIMIZE TABLE} is~available only as~a~preview followed by~separately confirmed selected-table operation; it~is~never an~automatic cleanup step.\footnote{Storage-engine allocation values such as~data-free estimates describe engine state and~do~not~guarantee a~precise number of~filesystem bytes returned after optimization.}
+
+\subsection{Storage statistics and~Complete report}
+\index{storage statistics}
+\index{Complete report}
+\index{gallery report}
+
+Detailed \ui{Storage statistics} are~calculated only when an~administrator requests them, so~the~normal dashboard does~not~perform a~full derivative-filesystem scan on~every visit. The~Files view separates indexed source photographs from~generated JPEG/WebP thumbnails and~DNG browser-display masters, shows source file-type and~size distributions, largest galleries and~sources, unknown sizes, and~scan warnings. A~cached snapshot is~marked stale when gallery data changes. Refreshing the~snapshot scans expected generated files in~small browser-driven batches. The~same area links to~database storage details and~database maintenance.
+
+The~Database tab reads information-schema storage statistics separately from~the~filesystem scan. It~distinguishes Gallery-owned tables from~the~whole selected database where possible and~shows the~largest tables rather than~forcing a~full table inspection into the~ordinary dashboard request. The~explicit \ui{Recompute database statistics} action runs the~database engine's statistics refresh for~the~available tables and~reports partial failures in~the~Admin log instead of~pretending the~recompute was~complete.
+
+\ui{Maintenance > Complete report} builds one self-contained HTML report covering storage, database structure and~size, gallery structure, image and~EXIF statistics, GPS overview, telemetry, operational logs, feature/settings state, and~runtime diagnostics. Image and~generated-media work is~processed in~bounded browser-driven batches so~the~report remains practical on~shared hosting. GPS place summaries use local approximate clustering and~offline reference data; probable simulator or~game screenshots are~excluded from~real-world place frequency where the~available evidence supports that classification.
+
+The~completed report is~returned to~the~browser as~a~download and~is~not~saved as~a~report file on~the~server. To~keep a~PDF copy, open the~generated HTML and~use the~browser's Print or~Save as~PDF function; print styling is~included in~the~report. Treat any exported report as~administrative data because it~can~contain detailed operational and~collection statistics.
+
+\subsection{Telemetry and~privacy controls}
+\index{telemetry}
+\index{privacy!telemetry}
+
+The~optional \ui{Telemetry} area records privacy-controlled operational measurements and~presents them as~Admin reports. Available controls cover the~master telemetry switch, public usage measurements, performance, cache and~database events, honoring Do~Not~Track, excluding administrators, the~maximum counted photo-view duration, and~retention for~raw, hourly, and~daily data. Reports include measures such as~anonymous sessions, page views, photograph opens and~capped view time, client errors, measured media bytes, browser mix, and~cache/database activity where those categories are~enabled.
+
+The~telemetry subsystem is~designed not~to~store raw IP addresses, raw browser user-agent strings, raw referrer URLs, names, email addresses, account identifiers, request bodies, or~exact visitor locations. Exports contain aggregated anonymous telemetry and~session hashes rather than~raw visitor identifiers. Maintenance rolls up~and~purges telemetry according to~the~configured retention policy, and~the~Admin screen can~export a~standalone HTML report for~offline review. Review the~privacy controls before enabling collection on~a~public site.
+
+\subsection{Runtime diagnostics, integrity, and~gallery benchmark}
+\index{Runtime diagnostics}
+\index{integrity checking}
+\index{gallery benchmark}
+
+\ui{Runtime diagnostics} provides a~copyable environment and~support view for~PHP, database-readiness classes, hosting limits, GD, Imagick/ImageMagick, and~relevant media-format support. It~also exposes the~DNG conversion policy described earlier. The~readiness panels separate presentation/reporting dependencies, authentication/security dependencies, and~mutation-sensitive dependencies so~an~administrator can~distinguish an~optional missing capability from~a~condition that must~block a~write.
+
+The~separate \ui{Development diagnostics} switch is~administrator-only. When enabled for~a~signed-in administrator it~adds viewer instrumentation for~preload, cache, memory, network, and~frame-timing work in~the~public/lightbox/fullscreen experience. It~does not~turn those diagnostics on~for~ordinary anonymous visitors. Keep it~off during normal ownership unless you~are~investigating rendering or~performance behavior; the~gallery benchmark also depends on~this development-diagnostics context.
+
+The~Admin \ui{Integrity} workflow checks integrity-managed core files against the~installed manifest and~helps identify incomplete or~unexpected deployment changes. It~is~a~runtime verification tool; coordinated backups are~still required because an~integrity manifest does~not~contain user photographs or~replace recovery media.
+
+When development diagnostics are~available, a~signed-in administrator can~start a~\ui{Public gallery load benchmark} for~the~current gallery. The~browser loads the~gallery several times in~a~hidden same-origin frame using an~anonymous preview, combines PHP render counters with browser navigation timing, and~then offers the~benchmark log as~JSON. Use the~same gallery, presentation mode, and~network/cache conditions when comparing two changes; the~benchmark is~most useful as~a~before/after measurement rather than~as~a~universal score.
+
+\subsection{Scheduled site maintenance}
+\index{scheduled maintenance}
+\index{cron!site maintenance}
+
+Routine maintenance can~run in~bounded slices instead of~one long request. The~maintenance service chains safe web requests when traffic is~available and~can~also be~called from~hosting cron with the~CLI command shown in~Admin. It~can~check thumbnail state, refresh metadata, process cleanup tasks, roll up~telemetry, and~archive eligible Admin-log days according to~their configured policies. The~hidden web-cron token is~rotatable; rotating it~invalidates previously published web-cron URLs. Maintenance is~non-destructive by~default and~does~not~replace explicit confirmation for~database optimization or~other consequential actions.
 
 \subsection{Admin log history and~archives}
 \index{admin logs}
@@ -1286,7 +1658,7 @@ Database inspection inventories schema objects, references, ownership categories
 
 Everyday administrative work creates a~useful history: uploads, gallery changes, security decisions, maintenance results, warnings, and~other operational events can~leave a~record in~the~Admin log. That history is~valuable when you want to~understand what happened, when it~happened, and~which account or~request was~involved. It~is~also normal for~the~table to~become large on~an~active installation. Version~\version{} therefore treats log care as~its own explicit maintenance task rather than allowing generic database cleanup to~remove audit history unexpectedly.
 
-The~Admin log screen can~show individual entries or~collapse repeated events into a~summary. A~group may~represent repeated thumbnail warnings, upload results, or~maintenance messages; opening it~shows the~individual records. Large lists and~exports are~processed in~limited portions, so~requesting a~complete history does not~require the~browser or~PHP to~hold the~entire table in~memory at~once.
+The~Admin log screen can~show individual entries or~collapse repeated events into a~summary. A~group may~represent repeated thumbnail warnings, upload results, or~maintenance messages; opening it~shows the~individual records. Filters and~workflow status controls help narrow operational review, while bounded exports preserve selected history without loading the~entire table in~one request. Large lists, raw-instance expansion, and~exports are~processed in~limited portions, so~requesting a~complete history does not~require the~browser or~PHP to~hold the~entire table in~memory at~once.
 
 The~owner can~choose how long recent logs should remain in~the~live database. Choosing \emph{Forever} disables automatic archival. Choosing a~finite live period does not~immediately throw older records away. The~maintenance workflow first selects complete calendar days that are~outside the~live retention window, writes a~protected archive containing both machine-readable JSON and~a~readable static HTML report, checks that the~archive contains the~expected number of~records, and~only then removes those same rows from the~live table. The~archive is~stored under \filepath{data/admin-log-archives/}, which is~application data rather than a~public gallery area and~carries an~additional web-server protection rule.
 
@@ -1294,11 +1666,88 @@ Archive maintenance is~resumable. It~writes temporary files before promoting a~c
 
 Administrators should still include the~database and~the~\filepath{data/admin-log-archives/} directory in~coordinated backups. The~live database contains recent operational history, while the~archive directory contains older history selected by~the~explicit retention policy. Keeping both gives the~owner a~continuous record and~makes a~restored installation easier to~investigate after an~update, migration, or~unexpected event.
 
+\subsection{Complete current feature reference}
+\label{sec:complete-feature-reference}
+\index{feature reference}
+\index{feature inventory}
+
+This~reference is~the~manual's completeness checklist for~Version~\version{}. It~lists the~current product-level capabilities exposed by~the~public routes, Admin navigation, gallery/photo editors, maintenance tools, and~optional integrations. Internal helper functions are~not~listed as~separate features when they exist only to~implement one row below.
+
+\begin{longtable}{>{\raggedright\arraybackslash}p{0.23\textwidth} >{\raggedright\arraybackslash}p{0.66\textwidth}}
+\toprule
+\textbf{Feature} & \textbf{Implemented behavior}\\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Feature} & \textbf{Implemented behavior}\\
+\midrule
+\endhead
+Filesystem-first galleries & Nested physical folders mirrored by~database records, unlimited practical hierarchy, discovery/import, manual creation, physical moves, clean public paths, sidecar metadata, and~stable sibling/photo ordering.\\
+Gallery metadata & Title, description, maintained translations, manual date/range, EXIF date suggestions, slug, folder name, parent, order, tags, cover/title picture, uploaded gallery thumbnail, branding, background, and~presentation overrides.\\
+Gallery access & Public, unpublished, private, password locking, expiring/non-expiring share links, inherited access evaluation, administrator access, and~NSFW / 18+ confirmation boundaries.\\
+Bulk gallery administration & Branch-aware deletion, visibility updates, EXIF/GPS map override changes, voting changes, filename-display changes, Picture Game changes, path regeneration, thumbnail/scanning operations, and~sibling reorder/date-sort workflows.\\
+Smart Galleries & Saved nested Boolean queries over physical galleries, tags, dates, EXIF/GPS, text, AI metadata, duplicate state, file properties, and~private editorial rating; public/unlisted/root/attached placement; per-parent above/below ordering; cycle protection; independent presentation overrides; complete paged lightbox traversal; bounded ZIP download.\\
+Photograph editor & Title/description/translations, visibility, NSFW, sort order, private editorial rating, tags, per-photo thumbnail bounds, EXIF/GPS review, internal AI metadata review, and~OpenAI draft tools.\\
+Bulk photograph administration & Move to~existing/new gallery, deletion, cover assignment, visibility, NSFW, thumbnail creation, and~drag/filename ordering.\\
+Tags & Shared gallery/photo tags, normalized reusable tag names/slugs, public descriptions, usage counts, weighted editor suggestions, Admin rename/edit/delete, public tag landing pages, tag-specific grid/card settings, hero tag ordering/disclosure/scrolling.\\
+Public home and~gallery pages & Hierarchical cards, breadcrumbs, covers/collages, pagination, direct photograph grids, gallery counts, dates, descriptions, branding/backgrounds, favorite header shortcuts, contextual logged-in Admin edit/remove/reorder controls, floating back-to-top assistance for~long listings, responsive public paths, and~query-string fallback when rewriting is~disabled.\\
+Public search & Optional site/branch search across gallery/photo titles, descriptions, filenames, tag metadata, maintained-language text, and~available internal AI searchable text; minimum query length and~bounded result count; access/listing policy applied before results are~returned.\\
+Robots, sitemap, and~SEO & Access-aware \codeword{robots.txt}, image-aware \codeword{sitemap.xml}, canonical/social/structured metadata, plus the~route-specific query-string guard described above.\\
+Public media authorization & Dedicated original/thumbnail/cover/branding/background/favicon routes re-evaluate gallery/image visibility and~protected access instead of~exposing arbitrary filesystem paths.\\
+Thumbnail generation & Responsive size variants, JPEG/WebP compatibility policy, responsive and~progressive selected-gallery renderers, lazy/near-viewport behavior, per-gallery/photo size bounds, DNG display masters, metadata reconciliation, Admin/browser rebuild workflows, and~signed access-checked low-budget public fallback warmup.\\
+Lightbox & Authorized asynchronous metadata, keyboard/touch navigation, slideshow/fullscreen, single-image/picture-strip/3D-carousel browsing modes, EXIF/map overlay, voting state, 100--400\% zoom with pan/pinch/cursor anchoring, immediate original-quality promotion when zooming, and~Shift+Arrow jumps of~10 photographs.\\
+EXIF and~GPS & Camera/lens/exposure/date/GPS extraction, global default with per-gallery inherit/force-on/force-off, photo pins, gallery map data, date suggestions, duplicate evidence, and~privacy-sensitive public suppression.\\
+Voting & Per-image reversible positive vote with score synchronization, anonymous visitor hash or~logged-in ownership, rate limiting for~new likes, and~per-gallery enable/disable.\\
+Picture Game & Optional branch-level pair comparison using eligible public images, persistent pair/winner state, leaderboard/result aggregation, and~schema-safe refusal when storage is~unknown.\\
+Picture Manager & Logged-in public-view administrative selection overlay with checkmark/range/toggle/select-all controls, move/copy/create-child actions, drag-to-visible-subgallery movement, native multi-file Web Share where supported, and~selected-photo ZIP fallback/download.\\
+Downloads & Authorized gallery ZIPs, Smart Gallery ZIPs, selected-photo ZIPs, administrator all-gallery ZIP, normalized archive paths, cache content signatures, bounded Smart Gallery source-count/byte limits, and~safe cache cleanup.\\
+Browser uploads & Existing/new-gallery upload flows, optional browser thumbnail preparation, bounded workers/batches, safe fallback to~server processing before writes, format-policy hinting, local ZIP import, and~post-scan automatic renaming.\\
+Filesystem discovery & Session-backed bounded folder scan; skips symlink/hidden/generated directories; imports image-bearing hierarchy in~place; can~move unmanaged photos into an~existing gallery or~delete safe unmanaged candidate trees; reports metadata-only sidecars separately.\\
+Filesystem metadata sidecars & Optional per-gallery \filepath{gallery.json} written from~editable gallery state and~read during discovery/parent repair for~supported metadata; useful for~filesystem portability but~not~a~replacement for~database backup.\\
+Upload API & Gallery-scoped one-time-visible API keys, central API manager, key revocation, shared ingestion pipeline, and~authenticated automation endpoint.\\
+Windows companion & Watch-folder uploads, manual bulk upload, optional local responsive-thumbnail generation, parallel/pipelined work, retry/state files, system tray, optional SimConnect camera coordinates, confirmed-success source deletion, and~optional local AI metadata worker.\\
+Mobile WebDAV & Gallery-scoped one-time password credentials, Basic authentication, WebDAV discovery/write methods required by~mobile transfer clients, JPG/PNG/GIF/WebP ingestion, last-use tracking, and~revocation.\\
+Media Renamer & Dry-run physical filename plan, default \codeword{\{gallery_path\}_\{seq4\}} and~documented wildcard placeholders, collision/safety handling, gallery-order context, coordinated database/public-path/derivative/cache updates, bounded site-wide application, and~post-upload auto-rename integration.\\
+Metadata Organizer & Preview-only EXIF date grouping with min/max date filters, ISO \codeword{YYYY-MM-DD} child folders, reuse of~matching direct date children, confirmed physical moves with derivatives, and~bounded apply batches; location grouping remains planned rather than~active.\\
+Duplicate Photo Detector & Exact SHA-256 and~metadata-supported possible pairs, context links, deletion workflow, per-admin reviewed-pair/exact-gallery ledger, and~persistent review state.\\
+OpenAI text assistance & Per-account encrypted API key/model settings, optional explicit thumbnail-consent switch, gallery/photo description drafting, text cleanup, context summary, visible-content description from~small generated thumbnails, translation suggestions, and~manual-review-only insertion.\\
+Internal AI metadata & Separate searchable machine metadata and~queue tables, authenticated Windows worker claims/results, read-only photo-editor inspection, Smart Gallery/search evidence, model-generation tracking, and~forced branch reprocessing.\\
+Flight maps and~SimBrief & Manual route text, explicit coordinate syntax, SimBrief latest-OFP fetch, editable generated Markdown, saved OFP data and~coordinates, and~public rendering from~stored points only.\\
+Navigation data & OurAirports local database import, bundled offline CSV, cached provider points, optional Navigraph OAuth/package/AIRAC integration, offline-first resolver, and~Admin lookup tester.\\
+Gallery migration & Same-version source-push/target-pull API transfer, versioned manifests, metadata/asset checksums, one-asset bounded requests, durable target status, reconnect/resume, and~separate completion.\\
+Theme and~layout & Direct palette colors, font mode, rounded corners, page width, gallery/card grids, pagination, card layout, count badge, public thumbnail renderer, lightbox default, GPS-pin presentation, three favorite/header shortcuts, and~live preview. There is~no~separate light/dark-mode switch in~the~current Theme UI.\\
+Branding and~browser identity & Site header banner, separator dimensions/stretching, optimized background and~opacity, per-gallery overrides, public cover assets, square-cropped favicon with~32/48/180-pixel generated variants, and~custom CSS presets/editor.\\
+Localization & English canonical fallback plus maintained selectable Czech, German, and~Swedish UI packs, per-viewer browser preference, flag/native-name selector designs, shared browser/server catalogs, pack diagnostics/editor/import/export, and~per-gallery/photo maintained-language content.\\
+Feature switches & Global route-aware switches for~public search, lightbox modes, Picture Manager, image voting, Picture Game, downloads, gallery maps, flight maps, navigation data, SimBrief, OpenAI, local AI metadata, upload API, mobile WebDAV, gallery migration, Media Renamer, and~telemetry.\\
+Central Settings & Searchable categorized registry, keyboard-driven Spotlight navigation, canonical save delegation for~approved global values, specialist deep links, inheritance-aware ownership, default/source labels, and~secret redaction.\\
+Admin gallery workspace & Visibility filter with hidden-row deselection, persistent per-branch collapse state, Collapse/Expand all, hierarchy reordering, visible-page public reorder tools, side-panel editors, and~contextual public-page edit/remove controls for~signed-in administrators.\\
+Administrator authentication & Username-or-recovery-email login, CSRF/session protection, hashed rate-limit subjects, optional durable login token, password reset by~PHP mail/SMTP, account/profile changes protected by~current-password checks, and~optional Google sign-in that must first be~linked from~an~authenticated password session and~requires the~current password to~disconnect.\\
+Database readiness/System Health & Tri-state schema inspection separating Available, Missing, Unknown, and~Disabled where applicable; distinct security/authentication, mutation-sensitive, and~optional presentation/report capability panels; writes fail closed on~unknown required schema.\\
+Database maintenance & Explicit schema/migration/code-reference inventory, storage information, dry-run cleanup candidates, bounded logical cleanup, dedicated legacy repair readiness, selected ANALYZE, selected-table optimization preview, and~separately confirmed OPTIMIZE TABLE.\\
+Storage statistics & On-demand source/generated-media scan, file-type/size distribution, largest galleries/files, DNG master and~thumbnail accounting, stale snapshot handling, separate database/table usage view, explicit database-statistics recompute, database-maintenance links, and~bounded refresh batches.\\
+Complete report & Self-contained HTML export covering storage, database, gallery/image/EXIF/GPS statistics, feature/settings state, telemetry, logs, and~runtime diagnostics, with bounded image/generated-media processing.\\
+Telemetry & Optional privacy-controlled anonymous usage/performance/cache/database measurements, DNT respect, administrator exclusion, bounded view time, raw/hourly/daily retention, rollups/purge, Admin dashboard, and~HTML export.\\
+Admin logs & Structured events, filters/status, repeated-event grouping with member expansion, bounded exports/ZIP export, configurable live retention, protected daily JSON+HTML archives, resume/recovery state, and~archive download/view tools.\\
+Scheduled site maintenance & Daily UTC window, optional request-triggered continuation, bounded image batch/time budget, CLI/web-cron support, run-one-slice action, interrupted-state reset, rotatable hidden web-cron token, thumbnail/metadata/cleanup/telemetry/log-archive tasks.\\
+Runtime diagnostics & PHP/hosting/database readiness, GD/Imagick/ImageMagick/format support, DNG policy, copyable support summary, administrator-only development diagnostics for~viewer preload/cache/memory/network/frame timing, and~development-only benchmark entry points.\\
+Integrity & Installed core-manifest hash verification for~managed application files plus release-time manifest generation/validation; separate from~user-data backup.\\
+Gallery benchmark & Development-only authenticated browser benchmark that uses anonymous preview loads, same-origin hidden frames, server render counters and~navigation timing, then exports JSON for~before/after comparisons.\\
+Updater & Stable/beta discovery, cached patch notes, resumable durable jobs, Range download resume, archive/manifest verification, staging, rollback snapshot, activation, migrations, cleanup, locks/stale-lock recovery, retry/cancel before activation, file rollback after activation, stable restore/clean reinstall/beta install, CLI continuation, and~emergency \filepath{reset.php}.\\
+Deployment helpers & Windows/Linux deploy scripts, release metadata, core-manifest generation and~package validation, with deployment designed not~to~make a~locally installed PHP executable an~unconditional runtime requirement for~the~gallery itself.\\
+\bottomrule
+\end{longtable}
+
 \subsection{Application updates}
 
 The~updater checks configured channels, validates packages, stages content, verifies required runtime files and~sizes, preserves overwritten files in~recovery storage, and~activates the~update. Rate-limit handling and~retry state prevent repeated remote requests during provider wait periods. A~resumable job card appears in~both \ui{Status} and~\ui{Advanced tools}, so~a~beta install, restore, or~reinstall continues to~show its progress where it~was~started. The~page may~be~closed and~reopened without discarding completed checkpoints.
 
+The~Admin update area also shows cached release information and~versioned patch notes for~the~available channel, so~an~owner can~review a~release before starting its~job. Stable and~beta channels remain separate choices; the~Beta label belongs to~the~release choice in~the~Admin interface and~does~not~change the~updater's durable job or~manifest terminology.
+
 Temporary download or~hosting failures may~be~retried. A~package whose files do~not~match its own integrity manifest is~different: downloading the~same published build again cannot change those bytes. PHP Gallery therefore asks the~administrator to~cancel that prepared job and~choose a~newer release or~beta code instead of~offering an~endless retry loop.
+
+Stable discovery and~package work are~separate bounded operations. A~discovery request may~create a~durable background job, while a~later safe request or~the~CLI runner advances a~short slice through download, archive validation, extraction, manifest verification, staging, rollback backup, activation, migrations, and~cleanup. Range requests can~resume interrupted downloads, worker locks prevent concurrent advancement, and~a~stale lock can~be~recovered after its~owner expires. On~idle shared hosting, schedule \codeword{php scripts/application_update.php} from~cron, for~example every five minutes. Each invocation performs bounded discovery or~advances existing background work; correctness does~not~depend on~\codeword{set_time_limit()} or~\codeword{ignore_user_abort()}.
+
+Before activation, an~administrator can~cancel or~retry a~recoverable job. After activation, the~Admin recovery action can~restore managed application files from~the~saved rollback snapshot, but~file rollback does~not~reverse database migrations. Stable restore, clean reinstall, and~beta installation remain resumable jobs with their own package validation. The~standalone \filepath{reset.php} emergency path is~a~separate recovery tool for~returning to~the~stable branch when the~normal Admin route cannot be~used; it~still requires the~same careful backup and~integrity review.
 
 \important{Run a~coordinated backup before an~application update. Keep the~backup available until runtime checks, migrations, public galleries, protected access, uploads, and~Admin operations have been verified.}
 
