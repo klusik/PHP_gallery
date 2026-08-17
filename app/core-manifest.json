@@ -1,6 +1,6 @@
 {
     "version": "0.91.2",
-    "generated_at": "2026-08-17T18:32:17+00:00",
+    "generated_at": "2026-08-17T21:41:49+00:00",
     "algorithm": "sha256",
     "hash_mode": "normalized-text-sha256",
     "files": {
@@ -342,7 +342,7 @@
         "public/assets/gallery-modules/lightbox-deferred.js": "sha256:50ba1faafe0747e913b6cf473cdac813a9499c807604fec056fcae26739056ea",
         "public/assets/gallery-modules/lightbox-votes.js": "sha256:4eebd33ec0dd0147e92a28543d20db78c11350c160f9e443e0f4852d8f8b4bfb",
         "public/assets/gallery-modules/lightbox-zoom-model.js": "sha256:d7a4924eedc75170d23bb318e36d34ca618db400fa731371e91899a3cc670fb1",
-        "public/assets/gallery-modules/lightbox.js": "sha256:6afff4612cf0b8817c38c2cc615c5cf09680d26886dedce1cc5a994f01f1fa7d",
+        "public/assets/gallery-modules/lightbox.js": "sha256:3928281801e3ad885e1b85423d794722a5ac086855b6e32a3376ab201c7c23aa",
         "public/assets/gallery-modules/picture-manager.js": "sha256:9e75f3080a1ee47781b25e0e55bd856084ddf8536ca74fa156cff35a46194e6e",
         "public/assets/gallery-modules/progressive-thumbnail-renderer.js": "sha256:bbd0a1d92d1f89caf20c5c3a889373012cf80ce290842f96a7cffd808a647d5c",
         "public/assets/gallery-modules/progressive-thumbnail-upgrade.js": "sha256:fdad18cef045566142167f9dd146e3d1897a0a195321d418609f93d01858cfc5",
@@ -373,7 +373,7 @@
         "public/assets/styles/admin-update.css": "sha256:cc4f2b30659bf16199e6c8673775b5afcbc98ab5c662f5650c0c3e3ef00834d7",
         "public/assets/styles/admin.css": "sha256:10d4a370b8502682e88c1c4a711b298da54b85f5dda42f0481c3fec5beceb364",
         "public/assets/styles/base.css": "sha256:9ec9fb6b1266d1904751581c2961001979f65a71ea04f131eb68466e05cab226",
-        "public/assets/styles/lightbox.css": "sha256:3d1d9501b429eb78d4d107169e94dee10c7594a0997dc8369e4ea9a4ba19bac7",
+        "public/assets/styles/lightbox.css": "sha256:a56644fa0f7e9d6f4a68fe0084876fcb1a2d48ba1f4a5f8e9f552e099b7c7cb3",
         "public/assets/styles/mobile-gallery.css": "sha256:0e7b5caf75193e031f573d7687c8efcb687b9154a1158fe7ed03437b618cfaa1",
         "public/assets/styles/public-shared.css": "sha256:6fc4be30635825f1972950aa2f221f171a234c47260269a364246ff201c6b033",
         "public/assets/styles/public.css": "sha256:df5b5cdbe86e5d9437f9c7257f9ce97e50b953e48dea381ef28dc17940bd3fe0",
