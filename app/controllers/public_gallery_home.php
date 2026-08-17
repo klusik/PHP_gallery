@@ -146,6 +146,7 @@ use function Gallery\Services\tags_for_entities;
 use function Gallery\Services\tags_for_entity;
 use function Gallery\Services\sort_public_hero_tag_groups;
 use function Gallery\Services\smart_galleries_for_placement;
+use function Gallery\Services\smart_gallery_card_summaries;
 use function Gallery\Services\theme_hero_tag_display_all_enabled;
 use function Gallery\Services\theme_hero_tag_scrollbar_enabled;
 use function Gallery\Services\theme_hero_tag_scrollbar_rows;
@@ -225,11 +226,13 @@ function cms_home(): void
         echo '<section class="grid public-home-gallery-grid' . e(pagination_grid_columns_class($paginationSettings)) . '">';
         public_render_profile_count('rendered_subgalleries', count($galleries));
         $physicalGalleries = array_values(array_filter($galleries, static fn (array $gallery): bool => empty($gallery['__smart_gallery'])));
+        $smartGalleries = array_values(array_filter($galleries, static fn (array $gallery): bool => !empty($gallery['__smart_gallery'])));
         $galleryCardContexts = public_render_profile_span('home_gallery_card_context_preload', static fn (): array => public_gallery_card_rendering_contexts($physicalGalleries, true, true));
-        public_render_profile_span('render_home_gallery_cards', static function () use ($galleries, $galleryCardContexts): void {
+        $smartGalleryCardContexts = public_render_profile_span('home_smart_gallery_card_context_preload', static fn (): array => smart_gallery_card_summaries($smartGalleries, true));
+        public_render_profile_span('render_home_gallery_cards', static function () use ($galleries, $galleryCardContexts, $smartGalleryCardContexts): void {
             foreach ($galleries as $index => $gallery) {
                 if (!empty($gallery['__smart_gallery'])) {
-                    render_smart_gallery_card($gallery, $index);
+                    render_smart_gallery_card($gallery, $index, $smartGalleryCardContexts[(int) $gallery['id']] ?? []);
                 } else {
                     render_gallery_card($gallery, true, false, true, $index, $galleryCardContexts[(int) $gallery['id']] ?? []);
                 }

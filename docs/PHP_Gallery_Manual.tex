@@ -472,11 +472,45 @@ Gallery deletion can~affect source files, descendants, metadata, thumbnails, lin
 
 A~Smart Gallery is~a~saved query, not~a~folder. Open \ui{Admin > Galleries > Smart Galleries}, add conditions, and~combine them with nested \ui{AND}, \ui{OR}, and~\ui{NOT} groups. Fields cover source galleries and~descendants, tags, capture dates, EXIF/GPS, text, AI metadata, duplicate state, file characteristics, and~private editorial ratings.
 
-Use \ui{Preview count}, save, and~optionally publish. Images and~files remain in~their physical galleries, so~metadata or~rating changes alter membership immediately. The~editorial rating is~private and~independent from visitor voting. Administrators may~also use \ui{Save search as~Smart Gallery} from public search.
+Use \ui{Preview} to~see the~current match count and~real matching photo cards, then save and~optionally publish. Images and~files remain in~their physical galleries, so~metadata or~rating changes alter membership immediately. The~editorial rating is~private and~independent from visitor voting. Administrators may~also use \ui{Save search as~Smart Gallery} from public search.
 
-Choose \ui{Unlisted} for~URL-only access, \ui{Root gallery} to~show the~Smart Gallery on~the~homepage, or~\ui{Subgallery placement} to~keep it~off the~homepage while allowing physical galleries to~list it. Each physical gallery editor contains a~Smart Gallery checklist. The~same virtual gallery may~be~selected beneath any number of~physical galleries, and~removing one placement does not~disturb the~others. The~Smart Gallery editor's \ui{Used in~physical galleries} section lists every attachment, links to~each physical gallery editor, and~provides an~independent \ui{Hide from here} action. It~must still be~enabled and~published before visitors see its card.
+Choose \ui{Unlisted} for~URL-only access, \ui{Root gallery} to~show the~Smart Gallery on~the~homepage, or~\ui{Subgallery placement} to~let physical galleries attach it. In~each physical gallery editor, select whether an~attachment belongs \ui{Above gallery content} or~\ui{Below gallery content} and~give it~an~order value. Above attachments render first, then ordinary subgalleries and~photos, then Below attachments. Equal order values are~resolved consistently by~Smart Gallery ID. Existing attachments default to~Below with order~0.
 
-Public results and~counts always intersect rules with access to~the~physical source gallery. Query-string routes work without rewriting and~clean \texttt{/smart/<slug>} URLs are~optional. Rules are~readable versioned JSON, never user SQL: fields/operators are~allowlisted, values are~prepared parameters, depth is~limited to~five, and~no~more than 50 conditions are~accepted. Deleted references match nothing and~malformed or~unknown rule versions are~rejected. The~normal migration workflow adds storage and~ratings; no~metadata rebuild is~required.
+The~same virtual gallery may~be~attached beneath several physical galleries, with independent placement and~order in~each parent. The~Smart Gallery editor's \ui{Used in~physical galleries} section shows every parent and~lets you~save its~placement/order or~\ui{Detach} it~without changing other parents. When the~editor is~opened in~the~Admin side panel, these actions stay in~that panel; ordinary form submission remains available when JavaScript is~disabled. A~public Smart Gallery placed beneath a~private or~otherwise restricted parent still inherits that parent's public access boundary for~the~card.
+
+Public results and~counts always apply the~same source-access policy as~ordinary public gallery content. A~matching photograph contributes only when its physical gallery is~publicly listed and~accessible to~the~current visitor and~the~photograph itself is~public. Existing password, share-link, inherited visibility, unpublished-gallery, and~age-restriction rules therefore continue to~apply. Query-string routes work without rewriting and~clean \texttt{/smart/<slug>} URLs are~optional.
+
+\subsection{Relationship safety and~repair}
+\index{Smart Galleries!cycle safety}
+
+A~Smart Gallery must not~resolve back into a~physical gallery that attaches it. The~server checks the~complete relationship graph whenever rules, attachments, or~gallery hierarchy are~changed; browser filtering is~not~treated as~security. This includes indirect paths through physical descendants and~other attached Smart Galleries. Filesystem-derived hierarchy synchronization and~public-path parent repair validate their complete proposed parent map before any~new parent link is~written. The~current rule editor can~reference physical galleries but~does not~offer a~direct Smart-Gallery-reference condition.
+
+A~complete Admin drag-and-drop tree is~validated once in~its final form. The~subsequent folder moves use that prevalidated map and~defer hierarchy synchronization until the~final tree exists, so~a~temporary intermediate state cannot reject an~otherwise valid batch. Every committed physical hierarchy mutation clears the~request-local Smart Gallery graph cache before later graph-dependent work continues.
+
+If~older or~manually modified database data already contains a~cycle, public rendering stops that invalid relationship instead of~recursing. The~Admin attachment list marks the~relationship for~repair, and~\ui{Detach} remains available. Validation and~runtime traversal both use conservative depth/node limits and~request-local deduplication, so~malformed data cannot repeatedly expand the~same Smart Gallery. The~normal result query remains paginated and~does not~copy all matching photographs into PHP merely to~perform cycle detection.
+
+Migration \texttt{202608170002\_smart\_gallery\_attachment\_ordering.php} adds the~per-parent placement and~order fields. Until that migration is~available, existing attachments keep their~historical Below behavior, while Admin placement mutations are~refused rather than~partially saved.
+
+\subsection{Presentation settings}
+\index{Smart Galleries!presentation}
+
+By~default a~Smart Gallery follows the~current Theme and~site presentation. Enable \ui{Override Theme defaults for this Smart Gallery} when this virtual collection needs its~own columns, rows, pagination, thumbnail size limits, thumbnail renderer, gallery-card layout, metadata overlays, lightbox behavior, slideshow, download, or~voting behavior. Sorting and~direction remain part of~the~Smart Gallery definition.
+
+A~Smart Gallery does not~inherit presentation from the~physical gallery in~which its~card appears. One Smart Gallery can~appear beneath several physical galleries, so~there is~no~single parent presentation with clear precedence. When no~override exists, or~when stored presentation data is~missing or~invalid, the~current Theme/site defaults remain the~fallback. Physical gallery and~photo thumbnail limits still win if~a~Smart Gallery limit conflicts with them.
+
+\subsection{Lightbox across result pages}
+\index{Smart Galleries!lightbox}
+
+The~large viewer is~not~limited to~the~photographs rendered on~the~current HTML page. Smart Gallery cards remember each photograph's position in~the~complete authorized result order. As~the~visitor moves forward or~backward, the~browser requests nearby metadata in~small authorized groups from the~server. The~server repeats the~same Smart Gallery rules, source access checks, sorting, and~stable tie-break used by~the~page.
+
+This keeps large virtual collections practical: opening a~Smart Gallery does not~preload all originals or~all result metadata. Existing keyboard, touch, fullscreen, zoom, close/reopen, and~slideshow behavior is~shared with ordinary galleries. If~slideshow is~disabled for~that Smart Gallery, its~slideshow controls are~omitted while normal galleries keep their~usual defaults.
+
+\subsection{Downloads and~safety limits}
+\index{Smart Galleries!downloads}
+
+When site downloads and~the~Smart Gallery download option are~both enabled, the~server can~prepare a~ZIP from the~current authorized matching originals. It~re-evaluates the~saved rules and~access policy instead of~exposing filesystem paths to~the~browser. The~archive path refuses collections above 5,000 matching images and~also enforces an~aggregate original-file byte ceiling. Existing installations use a~2~GiB ceiling unless \texttt{smart\_gallery\_zip\_max\_source\_bytes} is~set in~\texttt{config.php}. Concurrent requests for~the~same archive signature are~serialized with a~file lock; after the~lock is~obtained the~cache is~checked again, a~unique partial ZIP is~written, and~the~completed archive is~published with an~atomic rename. Failure logs keep only bounded reason/class diagnostics rather than raw exception messages or~private server paths.
+
+Rules are~readable versioned JSON, never user SQL: fields/operators are~allowlisted, values are~prepared parameters, depth is~limited to~five, and~no~more than 50 conditions are~accepted. Deleted references match nothing and~malformed or~unknown rule versions are~rejected. The~normal migration workflow adds Smart Gallery presentation storage; existing Smart Galleries inherit Theme/site defaults until an~override is~saved.
 
 \section{Adding, describing, and~organizing photographs}
 \label{sec:photo-workflow}

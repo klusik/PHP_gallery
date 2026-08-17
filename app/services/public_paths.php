@@ -913,6 +913,10 @@ function repair_gallery_parent_ids_from_folder_paths(PDO $pdo): int
 {
     $rows = $pdo->query('SELECT id, parent_id, folder_path FROM galleries ORDER BY CHAR_LENGTH(folder_path), folder_path, id')->fetchAll();
     $assignments = gallery_parent_id_assignments_from_folder_paths($rows);
+    if (function_exists(__NAMESPACE__ . '\\smart_gallery_validate_gallery_parent_map')) {
+        smart_gallery_validate_gallery_parent_map($assignments);
+    }
+
     $updateParent = $pdo->prepare('UPDATE galleries SET parent_id = ? WHERE id = ?');
     $changed = 0;
 
@@ -928,6 +932,10 @@ function repair_gallery_parent_ids_from_folder_paths(PDO $pdo): int
         }
         $updateParent->execute([$desiredParentId, $galleryId]);
         $changed++;
+    }
+
+    if ($changed > 0 && function_exists(__NAMESPACE__ . '\\smart_gallery_graph_cache_clear')) {
+        smart_gallery_graph_cache_clear();
     }
 
     return $changed;

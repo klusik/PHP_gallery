@@ -42,6 +42,7 @@ import { setupAdminImageReordering } from './admin-image-reordering.js?v=2026051
 import { setupPublicGalleryPageReordering } from './admin-gallery-list.js?v=20260512-modular-admin-v1';
 import { appendUploadProgressLog, escapeHtmlAttribute, escapeHtmlText, i18n, isThumbnailSubmission, thumbnailEndpoint, updateBasicProgress, updateThumbnailProgress, ensureThumbnailProgress, updateUploadProgressMetrics } from './admin-core.js?v=20260614-upload-order-v2';
 import { browserUploadRequested, browserUploadZipSelected, runBrowserGalleryUpload } from './admin-browser-upload.js?v=20260815-upload-zip-import-v1';
+import { setupAdminSmartGalleries } from './admin-smart-galleries.js?v=20260817-smart-gallery-cycle-placement-v2';
 
 const adminSidePanelMotionDurationMs = 280;
 
@@ -295,6 +296,25 @@ export function setupAdminGallerySidePanel() {
         await submitAdminGalleryPanelCreateForm(form);
     });
 
+    document.addEventListener('click', (event) => {
+        const submitter = event.target instanceof Element ? event.target.closest('button, input[type="submit"]') : null;
+        if (!(submitter instanceof HTMLElement)) return;
+        const form = submitter.closest('form[data-smart-gallery-panel-form]');
+        if (form instanceof HTMLFormElement) form.__adminSmartGallerySubmitter = submitter;
+    }, true);
+
+    document.addEventListener('submit', async (event) => {
+        const form = event.target;
+        if (!(form instanceof HTMLFormElement) || !form.matches('[data-smart-gallery-panel-form]') || !form.closest('[data-admin-side-panel]')) {
+            return;
+        }
+        if (event.defaultPrevented) return;
+        event.preventDefault();
+        event.stopPropagation();
+        if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
+        await submitAdminSmartGalleryPanelForm(form, event.submitter || form.__adminSmartGallerySubmitter || null);
+    }, true);
+
     document.addEventListener('submit', async (event) => {
         const form = event.target;
         if (!(form instanceof HTMLFormElement) || !form.matches('[data-admin-panel-edit-form]')) {
@@ -480,6 +500,15 @@ function sidePanelWorkflowFromLink(link) {
                 loadErrorMessage: 'The upload workflow could not be loaded.',
             };
         }
+        if (name === 'smart-gallery') {
+            return {
+                name,
+                kicker: link.dataset.adminSidePanelKicker || i18n('smart_gallery.admin_title', 'Smart Galleries'),
+                title: link.dataset.adminSidePanelTitle || i18n('smart_gallery.admin_title', 'Smart Galleries'),
+                loadingMessage: i18n('smart_gallery.panel_loading', 'Loading Smart Gallery editor...'),
+                loadErrorMessage: i18n('smart_gallery.panel_load_failed', 'The Smart Gallery editor could not be loaded.'),
+            };
+        }
         if (name === 'duplicate-detector') {
             return {
                 name,
@@ -529,6 +558,12 @@ function sidePanelContentFromHtml(html, workflow) {
         return trimmed;
     }
     const parsed = new DOMParser().parseFromString(html, 'text/html');
+    if (workflow.name === 'smart-gallery') {
+        const smartGalleryWorkspace = parsed.querySelector('[data-smart-gallery-editor-workspace]');
+        if (smartGalleryWorkspace instanceof HTMLElement) {
+            return smartGalleryWorkspace.outerHTML;
+        }
+    }
     const directFragment = parsed.querySelector('[data-gallery-create-panel], [data-admin-upload-panel], [data-duplicate-photo-detector]');
     if (directFragment instanceof HTMLElement) {
         return directFragment.outerHTML;
@@ -570,6 +605,11 @@ function prepareAdminSidePanelLoadedContent(body, workflow, sourceUrl) {
     } else if (workflow.name === 'tag-edit') {
         const tagForm = body.querySelector('form.admin-tags-form');
         prepareAdminPanelEditForm(tagForm, workflow.name, sourceUrl);
+    } else if (workflow.name === 'smart-gallery') {
+        setupAdminSmartGalleries(body);
+        body.querySelectorAll('[data-smart-gallery-panel-form]').forEach((form) => {
+            if (form instanceof HTMLFormElement) form.dataset.adminSmartGalleryPanelForm = 'true';
+        });
     } else if (workflow.name === 'upload') {
         const uploadForms = body.querySelectorAll('[data-gallery-upload-form]');
         uploadForms.forEach((uploadForm) => {
@@ -982,6 +1022,75 @@ function uploadAutomationTokenRequestUrl(form) {
         return '';
     }
     return '';
+}
+
+/**
+ * Submit a Smart Gallery form through its normal HTML POST path while keeping the side panel mounted.
+ *
+ * The controller remains the single non-JavaScript fallback. The enhanced path follows redirects,
+ * extracts the server-rendered editor workspace, and rebinds the dynamic rule/presentation controls.
+ *
+ * @param {HTMLFormElement} form Smart Gallery form rendered in the side panel.
+ * @param {HTMLElement|null} submitter Submit button whose name/value must be included in the POST.
+ */
+async function submitAdminSmartGalleryPanelForm(form, submitter) {
+    const panel = form.closest('[data-admin-side-panel]');
+    const bodyElement = panel?.querySelector('[data-admin-side-panel-body]');
+    if (!(panel instanceof HTMLElement) || !(bodyElement instanceof HTMLElement)) {
+        HTMLFormElement.prototype.submit.call(form);
+        return;
+    }
+    const buttons = Array.from(form.querySelectorAll('button, input[type="submit"]'));
+    buttons.forEach((button) => { button.disabled = true; });
+    writeAdminGallerySidePanelStatus(panel, i18n('smart_gallery.panel_saving', 'Updating Smart Gallery...'), false);
+    try {
+        const formData = new FormData(form);
+        if (submitter instanceof HTMLElement) {
+            const name = String(submitter.getAttribute('name') || '');
+            const value = String(submitter.getAttribute('value') || '');
+            if (name !== '') formData.set(name, value);
+        }
+        const actionUrl = new URL(form.getAttribute('action') || form.action || window.location.href, window.location.href);
+        actionUrl.searchParams.set('panel', '1');
+        const requestUrl = String(actionUrl.searchParams.get('page') || '') === 'admin_smart_galleries'
+            ? `${actionUrl.pathname}${actionUrl.search}${actionUrl.hash}`
+            : sameSitePathForPost(actionUrl.toString());
+        if (requestUrl === '') {
+            throw new Error(i18n('smart_gallery.panel_save_failed', 'The Smart Gallery update failed.'));
+        }
+        const response = await fetch(requestUrl, {
+            method: 'POST',
+            body: formData,
+            credentials: 'same-origin',
+            headers: {
+                'Accept': 'text/html',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+        });
+        const html = await response.text();
+        if (!response.ok || html.trim() === '') {
+            throw new Error(i18n('smart_gallery.panel_save_failed', 'The Smart Gallery update failed.'));
+        }
+        const workflow = {
+            name: 'smart-gallery',
+            kicker: i18n('smart_gallery.admin_title', 'Smart Galleries'),
+            title: i18n('smart_gallery.admin_title', 'Smart Galleries'),
+            loadingMessage: i18n('smart_gallery.panel_loading', 'Loading Smart Gallery editor...'),
+            loadErrorMessage: i18n('smart_gallery.panel_load_failed', 'The Smart Gallery editor could not be loaded.'),
+        };
+        bodyElement.innerHTML = sidePanelContentFromHtml(html, workflow);
+        panel.dataset.adminSidePanelSourceUrl = response.url || actionUrl.toString();
+        prepareAdminSidePanelLoadedContent(bodyElement, workflow, response.url || actionUrl.toString());
+        const titleInput = bodyElement.querySelector('[data-smart-gallery-editor] input[name="title"]');
+        if (titleInput instanceof HTMLInputElement && titleInput.value.trim() !== '') {
+            setAdminGallerySidePanelHeading(panel, workflow.kicker, titleInput.value.trim());
+        }
+        writeAdminGallerySidePanelStatus(panel, '', false);
+    } catch (error) {
+        writeAdminGallerySidePanelStatus(panel, error.message || i18n('smart_gallery.panel_save_failed', 'The Smart Gallery update failed.'), true);
+    } finally {
+        buttons.forEach((button) => { button.disabled = false; });
+    }
 }
 
 /**

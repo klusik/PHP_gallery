@@ -1114,9 +1114,10 @@ function gallery_image_belongs_to_gallery_branch(int $imageId, int $galleryId): 
  * @param mixed $galleryId Input used by this operation.
  * @param mixed $parentId Input used by this operation.
  * @param mixed $folderName Input used by this operation.
+ * @param bool $smartGalleryGraphPrevalidated True only for a caller that already validated the complete final parent map and will run final hierarchy maintenance.
  * @return mixed Result produced by this operation.
  */
-function move_gallery_folder_to_parent(int $galleryId, ?int $parentId, ?string $folderName = null): array
+function move_gallery_folder_to_parent(int $galleryId, ?int $parentId, ?string $folderName = null, bool $smartGalleryGraphPrevalidated = false): array
 {
     mutation_schema_assert_available(
         gallery_move_schema_status(),
@@ -1155,6 +1156,9 @@ function move_gallery_folder_to_parent(int $galleryId, ?int $parentId, ?string $
         if (!is_dir(gallery_abs_path($parentPath))) {
             throw new RuntimeException('Selected parent folder does not exist on disk.');
         }
+    }
+    if (!$smartGalleryGraphPrevalidated && function_exists(__NAMESPACE__ . '\\smart_gallery_validate_gallery_parent_change')) {
+        smart_gallery_validate_gallery_parent_change($galleryId, $parent ? (int) $parent['id'] : null);
     }
 
     // $currentFolderName stores an intermediate value used by the surrounding gallery workflow.
@@ -1215,6 +1219,9 @@ function move_gallery_folder_to_parent(int $galleryId, ?int $parentId, ?string $
             $stmt->execute([$path, hash('sha256', $path), $rowParentId, now_sql(), $id]);
         }
         $pdo->commit();
+        if (function_exists(__NAMESPACE__ . '\smart_gallery_graph_cache_clear')) {
+            smart_gallery_graph_cache_clear();
+        }
     } catch (Throwable $exception) {
         if ($pdo->inTransaction()) {
             $pdo->rollBack();
@@ -1225,9 +1232,11 @@ function move_gallery_folder_to_parent(int $galleryId, ?int $parentId, ?string $
         throw new RuntimeException('Gallery move failed: ' . $exception->getMessage(), 0, $exception);
     }
 
-    sync_gallery_parent_ids();
-    if (public_path_schema_ready()) {
-        refresh_gallery_public_paths();
+    if (!$smartGalleryGraphPrevalidated) {
+        sync_gallery_parent_ids();
+        if (public_path_schema_ready()) {
+            refresh_gallery_public_paths();
+        }
     }
     foreach (array_keys($pathMap) as $id) {
         // $updated stores an intermediate value used by the surrounding gallery workflow.
@@ -1367,8 +1376,10 @@ function import_galleries_without_thumbnails(array $folderPaths): array
 
 /**
  * Handles sync gallery parent ids logic for the gallery application.
+ *
+ * @param bool $smartGalleryGraphPrevalidated True only when the caller already validated the complete final parent map.
  */
-function sync_gallery_parent_ids(): void
+function sync_gallery_parent_ids(bool $smartGalleryGraphPrevalidated = false): void
 {
     // $hierarchyChanged tracks repairs that require clean public paths to be rebuilt.
     $hierarchyChanged = false;
@@ -1395,40 +1406,43 @@ function sync_gallery_parent_ids(): void
         $galleryIdsByPath[normalize_relative_path((string) $gallery['folder_path'])] = (int) $gallery['id'];
     }
 
+    // $desiredParentById stores the complete filesystem-derived parent map before any parent_id write occurs.
+    $desiredParentById = [];
+    foreach ($galleries as $gallery) {
+        $galleryId = (int) $gallery['id'];
+        $folderPath = normalize_relative_path((string) $gallery['folder_path']);
+        $parentPath = trim(str_replace('\\', '/', dirname($folderPath)), '.');
+        $desiredParentById[$galleryId] = ($parentPath === '' || $parentPath === '/')
+            ? 0
+            : (int) ($galleryIdsByPath[$parentPath] ?? 0);
+    }
+    if (!$smartGalleryGraphPrevalidated && function_exists(__NAMESPACE__ . '\smart_gallery_validate_gallery_parent_map')) {
+        smart_gallery_validate_gallery_parent_map($desiredParentById);
+    }
+
     // $clearParent stores the reusable statement for root rows that have stale parent ids.
     $clearParent = db()->prepare('UPDATE galleries SET parent_id = NULL, updated_at = ? WHERE id = ? AND parent_id IS NOT NULL');
     // $setParent stores the reusable statement for rows whose filesystem parent changed.
     $setParent = db()->prepare('UPDATE galleries SET parent_id = ?, updated_at = ? WHERE id = ? AND (parent_id IS NULL OR parent_id <> ?)');
     foreach ($galleries as $gallery) {
-        // Variable $folderPath stores this steps working value.
-        $folderPath = normalize_relative_path((string) $gallery['folder_path']);
-        // Variable $parentPath stores this steps working value.
-        $parentPath = trim(str_replace('\\', '/', dirname($folderPath)), '.');
-        // Variable $currentParentId stores this steps working value.
-        $currentParentId = $gallery['parent_id'] === null ? null : (int) $gallery['parent_id'];
-        if ($parentPath === '' || $parentPath === '/') {
-            if ($currentParentId !== null) {
-                $clearParent->execute([now_sql(), (int) $gallery['id']]);
-                $hierarchyChanged = $hierarchyChanged || $clearParent->rowCount() > 0;
-            }
+        $galleryId = (int) $gallery['id'];
+        $currentParentId = $gallery['parent_id'] === null ? 0 : (int) $gallery['parent_id'];
+        $desiredParentId = (int) ($desiredParentById[$galleryId] ?? 0);
+        if ($currentParentId === $desiredParentId) {
             continue;
         }
-
-        // Variable $parentId stores this steps working value.
-        $parentId = $galleryIdsByPath[$parentPath] ?? null;
-        if ($parentId === null) {
-            if ($currentParentId !== null) {
-                $clearParent->execute([now_sql(), (int) $gallery['id']]);
-                $hierarchyChanged = $hierarchyChanged || $clearParent->rowCount() > 0;
-            }
+        if ($desiredParentId <= 0) {
+            $clearParent->execute([now_sql(), $galleryId]);
+            $hierarchyChanged = $hierarchyChanged || $clearParent->rowCount() > 0;
             continue;
         }
-        if ($currentParentId !== $parentId) {
-            $setParent->execute([$parentId, now_sql(), (int) $gallery['id'], $parentId]);
-            $hierarchyChanged = $hierarchyChanged || $setParent->rowCount() > 0;
-        }
+        $setParent->execute([$desiredParentId, now_sql(), $galleryId, $desiredParentId]);
+        $hierarchyChanged = $hierarchyChanged || $setParent->rowCount() > 0;
     }
 
+    if ($hierarchyChanged && function_exists(__NAMESPACE__ . '\smart_gallery_graph_cache_clear')) {
+        smart_gallery_graph_cache_clear();
+    }
     if ($hierarchyChanged && public_path_schema_ready()) {
         refresh_gallery_public_paths();
     }

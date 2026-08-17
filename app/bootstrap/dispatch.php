@@ -79,6 +79,7 @@ function cms_dispatch_page(string $page): void
         'admin_browser_i18n' => '\\Gallery\\Controllers\\cms_browser_i18n',
         'gallery_map_data' => '\\Gallery\\Controllers\\cms_gallery_map_data',
         'gallery_lightbox_data' => '\\Gallery\\Controllers\\cms_gallery_lightbox_data',
+        'smart_gallery_lightbox_data' => '\\Gallery\\Controllers\\cms_smart_gallery_lightbox_data',
         'public_search' => '\\Gallery\\Controllers\\cms_public_search',
         'navdata_lookup' => '\\Gallery\\Controllers\\cms_navdata_lookup',
         'picture_manager_move' => '\\Gallery\\Controllers\\cms_picture_manager_move',
@@ -86,6 +87,7 @@ function cms_dispatch_page(string $page): void
         'picture_manager_create_gallery' => '\\Gallery\\Controllers\\cms_picture_manager_create_gallery',
         'picture_manager_download_selection' => '\\Gallery\\Controllers\\cms_picture_manager_download_selection',
         'download_gallery' => '\\Gallery\\Controllers\\cms_download_gallery',
+        'download_smart_gallery' => '\\Gallery\\Controllers\\cms_download_smart_gallery',
         'download_all' => '\\Gallery\\Controllers\\cms_download_all',
         'admin' => '\\Gallery\\Controllers\\cms_admin',
         'admin_dashboard_maintenance' => '\\Gallery\\Controllers\\cms_admin_dashboard_maintenance',
@@ -202,7 +204,7 @@ function cms_dispatch_page(string $page): void
     $handler = $routes[$page] ?? '\\Gallery\\Controllers\\cms_not_found';
     try {
         // Verify access/privacy policy before a sensitive controller can emit partial HTML, metadata, archives, or media bytes.
-        if (in_array($page, ['home', 'gallery', 'smart_gallery', 'gallery_access', 'share', 'tag', 'sitemap', 'picture_game', 'media', 'thumb', 'public_media', 'public_thumb', 'thumbnail_warmup', 'gallery_cover_asset', 'gallery_branding_asset', 'vote', 'gallery_map_data', 'gallery_lightbox_data', 'public_search', 'download_gallery'], true)) {
+        if (in_array($page, ['home', 'gallery', 'smart_gallery', 'gallery_access', 'share', 'tag', 'sitemap', 'picture_game', 'media', 'thumb', 'public_media', 'public_thumb', 'thumbnail_warmup', 'gallery_cover_asset', 'gallery_branding_asset', 'vote', 'gallery_map_data', 'gallery_lightbox_data', 'smart_gallery_lightbox_data', 'public_search', 'download_gallery', 'download_smart_gallery'], true)) {
             gallery_visibility_assert_public_policy_available();
             gallery_access_assert_public_policy_available();
             nsfw_guard_assert_public_policy_available();

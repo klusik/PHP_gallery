@@ -1009,6 +1009,16 @@ Rule version 1 contains `version` and `root`. Nodes are boolean groups (`AND`, `
 
 Migration `202608140002_smart_gallery_placement.php` introduces the `unlisted`, `root`, and `gallery` listing modes. Migration `202608140003_smart_gallery_multiple_placements.php` adds the `smart_gallery_placements` junction table and migrates existing single-parent assignments. Each `(smart_gallery_id, gallery_id)` pair is unique; deleting either record removes its junction rows through foreign-key cascades. A gallery-mode Smart Gallery may be attached beneath any number of physical galleries.
 
+Migration `202608170001_smart_gallery_presentation.php` adds nullable `smart_galleries.presentation_json MEDIUMTEXT`. The JSON document is versioned separately from `rules_json`; version 1 stores only Smart Gallery presentation overrides. Supported normalized keys are `grid_columns`, `grid_rows`, `pagination_enabled`, `thumbnail_min_size`, `thumbnail_max_size`, `thumbnail_rendering_mode`, `card_layout`, `metadata_visible`, `lightbox_enabled`, `lightbox_browsing_mode`, `slideshow_enabled`, `download_enabled`, and `voting_enabled`. Missing, malformed, unknown-version, or invalid values are treated as absent so current Theme/site defaults remain authoritative. An override-free document is stored as `{"version":1}`.
+
+Migration `202608170002_smart_gallery_attachment_ordering.php` extends the canonical `smart_gallery_placements` junction rather than adding a parallel relationship table. `placement ENUM('top','bottom') NOT NULL DEFAULT 'bottom'` preserves the previous below-content behavior for every existing row. `placement_order INT NOT NULL DEFAULT 0` stores per-parent order, and the `(gallery_id, placement, placement_order, smart_gallery_id)` index supports deterministic grouped reads. The existing composite primary key `(smart_gallery_id, gallery_id)` continues to prevent duplicate attachment instances under one physical parent while allowing the same Smart Gallery under multiple parents.
+
+The new placement/order columns are a mutation boundary. Read paths can safely treat a pre-migration junction row as `bottom`/`0`, but Admin attachment replacement or placement/order updates require the structured mutation-schema capability to be conclusively available before deleting or inserting any relationship row. Unknown or missing schema therefore cannot cause a partial attachment rewrite.
+
+`presentation_json` is intentionally nullable and is not included in the base Smart Gallery schema-readiness requirement. This preserves read/write compatibility while the additive migration is pending during an update. Once the column exists, saves and duplicates persist it. Public behavior remains safe before the column exists because effective presentation falls back to Theme/site defaults.
+
+Smart Gallery result membership remains derived at query time. No new membership, lightbox-manifest, or download-manifest table is introduced. Counts, paged rows, lazy lightbox windows, and downloads use the same compiled rule/access query and stable image-id tie breaker.
+
 ## Migration Authoring Guidelines
 
 Use this pattern for future migration files:

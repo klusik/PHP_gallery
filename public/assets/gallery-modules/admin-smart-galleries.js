@@ -108,14 +108,26 @@ function renderEditor(editor) {
 }
 
 /** Initialize all currently rendered Smart Gallery editors. */
-export function setupAdminSmartGalleries() {
-    document.querySelectorAll('[data-smart-gallery-editor]').forEach((form) => {
+export function setupAdminSmartGalleries(root = document) {
+    root.querySelectorAll('[data-smart-gallery-editor]').forEach((form) => {
         if (form.dataset.smartGalleryReady === '1') return;
         form.dataset.smartGalleryReady = '1';
         const hidden = form.querySelector('[data-smart-gallery-rules]');
+        const builder = form.querySelector('[data-smart-rule-builder]');
+        if (!(hidden instanceof HTMLInputElement) || !(builder instanceof HTMLElement)) return;
         let documentRules;
         try { documentRules = JSON.parse(hidden.value); } catch { documentRules = {version: 1, root: {type: 'group', operator: 'AND', children: []}}; }
-        const editor = {form, hidden, root: form.querySelector('[data-smart-rule-builder]'), rules: documentRules.root, catalog: JSON.parse(form.dataset.smartGalleryCatalog), tags: JSON.parse(form.dataset.smartGalleryTags), galleries: JSON.parse(form.dataset.smartGalleryGalleries)};
+        const editor = {form, hidden, root: builder, rules: documentRules.root, catalog: JSON.parse(form.dataset.smartGalleryCatalog), tags: JSON.parse(form.dataset.smartGalleryTags), galleries: JSON.parse(form.dataset.smartGalleryGalleries)};
         renderEditor(editor);
+        const presentationToggle = form.querySelector('[data-smart-gallery-presentation-toggle]');
+        const presentationFields = form.querySelector('[data-smart-gallery-presentation-fields]');
+        /** Synchronize the optional Smart Gallery presentation fieldset with its override toggle. */
+        const synchronizePresentationVisibility = () => {
+            if (presentationToggle instanceof HTMLInputElement && presentationFields instanceof HTMLElement) {
+                presentationFields.hidden = !presentationToggle.checked;
+            }
+        };
+        presentationToggle?.addEventListener('change', synchronizePresentationVisibility);
+        synchronizePresentationVisibility();
     });
 }

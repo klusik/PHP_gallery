@@ -157,7 +157,10 @@ use function Gallery\Services\store_uploaded_gallery_cover;
 use function Gallery\Services\sync_entity_tags;
 use function Gallery\Services\smart_galleries_all;
 use function Gallery\Services\smart_gallery_assign_children_to_gallery;
+use function Gallery\Services\smart_gallery_attachment_rows_for_gallery;
+use function Gallery\Services\smart_gallery_attachment_schema_ready;
 use function Gallery\Services\smart_gallery_schema_ready;
+use function Gallery\Services\smart_gallery_validate_children_assignment;
 use function Gallery\Services\t;
 use function Gallery\Services\tag_names_for_entity;
 use function Gallery\Services\thumbnail_bound_pair_from_post;
@@ -363,10 +366,17 @@ function cms_admin_edit_gallery(): void
             redirect_to($renamerReturnUrl);
         }
         try {
+            // Preflight Smart Gallery attachment schema and graph validation before any gallery mutation.
+            $smartGalleryChildrenInput = (array) ($_POST['smart_gallery_children'] ?? []);
+            if (isset($_POST['smart_gallery_children_present'])) {
+                $proposedSmartGalleryParentId = (int) ($_POST['parent_id'] ?? 0);
+                if ($proposedSmartGalleryParentId > 0 && !find_gallery($proposedSmartGalleryParentId)) $proposedSmartGalleryParentId = 0;
+                smart_gallery_validate_children_assignment((int) $gallery['id'], $smartGalleryChildrenInput, $proposedSmartGalleryParentId > 0 ? $proposedSmartGalleryParentId : null, true);
+            }
             // $saveResult stores the shared gallery save outcome used by both page and panel workflows.
             $saveResult = admin_save_gallery_from_input($gallery, $_POST, $_FILES, $returnTab, true);
             if (isset($_POST['smart_gallery_children_present'])) {
-                smart_gallery_assign_children_to_gallery((int) $gallery['id'], (array) ($_POST['smart_gallery_children'] ?? []));
+                smart_gallery_assign_children_to_gallery((int) $gallery['id'], $smartGalleryChildrenInput);
             }
         } catch (Throwable $exception) {
             if (admin_wants_json()) {
@@ -548,16 +558,51 @@ function cms_admin_edit_gallery(): void
     echo '<div class="admin-edit-card is-wide"><label>' . e(t('admin.gallery_editor.tags', 'Tags')) . '<input name="tags" value="' . e(tag_names_for_entity('gallery', (int) $gallery['id'])) . '" list="tag-suggestions" data-tag-input' . admin_weighted_tag_suggestions_attribute((int) $gallery['id']) . '><span class="muted">' . e(t('admin.gallery_editor.tags_help', 'Separate tags with commas. Suggested tags are ranked by nearby galleries, images, and folder context.')) . '</span></label></div>';
     if (smart_gallery_schema_ready()) {
         $smartGalleryDefinitions = smart_galleries_all();
-        echo '<div class="admin-edit-card is-wide"><input type="hidden" name="smart_gallery_children_present" value="1"><h3>' . e(t('smart_gallery.children_title', 'Smart Gallery subgalleries')) . '</h3><p class="muted">' . e(t('smart_gallery.children_help', 'Select virtual galleries that should appear beneath this physical gallery. A Smart Gallery can be attached beneath multiple galleries.')) . '</p>';
-        if (!$smartGalleryDefinitions) {
+        $attachmentMetadataReady = smart_gallery_attachment_schema_ready();
+        $attachedRows = $attachmentMetadataReady ? smart_gallery_attachment_rows_for_gallery((int) $gallery['id']) : [];
+        $attachedById = [];
+        foreach ($attachedRows as $attachedRow) $attachedById[(int) $attachedRow['id']] = $attachedRow;
+        echo '<div class="admin-edit-card is-wide"><h3>' . e(t('smart_gallery.children_title', 'Smart Gallery attachments')) . '</h3><p class="muted">' . e(t('smart_gallery.children_help', 'Attach virtual galleries above or below this physical gallery content. Placement and order apply only to this parent gallery.')) . '</p>';
+        if (!$attachmentMetadataReady) {
+            render_admin_migration_notice(t('smart_gallery.attachment_migration_required', 'Run the pending database migration before changing Smart Gallery placement or ordering. Existing attachments continue to render below gallery content until then.'));
+        } elseif (!$smartGalleryDefinitions) {
             echo '<p class="muted">' . e(t('smart_gallery.children_empty', 'No Smart Galleries exist yet.')) . '</p>';
         } else {
-            echo '<div class="admin-smart-gallery-child-list">';
-            foreach ($smartGalleryDefinitions as $smartDefinition) {
-                $assignedHere = ($smartDefinition['placement_mode'] ?? '') === 'gallery' && in_array((int) $gallery['id'], (array) ($smartDefinition['placement_gallery_ids'] ?? []), true);
-                echo '<label class="checkbox-label"><input type="checkbox" name="smart_gallery_children[]" value="' . (int) $smartDefinition['id'] . '"' . ($assignedHere ? ' checked' : '') . '> <span><strong>' . e((string) $smartDefinition['title']) . '</strong><small>' . e(($smartDefinition['visibility'] ?? '') === 'public' && !empty($smartDefinition['enabled']) ? t('smart_gallery.public', 'Published') : t('smart_gallery.not_public', 'Not publicly visible')) . '</small></span></label>';
+            echo '<input type="hidden" name="smart_gallery_children_present" value="1">';
+            echo '<div class="admin-smart-gallery-current-groups" aria-label="' . e(t('smart_gallery.current_attachments', 'Current Smart Gallery attachments')) . '">';
+            foreach (['top' => 'Above gallery content', 'bottom' => 'Below gallery content'] as $groupKey => $fallbackLabel) {
+                echo '<section class="admin-smart-gallery-current-group"><h4>' . e(t('smart_gallery.placement_' . $groupKey, $fallbackLabel)) . '</h4>';
+                $groupRows = array_values(array_filter($attachedRows, static fn (array $row): bool => ($row['placement'] ?? 'bottom') === $groupKey));
+                if ($groupRows === []) {
+                    echo '<p class="muted">' . e(t('smart_gallery.attachment_group_empty', 'No Smart Galleries in this placement area.')) . '</p>';
+                } else {
+                    echo '<ul class="admin-smart-gallery-current-list">';
+                    foreach ($groupRows as $attachedRow) {
+                        $state = ($attachedRow['visibility'] ?? '') === 'public' && !empty($attachedRow['enabled']) ? t('smart_gallery.public', 'Published') : t('smart_gallery.not_public', 'Not publicly visible');
+                        $diagnostic = empty($attachedRow['relationship_valid']) ? ' · ' . t('smart_gallery.relationship_invalid_short', 'relationship needs repair') : '';
+                        echo '<li><strong>' . e((string) $attachedRow['title']) . '</strong><span>' . e(t('smart_gallery.order_value', 'order {order}', ['order' => (int) ($attachedRow['placement_order'] ?? 0)])) . ' · ' . e($state . $diagnostic) . '</span></li>';
+                    }
+                    echo '</ul>';
+                }
+                echo '</section>';
             }
             echo '</div>';
+            echo '<h4>' . e(t('smart_gallery.attachment_settings', 'Attachment settings')) . '</h4><div class="admin-smart-gallery-child-list">';
+            foreach ($smartGalleryDefinitions as $smartDefinition) {
+                $smartId = (int) $smartDefinition['id'];
+                $current = $attachedById[$smartId] ?? null;
+                $assignedHere = is_array($current);
+                $placement = $assignedHere ? (string) ($current['placement'] ?? 'bottom') : 'bottom';
+                $placementOrder = $assignedHere ? (int) ($current['placement_order'] ?? 0) : 0;
+                $visibilityState = ($smartDefinition['visibility'] ?? '') === 'public' && !empty($smartDefinition['enabled']) ? t('smart_gallery.public', 'Published') : t('smart_gallery.not_public', 'Not publicly visible');
+                echo '<div class="admin-smart-gallery-child-row' . ($assignedHere ? ' is-attached' : '') . '">';
+                echo '<label class="checkbox-label"><input type="checkbox" name="smart_gallery_children[' . $smartId . '][enabled]" value="1"' . ($assignedHere ? ' checked' : '') . '> <span><strong>' . e((string) $smartDefinition['title']) . '</strong><small>' . e($visibilityState) . '</small></span></label>';
+                echo '<label>' . e(t('smart_gallery.attachment_placement', 'Placement for this parent')) . '<select name="smart_gallery_children[' . $smartId . '][placement]"><option value="top"' . ($placement === 'top' ? ' selected' : '') . '>' . e(t('smart_gallery.placement_top', 'Above gallery content')) . '</option><option value="bottom"' . ($placement === 'bottom' ? ' selected' : '') . '>' . e(t('smart_gallery.placement_bottom', 'Below gallery content')) . '</option></select></label>';
+                echo '<label>' . e(t('smart_gallery.attachment_order', 'Order')) . '<input type="number" min="-100000" max="100000" name="smart_gallery_children[' . $smartId . '][placement_order]" value="' . $placementOrder . '"></label>';
+                if ($assignedHere && empty($current['relationship_valid'])) echo '<p class="error">' . e(t('smart_gallery.relationship_invalid', 'This attachment participates in a recursive or malformed Smart Gallery relationship. Detach it or change the referenced gallery rule.')) . '</p>';
+                echo '</div>';
+            }
+            echo '</div><p class="muted">' . e(t('smart_gallery.attachment_order_help', 'Order is evaluated separately within the Above and Below groups. Equal values are resolved deterministically by Smart Gallery ID.')) . '</p>';
         }
         echo '</div>';
     }

@@ -33,7 +33,7 @@
 export { setupAdminTabs } from './admin-tabs.js?v=20260812-deferred-maintenance-v2';
 export { setupAdminNestedTabs } from './admin-nested-tabs.js?v=20260608-admin-cinematic-v1';
 export { setupGalleryRefreshProgress } from './admin-refresh-progress.js?v=20260611-admin-discovery-actions-v1';
-export { setupGalleryUploadProgress, setupAdminGallerySidePanel } from './admin-side-panel.js?v=20260815-upload-zip-import-v1';
+export { setupGalleryUploadProgress, setupAdminGallerySidePanel } from './admin-side-panel.js?v=20260817-smart-gallery-cycle-placement-v2';
 export { setupThumbnailProgress } from './admin-thumbnail-progress.js?v=20260611-import-errors-v1';
 export { setupAdminNavdataUpdateFeedback } from './admin-navdata-update.js?v=20260521-navdata-feedback-v2';
 export { setupPictureGame } from './admin-picture-game.js?v=20260512-modular-admin-v1';

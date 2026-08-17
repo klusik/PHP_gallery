@@ -37,6 +37,7 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 use RuntimeException;
+use Throwable;
 use DirectoryIterator;
 use ZipArchive;
 use function Gallery\Core\cms_config;
@@ -54,6 +55,35 @@ use function Gallery\Services\picture_manager_owned_images_for_selection;
 use function Gallery\Services\public_image_visible_to_current_visitor;
 use function Gallery\Services\t;
 use function Gallery\Services\visitor_can_access_gallery;
+
+const SMART_GALLERY_ZIP_MAX_IMAGES = 5000;
+const SMART_GALLERY_ZIP_DEFAULT_MAX_SOURCE_BYTES = 2147483648;
+
+/**
+ * Stable Smart Gallery ZIP failure carrying only an allowlisted diagnostic reason.
+ */
+final class SmartGalleryZipBuildException extends RuntimeException
+{
+    private string $reason;
+
+    /**
+     * Create one Smart Gallery ZIP failure.
+     *
+     * @param string $reason Stable internal reason code.
+     * @param string $message Visitor-safe localized exception message.
+     */
+    public function __construct(string $reason, string $message)
+    {
+        parent::__construct($message);
+        $this->reason = preg_match('/^[a-z_]{1,48}$/D', $reason) === 1 ? $reason : 'archive_build_failed';
+    }
+
+    /** Return the stable diagnostic reason without exposing the exception message. */
+    public function reason(): string
+    {
+        return $this->reason;
+    }
+}
 
 /**
  * Download and ZIP service model.
@@ -91,6 +121,81 @@ function zip_cache_dir(): string
 function zip_cache_ttl_seconds(): int
 {
     return 7 * 24 * 60 * 60;
+}
+
+/**
+ * Return the configured aggregate source-byte ceiling for one Smart Gallery ZIP.
+ *
+ * Existing installations that do not yet have the config key use a conservative
+ * 2 GiB default so archive generation remains bounded after an application update.
+ */
+function smart_gallery_zip_max_source_bytes(): int
+{
+    $configured = cms_config()['smart_gallery_zip_max_source_bytes'] ?? SMART_GALLERY_ZIP_DEFAULT_MAX_SOURCE_BYTES;
+    if (!is_numeric($configured)) {
+        return SMART_GALLERY_ZIP_DEFAULT_MAX_SOURCE_BYTES;
+    }
+    $bytes = (int) $configured;
+    return $bytes > 0 ? $bytes : SMART_GALLERY_ZIP_DEFAULT_MAX_SOURCE_BYTES;
+}
+
+/** Return a bounded reason code suitable for persistent Smart Gallery download logs. */
+function smart_gallery_zip_failure_reason(Throwable $exception): string
+{
+    if ($exception instanceof SmartGalleryZipBuildException) {
+        return $exception->reason();
+    }
+    return 'archive_build_failed';
+}
+
+/**
+ * Build one Smart Gallery ZIP under an exclusive signature lock and publish it atomically.
+ *
+ * @param string $filePath Final cache path.
+ * @param array $entries Archive entries accepted by create_zip().
+ */
+function smart_gallery_zip_create_atomically(string $filePath, array $entries): void
+{
+    if (zip_cache_file_is_fresh($filePath)) {
+        return;
+    }
+
+    $lockPath = $filePath . '.lock';
+    $lockHandle = @fopen($lockPath, 'c');
+    if ($lockHandle === false) {
+        throw new SmartGalleryZipBuildException('lock_open_failed', t('smart_gallery.download_failed', 'Smart Gallery download could not be prepared.'));
+    }
+
+    $partialPath = '';
+    try {
+        if (!flock($lockHandle, LOCK_EX)) {
+            throw new SmartGalleryZipBuildException('lock_acquire_failed', t('smart_gallery.download_failed', 'Smart Gallery download could not be prepared.'));
+        }
+
+        // Another request may have completed the same signature while this request waited.
+        if (zip_cache_file_is_fresh($filePath)) {
+            return;
+        }
+
+        $partialPath = $filePath . '.partial-' . bin2hex(random_bytes(8));
+        create_zip($partialPath, $entries);
+
+        // A stale destination may exist from an earlier cache generation. The signature
+        // lock guarantees no other Smart Gallery builder owns this final path now.
+        if (is_file($filePath) && !@unlink($filePath)) {
+            throw new SmartGalleryZipBuildException('stale_archive_remove_failed', t('smart_gallery.download_failed', 'Smart Gallery download could not be prepared.'));
+        }
+        if (!@rename($partialPath, $filePath)) {
+            throw new SmartGalleryZipBuildException('archive_publish_failed', t('smart_gallery.download_failed', 'Smart Gallery download could not be prepared.'));
+        }
+        $partialPath = '';
+    } finally {
+        if ($partialPath !== '' && is_file($partialPath)) {
+            @unlink($partialPath);
+        }
+        @flock($lockHandle, LOCK_UN);
+        fclose($lockHandle);
+    }
 }
 
 /**
@@ -442,6 +547,69 @@ function build_selected_images_zip(int $sourceGalleryId, array $imageIds): strin
         throw new RuntimeException('No selected photos have a browser-displayable file available.');
     }
     create_zip($filePath, $entries);
+    return $filePath;
+}
+
+/**
+ * Create or reuse a transient ZIP archive for one public Smart Gallery result set.
+ *
+ * Membership is fetched only through the canonical Smart Gallery service in
+ * bounded pages. The archive preserves source-gallery paths so duplicate photo
+ * filenames remain unambiguous without exposing server filesystem paths.
+ *
+ * @param array<string,mixed> $smartGallery Published Smart Gallery definition.
+ * @return string Absolute path to the generated ZIP archive.
+ */
+function build_smart_gallery_zip(array $smartGallery): string
+{
+    cleanup_expired_zip_cache();
+    $total = smart_gallery_count_images($smartGallery, true);
+    if ($total > SMART_GALLERY_ZIP_MAX_IMAGES) {
+        throw new SmartGalleryZipBuildException('image_count_limit', t('smart_gallery.download_too_large', 'This Smart Gallery is too large for one server-generated ZIP. Narrow its rules or use pagination to download source galleries individually.'));
+    }
+
+    $images = [];
+    for ($offset = 0; $offset < $total; $offset += SMART_GALLERY_QUERY_MAX_PAGE_SIZE) {
+        $batch = smart_gallery_query_images($smartGallery, true, SMART_GALLERY_QUERY_MAX_PAGE_SIZE, $offset);
+        if ($batch === []) break;
+        array_push($images, ...$batch);
+    }
+    $sourceGalleries = smart_gallery_source_galleries($images);
+    $signatureParts = [
+        'smart_gallery_id' => (int) ($smartGallery['id'] ?? 0),
+        'updated_at' => (string) ($smartGallery['updated_at'] ?? ''),
+        'items' => [],
+    ];
+    $entries = [];
+    $sourceBytes = 0;
+    $maxSourceBytes = smart_gallery_zip_max_source_bytes();
+    foreach ($images as $image) {
+        $source = $sourceGalleries[(int) ($image['gallery_id'] ?? 0)] ?? null;
+        if (!$source || !public_image_visible_to_current_visitor($image, $source)) continue;
+        $absolute = image_abs_path($image, $source);
+        if (!is_file($absolute)) continue;
+        $relative = normalize_relative_path((string) ($image['relative_path'] ?? ''));
+        $zipPath = normalize_relative_path((string) ($source['folder_path'] ?? '') . '/' . $relative);
+        if ($zipPath === '') continue;
+        $fileSize = filesize($absolute);
+        if ($fileSize === false) {
+            throw new SmartGalleryZipBuildException('source_size_unavailable', t('smart_gallery.download_failed', 'Smart Gallery download could not be prepared.'));
+        }
+        if ($fileSize > $maxSourceBytes - $sourceBytes) {
+            throw new SmartGalleryZipBuildException('source_bytes_limit', t('smart_gallery.download_too_large', 'This Smart Gallery is too large for one server-generated ZIP. Narrow its rules or use pagination to download source galleries individually.'));
+        }
+        $sourceBytes += $fileSize;
+        $entries[] = ['type' => 'file', 'absolute' => $absolute, 'zip_path' => $zipPath];
+        $signatureParts['items'][] = [
+            'id' => (int) ($image['id'] ?? 0),
+            'relative_path' => $zipPath,
+            'file_size' => $fileSize,
+            'modified_at' => (int) filemtime($absolute),
+        ];
+    }
+    $signature = hash('sha256', json_encode($signatureParts, JSON_UNESCAPED_SLASHES));
+    $filePath = zip_cache_dir() . DIRECTORY_SEPARATOR . 'smart-gallery-' . (int) ($smartGallery['id'] ?? 0) . '-' . $signature . '.zip';
+    smart_gallery_zip_create_atomically($filePath, $entries);
     return $filePath;
 }
 
