@@ -3935,7 +3935,7 @@
   "lightbox.fullscreen": "helskärm",
   "lightbox.gallery_map": "Gallerikarta",
   "lightbox.help_label": "Visa tangentbordsgenvägar",
-  "lightbox.help_shortcuts": "←/→ foton, +/− zoom, 0 återställ, F helskärm, M karta, S bildspel, X stäng",
+  "lightbox.help_shortcuts": "←/→ foton, Shift+←/→ ±10 foton, +/− zoom, 0 återställ, F helskärm, M karta, S bildspel, X stäng",
   "lightbox.help_title": "Kontroller",
   "lightbox.image_load_failed": "Inläsning av lightbox-bilden misslyckades.",
   "lightbox.initial_loader": "Förbereder galleri...",
@@ -4449,7 +4449,7 @@
   "smart_gallery.panel_load_failed": "Smart Gallery-redigeraren kunde inte läsas in.",
   "smart_gallery.panel_saving": "Uppdaterar Smart Gallery...",
   "smart_gallery.panel_save_failed": "Uppdateringen av Smart Gallery misslyckades.",
-  "lightbox.help_shortcuts_no_slideshow": "←/→ foton, +/− zoom, 0 återställ, F helskärm, M karta, X stäng",
+  "lightbox.help_shortcuts_no_slideshow": "←/→ foton, Shift+←/→ ±10 foton, +/− zoom, 0 återställ, F helskärm, M karta, X stäng",
   "smart_gallery.download": "Ladda ned Smart Gallery",
   "smart_gallery.download_too_large": "Detta smarta galleri är för stort för en enda servergenererad ZIP-fil. Begränsa reglerna eller ladda ned källgallerierna separat.",
   "smart_gallery.download_failed": "Nedladdningen av Smart Gallery kunde inte förberedas."

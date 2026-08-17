@@ -3935,7 +3935,7 @@
   "lightbox.fullscreen": "celá obrazovka",
   "lightbox.gallery_map": "Mapa galerie",
   "lightbox.help_label": "Zobrazit klávesové zkratky",
-  "lightbox.help_shortcuts": "←/→ fotky, +/− přiblížení, 0 obnovit, F celá obrazovka, M mapa, S prezentace, X zavřít",
+  "lightbox.help_shortcuts": "←/→ fotky, Shift+←/→ ±10 fotek, +/− přiblížení, 0 obnovit, F celá obrazovka, M mapa, S prezentace, X zavřít",
   "lightbox.help_title": "Ovládání",
   "lightbox.image_load_failed": "Načtení obrázku v lightboxu selhalo.",
   "lightbox.initial_loader": "Připravuji galerii...",
@@ -4449,7 +4449,7 @@
   "smart_gallery.panel_load_failed": "Editor Smart Gallery se nepodařilo načíst.",
   "smart_gallery.panel_saving": "Aktualizuje se Smart Gallery...",
   "smart_gallery.panel_save_failed": "Aktualizace Smart Gallery selhala.",
-  "lightbox.help_shortcuts_no_slideshow": "←/→ fotografie, +/− přiblížení, 0 reset, F celá obrazovka, M mapa, X zavřít",
+  "lightbox.help_shortcuts_no_slideshow": "←/→ fotografie, Shift+←/→ ±10 fotek, +/− přiblížení, 0 reset, F celá obrazovka, M mapa, X zavřít",
   "smart_gallery.download": "Stáhnout Smart Gallery",
   "smart_gallery.download_too_large": "Tato Smart Gallery je příliš velká pro jeden ZIP vytvářený serverem. Zpřesněte pravidla nebo stáhněte zdrojové galerie jednotlivě.",
   "smart_gallery.download_failed": "Stažení Smart Gallery se nepodařilo připravit."

@@ -316,7 +316,7 @@ function render_lightbox(bool $votingAllowed = true, bool $mapsAllowed = false, 
     // $slideshowHudHtml mirrors the optional slideshow action in fullscreen mode.
     $slideshowHudHtml = $slideshowAllowed ? '<button type="button" class="lightbox-slideshow-button lightbox-hud" data-lightbox-action="slideshow" aria-label="' . e(t('lightbox.toggle_slideshow', 'Toggle slideshow')) . '" title="' . e(t('lightbox.toggle_slideshow', 'Toggle slideshow')) . '" aria-pressed="false">S</button>' : '';
     // $helpShortcuts omits the unavailable S shortcut when slideshow is disabled.
-    $helpShortcuts = $slideshowAllowed ? t('lightbox.help_shortcuts', '←/→ photos, +/− zoom, 0 reset, F fullscreen, M map, S slideshow, X close') : t('lightbox.help_shortcuts_no_slideshow', '←/→ photos, +/− zoom, 0 reset, F fullscreen, M map, X close');
+    $helpShortcuts = $slideshowAllowed ? t('lightbox.help_shortcuts', '←/→ photos, Shift+←/→ ±10 photos, +/− zoom, 0 reset, F fullscreen, M map, S slideshow, X close') : t('lightbox.help_shortcuts_no_slideshow', '←/→ photos, Shift+←/→ ±10 photos, +/− zoom, 0 reset, F fullscreen, M map, X close');
 
     echo '<div class="lightbox" data-lightbox data-lightbox-browsing-mode="' . e($lightboxBrowsingMode) . '" data-lightbox-maps-enabled="' . ($mapsAllowed ? '1' : '0') . '" data-lightbox-slideshow-enabled="' . ($slideshowAllowed ? '1' : '0') . '"' . $galleryMapAttributes . ' data-lightbox-slideshow-visible-ms="2000" data-lightbox-slideshow-transition-ms="1000" data-lightbox-zoom-status-template="' . e(t('lightbox.zoom_status', 'Zoom {percent}')) . '" hidden>';
     echo '<button class="lightbox-close lightbox-hud" type="button" data-lightbox-action="close">' . e(t('lightbox.close', 'Close')) . '</button>';

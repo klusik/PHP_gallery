@@ -3363,7 +3363,7 @@ export function setupGalleryLightbox() {
             return;
         }
         // nextIndex stores state or configuration for the gallery front-end flow.
-        const nextIndex = (currentIndex + offset + cards.length) % cards.length;
+        const nextIndex = ((currentIndex + offset) % cards.length + cards.length) % cards.length;
         openAt(nextIndex, options);
     }
 
@@ -3924,11 +3924,11 @@ export function setupGalleryLightbox() {
         }
         if (event.key === 'ArrowLeft') {
             event.preventDefault();
-            step(-1);
+            step(event.shiftKey ? -10 : -1);
         }
         if (event.key === 'ArrowRight') {
             event.preventDefault();
-            step(1);
+            step(event.shiftKey ? 10 : 1);
         }
         if (event.key === 'ArrowUp') {
             event.preventDefault();

@@ -3935,7 +3935,7 @@
   "lightbox.fullscreen": "fullscreen",
   "lightbox.gallery_map": "Gallery map",
   "lightbox.help_label": "Show keyboard shortcuts",
-  "lightbox.help_shortcuts": "←/→ photos, +/− zoom, 0 reset, F fullscreen, M map, S slideshow, X close",
+  "lightbox.help_shortcuts": "←/→ photos, Shift+←/→ ±10 photos, +/− zoom, 0 reset, F fullscreen, M map, S slideshow, X close",
   "lightbox.help_title": "Controls",
   "lightbox.image_load_failed": "Lightbox image load failed.",
   "lightbox.initial_loader": "Preparing gallery...",
@@ -4449,7 +4449,7 @@
   "smart_gallery.panel_load_failed": "The Smart Gallery editor could not be loaded.",
   "smart_gallery.panel_saving": "Updating Smart Gallery...",
   "smart_gallery.panel_save_failed": "The Smart Gallery update failed.",
-  "lightbox.help_shortcuts_no_slideshow": "←/→ photos, +/− zoom, 0 reset, F fullscreen, M map, X close",
+  "lightbox.help_shortcuts_no_slideshow": "←/→ photos, Shift+←/→ ±10 photos, +/− zoom, 0 reset, F fullscreen, M map, X close",
   "smart_gallery.download": "Download Smart Gallery",
   "smart_gallery.download_too_large": "This Smart Gallery is too large for one server-generated ZIP. Narrow its rules or use pagination to download source galleries individually.",
   "smart_gallery.download_failed": "Smart Gallery download could not be prepared."
