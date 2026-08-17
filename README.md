@@ -2,7 +2,7 @@
 
 A modern PHP 8.0+ gallery CMS designed for ordinary shared hosting. The application uses the filesystem as the authoritative source for gallery structure, while storing all metadata, access rules, votes, user accounts, and audit logs in MySQL or MariaDB.
 
-**Current Version:** 0.90
+**Current Version:** 0.91
 
 **Key Benefit:** Deploy in minutes on shared hosting. No npm, no Composer, no framework overhead. Just PHP + MySQL.
 
@@ -323,7 +323,7 @@ Use **Settings** in the Admin navigation as the central overview for important g
 
 The hub can directly edit only settings that already have a safe canonical service setter: site name, public language, URL rewrite, public search when available, the public thumbnail renderer, the global EXIF/GPS display default when its existing schema is ready, and development diagnostics. Theme layout, tag presentation, upload tuning, telemetry, Account credentials, language-pack editing, raw CSS, API keys, database tools and destructive maintenance remain on their existing specialized pages. Those pages remain fully supported and link back to the relevant Settings section.
 
-Version 0.90 adds dynamic Smart Galleries, browser-local ZIP photo import, and optional multilingual gallery and photo metadata. Administrators can publish securely filtered virtual collections without moving files, unpack ordinary iCloud-style ZIP exports directly in the browser, and save reviewed title/description translations for the maintained viewer languages. Existing installations upgrade through four ordered migrations and retain the hourly stable-update checks introduced in 0.89.1.
+Version 0.91 adds a complete public lightbox zoom and progressive image-quality experience on top of the 0.90 Smart Galleries, browser-local ZIP import, and multilingual content foundation. Visitors can zoom with controls, keyboard, wheel, pointer, and touch gestures; large active photographs can upgrade from protected previews to sharper display sources in the background; and repeated navigation, fullscreen changes, maps, access rules, and no-JavaScript fallbacks remain compatible.
 
 Deep links use stable identifiers such as `?page=admin_settings&section=appearance#settings-appearance`. JavaScript tab changes update the complete query plus hash URL so Back/Forward and refresh preserve the selected section. Without JavaScript, the tab links load the same section as normal pages. See `docs/ADMIN_SETTINGS_INVENTORY.md` for canonical ownership, defaults, fallbacks, sensitivity and migration status.
 

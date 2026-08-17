@@ -49,7 +49,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.90}
+\newcommand{\version}{0.91}
 \newcommand{\manualdate}{17 August 2026}
 
 \hypersetup{
@@ -152,10 +152,14 @@ The~manual is~organized around work that an~owner actually performs. The~early s
 
 For~a~new installation, begin with Section~\ref{sec:first-hour}. Collection planning is~covered in~Section~\ref{sec:planning}; routine gallery and~photo editing is~in~Sections~\ref{sec:create-edit-gallery} and~\ref{sec:photo-workflow}. Section~\ref{sec:audiences} is~useful before publishing because it~compares several common audience types. The~contents and~index are~intended for~jumping directly to~a~setting or~workflow when the~site is~already in~use.
 
-\subsection{What is~new in~Version 0.90}
-\index{Version 0.90}
+\subsection{What is~new in~Version 0.91}
+\index{Version 0.91}
 
-Version~0.90 introduces Smart Galleries, browser-local ZIP import, and~optional multilingual titles and~descriptions. Smart Galleries store a~validated rule tree and~evaluate it~against photographs in~accessible physical galleries; no~source file is~copied simply because it~matches a~rule. Rules may~contain nested AND, OR, and~NOT groups, and~the~same Smart Gallery can~be~placed at~the~root or~under several physical galleries. Private editorial ratings remain separate from public votes.
+Version~0.91 adds the~public lightbox zoom and~progressive quality system. Visitors can~use toolbar controls, keyboard shortcuts, wheel or~trackpad input, pointer dragging, and~touch pinch gestures to~inspect photographs between 100\% and~400\%. The~viewer preserves its~existing navigation, fullscreen, map, voting, access, and~no-JavaScript behavior.
+
+The~viewer starts from an~authorized preview and~requests a~sharper browser-displayable source only when the~active photograph needs more pixels. A~translated loading indicator remains visible during transfer and~decode. The~decoded image is~installed with its~existing zoom and~pan state, and~the~compositor is~repainted immediately so~a~fullscreen toggle is~not~needed. Navigation and~close boundaries reject stale work, and~each photograph owns an~independent promotion lifecycle.
+
+The~0.90 Smart Gallery, browser-local ZIP import, and~multilingual title/description foundations remain part of~the~release baseline. Smart Galleries store a~validated rule tree and~evaluate it~against photographs in~accessible physical galleries; no~source file is~copied simply because it~matches a~rule. Rules may~contain nested AND, OR, and~NOT groups, and~the~same Smart Gallery can~be~placed at~the~root or~under several physical galleries. Private editorial ratings remain separate from public votes.
 
 ZIP import is~handled in~the~browser for~ordinary stored or~Deflate archives. Supported images are~added to~the~existing preparation queue, while invalid or~unsupported members are~skipped without uploading the~archive itself to~PHP. Gallery and~photo editors can~store reviewed English, Czech, German, and~Swedish variants of~titles and~descriptions. Language selection changes presentation text only; slugs, paths, filenames, access policy, and~the~source fields keep their existing meaning.
 
