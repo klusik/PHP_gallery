@@ -9,7 +9,7 @@ This document is intended to help future maintainers and AI coding agents unders
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.91';
+const CMS_VERSION = '0.91.1';
 ```
 
 Update-related code uses:

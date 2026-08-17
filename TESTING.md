@@ -1,6 +1,6 @@
 # Testing Guide
 
-This guide applies to PHP Gallery Version 0.91. Release verification must include public lightbox zoom and progressive quality promotion; Smart Gallery rules, placement, access intersection and pagination; multilingual gallery/photo content and fallbacks; browser-local ZIP imports; ordered migration upgrades; complete deployment packaging; updater safety; the configurable public language selector; hourly automatic-update throttling; and the supported English, Czech, German, and Swedish catalogs.
+This guide applies to PHP Gallery Version 0.91.1. Release verification must include the public lightbox zoom and progressive quality promotion, Shift+Left/Right ten-photo navigation, Smart Gallery rules, placement, access intersection and pagination; multilingual gallery/photo content and fallbacks; browser-local ZIP imports; ordered migration upgrades; complete deployment packaging; updater safety; the configurable public language selector; hourly automatic-update throttling; and the supported English, Czech, German, and Swedish catalogs.
 
 ## Purpose
 This project is a plain PHP gallery CMS without a formal browser automation stack. The most reliable testing approach is a mix of fast syntax checks, focused script-level checks, and a repeatable manual smoke-test scenario that exercises the core gallery lifecycle.
