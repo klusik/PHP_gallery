@@ -85,7 +85,7 @@ namespace Gallery\Services {
     $serviceSource = file_get_contents(dirname(__DIR__) . '/app/services/smart_galleries.php');
     $adminControllerSource = file_get_contents(dirname(__DIR__) . '/app/controllers/smart_galleries.php');
     smart_gallery_test_assert(str_contains((string) $homeSource, 'smart_galleries_for_placement(null, true)'), 'Root Smart Galleries join homepage pagination input.');
-    smart_gallery_test_assert(str_contains((string) $gallerySource, "smart_galleries_for_placement((int) \$gallery['id'], \$publicOnly)"), 'Placed Smart Galleries join physical child pagination input.');
+    smart_gallery_test_assert(str_contains((string) $gallerySource, "smart_gallery_attachment_groups((int) \$gallery['id'], \$publicOnly)"), 'Placed Smart Galleries are collected independently around physical gallery content.');
     smart_gallery_test_assert(str_contains((string) $serviceSource, '$submittedSlug !== \'\' ? $submittedSlug : $title'), 'A blank submitted slug is generated from the Smart Gallery title.');
     smart_gallery_test_assert(str_contains((string) $adminControllerSource, "'smart_gallery.saved'") && str_contains((string) $adminControllerSource, "'smart_gallery.validation_failed'") && str_contains((string) $adminControllerSource, "'smart_gallery.action_failed'"), 'Smart Gallery Admin actions emit success, validation, and unexpected-failure diagnostics.');
     smart_gallery_test_assert(str_contains((string) $adminControllerSource, 'function smart_gallery_admin_log_context') && str_contains((string) $adminControllerSource, "'group_counts'") && str_contains((string) $adminControllerSource, "'condition_count'"), 'Smart Gallery logs include a bounded rule-structure and creation-intent summary.');

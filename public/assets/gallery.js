@@ -67,7 +67,7 @@ import { setupOpenAITextAssist } from './gallery-modules/admin-openai-text-assis
 import { setupPublicHomeSearch } from './gallery-modules/public-home-search.js?v=20260528-public-search-context-v1';
 import { setupAdminSettingsSearch } from './gallery-modules/admin-settings-search.js?v=20260812-settings-spotlight-v1';
 import { setupAdminLanguageSelectorDesign } from './gallery-modules/admin-language-selector-design.js?v=20260814-language-selector-design-v1';
-import { setupAdminSmartGalleries } from './gallery-modules/admin-smart-galleries.js?v=20260814-smart-galleries-v6';
+import { setupAdminSmartGalleries } from './gallery-modules/admin-smart-galleries.js?v=20260817-smart-gallery-cycle-placement-v2';
 import { setupAdminUpdateJobs } from './gallery-modules/admin-update-jobs.js?v=20260813-resumable-updates-v3';
 import { setupAdminGalleryMigration } from './gallery-modules/admin-gallery-migration.js?v=20260527-gallery-migration-reconnect-v1';
 import { setupAdminGalleryDateSuggestions } from './gallery-modules/admin-gallery-date-suggestion.js?v=20260607-date-suggestion-endpoint-v2';
@@ -97,7 +97,7 @@ import {
     setupAdminNavdataUpdateFeedback,
     setupAdminMediaRenamer,
     setupAdminMetadataOrganizer,
-} from './gallery-modules/admin-operations.js?v=20260815-upload-zip-import-v1';
+} from './gallery-modules/admin-operations.js?v=20260817-smart-gallery-cycle-placement-v2';
 
 /**
  * Runs a setup callback after the DOM is ready.

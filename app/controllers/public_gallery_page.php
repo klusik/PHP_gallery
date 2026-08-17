@@ -148,7 +148,8 @@ use function Gallery\Services\translation_active_language;
 use function Gallery\Services\tags_for_entities;
 use function Gallery\Services\tags_for_entity;
 use function Gallery\Services\sort_public_hero_tag_groups;
-use function Gallery\Services\smart_galleries_for_placement;
+use function Gallery\Services\smart_gallery_attachment_groups;
+use function Gallery\Services\smart_gallery_card_summaries;
 use function Gallery\Services\theme_hero_tag_display_all_enabled;
 use function Gallery\Services\theme_hero_tag_scrollbar_enabled;
 use function Gallery\Services\theme_hero_tag_scrollbar_rows;
@@ -166,6 +167,22 @@ use function Gallery\Views\view_gallery_description_markdown_html;
 use function Gallery\Views\view_render_gallery_json_ld;
 use function Gallery\Views\view_render_public_seo_tags;
 use function Gallery\Services\admin_log_event;
+
+/** Render one ordered Smart Gallery attachment area around the physical gallery content. */
+function render_public_smart_gallery_attachment_group(array $smartGalleries, string $placement, array $paginationSettings, array $cardContexts = []): void
+{
+    if ($smartGalleries === []) return;
+    $placement = $placement === 'top' ? 'top' : 'bottom';
+    $label = $placement === 'top'
+        ? t('smart_gallery.public_group_top', 'Smart Galleries above gallery content')
+        : t('smart_gallery.public_group_bottom', 'Smart Galleries below gallery content');
+    echo '<section class="panel public-smart-gallery-attachment-panel public-smart-gallery-attachment-' . e($placement) . '" data-smart-gallery-attachment-group="' . e($placement) . '" aria-label="' . e($label) . '">';
+    echo '<div class="grid' . e(pagination_grid_columns_class($paginationSettings)) . '">';
+    foreach ($smartGalleries as $index => $smartGallery) {
+        render_smart_gallery_card($smartGallery, $index, $cardContexts[(int) ($smartGallery['id'] ?? 0)] ?? []);
+    }
+    echo '</div></section>';
+}
 
 /**
  * Handles cms gallery logic for the gallery application.
@@ -243,7 +260,10 @@ function cms_gallery(): void
     // Variable $children stores this steps working value.
     public_render_profile_count('gallery_scan_calls');
     $children = public_render_profile_span('child_gallery_lookup', static fn (): array => child_galleries((int) $gallery['id'], $publicOnly));
-    $smartChildren = smart_galleries_for_placement((int) $gallery['id'], $publicOnly);
+    $smartAttachmentGroups = smart_gallery_attachment_groups((int) $gallery['id'], $publicOnly);
+    $topSmartChildren = (array) ($smartAttachmentGroups['top'] ?? []);
+    $bottomSmartChildren = (array) ($smartAttachmentGroups['bottom'] ?? []);
+    $smartGalleryCardContexts = smart_gallery_card_summaries(array_merge($topSmartChildren, $bottomSmartChildren), true);
     // $adminSubgalleryDateSortEnabled stores whether this viewer may use the date sort overlay.
     $adminSubgalleryDateSortEnabled = current_user() && !admin_anonymous_preview_active();
     // $subgalleryDateSortMode stores the requested preview date sort mode for this page.
@@ -254,8 +274,7 @@ function cms_gallery(): void
         // $children stores the same direct children with only dated rows reordered by their start date.
         $children = public_sort_subgalleries_by_date($children, $subgalleryDateSortMode);
     }
-    // Variable $allChildren stores the complete sorted child-gallery list before optional pagination slicing.
-    $children = array_merge($children, $smartChildren);
+    // Variable $allChildren stores the complete sorted physical child-gallery list before optional pagination slicing.
     $allChildren = $children;
     // Variable $photoMapsAllowed stores whether individual photos may expose EXIF GPS points.
     $photoMapsAllowed = gallery_allows_gps_maps($gallery);
@@ -311,15 +330,12 @@ function cms_gallery(): void
     // Resolve optional content overlays only after access policy and pagination have selected safe rows.
     $contentLanguage = translation_active_language();
     $gallery = content_localize_entity('gallery', $gallery, $contentLanguage);
-    $physicalChildrenForLocalization = array_values(array_filter($children, static fn (array $child): bool => empty($child['__smart_gallery'])));
     $localizedChildrenById = [];
-    foreach (content_localize_entities('gallery', $physicalChildrenForLocalization, $contentLanguage) as $localizedChild) {
+    foreach (content_localize_entities('gallery', $children, $contentLanguage) as $localizedChild) {
         $localizedChildrenById[(int) ($localizedChild['id'] ?? 0)] = $localizedChild;
     }
     foreach ($children as &$child) {
-        if (empty($child['__smart_gallery']) && isset($localizedChildrenById[(int) ($child['id'] ?? 0)])) {
-            $child = $localizedChildrenById[(int) $child['id']];
-        }
+        if (isset($localizedChildrenById[(int) ($child['id'] ?? 0)])) $child = $localizedChildrenById[(int) $child['id']];
     }
     unset($child);
     $images = content_localize_entities('image', $images, $contentLanguage);
@@ -415,13 +431,14 @@ function cms_gallery(): void
     // Variable $publicPageReorderEnabled stores whether the logged-in admin can reorder visible public-page cards.
     $publicPageReorderEnabled = current_user() && !admin_anonymous_preview_active();
     // $publicSubgalleryReorderEnabled stores whether subgallery cards can expose drag ordering handles.
-    $publicSubgalleryReorderEnabled = $publicPageReorderEnabled && $subgalleryDateSortMode === '' && !$smartChildren;
+    $publicSubgalleryReorderEnabled = $publicPageReorderEnabled && $subgalleryDateSortMode === '';
     // $pictureManagerEnabled stores whether the logged-in viewer can select and manage visible photos.
     $pictureManagerEnabled = current_user() && !admin_anonymous_preview_active() && (!function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('picture_manager'));
-    if ($children || $images) {
+    if ($topSmartChildren || $children || $images || $bottomSmartChildren) {
         echo '<div class="gallery-list-frame" data-back-to-top-scope>';
         echo '<div class="gallery-list-content" data-back-to-top-list>';
     }
+    render_public_smart_gallery_attachment_group($topSmartChildren, 'top', $paginationSettings, $smartGalleryCardContexts);
     if ($children) {
         echo '<section class="panel public-subgallery-panel" data-public-subgallery-section aria-label="' . e(t('public.subgalleries', 'Subgalleries')) . '">';
         render_public_subgallery_date_sort_toolbar($gallery, $subgalleryDateSortMode, $datedSubgalleryCount, count($allChildren));
@@ -431,15 +448,10 @@ function cms_gallery(): void
         render_pagination_controls(!empty($paginationSettings['enabled']) ? $childPagination : [], t('pagination.subgallery_pages', 'Subgallery pages'));
         echo '<div class="grid' . e(pagination_grid_columns_class($paginationSettings)) . '" data-public-reorder-list="gallery" data-public-subgallery-grid>';
         public_render_profile_count('rendered_subgalleries', count($children));
-        $physicalChildren = array_values(array_filter($children, static fn (array $child): bool => empty($child['__smart_gallery'])));
-        $subgalleryCardContexts = public_render_profile_span('subgallery_card_context_preload', static fn (): array => public_gallery_card_rendering_contexts($physicalChildren, true, true));
+        $subgalleryCardContexts = public_render_profile_span('subgallery_card_context_preload', static fn (): array => public_gallery_card_rendering_contexts($children, true, true));
         public_render_profile_span('render_subgallery_cards', static function () use ($children, $publicSubgalleryReorderEnabled, $subgalleryCardContexts): void {
             foreach ($children as $index => $child) {
-                if (!empty($child['__smart_gallery'])) {
-                    render_smart_gallery_card($child, $index);
-                } else {
-                    render_gallery_card($child, true, $publicSubgalleryReorderEnabled && count($children) > 1, true, $index, $subgalleryCardContexts[(int) $child['id']] ?? []);
-                }
+                render_gallery_card($child, true, $publicSubgalleryReorderEnabled && count($children) > 1, true, $index, $subgalleryCardContexts[(int) $child['id']] ?? []);
             }
         });
         echo '</div>';
@@ -558,7 +570,8 @@ function cms_gallery(): void
         echo '</section>';
         render_pagination_controls(!empty($paginationSettings['enabled']) ? $photoPagination : [], t('pagination.photo_pages', 'Photo pages'));
     }
-    if ($children || $images) {
+    render_public_smart_gallery_attachment_group($bottomSmartChildren, 'bottom', $paginationSettings, $smartGalleryCardContexts);
+    if ($topSmartChildren || $children || $images || $bottomSmartChildren) {
         echo '</div>';
         render_back_to_top_button();
         echo '</div>';

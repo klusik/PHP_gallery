@@ -442,6 +442,8 @@ export function setupGalleryLightbox() {
     const lightboxSlideshowVisibleDuration = readLightboxTimingSetting('lightboxSlideshowVisibleMs', 2000, 500, 600000);
     // lightboxSlideshowTransitionDuration stores the slideshow blend duration for automatic picture changes.
     const lightboxSlideshowTransitionDuration = readLightboxTimingSetting('lightboxSlideshowTransitionMs', 1000, 0, 30000);
+    // lightboxSlideshowEnabled stores whether this rendered gallery permits slideshow activation.
+    const lightboxSlideshowEnabled = !(overlay instanceof HTMLElement) || overlay.dataset.lightboxSlideshowEnabled !== '0';
     // lightboxPreviewPreloadRadius limits how many nearby preview images are warmed after a photo opens.
     const lightboxPreviewPreloadRadius = 4;
     // lightboxFullPreloadRadius stays zero so adjacent navigation warms previews without downloading full media early.
@@ -3361,7 +3363,7 @@ export function setupGalleryLightbox() {
             return;
         }
         // nextIndex stores state or configuration for the gallery front-end flow.
-        const nextIndex = (currentIndex + offset + cards.length) % cards.length;
+        const nextIndex = ((currentIndex + offset) % cards.length + cards.length) % cards.length;
         openAt(nextIndex, options);
     }
 
@@ -3464,6 +3466,9 @@ export function setupGalleryLightbox() {
      * Toggle slideshow mode from the toolbar, HUD, or S keyboard shortcut.
      */
     async function toggleLightboxSlideshow() {
+        if (!lightboxSlideshowEnabled) {
+            return;
+        }
         if (lightboxSlideshowActive) {
             stopLightboxSlideshow();
             showLightboxHud();
@@ -3919,11 +3924,11 @@ export function setupGalleryLightbox() {
         }
         if (event.key === 'ArrowLeft') {
             event.preventDefault();
-            step(-1);
+            step(event.shiftKey ? -10 : -1);
         }
         if (event.key === 'ArrowRight') {
             event.preventDefault();
-            step(1);
+            step(event.shiftKey ? 10 : 1);
         }
         if (event.key === 'ArrowUp') {
             event.preventDefault();

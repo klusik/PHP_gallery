@@ -161,9 +161,11 @@ function seo_request_guard_allowed_parameters_for_page(string $page): array
     $map = [
         'home' => ['gallery_page', 'view_as'],
         'gallery' => ['public_path', 'gallery_path', 'slug', 'gallery_page', 'photo_page', 'share', 'token', 'q', 'view_as', 'benchmark_token', 'benchmark_run', 'benchmark_cache_bust'],
+        'smart_gallery' => ['slug', 'photo_page', 'view_as'],
         'tag' => ['slug', 'view_as'],
         'public_search' => ['q', 'context_only', 'gallery_id'],
         'gallery_lightbox_data' => ['id', 'limit', 'offset', 'view_as'],
+        'smart_gallery_lightbox_data' => ['id', 'limit', 'offset', 'view_as'],
         'gallery_map_data' => ['id', 'view_as'],
         'picture_game' => ['id', 'view_as'],
         'vote' => ['id'],
@@ -181,6 +183,7 @@ function seo_request_guard_allowed_parameters_for_page(string $page): array
         'theme_css' => ['v'],
         'browser_i18n' => ['scope', 'lang', 'v'],
         'download_gallery' => ['id', 'token', 'share'],
+        'download_smart_gallery' => ['id'],
         'robots' => [],
         'sitemap' => [],
         'not_found' => [],
@@ -323,6 +326,12 @@ function seo_request_guard_public_canonical_url(string $page, ?array $currentGal
     }
     if ($page === 'gallery' && $currentGallery !== null) {
         return canonical_url_for_gallery($currentGallery);
+    }
+    if ($page === 'smart_gallery') {
+        $slug = trim((string) ($_GET['slug'] ?? ''));
+        if ($slug !== '') {
+            return absolute_public_url(url_for('smart_gallery', ['slug' => $slug]));
+        }
     }
     if ($page === 'tag') {
         $slug = trim((string) ($_GET['slug'] ?? ''));

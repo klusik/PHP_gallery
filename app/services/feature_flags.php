@@ -333,6 +333,7 @@ function feature_flag_route_map(): array
         'vote' => 'image_voting',
         'picture_game' => 'picture_game',
         'download_gallery' => 'downloads',
+        'download_smart_gallery' => 'downloads',
         'download_all' => 'downloads',
         'gallery_map_data' => 'gallery_maps',
         'admin_navdata' => 'navigation_data',

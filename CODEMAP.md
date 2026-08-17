@@ -481,7 +481,11 @@ dynamically, not test one known table identity.
 ### Smart Galleries
 
 - `database/migrations/202608140001_smart_galleries.php`: definition storage, ratings, and focused indexes.
-- `app/services/smart_galleries.php`: schema capability, rule validation/compiler, summaries, CRUD, access intersection, pagination queries, search conversion, and rating writer.
-- `app/controllers/smart_galleries.php`: Admin management/preview and published route.
+- `database/migrations/202608140003_smart_gallery_multiple_placements.php`: many-to-many physical-parent attachment junction.
+- `database/migrations/202608170002_smart_gallery_attachment_ordering.php`: per-parent top/bottom placement plus deterministic attachment ordering.
+- `app/services/smart_galleries.php`: schema capability, rule validation/compiler, request-cached mixed relationship graph, cycle validation, attachment persistence, access intersection, pagination queries, search conversion, and rating writer.
+- `app/controllers/smart_galleries.php`: Admin management/preview, per-parent attachment editing, and published route.
+- `app/controllers/public_gallery_page.php`: physical-gallery boundary that renders top Smart Gallery attachments, normal gallery content, then bottom attachments.
 - `public/assets/gallery-modules/admin-smart-galleries.js`: nested visual rule editor.
 - `tests/smart_gallery_rules_test.php`: validation, nesting, version, injection, and compiler contracts.
+- `tests/smart_gallery_cycle_placement_test.php`: mixed-cycle bounds, placement defaults/order, hierarchy preflight, side-panel/no-JavaScript, and translation contracts.

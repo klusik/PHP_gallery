@@ -50,8 +50,12 @@ use function Gallery\Services\visitor_can_access_gallery;
 use function Gallery\Services\admin_log_event;
 use function Gallery\Services\build_all_zip;
 use function Gallery\Services\build_gallery_zip;
+use function Gallery\Services\build_smart_gallery_zip;
 use function Gallery\Services\build_selected_images_zip;
 use function Gallery\Services\send_download;
+use function Gallery\Services\smart_gallery_effective_presentation;
+use function Gallery\Services\smart_gallery_find_public_by_id;
+use function Gallery\Services\smart_gallery_zip_failure_reason;
 
 /**
  * Public download controller model.
@@ -78,6 +82,32 @@ function cms_download_gallery(): void
     // Variable $zip stores this steps working value.
     $zip = build_gallery_zip((int) $gallery['id'], true);
     send_download($zip, slugify((string) $gallery['title']) . '.zip');
+}
+
+
+/**
+ * Download the current visitor-authorized Smart Gallery result set as a ZIP.
+ */
+function cms_download_smart_gallery(): void
+{
+    $gallery = smart_gallery_find_public_by_id(max(0, (int) ($_GET['id'] ?? 0)));
+    if (!$gallery || empty(smart_gallery_effective_presentation($gallery)['download_enabled'])) {
+        cms_not_found();
+        return;
+    }
+    try {
+        $zip = build_smart_gallery_zip($gallery);
+        send_download($zip, slugify((string) $gallery['title']) . '.zip');
+    } catch (Throwable $exception) {
+        admin_log_event('error', 'smart_gallery.download_failed', 'Smart Gallery ZIP preparation failed.', [
+            'smart_gallery_id' => (int) $gallery['id'],
+            'exception_class' => get_class($exception),
+            'reason' => smart_gallery_zip_failure_reason($exception),
+        ]);
+        http_response_code(422);
+        header('Content-Type: text/plain; charset=utf-8');
+        echo t('smart_gallery.download_failed', 'Smart Gallery download could not be prepared.');
+    }
 }
 
 

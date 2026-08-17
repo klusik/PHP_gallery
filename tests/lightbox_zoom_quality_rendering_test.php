@@ -71,8 +71,8 @@ lightbox_zoom_quality_rendering_assert(
     'Physical gallery cards must pass the already-resolved thumbnail bundle.'
 );
 lightbox_zoom_quality_rendering_assert(
-    str_contains($smartGallerySource, "'data-lightbox-image', \$voting, \$index, \$bundle"),
-    'Smart Gallery cards must use the same bundle-backed source contract.'
+    str_contains($smartGallerySource, "'data-lightbox-image', \$voting, \$offset + \$index, \$bundle"),
+    'Smart Gallery cards must use the same bundle-backed source contract with a global ordered index.'
 );
 lightbox_zoom_quality_rendering_assert(
     str_contains($lazyEndpointSource, "'quality_sources' => lightbox_zoom_quality_candidates(\$image, \$previewUrl, \$mediaUrl, \$thumbnailBundle)"),

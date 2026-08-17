@@ -55,6 +55,7 @@ use function Gallery\Services\move_gallery_folder_to_parent;
 use function Gallery\Services\public_path_schema_ready;
 use function Gallery\Services\regenerate_public_paths;
 use function Gallery\Services\sync_gallery_parent_ids;
+use function Gallery\Services\smart_gallery_validate_gallery_parent_map;
 use function Gallery\Services\t;
 use function Gallery\Services\write_gallery_sidecar;
 use function Gallery\Services\admin_log_event;
@@ -191,6 +192,9 @@ function cms_admin_reorder_galleries(): void
     // Variable $activeMoveDiagnostics stores the move currently being processed when an exception is raised.
     $activeMoveDiagnostics = null;
     try {
+        // Validate the complete requested hierarchy before the first filesystem move so a later
+        // Smart Gallery cycle cannot leave a partially applied drag-and-drop tree operation.
+        smart_gallery_validate_gallery_parent_map($submittedParentById);
         foreach ($submittedEntries as $entry) {
             // Variable $galleryId stores the gallery being checked for a parent move.
             $galleryId = (int) $entry['id'];
@@ -201,10 +205,9 @@ function cms_admin_reorder_galleries(): void
             }
             $activeMoveDiagnostics = admin_gallery_reorder_move_diagnostics($galleryId, $parentId > 0 ? $parentId : null);
             $reorderDiagnostics[] = $activeMoveDiagnostics;
-            move_gallery_folder_to_parent($galleryId, $parentId > 0 ? $parentId : null);
+            move_gallery_folder_to_parent($galleryId, $parentId > 0 ? $parentId : null, null, true);
             $movedCount++;
             $activeMoveDiagnostics = null;
-            sync_gallery_parent_ids();
         }
 
         // Variable $siblingPositionByParent stores the next sort index for each parent id.
@@ -227,7 +230,7 @@ function cms_admin_reorder_galleries(): void
         }
         $pdo->commit();
 
-        sync_gallery_parent_ids();
+        sync_gallery_parent_ids(true);
 
         // Sidecar and clean URL refresh are follow-up maintenance tasks. The
         // visible tree and the database order have already been saved at this

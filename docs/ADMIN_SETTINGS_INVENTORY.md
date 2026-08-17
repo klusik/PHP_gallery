@@ -101,6 +101,20 @@ Tag names, slugs, descriptions and usage metadata are not global `app_settings` 
 
 Uploaded theme backgrounds and branding assets are file-backed resources rather than scalar settings. They are status/link-only in Advanced Settings. Gallery-specific lightbox, description-layout, branding and EXIF/GPS overrides remain per-gallery and are intentionally outside the central global form.
 
+### Smart Gallery scoped presentation
+
+Smart Gallery presentation is intentionally not represented as global `app_settings` rows. It is owned by `app/services/smart_galleries.php` and the Smart Gallery editor, with optional overrides persisted in `smart_galleries.presentation_json` by migration `202608170001_smart_gallery_presentation.php`.
+
+The editor exposes columns, rows, pagination, thumbnail minimum/maximum generated size, responsive/progressive thumbnail renderer, canonical vertical/horizontal gallery-card layout, metadata overlays, lightbox enablement and browsing mode, slideshow, download, and voting. With **Override Theme defaults** disabled, the Smart Gallery uses the current global pagination, thumbnail-renderer, lightbox, and feature defaults. Invalid/missing override keys inherit those defaults. Sorting remains the Smart Gallery definition's existing `sort_mode`/`sort_direction`.
+
+A Smart Gallery never inherits presentation from a physical parent gallery. Since one virtual gallery may appear beneath several physical galleries, parent precedence would be ambiguous. Physical gallery/image thumbnail guardrails remain authoritative even when a Smart Gallery presentation override is active.
+
+### Smart Gallery attachment placement
+
+Smart Gallery attachment placement is also scoped data rather than a global setting. Migration `202608170002_smart_gallery_attachment_ordering.php` stores `placement` and `placement_order` on each `(smart_gallery_id, gallery_id)` junction row. The physical gallery editor owns the complete attachment set for that parent, while the Smart Gallery editor exposes per-parent placement/order updates and detach actions. Existing rows default to `bottom` with order `0`; equal orders resolve by Smart Gallery ID.
+
+Attachment writes require the dedicated mutation-schema capability before any parent relationship is deleted or changed. The Admin controls remain standard form fields for no-JavaScript operation and are enhanced by the existing side-panel AJAX workflows when rendered in a drawer. Cycle diagnostics are relationship state, not editable settings, and are produced from the canonical mixed gallery/Smart Gallery graph.
+
 ## Uploads and automation
 
 | Canonical key | Owner / current Admin location | Type and accepted values | Default and invalid/missing fallback | Side effects / migration | Central | Specialized link | Sensitivity |

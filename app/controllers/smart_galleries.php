@@ -34,9 +34,16 @@ use function Gallery\Services\smart_gallery_duplicate;
 use function Gallery\Services\smart_gallery_empty_rules;
 use function Gallery\Services\smart_gallery_find;
 use function Gallery\Services\smart_gallery_find_public;
+use function Gallery\Services\smart_gallery_find_public_by_id;
+use function Gallery\Services\smart_gallery_effective_presentation;
+use function Gallery\Services\smart_gallery_normalize_presentation;
+use function Gallery\Services\smart_gallery_lightbox_fetch_images;
+use function Gallery\Services\smart_gallery_source_galleries;
+use function Gallery\Services\smart_gallery_thumbnail_sizes;
 use function Gallery\Services\smart_gallery_query_images;
 use function Gallery\Services\smart_gallery_placement_galleries;
 use function Gallery\Services\smart_gallery_remove_from_gallery;
+use function Gallery\Services\smart_gallery_update_placement;
 use function Gallery\Services\smart_gallery_rule_catalog;
 use function Gallery\Services\smart_gallery_rules_from_json;
 use function Gallery\Services\smart_gallery_rules_from_search;
@@ -45,6 +52,7 @@ use function Gallery\Services\t;
 use function Gallery\Services\thumbnail_bundle;
 use function Gallery\Services\public_thumbnail_render_picture_html;
 use function Gallery\Services\public_thumbnail_rendering_mode;
+use function Gallery\Services\public_thumbnail_rendering_modes;
 use function Gallery\Services\admin_tag_rows;
 use function Gallery\Services\admin_log_event;
 use function Gallery\Services\current_votes_for_images;
@@ -53,6 +61,17 @@ use function Gallery\Services\public_image_display_title;
 use function Gallery\Services\thumbnail_bundle_url;
 use function Gallery\Services\tags_for_entities;
 use function Gallery\Services\theme_lightbox_browsing_mode;
+use function Gallery\Services\gallery_lightbox_browsing_mode_options;
+use function Gallery\Services\gallery_description_layout_options;
+use function Gallery\Services\gallery_description_layout_label;
+use function Gallery\Services\gallery_allows_gps_maps;
+use function Gallery\Services\translation_active_language;
+use function Gallery\Services\content_localize_entities;
+use function Gallery\Services\content_localize_entity;
+use function Gallery\Services\thumbnail_sizes;
+use function Gallery\Services\pagination_photo_thumbnail_sizes_attribute;
+use const Gallery\Services\SMART_GALLERY_QUERY_MAX_PAGE_SIZE;
+use const Gallery\Services\SMART_GALLERY_LIGHTBOX_MAX_WINDOW;
 
 /** Render and process Smart Gallery administration. */
 function cms_admin_smart_galleries(): void
@@ -62,6 +81,7 @@ function cms_admin_smart_galleries(): void
     $selected = $id > 0 ? smart_gallery_find($id) : null;
     $error = '';
     $previewCount = null;
+    $previewImages = [];
     if (request_method() === 'POST') {
         verify_csrf();
         $action = (string) ($_POST['action'] ?? 'save');
@@ -80,6 +100,16 @@ function cms_admin_smart_galleries(): void
                 flash_message('smart_gallery_notice', t('smart_gallery.duplicated', 'A private disabled copy was created.'));
                 redirect_to(url_for('admin_smart_galleries', ['id' => $copy['id']]));
             }
+            if ($action === 'update_placement') {
+                $smartGalleryId = max(0, (int) ($_POST['id'] ?? 0));
+                $galleryId = max(0, (int) ($_POST['gallery_id'] ?? 0));
+                $placement = (string) ($_POST['attachment_placement'] ?? 'bottom');
+                $placementOrder = (int) ($_POST['attachment_order'] ?? 0);
+                smart_gallery_update_placement($smartGalleryId, $galleryId, $placement, $placementOrder);
+                admin_log_event('info', 'smart_gallery.placement_updated', 'Admin updated one physical Smart Gallery placement.', ['action' => 'update_placement', 'gallery_id' => $galleryId, 'placement' => $placement === 'top' ? 'top' : 'bottom', 'placement_order' => $placementOrder], ['category' => 'gallery', 'subject_type' => 'smart_gallery', 'subject_id' => $smartGalleryId]);
+                flash_message('smart_gallery_notice', t('smart_gallery.placement_updated', 'Smart Gallery placement updated.'));
+                redirect_to(url_for('admin_smart_galleries', ['id' => $smartGalleryId]));
+            }
             if ($action === 'remove_placement') {
                 $smartGalleryId = max(0, (int) ($_POST['id'] ?? 0));
                 $galleryId = max(0, (int) ($_POST['gallery_id'] ?? 0));
@@ -94,6 +124,7 @@ function cms_admin_smart_galleries(): void
                 $preview = $selected ?: ['rules_json' => ''];
                 $preview = array_merge($preview, $input, ['rules_json' => json_encode($rules, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)]);
                 $previewCount = smart_gallery_count_images($preview, false);
+                $previewImages = $previewCount > 0 ? smart_gallery_query_images($preview, false, min(12, $previewCount), 0) : [];
                 $selected = array_merge($preview, ['id' => $id]);
                 admin_log_event('info', 'smart_gallery.previewed', 'Admin previewed Smart Gallery rules.', array_merge(smart_gallery_admin_log_context($input, 'preview'), ['matched_images' => $previewCount]), ['category' => 'gallery', 'subject_type' => 'smart_gallery', 'subject_id' => $id > 0 ? $id : null]);
             } else {
@@ -121,7 +152,7 @@ function cms_admin_smart_galleries(): void
         $selected = ['title' => '', 'slug' => '', 'description' => '', 'rules_json' => json_encode(smart_gallery_rules_from_search((string) $_GET['from_search'])), 'enabled' => 1, 'visibility' => 'private', 'placement_mode' => 'unlisted', 'sort_mode' => 'capture_date', 'sort_direction' => 'desc'];
     }
     render_header(t('smart_gallery.admin_title', 'Smart Galleries'));
-    echo '<section class="hero"><div><p class="admin-kicker">' . e(t('smart_gallery.kicker', 'Saved dynamic collections')) . '</p><h1>' . e(t('smart_gallery.admin_title', 'Smart Galleries')) . '</h1><p class="muted">' . e(t('smart_gallery.intro', 'Images stay in their physical galleries. Membership changes immediately when metadata changes.')) . '</p></div><a class="button" href="' . e(url_for('admin_smart_galleries', ['new' => 1])) . '">' . e(t('smart_gallery.create', 'Create Smart Gallery')) . '</a></section>';
+    echo '<section class="hero"><div><p class="admin-kicker">' . e(t('smart_gallery.kicker', 'Saved dynamic collections')) . '</p><h1>' . e(t('smart_gallery.admin_title', 'Smart Galleries')) . '</h1><p class="muted">' . e(t('smart_gallery.intro', 'Images stay in their physical galleries. Membership changes immediately when metadata changes.')) . '</p></div><a class="button" href="' . e(url_for('admin_smart_galleries', ['new' => 1])) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="smart-gallery" data-admin-side-panel-title="' . e(t('smart_gallery.create', 'Create Smart Gallery')) . '">' . e(t('smart_gallery.create', 'Create Smart Gallery')) . '</a></section>';
     $notice = flash_message('smart_gallery_notice');
     if ($notice) echo '<p class="success">' . e($notice) . '</p>';
     if ($error !== '') echo '<p class="error">' . e($error) . '</p>';
@@ -129,10 +160,10 @@ function cms_admin_smart_galleries(): void
     $all = smart_galleries_all();
     if (!$all) echo '<p class="muted">' . e(t('smart_gallery.none', 'No Smart Galleries have been created.')) . '</p>';
     foreach ($all as $row) {
-        echo '<a class="admin-smart-gallery-row" href="' . e(url_for('admin_smart_galleries', ['id' => $row['id']])) . '"><strong>' . e($row['title']) . '</strong><span>' . e($row['visibility'] === 'public' ? t('smart_gallery.public', 'Published') : t('smart_gallery.private', 'Private')) . ($row['enabled'] ? '' : ' · ' . e(t('smart_gallery.disabled', 'Disabled'))) . '</span></a>';
+        echo '<a class="admin-smart-gallery-row" href="' . e(url_for('admin_smart_galleries', ['id' => $row['id']])) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="smart-gallery" data-admin-side-panel-title="' . e((string) $row['title']) . '"><strong>' . e($row['title']) . '</strong><span>' . e($row['visibility'] === 'public' ? t('smart_gallery.public', 'Published') : t('smart_gallery.private', 'Private')) . ($row['enabled'] ? '' : ' · ' . e(t('smart_gallery.disabled', 'Disabled'))) . '</span></a>';
     }
-    echo '</section><section class="panel">';
-    if ($selected || isset($_GET['new'])) smart_gallery_render_editor($selected ?: [] , $previewCount); else echo '<h2>' . e(t('smart_gallery.select', 'Select a Smart Gallery or create a new one.')) . '</h2>';
+    echo '</section><section class="panel" data-smart-gallery-editor-workspace>';
+    if ($selected || isset($_GET['new'])) smart_gallery_render_editor($selected ?: [], $previewCount, $previewImages); else echo '<h2>' . e(t('smart_gallery.select', 'Select a Smart Gallery or create a new one.')) . '</h2>';
     echo '</section></div>';
     render_footer();
 }
@@ -140,7 +171,38 @@ function cms_admin_smart_galleries(): void
 /** Normalize the Smart Gallery editor POST payload. */
 function smart_gallery_admin_input(): array
 {
-    return ['title' => (string) ($_POST['title'] ?? ''), 'slug' => (string) ($_POST['slug'] ?? ''), 'description' => (string) ($_POST['description'] ?? ''), 'rules_json' => (string) ($_POST['rules_json'] ?? ''), 'enabled' => isset($_POST['enabled']), 'visibility' => (string) ($_POST['visibility'] ?? 'private'), 'placement_mode' => (string) ($_POST['placement_mode'] ?? 'unlisted'), 'sort_mode' => (string) ($_POST['sort_mode'] ?? 'capture_date'), 'sort_direction' => (string) ($_POST['sort_direction'] ?? 'desc')];
+    $presentation = [];
+    if (isset($_POST['presentation_override_enabled'])) {
+        $presentation = [
+            'grid_columns' => $_POST['presentation_grid_columns'] ?? null,
+            'grid_rows' => $_POST['presentation_grid_rows'] ?? null,
+            'pagination_enabled' => isset($_POST['presentation_pagination_enabled']),
+            'thumbnail_min_size' => $_POST['presentation_thumbnail_min_size'] ?? null,
+            'thumbnail_max_size' => $_POST['presentation_thumbnail_max_size'] ?? null,
+            'thumbnail_rendering_mode' => (string) ($_POST['presentation_thumbnail_rendering_mode'] ?? ''),
+            'card_layout' => (string) ($_POST['presentation_card_layout'] ?? ''),
+            'metadata_visible' => isset($_POST['presentation_metadata_visible']),
+            'lightbox_enabled' => isset($_POST['presentation_lightbox_enabled']),
+            'lightbox_browsing_mode' => (string) ($_POST['presentation_lightbox_browsing_mode'] ?? ''),
+            'slideshow_enabled' => isset($_POST['presentation_slideshow_enabled']),
+            'download_enabled' => isset($_POST['presentation_download_enabled']),
+            'voting_enabled' => isset($_POST['presentation_voting_enabled']),
+        ];
+    }
+
+    return [
+        'title' => (string) ($_POST['title'] ?? ''),
+        'slug' => (string) ($_POST['slug'] ?? ''),
+        'description' => (string) ($_POST['description'] ?? ''),
+        'rules_json' => (string) ($_POST['rules_json'] ?? ''),
+        'enabled' => isset($_POST['enabled']),
+        'visibility' => (string) ($_POST['visibility'] ?? 'private'),
+        'placement_mode' => (string) ($_POST['placement_mode'] ?? 'unlisted'),
+        'sort_mode' => (string) ($_POST['sort_mode'] ?? 'capture_date'),
+        'sort_direction' => (string) ($_POST['sort_direction'] ?? 'desc'),
+        'presentation' => $presentation,
+        'presentation_json' => $presentation,
+    ];
 }
 
 /**
@@ -197,7 +259,7 @@ function smart_gallery_admin_log_context(array $input, string $action): array
 }
 
 /** Render the non-programmer rule-builder editor and standard POST fallback. */
-function smart_gallery_render_editor(array $gallery, ?int $previewCount): void
+function smart_gallery_render_editor(array $gallery, ?int $previewCount, array $previewImages = []): void
 {
     $rulesJson = (string) ($gallery['rules_json'] ?? json_encode(smart_gallery_empty_rules()));
     $catalog = smart_gallery_rule_catalog();
@@ -211,7 +273,11 @@ function smart_gallery_render_editor(array $gallery, ?int $previewCount): void
     unset($definition);
     $tags = admin_tag_rows('name', 'asc');
     $galleries = \Gallery\Core\db()->query('SELECT id,title,folder_path FROM galleries ORDER BY folder_path,title')->fetchAll();
-    echo '<form method="post" data-smart-gallery-editor data-smart-gallery-catalog="' . e(json_encode($catalog)) . '" data-smart-gallery-tags="' . e(json_encode($tags)) . '" data-smart-gallery-galleries="' . e(json_encode($galleries)) . '">' . csrf_field();
+    $presentationOverrides = smart_gallery_normalize_presentation(array_key_exists('presentation', $gallery) ? $gallery['presentation'] : ($gallery['presentation_json'] ?? []));
+    $presentation = smart_gallery_effective_presentation($gallery);
+    $formAction = url_for('admin_smart_galleries', !empty($gallery['id']) ? ['id' => (int) $gallery['id']] : (isset($_GET['new']) ? ['new' => 1] : []));
+
+    echo '<form method="post" action="' . e($formAction) . '" data-smart-gallery-editor data-smart-gallery-panel-form data-smart-gallery-catalog="' . e(json_encode($catalog)) . '" data-smart-gallery-tags="' . e(json_encode($tags)) . '" data-smart-gallery-galleries="' . e(json_encode($galleries)) . '">' . csrf_field();
     echo '<label>' . e(t('smart_gallery.title', 'Title')) . '<input name="title" required value="' . e((string) ($gallery['title'] ?? '')) . '"></label>';
     echo '<label>' . e(t('smart_gallery.slug', 'Public URL slug')) . '<input name="slug" value="' . e((string) ($gallery['slug'] ?? '')) . '"><span class="muted">' . e(t('smart_gallery.slug_help', 'Leave blank to generate it automatically from the title.')) . '</span></label>';
     echo '<label>' . e(t('smart_gallery.description', 'Description')) . '<textarea name="description">' . e((string) ($gallery['description'] ?? '')) . '</textarea></label>';
@@ -223,9 +289,19 @@ function smart_gallery_render_editor(array $gallery, ?int $previewCount): void
     echo '<div class="admin-smart-gallery-options"><label><input type="checkbox" name="enabled" value="1"' . (!array_key_exists('enabled', $gallery) || $gallery['enabled'] ? ' checked' : '') . '> ' . e(t('smart_gallery.enabled', 'Enabled')) . '</label><label>' . e(t('smart_gallery.visibility', 'Visibility')) . '<select name="visibility"><option value="private">' . e(t('smart_gallery.private', 'Private')) . '</option><option value="public"' . (($gallery['visibility'] ?? '') === 'public' ? ' selected' : '') . '>' . e(t('smart_gallery.public', 'Published')) . '</option></select></label><label>' . e(t('smart_gallery.sort', 'Sort')) . '<select name="sort_mode">';
     foreach (['capture_date', 'filename', 'created_at', 'title', 'rating', 'default'] as $mode) echo '<option value="' . e($mode) . '"' . (($gallery['sort_mode'] ?? 'capture_date') === $mode ? ' selected' : '') . '>' . e(t('smart_gallery.sort_' . $mode, ucfirst(str_replace('_', ' ', $mode)))) . '</option>';
     echo '</select></label><label>' . e(t('smart_gallery.direction', 'Direction')) . '<select name="sort_direction"><option value="desc">' . e(t('smart_gallery.desc', 'Descending')) . '</option><option value="asc"' . (($gallery['sort_direction'] ?? '') === 'asc' ? ' selected' : '') . '>' . e(t('smart_gallery.asc', 'Ascending')) . '</option></select></label></div>';
+
+    smart_gallery_render_presentation_controls($presentation, $presentationOverrides !== []);
+
     echo '<input type="hidden" name="rules_json" value="' . e($rulesJson) . '" data-smart-gallery-rules><div class="smart-rule-builder" data-smart-rule-builder></div><noscript><p class="error">' . e(t('smart_gallery.javascript_required', 'JavaScript is required for the visual nested rule editor. Existing rules remain safe and can still be previewed or saved unchanged.')) . '</p></noscript>';
-    if ($previewCount !== null) echo '<p class="notice">' . e(t('smart_gallery.preview_count', 'This Smart Gallery currently matches {count} images.', ['count' => $previewCount])) . '</p>';
-    echo '<div class="button-row"><button name="action" value="preview" class="button secondary">' . e(t('smart_gallery.preview', 'Preview count')) . '</button><button name="action" value="save" class="button">' . e(t('smart_gallery.save', 'Save Smart Gallery')) . '</button></div></form>';
+    if ($previewCount !== null) {
+        echo '<p class="notice">' . e(t('smart_gallery.preview_count', 'This Smart Gallery currently matches {count} images.', ['count' => $previewCount])) . '</p>';
+        if ($previewImages !== []) {
+            echo '<div class="admin-smart-gallery-preview"><h3>' . e(t('smart_gallery.preview_cards', 'Presentation preview')) . '</h3><p class="muted">' . e(t('smart_gallery.preview_cards_help', 'The preview uses real matching photos and the effective Smart Gallery presentation settings.')) . '</p>';
+            smart_gallery_render_image_cards($previewImages, smart_gallery_source_galleries($previewImages), $presentation, [], [], 0, false);
+            echo '</div>';
+        }
+    }
+    echo '<div class="button-row"><button name="action" value="preview" class="button secondary">' . e(t('smart_gallery.preview', 'Preview')) . '</button><button name="action" value="save" class="button">' . e(t('smart_gallery.save', 'Save Smart Gallery')) . '</button></div></form>';
     if (!empty($gallery['id'])) {
         $placements = smart_gallery_placement_galleries((int) $gallery['id']);
         echo '<section class="admin-smart-gallery-placements"><h3>' . e(t('smart_gallery.used_in', 'Used in physical galleries')) . '</h3><p class="muted">' . e(t('smart_gallery.used_in_help', 'These galleries currently show this Smart Gallery as a subgallery. Removing one location does not affect the others.')) . '</p>';
@@ -234,7 +310,9 @@ function smart_gallery_render_editor(array $gallery, ?int $previewCount): void
         } else {
             echo '<div class="admin-smart-gallery-placement-list">';
             foreach ($placements as $placement) {
-                echo '<div class="admin-smart-gallery-placement-row"><a href="' . e(url_for('admin_edit_gallery', ['id' => (int) $placement['id']])) . '"><strong>' . e((string) $placement['title']) . '</strong><small>' . e((string) $placement['folder_path']) . '</small></a><form method="post">' . csrf_field() . '<input type="hidden" name="id" value="' . (int) $gallery['id'] . '"><input type="hidden" name="gallery_id" value="' . (int) $placement['id'] . '"><button name="action" value="remove_placement" class="button secondary">' . e(t('smart_gallery.hide_from_here', 'Hide from here')) . '</button></form></div>';
+                $placementValue = ($placement['placement'] ?? 'bottom') === 'top' ? 'top' : 'bottom';
+                $parentRestricted = ($placement['visibility'] ?? '') !== 'public' || ($placement['access_mode'] ?? 'normal') !== 'normal';
+                echo '<div class="admin-smart-gallery-placement-row"><a href="' . e(url_for('admin_edit_gallery', ['id' => (int) $placement['id']])) . '"><strong>' . e((string) $placement['title']) . '</strong><small>' . e((string) $placement['folder_path']) . '</small>' . ($parentRestricted ? '<small>' . e(t('smart_gallery.parent_policy_applies', 'Parent access policy still applies to this placement.')) . '</small>' : '') . (empty($placement['relationship_valid']) ? '<small class="error">' . e(t('smart_gallery.relationship_invalid_short', 'Relationship needs repair.')) . '</small>' : '') . '</a><form method="post" action="' . e($formAction) . '" data-smart-gallery-panel-form>' . csrf_field() . '<input type="hidden" name="id" value="' . (int) $gallery['id'] . '"><input type="hidden" name="gallery_id" value="' . (int) $placement['id'] . '"><label>' . e(t('smart_gallery.attachment_placement', 'Placement for this parent')) . '<select name="attachment_placement"><option value="top"' . ($placementValue === 'top' ? ' selected' : '') . '>' . e(t('smart_gallery.placement_top', 'Above gallery content')) . '</option><option value="bottom"' . ($placementValue === 'bottom' ? ' selected' : '') . '>' . e(t('smart_gallery.placement_bottom', 'Below gallery content')) . '</option></select></label><label>' . e(t('smart_gallery.attachment_order', 'Order')) . '<input type="number" min="-100000" max="100000" name="attachment_order" value="' . (int) ($placement['placement_order'] ?? 0) . '"></label><div class="button-row"><button name="action" value="update_placement" class="button secondary">' . e(t('smart_gallery.save_placement', 'Save placement')) . '</button><button name="action" value="remove_placement" class="button secondary">' . e(t('smart_gallery.hide_from_here', 'Detach')) . '</button></div></form></div>';
             }
             echo '</div>';
         }
@@ -242,47 +320,187 @@ function smart_gallery_render_editor(array $gallery, ?int $previewCount): void
         if (($gallery['visibility'] ?? '') === 'public' && !empty($gallery['enabled'])) {
             echo '<p><a class="button secondary" href="' . e(url_for('smart_gallery', ['slug' => $gallery['slug']])) . '">' . e(t('smart_gallery.open_public', 'Open published Smart Gallery')) . '</a></p>';
         }
-        echo '<div class="button-row"><form method="post">' . csrf_field() . '<input type="hidden" name="id" value="' . (int) $gallery['id'] . '"><button name="action" value="duplicate" class="button secondary">' . e(t('smart_gallery.duplicate', 'Duplicate')) . '</button></form><form method="post" onsubmit="return confirm(this.dataset.confirm)" data-confirm="' . e(t('smart_gallery.delete_confirm', 'Delete this Smart Gallery definition? Images and files will not be deleted.')) . '">' . csrf_field() . '<input type="hidden" name="id" value="' . (int) $gallery['id'] . '"><button name="action" value="delete" class="button danger">' . e(t('smart_gallery.delete', 'Delete')) . '</button></form></div>';
+        echo '<div class="button-row"><form method="post" action="' . e($formAction) . '" data-smart-gallery-panel-form>' . csrf_field() . '<input type="hidden" name="id" value="' . (int) $gallery['id'] . '"><button name="action" value="duplicate" class="button secondary">' . e(t('smart_gallery.duplicate', 'Duplicate')) . '</button></form><form method="post" action="' . e($formAction) . '" data-smart-gallery-panel-form onsubmit="return confirm(this.dataset.confirm)" data-confirm="' . e(t('smart_gallery.delete_confirm', 'Delete this Smart Gallery definition? Images and files will not be deleted.')) . '">' . csrf_field() . '<input type="hidden" name="id" value="' . (int) $gallery['id'] . '"><button name="action" value="delete" class="button danger">' . e(t('smart_gallery.delete', 'Delete')) . '</button></form></div>';
     }
+}
+
+/** Render canonical Smart Gallery presentation controls with explicit Theme inheritance. */
+function smart_gallery_render_presentation_controls(array $presentation, bool $hasOverride): void
+{
+    echo '<fieldset class="admin-smart-gallery-presentation"><legend>' . e(t('smart_gallery.presentation', 'Presentation')) . '</legend>';
+    echo '<label class="admin-smart-gallery-presentation-toggle"><input type="checkbox" name="presentation_override_enabled" value="1" data-smart-gallery-presentation-toggle' . ($hasOverride ? ' checked' : '') . '> ' . e(t('smart_gallery.presentation_override', 'Override Theme defaults for this Smart Gallery')) . '</label>';
+    echo '<p class="muted">' . e(t('smart_gallery.presentation_help', 'When disabled, the Smart Gallery inherits the current Theme and site defaults. Because one Smart Gallery can have multiple placements, presentation never inherits from a physical parent gallery.')) . '</p>';
+    echo '<div class="admin-smart-gallery-presentation-grid" data-smart-gallery-presentation-fields>';
+    echo '<label>' . e(t('smart_gallery.grid_columns', 'Columns')) . '<input type="number" min="1" max="12" name="presentation_grid_columns" value="' . (int) $presentation['grid_columns'] . '"></label>';
+    echo '<label>' . e(t('smart_gallery.grid_rows', 'Rows per page')) . '<input type="number" min="1" max="50" name="presentation_grid_rows" value="' . (int) $presentation['grid_rows'] . '"></label>';
+    echo '<label><input type="checkbox" name="presentation_pagination_enabled" value="1"' . (!empty($presentation['pagination_enabled']) ? ' checked' : '') . '> ' . e(t('smart_gallery.pagination_enabled', 'Use pagination')) . '</label>';
+    echo '<label>' . e(t('smart_gallery.thumbnail_renderer', 'Thumbnail renderer')) . '<select name="presentation_thumbnail_rendering_mode">';
+    foreach (public_thumbnail_rendering_modes() as $mode) {
+        $modeLabel = $mode === 'progressive' ? t('admin.settings.thumbnail.progressive', 'Progressive') : t('admin.settings.thumbnail.responsive', 'Responsive');
+        echo '<option value="' . e($mode) . '"' . ($presentation['thumbnail_rendering_mode'] === $mode ? ' selected' : '') . '>' . e($modeLabel) . '</option>';
+    }
+    echo '</select></label>';
+    echo '<label>' . e(t('admin.gallery_editor.description_layout_label', 'Card layout')) . '<select name="presentation_card_layout">';
+    foreach (gallery_description_layout_options() as $layout) echo '<option value="' . e($layout) . '"' . ($presentation['card_layout'] === $layout ? ' selected' : '') . '>' . e(gallery_description_layout_label($layout)) . '</option>';
+    echo '</select></label>';
+    foreach (['thumbnail_min_size' => 'Minimum thumbnail size', 'thumbnail_max_size' => 'Maximum thumbnail size'] as $key => $fallback) {
+        echo '<label>' . e(t('smart_gallery.' . $key, $fallback)) . '<select name="presentation_' . e($key) . '"><option value="0">' . e(t('smart_gallery.thumbnail_auto', 'Auto')) . '</option>';
+        foreach (thumbnail_sizes() as $size) echo '<option value="' . (int) $size . '"' . ((int) ($presentation[$key] ?? 0) === (int) $size ? ' selected' : '') . '>' . (int) $size . ' px</option>';
+        echo '</select></label>';
+    }
+    echo '<label><input type="checkbox" name="presentation_metadata_visible" value="1"' . (!empty($presentation['metadata_visible']) ? ' checked' : '') . '> ' . e(t('smart_gallery.metadata_visible', 'Show photo metadata overlays')) . '</label>';
+    echo '<label><input type="checkbox" name="presentation_lightbox_enabled" value="1"' . (!empty($presentation['lightbox_enabled']) ? ' checked' : '') . '> ' . e(t('smart_gallery.lightbox_enabled', 'Enable lightbox')) . '</label>';
+    echo '<label>' . e(t('smart_gallery.lightbox_mode', 'Lightbox browsing mode')) . '<select name="presentation_lightbox_browsing_mode">';
+    foreach (gallery_lightbox_browsing_mode_options() as $mode) echo '<option value="' . e($mode) . '"' . ($presentation['lightbox_browsing_mode'] === $mode ? ' selected' : '') . '>' . e(t('gallery.lightbox_mode.' . $mode, ucfirst(str_replace('_', ' ', $mode)))) . '</option>';
+    echo '</select></label>';
+    echo '<label><input type="checkbox" name="presentation_slideshow_enabled" value="1"' . (!empty($presentation['slideshow_enabled']) ? ' checked' : '') . '> ' . e(t('smart_gallery.slideshow_enabled', 'Enable slideshow controls')) . '</label>';
+    echo '<label><input type="checkbox" name="presentation_voting_enabled" value="1"' . (!empty($presentation['voting_enabled']) ? ' checked' : '') . '> ' . e(t('smart_gallery.voting_enabled', 'Enable visitor voting where the source gallery allows it')) . '</label>';
+    echo '<label><input type="checkbox" name="presentation_download_enabled" value="1"' . (!empty($presentation['download_enabled']) ? ' checked' : '') . '> ' . e(t('smart_gallery.download_enabled', 'Allow Smart Gallery download when site downloads are enabled')) . '</label>';
+    echo '</div></fieldset>';
+}
+
+/** Render real Smart Gallery image cards with one shared presentation contract. */
+function smart_gallery_render_image_cards(array $images, array $sourceGalleries, array $presentation, array $votes, array $tags, int $offset, bool $interactive): void
+{
+    $columns = (int) ($presentation['grid_columns'] ?? 3);
+    $sizesAttribute = pagination_photo_thumbnail_sizes_attribute(['enabled' => true, 'columns' => $columns]);
+    echo '<section class="grid gallery-image-grid' . e(pagination_grid_columns_class(['columns' => $columns, 'grid_columns_enabled' => true])) . '" data-gallery-image-list>';
+    foreach ($images as $index => $image) {
+        $source = $sourceGalleries[(int) ($image['gallery_id'] ?? 0)] ?? null;
+        if (!$source) continue;
+        $url = image_public_url($image, $source);
+        $bundle = thumbnail_bundle($image);
+        $title = public_image_display_title($image, $source);
+        $candidateSizes = smart_gallery_thumbnail_sizes($presentation, $image, $source, thumbnail_sizes());
+        $fallbackSize = (int) ($candidateSizes[0] ?? 300);
+        $voting = $interactive && !empty($presentation['voting_enabled']) && gallery_voting_allowed($source);
+        $lightbox = $interactive && !empty($presentation['lightbox_enabled']);
+        $attributes = '';
+        if ($lightbox) {
+            $mediaUrl = url_for('media', ['id' => $image['id']]);
+            $previewUrl = thumbnail_bundle_url($bundle, 1600);
+            $attributes = ' ' . lightbox_image_data_attributes($image, $source, $mediaUrl, $previewUrl, $url, $title, (int) ($image['score'] ?? 0), (int) ($votes[(int) $image['id']] ?? 0), null, 'data-lightbox-image', $voting, $offset + $index, $bundle);
+        }
+        echo '<article class="image-card"' . $attributes . '><div class="image-stage"><a class="image-preview-link" href="' . e($url) . '">' . public_thumbnail_render_picture_html($image, $fallbackSize, $candidateSizes, $sizesAttribute, image_alt_text($image, $source, $offset + $index + 1), $index, $bundle, (string) $presentation['thumbnail_rendering_mode']) . '</a>';
+        if ($interactive && !empty($presentation['voting_enabled'])) render_vote_form((int) $image['id'], (int) ($image['score'] ?? 0), (int) ($votes[(int) $image['id']] ?? 0), $voting);
+        if (!empty($presentation['metadata_visible']) && ($title !== '' || trim((string) ($image['description'] ?? '')) !== '' || !empty($tags[(int) $image['id']]))) {
+            echo '<div class="image-meta image-meta-overlay">' . ($title !== '' ? '<h2>' . e($title) . '</h2>' : '') . (trim((string) ($image['description'] ?? '')) !== '' ? '<p>' . e((string) $image['description']) . '</p>' : '');
+            render_tag_list($tags[(int) $image['id']] ?? []);
+            echo '</div>';
+        }
+        echo '</div></article>';
+    }
+    echo '</section>';
 }
 
 /** Render a published Smart Gallery using physical-gallery media URLs and shared thumbnail cards. */
 function cms_smart_gallery(): void
 {
     $gallery = smart_gallery_find_public((string) ($_GET['slug'] ?? ''));
-    if (!$gallery) { cms_not_found(); return; }
-    try { $total = smart_gallery_count_images($gallery, true); } catch (InvalidArgumentException) { cms_not_found(); return; }
-    $pagination = pagination_model($total, pagination_current_page('photo_page'), 4, 6, 'photo_page', ['page' => 'smart_gallery', 'slug' => $gallery['slug']]);
-    $images = smart_gallery_query_images($gallery, true, (int) $pagination['limit'], (int) $pagination['offset']);
-    $imageIds = array_map(static fn (array $image): int => (int) $image['id'], $images);
-    $votes = current_votes_for_images($imageIds);
-    $tags = tags_for_entities('image', $imageIds);
-    render_header((string) $gallery['title']);
-    echo '<section class="hero"><div><p class="admin-kicker">' . e(t('smart_gallery.public_kicker', 'Smart Gallery')) . '</p><h1>' . e($gallery['title']) . '</h1><p>' . e((string) $gallery['description']) . '</p><p class="muted">' . e(t('smart_gallery.dynamic_count', '{count} matching images', ['count' => $total])) . '</p></div></section>';
-    render_pagination_controls($pagination, t('pagination.photo_pages', 'Photo pages'));
-    $lightboxMode = theme_lightbox_browsing_mode();
-    echo '<section class="grid gallery-image-grid' . e(pagination_grid_columns_class(['columns' => 4])) . '" data-gallery-image-list data-lightbox-config data-lightbox-total="' . count($images) . '" data-lightbox-browsing-mode="' . e($lightboxMode) . '">';
-    foreach ($images as $index => $image) {
-        $source = find_gallery((int) $image['gallery_id']);
-        if (!$source) continue;
-        $url = image_public_url($image, $source);
-        $bundle = thumbnail_bundle($image);
-        $title = public_image_display_title($image, $source);
-        $mediaUrl = url_for('media', ['id' => $image['id']]);
-        $previewUrl = thumbnail_bundle_url($bundle, 1600);
-        $voting = gallery_voting_allowed($source);
-        $attributes = lightbox_image_data_attributes($image, $source, $mediaUrl, $previewUrl, $url, $title, (int) ($image['score'] ?? 0), (int) ($votes[(int) $image['id']] ?? 0), null, 'data-lightbox-image', $voting, $index, $bundle);
-        echo '<article class="image-card" ' . $attributes . '><div class="image-stage"><a class="image-preview-link" href="' . e($url) . '">' . public_thumbnail_render_picture_html($image, 300, [300,600,800,960], '(max-width: 720px) 50vw, 25vw', image_alt_text($image, $source, $index + 1 + (int) $pagination['offset']), $index, $bundle, public_thumbnail_rendering_mode()) . '</a>';
-        render_vote_form((int) $image['id'], (int) ($image['score'] ?? 0), (int) ($votes[(int) $image['id']] ?? 0), $voting);
-        if ($title !== '' || trim((string) ($image['description'] ?? '')) !== '' || !empty($tags[(int) $image['id']])) {
-            echo '<div class="image-meta image-meta-overlay">' . ($title !== '' ? '<h2>' . e($title) . '</h2>' : '') . (trim((string) ($image['description'] ?? '')) !== '' ? '<p>' . e($image['description']) . '</p>' : '');
-            \Gallery\Controllers\render_tag_list($tags[(int) $image['id']] ?? []);
-            echo '</div>';
-        }
-        echo '</div></article>';
+    if (!$gallery) {
+        cms_not_found();
+        return;
     }
-    echo '</section>';
-    render_pagination_controls($pagination, t('pagination.photo_pages', 'Photo pages'));
-    render_lightbox(true, false, '', (string) $gallery['title'], $lightboxMode);
+
+    try {
+        $total = smart_gallery_count_images($gallery, true);
+        $presentation = smart_gallery_effective_presentation($gallery);
+    } catch (InvalidArgumentException) {
+        cms_not_found();
+        return;
+    }
+
+    $columns = (int) $presentation['grid_columns'];
+    $rows = (int) $presentation['grid_rows'];
+    $paginationRequiredForSafety = $total > SMART_GALLERY_QUERY_MAX_PAGE_SIZE;
+    $usePagination = !empty($presentation['pagination_enabled']) || $paginationRequiredForSafety;
+    if ($usePagination) {
+        $pagination = pagination_model($total, pagination_current_page('photo_page'), $columns, $rows, 'photo_page', ['page' => 'smart_gallery', 'slug' => $gallery['slug']]);
+        $limit = (int) $pagination['limit'];
+        $offset = (int) $pagination['offset'];
+    } else {
+        $limit = max(1, min(SMART_GALLERY_QUERY_MAX_PAGE_SIZE, $total));
+        $offset = 0;
+        $pagination = null;
+    }
+
+    $images = $total > 0 ? smart_gallery_query_images($gallery, true, $limit, $offset) : [];
+    $sourceGalleries = smart_gallery_source_galleries($images);
+    $contentLanguage = translation_active_language();
+    $images = content_localize_entities('image', $images, $contentLanguage);
+    foreach ($sourceGalleries as $sourceId => $sourceGallery) {
+        $sourceGalleries[$sourceId] = content_localize_entity('gallery', $sourceGallery, $contentLanguage);
+    }
+    $imageIds = array_map(static fn (array $image): int => (int) $image['id'], $images);
+    $votes = !empty($presentation['voting_enabled']) ? current_votes_for_images($imageIds) : [];
+    $tags = !empty($presentation['metadata_visible']) ? tags_for_entities('image', $imageIds) : [];
+
+    render_header((string) $gallery['title']);
+    echo '<section class="hero"><div class="hero-topbar"><div class="hero-primary"><div><p class="admin-kicker">' . e(t('smart_gallery.public_kicker', 'Smart Gallery')) . '</p><h1>' . e((string) $gallery['title']) . '</h1><p>' . e((string) $gallery['description']) . '</p><p class="muted">' . e(t('smart_gallery.dynamic_count', '{count} matching images', ['count' => $total])) . '</p></div></div><div class="hero-meta"><div class="hero-actions" aria-label="' . e(t('gallery.actions', 'Gallery actions')) . '">';
+    if (!empty($presentation['download_enabled']) && $total > 0) echo '<a class="button hero-icon-button hero-download-button" href="' . e(url_for('download_smart_gallery', ['id' => (int) $gallery['id']])) . '" aria-label="' . e(t('smart_gallery.download', 'Download Smart Gallery')) . '" title="' . e(t('smart_gallery.download', 'Download Smart Gallery')) . '"><span aria-hidden="true">&#10515;</span><span class="visually-hidden">' . e(t('smart_gallery.download', 'Download Smart Gallery')) . '</span></a>';
+    echo '</div></div></div></section>';
+    if ($pagination !== null) render_pagination_controls($pagination, t('pagination.photo_pages', 'Photo pages'));
+
+    $lightboxEnabled = !empty($presentation['lightbox_enabled']) && $total > 0;
+    if ($lightboxEnabled) {
+        echo '<div data-lightbox-config data-lightbox-endpoint="' . e(url_for('smart_gallery_lightbox_data', ['id' => (int) $gallery['id']])) . '" data-lightbox-total="' . $total . '" data-lightbox-window-size="60" data-lightbox-browsing-mode="' . e((string) $presentation['lightbox_browsing_mode']) . '">';
+    }
+    smart_gallery_render_image_cards($images, $sourceGalleries, $presentation, $votes, $tags, $offset, true);
+    if ($lightboxEnabled) echo '</div>';
+
+    if ($pagination !== null) render_pagination_controls($pagination, t('pagination.photo_pages', 'Photo pages'));
+    if ($lightboxEnabled) render_lightbox(!empty($presentation['voting_enabled']), false, '', (string) $gallery['title'], (string) $presentation['lightbox_browsing_mode'], !empty($presentation['slideshow_enabled']));
     render_footer();
+}
+
+/** Return one authorized bounded metadata window for complete Smart Gallery lightbox navigation. */
+function cms_smart_gallery_lightbox_data(): void
+{
+    $gallery = smart_gallery_find_public_by_id(max(0, (int) ($_GET['id'] ?? 0)));
+    if (!$gallery) {
+        gallery_lightbox_json_response(['ok' => false, 'error' => 'not_found'], 404);
+        return;
+    }
+
+    try {
+        $presentation = smart_gallery_effective_presentation($gallery);
+        if (empty($presentation['lightbox_enabled'])) {
+            gallery_lightbox_json_response(['ok' => false, 'error' => 'not_found'], 404);
+            return;
+        }
+        $total = smart_gallery_count_images($gallery, true);
+        $limit = max(1, min(SMART_GALLERY_LIGHTBOX_MAX_WINDOW, (int) ($_GET['limit'] ?? 60)));
+        $offset = max(0, (int) ($_GET['offset'] ?? 0));
+        if ($total > 0 && $offset >= $total) $offset = max(0, $total - $limit);
+        $images = $total > 0 ? smart_gallery_lightbox_fetch_images($gallery, true, $offset, $limit) : [];
+    } catch (InvalidArgumentException) {
+        gallery_lightbox_json_response(['ok' => false, 'error' => 'not_found'], 404);
+        return;
+    }
+
+    $contentLanguage = translation_active_language();
+    $images = content_localize_entities('image', $images, $contentLanguage);
+    $sourceGalleries = smart_gallery_source_galleries($images);
+    foreach ($sourceGalleries as $sourceId => $sourceGallery) {
+        $sourceGalleries[$sourceId] = content_localize_entity('gallery', $sourceGallery, $contentLanguage);
+    }
+    $imageIds = array_map(static fn (array $image): int => (int) $image['id'], $images);
+    $votes = !empty($presentation['voting_enabled']) ? current_votes_for_images($imageIds) : [];
+    $items = [];
+    foreach ($images as $rowIndex => $image) {
+        $source = $sourceGalleries[(int) ($image['gallery_id'] ?? 0)] ?? null;
+        if (!$source) continue;
+        $votingAllowed = !empty($presentation['voting_enabled']) && gallery_voting_allowed($source);
+        $items[] = gallery_lightbox_json_item($image, $source, $offset + $rowIndex, gallery_allows_gps_maps($source), $votingAllowed, $votes);
+    }
+
+    gallery_lightbox_json_response([
+        'ok' => true,
+        'smart_gallery_id' => (int) $gallery['id'],
+        'total' => $total,
+        'offset' => $offset,
+        'limit' => $limit,
+        'count' => count($items),
+        'items' => $items,
+    ]);
 }
