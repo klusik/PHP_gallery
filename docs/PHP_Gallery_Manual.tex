@@ -49,7 +49,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.91.2}
+\newcommand{\version}{0.91.3}
 \newcommand{\manualdate}{17 August 2026}
 
 \hypersetup{
@@ -152,10 +152,12 @@ The~manual is~organized around work that an~owner actually performs. The~early s
 
 For~a~new installation, begin with Section~\ref{sec:first-hour}. Collection planning is~covered in~Section~\ref{sec:planning}; routine gallery and~photo editing is~in~Sections~\ref{sec:create-edit-gallery} and~\ref{sec:photo-workflow}. Section~\ref{sec:audiences} is~useful before publishing because it~compares several common audience types. The~contents and~index are~intended for~jumping directly to~a~setting or~workflow when the~site is~already in~use.
 
-\subsection{What is~new in~Version 0.91.2}
-\index{Version 0.91.2}
+\subsection{What is~new in~Version 0.91.3}
+\index{Version 0.91.3}
 
-Version~0.91.2 consolidates the~complete Version~0.91 and~0.91.1 viewer and~Smart Gallery improvements. Published Smart Galleries can~appear to~anonymous viewers when their parent and~matched images are~accessible, while centralized visibility and~access checks prevent protected content or~counts from~leaking. Administrators can~configure Smart Gallery presentation, thumbnail behavior, placement above or~below normal gallery content, and~deterministic ordering for~multiple attachments.
+Version~0.91.3 consolidates the~complete Version~0.91, 0.91.1, and~0.91.2 viewer and~Smart Gallery improvements and~stabilizes slideshow preloading and~fullscreen transitions. The~slideshow prepares the~next authorized photograph without disturbing the~active transition, rejects duplicate or~stale preload work, and~keeps timing, navigation, controls, and~loading state synchronized when fullscreen changes.
+
+Published Smart Galleries can~appear to~anonymous viewers when their parent and~matched images are~accessible, while centralized visibility and~access checks prevent protected content or~counts from~leaking. Administrators can~configure Smart Gallery presentation, thumbnail behavior, placement above or~below normal gallery content, and~deterministic ordering for~multiple attachments.
 
 Smart Gallery relationships reject direct and~indirect cycles and~use bounded runtime evaluation for~legacy malformed data. The~public lightbox retains zoom, progressive quality promotion, fullscreen, map, slideshow, and~access behavior; ordinary arrows move one photograph, while holding Shift moves ten. Backward movement uses stable modular navigation. Existing installations should run the~normal updater so~the~Smart Gallery presentation and~attachment-order migrations are~applied; no~source files are~moved.
 
