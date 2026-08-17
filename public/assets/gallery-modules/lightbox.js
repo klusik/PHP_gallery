@@ -538,6 +538,8 @@ export function setupGalleryLightbox() {
     let fullscreenHideTimer = null;
     // lightboxSlideshowTimer stores the automatic advance timer while slideshow mode is active.
     let lightboxSlideshowTimer = null;
+    // lightboxSlideshowScheduleToken invalidates an automatic cycle when slideshow stops or navigation changes.
+    let lightboxSlideshowScheduleToken = 0;
     // lightboxSlideshowActive stores whether slideshow mode owns automatic fullscreen advancing.
     let lightboxSlideshowActive = false;
     // touchGesture stores the active mobile stage swipe, when one is in progress.
@@ -1655,12 +1657,34 @@ export function setupGalleryLightbox() {
      *
      * @param {HTMLImageElement|null} loadedImage Decoded image used by the lightbox.
      */
-    function updateNormalLightboxStageSizeFromLoadedImage(loadedImage) {
+    function updateNormalLightboxStageSizeFromLoadedImage(loadedImage, scheduleReclamp = true) {
         if (!(loadedImage instanceof HTMLImageElement)) {
             return;
         }
         updateNormalLightboxStageSizeFromDimensions(loadedImage.naturalWidth || 0, loadedImage.naturalHeight || 0);
-        scheduleLightboxZoomReclamp();
+        if (scheduleReclamp) {
+            scheduleLightboxZoomReclamp();
+        }
+    }
+
+    /**
+     * Resolve the final 100% presentation geometry for an already-decoded target image.
+     *
+     * Normal lightbox mode first sizes the stage from the browser-decoded dimensions.
+     * Fullscreen and mobile fullscreen keep their fixed viewport-sized stage. A forced
+     * stage measurement then makes the returned fitted rectangle authoritative before
+     * any pixels from the target image are allowed to become visible.
+     *
+     * @param {HTMLImageElement} loadedImage Decoded image that is about to be displayed.
+     * @return {{viewportWidth:number,viewportHeight:number,imageWidth:number,imageHeight:number,panViewportWidth:number,panViewportHeight:number}|null} Final target geometry.
+     */
+    function prepareDecodedLightboxGeometry(loadedImage) {
+        if (!(loadedImage instanceof HTMLImageElement) || !loadedImage.naturalWidth || !loadedImage.naturalHeight) {
+            return null;
+        }
+        updateNormalLightboxStageSizeFromLoadedImage(loadedImage, false);
+        stageLink?.getBoundingClientRect();
+        return measureLightboxZoomMetricsForDimensions(loadedImage.naturalWidth, loadedImage.naturalHeight);
     }
 
         /**
@@ -1717,6 +1741,10 @@ export function setupGalleryLightbox() {
         ) {
             return Promise.resolve(false);
         }
+        const targetMetrics = prepareDecodedLightboxGeometry(loadedImage);
+        if (!targetMetrics) {
+            return Promise.resolve(false);
+        }
         const previousImage = image;
         loadedImage.onload = null;
         loadedImage.onerror = null;
@@ -1739,7 +1767,7 @@ export function setupGalleryLightbox() {
         galleryDevModeState.currentSource = src;
         galleryDevModeState.currentSourceKind = devFindSourceKind(src);
         devMarkSource(src, 'ready', 'quality-display');
-        applyLightboxZoomState(false);
+        applyLightboxZoomState(false, targetMetrics);
         loadedImage.getBoundingClientRect();
 
         return new Promise((resolve) => {
@@ -1755,6 +1783,257 @@ export function setupGalleryLightbox() {
     }
 
     /**
+     * Create a live lightbox image node from an already-decoded cached image.
+     *
+     * The decoded cache keeps its own detached node. Display nodes are cloned from it
+     * so later cache hits cannot move the currently visible image out of the viewer.
+     * Geometry-related inline styles are cleared because the target image receives a
+     * fresh, aspect-ratio-correct 100% frame before it becomes visible.
+     *
+     * @param {HTMLImageElement} loadedImage Decoded cached source.
+     * @param {HTMLImageElement} previousImage Currently live image used for presentation classes.
+     * @param {string} imageId Stable target image identifier.
+     * @param {string} altText Accessible target image alternative text.
+     * @return {HTMLImageElement} Detached target display node.
+     */
+    function createPreparedLightboxDisplayNode(loadedImage, previousImage, imageId, altText) {
+        const displayNode = loadedImage.cloneNode(false);
+        displayNode.onload = null;
+        displayNode.onerror = null;
+        displayNode.removeAttribute('loading');
+        displayNode.removeAttribute('fetchpriority');
+        displayNode.setAttribute('data-lightbox-img', '');
+        displayNode.dataset.lightboxImageId = imageId;
+        displayNode.alt = altText;
+        displayNode.decoding = 'sync';
+        displayNode.className = previousImage.className;
+        displayNode.style.cssText = previousImage.style.cssText;
+        displayNode.style.removeProperty('width');
+        displayNode.style.removeProperty('height');
+        displayNode.style.removeProperty('max-width');
+        displayNode.style.removeProperty('max-height');
+        displayNode.style.removeProperty('transform');
+        displayNode.style.removeProperty('will-change');
+        displayNode.style.removeProperty('opacity');
+        return displayNode;
+    }
+
+    /**
+     * Commit an already-decoded image using geometry calculated from that same image.
+     *
+     * The replacement and the 100% fitted zoom-surface dimensions are applied in one
+     * browser task. Two paint boundaries are then allowed before completion is reported,
+     * which prevents a caller from removing a covering transition while the browser is
+     * still laying out the new aspect ratio.
+     *
+     * @param {number} index Zero-based image index.
+     * @param {number} token Active lightbox navigation token.
+     * @param {HTMLImageElement} loadedImage Decoded cached target image.
+     * @param {string} src Authorized target source URL.
+     * @param {string} altText Accessible image alternative text.
+     * @param {{viewportWidth:number,viewportHeight:number,imageWidth:number,imageHeight:number,panViewportWidth:number,panViewportHeight:number}|null} measuredMetrics Precomputed target geometry.
+     * @return {Promise<boolean>} True after the final geometry survives two paint boundaries.
+     */
+    function commitPreparedLightboxImage(index, token, loadedImage, src, altText, measuredMetrics = null) {
+        if (
+            !(loadedImage instanceof HTMLImageElement)
+            || !(image instanceof HTMLImageElement)
+            || !(zoomSurface instanceof HTMLElement)
+            || !src
+            || !isCurrentLightboxImageRequest(index, token)
+        ) {
+            return Promise.resolve(false);
+        }
+        const targetMetrics = measuredMetrics || prepareDecodedLightboxGeometry(loadedImage);
+        if (!targetMetrics) {
+            return Promise.resolve(false);
+        }
+        const previousImage = image;
+        const imageId = String(cards[index]?.dataset.imageId || index);
+        const displayNode = createPreparedLightboxDisplayNode(loadedImage, previousImage, imageId, altText);
+
+        return decodeLoadedImage(displayNode).then(() => {
+            if (
+                !isCurrentLightboxImageRequest(index, token)
+                || image !== previousImage
+                || !displayNode.complete
+                || displayNode.naturalWidth <= 0
+                || displayNode.naturalHeight <= 0
+            ) {
+                return false;
+            }
+            previousImage.replaceWith(displayNode);
+            image = displayNode;
+            applyLightboxImageSource(src, altText, imageId);
+            applyLightboxZoomState(false, targetMetrics);
+            zoomSurface.getBoundingClientRect();
+            displayNode.getBoundingClientRect();
+
+            return new Promise((resolve) => {
+                window.requestAnimationFrame(() => {
+                    window.requestAnimationFrame(() => {
+                        const stillCurrent = isCurrentLightboxImageRequest(index, token)
+                            && image === displayNode
+                            && displayNode.isConnected
+                            && displayNode.getAttribute('src') === src
+                            && displayNode.dataset.lightboxImageId === imageId;
+                        if (stillCurrent) {
+                            clearLightboxNavigationPending(token);
+                        }
+                        resolve(stillCurrent);
+                    });
+                });
+            });
+        }).catch(() => false);
+    }
+
+    /**
+     * Blend an already-decoded image in at its final centered stage position.
+     *
+     * The visible transition node is independent from the live zoom surface. This is
+     * important when consecutive photographs have different aspect ratios: the old
+     * image can keep its old zoom-surface rectangle while the new image fades in using
+     * the final stage-centered `object-fit: contain` geometry. Once the transition is
+     * fully opaque, the real zoom surface is switched underneath it using dimensions
+     * calculated from the same decoded target. The transition is removed only after
+     * that final live layout has survived two animation frames.
+     *
+     * @param {number} index Zero-based image index.
+     * @param {number} token Active lightbox navigation token.
+     * @param {HTMLImageElement} loadedImage Detached decoded image.
+     * @param {string} src Authorized target source URL.
+     * @param {string} altText Accessible image alternative text.
+     * @return {Promise<boolean>} True when the target image is live at final geometry.
+     */
+    function showPreparedLightboxTransitionImage(index, token, loadedImage, src, altText) {
+        if (
+            !(loadedImage instanceof HTMLImageElement)
+            || !(image instanceof HTMLImageElement)
+            || !(stageLink instanceof HTMLElement)
+            || !src
+            || !isCurrentLightboxImageRequest(index, token)
+        ) {
+            return Promise.resolve(false);
+        }
+
+        const targetMetrics = prepareDecodedLightboxGeometry(loadedImage);
+        if (!targetMetrics) {
+            return Promise.resolve(false);
+        }
+        activeLightboxTransitionToken += 1;
+        const transitionToken = activeLightboxTransitionToken;
+        removeTransitionImage();
+        const imageId = String(cards[index]?.dataset.imageId || index);
+        const transitionNode = loadedImage.cloneNode(false);
+        transitionNode.onload = null;
+        transitionNode.onerror = null;
+        transitionNode.removeAttribute('loading');
+        transitionNode.removeAttribute('fetchpriority');
+        transitionNode.removeAttribute('data-lightbox-img');
+        transitionNode.setAttribute('aria-hidden', 'true');
+        transitionNode.dataset.lightboxImageId = imageId;
+        transitionNode.alt = '';
+        transitionNode.decoding = 'sync';
+        transitionNode.className = 'lightbox-transition-image';
+        const transitionDuration = currentLightboxTransitionDuration();
+        transitionNode.style.setProperty('--lightbox-transition-duration', `${transitionDuration}ms`);
+        transitionImage = transitionNode;
+        stageLink.append(transitionNode);
+
+        return decodeLoadedImage(transitionNode).then(() => new Promise((resolve) => {
+            if (
+                !isCurrentLightboxImageRequest(index, token)
+                || activeLightboxTransitionToken !== transitionToken
+                || transitionImage !== transitionNode
+                || !transitionNode.isConnected
+                || !transitionNode.complete
+                || transitionNode.naturalWidth <= 0
+                || transitionNode.naturalHeight <= 0
+            ) {
+                removeTransitionImage(transitionNode);
+                resolve(false);
+                return;
+            }
+
+            // The target stage dimensions and its centered contain geometry are now final.
+            // Give the browser two frames before revealing the transition pixels so cached
+            // and freshly decoded resources follow the same paint sequence.
+            transitionNode.getBoundingClientRect();
+            window.requestAnimationFrame(() => {
+                window.requestAnimationFrame(() => {
+                    if (
+                        !isCurrentLightboxImageRequest(index, token)
+                        || activeLightboxTransitionToken !== transitionToken
+                        || transitionImage !== transitionNode
+                        || !transitionNode.isConnected
+                    ) {
+                        removeTransitionImage(transitionNode);
+                        resolve(false);
+                        return;
+                    }
+
+                    transitionNode.classList.add('is-visible');
+                    window.setTimeout(() => {
+                        if (
+                            !isCurrentLightboxImageRequest(index, token)
+                            || activeLightboxTransitionToken !== transitionToken
+                            || transitionImage !== transitionNode
+                            || !transitionNode.isConnected
+                        ) {
+                            removeTransitionImage(transitionNode);
+                            resolve(false);
+                            return;
+                        }
+
+                        // The transition is now fully opaque. Rebuild the real zoom surface
+                        // underneath it, then keep the cover in place until the new live node
+                        // has been painted at the exact same final geometry.
+                        commitPreparedLightboxImage(index, token, loadedImage, src, altText, targetMetrics).then((committed) => {
+                            if (
+                                !committed
+                                || !isCurrentLightboxImageRequest(index, token)
+                                || activeLightboxTransitionToken !== transitionToken
+                                || transitionImage !== transitionNode
+                            ) {
+                                removeTransitionImage(transitionNode);
+                                resolve(false);
+                                return;
+                            }
+                            removeTransitionImage(transitionNode);
+                            resolve(true);
+                        });
+                    }, transitionDuration);
+                });
+            });
+        })).catch(() => {
+            if (transitionImage === transitionNode) {
+                removeTransitionImage(transitionNode);
+            }
+            return false;
+        });
+    }
+
+    /**
+     * Present an automatic slideshow image from the exact DOM node that was prepared for display.
+     *
+     * The full source is already decoded before this function is called. The shared prepared
+     * transition path renders it as a stage-centered cover, then rebuilds the real zoom surface
+     * underneath that opaque cover from the same target dimensions. The cover remains until the
+     * live image has survived its final paint boundaries, so a different aspect ratio cannot
+     * expose a second geometry correction after the photograph becomes visible.
+     *
+     * @param {number} index Zero-based image index.
+     * @param {number} token Active lightbox navigation token.
+     * @param {HTMLImageElement} loadedImage Detached decoded full-quality image.
+     * @param {string} src Authorized full-quality source URL.
+     * @param {string} altText Accessible image alternative text.
+     * @return {Promise<boolean>} True when the prepared node became the live image.
+     */
+    function showPreparedLightboxSlideshowImage(index, token, loadedImage, src, altText) {
+        return showPreparedLightboxTransitionImage(index, token, loadedImage, src, altText);
+    }
+
+    /**
      * Handles show lightbox image source behavior for the gallery UI.
      *
      * @param {*} index Value supplied by the caller or event context.
@@ -1763,103 +2042,52 @@ export function setupGalleryLightbox() {
      * @param {*} altText Value supplied by the caller or event context.
      * @param {*} immediate Value supplied by the caller or event context.
      * @param {*} decodedImage Decoded image value.
+     * @param {boolean} preparedForSlideshow Whether the decoded image must use the stable automatic-slideshow handoff.
      * @return {*} Result of the UI operation, when a value is produced.
      */
-    function showLightboxImageSource(index, token, src, altText, immediate, decodedImage = null) {
+    function showLightboxImageSource(index, token, src, altText, immediate, decodedImage = null, preparedForSlideshow = false) {
         if (!src) {
             return Promise.resolve(false);
         }
-        if (decodedImage) {
-            updateNormalLightboxStageSizeFromLoadedImage(decodedImage);
+        if (!(decodedImage instanceof HTMLImageElement)) {
+            return loadDecodedLightboxImage(src, {priority: 'high'})
+                .then((loadedImage) => showLightboxImageSource(
+                    index,
+                    token,
+                    src,
+                    altText,
+                    immediate,
+                    loadedImage,
+                    preparedForSlideshow,
+                ))
+                .catch(() => {
+                    const stillCurrent = isCurrentLightboxImageRequest(index, token);
+                    if (stillCurrent) {
+                        clearLightboxNavigationPending(token);
+                    }
+                    return false;
+                });
+        }
+        const targetMetrics = prepareDecodedLightboxGeometry(decodedImage);
+        if (!targetMetrics || !isCurrentLightboxImageRequest(index, token)) {
+            return Promise.resolve(false);
+        }
+        if (preparedForSlideshow && !immediate) {
+            return showPreparedLightboxSlideshowImage(index, token, decodedImage, src, altText);
         }
         if (immediate || !stageLink || !image.getAttribute('src')) {
             activeLightboxTransitionToken += 1;
             removeTransitionImage();
-            if (!isCurrentLightboxImageRequest(index, token)) {
-                return Promise.resolve(false);
-            }
-            applyLightboxImageSource(src, altText, String(cards[index]?.dataset.imageId || index));
-            return loadDecodedLightboxImage(src, {priority: 'high'}).then((loadedImage) => {
-                if (!isCurrentLightboxImageRequest(index, token) || image.getAttribute('src') !== src) {
-                    return false;
-                }
-                updateNormalLightboxStageSizeFromLoadedImage(loadedImage);
-                clearLightboxNavigationPending(token);
-                return true;
-            }).catch(() => {
-                const stillCurrent = isCurrentLightboxImageRequest(index, token) && image.getAttribute('src') === src;
-                if (stillCurrent) {
-                    clearLightboxNavigationPending(token);
-                }
-                return stillCurrent;
-            });
+            return commitPreparedLightboxImage(index, token, decodedImage, src, altText, targetMetrics);
         }
-        const decodedImagePromise = decodedImage instanceof HTMLImageElement ? Promise.resolve(decodedImage) : loadDecodedLightboxImage(src, {priority: 'high'});
-        return decodedImagePromise.then((loadedImage) => new Promise((resolve) => {
-            if (!isCurrentLightboxImageRequest(index, token)) {
-                resolve(false);
-                return;
-            }
-            updateNormalLightboxStageSizeFromLoadedImage(loadedImage);
-            if (image.getAttribute('src') === src) {
-                image.alt = altText;
-                image.dataset.lightboxImageId = String(cards[index]?.dataset.imageId || index);
-                clearLightboxNavigationPending(token);
-                resolve(true);
-                return;
-            }
-            activeLightboxTransitionToken += 1;
-            // transitionToken stores state or configuration for the gallery front-end flow.
-            const transitionToken = activeLightboxTransitionToken;
-            removeTransitionImage();
-            // transitionNode stores state or configuration for the gallery front-end flow.
-            const transitionNode = loadedImage.cloneNode(false);
-            transitionNode.alt = '';
-            transitionNode.setAttribute('aria-hidden', 'true');
-            transitionNode.className = 'lightbox-transition-image';
-            // transitionDuration stores the exact duration used for this single blend.
-            // Capture it before scheduling frames so stopping slideshow mode mid-transition
-            // cannot shorten the active automatic picture blend.
-            const transitionDuration = currentLightboxTransitionDuration();
-            transitionNode.style.setProperty('--lightbox-transition-duration', `${transitionDuration}ms`);
-            transitionImage = transitionNode;
-            stageLink.append(transitionNode);
-            // Force the browser to commit the initial opacity before enabling the
-            // visible state. This makes slideshow blends reliable in fullscreen,
-            // especially when the decoded image is already hot in browser cache.
-            transitionNode.getBoundingClientRect();
-            requestAnimationFrame(() => {
-                requestAnimationFrame(() => {
-                    if (
-                        !isCurrentLightboxImageRequest(index, token) ||
-                        activeLightboxTransitionToken !== transitionToken ||
-                        transitionImage !== transitionNode
-                    ) {
-                        removeTransitionImage(transitionNode);
-                        resolve(false);
-                        return;
-                    }
-                    transitionNode.classList.add('is-visible');
-                    window.setTimeout(() => {
-                        if (
-                            !isCurrentLightboxImageRequest(index, token) ||
-                            activeLightboxTransitionToken !== transitionToken ||
-                            transitionImage !== transitionNode
-                        ) {
-                            removeTransitionImage(transitionNode);
-                            resolve(false);
-                            return;
-                        }
-                        applyLightboxImageSource(src, altText, String(cards[index]?.dataset.imageId || index));
-                        clearLightboxNavigationPending(token);
-                        requestAnimationFrame(() => {
-                            removeTransitionImage(transitionNode);
-                            resolve(true);
-                        });
-                    }, transitionDuration);
-                });
-            });
-        })).catch(() => false);
+        if (image.getAttribute('src') === src) {
+            image.alt = altText;
+            image.dataset.lightboxImageId = String(cards[index]?.dataset.imageId || index);
+            applyLightboxZoomState(false, targetMetrics);
+            clearLightboxNavigationPending(token);
+            return Promise.resolve(true);
+        }
+        return showPreparedLightboxTransitionImage(index, token, decodedImage, src, altText);
     }
 
     /**
@@ -2565,13 +2793,21 @@ export function setupGalleryLightbox() {
      *
      * @return {{viewportWidth: number, viewportHeight: number, imageWidth: number, imageHeight: number, panViewportWidth: number, panViewportHeight: number}} Current zoom metrics.
      */
-    function measureLightboxZoomMetrics() {
+    function measureLightboxZoomMetricsForDimensions(naturalWidth, naturalHeight) {
         const stageRect = stageLink?.getBoundingClientRect();
-        const viewportWidth = Math.max(0, stageRect?.width || stageLink?.clientWidth || 0);
-        const viewportHeight = Math.max(0, stageRect?.height || stageLink?.clientHeight || 0);
-        const naturalWidth = Math.max(0, image?.naturalWidth || 0);
-        const naturalHeight = Math.max(0, image?.naturalHeight || 0);
-        if (!viewportWidth || !viewportHeight || !naturalWidth || !naturalHeight) {
+        const stagedWidth = Number.parseFloat(stageLink?.style.getPropertyValue('--lightbox-stage-width') || '0') || 0;
+        const stagedHeight = Number.parseFloat(stageLink?.style.getPropertyValue('--lightbox-stage-height') || '0') || 0;
+        const fullscreenViewportWidth = isLightboxFullscreen()
+            ? (window.visualViewport?.width || window.innerWidth || document.documentElement.clientWidth || 0)
+            : 0;
+        const fullscreenViewportHeight = isLightboxFullscreen()
+            ? (window.visualViewport?.height || window.innerHeight || document.documentElement.clientHeight || 0)
+            : 0;
+        const viewportWidth = Math.max(0, stageRect?.width || stageLink?.clientWidth || stagedWidth || fullscreenViewportWidth || 0);
+        const viewportHeight = Math.max(0, stageRect?.height || stageLink?.clientHeight || stagedHeight || fullscreenViewportHeight || 0);
+        const resolvedNaturalWidth = Math.max(0, Number(naturalWidth) || 0);
+        const resolvedNaturalHeight = Math.max(0, Number(naturalHeight) || 0);
+        if (!viewportWidth || !viewportHeight || !resolvedNaturalWidth || !resolvedNaturalHeight) {
             return {
                 viewportWidth,
                 viewportHeight,
@@ -2581,9 +2817,9 @@ export function setupGalleryLightbox() {
                 panViewportHeight: viewportHeight,
             };
         }
-        const containScale = Math.min(viewportWidth / naturalWidth, viewportHeight / naturalHeight);
-        const imageWidth = naturalWidth * containScale;
-        const imageHeight = naturalHeight * containScale;
+        const containScale = Math.min(viewportWidth / resolvedNaturalWidth, viewportHeight / resolvedNaturalHeight);
+        const imageWidth = resolvedNaturalWidth * containScale;
+        const imageHeight = resolvedNaturalHeight * containScale;
         const fullscreen = isLightboxFullscreen();
         return {
             viewportWidth,
@@ -2597,6 +2833,15 @@ export function setupGalleryLightbox() {
             panViewportWidth: fullscreen ? imageWidth : viewportWidth,
             panViewportHeight: fullscreen ? imageHeight : viewportHeight,
         };
+    }
+
+    /**
+     * Measure the stage against the currently live image dimensions.
+     *
+     * @return {{viewportWidth: number, viewportHeight: number, imageWidth: number, imageHeight: number, panViewportWidth: number, panViewportHeight: number}} Current zoom metrics.
+     */
+    function measureLightboxZoomMetrics() {
+        return measureLightboxZoomMetricsForDimensions(image?.naturalWidth || 0, image?.naturalHeight || 0);
     }
 
     /**
@@ -3279,10 +3524,18 @@ export function setupGalleryLightbox() {
         const rapidManualNavigation = !shouldShowImmediately && !lightboxSlideshowActive && navigationRequestedAt - lastLightboxNavigationRequestedAt <= lightboxRapidNavigationThreshold;
         lastLightboxNavigationRequestedAt = navigationRequestedAt;
         const shouldSwapImmediately = shouldShowImmediately || rapidManualNavigation;
-        if (!shouldShowImmediately) {
+        // slideshowPreparedImage is supplied only by automatic slideshow navigation after the full source has decoded.
+        const slideshowPreparedImage = lightboxSlideshowActive
+            && options.slideshowPreparedImage instanceof HTMLImageElement
+            && String(options.slideshowPreparedSrc || '') === fullSrc
+            ? options.slideshowPreparedImage
+            : null;
+        if (!shouldShowImmediately && !slideshowPreparedImage) {
             scheduleLightboxNavigationPending(normalizedIndex, imageToken, previewSrc || mainSrc);
         }
-        preloadCardLightboxImages(card, false, {reason: 'current-preview'});
+        if (!slideshowPreparedImage) {
+            preloadCardLightboxImages(card, false, {reason: 'current-preview'});
+        }
         /**
          * Handle show lightweight preview image before the full media source.
          *
@@ -3299,24 +3552,34 @@ export function setupGalleryLightbox() {
          * @param {*} loadedImage Loaded image value.
          * @return {*} Result value for the caller.
          */
-        const showMainImage = (loadedImage = null) => showLightboxImageSource(normalizedIndex, imageToken, mainSrc, altText, shouldSwapImmediately, loadedImage);
-        const initialMainPromise = previewSrc
-            ? showPreviewFirst().then((wasDisplayed) => {
-                if (!isCurrentLightboxImageRequest(normalizedIndex, imageToken)) {
-                    return false;
-                }
-                if (wasDisplayed) {
-                    return true;
-                }
-                return mainSrc
-                    ? loadDecodedLightboxImage(mainSrc, {priority: 'high'}).then(showMainImage).catch(() => false)
-                    : false;
-            })
-            : (mainSrc
-                ? (shouldShowImmediately
-                    ? showMainImage(null)
-                    : loadDecodedLightboxImage(mainSrc, {priority: 'high'}).then(showMainImage))
-                : Promise.resolve(false));
+        const showMainImage = (loadedImage = null) => showLightboxImageSource(
+            normalizedIndex,
+            imageToken,
+            mainSrc,
+            altText,
+            shouldSwapImmediately,
+            loadedImage,
+            loadedImage === slideshowPreparedImage,
+        );
+        const initialMainPromise = slideshowPreparedImage
+            ? showMainImage(slideshowPreparedImage)
+            : (previewSrc
+                ? showPreviewFirst().then((wasDisplayed) => {
+                    if (!isCurrentLightboxImageRequest(normalizedIndex, imageToken)) {
+                        return false;
+                    }
+                    if (wasDisplayed) {
+                        return true;
+                    }
+                    return mainSrc
+                        ? loadDecodedLightboxImage(mainSrc, {priority: 'high'}).then(showMainImage).catch(() => false)
+                        : false;
+                })
+                : (mainSrc
+                    ? (shouldShowImmediately
+                        ? showMainImage(null)
+                        : loadDecodedLightboxImage(mainSrc, {priority: 'high'}).then(showMainImage))
+                    : Promise.resolve(false)));
         Promise.resolve(initialMainPromise).then((wasDisplayed) => {
             if (!wasDisplayed || !isCurrentLightboxImageRequest(normalizedIndex, imageToken)) {
                 return;
@@ -3386,12 +3649,53 @@ export function setupGalleryLightbox() {
 
         /**
      * Clears any pending automatic slideshow advance.
+     *
+     * Incrementing the schedule token also invalidates a cycle whose display
+     * timer already elapsed but whose full-size preload is still in flight.
      */
     function clearLightboxSlideshowTimer() {
+        lightboxSlideshowScheduleToken += 1;
         if (lightboxSlideshowTimer) {
             window.clearTimeout(lightboxSlideshowTimer);
             lightboxSlideshowTimer = null;
         }
+    }
+
+        /**
+     * Preload and decode the exact full-size source required by one automatic slideshow step.
+     *
+     * Sparse paginated galleries may not have the next card metadata in memory yet,
+     * so the metadata window is filled first. The returned image is detached and
+     * decoded, allowing the transition to start without showing a preview or loader.
+     *
+     * @param {number} index Zero-based slideshow target index.
+     * @return {Promise<{index:number,src:string,image:HTMLImageElement}|null>} Prepared full image, or null on failure.
+     */
+    function prepareLightboxSlideshowImage(index) {
+        const normalizedIndex = ((index % cards.length) + cards.length) % cards.length;
+        const metadataPromise = cards[normalizedIndex]
+            ? Promise.resolve(true)
+            : fetchLightboxWindowAround(normalizedIndex);
+        return metadataPromise.then((loaded) => {
+            if (!loaded || controller.signal.aborted) {
+                return null;
+            }
+            const card = cards[normalizedIndex];
+            if (!(card instanceof HTMLElement)) {
+                return null;
+            }
+            const fullSrc = String(card.dataset.fullSrc || card.dataset.previewSrc || '').trim();
+            if (!fullSrc) {
+                return null;
+            }
+            preloadedSources.add(fullSrc);
+            devMarkSource(fullSrc, 'preloading', 'slideshow-full');
+            return loadDecodedLightboxImage(fullSrc, {priority: 'high'})
+                .then((loadedImage) => loadedImage instanceof HTMLImageElement
+                    ? {index: normalizedIndex, src: fullSrc, image: loadedImage}
+                    : null)
+                .catch(() => null);
+        });
     }
 
         /**
@@ -3409,20 +3713,43 @@ export function setupGalleryLightbox() {
     }
 
         /**
-     * Schedule the next automatic slideshow step after the stable image time.
+     * Schedule the next automatic slideshow step after both required gates are ready.
+     *
+     * The stable display timer and the next full-size image preload begin together.
+     * If the image decodes first, it waits for the timer. If the timer expires first,
+     * the current photo stays visible until the full image has finished decoding.
      */
     function scheduleLightboxSlideshowNext() {
         clearLightboxSlideshowTimer();
         if (!lightboxSlideshowActive || overlay.hidden || cards.length <= 1) {
             return;
         }
+        const scheduledFromIndex = currentIndex;
+        const nextIndex = (scheduledFromIndex + 1) % cards.length;
+        const scheduleToken = lightboxSlideshowScheduleToken;
+        const preparedImagePromise = prepareLightboxSlideshowImage(nextIndex);
         lightboxSlideshowTimer = window.setTimeout(() => {
             lightboxSlideshowTimer = null;
-            if (!lightboxSlideshowActive || overlay.hidden) {
-                return;
-            }
-            hideLightboxHud();
-            step(1, {revealHud: false});
+            preparedImagePromise.then((prepared) => {
+                if (
+                    scheduleToken !== lightboxSlideshowScheduleToken
+                    || !lightboxSlideshowActive
+                    || overlay.hidden
+                    || currentIndex !== scheduledFromIndex
+                ) {
+                    return;
+                }
+                if (!prepared || prepared.index !== nextIndex) {
+                    scheduleLightboxSlideshowNext();
+                    return;
+                }
+                hideLightboxHud();
+                openAt(nextIndex, {
+                    revealHud: false,
+                    slideshowPreparedImage: prepared.image,
+                    slideshowPreparedSrc: prepared.src,
+                });
+            });
         }, lightboxSlideshowVisibleDuration);
     }
 

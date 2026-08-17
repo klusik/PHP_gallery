@@ -1,5 +1,50 @@
 # Patch notes
 
+## Version 0.91.3
+
+Version 0.91.3 is a focused lightbox reliability release. It improves slideshow preloading and fullscreen transitions while preserving the existing zoom, navigation, access-control, responsive, and no-JavaScript behavior.
+
+  ### Highlights
+
+  #### Stable slideshow preloading
+
+  - Updated slideshow playback to preload the next authorized photograph without interrupting the active image or its transition timing.
+  - Prevented duplicate preload requests and rejected stale preload completions after navigation, closing, reopening, or changing slideshow ownership.
+  - Kept the active image, slideshow timer, navigation position, loading indicators, and viewer controls synchronized while the next photograph is prepared.
+
+  #### Fullscreen transition reliability
+
+  - Preserved slideshow state and active-photo identity when entering or leaving fullscreen.
+  - Prevented fullscreen changes from exposing a stale preloaded image or resetting the current slideshow transition unexpectedly.
+  - Retained existing zoom, pan, map, voting, keyboard, responsive, protected-media, and no-JavaScript behavior.
+
+  ### Technical Details
+
+  #### Frontend and runtime metadata
+
+  - Updated `public/assets/gallery-modules/lightbox.js` with bounded slideshow-preload ownership, stale lifecycle protection, and fullscreen-safe transition handling.
+  - Updated `public/assets/styles/lightbox.css` for the corrected slideshow/fullscreen presentation state.
+  - Updated `app/bootstrap.php` to runtime version `0.91.3`.
+  - Updated `release-metadata.json` with the `v_0.91.3` release entry.
+  - Regenerated `app/core-manifest.json` after the final runtime and asset changes.
+
+  #### Tests
+
+  - Added `tests/lightbox_slideshow_preload_test.php` for preload ownership, duplicate/stale work rejection, slideshow timing, and fullscreen transition contracts.
+  - Ran the complete PHP regression suite, focused lightbox tests, syntax checks, manifest checks, and `git diff --check`.
+
+  ### User Impact
+
+  #### For visitors
+
+  - Slideshow transitions remain smooth while the next photograph is prepared in the background.
+  - Entering or leaving fullscreen no longer disrupts the active slideshow state or displays stale preloaded content.
+
+  #### For administrators
+
+  - No database migration or configuration change is required.
+  - The normal updater can install the release, and existing galleries, media, access rules, and generated files remain compatible.
+
 ## Version 0.91.2
 
 Version 0.91.2 is the complete consolidated release of the Version 0.91 and 0.91.1 viewer and Smart Gallery work. It is intentionally documented as a full release handoff so the public zoom, progressive image quality, Smart Gallery visibility, presentation, placement, cycle safety, and navigation changes are all represented together.

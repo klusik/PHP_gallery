@@ -247,6 +247,7 @@
 .lightbox-zoom-surface > img,
 .lightbox-transition-image {
     background: rgba(5, 5, 5, 0.82);
+    object-position: center center;
 }
 
 .lightbox-stage-link:hover,
@@ -578,6 +579,16 @@
     object-fit: contain;
 }
 .lightbox-transition-image {
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    max-height: none;
+    margin: 0;
+    object-fit: contain;
+    object-position: center center;
     opacity: 0;
     pointer-events: none;
     transition: opacity var(--lightbox-transition-duration, 80ms) ease;
