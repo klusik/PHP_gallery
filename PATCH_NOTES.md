@@ -1,5 +1,26 @@
 # Patch notes
 
+## Version 0.91.1
+
+Version 0.91.1 is a focused lightbox navigation refinement for the Version 0.91 zoom and progressive image-quality release. It adds a fast, accessible ten-photo navigation shortcut while preserving the existing single-photo arrows and all gallery, Smart Gallery, access-control, zoom, fullscreen, map, slideshow, responsive, and no-JavaScript behavior.
+
+  ### Highlights
+
+  #### Faster lightbox navigation
+
+  - Added `Shift+Left` and `Shift+Right` shortcuts to move backward or forward by ten photographs in the current lightbox result set.
+  - Kept ordinary `Left` and `Right` arrows as single-photo navigation, so existing workflows remain unchanged.
+  - Updated the translated lightbox keyboard-help text in English, Czech, German, and Swedish so the shortcut is discoverable.
+  - Corrected modular index handling for backward ten-photo movement, including wraparound at the beginning of a result set.
+  - Preserved the current Smart Gallery ordering, pagination, access filtering, zoom state, progressive quality lifecycle, fullscreen/map behavior, slideshow behavior, and stale-navigation protections.
+
+  ### Compatibility and release verification
+
+  - No database migration or filesystem change is required.
+  - Updated `CMS_VERSION`, release metadata, README, architecture/database/testing references, and the administrator manual to Version 0.91.1.
+  - Rebuilt the indexed manual PDF and regenerated `app/core-manifest.json` after the final source and documentation edits.
+  - Verified the full PHP regression suite, focused lightbox/browser tests, syntax validation, translation consistency, manifest freshness, and `git diff --check`.
+
 ## Version 0.91
 
 Version 0.91 introduces a complete public lightbox zoom and progressive image-quality release. Visitors can inspect photographs with accessible controls, keyboard shortcuts, wheel and trackpad input, pointer dragging, and touch pinch gestures while the existing gallery, fullscreen, map, voting, access-control, responsive, and no-JavaScript behavior remains intact. The active photograph can transparently upgrade from a protected preview to a sharper browser-displayable source when the viewport and zoom level require more pixels.

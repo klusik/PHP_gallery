@@ -49,7 +49,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.91}
+\newcommand{\version}{0.91.1}
 \newcommand{\manualdate}{17 August 2026}
 
 \hypersetup{
@@ -152,7 +152,14 @@ The~manual is~organized around work that an~owner actually performs. The~early s
 
 For~a~new installation, begin with Section~\ref{sec:first-hour}. Collection planning is~covered in~Section~\ref{sec:planning}; routine gallery and~photo editing is~in~Sections~\ref{sec:create-edit-gallery} and~\ref{sec:photo-workflow}. Section~\ref{sec:audiences} is~useful before publishing because it~compares several common audience types. The~contents and~index are~intended for~jumping directly to~a~setting or~workflow when the~site is~already in~use.
 
-\subsection{What is~new in~Version 0.91}
+\subsection{What is~new in~Version 0.91.1}
+\index{Version 0.91.1}
+
+Version~0.91.1 is~a~focused lightbox navigation refinement. The~ordinary left and~right arrow keys continue to~move one photograph at~a~time; holding Shift while pressing either arrow moves ten photographs in~the~same direction. The~shortcut is~announced in~the~translated lightbox help text and~works with~the~existing paginated gallery, Smart Gallery, zoom, fullscreen, map, slideshow, access-control, and~no-JavaScript-compatible viewer behavior.
+
+The~release also corrects backwards ten-photo movement at~the~beginning of~a~gallery by~using stable modular navigation. No~database migration or~filesystem change is~required.
+
+\subsection{Version 0.91 foundation}
 \index{Version 0.91}
 
 Version~0.91 adds the~public lightbox zoom and~progressive quality system. Visitors can~use toolbar controls, keyboard shortcuts, wheel or~trackpad input, pointer dragging, and~touch pinch gestures to~inspect photographs between 100\% and~400\%. The~viewer preserves its~existing navigation, fullscreen, map, voting, access, and~no-JavaScript behavior.
