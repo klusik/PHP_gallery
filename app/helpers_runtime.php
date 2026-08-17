@@ -119,6 +119,44 @@ function asset_url(string $path): string
 }
 
 /**
+ * Return a content-sensitive cache revision for one browser asset dependency graph.
+ *
+ * Every readable dependency contributes its actual bytes, not only its newest
+ * modification time. This prevents an unrelated file with a future/newer mtime
+ * from masking a changed JavaScript module and leaving the browser on stale code.
+ * Missing/unreadable files fall back to bounded stat metadata, and an entirely
+ * empty dependency graph receives a request-time revision.
+ *
+ * @param array<int,string> $paths Absolute dependency paths.
+ * @return string Stable short revision suitable for a URL query parameter.
+ */
+function asset_dependency_revision(array $paths): string
+{
+    $context = hash_init('sha256');
+    $found = false;
+    foreach ($paths as $path) {
+        if (!is_string($path) || $path === '' || !is_file($path)) {
+            continue;
+        }
+        $found = true;
+        hash_update($context, str_replace('\\', '/', $path) . "\0");
+        $contents = @file_get_contents($path);
+        if ($contents !== false) {
+            hash_update($context, $contents);
+        } else {
+            hash_update($context, (string) (@filemtime($path) ?: 0));
+            hash_update($context, ':');
+            hash_update($context, (string) (@filesize($path) ?: 0));
+        }
+        hash_update($context, "\0");
+    }
+    if (!$found) {
+        return (string) time();
+    }
+    return substr(hash_final($context), 0, 20);
+}
+
+/**
  * Send a 302 redirect and stop processing immediately.
  */
 function redirect_to(string $url): never

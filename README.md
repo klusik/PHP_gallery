@@ -2,7 +2,7 @@
 
 A modern PHP 8.0+ gallery CMS designed for ordinary shared hosting. The application uses the filesystem as the authoritative source for gallery structure, while storing all metadata, access rules, votes, user accounts, and audit logs in MySQL or MariaDB.
 
-**Current Version:** 0.90
+**Current Version:** 0.91
 
 **Key Benefit:** Deploy in minutes on shared hosting. No npm, no Composer, no framework overhead. Just PHP + MySQL.
 
@@ -77,8 +77,45 @@ Progressive rendering prioritizes perceived initial responsiveness, not minimum 
 - **Breadcrumbs** - Navigate hierarchy on public pages
 - **Gallery cards** - Display subgalleries with cover images and metadata
 - **Pagination** - Handle large galleries without overwhelming the browser
-- **Fullscreen viewer** - Lightbox with keyboard navigation, zoom, EXIF overlay
+- **Fullscreen viewer** - Lightbox with keyboard navigation, cursor-centered 100-400% zoom/pan, EXIF overlay
 - **Picture game** - Side-by-side image comparison game (optional per-gallery)
+
+### Lightbox Image Zoom
+
+Open any public photograph and use the visible `−`, percentage/reset, and `+` controls to inspect details from 100% to
+400%. The same controls remain available in fullscreen. Keyboard users can press `+`/`=`, `-`/`_`, and `0`. Mouse-wheel
+and trackpad zoom keeps the photograph point under the pointer stable; touch pinch keeps the gesture midpoint stable.
+When no valid pointer anchor is available, discrete zoom uses the photograph center. An enlarged photograph can be dragged
+in both axes. Ctrl/Command-modified wheel gestures are left to the browser, so normal page zoom remains available.
+
+The 100% photograph is fitted and centered inside the stage. Zoom does not enlarge pixels inside a fixed 100% frame.
+Instead, the real `.lightbox-zoom-surface` grows symmetrically around the fitted photograph center and is translated only
+for pan. Cursor anchoring is calculated from the canonical fitted dimensions, current scale, and current translation,
+rather than from a CSS transition that may still be between frames. Repeated wheel or keyboard zoom therefore does not
+accumulate drift toward a corner. In fullscreen, the stage clips the enlarged photograph to the viewport while preserving
+horizontal and vertical pan range; the close and other HUD controls remain above the zoomed media layer and clickable.
+
+Zoom is temporary browser presentation state. Moving to another photograph, starting slideshow, closing, or reopening
+the viewer returns to a centered 100% view. A pure fullscreen toggle preserves the current scale and reclamps translation
+to the new viewport.
+
+The viewer starts with the generated preview when it contains enough pixels for the current 100% stage. A passive
+quality calculation may promote a very large or high-DPI 100% view. The moment the visitor deliberately zooms above
+100%, however, the active image is switched directly to its existing protected full/original display URL in that same
+input action. It does not wait for fullscreen, resize, a density threshold, an animation frame, or a detached decode pass.
+The currently visible preview can remain on screen only while the original response transfers. The zoom frame and pan
+state stay unchanged when the sharper resource becomes visible, so changing between lightbox and fullscreen is never
+required to refresh image quality. A translated loading pill and activity indicator remain visible while the larger source
+is being prepared.
+
+Only the active photograph is upgraded. The viewer never constructs a raw-file URL and does not eagerly download full
+sources for neighboring photos. A failed full-source request restores the authorized preview and leaves zoom/pan usable.
+Very large originals can still use substantial bandwidth and decoded memory, and sharpness cannot exceed the detail in
+the stored source or DNG display master.
+
+The feature does not store a preference or alter files or metadata. Preview and full requests continue through the same
+authorized thumbnail/media routes, so gallery, share, NSFW, map, voting, pagination, Smart Gallery, and no-JavaScript
+behavior remains unchanged.
 
 ### Downloading
 - **ZIP archives** - Download a single gallery or all accessible galleries
@@ -286,7 +323,7 @@ Use **Settings** in the Admin navigation as the central overview for important g
 
 The hub can directly edit only settings that already have a safe canonical service setter: site name, public language, URL rewrite, public search when available, the public thumbnail renderer, the global EXIF/GPS display default when its existing schema is ready, and development diagnostics. Theme layout, tag presentation, upload tuning, telemetry, Account credentials, language-pack editing, raw CSS, API keys, database tools and destructive maintenance remain on their existing specialized pages. Those pages remain fully supported and link back to the relevant Settings section.
 
-Version 0.90 adds dynamic Smart Galleries, browser-local ZIP photo import, and optional multilingual gallery and photo metadata. Administrators can publish securely filtered virtual collections without moving files, unpack ordinary iCloud-style ZIP exports directly in the browser, and save reviewed title/description translations for the maintained viewer languages. Existing installations upgrade through four ordered migrations and retain the hourly stable-update checks introduced in 0.89.1.
+Version 0.91 adds a complete public lightbox zoom and progressive image-quality experience on top of the 0.90 Smart Galleries, browser-local ZIP import, and multilingual content foundation. Visitors can zoom with controls, keyboard, wheel, pointer, and touch gestures; large active photographs can upgrade from protected previews to sharper display sources in the background; and repeated navigation, fullscreen changes, maps, access rules, and no-JavaScript fallbacks remain compatible.
 
 Deep links use stable identifiers such as `?page=admin_settings&section=appearance#settings-appearance`. JavaScript tab changes update the complete query plus hash URL so Back/Forward and refresh preserve the selected section. Without JavaScript, the tab links load the same section as normal pages. See `docs/ADMIN_SETTINGS_INVENTORY.md` for canonical ownership, defaults, fallbacks, sensitivity and migration status.
 

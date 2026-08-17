@@ -47,6 +47,39 @@ The selected-gallery mode is stored as `public_thumbnail_rendering_mode` with on
 
 `PATCH_NOTES.md` is intentionally not changed as part of renderer implementation work unless a separate task explicitly requests release notes.
 
+## Public Lightbox Zoom Guidelines
+The public lightbox zoom is a single-viewer feature. Keep `data-lightbox-stage`, `.lightbox-zoom-surface`, and
+`data-lightbox-img` as one coordinated presentation path rather than adding a parallel fullscreen viewer or a second
+media authorization route. Scale is bounded to 100-400%. The fitted 100% photograph is explicitly centered; the zoom
+surface owns the real enlarged CSS width/height and grows around that center, while translation-only transform moves the
+surface for pan. Do not restore compositor `scale()` zoom on the image itself or a fixed 100% clipping frame, because both
+regress full-quality repaint and cursor geometry.
+
+Pointer/pinch anchoring must be calculated from canonical fitted image dimensions, current scale, and current translation.
+Do not feed an in-flight animated `getBoundingClientRect()` back into the next zoom step. Repeated off-center zoom must
+keep the same fractional photograph point under the cursor/midpoint without accumulating top-left or bottom-right drift.
+Fullscreen must preserve both X and Y pan range and keep close/HUD controls above the transformed media layer for hit
+testing.
+
+At exactly 100%, passive quality selection may choose a larger authorized candidate for a large or high-DPI stage. Any
+deliberate zoom above 100% must synchronously assign the already-authorized active card `data-full-src` to the live
+`data-lightbox-img` in that same input task. It must not wait for fullscreen, resize, a debounce, detached decode,
+`requestAnimationFrame`, or another mode transition. Cancel pending preview cross-fades first, keep navigation/quality
+tokens scoped to the current image, restore the protected preview on failure, and never prefetch neighboring originals
+merely because the active photo is zoomed.
+
+After changing zoom markup, geometry, quality promotion, fullscreen CSS, or event routing, run the seven PHP
+`lightbox_zoom_*` contracts plus `node tests/lightbox_zoom_model_test.mjs`, JavaScript syntax checks, and the manual
+browser matrix in `TESTING.md`. Preserve browser Ctrl/Command-wheel zoom, 100% mobile swipe navigation, maps, voting,
+strip/carousel controls, slideshow reset behavior, authorized media access, and the no-JavaScript fallback.
+
+## LaTeX Manual Typography
+For human-readable prose in `docs/PHP_Gallery_Manual.tex`, do not leave short function words stranded at the end of a rendered line. Use LaTeX non-breaking spaces (`~`) to bind them to the following word or visible phrase. Apply this throughout the manual, including headings, captions, list text, footnotes, and explanatory table text.
+
+As a general rule, bind ordinary standalone one-letter words (normally `a` and `I`) and ordinary two-letter words forward. Also bind common three-letter function words where appropriate, including `the`, `and`, `for`, `but`, `nor`, `yet`, `are`, `was`, `can`, `may`, `has`, `had`, `did`, `not`, `per`, and `via`. Apply the rule case-insensitively in prose and chain bindings naturally, for example `a~thing`, `the~thing`, `on~the~menu`, and `The~gallery needs to~be~formatted like this.` Keep all-uppercase technical abbreviations and operators such as `UI`, `IP`, `OS`, `DB`, `ID`, `AND`, `OR`, and `NOT` untouched regardless of length.
+
+Do not insert these typography tildes into LaTeX commands or machine-readable material such as URLs, filesystem paths, setting names, labels, references, citation keys, index keys, math, code/literal strings, or `lstlisting`/verbatim-style environments. A short word at a source-code line wrap still belongs to the following prose word, so the non-breaking binding must survive source wrapping rather than only same-line text. When editing or adding manual prose, preserve this convention instead of relying on TeX to choose a line break automatically.
+
 ## Release Manifest Handoff Requirement
 Every change to an updater-managed release file must refresh `app/core-manifest.json` before a deploy archive, affected-files ZIP, release commit, or handoff is created. Run `php scripts/generate_manifest.php` after the final source edit, then run `php scripts/generate_manifest.php --check`. The deployment helpers enforce this automatically and must never offer a path that skips it. If an affected-files ZIP contains any managed application file whose hash is covered by the manifest, include the freshly generated `app/core-manifest.json` in that ZIP as well. A stale manifest makes an otherwise valid GitHub release deterministically uninstallable.
 

@@ -576,6 +576,7 @@ function render_footer(): void
         $scriptPath,
         dirname(__DIR__) . '/public/assets/gallery-modules/lightbox-deferred.js',
         dirname(__DIR__) . '/public/assets/gallery-modules/lightbox.js',
+        dirname(__DIR__) . '/public/assets/gallery-modules/lightbox-zoom-model.js',
         dirname(__DIR__) . '/public/assets/gallery-modules/admin-core.js',
         dirname(__DIR__) . '/public/assets/gallery-modules/votes.js',
         dirname(__DIR__) . '/public/assets/gallery-modules/public-home-search.js',
@@ -589,6 +590,7 @@ function render_footer(): void
         dirname(__DIR__) . '/public/assets/gallery-modules/progressive-thumbnail-renderer.js',
         dirname(__DIR__) . '/public/assets/gallery-modules/progressive-thumbnail-upgrade.js',
         dirname(__DIR__) . '/public/assets/gallery-modules/lightbox.js',
+        dirname(__DIR__) . '/public/assets/gallery-modules/lightbox-zoom-model.js',
         dirname(__DIR__) . '/public/assets/gallery-modules/lightbox-votes.js',
         dirname(__DIR__) . '/public/assets/gallery-modules/tag-suggestions.js',
         dirname(__DIR__) . '/public/assets/gallery-modules/votes.js',
@@ -602,14 +604,8 @@ function render_footer(): void
         dirname(__DIR__) . '/public/assets/gallery-modules/admin-simbrief-description.js',
         dirname(__DIR__) . '/public/assets/gallery-modules/admin-gallery-benchmark.js',
     ];
-    $scriptVersion = 0;
-    foreach ($scriptVersionPaths as $versionPath) {
-        if (is_file($versionPath)) {
-            $scriptVersion = max($scriptVersion, filemtime($versionPath));
-        }
-    }
+    $resolvedScriptVersion = asset_dependency_revision($scriptVersionPaths);
     render_browser_i18n_script();
-    $resolvedScriptVersion = $scriptVersion > 0 ? $scriptVersion : time();
     echo '<script type="module" data-gallery-asset-revision="' . e((string) $resolvedScriptVersion) . '" src="' . e(asset_url($scriptAsset)) . '?v=' . $resolvedScriptVersion . '"></script>';
     echo cms_footer_scripts_html();
     echo '</body></html>';

@@ -1,5 +1,68 @@
 # Patch notes
 
+## Version 0.91
+
+Version 0.91 introduces a complete public lightbox zoom and progressive image-quality release. Visitors can inspect photographs with accessible controls, keyboard shortcuts, wheel and trackpad input, pointer dragging, and touch pinch gestures while the existing gallery, fullscreen, map, voting, access-control, responsive, and no-JavaScript behavior remains intact. The active photograph can transparently upgrade from a protected preview to a sharper browser-displayable source when the viewport and zoom level require more pixels.
+
+  ### Highlights
+
+  #### Accessible lightbox zoom and navigation
+
+  - Added bounded 100%–400% zoom with 25% steps, visible percentage/reset state, disabled limits, keyboard shortcuts (`+`, `=`, `-`, `_`, and `0`), and synchronized normal/fullscreen controls.
+  - Added pointer-aware wheel and trackpad zoom, anchor-preserving transforms, bounded panning, two-pointer touch pinch, post-zoom one-finger panning, and preserved one-finger mobile photo swiping at 100%.
+  - Preserved the stage as the single semantic viewer surface, including keyboard focus, visible focus behavior, browser Ctrl/Command page zoom, map controls, voting controls, metadata, slideshow, picture strip, 3D carousel, and responsive safe-area layouts.
+  - Reset zoom state predictably when navigating, starting a slideshow, closing, or reopening; fullscreen and map-pane changes preserve the current scale while reclamping translation to the new viewport.
+
+  #### Progressive image quality
+
+  - Added demand-driven quality selection from the existing protected preview and browser-displayable full-media routes. The browser considers contained CSS width, zoom scale, bounded device density, and conservative rendering headroom.
+  - Upgraded only the active photograph, without eagerly downloading full sources for adjacent images or constructing raw-file URLs. Existing gallery, Smart Gallery, private-gallery, share, NSFW, and media authorization checks remain authoritative.
+  - Added translated loading feedback with a compact activity ring, `aria-busy`, polite announcements, pointer-transparent presentation, and reduced-motion behavior while a sharper source transfers and decodes.
+  - Preserved scale, pan, alt text, focus, URL/history, fullscreen state, and active-photo identity during promotion. Repeated previous/next navigation and close/reopen cycles receive independent quality lifecycles; stale callbacks and late decodes cannot overwrite another photograph.
+  - Rebuilt the decoded image compositor surface after promotion so sharper detail appears in the current lightbox immediately without requiring a fullscreen toggle.
+
+  ### Technical Details
+
+  #### Backend and presentation metadata
+
+  - Added `public_render` quality-candidate metadata through `app/services/thumbnail_bundles.php`, including validated source URLs and bounded effective dimensions.
+  - Updated `app/controllers/public_gallery_lightbox.php`, `app/controllers/gallery_lightbox.php`, `app/controllers/public_gallery_page.php`, and Smart Gallery rendering to expose the same authorized candidates for server-rendered and lazy lightbox cards.
+  - Preserved existing media URL generation and access preflight; no database migration or filesystem movement is required for zoom quality promotion.
+
+  #### Frontend and styling
+
+  - Added `public/assets/gallery-modules/lightbox-zoom-model.js` for pure zoom bounds, anchor math, panning, candidate normalization, demand calculation, and no-downgrade source selection.
+  - Extended `public/assets/gallery-modules/lightbox.js` with delegated zoom interactions, fullscreen/map remeasurement, quality scheduling, stale-request cancellation, decoded-image installation, loading feedback, and repeated-photo ownership checks.
+  - Updated `public/assets/styles/lightbox.css` and `public/assets/styles/mobile-gallery.css` for clipped transforms, responsive controls, loading feedback, mobile gestures, visible focus, and reduced-motion behavior.
+  - Updated public asset cache-busting revisions in `public/assets/gallery.js` and `public/assets/public-gallery.js` so deployed browsers load the release behavior.
+
+  #### Compatibility and translations
+
+  - Kept the existing server-rendered image links and no-JavaScript navigation as the fallback path.
+  - Kept zoom state presentation-only: it is not stored in a cookie, account setting, URL, database row, telemetry event, or server-side preference.
+  - Added and verified the loading and zoom strings in the maintained English, Czech, German, and Swedish catalogs with safe English fallback.
+
+  #### Tests and release artifacts
+
+  - Added focused contracts covering zoom model math, controls and lifecycle, gesture/event boundaries, translations, quality candidates, rendering metadata, loading indicators, stale-request cancellation, repeated-photo ownership, and access ordering.
+  - Verified the complete PHP regression suite, focused Node tests, PHP syntax, JavaScript syntax, function documentation, translation consistency, migration consistency, deployment packaging, updater safety, and `git diff --check`.
+  - Updated `README.md`, `ARCHITECTURE.md`, `DATABASE.md`, `TESTING.md`, `TEMP_ZOOM_CONTROLS_FEATURE.MD`, and `docs/PHP_Gallery_Manual.tex`; rebuilt the indexed Version 0.91 PDF manual.
+  - Updated runtime version and release metadata to 0.91 and regenerated `app/core-manifest.json` after the final source and documentation edits.
+
+  ### User Impact
+
+  #### For visitors
+
+  - Photographs can be inspected more naturally on desktop and touch devices, with zoom controls that remain usable in normal and fullscreen viewing.
+  - Large photographs become sharper in the current viewer as the required detail increases, with visible progress during slower transfers and no forced navigation or fullscreen toggle.
+  - Existing public access restrictions, private galleries, shared links, NSFW protections, maps, votes, downloads, pagination, responsive layouts, and no-JavaScript behavior remain unchanged.
+
+  #### For administrators and maintainers
+
+  - No migration is required for the zoom feature; the existing protected preview/media routes and metadata dimensions are reused.
+  - Large full-source decodes can consume substantial bandwidth and memory, especially for high-resolution originals; only the active photograph is promoted.
+  - Release verification now includes repeated multi-photo promotion, close/reopen cycles, stale decode rejection, and immediate repaint checks.
+
 ## Version 0.90
 
 Version 0.90 is a gallery organization, upload convenience, and multilingual-content release. It introduces dynamic Smart Galleries built from secure nested rules, lets browser-assisted uploads consume ordinary photo ZIP exports without server-side archive extraction, and adds optional translated gallery and photo titles/descriptions for every maintained viewer language. Existing physical galleries, source files, access rules, source metadata, and public voting remain authoritative and compatible.

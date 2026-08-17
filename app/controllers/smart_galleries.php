@@ -271,7 +271,7 @@ function cms_smart_gallery(): void
         $mediaUrl = url_for('media', ['id' => $image['id']]);
         $previewUrl = thumbnail_bundle_url($bundle, 1600);
         $voting = gallery_voting_allowed($source);
-        $attributes = lightbox_image_data_attributes($image, $source, $mediaUrl, $previewUrl, $url, $title, (int) ($image['score'] ?? 0), (int) ($votes[(int) $image['id']] ?? 0), null, 'data-lightbox-image', $voting, $index);
+        $attributes = lightbox_image_data_attributes($image, $source, $mediaUrl, $previewUrl, $url, $title, (int) ($image['score'] ?? 0), (int) ($votes[(int) $image['id']] ?? 0), null, 'data-lightbox-image', $voting, $index, $bundle);
         echo '<article class="image-card" ' . $attributes . '><div class="image-stage"><a class="image-preview-link" href="' . e($url) . '">' . public_thumbnail_render_picture_html($image, 300, [300,600,800,960], '(max-width: 720px) 50vw, 25vw', image_alt_text($image, $source, $index + 1 + (int) $pagination['offset']), $index, $bundle, public_thumbnail_rendering_mode()) . '</a>';
         render_vote_form((int) $image['id'], (int) ($image['score'] ?? 0), (int) ($votes[(int) $image['id']] ?? 0), $voting);
         if ($title !== '' || trim((string) ($image['description'] ?? '')) !== '' || !empty($tags[(int) $image['id']])) {

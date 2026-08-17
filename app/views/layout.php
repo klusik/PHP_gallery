@@ -37,6 +37,7 @@ declare(strict_types=1);
 namespace Gallery\Views;
 
 use function Gallery\Core\admin_anonymous_preview_active;
+use function Gallery\Core\asset_dependency_revision;
 use function Gallery\Core\asset_url;
 use function Gallery\Core\cms_current_version;
 use function Gallery\Core\cms_footer_scripts_html;
@@ -615,14 +616,8 @@ function view_render_footer(): void
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-storage-statistics.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-gallery-report.js',
     ];
-    $scriptVersion = 0;
-    foreach ($scriptVersionPaths as $versionPath) {
-        if (is_file($versionPath)) {
-            $scriptVersion = max($scriptVersion, filemtime($versionPath));
-        }
-    }
+    $resolvedScriptVersion = asset_dependency_revision($scriptVersionPaths);
     view_render_browser_i18n_script();
-    $resolvedScriptVersion = $scriptVersion > 0 ? $scriptVersion : time();
     echo '<script type="module" data-gallery-asset-revision="' . e((string) $resolvedScriptVersion) . '" src="' . e(asset_url($scriptAsset)) . '?v=' . $resolvedScriptVersion . '"></script>';
     echo cms_footer_scripts_html();
     echo '</body></html>';

@@ -57,6 +57,7 @@ use function Gallery\Services\public_image_display_title;
 use function Gallery\Services\public_render_profile_with_thumbnail_purpose;
 use function Gallery\Services\thumbnail_bundle;
 use function Gallery\Services\thumbnail_bundle_url;
+use function Gallery\Services\lightbox_zoom_quality_candidates;
 use function Gallery\Services\translation_active_language;
 use function Gallery\Services\visitor_can_access_gallery;
 use function Gallery\Services\visitor_can_access_nsfw_content;
@@ -104,6 +105,7 @@ function gallery_lightbox_json_item(array $image, array $gallery, int $index, bo
         'gallery_id' => (int) $gallery['id'],
         'full_src' => $mediaUrl,
         'preview_src' => $previewUrl,
+        'quality_sources' => lightbox_zoom_quality_candidates($image, $previewUrl, $mediaUrl, $thumbnailBundle),
         'page_url' => image_public_url($image, $gallery),
         'gallery_url' => gallery_public_url($gallery),
         'title' => public_image_display_title($image, $gallery),

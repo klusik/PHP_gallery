@@ -233,6 +233,9 @@
     background: transparent;
     color: inherit;
     cursor: zoom-in;
+    overflow: hidden;
+    overscroll-behavior: contain;
+    touch-action: none;
 }
 
 /*
@@ -241,7 +244,7 @@
  * dark media surface, the replaced <img> element can briefly expose the
  * browser/theme default white canvas above and below the actual pixels.
  */
-.lightbox-stage-link > img,
+.lightbox-zoom-surface > img,
 .lightbox-transition-image {
     background: rgba(5, 5, 5, 0.82);
 }
@@ -263,8 +266,114 @@
     height: 100%;
     cursor: zoom-out;
 }
-.lightbox-stage-link > img {
+.lightbox-zoom-surface {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    display: grid;
+    place-items: center;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+    transform: translate3d(-50%, -50%, 0);
+    transform-origin: center center;
+}
+.lightbox-zoom-surface > img {
     grid-area: 1 / 1;
+    user-select: none;
+    -webkit-user-drag: none;
+}
+
+.lightbox.is-zoomed .lightbox-stage-link {
+    cursor: grab;
+}
+
+.lightbox.is-zoom-panning .lightbox-stage-link,
+.lightbox.is-zoom-pinching .lightbox-stage-link {
+    cursor: grabbing;
+}
+
+.lightbox.is-zoom-animating .lightbox-zoom-surface {
+    transition: width 120ms ease-out, height 120ms ease-out, transform 120ms ease-out;
+}
+
+.lightbox:not(.is-fullscreen):not(.is-mobile-fullscreen).is-zoomed .lightbox-stage-link {
+    overflow: visible;
+}
+
+.lightbox-zoom-controls {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: stretch;
+    min-height: 2rem;
+    overflow: hidden;
+    border: 1px solid rgba(255, 253, 248, 0.45);
+    border-radius: 999px;
+    background: rgba(10, 10, 10, 0.36);
+    color: #fffdf8;
+}
+
+.lightbox-zoom-controls > button {
+    display: inline-grid;
+    place-items: center;
+    min-width: 2rem;
+    min-height: 2rem;
+    margin: 0;
+    padding: 0.2rem 0.5rem;
+    border: 0;
+    border-right: 1px solid rgba(255, 253, 248, 0.2);
+    border-radius: 0;
+    background: transparent;
+    color: inherit;
+    box-shadow: none;
+    font: inherit;
+    font-weight: 800;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.lightbox-zoom-controls > button:last-child {
+    border-right: 0;
+}
+
+.lightbox-zoom-controls > button:hover:not(:disabled) {
+    background: rgba(255, 253, 248, 0.16);
+}
+
+.lightbox-zoom-controls > button:focus-visible {
+    position: relative;
+    z-index: 1;
+    outline: 2px solid #fffdf8;
+    outline-offset: -3px;
+}
+
+.lightbox-zoom-controls > button:disabled {
+    opacity: 0.42;
+    cursor: default;
+}
+
+.lightbox-zoom-controls [data-lightbox-action="zoom-reset"] {
+    min-width: 3.6rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.lightbox-zoom-controls-hud {
+    display: none;
+}
+
+.lightbox.is-fullscreen:not(.is-mobile-fullscreen) .lightbox-toolbar > .lightbox-zoom-controls {
+    display: none;
+}
+
+.lightbox.is-fullscreen:not(.is-mobile-fullscreen) .lightbox-zoom-controls-hud {
+    position: absolute;
+    top: calc(env(safe-area-inset-top, 0px) + 1rem);
+    left: calc(env(safe-area-inset-left, 0px) + 10rem);
+    z-index: 13;
+    display: inline-flex;
+    background: rgba(10, 10, 10, 0.62);
+    backdrop-filter: blur(8px);
 }
 .lightbox-initial-loader {
     grid-area: 1 / 1;
@@ -382,7 +491,7 @@
 .lightbox.is-initial-loading .lightbox-stage-link {
     cursor: progress;
 }
-.lightbox.is-initial-loading .lightbox-stage-link > img {
+.lightbox.is-initial-loading .lightbox-zoom-surface > img {
     opacity: 0;
 }
 .lightbox.is-navigation-loading .lightbox-stage-link {
@@ -411,11 +520,57 @@
         animation: none;
     }
 }
+.lightbox.is-quality-loading:not(.is-initial-loading):not(.is-navigation-loading) .lightbox-stage-link::after {
+    content: attr(data-quality-loading-label);
+    position: absolute;
+    bottom: 1rem;
+    left: 1rem;
+    z-index: 7;
+    max-width: calc(100% - 2rem);
+    padding: 0.52rem 0.75rem 0.52rem 2.45rem;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    border-radius: 999px;
+    background: rgba(8, 12, 20, 0.8);
+    color: #fffdf8;
+    box-shadow: 0 0.65rem 2rem rgba(0, 0, 0, 0.4);
+    font-size: 0.82rem;
+    font-weight: 700;
+    line-height: 1.2;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    pointer-events: none;
+    backdrop-filter: blur(8px);
+}
+.lightbox.is-quality-loading:not(.is-initial-loading):not(.is-navigation-loading) .lightbox-stage-link::before {
+    content: '';
+    position: absolute;
+    bottom: 1.53rem;
+    left: 1.68rem;
+    z-index: 8;
+    width: 1.05rem;
+    height: 1.05rem;
+    border: 0.16rem solid rgba(255, 255, 255, 0.3);
+    border-top-color: #fffdf8;
+    border-radius: 999px;
+    pointer-events: none;
+    animation: lightbox-quality-spinner 0.78s linear infinite;
+}
+@keyframes lightbox-quality-spinner {
+    to {
+        transform: rotate(360deg);
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .lightbox.is-quality-loading:not(.is-initial-loading):not(.is-navigation-loading) .lightbox-stage-link::before {
+        animation: none;
+    }
+}
 .lightbox:not(.is-fullscreen):not(.is-mobile-fullscreen) .lightbox-stage-link {
     width: var(--lightbox-stage-width, auto);
     height: var(--lightbox-stage-height, auto);
 }
-.lightbox:not(.is-fullscreen):not(.is-mobile-fullscreen) .lightbox-stage-link > img {
+.lightbox:not(.is-fullscreen):not(.is-mobile-fullscreen) .lightbox-zoom-surface > img {
     width: 100%;
     height: 100%;
     max-width: none;
@@ -626,6 +781,15 @@
     position: absolute;
     top: 1rem;
     right: 1rem;
+}
+
+/*
+ * Zoomed fullscreen images are promoted to their own compositor layer. Keep the
+ * close control above that layer for hit-testing as well as painting; otherwise
+ * the button can remain visible while the fullscreen stage receives the click.
+ */
+.lightbox.is-fullscreen .lightbox-close {
+    z-index: 14;
 }
 .lightbox-hud,
 .lightbox-meta {
@@ -966,7 +1130,7 @@
     border-color: rgba(255, 253, 248, 0.9);
     box-shadow: 0 1.55rem 4.6rem rgba(0, 0, 0, 0.58), 0 0 0 4px rgba(255, 253, 248, 0.22);
 }
-.lightbox.is-3d-carousel-mode:not(.is-fullscreen):not(.is-mobile-fullscreen):not(.is-slideshow):not(.is-map-split) .lightbox-stage-link > img {
+.lightbox.is-3d-carousel-mode:not(.is-fullscreen):not(.is-mobile-fullscreen):not(.is-slideshow):not(.is-map-split) .lightbox-zoom-surface > img {
     max-width: min(54rem, 52vw);
     max-height: min(74vh, 50rem);
     border-radius: inherit;
@@ -1077,5 +1241,8 @@
     }
     .lightbox-strip-track {
         scroll-behavior: auto;
+    }
+    .lightbox.is-zoom-animating .lightbox-zoom-surface > img {
+        transition: none;
     }
 }
