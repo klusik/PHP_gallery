@@ -489,6 +489,11 @@
                    "released_label":  "16. August 2026, 15:46",
                    "tag":  "v_0.90"
                 },
+    "0.91": {
+                   "released_at":  "2026-08-17 08:51:46",
+                   "released_label":  "17. August 2026, 08:51",
+                   "tag":  "v_0.91"
+                },
     "0.86.1": {
                    "released_at":  "2026-08-08 20:50:54",
                    "released_label":  "8. August 2026, 20:50",
