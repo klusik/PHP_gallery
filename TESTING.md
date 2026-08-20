@@ -1,6 +1,6 @@
 # Testing Guide
 
-This guide applies to PHP Gallery Version 0.91.2. Release verification must include the public lightbox zoom and progressive quality promotion, Shift+Left/Right ten-photo navigation, public Smart Gallery visibility, presentation settings, cycle-safe placement/order evaluation, access intersection and pagination; multilingual gallery/photo content and fallbacks; browser-local ZIP imports; ordered migration upgrades; complete deployment packaging; updater safety; the configurable public language selector; hourly automatic-update throttling; and the supported English, Czech, German, and Swedish catalogs.
+This guide applies to PHP Gallery Version 0.91.3. Release verification must include the public lightbox zoom and progressive quality promotion, Shift+Left/Right ten-photo navigation, public Smart Gallery visibility, presentation settings, cycle-safe placement/order evaluation, access intersection and pagination; multilingual gallery/photo content and fallbacks; browser-local ZIP imports; ordered migration upgrades; complete deployment packaging; updater safety; the configurable public language selector; hourly automatic-update throttling; and the supported English, Czech, German, and Swedish catalogs.
 
 ## Purpose
 This project is a plain PHP gallery CMS without a formal browser automation stack. The most reliable testing approach is a mix of fast syntax checks, focused script-level checks, and a repeatable manual smoke-test scenario that exercises the core gallery lifecycle.
@@ -81,6 +81,76 @@ The translation catalog consistency test requires English, Czech, German, and Sw
 The public thumbnail rendering model test covers responsive default/fallback normalization, supported setting persistence, invalid Admin input normalization, the narrow renderer dispatch boundary, the unchanged responsive eager/lazy/fetchpriority thresholds, and progressive small-thumbnail thresholds. The public thumbnail markup test covers complete responsive srcsets, small-only progressive active srcsets, inert larger candidates, WebP/JPEG structures, missing variants, synthetic bounds, intrinsic dimensions, media fallback, warm-up attributes, and selected-gallery NSFW gate ordering. The hero tag Theme model test covers 20-tag and five-row defaults, server-side clamping, display-all and scrollbar booleans, usage/alphabetical mode normalization, Admin persistence wiring, complete server-rendered hero groups, full-width CSS overrides, anonymous/logged-in browser entrypoints, accessible disclosure state, row-based scrollbar activation, and English/Czech public strings. `tests/progressive_thumbnail_renderer_test.mjs` covers browser-independent candidate parsing, smallest-adequate selection, capped DPR width calculation, queue deduplication, visible priority, and the two-worker concurrency bound. DOM intersection, actual browser network order, decode timing, cache reuse, lightbox/maps/votes interaction, hero tag wrapping at real browser widths, and reduced-motion rendering remain manual checks.
 
 These tests are maintained against the current namespaced production code. They are best for pure logic, helper functions, and regression checks that do not require a browser session. A release patch should not be published while `php tests/run.php` reports a failure.
+
+### Viewer Phase 0 security-foundation coverage
+
+Phase 0 viewer foundations deliberately have no HTTP route, so focused tests exercise services and static architecture boundaries without requiring an external mail provider, browser, or Internet service:
+
+```text
+php tests/viewer_security_foundations_test.php
+php tests/viewer_schema_foundations_test.php
+php tests/viewer_identity_boundary_test.php
+```
+
+`viewer_security_foundations_test.php` verifies disabled-by-default/fail-closed configuration, service-level refusal before database access while disabled, independent viewer session namespace behavior, preservation of administrator session keys, cryptographically random opaque tokens, authority hashing/verification, deterministic email normalization, native password hash/verify/rehash behavior, no silent bcrypt-length truncation, one-time-token expiry/consumption policy, fixed abuse-policy names, identifier/subnet normalization, configured hard subject caps, trusted-proxy CIDR behavior, default rejection of spoofed forwarding headers, and security-event context redaction.
+
+`viewer_schema_foundations_test.php` validates that the migrations are additive and ordered, creates every intended viewer table including the Phase 0.6 durable-account counter, leaves historical identity/media tables untouched, stores token authority hashed, defines expiry/invalidation/single-use lifecycle fields, uses canonical `images.id` references, protects favourite/collection uniqueness with database constraints, provides deterministic collection ordering, keeps collection/share rows free of gallery/media permission fields, stores no passkey private key, uses bounded rate-limit storage, defaults the feature and registration off, defaults trusted proxies off, exposes no viewer controller/dispatcher route, and verifies scheduled viewer cleanup is no longer gated by feature enablement.
+
+`viewer_identity_boundary_test.php` guards the most important repository-specific security invariant: `current_user()` continues to use only the administrator `users` table and `$_SESSION['user_id']`, while `current_viewer()` uses only viewer session/tables. It also proves the historical `visitor_can_access_gallery()` administrator bypass still depends only on `current_user()`, public media does not consult viewer auth, existing administrator auth/persistent-login code remains viewer-unaware, the existing CSRF contract is unchanged, and historical gallery share-token validation remains separate from future collection sharing.
+
+These focused tests supplement, rather than replace, `php tests/run.php`, `tests/migration_consistency_test.php`, authentication schema-policy tests, gallery-access schema-policy tests, and the Node model tests. Fresh installation and upgrade safety are represented by the shared migration directory/runner contract plus migration preflight/replay tests. When a disposable MySQL/MariaDB instance is available, release qualification should additionally execute a fresh install and an upgrade from a pre-Phase-0 database because MySQL DDL cannot be rolled back as one transaction.
+
+### Viewer Phase 0.5 registration/mail-abuse foundation coverage
+
+Phase 0.5 remains route-free and transport-free. Run:
+
+```text
+php tests/viewer_registration_foundations_test.php
+php tests/viewer_mail_abuse_foundations_test.php
+```
+
+`viewer_registration_foundations_test.php` verifies disabled/fail-closed staging, generic public-result foundations, optional invitation email binding, claimed/revoked/expired invitation rejection, transactional invitation-state revalidation after preflight, revocation availability while admission is disabled, scanner-safe non-consuming verification predicates, replay rejection, three-state schema availability, binary-unique pending-email deduplication, unique invitation use, hashed invitation/verification authority, indexed expiry cleanup, the locked registration-capacity counter, absence of password storage in staging, and Phase 4.1 reuse of the same registration service rather than a parallel signup subsystem.
+
+`viewer_mail_abuse_foundations_test.php` verifies independent verification/reset/invitation mail budget plans, per-address cooldown/hour/day limits, per-client and installation-wide limits, narrow-to-global reservation ordering that protects the global circuit breaker from suppressed-request exhaustion, generic future external outcomes, fail-closed invalid recipient/client handling, corrected `max_attempts` semantics, and the deliberate absence of PHP `mail()`, SMTP sockets, provider APIs, queues, or other delivery code. Existing administrator password-reset mail is not refactored by Phase 0.5.
+
+These tests intentionally do not claim live transactional concurrency coverage because the standard sandbox/repository test environment may not provide a PDO MySQL/MariaDB driver. The SQL paths use row locks, unique constraints, and transaction-scoped capacity admission. Release qualification on a disposable MySQL/MariaDB database should additionally race duplicate pending requests, one invitation claim, and one verification confirmation to confirm exactly one durable state transition.
+
+### Viewer Phase 0.6 authentication/request-security foundation coverage
+
+Phase 0.6 remains route-free, UI-free, cookie-emission-free, and mail-transport-free. Run:
+
+```text
+php tests/viewer_authentication_phase06_test.php
+```
+
+`viewer_authentication_phase06_test.php` exercises the aggregate three-state viewer-auth schema capability (available/missing/unknown), 15-code-point native password policy, Unicode/spaces/no-composition behavior, native hash/verify/rehash, viewer/admin CSRF separation, short-lived activation and reset pre-auth namespaces, activation-state HMAC binding/expiry, forged versus trusted forwarded HTTPS, invalid proxy config, IPv4/IPv6 trusted-proxy behavior, strict configured security-link origin and Host-header poisoning resistance.
+
+The same test statically protects database transaction/locking contracts that cannot be executed without PDO MySQL: singleton `viewer_account_state` serialization, invitation re-lock during activation, staging retirement, login throttle ordering before account/password work, deterministic session/remember caps, remember selector/verifier rotation, security-version-aware reset locking/revocation, collection-share revocation on account state changes, viewer/pre-auth no-store classification, cleanup while disabled, and the Phase 0.6 service boundary remaining free of direct cookie emission and mail transport. Phase 1.0 HTTP adapters may now consume those established services.
+
+A release environment with MySQL/MariaDB and `pdo_mysql` should additionally run live races for durable account-cap admission, two concurrent activations, session-cap admission, remember restore rotation, reset-token final use, and security-version invalidation. If that database capability is absent, release notes/test reports must state those integration races were **not run** rather than presenting static/model checks as live concurrency coverage.
+
+### Viewer Phase 0.7 lifecycle/content-authorization coverage
+
+Phase 0.7 is still HTTP-free and UI-free. Run the focused deterministic contract test with:
+
+```text
+php tests/viewer_account_lifecycle_phase07_test.php
+```
+
+It covers three-state lifecycle schema capability, recent-reauth namespace clearing/expiry, interactive-login versus remember-restoration semantics, strict future content-quota parsing, 120-code-point/480-byte plain-text title policy, invalid UTF-8/NUL/control/bidi rejection, scanner-safe staged email change, security-version-aware password/email mutation structure, account-deletion capacity reconciliation, no-admin-bypass source-image authorization, and the continued absence of Phase 0.7 lifecycle HTTP wiring while keeping the Phase 0.7 content-foundation service policy-only; later favourite CRUD is covered separately by the Phase 1.1 test and private collection CRUD is covered separately by the Phase 2.0 test.
+
+A real MySQL/MariaDB race harness is optional and intentionally separate from the default suite:
+
+```text
+GALLERY_TEST_MYSQL_DSN='mysql:host=127.0.0.1;dbname=php_gallery_test;charset=utf8mb4' \
+GALLERY_TEST_MYSQL_USER='gallery_test' \
+GALLERY_TEST_MYSQL_PASSWORD='...' \
+php tests/viewer_phase07_mysql_concurrency_test.php
+```
+
+The database must already contain the current migrated schema and must be disposable test data. The harness creates isolated fixture rows, launches independent PHP worker processes with independent PDO connections, releases them through an explicit process-pipe barrier, and cleans up/reconciles viewer capacity state afterwards. It exercises seven storage-level race invariants separately: duplicate verified activation, hard durable-account cap, active session cap, remember-token rotation, one reset-token final use, security-version invalidation competing with authentication authority, and account deletion versus account-capacity consistency. It is a low-level InnoDB/row-lock integration harness, not a replacement for service-contract tests.
+
+If `pdo_mysql`, the DSN, or the required migrated tables are unavailable, the harness prints `SKIP` with the exact reason and exits without claiming that a race ran. Static SQL inspection is not equivalent to this live test.
 
 ### Schema-inspection reliability regression coverage
 
@@ -826,3 +896,261 @@ Manual Admin regression:
 6. Uncheck every viewer language and submit. Confirm the page shows a validation error, persists no partial selector change, and retains the rejected checkbox state for correction.
 7. Confirm Settings > General shows only preset and flag design controls plus the Theme > Language detailed-settings link. Save a basic change and verify existing custom colors and dimensions remain intact. In Theme > Language, exercise Classic, Solid pills, Outline, Soft cards, and Minimal in the preview above the compact one-line controls. Change every color/range/select/toggle class of control, including each color's Transparent switch, and confirm the actual flags, code/name visibility, spacing, borders, active state, and responsive orientation update without saving or navigation.
 8. Use an individual Reset and confirm only that value changes; use Reset this preset and confirm global choices plus other presets remain untouched; use Reset all and confirm Classic plus every canonical design default returns while selector enabled state and enabled languages remain untouched. Submit only afterward and reload both Settings surfaces to confirm synchronization.
+
+## Pre-Phase-3 Viewer Feature Wrapper
+
+Run the focused master feature regression:
+
+```powershell
+php tests/viewer_feature_wrapper_test.php
+```
+
+The wrapper test verifies that the canonical `viewer_accounts` Admin feature defaults to disabled while all established feature switches retain their historical enabled defaults. It proves that historical `config.php` or `viewer_accounts_admin_mode=invite_only` state cannot bypass the master switch, every current `viewer_*` dispatcher route and the historical Admin viewer-management route belong to the wrapper, the Admin Viewer accounts navigation item is feature-owned, public disabled viewer routes use a generic not-found result, production load order establishes feature flags before viewer services, and every feature reference used by the current Admin menu/route map resolves to a registered switch.
+
+Manual regression:
+
+1. On an installation with no persisted `feature_flag.viewer_accounts.enabled`, open **Admin > Features** and confirm **Viewer accounts and collections** is present under the account/personalization group and is OFF while the established feature cards retain their previous defaults.
+2. With the master switch OFF, confirm public viewer Login/Account controls, favourite/collection UI, and the Admin **Viewer accounts** menu entry are absent. Direct viewer URLs must fail closed and must not advertise that the viewer subsystem exists. Existing viewer rows and content remain stored.
+3. Turn the master switch ON. Confirm the Admin **Viewer accounts** menu entry appears. The subordinate Viewer Accounts registration mode remains independently configurable as **Disabled**, **Invite only**, or **Open registration** once the master switch is ON.
+4. Keep the master ON but turn the subordinate viewer frontend mode OFF. Confirm Admin account creation/deletion and Phase 2.5 security controls remain available, while public viewer login remains unavailable.
+5. Re-enable the subordinate mode and confirm an existing active viewer can authenticate normally. Turn the master OFF again and confirm the same credentials and any existing viewer session no longer establish `current_viewer()` authority, while Admin authentication and public gallery browsing remain unchanged.
+6. Review **Admin > Features** after the registry audit and confirm the existing optional switches remain present. Core gallery/admin workflows such as ordinary galleries, Smart Galleries, tags, standard uploads, authentication, updates, integrity, and logs remain core behavior rather than being accidentally wrapped as optional features.
+
+## Phase 1.0 Invite-only Viewer Account Boundary
+
+Run the focused trust-boundary regression:
+
+```powershell
+php tests/viewer_http_phase10_test.php
+```
+
+It verifies the Phase 1.0 viewer/Admin account route surface, absence of open signup/collections routes, isolation of later favourite mutation logic from the Phase 1.0 account controller, Admin-only invitation mutations with Admin CSRF, scanner-safe invitation/verification/reset GET handling, viewer/pre-auth CSRF, mail-abuse authorization before verification transport, login delegation and pre-hash rate limiting, viewer/Admin session separation, POST-only viewer logout, dedicated remember-cookie rotation without recent reauthentication, no-store plus no-referrer classification, secret-bearing viewer routes bypassing the generic SEO query logger, suppression of viewer bearer URLs from the Admin-login return parameter, feature-switch gating, and unchanged gallery-authorization boundaries.
+
+The historical Phase 0 through 0.7 tests remain active. Their route-free assertions now protect the original service-layer separation rather than incorrectly requiring the whole application to remain viewer-HTTP-free after Phase 1.0. `translation_catalog_consistency_test.php` also requires all new literal viewer UI keys to remain aligned across English, Czech, German, and Swedish.
+
+Manual Phase 1.0 regression on an HTTPS test installation should cover this sequence:
+
+1. Keep the master **Viewer accounts and collections** feature disabled in **Admin > Features**. Verify public galleries and Admin login behave normally, no public viewer Login entry is shown, and no Viewer accounts entry appears in the Admin Account menu. A direct public viewer route should return the ordinary not-found surface.
+2. Enable the master feature in **Admin > Features**. Open **Admin > Account > Viewer accounts**, select **Invite only** with the subordinate Admin registration-mode selector, create an invitation, copy the show-once link, and verify no account row is created yet. Confirm this works even when the fallback `config.php` viewer block remains disabled.
+3. Open the invitation link with GET and verify repeated/scanner-style GET requests do not consume it. Submit an incorrect bound email and confirm the public result remains generic. Submit the correct email and confirm a verification message is sent only through configured mail transport.
+4. Open the verification URL repeatedly with GET and confirm no durable account exists. POST Continue, then choose a password of at least 15 characters and activate once. Replaying the original verification URL must not create a second account.
+5. Log in as the viewer and, in the same browser session if desired, separately log in as Admin. Confirm `current_user()`/Admin access remains independent from the viewer account and viewer login does not unlock any password/private gallery.
+6. Log out from the viewer account and confirm the Admin session remains alive. A GET to the logout route must not perform logout.
+7. Log in with Remember me, allow the ordinary viewer PHP session to disappear, and confirm the dedicated viewer remember credential restores only viewer identity, rotates, and does not satisfy recent reauthentication.
+8. Request forgotten-password mail for one known and one unknown email and confirm the browser-visible responses are equivalent. Repeated reset-link GETs must be non-consuming; final POST reset must invalidate old viewer sessions/remember authority without affecting Admin identity.
+9. Inspect response headers for login, invitation, verification, reset, and account pages. They must be private/no-store. Public anonymous galleries must retain their existing cache/access behavior.
+10. Re-disable viewer accounts and verify the viewer UI disappears/fails closed while ordinary galleries and Admin authentication continue normally.
+
+Optional real MySQL/MariaDB concurrency coverage remains `tests/viewer_phase07_mysql_concurrency_test.php`. It is executed only when `pdo_mysql` plus `GALLERY_TEST_MYSQL_DSN`, `GALLERY_TEST_MYSQL_USER`, and `GALLERY_TEST_MYSQL_PASSWORD` are actually available. A skip must be reported as a skip, never as a pass.
+
+## Phase 1.1 Viewer Favourites
+
+Run the focused favourites boundary regression:
+
+```powershell
+php tests/viewer_favourites_phase11_test.php
+```
+
+It verifies the existing Phase 0 `viewer_favourites` table is reused, the mutation route is POST-only and viewer-CSRF-protected, no Admin principal/session state is used, every write delegates to `viewer_source_image_can_reference()`, owner/security-version checks and quota admission occur under the viewer-account row lock, and the controller contains no favourite SQL. It also requires the private list to re-check `viewer_source_image_can_render_reference()` before metadata rendering, optional favourite-state decoration to fail closed on viewer-storage errors, normal/Smart Gallery authorization code to remain viewer-independent, lightbox state to remain server-provided, no secret-bearing gallery return URL to be relayed through the mutation form, and keeps collection/share/profile/upload responsibilities out of the Phase 1.1 favourites service/controller itself.
+
+Manual Phase 1.1 regression on an HTTPS test installation should cover:
+
+1. With viewer accounts disabled, verify anonymous/public galleries, protected galleries, Smart Galleries, Admin login, and existing share links behave exactly as before and no favourite control appears.
+2. Sign in as an active viewer and open a public physical gallery. Add/remove a favourite from a card, reload, and confirm the state persists. Repeat in lightbox and confirm card/lightbox state stays synchronized.
+3. Repeat on an authorized Smart Gallery item. Confirm the control refers to the canonical source image and remains synchronized when lazy lightbox navigation crosses the initial page/window.
+4. Open the private Favourites page from Account. Confirm only currently authorized source photos render, inaccessible saved references disclose no image/gallery metadata, and removing a visible favourite works with and without JavaScript.
+5. Verify a viewer cannot add a non-public, unauthorized password/private, expired-share, or NSFW-restricted source image by POSTing its numeric image id directly. Existing Admin access in the same browser must not make that write succeed unless the non-Admin source authorization independently succeeds.
+6. Verify the configured `max_viewer_favourites_per_account` limit blocks the next add without deleting/changing existing favourites. Repeated add/remove requests remain idempotent and no duplicate row can exist.
+7. Hold both Admin and viewer principals in one browser. Confirm favourite controls do not overlap Admin reorder/Picture Manager controls, viewer mutations never write `user_id`, and Admin authorization remains unchanged.
+8. Inspect viewer gallery/account/favourites responses while signed in and confirm personalized responses remain private/no-store. Anonymous public gallery output must contain no viewer email or favourite state and must remain operational if optional viewer favourite storage is unavailable.
+9. Inspect Phase 1.1 favourites code to confirm it does not implement collection CRUD/share, public viewer profiles, uploads, comments, open signup, CAPTCHA, OIDC, TOTP, passkeys, or magic-link authentication.
+
+The optional real MySQL/MariaDB concurrency harness remains `tests/viewer_phase07_mysql_concurrency_test.php`. It does not yet contain a dedicated favourite-quota race scenario; if `pdo_mysql` or the configured test DSN is unavailable, report that exact skip rather than claiming live concurrency coverage.
+
+## Phase 1.2 Viewer Account Lifecycle HTTP Wiring
+
+Run the focused lifecycle boundary regression:
+
+```powershell
+php tests/viewer_account_lifecycle_phase12_test.php
+```
+
+It loads the real Phase 1.2 controller, directly exercises the bounded recent-reauthentication destination parser, audits every imported project function against a real source definition, and verifies the exact lifecycle route surface. Static contract checks then protect viewer CSRF, GET/POST boundaries, no-store classification, password-backed recent reauthentication, remember-me exclusion, password-policy/service delegation, staged/budget-authorized email mail, scanner-safe verification GET, tokenless single-use final email POST, explicit destructive confirmation, service-owned deletion, Admin/viewer principal separation, fail-closed feature/schema behavior, translation alignment, absence of a new migration, and keeps later private-collection/open-signup/public-profile/upload/optional-auth responsibilities out of the Phase 1.2 lifecycle controller.
+
+Manual Phase 1.2 regression on an HTTPS test installation should cover:
+
+1. Sign in as a viewer with Remember me, expire/remove only the ordinary viewer PHP authentication state so remember restoration occurs, then open Change password. Confirm the sensitive action requires the current viewer password and a wrong password fails generically without establishing Admin identity.
+2. With a normal recently password-authenticated viewer, change the password. Confirm the old password no longer authenticates, the new password does, viewer sessions/remember credentials follow the Phase 0.7 invalidation contract, favourites remain owned by the same account, and a simultaneous Admin login survives.
+3. Start Change email and submit malformed, unchanged, already-used, and valid new addresses. Confirm public errors remain generic where appropriate and the current account email never changes at request time. Confirm mail is attempted only after the existing email-change mail budget authorizes/stages the request.
+4. Open the valid email-change verification URL repeatedly with GET. Confirm GET never changes the durable account email. Complete any required recent reauthentication and use the tokenless CSRF-protected confirmation POST exactly once. Replay/stale/superseded/expired confirmation must fail. Confirm login moves from the old verified email to the new one according to service semantics and favourites remain attached to the same viewer id.
+5. Hold Admin and viewer principals simultaneously. Repeat password and email changes and confirm `$_SESSION['user_id']`, Admin persistent login, protected-gallery authorization, gallery share grants, and Smart Gallery behavior are unchanged.
+6. Open Delete account with GET and confirm no deletion occurs. After recent viewer reauthentication, submit without the explicit destructive confirmation and verify rejection. Then confirm deletion and verify viewer login/sessions/remember/reset/email-change authority and favourites are gone according to the existing lifecycle/cascade design, while the simultaneous Admin principal remains signed in and galleries/images/share links are untouched.
+7. Inspect Account, reauthentication, password, email, verification/confirmation, and deletion responses. They must remain private/no-store; token/security pages must retain no-referrer/noindex behavior. Forms must contain only bounded lifecycle destinations, never arbitrary return URLs.
+8. Disable viewer accounts and confirm every lifecycle route fails closed and account controls disappear with the viewer account UI. Break/withhold optional viewer lifecycle schema in a test environment and confirm unrelated anonymous public gallery browsing remains operational.
+9. Confirm the Phase 1.2 lifecycle controller remains limited to lifecycle actions and does not implement collection CRUD/sharing, public profiles, comments, uploads, open signup, CAPTCHA, OIDC, TOTP, passkeys, or magic-link authentication.
+
+The existing Phase 0.7 service/concurrency tests remain the source of truth for atomic security-version, session/remember invalidation, email replay/race, and account-deletion storage semantics. Run `tests/viewer_phase07_mysql_concurrency_test.php` when `pdo_mysql` and the configured MySQL/MariaDB DSN are actually available; otherwise report the exact `SKIP` reason.
+
+## Phase 2.0 Private Viewer Collections
+
+Run the focused collection boundary regression:
+
+```powershell
+php tests/viewer_collections_phase20_test.php
+```
+
+It verifies reuse of the existing Phase 0 collection schema, strict current-viewer ownership predicates, viewer CSRF and POST-only mutations, bounded integer IDs, centralized plain-text title validation/escaping, account/collection row locking around quotas, the dedicated collection-creation rate limit, duplicate-safe image insertion, transactional reorder validation, and reference-only delete/remove behavior. It also requires collection detail to batch re-evaluate every stored image through the no-admin-bypass source authorization path, checks dual Admin+viewer coexistence, confirms anonymous public gallery HTML performs no collection lookup, audits imported PHP functions against real definitions, and proves the Phase 2 collection service remains independent from the dedicated Phase 3 sharing authority while public profiles/uploads/optional auth remain absent.
+
+Manual Phase 2.0 regression on an HTTPS test installation should cover:
+
+1. Enable invite-only viewer accounts, sign in as Viewer A, create collections with ordinary Unicode titles and XSS-looking plain text, then verify titles render inertly. Empty, control-character, malformed-UTF-8, and over-120-character titles must be rejected.
+2. Create Viewer B. Guess Viewer A collection ids from B and test GET detail plus rename/delete/add/remove/reorder POSTs. Every operation must fail generically without disclosing title, count, owner, timestamps, or item ids.
+3. Add an authorized public image, repeat the add, and confirm one row/reference only. Confirm favourites are unchanged. Try a nonexistent/inaccessible image id and confirm no reference is inserted and no source metadata is returned.
+4. Add a photo while its source gallery is public, then make that gallery private/password protected or expire/revoke the browser's existing source grant. Reload the collection and confirm the item disappears without title/path/thumbnail/EXIF leakage. Restore the normal source authorization and confirm the still-stored reference becomes visible again.
+5. Repeat with a password-unlocked or valid gallery-share-granted source. Confirm only the canonical image id is stored and expiration/revocation of that independent source authority immediately affects collection rendering.
+6. Hold Admin and viewer principals in one browser. Open an Admin-visible protected image that the viewer context cannot independently access. Confirm collection Add is absent/rejected and an already-stored item remains hidden. Viewer collection mutations and logout must not modify Admin session/authentication.
+7. Fill a collection to `max_viewer_items_per_collection` and an account to `max_viewer_collections_per_account`; the next insert/create must fail without changing existing rows. Confirm the collection-creation rate bucket is enforced independently.
+8. Reorder visible items repeatedly. Submit duplicate ids, an id from another collection, malformed ids, and an array above the item quota; each invalid request must leave the previous order unchanged. With temporarily inaccessible items present, confirm their hidden references keep stable ordinal slots while visible items reorder around them.
+9. Remove an item and delete a collection. Confirm only collection references disappear; source images, galleries, Smart Galleries, favourites, gallery share links, and Admin authentication remain unchanged. Account password/email changes keep collection ownership, while viewer account deletion follows the existing FK lifecycle.
+10. Inspect private collection list/detail/mutation responses for `private, no-store`. Disable viewer accounts and confirm collection UI/routes fail closed while ordinary anonymous galleries still render. Simulate unavailable collection schema and confirm unrelated anonymous browsing remains independent.
+11. Inspect the complete route/UI surface and confirm there is no collection share/copy-link action, anonymous collection URL, public viewer profile, upload, comment, TOTP, OIDC, or passkey feature.
+
+Optional real MySQL/MariaDB execution should exercise duplicate-add races, collection/item quota races, reorder consistency, and FK cascade behavior when `pdo_mysql`, `GALLERY_TEST_MYSQL_DSN`, `GALLERY_TEST_MYSQL_USER`, and `GALLERY_TEST_MYSQL_PASSWORD` are available. If they are unavailable, report the exact missing driver/configuration reason; do not report skipped live-DB coverage as passed.
+
+## Pre-Phase 3 Administrator Viewer Account Provisioning
+
+Run the focused account-management regression:
+
+```powershell
+php tests/viewer_admin_account_management_test.php
+```
+
+It directly loads the new Admin provisioning service and the real viewer account controller, verifies the migration and service-loader order, and protects the direct-create/list/delete boundary. The test requires account-cap locking, normal viewer password hashing, `must_change_password=1` on direct creation, no Admin-principal reuse, no plaintext password persistence/emailing, show-once Admin disclosure, viewer CSRF on the forced first-login POST, no-store behavior, and viewer-only deletion scope. It also verifies `current_viewer()`, normal session establishment, viewer content mutation, and remember-token issue/restore all reject the temporary-password state; successful replacement must clear the flag, increment the security version, revoke old viewer authority, reject temporary-password reuse, and only then establish normal viewer authentication.
+
+Manual regression on an HTTPS test installation should cover:
+
+1. Enable the master viewer feature in **Admin > Features**, then open **Admin > Account > Viewer accounts** while the subordinate viewer frontend mode is disabled. Create a viewer with the temporary-password field blank. Confirm the account is created despite the disabled frontend mode, the generated password is displayed once after redirect, and no viewer login is possible until the subordinate viewer-account mode is enabled.
+2. Repeat with an explicit policy-compliant temporary password. Confirm duplicate email, malformed email, weak password, unavailable schema, and installation-cap exhaustion fail without creating a second account.
+3. Leave **Send notification** enabled and confirm mail contains the trusted login URL and first-login instruction but not the generated/supplied temporary password. Deliver the temporary password through a separate trusted channel. Refresh/navigate away from the Admin page and confirm the plaintext show-once value is gone.
+4. Enable viewer accounts and sign in with the temporary password. Confirm login redirects to `/viewer/first-login`, `current_viewer()` is still absent, no viewer remember credential is issued/restored, and favourites/collections/account pages cannot be used as a normal signed-in viewer before replacement. A simultaneous Admin principal must remain logged in.
+5. Submit a weak replacement, mismatched confirmation, and the same temporary password; each must fail while retaining only bounded first-login authority. Submit a new compliant password and confirm the flag clears, the security version advances, old viewer session/remember/reset/email-change authority is revoked, normal viewer login is established, and the temporary password can no longer authenticate.
+6. On a direct-created account, use the normal forgotten-password flow instead of completing `/viewer/first-login`. Confirm the scanner-safe reset succeeds through its existing verification path, clears `must_change_password`, and the reset password signs in normally.
+7. Delete a direct-created and an invitation-created viewer account from Admin. Confirm an explicit confirmation is required and only the target `viewer_accounts` identity plus viewer-owned dependent state is removed. Photographs, galleries, Smart Galleries, gallery share links, favourites belonging to other viewers, and Admin authentication/session state must remain unchanged.
+8. Hold Admin and viewer principals simultaneously, then create/delete a different viewer. Confirm Admin `user_id`, current viewer ownership, protected-gallery authorization, and existing gallery share grants are unaffected.
+9. Inspect the direct-provisioning surface and confirm it does not itself add public signup, a public user directory/profile, collection-share authority, uploads/comments, TOTP, OIDC, or passkeys.
+
+## Phase 2.5 Administrator Viewer Account Security Controls
+
+Run the focused security-control regression:
+
+```powershell
+php tests/viewer_admin_security_controls_test.php
+```
+
+The test directly executes the existing `viewer_account_suspend()`, `viewer_account_restore()`, and `viewer_session_revoke_all()` helpers against a deterministic PDO fixture, so the core suspension/restoration/logout-all assertions are not source-only. It proves security-version rotation, session/remember/reset revocation, dormant collection-share revocation on account-state transition, restoration non-resurrection, `must_change_password` preservation, first-login limited-state invalidation, Admin `user_id` survival, matching viewer-namespace cleanup, other-viewer isolation, favourites/collections preservation, feature-disable operation, and fail-closed schema behavior. Static HTTP checks additionally require Admin auth, Admin CSRF, POST-only action placement, strict positive account IDs without overflow, SQL-free controller wiring, localized state-specific buttons, Admin audit events, and no Phase 3 route/UI expansion.
+
+Manual regression should cover:
+
+1. With viewer accounts enabled, open **Admin > Account > Viewer accounts** and suspend an active viewer. Confirm the row becomes Suspended, the viewer loses authority on the next request, an old Remember me cookie cannot restore the session, and any simultaneous Admin login remains active.
+2. Restore that viewer. Confirm the row returns to Active but every pre-suspension viewer session/remember/reset/share capability remains invalid. Sign in normally again and confirm favourites and private collections are still present.
+3. Repeat suspend/restore for an administrator-created `must_change_password=1` account. Confirm the temporary password still enters only the existing forced first-login replacement flow after restoration and cannot obtain normal viewer authority before replacement.
+4. On an active viewer, choose **Sign out everywhere**. Confirm all viewer devices require a fresh login, the account remains Active, favourites/collections/password/first-login flag are unchanged, and any simultaneous Admin login remains active.
+5. Keep the master viewer feature enabled but disable the subordinate viewer frontend from the same Admin viewer page. Confirm Suspend, Restore, Sign out everywhere, and Delete remain available to the administrator while public viewer login remains disabled. Then disable the master feature in **Admin > Features** and confirm the Viewer accounts Admin entry itself disappears and its route is centrally guarded.
+6. Simulate missing/unknown viewer lifecycle security schema. Confirm the security mutation fails with a normal operational message while Admin authentication and unrelated anonymous gallery browsing continue.
+7. Inspect the Admin page and routes to confirm there is still no Disable action, viewer impersonation, collection Share/Copy link control, anonymous collection route, public viewer profile, upload, TOTP, OIDC, or passkey feature.
+
+No Phase 2.5 migration is expected. Optional live MySQL/MariaDB qualification should add races for suspend versus restore, suspend versus sign-out-all, suspend versus delete, and restore versus delete when the configured external harness is available; an unavailable driver/DSN must be reported as skipped rather than passed.
+
+The optional MySQL/MariaDB harness remains conditional on `pdo_mysql` plus the configured `GALLERY_TEST_MYSQL_*` environment. A missing driver or DSN is a `SKIP`, not a pass. The normal focused/static and complete PHP suites do not require an external database.
+
+## Phase 3.0 Unlisted Read-only Collection Sharing
+
+Run the focused regression test with:
+
+```bash
+php tests/viewer_collection_sharing_phase30_test.php
+```
+
+The test verifies reuse of the dormant share table without plaintext storage, the existing 32-byte opaque-token/SHA-256 primitives, strict 43-character token syntax before lookup, fixed 30-day expiry, transactional one-active-share replacement, owner/current-viewer and Viewer-CSRF POST boundaries, un-rate-limited revoke, scanner-safe GET exchange, 303 token removal, isolated and capped `viewer_collection_share_grants`, per-request durable grant revalidation, live `viewer_source_images_resolve_authorized()` filtering, explicit no-Admin-bypass behavior, no collection-share hooks in direct media/gallery authorization, lifecycle semantics for suspend/restore/sign-out-all/delete, master-feature default-OFF ownership, independent share-schema failure, XSS/disclosure constraints, maintained language parity, and runtime resolution of new PHP imports. It also executes pure token/session-grant helper behavior without requiring an external PDO driver.
+
+Manual HTTPS qualification should additionally create Share A, open it in two independent browsers/sessions, verify both exchange to token-free URLs, replace with Share B and confirm both existing Share A clean sessions fail on their next request, then revoke Share B and confirm its existing clean session fails likewise. Repeat with a public image that is subsequently made private and with a gallery that becomes password protected. The recipient must lose the item until independently satisfying the existing source-gallery authorization. In a browser that also holds an Admin principal, the shared page must still omit content visible only through Admin bypass, while normal Admin gallery/media routes retain their historical behavior. Verify renaming, adding, removing, and reordering update the shared live view without regenerating the share.
+
+With the global Viewer Accounts master feature OFF, both raw and clean Phase 3 routes must look like ordinary not-found requests and owner share controls are unreachable. With the share table missing/unknown in a controlled schema-failure test, sharing must fail closed while private collections and ordinary public galleries continue to operate. Optional real MySQL/MariaDB race qualification should cover replace/replace, replace/revoke, replace/suspend, replace/delete-collection, replace/delete-account, and exchange/revoke. If `pdo_mysql` or the `GALLERY_TEST_MYSQL_*` harness is unavailable, report that qualification as skipped rather than passed.
+
+## Phase 4.0 Open Registration Policy and Lifecycle Foundations
+
+Run the focused policy regression with:
+
+```bash
+php tests/viewer_open_registration_policy_phase40_test.php
+```
+
+The Phase 4.0 test proves the backend registration policy recognizes only `disabled`, `invite_only`, and `open`, with invalid values failing closed to `disabled` and the global Viewer Accounts master switch still dominating every subordinate mode. It directly exercises invitation-backed versus open-origin classification from the existing nullable `viewer_invitation_id`, current-mode authorization for both origins, `open -> invite_only` and `open -> disabled` cancellation of only open-origin pending/email-verified rows, invitation preservation, stale-authority cleanup before re-enabling `open`, and fail-safe transition behavior when cleanup cannot complete. Static lifecycle contracts additionally require current-mode authorization in verification validation, explicit confirmation, and final activation before durable account creation; serialized policy re-check during staging admission; no new schema origin column; and no Viewer/Admin principal mixing. The historical temporary Phase 4.0 assertion that no generic route existed is superseded by Phase 4.1 only; all lifecycle/security assertions remain.
+
+## Phase 4.1 Public Verified-email Open Registration HTTP Flow
+
+Run the focused regression test with:
+
+```bash
+php tests/viewer_open_registration_http_phase41_test.php
+```
+
+The Phase 4.1 test exercises the actual registration service with deterministic staged-row fixtures and verifies: master OFF plus open is unavailable; disabled and invite_only do not expose generic registration; open requires secure transport plus viewer auth/registration storage; `/viewer/register` and `viewer_register` are wired; generic POST passes a null invitation and persists `viewer_invitation_id IS NULL`; the existing IP/subnet/identifier/global registration buckets are consumed; an already-sent valid token is not rotated on duplicate submission; `verification_send_count = 0` may retry; an expired sent token may rotate; invite-backed policy remains valid in invite_only and open; open-origin policy stops after a restrictive mode change; scanner-safe verification and no-auto-login remain; the Admin selector is exactly disabled/invite_only/open and uses the existing lifecycle-aware setting service; Register discovery is open-only; all four language catalogs contain the new strings; and no resend, Turnstile/CAPTCHA, public-profile, or Phase 5 route is added.
+
+Manual qualification should keep the global Viewer Accounts master OFF first and confirm no viewer navigation or direct public registration surface is reachable. Turn the master ON and test each subordinate mode: **Disabled** should keep the viewer frontend unavailable; **Invite only** should retain login and Admin invitation registration with no generic Register link; **Open registration** should show Register on the viewer login page and anonymous public header, accept only email plus Viewer CSRF, return the same generic notice for accepted/suppressed requests, deliver neutral verification mail through the configured transport, and continue through GET validation -> explicit confirmation POST -> password selection -> durable activation -> viewer login. In open mode, verify an Admin invitation still works. After creating an open-origin staged request, switch to Invite only and confirm its old verification link cannot continue, then switch back to Open and confirm the old authority does not resurrect. Double-submit a freshly mailed request and confirm the first emailed link remains valid and no second message is generated by the duplicate path. Phase 4.1 itself intentionally introduced no explicit resend UI/endpoint and no CAPTCHA/Turnstile; Phase 4.2 adds the resend path while preserving every Phase 4.1 duplicate-submit protection.
+
+
+## Phase 4.2 First-party Verification Resend and Recovery Hardening
+
+Run the focused regression test with:
+
+```bash
+php tests/viewer_verification_resend_phase42_test.php
+```
+
+The Phase 4.2 test verifies `/viewer/resend` plus `viewer_resend_verification` dispatch, the Viewer/pre-auth CSRF/input contract, and the availability matrix: master OFF or registration `disabled` is unavailable, while `invite_only` and `open` are route-capable when transport/auth/registration storage is healthy. Per-request authority is tested independently: open-origin staging can resend only under `open`; invitation-backed staging can resend in both `invite_only` and `open`; restrictive mode changes block already-prepared open-origin delivery; cancelled/stale state does not resurrect.
+
+The test exercises the existing `viewer_resend_verification_identifier` authorization and verifies delivery still references `viewer_mail_authorize_send()` plus the existing verification mail bucket family. It proves the Phase 4.1 primary token hash/expiry are unchanged by resend preparation, a newly prepared child token is unusable before successful handoff, successful handoff makes both A and B valid, and transport failure leaves A valid while B cannot verify. Independent A-first and B-first confirmation fixtures prove the first successful explicit confirmation transitions the shared registration request and invalidates the sibling. A historical primary-only Phase 4.1 request still validates and confirms after the Phase 4.2 child-table migration.
+
+Static HTTP/security assertions require one generic public response for syntactically valid CSRF-valid submissions, no browser-supplied registration/origin/invitation authority fields, scanner-safe verification GET, no automatic Viewer/Admin identity establishment, no plaintext/hash disclosure, bounded child-token storage/cascade cleanup, translation parity, and no CAPTCHA/Turnstile/reCAPTCHA/hCaptcha, adaptive challenge, remote security API, Composer/npm dependency, or new runtime service.
+
+Manual qualification should confirm a freshly delivered verification link A remains usable after requesting and receiving B, then repeat with B confirmed first. Simulate mail failure for B and confirm A still verifies. Check resend recovery links in relevant registration/verification UI only when the master feature and registration mode make resend available. For a staged open-origin request, change `open -> invite_only` and `open -> disabled` and confirm no resend message is handed to transport; invitation-backed pending staging should resend in `invite_only` and `open`. Let the whole staged request expire and confirm resend does not revive it. Every syntactically valid resend submission should return the same public notice regardless of address/account/request/limiter/mail outcome.
+
+## Phase 4.3 First-party Adaptive Anti-automation Gate
+
+Run the focused regression test with:
+
+```bash
+php tests/viewer_anti_automation_phase43_test.php
+```
+
+The focused test verifies that `/viewer/register` and `/viewer/resend` receive signed first-party form state and that authoritative action, nonce, issue time, expiry, honeypot metadata, and challenge difficulty cannot be tampered with, crossed between actions, crossed between PHP sessions, or replayed. It verifies the 12-entry session cap and opportunistic expiry cleanup, server-measured form age, randomized empty honeypot behavior, populated-honeypot suppression, clean challenge-free requests, repeated/fast escalation, hard limiter suppression, and existing `viewer_rate_limit_consume()` reuse through `viewer_automation_ip` and `viewer_automation_subnet`. Existing registration, resend-identifier, and verification-mail limiter families remain present and are not replaced.
+
+Proof tests solve one real bounded SHA-256 challenge and reject expired/tampered/replayed authority, invalid proof, challenge limiter denial, and counters beyond the hard ceiling. Static JavaScript checks require the solver to remain a local `public/assets/viewer-anti-automation.js` asset using native `crypto.subtle.digest('SHA-256', ...)`, with no remote import, hashing dependency, browser-fingerprint probes, or unbounded counter loop. The no-JavaScript fallback is checked for Viewer-CSRF presentation, signed/session-bound/short-lived/single-use challenge authority, minimum server-measured challenge age, and existing local limiter use.
+
+Controller-order assertions require Viewer CSRF and local syntax validation before the Phase 4.3 authorization call and require hard suppression to branch before `viewer_registration_request_begin()` / `viewer_registration_verification_resend_prepare()` and therefore before verification-mail authorization/transport. Challenge success still delegates to the Phase 4.0 through 4.2 services. The focused regression protects generic registration/resend results, Phase 4.2 primary token A preservation and sibling-authority independence, current-mode revalidation, invitation-authority independence, no Viewer/Admin principal creation, scanner-safe verification GET, bounded event context, maintained translations, and the zero-third-party runtime contract.
+
+Manual browser qualification should test one ordinary registration and resend request with JavaScript enabled and confirm no challenge on the initial clean path. Submit immediately or repeat from the same client until escalation and confirm the local panel solves via Web Crypto and only then continues to the existing generic workflow. Disable JavaScript or Web Crypto and confirm the explicit local fallback becomes usable only after its server-enforced delay. Populate the randomized hidden field through developer tools and confirm the public result remains generic while no registration/resend or mail work occurs. Confirm no network request is made by the challenge page except normal same-site form/asset requests and configured mail remains the only outbound transport. Repeat open-origin mode changes and Phase 4.2 token-A/token-B verification scenarios to confirm the anti-automation gate never changes registration origin, verification authority, current-mode policy, or first-confirmed-token-wins behavior.
+
+## Phase 4.4 Viewer Registration Security Operations and Phase 4 Closure
+
+Run the focused regression test with:
+
+```bash
+php tests/viewer_security_operations_phase44_test.php
+```
+
+The focused test verifies that security operations remain inside the existing Admin Viewer-accounts surface and use the established `require_admin()`/administrator identity boundary without adding a public or Viewer metrics route. It verifies that no Phase 4.4 migration, metrics table, event table, limiter table, telemetry coupling, Composer/npm dependency, remote monitoring integration, CAPTCHA service, Redis/Memcached requirement, or new persistent visitor identifier is introduced.
+
+Capability tests cover Viewer Accounts master state, all three effective registration modes, open-registration and resend availability, normalized Phase 4.3 anti-automation configuration, and `available` / `unavailable` / `unknown` storage states. Capacity fixtures verify durable account count/cap and pending registration count/cap, including aggregate open-origin versus invitation-backed staging, without adding email to the operations metrics. Unavailable storage is distinct from a real zero.
+
+Event fixtures use fixed timestamps and prove rolling 24-hour and 7-day counts include only the Phase 4 allowlist and exclude out-of-window/unrelated events. The seven-calendar-day table groups accepted registration requests, verification messages sent, verification resend messages sent, and the documented anti-automation intervention definition (`viewer.automation_challenge_required + viewer.automation_request_suppressed`) by date. The implementation is checked for fixed aggregate SQL rather than an individual-event browser or arbitrary date/report engine.
+
+Limiter fixtures and generated-query assertions protect policy-owned bucket selection and the current-pressure semantics. Active means `last_attempt_at` remains in the configured policy window or `locked_until` remains in the future. Locked means `locked_until > now`. Stale inactive rows and expired locks must not inflate pressure. The registration and verification-mail global-day budgets derive current usage only while `first_attempt_at` remains in the current policy window. Rendering must not call `viewer_rate_limit_consume()`, reset/delete limiter rows, or run maintenance.
+
+Read-only/privacy assertions require the operations service to contain no registration, verification, invitation, anti-automation-ticket, or telemetry mutation path. Rendered operations HTML must not expose IP/IP hash, user-agent/hash, limiter subject hash, request id, event context JSON, verification authority, installation secret, or registration email dimensions. Historical Phase 4.1 generic registration, Phase 4.2 generic resend/token-A/sibling-authority, Phase 4.3 local anti-automation, current-mode revalidation, invitation authority, scanner-safe verification, no-auto-login, and Viewer/Admin principal-boundary regressions remain independently authoritative and are run again in the full suite.
+
+Manual qualification should open **Admin -> Viewer accounts** as an administrator and confirm the new **Viewer security status** panel follows the existing three-state registration selector. Verify status/capacity sections, rolling 24-hour/7-day counts, the seven-day table, fixed limiter-family pressure, and both global-day budget rows. Confirm no identity dimension is shown in those new metrics. Disable or make one backing capability unavailable in a test/staging environment and confirm the affected subsection reports unavailable/unknown rather than zero while the rest of the Admin page remains usable. Repeatedly reload the page and confirm limiter attempts, verification authorities, staged registrations, and Phase 4.3 session challenge authority do not change because of observation.
+
+Phase 4 is considered complete when this focused regression plus the historical Viewer, telemetry, translation, migration, packaging, complete PHP, and Node suites pass.
+

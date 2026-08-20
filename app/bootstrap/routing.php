@@ -98,6 +98,102 @@ function cms_route_from_request(): array
             ],
         ];
     }
+    if ($segments === ['viewer', 'login']) {
+        return ['page' => 'viewer_login', 'params' => []];
+    }
+    if ($segments === ['viewer', 'register']) {
+        return ['page' => 'viewer_register', 'params' => []];
+    }
+    if ($segments === ['viewer', 'resend']) {
+        return ['page' => 'viewer_resend_verification', 'params' => []];
+    }
+    if ($segments === ['viewer', 'first-login']) {
+        return ['page' => 'viewer_first_login_password', 'params' => []];
+    }
+    if ($segments === ['viewer', 'logout']) {
+        return ['page' => 'viewer_logout', 'params' => []];
+    }
+    if ($segments === ['viewer', 'account']) {
+        return ['page' => 'viewer_account', 'params' => []];
+    }
+    if ($segments === ['viewer', 'account', 'reauth']) {
+        return ['page' => 'viewer_account_reauth', 'params' => []];
+    }
+    if ($segments === ['viewer', 'account', 'password']) {
+        return ['page' => 'viewer_account_password', 'params' => []];
+    }
+    if ($segments === ['viewer', 'account', 'email']) {
+        return ['page' => 'viewer_account_email', 'params' => []];
+    }
+    if ($segments === ['viewer', 'account', 'delete']) {
+        return ['page' => 'viewer_account_delete', 'params' => []];
+    }
+    if (($segments[0] ?? '') === 'viewer' && ($segments[1] ?? '') === 'email-change' && ($segments[2] ?? '') === 'verify' && isset($segments[3]) && count($segments) === 4) {
+        return ['page' => 'viewer_email_change_verify', 'params' => ['token' => rawurldecode($segments[3])]];
+    }
+    if ($segments === ['viewer', 'email-change', 'confirm']) {
+        return ['page' => 'viewer_email_change_confirm', 'params' => []];
+    }
+    if ($segments === ['viewer', 'favourites']) {
+        return ['page' => 'viewer_favourites', 'params' => []];
+    }
+    if ($segments === ['viewer', 'favourite']) {
+        return ['page' => 'viewer_favourite', 'params' => []];
+    }
+    if ($segments === ['viewer', 'collections']) {
+        return ['page' => 'viewer_collections', 'params' => []];
+    }
+    if (($segments[0] ?? '') === 'viewer' && ($segments[1] ?? '') === 'collection' && ($segments[2] ?? '') === 'share' && isset($segments[3]) && count($segments) === 4) {
+        return ['page' => 'viewer_collection_share_exchange', 'params' => ['token' => rawurldecode($segments[3])]];
+    }
+    if (($segments[0] ?? '') === 'viewer' && ($segments[1] ?? '') === 'shared' && isset($segments[2]) && count($segments) === 3 && preg_match('/^[1-9][0-9]*$/D', (string) $segments[2]) === 1) {
+        return ['page' => 'viewer_collection_shared', 'params' => ['collection_id' => (string) $segments[2]]];
+    }
+    if (($segments[0] ?? '') === 'viewer' && ($segments[1] ?? '') === 'collections' && isset($segments[2]) && preg_match('/^[1-9][0-9]*$/D', (string) $segments[2]) === 1) {
+        $collectionId = (string) $segments[2];
+        if (count($segments) === 3) {
+            return ['page' => 'viewer_collection', 'params' => ['collection_id' => $collectionId]];
+        }
+        if (count($segments) === 4 && $segments[3] === 'rename') {
+            return ['page' => 'viewer_collection_rename', 'params' => ['collection_id' => $collectionId]];
+        }
+        if (count($segments) === 4 && $segments[3] === 'delete') {
+            return ['page' => 'viewer_collection_delete', 'params' => ['collection_id' => $collectionId]];
+        }
+        if (count($segments) === 4 && $segments[3] === 'items') {
+            return ['page' => 'viewer_collection_item_add', 'params' => ['collection_id' => $collectionId]];
+        }
+        if (count($segments) === 5 && $segments[3] === 'items' && $segments[4] === 'remove') {
+            return ['page' => 'viewer_collection_item_remove', 'params' => ['collection_id' => $collectionId]];
+        }
+        if (count($segments) === 4 && $segments[3] === 'reorder') {
+            return ['page' => 'viewer_collection_reorder', 'params' => ['collection_id' => $collectionId]];
+        }
+        if (count($segments) === 4 && $segments[3] === 'share') {
+            return ['page' => 'viewer_collection_share_replace', 'params' => ['collection_id' => $collectionId]];
+        }
+        if (count($segments) === 5 && $segments[3] === 'share' && $segments[4] === 'revoke') {
+            return ['page' => 'viewer_collection_share_revoke', 'params' => ['collection_id' => $collectionId]];
+        }
+    }
+    if ($segments === ['viewer', 'forgot-password']) {
+        return ['page' => 'viewer_forgot_password', 'params' => []];
+    }
+    if (($segments[0] ?? '') === 'viewer' && ($segments[1] ?? '') === 'invite' && isset($segments[2]) && count($segments) === 3) {
+        return ['page' => 'viewer_invite', 'params' => ['token' => rawurldecode($segments[2])]];
+    }
+    if (($segments[0] ?? '') === 'viewer' && ($segments[1] ?? '') === 'verify' && isset($segments[2]) && count($segments) === 3) {
+        return ['page' => 'viewer_verify', 'params' => ['token' => rawurldecode($segments[2])]];
+    }
+    if (($segments[0] ?? '') === 'viewer' && ($segments[1] ?? '') === 'reset' && isset($segments[2]) && count($segments) === 3) {
+        return ['page' => 'viewer_reset_password', 'params' => ['token' => rawurldecode($segments[2])]];
+    }
+    if ($segments === ['viewer', 'verify']) {
+        return ['page' => 'viewer_verify', 'params' => []];
+    }
+    if ($segments === ['viewer', 'reset']) {
+        return ['page' => 'viewer_reset_password', 'params' => []];
+    }
     if ($segments[0] === 'galleries' && isset($segments[1]) && preg_match('/^[0-9]+$/', $segments[1]) === 1) {
         return ['page' => 'home', 'params' => ['gallery_page' => max(1, (int) $segments[1])]];
     }

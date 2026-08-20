@@ -115,6 +115,11 @@ function seo_request_guard_route_is_exempt(string $page): bool
     if (str_starts_with($page, 'admin')) {
         return true;
     }
+    // Viewer account routes own strict bearer/pre-auth validation and may carry security tokens.
+    // Exempt them so the SEO guard cannot reject or log complete secret-bearing query URLs.
+    if (str_starts_with($page, 'viewer_')) {
+        return true;
+    }
 
     return in_array($page, [
         'setup',

@@ -30,22 +30,25 @@ function slideshow_preload_assert(bool $condition, string $message): void
     exit(1);
 }
 
-$prepareStart = strpos($source, 'function prepareLightboxSlideshowImage(index)');
+$prepareStart = strpos($source, 'function prepareLightboxSlideshowImage(index, signal = null)');
 $prepareEnd = strpos($source, 'function syncLightboxSlideshowControls()', $prepareStart === false ? 0 : $prepareStart);
 slideshow_preload_assert($prepareStart !== false && $prepareEnd !== false, 'Slideshow full-image preparation helper is missing.');
 $prepareSource = substr($source, (int) $prepareStart, (int) $prepareEnd - (int) $prepareStart);
 slideshow_preload_assert(str_contains($prepareSource, "card.dataset.fullSrc || card.dataset.previewSrc"), 'Slideshow preparation must prefer the full source.');
-slideshow_preload_assert(str_contains($prepareSource, "loadDecodedLightboxImage(fullSrc, {priority: 'high'})"), 'Slideshow preparation must fully load and decode the next full source.');
+slideshow_preload_assert(str_contains($prepareSource, "loadFreshDecodedLightboxImage(fullSrc, {priority: 'high', signal})"), 'Slideshow preparation must fully load and decode the next full source without adding it to the reusable decoded cache.');
+slideshow_preload_assert(!str_contains($prepareSource, 'loadDecodedLightboxImage(fullSrc'), 'Slideshow full-source preparation must remain transient instead of accumulating originals in the reusable decoded cache.');
 slideshow_preload_assert(str_contains($prepareSource, 'fetchLightboxWindowAround(normalizedIndex)'), 'Slideshow preparation must support sparse paginated gallery metadata.');
 
 $scheduleStart = strpos($source, 'function scheduleLightboxSlideshowNext()');
 $scheduleEnd = strpos($source, 'async function startLightboxSlideshow()', $scheduleStart === false ? 0 : $scheduleStart);
 slideshow_preload_assert($scheduleStart !== false && $scheduleEnd !== false, 'Slideshow scheduler is missing.');
 $scheduleSource = substr($source, (int) $scheduleStart, (int) $scheduleEnd - (int) $scheduleStart);
-$preparePosition = strpos($scheduleSource, 'prepareLightboxSlideshowImage(nextIndex)');
+$preparePosition = strpos($scheduleSource, 'prepareLightboxSlideshowImage(nextIndex, preloadController.signal)');
 $timerPosition = strpos($scheduleSource, 'window.setTimeout(() =>');
 $readyGatePosition = strpos($scheduleSource, 'preparedImagePromise.then((prepared) =>');
 $openPosition = strpos($scheduleSource, 'openAt(nextIndex, {');
+slideshow_preload_assert(str_contains($scheduleSource, 'const preloadController = new AbortController();'), 'Each slideshow cycle must own a cancellable next-image preload.');
+slideshow_preload_assert(str_contains($scheduleSource, 'lightboxSlideshowPreloadController = preloadController;'), 'The active slideshow preload controller must be retained for stop/close cancellation.');
 slideshow_preload_assert($preparePosition !== false && $timerPosition !== false && $preparePosition < $timerPosition, 'Next full-image preload must start before the slideshow timer expires.');
 slideshow_preload_assert($readyGatePosition !== false && $timerPosition < $readyGatePosition, 'Automatic advance must wait for the preload only after the display timer gate opens.');
 slideshow_preload_assert($openPosition !== false && $readyGatePosition < $openPosition, 'Automatic slideshow navigation must occur only inside the decoded-image readiness gate.');
@@ -59,5 +62,11 @@ $openSource = substr($source, (int) $openStart, (int) $openEnd - (int) $openStar
 slideshow_preload_assert(str_contains($openSource, 'options.slideshowPreparedImage instanceof HTMLImageElement'), 'Prepared full images must be explicitly slideshow-only.');
 slideshow_preload_assert(str_contains($openSource, 'const initialMainPromise = slideshowPreparedImage'), 'Prepared slideshow images must bypass the preview-first branch.');
 slideshow_preload_assert(str_contains($openSource, '? showMainImage(slideshowPreparedImage)'), 'Prepared slideshow images must enter the existing decoded-image transition path directly.');
+
+$clearStart = strpos($source, 'function clearLightboxSlideshowTimer()');
+$clearEnd = strpos($source, 'function prepareLightboxSlideshowImage(', $clearStart === false ? 0 : $clearStart);
+slideshow_preload_assert($clearStart !== false && $clearEnd !== false, 'Slideshow timer cancellation helper is missing.');
+$clearSource = substr($source, (int) $clearStart, (int) $clearEnd - (int) $clearStart);
+slideshow_preload_assert(str_contains($clearSource, 'lightboxSlideshowPreloadController.abort();'), 'Stopping or replacing a slideshow cycle must abort its unfinished full-image preload.');
 
 fwrite(STDOUT, "lightbox slideshow preload contract: OK\n");

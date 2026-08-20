@@ -1619,3 +1619,219 @@ body.has-map-overlay {
         max-height: 3.75rem;
     }
 }
+
+/* Phase 1.1 viewer favourites stay visually small and do not change public card geometry. */
+.viewer-favourite-card-overlay {
+    position: absolute;
+    top: 0.6rem;
+    left: 0.6rem;
+    z-index: 7;
+    margin: 0;
+    line-height: 1;
+}
+
+.image-card.has-public-reorder-handle .viewer-favourite-card-overlay,
+.image-card.has-picture-manager-select .viewer-favourite-card-overlay {
+    top: 3.05rem;
+}
+
+.viewer-favourite-card-overlay .viewer-favourite-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    min-width: 2rem;
+    height: 2rem;
+    min-height: 2rem;
+    padding: 0;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.55);
+    color: rgba(255, 255, 255, 0.95);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.16);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    cursor: pointer;
+    font-size: 1.15rem;
+    line-height: 1;
+}
+
+.viewer-favourite-card-overlay.is-favourite .viewer-favourite-button {
+    border-color: rgba(255, 255, 255, 0.82);
+    background: var(--accent);
+    color: #fff;
+}
+
+.viewer-favourite-card-overlay .viewer-favourite-button:disabled {
+    cursor: progress;
+    opacity: 0.65;
+}
+
+.viewer-favourites-grid {
+    margin-top: 1rem;
+}
+
+
+/* Phase 2.0 private viewer collections remain compact and do not alter anonymous card geometry. */
+.viewer-collection-card-overlay {
+    position: absolute;
+    top: 0.6rem;
+    left: 3rem;
+    z-index: 8;
+    margin: 0;
+    line-height: 1.2;
+}
+
+.image-card.has-public-reorder-handle .viewer-collection-card-overlay,
+.image-card.has-picture-manager-select .viewer-collection-card-overlay {
+    top: 3.05rem;
+}
+
+.viewer-collection-add-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.55);
+    color: rgba(255, 255, 255, 0.95);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.16);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    cursor: pointer;
+    font-size: 1.15rem;
+    list-style: none;
+}
+
+.viewer-collection-add-button::-webkit-details-marker {
+    display: none;
+}
+
+.viewer-collection-add-menu {
+    width: min(16rem, calc(100vw - 3rem));
+    max-height: 15rem;
+    margin-top: 0.35rem;
+    padding: 0.55rem;
+    overflow: auto;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--panel);
+    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.24);
+    color: var(--text);
+    line-height: 1.25;
+}
+
+.viewer-collection-add-menu strong,
+.viewer-collection-add-menu p {
+    display: block;
+    margin: 0 0 0.4rem;
+    line-height: 1.3;
+}
+
+.viewer-collection-add-menu form {
+    display: grid;
+    gap: 0.35rem;
+    margin: 0.25rem 0 0;
+}
+
+.viewer-collection-add-menu select {
+    width: 100%;
+    max-width: 100%;
+}
+
+.viewer-collection-list {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.viewer-collection-list-item,
+.viewer-collection-manage-row,
+.viewer-collection-item-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    flex-wrap: wrap;
+}
+
+.viewer-collection-list-item {
+    justify-content: space-between;
+    padding: 0.8rem 0;
+    border-bottom: 1px solid var(--border);
+}
+
+.viewer-collection-list-item:last-child {
+    border-bottom: 0;
+}
+
+.viewer-collection-list-main h3,
+.viewer-collection-list-main p {
+    margin: 0;
+}
+
+.viewer-collection-list-actions,
+.viewer-collection-inline-form {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    flex-wrap: wrap;
+}
+
+.viewer-collection-inline-form input[type="text"] {
+    width: min(22rem, 55vw);
+}
+
+.viewer-collection-delete-form .button.danger {
+    border-color: #a62a2a;
+    background: #a62a2a;
+    color: #fff;
+}
+
+.viewer-collection-share-url {
+    display: block;
+    width: 100%;
+    margin-top: 0.4rem;
+}
+
+.viewer-collection-share-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    flex-wrap: wrap;
+}
+
+.viewer-collection-share-actions form {
+    margin: 0;
+}
+
+.viewer-collection-grid {
+    margin-top: 1rem;
+}
+
+.viewer-collection-item-actions {
+    padding: 0.55rem 0;
+}
+
+.viewer-collection-item-actions form {
+    margin: 0;
+}
+
+.viewer-collection-item-actions .button.small {
+    padding: 0.35rem 0.55rem;
+    font-size: 0.85rem;
+}
+
+@media (max-width: 700px) {
+    .viewer-collection-list-item,
+    .viewer-collection-list-actions,
+    .viewer-collection-inline-form,
+    .viewer-collection-manage-row {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .viewer-collection-inline-form input[type="text"] {
+        width: 100%;
+    }
+}

@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-04
+ *   2026-08-18
  */
 
 declare(strict_types=1);
@@ -176,8 +176,15 @@ function send_security_headers(): void
 
     // $page stores an intermediate value used by the surrounding gallery workflow.
     $page = (string) ($_GET['page'] ?? 'home');
+    // Viewer and viewer pre-auth session state must never be eligible for anonymous/public response caching.
+    // This is intentionally a PHP-session presence check only; cache classification must not query viewer tables.
+    $hasViewerSensitiveState = isset($_SESSION['viewer_auth'])
+        || isset($_SESSION['viewer_registration_activation'])
+        || isset($_SESSION['viewer_password_reset'])
+        || isset($_SESSION['viewer_csrf_token'])
+        || isset($_COOKIE['php_gallery_viewer_remember']);
     // $isAnonymousGet stores an intermediate value used by the surrounding gallery workflow.
-    $isAnonymousGet = request_method() === 'GET' && current_user() === null;
+    $isAnonymousGet = request_method() === 'GET' && current_user() === null && !$hasViewerSensitiveState;
     // $isPublicHtmlCacheCandidate stores public pages whose rendered HTML depends on DB-backed theme and gallery settings.
     $isPublicHtmlCacheCandidate = in_array($page, ['home', 'gallery', 'share', 'tag', 'picture_game'], true);
     // $isStaticPublicCacheCandidate stores public routes that do not render gallery-card HTML.

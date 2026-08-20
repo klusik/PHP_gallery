@@ -41,6 +41,7 @@ const optionalPublicModules = {
     thumbnailRenderDiagnostics: './gallery-modules/public-thumbnail-render-diagnostics.js?v=20260809-thumbnail-render-diagnostics-v1',
     thumbnailWarmup: './gallery-modules/thumbnail-warmup.js?v=20260608-thumbnail-warmup-v1',
     heroTags: './gallery-modules/hero-tags.js?v=20260811-hero-tags-v1',
+    viewerFavourites: './gallery-modules/viewer-favourites.js?v=20260818-viewer-favourites-v1',
 };
 
 /**
@@ -114,6 +115,7 @@ function bootPublicGalleryBrowserFeatures() {
         setupOptionalPublicFeature(optionalPublicModules.thumbnailRenderDiagnostics, 'setupPublicThumbnailRenderDiagnostics', '[data-public-thumbnail-diagnostics]');
         setupOptionalPublicFeature(optionalPublicModules.thumbnailWarmup, 'setupThumbnailWarmup', 'img[data-thumbnail-warmup-id][data-thumbnail-warmup-token][data-thumbnail-warmup-endpoint]');
         setupOptionalPublicFeature(optionalPublicModules.heroTags, 'setupHeroTagDisclosure', '[data-hero-tags]');
+        setupOptionalPublicFeature(optionalPublicModules.viewerFavourites, 'setupViewerFavourites', '[data-viewer-favourite-form]');
     });
 }
 

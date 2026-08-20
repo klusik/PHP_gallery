@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-04
+ *   2026-08-18
  */
 
 return [
@@ -59,6 +59,72 @@ return [
         'remember_lifetime_days' => 30,
         'persistent_login_enabled' => true,
         'persistent_login_default_checked' => true,
+    ],
+
+    // Viewer accounts remain disabled by default. When enabled, registration_mode controls
+    // whether registration is disabled, Admin-invitation-only, or open with verified email.
+    // The global viewer_accounts feature remains the master switch for all viewer HTTP surfaces.
+    'viewer_accounts' => [
+        'enabled' => false,
+        'registration_mode' => 'disabled', // disabled, invite_only, or open
+        'require_https' => true,
+        'session_lifetime_seconds' => 86400,
+        'remember_lifetime_days' => 30,
+        'security_event_retention_days' => 180,
+        'rate_limit_max_subjects_per_bucket' => 5000,
+        // First-party adaptive anti-automation gate for anonymous registration/resend.
+        'anti_automation_enabled' => true,
+        'anti_automation_min_form_age_seconds' => 2,
+        'anti_automation_form_lifetime_seconds' => 600,
+        'anti_automation_pow_min_bits' => 12,
+        'anti_automation_pow_max_bits' => 15,
+        'max_viewer_accounts' => 250,
+        'max_active_viewer_sessions_per_account' => 10,
+        'max_active_viewer_remember_tokens_per_account' => 10,
+        'max_pending_registration_requests' => 250,
+        'registration_request_lifetime_minutes' => 1440,
+        'verified_registration_lifetime_minutes' => 60,
+        'registration_activation_lifetime_minutes' => 20,
+        'verification_token_lifetime_minutes' => 60,
+        'password_reset_authorization_lifetime_minutes' => 15,
+        'password_reset_token_lifetime_minutes' => 60,
+        'viewer_reauthentication_lifetime_minutes' => 15,
+        'email_change_request_lifetime_minutes' => 60,
+        'email_change_confirmation_lifetime_minutes' => 15,
+        'invitation_lifetime_days' => 7,
+        'registration_global_daily_limit' => 50,
+        'verification_mail_email_cooldown_seconds' => 600,
+        'verification_mail_email_hourly_limit' => 3,
+        'verification_mail_email_daily_limit' => 5,
+        'verification_mail_ip_hourly_limit' => 10,
+        'verification_mail_ip_daily_limit' => 25,
+        'verification_mail_subnet_hourly_limit' => 25,
+        'verification_mail_subnet_daily_limit' => 60,
+        'verification_mail_global_daily_limit' => 50,
+        'password_reset_mail_email_cooldown_seconds' => 600,
+        'password_reset_mail_email_hourly_limit' => 3,
+        'password_reset_mail_email_daily_limit' => 5,
+        'password_reset_mail_ip_hourly_limit' => 5,
+        'password_reset_mail_ip_daily_limit' => 20,
+        'password_reset_mail_subnet_hourly_limit' => 15,
+        'password_reset_mail_subnet_daily_limit' => 40,
+        'password_reset_mail_global_daily_limit' => 50,
+        'invitation_mail_email_daily_limit' => 3,
+        'invitation_mail_global_daily_limit' => 50,
+        // Viewer content resource boundaries. Phase 1.1 uses the favourites limit; collection limits remain reserved for later phases.
+        'max_viewer_favourites_per_account' => 5000,
+        'max_viewer_collections_per_account' => 25,
+        'max_viewer_items_per_collection' => 500,
+        'max_active_viewer_collection_shares_per_collection' => 1,
+    ],
+
+    // Forwarded client-IP headers are ignored unless both the direct peer and
+    // header family are explicitly trusted here. Exact IPs and CIDRs are valid.
+    // This leaves normal non-proxy installations on REMOTE_ADDR behavior.
+    'security' => [
+        'trusted_proxies' => [],
+        'trusted_proxy_headers' => [], // x-forwarded-for, x-real-ip, cf-connecting-ip
+        'trusted_proxy_protocol_headers' => [], // x-forwarded-proto, x-forwarded-ssl
     ],
 
     // Google login uses OpenID Connect. Create a Google OAuth 2.0 Web

@@ -31,7 +31,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-06-08
+ *   2026-08-18
  */
 
 declare(strict_types=1);
@@ -1426,6 +1426,10 @@ function site_maintenance_process_cleanup_step(array &$state, float $deadline): 
     if (function_exists('Gallery\\Controllers\\cms_cleanup_password_reset_tokens')) {
         cms_cleanup_password_reset_tokens();
         $cleanup['password_reset_tokens'] = 'cleaned';
+    }
+
+    if (function_exists('Gallery\Services\viewer_security_maintenance_cleanup')) {
+        $cleanup['viewer_security'] = viewer_security_maintenance_cleanup();
     }
 
     if (function_exists('telemetry_run_maintenance') && (!function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('telemetry'))) {

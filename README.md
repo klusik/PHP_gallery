@@ -2,7 +2,7 @@
 
 A modern PHP 8.0+ gallery CMS designed for ordinary shared hosting. The application uses the filesystem as the authoritative source for gallery structure, while storing all metadata, access rules, votes, user accounts, and audit logs in MySQL or MariaDB.
 
-**Current Version:** 0.91.3
+**Current Version:** 0.92
 
 **Key Benefit:** Deploy in minutes on shared hosting. No npm, no Composer, no framework overhead. Just PHP + MySQL.
 
@@ -55,6 +55,26 @@ Progressive rendering prioritizes perceived initial responsiveness, not minimum 
 - **Share links** - Generate time-limited or permanent share tokens
 - **Inheritance** - Child galleries inherit parent access rules
 - **Admin-only zones** - Some galleries only visible when logged in
+
+### Viewer Accounts (Invite-only Registration)
+- **Administrator account management** - Admin can create and delete viewer accounts directly, or create/list/revoke invitation links without pre-creating an account
+- **Administrator security controls** - Admin can suspend or restore a viewer account and force sign-out on every viewer device; suspension and restoration rotate viewer security authority without deleting favourites or private collections
+- **Forced first-login password replacement** - Directly created accounts use a generated or Admin-supplied temporary password; normal viewer authority and Remember me stay blocked until the user replaces it
+- **Password-safe notification** - Optional account-created mail contains the trusted login URL but never the temporary password, which is shown once to the administrator for separate delivery
+- **Administrator-issued invitations** - Invitation recipients still follow the existing email-verification activation flow and choose their own initial password
+- **Verified activation** - Invitation recipients verify their email before a durable viewer account is activated and choose a password of at least 15 characters
+- **Separate viewer login** - Viewer identity is independent from administrator identity and never grants protected-gallery access by itself
+- **Remember me** - Dedicated rotating viewer persistent credential, separate from Admin persistent login and recent reauthentication
+- **Password recovery** - Generic, scanner-safe viewer reset flow using the configured bounded mail transport
+- **Private account and favourites** - Signed-in email, viewer-only logout, a private favourites page, and small favourite controls on authorized gallery cards/lightbox images
+- **Private viewer collections** - Viewers can create, rename, delete, order, and browse private collections of authorized image references; source authorization is re-evaluated whenever a collection is rendered
+- **Unlisted read-only collection sharing** - A viewer may issue one revocable 30-day share link for an owned collection; recipients need no account, the secret is exchanged into a narrow session grant and removed from the displayed URL, and every rendered source image still passes the recipient's current gallery/media authorization without Admin bypass
+- **Viewer account lifecycle** - Authenticated viewers can change password, stage and verify a new email address, and permanently delete their own viewer account through the existing Phase 0.7 lifecycle services
+- **Recent reauthentication** - Password change, email-change initiation, and account deletion require recent viewer password proof; remember-me restoration alone is intentionally insufficient
+- **Master feature wrapper** - The complete viewer-account subsystem is registered in **Admin > Features** and is disabled by default. While off, Viewer accounts is hidden from Admin navigation, public viewer Login/Account UI is absent, and viewer routes fail closed without allowing existing accounts to authenticate.
+- **Invite-only mode inside the feature** - After the master feature is enabled, **Admin > Account > Viewer accounts** exposes the existing subordinate viewer-frontend toggle; enabling it selects the supported `invite_only` mode and no `config.php` edit is required.
+- **Authorization remains independent** - Saving a favourite or collection item stores only the canonical image reference and never preserves or grants access to a protected source gallery
+- **Still deliberately absent** - Open signup, public viewer profiles or collection discovery, recipient ACLs/collaboration, uploads, comments, and optional viewer MFA/social-login mechanisms
 
 ### Tagging & Organization
 - **Reusable tags** - Global tag system shared across all galleries and images
@@ -323,7 +343,7 @@ Use **Settings** in the Admin navigation as the central overview for important g
 
 The hub can directly edit only settings that already have a safe canonical service setter: site name, public language, URL rewrite, public search when available, the public thumbnail renderer, the global EXIF/GPS display default when its existing schema is ready, and development diagnostics. Theme layout, tag presentation, upload tuning, telemetry, Account credentials, language-pack editing, raw CSS, API keys, database tools and destructive maintenance remain on their existing specialized pages. Those pages remain fully supported and link back to the relevant Settings section.
 
-Version 0.91.3 contains the complete Version 0.91/0.91.1/0.91.2 viewer and Smart Gallery improvements plus stabilized slideshow preloading and fullscreen transitions. Public Smart Galleries retain centralized access enforcement, configurable presentation and thumbnail behavior, top/bottom placement with deterministic ordering, cycle-safe rule evaluation, complete zoom/progressive-quality lightbox behavior, and Shift+Left/Right ten-photo navigation. Existing gallery, migration, privacy, responsive, and no-JavaScript behavior remains compatible.
+Version 0.92 adds the invite-only multi-user viewer system on top of the complete Version 0.91/0.91.1/0.91.2/0.91.3 foundation: administrator-managed viewer accounts and invitations, verified activation, separate viewer authentication, password recovery, favourites, private collections, revocable unlisted collection sharing, account lifecycle controls, and adaptive anti-automation protection. It also hardens lightbox resource caching, detached-image cancellation, slideshow preloading, and protected-media session release for slower hosting environments. The Viewer accounts master switch is disabled by default, open signup remains intentionally absent, and existing gallery access rules remain authoritative.
 
 Deep links use stable identifiers such as `?page=admin_settings&section=appearance#settings-appearance`. JavaScript tab changes update the complete query plus hash URL so Back/Forward and refresh preserve the selected section. Without JavaScript, the tab links load the same section as normal pages. See `docs/ADMIN_SETTINGS_INVENTORY.md` for canonical ownership, defaults, fallbacks, sensitivity and migration status.
 

@@ -94,8 +94,14 @@ $publicPathRepair = '202607120002_harden_gallery_public_paths';
 $hierarchicalPathRepair = '202607120003_restore_hierarchical_gallery_public_paths';
 $runnerCompatibilityRepair = '202607120004_verify_gallery_public_paths_after_runner_upgrade';
 $databaseMaintenanceRepair = '202607250001_database_maintenance_schema_repair';
+$viewerSecurityFoundation = '202608180001_viewer_security_foundations';
+$viewerRegistrationFoundation = '202608180002_viewer_registration_foundations';
+$viewerAuthenticationFoundation = '202608180003_viewer_authentication_foundations';
+$viewerLifecycleFoundation = '202608180004_viewer_account_lifecycle_foundations';
+$viewerInvitationAdminManagement = '202608180005_viewer_invitation_admin_management';
+$viewerAdminAccountManagement = '202608180006_viewer_admin_account_management';
 
-foreach ([$browserSeed, $browserSafety, $browserRebuild, $legacyCleanup, $publicPathRepair, $hierarchicalPathRepair, $runnerCompatibilityRepair, $databaseMaintenanceRepair] as $requiredVersion) {
+foreach ([$browserSeed, $browserSafety, $browserRebuild, $legacyCleanup, $publicPathRepair, $hierarchicalPathRepair, $runnerCompatibilityRepair, $databaseMaintenanceRepair, $viewerSecurityFoundation, $viewerRegistrationFoundation, $viewerAuthenticationFoundation, $viewerLifecycleFoundation, $viewerInvitationAdminManagement, $viewerAdminAccountManagement] as $requiredVersion) {
     assert_migration_consistency(isset($definitions[$requiredVersion]), 'Required migration is missing: ' . $requiredVersion);
 }
 assert_migration_consistency(strcmp($legacyCleanup, $browserRebuild) > 0, 'Legacy cleanup must run after canonical browser setting migrations.');
@@ -111,6 +117,15 @@ assert_migration_consistency(strcmp($runnerCompatibilityRepair, $hierarchicalPat
 assert_migration_consistency($definitions[$databaseMaintenanceRepair]['after'] !== null, 'Database maintenance repair must be recorded as a post-migration callback.');
 assert_migration_consistency($definitions[$databaseMaintenanceRepair]['statements'] === [], 'Database maintenance repair must conditionally inspect objects instead of exposing destructive SQL statements.');
 assert_migration_consistency(strcmp($databaseMaintenanceRepair, $runnerCompatibilityRepair) > 0, 'Database maintenance repair must run after the released migration-runner compatibility repair.');
+assert_migration_consistency(strcmp($viewerRegistrationFoundation, $viewerSecurityFoundation) > 0, 'Viewer registration foundations must run after the base viewer-security migration.');
+assert_migration_consistency(strcmp($viewerAuthenticationFoundation, $viewerRegistrationFoundation) > 0, 'Viewer authentication foundations must run after registration foundations.');
+assert_migration_consistency(strcmp($viewerLifecycleFoundation, $viewerAuthenticationFoundation) > 0, 'Viewer Phase 0.7 lifecycle foundations must run after Phase 0.6 authentication foundations.');
+assert_migration_consistency(count($definitions[$viewerLifecycleFoundation]['statements']) === 1, 'Viewer Phase 0.7 lifecycle migration must remain one additive table definition.');
+assert_migration_consistency(strcmp($viewerInvitationAdminManagement, $viewerLifecycleFoundation) > 0, 'Viewer invitation Admin management migration must run after the Phase 0.7 lifecycle foundations.');
+assert_migration_consistency(count($definitions[$viewerInvitationAdminManagement]['statements']) === 1, 'Viewer invitation Admin management migration must remain one additive column definition.');
+assert_migration_consistency(strcmp($viewerAdminAccountManagement, $viewerInvitationAdminManagement) > 0, 'Viewer Admin account management migration must run after invitation Admin management.');
+assert_migration_consistency(count($definitions[$viewerAdminAccountManagement]['statements']) === 1, 'Viewer Admin account management migration must remain one additive first-login flag definition.');
+assert_migration_consistency(str_contains((string) $definitions[$viewerAdminAccountManagement]['statements'][0], 'must_change_password'), 'Viewer Admin account management migration must add the forced password-change flag.');
 
 $simulatedFiles = [
     '/project/database/migrations/202606100001_browser_client_upload_settings.php',

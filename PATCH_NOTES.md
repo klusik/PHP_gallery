@@ -1,5 +1,98 @@
 # Patch notes
 
+## Version 0.92
+
+Version 0.92 introduces the invite-only multi-user viewer system and a substantial resource-lifecycle hardening pass for the lightbox and protected media. Administrators can manage viewer accounts and invitations while viewers receive a separate, privacy-preserving account boundary for favourites, private collections, and controlled unlisted sharing. The viewer feature is disabled by default and does not grant access to protected galleries.
+
+  ### Highlights
+
+  #### Viewer account administration
+
+  - Added a disabled-by-default **Viewer accounts** master feature switch under Admin > Features.
+  - Added administrator-created viewer accounts with generated or administrator-supplied temporary passwords and forced first-login password replacement.
+  - Added administrator invitation creation, listing, resend, revoke, and expiry workflows without pre-creating the recipient account.
+  - Added viewer suspension, restoration, and sign-out-everywhere controls that rotate viewer security authority without deleting favourites or private collections.
+  - Kept viewer identity separate from administrator identity and prevented viewer authentication from granting protected-gallery access.
+
+  #### Verified viewer authentication and lifecycle
+
+  - Added invite-only email verification and activation with scanner-safe responses, one-time verification tokens, expiry handling, resend cooldowns, and a minimum 15-character viewer password.
+  - Added dedicated viewer login/logout and rotating viewer remember-me credentials separate from administrator login persistence.
+  - Added generic password recovery through the configured bounded mail transport, with token expiry, one-time use, and persistent-session revocation.
+  - Added authenticated viewer password changes, staged email changes with verification, account deletion, and recent-password reauthentication for sensitive operations.
+  - Added private no-store account responses and viewer-only lifecycle boundaries suitable for shared-hosting session behavior.
+
+  #### Favourites, collections, and sharing
+
+  - Added authenticated viewer favourites on authorized gallery cards and lightbox images, plus a private favourites page.
+  - Added private viewer collections with create, rename, delete, ordering, and browse workflows.
+  - Added one revocable 30-day unlisted read-only collection share per owned collection.
+  - Removed the displayed share secret after exchange into a narrow session grant and revalidated source-gallery/media authorization for every rendered item.
+  - Kept favourites, collection references, and share grants from bypassing gallery passwords, visibility, NSFW rules, or administrator authorization boundaries.
+
+  #### Anti-automation and abuse controls
+
+  - Added adaptive registration/login/recovery rate limits, trusted-client handling, challenge escalation, and bounded mail-abuse protection.
+  - Added browser challenge support and localized security messages without exposing account existence through public responses.
+  - Added security-event and maintenance foundations for viewer lifecycle cleanup and authority revocation.
+
+  #### Lightbox caching and resource lifecycle
+
+  - Reduced the decoded lightbox preview neighbourhood from 48 images to 12 so long galleries do not retain an unnecessarily large set of decoded bitmaps in browser memory.
+  - Added ownership tracking for detached image requests and aborts unfinished preview, nearby-image, and slideshow loads when the lightbox closes, navigates, or is torn down.
+  - Invalidated stale preload generations, removed failed or aborted cache entries, and prevented late decodes from repopulating a newer photo's state.
+  - Kept slideshow preloading bounded to the next authorized photograph, rejected duplicate and stale preload work, and preserved the active timer, transition, navigation, fullscreen state, and controls.
+  - Preserved the active viewer favourite state when asynchronous lightbox metadata updates complete, preventing a late response from overwriting the current card state.
+  - Cleaned up public-media image-load handlers and registries when work is cancelled so obsolete browser requests and callbacks can be released promptly.
+
+  #### Protected media session and cache behavior
+
+  - Added a protected-media session-lock release after authorization and cache-policy decisions for thumbnail, media, cover, and branding responses, allowing concurrent requests to proceed on slower or session-locked hosting.
+  - Kept gallery, password, visibility, NSFW, conditional-request, and media authorization checks ahead of session release; releasing the lock does not weaken access control.
+  - Preserved private/no-store cache behavior for access-sensitive responses and immutable public caching only for safe public derivatives.
+
+  ### Technical Details
+
+  #### Backend and database
+
+  - Added viewer account, authentication, lifecycle, token, rate-limit, mail, security-event, collection, favourite, and sharing services under `app/services/`.
+  - Added viewer account, invitation, authentication, lifecycle, and verification-token migrations under `database/migrations/`.
+  - Added route and dispatch integration for viewer registration, verification, login, recovery, account lifecycle, favourites, collections, and collection sharing.
+  - Preserved schema-aware fail-closed behavior for required viewer writes and kept the master feature wrapper dormant when disabled.
+
+  #### Frontend and localization
+
+  - Added viewer account and collection UI integration to the public layout and lightbox/gallery surfaces.
+  - Added browser anti-automation challenge behavior and cache-busted public viewer assets.
+  - Added maintained English, Czech, German, and Swedish strings for viewer authentication, registration, recovery, account security, favourites, collections, invitations, and sharing.
+  - Updated `README.md`, `ARCHITECTURE.md`, `CODEMAP.md`, `DATABASE.md`, `TESTING.md`, and `docs/VIEWER_SECURITY_FOUNDATIONS.md` with the multi-user security contracts.
+
+  #### Tests and release artifacts
+
+  - Added focused viewer foundation, authentication, lifecycle, invitation, HTTP, verification-resend, anti-automation, security-operation, collection, favourite, sharing, and MySQL concurrency regression tests.
+  - Updated `docs/PHP_Gallery_Manual.tex` and rebuilt the indexed `docs/PHP_Gallery_Manual.pdf` for Version 0.92, including the lightbox cache and protected-media session lifecycle contracts.
+  - Updated `app/controllers/public_media.php` and `public/assets/gallery-modules/lightbox.js` for bounded caching, cancellation, stale-generation protection, and session-lock release.
+  - Regenerated and verified `app/core-manifest.json` after the final runtime, asset, migration, and documentation changes.
+
+  ### User Impact
+
+  #### For visitors
+
+  - Invitees can activate a verified viewer account, sign in separately from administrators, recover access safely, save favourites, and maintain private image collections.
+  - Collection owners can share one revocable unlisted read-only link for up to 30 days without exposing a public profile or collection directory.
+  - Shared and saved image references continue to obey the current visitor's gallery, media, password, visibility, and NSFW authorization.
+
+  #### For administrators
+
+  - Viewer accounts remain off until explicitly enabled, and the enabled mode is invite-only.
+  - Administrators can provision, invite, suspend, restore, revoke, and force-sign-out viewer identities from the dedicated account controls.
+  - No existing gallery access rules, administrator accounts, source files, or public media permissions are changed by enabling the viewer subsystem.
+
+  #### For gallery performance
+
+  - Long galleries retain fewer decoded previews, and obsolete image work is cancelled during rapid navigation or closing.
+  - Slideshow and fullscreen transitions no longer depend on stale preload callbacks, while protected media requests do not hold the PHP session lock after their security decisions are complete.
+
 ## Version 0.91.3
 
 Version 0.91.3 is a focused lightbox reliability release. It improves slideshow preloading and fullscreen transitions while preserving the existing zoom, navigation, access-control, responsive, and no-JavaScript behavior.

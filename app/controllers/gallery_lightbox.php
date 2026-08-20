@@ -42,6 +42,7 @@ use function Gallery\Core\gallery_public_url;
 use function Gallery\Core\image_public_url;
 use function Gallery\Core\url_for;
 use function Gallery\Services\current_user_is_known_under_18;
+use function Gallery\Services\current_viewer;
 use function Gallery\Services\current_votes_for_images;
 use function Gallery\Services\content_localize_entities;
 use function Gallery\Services\content_localize_entity;
@@ -61,6 +62,9 @@ use function Gallery\Services\lightbox_zoom_quality_candidates;
 use function Gallery\Services\translation_active_language;
 use function Gallery\Services\visitor_can_access_gallery;
 use function Gallery\Services\visitor_can_access_nsfw_content;
+use function Gallery\Services\viewer_favourites_for_image_ids;
+use function Gallery\Services\viewer_favourites_storage_available;
+use function Gallery\Services\viewer_source_image_can_reference;
 
 /**
  * Send a JSON response for the lazy lightbox endpoint.
@@ -152,6 +156,11 @@ function cms_gallery_lightbox_data(): void
     $images = content_localize_entities('image', $images, $contentLanguage);
     $imageIds = array_map(static fn (array $image): int => (int) $image['id'], $images);
     $votesById = current_votes_for_images($imageIds);
+    $viewerPrincipal = current_viewer();
+    $viewerFavouriteStates = $viewerPrincipal !== null && viewer_favourites_storage_available()
+        ? viewer_favourites_for_image_ids((int) $viewerPrincipal['id'], $imageIds)
+        : null;
+    $viewerFavouriteRequiresSourceRecheck = is_array($viewerFavouriteStates) && $viewer !== null;
     $mapsAllowed = gallery_allows_gps_maps($gallery);
     $votingAllowed = gallery_voting_allowed($gallery);
     $items = [];
@@ -161,6 +170,13 @@ function cms_gallery_lightbox_data(): void
             continue;
         }
         $items[] = gallery_lightbox_json_item($image, $gallery, $offset + $rowIndex, $mapsAllowed, $votingAllowed, $votesById);
+        if (is_array($viewerFavouriteStates)
+            && (!$viewerFavouriteRequiresSourceRecheck || viewer_source_image_can_reference((int) $image['id']))) {
+            $lastItemIndex = array_key_last($items);
+            if ($lastItemIndex !== null) {
+                $items[$lastItemIndex]['viewer_favourite'] = !empty($viewerFavouriteStates[(int) $image['id']]);
+            }
+        }
     }
 
     gallery_lightbox_json_response([

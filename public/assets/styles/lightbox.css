@@ -1257,3 +1257,44 @@
         transition: none;
     }
 }
+
+/* Phase 1.1 viewer favourite control shares the existing compact lightbox toolbar. */
+.lightbox-toolbar .viewer-favourite-lightbox-form {
+    display: inline-flex;
+    align-items: center;
+    margin: 0;
+}
+
+.lightbox-toolbar .viewer-favourite-lightbox-form[hidden] {
+    display: none !important;
+}
+
+.lightbox-toolbar .viewer-favourite-lightbox-form .viewer-favourite-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.65rem;
+    min-width: 1.65rem;
+    height: 1.65rem;
+    min-height: 1.65rem;
+    padding: 0;
+    border: 1px solid rgba(255, 253, 248, 0.32);
+    border-radius: 999px;
+    background: rgba(255, 253, 248, 0.12);
+    color: #fffdf8;
+    box-shadow: none;
+    cursor: pointer;
+    font-size: 0.95rem;
+    line-height: 1;
+}
+
+.lightbox-toolbar .viewer-favourite-lightbox-form.is-favourite .viewer-favourite-button {
+    border-color: rgba(255, 253, 248, 0.85);
+    background: var(--accent);
+    color: #fffdf8;
+}
+
+.lightbox-toolbar .viewer-favourite-lightbox-form .viewer-favourite-button:disabled {
+    cursor: progress;
+    opacity: 0.65;
+}

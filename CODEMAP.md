@@ -92,6 +92,30 @@ This file maps features to source files. It is optimized for fast maintenance an
 | Google OAuth config and token handling | `app/services/google_auth.php` |
 | Google login routes | `app/controllers/admin_auth.php`, handlers `cms_admin_google_start`, `cms_admin_google_callback` |
 
+## Dormant Viewer Identity and Security Foundation
+
+| Task | Files |
+| --- | --- |
+| Viewer identity/config/session/CSRF/account-cap boundary | `app/services/viewer_accounts.php`, migrations `202608180001_viewer_security_foundations.php`, `202608180003_viewer_authentication_foundations.php` |
+| Opaque authority-token primitive | `app/services/security_tokens.php` |
+| Viewer verification/reset/remember-token storage | `app/services/viewer_tokens.php` |
+| Trusted-proxy-aware client IP + strict viewer HTTPS protocol resolver | `app/services/client_ip.php`, `config.example.php` |
+| Bounded viewer abuse controls | `app/services/viewer_rate_limits.php`, tables `viewer_rate_limit_buckets`, `viewer_rate_limits` |
+| Viewer security-event storage | `app/services/viewer_security_events.php`, table `viewer_security_events` |
+| Pending registration and invitation state | `app/services/viewer_registration.php`, migrations `202608180002_viewer_registration_foundations.php`, `202608180005_viewer_invitation_admin_management.php`, tables `viewer_registration_requests`, `viewer_invitations`, `viewer_registration_state` |
+| Future viewer mail abuse authorization + trusted security-link origin | `app/services/viewer_mail.php`, `app/services/viewer_rate_limits.php` |
+| Expired viewer security-data cleanup, including while feature disabled | `app/services/viewer_maintenance.php`, `app/services/viewer_registration.php`, scheduled hook in `app/services/site_maintenance.php` |
+| Recent viewer reauthentication, password change, staged verified email change, account deletion | `app/services/viewer_lifecycle.php`, migration `202608180004_viewer_account_lifecycle_foundations.php` |
+| Canonical viewer source-image authorization, plain-text policy, future content quota contract | `app/services/viewer_content_foundations.php`, explicit no-admin-bypass helper in `app/services/gallery_access.php` |
+| Favourites/collections/share/passkey schema | migration `202608180001_viewer_security_foundations.php` |
+| Security architecture and threat model | `docs/VIEWER_SECURITY_FOUNDATIONS.md` |
+| Phase 0 regressions | `tests/viewer_security_foundations_test.php`, `tests/viewer_schema_foundations_test.php`, `tests/viewer_identity_boundary_test.php` |
+| Phase 0.5 regressions | `tests/viewer_registration_foundations_test.php`, `tests/viewer_mail_abuse_foundations_test.php` |
+| Phase 0.6 auth/reset/transport regressions | `tests/viewer_authentication_phase06_test.php`, plus updated viewer schema/security/mail tests |
+| Phase 0.7 lifecycle/content regressions | `tests/viewer_account_lifecycle_phase07_test.php`, optional real-DB races in `tests/viewer_phase07_mysql_concurrency_test.php`, plus migration consistency coverage |
+
+There is intentionally no viewer controller, view, route, JavaScript, CSS, mail sender, remember-cookie emission, or Admin setting page in Phase 0 through Phase 0.7. `current_user()` remains administrator-only and `current_viewer()` remains a separate principal. Email verification establishes only short-lived pre-auth activation authority; durable activation, password login, remember rotation, password reset, recent reauthentication, password/email lifecycle transitions, and account deletion exist only as internal services. Collection/favourite rows are canonical `images.id` references and never authorization grants. Future content code must use `viewer_source_image_can_reference()` / `viewer_source_image_can_render_reference()` rather than treating a stored reference or viewer identity as gallery permission.
+
 ## Centralized Admin Settings
 
 | Path | Responsibility |
@@ -489,3 +513,149 @@ dynamically, not test one known table identity.
 - `public/assets/gallery-modules/admin-smart-galleries.js`: nested visual rule editor.
 - `tests/smart_gallery_rules_test.php`: validation, nesting, version, injection, and compiler contracts.
 - `tests/smart_gallery_cycle_placement_test.php`: mixed-cycle bounds, placement defaults/order, hierarchy preflight, side-panel/no-JavaScript, and translation contracts.
+
+## Phase 1.0 Viewer Account HTTP Boundary
+
+| File | Phase 1.0 responsibility |
+|---|---|
+| `app/controllers/viewer_accounts.php` | Thin viewer HTTP orchestration: Admin viewer-account management plus invitation create/list/revoke, invitation acceptance, scanner-safe verification, viewer login/logout, remember-me issuance, forgotten-password/reset, first-login password replacement, minimal account page, generic failure responses, and explicit no-store classification. |
+| `app/services/viewer_http.php` | Dedicated viewer remember-cookie encoding/parsing/emission/clearing and fail-closed restore/rotation bridge. When the feature is disabled it clears local viewer-only authority so public requests return to the historical anonymous cache path. Never touches Admin identity. |
+| `app/services/viewer_registration.php` | Adds scanner-safe invitation inspection, bounded Admin invitation operational listing, and conservative pre-issue account-capacity preflight while retaining existing transactional activation semantics. |
+| `app/bootstrap/routing.php` | Maps optional clean `/viewer/...` paths to the existing page identifiers. Query-string routing remains compatible. |
+| `app/bootstrap/dispatch.php` | Registers the seven Phase 1.0 viewer routes plus `admin_viewer_invitations`. Phase 1.0 itself adds no signup/content-management route; later Phase 1.1 adds the isolated favourites routes below. |
+| `app/bootstrap/request.php` | Attempts viewer remember restoration before security-header/cache classification. |
+| `app/security.php` | Treats viewer remember bearer presence as sensitive state so it cannot enter anonymous shared/public caching. |
+| `app/services/seo_request_guard.php` | Exempts dedicated `viewer_*` bearer/pre-auth routes from the generic public query-string guard so valid token URLs are not rejected and complete bearer URLs are not sampled into SEO security logs. Viewer controllers remain responsible for strict token validation. |
+| `app/views/layout.php` | Adds the unobtrusive public `Login` or `Account` entry only when viewer accounts are enabled and suppresses the Admin-login return parameter on secret-bearing `viewer_*` routes. |
+| `app/views/admin_chrome.php` | Adds `Viewer accounts` to the existing Admin Account menu and hides it when the master `viewer_accounts` feature wrapper is disabled; the historical route identifier remains compatible. |
+| `app/lang/{en,cs,de,sv}.json` | Maintained translations for the Phase 1.0 viewer and invitation UI/email text. |
+| `tests/viewer_http_phase10_test.php` | Focused static trust-boundary regression coverage for routes, CSRF, scanner-safe GETs, mail authorization ordering, identity separation, remember semantics, no-store, feature switches, and scope exclusions. |
+
+The existing `app/services/viewer_accounts.php`, `viewer_tokens.php`, `viewer_authentication.php`, `viewer_mail.php`, `viewer_lifecycle.php`, and related Phase 0 services remain the authoritative security/state-transition layer. Do not copy their SQL or token rules into future controllers.
+
+## Phase 1.1 Viewer Favourites
+
+| File | Phase 1.1 responsibility |
+|---|---|
+| `app/services/viewer_favourites.php` | Existing-table favourite state lookup, per-account quota enforcement under owner-row locking, active/security-version account checks, and source-authorization-before-write. Public decoration lookup fails closed to an empty state map on optional viewer-storage failure. |
+| `app/controllers/viewer_favourites.php` | POST-only viewer-CSRF add/remove endpoint, private no-store favourites page, server-rendered card/lightbox forms, and read-time canonical source-authorization rechecks. Contains no gallery-authorization or account-authentication SQL. |
+| `app/controllers/public_gallery_page.php` | Batch-decorates already-authorized physical-gallery cards for the current viewer and renders the small favourite control only when viewer storage is available. |
+| `app/controllers/smart_galleries.php` | Applies the same favourite decoration to interactive Smart Gallery cards and authorized Smart Gallery lazy-lightbox metadata. Admin preview rendering remains non-personalized. |
+| `app/controllers/gallery_lightbox.php` | Adds optional current-viewer favourite state to already-authorized lazy lightbox items without changing gallery/NSFW access checks. |
+| `app/controllers/public_gallery_lightbox.php` | Hosts the current-image viewer favourite form in the existing lightbox toolbar. |
+| `public/assets/gallery-modules/viewer-favourites.js` | Asynchronous form submission and card/lightbox state synchronization. Server identity, CSRF, quota, and source authorization remain authoritative. |
+| `public/assets/public-gallery.js`, `public/assets/gallery.js` | Load/bind the favourites module for viewer public pages and the rare coexisting Admin+viewer public session. |
+| `public/assets/styles/public-shared.css`, `public/assets/styles/lightbox.css` | Small heart controls that do not change card geometry and avoid coexisting Admin card controls. |
+| `app/lang/{en,cs,de,sv}.json` | Maintained favourite action/page/error translations. |
+| `tests/viewer_favourites_phase11_test.php` | Focused regression contract for viewer ownership, CSRF, quota locking, source authorization, fail-closed storage behavior, routes, gallery independence, browser wiring, and later-phase scope exclusions. |
+
+No Phase 1.1 collection, share, profile, upload, comment, open-registration, OIDC, TOTP, passkey, CAPTCHA, or magic-link controller/service is added.
+
+## Phase 1.2 Viewer Account Lifecycle HTTP Wiring
+
+| File | Phase 1.2 responsibility |
+|---|---|
+| `app/controllers/viewer_lifecycle.php` | Thin lifecycle HTTP orchestration for bounded recent reauthentication, password change, staged email change, scanner-safe verification/tokenless final confirmation, and destructive viewer self-deletion. Uses viewer CSRF/no-store helpers and contains no lifecycle SQL. |
+| `app/controllers/viewer_accounts.php` | Extends the existing private account page only with Change password, Change email, and Delete account navigation plus post-change login notices. Existing login/logout/invitation/reset behavior remains authoritative here. |
+| `app/bootstrap/routing.php` | Adds optional clean lifecycle paths under `/viewer/account/...` and `/viewer/email-change/...` while preserving query-route compatibility. |
+| `app/bootstrap/dispatch.php` | Dispatches the six Phase 1.2 lifecycle route identifiers to the dedicated controller. |
+| `app/controllers.php` | Loads the lifecycle controller after the shared Phase 1.0 viewer-account helpers it reuses. |
+| `app/lang/{en,cs,de,sv}.json` | Maintained translations for reauthentication, password/email lifecycle, verification confirmation, deletion, and account navigation. |
+| `tests/viewer_account_lifecycle_phase12_test.php` | Focused route/method/CSRF/reauth/no-store/scanner-safe/Admin-coexistence/scope/runtime-import regression checks. It directly loads the real controller and exercises the bounded destination helpers. |
+| `tests/viewer_account_lifecycle_phase07_test.php` | Keeps the Phase 0.7 lifecycle service authoritative while acknowledging that Phase 1.2 now exposes it through a separate thin controller. |
+
+No Phase 1.2 migration or collection/share/profile/upload/open-registration/optional-auth implementation is added. `app/services/viewer_lifecycle.php` and the existing Phase 0.7 schema remain unchanged and authoritative.
+
+## Phase 2.0 Private Viewer Collections
+
+| File | Phase 2.0 responsibility |
+|---|---|
+| `app/services/viewer_collections.php` | Owner-scoped private collection CRUD, source-authorized item add/remove, configured quotas, duplicate-safe inserts, and transactional integer ordering. Does not expose dormant sharing storage. |
+| `app/services/viewer_content_foundations.php` | Batched no-admin-bypass source-image resolver used by collection detail rendering while retaining the existing single-image authorization contract. |
+| `app/controllers/viewer_collections.php` | Private/no-store list/detail/create/rename/delete/add/remove/reorder HTTP surface, strict ids, viewer CSRF, escaped titles, generic inaccessible-item behavior, and compact Add-to-collection controls. |
+| `app/controllers/public_gallery_page.php` | Viewer-only collection chooser decoration after normal source authorization; dual Admin+viewer cards recheck the viewer source policy. Anonymous HTML does not query collection state. |
+| `app/controllers/smart_galleries.php` | Same viewer-only collection chooser on authorized Smart Gallery cards with explicit no-Admin-bypass recheck when both principals coexist. |
+| `app/controllers/viewer_favourites.php` | Reuses the Add-to-collection control on already reauthorized favourite cards; favourites and collections remain independent references. |
+| `app/controllers/viewer_accounts.php` | Adds the private Collections destination to the viewer account page while leaving lifecycle behavior unchanged. |
+| `app/bootstrap/routing.php`, `app/bootstrap/dispatch.php` | Private collection list/detail and POST mutation route identifiers through the existing router/query compatibility model. |
+| `app/services/viewer_rate_limits.php` | Dedicated bounded collection-creation account rate bucket. |
+| `public/assets/styles/public-shared.css` | Scoped collection chooser/list/detail/action presentation without a JavaScript framework/library. |
+| `app/lang/{en,cs,de,sv}.json` | Maintained private-collection UI translations with exact selectable-catalog key alignment. |
+| `tests/viewer_collections_phase20_test.php` | Focused ownership/IDOR, CSRF/method, live authorization, Admin coexistence, quota/reorder, privacy/cache, runtime-import, schema reuse, and scope-exclusion contract. |
+
+No Phase 2.0 migration, collection-share route, anonymous collection view, public profile, upload, open-registration, TOTP, OIDC, or passkey implementation is added.
+
+## Pre-Phase 3 Administrator Viewer Account Provisioning
+
+| File | Responsibility |
+|---|---|
+| `database/migrations/202608180006_viewer_admin_account_management.php` | Adds the compatibility-defaulted `viewer_accounts.must_change_password` server flag used only for administrator-provisioned temporary credentials. |
+| `app/services/viewer_admin_accounts.php` | Administrator-only durable viewer create/list/delete service, generated or supplied temporary password, locked account-cap admission, viewer-only cascade deletion, and no gallery/Admin ownership changes. |
+| `app/services/viewer_authentication.php` | Detects a valid temporary credential, establishes only short-lived first-login replacement authority, performs atomic non-reuse password replacement, and establishes the normal viewer principal only after the flag clears. Password reset clears the same flag. |
+| `app/services/viewer_accounts.php` | Makes `current_viewer()`, normal viewer session establishment, and viewer content mutation reject accounts still requiring first-login replacement. |
+| `app/services/viewer_tokens.php` | Prevents remember-token issue, verification, or restoration while `must_change_password=1`. |
+| `app/services/viewer_lifecycle.php` | Normal password change defensively clears the first-login flag while retaining existing security-version/session invalidation semantics. |
+| `app/controllers/viewer_accounts.php` | Extends **Account > Viewer accounts** with direct create/delete, optional account-created notification without a password, show-once temporary password handling, and the private `/viewer/first-login` password-replacement page. |
+| `app/bootstrap/routing.php`, `app/bootstrap/dispatch.php` | Adds the clean/query-compatible `viewer_first_login_password` route through the existing router. |
+| `app/views/admin_chrome.php`, `app/lang/{en,cs,de,sv}.json` | Renames the Admin entry to Viewer accounts and provides maintained direct-provisioning/first-login UI text. |
+| `tests/viewer_admin_account_management_test.php` | Focused Admin/viewer principal separation, temporary-password gate, remember/session bypass prevention, direct-delete scope, CSRF/no-store, routing, notification secrecy, runtime loading, and scope regression contract. |
+
+Direct account creation is independent of the public/invite-only frontend switch so an administrator may stage accounts while the viewer frontend is disabled. Login remains feature-gated, and open registration remains absent. A direct-created account is active/verified but cannot obtain `current_viewer()` authority until the temporary password is replaced. The plaintext temporary password is show-once Admin output only and is never included in notification mail. Direct deletion removes the viewer identity and viewer-owned dependent state only; canonical gallery/media and administrator state remain outside the cascade direction.
+
+## Phase 2.5 Administrator Viewer Account Security Controls
+
+| File | Responsibility |
+|---|---|
+| `app/services/feature_flags.php` | Registers the complete viewer-account subsystem as a master Admin feature with a disabled-by-default state, route ownership for every current `viewer_*` route plus Admin viewer management, and a non-advertising public disabled response. |
+| `app/services/viewer_accounts.php` | Composes the master feature wrapper with the existing subordinate viewer mode so login, remember restoration, favourites, collections, and lifecycle services all fail closed while the wrapper is off. |
+| `app/views/admin_chrome.php` | Marks the historical Viewer accounts Admin menu item as owned by the master viewer feature so the entry disappears while the subsystem is off. |
+| `app/controllers/viewer_accounts.php` | Adds localized state-aware Suspend, Restore, and Sign out everywhere POST forms to the existing Admin viewer-account table, strict positive-ID parsing, Admin CSRF/auth checks, safe operational failures, and Admin audit attribution. |
+| `app/services/viewer_accounts.php` | Existing authoritative account transition and logout-all services remain the only viewer security-state mutation boundary: transactional row locking, `security_version` rotation, session/remember/reset revocation, durable verification/email-change/share invalidation for state transitions, and viewer-only local namespace clearing. |
+| `app/lang/{en,cs,de,sv}.json` | Maintained labels, confirmations, status names, and results for the three Admin security controls. |
+| `tests/viewer_admin_security_controls_test.php` | Exercises real suspend/restore/logout-all helpers through a deterministic PDO fixture, Admin/viewer session coexistence, old-authority non-resurrection, `must_change_password`, dormant share revocation, feature-disable behavior, schema failure, ID bounds, HTTP/CSRF wiring, translations, and Phase 3 scope exclusion. |
+
+Phase 2.5 adds no migration and no route rename. Suspension/restoration preserve favourites and private collections while invalidating authentication authority; restoration never revives old credentials. Sign out everywhere leaves the account active and does not mutate viewer-owned content. The controls remain available while the viewer frontend is disabled. Collection sharing and anonymous collection viewing remain absent.
+
+## Phase 3.0 Unlisted Read-only Collection Sharing
+
+| File | Phase 3.0 responsibility |
+|---|---|
+| `app/services/viewer_collection_shares.php` | Share-schema capability, one-active-share create/replace/revoke, 30-day expiry, hashed-token exchange, bounded `viewer_collection_share_grants` session namespace, durable grant revalidation, and narrow shared collection read model. |
+| `app/controllers/viewer_collection_shares.php` | Owner Share section, show-once secret flash, Viewer-CSRF POST mutations, raw GET exchange with 303 clean redirect, strict security headers, and read-only recipient rendering through live source authorization. |
+| `app/services/viewer_collections.php` | Existing viewer mutation lock now selects `must_change_password` so transaction-time content authority is conclusively revalidated for Phase 3 as well as existing collection mutations. |
+| `app/controllers/viewer_collections.php` | Integrates the dedicated Share section into the existing owned collection detail page without adding share SQL/authority logic. |
+| `app/bootstrap/routing.php`, `app/bootstrap/dispatch.php`, `app/helpers_request.php` | Four `viewer_` routes plus clean token exchange/shared URLs; existing Viewer Accounts feature ownership applies automatically. |
+| `app/services.php`, `app/controllers.php` | Load the dedicated Phase 3 modules in the existing bootstrap order. |
+| `app/lang/{en,cs,de,sv}.json` | Maintained owner/recipient sharing UI strings with catalog parity. |
+| `public/assets/styles/public-shared.css` | Small scoped Share URL/action layout additions. |
+| `tests/viewer_collection_sharing_phase30_test.php` | Focused Phase 3 token, route, CSRF, transaction, session-grant, source-ACL, lifecycle, feature-wrapper, schema-failure, disclosure, localization, and runtime-import contracts. |
+| `tests/viewer_collections_phase20_test.php` | Phase 2 regression now verifies collection ownership/storage remains independent while Phase 3 authority lives in dedicated modules. |
+
+No Phase 3 migration is added. Existing gallery share links, gallery authorization, public media authorization, Admin/viewer principal semantics, Smart Galleries, and anonymous public gallery discovery are not refactored. Shared collections are unlisted and recipients need no viewer account.
+
+## Phase 4.0 through 4.4 Open Registration, Verification Recovery, Local Anti-automation, and Security Operations
+
+| File | Phase 4 responsibility |
+|---|---|
+| `app/services/viewer_accounts.php` | Single bounded `viewer_accounts_admin_mode` policy, master-feature precedence, lifecycle-safe transitions into/out of `open`, compatibility boolean wrapper, and hard-bounded Phase 4.3 anti-automation configuration. |
+| `app/services/viewer_registration.php` | Existing staged registration/verification/activation authority, `viewer_invitation_id` origin classification, current-mode revalidation, stale open-origin cancellation, Phase 4.1 duplicate-submit token preservation, and Phase 4.2 bounded multi-authority resend lifecycle. |
+| `app/services/viewer_http.php` | Shared registration HTTP capability gate plus exact open-registration, invitation-registration, verification-route, and verification-resend availability helpers. |
+| `app/services/viewer_anti_automation.php` | Phase 4.3 first-party signed form/challenge tickets, session-bound one-time/replay state, server form age, randomized honeypot, existing limiter signals, deterministic escalation, bounded SHA-256 proof verification, fallback, and bounded security events. |
+| `app/services/viewer_security_operations.php` | Phase 4.4 read-only Admin operations snapshot: capability/storage status, account/staging capacity, fixed 24-hour/7-day event aggregates, seven-day trend, privacy-safe limiter pressure, and global registration/mail budget use without consuming authority. |
+| `app/services/viewer_rate_limits.php` | Existing bounded/fail-closed limiter storage plus only the fixed Phase 4.3 `viewer_automation_ip` and `viewer_automation_subnet` policies. |
+| `app/controllers/viewer_accounts.php` | Thin registration and `cms_viewer_resend_verification()` orchestration, Viewer/pre-auth CSRF, Phase 4.3 form/challenge presentation and short-circuit ordering, generic anti-enumeration results, existing verification-mail authorization/transport, resend recovery links, generalized verification gate, invitation support in open mode, three-state Admin selector, and Phase 4.4 read-only aggregate security-operations rendering. |
+| `app/bootstrap/dispatch.php` | Dispatches `viewer_register` and Phase 4.2 `viewer_resend_verification` to their thin Viewer controllers. |
+| `app/bootstrap/routing.php` | Maps clean `/viewer/register` and `/viewer/resend` input to their viewer page ids. |
+| `app/helpers_request.php` | Emits clean `/viewer/register` and `/viewer/resend` output when URL rewriting is enabled. |
+| `app/views/layout.php` | Shows anonymous Register navigation only when `viewer_http_open_registration_available()` is true. |
+| `app/lang/{en,cs,de,sv}.json` | Phase 4 registration, resend/recovery, local verification/fallback, Admin selector, neutral verification-mail, navigation, and Phase 4.4 security-operations strings with catalog parity. |
+| `public/assets/viewer-anti-automation.js` | Dependency-free progressive-enhancement solver using only native Web Crypto SHA-256, bounded counters, browser yielding, and graceful first-party fallback. |
+| `tests/viewer_open_registration_policy_phase40_test.php` | Phase 4.0 policy, origin, transition locking, cancellation, anti-resurrection, activation ordering, and principal-boundary regression. |
+| `tests/viewer_open_registration_http_phase41_test.php` | Phase 4.1 route matrix, null-invitation staging, existing abuse buckets, CSRF/static HTTP contracts, generic result, mail ordering, token-preservation retries, verification/invitation policy, Admin selector, discoverability, translations, and scope exclusions. |
+| `database/migrations/202608200001_viewer_registration_verification_tokens.php` | Adds normalized hashed child verification authorities with request ownership, bounded expiry, send-handoff state, uniqueness, and request cascade for safe true resend. |
+| `tests/viewer_verification_resend_phase42_test.php` | Phase 4.2 route/mode matrix, CSRF/input contract, generic result, existing limiter reuse, token-A preservation, token-B delivery/failure behavior, first-token-wins verification, historical primary-token compatibility, current-mode revalidation, no resurrection, identity boundaries, translations, and zero-third-party scope. |
+| `tests/viewer_anti_automation_phase43_test.php` | Phase 4.3 first-party dependency contract, ticket tamper/action/session/replay/expiry bounds, honeypot/form-age policy, adaptive challenge, proof/fallback verification, limiter reuse, suppression ordering, generic-result/token/mode/principal/scanner-safe regressions, and local-JavaScript/privacy checks. |
+| `tests/viewer_security_operations_phase44_test.php` | Phase 4.4 Admin-only/read-only boundary, capability and capacity state, fixed event aggregation/trend, active/locked/stale limiter semantics, global budgets, storage-failure distinction, privacy, telemetry independence, schema reuse, and zero-third-party regression. |
+| `docs/VIEWER_SECURITY_FOUNDATIONS.md`, `TESTING.md`, `ARCHITECTURE.md`, `CODEMAP.md`, `DATABASE.md` | Phase 4.4 operations visibility, privacy, schema-reuse, limiter semantics, test coverage, and completed Phase 4 documentation. |
+
+Phase 4.1 adds no migration; Phase 4.2 adds only `viewer_registration_verification_tokens` so resend can add a second usable authority without rotating the historical primary token; Phase 4.3 adds no migration and reuses PHP session plus existing bounded rate-limit storage; Phase 4.4 also adds no migration and reads only the existing Viewer security/event/limiter/account/registration storage. The global Viewer Accounts feature remains OFF by default. Open registration remains verified-email only. Phase 4.3 protects only anonymous open registration and explicit verification resend before expensive work. Phase 4.4 observes those systems only and establishes no Viewer/Admin/registration/invitation/verification authority. Public telemetry remains independent. Traditional or third-party CAPTCHA, external reputation/security/monitoring services, browser fingerprinting, public profiles, passkeys, TOTP, and viewer OIDC remain out of scope. Phase 4 is complete after Phase 4.4.

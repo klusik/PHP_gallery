@@ -14,7 +14,7 @@
  *   - Require admin authentication for feature settings
  *   - Render registry-driven feature checkboxes grouped by context
  *   - Persist opt-out feature state through app_settings
- *   - Keep all current features enabled by default unless an admin disables them
+ *   - Honor each registered feature's declared default state
  *
  * Author:
  *   Rudolf Klusal
@@ -30,7 +30,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-06-04
+ *   2026-08-19
  */
 
 declare(strict_types=1);

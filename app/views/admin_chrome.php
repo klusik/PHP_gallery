@@ -100,6 +100,7 @@ function view_admin_menu_structure(): array
             'label' => t('admin.menu.account', 'Account'),
             'items' => [
                 ['label' => t('admin.menu.profile', 'Profile'), 'page' => 'admin_account', 'url' => url_for('admin_account')],
+                ['label' => t('viewer.admin.invites.menu', 'Viewer accounts'), 'page' => 'admin_viewer_invitations', 'url' => url_for('admin_viewer_invitations'), 'feature' => 'viewer_accounts'],
                 ['label' => t('admin.menu.logout', 'Logout'), 'page' => 'admin_logout', 'url' => url_for('admin_logout')],
             ],
         ],
