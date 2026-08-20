@@ -11,6 +11,7 @@ use Throwable;
 use Gallery\Services\MutationSchemaUnavailableException;
 
 use function Gallery\Core\csrf_field;
+use function Gallery\Core\csrf_token;
 use function Gallery\Core\current_user;
 use function Gallery\Core\e;
 use function Gallery\Core\flash_message;
@@ -51,6 +52,7 @@ use function Gallery\Services\smart_gallery_rules_from_search;
 use function Gallery\Services\smart_gallery_save;
 use function Gallery\Services\t;
 use function Gallery\Services\thumbnail_bundle;
+use function Gallery\Services\thumbnail_bundles_preload;
 use function Gallery\Services\public_thumbnail_render_picture_html;
 use function Gallery\Services\public_thumbnail_rendering_mode;
 use function Gallery\Services\public_thumbnail_rendering_modes;
@@ -510,11 +512,7 @@ function cms_smart_gallery_lightbox_data(): void
     }
 
     $contentLanguage = translation_active_language();
-    $images = content_localize_entities('image', $images, $contentLanguage);
     $sourceGalleries = smart_gallery_source_galleries($images);
-    foreach ($sourceGalleries as $sourceId => $sourceGallery) {
-        $sourceGalleries[$sourceId] = content_localize_entity('gallery', $sourceGallery, $contentLanguage);
-    }
     $imageIds = array_map(static fn (array $image): int => (int) $image['id'], $images);
     $votes = !empty($presentation['voting_enabled']) ? current_votes_for_images($imageIds) : [];
     $viewerPrincipal = current_viewer();
@@ -522,6 +520,17 @@ function cms_smart_gallery_lightbox_data(): void
         ? viewer_favourites_for_image_ids((int) $viewerPrincipal['id'], $imageIds)
         : null;
     $viewerFavouriteRequiresSourceRecheck = is_array($viewerFavouriteStates) && current_user() !== null;
+    if (!empty($presentation['voting_enabled'])) {
+        csrf_token();
+    }
+
+    cms_release_gallery_lightbox_session_lock();
+
+    $images = content_localize_entities('image', $images, $contentLanguage);
+    foreach ($sourceGalleries as $sourceId => $sourceGallery) {
+        $sourceGalleries[$sourceId] = content_localize_entity('gallery', $sourceGallery, $contentLanguage);
+    }
+    thumbnail_bundles_preload($images);
     $items = [];
     foreach ($images as $rowIndex => $image) {
         $source = $sourceGalleries[(int) ($image['gallery_id'] ?? 0)] ?? null;

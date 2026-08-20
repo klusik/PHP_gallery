@@ -68,7 +68,7 @@ foreach ([
     'resetLightboxPreloadQueue();',
     'cancelActiveDetachedLightboxImageLoads();',
     'decodedLightboxImages.clear();',
-    'lightboxPendingWindows.clear();',
+    'cancelLightboxMetadataRequests();',
     'lightboxGalleryMapPayloadPromises.clear();',
     'failedLightboxQualitySources.clear();',
 ] as $requiredCleanup) {

@@ -45,6 +45,7 @@ use function Gallery\Core\url_for;
 use function Gallery\Services\admin_log_event;
 use function Gallery\Services\find_gallery;
 use function Gallery\Services\gallery_benchmark_build_summary;
+use function Gallery\Services\gallery_benchmark_diagnostics_version;
 use function Gallery\Services\gallery_benchmark_download_filename;
 use function Gallery\Services\gallery_benchmark_load_log;
 use function Gallery\Services\gallery_benchmark_record_browser_load;
@@ -121,6 +122,20 @@ function admin_gallery_benchmark_require_admin(): bool
 }
 
 /**
+ * Release the admin PHP session before benchmark file I/O or response measurement.
+ *
+ * Benchmark logging can serialize large JSON payloads. Keeping the admin session
+ * locked during that work would make the diagnostic runner create the very
+ * contention it is trying to measure.
+ */
+function admin_gallery_benchmark_release_session_lock(): void
+{
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        session_write_close();
+    }
+}
+
+/**
  * Validate benchmark POST request method and CSRF token.
  *
  * @return bool True when the request may continue.
@@ -157,6 +172,7 @@ function cms_admin_gallery_benchmark_start(): void
     admin_gallery_benchmark_start_json_buffer();
     admin_gallery_benchmark_require_admin();
     admin_gallery_benchmark_require_post();
+    admin_gallery_benchmark_release_session_lock();
 
     $galleryId = (int) ($_POST['gallery_id'] ?? 0);
     $runsTotal = (int) ($_POST['runs_total'] ?? 5);
@@ -180,6 +196,8 @@ function cms_admin_gallery_benchmark_start(): void
         ], ['category' => 'admin', 'severity' => 'info', 'subject_type' => 'gallery', 'subject_id' => $galleryId]);
         admin_gallery_benchmark_json_response([
             'ok' => true,
+            'schema_version' => (int) ($log['schema_version'] ?? 0),
+            'diagnostics_version' => gallery_benchmark_diagnostics_version(),
             'token' => $token,
             'runs_total' => (int) $log['runs_total'],
             'public_url' => $publicUrl,
@@ -206,6 +224,7 @@ function cms_admin_gallery_benchmark_browser(): void
     admin_gallery_benchmark_start_json_buffer();
     admin_gallery_benchmark_require_admin();
     admin_gallery_benchmark_require_post();
+    admin_gallery_benchmark_release_session_lock();
 
     $token = strtolower(trim((string) ($_POST['token'] ?? '')));
     $runIndex = (int) ($_POST['run_index'] ?? 0);
@@ -241,8 +260,12 @@ function cms_admin_gallery_benchmark_browser(): void
  */
 function cms_admin_gallery_benchmark_status(): void
 {
+    $serverRequestTimeMs = isset($_SERVER['REQUEST_TIME_FLOAT']) && is_numeric($_SERVER['REQUEST_TIME_FLOAT'])
+        ? ((float) $_SERVER['REQUEST_TIME_FLOAT']) * 1000
+        : microtime(true) * 1000;
     admin_gallery_benchmark_start_json_buffer();
     admin_gallery_benchmark_require_admin();
+    admin_gallery_benchmark_release_session_lock();
 
     $token = strtolower(trim((string) ($_GET['token'] ?? $_POST['token'] ?? '')));
     if (!gallery_benchmark_token_is_valid($token)) {
@@ -256,6 +279,10 @@ function cms_admin_gallery_benchmark_status(): void
         $log = gallery_benchmark_load_log($token);
         admin_gallery_benchmark_json_response([
             'ok' => true,
+            'schema_version' => (int) ($log['schema_version'] ?? 0),
+            'diagnostics_version' => gallery_benchmark_diagnostics_version(),
+            'server_request_time_ms' => $serverRequestTimeMs,
+            'server_response_time_ms' => microtime(true) * 1000,
             'summary' => $log['summary'] ?? gallery_benchmark_build_summary($log),
             'download_url' => url_for('admin_gallery_benchmark_download', ['token' => $token]),
         ]);
@@ -268,6 +295,43 @@ function cms_admin_gallery_benchmark_status(): void
 }
 
 /**
+ * Return one minimal PHP timing probe for static-vs-PHP benchmark comparison.
+ *
+ * The route intentionally performs no benchmark-log read or write. REQUEST_TIME_FLOAT
+ * therefore measures the full PHP request including bootstrap/session wait, while
+ * the browser can compare that duration against its own round trip without clock
+ * synchronization.
+ */
+function cms_admin_gallery_benchmark_probe(): void
+{
+    $requestTime = isset($_SERVER['REQUEST_TIME_FLOAT']) && is_numeric($_SERVER['REQUEST_TIME_FLOAT'])
+        ? (float) $_SERVER['REQUEST_TIME_FLOAT']
+        : microtime(true);
+    admin_gallery_benchmark_start_json_buffer();
+    admin_gallery_benchmark_require_admin();
+    $token = strtolower(trim((string) ($_GET['token'] ?? '')));
+    $runIndex = (int) ($_GET['run_index'] ?? 0);
+    if (!gallery_benchmark_token_is_valid($token) || $runIndex < 1 || $runIndex > 20) {
+        admin_gallery_benchmark_json_response([
+            'ok' => false,
+            'error' => t('admin.gallery_benchmark.invalid_token', 'Benchmark token is invalid.'),
+        ], 400);
+    }
+    admin_gallery_benchmark_release_session_lock();
+    $controllerAt = microtime(true);
+    admin_gallery_benchmark_json_response([
+        'ok' => true,
+        'diagnostics_version' => gallery_benchmark_diagnostics_version(),
+        'request_time_unix' => $requestTime,
+        'controller_at_unix' => $controllerAt,
+        'response_at_unix' => microtime(true),
+        'request_age_to_controller_ms' => max(0.0, ($controllerAt - $requestTime) * 1000),
+        'pid' => function_exists('getmypid') ? getmypid() : null,
+        'session_status_after_release' => session_status(),
+    ]);
+}
+
+/**
  * Download a completed or partial benchmark JSON log.
  */
 function cms_admin_gallery_benchmark_download(): void
@@ -277,6 +341,7 @@ function cms_admin_gallery_benchmark_download(): void
         echo t('admin.gallery_benchmark.session_expired', 'Admin session expired.');
         return;
     }
+    admin_gallery_benchmark_release_session_lock();
     $token = strtolower(trim((string) ($_GET['token'] ?? '')));
     if (!gallery_benchmark_token_is_valid($token)) {
         http_response_code(400);

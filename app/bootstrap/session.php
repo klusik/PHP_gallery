@@ -59,7 +59,21 @@ function cms_start_session(array $config): void
             'httponly' => true,
             'samesite' => 'Lax',
         ]);
+        if (function_exists('Gallery\\Services\\gallery_benchmark_trace_mark')) {
+            \Gallery\Services\gallery_benchmark_trace_mark('session_start_begin', [
+                'cookie_present' => isset($_COOKIE[session_name()]),
+                'save_handler' => (string) ini_get('session.save_handler'),
+            ]);
+        }
         session_start();
+        if (function_exists('Gallery\\Services\\gallery_benchmark_trace_mark')) {
+            \Gallery\Services\gallery_benchmark_trace_mark('session_start_end', [
+                'session_active' => session_status() === PHP_SESSION_ACTIVE,
+                'session_id_present' => session_id() !== '',
+            ]);
+        }
+    } elseif (function_exists('Gallery\\Services\\gallery_benchmark_trace_mark')) {
+        \Gallery\Services\gallery_benchmark_trace_mark('session_already_active');
     }
 
 }

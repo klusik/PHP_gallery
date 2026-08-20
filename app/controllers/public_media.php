@@ -51,6 +51,9 @@ use function Gallery\Services\gallery_branding_asset_kind;
 use function Gallery\Services\gallery_branding_mime_extension;
 use function Gallery\Services\gallery_branding_schema_ready;
 use function Gallery\Services\gallery_cover_path;
+use function Gallery\Services\gallery_benchmark_media_request_begin;
+use function Gallery\Services\gallery_benchmark_media_request_finish;
+use function Gallery\Services\gallery_benchmark_media_request_mark;
 use function Gallery\Services\gallery_nsfw_requirement;
 use function Gallery\Services\image_create_from_path;
 use function Gallery\Services\image_nsfw_restricted;
@@ -151,6 +154,10 @@ function cms_resolve_thumbnail_response_file(array $image, array $gallery, int $
  */
 function cms_thumb(): void
 {
+    $benchmarkMediaRequest = gallery_benchmark_media_request_begin('thumb', [
+        'size' => (int) ($_GET['size'] ?? 0),
+        'format' => substr((string) ($_GET['format'] ?? 'jpg'), 0, 12),
+    ]);
     // Variable $image stores this steps working value.
     $image = find_image((int) ($_GET['id'] ?? 0));
     // Variable $size stores this steps working value.
@@ -167,9 +174,17 @@ function cms_thumb(): void
         cms_not_found();
         return;
     }
+    gallery_benchmark_media_request_mark($benchmarkMediaRequest, 'authorized', [
+        'gallery_id' => (int) $gallery['id'],
+        'image_id' => (int) $image['id'],
+        'size' => $size,
+        'format' => $format,
+    ]);
     // $privateCache stores the access-sensitive cache policy before the read-only session lock is released.
     $privateCache = public_media_needs_private_cache($gallery, $image);
+    gallery_benchmark_media_request_mark($benchmarkMediaRequest, 'session_release_begin');
     cms_release_public_media_session_lock();
+    gallery_benchmark_media_request_mark($benchmarkMediaRequest, 'session_release_end');
     // $responseFile stores the valid derivative selected for this response.
     $responseFile = cms_resolve_thumbnail_response_file($image, $gallery, $size, $format);
     if ($responseFile === null) {
@@ -188,11 +203,25 @@ function cms_thumb(): void
     $cacheControl = !empty($geometryStatus['valid'])
         ? ($privateCache ? 'private, max-age=300' : 'public, max-age=31536000, immutable')
         : 'private, no-cache, max-age=0, must-revalidate';
-    send_conditional_file_headers($path, $cacheControl);
     // $bytes stores the response body size sent to the browser.
     $bytes = (int) filesize($path);
+    gallery_benchmark_media_request_mark($benchmarkMediaRequest, 'file_ready', [
+        'bytes' => $bytes,
+        'variant' => 'thumbnail',
+        'private_cache' => $privateCache,
+    ]);
+    send_conditional_file_headers($path, $cacheControl);
     header('Content-Length: ' . $bytes);
-    readfile($path);
+    gallery_benchmark_media_request_mark($benchmarkMediaRequest, 'stream_begin');
+    $readBytes = readfile($path);
+    gallery_benchmark_media_request_mark($benchmarkMediaRequest, 'stream_end', [
+        'readfile_bytes' => is_int($readBytes) ? $readBytes : null,
+    ]);
+    gallery_benchmark_media_request_finish($benchmarkMediaRequest, [
+        'finish_reason' => 'normal',
+        'expected_bytes' => $bytes,
+        'readfile_bytes' => is_int($readBytes) ? $readBytes : null,
+    ]);
 }
 
 /**
@@ -200,6 +229,10 @@ function cms_thumb(): void
  */
 function cms_public_thumb(): void
 {
+    $benchmarkMediaRequest = gallery_benchmark_media_request_begin('public_thumb', [
+        'size' => (int) ($_GET['size'] ?? 0),
+        'format' => substr((string) ($_GET['format'] ?? 'jpg'), 0, 12),
+    ]);
     // $resolved stores an intermediate value used by the surrounding gallery workflow.
     $resolved = resolve_public_gallery_path((string) ($_GET['public_path'] ?? ''), !current_user());
     // $gallery stores an intermediate value used by the surrounding gallery workflow.
@@ -220,9 +253,17 @@ function cms_public_thumb(): void
         return;
     }
 
+    gallery_benchmark_media_request_mark($benchmarkMediaRequest, 'authorized', [
+        'gallery_id' => (int) $gallery['id'],
+        'image_id' => (int) $image['id'],
+        'size' => $size,
+        'format' => $format,
+    ]);
     // $privateCache stores the access-sensitive cache policy before the read-only session lock is released.
     $privateCache = public_media_needs_private_cache($gallery, $image);
+    gallery_benchmark_media_request_mark($benchmarkMediaRequest, 'session_release_begin');
     cms_release_public_media_session_lock();
+    gallery_benchmark_media_request_mark($benchmarkMediaRequest, 'session_release_end');
     // $responseFile stores the valid derivative selected for this response.
     $responseFile = cms_resolve_thumbnail_response_file($image, $gallery, $size, $format);
     if ($responseFile === null) {
@@ -242,11 +283,25 @@ function cms_public_thumb(): void
     $cacheControl = !empty($geometryStatus['valid'])
         ? ($privateCache ? 'private, max-age=300' : 'public, max-age=31536000, immutable')
         : 'private, no-cache, max-age=0, must-revalidate';
-    send_conditional_file_headers($path, $cacheControl);
     // $bytes stores the response body size sent to the browser.
     $bytes = (int) filesize($path);
+    gallery_benchmark_media_request_mark($benchmarkMediaRequest, 'file_ready', [
+        'bytes' => $bytes,
+        'variant' => 'thumbnail',
+        'private_cache' => $privateCache,
+    ]);
+    send_conditional_file_headers($path, $cacheControl);
     header('Content-Length: ' . $bytes);
-    readfile($path);
+    gallery_benchmark_media_request_mark($benchmarkMediaRequest, 'stream_begin');
+    $readBytes = readfile($path);
+    gallery_benchmark_media_request_mark($benchmarkMediaRequest, 'stream_end', [
+        'readfile_bytes' => is_int($readBytes) ? $readBytes : null,
+    ]);
+    gallery_benchmark_media_request_finish($benchmarkMediaRequest, [
+        'finish_reason' => 'normal',
+        'expected_bytes' => $bytes,
+        'readfile_bytes' => is_int($readBytes) ? $readBytes : null,
+    ]);
 }
 
 /**
@@ -254,6 +309,7 @@ function cms_public_thumb(): void
  */
 function cms_public_media(): void
 {
+    $benchmarkMediaRequest = gallery_benchmark_media_request_begin('public_media');
     // $resolved stores an intermediate value used by the surrounding gallery workflow.
     $resolved = resolve_public_gallery_path((string) ($_GET['public_path'] ?? ''), !current_user());
     // $gallery stores an intermediate value used by the surrounding gallery workflow.
@@ -270,9 +326,15 @@ function cms_public_media(): void
         return;
     }
 
+    gallery_benchmark_media_request_mark($benchmarkMediaRequest, 'authorized', [
+        'gallery_id' => (int) $gallery['id'],
+        'image_id' => (int) $image['id'],
+    ]);
     // $privateCache stores the access-sensitive cache policy before the read-only session lock is released.
     $privateCache = public_media_needs_private_cache($gallery, $image);
+    gallery_benchmark_media_request_mark($benchmarkMediaRequest, 'session_release_begin');
     cms_release_public_media_session_lock();
+    gallery_benchmark_media_request_mark($benchmarkMediaRequest, 'session_release_end');
     // $displayFile stores the browser-displayable file selected for public viewing.
     $displayFile = image_public_display_file($image, $gallery, true);
     if ($displayFile === null) {
@@ -289,14 +351,28 @@ function cms_public_media(): void
     header('Content-Disposition: inline; filename="' . basename((string) $displayFile['filename']) . '"');
     // $cacheControl stores an intermediate value used by the surrounding gallery workflow.
     $cacheControl = $privateCache ? 'private, max-age=300' : 'public, max-age=31536000, immutable';
-    send_conditional_file_headers($path, $cacheControl);
     // $bytes stores the response body size counted for anonymous media telemetry.
     $bytes = (int) filesize($path);
+    gallery_benchmark_media_request_mark($benchmarkMediaRequest, 'file_ready', [
+        'bytes' => $bytes,
+        'variant' => substr((string) ($displayFile['variant'] ?? 'media'), 0, 40),
+        'private_cache' => $privateCache,
+    ]);
+    send_conditional_file_headers($path, $cacheControl);
     if (function_exists('telemetry_record_media_served_event')) {
         \telemetry_record_media_served_event($image, $gallery, 'media.image.served', $bytes, (string) $displayFile['variant'], 'miss');
     }
     header('Content-Length: ' . $bytes);
-    readfile($path);
+    gallery_benchmark_media_request_mark($benchmarkMediaRequest, 'stream_begin');
+    $readBytes = readfile($path);
+    gallery_benchmark_media_request_mark($benchmarkMediaRequest, 'stream_end', [
+        'readfile_bytes' => is_int($readBytes) ? $readBytes : null,
+    ]);
+    gallery_benchmark_media_request_finish($benchmarkMediaRequest, [
+        'finish_reason' => 'normal',
+        'expected_bytes' => $bytes,
+        'readfile_bytes' => is_int($readBytes) ? $readBytes : null,
+    ]);
 }
 
 /**
@@ -436,6 +512,7 @@ function cms_gallery_branding_asset(): void
  */
 function cms_media(): void
 {
+    $benchmarkMediaRequest = gallery_benchmark_media_request_begin('media');
     // Variable $image stores this steps working value.
     $image = find_image((int) ($_GET['id'] ?? 0));
     if (!$image) {
@@ -448,9 +525,15 @@ function cms_media(): void
         cms_not_found();
         return;
     }
+    gallery_benchmark_media_request_mark($benchmarkMediaRequest, 'authorized', [
+        'gallery_id' => (int) $gallery['id'],
+        'image_id' => (int) $image['id'],
+    ]);
     // $privateCache stores the access-sensitive cache policy before the read-only session lock is released.
     $privateCache = public_media_needs_private_cache($gallery, $image);
+    gallery_benchmark_media_request_mark($benchmarkMediaRequest, 'session_release_begin');
     cms_release_public_media_session_lock();
+    gallery_benchmark_media_request_mark($benchmarkMediaRequest, 'session_release_end');
     // Variable $displayFile stores the browser-displayable file selected for public viewing.
     $displayFile = image_public_display_file($image, $gallery, true);
     if ($displayFile === null) {
@@ -466,14 +549,28 @@ function cms_media(): void
     header('Content-Disposition: inline; filename="' . basename((string) $displayFile['filename']) . '"');
     // $cacheControl stores an intermediate value used by the surrounding gallery workflow.
     $cacheControl = $privateCache ? 'private, max-age=300' : 'public, max-age=31536000, immutable';
-    send_conditional_file_headers($path, $cacheControl);
     // $bytes stores the response body size counted for anonymous media telemetry.
     $bytes = (int) filesize($path);
+    gallery_benchmark_media_request_mark($benchmarkMediaRequest, 'file_ready', [
+        'bytes' => $bytes,
+        'variant' => substr((string) ($displayFile['variant'] ?? 'media'), 0, 40),
+        'private_cache' => $privateCache,
+    ]);
+    send_conditional_file_headers($path, $cacheControl);
     if (function_exists('telemetry_record_media_served_event')) {
         \telemetry_record_media_served_event($image, $gallery, 'media.image.served', $bytes, (string) $displayFile['variant'], 'miss');
     }
     header('Content-Length: ' . $bytes);
-    readfile($path);
+    gallery_benchmark_media_request_mark($benchmarkMediaRequest, 'stream_begin');
+    $readBytes = readfile($path);
+    gallery_benchmark_media_request_mark($benchmarkMediaRequest, 'stream_end', [
+        'readfile_bytes' => is_int($readBytes) ? $readBytes : null,
+    ]);
+    gallery_benchmark_media_request_finish($benchmarkMediaRequest, [
+        'finish_reason' => 'normal',
+        'expected_bytes' => $bytes,
+        'readfile_bytes' => is_int($readBytes) ? $readBytes : null,
+    ]);
 }
 
 /**

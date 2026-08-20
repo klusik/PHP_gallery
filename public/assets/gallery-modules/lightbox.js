@@ -173,6 +173,64 @@ export function setupGalleryLightbox() {
     );
     // lightboxPendingWindows stores in-flight async metadata requests keyed by endpoint range.
     const lightboxPendingWindows = new Map();
+    // lightboxMetadataAbortController owns lazy metadata requests for the current open viewer lifecycle.
+    let lightboxMetadataAbortController = null;
+    // lightboxMetadataGeneration prevents an aborted previous viewer lifecycle from merging stale metadata after reopen.
+    let lightboxMetadataGeneration = 0;
+    // lightboxBenchmarkParams captures benchmark identity before lightbox history replaces the gallery URL with photo URLs.
+    const lightboxBenchmarkParams = new URLSearchParams(window.location.search);
+    // lightboxBenchmarkToken stores the opaque benchmark id for lazy requests started after photo history changes.
+    const lightboxBenchmarkToken = lightboxBenchmarkParams.get('benchmark_token') || '';
+    // lightboxBenchmarkRun stores the one-based benchmark run number for auxiliary server profiles.
+    const lightboxBenchmarkRun = lightboxBenchmarkParams.get('benchmark_run') || '';
+    // lightboxBenchmarkDiagnosticsEnabled keeps deep diagnostics isolated to explicit admin benchmark runs.
+    const lightboxBenchmarkDiagnosticsEnabled = lightboxBenchmarkToken !== '';
+    // lightboxBenchmarkDiagnosticsState records request/cache lifecycle facts that Resource Timing cannot expose.
+    const lightboxBenchmarkDiagnosticsState = {
+        startedAt: performance.now(),
+        metadataRequestsStarted: 0,
+        metadataRequestsReused: 0,
+        metadataRequestsSkippedLoaded: 0,
+        metadataRequestsCompleted: 0,
+        metadataRequestsAborted: 0,
+        metadataRequestsFailed: 0,
+        metadataItemsMerged: 0,
+        metadataCancelCalls: 0,
+        metadataPendingAtLastCancel: 0,
+        openCalls: 0,
+        closeCalls: 0,
+        navigationCalls: 0,
+        detachedLoadSequence: 0,
+        detachedLoadsStarted: 0,
+        detachedLoadsCompleted: 0,
+        detachedLoadsAborted: 0,
+        detachedLoadsFailed: 0,
+        decodedCacheInsertions: 0,
+        decodedCacheInsertionsAfterClose: 0,
+        lastDecodedCacheInsertionReason: '',
+        lastCloseEndedAtMs: null,
+        events: [],
+    };
+
+    /**
+     * Record one compact benchmark-only lightbox lifecycle event.
+     *
+     * @param {string} type Stable event name.
+     * @param {Record<string, string|number|boolean|null>} details Small diagnostic values.
+     */
+    function recordLightboxBenchmarkEvent(type, details = {}) {
+        if (!lightboxBenchmarkDiagnosticsEnabled) {
+            return;
+        }
+        lightboxBenchmarkDiagnosticsState.events.push({
+            type,
+            at_ms: performance.now() - lightboxBenchmarkDiagnosticsState.startedAt,
+            ...details,
+        });
+        if (lightboxBenchmarkDiagnosticsState.events.length > 160) {
+            lightboxBenchmarkDiagnosticsState.events.splice(0, lightboxBenchmarkDiagnosticsState.events.length - 160);
+        }
+    }
 
         /**
      * Refreshes the lightbox order after an admin reorders visible photo cards or replaces public gallery content.
@@ -278,6 +336,7 @@ export function setupGalleryLightbox() {
         if (!Array.isArray(items)) {
             return;
         }
+        let merged = 0;
         items.forEach((item) => {
             const card = createLightboxCardFromItem(item);
             if (!card) {
@@ -286,8 +345,13 @@ export function setupGalleryLightbox() {
             const index = lightboxIndexForCard(card);
             if (index >= 0 && index < cards.length && !cards[index]) {
                 cards[index] = card;
+                merged += 1;
             }
         });
+        if (lightboxBenchmarkDiagnosticsEnabled && merged > 0) {
+            lightboxBenchmarkDiagnosticsState.metadataItemsMerged += merged;
+            recordLightboxBenchmarkEvent('metadata_items_merged', {count: merged});
+        }
     }
 
         /**
@@ -300,9 +364,8 @@ export function setupGalleryLightbox() {
         if (cards.length <= 0) {
             return {offset: 0, limit: lightboxWindowSize};
         }
-        const leadingItems = Math.min(12, Math.max(4, Math.floor(lightboxWindowSize / 4)));
-        const maxOffset = Math.max(0, cards.length - lightboxWindowSize);
-        const offset = Math.max(0, Math.min(maxOffset, index - leadingItems));
+        const normalizedIndex = Math.max(0, Math.min(cards.length - 1, index));
+        const offset = Math.floor(normalizedIndex / lightboxWindowSize) * lightboxWindowSize;
         const limit = Math.min(lightboxWindowSize, cards.length - offset);
         return {offset, limit: Math.max(1, limit)};
     }
@@ -325,6 +388,41 @@ export function setupGalleryLightbox() {
     }
 
         /**
+     * Return the AbortSignal that owns lazy metadata work for the current open viewer lifecycle.
+     *
+     * @return {AbortSignal|null} Active metadata signal, or null after full component teardown.
+     */
+    function currentLightboxMetadataSignal() {
+        if (controller.signal.aborted) {
+            return null;
+        }
+        if (!(lightboxMetadataAbortController instanceof AbortController) || lightboxMetadataAbortController.signal.aborted) {
+            lightboxMetadataAbortController = new AbortController();
+        }
+        return lightboxMetadataAbortController.signal;
+    }
+
+    /**
+     * Abort and forget lazy metadata work owned by the current viewer lifecycle.
+     *
+     * Closing a lightbox must cancel the underlying HTTP requests rather than
+     * merely dropping their Promise references while PHP continues working.
+     */
+    function cancelLightboxMetadataRequests() {
+        if (lightboxBenchmarkDiagnosticsEnabled) {
+            lightboxBenchmarkDiagnosticsState.metadataCancelCalls += 1;
+            lightboxBenchmarkDiagnosticsState.metadataPendingAtLastCancel = lightboxPendingWindows.size;
+            recordLightboxBenchmarkEvent('metadata_cancel', {pending: lightboxPendingWindows.size});
+        }
+        lightboxMetadataGeneration += 1;
+        if (lightboxMetadataAbortController instanceof AbortController && !lightboxMetadataAbortController.signal.aborted) {
+            lightboxMetadataAbortController.abort();
+        }
+        lightboxMetadataAbortController = null;
+        lightboxPendingWindows.clear();
+    }
+
+    /**
      * Fetch one async metadata range unless it is already loaded or in flight.
      *
      * @param {number} offset Zero-based range offset.
@@ -332,20 +430,49 @@ export function setupGalleryLightbox() {
      * @return {Promise<boolean>} True when the request completed successfully or was unnecessary.
      */
     function fetchLightboxRange(offset, limit) {
-        if (!lightboxEndpoint || cards.length === 0 || lightboxRangeLoaded(offset, limit)) {
+        if (!lightboxEndpoint || cards.length === 0) {
+            return Promise.resolve(true);
+        }
+        if (lightboxRangeLoaded(offset, limit)) {
+            if (lightboxBenchmarkDiagnosticsEnabled) {
+                lightboxBenchmarkDiagnosticsState.metadataRequestsSkippedLoaded += 1;
+                recordLightboxBenchmarkEvent('metadata_skip_loaded', {offset, limit});
+            }
             return Promise.resolve(true);
         }
         const key = `${offset}:${limit}`;
         if (lightboxPendingWindows.has(key)) {
+            if (lightboxBenchmarkDiagnosticsEnabled) {
+                lightboxBenchmarkDiagnosticsState.metadataRequestsReused += 1;
+                recordLightboxBenchmarkEvent('metadata_reuse_pending', {offset, limit});
+            }
             return lightboxPendingWindows.get(key);
         }
+        const metadataSignal = currentLightboxMetadataSignal();
+        if (!metadataSignal) {
+            return Promise.resolve(false);
+        }
+        const requestGeneration = lightboxMetadataGeneration;
         const url = new URL(lightboxEndpoint, window.location.href);
         url.searchParams.set('offset', String(offset));
         url.searchParams.set('limit', String(limit));
-        const promise = fetch(url.toString(), {
+        if (lightboxBenchmarkDiagnosticsEnabled) {
+            if (lightboxBenchmarkToken) {
+                url.searchParams.set('benchmark_token', lightboxBenchmarkToken);
+            }
+            if (lightboxBenchmarkRun) {
+                url.searchParams.set('benchmark_run', lightboxBenchmarkRun);
+            }
+            url.searchParams.set('benchmark_phase', 'lightbox_metadata');
+            lightboxBenchmarkDiagnosticsState.metadataRequestsStarted += 1;
+            recordLightboxBenchmarkEvent('metadata_start', {offset, limit, generation: requestGeneration});
+        }
+        const requestStartedAt = performance.now();
+        let promise = null;
+        promise = fetch(url.toString(), {
             credentials: 'same-origin',
             headers: {'Accept': 'application/json'},
-            signal: controller.signal,
+            signal: metadataSignal,
         })
             .then((response) => {
                 if (!response.ok) {
@@ -354,10 +481,41 @@ export function setupGalleryLightbox() {
                 return response.json();
             })
             .then((payload) => {
+                if (metadataSignal.aborted || controller.signal.aborted || requestGeneration !== lightboxMetadataGeneration) {
+                    return false;
+                }
                 mergeLightboxItems(payload?.items || []);
+                if (lightboxBenchmarkDiagnosticsEnabled) {
+                    lightboxBenchmarkDiagnosticsState.metadataRequestsCompleted += 1;
+                    recordLightboxBenchmarkEvent('metadata_complete', {
+                        offset,
+                        limit,
+                        count: Array.isArray(payload?.items) ? payload.items.length : 0,
+                        duration_ms: performance.now() - requestStartedAt,
+                    });
+                }
                 return true;
             })
             .catch((error) => {
+                if (error?.name === 'AbortError' || metadataSignal.aborted || controller.signal.aborted) {
+                    if (lightboxBenchmarkDiagnosticsEnabled) {
+                        lightboxBenchmarkDiagnosticsState.metadataRequestsAborted += 1;
+                        recordLightboxBenchmarkEvent('metadata_abort', {
+                            offset,
+                            limit,
+                            duration_ms: performance.now() - requestStartedAt,
+                        });
+                    }
+                    return false;
+                }
+                if (lightboxBenchmarkDiagnosticsEnabled) {
+                    lightboxBenchmarkDiagnosticsState.metadataRequestsFailed += 1;
+                    recordLightboxBenchmarkEvent('metadata_failure', {
+                        offset,
+                        limit,
+                        duration_ms: performance.now() - requestStartedAt,
+                    });
+                }
                 if (window.console && typeof window.console.warn === 'function') {
                     window.console.warn('Lazy lightbox metadata request failed.', {
                         endpoint: url.toString(),
@@ -369,7 +527,9 @@ export function setupGalleryLightbox() {
                 return false;
             })
             .finally(() => {
-                lightboxPendingWindows.delete(key);
+                if (lightboxPendingWindows.get(key) === promise) {
+                    lightboxPendingWindows.delete(key);
+                }
             });
         lightboxPendingWindows.set(key, promise);
         return promise;
@@ -393,6 +553,7 @@ export function setupGalleryLightbox() {
     setupGpsMaps(controller.signal);
 
     galleryLightboxState.cleanup = () => {
+        cancelLightboxMetadataRequests();
         controller.abort();
         cards = [];
         if (overlay?.galleryLeafletSplitResizeObserver) {
@@ -618,7 +779,85 @@ export function setupGalleryLightbox() {
     updateMobileLightboxViewport();
     window.__LIGHTBOX_DEBUG__ = isLightboxDebugEnabled;
 
+    /**
+     * Return benchmark-only lightbox internals that are otherwise invisible to Resource Timing.
+     *
+     * @return {Record<string, unknown>} Serializable viewer lifecycle snapshot.
+     */
+    function lightboxBenchmarkSnapshot() {
+        const currentImage = image instanceof HTMLImageElement ? image : null;
+        const memory = performance && performance.memory ? performance.memory : null;
+        return {
+            recorded_at_ms: performance.now(),
+            overlay_hidden: Boolean(overlay.hidden),
+            overlay_classes: Array.from(overlay.classList),
+            current_index: currentIndex,
+            cards_total: cards.length,
+            cards_loaded: cards.reduce((count, card) => count + (card ? 1 : 0), 0),
+            pending_metadata_windows: lightboxPendingWindows.size,
+            pending_metadata_keys: Array.from(lightboxPendingWindows.keys()).slice(0, 20),
+            metadata_generation: lightboxMetadataGeneration,
+            metadata_abort_controller_active: Boolean(lightboxMetadataAbortController && !lightboxMetadataAbortController.signal.aborted),
+            decoded_image_cache_size: decodedLightboxImages.size,
+            preloaded_sources_size: preloadedSources.size,
+            preload_queue_length: lightboxPreloadQueue.length,
+            queued_sources_size: lightboxQueuedSources.size,
+            active_preloads: activeLightboxPreloads,
+            detached_image_loads: activeDetachedLightboxImageLoads.size,
+            preload_generation: lightboxPreloadGeneration,
+            slideshow_active: lightboxSlideshowActive,
+            fullscreen_active: document.fullscreenElement === overlay || overlay.classList.contains('is-mobile-fullscreen'),
+            image: currentImage ? {
+                src_present: currentImage.hasAttribute('src'),
+                complete: currentImage.complete,
+                natural_width: currentImage.naturalWidth,
+                natural_height: currentImage.naturalHeight,
+                current_src: currentImage.currentSrc ? currentImage.currentSrc.slice(0, 700) : '',
+            } : null,
+            js_heap: memory ? {
+                used_js_heap_size: Number(memory.usedJSHeapSize || 0),
+                total_js_heap_size: Number(memory.totalJSHeapSize || 0),
+                js_heap_size_limit: Number(memory.jsHeapSizeLimit || 0),
+            } : null,
+            counters: {
+                metadata_requests_started: lightboxBenchmarkDiagnosticsState.metadataRequestsStarted,
+                metadata_requests_reused: lightboxBenchmarkDiagnosticsState.metadataRequestsReused,
+                metadata_requests_skipped_loaded: lightboxBenchmarkDiagnosticsState.metadataRequestsSkippedLoaded,
+                metadata_requests_completed: lightboxBenchmarkDiagnosticsState.metadataRequestsCompleted,
+                metadata_requests_aborted: lightboxBenchmarkDiagnosticsState.metadataRequestsAborted,
+                metadata_requests_failed: lightboxBenchmarkDiagnosticsState.metadataRequestsFailed,
+                metadata_items_merged: lightboxBenchmarkDiagnosticsState.metadataItemsMerged,
+                metadata_cancel_calls: lightboxBenchmarkDiagnosticsState.metadataCancelCalls,
+                metadata_pending_at_last_cancel: lightboxBenchmarkDiagnosticsState.metadataPendingAtLastCancel,
+                open_calls: lightboxBenchmarkDiagnosticsState.openCalls,
+                close_calls: lightboxBenchmarkDiagnosticsState.closeCalls,
+                navigation_calls: lightboxBenchmarkDiagnosticsState.navigationCalls,
+                detached_loads_started: lightboxBenchmarkDiagnosticsState.detachedLoadsStarted,
+                detached_loads_completed: lightboxBenchmarkDiagnosticsState.detachedLoadsCompleted,
+                detached_loads_aborted: lightboxBenchmarkDiagnosticsState.detachedLoadsAborted,
+                detached_loads_failed: lightboxBenchmarkDiagnosticsState.detachedLoadsFailed,
+                decoded_cache_insertions: lightboxBenchmarkDiagnosticsState.decodedCacheInsertions,
+                decoded_cache_insertions_after_close: lightboxBenchmarkDiagnosticsState.decodedCacheInsertionsAfterClose,
+                last_decoded_cache_insertion_reason: lightboxBenchmarkDiagnosticsState.lastDecodedCacheInsertionReason,
+                last_close_ended_at_ms: lightboxBenchmarkDiagnosticsState.lastCloseEndedAtMs,
+            },
+            events: lightboxBenchmarkDiagnosticsState.events.slice(-100),
+        };
+    }
+
+    // benchmarkSnapshotFunction is kept so teardown removes only the API installed by this lightbox instance.
+    const benchmarkSnapshotFunction = lightboxBenchmarkDiagnosticsEnabled ? lightboxBenchmarkSnapshot : null;
+    if (benchmarkSnapshotFunction) {
+        window.PHPGalleryBenchmarkDiagnostics = window.PHPGalleryBenchmarkDiagnostics || {};
+        window.PHPGalleryBenchmarkDiagnostics.lightboxSnapshot = benchmarkSnapshotFunction;
+        recordLightboxBenchmarkEvent('diagnostics_ready', {
+            cards_total: cards.length,
+            cards_loaded: cards.reduce((count, card) => count + (card ? 1 : 0), 0),
+        });
+    }
+
     galleryLightboxState.cleanup = () => {
+        cancelLightboxMetadataRequests();
         controller.abort();
         cards = [];
         clearPendingLightboxQualityUpgrade();
@@ -633,18 +872,10 @@ export function setupGalleryLightbox() {
         preloadedSources.clear();
         resetLightboxPreloadQueue();
         cancelActiveDetachedLightboxImageLoads();
-        lightboxPendingWindows.clear();
         lightboxGalleryMapPayloadPromises.clear();
         decodedLightboxImages.clear();
         failedLightboxQualitySources.clear();
-        if (galleryDevModeState.frameId) {
-            window.cancelAnimationFrame(galleryDevModeState.frameId);
-            galleryDevModeState.frameId = 0;
-        }
-        if (galleryDevModeState.intervalId) {
-            window.clearInterval(galleryDevModeState.intervalId);
-            galleryDevModeState.intervalId = 0;
-        }
+        stopGalleryDevModeMonitoring();
         if (galleryDevModeState.overlay) {
             galleryDevModeState.overlay.remove();
             galleryDevModeState.overlay = null;
@@ -693,6 +924,9 @@ export function setupGalleryLightbox() {
         overlay.removeAttribute('data-current-title');
         if (image) {
             image.removeAttribute('src');
+        }
+        if (benchmarkSnapshotFunction && window.PHPGalleryBenchmarkDiagnostics?.lightboxSnapshot === benchmarkSnapshotFunction) {
+            delete window.PHPGalleryBenchmarkDiagnostics.lightboxSnapshot;
         }
         document.documentElement.classList.remove('has-lightbox', 'has-mobile-lightbox');
         document.body.classList.remove('has-lightbox', 'has-mobile-lightbox', 'has-map-overlay');
@@ -894,9 +1128,39 @@ export function setupGalleryLightbox() {
             devRegisterSource(card.dataset.previewSrc || card.dataset.fullSrc || '', 'preview', index, 'idle');
             devRegisterSource(card.dataset.fullSrc || card.dataset.previewSrc || '', 'full', index, 'idle');
         });
-        galleryDevModeState.frameId = requestAnimationFrame(devFrameTick);
-        galleryDevModeState.intervalId = window.setInterval(renderGalleryDevModeOverlay, 350);
         renderGalleryDevModeOverlay();
+    }
+
+    /**
+     * Start development-only lightbox diagnostics while the viewer is active.
+     */
+    function startGalleryDevModeMonitoring() {
+        if (!galleryDevModeEnabled || controller.signal.aborted) {
+            return;
+        }
+        if (!galleryDevModeState.frameId) {
+            galleryDevModeState.lastFrameAt = 0;
+            galleryDevModeState.frameId = requestAnimationFrame(devFrameTick);
+        }
+        if (!galleryDevModeState.intervalId) {
+            galleryDevModeState.intervalId = window.setInterval(renderGalleryDevModeOverlay, 350);
+        }
+        renderGalleryDevModeOverlay();
+    }
+
+    /**
+     * Stop development-only diagnostics when the lightbox is not visible.
+     */
+    function stopGalleryDevModeMonitoring() {
+        if (galleryDevModeState.frameId) {
+            window.cancelAnimationFrame(galleryDevModeState.frameId);
+            galleryDevModeState.frameId = 0;
+        }
+        if (galleryDevModeState.intervalId) {
+            window.clearInterval(galleryDevModeState.intervalId);
+            galleryDevModeState.intervalId = 0;
+        }
+        galleryDevModeState.lastFrameAt = 0;
     }
 
         /**
@@ -1343,7 +1607,25 @@ export function setupGalleryLightbox() {
         }
     }
 
-        /**
+    /**
+     * Return a bounded non-secret source label for benchmark image lifecycle events.
+     *
+     * @param {string} src Image source URL.
+     * @return {string} Bounded path-only diagnostic label.
+     */
+    function benchmarkSourceLabel(src) {
+        if (!src) {
+            return 'none';
+        }
+        try {
+            const url = new URL(src, window.location.href);
+            return decodeURIComponent(url.pathname).slice(-220);
+        } catch {
+            return String(src).split('?')[0].slice(-220);
+        }
+    }
+
+    /**
      * Handles load fresh decoded lightbox image behavior for the gallery UI.
      *
      * @param {*} src Value supplied by the caller or event context.
@@ -1357,6 +1639,16 @@ export function setupGalleryLightbox() {
             }
             galleryDevModeState.loadStarted += galleryDevModeEnabled ? 1 : 0;
             devMarkSource(src, 'loading', 'fresh');
+            const benchmarkLoadId = lightboxBenchmarkDiagnosticsEnabled ? ++lightboxBenchmarkDiagnosticsState.detachedLoadSequence : 0;
+            if (lightboxBenchmarkDiagnosticsEnabled) {
+                lightboxBenchmarkDiagnosticsState.detachedLoadsStarted += 1;
+                recordLightboxBenchmarkEvent('image_load_start', {
+                    load_id: benchmarkLoadId,
+                    source: benchmarkSourceLabel(src),
+                    priority: String(options.priority || ''),
+                    preload_generation: lightboxPreloadGeneration,
+                });
+            }
             // loadedImage stores state or configuration for the gallery front-end flow.
             const loadedImage = new Image();
             // signal optionally lets nearby-image or slideshow lifecycle code cancel this detached request.
@@ -1381,6 +1673,14 @@ export function setupGalleryLightbox() {
                 settled = true;
                 cleanupLoad();
                 loadedImage.removeAttribute('src');
+                if (lightboxBenchmarkDiagnosticsEnabled) {
+                    lightboxBenchmarkDiagnosticsState.detachedLoadsAborted += 1;
+                    recordLightboxBenchmarkEvent('image_load_abort', {
+                        load_id: benchmarkLoadId,
+                        source: benchmarkSourceLabel(src),
+                        preload_generation: lightboxPreloadGeneration,
+                    });
+                }
                 const error = new Error('Lightbox image load cancelled.');
                 error.name = 'AbortError';
                 reject(error);
@@ -1411,6 +1711,16 @@ export function setupGalleryLightbox() {
                     }
                     settled = true;
                     cleanupLoad();
+                    if (lightboxBenchmarkDiagnosticsEnabled) {
+                        lightboxBenchmarkDiagnosticsState.detachedLoadsCompleted += 1;
+                        recordLightboxBenchmarkEvent('image_load_complete', {
+                            load_id: benchmarkLoadId,
+                            source: benchmarkSourceLabel(src),
+                            width: loadedImage.naturalWidth,
+                            height: loadedImage.naturalHeight,
+                            preload_generation: lightboxPreloadGeneration,
+                        });
+                    }
                     devMarkSource(src, 'ready', 'decoded', loadedImage);
                     resolve(loadedImage);
                 });
@@ -1421,6 +1731,14 @@ export function setupGalleryLightbox() {
                 }
                 settled = true;
                 cleanupLoad();
+                if (lightboxBenchmarkDiagnosticsEnabled) {
+                    lightboxBenchmarkDiagnosticsState.detachedLoadsFailed += 1;
+                    recordLightboxBenchmarkEvent('image_load_error', {
+                        load_id: benchmarkLoadId,
+                        source: benchmarkSourceLabel(src),
+                        preload_generation: lightboxPreloadGeneration,
+                    });
+                }
                 galleryDevModeState.decodeErrors += galleryDevModeEnabled ? 1 : 0;
                 devMarkSource(src, 'error', 'load');
                 reject(new Error(i18n('lightbox.image_load_failed', 'Lightbox image load failed.')));
@@ -1453,11 +1771,26 @@ export function setupGalleryLightbox() {
      * @param {*} preloadPromise Value supplied by the caller or event context.
      * @return {*} Result of the UI operation, when a value is produced.
      */
-    function rememberDecodedLightboxImage(src, preloadPromise) {
+    function rememberDecodedLightboxImage(src, preloadPromise, reason = 'unknown') {
         if (decodedLightboxImages.has(src)) {
             decodedLightboxImages.delete(src);
         }
         decodedLightboxImages.set(src, preloadPromise);
+        if (lightboxBenchmarkDiagnosticsEnabled) {
+            lightboxBenchmarkDiagnosticsState.decodedCacheInsertions += 1;
+            lightboxBenchmarkDiagnosticsState.lastDecodedCacheInsertionReason = String(reason || 'unknown');
+            const afterClose = typeof lightboxBenchmarkDiagnosticsState.lastCloseEndedAtMs === 'number' && overlay.hidden;
+            if (afterClose) {
+                lightboxBenchmarkDiagnosticsState.decodedCacheInsertionsAfterClose += 1;
+            }
+            recordLightboxBenchmarkEvent(afterClose ? 'decoded_cache_insert_after_close' : 'decoded_cache_insert', {
+                source: benchmarkSourceLabel(src),
+                reason: String(reason || 'unknown'),
+                cache_size: decodedLightboxImages.size,
+                since_close_ms: afterClose ? Math.max(0, performance.now() - lightboxBenchmarkDiagnosticsState.lastCloseEndedAtMs) : null,
+                preload_generation: lightboxPreloadGeneration,
+            });
+        }
         trimDecodedLightboxImageCache();
         return preloadPromise;
     }
@@ -1505,7 +1838,7 @@ export function setupGalleryLightbox() {
         devMarkSource(src, 'preloading', 'preload-miss');
         // preloadPromise stores state or configuration for the gallery front-end flow.
         const preloadPromise = loadFreshDecodedLightboxImage(src, {priority: 'low', signal: options.signal}).catch(() => null);
-        rememberDecodedLightboxImage(src, preloadPromise);
+        rememberDecodedLightboxImage(src, preloadPromise, 'preload');
         preloadPromise.finally(() => {
             if (options.signal?.aborted && decodedLightboxImages.get(src) === preloadPromise) {
                 decodedLightboxImages.delete(src);
@@ -1648,14 +1981,14 @@ export function setupGalleryLightbox() {
                 }
                 // freshPromise stores state or configuration for the gallery front-end flow.
                 const freshPromise = loadFreshDecodedLightboxImage(src, options);
-                rememberDecodedLightboxImage(src, freshPromise.catch(() => null));
+                rememberDecodedLightboxImage(src, freshPromise.catch(() => null), 'load-cache-retry');
                 return freshPromise;
             });
         }
         galleryDevModeState.cacheMisses += galleryDevModeEnabled ? 1 : 0;
         // freshPromise stores state or configuration for the gallery front-end flow.
         const freshPromise = loadFreshDecodedLightboxImage(src, options);
-        rememberDecodedLightboxImage(src, freshPromise.catch(() => null));
+        rememberDecodedLightboxImage(src, freshPromise.catch(() => null), 'load-fresh');
         return freshPromise;
     }
 
@@ -3534,6 +3867,17 @@ export function setupGalleryLightbox() {
         if (cards.length === 0) {
             return;
         }
+        if (lightboxBenchmarkDiagnosticsEnabled) {
+            lightboxBenchmarkDiagnosticsState.navigationCalls += 1;
+            if (overlay.hidden) {
+                lightboxBenchmarkDiagnosticsState.openCalls += 1;
+            }
+            recordLightboxBenchmarkEvent(overlay.hidden ? 'open' : 'navigate', {
+                requested_index: index,
+                current_index: currentIndex,
+                cards_loaded: cards.reduce((count, card) => count + (card ? 1 : 0), 0),
+            });
+        }
         const revealHud = options.revealHud !== false;
         clearLightboxSlideshowTimer();
         const normalizedIndex = ((index % cards.length) + cards.length) % cards.length;
@@ -3555,6 +3899,7 @@ export function setupGalleryLightbox() {
             });
             return;
         }
+        startGalleryDevModeMonitoring();
         if (!isInitialPhotoOpen) {
             hideInitialLightboxLoader();
         }
@@ -3936,6 +4281,17 @@ export function setupGalleryLightbox() {
      * Close close.
      */
     function close() {
+        if (lightboxBenchmarkDiagnosticsEnabled) {
+            lightboxBenchmarkDiagnosticsState.closeCalls += 1;
+            recordLightboxBenchmarkEvent('close_begin', {
+                current_index: currentIndex,
+                pending_metadata: lightboxPendingWindows.size,
+                decoded_cache: decodedLightboxImages.size,
+                preload_queue: lightboxPreloadQueue.length,
+                active_preloads: activeLightboxPreloads,
+                detached_loads: activeDetachedLightboxImageLoads.size,
+            });
+        }
         telemetryPhotoClosed();
         resetLightboxZoom(false);
         stopLightboxSlideshow();
@@ -3964,10 +4320,11 @@ export function setupGalleryLightbox() {
         resetLightboxPreloadQueue();
         cancelActiveDetachedLightboxImageLoads();
         decodedLightboxImages.clear();
-        lightboxPendingWindows.clear();
+        cancelLightboxMetadataRequests();
         lightboxGalleryMapPayloadPromises.clear();
         failedLightboxQualitySources.clear();
         activeLightboxQualitySource = '';
+        stopGalleryDevModeMonitoring();
         galleryDevModeState.currentSource = '';
         galleryDevModeState.currentSourceKind = '';
         galleryDevModeState.currentIndex = -1;
@@ -3977,6 +4334,16 @@ export function setupGalleryLightbox() {
             window.history.replaceState({}, '', lightboxReturnUrl);
         }
         lightboxHistoryActive = false;
+        if (lightboxBenchmarkDiagnosticsEnabled) {
+            lightboxBenchmarkDiagnosticsState.lastCloseEndedAtMs = performance.now();
+            recordLightboxBenchmarkEvent('close_end', {
+                pending_metadata: lightboxPendingWindows.size,
+                decoded_cache: decodedLightboxImages.size,
+                preload_queue: lightboxPreloadQueue.length,
+                active_preloads: activeLightboxPreloads,
+                detached_loads: activeDetachedLightboxImageLoads.size,
+            });
+        }
     }
 
 

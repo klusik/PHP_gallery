@@ -38,6 +38,7 @@ namespace Gallery\Controllers;
 
 use function Gallery\Core\admin_anonymous_preview_active;
 use function Gallery\Core\current_user;
+use function Gallery\Core\csrf_token;
 use function Gallery\Core\gallery_public_url;
 use function Gallery\Core\image_public_url;
 use function Gallery\Core\url_for;
@@ -48,6 +49,9 @@ use function Gallery\Services\content_localize_entities;
 use function Gallery\Services\content_localize_entity;
 use function Gallery\Services\find_gallery;
 use function Gallery\Services\gallery_allows_gps_maps;
+use function Gallery\Services\gallery_benchmark_record_auxiliary_render;
+use function Gallery\Services\gallery_benchmark_request_trace_enabled;
+use function Gallery\Services\gallery_benchmark_trace_mark;
 use function Gallery\Services\gallery_lightbox_fetch_images;
 use function Gallery\Services\gallery_lightbox_total_count;
 use function Gallery\Services\gallery_voting_allowed;
@@ -55,8 +59,11 @@ use function Gallery\Services\image_has_gps;
 use function Gallery\Services\image_map_point;
 use function Gallery\Services\image_nsfw_restricted;
 use function Gallery\Services\public_image_display_title;
+use function Gallery\Services\public_render_profile_snapshot;
+use function Gallery\Services\public_render_profile_start;
 use function Gallery\Services\public_render_profile_with_thumbnail_purpose;
 use function Gallery\Services\thumbnail_bundle;
+use function Gallery\Services\thumbnail_bundles_preload;
 use function Gallery\Services\thumbnail_bundle_url;
 use function Gallery\Services\lightbox_zoom_quality_candidates;
 use function Gallery\Services\translation_active_language;
@@ -78,6 +85,27 @@ function gallery_lightbox_json_response(array $payload, int $status = 200): void
     header('Content-Type: application/json; charset=utf-8');
     header('Cache-Control: private, no-store');
     echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+}
+
+/**
+ * Release the PHP session lock before expensive read-only lightbox metadata work.
+ *
+ * Gallery authorization, viewer identity, vote/favourite state, NSFW access, and
+ * the CSRF token required by rendered vote forms must be captured first. Closing
+ * the session afterwards keeps the in-memory values readable while allowing a
+ * pagination or reload request from the same visitor to run concurrently.
+ */
+function cms_release_gallery_lightbox_session_lock(): void
+{
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        if (function_exists('Gallery\\Services\\gallery_benchmark_trace_mark')) {
+            gallery_benchmark_trace_mark('lightbox_session_release_begin');
+        }
+        session_write_close();
+        if (function_exists('Gallery\\Services\\gallery_benchmark_trace_mark')) {
+            gallery_benchmark_trace_mark('lightbox_session_release_end');
+        }
+    }
 }
 
 /**
@@ -129,6 +157,11 @@ function gallery_lightbox_json_item(array $image, array $gallery, int $index, bo
  */
 function cms_gallery_lightbox_data(): void
 {
+    $benchmarkTracing = function_exists('Gallery\\Services\\gallery_benchmark_request_trace_enabled') && gallery_benchmark_request_trace_enabled();
+    if ($benchmarkTracing) {
+        gallery_benchmark_trace_mark('lightbox_controller_enter');
+        public_render_profile_start('gallery_lightbox', (int) ($_GET['id'] ?? 0));
+    }
     $gallery = find_gallery((int) ($_GET['id'] ?? 0));
     $anonymousPreview = admin_anonymous_preview_active();
     $viewer = $anonymousPreview ? null : (current_user_is_known_under_18() ? null : current_user());
@@ -152,8 +185,6 @@ function cms_gallery_lightbox_data(): void
 
     $images = gallery_lightbox_fetch_images($gallery, $publicOnly, $offset, $limit, true);
     $contentLanguage = translation_active_language();
-    $gallery = content_localize_entity('gallery', $gallery, $contentLanguage);
-    $images = content_localize_entities('image', $images, $contentLanguage);
     $imageIds = array_map(static fn (array $image): int => (int) $image['id'], $images);
     $votesById = current_votes_for_images($imageIds);
     $viewerPrincipal = current_viewer();
@@ -163,12 +194,26 @@ function cms_gallery_lightbox_data(): void
     $viewerFavouriteRequiresSourceRecheck = is_array($viewerFavouriteStates) && $viewer !== null;
     $mapsAllowed = gallery_allows_gps_maps($gallery);
     $votingAllowed = gallery_voting_allowed($gallery);
-    $items = [];
+    $nsfwAllowed = visitor_can_access_nsfw_content();
+    if ($votingAllowed) {
+        csrf_token();
+    }
 
+    cms_release_gallery_lightbox_session_lock();
+
+    $gallery = content_localize_entity('gallery', $gallery, $contentLanguage);
+    $images = content_localize_entities('image', $images, $contentLanguage);
+    $renderImages = [];
     foreach ($images as $rowIndex => $image) {
-        if ($publicOnly && image_nsfw_restricted($image, $gallery) && !visitor_can_access_nsfw_content()) {
+        if ($publicOnly && image_nsfw_restricted($image, $gallery) && !$nsfwAllowed) {
             continue;
         }
+        $renderImages[$rowIndex] = $image;
+    }
+    thumbnail_bundles_preload(array_values($renderImages));
+    $items = [];
+
+    foreach ($renderImages as $rowIndex => $image) {
         $items[] = gallery_lightbox_json_item($image, $gallery, $offset + $rowIndex, $mapsAllowed, $votingAllowed, $votesById);
         if (is_array($viewerFavouriteStates)
             && (!$viewerFavouriteRequiresSourceRecheck || viewer_source_image_can_reference((int) $image['id']))) {
@@ -177,6 +222,15 @@ function cms_gallery_lightbox_data(): void
                 $items[$lastItemIndex]['viewer_favourite'] = !empty($viewerFavouriteStates[(int) $image['id']]);
             }
         }
+    }
+
+    if ($benchmarkTracing) {
+        gallery_benchmark_trace_mark('lightbox_payload_ready', [
+            'offset' => $offset,
+            'limit' => $limit,
+            'items' => count($items),
+        ]);
+        gallery_benchmark_record_auxiliary_render($gallery, public_render_profile_snapshot(), 'lightbox_metadata');
     }
 
     gallery_lightbox_json_response([

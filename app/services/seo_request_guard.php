@@ -165,11 +165,11 @@ function seo_request_guard_allowed_parameters_for_page(string $page): array
     $global = ['page', 'lang'];
     $map = [
         'home' => ['gallery_page', 'view_as'],
-        'gallery' => ['public_path', 'gallery_path', 'slug', 'gallery_page', 'photo_page', 'share', 'token', 'q', 'view_as', 'benchmark_token', 'benchmark_run', 'benchmark_cache_bust'],
+        'gallery' => ['public_path', 'gallery_path', 'slug', 'gallery_page', 'photo_page', 'share', 'token', 'q', 'view_as', 'benchmark_token', 'benchmark_run', 'benchmark_cache_bust', 'benchmark_phase'],
         'smart_gallery' => ['slug', 'photo_page', 'view_as'],
         'tag' => ['slug', 'view_as'],
         'public_search' => ['q', 'context_only', 'gallery_id'],
-        'gallery_lightbox_data' => ['id', 'limit', 'offset', 'view_as'],
+        'gallery_lightbox_data' => ['id', 'limit', 'offset', 'view_as', 'benchmark_token', 'benchmark_run', 'benchmark_phase'],
         'smart_gallery_lightbox_data' => ['id', 'limit', 'offset', 'view_as'],
         'gallery_map_data' => ['id', 'view_as'],
         'picture_game' => ['id', 'view_as'],
