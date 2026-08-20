@@ -58,7 +58,7 @@ smart_gallery_public_contract_assert(!str_contains($controller, 'folder_path AS 
 
 smart_gallery_public_contract_assert(str_contains($lightboxView, 'bool $slideshowAllowed = true'), 'Normal gallery lightbox keeps slideshow enabled by default.');
 smart_gallery_public_contract_assert(str_contains($lightbox, 'lightboxPendingWindows.has(key)') && str_contains($lightbox, 'lightboxPendingWindows.delete(key)'), 'Shared lazy lightbox client deduplicates adjacent metadata requests and releases failed/completed windows.');
-smart_gallery_public_contract_assert(str_contains($lightbox, "return false;") && str_contains($lightbox, "signal: controller.signal"), 'Shared lazy lightbox client fails closed for metadata fetch errors and aborts stale work on teardown.');
+smart_gallery_public_contract_assert(str_contains($lightbox, "return false;") && str_contains($lightbox, "signal: metadataSignal") && str_contains($lightbox, 'cancelLightboxMetadataRequests();'), 'Shared lazy lightbox client fails closed for metadata fetch errors and aborts stale work when the viewer closes or tears down.');
 smart_gallery_public_contract_assert(str_contains($lightbox, "overlay.dataset.lightboxSlideshowEnabled !== '0'"), 'Lightbox client honors per-Smart-Gallery slideshow disablement without changing default behavior.');
 
 fwrite(STDOUT, "Smart Gallery public contract tests passed.\n");

@@ -74,7 +74,7 @@ import { setupAdminGalleryDateSuggestions } from './gallery-modules/admin-galler
 import { setupAdminDuplicatePhotoDetector } from './gallery-modules/admin-duplicate-photo-detector.js?v=20260808-duplicate-photo-detector-ledger-v4';
 import { setupAdminStorageStatistics } from './gallery-modules/admin-storage-statistics.js?v=20260608-storage-statistics-v1';
 import { setupAdminGalleryReport } from './gallery-modules/admin-gallery-report.js?v=20260615-admin-gallery-report-v1';
-import { setupAdminGalleryBenchmark } from './gallery-modules/admin-gallery-benchmark.js?v=20260618-gallery-benchmark-v1';
+import { setupAdminGalleryBenchmark } from './gallery-modules/admin-gallery-benchmark.js?v=20260820-benchmark-diagnostics-v4.2';
 import { setupPublicThumbnailRenderDiagnostics } from './gallery-modules/public-thumbnail-render-diagnostics.js?v=20260809-thumbnail-render-diagnostics-v1';
 import { setupVoteForms } from './gallery-modules/votes.js?v=20260512-lightbox-vote-clone-widget-v6';
 import { setupViewerFavourites } from './gallery-modules/viewer-favourites.js?v=20260818-viewer-favourites-v1';

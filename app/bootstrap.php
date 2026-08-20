@@ -36,7 +36,7 @@ declare(strict_types=1);
 
 namespace Gallery\Core;
 
-const CMS_VERSION = '0.92';
+const CMS_VERSION = '0.92.1';
 const CMS_GITHUB_REPOSITORY = 'klusik/PHP_gallery';
 const CMS_UPDATE_BRANCHES = ['main', 'master'];
 
@@ -63,14 +63,40 @@ require __DIR__ . '/bootstrap/dispatch.php';
  */
 function cms_run(): void
 {
+    if (function_exists('Gallery\\Services\\gallery_benchmark_trace_mark')) {
+        \Gallery\Services\gallery_benchmark_trace_mark('cms_run_enter');
+    }
     if (!cms_has_config()) {
         cms_redirect_to_installer();
     }
 
     // Variable $config stores this steps working value.
+    if (function_exists('Gallery\\Services\\gallery_benchmark_trace_mark')) {
+        \Gallery\Services\gallery_benchmark_trace_mark('config_load_start');
+    }
     $config = cms_config();
+    if (function_exists('Gallery\\Services\\gallery_benchmark_trace_mark')) {
+        \Gallery\Services\gallery_benchmark_trace_mark('config_load_end');
+    }
     cms_start_session($config);
+    if (function_exists('Gallery\\Services\\gallery_benchmark_trace_mark')) {
+        \Gallery\Services\gallery_benchmark_trace_mark('request_initialize_start');
+    }
     $page = cms_initialize_request();
+    if (function_exists('Gallery\\Services\\gallery_benchmark_trace_mark')) {
+        \Gallery\Services\gallery_benchmark_trace_mark('request_initialize_end', ['page' => $page]);
+        \Gallery\Services\gallery_benchmark_trace_mark('request_maintenance_start');
+    }
     cms_run_request_maintenance($page);
+    if (function_exists('Gallery\\Services\\gallery_benchmark_trace_mark')) {
+        \Gallery\Services\gallery_benchmark_trace_mark('request_maintenance_end');
+        \Gallery\Services\gallery_benchmark_trace_mark('dispatch_start', ['page' => $page]);
+    }
     cms_dispatch_page($page);
+    if (function_exists('Gallery\\Services\\gallery_benchmark_trace_mark')) {
+        \Gallery\Services\gallery_benchmark_trace_mark('dispatch_end', ['page' => $page]);
+    }
+    if (function_exists('Gallery\\Services\\gallery_benchmark_record_request_completion')) {
+        \Gallery\Services\gallery_benchmark_record_request_completion($page);
+    }
 }

@@ -36,6 +36,7 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+use function Gallery\Core\asset_url;
 use function Gallery\Core\current_user;
 use function Gallery\Core\csrf_token;
 use function Gallery\Core\e;
@@ -471,7 +472,7 @@ function render_public_gallery_benchmark_panel(array $snapshot): void
     if ((string) ($snapshot['route'] ?? '') !== 'gallery' || $galleryId <= 0) {
         return;
     }
-    echo '<section class="panel public-gallery-benchmark" data-gallery-benchmark data-gallery-id="' . $galleryId . '" data-benchmark-runs="5" data-csrf-token="' . e(csrf_token()) . '" data-start-url="' . e(url_for('admin_gallery_benchmark_start')) . '" data-browser-url="' . e(url_for('admin_gallery_benchmark_browser')) . '" data-status-url="' . e(url_for('admin_gallery_benchmark_status')) . '">';
+    echo '<section class="panel public-gallery-benchmark" data-gallery-benchmark data-gallery-id="' . $galleryId . '" data-benchmark-runs="5" data-csrf-token="' . e(csrf_token()) . '" data-start-url="' . e(url_for('admin_gallery_benchmark_start')) . '" data-browser-url="' . e(url_for('admin_gallery_benchmark_browser')) . '" data-status-url="' . e(url_for('admin_gallery_benchmark_status')) . '" data-php-probe-url="' . e(url_for('admin_gallery_benchmark_probe')) . '" data-static-probe-url="' . e(asset_url('assets/gallery-benchmark-static-probe.txt')) . '">';
     echo '<div class="admin-panel-heading"><div><p class="admin-kicker">' . e(t('admin.gallery_benchmark.kicker', 'Benchmark')) . '</p><h2>' . e(t('admin.gallery_benchmark.title', 'Public gallery load benchmark')) . '</h2></div><div class="admin-hero-actions"><button type="button" class="button secondary" data-gallery-benchmark-start>' . e(t('admin.gallery_benchmark.start_button', 'Run benchmark')) . '</button><a class="button secondary is-disabled" data-gallery-benchmark-download href="#" aria-disabled="true" download>' . e(t('admin.gallery_benchmark.download_button', 'Download log')) . '</a></div></div>';
     echo '<p class="muted">' . e(t('admin.gallery_benchmark.help', 'Runs this gallery several times in a hidden same-origin iframe as an anonymous preview, records PHP render counters plus browser timing, then enables the JSON log download.')) . '</p>';
     echo '<div class="thumbnail-progress" data-gallery-benchmark-progress hidden><progress class="thumbnail-progress-bar" max="100" value="0" data-gallery-benchmark-progress-bar></progress><p class="muted" data-gallery-benchmark-status>' . e(t('admin.gallery_benchmark.idle', 'Benchmark is idle.')) . '</p><p class="muted" data-gallery-benchmark-summary></p></div>';

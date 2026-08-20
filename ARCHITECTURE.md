@@ -9,7 +9,7 @@ This document is intended to help future maintainers and AI coding agents unders
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.91.2';
+const CMS_VERSION = '0.92.1';
 ```
 
 Update-related code uses:
@@ -1711,4 +1711,3 @@ Phase 4.4 creates no migration, metrics table, event table, limiter table, files
 The operations layer is intentionally non-authoritative. Viewing it does not issue or consume anti-automation tickets/nonces, consume rate-limit budgets, mutate registration staging, rotate or consume Phase 4.2 verification authorities, alter invitation state, establish Viewer identity, or change scanner-safe verification. Phase 4.0 current-mode revalidation, Phase 4.1 generic registration semantics, Phase 4.2 token-A/sibling authority behavior, Phase 4.3 first-party anti-automation, Viewer/Admin identity separation, gallery authorization, and Phase 3 sharing remain unchanged.
 
 Phase 4 is complete after Phase 4.4: 4.0 owns registration policy/lifecycle foundations, 4.1 exposes verified-email open registration, 4.2 hardens verification resend/recovery, 4.3 provides fully first-party adaptive anti-automation, and 4.4 provides aggregate administrator operations visibility. No third-party CAPTCHA, reputation, monitoring, analytics, browser-fingerprinting, Composer/npm security package, Redis/Memcached, queue, daemon, or Phase 5 authentication mechanism is introduced.
-

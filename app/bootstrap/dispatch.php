@@ -144,6 +144,7 @@ function cms_dispatch_page(string $page): void
         'admin_gallery_benchmark_start' => '\\Gallery\\Controllers\\cms_admin_gallery_benchmark_start',
         'admin_gallery_benchmark_browser' => '\\Gallery\\Controllers\\cms_admin_gallery_benchmark_browser',
         'admin_gallery_benchmark_status' => '\\Gallery\\Controllers\\cms_admin_gallery_benchmark_status',
+        'admin_gallery_benchmark_probe' => '\\Gallery\\Controllers\\cms_admin_gallery_benchmark_probe',
         'admin_gallery_benchmark_download' => '\\Gallery\\Controllers\\cms_admin_gallery_benchmark_download',
         'admin_database_usage_recompute' => '\\Gallery\\Controllers\\cms_admin_database_usage_recompute',
         'admin_database_maintenance_inspect' => '\\Gallery\\Controllers\\cms_admin_database_maintenance_inspect',
