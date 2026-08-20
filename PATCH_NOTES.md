@@ -1,5 +1,36 @@
 # Patch notes
 
+## Version 0.92.1
+
+Version 0.92.1 is a focused observability and performance refinement on top of the complete Version 0.92 viewer-account and lightbox release. It adds a bounded, repeatable public-gallery benchmark and extends protected-media diagnostics while preserving viewer privacy, gallery authorization, and shared-hosting safety.
+
+  ### Highlights
+
+  #### Public gallery benchmark
+
+  - Added an administrator-only benchmark workflow for measuring a public gallery through isolated anonymous previews rather than an authenticated Admin page.
+  - Added bounded browser-driven runs with explicit start, progress, completion, cancellation, expiry, and failure states so a benchmark cannot become an unbounded background job.
+  - Added server render counters, request timing, browser navigation timing, cache status, response/transfer measurements, resource timing, decode timing, and lightbox lifecycle observations where the browser exposes them.
+  - Kept benchmark state session-scoped and automatically expiring; it is not visitor telemetry, an account preference, or a permanent report file.
+  - Added a static same-origin probe and cache-aware controls so repeated comparisons can distinguish server rendering, browser cache, protected media, and public derivative behavior.
+  - Added clear Admin result summaries and JSON export suitable for before/after comparisons on ordinary shared hosting.
+
+  #### Protected media and lightbox diagnostics
+
+  - Extended authorized protected-media diagnostics for benchmark requests without exposing private image paths, raw credentials, or unauthorized media URLs.
+  - Preserved gallery visibility, password/share, NSFW, conditional-request, and media authorization checks before any benchmark response or session-lock release.
+  - Retained bounded lightbox preview caching, detached-request cancellation, stale-generation rejection, failed-entry cleanup, and controlled slideshow preloading from Version 0.92.
+  - Kept the active photo, favourite state, metadata lifecycle, fullscreen/map state, and navigation controls stable while asynchronous benchmark or lightbox work completes.
+
+  ### Technical and release details
+
+  - Updated gallery benchmark services/controllers, public-media diagnostics, lightbox lifecycle code, and cache-busting asset revisions.
+  - Added focused PHP and browser/static benchmark contracts, media-diagnostics coverage, metadata/resource lifecycle tests, and Smart Gallery public-contract regression updates.
+  - Removed stale generated benchmark snapshots from tracked runtime data; new benchmark results remain runtime data rather than release source.
+  - Updated the README, architecture, database, testing guide, administrator manual, and rebuilt the indexed manual PDF for Version 0.92.1.
+  - Regenerated and verified `app/core-manifest.json` after all source and documentation edits.
+  - No database migration is required for this release.
+
 ## Version 0.92
 
 Version 0.92 introduces the invite-only multi-user viewer system and a substantial resource-lifecycle hardening pass for the lightbox and protected media. Administrators can manage viewer accounts and invitations while viewers receive a separate, privacy-preserving account boundary for favourites, private collections, and controlled unlisted sharing. The viewer feature is disabled by default and does not grant access to protected galleries.
