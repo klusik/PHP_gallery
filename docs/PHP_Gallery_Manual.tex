@@ -49,8 +49,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.92.2}
-\newcommand{\manualdate}{18 August 2026}
+\newcommand{\version}{0.92.3}
+\newcommand{\manualdate}{20 August 2026}
 
 \hypersetup{
   colorlinks=true,
@@ -152,8 +152,12 @@ The~manual is~organized around work that an~owner actually performs. The~early s
 
 For~a~new installation, begin with Section~\ref{sec:first-hour}. Collection planning is~covered in~Section~\ref{sec:planning}; routine gallery and~photo editing is~in~Sections~\ref{sec:create-edit-gallery} and~\ref{sec:photo-workflow}. Section~\ref{sec:audiences} is~useful before publishing because it~compares several common audience types. The~contents and~index are~intended for~jumping directly to~a~setting or~workflow when the~site is~already in~use.
 
-\subsection{What is~new in~Version 0.92.2}
-\index{Version 0.92.2}
+\subsection{What is~new in~Version 0.92.3}
+\index{Version 0.92.3}
+
+Version~0.92.3 makes~progressive thumbnail sharpening the~default renderer for~public photo cards. The~browser still receives a~usable server-rendered small image immediately, then may~activate larger bounded candidates near~the~viewport. The~responsive renderer remains permanently supported and~can~be~selected for~compatibility or~diagnostics; the~Admin labels now describe progressive as~the~default and~responsive as~the~legacy-compatible option.
+
+The~release adds an~idempotent migration that normalizes the~missing public-thumbnail-rendering setting to~progressive without changing existing explicit selections. Smart Gallery presentation, Admin normalization, diagnostic wording, cache-busted browser modules, and~regression tests all use the~same two permanent renderer identifiers. No~source photographs or~generated derivatives are~moved by~the~migration.
 
 Version~0.92.2 is~a~focused lightbox reliability patch. Detached image requests, decoded-cache entries, preload generations, and~teardown callbacks are~now kept under~a~single ownership lifecycle during rapid navigation, close/reopen cycles, slideshow transitions, and~resource cancellation. Late loads and~decodes cannot repopulate a~newer photograph's state after~the~viewer has~moved on. The~existing zoom, progressive quality, fullscreen, map, favourite, protected-media, and~no-JavaScript behavior remains unchanged.
 

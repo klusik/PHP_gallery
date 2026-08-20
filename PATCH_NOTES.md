@@ -1,5 +1,33 @@
 # Patch notes
 
+## Version 0.92.3
+
+Version 0.92.3 makes progressive thumbnail sharpening the default public photo-card renderer. It is a compatibility-aware presentation release on top of Version 0.92.2: the responsive renderer remains permanently supported, explicit existing selections are preserved, and the complete viewer-account, collection-sharing, benchmark, lightbox, Smart Gallery, and protected-media behavior remains intact.
+
+  ### Highlights
+
+  #### Progressive renderer default
+
+  - Changed the normalized public thumbnail rendering default from `responsive` to `progressive`.
+  - Kept `responsive` and `progressive` as the only permanent machine/architecture values; no temporary or replacement renderer identifier was introduced.
+  - Preserved the progressive pipeline’s server-rendered small-image fallback, bounded near-viewport activation, responsive layout, useful alt text, access checks, and no-JavaScript behavior.
+  - Kept the responsive renderer available as the compatibility/legacy option for installations that prefer complete server-rendered candidate sets.
+
+  #### Settings, migration, and diagnostics
+
+  - Added idempotent migration `202608200002_public_thumbnail_progressive_default.php` to establish progressive as the default without overwriting explicit stored choices.
+  - Updated Admin Theme and Settings labels, help text, normalization, Smart Gallery presentation contracts, diagnostics, and tests so the default/legacy wording is consistent everywhere.
+  - Updated cache-busted progressive-renderer and diagnostics modules and refreshed the core integrity manifest.
+  - Preserved both supported renderers’ gallery/password/NSFW/media authorization, semantic markup, and browser lifecycle contracts.
+
+  ### Upgrade and release details
+
+  - Existing installations should run the normal updater so the default-setting migration is applied. Existing explicit renderer settings remain unchanged.
+  - No source photographs or generated thumbnails are moved or rebuilt solely because the default changes.
+  - Updated `AGENTS.md`, README, architecture, database, testing, Admin settings inventory, and the administrator manual; rebuilt the indexed manual PDF for Version 0.92.3.
+  - Regenerated and verified `app/core-manifest.json` after all final source and documentation edits.
+  - Verified renderer normalization, migration consistency, Smart Gallery presentation, Admin settings, the complete PHP suite, syntax checks, and `git diff --check`.
+
 ## Version 0.92.2
 
 Version 0.92.2 is a focused lightbox reliability patch on top of Version 0.92.1. It addresses the final resource-ownership edges found during rapid navigation and repeated close/reopen cycles while preserving the complete Version 0.92 viewer-account, collection-sharing, benchmark, zoom, Smart Gallery, and protected-media foundation.
