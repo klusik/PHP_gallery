@@ -554,6 +554,7 @@ export function setupGalleryLightbox() {
 
     galleryLightboxState.cleanup = () => {
         cancelLightboxMetadataRequests();
+        clearLightboxHiddenCleanupTimer();
         controller.abort();
         cards = [];
         if (overlay?.galleryLeafletSplitResizeObserver) {
@@ -614,8 +615,12 @@ export function setupGalleryLightbox() {
     const lightboxFullPreloadRadius = 0;
     // lightboxQualityUpgradeDelay coalesces passive viewport/layout quality checks; explicit zoom requests promote immediately.
     const lightboxQualityUpgradeDelay = 140;
-    // lightboxDecodedImageCacheLimit keeps only the current preview neighborhood decoded.
-    const lightboxDecodedImageCacheLimit = 12;
+    // lightboxDecodedImageCacheDesktopLimit keeps a modest reusable decoded working set on desktop.
+    const lightboxDecodedImageCacheDesktopLimit = 12;
+    // lightboxDecodedImageCacheMobileLimit reduces reusable decoded retention on memory-constrained touch devices.
+    const lightboxDecodedImageCacheMobileLimit = 6;
+    // lightboxDecodedImageCacheIdleMs makes settled reusable images disposable after one minute without use.
+    const lightboxDecodedImageCacheIdleMs = 60000;
     // transitionImage stores state or configuration for the gallery front-end flow.
     let transitionImage = null;
     // activeLightboxTransitionToken stores state or configuration for the gallery front-end flow.
@@ -680,9 +685,9 @@ export function setupGalleryLightbox() {
     let lightboxHistoryActive = false;
     // initialLightboxLoadActive is true only before the first requested photo is displayed.
     let initialLightboxLoadActive = false;
-    // Variable `preloadedSources` stores this steps working value.
+    // preloadedSources is bounded diagnostic bookkeeping for the current nearby/slideshow preload generation.
     const preloadedSources = new Set();
-    // decodedLightboxImages stores state or configuration for the gallery front-end flow.
+    // decodedLightboxImages stores reusable decoded entries keyed by source URL.
     const decodedLightboxImages = new Map();
     // lightboxPreloadQueue holds nearby preview work so opening a photo does not start all downloads at once.
     const lightboxPreloadQueue = [];
@@ -702,6 +707,8 @@ export function setupGalleryLightbox() {
     let lightboxPreloadDrainHandle = 0;
     // lightboxPreloadDrainUsesIdleCallback tracks which browser timer API owns the drain handle.
     let lightboxPreloadDrainUsesIdleCallback = false;
+    // lightboxHiddenCleanupTimer releases settled reusable decoded entries only after a sustained hidden period.
+    let lightboxHiddenCleanupTimer = 0;
     // fullscreenHideTimer stores state or configuration for the gallery front-end flow.
     let fullscreenHideTimer = null;
     // lightboxSlideshowTimer stores the automatic advance timer while slideshow mode is active.
@@ -1448,7 +1455,7 @@ export function setupGalleryLightbox() {
         // decodedBytes stores state or configuration for the gallery front-end flow.
         const decodedBytes = devDecodedMemoryBytes();
         // cacheLimit stores state or configuration for the gallery front-end flow.
-        const cacheLimit = lightboxDecodedImageCacheLimit;
+        const cacheLimit = activeLightboxDecodedImageCacheLimit();
         // browserMode stores state or configuration for the gallery front-end flow.
         const browserMode = isLightboxFullscreen() ? 'fullscreen' : (overlay.hidden ? 'closed' : 'normal');
         // currentCard stores state or configuration for the gallery front-end flow.
@@ -1764,18 +1771,111 @@ export function setupGalleryLightbox() {
         activeDetachedLightboxImageLoads.clear();
     }
 
-        /**
-     * Handles remember decoded lightbox image behavior for the gallery UI.
+    /**
+     * Return the reusable decoded-image cache limit for this browser context.
      *
-     * @param {*} src Value supplied by the caller or event context.
-     * @param {*} preloadPromise Value supplied by the caller or event context.
-     * @return {*} Result of the UI operation, when a value is produced.
+     * @return {number} Maximum settled reusable entries to retain.
+     */
+    function activeLightboxDecodedImageCacheLimit() {
+        return isMobileTouchDevice ? lightboxDecodedImageCacheMobileLimit : lightboxDecodedImageCacheDesktopLimit;
+    }
+
+    /**
+     * Delete one settled reusable decoded entry and record the eviction in development mode.
+     *
+     * @param {string} src Image source key to remove.
+     * @param {string} reason Short diagnostic reason for the eviction.
+     * @return {boolean} True when a cache entry was removed.
+     */
+    function evictSettledDecodedLightboxImage(src, reason) {
+        const entry = decodedLightboxImages.get(src);
+        if (!entry?.settled) {
+            return false;
+        }
+        decodedLightboxImages.delete(src);
+        if (galleryDevModeEnabled) {
+            galleryDevModeState.evictions += 1;
+            devLog(`evict:${reason}:${shortenDevUrl(src)}`);
+        }
+        return true;
+    }
+
+    /**
+     * Remove settled decoded entries that exceeded idle age and enforce the active count limit.
+     *
+     * Unsettled promises remain mapped until their existing cancellation or settlement
+     * lifecycle completes, so cleanup never hides active work and causes duplicate loads.
+     *
+     * @param {object} options Optional cleanup controls.
+     * @param {boolean} options.releaseAllSettled Release every settled reusable entry.
+     */
+    function sweepDecodedLightboxImageCache(options = {}) {
+        const releaseAllSettled = options.releaseAllSettled === true;
+        const now = performance.now();
+        decodedLightboxImages.forEach((entry, src) => {
+            if (!entry?.settled) {
+                return;
+            }
+            if (releaseAllSettled || now - entry.lastUsedAt >= lightboxDecodedImageCacheIdleMs) {
+                evictSettledDecodedLightboxImage(src, releaseAllSettled ? 'hidden' : 'idle');
+            }
+        });
+        trimDecodedLightboxImageCache();
+    }
+
+    /**
+     * Return one reusable decoded cache entry while refreshing its last-use time and LRU position.
+     *
+     * @param {string} src Image source key.
+     * @return {{promise: Promise<*>, lastUsedAt: number, settled: boolean}|null} Reusable cache entry.
+     */
+    function useDecodedLightboxImageCacheEntry(src) {
+        sweepDecodedLightboxImageCache();
+        const entry = decodedLightboxImages.get(src);
+        if (!entry) {
+            return null;
+        }
+        entry.lastUsedAt = performance.now();
+        decodedLightboxImages.delete(src);
+        decodedLightboxImages.set(src, entry);
+        return entry;
+    }
+
+    /**
+     * Remember one reusable decoded image promise with settlement and last-use metadata.
+     *
+     * @param {string} src Image source key.
+     * @param {Promise<*>} preloadPromise Promise resolving to a decoded detached image or null.
+     * @param {string} reason Diagnostic insertion reason.
+     * @return {Promise<*>} The supplied reusable promise.
      */
     function rememberDecodedLightboxImage(src, preloadPromise, reason = 'unknown') {
+        sweepDecodedLightboxImageCache();
         if (decodedLightboxImages.has(src)) {
             decodedLightboxImages.delete(src);
         }
-        decodedLightboxImages.set(src, preloadPromise);
+        const entry = {
+            promise: preloadPromise,
+            lastUsedAt: performance.now(),
+            settled: false,
+        };
+        decodedLightboxImages.set(src, entry);
+        preloadPromise.then(
+            () => {
+                if (decodedLightboxImages.get(src) !== entry) {
+                    return;
+                }
+                entry.settled = true;
+                sweepDecodedLightboxImageCache();
+            },
+            () => {
+                if (decodedLightboxImages.get(src) !== entry) {
+                    return;
+                }
+                entry.settled = true;
+                sweepDecodedLightboxImageCache();
+            }
+        );
         if (lightboxBenchmarkDiagnosticsEnabled) {
             lightboxBenchmarkDiagnosticsState.decodedCacheInsertions += 1;
             lightboxBenchmarkDiagnosticsState.lastDecodedCacheInsertionReason = String(reason || 'unknown');
@@ -1795,21 +1895,18 @@ export function setupGalleryLightbox() {
         return preloadPromise;
     }
 
-        /**
-     * Handles trim decoded lightbox image cache behavior for the gallery UI.
+    /**
+     * Enforce the active LRU entry-count limit without orphaning unresolved image work.
      */
     function trimDecodedLightboxImageCache() {
-        while (decodedLightboxImages.size > lightboxDecodedImageCacheLimit) {
-            // oldestKey stores state or configuration for the gallery front-end flow.
-            const oldestKey = decodedLightboxImages.keys().next().value;
-            if (!oldestKey) {
+        const cacheLimit = activeLightboxDecodedImageCacheLimit();
+        while (decodedLightboxImages.size > cacheLimit) {
+            const oldestSettledKey = Array.from(decodedLightboxImages.entries())
+                .find(([, entry]) => entry?.settled)?.[0];
+            if (!oldestSettledKey) {
                 return;
             }
-            decodedLightboxImages.delete(oldestKey);
-            if (galleryDevModeEnabled) {
-                galleryDevModeState.evictions += 1;
-                devLog(`evict:${shortenDevUrl(oldestKey)}`);
-            }
+            evictSettledDecodedLightboxImage(oldestSettledKey, 'limit');
         }
     }
 
@@ -1824,14 +1921,11 @@ export function setupGalleryLightbox() {
         if (!src) {
             return Promise.resolve(null);
         }
-        if (decodedLightboxImages.has(src)) {
+        const cachedEntry = useDecodedLightboxImageCacheEntry(src);
+        if (cachedEntry) {
             galleryDevModeState.cacheHits += galleryDevModeEnabled ? 1 : 0;
             devMarkSource(src, 'preloading', 'preload-hit');
-            // cachedPromise stores state or configuration for the gallery front-end flow.
-            const cachedPromise = decodedLightboxImages.get(src);
-            decodedLightboxImages.delete(src);
-            decodedLightboxImages.set(src, cachedPromise);
-            return cachedPromise;
+            return cachedEntry.promise;
         }
         galleryDevModeState.cacheMisses += galleryDevModeEnabled ? 1 : 0;
         galleryDevModeState.preloadStarted += galleryDevModeEnabled ? 1 : 0;
@@ -1840,7 +1934,7 @@ export function setupGalleryLightbox() {
         const preloadPromise = loadFreshDecodedLightboxImage(src, {priority: 'low', signal: options.signal}).catch(() => null);
         rememberDecodedLightboxImage(src, preloadPromise, 'preload');
         preloadPromise.finally(() => {
-            if (options.signal?.aborted && decodedLightboxImages.get(src) === preloadPromise) {
+            if (options.signal?.aborted && decodedLightboxImages.get(src)?.promise === preloadPromise) {
                 decodedLightboxImages.delete(src);
             }
         });
@@ -1890,6 +1984,7 @@ export function setupGalleryLightbox() {
      */
     function resetLightboxPreloadQueue() {
         lightboxPreloadGeneration += 1;
+        preloadedSources.clear();
         lightboxPreloadQueue.length = 0;
         lightboxQueuedSources.clear();
         lightboxPreloadAbortController.abort();
@@ -1904,6 +1999,44 @@ export function setupGalleryLightbox() {
         }
         lightboxPreloadDrainHandle = 0;
         lightboxPreloadDrainUsesIdleCallback = false;
+    }
+
+    /**
+     * Cancel the one-shot decoded-cache cleanup owned by a hidden document state.
+     */
+    function clearLightboxHiddenCleanupTimer() {
+        if (!lightboxHiddenCleanupTimer) {
+            return;
+        }
+        window.clearTimeout(lightboxHiddenCleanupTimer);
+        lightboxHiddenCleanupTimer = 0;
+    }
+
+    /**
+     * Shed low-priority lightbox resources while the page remains backgrounded.
+     *
+     * A hidden page immediately cancels nearby preview work. Settled reusable
+     * decoded entries are released only after the page stays hidden for the
+     * normal idle-age threshold, while the live displayed image remains intact.
+     */
+    function handleLightboxVisibilityChange() {
+        if (document.hidden) {
+            clearLightboxHiddenCleanupTimer();
+            if (overlay.hidden) {
+                return;
+            }
+            resetLightboxPreloadQueue();
+            lightboxHiddenCleanupTimer = window.setTimeout(() => {
+                lightboxHiddenCleanupTimer = 0;
+                if (!document.hidden || controller.signal.aborted) {
+                    return;
+                }
+                sweepDecodedLightboxImageCache({releaseAllSettled: true});
+            }, lightboxDecodedImageCacheIdleMs);
+            return;
+        }
+        clearLightboxHiddenCleanupTimer();
+        sweepDecodedLightboxImageCache();
     }
 
         /**
@@ -1968,14 +2101,11 @@ export function setupGalleryLightbox() {
         if (!src) {
             return Promise.reject(new Error(i18n('lightbox.missing_image_source', 'Missing lightbox image source.')));
         }
-        if (decodedLightboxImages.has(src)) {
+        const cachedEntry = useDecodedLightboxImageCacheEntry(src);
+        if (cachedEntry) {
             galleryDevModeState.cacheHits += galleryDevModeEnabled ? 1 : 0;
             devMarkSource(src, 'loading', 'load-hit');
-            // cachedPromise stores state or configuration for the gallery front-end flow.
-            const cachedPromise = decodedLightboxImages.get(src);
-            decodedLightboxImages.delete(src);
-            decodedLightboxImages.set(src, cachedPromise);
-            return cachedPromise.then((preloadedImage) => {
+            return cachedEntry.promise.then((preloadedImage) => {
                 if (preloadedImage) {
                     return preloadedImage;
                 }
@@ -3912,6 +4042,7 @@ export function setupGalleryLightbox() {
         activeLightboxQualitySource = '';
         removeTransitionImage();
         resetLightboxPreloadQueue();
+        sweepDecodedLightboxImageCache();
         // imageToken stores state or configuration for the gallery front-end flow.
         const imageToken = activeLightboxImageToken;
         // pageUrl stores state or configuration for the gallery front-end flow.
@@ -4316,11 +4447,13 @@ export function setupGalleryLightbox() {
         clearPendingLightboxQualityUpgrade();
         removeTransitionImage();
         image.removeAttribute('src');
+        clearLightboxHiddenCleanupTimer();
         preloadedSources.clear();
         resetLightboxPreloadQueue();
         cancelActiveDetachedLightboxImageLoads();
         decodedLightboxImages.clear();
         cancelLightboxMetadataRequests();
+        refreshLightboxOrderFromDom();
         lightboxGalleryMapPayloadPromises.clear();
         failedLightboxQualitySources.clear();
         activeLightboxQualitySource = '';
@@ -4482,6 +4615,9 @@ export function setupGalleryLightbox() {
         }
         return ['slow-2g', '2g'].includes(connection.effectiveType);
     }
+
+    document.addEventListener('visibilitychange', handleLightboxVisibilityChange, {signal: controller.signal});
+    controller.signal.addEventListener('abort', clearLightboxHiddenCleanupTimer, {once: true});
 
     resetLightboxZoom(false);
 

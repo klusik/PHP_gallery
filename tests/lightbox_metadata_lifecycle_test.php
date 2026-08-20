@@ -80,7 +80,22 @@ lightbox_metadata_assert(str_contains($fetchSource, 'lightboxPendingWindows.get(
 $closeSource = lightbox_metadata_function_source($lightbox, 'close', 'preloadCardLightboxImages');
 lightbox_metadata_assert($closeSource !== '', 'Lightbox close helper is missing.');
 lightbox_metadata_assert(str_contains($closeSource, 'cancelLightboxMetadataRequests();'), 'Normal lightbox close must abort lazy metadata requests.');
+lightbox_metadata_assert(str_contains($closeSource, 'refreshLightboxOrderFromDom();'), 'Normal lightbox close must prune lazily created detached metadata cards back to the server-rendered DOM baseline.');
 lightbox_metadata_assert(str_contains($closeSource, 'stopGalleryDevModeMonitoring();'), 'Normal lightbox close must suspend development diagnostics loops.');
+
+$refreshSource = lightbox_metadata_function_source($lightbox, 'refreshLightboxOrderFromDom', 'lightboxIndexForCard');
+lightbox_metadata_assert($refreshSource !== '', 'Server-rendered lightbox order refresh helper is missing.');
+lightbox_metadata_assert(str_contains($refreshSource, "document.querySelectorAll('[data-lightbox-image]')"), 'Metadata pruning must rebuild from real server-rendered visible gallery cards.');
+lightbox_metadata_assert(str_contains($refreshSource, "document.querySelectorAll('[data-lightbox-source]')"), 'Metadata pruning must preserve any real server-rendered source nodes when that rendering mode is used.');
+lightbox_metadata_assert(str_contains($refreshSource, 'const sparseCards = Array.from({length: lightboxTotal}, () => null);'), 'Paginated metadata pruning must restore a sparse array with the full gallery length.');
+lightbox_metadata_assert(str_contains($refreshSource, 'sparseCards[index] = card;'), 'Paginated metadata pruning must keep current server-rendered cards at their authoritative indexes.');
+
+$cancelPosition = strpos($closeSource, 'cancelLightboxMetadataRequests();');
+$refreshPosition = strpos($closeSource, 'refreshLightboxOrderFromDom();');
+lightbox_metadata_assert(
+    $cancelPosition !== false && $refreshPosition !== false && $cancelPosition < $refreshPosition,
+    'Metadata requests must be generation-invalidated and aborted before detached lazy cards are pruned.'
+);
 
 $releaseSource = lightbox_metadata_function_source($galleryController, 'cms_release_gallery_lightbox_session_lock', 'gallery_lightbox_json_item');
 lightbox_metadata_assert($releaseSource !== '', 'Gallery lightbox session-release helper is missing.');
