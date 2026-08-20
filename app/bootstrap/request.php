@@ -38,6 +38,7 @@ namespace Gallery\Core;
 
 use function Gallery\Services\seo_request_guard_enforce;
 use function Gallery\Services\translation_bootstrap_request;
+use function Gallery\Services\viewer_remember_restore_from_cookie;
 
 /**
  * Resolve the route and initialize request-scoped behavior in the legacy startup order.
@@ -58,6 +59,9 @@ function cms_initialize_request(): string
         seo_request_guard_enforce($page);
     }
     translation_bootstrap_request($page);
+    // Restore only the dedicated viewer persistent credential before response cache classification.
+    // The adapter is fail-closed and never mutates administrator identity.
+    viewer_remember_restore_from_cookie();
     send_security_headers();
 
     return $page;

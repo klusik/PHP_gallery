@@ -336,6 +336,18 @@ function sanitize_login_return_target(string $target, string $fallback = ''): st
  */
 function url_for(string $page, array $params = []): string
 {
+    if ($page === 'viewer_register' && $params === [] && url_rewrite_should_emit_clean_urls()) {
+        return base_url('viewer/register');
+    }
+    if ($page === 'viewer_resend_verification' && $params === [] && url_rewrite_should_emit_clean_urls()) {
+        return base_url('viewer/resend');
+    }
+    if ($page === 'viewer_collection_share_exchange' && isset($params['token']) && count($params) === 1 && url_rewrite_should_emit_clean_urls()) {
+        return base_url('viewer/collection/share/' . rawurlencode((string) $params['token']));
+    }
+    if ($page === 'viewer_collection_shared' && isset($params['collection_id']) && count($params) === 1 && url_rewrite_should_emit_clean_urls()) {
+        return base_url('viewer/shared/' . rawurlencode((string) $params['collection_id']));
+    }
     if ($page === 'smart_gallery' && isset($params['slug']) && url_rewrite_should_emit_clean_urls()) {
         $pageNumber = max(1, (int) ($params['photo_page'] ?? 1));
         return base_url('smart/' . rawurlencode((string) $params['slug']) . ($pageNumber > 1 ? '/' . $pageNumber : ''));

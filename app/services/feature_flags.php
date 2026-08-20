@@ -14,7 +14,7 @@
  *   - Define every optional feature exposed in the Admin feature settings page
  *   - Persist enabled/disabled state through app_settings
  *   - Provide route and UI guards so unfinished or unwanted features can be hidden cleanly
- *   - Keep all features enabled by default for backward-compatible upgrades
+ *   - Honor per-feature defaults while preserving enabled-by-default behavior for established switches
  *
  * Author:
  *   Rudolf Klusal
@@ -30,7 +30,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-06-04
+ *   2026-08-19
  */
 
 declare(strict_types=1);
@@ -49,11 +49,11 @@ const FEATURE_FLAG_SETTING_SUFFIX = '.enabled';
 /**
  * Return the canonical optional-feature registry.
  *
- * Every feature is enabled when no explicit setting exists. This keeps existing
- * installations unchanged after deployment and lets administrators opt out from
- * specific tools later.
+ * Established features remain enabled when no explicit setting exists. Individual
+ * definitions may opt into a disabled default when a staged subsystem must require
+ * an explicit administrator decision before becoming reachable.
  *
- * @return array<string array<string, string>>.
+ * @return array<string,array{group:string,label:string,description:string,default_enabled?:bool}> Structured feature definitions.
  */
 function feature_flag_definitions(): array
 {
@@ -87,6 +87,12 @@ function feature_flag_definitions(): array
             'group' => 'public_display',
             'label' => t('admin.features.downloads.label', 'Gallery ZIP downloads'),
             'description' => t('admin.features.downloads.description', 'Download links and ZIP archive routes for one gallery or all galleries.'),
+        ],
+        'viewer_accounts' => [
+            'group' => 'accounts',
+            'label' => t('admin.features.viewer_accounts.label', 'Viewer accounts and collections'),
+            'description' => t('admin.features.viewer_accounts.description', 'Master switch for viewer login, invitations, favourites, private collections, unlisted collection sharing, and viewer-account administration. Disabled by default.'),
+            'default_enabled' => false,
         ],
         'gallery_maps' => [
             'group' => 'maps_flightsim',
@@ -158,6 +164,10 @@ function feature_flag_groups(): array
             'label' => t('admin.features.group.public_display', 'Gallery display and visitor features'),
             'description' => t('admin.features.group.public_display_help', 'Public browsing, lightbox, voting, downloads, and logged-in admin controls on gallery pages.'),
         ],
+        'accounts' => [
+            'label' => t('admin.features.group.accounts', 'Accounts and personalized features'),
+            'description' => t('admin.features.group.accounts_help', 'Viewer identities, favourites, private collections, and other account-scoped visitor features.'),
+        ],
         'maps_flightsim' => [
             'label' => t('admin.features.group.maps_flightsim', 'Maps, GPS, and flight simulation'),
             'description' => t('admin.features.group.maps_flightsim_help', 'EXIF GPS maps, stored flight routes, navigation data, and SimBrief workflows.'),
@@ -207,6 +217,25 @@ function feature_flag_exists(string $key): bool
 }
 
 /**
+ * Return the default state for one registered feature.
+ *
+ * Established feature switches remain enabled by default when no explicit default is
+ * declared. New or intentionally staged features can opt into a disabled default.
+ *
+ * @param string $key Lookup key.
+ * @return bool Default enabled state.
+ */
+function feature_flag_default_enabled(string $key): bool
+{
+    $key = feature_flag_normalize_key($key);
+    $definition = feature_flag_definitions()[$key] ?? null;
+    if (!is_array($definition)) {
+        return true;
+    }
+    return !array_key_exists('default_enabled', $definition) || $definition['default_enabled'] === true;
+}
+
+/**
  * Return true when a feature is globally enabled.
  *
  * Unknown feature keys deliberately return true so optional checks cannot break
@@ -221,7 +250,8 @@ function feature_flag_enabled(string $key): bool
     if (!feature_flag_exists($key)) {
         return true;
     }
-    return app_setting(feature_flag_setting_key($key), '1') !== '0';
+    $default = feature_flag_default_enabled($key) ? '1' : '0';
+    return app_setting(feature_flag_setting_key($key), $default) !== '0';
 }
 
 /**
@@ -288,7 +318,7 @@ function save_feature_flags_from_post(array $post): array
 /**
  * Return feature definitions grouped for the Admin feature settings page.
  *
- * @return array<string array{group:array<string,string>,features:array<string,array<string,string>>}>.
+ * @return array<string,array{group:array<string,string>,features:array<string,array<string,mixed>>}> Grouped feature definitions.
  */
 function grouped_feature_flag_definitions(): array
 {
@@ -360,6 +390,7 @@ function feature_flag_route_map(): array
         'admin_telemetry_export' => 'telemetry',
         'telemetry_ingest' => 'telemetry',
         'usage_collect' => 'telemetry',
+        'admin_viewer_invitations' => 'viewer_accounts',
     ];
 }
 
@@ -371,6 +402,9 @@ function feature_flag_route_map(): array
  */
 function feature_flag_for_route(string $page): ?string
 {
+    if (str_starts_with($page, 'viewer_')) {
+        return 'viewer_accounts';
+    }
     $map = feature_flag_route_map();
     return $map[$page] ?? null;
 }
@@ -418,6 +452,25 @@ function feature_flag_render_disabled_route(string $page): void
         $label = t('admin.features.combined_maps_label', 'EXIF GPS gallery maps / Flight route maps');
     }
     $message = t('admin.features.disabled_route_message', 'This feature is disabled in Admin > Features: {feature}', ['feature' => $label]);
+
+    if ($featureKey === 'viewer_accounts') {
+        $admin = current_user();
+        if (!$admin || (string) ($admin['role'] ?? '') !== 'admin') {
+            http_response_code(404);
+            if (!headers_sent()) {
+                header('X-Robots-Tag: noindex, nofollow');
+            }
+            if (feature_flag_request_wants_json()) {
+                header('Content-Type: application/json; charset=utf-8');
+                echo json_encode(['ok' => false, 'error' => 'not_found'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                return;
+            }
+            render_header(t('public.not_found_title', 'Not found'));
+            echo '<section class="panel"><h1>' . e(t('public.not_found_title', 'Not found')) . '</h1><p>' . e(t('public.not_found_message', 'The requested page was not found.')) . '</p></section>';
+            render_footer();
+            return;
+        }
+    }
 
     http_response_code(403);
     if (feature_flag_request_wants_json()) {

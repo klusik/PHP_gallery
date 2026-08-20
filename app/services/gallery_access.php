@@ -598,6 +598,19 @@ function visitor_can_access_nsfw_content(): bool
 }
 
 /**
+ * Return NSFW authorization from visitor/request state without the administrator bypass.
+ *
+ * This narrow boundary exists for viewer-owned references. A simultaneous administrator
+ * session must never make media transferable into a viewer favourite or collection.
+ *
+ * @return bool True only when the ordinary visitor NSFW guard has been satisfied.
+ */
+function visitor_can_access_nsfw_content_without_admin_bypass(): bool
+{
+    return nsfw_guard_session_is_valid();
+}
+
+/**
  * Handles gallery has password policy logic for the gallery application.
  *
  * @param mixed $gallery Input used by this operation.
@@ -749,6 +762,39 @@ function visitor_can_access_gallery(array $gallery): bool
         }
     }
     if (gallery_nsfw_requirement($gallery) !== null && !visitor_can_access_nsfw_content()) {
+        return false;
+    }
+    if (!$requirement) {
+        return true;
+    }
+    if (gallery_public_access_session_is_valid((int) $requirement['id'])) {
+        return true;
+    }
+    return request_share_token_allows_gallery($gallery);
+}
+
+/**
+ * Evaluate gallery access using only recipient/request grants, never administrator identity.
+ *
+ * Password unlock state and current-request share tokens retain their existing semantics,
+ * but current_user() is deliberately ignored. This is the canonical gallery decision for
+ * viewer-owned source-image references.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @return bool True only when the ordinary public/request context authorizes the gallery.
+ */
+function visitor_can_access_gallery_without_admin_bypass(array $gallery): bool
+{
+    $requirement = gallery_access_requirement($gallery);
+    if (!gallery_allows_direct_public_request($gallery)) {
+        if (!$requirement) {
+            return false;
+        }
+        if (!gallery_public_access_session_is_valid((int) $requirement['id']) && !request_share_token_allows_gallery($gallery)) {
+            return false;
+        }
+    }
+    if (gallery_nsfw_requirement($gallery) !== null && !visitor_can_access_nsfw_content_without_admin_bypass()) {
         return false;
     }
     if (!$requirement) {

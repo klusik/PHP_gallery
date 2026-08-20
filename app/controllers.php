@@ -49,6 +49,16 @@ require_once __DIR__ . '/controllers/public_media.php';
 require_once __DIR__ . '/controllers/thumbnail_warmup.php';
 require_once __DIR__ . '/controllers/site_maintenance.php';
 require_once __DIR__ . '/controllers/admin_auth.php';
+// Load the minimal invite-only viewer account HTTP boundary after the shared mail transport.
+require_once __DIR__ . '/controllers/viewer_accounts.php';
+// Load the narrow viewer account lifecycle HTTP boundary after its shared Phase 1.0 helpers.
+require_once __DIR__ . '/controllers/viewer_lifecycle.php';
+// Load the first viewer-owned content HTTP boundary after viewer authentication helpers.
+require_once __DIR__ . '/controllers/viewer_favourites.php';
+// Load the private viewer-collection HTTP boundary after shared viewer content controls.
+require_once __DIR__ . '/controllers/viewer_collections.php';
+// Load Phase 3 unlisted collection-share routes after the owner collection helpers.
+require_once __DIR__ . '/controllers/viewer_collection_shares.php';
 require_once __DIR__ . '/controllers/admin_integrity.php';
 require_once __DIR__ . '/controllers/upload_automation.php';
 require_once __DIR__ . '/controllers/mobile_webdav.php';

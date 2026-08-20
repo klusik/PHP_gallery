@@ -51,6 +51,7 @@ use function Gallery\Services\app_setting;
 use function Gallery\Services\application_update_nav_label;
 use function Gallery\Services\application_update_pending;
 use function Gallery\Services\cms_github_project_url;
+use function Gallery\Services\current_viewer;
 use function Gallery\Services\custom_css_path;
 use function Gallery\Services\custom_css_url;
 use function Gallery\Services\dev_mode_enabled;
@@ -76,6 +77,8 @@ use function Gallery\Services\translation_public_language_selector_enabled;
 use function Gallery\Services\translation_public_language_selector_languages;
 use function Gallery\Services\translation_public_language_selector_design;
 use function Gallery\Services\translation_public_language_selector_design_style;
+use function Gallery\Services\viewer_accounts_enabled;
+use function Gallery\Services\viewer_http_open_registration_available;
 
 /**
  * Render the public visitor language selector in the shared header.
@@ -354,6 +357,18 @@ function view_render_header(string $title, ?array $currentGallery = null, bool $
     // $favoriteGalleryItems stores resolved gallery shortcuts for the top navigation.
     $favoriteGalleryItems = function_exists('Gallery\\Services\\theme_favorite_gallery_navigation_items') ? theme_favorite_gallery_navigation_items($favoritePublicOnly) : [];
     echo view_favorite_gallery_nav_html($favoriteGalleryItems);
+    if ($bodyClass === 'public-page' && viewer_accounts_enabled()) {
+        // Viewer identity remains independent of administrator identity and gallery authorization.
+        $viewer = current_viewer();
+        if ($viewer !== null) {
+            echo '<a href="' . e(url_for('viewer_account')) . '">' . e(t('viewer.nav.account', 'Account')) . '</a>';
+        } else {
+            echo '<a href="' . e(url_for('viewer_login')) . '">' . e(t('viewer.nav.login', 'Login')) . '</a>';
+            if (viewer_http_open_registration_available()) {
+                echo '<a href="' . e(url_for('viewer_register')) . '">' . e(t('viewer.nav.register', 'Register')) . '</a>';
+            }
+        }
+    }
     if ($user && !$anonymousPreview) {
         if ($bodyClass === 'public-page') {
             $updatePending = application_update_pending();
@@ -364,7 +379,9 @@ function view_render_header(string $title, ?array $currentGallery = null, bool $
         }
         echo '<a href="' . e(url_for('admin_logout')) . '">' . e(t('nav.logout', 'Logout')) . '</a>';
     } else {
-        echo '<a href="' . e(url_for('admin_login', ['return' => current_login_return_target()])) . '">' . e(t('nav.admin_login', 'Admin login')) . '</a>';
+        // Secret-bearing viewer routes must not be copied into the administrator login return parameter.
+        $adminLoginParams = str_starts_with($page, 'viewer_') ? [] : ['return' => current_login_return_target()];
+        echo '<a href="' . e(url_for('admin_login', $adminLoginParams)) . '">' . e(t('nav.admin_login', 'Admin login')) . '</a>';
     }
     echo '</nav></header>';
     if ($headerBranding['separator_url'] !== '') {
@@ -549,6 +566,9 @@ function view_cms_browser_i18n_strings(?string $language = null): array
         'admin.simbrief.js_html_response' => view_browser_i18n_string($strings, 'admin.simbrief.js_html_response', 'The server returned HTML instead of JSON. Check the admin logs or PHP error log.'),
         'lightbox.no_gps_title' => view_browser_i18n_string($strings, 'lightbox.no_gps_title', 'No GPS EXIF data'),
         'lightbox.no_gps_detail' => view_browser_i18n_string($strings, 'lightbox.no_gps_detail', 'This photo has no coordinates, so the fullscreen map is unavailable for this item.'),
+        'viewer.favourites.add' => view_browser_i18n_string($strings, 'viewer.favourites.add', 'Add to favourites'),
+        'viewer.favourites.remove' => view_browser_i18n_string($strings, 'viewer.favourites.remove', 'Remove from favourites'),
+        'viewer.favourites.unavailable' => view_browser_i18n_string($strings, 'viewer.favourites.unavailable', 'Favourites are temporarily unavailable.'),
     ]);
 }
 
@@ -588,6 +608,7 @@ function view_render_footer(): void
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/lightbox.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-core.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/votes.js',
+        dirname(__DIR__, 2) . '/public/assets/gallery-modules/viewer-favourites.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/public-home-search.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/back-to-top.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/responsive-thumbnails.js',
@@ -604,6 +625,7 @@ function view_render_footer(): void
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/lightbox-votes.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/tag-suggestions.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/votes.js',
+        dirname(__DIR__, 2) . '/public/assets/gallery-modules/viewer-favourites.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-operations.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-update-jobs.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-core.js',

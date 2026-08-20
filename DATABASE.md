@@ -1,6 +1,6 @@
 # PHP Gallery Database Documentation
 
-This document describes the database schema used by PHP Gallery as of application version 0.91.2. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
+This document describes the database schema used by PHP Gallery as of application version 0.91.3. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
 
 ## Database Engine
 
@@ -79,6 +79,13 @@ Current migration sequence:
 | `202607250001_database_maintenance_schema_repair.php` | Creates the transactional cleanup audit table, conditionally repairs partial thumbnail metadata compaction, and removes only proven legacy objects after preserving source geometry. |
 | `202608080001_duplicate_photo_ledger.php` | Adds per-administrator reviewed duplicate-pair and exact-gallery ledger tables used by the Admin Duplicate Photo Detector. |
 | `202608100001_admin_log_scaling.php` | Adds age and grouping indexes for bounded Admin log retention and grouped browsing on large installations. |
+| `202608180001_viewer_security_foundations.php` | Adds dormant viewer identity, hashed security-token/session, bounded abuse-control, favourites/collection-reference, collection share-token, audit, and passkey-public-credential foundations. No viewer route is enabled. |
+| `202608180002_viewer_registration_foundations.php` | Adds dormant expiring pending-registration rows, administrator-issued hashed invitations, and a locked hard-cap counter. No account, route, form, or email sender is created. |
+| `202608180003_viewer_authentication_foundations.php` | Adds the lockable singleton `viewer_account_state` counter used to serialize the hard durable viewer-account installation cap. Replay-safe `CREATE TABLE IF NOT EXISTS`; no existing table is rebuilt. |
+| `202608180004_viewer_account_lifecycle_foundations.php` | Adds dormant staged verified-email-change state with hashed verification authority and security-version binding. Replay-safe `CREATE TABLE IF NOT EXISTS`; no route, form, sender, or existing table rebuild is introduced. |
+| `202608180005_viewer_invitation_admin_management.php` | Adds nullable administrator-visible `viewer_invitations.target_email` metadata while retaining the existing HMAC email fingerprint as invitation authorization authority. |
+| `202608180006_viewer_admin_account_management.php` | Adds `viewer_accounts.must_change_password` with a default of `0`, allowing administrator-provisioned temporary passwords to be replaced before a normal viewer principal is established while preserving existing account login behavior. |
+| `202608200001_viewer_registration_verification_tokens.php` | Adds bounded child verification authorities for explicit registration resend without replacing the existing Phase 4.1 primary verification token. Stores only token hashes and cascades with the owning staged registration request. |
 
 ## Entity Relationship Overview
 
@@ -94,6 +101,28 @@ users
   -> user_google_accounts.user_id
   -> duplicate_photo_ledger_pairs.user_id
   -> duplicate_photo_ledger_galleries.user_id
+  -> viewer_invitations.created_by_admin_user_id (nullable, SET NULL on admin deletion)
+
+viewer_invitations
+  -> viewer_registration_requests.viewer_invitation_id (nullable, unique)
+
+viewer_registration_requests
+  -> viewer_registration_verification_tokens.viewer_registration_request_id (CASCADE)
+
+viewer_accounts
+  -> viewer_email_verification_tokens.viewer_account_id
+  -> viewer_password_reset_tokens.viewer_account_id
+  -> viewer_remember_tokens.viewer_account_id
+  -> viewer_sessions.viewer_account_id
+  -> viewer_security_events.viewer_account_id (nullable, SET NULL on account deletion)
+  -> viewer_favourites.viewer_account_id
+  -> viewer_collections.viewer_account_id
+  -> viewer_collection_share_tokens.created_by_viewer_account_id (nullable)
+  -> viewer_passkeys.viewer_account_id
+
+viewer_collections
+  -> viewer_collection_items.viewer_collection_id
+  -> viewer_collection_share_tokens.viewer_collection_id
 
 galleries
   -> galleries.parent_id
@@ -117,6 +146,8 @@ images
   -> image_ai_analysis_jobs.image_id
   -> duplicate_photo_ledger_pairs.image_id_low
   -> duplicate_photo_ledger_pairs.image_id_high
+  -> viewer_favourites.image_id
+  -> viewer_collection_items.image_id
 
 tags
   -> gallery_tags.tag_id
@@ -148,6 +179,51 @@ app/services/auth_persistence.php
 app/services/google_auth.php
 app/services/auth_throttle.php
 ```
+
+### Viewer identity and security foundation tables
+
+The viewer domain is deliberately separate from `users`. `current_user()` remains the administrator principal and must never resolve a row from `viewer_accounts`. The future viewer principal is `current_viewer()` and uses viewer-only session/database state. This prevents a viewer login from satisfying historical administrator access checks.
+
+`viewer_accounts` contains only the minimum viewer identity/security data: email, deterministic `normalized_email`, native password hash, lifecycle status, security version, security timestamps, the server-owned `must_change_password` first-login flag, and creation/update timestamps. Its lifecycle states are `pending_verification`, `active`, `suspended`, and `disabled`. The binary unique index on `normalized_email` makes the application's chosen email comparison deterministic. `must_change_password=0` is the compatibility default; `1` marks an administrator-provisioned temporary credential that may prove the first login but cannot establish a normal viewer principal or remember-me authority until replaced.
+
+Phase 0.6 activates a durable row only after verified staging has been bound to short-lived server-side activation authority. The activation transaction re-locks staging/invitation state, enforces the binary unique email constraint, locks `viewer_account_state`, recounts authoritative durable rows, enforces `max_viewer_accounts`, inserts one `active` row with `security_version=1` and verified/password timestamps, deletes the staging row, and updates both capacity counters before commit. `viewer_account_state.account_count` counts every durable viewer-account row regardless of lifecycle status, so suspended/disabled accounts still consume the installation cap.
+
+Administrator direct provisioning uses the same durable account namespace and the same locked `viewer_account_state` installation-cap discipline instead of introducing a second account type. The Admin-authorized email is stored as verified immediately, the temporary password is stored only through `password_hash`, and the row is created `active` with `security_version=1`, `must_change_password=1`, and no completed `password_changed_at`. A successful first-login replacement atomically writes the new hash, clears `must_change_password`, records `password_changed_at`, increments `security_version`, and invalidates older viewer authentication/recovery authority before a normal viewer session is established. Password reset also clears the flag. The plaintext temporary password is not a database field.
+
+`viewer_account_state` is deliberately tiny: `state_key` primary key, `account_count`, and `updated_at`. Services lazily ensure the singleton row, lock it with `SELECT ... FOR UPDATE`, and can reconcile the count from `viewer_accounts`. This avoids a racy `COUNT(*)`-then-INSERT cap check. Phase 0.7 account deletion locks the same state row, deletes the durable account inside the transaction, recounts authoritative rows, and writes the post-delete count before commit, so rollback cannot persist a capacity decrement without the corresponding deletion.
+
+`viewer_email_change_requests` is the only Phase 0.7 storage addition. Each row belongs to one durable viewer account and stores the candidate email, deterministic normalized candidate, random selector, only the SHA-256 verification-token hash, the account `security_version` captured at request creation, expiry, and consumed/cancelled state. Account-row locking serializes pending-request replacement so only a small bounded active set is possible. Inspection is read-only. Final confirmation re-locks account and request, re-checks expiry/state/security version, and relies on the existing binary unique `viewer_accounts.normalized_email` constraint as the structural last line of defense against a conflicting target-email race. Deleting the account cascades its staged email-change rows.
+
+Authority-bearing viewer credentials are stored in separate tables. Verification and reset tables store only `token_hash` plus expiry/consumption/invalidation state. Remember credentials use a public random selector plus hashed verifier. Viewer sessions store only a hash of an independent viewer session token plus account security version. `security_version` allows a password reset/change, recovery, suspension, or logout-all operation to invalidate older authentication state.
+
+Phase 0.6 enforces default per-account active limits of 10 viewer sessions and 10 remember credentials. Expired/revoked rows do not count. Account-row locks serialize admission, and the oldest active `(created_at, id)` rows are revoked deterministically when a replacement slot is needed. Remember restoration replaces selector/verifier authority atomically; the old verifier cannot match after commit. Final password reset is security-version-bound and revokes all viewer sessions/remember credentials while invalidating sibling reset tokens.
+
+`viewer_rate_limit_buckets` and `viewer_rate_limits` are designed for bounded abuse-control storage. The fixed bucket row records the current admitted subject count; the composite `(bucket, subject_hash)` key prevents duplicates. Future throttling normalizes subjects, stores keyed fingerprints instead of raw IP/email values, serializes new-subject admission, and refuses unbounded growth after a configured per-bucket cap.
+
+`viewer_security_events` contains privacy-bounded diagnostics with optional account relation, keyed IP/user-agent fingerprints, low-risk structured context, and an indexed retention deadline. Secrets and raw viewer email addresses do not have dedicated event columns.
+
+`viewer_favourites` and `viewer_collection_items` reference canonical `images.id`. The favourite composite key `(viewer_account_id, image_id)` prevents duplicate favourites. The collection-item composite key `(viewer_collection_id, image_id)` prevents duplicate image membership and `position` supports deterministic ordering. Both image foreign keys use `ON DELETE CASCADE` so deleting canonical media removes stale viewer references. No viewer foreign key ever cascades into `images` or `galleries`.
+
+`viewer_collections` contains bounded plain-text title/description fields and an explicit owner. `viewer_collection_share_tokens` stores only a unique hash of future collection-container share authority plus lifecycle timestamps. Neither table stores media/gallery permission state. **A collection reference is not an authorization grant.** A future collection/share read must re-check canonical gallery/media authorization for every image at request time.
+
+`viewer_passkeys` stores only public WebAuthn credential material and metadata. The large raw credential id is accompanied by a fixed-size unique SHA-256 identity hash to avoid relying on an oversized variable index on older MySQL/MariaDB/InnoDB configurations. No private passkey key is ever stored.
+
+Deletion policy is deliberately one-directional. Physical account deletion cascades to account-owned viewer credentials/preferences/collections/passkeys and Phase 0.7 email-change requests; collection deletion cascades to its items/share capabilities; image deletion cascades only to viewer references; security events detach with `ON DELETE SET NULL`. Before deleting an account, the lifecycle transaction also revokes still-active collection-share capabilities created by that viewer for collections the viewer does not own, preventing a creator relation from disappearing while leaving a capability alive. Gallery/media content is never deleted by viewer-account cleanup.
+
+Phase 0.5 adds three registration-staging tables without changing the durable account table. `viewer_registration_requests` stores one expiring request per binary-unique `normalized_email`, a hashed verification capability, optional invitation relation, HMAC request metadata, verification-send counters, and indexed expiry/verification state. It stores no password. Verification changes only the staging row to `email_verified`; it does not insert into `viewer_accounts`.
+
+`viewer_invitations` stores a unique hash of the invitation capability, optional administrator-visible intended email plus its HMAC target-email authorization binding, optional administrator creator foreign key, expiry, claim, and revocation timestamps. A unique `viewer_registration_requests.viewer_invitation_id` ensures one invitation cannot stage multiple identities. `viewer_registration_state` contains the singleton locked counter used to serialize admission of new pending rows and enforce `max_pending_registration_requests` even under concurrent anonymous requests. Scheduled cleanup deletes expired staging rows in bounded batches and repairs the counter from authoritative table state.
+
+
+Phase 4.2 migration `202608200001_viewer_registration_verification_tokens.php` adds `viewer_registration_verification_tokens` without altering or migrating away the existing primary verification columns on `viewer_registration_requests`. The child table contains `id`, `viewer_registration_request_id`, unique `token_hash`, `expires_at`, `created_at`, and nullable `sent_at`. The request foreign key uses `ON DELETE CASCADE`; token lookup is structurally unique; request ownership and expiry have dedicated indexes. Plaintext verification capabilities are never persisted. Existing Phase 4.1 mail continues to validate against the primary request-row hash, while successfully handed-off resend capabilities validate against child hashes.
+
+Phase 4.3 adds no persistent schema and no migration. Its signed form/challenge state is browser-carried, one-time replay authority is bounded to the current PHP session using installation-HMAC nonce fingerprints, and repeated-request signals reuse the existing `viewer_rate_limit_buckets` / `viewer_rate_limits` tables through `viewer_rate_limit_consume()`. Only two new fixed bucket names, `viewer_automation_ip` and `viewer_automation_subnet`, are introduced in policy code; existing subject normalization, HMAC hashing, per-bucket storage caps, cleanup, and fail-closed semantics apply unchanged. No plaintext challenge secret, proof candidate, raw email, or raw IP is added to persistent storage by Phase 4.3.
+
+Phase 4.4 adds no persistent schema and no migration. `app/services/viewer_security_operations.php` performs read-only, bounded aggregate queries against the already-authoritative `viewer_security_events`, `viewer_rate_limit_buckets`, `viewer_rate_limits`, `viewer_accounts`, `viewer_account_state`, `viewer_registration_requests`, and `viewer_registration_state` storage. It creates no metrics/statistics/analytics table and copies no Viewer account or security data into generic telemetry tables. Fixed event-key/time predicates use the existing `(event_key, created_at)` event index; fixed limiter-bucket reads use the existing bucket primary/indexed time state and policy windows. The operations page does not consume/reset limiter rows, reconcile capacity counters, run maintenance, or mutate registration/verification authority. Stale limiter rows outside their configured window are ignored unless `locked_until` remains in the future.
+
+A prepared child token is deliberately unusable until `sent_at` records successful transport handoff. Resend never changes the request row's existing primary token hash or primary token expiry. Active child creation is bounded by an application-level per-request cap and request lifetime; bounded maintenance deletes expired child authorities. Successful verification through either the primary authority or any sent child transitions the same registration request and removes all child siblings. Expired/cancelled request deletion also removes children by cascade, so no child authority can outlive its staged registration owner.
+
+See `docs/VIEWER_SECURITY_FOUNDATIONS.md` for the complete token, session, abuse-control, proxy, privacy, pending-registration, mail-budget, cleanup, and threat-model contract.
 
 ### `galleries`
 
@@ -1043,3 +1119,55 @@ Rules:
 5. Manual gallery date ranges use `gallery_date` plus nullable `gallery_date_end`; do not replace the start column because older installs and sidecars depend on it. EXIF suggestions only read `images.exif_taken_at` and then persist approved values back to these gallery date columns through the shared `gallery_date_save_range()` writer. Date-range labels must use an en dash (`–`) when rendered for visitors, editor suggestions or admin review.
 6. Do not insert environment-specific data.
 7. For sensitive values, store hashes or encrypted ciphers, never raw tokens.
+
+## Phase 1.0 Viewer Account HTTP Use
+
+Phase 1.0 adds no database migration and no parallel viewer schema. The reachable HTTP controllers use the Phase 0 through 0.7 tables and transactional service contracts already documented above: `viewer_invitations`, `viewer_registration_requests`, `viewer_registration_state`, `viewer_accounts`, `viewer_email_verification_tokens`, `viewer_sessions`, `viewer_remember_tokens`, `viewer_password_reset_tokens`, `viewer_rate_limit_buckets`, `viewer_rate_limits`, and `viewer_security_events`.
+
+Administrator invitation listing reads only operational invitation metadata and staged registration status. Invitation token hashes are never returned to the Admin UI. Invitation creation also performs a conservative durable-capacity preflight, while final activation still relies on the existing transactional account-cap singleton lock and recount/reconciliation path. The preflight is not an authorization substitute and cannot consume capacity.
+
+No password is stored in pending registration rows. The invitation recipient first verifies email through the scanner-safe token exchange, then supplies the password only while holding short-lived server-side activation authority. Final durable viewer creation remains the existing atomic `viewer_registration_activate_verified()` transaction.
+
+Phase 1.0 introduces no mail queue or transport tables. Viewer verification and password-reset messages use the existing configured PHP-mail/SMTP transport after the viewer mail-abuse budget service has authorized the send. Remember-me continues to store only selector plus verifier hash in `viewer_remember_tokens`; the plaintext verifier exists only in the dedicated browser cookie.
+
+## Phase 1.1 Viewer Favourites Use
+
+Phase 1.1 adds no database migration. It activates the existing `viewer_favourites` table created by `202608180001_viewer_security_foundations.php`. The composite primary key `(viewer_account_id, image_id)` remains the duplicate/race backstop; account and image foreign keys continue to cascade only stale reference rows and never grant or mutate gallery/media access.
+
+Favourite addition locks the owning `viewer_accounts` row with `SELECT ... FOR UPDATE`, verifies the active account/security version, counts current favourites while that owner lock is held, and applies the centralized `max_viewer_favourites_per_account` limit before inserting. Removal deletes only the current viewer's matching reference. No permission snapshot, gallery password, share token, visibility state, or media URL is stored in `viewer_favourites`.
+
+Read paths first load owned image ids, then re-evaluate the current canonical source-image authorization before rendering metadata. If an image/gallery becomes inaccessible, the saved reference may remain in storage but produces no image/gallery disclosure and grants no access. Image/account deletion continues to remove stale favourite rows through the established foreign-key cascades.
+
+## Phase 1.2 Viewer Account Lifecycle HTTP Use
+
+Phase 1.2 adds no database migration. It reuses the existing Phase 0.7 lifecycle schema from `202608180004_viewer_account_lifecycle_foundations.php` together with the previously established `viewer_accounts`, `viewer_sessions`, `viewer_remember_tokens`, `viewer_password_reset_tokens`, `viewer_email_change_requests`, `viewer_security_events`, favourites, dormant collection tables, and account-capacity state.
+
+Password change remains one atomic service transaction against the current viewer account/security version. On success the service updates the password hash and `password_changed_at`, increments `security_version`, revokes prior viewer session/remember/reset/email-change authority according to the Phase 0.7 contract, and clears only viewer authentication state. No administrator table, Admin remember token, or Admin session key participates.
+
+Email change never writes `viewer_accounts.email` at request time. A candidate address lives in `viewer_email_change_requests` with a high-entropy verification token stored only as a hash, expiry, current viewer account id, and current security version. Verification-link GET is non-consuming. Final confirmation locks both the account and request, rechecks expiry/cancellation/security version/uniqueness, updates the durable email and normalized email, increments the viewer security version, consumes exactly one request, and cancels competing pending requests. Replay, stale confirmation state, and concurrent losing transitions therefore fail without a second email switch.
+
+Self-deletion remains the existing `viewer_account_delete()` transaction. It invalidates the account security version, revokes viewer-created collection share authority as defined by the foundation, writes the bounded deletion security event, deletes the viewer account, and relies on existing foreign-key cascades for viewer-owned sessions, remember/reset/verification/email-change records, favourites, collections/items/shares, and other viewer-owned authority. Gallery/image rows, Smart Galleries, and gallery share-link tables are not account-owned cascades and are not deleted by this lifecycle path.
+
+## Phase 2.0 Private Viewer Collections Use
+
+Phase 2.0 adds no database migration. It activates the existing `viewer_collections` and `viewer_collection_items` tables created by `202608180001_viewer_security_foundations.php`. The existing `description` column and `viewer_collection_share_tokens` table remain dormant and are not exposed by the Phase 2.0 service/controller.
+
+`viewer_collections.viewer_account_id` is the authoritative owner foreign key. Every object lookup/mutation includes the current viewer id in the predicate. Collection creation locks the `viewer_accounts` row before counting against `max_viewer_collections_per_account`, while item mutation/reorder locks the owned `viewer_collections` row before checking `max_viewer_items_per_collection`. The composite primary key `(viewer_collection_id, image_id)` is the duplicate/race backstop. New items receive bounded integer `position` values and reorder normalizes positions transactionally.
+
+`viewer_collection_items` stores no path, thumbnail URL, password, gallery share token, cached permission, or copied authorization decision. Rendering first reads owner-scoped image ids/order and then resolves current authoritative image/gallery rows through the no-admin-bypass viewer source policy. A row may survive a temporary access loss; inaccessible items disclose no protected source metadata. Image deletion and collection/account deletion continue to use the existing foreign-key cascades, but collection deletion never cascades into `images`, `galleries`, `viewer_favourites`, Smart Galleries, or gallery share-link tables.
+
+## Phase 2.5 Admin Viewer Security Controls
+
+Phase 2.5 adds no migration. Suspend and Restore reuse the existing `viewer_accounts.status`, `security_version`, `suspended_at`, and the already-prepared viewer authentication/lifecycle token tables. The existing account-state transition runs under a viewer-row lock and increments `security_version`; it revokes active `viewer_sessions` and `viewer_remember_tokens`, invalidates outstanding `viewer_password_reset_tokens` and durable `viewer_email_verification_tokens`, cancels pending `viewer_email_change_requests`, and revokes `viewer_collection_share_tokens` created by the affected viewer. Restore performs the same authority rotation while returning the durable account status to `active`, so rows revoked before suspension are never made valid again.
+
+Admin Sign out everywhere also adds no storage. It reuses central viewer authentication invalidation to increment `security_version`, revoke all current viewer session and remember rows, and invalidate outstanding reset authority while leaving `viewer_accounts.status`, password hash, `must_change_password`, favourites, collections, collection items, and dormant collection-share capabilities unchanged. An account suspended/restored through Phase 2.5 retains `must_change_password=1` when it was administrator-provisioned with a temporary password.
+
+These operations never delete or update canonical `images`, `galleries`, Smart Gallery definitions, gallery share-link rows, or the administrator `users`/persistent-auth domain. The viewer frontend feature switch is not a storage prerequisite for Admin security operations; schema uncertainty still fails the relevant mutation closed.
+
+## Phase 3.0 Collection Share Storage Use
+
+Phase 3.0 adds no migration. It activates the existing `viewer_collection_share_tokens` table from `202608180001_viewer_security_foundations.php`: `id`, `viewer_collection_id`, nullable `created_by_viewer_account_id`, unique `token_hash`, `created_at`, optional `last_used_at`, `expires_at`, and `revoked_at`, with the existing collection/state, creator/state, and expiry indexes. The database never stores a plaintext share token, complete share URL, reversible display copy, copied collection title, or source-gallery permission snapshot.
+
+One active share per collection is an application-level Phase 3 product invariant serialized by the authoritative `viewer_collections` row lock. Create/replace locks the viewer account, owned collection, and unrevoked share rows in one transaction, revokes every previous unrevoked row, then inserts one SHA-256 authority hash with a 30-day expiry. Historic revoked/expired rows may remain. Revoke marks unrevoked rows with `revoked_at` and does not delete the collection, items, favourites, images, galleries, or gallery shares. `last_used_at` is best-effort exchange telemetry only and is not human-open proof or authorization state.
+
+The existing foreign key from `viewer_collection_share_tokens.viewer_collection_id` to `viewer_collections.id` keeps collection deletion authoritative and never points toward `images`. Owner account deletion continues to remove/cascade viewer-owned collections and shares without touching source media. Account suspension explicitly revokes created shares through the established lifecycle transition; restoration never clears `revoked_at`. Sign out everywhere does not mutate share rows. Share schema inspection is intentionally separate from `viewer_collections_schema_status()`, so missing/unknown share storage fails sharing closed without disabling private collections.

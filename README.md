@@ -56,6 +56,26 @@ Progressive rendering prioritizes perceived initial responsiveness, not minimum 
 - **Inheritance** - Child galleries inherit parent access rules
 - **Admin-only zones** - Some galleries only visible when logged in
 
+### Viewer Accounts (Invite-only Registration)
+- **Administrator account management** - Admin can create and delete viewer accounts directly, or create/list/revoke invitation links without pre-creating an account
+- **Administrator security controls** - Admin can suspend or restore a viewer account and force sign-out on every viewer device; suspension and restoration rotate viewer security authority without deleting favourites or private collections
+- **Forced first-login password replacement** - Directly created accounts use a generated or Admin-supplied temporary password; normal viewer authority and Remember me stay blocked until the user replaces it
+- **Password-safe notification** - Optional account-created mail contains the trusted login URL but never the temporary password, which is shown once to the administrator for separate delivery
+- **Administrator-issued invitations** - Invitation recipients still follow the existing email-verification activation flow and choose their own initial password
+- **Verified activation** - Invitation recipients verify their email before a durable viewer account is activated and choose a password of at least 15 characters
+- **Separate viewer login** - Viewer identity is independent from administrator identity and never grants protected-gallery access by itself
+- **Remember me** - Dedicated rotating viewer persistent credential, separate from Admin persistent login and recent reauthentication
+- **Password recovery** - Generic, scanner-safe viewer reset flow using the configured bounded mail transport
+- **Private account and favourites** - Signed-in email, viewer-only logout, a private favourites page, and small favourite controls on authorized gallery cards/lightbox images
+- **Private viewer collections** - Viewers can create, rename, delete, order, and browse private collections of authorized image references; source authorization is re-evaluated whenever a collection is rendered
+- **Unlisted read-only collection sharing** - A viewer may issue one revocable 30-day share link for an owned collection; recipients need no account, the secret is exchanged into a narrow session grant and removed from the displayed URL, and every rendered source image still passes the recipient's current gallery/media authorization without Admin bypass
+- **Viewer account lifecycle** - Authenticated viewers can change password, stage and verify a new email address, and permanently delete their own viewer account through the existing Phase 0.7 lifecycle services
+- **Recent reauthentication** - Password change, email-change initiation, and account deletion require recent viewer password proof; remember-me restoration alone is intentionally insufficient
+- **Master feature wrapper** - The complete viewer-account subsystem is registered in **Admin > Features** and is disabled by default. While off, Viewer accounts is hidden from Admin navigation, public viewer Login/Account UI is absent, and viewer routes fail closed without allowing existing accounts to authenticate.
+- **Invite-only mode inside the feature** - After the master feature is enabled, **Admin > Account > Viewer accounts** exposes the existing subordinate viewer-frontend toggle; enabling it selects the supported `invite_only` mode and no `config.php` edit is required.
+- **Authorization remains independent** - Saving a favourite or collection item stores only the canonical image reference and never preserves or grants access to a protected source gallery
+- **Still deliberately absent** - Open signup, public viewer profiles or collection discovery, recipient ACLs/collaboration, uploads, comments, and optional viewer MFA/social-login mechanisms
+
 ### Tagging & Organization
 - **Reusable tags** - Global tag system shared across all galleries and images
 - **Tag metadata** - Display name, slug, description, usage statistics

@@ -64,6 +64,7 @@ use function Gallery\Services\child_galleries_tree_preload;
 use function Gallery\Services\contained_tags_for_gallery;
 use function Gallery\Services\current_user_is_known_under_18;
 use function Gallery\Services\current_votes_for_images;
+use function Gallery\Services\current_viewer;
 use function Gallery\Services\content_localize_entities;
 use function Gallery\Services\content_localize_entity;
 use function Gallery\Services\feature_flag_enabled;
@@ -162,6 +163,11 @@ use function Gallery\Services\thumbnail_bundles_preload;
 use function Gallery\Services\thumbnail_picture_html;
 use function Gallery\Services\visitor_can_access_gallery;
 use function Gallery\Services\visitor_can_access_nsfw_content;
+use function Gallery\Services\viewer_favourites_for_image_ids;
+use function Gallery\Services\viewer_favourites_storage_available;
+use function Gallery\Services\viewer_collections_for_owner;
+use function Gallery\Services\viewer_collections_storage_available;
+use function Gallery\Services\viewer_source_image_can_reference;
 use function Gallery\Views\view_gallery_description_markdown_excerpt;
 use function Gallery\Views\view_gallery_description_markdown_html;
 use function Gallery\Views\view_render_gallery_json_ld;
@@ -484,7 +490,22 @@ function cms_gallery(): void
         echo '<section class="grid gallery-image-grid' . e(pagination_grid_columns_class($paginationSettings)) . '" data-public-reorder-list="photo" data-gallery-image-list' . $lightboxConfigAttributes . '>';
     }
     public_render_profile_count('rendered_images', count($images));
-    public_render_profile_span('render_image_cards', static function () use ($images, $gallery, $publicOnly, $photoMapsAllowed, $imageTagsById, $votesById, $votingAllowed, $paginationSettings, $photoPagination, $publicPhotoReorderEnabled, $pictureManagerEnabled, $lightboxExcludesRestrictedNsfw, $lightboxFeatureEnabled, $publicMediaManifest, $publicThumbnailRenderingMode): void {
+    // Viewer favourites are personalized only for an authenticated viewer and never participate in gallery authorization.
+    $viewerPrincipal = current_viewer();
+    $viewerFavouriteControlsEnabled = $viewerPrincipal !== null && viewer_favourites_storage_available();
+    // An Admin principal can expose non-public rows on this page. In the rare dual-principal case,
+    // independently re-check the viewer source contract before rendering a favourite control.
+    $viewerFavouriteRequiresSourceRecheck = $viewerFavouriteControlsEnabled && $viewer !== null;
+    $viewerFavouriteStates = $viewerFavouriteControlsEnabled
+        ? viewer_favourites_for_image_ids((int) $viewerPrincipal['id'], array_map(static fn (array $image): int => (int) $image['id'], $images))
+        : [];
+    // Private collection controls stay viewer-only and do not query collection storage for anonymous HTML.
+    $viewerCollectionControlsEnabled = $viewerPrincipal !== null && viewer_collections_storage_available();
+    $viewerCollectionRequiresSourceRecheck = $viewerCollectionControlsEnabled && $viewer !== null;
+    $viewerCollections = $viewerCollectionControlsEnabled
+        ? viewer_collections_for_owner((int) $viewerPrincipal['id'])
+        : [];
+    public_render_profile_span('render_image_cards', static function () use ($images, $gallery, $publicOnly, $photoMapsAllowed, $imageTagsById, $votesById, $votingAllowed, $paginationSettings, $photoPagination, $publicPhotoReorderEnabled, $pictureManagerEnabled, $lightboxExcludesRestrictedNsfw, $lightboxFeatureEnabled, $publicMediaManifest, $publicThumbnailRenderingMode, $viewerFavouriteControlsEnabled, $viewerFavouriteRequiresSourceRecheck, $viewerFavouriteStates, $viewerCollectionControlsEnabled, $viewerCollectionRequiresSourceRecheck, $viewerCollections): void {
     foreach ($images as $index => $image) {
         // Variable $imageNeedsNsfwGate stores whether this card must avoid exposing thumbnail/media URLs.
         $imageNeedsNsfwGate = $publicOnly && image_nsfw_restricted($image, $gallery) && !visitor_can_access_nsfw_content();
@@ -529,7 +550,12 @@ function cms_gallery(): void
         $imageCardClass = 'image-card' . ($publicPhotoReorderEnabled ? ' has-public-reorder-handle' : '') . ($pictureManagerEnabled ? ' has-picture-manager-select' : '');
         $pictureManagerAttributes = $pictureManagerEnabled ? ' data-picture-manager-image data-picture-manager-image-id="' . (int) $image['id'] . '" data-picture-manager-index="' . (int) $displayIndex . '" data-picture-manager-share-url="' . e($previewUrl) . '" data-picture-manager-share-filename="' . e(picture_manager_share_filename($image, $displayTitle)) . '" data-picture-manager-share-title="' . e($displayTitle) . '"' : '';
         $lightboxAttributes = $lightboxFeatureEnabled ? ' ' . lightbox_image_data_attributes($image, $gallery, $mediaUrl, $previewUrl, $imagePageUrl, $displayTitle, (int) $image['score'], $vote, $imageMapPoint, 'data-lightbox-image', $votingAllowed, $lightboxIndex >= 0 ? $lightboxIndex : null, $thumbnailBundle) : '';
-        echo '<article class="' . e($imageCardClass) . '" data-public-photo-order-item data-public-order-id="' . (int) $image['id'] . '"' . $pictureManagerAttributes . $lightboxAttributes . '>';
+        $viewerFavouriteAvailableForImage = $viewerFavouriteControlsEnabled
+            && (!$viewerFavouriteRequiresSourceRecheck || viewer_source_image_can_reference((int) $image['id']));
+        $viewerFavouriteAttribute = $viewerFavouriteAvailableForImage ? ' data-viewer-favourite="' . (!empty($viewerFavouriteStates[(int) $image['id']]) ? '1' : '0') . '"' : '';
+        $viewerCollectionAvailableForImage = $viewerCollectionControlsEnabled
+            && (!$viewerCollectionRequiresSourceRecheck || viewer_source_image_can_reference((int) $image['id']));
+        echo '<article class="' . e($imageCardClass) . '" data-public-photo-order-item data-public-order-id="' . (int) $image['id'] . '"' . $pictureManagerAttributes . $lightboxAttributes . $viewerFavouriteAttribute . '>';
         if ($publicPhotoReorderEnabled) {
             echo '<button type="button" class="public-reorder-handle public-photo-reorder-handle" data-public-reorder-handle aria-label="' . e(t('public.reorder.drag_photo_label', 'Drag photo to reorder visible photos')) . '" title="' . e(t('public.reorder.drag_photo_title', 'Drag to reorder this visible photo')) . '"><span aria-hidden="true">↕</span><span>' . e(t('public.reorder.move_photo', 'Move photo')) . '</span></button>';
         }
@@ -543,6 +569,12 @@ function cms_gallery(): void
         echo '<a class="image-preview-link" href="' . e($imagePageUrl) . '">' . public_render_profile_with_thumbnail_purpose('image card public thumbnail picture', static fn (): string => public_thumbnail_render_picture_html($image, 300, [300, 600, 800, 960], $thumbnailSizesAttribute, $altText, $index, $thumbnailBundle, $publicThumbnailRenderingMode)) . '</a>';
         if ($imageMapPoint) {
             echo '<button type="button" class="photo-map-pin" data-photo-map aria-label="' . e(t('public.show_photo_location', 'Show photo location')) . '" title="' . e(t('public.show_photo_location', 'Show photo location')) . '">&#128205;</button>';
+        }
+        if ($viewerFavouriteAvailableForImage) {
+            echo render_viewer_favourite_form_html((int) $image['id'], !empty($viewerFavouriteStates[(int) $image['id']]), 'viewer-favourite-card-overlay');
+        }
+        if ($viewerCollectionAvailableForImage) {
+            echo render_viewer_collection_add_control_html((int) $image['id'], $viewerCollections, 'viewer-collection-card-overlay');
         }
         render_vote_form((int) $image['id'], (int) $image['score'], $vote, $votingAllowed);
         // Variable $hasPublicImageMeta stores whether the anonymous-facing metadata overlay has visible content.

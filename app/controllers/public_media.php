@@ -71,6 +71,21 @@ use function Gallery\Services\visitor_can_access_nsfw_content;
  */
 
 /**
+ * Release the PHP session lock before read-only media generation or streaming.
+ *
+ * Public media authorization is completed before this helper is called. Closing
+ * the session here preserves the in-memory session data for any later read-only
+ * checks while allowing pagination and other requests from the same visitor to
+ * run concurrently with thumbnail generation and large file delivery.
+ */
+function cms_release_public_media_session_lock(): void
+{
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        session_write_close();
+    }
+}
+
+/**
  * Return generated thumbnail geometry status for response headers and cache policy.
  *
  * Invalid geometry is handled by the response resolver before streaming.
@@ -152,6 +167,9 @@ function cms_thumb(): void
         cms_not_found();
         return;
     }
+    // $privateCache stores the access-sensitive cache policy before the read-only session lock is released.
+    $privateCache = public_media_needs_private_cache($gallery, $image);
+    cms_release_public_media_session_lock();
     // $responseFile stores the valid derivative selected for this response.
     $responseFile = cms_resolve_thumbnail_response_file($image, $gallery, $size, $format);
     if ($responseFile === null) {
@@ -168,7 +186,7 @@ function cms_thumb(): void
     header('Content-Disposition: inline; filename="' . basename($path) . '"');
     // $cacheControl stores an intermediate value used by the surrounding gallery workflow.
     $cacheControl = !empty($geometryStatus['valid'])
-        ? (public_media_needs_private_cache($gallery, $image) ? 'private, max-age=300' : 'public, max-age=31536000, immutable')
+        ? ($privateCache ? 'private, max-age=300' : 'public, max-age=31536000, immutable')
         : 'private, no-cache, max-age=0, must-revalidate';
     send_conditional_file_headers($path, $cacheControl);
     // $bytes stores the response body size sent to the browser.
@@ -202,6 +220,9 @@ function cms_public_thumb(): void
         return;
     }
 
+    // $privateCache stores the access-sensitive cache policy before the read-only session lock is released.
+    $privateCache = public_media_needs_private_cache($gallery, $image);
+    cms_release_public_media_session_lock();
     // $responseFile stores the valid derivative selected for this response.
     $responseFile = cms_resolve_thumbnail_response_file($image, $gallery, $size, $format);
     if ($responseFile === null) {
@@ -219,7 +240,7 @@ function cms_public_thumb(): void
     header('Content-Disposition: inline; filename="' . basename($path) . '"');
     // $cacheControl stores an intermediate value used by the surrounding gallery workflow.
     $cacheControl = !empty($geometryStatus['valid'])
-        ? (public_media_needs_private_cache($gallery, $image) ? 'private, max-age=300' : 'public, max-age=31536000, immutable')
+        ? ($privateCache ? 'private, max-age=300' : 'public, max-age=31536000, immutable')
         : 'private, no-cache, max-age=0, must-revalidate';
     send_conditional_file_headers($path, $cacheControl);
     // $bytes stores the response body size sent to the browser.
@@ -249,6 +270,9 @@ function cms_public_media(): void
         return;
     }
 
+    // $privateCache stores the access-sensitive cache policy before the read-only session lock is released.
+    $privateCache = public_media_needs_private_cache($gallery, $image);
+    cms_release_public_media_session_lock();
     // $displayFile stores the browser-displayable file selected for public viewing.
     $displayFile = image_public_display_file($image, $gallery, true);
     if ($displayFile === null) {
@@ -264,7 +288,7 @@ function cms_public_media(): void
     header('X-Content-Type-Options: nosniff');
     header('Content-Disposition: inline; filename="' . basename((string) $displayFile['filename']) . '"');
     // $cacheControl stores an intermediate value used by the surrounding gallery workflow.
-    $cacheControl = public_media_needs_private_cache($gallery, $image) ? 'private, max-age=300' : 'public, max-age=31536000, immutable';
+    $cacheControl = $privateCache ? 'private, max-age=300' : 'public, max-age=31536000, immutable';
     send_conditional_file_headers($path, $cacheControl);
     // $bytes stores the response body size counted for anonymous media telemetry.
     $bytes = (int) filesize($path);
@@ -314,6 +338,9 @@ function cms_gallery_cover_asset(): void
         cms_not_found();
         return;
     }
+    // $cacheControl stores the access-sensitive policy before expensive image work begins.
+    $cacheControl = public_media_needs_private_cache($gallery) ? 'private, max-age=300' : 'public, max-age=86400';
+    cms_release_public_media_session_lock();
     if (extension_loaded('gd')) {
         // $info stores an intermediate value used by the surrounding gallery workflow.
         $info = @getimagesize($path);
@@ -335,7 +362,7 @@ function cms_gallery_cover_asset(): void
             imageinterlace($target, true);
             header('Content-Type: image/jpeg');
             header('X-Content-Type-Options: nosniff');
-            send_asset_cache_control(public_media_needs_private_cache($gallery) ? 'private, max-age=300' : 'public, max-age=86400');
+            send_asset_cache_control($cacheControl);
             imagejpeg($target, null, 82);
             imagedestroy($target);
             imagedestroy($source);
@@ -347,7 +374,7 @@ function cms_gallery_cover_asset(): void
     }
     header('Content-Type: ' . $mime);
     header('X-Content-Type-Options: nosniff');
-    send_asset_cache_control(public_media_needs_private_cache($gallery) ? 'private, max-age=300' : 'public, max-age=86400');
+    send_asset_cache_control($cacheControl);
     readfile($path);
 }
 
@@ -397,6 +424,7 @@ function cms_gallery_branding_asset(): void
     header('Content-Disposition: inline; filename="' . basename($path) . '"');
     // $cacheControl stores a conservative policy for protected or restricted galleries.
     $cacheControl = (gallery_access_requirement($gallery) || gallery_nsfw_requirement($gallery)) && (!current_user() || current_user_is_known_under_18()) ? 'private, max-age=300' : 'public, max-age=86400';
+    cms_release_public_media_session_lock();
     send_conditional_file_headers($path, $cacheControl);
     header('Content-Length: ' . (string) filesize($path));
     readfile($path);
@@ -420,6 +448,9 @@ function cms_media(): void
         cms_not_found();
         return;
     }
+    // $privateCache stores the access-sensitive cache policy before the read-only session lock is released.
+    $privateCache = public_media_needs_private_cache($gallery, $image);
+    cms_release_public_media_session_lock();
     // Variable $displayFile stores the browser-displayable file selected for public viewing.
     $displayFile = image_public_display_file($image, $gallery, true);
     if ($displayFile === null) {
@@ -434,7 +465,7 @@ function cms_media(): void
     header('X-Content-Type-Options: nosniff');
     header('Content-Disposition: inline; filename="' . basename((string) $displayFile['filename']) . '"');
     // $cacheControl stores an intermediate value used by the surrounding gallery workflow.
-    $cacheControl = public_media_needs_private_cache($gallery, $image) ? 'private, max-age=300' : 'public, max-age=31536000, immutable';
+    $cacheControl = $privateCache ? 'private, max-age=300' : 'public, max-age=31536000, immutable';
     send_conditional_file_headers($path, $cacheControl);
     // $bytes stores the response body size counted for anonymous media telemetry.
     $bytes = (int) filesize($path);

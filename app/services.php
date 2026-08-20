@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-04
+ *   2026-08-18
  */
 
 declare(strict_types=1);
@@ -143,6 +143,37 @@ require_once __DIR__ . '/services/auth_persistence.php';
 require_once __DIR__ . '/services/google_auth.php';
 // Load authentication throttling after logs so rate-limit events can be recorded safely.
 require_once __DIR__ . '/services/auth_throttle.php';
+// Load generic token and trusted-client primitives before the dormant viewer identity domain.
+require_once __DIR__ . '/services/security_tokens.php';
+require_once __DIR__ . '/services/client_ip.php';
+// Load dormant viewer-account foundations. No Phase 0 route exposes these services.
+require_once __DIR__ . '/services/viewer_accounts.php';
+require_once __DIR__ . '/services/viewer_tokens.php';
+require_once __DIR__ . '/services/viewer_rate_limits.php';
+require_once __DIR__ . '/services/viewer_security_events.php';
+// Load the first-party anonymous anti-automation gate before registration/mail orchestration.
+require_once __DIR__ . '/services/viewer_anti_automation.php';
+// Load dormant pending-registration and mail-abuse boundaries after viewer identity/rate primitives.
+require_once __DIR__ . '/services/viewer_registration.php';
+require_once __DIR__ . '/services/viewer_mail.php';
+// Load dormant viewer lifecycle/content policy before login orchestration can establish recent credential proof.
+require_once __DIR__ . '/services/viewer_lifecycle.php';
+require_once __DIR__ . '/services/viewer_content_foundations.php';
+// Load the first viewer-owned content service after the canonical source authorization/quota contracts.
+require_once __DIR__ . '/services/viewer_favourites.php';
+// Load private viewer collections after favourites and shared content-authorization foundations.
+require_once __DIR__ . '/services/viewer_collections.php';
+// Load Phase 3 collection sharing after private collection ownership/locking helpers.
+require_once __DIR__ . '/services/viewer_collection_shares.php';
+// Load route-free viewer login/reset orchestration only after token, rate, event, registration, mail, and lifecycle boundaries.
+require_once __DIR__ . '/services/viewer_authentication.php';
+// Load administrator viewer provisioning only after authentication/lifecycle helpers are available.
+require_once __DIR__ . '/services/viewer_admin_accounts.php';
+// Load the Phase 1.0 HTTP cookie adapter after the underlying viewer authentication services.
+require_once __DIR__ . '/services/viewer_http.php';
+// Load read-only Phase 4.4 Viewer security operations after all authoritative Viewer state services.
+require_once __DIR__ . '/services/viewer_security_operations.php';
+require_once __DIR__ . '/services/viewer_maintenance.php';
 require_once __DIR__ . '/services/telemetry_settings.php';
 require_once __DIR__ . '/services/telemetry_privacy.php';
 require_once __DIR__ . '/services/telemetry.php';

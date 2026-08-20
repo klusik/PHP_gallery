@@ -252,6 +252,9 @@ export function setupGalleryLightbox() {
         card.dataset.description = String(item.description || '');
         card.dataset.score = String(item.score ?? '0');
         card.dataset.userVote = String(item.user_vote ?? '0');
+        if (typeof item.viewer_favourite === 'boolean') {
+            card.dataset.viewerFavourite = item.viewer_favourite ? '1' : '0';
+        }
         card.dataset.imageWidth = String(item.width ?? '0');
         card.dataset.imageHeight = String(item.height ?? '0');
         if (item.voting_allowed) {
@@ -450,8 +453,8 @@ export function setupGalleryLightbox() {
     const lightboxFullPreloadRadius = 0;
     // lightboxQualityUpgradeDelay coalesces passive viewport/layout quality checks; explicit zoom requests promote immediately.
     const lightboxQualityUpgradeDelay = 140;
-    // lightboxDecodedImageCacheLimit stores state or configuration for the gallery front-end flow.
-    const lightboxDecodedImageCacheLimit = 48;
+    // lightboxDecodedImageCacheLimit keeps only the current preview neighborhood decoded.
+    const lightboxDecodedImageCacheLimit = 12;
     // transitionImage stores state or configuration for the gallery front-end flow.
     let transitionImage = null;
     // activeLightboxTransitionToken stores state or configuration for the gallery front-end flow.
@@ -528,6 +531,10 @@ export function setupGalleryLightbox() {
     let lightboxPreloadGeneration = 0;
     // activeLightboxPreloads tracks how many background image decodes are currently active.
     let activeLightboxPreloads = 0;
+    // lightboxPreloadAbortController owns active nearby preview preloads for the current navigation generation.
+    let lightboxPreloadAbortController = new AbortController();
+    // activeDetachedLightboxImageLoads contains cancellation callbacks for detached image requests that have not settled yet.
+    const activeDetachedLightboxImageLoads = new Set();
     // lastLightboxNavigationRequestedAt stores the last manual navigation timestamp.
     let lastLightboxNavigationRequestedAt = 0;
     // lightboxPreloadDrainHandle stores the pending queue drain callback handle.
@@ -540,6 +547,8 @@ export function setupGalleryLightbox() {
     let lightboxSlideshowTimer = null;
     // lightboxSlideshowScheduleToken invalidates an automatic cycle when slideshow stops or navigation changes.
     let lightboxSlideshowScheduleToken = 0;
+    // lightboxSlideshowPreloadController owns the single detached full-image request prepared for the next slide.
+    let lightboxSlideshowPreloadController = null;
     // lightboxSlideshowActive stores whether slideshow mode owns automatic fullscreen advancing.
     let lightboxSlideshowActive = false;
     // touchGesture stores the active mobile stage swipe, when one is in progress.
@@ -623,9 +632,11 @@ export function setupGalleryLightbox() {
         removeTransitionImage();
         preloadedSources.clear();
         resetLightboxPreloadQueue();
+        cancelActiveDetachedLightboxImageLoads();
         lightboxPendingWindows.clear();
         lightboxGalleryMapPayloadPromises.clear();
         decodedLightboxImages.clear();
+        failedLightboxQualitySources.clear();
         if (galleryDevModeState.frameId) {
             window.cancelAnimationFrame(galleryDevModeState.frameId);
             galleryDevModeState.frameId = 0;
@@ -1348,6 +1359,42 @@ export function setupGalleryLightbox() {
             devMarkSource(src, 'loading', 'fresh');
             // loadedImage stores state or configuration for the gallery front-end flow.
             const loadedImage = new Image();
+            // signal optionally lets nearby-image or slideshow lifecycle code cancel this detached request.
+            const signal = options.signal && typeof options.signal.addEventListener === 'function' ? options.signal : null;
+            let settled = false;
+
+            /** Remove request listeners and release this detached load from the active registry. */
+            const cleanupLoad = () => {
+                loadedImage.onload = null;
+                loadedImage.onerror = null;
+                if (signal) {
+                    signal.removeEventListener('abort', cancelLoad);
+                }
+                activeDetachedLightboxImageLoads.delete(cancelLoad);
+            };
+
+            /** Cancel an unfinished detached image request and reject it as an abort. */
+            const cancelLoad = () => {
+                if (settled) {
+                    return;
+                }
+                settled = true;
+                cleanupLoad();
+                loadedImage.removeAttribute('src');
+                const error = new Error('Lightbox image load cancelled.');
+                error.name = 'AbortError';
+                reject(error);
+            };
+
+            activeDetachedLightboxImageLoads.add(cancelLoad);
+            if (signal) {
+                if (signal.aborted) {
+                    cancelLoad();
+                    return;
+                }
+                signal.addEventListener('abort', cancelLoad, {once: true});
+            }
+
             loadedImage.decoding = 'async';
             loadedImage.loading = 'eager';
             if ('fetchPriority' in loadedImage && options.priority) {
@@ -1355,17 +1402,48 @@ export function setupGalleryLightbox() {
             }
             loadedImage.onload = () => {
                 decodeLoadedImage(loadedImage).then(() => {
+                    if (settled) {
+                        return;
+                    }
+                    if (signal?.aborted) {
+                        cancelLoad();
+                        return;
+                    }
+                    settled = true;
+                    cleanupLoad();
                     devMarkSource(src, 'ready', 'decoded', loadedImage);
                     resolve(loadedImage);
                 });
             };
             loadedImage.onerror = () => {
+                if (settled) {
+                    return;
+                }
+                settled = true;
+                cleanupLoad();
                 galleryDevModeState.decodeErrors += galleryDevModeEnabled ? 1 : 0;
                 devMarkSource(src, 'error', 'load');
                 reject(new Error(i18n('lightbox.image_load_failed', 'Lightbox image load failed.')));
             };
             loadedImage.src = src;
         });
+    }
+
+    /**
+     * Cancel every unfinished detached image request owned by the lightbox.
+     *
+     * This is used when the viewer closes or is torn down so decoded-image work
+     * cannot continue consuming bandwidth and memory after the gallery is visible.
+     */
+    function cancelActiveDetachedLightboxImageLoads() {
+        Array.from(activeDetachedLightboxImageLoads).forEach((cancelLoad) => {
+            try {
+                cancelLoad();
+            } catch {
+                // A late browser cancellation must never break viewer teardown.
+            }
+        });
+        activeDetachedLightboxImageLoads.clear();
     }
 
         /**
@@ -1406,9 +1484,10 @@ export function setupGalleryLightbox() {
      * Handles preload decoded lightbox image behavior for the gallery UI.
      *
      * @param {*} src Value supplied by the caller or event context.
+     * @param {object} options Optional preload lifecycle controls.
      * @return {*} Result of the UI operation, when a value is produced.
      */
-    function preloadDecodedLightboxImage(src) {
+    function preloadDecodedLightboxImage(src, options = {}) {
         if (!src) {
             return Promise.resolve(null);
         }
@@ -1425,8 +1504,14 @@ export function setupGalleryLightbox() {
         galleryDevModeState.preloadStarted += galleryDevModeEnabled ? 1 : 0;
         devMarkSource(src, 'preloading', 'preload-miss');
         // preloadPromise stores state or configuration for the gallery front-end flow.
-        const preloadPromise = loadFreshDecodedLightboxImage(src, {priority: 'low'}).catch(() => null);
-        return rememberDecodedLightboxImage(src, preloadPromise);
+        const preloadPromise = loadFreshDecodedLightboxImage(src, {priority: 'low', signal: options.signal}).catch(() => null);
+        rememberDecodedLightboxImage(src, preloadPromise);
+        preloadPromise.finally(() => {
+            if (options.signal?.aborted && decodedLightboxImages.get(src) === preloadPromise) {
+                decodedLightboxImages.delete(src);
+            }
+        });
+        return preloadPromise;
     }
 
         /**
@@ -1474,6 +1559,8 @@ export function setupGalleryLightbox() {
         lightboxPreloadGeneration += 1;
         lightboxPreloadQueue.length = 0;
         lightboxQueuedSources.clear();
+        lightboxPreloadAbortController.abort();
+        lightboxPreloadAbortController = new AbortController();
         if (!lightboxPreloadDrainHandle) {
             return;
         }
@@ -1529,7 +1616,7 @@ export function setupGalleryLightbox() {
             }
             activeLightboxPreloads += 1;
             devMarkSource(item.src, 'preloading', item.reason || 'queued-preview');
-            preloadDecodedLightboxImage(item.src).finally(() => {
+            preloadDecodedLightboxImage(item.src, {signal: lightboxPreloadAbortController.signal}).finally(() => {
                 activeLightboxPreloads = Math.max(0, activeLightboxPreloads - 1);
                 if (lightboxPreloadQueue.length > 0) {
                     scheduleLightboxPreloadDrain();
@@ -3655,6 +3742,10 @@ export function setupGalleryLightbox() {
      */
     function clearLightboxSlideshowTimer() {
         lightboxSlideshowScheduleToken += 1;
+        if (lightboxSlideshowPreloadController) {
+            lightboxSlideshowPreloadController.abort();
+            lightboxSlideshowPreloadController = null;
+        }
         if (lightboxSlideshowTimer) {
             window.clearTimeout(lightboxSlideshowTimer);
             lightboxSlideshowTimer = null;
@@ -3669,15 +3760,16 @@ export function setupGalleryLightbox() {
      * decoded, allowing the transition to start without showing a preview or loader.
      *
      * @param {number} index Zero-based slideshow target index.
+     * @param {AbortSignal|null} signal Cancellation signal for the single prepared full image.
      * @return {Promise<{index:number,src:string,image:HTMLImageElement}|null>} Prepared full image, or null on failure.
      */
-    function prepareLightboxSlideshowImage(index) {
+    function prepareLightboxSlideshowImage(index, signal = null) {
         const normalizedIndex = ((index % cards.length) + cards.length) % cards.length;
         const metadataPromise = cards[normalizedIndex]
             ? Promise.resolve(true)
             : fetchLightboxWindowAround(normalizedIndex);
         return metadataPromise.then((loaded) => {
-            if (!loaded || controller.signal.aborted) {
+            if (!loaded || controller.signal.aborted || signal?.aborted) {
                 return null;
             }
             const card = cards[normalizedIndex];
@@ -3690,7 +3782,7 @@ export function setupGalleryLightbox() {
             }
             preloadedSources.add(fullSrc);
             devMarkSource(fullSrc, 'preloading', 'slideshow-full');
-            return loadDecodedLightboxImage(fullSrc, {priority: 'high'})
+            return loadFreshDecodedLightboxImage(fullSrc, {priority: 'high', signal})
                 .then((loadedImage) => loadedImage instanceof HTMLImageElement
                     ? {index: normalizedIndex, src: fullSrc, image: loadedImage}
                     : null)
@@ -3727,7 +3819,13 @@ export function setupGalleryLightbox() {
         const scheduledFromIndex = currentIndex;
         const nextIndex = (scheduledFromIndex + 1) % cards.length;
         const scheduleToken = lightboxSlideshowScheduleToken;
-        const preparedImagePromise = prepareLightboxSlideshowImage(nextIndex);
+        const preloadController = new AbortController();
+        lightboxSlideshowPreloadController = preloadController;
+        const preparedImagePromise = prepareLightboxSlideshowImage(nextIndex, preloadController.signal).finally(() => {
+            if (lightboxSlideshowPreloadController === preloadController) {
+                lightboxSlideshowPreloadController = null;
+            }
+        });
         lightboxSlideshowTimer = window.setTimeout(() => {
             lightboxSlideshowTimer = null;
             preparedImagePromise.then((prepared) => {
@@ -3862,6 +3960,13 @@ export function setupGalleryLightbox() {
         clearPendingLightboxQualityUpgrade();
         removeTransitionImage();
         image.removeAttribute('src');
+        preloadedSources.clear();
+        resetLightboxPreloadQueue();
+        cancelActiveDetachedLightboxImageLoads();
+        decodedLightboxImages.clear();
+        lightboxPendingWindows.clear();
+        lightboxGalleryMapPayloadPromises.clear();
+        failedLightboxQualitySources.clear();
         activeLightboxQualitySource = '';
         galleryDevModeState.currentSource = '';
         galleryDevModeState.currentSourceKind = '';
@@ -3907,7 +4012,7 @@ export function setupGalleryLightbox() {
                 return;
             }
             devMarkSource(item.src, 'preloading', item.reason);
-            preloadDecodedLightboxImage(item.src);
+            preloadDecodedLightboxImage(item.src, {signal: lightboxPreloadAbortController.signal});
         });
     }
 

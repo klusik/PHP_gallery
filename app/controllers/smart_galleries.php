@@ -11,6 +11,7 @@ use Throwable;
 use Gallery\Services\MutationSchemaUnavailableException;
 
 use function Gallery\Core\csrf_field;
+use function Gallery\Core\current_user;
 use function Gallery\Core\e;
 use function Gallery\Core\flash_message;
 use function Gallery\Core\redirect_to;
@@ -56,6 +57,7 @@ use function Gallery\Services\public_thumbnail_rendering_modes;
 use function Gallery\Services\admin_tag_rows;
 use function Gallery\Services\admin_log_event;
 use function Gallery\Services\current_votes_for_images;
+use function Gallery\Services\current_viewer;
 use function Gallery\Services\gallery_voting_allowed;
 use function Gallery\Services\public_image_display_title;
 use function Gallery\Services\thumbnail_bundle_url;
@@ -70,6 +72,11 @@ use function Gallery\Services\content_localize_entities;
 use function Gallery\Services\content_localize_entity;
 use function Gallery\Services\thumbnail_sizes;
 use function Gallery\Services\pagination_photo_thumbnail_sizes_attribute;
+use function Gallery\Services\viewer_favourites_for_image_ids;
+use function Gallery\Services\viewer_favourites_storage_available;
+use function Gallery\Services\viewer_collections_for_owner;
+use function Gallery\Services\viewer_collections_storage_available;
+use function Gallery\Services\viewer_source_image_can_reference;
 use const Gallery\Services\SMART_GALLERY_QUERY_MAX_PAGE_SIZE;
 use const Gallery\Services\SMART_GALLERY_LIGHTBOX_MAX_WINDOW;
 
@@ -362,6 +369,19 @@ function smart_gallery_render_presentation_controls(array $presentation, bool $h
 /** Render real Smart Gallery image cards with one shared presentation contract. */
 function smart_gallery_render_image_cards(array $images, array $sourceGalleries, array $presentation, array $votes, array $tags, int $offset, bool $interactive): void
 {
+    $viewerPrincipal = $interactive ? current_viewer() : null;
+    $viewerFavouriteControlsEnabled = $viewerPrincipal !== null && viewer_favourites_storage_available();
+    // Smart Gallery source discovery historically honors an administrator principal. Favourites do not.
+    $viewerFavouriteRequiresSourceRecheck = $viewerFavouriteControlsEnabled && current_user() !== null;
+    $viewerFavouriteStates = $viewerFavouriteControlsEnabled
+        ? viewer_favourites_for_image_ids((int) $viewerPrincipal['id'], array_map(static fn (array $image): int => (int) $image['id'], $images))
+        : [];
+    $viewerCollectionControlsEnabled = $viewerPrincipal !== null && viewer_collections_storage_available();
+    // Smart Gallery source discovery may honor Admin. Viewer collection controls never inherit that bypass.
+    $viewerCollectionRequiresSourceRecheck = $viewerCollectionControlsEnabled && current_user() !== null;
+    $viewerCollections = $viewerCollectionControlsEnabled
+        ? viewer_collections_for_owner((int) $viewerPrincipal['id'])
+        : [];
     $columns = (int) ($presentation['grid_columns'] ?? 3);
     $sizesAttribute = pagination_photo_thumbnail_sizes_attribute(['enabled' => true, 'columns' => $columns]);
     echo '<section class="grid gallery-image-grid' . e(pagination_grid_columns_class(['columns' => $columns, 'grid_columns_enabled' => true])) . '" data-gallery-image-list>';
@@ -381,7 +401,18 @@ function smart_gallery_render_image_cards(array $images, array $sourceGalleries,
             $previewUrl = thumbnail_bundle_url($bundle, 1600);
             $attributes = ' ' . lightbox_image_data_attributes($image, $source, $mediaUrl, $previewUrl, $url, $title, (int) ($image['score'] ?? 0), (int) ($votes[(int) $image['id']] ?? 0), null, 'data-lightbox-image', $voting, $offset + $index, $bundle);
         }
-        echo '<article class="image-card"' . $attributes . '><div class="image-stage"><a class="image-preview-link" href="' . e($url) . '">' . public_thumbnail_render_picture_html($image, $fallbackSize, $candidateSizes, $sizesAttribute, image_alt_text($image, $source, $offset + $index + 1), $index, $bundle, (string) $presentation['thumbnail_rendering_mode']) . '</a>';
+        $viewerFavouriteAvailableForImage = $viewerFavouriteControlsEnabled
+            && (!$viewerFavouriteRequiresSourceRecheck || viewer_source_image_can_reference((int) $image['id']));
+        $viewerCollectionAvailableForImage = $viewerCollectionControlsEnabled
+            && (!$viewerCollectionRequiresSourceRecheck || viewer_source_image_can_reference((int) $image['id']));
+        $viewerFavouriteAttribute = $viewerFavouriteAvailableForImage ? ' data-viewer-favourite="' . (!empty($viewerFavouriteStates[(int) $image['id']]) ? '1' : '0') . '"' : '';
+        echo '<article class="image-card"' . $attributes . $viewerFavouriteAttribute . '><div class="image-stage"><a class="image-preview-link" href="' . e($url) . '">' . public_thumbnail_render_picture_html($image, $fallbackSize, $candidateSizes, $sizesAttribute, image_alt_text($image, $source, $offset + $index + 1), $index, $bundle, (string) $presentation['thumbnail_rendering_mode']) . '</a>';
+        if ($viewerFavouriteAvailableForImage) {
+            echo render_viewer_favourite_form_html((int) $image['id'], !empty($viewerFavouriteStates[(int) $image['id']]), 'viewer-favourite-card-overlay');
+        }
+        if ($viewerCollectionAvailableForImage) {
+            echo render_viewer_collection_add_control_html((int) $image['id'], $viewerCollections, 'viewer-collection-card-overlay');
+        }
         if ($interactive && !empty($presentation['voting_enabled'])) render_vote_form((int) $image['id'], (int) ($image['score'] ?? 0), (int) ($votes[(int) $image['id']] ?? 0), $voting);
         if (!empty($presentation['metadata_visible']) && ($title !== '' || trim((string) ($image['description'] ?? '')) !== '' || !empty($tags[(int) $image['id']]))) {
             echo '<div class="image-meta image-meta-overlay">' . ($title !== '' ? '<h2>' . e($title) . '</h2>' : '') . (trim((string) ($image['description'] ?? '')) !== '' ? '<p>' . e((string) $image['description']) . '</p>' : '');
@@ -486,12 +517,22 @@ function cms_smart_gallery_lightbox_data(): void
     }
     $imageIds = array_map(static fn (array $image): int => (int) $image['id'], $images);
     $votes = !empty($presentation['voting_enabled']) ? current_votes_for_images($imageIds) : [];
+    $viewerPrincipal = current_viewer();
+    $viewerFavouriteStates = $viewerPrincipal !== null && viewer_favourites_storage_available()
+        ? viewer_favourites_for_image_ids((int) $viewerPrincipal['id'], $imageIds)
+        : null;
+    $viewerFavouriteRequiresSourceRecheck = is_array($viewerFavouriteStates) && current_user() !== null;
     $items = [];
     foreach ($images as $rowIndex => $image) {
         $source = $sourceGalleries[(int) ($image['gallery_id'] ?? 0)] ?? null;
         if (!$source) continue;
         $votingAllowed = !empty($presentation['voting_enabled']) && gallery_voting_allowed($source);
-        $items[] = gallery_lightbox_json_item($image, $source, $offset + $rowIndex, gallery_allows_gps_maps($source), $votingAllowed, $votes);
+        $item = gallery_lightbox_json_item($image, $source, $offset + $rowIndex, gallery_allows_gps_maps($source), $votingAllowed, $votes);
+        if (is_array($viewerFavouriteStates)
+            && (!$viewerFavouriteRequiresSourceRecheck || viewer_source_image_can_reference((int) $image['id']))) {
+            $item['viewer_favourite'] = !empty($viewerFavouriteStates[(int) $image['id']]);
+        }
+        $items[] = $item;
     }
 
     gallery_lightbox_json_response([
