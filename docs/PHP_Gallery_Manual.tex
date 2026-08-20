@@ -49,7 +49,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.92.1}
+\newcommand{\version}{0.92.2}
 \newcommand{\manualdate}{18 August 2026}
 
 \hypersetup{
@@ -152,8 +152,12 @@ The~manual is~organized around work that an~owner actually performs. The~early s
 
 For~a~new installation, begin with Section~\ref{sec:first-hour}. Collection planning is~covered in~Section~\ref{sec:planning}; routine gallery and~photo editing is~in~Sections~\ref{sec:create-edit-gallery} and~\ref{sec:photo-workflow}. Section~\ref{sec:audiences} is~useful before publishing because it~compares several common audience types. The~contents and~index are~intended for~jumping directly to~a~setting or~workflow when the~site is~already in~use.
 
-\subsection{What is~new in~Version 0.92.1}
-\index{Version 0.92.1}
+\subsection{What is~new in~Version 0.92.2}
+\index{Version 0.92.2}
+
+Version~0.92.2 is~a~focused lightbox reliability patch. Detached image requests, decoded-cache entries, preload generations, and~teardown callbacks are~now kept under~a~single ownership lifecycle during rapid navigation, close/reopen cycles, slideshow transitions, and~resource cancellation. Late loads and~decodes cannot repopulate a~newer photograph's state after~the~viewer has~moved on. The~existing zoom, progressive quality, fullscreen, map, favourite, protected-media, and~no-JavaScript behavior remains unchanged.
+
+The~release adds regression coverage for~metadata/resource cleanup and~requires no~database migration or~filesystem change. Existing Version~0.92.1 installations can~use the~normal updater.
 
 Version~0.92.1 adds a~bounded public-gallery benchmark for~administrators and~hardens the~viewer resource diagnostics introduced with~Version~0.92. The~benchmark runs isolated anonymous previews, measures server render counters and~browser navigation timing, and~can~collect authorized protected-media diagnostics without exposing private content. Results include bounded transfer, cache, decode, and~resource-lifecycle information suitable for~before/after comparisons on~shared hosting.
 

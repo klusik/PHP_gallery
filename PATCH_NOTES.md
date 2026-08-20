@@ -1,5 +1,32 @@
 # Patch notes
 
+## Version 0.92.2
+
+Version 0.92.2 is a focused lightbox reliability patch on top of Version 0.92.1. It addresses the final resource-ownership edges found during rapid navigation and repeated close/reopen cycles while preserving the complete Version 0.92 viewer-account, collection-sharing, benchmark, zoom, Smart Gallery, and protected-media foundation.
+
+  ### Highlights
+
+  #### Detached image and cache lifecycle
+
+  - Hardened ownership tracking for detached image loads so a request that no longer belongs to the active photograph is aborted or ignored safely.
+  - Hardened decoded-image cache insertion and eviction so late decodes cannot repopulate a newer photo’s cache state after navigation or teardown.
+  - Invalidated stale preload generations consistently during rapid previous/next movement, slideshow transitions, close/reopen cycles, and lightbox destruction.
+  - Ensured preload queues, abort controllers, event callbacks, timers, and lifecycle registries are released together instead of leaving detached work behind.
+  - Preserved active-photo identity, metadata, favourite state, zoom/pan state, fullscreen/map state, and progressive-quality promotion while asynchronous work completes.
+
+  #### Compatibility and safety
+
+  - Kept the existing protected preview/full-media authorization pipeline, private/no-store behavior, Smart Gallery access intersection, and public-media session-release guarantees unchanged.
+  - Kept normal gallery, Smart Gallery, slideshow, fullscreen, map, touch, keyboard, zoom, and no-JavaScript behavior compatible.
+  - Added focused metadata and resource lifecycle regression coverage for stale work, detached loads, cache cleanup, preload invalidation, and teardown/reopen scenarios.
+  - No database migration or filesystem change is required; Version 0.92.1 installations can use the normal updater.
+
+  ### Release artifacts
+
+  - Updated runtime version, README, architecture/database/testing references, administrator manual, and release metadata to Version 0.92.2.
+  - Rebuilt the indexed manual PDF and regenerated `app/core-manifest.json` after the final source and documentation edits.
+  - Verified the complete PHP suite, lightbox lifecycle contracts, benchmark runtime scope, syntax checks, manifest freshness, and `git diff --check`.
+
 ## Version 0.92.1
 
 Version 0.92.1 is a focused observability and performance refinement on top of the complete Version 0.92 viewer-account and lightbox release. It adds a bounded, repeatable public-gallery benchmark and extends protected-media diagnostics while preserving viewer privacy, gallery authorization, and shared-hosting safety.
