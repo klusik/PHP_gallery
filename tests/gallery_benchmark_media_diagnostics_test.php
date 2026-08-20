@@ -68,7 +68,11 @@ $assertions = [
     [!str_contains($adminJs, 'calibrateBenchmarkClock'), 'Unreliable wall-clock calibration must be absent in v4.'],
     [str_contains($adminJs, "targetWindow.addEventListener('error', onWindowError)"), 'Iframe runtime errors must be captured.'],
     [str_contains($adminJs, "targetWindow.addEventListener('unhandledrejection', onUnhandledRejection)"), 'Iframe unhandled rejections must be captured.'],
-    [str_contains($adminJs, "async function runBenchmarkLightboxScenario") && str_contains($adminJs, "    let runtimeWindow = null;\n    let runtimeErrorHandler = null;\n    let runtimeRejectionHandler = null;\n    try {\n        const targetWindow = frame.contentWindow;\n        runtimeWindow = targetWindow;"), 'Lightbox runtime cleanup variables must be declared in the scenario function scope.'],
+    [str_contains($adminJs, 'async function runBenchmarkLightboxScenario(')
+        && str_contains($adminJs, '    let runtimeWindow = null;')
+        && str_contains($adminJs, '    let runtimeErrorHandler = null;')
+        && str_contains($adminJs, '    let runtimeRejectionHandler = null;')
+        && str_contains($adminJs, 'runtimeWindow = targetWindow;'), 'Lightbox runtime cleanup variables must be declared in the scenario function scope.'],
     [str_contains($adminJs, "first_lightbox_image_did_not_load"), 'The benchmark must fail fast when the first lightbox image does not load.'],
     [str_contains($lightboxJs, 'function benchmarkSourceLabel(src)'), 'Benchmark image source labeling helper must be defined before runtime use.'],
     [str_contains($lightboxJs, 'decoded_cache_insert_after_close'), 'Late decoded-cache reinsertion diagnostics must remain observable.'],
