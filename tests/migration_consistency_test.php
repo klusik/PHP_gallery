@@ -100,8 +100,9 @@ $viewerAuthenticationFoundation = '202608180003_viewer_authentication_foundation
 $viewerLifecycleFoundation = '202608180004_viewer_account_lifecycle_foundations';
 $viewerInvitationAdminManagement = '202608180005_viewer_invitation_admin_management';
 $viewerAdminAccountManagement = '202608180006_viewer_admin_account_management';
+$publicThumbnailProgressiveDefault = '202608200002_public_thumbnail_progressive_default';
 
-foreach ([$browserSeed, $browserSafety, $browserRebuild, $legacyCleanup, $publicPathRepair, $hierarchicalPathRepair, $runnerCompatibilityRepair, $databaseMaintenanceRepair, $viewerSecurityFoundation, $viewerRegistrationFoundation, $viewerAuthenticationFoundation, $viewerLifecycleFoundation, $viewerInvitationAdminManagement, $viewerAdminAccountManagement] as $requiredVersion) {
+foreach ([$browserSeed, $browserSafety, $browserRebuild, $legacyCleanup, $publicPathRepair, $hierarchicalPathRepair, $runnerCompatibilityRepair, $databaseMaintenanceRepair, $viewerSecurityFoundation, $viewerRegistrationFoundation, $viewerAuthenticationFoundation, $viewerLifecycleFoundation, $viewerInvitationAdminManagement, $viewerAdminAccountManagement, $publicThumbnailProgressiveDefault] as $requiredVersion) {
     assert_migration_consistency(isset($definitions[$requiredVersion]), 'Required migration is missing: ' . $requiredVersion);
 }
 assert_migration_consistency(strcmp($legacyCleanup, $browserRebuild) > 0, 'Legacy cleanup must run after canonical browser setting migrations.');
@@ -126,6 +127,11 @@ assert_migration_consistency(count($definitions[$viewerInvitationAdminManagement
 assert_migration_consistency(strcmp($viewerAdminAccountManagement, $viewerInvitationAdminManagement) > 0, 'Viewer Admin account management migration must run after invitation Admin management.');
 assert_migration_consistency(count($definitions[$viewerAdminAccountManagement]['statements']) === 1, 'Viewer Admin account management migration must remain one additive first-login flag definition.');
 assert_migration_consistency(str_contains((string) $definitions[$viewerAdminAccountManagement]['statements'][0], 'must_change_password'), 'Viewer Admin account management migration must add the forced password-change flag.');
+assert_migration_consistency(strcmp($publicThumbnailProgressiveDefault, $viewerAdminAccountManagement) > 0, 'Progressive thumbnail default migration must run after the current viewer-security migrations.');
+assert_migration_consistency(count($definitions[$publicThumbnailProgressiveDefault]['statements']) === 2, 'Progressive thumbnail default migration must remain a two-setting transition.');
+assert_migration_consistency(str_contains((string) $definitions[$publicThumbnailProgressiveDefault]['statements'][0], "public_thumbnail_rendering_mode', 'progressive'"), 'Progressive thumbnail default migration must seed and update the renderer setting to progressive.');
+assert_migration_consistency(str_contains((string) $definitions[$publicThumbnailProgressiveDefault]['statements'][0], "setting_value = 'progressive'"), 'Progressive thumbnail default migration must move existing persisted renderer settings to progressive.');
+assert_migration_consistency(str_contains((string) $definitions[$publicThumbnailProgressiveDefault]['statements'][1], 'theme_public_content_revision'), 'Progressive thumbnail default migration must invalidate cached public presentation through the content revision.');
 
 $simulatedFiles = [
     '/project/database/migrations/202606100001_browser_client_upload_settings.php',

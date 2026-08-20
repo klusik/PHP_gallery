@@ -12,7 +12,7 @@
  *
  * Responsibilities:
  *   - Define the supported responsive and progressive machine values in one place
- *   - Normalize persisted settings to a safe responsive default
+ *   - Normalize persisted settings to the progressive default
  *   - Persist only normalized public thumbnail rendering values through app_settings
  *   - Keep renderer selection out of the public gallery controller
  *   - Preserve the existing responsive loading policy and define the progressive small-first policy
@@ -31,7 +31,7 @@
  *   renderer elects to sharpen a visible or near-visible image.
  *
  * Invariants:
- *   - Responsive browser selection is always the default and fallback mode
+ *   - Progressive thumbnail sharpening is the default and fallback mode
  *   - Unknown, empty, malformed, or obsolete persisted values cannot select another renderer
  *   - Renderer selection changes only thumbnail picture markup and its loading policy
  *   - Access checks, card links, lightbox metadata, votes, maps, tags, pagination, manifest data, and warm-up
@@ -40,7 +40,7 @@
  *     the responsive helper; the site-level mode currently applies only to selected-gallery photo cards
  *
  * Fallback behavior:
- *   Missing settings and unsupported submitted values normalize to responsive. Progressive markup always keeps
+ *   Missing settings and unsupported submitted values normalize to progressive. Progressive markup always keeps
  *   a real server-rendered small image, so failed or unavailable JavaScript leaves a usable gallery rather than
  *   an empty placeholder.
  *
@@ -59,7 +59,7 @@
  *
  * Naming:
  *   Responsive and progressive are permanent architecture terms because both pipelines are intended to remain
- *   supported. The current Beta wording belongs only to the Admin-facing maturity label and is not a machine
+ *   supported. The Admin UI may describe renderer status, but that wording is not a machine
  *   value, setting key, function name, class name, filename, test identifier, or browser data marker.
  *
  * Author:
@@ -76,7 +76,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-08-09
+ *   2026-08-20
  */
 
 declare(strict_types=1);
@@ -86,7 +86,7 @@ namespace Gallery\Services;
 const PUBLIC_THUMBNAIL_RENDERING_SETTING_KEY = 'public_thumbnail_rendering_mode';
 const PUBLIC_THUMBNAIL_RENDERING_RESPONSIVE = 'responsive';
 const PUBLIC_THUMBNAIL_RENDERING_PROGRESSIVE = 'progressive';
-const PUBLIC_THUMBNAIL_RENDERING_DEFAULT = PUBLIC_THUMBNAIL_RENDERING_RESPONSIVE;
+const PUBLIC_THUMBNAIL_RENDERING_DEFAULT = PUBLIC_THUMBNAIL_RENDERING_PROGRESSIVE;
 
 /**
  * Return the permanent machine values accepted for public thumbnail rendering.
@@ -96,16 +96,16 @@ const PUBLIC_THUMBNAIL_RENDERING_DEFAULT = PUBLIC_THUMBNAIL_RENDERING_RESPONSIVE
 function public_thumbnail_rendering_modes(): array
 {
     return [
-        PUBLIC_THUMBNAIL_RENDERING_RESPONSIVE,
         PUBLIC_THUMBNAIL_RENDERING_PROGRESSIVE,
+        PUBLIC_THUMBNAIL_RENDERING_RESPONSIVE,
     ];
 }
 
 /**
  * Normalize an arbitrary persisted or submitted value to a supported renderer mode.
  *
- * Unsupported values intentionally fall back to responsive so corrupted, stale, or manually edited
- * app_settings rows can never opt visitors into a different rendering pipeline unexpectedly.
+ * Unsupported values intentionally fall back to progressive so corrupted, stale, or manually edited
+ * app_settings rows resolve to the current site default instead of selecting the legacy renderer unexpectedly.
  *
  * @param mixed $value Persisted or submitted rendering mode value.
  * @return string One of the supported public thumbnail rendering machine values.
@@ -137,7 +137,7 @@ function public_thumbnail_rendering_mode(): string
 /**
  * Persist a validated public thumbnail rendering mode through the application settings service.
  *
- * Invalid input is deliberately persisted as the safe responsive default instead of retaining an obsolete value.
+ * Invalid input is deliberately persisted as the progressive default instead of retaining an obsolete value.
  * This makes Admin POST handling deterministic while keeping validation and renderer fallback in one service.
  *
  * @param mixed $value Submitted rendering mode value.

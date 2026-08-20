@@ -46,7 +46,7 @@ namespace Gallery\Services {
     /** Normalize renderer values like the production helper. */
     function public_thumbnail_rendering_mode_normalize(mixed $value): string
     {
-        return is_string($value) && in_array(trim($value), public_thumbnail_rendering_modes(), true) ? trim($value) : 'responsive';
+        return is_string($value) && in_array(trim($value), public_thumbnail_rendering_modes(), true) ? trim($value) : 'progressive';
     }
 
     /** Return the configured site lightbox browsing default. */

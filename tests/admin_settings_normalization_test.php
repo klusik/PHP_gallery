@@ -11,7 +11,7 @@
  *   Verifies normalization boundaries used by centralized Admin Settings.
  *
  * Responsibilities:
- *   - Cover safe renderer fallback behavior
+ *   - Cover progressive renderer fallback behavior
  *   - Cover bounded browser-upload numeric normalization
  *   - Cover central site-name normalization
  *   - Ensure unknown central setting identifiers cannot be persisted
@@ -74,7 +74,7 @@ function assert_admin_settings_same(mixed $expected, mixed $actual, string $labe
 }
 
 assert_admin_settings_same('progressive', public_thumbnail_rendering_mode_save('progressive'), 'valid thumbnail mode persists');
-assert_admin_settings_same('responsive', public_thumbnail_rendering_mode_save('invalid'), 'invalid thumbnail mode uses safe fallback');
+assert_admin_settings_same('progressive', public_thumbnail_rendering_mode_save('invalid'), 'invalid thumbnail mode uses progressive fallback');
 
 $browser = browser_upload_normalize_settings([
     'enabled' => '1',
