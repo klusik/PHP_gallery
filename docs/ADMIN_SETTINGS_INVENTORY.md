@@ -17,7 +17,7 @@ The Settings work audited the requested sources and their effective owners:
 - `app/services/theme.php`: Theme defaults and normalization.
 - `app/services/pagination.php`: global/home/tag grid normalization and inheritance.
 - `app/services/gallery_description_layout.php`: global/tag/per-gallery card-layout normalization and fallback.
-- `app/services/public_thumbnail_rendering.php`: `responsive` / `progressive` renderer contract and safe fallback.
+- `app/services/public_thumbnail_rendering.php`: `responsive` / `progressive` renderer contract with progressive default/fallback and responsive legacy selection.
 - `app/services/gallery_lightbox_mode.php`: `single` / `picture_strip` / `3d_carousel` contract and per-gallery inheritance.
 - `app/views/admin_chrome.php`, `app/views/admin_dashboard.php`, `app/views/admin_dashboard_sections.php`: navigation and specialized settings surfaces.
 - `app/bootstrap.php`: route registration.
@@ -185,7 +185,7 @@ Maintenance run state, last-result and completion marker settings are runtime st
 2. Tag landing-page card layout inherits `theme_gallery_description_layout` when `tag_page_gallery_description_layout` is missing.
 3. Hero-tag settings are a separate Theme concern and never substitute for tag landing-page settings.
 4. Gallery description layout, lightbox mode and EXIF/GPS display can have per-gallery overrides. The central page displays the global fallback only and never rewrites per-gallery values.
-5. `public_thumbnail_rendering_mode` accepts only `responsive` and `progressive`; invalid/missing state falls back to `responsive`.
+5. `public_thumbnail_rendering_mode` accepts only `responsive` and `progressive`; invalid/missing state falls back to `progressive`, while `responsive` remains selectable as the legacy renderer.
 6. `theme_lightbox_browsing_mode` accepts only `single`, `picture_strip` and `3d_carousel`; invalid state falls back to `single` and the feature flag can force `single`.
 7. The viewer-language selector is independent from Admin language and the site-wide public default. Disabling the feature suppresses personal overrides; filtering its languages never removes maintained catalogs from administrative tools.
 8. Sensitive resources are represented only as status such as `Configured`, `Not configured` or `Specialized page only`.

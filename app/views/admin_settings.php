@@ -381,8 +381,8 @@ function view_admin_settings_option_label(string $id, string $value): string
 {
     if ($id === 'public_thumbnail_rendering_mode') {
         return $value === 'progressive'
-            ? t('admin.settings.thumbnail.progressive', 'Progressive')
-            : t('admin.settings.thumbnail.responsive', 'Responsive');
+            ? t('admin.settings.thumbnail.progressive', 'Progressive (Default)')
+            : t('admin.settings.thumbnail.responsive', 'Responsive (Legacy)');
     }
     if ($id === 'public_language') {
         // $languageStrings stores pack metadata so the central selector matches the Theme language selector.

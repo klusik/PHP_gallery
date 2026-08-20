@@ -1,6 +1,6 @@
 # PHP Gallery Database Documentation
 
-This document describes the database schema used by PHP Gallery as of application version 0.92.2. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
+This document describes the database schema used by PHP Gallery as of application version 0.92.3. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
 
 ## Database Engine
 
@@ -648,7 +648,7 @@ Browser-side uploads store their mutable admin configuration in `app_settings` t
 
 The Admin Settings hub does not introduce a table, column or migration. Scalar global settings continue to use their existing storage, primarily `app_settings`, while telemetry continues to use `telemetry_settings` and user/account integrations keep their existing account-specific tables. `app/services/admin_settings_registry.php` is application metadata, not persistent configuration.
 
-The hub does not rename keys or copy values. Missing and invalid values are still resolved by the owning service. In particular, tag landing-page grid keys inherit global pagination values, tag landing-page card layout inherits the global Theme card layout, the public thumbnail renderer falls back to `responsive`, and the lightbox default falls back to `single`. Per-gallery overrides remain in the `galleries` schema and are not flattened into global settings.
+The hub does not rename keys or copy values. Missing and invalid values are still resolved by the owning service. In particular, tag landing-page grid keys inherit global pagination values, tag landing-page card layout inherits the global Theme card layout, the public thumbnail renderer falls back to `progressive`, and the lightbox default falls back to `single`. Per-gallery overrides remain in the `galleries` schema and are not flattened into global settings.
 
 Sensitive values such as `password_reset_smtp_password`, site-maintenance cron tokens, OpenAI keys and upload API keys are never copied into a second table or rendered as raw central summaries. The central page stores no secret shadow values. Existing optional migrations still gate the specialized subsystem that owns them. For example, the central EXIF/GPS checkbox is editable only when the existing per-gallery EXIF/GPS override schema is ready.
 

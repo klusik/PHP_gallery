@@ -58,7 +58,7 @@
  *   main-thread time, with a bounded timeout preventing indefinitely postponed sharpening.
  *
  * Naming:
- *   Progressive is a permanent architecture term. The Admin interface currently marks the choice as Beta only as a
+ *   Progressive is a permanent architecture term. The Admin interface may add Default/Legacy status wording as a
  *   maturity label; implementation symbols, filenames, data markers, queue state, and tests use permanent terminology.
  *
  * Author:

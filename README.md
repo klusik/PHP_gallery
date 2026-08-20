@@ -2,7 +2,7 @@
 
 A modern PHP 8.0+ gallery CMS designed for ordinary shared hosting. The application uses the filesystem as the authoritative source for gallery structure, while storing all metadata, access rules, votes, user accounts, and audit logs in MySQL or MariaDB.
 
-**Current Version:** 0.92.2
+**Current Version:** 0.92.3
 
 **Key Benefit:** Deploy in minutes on shared hosting. No npm, no Composer, no framework overhead. Just PHP + MySQL.
 
@@ -32,7 +32,7 @@ A modern PHP 8.0+ gallery CMS designed for ordinary shared hosting. The applicat
 - **Automatic generation** - Create optimized thumbnails during import or on-demand
 - **Multiple formats** - JPEG and WebP variants for browser compatibility
 - **Responsive sizing** - Automatically serve appropriately-sized images for device
-- **Two public thumbnail renderers** - Responsive browser selection remains the default; selected-gallery photo cards can optionally use progressive small-first sharpening from Admin > Theme > Layout
+- **Two public thumbnail renderers** - Progressive small-first sharpening is the default; selected-gallery photo cards can optionally use the legacy responsive browser-selection pipeline from Admin > Theme > Layout
 - **Quality tuning** - Configurable JPEG quality with automatic size optimization
 - **DNG RAW support** - Generate display masters from DNG raw files
 - **Lazy loading** - Deferred thumbnail loading in fullscreen gallery
@@ -41,13 +41,13 @@ A modern PHP 8.0+ gallery CMS designed for ordinary shared hosting. The applicat
 
 #### Public thumbnail rendering modes
 
-The site-level `public_thumbnail_rendering_mode` setting controls photo cards inside a selected gallery and accepts only `responsive` or `progressive`. Missing or invalid values resolve to `responsive`. Gallery cover cards, subgallery collage cells, home-page gallery cards, and Admin thumbnails continue to use responsive browser selection.
+The site-level `public_thumbnail_rendering_mode` setting controls photo cards inside a selected gallery and accepts only `responsive` or `progressive`. Missing or invalid values resolve to `progressive`. Gallery cover cards, subgallery collage cells, home-page gallery cards, and Admin thumbnails continue to use responsive browser selection.
 
-**Responsive browser selection - Default** renders normal server-side `<picture>/<img>` markup with the complete available WebP/JPEG candidate set immediately. The browser can select among generated 300, 600, 800, and 960 px candidates, subject to actual derivatives and thumbnail bounds. It works fully without JavaScript.
+**Responsive browser selection - Legacy** renders normal server-side `<picture>/<img>` markup with the complete available WebP/JPEG candidate set immediately. The browser can select among generated 300, 600, 800, and 960 px candidates, subject to actual derivatives and thumbnail bounds. It works fully without JavaScript.
 
-**Progressive thumbnail sharpening - Beta** is the current Admin-facing label for the second permanent pipeline. PHP still renders a real small thumbnail, normally the 300 px derivative, plus semantic links and alt text. Larger candidates remain inert until the optional browser module sees a visible or near-visible card, measures it, and preloads/decodes the smallest adequate replacement. JavaScript-disabled visitors keep the functional small thumbnail.
+**Progressive thumbnail sharpening - Default** is the current Admin-facing label for the primary pipeline. PHP still renders a real small thumbnail, normally the 300 px derivative, plus semantic links and alt text. Larger candidates remain inert until the optional browser module sees a visible or near-visible card, measures it, and preloads/decodes the smallest adequate replacement. JavaScript-disabled visitors keep the functional small thumbnail.
 
-Progressive rendering prioritizes perceived initial responsiveness, not minimum total transfer. A visitor can download both the initial small thumbnail and a later larger replacement, so total transferred bytes can be higher than responsive mode even when the page feels ready sooner. The word Beta describes current Admin-facing maturity only; it is not part of setting keys, renderer identifiers, filenames, or architecture terminology.
+Progressive rendering prioritizes perceived initial responsiveness, not minimum total transfer. A visitor can download both the initial small thumbnail and a later larger replacement, so total transferred bytes can be higher than responsive mode even when the page feels ready sooner. Default and Legacy are Admin-facing status labels only; neither changes the permanent `progressive` and `responsive` machine values.
 
 ### Access Control
 - **Visibility modes** - Public, unpublished (admin-only), or private (password/token protected)
@@ -343,7 +343,7 @@ Use **Settings** in the Admin navigation as the central overview for important g
 
 The hub can directly edit only settings that already have a safe canonical service setter: site name, public language, URL rewrite, public search when available, the public thumbnail renderer, the global EXIF/GPS display default when its existing schema is ready, and development diagnostics. Theme layout, tag presentation, upload tuning, telemetry, Account credentials, language-pack editing, raw CSS, API keys, database tools and destructive maintenance remain on their existing specialized pages. Those pages remain fully supported and link back to the relevant Settings section.
 
-Version 0.92.2 is a focused lightbox reliability patch on top of Version 0.92.1. It hardens detached-image cleanup, decoded-cache ownership, preload generations, and teardown behavior during rapid navigation and close/reopen cycles while preserving the complete viewer-account, collection-sharing, benchmark, zoom, and protected-media foundation.
+Version 0.92.3 makes progressive thumbnail sharpening the default public photo-card renderer. It keeps the responsive renderer permanently available as a compatibility option, adds an idempotent default-setting migration, updates Admin wording and diagnostics, and preserves the full Version 0.92.2 viewer, benchmark, Smart Gallery, zoom, and protected-media foundation.
 
 Deep links use stable identifiers such as `?page=admin_settings&section=appearance#settings-appearance`. JavaScript tab changes update the complete query plus hash URL so Back/Forward and refresh preserve the selected section. Without JavaScript, the tab links load the same section as normal pages. See `docs/ADMIN_SETTINGS_INVENTORY.md` for canonical ownership, defaults, fallbacks, sensitivity and migration status.
 

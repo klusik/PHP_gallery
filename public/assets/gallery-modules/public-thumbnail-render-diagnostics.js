@@ -53,7 +53,7 @@
  *   passive, and no thumbnails are prefetched or decoded for diagnostics, so comparison does not perturb the renderer.
  *
  * Naming:
- *   Responsive and progressive remain permanent renderer names. Any Beta maturity wording belongs only to the Admin
+ *   Responsive and progressive remain permanent renderer names. Any Default/Legacy status wording belongs only to the Admin
  *   renderer selection UI and is intentionally absent from this module's identifiers and report schema.
  *
  * Author:
