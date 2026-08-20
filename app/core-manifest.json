@@ -1,6 +1,6 @@
 {
     "version": "0.92.1",
-    "generated_at": "2026-08-20T16:55:27+00:00",
+    "generated_at": "2026-08-20T17:40:46+00:00",
     "algorithm": "sha256",
     "hash_mode": "normalized-text-sha256",
     "files": {
@@ -373,7 +373,7 @@
         "public/assets/gallery-modules/lightbox-deferred.js": "sha256:50ba1faafe0747e913b6cf473cdac813a9499c807604fec056fcae26739056ea",
         "public/assets/gallery-modules/lightbox-votes.js": "sha256:4eebd33ec0dd0147e92a28543d20db78c11350c160f9e443e0f4852d8f8b4bfb",
         "public/assets/gallery-modules/lightbox-zoom-model.js": "sha256:d7a4924eedc75170d23bb318e36d34ca618db400fa731371e91899a3cc670fb1",
-        "public/assets/gallery-modules/lightbox.js": "sha256:e26c33d354baf109637c5624a4507f9dcb0eae7d8e53eb1fafcced1b1582f0a0",
+        "public/assets/gallery-modules/lightbox.js": "sha256:087107328092fa824377f37e5ee18589d6c96ccf51273431ad2cd4a3b39cff71",
         "public/assets/gallery-modules/picture-manager.js": "sha256:9e75f3080a1ee47781b25e0e55bd856084ddf8536ca74fa156cff35a46194e6e",
         "public/assets/gallery-modules/progressive-thumbnail-renderer.js": "sha256:bbd0a1d92d1f89caf20c5c3a889373012cf80ce290842f96a7cffd808a647d5c",
         "public/assets/gallery-modules/progressive-thumbnail-upgrade.js": "sha256:fdad18cef045566142167f9dd146e3d1897a0a195321d418609f93d01858cfc5",
