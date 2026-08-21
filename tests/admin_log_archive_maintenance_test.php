@@ -14,7 +14,7 @@
  *   - Validate supported live-retention choices and complete-day boundaries
  *   - Confirm daily ZIP naming and immutable filesystem layout
  *   - Confirm archive creation is streamed, verified, and published before DB cleanup
- *   - Confirm normal page loads use a lightweight 24-hour request counter and lock
+ *   - Confirm authenticated Admin page loads use a lightweight 24-hour request counter and lock
  *   - Confirm the Admin Logs page exposes retention, manual maintenance, and archive-file actions
  *   - Confirm archive ZIPs are never automatically deleted
  *
@@ -130,9 +130,9 @@ assert_admin_log_archive_maintenance(
 );
 assert_admin_log_archive_maintenance(
     str_contains($bootstrapSource, 'admin_log_archive_register_request_trigger($page)')
-        && str_contains($archiveServiceSource, "['home', 'gallery', 'share', 'tag', 'admin', 'admin_logs']")
+        && str_contains($archiveServiceSource, "['admin', 'admin_logs']")
         && str_contains($archiveServiceSource, 'register_shutdown_function'),
-    'Normal page loads must register due archive work only for suitable page requests and execute it after response.'
+    'Only authenticated Admin page loads may register due archive work, and it must execute after response.'
 );
 assert_admin_log_archive_maintenance(
     str_contains($bootstrapSource, "'admin_log_archive_maintenance' =>")

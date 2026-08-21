@@ -1926,8 +1926,38 @@ function application_update_job_finalize(array &$job): void
     }
 
     $version = application_update_version_from_local_bootstrap($root . '/app/bootstrap.php') ?? (string) ($job['checkpoints']['validated_version'] ?? '');
+    $reportedVersion = $operation === 'beta_install' ? (string) ($job['parameters']['commit'] ?? $version) : $version;
+
+    // Request-local metadata caches are cheap to invalidate immediately. Persistent
+    // version-sensitive cache directories are atomically moved out of their canonical
+    // locations and physically deleted later by the bounded cleanup stage.
+    $runtimeCacheActions = [];
+    foreach ([
+        'translation_runtime' => __NAMESPACE__ . '\\translation_clear_runtime_cache',
+        'content_localization_request' => __NAMESPACE__ . '\\content_localization_reset_request_cache',
+        'schema_inspection_request' => __NAMESPACE__ . '\\schema_inspection_reset_request_cache',
+        'legacy_schema_request' => __NAMESPACE__ . '\\db_schema_helper_reset_request_cache',
+        'smart_gallery_graph_request' => __NAMESPACE__ . '\\smart_gallery_graph_cache_clear',
+        'thumbnail_maintenance_summary' => __NAMESPACE__ . '\\thumbnail_maintenance_summary_cache_clear',
+        'admin_storage_statistics' => __NAMESPACE__ . '\\admin_storage_statistics_cache_clear',
+        'gallery_map_runtime' => __NAMESPACE__ . '\\gallery_map_cache_clear_all',
+    ] as $cacheName => $callback) {
+        if (!function_exists($callback)) {
+            $runtimeCacheActions[$cacheName] = 'unavailable';
+            continue;
+        }
+        try {
+            $callback();
+            $runtimeCacheActions[$cacheName] = 'cleared';
+        } catch (Throwable) {
+            $runtimeCacheActions[$cacheName] = 'failed';
+        }
+    }
+    clearstatcache(true);
+    $persistentCacheInvalidation = application_update_invalidate_persistent_caches($root, (string) $job['id'], $reportedVersion);
+
     $job['result'] = array_merge((array) ($job['result'] ?? []), [
-        'version' => $operation === 'beta_install' ? (string) ($job['parameters']['commit'] ?? $version) : $version,
+        'version' => $reportedVersion,
         'branch' => $operation === 'beta_install' ? 'beta' : ($operation === 'rollback' ? 'rollback' : (string) ($job['parameters']['branch'] ?? 'stable')),
         'rollback_of' => $operation === 'rollback' ? (string) ($job['parameters']['source_job_id'] ?? '') : '',
         'files_copied' => (int) ($job['checkpoints']['activated_files'] ?? 0),
@@ -1935,29 +1965,215 @@ function application_update_job_finalize(array &$job): void
         'removed_count' => count((array) ($job['checkpoints']['obsolete_paths'] ?? [])),
         'backup' => 'cache/updates/jobs/' . (string) $job['id'] . '/rollback',
         'migrations' => array_values((array) ($job['result']['migrations'] ?? [])),
+        'cache_invalidation' => [
+            'runtime' => $runtimeCacheActions,
+            'persistent' => $persistentCacheInvalidation,
+        ],
     ]);
     $job['checkpoints']['finalized'] = true;
     application_update_save_job($job);
 }
 
 /**
- * Remove transient package and extraction artifacts while preserving rollback data.
+ * Stage current-job transient payloads for bounded deletion without touching rollback data.
  *
- * @param array $job Job state, updated by reference.
+ * @return array{ok:bool,moved:int}
  */
-function application_update_job_cleanup(array &$job): void
+function application_update_stage_current_job_cleanup_artifacts(array $job): array
 {
-    $jobDir = application_update_job_dir((string) $job['id']);
-    foreach ([$jobDir . '/extract', $jobDir . '/ready'] as $path) {
-        if (is_dir($path)) {
-            application_update_remove_path($path);
+    $jobId = (string) ($job['id'] ?? '');
+    $jobDir = application_update_job_dir($jobId);
+    $trashRoot = application_update_prune_trash_root(application_update_project_root())
+        . DIRECTORY_SEPARATOR . 'current'
+        . DIRECTORY_SEPARATOR . $jobId;
+    $moved = 0;
+    $ok = true;
+
+    foreach (['extract', 'ready'] as $name) {
+        $source = $jobDir . DIRECTORY_SEPARATOR . $name;
+        $target = $trashRoot . DIRECTORY_SEPARATOR . $name;
+        if ((is_dir($source) || is_link($source)) && !application_update_stage_path_for_prune($source, $target)) {
+            $ok = false;
+        } elseif (file_exists($target) || is_link($target)) {
+            $moved++;
         }
     }
-    if (is_file($jobDir . '/package.zip')) {
-        @unlink($jobDir . '/package.zip');
+
+    $packageSource = $jobDir . DIRECTORY_SEPARATOR . 'package.zip';
+    $packageTarget = $trashRoot . DIRECTORY_SEPARATOR . 'package.zip';
+    if (is_file($packageSource) && !application_update_stage_path_for_prune($packageSource, $packageTarget)) {
+        $ok = false;
+    } elseif (is_file($packageTarget)) {
+        $moved++;
     }
-    $job['checkpoints']['cleanup_complete'] = true;
+
+    return ['ok' => $ok, 'moved' => $moved];
+}
+
+/**
+ * Return update-job identifiers that must not be pruned during this cleanup pass.
+ *
+ * @return array<string,bool> Protected job identifiers.
+ */
+function application_update_prune_protected_job_ids(array $job): array
+{
+    $protected = [];
+    $currentId = (string) ($job['id'] ?? '');
+    if ($currentId !== '') {
+        $protected[$currentId] = true;
+    }
+    $active = application_update_active_job();
+    if (is_array($active) && !empty($active['id'])) {
+        $protected[(string) $active['id']] = true;
+    }
+    $last = application_update_last_job();
+    if (is_array($last) && !empty($last['id'])) {
+        $protected[(string) $last['id']] = true;
+    }
+    $sourceJobId = (string) ($job['parameters']['source_job_id'] ?? '');
+    if ($sourceJobId !== '') {
+        $protected[$sourceJobId] = true;
+    }
+    $betaBackup = trim((string) app_setting('application_update_beta_backup_path', ''));
+    if (preg_match('#^cache/updates/jobs/(\d{14}-[a-f0-9]{12})/rollback/?$#', str_replace('\\', '/', $betaBackup), $match) === 1) {
+        $protected[$match[1]] = true;
+    }
+    return $protected;
+}
+
+/**
+ * Return whether an inactive historical update job is eligible for physical pruning.
+ */
+function application_update_job_prune_eligible(array $candidate, int $fallbackMtime): bool
+{
+    $status = (string) ($candidate['status'] ?? '');
+    $timestamp = max(
+        (int) ($candidate['finished_at'] ?? 0),
+        (int) ($candidate['updated_at'] ?? 0),
+        $fallbackMtime
+    );
+    $age = max(0, time() - $timestamp);
+
+    if ($status === 'completed') {
+        return true;
+    }
+    if (in_array($status, ['cancelled', 'failed'], true)) {
+        return $age >= 7 * 86400;
+    }
+    // Preserve recent orphaned/running state for manual recovery. Truly abandoned
+    // non-active workspaces are eventually reclaimable instead of living forever.
+    return $status === 'running' && $age >= 30 * 86400;
+}
+
+/**
+ * Atomically stage obsolete updater job directories for bounded deletion.
+ *
+ * @return array{moved:int,remaining:bool}
+ */
+function application_update_stage_stale_jobs_for_prune(array $job, int $maxMoves = 20): array
+{
+    $jobsRoot = application_update_jobs_root() . DIRECTORY_SEPARATOR . 'jobs';
+    if (!is_dir($jobsRoot)) {
+        return ['moved' => 0, 'remaining' => false];
+    }
+    $protected = application_update_prune_protected_job_ids($job);
+    $trashRoot = application_update_prune_trash_root(application_update_project_root()) . DIRECTORY_SEPARATOR . 'jobs';
+    $moved = 0;
+    $remaining = false;
+
+    foreach ((array) @scandir($jobsRoot) as $jobId) {
+        if (!is_string($jobId) || preg_match('/^\d{14}-[a-f0-9]{12}$/', $jobId) !== 1 || isset($protected[$jobId])) {
+            continue;
+        }
+        $source = $jobsRoot . DIRECTORY_SEPARATOR . $jobId;
+        if (!is_dir($source)) {
+            continue;
+        }
+        $candidate = application_update_read_json($source . DIRECTORY_SEPARATOR . 'job.json');
+        $fallbackMtime = (int) (@filemtime($source) ?: time());
+        if ($candidate !== [] && !application_update_job_prune_eligible($candidate, $fallbackMtime)) {
+            continue;
+        }
+        if ($candidate === [] && time() - $fallbackMtime < 30 * 86400) {
+            continue;
+        }
+        if ($moved >= max(1, $maxMoves)) {
+            $remaining = true;
+            continue;
+        }
+        $target = $trashRoot . DIRECTORY_SEPARATOR . $jobId;
+        if (application_update_stage_path_for_prune($source, $target)) {
+            $moved++;
+        } else {
+            $remaining = true;
+        }
+    }
+
+    return ['moved' => $moved, 'remaining' => $remaining];
+}
+
+/**
+ * Remove transient update artifacts and historical cache debt in bounded slices.
+ *
+ * Current-package/extraction data and version-sensitive cache paths have already been
+ * atomically moved out of live locations. Physical deletion is deliberately capped to
+ * a small slice even when the surrounding updater worker has a larger request budget.
+ *
+ * @param array $job Job state, updated by reference.
+ * @param array $budget Worker wall-clock budget.
+ * @return bool True when the post-update prune queue is empty.
+ */
+function application_update_job_cleanup(array &$job, array $budget): bool
+{
+    $current = application_update_stage_current_job_cleanup_artifacts($job);
+    $staleJobs = application_update_stage_stale_jobs_for_prune($job, 20);
+    $legacy = application_update_stage_legacy_cache_artifacts(application_update_project_root(), 12);
+
+    $remainingBudget = max(0.01, (float) ($budget['deadline'] ?? microtime(true)) - microtime(true) - 0.35);
+    $sliceSeconds = min(0.18, $remainingBudget);
+    $delete = application_update_delete_tree_slice(
+        application_update_prune_trash_root(application_update_project_root()),
+        180,
+        $sliceSeconds
+    );
+
+    $job['checkpoints']['cache_cleanup_removed_entries'] = (int) ($job['checkpoints']['cache_cleanup_removed_entries'] ?? 0) + (int) ($delete['removed'] ?? 0);
+    $job['checkpoints']['cache_cleanup_slices'] = (int) ($job['checkpoints']['cache_cleanup_slices'] ?? 0) + 1;
+    $job['result']['cache_cleanup'] = [
+        'strategy' => 'bounded updater-owned prune slices',
+        'removed_entries' => (int) $job['checkpoints']['cache_cleanup_removed_entries'],
+        'stale_jobs_staged_this_slice' => (int) ($staleJobs['moved'] ?? 0),
+        'legacy_artifacts_staged_this_slice' => (int) ($legacy['moved'] ?? 0),
+        'trash_empty' => (bool) ($delete['done'] ?? false),
+        'slice_elapsed_ms' => (float) ($delete['elapsed_ms'] ?? 0.0),
+        'per_slice_entry_cap' => 180,
+        'per_slice_wall_clock_cap_ms' => 180,
+        'slices' => (int) $job['checkpoints']['cache_cleanup_slices'],
+        'max_slices_before_defer' => 20,
+    ];
+    $job['progress'] = [
+        'current' => (int) $job['checkpoints']['cache_cleanup_removed_entries'],
+        'total' => 0,
+        'percent' => 99,
+        'message' => 'Pruning stale update and application cache artifacts in a bounded slice.',
+        'unit' => 'cache entries',
+    ];
+
+    $complete = !empty($current['ok'])
+        && empty($staleJobs['remaining'])
+        && empty($legacy['remaining'])
+        && !empty($delete['done']);
+    $deferred = !$complete && (int) $job['checkpoints']['cache_cleanup_slices'] >= 20;
+    if ($complete || $deferred) {
+        $job['checkpoints']['cleanup_complete'] = true;
+        $job['result']['cache_cleanup']['completed'] = true;
+        $job['result']['cache_cleanup']['deferred_remaining_trash'] = $deferred;
+    }
+    if ($deferred) {
+        $complete = true;
+    }
     application_update_save_job($job);
+    return $complete;
 }
 
 /**
@@ -2052,7 +2268,9 @@ function application_update_process_job(string $jobId, float $budgetSeconds = 8.
                 application_update_job_finalize($job);
                 $next = 'cleanup';
             } elseif ($stage === 'cleanup') {
-                application_update_job_cleanup($job);
+                if (!application_update_job_cleanup($job, $budget)) {
+                    break;
+                }
                 $next = 'completed';
             } elseif ($stage === 'completed') {
                 $job['status'] = 'completed';

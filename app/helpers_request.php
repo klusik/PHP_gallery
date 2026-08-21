@@ -336,6 +336,9 @@ function sanitize_login_return_target(string $target, string $fallback = ''): st
  */
 function url_for(string $page, array $params = []): string
 {
+    if ($page === 'home' && $params === [] && url_rewrite_should_emit_clean_urls()) {
+        return base_url();
+    }
     if ($page === 'viewer_register' && $params === [] && url_rewrite_should_emit_clean_urls()) {
         return base_url('viewer/register');
     }

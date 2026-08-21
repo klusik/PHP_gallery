@@ -929,17 +929,100 @@ function cached_thumbnail_maintenance_summary_if_available(?array $galleryIds = 
 
 /**
  * Invalidate cached thumbnail maintenance summaries after cache files change.
+ *
+ * @param ?array<string,mixed> $diagnostics Optional Test Run timing payload populated only when explicitly requested.
  */
-function thumbnail_maintenance_summary_cache_clear(): void
+function thumbnail_maintenance_summary_cache_clear(?array &$diagnostics = null): void
 {
-    set_app_setting('thumbnail_maintenance_summary_generation', sprintf('%.6F', microtime(true)));
-    delete_app_settings([THUMBNAIL_MAINTENANCE_LAST_CHECK_SETTING]);
-    if (function_exists('Gallery\\Services\\admin_storage_statistics_cache_clear')) {
-        admin_storage_statistics_cache_clear();
+    $diagnosticMode = $diagnostics !== null;
+    $started = $diagnosticMode ? microtime(true) : 0.0;
+    $steps = [];
+
+    $stepStarted = $diagnosticMode ? microtime(true) : 0.0;
+    $completed = false;
+    try {
+        set_app_setting('thumbnail_maintenance_summary_generation', sprintf('%.6F', microtime(true)));
+        $completed = true;
+    } finally {
+        if ($diagnosticMode) {
+            $steps['set_generation_setting'] = [
+                'available' => true,
+                'completed' => $completed,
+                'elapsed_ms' => (microtime(true) - $stepStarted) * 1000,
+            ];
+        }
     }
-    if (function_exists('Gallery\\Services\\gallery_map_cache_clear_all')) {
-        gallery_map_cache_clear_all();
+
+    $stepStarted = $diagnosticMode ? microtime(true) : 0.0;
+    $completed = false;
+    try {
+        delete_app_settings([THUMBNAIL_MAINTENANCE_LAST_CHECK_SETTING]);
+        $completed = true;
+    } finally {
+        if ($diagnosticMode) {
+            $steps['delete_last_check_setting'] = [
+                'available' => true,
+                'completed' => $completed,
+                'elapsed_ms' => (microtime(true) - $stepStarted) * 1000,
+            ];
+        }
     }
+
+    $stepStarted = $diagnosticMode ? microtime(true) : 0.0;
+    $available = function_exists('Gallery\\Services\\admin_storage_statistics_cache_clear');
+    $completed = false;
+    try {
+        if ($available) {
+            admin_storage_statistics_cache_clear();
+        }
+        $completed = true;
+    } finally {
+        if ($diagnosticMode) {
+            $steps['admin_storage_statistics_cache_clear'] = [
+                'available' => $available,
+                'completed' => $completed,
+                'elapsed_ms' => (microtime(true) - $stepStarted) * 1000,
+            ];
+        }
+    }
+
+    $stepStarted = $diagnosticMode ? microtime(true) : 0.0;
+    $available = function_exists('Gallery\\Services\\gallery_map_cache_clear_all');
+    $completed = false;
+    try {
+        if ($available) {
+            gallery_map_cache_clear_all();
+        }
+        $completed = true;
+    } finally {
+        if ($diagnosticMode) {
+            $steps['gallery_map_cache_clear_all'] = [
+                'available' => $available,
+                'completed' => $completed,
+                'elapsed_ms' => (microtime(true) - $stepStarted) * 1000,
+            ];
+        }
+    }
+
+    if ($diagnosticMode) {
+        $diagnostics = [
+            'mode' => 'test_run_nested_timing',
+            'steps' => $steps,
+            'total_ms' => (microtime(true) - $started) * 1000,
+        ];
+    }
+}
+
+/**
+ * Invalidate the thumbnail-maintenance summary cache and return nested timing only for Admin Test Run diagnostics.
+ *
+ * @return array<string,mixed>
+ */
+function thumbnail_maintenance_summary_cache_clear_diagnostic(): array
+{
+    $diagnostics = [];
+    thumbnail_maintenance_summary_cache_clear($diagnostics);
+    return $diagnostics;
 }
 
 /**

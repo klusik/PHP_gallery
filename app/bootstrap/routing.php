@@ -40,6 +40,25 @@ use function Gallery\Services\find_gallery_by_public_path;
 use function Gallery\Services\resolve_public_gallery_path;
 
 /**
+ * Return true for GET/HEAD-style media asset routes that never need to mutate session state.
+ *
+ * These routes still execute the normal PHP authorization policy. The predicate
+ * only allows the bootstrap to release the exclusive PHP session lock before
+ * database/path/derivative work begins.
+ */
+function cms_route_is_read_only_media_asset(string $page): bool
+{
+    return in_array($page, [
+        'thumb',
+        'public_thumb',
+        'media',
+        'public_media',
+        'gallery_cover_asset',
+        'gallery_branding_asset',
+    ], true);
+}
+
+/**
  * Convert either query-string routes or simple pretty URLs into a page name.
  *
  * Query-string routes remain compatible. Pretty URLs are a convenience layer

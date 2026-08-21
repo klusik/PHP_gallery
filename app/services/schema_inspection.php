@@ -43,6 +43,7 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 use InvalidArgumentException;
+use PDO;
 use PDOException;
 use Throwable;
 use function Gallery\Core\db;
@@ -68,6 +69,21 @@ const SCHEMA_INSPECTION_DIAGNOSTIC_FAILED = 'Database schema inspection failed.'
  * @return array<string,array<string,string>> Results keyed by object identity.
  */
 function &schema_inspection_request_cache(): array
+{
+    static $cache = [];
+    return $cache;
+}
+
+/**
+ * Return request-local bulk table/column metadata snapshots by reference.
+ *
+ * Snapshots are optional accelerators for high-fanout read-only requests. A
+ * table key exists only after one successful bulk information_schema query, so
+ * inspection failures never turn unknown schema state into confirmed absence.
+ *
+ * @return array<string,array{exists:bool,columns:array<string,array{column_type:string,is_nullable:bool}>}>
+ */
+function &schema_inspection_table_snapshot_cache(): array
 {
     static $cache = [];
     return $cache;
@@ -115,6 +131,157 @@ function schema_inspection_reset_request_cache(): void
 {
     $cache = &schema_inspection_request_cache();
     $cache = [];
+    $snapshots = &schema_inspection_table_snapshot_cache();
+    $snapshots = [];
+}
+
+/**
+ * Commit validated bulk table/column metadata to the request-local snapshot.
+ *
+ * The helper is intentionally separate from PDO execution so focused tests can
+ * verify snapshot semantics without requiring MySQL. Requested tables with no
+ * returned columns are recorded as confirmed missing only after the surrounding
+ * bulk query itself completed successfully.
+ *
+ * @param array<int,string> $tables Requested table names.
+ * @param array<int,array<string,mixed>> $rows information_schema.COLUMNS rows.
+ */
+function schema_inspection_store_table_snapshots(array $tables, array $rows): void
+{
+    $validated = [];
+    foreach (array_slice(array_values(array_unique($tables)), 0, 24) as $table) {
+        $validated[] = schema_inspection_validate_identifier((string) $table, 'table');
+    }
+    if ($validated === []) {
+        return;
+    }
+
+    $requested = array_fill_keys($validated, true);
+    $built = [];
+    foreach ($validated as $table) {
+        $built[$table] = ['exists' => false, 'columns' => []];
+    }
+    foreach ($rows as $row) {
+        if (!is_array($row)) {
+            continue;
+        }
+        $table = (string) ($row['TABLE_NAME'] ?? $row['table_name'] ?? '');
+        $column = (string) ($row['COLUMN_NAME'] ?? $row['column_name'] ?? '');
+        if (!isset($requested[$table])) {
+            continue;
+        }
+        try {
+            $column = schema_inspection_validate_identifier($column, 'column');
+        } catch (InvalidArgumentException) {
+            continue;
+        }
+        $built[$table]['exists'] = true;
+        $built[$table]['columns'][$column] = [
+            'column_type' => (string) ($row['COLUMN_TYPE'] ?? $row['column_type'] ?? ''),
+            'is_nullable' => strtoupper((string) ($row['IS_NULLABLE'] ?? $row['is_nullable'] ?? 'NO')) === 'YES',
+        ];
+    }
+
+    $snapshots = &schema_inspection_table_snapshot_cache();
+    foreach ($built as $table => $snapshot) {
+        $snapshots[$table] = $snapshot;
+    }
+}
+
+/**
+ * Prime bounded table/column snapshots with one information_schema round-trip.
+ *
+ * Existing request snapshots are reused. When PDO metadata inspection fails the
+ * cache is left untouched and all normal object-level inspection functions keep
+ * their original retry/fail-closed behavior.
+ *
+ * @param array<int,string> $tables Table names used by the current request path.
+ * @return bool True when every requested table is represented by a snapshot.
+ */
+function schema_inspection_prime_table_snapshots(array $tables): bool
+{
+    $validated = [];
+    foreach (array_slice(array_values(array_unique($tables)), 0, 24) as $table) {
+        $validated[] = schema_inspection_validate_identifier((string) $table, 'table');
+    }
+    if ($validated === []) {
+        return true;
+    }
+
+    $snapshots = &schema_inspection_table_snapshot_cache();
+    $missing = array_values(array_filter($validated, static fn (string $table): bool => !array_key_exists($table, $snapshots)));
+    if ($missing === []) {
+        return true;
+    }
+
+    $override = &schema_inspection_query_executor_override();
+    if (is_callable($override)) {
+        return false;
+    }
+
+    try {
+        $placeholders = implode(',', array_fill(0, count($missing), '?'));
+        $statement = db()->prepare(
+            'SELECT TABLE_NAME, COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE '
+            . 'FROM information_schema.COLUMNS '
+            . 'WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN (' . $placeholders . ') '
+            . 'ORDER BY TABLE_NAME, ORDINAL_POSITION'
+        );
+        $statement->execute($missing);
+        $rows = $statement->fetchAll(PDO::FETCH_ASSOC);
+        schema_inspection_store_table_snapshots($missing, is_array($rows) ? $rows : []);
+    } catch (Throwable) {
+        return false;
+    }
+
+    foreach ($validated as $table) {
+        if (!array_key_exists($table, $snapshots)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/**
+ * Return a snapshotted table existence answer, or null when not primed.
+ */
+function schema_inspection_snapshot_table_exists(string $table): ?bool
+{
+    $table = schema_inspection_validate_identifier($table, 'table');
+    $snapshots = &schema_inspection_table_snapshot_cache();
+    if (!array_key_exists($table, $snapshots)) {
+        return null;
+    }
+    return (bool) $snapshots[$table]['exists'];
+}
+
+/**
+ * Return a snapshotted column existence answer, or null when not primed.
+ */
+function schema_inspection_snapshot_column_exists(string $table, string $column): ?bool
+{
+    $metadata = schema_inspection_snapshot_column_metadata($table, $column);
+    if ($metadata === null) {
+        $tableExists = schema_inspection_snapshot_table_exists($table);
+        return $tableExists === null ? null : false;
+    }
+    return true;
+}
+
+/**
+ * Return snapshotted column metadata, or null when absent/unprimed.
+ *
+ * @return ?array{column_type:string,is_nullable:bool}
+ */
+function schema_inspection_snapshot_column_metadata(string $table, string $column): ?array
+{
+    $table = schema_inspection_validate_identifier($table, 'table');
+    $column = schema_inspection_validate_identifier($column, 'column');
+    $snapshots = &schema_inspection_table_snapshot_cache();
+    if (!isset($snapshots[$table]['columns'][$column])) {
+        return null;
+    }
+    return $snapshots[$table]['columns'][$column];
 }
 
 /**
@@ -296,6 +463,18 @@ function schema_inspection_column_definition_contains(string $table, string $col
         return $cache[$cacheKey];
     }
 
+    $snapshotMetadata = schema_inspection_snapshot_column_metadata($table, $column);
+    if ($snapshotMetadata !== null) {
+        $exists = str_contains(strtolower((string) $snapshotMetadata['column_type']), strtolower($token));
+        $cache[$cacheKey] = schema_inspection_result(
+            $exists ? SCHEMA_INSPECTION_AVAILABLE : SCHEMA_INSPECTION_MISSING,
+            SCHEMA_INSPECTION_OBJECT_COLUMN,
+            $table,
+            $column
+        );
+        return $cache[$cacheKey];
+    }
+
     try {
         $override = &schema_inspection_query_executor_override();
         if (is_callable($override)) {
@@ -361,6 +540,17 @@ function schema_inspection_column_nullable(string $table, string $column): array
         return $cache[$cacheKey];
     }
 
+    $snapshotMetadata = schema_inspection_snapshot_column_metadata($table, $column);
+    if ($snapshotMetadata !== null) {
+        $cache[$cacheKey] = schema_inspection_result(
+            !empty($snapshotMetadata['is_nullable']) ? SCHEMA_INSPECTION_AVAILABLE : SCHEMA_INSPECTION_MISSING,
+            SCHEMA_INSPECTION_OBJECT_COLUMN,
+            $table,
+            $column
+        );
+        return $cache[$cacheKey];
+    }
+
     try {
         $override = &schema_inspection_query_executor_override();
         if (is_callable($override)) {
@@ -413,6 +603,22 @@ function schema_inspection_object(string $objectType, string $table, string $obj
     $cacheKey = $objectType . ':' . $table . ':' . $object;
     $cache = &schema_inspection_request_cache();
     if (isset($cache[$cacheKey])) {
+        return $cache[$cacheKey];
+    }
+
+    $snapshotExists = null;
+    if ($objectType === SCHEMA_INSPECTION_OBJECT_TABLE) {
+        $snapshotExists = schema_inspection_snapshot_table_exists($table);
+    } elseif ($objectType === SCHEMA_INSPECTION_OBJECT_COLUMN) {
+        $snapshotExists = schema_inspection_snapshot_column_exists($table, $object);
+    }
+    if ($snapshotExists !== null) {
+        $cache[$cacheKey] = schema_inspection_result(
+            $snapshotExists ? SCHEMA_INSPECTION_AVAILABLE : SCHEMA_INSPECTION_MISSING,
+            $objectType,
+            $table,
+            $object
+        );
         return $cache[$cacheKey];
     }
 

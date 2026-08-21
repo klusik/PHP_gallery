@@ -75,6 +75,7 @@ import { setupAdminDuplicatePhotoDetector } from './gallery-modules/admin-duplic
 import { setupAdminStorageStatistics } from './gallery-modules/admin-storage-statistics.js?v=20260608-storage-statistics-v1';
 import { setupAdminGalleryReport } from './gallery-modules/admin-gallery-report.js?v=20260615-admin-gallery-report-v1';
 import { setupAdminGalleryBenchmark } from './gallery-modules/admin-gallery-benchmark.js?v=20260820-benchmark-diagnostics-v4.2';
+import { setupAdminTestRun } from './gallery-modules/admin-test-run.js?v=20260821-admin-test-run-v1.1.3';
 import { setupPublicThumbnailRenderDiagnostics } from './gallery-modules/public-thumbnail-render-diagnostics.js?v=20260809-thumbnail-render-diagnostics-v1';
 import { setupVoteForms } from './gallery-modules/votes.js?v=20260512-lightbox-vote-clone-widget-v6';
 import { setupViewerFavourites } from './gallery-modules/viewer-favourites.js?v=20260818-viewer-favourites-v1';
@@ -146,6 +147,7 @@ function bootGalleryBrowserFeatures() {
     setupAdminStorageStatistics();
     setupAdminGalleryReport();
     setupAdminGalleryBenchmark();
+    setupAdminTestRun();
     setupPublicThumbnailRenderDiagnostics();
     setupGalleryBulkDeleteConfirmation();
     setupImageBulkDeleteConfirmation();

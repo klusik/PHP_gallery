@@ -135,6 +135,9 @@ require_once __DIR__ . '/services/logs.php';
 require_once __DIR__ . '/services/admin_log_archives.php';
 // Load gallery benchmark helpers after logs so benchmark runs can be recorded as support artifacts.
 require_once __DIR__ . '/services/gallery_benchmark.php';
+// Load opt-in full Admin test-run diagnostics after benchmark/log helpers and before maintenance triggers.
+require_once __DIR__ . '/services/admin_test_runs.php';
+require_once __DIR__ . '/services/admin_test_run_analysis.php';
 // Load scheduled site maintenance after logs, thumbnails, downloads, and cleanup helpers are available.
 require_once __DIR__ . '/services/site_maintenance.php';
 // Load durable login helpers before authentication controllers restore expired PHP sessions.

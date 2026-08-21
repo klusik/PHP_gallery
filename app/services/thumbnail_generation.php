@@ -612,7 +612,9 @@ function thumbnail_ensure_image_thumbnail_variant_file(array $image, array $gall
         }
     }
 
-    if (function_exists('Gallery\\Services\\thumbnail_metadata_record_file')) {
+    $metadataCurrent = function_exists('Gallery\\Services\\thumbnail_metadata_has_renderable_variant')
+        && thumbnail_metadata_has_renderable_variant($image, $size, $format);
+    if (!$metadataCurrent && function_exists('Gallery\\Services\\thumbnail_metadata_record_file')) {
         try {
             thumbnail_metadata_record_file($image, $gallery, $size, $format, $path, image_abs_path($image, $gallery), false);
         } catch (Throwable) {

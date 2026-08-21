@@ -149,6 +149,12 @@ function feature_flag_definitions(): array
             'label' => t('admin.features.telemetry.label', 'Anonymous telemetry'),
             'description' => t('admin.features.telemetry.description', 'Anonymous usage collection script, ingestion endpoint, and admin telemetry reports.'),
         ],
+        'admin_test_runs' => [
+            'group' => 'admin_tools',
+            'label' => t('admin.features.admin_test_runs.label', 'Enable test runs for admins'),
+            'description' => t('admin.features.admin_test_runs.description', 'Shows an Admin-only Test run control on gallery pages. A run performs bounded deep diagnostics, clears safe caches, traces PHP/database/process/cache/concurrency state, and stores a downloadable report. Disabled by default.'),
+            'default_enabled' => false,
+        ],
     ];
 }
 
@@ -391,6 +397,11 @@ function feature_flag_route_map(): array
         'telemetry_ingest' => 'telemetry',
         'usage_collect' => 'telemetry',
         'admin_viewer_invitations' => 'viewer_accounts',
+        'admin_test_run_start' => 'admin_test_runs',
+        'admin_test_run_probe' => 'admin_test_runs',
+        'admin_test_run_finish' => 'admin_test_runs',
+        'admin_test_run_finalize' => 'admin_test_runs',
+        'admin_test_run_download' => 'admin_test_runs',
     ];
 }
 

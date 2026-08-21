@@ -59,6 +59,12 @@ function cms_start_session(array $config): void
             'httponly' => true,
             'samesite' => 'Lax',
         ]);
+        if (function_exists('Gallery\\Services\\admin_test_run_mark')) {
+            \Gallery\Services\admin_test_run_mark('session_start_begin', [
+                'cookie_present' => isset($_COOKIE[session_name()]),
+                'save_handler' => (string) ini_get('session.save_handler'),
+            ]);
+        }
         if (function_exists('Gallery\\Services\\gallery_benchmark_trace_mark')) {
             \Gallery\Services\gallery_benchmark_trace_mark('session_start_begin', [
                 'cookie_present' => isset($_COOKIE[session_name()]),
@@ -66,14 +72,60 @@ function cms_start_session(array $config): void
             ]);
         }
         session_start();
+        if (function_exists('Gallery\\Services\\admin_test_run_mark')) {
+            \Gallery\Services\admin_test_run_mark('session_start_end', [
+                'session_active' => session_status() === PHP_SESSION_ACTIVE,
+                'session_id_present' => session_id() !== '',
+            ]);
+        }
         if (function_exists('Gallery\\Services\\gallery_benchmark_trace_mark')) {
             \Gallery\Services\gallery_benchmark_trace_mark('session_start_end', [
                 'session_active' => session_status() === PHP_SESSION_ACTIVE,
                 'session_id_present' => session_id() !== '',
             ]);
         }
-    } elseif (function_exists('Gallery\\Services\\gallery_benchmark_trace_mark')) {
-        \Gallery\Services\gallery_benchmark_trace_mark('session_already_active');
+    } else {
+        if (function_exists('Gallery\\Services\\admin_test_run_mark')) {
+            \Gallery\Services\admin_test_run_mark('session_already_active');
+        }
+        if (function_exists('Gallery\\Services\\gallery_benchmark_trace_mark')) {
+            \Gallery\Services\gallery_benchmark_trace_mark('session_already_active');
+        }
     }
 
+}
+
+/**
+ * Release the PHP session lock early for read-only media delivery routes.
+ *
+ * Request initialization has already restored the dedicated Viewer remember
+ * credential and completed translation/session bootstrap before this helper is
+ * called. When the administrator PHP session itself expired but a durable
+ * remember cookie exists, current_user() is resolved once while the session is
+ * still writable so that restoration can persist safely before the lock closes.
+ * Normal authorization checks still run later in the media controller using the
+ * in-memory session state.
+ *
+ * @param string $page Resolved page identifier.
+ * @return bool True when an active session lock was released.
+ */
+function cms_release_read_only_media_session_lock(string $page): bool
+{
+    if (!cms_route_is_read_only_media_asset($page) || session_status() !== PHP_SESSION_ACTIVE) {
+        return false;
+    }
+
+    if (empty($_SESSION['user_id'])
+        && function_exists('Gallery\\Services\\auth_remember_cookie_name')
+        && isset($_COOKIE[\Gallery\Services\auth_remember_cookie_name()])) {
+        current_user();
+    }
+
+    cms_request_trace_mark('read_only_media_session_release_begin', ['page' => $page]);
+    session_write_close();
+    cms_request_trace_mark('read_only_media_session_release_end', [
+        'page' => $page,
+        'session_active' => session_status() === PHP_SESSION_ACTIVE,
+    ]);
+    return true;
 }

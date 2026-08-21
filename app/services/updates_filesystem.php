@@ -600,6 +600,274 @@ function application_update_clean_cache_artifacts(string $root, string $activeBa
 
 
 /**
+ * Return persistent cache paths whose contents are derived from application code or remote metadata.
+ *
+ * User assets, generated image derivatives, diagnostics, installation locks, OIDC keys,
+ * and updater rollback data are deliberately excluded. These paths can be atomically
+ * moved out of their canonical locations after a successful update so the next request
+ * starts from a clean logical cache state without recursively deleting files inline.
+ *
+ * @param string $root Project root.
+ * @return array<string,string> Relative cache path => absolute path.
+ */
+function application_update_version_sensitive_cache_paths(string $root): array
+{
+    $cacheRoot = rtrim($root, '/\\') . DIRECTORY_SEPARATOR . 'cache';
+    return [
+        'github-api' => $cacheRoot . DIRECTORY_SEPARATOR . 'github-api',
+        'patch-notes' => $cacheRoot . DIRECTORY_SEPARATOR . 'patch-notes',
+        'thumbnail-warmup' => $cacheRoot . DIRECTORY_SEPARATOR . 'thumbnail-warmup',
+        'integrity-status.json' => $cacheRoot . DIRECTORY_SEPARATOR . 'integrity-status.json',
+        'admin-database-maintenance-report.json' => $cacheRoot . DIRECTORY_SEPARATOR . 'admin-database-maintenance-report.json',
+    ];
+}
+
+/**
+ * Return the updater-owned trash root used for bounded post-update deletion.
+ */
+function application_update_prune_trash_root(string $root): string
+{
+    return rtrim($root, '/\\') . DIRECTORY_SEPARATOR . 'cache' . DIRECTORY_SEPARATOR . 'updates' . DIRECTORY_SEPARATOR . 'prune-trash';
+}
+
+/**
+ * Atomically advance the application cache generation marker after an update.
+ *
+ * The marker is diagnostic and future-cache friendly. Actual invalidation is performed
+ * by moving known version-sensitive persistent caches away from their canonical paths.
+ *
+ * @return array{generation:int,updated_at:int,job_id:string,version:string}
+ */
+function application_update_bump_cache_generation(string $root, string $jobId, string $version): array
+{
+    $cacheRoot = rtrim($root, '/\\') . DIRECTORY_SEPARATOR . 'cache';
+    application_update_ensure_dir($cacheRoot);
+    $path = $cacheRoot . DIRECTORY_SEPARATOR . 'application-cache-generation.json';
+    $current = [];
+    if (is_file($path)) {
+        $decoded = json_decode((string) @file_get_contents($path), true);
+        if (is_array($decoded)) {
+            $current = $decoded;
+        }
+    }
+    $payload = [
+        'generation' => max(0, (int) ($current['generation'] ?? 0)) + 1,
+        'updated_at' => time(),
+        'job_id' => $jobId,
+        'version' => $version,
+    ];
+    $encoded = json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+    if (!is_string($encoded)) {
+        throw new RuntimeException('Could not encode application cache generation state.');
+    }
+    $temporary = $path . '.tmp-' . bin2hex(random_bytes(6));
+    if (file_put_contents($temporary, $encoded, LOCK_EX) === false) {
+        @unlink($temporary);
+        throw new RuntimeException('Could not persist application cache generation state.');
+    }
+    if (!@rename($temporary, $path)) {
+        // Windows may refuse rename-over-existing even within one filesystem.
+        // Cache generation is advisory, so a narrow replace fallback is sufficient.
+        @unlink($path);
+        if (!@rename($temporary, $path)) {
+            @unlink($temporary);
+            throw new RuntimeException('Could not persist application cache generation state.');
+        }
+    }
+    return $payload;
+}
+
+/**
+ * Atomically invalidate version-sensitive persistent caches after files and migrations are complete.
+ *
+ * Renaming a cache directory is intentionally preferred over recursive deletion here: canonical
+ * cache paths disappear immediately, while physical deletion is deferred to the bounded cleanup
+ * stage. Replays are idempotent because an already-staged path is never moved twice.
+ *
+ * @return array<string,mixed> Invalidation diagnostics stored in the update result.
+ */
+function application_update_invalidate_persistent_caches(string $root, string $jobId, string $version): array
+{
+    $startedAt = microtime(true);
+    $trashRoot = application_update_prune_trash_root($root)
+        . DIRECTORY_SEPARATOR . 'cache-invalidated'
+        . DIRECTORY_SEPARATOR . $jobId;
+    $moved = [];
+    $alreadyInvalidated = [];
+    $errors = [];
+
+    foreach (application_update_version_sensitive_cache_paths($root) as $relative => $source) {
+        $target = $trashRoot . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relative);
+        if (file_exists($target) || is_link($target)) {
+            $alreadyInvalidated[] = $relative;
+            continue;
+        }
+        if (!file_exists($source) && !is_link($source)) {
+            continue;
+        }
+        try {
+            application_update_ensure_dir(dirname($target));
+            if (!@rename($source, $target)) {
+                throw new RuntimeException('Could not atomically stage cache path for deletion.');
+            }
+            $moved[] = $relative;
+        } catch (Throwable $exception) {
+            $errors[$relative] = 'cache_invalidation_failed';
+        }
+    }
+
+    $generation = null;
+    try {
+        $generation = application_update_bump_cache_generation($root, $jobId, $version);
+    } catch (Throwable $exception) {
+        $errors['application-cache-generation.json'] = 'cache_generation_persist_failed';
+    }
+
+    clearstatcache(true);
+    return [
+        'strategy' => 'atomic canonical-path invalidation followed by bounded physical deletion',
+        'moved' => $moved,
+        'already_invalidated' => $alreadyInvalidated,
+        'errors' => $errors,
+        'generation' => $generation,
+        'elapsed_ms' => (microtime(true) - $startedAt) * 1000,
+    ];
+}
+
+/**
+ * Move one updater-owned path into prune-trash without traversing its contents.
+ *
+ * @return bool True when the source was moved or had already been staged.
+ */
+function application_update_stage_path_for_prune(string $source, string $target): bool
+{
+    if (file_exists($target) || is_link($target)) {
+        // A source that still exists has not been staged yet. Do not report success
+        // merely because an older same-name trash entry is awaiting deletion.
+        return !file_exists($source) && !is_link($source);
+    }
+    if (!file_exists($source) && !is_link($source)) {
+        return true;
+    }
+    application_update_ensure_dir(dirname($target));
+    return @rename($source, $target);
+}
+
+/**
+ * Stage legacy updater backups and extraction folders for bounded deletion.
+ *
+ * @return array{moved:int,remaining:bool}
+ */
+function application_update_stage_legacy_cache_artifacts(string $root, int $maxMoves = 12): array
+{
+    $updateRoot = rtrim($root, '/\\') . DIRECTORY_SEPARATOR . 'cache' . DIRECTORY_SEPARATOR . 'updates';
+    if (!is_dir($updateRoot)) {
+        return ['moved' => 0, 'remaining' => false];
+    }
+    $trashRoot = application_update_prune_trash_root($root) . DIRECTORY_SEPARATOR . 'legacy';
+    $moved = 0;
+    $remaining = false;
+    $now = time();
+
+    $backupRoot = $updateRoot . DIRECTORY_SEPARATOR . 'backups';
+    if (is_dir($backupRoot)) {
+        foreach ((array) @scandir($backupRoot) as $entry) {
+            if ($entry === '.' || $entry === '..') {
+                continue;
+            }
+            $source = $backupRoot . DIRECTORY_SEPARATOR . $entry;
+            if (!is_file($source) || $now - (int) (@filemtime($source) ?: $now) < 7 * 86400) {
+                continue;
+            }
+            if ($moved >= $maxMoves) {
+                $remaining = true;
+                continue;
+            }
+            $target = $trashRoot . DIRECTORY_SEPARATOR . 'backups' . DIRECTORY_SEPARATOR . $entry;
+            if (application_update_stage_path_for_prune($source, $target)) {
+                $moved++;
+            } else {
+                $remaining = true;
+            }
+        }
+    }
+
+    foreach ((array) @scandir($updateRoot) as $entry) {
+        if ($entry === '.' || $entry === '..' || in_array($entry, ['jobs', 'backups', 'prune-trash'], true)) {
+            continue;
+        }
+        if (preg_match('/^(extract|beta-extract|stable-restore)-[0-9]{8}-[0-9]{6}$/', $entry) !== 1) {
+            continue;
+        }
+        $source = $updateRoot . DIRECTORY_SEPARATOR . $entry;
+        if (!is_dir($source)) {
+            continue;
+        }
+        if ($moved >= $maxMoves) {
+            $remaining = true;
+            continue;
+        }
+        $target = $trashRoot . DIRECTORY_SEPARATOR . 'extracts' . DIRECTORY_SEPARATOR . $entry;
+        if (application_update_stage_path_for_prune($source, $target)) {
+            $moved++;
+        } else {
+            $remaining = true;
+        }
+    }
+
+    return ['moved' => $moved, 'remaining' => $remaining];
+}
+
+/**
+ * Delete a bounded slice of one updater-owned trash tree.
+ *
+ * The caller controls both entry count and wall-clock duration. This prevents a large historical
+ * cache from turning one automatic-update request into a long-running shared-hosting worker.
+ *
+ * @return array{removed:int,done:bool,elapsed_ms:float}
+ */
+function application_update_delete_tree_slice(string $path, int $maxEntries = 180, float $maxSeconds = 0.18): array
+{
+    $startedAt = microtime(true);
+    $deadline = $startedAt + max(0.01, min(0.50, $maxSeconds));
+    $removed = 0;
+
+    if (is_file($path) || is_link($path)) {
+        $done = @unlink($path) || !file_exists($path);
+        return ['removed' => $done ? 1 : 0, 'done' => $done, 'elapsed_ms' => (microtime(true) - $startedAt) * 1000];
+    }
+    if (!is_dir($path)) {
+        return ['removed' => 0, 'done' => true, 'elapsed_ms' => (microtime(true) - $startedAt) * 1000];
+    }
+
+    $iterator = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS),
+        RecursiveIteratorIterator::CHILD_FIRST
+    );
+    foreach ($iterator as $item) {
+        if ($removed >= max(1, $maxEntries) || microtime(true) >= $deadline) {
+            break;
+        }
+        $itemPath = $item->getPathname();
+        $ok = $item->isDir() && !$item->isLink() ? @rmdir($itemPath) : @unlink($itemPath);
+        if ($ok || (!file_exists($itemPath) && !is_link($itemPath))) {
+            $removed++;
+        }
+    }
+
+    if (microtime(true) < $deadline && is_dir($path)) {
+        @rmdir($path);
+    }
+    clearstatcache(true, $path);
+    return [
+        'removed' => $removed,
+        'done' => !file_exists($path) && !is_link($path),
+        'elapsed_ms' => (microtime(true) - $startedAt) * 1000,
+    ];
+}
+
+
+/**
  * Back up and remove a full project copy that was accidentally written inside app.
  *
  * @param string $root Root value.

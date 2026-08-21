@@ -413,6 +413,10 @@ function render_public_render_profile_panel(): void
         return;
     }
     $snapshot = public_render_profile_snapshot();
+    if (function_exists(__NAMESPACE__ . '\\admin_test_run_active') && admin_test_run_active()
+        && function_exists(__NAMESPACE__ . '\\admin_test_run_record_component')) {
+        admin_test_run_record_component('public_render_profile', $snapshot);
+    }
     $counters = isset($snapshot['counters']) && is_array($snapshot['counters']) ? $snapshot['counters'] : [];
     $timers = isset($snapshot['timers']) && is_array($snapshot['timers']) ? $snapshot['timers'] : [];
     // $thumbnailRenderingMode exposes only the validated machine mode to the admin-only browser diagnostics panel.

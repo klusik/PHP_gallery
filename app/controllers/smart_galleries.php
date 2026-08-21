@@ -79,6 +79,9 @@ use function Gallery\Services\viewer_favourites_storage_available;
 use function Gallery\Services\viewer_collections_for_owner;
 use function Gallery\Services\viewer_collections_storage_available;
 use function Gallery\Services\viewer_source_image_can_reference;
+use function Gallery\Services\admin_test_run_active;
+use function Gallery\Services\admin_test_run_mark;
+use function Gallery\Services\admin_test_run_record_component;
 use const Gallery\Services\SMART_GALLERY_QUERY_MAX_PAGE_SIZE;
 use const Gallery\Services\SMART_GALLERY_LIGHTBOX_MAX_WINDOW;
 
@@ -429,15 +432,22 @@ function smart_gallery_render_image_cards(array $images, array $sourceGalleries,
 /** Render a published Smart Gallery using physical-gallery media URLs and shared thumbnail cards. */
 function cms_smart_gallery(): void
 {
+    $testRunActive = admin_test_run_active();
+    if ($testRunActive) admin_test_run_mark('smart_gallery_find_begin');
     $gallery = smart_gallery_find_public((string) ($_GET['slug'] ?? ''));
+    if ($testRunActive) admin_test_run_mark('smart_gallery_find_end', ['found' => $gallery !== null]);
     if (!$gallery) {
         cms_not_found();
         return;
     }
 
     try {
+        if ($testRunActive) admin_test_run_mark('smart_gallery_count_begin', ['smart_gallery_id' => (int) $gallery['id']]);
         $total = smart_gallery_count_images($gallery, true);
+        if ($testRunActive) admin_test_run_mark('smart_gallery_count_end', ['total' => $total]);
+        if ($testRunActive) admin_test_run_mark('smart_gallery_presentation_begin');
         $presentation = smart_gallery_effective_presentation($gallery);
+        if ($testRunActive) admin_test_run_mark('smart_gallery_presentation_end');
     } catch (InvalidArgumentException) {
         cms_not_found();
         return;
@@ -457,17 +467,28 @@ function cms_smart_gallery(): void
         $pagination = null;
     }
 
+    if ($testRunActive) admin_test_run_mark('smart_gallery_image_query_begin', ['limit' => $limit, 'offset' => $offset]);
     $images = $total > 0 ? smart_gallery_query_images($gallery, true, $limit, $offset) : [];
+    if ($testRunActive) admin_test_run_mark('smart_gallery_image_query_end', ['images' => count($images)]);
+    if ($testRunActive) admin_test_run_mark('smart_gallery_source_gallery_lookup_begin');
     $sourceGalleries = smart_gallery_source_galleries($images);
+    if ($testRunActive) admin_test_run_mark('smart_gallery_source_gallery_lookup_end', ['source_galleries' => count($sourceGalleries)]);
     $contentLanguage = translation_active_language();
+    if ($testRunActive) admin_test_run_mark('smart_gallery_localization_begin', ['language' => $contentLanguage]);
     $images = content_localize_entities('image', $images, $contentLanguage);
     foreach ($sourceGalleries as $sourceId => $sourceGallery) {
         $sourceGalleries[$sourceId] = content_localize_entity('gallery', $sourceGallery, $contentLanguage);
     }
+    if ($testRunActive) admin_test_run_mark('smart_gallery_localization_end');
     $imageIds = array_map(static fn (array $image): int => (int) $image['id'], $images);
+    if ($testRunActive) admin_test_run_mark('smart_gallery_votes_begin', ['enabled' => !empty($presentation['voting_enabled'])]);
     $votes = !empty($presentation['voting_enabled']) ? current_votes_for_images($imageIds) : [];
+    if ($testRunActive) admin_test_run_mark('smart_gallery_votes_end', ['rows' => count($votes)]);
+    if ($testRunActive) admin_test_run_mark('smart_gallery_tags_begin', ['enabled' => !empty($presentation['metadata_visible'])]);
     $tags = !empty($presentation['metadata_visible']) ? tags_for_entities('image', $imageIds) : [];
+    if ($testRunActive) admin_test_run_mark('smart_gallery_tags_end', ['entities' => count($tags)]);
 
+    if ($testRunActive) admin_test_run_mark('smart_gallery_render_begin');
     render_header((string) $gallery['title']);
     echo '<section class="hero"><div class="hero-topbar"><div class="hero-primary"><div><p class="admin-kicker">' . e(t('smart_gallery.public_kicker', 'Smart Gallery')) . '</p><h1>' . e((string) $gallery['title']) . '</h1><p>' . e((string) $gallery['description']) . '</p><p class="muted">' . e(t('smart_gallery.dynamic_count', '{count} matching images', ['count' => $total])) . '</p></div></div><div class="hero-meta"><div class="hero-actions" aria-label="' . e(t('gallery.actions', 'Gallery actions')) . '">';
     if (!empty($presentation['download_enabled']) && $total > 0) echo '<a class="button hero-icon-button hero-download-button" href="' . e(url_for('download_smart_gallery', ['id' => (int) $gallery['id']])) . '" aria-label="' . e(t('smart_gallery.download', 'Download Smart Gallery')) . '" title="' . e(t('smart_gallery.download', 'Download Smart Gallery')) . '"><span aria-hidden="true">&#10515;</span><span class="visually-hidden">' . e(t('smart_gallery.download', 'Download Smart Gallery')) . '</span></a>';
@@ -483,7 +504,32 @@ function cms_smart_gallery(): void
 
     if ($pagination !== null) render_pagination_controls($pagination, t('pagination.photo_pages', 'Photo pages'));
     if ($lightboxEnabled) render_lightbox(!empty($presentation['voting_enabled']), false, '', (string) $gallery['title'], (string) $presentation['lightbox_browsing_mode'], !empty($presentation['slideshow_enabled']));
+    if ($testRunActive) {
+        admin_test_run_mark('smart_gallery_render_before_footer');
+        admin_test_run_record_component('smart_gallery', [
+            'smart_gallery_id' => (int) $gallery['id'],
+            'total_matching_images' => $total,
+            'page_images' => count($images),
+            'limit' => $limit,
+            'offset' => $offset,
+            'pagination_enabled' => $usePagination,
+            'pagination_forced_for_safety' => $paginationRequiredForSafety,
+            'source_gallery_count' => count($sourceGalleries),
+            'lightbox_enabled' => $lightboxEnabled,
+            'presentation' => [
+                'grid_columns' => (int) $presentation['grid_columns'],
+                'grid_rows' => (int) $presentation['grid_rows'],
+                'thumbnail_rendering_mode' => (string) ($presentation['thumbnail_rendering_mode'] ?? ''),
+                'metadata_visible' => !empty($presentation['metadata_visible']),
+                'voting_enabled' => !empty($presentation['voting_enabled']),
+                'slideshow_enabled' => !empty($presentation['slideshow_enabled']),
+            ],
+            'query_page_size_cap' => SMART_GALLERY_QUERY_MAX_PAGE_SIZE,
+            'lightbox_window_cap' => SMART_GALLERY_LIGHTBOX_MAX_WINDOW,
+        ]);
+    }
     render_footer();
+    if ($testRunActive) admin_test_run_mark('smart_gallery_render_end');
 }
 
 /** Return one authorized bounded metadata window for complete Smart Gallery lightbox navigation. */

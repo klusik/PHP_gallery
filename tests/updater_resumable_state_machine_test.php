@@ -38,6 +38,9 @@ use function Gallery\Services\application_update_backup_items_for_plan;
 use function Gallery\Services\application_update_backup_path_to_directory;
 use function Gallery\Services\application_update_budget_allows;
 use function Gallery\Services\application_update_changed_release_files;
+use function Gallery\Services\application_update_delete_tree_slice;
+use function Gallery\Services\application_update_invalidate_persistent_caches;
+use function Gallery\Services\application_update_prune_trash_root;
 use function Gallery\Services\application_update_job_public_state;
 use function Gallery\Services\application_update_job_stages;
 use function Gallery\Services\application_update_job_transition_allowed;
@@ -155,6 +158,44 @@ try {
     assert_updater_resumable(!application_update_backup_path_to_directory($activeRoot, $snapshotRoot, 'app/new.php'), 'Missing pre-update file was incorrectly reported as backed up.');
     assert_updater_resumable((string) file_get_contents($snapshotRoot . '/app/example.php') === "old-file\n", 'Rollback snapshot file contents changed.');
     assert_updater_resumable((string) file_get_contents($snapshotRoot . '/app/nested/value.txt') === "old-directory-file\n", 'Rollback snapshot directory contents changed.');
+
+    $cacheFixtureRoot = $tempRoot . '/cache-lifecycle';
+    mkdir($cacheFixtureRoot . '/cache/github-api', 0775, true);
+    mkdir($cacheFixtureRoot . '/cache/patch-notes', 0775, true);
+    mkdir($cacheFixtureRoot . '/cache/favicon', 0775, true);
+    file_put_contents($cacheFixtureRoot . '/cache/github-api/status.json', '{"cached":true}');
+    file_put_contents($cacheFixtureRoot . '/cache/patch-notes/stable.json', '{"cached":true}');
+    file_put_contents($cacheFixtureRoot . '/cache/integrity-status.json', '{"cached":true}');
+    file_put_contents($cacheFixtureRoot . '/cache/favicon/user.png', 'preserve-user-asset');
+    $cacheInvalidation = application_update_invalidate_persistent_caches(
+        $cacheFixtureRoot,
+        '20260821120000-abcdef123456',
+        '0.92.4'
+    );
+    assert_updater_resumable(!is_dir($cacheFixtureRoot . '/cache/github-api'), 'Post-update invalidation left GitHub metadata at its canonical cache path.');
+    assert_updater_resumable(!is_dir($cacheFixtureRoot . '/cache/patch-notes'), 'Post-update invalidation left patch-note metadata at its canonical cache path.');
+    assert_updater_resumable(!is_file($cacheFixtureRoot . '/cache/integrity-status.json'), 'Post-update invalidation left integrity metadata at its canonical cache path.');
+    assert_updater_resumable(is_file($cacheFixtureRoot . '/cache/favicon/user.png'), 'Post-update invalidation removed a user-managed favicon asset.');
+    assert_updater_resumable((int) ($cacheInvalidation['generation']['generation'] ?? 0) === 1, 'Post-update invalidation did not advance the cache generation marker.');
+    assert_updater_resumable(is_file($cacheFixtureRoot . '/cache/application-cache-generation.json'), 'Cache generation marker was not persisted.');
+
+    $pruneRoot = application_update_prune_trash_root($cacheFixtureRoot);
+    for ($index = 0; $index < 60; $index++) {
+        $dir = $pruneRoot . '/bounded/' . sprintf('%03d', intdiv($index, 10));
+        if (!is_dir($dir)) {
+            mkdir($dir, 0775, true);
+        }
+        file_put_contents($dir . '/item-' . $index . '.tmp', str_repeat('x', 64));
+    }
+    $firstPruneSlice = application_update_delete_tree_slice($pruneRoot, 10, 0.50);
+    assert_updater_resumable((int) ($firstPruneSlice['removed'] ?? 0) <= 10, 'Bounded cache pruning exceeded its per-slice entry cap.');
+    assert_updater_resumable(($firstPruneSlice['done'] ?? true) === false, 'Bounded cache pruning unexpectedly deleted the full fixture in one capped slice.');
+    $pruneIterations = 0;
+    while (is_dir($pruneRoot) && $pruneIterations < 30) {
+        application_update_delete_tree_slice($pruneRoot, 20, 0.50);
+        $pruneIterations++;
+    }
+    assert_updater_resumable(!is_dir($pruneRoot), 'Bounded cache pruning did not eventually remove the staged trash tree.');
 
     $sourcePlan = $tempRoot . '/source-plan';
     $destinationPlan = $tempRoot . '/destination-plan';
@@ -337,6 +378,13 @@ $activationSource = substr($jobsSource, (int) $activationStart, (int) $activatio
 foreach (['application_update_job_download_slice', 'application_update_job_extract_slice', 'application_update_job_backup_slice', 'run_migrations_bounded'] as $forbiddenActivationWork) {
     assert_updater_resumable(!str_contains($activationSource, $forbiddenActivationWork), 'Activation critical section contains expensive precondition work: ' . $forbiddenActivationWork);
 }
+
+$filesystemSource = (string) file_get_contents($root . '/app/services/updates_filesystem.php');
+assert_updater_resumable(str_contains($jobsSource, 'application_update_invalidate_persistent_caches('), 'Updater finalization no longer invalidates version-sensitive persistent caches.');
+assert_updater_resumable(str_contains($jobsSource, 'application_update_delete_tree_slice('), 'Updater cleanup no longer uses bounded physical cache deletion.');
+assert_updater_resumable(str_contains($jobsSource, 'if (!application_update_job_cleanup($job, $budget))'), 'Updater cleanup no longer yields across bounded worker slices.');
+assert_updater_resumable(str_contains($filesystemSource, "'github-api'") && str_contains($filesystemSource, "'patch-notes'") && str_contains($filesystemSource, "'integrity-status.json'"), 'Version-sensitive cache invalidation coverage regressed.');
+assert_updater_resumable(!str_contains($filesystemSource, "'favicon' =>") && !str_contains($filesystemSource, "'theme-background' =>") && !str_contains($filesystemSource, "'theme-branding' =>"), 'Post-update cache invalidation targets user-managed cache assets.');
 
 $serviceFiles = glob($root . '/app/services/updates_*.php') ?: [];
 foreach ($serviceFiles as $serviceFile) {

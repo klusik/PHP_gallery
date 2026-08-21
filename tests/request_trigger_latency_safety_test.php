@@ -70,4 +70,20 @@ assert_request_trigger_latency_safety(
     'Admin-log archive shutdown maintenance must use the same no-visible-latency detachment rule.'
 );
 
+
+assert_request_trigger_latency_safety(
+    str_contains($siteSource, "return \$page === 'admin';")
+        && !str_contains($siteSource, "'gallery',
+        'home',
+        'share',
+        'tag'"),
+    'Anonymous/public gallery requests must never schedule after-response site maintenance that continues occupying a PHP worker.'
+);
+
+assert_request_trigger_latency_safety(
+    str_contains($archiveSource, "return in_array(\$page, ['admin', 'admin_logs'], true);")
+        && !str_contains($archiveSource, "['home', 'gallery', 'share', 'tag', 'admin', 'admin_logs']"),
+    'Anonymous/public gallery requests must never schedule Admin-log archive work on the PHP worker pool.'
+);
+
 fwrite(STDOUT, "Request-trigger latency safety tests passed.\n");

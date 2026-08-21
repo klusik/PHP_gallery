@@ -137,7 +137,8 @@ namespace {
     viewer_feature_wrapper_assert(viewer_registration_mode() === 'disabled', 'Disabling the wrapper must hide subordinate registration mode.');
 
     $definitions = feature_flag_definitions();
-    viewer_feature_wrapper_assert(count($definitions) === 18, 'Feature registry audit expected 18 current switches after adding the viewer wrapper.');
+    viewer_feature_wrapper_assert(count($definitions) === 19, 'Feature registry audit expected 19 current switches after adding the opt-in Admin test-run diagnostics feature.');
+    viewer_feature_wrapper_assert(!feature_flag_default_enabled('admin_test_runs'), 'Admin test-run diagnostics must remain disabled by default.');
 
     $routeMap = feature_flag_route_map();
     foreach ($routeMap as $route => $feature) {

@@ -639,32 +639,14 @@ function site_maintenance_mark_request_trigger_attempt(): void
  */
 function site_maintenance_route_allows_request_trigger(string $page): bool
 {
-    $excludedPrefixes = [
-        'admin_',
-        'gallery_migration_',
-        'picture_manager_',
-        'upload_automation_',
-    ];
-    $excludedPages = [
-        'admin',
-        'admin_login',
-        'gallery',
-        'home',
-        'share',
-        'tag',
-    ];
-
-    if (in_array($page, $excludedPages, true)) {
-        return true;
-    }
-
-    foreach ($excludedPrefixes as $prefix) {
-        if (str_starts_with($page, $prefix)) {
-            return false;
-        }
-    }
-
-    return false;
+    // Opportunistic maintenance deliberately never starts from anonymous/public
+    // browsing. fastcgi_finish_request()/litespeed_finish_request() can detach
+    // the client, but the PHP worker remains occupied until shutdown work ends.
+    // On bounded shared-hosting pools that can queue the next public request for
+    // seconds even though the triggering page itself already reached the user.
+    // Keep request-trigger fallback confined to the authenticated Admin dashboard;
+    // cron and the explicit maintenance action remain the normal execution paths.
+    return $page === 'admin';
 }
 
 /**
@@ -756,12 +738,16 @@ function site_maintenance_finish_response_before_background_work(): void
 
     $finished = true;
     if (function_exists('fastcgi_finish_request')) {
+        if (function_exists(__NAMESPACE__ . '\\admin_test_run_note_response_detach')) admin_test_run_note_response_detach('fastcgi_finish_request', 'called');
         @fastcgi_finish_request();
+        if (function_exists(__NAMESPACE__ . '\\admin_test_run_note_response_detach')) admin_test_run_note_response_detach('fastcgi_finish_request', 'returned');
         return;
     }
 
     if (function_exists('litespeed_finish_request')) {
+        if (function_exists(__NAMESPACE__ . '\\admin_test_run_note_response_detach')) admin_test_run_note_response_detach('litespeed_finish_request', 'called');
         @litespeed_finish_request();
+        if (function_exists(__NAMESPACE__ . '\\admin_test_run_note_response_detach')) admin_test_run_note_response_detach('litespeed_finish_request', 'returned');
     }
 }
 
@@ -849,11 +835,17 @@ function site_maintenance_register_request_trigger(string $page): void
         return;
     }
 
+    if (function_exists(__NAMESPACE__ . '\\admin_test_run_record_maintenance_event')) {
+        admin_test_run_record_maintenance_event('site_maintenance', 'scheduled_after_response', ['source' => 'request_trigger_inline']);
+    }
     register_shutdown_function(static function (): void {
         if (!site_maintenance_request_trigger_due()) {
             return;
         }
 
+        if (function_exists(__NAMESPACE__ . '\\admin_test_run_record_maintenance_event')) {
+            admin_test_run_record_maintenance_event('site_maintenance', 'execution_begin', ['source' => 'request_trigger_inline']);
+        }
         site_maintenance_mark_request_trigger_attempt();
         if (session_status() === PHP_SESSION_ACTIVE) {
             session_write_close();
@@ -867,6 +859,9 @@ function site_maintenance_register_request_trigger(string $page): void
             'time_budget_seconds' => site_maintenance_time_budget_seconds(),
             'chain' => true,
         ]);
+        if (function_exists(__NAMESPACE__ . '\\admin_test_run_record_maintenance_event')) {
+            admin_test_run_record_maintenance_event('site_maintenance', 'execution_end', ['source' => 'request_trigger_inline']);
+        }
     });
 }
 
