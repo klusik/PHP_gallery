@@ -47,6 +47,11 @@
     gap: 0.75rem;
 }
 
+.nav-inline-form {
+    display: inline-flex;
+    margin: 0;
+}
+
 /* Public language preference: compact code + flag links stay visible without a dropdown. */
 .public-language-switcher {
     display: inline-flex;

@@ -58,6 +58,19 @@ function migration_reset_schema_inspection_cache(): void
     if (function_exists('Gallery\\Services\\schema_inspection_reset_request_cache')) {
         \Gallery\Services\schema_inspection_reset_request_cache();
     }
+    if (function_exists('Gallery\\Services\\db_schema_helper_reset_request_cache')) {
+        \Gallery\Services\db_schema_helper_reset_request_cache();
+    }
+}
+
+/**
+ * Invalidate request-local application settings after same-request settings DML.
+ */
+function migration_reset_app_settings_cache(): void
+{
+    if (function_exists('Gallery\\Services\\app_settings_reset_request_cache')) {
+        \Gallery\Services\app_settings_reset_request_cache();
+    }
 }
 
 /**
@@ -123,6 +136,7 @@ function run_migrations(): array
                 $afterStartedAt = microtime(true);
                 $after($pdo);
                 migration_reset_schema_inspection_cache();
+                migration_reset_app_settings_cache();
                 $afterDiagnostic = [
                     'status' => 'applied',
                     'duration_seconds' => round(microtime(true) - $afterStartedAt, 4),
@@ -210,6 +224,7 @@ function run_migrations_bounded(int $maxMigrations = 1): array
             if ($definition['after'] !== null) {
                 $definition['after']($pdo);
                 migration_reset_schema_inspection_cache();
+                migration_reset_app_settings_cache();
             }
             $stmt = $pdo->prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)');
             $stmt->execute([$version, now_sql()]);
@@ -267,6 +282,10 @@ function apply_migration_statement(PDO $pdo, string $statement): array
 
     if (in_array((string) ($diagnostic['operation'] ?? ''), ['ALTER', 'CREATE', 'DROP', 'RENAME'], true)) {
         migration_reset_schema_inspection_cache();
+    }
+    if ((string) ($diagnostic['object'] ?? '') === 'app_settings'
+        && in_array((string) ($diagnostic['operation'] ?? ''), ['INSERT', 'UPDATE', 'DELETE', 'REPLACE', 'TRUNCATE'], true)) {
+        migration_reset_app_settings_cache();
     }
 
     $diagnostic['duration_seconds'] = round(microtime(true) - $startedAt, 4);

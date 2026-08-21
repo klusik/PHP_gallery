@@ -1171,7 +1171,12 @@ function admin_log_archive_request_trigger_due(?int $now = null): bool
  */
 function admin_log_archive_route_allows_request_trigger(string $page): bool
 {
-    return in_array($page, ['home', 'gallery', 'share', 'tag', 'admin', 'admin_logs'], true);
+    // Archive creation and verified-row cleanup may continue after the response
+    // is detached, but they still own one PHP worker until the shutdown callback
+    // exits. Never make anonymous/public browsing the scheduler for that work.
+    // This is especially important while an archive backlog uses the short retry
+    // interval. Admin visits, explicit maintenance, and cron remain available.
+    return in_array($page, ['admin', 'admin_logs'], true);
 }
 
 /**
@@ -1183,17 +1188,31 @@ function admin_log_archive_finish_response_before_background_work(): void
         return;
     }
     if (function_exists('fastcgi_finish_request')) {
+        if (function_exists(__NAMESPACE__ . '\\admin_test_run_note_response_detach')) admin_test_run_note_response_detach('fastcgi_finish_request', 'called');
         @fastcgi_finish_request();
+        if (function_exists(__NAMESPACE__ . '\\admin_test_run_note_response_detach')) admin_test_run_note_response_detach('fastcgi_finish_request', 'returned');
         return;
     }
     if (function_exists('litespeed_finish_request')) {
+        if (function_exists(__NAMESPACE__ . '\\admin_test_run_note_response_detach')) admin_test_run_note_response_detach('litespeed_finish_request', 'called');
         @litespeed_finish_request();
-        return;
+        if (function_exists(__NAMESPACE__ . '\\admin_test_run_note_response_detach')) admin_test_run_note_response_detach('litespeed_finish_request', 'returned');
     }
-    while (ob_get_level() > 0) {
-        @ob_end_flush();
+}
+
+/**
+ * Return whether this runtime can detach archive maintenance from the visible
+ * browser response.
+ *
+ * @return bool True when background shutdown work will not keep the client request open.
+ */
+function admin_log_archive_request_trigger_can_detach_response(): bool
+{
+    if (PHP_SAPI === 'cli') {
+        return false;
     }
-    @flush();
+
+    return function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request');
 }
 
 /**
@@ -1209,13 +1228,20 @@ function admin_log_archive_register_request_trigger(string $page): void
     $method = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
     if (!in_array($method, ['GET', 'HEAD'], true)
         || !admin_log_archive_route_allows_request_trigger($page)
+        || !admin_log_archive_request_trigger_can_detach_response()
         || !admin_log_archive_request_trigger_due()) {
         return;
     }
 
+    if (function_exists(__NAMESPACE__ . '\\admin_test_run_record_maintenance_event')) {
+        admin_test_run_record_maintenance_event('admin_log_archive', 'scheduled_after_response', ['source' => 'request_trigger']);
+    }
     register_shutdown_function(static function (): void {
         if (!admin_log_archive_request_trigger_due()) {
             return;
+        }
+        if (function_exists(__NAMESPACE__ . '\\admin_test_run_record_maintenance_event')) {
+            admin_test_run_record_maintenance_event('admin_log_archive', 'execution_begin', ['source' => 'request_trigger']);
         }
         if (session_status() === PHP_SESSION_ACTIVE) {
             session_write_close();
@@ -1226,6 +1252,9 @@ function admin_log_archive_register_request_trigger(string $page): void
             'source' => 'request_trigger',
             'force' => false,
         ]);
+        if (function_exists(__NAMESPACE__ . '\\admin_test_run_record_maintenance_event')) {
+            admin_test_run_record_maintenance_event('admin_log_archive', 'execution_end', ['source' => 'request_trigger']);
+        }
     });
 }
 

@@ -155,6 +155,21 @@ migration_cache_assert_same(
     preg_match('/CREATE TABLE IF NOT EXISTS schema_migrations.*?migration_reset_schema_inspection_cache\(\);/s', $migrationSource),
     'migration table bootstrap cache invalidation'
 );
+migration_cache_assert_same(
+    1,
+    preg_match('/db_schema_helper_reset_request_cache/', $migrationSource),
+    'legacy schema helper cache invalidation'
+);
+migration_cache_assert_same(
+    1,
+    preg_match('/migration_reset_app_settings_cache/', $migrationSource),
+    'application settings cache invalidation hook'
+);
+migration_cache_assert_same(
+    1,
+    preg_match("/object.*app_settings.*INSERT.*UPDATE.*DELETE.*REPLACE.*TRUNCATE/s", $migrationSource),
+    'application settings DML cache invalidation'
+);
 
 schema_inspection_set_query_executor_for_tests(null);
 echo "Migration schema cache reset tests passed.\n";

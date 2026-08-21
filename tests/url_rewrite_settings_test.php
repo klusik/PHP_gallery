@@ -37,6 +37,7 @@
 declare(strict_types=1);
 
 use function Gallery\Core\gallery_public_url;
+use function Gallery\Core\image_public_asset_version;
 use function Gallery\Core\image_public_media_url;
 use function Gallery\Core\image_public_thumbnail_url;
 use function Gallery\Core\image_public_url;
@@ -143,12 +144,23 @@ try {
     assert_url_rewrite_same('disabled', $disabled['status'], 'manual disabled status');
     assert_url_rewrite_same(false, url_rewrite_should_emit_clean_urls(), 'manual disabled emit clean URLs');
     assert_url_rewrite_same('https://example.test/index.php?page=tag&slug=friedrichshafen', url_for('tag', ['slug' => 'friedrichshafen']), 'manual disabled tag fallback URL');
+    assert_url_rewrite_same('https://example.test/index.php?page=upload_automation_upload', url_for('upload_automation_upload'), 'manual disabled upload automation fallback URL');
     $gallery = ['url_path' => 'Trips/Prague', 'folder_path' => 'Trips/Prague', 'slug' => 'prague'];
-    $image = ['url_slug' => 'Evening Flight', 'filename' => 'DSC_0001.JPG'];
+    $image = [
+        'id' => 91,
+        'url_slug' => 'Evening Flight',
+        'filename' => 'DSC_0001.JPG',
+        'relative_path_hash' => hash('sha256', 'DSC_0001.JPG'),
+        'checksum_sha256' => str_repeat('b', 64),
+        'modified_at' => '2026-08-21 08:30:00',
+        'file_size' => 654321,
+        'thumbnail_derivative_version' => 2,
+    ];
+    $assetVersion = image_public_asset_version($image);
     assert_url_rewrite_same('https://example.test/index.php?page=gallery&public_path=Trips%2FPrague', gallery_public_url($gallery), 'manual disabled gallery fallback URL');
     assert_url_rewrite_same('https://example.test/index.php?page=gallery&public_path=Trips%2FPrague%2Fevening-flight', image_public_url($image, $gallery), 'manual disabled image fallback URL');
-    assert_url_rewrite_same('https://example.test/index.php?page=public_media&public_path=Trips%2FPrague%2Fevening-flight', image_public_media_url($image, $gallery), 'manual disabled media fallback URL');
-    assert_url_rewrite_same('https://example.test/index.php?page=public_thumb&public_path=Trips%2FPrague%2Fevening-flight&size=300&format=webp', image_public_thumbnail_url($image, $gallery, 300, 'webp'), 'manual disabled thumbnail fallback URL');
+    assert_url_rewrite_same('https://example.test/index.php?page=public_media&public_path=Trips%2FPrague%2Fevening-flight&v=' . $assetVersion, image_public_media_url($image, $gallery), 'manual disabled media fallback URL');
+    assert_url_rewrite_same('https://example.test/index.php?page=public_thumb&public_path=Trips%2FPrague%2Fevening-flight&size=300&format=webp&v=' . $assetVersion, image_public_thumbnail_url($image, $gallery, 300, 'webp'), 'manual disabled thumbnail fallback URL');
 
     $GLOBALS['cms_app_settings_cache'] = ['url_rewrite_enabled' => '1'];
     $_SERVER['SERVER_SOFTWARE'] = 'Apache/2.4';
@@ -156,9 +168,10 @@ try {
     $_SERVER['SCRIPT_NAME'] = '/index.php';
     assert_url_rewrite_same(true, url_rewrite_should_emit_clean_urls(), 'default enabled emit clean URLs');
     assert_url_rewrite_same('https://example.test/tag/friedrichshafen', url_for('tag', ['slug' => 'friedrichshafen']), 'default enabled tag clean URL');
+    assert_url_rewrite_same('https://example.test/index.php?page=upload_automation_upload', url_for('upload_automation_upload'), 'upload automation keeps portable canonical query endpoint when rewrite is enabled');
     assert_url_rewrite_same('https://example.test/gallery/Trips/Prague/evening-flight/', image_public_url($image, $gallery), 'default enabled image clean URL');
-    assert_url_rewrite_same('https://example.test/gallery/Trips/Prague/evening-flight/media', image_public_media_url($image, $gallery), 'default enabled media clean URL');
-    assert_url_rewrite_same('https://example.test/gallery/Trips/Prague/evening-flight/thumb-300.webp', image_public_thumbnail_url($image, $gallery, 300, 'webp'), 'default enabled thumbnail clean URL');
+    assert_url_rewrite_same('https://example.test/gallery/Trips/Prague/evening-flight/media?v=' . $assetVersion, image_public_media_url($image, $gallery), 'default enabled media clean URL');
+    assert_url_rewrite_same('https://example.test/gallery/Trips/Prague/evening-flight/thumb-300.webp?v=' . $assetVersion, image_public_thumbnail_url($image, $gallery, 300, 'webp'), 'default enabled thumbnail clean URL');
     assert_url_rewrite_same(
         'https://example.test/gallery/testovaci-fotky',
         rtrim(gallery_public_url([

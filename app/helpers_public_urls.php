@@ -204,35 +204,58 @@ function image_public_media_url(array $image, array $gallery): string
 }
 
 /**
- * Return a public media or thumbnail URL without adding cache-version parameters.
+ * Return a public media or thumbnail URL with a stable cache-version parameter.
  *
- * Rewritten installations use clean image paths, while rewrite-disabled
- * installations already depend on routing query parameters. Cache invalidation
- * for replaced media and regenerated thumbnails must therefore not append an
- * additional version parameter that could change routing behavior on shared hosting.
+ * Public media responses are intentionally cacheable for a long time. The URL
+ * therefore must change when an image row is replaced, rescanned, or its
+ * thumbnail derivative generation is invalidated. Appending one ordinary query
+ * parameter works in both clean-rewrite and index.php query-string routing modes
+ * and prevents a newly uploaded image from inheriting browser-cached bytes from
+ * an older deleted image that reused the same public slug.
  *
  * @param string $url Public media or thumbnail URL.
  * @param array $image Image row or image data.
- * @return string Unmodified public URL.
+ * @return string Versioned public URL.
  */
 function image_public_asset_url_with_version(string $url, array $image): string
 {
-    unset($image);
+    // $version stores the source/derivative identity used only for browser cache invalidation.
+    $version = image_public_asset_version($image);
+    if ($version === '') {
+        return $url;
+    }
 
-    return $url;
+    // $separator keeps query-string installations valid while clean URLs use the normal first query parameter.
+    $separator = str_contains($url, '?') ? '&' : '?';
+    return $url . $separator . 'v=' . rawurlencode($version);
 }
 
 /**
  * Build a stable cache version for media and thumbnail URLs.
+ *
+ * The database image id prevents a delete/re-upload cycle from reusing the old
+ * immutable browser cache entry. Source checksum/modification metadata detects
+ * in-place replacements, while thumbnail_derivative_version follows the existing
+ * scanner invalidation lifecycle for regenerated derivatives. The explicit
+ * revision prefix invalidates URLs produced before this cache-safety fix.
  *
  * @param array $image Image row or image data.
  * @return string Compact cache version.
  */
 function image_public_asset_version(array $image): string
 {
-    unset($image);
+    // $identity stores only durable image/source fields already present on normal image rows.
+    $identity = implode('|', [
+        'media-cache-v2',
+        (string) ((int) ($image['id'] ?? 0)),
+        (string) ($image['checksum_sha256'] ?? ''),
+        (string) ($image['modified_at'] ?? ''),
+        (string) ((int) ($image['file_size'] ?? 0)),
+        (string) ($image['relative_path_hash'] ?? ''),
+        (string) max(1, (int) ($image['thumbnail_derivative_version'] ?? 1)),
+    ]);
 
-    return '';
+    return substr(hash('sha256', $identity), 0, 16);
 }
 
 /**

@@ -48,6 +48,26 @@ use function Gallery\Core\db;
  */
 
 /**
+ * Return request-local legacy schema helper cache by reference.
+ *
+ * @return array<string,bool> Cached table/column capability answers.
+ */
+function &db_schema_helper_request_cache(): array
+{
+    static $cache = [];
+    return $cache;
+}
+
+/**
+ * Clear request-local legacy schema helper answers after same-request DDL.
+ */
+function db_schema_helper_reset_request_cache(): void
+{
+    $cache = &db_schema_helper_request_cache();
+    $cache = [];
+}
+
+/**
  * Check whether one database table contains a column.
  *
  * @param string $table Table value.
@@ -64,12 +84,25 @@ function db_column_exists(string $table, string $column): bool
         return false;
     }
 
+    $cache = &db_schema_helper_request_cache();
+    $cacheKey = 'column:' . $safeTable . ':' . $safeColumn;
+    if (array_key_exists($cacheKey, $cache)) {
+        return $cache[$cacheKey];
+    }
+
+    if (function_exists(__NAMESPACE__ . '\\schema_inspection_snapshot_column_exists')) {
+        $snapshotExists = schema_inspection_snapshot_column_exists($safeTable, $safeColumn);
+        if ($snapshotExists !== null) {
+            return $cache[$cacheKey] = $snapshotExists;
+        }
+    }
+
     try {
         // $stmt stores an intermediate value used by the surrounding gallery workflow.
         $stmt = db()->query("SHOW COLUMNS FROM `{$safeTable}` LIKE '{$safeColumn}'");
-        return $stmt && (bool) $stmt->fetch();
+        return $cache[$cacheKey] = (bool) ($stmt && $stmt->fetch());
     } catch (Throwable) {
-        return false;
+        return $cache[$cacheKey] = false;
     }
 }
 
@@ -87,11 +120,24 @@ function db_table_exists(string $table): bool
         return false;
     }
 
+    $cache = &db_schema_helper_request_cache();
+    $cacheKey = 'table:' . $safeTable;
+    if (array_key_exists($cacheKey, $cache)) {
+        return $cache[$cacheKey];
+    }
+
+    if (function_exists(__NAMESPACE__ . '\\schema_inspection_snapshot_table_exists')) {
+        $snapshotExists = schema_inspection_snapshot_table_exists($safeTable);
+        if ($snapshotExists !== null) {
+            return $cache[$cacheKey] = $snapshotExists;
+        }
+    }
+
     try {
         // $stmt stores an intermediate value used by the surrounding gallery workflow.
         $stmt = db()->query("SHOW TABLES LIKE " . db()->quote($safeTable));
-        return (bool) $stmt->fetchColumn();
+        return $cache[$cacheKey] = (bool) $stmt->fetchColumn();
     } catch (Throwable) {
-        return false;
+        return $cache[$cacheKey] = false;
     }
 }

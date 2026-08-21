@@ -36,8 +36,6 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
-use PDOException;
-use function Gallery\Core\db;
 
 /**
  * Gallery display-preference service layer.
@@ -56,13 +54,7 @@ use function Gallery\Core\db;
  */
 function gallery_filename_display_schema_ready(): bool
 {
-    try {
-        // Variable $stmt stores this steps working value.
-        $stmt = db()->query("SHOW COLUMNS FROM galleries LIKE 'show_filenames'");
-        return $stmt && (bool) $stmt->fetch();
-    } catch (PDOException) {
-        return false;
-    }
+    return db_column_exists('galleries', 'show_filenames');
 }
 
 /**

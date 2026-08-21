@@ -335,7 +335,13 @@ function application_autoupdate_maybe_run(int $ttlSeconds = 3600): void
     // Finish a previously started background job before considering a new remote check.
     $activeJob = application_update_active_job();
     if ($activeJob !== null) {
+        if (function_exists(__NAMESPACE__ . '\\admin_test_run_record_maintenance_event')) {
+            admin_test_run_record_maintenance_event('automatic_updater', 'active_job_continue_begin', ['budget_seconds' => 3.0]);
+        }
         application_update_continue_background_job(3.0);
+        if (function_exists(__NAMESPACE__ . '\\admin_test_run_record_maintenance_event')) {
+            admin_test_run_record_maintenance_event('automatic_updater', 'active_job_continue_end', ['budget_seconds' => 3.0]);
+        }
         return;
     }
 
@@ -360,10 +366,22 @@ function application_autoupdate_maybe_run(int $ttlSeconds = 3600): void
     }
 
     if (application_update_beta_active()) {
+        if (function_exists(__NAMESPACE__ . '\\admin_test_run_record_maintenance_event')) {
+            admin_test_run_record_maintenance_event('automatic_updater', 'due_check_begin', ['mode' => 'beta_dry_run']);
+        }
         application_autoupdate_dry_run(false, $now);
+        if (function_exists(__NAMESPACE__ . '\\admin_test_run_record_maintenance_event')) {
+            admin_test_run_record_maintenance_event('automatic_updater', 'due_check_end', ['mode' => 'beta_dry_run']);
+        }
         return;
     }
+    if (function_exists(__NAMESPACE__ . '\\admin_test_run_record_maintenance_event')) {
+        admin_test_run_record_maintenance_event('automatic_updater', 'due_check_begin', ['mode' => 'stable_installing_check']);
+    }
     application_autoupdate_run_installing_check(false, $now);
+    if (function_exists(__NAMESPACE__ . '\\admin_test_run_record_maintenance_event')) {
+        admin_test_run_record_maintenance_event('automatic_updater', 'due_check_end', ['mode' => 'stable_installing_check']);
+    }
 }
 
 /**

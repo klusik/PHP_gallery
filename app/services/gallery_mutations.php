@@ -445,6 +445,159 @@ function delete_directory_tree(string $directory, string $allowedRoot): void
 
 
 /**
+ * Return every generated derivative cache file that belongs to one image deletion.
+ *
+ * Exact current thumbnail paths are included first. The bounded directory scan also
+ * catches stale thumbnail sizes and interrupted temporary files left by older
+ * configurations. Those files can otherwise make a later auto-rename choose a
+ * collision suffix or, worse, become visible again when a filename/public slug is
+ * reused after deletion.
+ *
+ * @param array $image Image row or image data.
+ * @param array $gallery Gallery row or gallery data.
+ * @param string $galleryRoot Absolute owning gallery directory.
+ * @return array<int,string> Absolute derivative paths safe to remove.
+ */
+function gallery_image_deletion_derivative_paths(array $image, array $gallery, string $galleryRoot): array
+{
+    // $paths stores normalized unique cache artifacts keyed by absolute path.
+    $paths = [];
+    foreach (thumbnail_sizes() as $size) {
+        foreach (['jpg', 'webp'] as $format) {
+            $path = thumbnail_abs_path($image, $gallery, (int) $size, $format);
+            if (thumbnail_path_inside_existing_gallery($galleryRoot, $path) && is_file($path)) {
+                $paths[$path] = $path;
+            }
+        }
+    }
+
+    if (function_exists('Gallery\\Services\\image_uses_dng_display_derivatives') && image_uses_dng_display_derivatives($image)) {
+        $displayMasterPath = dng_display_master_abs_path($image, $gallery, false);
+        if (thumbnail_path_inside_existing_gallery($galleryRoot, $displayMasterPath) && is_file($displayMasterPath)) {
+            $paths[$displayMasterPath] = $displayMasterPath;
+        }
+    }
+
+    // $thumbsDir stores the generated-cache directory. A direct scan is bounded to
+    // one gallery and avoids assuming that today's thumbnail size list matches the
+    // sizes that existed when an older cache file was created.
+    $thumbsDir = gallery_thumbs_dir($gallery, false);
+    if (!is_dir($thumbsDir) || !thumbnail_path_inside_existing_gallery($galleryRoot, $thumbsDir)) {
+        return array_values($paths);
+    }
+
+    // $stem stores the exact readable filename prefix used by thumbnail_filename().
+    $stem = pathinfo((string) ($image['filename'] ?? ''), PATHINFO_FILENAME);
+    if ($stem === '') {
+        return array_values($paths);
+    }
+    // $thumbnailPattern matches current/legacy configured sizes plus interrupted
+    // atomic-write temporary files such as name_thumb300.jpg.<token>.tmp.jpg.
+    $thumbnailPattern = '/^' . preg_quote($stem, '/') . '_thumb\\d+\\.(?:jpg|webp)(?:\\.[A-Fa-f0-9]+\\.tmp\\.(?:jpg|webp))?$/i';
+    // $dngPattern catches a DNG display master for this exact image id even when a
+    // future cleanup runs after the source MIME metadata has become incomplete.
+    $dngPattern = '/^' . preg_quote($stem, '/') . '_display_' . max(0, (int) ($image['id'] ?? 0)) . '\\.webp$/i';
+
+    try {
+        $iterator = new \DirectoryIterator($thumbsDir);
+        foreach ($iterator as $entry) {
+            if (!$entry->isFile() || $entry->isLink()) {
+                continue;
+            }
+            $filename = $entry->getFilename();
+            if (preg_match($thumbnailPattern, $filename) !== 1 && preg_match($dngPattern, $filename) !== 1) {
+                continue;
+            }
+            $path = $entry->getPathname();
+            if (thumbnail_path_inside_existing_gallery($galleryRoot, $path)) {
+                $paths[$path] = $path;
+            }
+        }
+    } catch (Throwable) {
+        // Exact configured paths above remain authoritative when directory
+        // enumeration itself is unavailable on a constrained shared host.
+    }
+
+    return array_values($paths);
+}
+
+/**
+ * Stage one live gallery file under a non-media filename before database deletion.
+ *
+ * Renaming inside the same directory is used as the filesystem transaction step.
+ * If a later database mutation fails, the staged file can be restored. If final
+ * unlink cleanup fails after commit, the hidden staged filename is no longer a
+ * supported image/thumbnail path and therefore cannot be rescanned or served.
+ *
+ * @param string $path Live file path.
+ * @param string $galleryRoot Absolute owning gallery directory.
+ * @return array{original:string,staged:string} Staged file mapping.
+ */
+function gallery_stage_file_for_deletion(string $path, string $galleryRoot): array
+{
+    if (!thumbnail_path_inside_existing_gallery($galleryRoot, $path) || !is_file($path)) {
+        throw new RuntimeException('Refusing to stage a deletion file outside its gallery.');
+    }
+
+    $directory = dirname($path);
+    $basename = basename($path);
+    for ($attempt = 0; $attempt < 20; $attempt++) {
+        $staged = $directory . DIRECTORY_SEPARATOR . '.' . $basename . '.delete-' . bin2hex(random_bytes(6));
+        if (file_exists($staged)) {
+            continue;
+        }
+        if (@rename($path, $staged)) {
+            return ['original' => $path, 'staged' => $staged];
+        }
+        throw new RuntimeException('Could not stage file for deletion: ' . $basename);
+    }
+
+    throw new RuntimeException('Could not allocate a safe deletion staging filename for: ' . $basename);
+}
+
+/**
+ * Restore staged deletion files after a database failure.
+ *
+ * @param array<int,array{original:string,staged:string}> $stagedFiles Staged file mappings.
+ */
+function gallery_restore_staged_deletion_files(array $stagedFiles): void
+{
+    foreach (array_reverse($stagedFiles) as $entry) {
+        $staged = (string) ($entry['staged'] ?? '');
+        $original = (string) ($entry['original'] ?? '');
+        if ($staged === '' || $original === '' || !is_file($staged)) {
+            continue;
+        }
+        @rename($staged, $original);
+    }
+}
+
+/**
+ * Permanently remove staged deletion files after the database commit.
+ *
+ * Failed final unlinks are counted but intentionally not restored. Their staged
+ * filenames are non-media cache trash and leaving them quarantined is safer than
+ * resurrecting a deleted original or stale thumbnail path.
+ *
+ * @param array<int,array{original:string,staged:string}> $stagedFiles Staged file mappings.
+ * @return int Number of quarantine files that could not be physically unlinked.
+ */
+function gallery_finalize_staged_deletion_files(array $stagedFiles): int
+{
+    $failed = 0;
+    foreach ($stagedFiles as $entry) {
+        $staged = (string) ($entry['staged'] ?? '');
+        if ($staged === '' || !is_file($staged)) {
+            continue;
+        }
+        if (!@unlink($staged)) {
+            $failed++;
+        }
+    }
+    return $failed;
+}
+
+/**
  * Delete selected original image files, generated derivatives, and image rows from one gallery.
  *
  * The original media files are removed from disk because the gallery folder is
@@ -453,14 +606,14 @@ function delete_directory_tree(string $directory, string $allowedRoot): void
  *
  * @param int $galleryId Gallery that must own every selected image.
  * @param array<int> $imageIds Image ids submitted by the admin UI.
- * @return array{requested:int,deleted:int,files_deleted:int,derivatives_deleted:int,missing_files:int} Structured result data for the caller.
+ * @return array{requested:int,deleted:int,files_deleted:int,derivatives_deleted:int,missing_files:int,cleanup_failed:int} Structured result data for the caller.
  */
 function delete_gallery_images(int $galleryId, array $imageIds): array
 {
     // $normalizedIds stores the unique positive image ids selected by the admin.
     $normalizedIds = array_values(array_unique(array_filter(array_map('intval', $imageIds), static fn (int $imageId): bool => $imageId > 0)));
     if (!$normalizedIds) {
-        return ['requested' => 0, 'deleted' => 0, 'files_deleted' => 0, 'derivatives_deleted' => 0, 'missing_files' => 0];
+        return ['requested' => 0, 'deleted' => 0, 'files_deleted' => 0, 'derivatives_deleted' => 0, 'missing_files' => 0, 'cleanup_failed' => 0];
     }
 
     mutation_schema_assert_available(
@@ -486,7 +639,7 @@ function delete_gallery_images(int $galleryId, array $imageIds): array
         }
     }
     if (!$images) {
-        return ['requested' => count($normalizedIds), 'deleted' => 0, 'files_deleted' => 0, 'derivatives_deleted' => 0, 'missing_files' => 0];
+        return ['requested' => count($normalizedIds), 'deleted' => 0, 'files_deleted' => 0, 'derivatives_deleted' => 0, 'missing_files' => 0, 'cleanup_failed' => 0];
     }
 
     // $galleryRoot stores the allowed filesystem boundary for originals and derivatives.
@@ -495,9 +648,10 @@ function delete_gallery_images(int $galleryId, array $imageIds): array
         throw new RuntimeException('Gallery folder does not exist on disk.');
     }
 
-    // $originalPaths stores original files that should be removed after database validation.
+    // $originalPaths stores original files that must disappear from their live
+    // names before the database rows can be committed as deleted.
     $originalPaths = [];
-    // $derivativePaths stores generated files that should be removed with the selected originals.
+    // $derivativePaths stores both current and stale generated cache artifacts.
     $derivativePaths = [];
     // $missingFiles stores how many selected original paths are already absent on disk.
     $missingFiles = 0;
@@ -509,31 +663,40 @@ function delete_gallery_images(int $galleryId, array $imageIds): array
             throw new RuntimeException('Refusing to delete an image outside its gallery.');
         }
         if (is_file($originalPath)) {
-            if (!is_writable($originalPath)) {
-                throw new RuntimeException('Image file is not writable: ' . basename($originalPath));
-            }
-            $originalPaths[] = $originalPath;
+            $originalPaths[$originalPath] = $originalPath;
         } else {
             $missingFiles++;
         }
 
-        foreach (thumbnail_sizes() as $size) {
-            foreach (['jpg', 'webp'] as $format) {
-                // $thumbnailPath stores one generated thumbnail variant.
-                $thumbnailPath = thumbnail_abs_path($image, $gallery, (int) $size, $format);
-                if (thumbnail_path_inside_existing_gallery($galleryRoot, $thumbnailPath) && is_file($thumbnailPath)) {
-                    $derivativePaths[] = $thumbnailPath;
-                }
-            }
+        foreach (gallery_image_deletion_derivative_paths($image, $gallery, $galleryRoot) as $derivativePath) {
+            $derivativePaths[$derivativePath] = $derivativePath;
         }
+    }
 
-        if (function_exists('Gallery\\Services\\image_uses_dng_display_derivatives') && image_uses_dng_display_derivatives($image)) {
-            // $displayMasterPath stores the full-size generated WebP used for public DNG display.
-            $displayMasterPath = dng_display_master_abs_path($image, $gallery, false);
-            if (thumbnail_path_inside_existing_gallery($galleryRoot, $displayMasterPath) && is_file($displayMasterPath)) {
-                $derivativePaths[] = $displayMasterPath;
+    // $stagedFiles stores every active path moved out of service before SQL changes.
+    $stagedFiles = [];
+    // $stagedOriginalCount counts originals removed from their live gallery paths.
+    $stagedOriginalCount = 0;
+    // $stagedDerivativeCount counts generated cache files removed from live paths.
+    $stagedDerivativeCount = 0;
+    try {
+        foreach (array_values($derivativePaths) as $path) {
+            if (!is_file($path)) {
+                continue;
             }
+            $stagedFiles[] = gallery_stage_file_for_deletion($path, $galleryRoot);
+            $stagedDerivativeCount++;
         }
+        foreach (array_values($originalPaths) as $path) {
+            if (!is_file($path)) {
+                continue;
+            }
+            $stagedFiles[] = gallery_stage_file_for_deletion($path, $galleryRoot);
+            $stagedOriginalCount++;
+        }
+    } catch (Throwable $exception) {
+        gallery_restore_staged_deletion_files($stagedFiles);
+        throw $exception;
     }
 
     // $imageIdsToDelete stores the actual database rows that will be removed.
@@ -544,37 +707,50 @@ function delete_gallery_images(int $galleryId, array $imageIds): array
     $pdo = db();
     $pdo->beginTransaction();
     try {
-        // $coverStmt clears gallery title-picture references before deleting image rows.
-        $coverStmt = $pdo->prepare('UPDATE galleries SET cover_image_id = NULL, updated_at = ? WHERE cover_image_id IN (' . $placeholders . ')');
-        $coverStmt->execute(array_merge([now_sql()], $imageIdsToDelete));
-        // $deleteStmt removes the selected image rows. Related rows are handled by existing foreign keys.
+        // Clear nullable references explicitly so older shared-hosting databases
+        // remain deterministic even if one historical foreign key is missing.
+        gallery_null_rows_by_ids('galleries', 'cover_image_id', $imageIdsToDelete);
+        gallery_null_rows_by_ids('telemetry_sessions', 'first_image_id', $imageIdsToDelete);
+        gallery_null_rows_by_ids('telemetry_sessions', 'last_image_id', $imageIdsToDelete);
+        gallery_null_rows_by_ids('telemetry_events', 'image_id', $imageIdsToDelete);
+        gallery_null_rows_by_ids('telemetry_job_runs', 'image_id', $imageIdsToDelete);
+
+        // Remove known dependent rows explicitly. Existing ON DELETE CASCADE keys
+        // still work, but this mirrors subtree deletion safety on older installs.
+        gallery_delete_rows_by_ids('image_thumbnail_variants', 'image_id', $imageIdsToDelete);
+        gallery_delete_rows_by_ids('image_ai_analysis_jobs', 'image_id', $imageIdsToDelete);
+        gallery_delete_rows_by_ids('image_ai_metadata', 'image_id', $imageIdsToDelete);
+        gallery_delete_rows_by_ids('picture_game_votes', 'image_a_id', $imageIdsToDelete);
+        gallery_delete_rows_by_ids('picture_game_votes', 'image_b_id', $imageIdsToDelete);
+        gallery_delete_rows_by_ids('picture_game_votes', 'winner_image_id', $imageIdsToDelete);
+        gallery_delete_rows_by_ids('image_tags', 'image_id', $imageIdsToDelete);
+        gallery_delete_rows_by_ids('image_votes', 'image_id', $imageIdsToDelete);
+        gallery_delete_rows_by_ids('image_translations', 'image_id', $imageIdsToDelete);
+        gallery_delete_rows_by_ids('viewer_favourites', 'image_id', $imageIdsToDelete);
+        gallery_delete_rows_by_ids('viewer_collection_items', 'image_id', $imageIdsToDelete);
+        gallery_delete_rows_by_ids('duplicate_photo_ledger_pairs', 'image_id_low', $imageIdsToDelete);
+        gallery_delete_rows_by_ids('duplicate_photo_ledger_pairs', 'image_id_high', $imageIdsToDelete);
+
+        // $deleteStmt removes the selected image rows after dependencies are safe.
         $deleteStmt = $pdo->prepare('DELETE FROM images WHERE gallery_id = ? AND id IN (' . $placeholders . ')');
         $deleteStmt->execute(array_merge([$galleryId], $imageIdsToDelete));
         // $deletedRows stores the number of rows removed from images.
         $deletedRows = $deleteStmt->rowCount();
+        if ($deletedRows !== count($imageIdsToDelete)) {
+            throw new RuntimeException('Image deletion changed fewer database rows than expected.');
+        }
         $pdo->commit();
     } catch (Throwable $exception) {
         if ($pdo->inTransaction()) {
             $pdo->rollBack();
         }
+        gallery_restore_staged_deletion_files($stagedFiles);
         throw $exception;
     }
 
-    // $filesDeleted stores how many original source files were deleted from disk.
-    $filesDeleted = 0;
-    foreach (array_values(array_unique($originalPaths)) as $path) {
-        if (is_file($path) && @unlink($path)) {
-            $filesDeleted++;
-        }
-    }
-
-    // $derivativesDeleted stores how many generated derivative files were deleted from disk.
-    $derivativesDeleted = 0;
-    foreach (array_values(array_unique($derivativePaths)) as $path) {
-        if (is_file($path) && @unlink($path)) {
-            $derivativesDeleted++;
-        }
-    }
+    // $cleanupFailed counts hidden quarantine files that could not be unlinked.
+    // They no longer occupy a live original or thumbnail path and cannot be served.
+    $cleanupFailed = gallery_finalize_staged_deletion_files($stagedFiles);
 
     thumbnail_maintenance_summary_cache_clear();
     if (public_path_schema_ready()) {
@@ -589,12 +765,12 @@ function delete_gallery_images(int $galleryId, array $imageIds): array
     return [
         'requested' => count($normalizedIds),
         'deleted' => (int) $deletedRows,
-        'files_deleted' => $filesDeleted,
-        'derivatives_deleted' => $derivativesDeleted,
+        'files_deleted' => $stagedOriginalCount,
+        'derivatives_deleted' => $stagedDerivativeCount,
         'missing_files' => $missingFiles,
+        'cleanup_failed' => $cleanupFailed,
     ];
 }
-
 
 /**
  * Move selected original image files, generated thumbnails, and display derivatives to another gallery.

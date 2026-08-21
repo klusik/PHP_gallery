@@ -1,5 +1,39 @@
 # Patch notes
 
+## Version 0.93
+
+Version 0.93 is an operational performance, reliability, diagnostics, and Windows uploader release following Version 0.92.3. It reduces avoidable request work while preserving the existing security, access-control, mutation, viewer, Smart Gallery, thumbnail, and updater contracts.
+
+  ### Highlights
+
+  #### TTFB, caching, and concurrency
+
+  - Added bounded request-trigger scheduling and clearer runtime diagnostics so background maintenance does not consume an unbounded portion of a normal request.
+  - Added request-local database query caching and improved cache invalidation around public media deletion and thumbnail/source lookups.
+  - Hardened public media concurrency/session release behavior and protected clean public-home URL routing.
+  - Improved upload inventory confirmation, automatic media-renamer selection, and maintenance/archive operations.
+
+  #### Updater and operational diagnostics
+
+  - Strengthened autoupdate request-latency handling, resumable updater state, filesystem activation safety, and migration/schema-cache boundaries.
+  - Added Admin test-run workflows, analysis, diagnostics, and browser controls for repeatable operational verification.
+  - Added focused regression coverage for request budgets, database caching, public-media concurrency, clean URLs, archive maintenance, upload automation, and updater behavior.
+
+  #### Windows uploader redesign
+
+  - Redesigned the Windows companion uploader around clearer import, watch-folder, activity, settings, and optional AI workflows.
+  - Added modular configuration, discovery, media-capability, diagnostics, state-store, and job-model services while retaining the existing `.pyw` launcher and installation path.
+  - Improved ZIP/file discovery, progress and recovery behavior, HEIC/HEIF/DNG capability reporting, local thumbnail fallback, tray lifecycle, and worker isolation.
+  - Preserved gallery-scoped API-key behavior, server-authoritative validation, duplicate confirmation, SimConnect metadata, optional AI processing, and source-file safety.
+
+  ### Upgrade and release details
+
+  - No source photographs, generated derivatives, or viewer personal data are migrated by this release.
+  - Existing updater and migration workflows remain the supported upgrade path; release files retain their current schema-inspection and mutation-safety policies.
+  - Updated runtime/version metadata, README, architecture/database/testing documentation, administrator manual and PDF, translations, Admin diagnostics, and the core integrity manifest.
+  - Removed the temporary Windows watcher design brief before release preparation; temporary feature briefs must not ship in release packages.
+  - Verified the complete PHP regression suite, focused runtime/upload/media tests, Windows uploader tests, syntax checks, manifest generation/checking, and `git diff --check`.
+
 ## Version 0.92.3
 
 Version 0.92.3 makes progressive thumbnail sharpening the default public photo-card renderer. It is a compatibility-aware presentation release on top of Version 0.92.2: the responsive renderer remains permanently supported, explicit existing selections are preserved, and the complete viewer-account, collection-sharing, benchmark, lightbox, Smart Gallery, and protected-media behavior remains intact.

@@ -397,35 +397,67 @@ function media_renamer_plans_for_galleries(array $galleryIds, string $pattern = 
  */
 function media_renamer_plan_for_gallery(int $galleryId, string $pattern = ''): array
 {
+    return media_renamer_plan_for_gallery_selection($galleryId, [], $pattern);
+}
+
+/**
+ * Build one media-renamer plan for a bounded image selection while preserving
+ * sequence numbers from the complete gallery order.
+ *
+ * Non-selected images are treated as fixed occupied files. This distinction is
+ * essential for upload-time auto-renaming: a batch containing only newly
+ * uploaded rows must never plan as if every older gallery image will be staged
+ * and moved in the same transaction.
+ *
+ * @param int $galleryId Gallery identifier.
+ * @param array<int,int|string> $imageIds Selected image ids. Empty means all images.
+ * @param string $pattern Pattern value.
+ * @return array<string,mixed> Structured result data for the caller.
+ */
+function media_renamer_plan_for_gallery_selection(int $galleryId, array $imageIds = [], string $pattern = ''): array
+{
     $gallery = find_gallery($galleryId, true);
     if (!$gallery) {
         throw new RuntimeException(t('admin.media_renamer.error_gallery_missing', 'Gallery was not found.'));
     }
 
     $images = gallery_images($galleryId, false);
+    $requestedIds = array_values(array_unique(array_filter(array_map('intval', $imageIds), static fn (int $id): bool => $id > 0)));
+    $selectAll = $requestedIds === [];
+    $selectedImageIds = $selectAll
+        ? array_fill_keys(array_map(static fn (array $image): int => (int) $image['id'], $images), true)
+        : array_fill_keys($requestedIds, true);
+    $selectedImages = $selectAll
+        ? $images
+        : array_values(array_filter($images, static fn (array $image): bool => isset($selectedImageIds[(int) ($image['id'] ?? 0)])));
+
     $galleryRoot = gallery_abs_path((string) $gallery['folder_path']);
     $pattern = media_renamer_normalize_pattern($pattern);
     $contextBase = media_renamer_gallery_context_base($gallery);
-    $selectedImageIds = array_fill_keys(array_map(static fn (array $image): int => (int) $image['id'], $images), true);
-    $currentFileKeys = media_renamer_current_file_keys($images, $gallery);
+    // Only selected sources are considered movable. Files and derivatives owned
+    // by non-selected images remain hard collision boundaries for this batch.
+    $currentFileKeys = media_renamer_current_file_keys($selectedImages, $gallery);
     $usedTargetPaths = [];
     $items = [];
     $sequence = 1;
 
     foreach ($images as $image) {
-        $item = media_renamer_plan_item(
-            $gallery,
-            $galleryRoot,
-            $contextBase,
-            $pattern,
-            $image,
-            $sequence,
-            $selectedImageIds,
-            $currentFileKeys,
-            $usedTargetPaths
-        );
-        if (!media_renamer_plan_item_is_hidden_noop($item)) {
-            $items[] = $item;
+        $imageId = (int) ($image['id'] ?? 0);
+        if ($selectAll || isset($selectedImageIds[$imageId])) {
+            $item = media_renamer_plan_item(
+                $gallery,
+                $galleryRoot,
+                $contextBase,
+                $pattern,
+                $image,
+                $sequence,
+                $selectedImageIds,
+                $currentFileKeys,
+                $usedTargetPaths
+            );
+            if (!media_renamer_plan_item_is_hidden_noop($item)) {
+                $items[] = $item;
+            }
         }
         $sequence++;
     }
@@ -890,13 +922,11 @@ function media_renamer_execute_gallery(int $galleryId, string $pattern = ''): ar
 function media_renamer_execute_gallery_image_batch(int $galleryId, array $imageIds, string $pattern = ''): array
 {
     $requested = array_values(array_unique(array_filter(array_map('intval', $imageIds), static fn (int $id): bool => $id > 0)));
-    $idMap = array_fill_keys($requested, true);
-    $plan = media_renamer_plan_for_gallery($galleryId, $pattern);
-    $plan['items'] = array_values(array_filter((array) ($plan['items'] ?? []), static function (array $item) use ($idMap): bool {
-        return isset($idMap[(int) ($item['image_id'] ?? 0)]);
-    }));
-    $plan['summary'] = media_renamer_summarize_items((array) ($plan['items'] ?? []));
-    return media_renamer_execute_plan($plan);
+    if (!$requested) {
+        return media_renamer_empty_execution_result(0);
+    }
+
+    return media_renamer_execute_plan(media_renamer_plan_for_gallery_selection($galleryId, $requested, $pattern));
 }
 
 /**

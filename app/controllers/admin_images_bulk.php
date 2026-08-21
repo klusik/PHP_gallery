@@ -262,8 +262,12 @@ function cms_admin_bulk_images(): void
                 'files_deleted' => (int) $deleted['files_deleted'],
                 'derivatives_deleted' => (int) $deleted['derivatives_deleted'],
                 'missing_files' => (int) $deleted['missing_files'],
+                'cleanup_failed' => (int) ($deleted['cleanup_failed'] ?? 0),
             ], ['category' => 'other', 'severity' => 'warning']);
             $notice = 'Deleted ' . (int) $deleted['deleted'] . ' image(s), removed ' . (int) $deleted['files_deleted'] . ' original file(s), and cleaned ' . (int) $deleted['derivatives_deleted'] . ' derivative file(s).';
+            if ((int) ($deleted['cleanup_failed'] ?? 0) > 0) {
+                $notice .= ' ' . (int) $deleted['cleanup_failed'] . ' quarantined deletion file(s) could not be physically removed, but they are no longer live media paths.';
+            }
             if (admin_wants_json()) {
                 header('Content-Type: application/json');
                 echo json_encode(admin_bulk_images_success_response($updated, $notice, $returnTab, 'delete', $ownedIds));

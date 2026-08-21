@@ -44,6 +44,7 @@ use function Gallery\Core\cms_footer_scripts_html;
 use function Gallery\Core\cms_head_extras_html;
 use function Gallery\Core\current_login_return_target;
 use function Gallery\Core\current_user;
+use function Gallery\Core\csrf_token;
 use function Gallery\Core\e;
 use function Gallery\Core\theme_cache_key;
 use function Gallery\Core\url_for;
@@ -56,6 +57,9 @@ use function Gallery\Services\custom_css_path;
 use function Gallery\Services\custom_css_url;
 use function Gallery\Services\dev_mode_enabled;
 use function Gallery\Services\favicon_asset_url;
+use function Gallery\Services\admin_test_run_active;
+use function Gallery\Services\feature_flag_enabled;
+use function Gallery\Services\render_admin_test_run_panel;
 use function Gallery\Services\gallery_branding_asset_url;
 use function Gallery\Services\gallery_branding_schema_ready;
 use function Gallery\Services\seo_request_guard_canonical_head_html;
@@ -375,6 +379,18 @@ function view_render_header(string $title, ?array $currentGallery = null, bool $
             $updateClass = $updatePending ? ' class="is-update-pending"' : '';
             $updateLabel = application_update_nav_label($updatePending);
             echo '<a href="' . e(url_for('admin')) . '">' . e(t('nav.admin', 'Admin')) . '</a>';
+            if (in_array($page, ['gallery', 'smart_gallery'], true) && feature_flag_enabled('admin_test_runs')) {
+                if (admin_test_run_active()) {
+                    echo '<span class="button secondary is-disabled" aria-disabled="true">' . e(t('admin.test_run.running_button', 'Test run running')) . '</span>';
+                } else {
+                    echo '<form method="post" action="' . e(url_for('admin_test_run_start')) . '" class="nav-inline-form">';
+                    echo '<input type="hidden" name="csrf_token" value="' . e(csrf_token()) . '">';
+                    echo '<input type="hidden" name="target" value="' . e((string) ($_SERVER['REQUEST_URI'] ?? '/')) . '">';
+                    echo '<input type="hidden" name="target_page" value="' . e($page) . '">';
+                    echo '<button type="submit" class="button secondary">' . e(t('admin.test_run.button', 'Test run')) . '</button>';
+                    echo '</form>';
+                }
+            }
             echo '<a' . $updateClass . ' href="' . e(url_for('admin_update')) . '">' . e($updateLabel) . '</a>';
         }
         echo '<a href="' . e(url_for('admin_logout')) . '">' . e(t('nav.logout', 'Logout')) . '</a>';
@@ -593,6 +609,9 @@ function view_render_footer(): void
 {
     $page = (string) ($_GET['page'] ?? 'home');
     $hasAdminShell = (str_starts_with($page, 'admin') || $page === 'setup') && current_user();
+    if (!$hasAdminShell && function_exists('Gallery\\Services\\render_admin_test_run_panel')) {
+        render_admin_test_run_panel();
+    }
     echo '</main>' . ($hasAdminShell ? '</div>' : '') . '<footer class="site-footer muted">';
     echo '<a class="site-footer-link" href="' . e(cms_github_project_url()) . '" target="_blank" rel="noopener noreferrer">PHP Gallery (' . e(cms_current_version()) . ')</a>';
     echo '</footer>';
@@ -637,6 +656,7 @@ function view_render_footer(): void
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-simbrief-description.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-storage-statistics.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-gallery-report.js',
+        dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-test-run.js',
     ];
     $resolvedScriptVersion = asset_dependency_revision($scriptVersionPaths);
     view_render_browser_i18n_script();

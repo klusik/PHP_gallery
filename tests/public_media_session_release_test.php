@@ -5,14 +5,20 @@ declare(strict_types=1);
 /**
  * Regression contract for read-only media session concurrency.
  *
- * Public media routes need the PHP session while evaluating access policy, but
- * they must release the exclusive session lock before derivative generation or
- * long response streaming so the same visitor can paginate concurrently.
+ * Public media routes complete session-dependent request initialization first,
+ * then release the exclusive PHP session lock before authorization/path/database
+ * resolution and long response streaming. Controller-level release calls remain
+ * as defensive fallbacks for direct/legacy dispatch paths.
  */
 
 $sourcePath = dirname(__DIR__) . '/app/controllers/public_media.php';
 $source = file_get_contents($sourcePath);
-if (!is_string($source)) {
+$bootstrapSource = file_get_contents(dirname(__DIR__) . '/app/bootstrap.php');
+$sessionSource = file_get_contents(dirname(__DIR__) . '/app/bootstrap/session.php');
+$routingSource = file_get_contents(dirname(__DIR__) . '/app/bootstrap/routing.php');
+$maintenanceSource = file_get_contents(dirname(__DIR__) . '/app/bootstrap/maintenance.php');
+$requestSource = file_get_contents(dirname(__DIR__) . '/app/bootstrap/request.php');
+if (!is_string($source) || !is_string($bootstrapSource) || !is_string($sessionSource) || !is_string($routingSource) || !is_string($maintenanceSource) || !is_string($requestSource)) {
     fwrite(STDERR, "Unable to read public_media.php\n");
     exit(1);
 }
@@ -28,6 +34,44 @@ function media_session_assert(bool $condition, string $message): void
     fwrite(STDERR, $message . "\n");
     exit(1);
 }
+
+media_session_assert(
+    str_contains($routingSource, 'function cms_route_is_read_only_media_asset(string $page): bool')
+        && str_contains($routingSource, "'public_thumb'")
+        && str_contains($routingSource, "'public_media'")
+        && str_contains($routingSource, "'gallery_cover_asset'")
+        && str_contains($routingSource, "'gallery_branding_asset'"),
+    'Read-only media route classification must cover protected thumbnail/media asset endpoints.'
+);
+$initializePosition = strpos($bootstrapSource, '$page = cms_initialize_request();');
+$earlyReleasePosition = strpos($bootstrapSource, 'cms_release_read_only_media_session_lock($page);');
+$schemaPrimePosition = strpos($bootstrapSource, 'cms_prime_read_only_media_schema_cache($page);');
+$maintenancePosition = strpos($bootstrapSource, 'cms_run_request_maintenance($page);');
+media_session_assert(
+    $initializePosition !== false && $earlyReleasePosition !== false && $schemaPrimePosition !== false && $maintenancePosition !== false
+        && $initializePosition < $earlyReleasePosition
+        && $earlyReleasePosition < $schemaPrimePosition
+        && $schemaPrimePosition < $maintenancePosition,
+    'Media session release and schema priming must occur after request initialization but before maintenance/dispatch.'
+);
+media_session_assert(
+    str_contains($sessionSource, 'function cms_release_read_only_media_session_lock(string $page): bool')
+        && str_contains($sessionSource, 'session_write_close();')
+        && str_contains($sessionSource, 'auth_remember_cookie_name')
+        && str_contains($sessionSource, 'current_user();'),
+    'Early media session release must preserve durable admin-login restoration before closing the writable session.'
+);
+$maintenanceSkip = strpos($maintenanceSource, 'cms_route_is_read_only_media_asset($page)');
+$autoupdate = strpos($maintenanceSource, 'application_autoupdate_maybe_run();');
+media_session_assert(
+    $maintenanceSkip !== false && $autoupdate !== false && $maintenanceSkip < $autoupdate,
+    'Read-only media requests must skip request-triggered updater/maintenance work before it begins.'
+);
+media_session_assert(
+    str_contains($requestSource, 'function cms_prime_read_only_media_schema_cache(string $page): void')
+        && str_contains($requestSource, 'schema_inspection_prime_table_snapshots'),
+    'Read-only media requests must prime the bounded schema snapshot after releasing the session lock.'
+);
 
 media_session_assert(
     str_contains($source, 'function cms_release_public_media_session_lock(): void'),

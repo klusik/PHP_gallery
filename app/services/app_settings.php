@@ -442,6 +442,53 @@ use function Gallery\Core\now_sql;
 
 
 /**
+ * Reset request-local application-setting state.
+ *
+ * Long-running maintenance/update requests can call this after schema changes or
+ * fixture replacement. Normal web requests start with an empty process-local cache.
+ */
+function app_settings_reset_request_cache(): void
+{
+    $GLOBALS['cms_app_settings_cache'] = [];
+    $GLOBALS['cms_app_settings_cache_loaded'] = false;
+}
+
+/**
+ * Prime the request-local settings cache with one bounded table read.
+ *
+ * Public rendering reads many independent settings. Loading the small settings
+ * table once prevents dozens of one-row round trips while keeping all values
+ * request-local and preserving same-request writes through set_app_setting().
+ */
+function app_settings_prime_request_cache(): void
+{
+    if (!isset($GLOBALS['cms_app_settings_cache']) || !is_array($GLOBALS['cms_app_settings_cache'])) {
+        $GLOBALS['cms_app_settings_cache'] = [];
+    }
+    if (($GLOBALS['cms_app_settings_cache_loaded'] ?? false) === true) {
+        return;
+    }
+
+    try {
+        $stmt = db()->query('SELECT setting_key, setting_value FROM app_settings');
+        if ($stmt !== false) {
+            foreach ($stmt->fetchAll() as $row) {
+                $settingKey = (string) ($row['setting_key'] ?? '');
+                if ($settingKey === '') {
+                    continue;
+                }
+                $GLOBALS['cms_app_settings_cache'][$settingKey] = (string) ($row['setting_value'] ?? '');
+            }
+        }
+        $GLOBALS['cms_app_settings_cache_loaded'] = true;
+    } catch (PDOException) {
+        // Installation/migration compatibility: fall back to the old one-key read
+        // path instead of treating a temporary preload failure as an empty table.
+        $GLOBALS['cms_app_settings_cache_loaded'] = false;
+    }
+}
+
+/**
  * Read one application setting with a fallback.
  *
  * @param string $key Lookup key.
@@ -461,11 +508,17 @@ function app_setting(string $key, ?string $default = null): ?string
         return $cachedValue === null ? $default : (string) $cachedValue;
     }
 
+    app_settings_prime_request_cache();
+    if (($GLOBALS['cms_app_settings_cache_loaded'] ?? false) === true) {
+        return array_key_exists($key, $GLOBALS['cms_app_settings_cache'])
+            ? (string) $GLOBALS['cms_app_settings_cache'][$key]
+            : $default;
+    }
+
     try {
-        // Variable $stmt stores this steps working value.
+        // Preload failure is deliberately recoverable through the legacy one-key query.
         $stmt = db()->prepare('SELECT setting_value FROM app_settings WHERE setting_key = ?');
         $stmt->execute([$key]);
-        // Variable $value stores this steps working value.
         $value = $stmt->fetchColumn();
         $GLOBALS['cms_app_settings_cache'][$key] = $value === false ? null : (string) $value;
         return $value === false ? $default : (string) $value;

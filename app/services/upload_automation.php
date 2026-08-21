@@ -486,14 +486,19 @@ function upload_automation_inventory_disk_matches(array $gallery, array $candida
  * @param int $galleryId Gallery id authorized by the API key.
  * @param array<string,mixed> $gallery Gallery row authorized by the API key.
  * @param array<int,array{client_id:string,filename:string,size:int,sha256:string}> $candidates Normalized client inventory candidates.
+ * @param bool $deepCheck Whether to perform the bounded filesystem fallback used only after ambiguous upload failures.
  * @return array<string,mixed> JSON-safe inventory response.
  */
-function upload_automation_gallery_inventory_response(int $galleryId, array $gallery, array $candidates): array
+function upload_automation_gallery_inventory_response(int $galleryId, array $gallery, array $candidates, bool $deepCheck = false): array
 {
-    // $dbMatches stores the normal indexed-image matches.
+    // $dbMatches stores the normal indexed-image matches. Routine inventory remains database-only.
     $dbMatches = upload_automation_inventory_db_matches($galleryId, $candidates);
-    // $diskMatches stores fallback direct-file matches for interrupted requests.
-    $diskMatches = upload_automation_inventory_disk_matches($gallery, $candidates, $dbMatches);
+    // $deepCandidates bounds the expensive disk fallback to a tiny recovery request.
+    $deepCandidates = $deepCheck ? array_slice($candidates, 0, 8) : [];
+    // $diskMatches stores fallback direct-file matches only for interrupted upload recovery.
+    $diskMatches = $deepCandidates
+        ? upload_automation_inventory_disk_matches($gallery, $deepCandidates, $dbMatches)
+        : [];
     // $matches stores the combined remote truth keyed by content hash.
     $matches = array_replace($diskMatches, $dbMatches);
 
@@ -525,6 +530,7 @@ function upload_automation_gallery_inventory_response(int $galleryId, array $gal
         'checked' => count($candidates),
         'matched' => count($existing),
         'existing' => $existing,
+        'deep_check_applied' => $deepCheck && $deepCandidates !== [],
         'fingerprint' => upload_automation_gallery_inventory_fingerprint($galleryId),
         'server_time' => now_sql(),
     ];

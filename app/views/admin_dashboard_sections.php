@@ -809,6 +809,7 @@ function view_render_admin_dashboard_site_maintenance_card(array $model, string 
     $lastStep = is_array($state['last_step_summary'] ?? null) ? $state['last_step_summary'] : [];
     $enabled = !empty($status['enabled']);
     $requestTriggerEnabled = !empty($status['request_trigger_enabled']);
+    $requestTriggerSupported = !empty($status['request_trigger_supported']);
     $utcTime = (string) ($status['utc_time'] ?? '00:00');
     $batchSize = (int) ($status['batch_size'] ?? 20);
     $timeBudget = (int) ($status['time_budget_seconds'] ?? 20);
@@ -864,6 +865,10 @@ function view_render_admin_dashboard_site_maintenance_card(array $model, string 
         echo '<span class="admin-site-maintenance-note is-warning">' . e(t('admin.site_maintenance.last_busy', 'The last maintenance call found another invocation already running.')) . '</span>';
     }
 
+    if ($requestTriggerEnabled && !$requestTriggerSupported) {
+        echo '<span class="admin-site-maintenance-note is-warning">' . e(t('admin.site_maintenance.request_trigger_unsupported', 'This PHP runtime cannot detach background work from a visible page response, so request-triggered maintenance is suppressed to protect gallery latency. Use hosting cron or Run one safe check now instead.')) . '</span>';
+    }
+
     if ($scheduledAtUtc !== '' && $windowEndsAtUtc !== '') {
         echo '<span class="admin-site-maintenance-note">' . e(t('admin.site_maintenance.window_summary', 'Active UTC window: {start} to {end}. Current window state: {state}.', [
             'start' => $scheduledAtUtc,
@@ -875,7 +880,7 @@ function view_render_admin_dashboard_site_maintenance_card(array $model, string 
     echo '<form method="post" action="' . e(url_for('admin_site_maintenance_settings')) . '" class="admin-site-maintenance-settings-form">' . csrf_field();
     echo '<input type="hidden" name="site_maintenance_action" value="save">';
     echo '<label class="admin-compact-toggle"><input type="checkbox" name="site_maintenance_enabled" value="1"' . ($enabled ? ' checked' : '') . '> <span>' . e(t('admin.site_maintenance.enabled', 'Enable scheduled maintenance')) . '</span></label>';
-    echo '<label class="admin-compact-toggle"><input type="checkbox" name="site_maintenance_request_trigger_enabled" value="1"' . ($requestTriggerEnabled ? ' checked' : '') . '> <span>' . e(t('admin.site_maintenance.request_trigger_enabled', 'Let normal page requests trigger due maintenance')) . '</span></label>';
+    echo '<label class="admin-compact-toggle"><input type="checkbox" name="site_maintenance_request_trigger_enabled" value="1"' . ($requestTriggerEnabled ? ' checked' : '') . '> <span>' . e(t('admin.site_maintenance.request_trigger_enabled', 'Let Admin dashboard requests trigger due maintenance')) . '</span></label>';
     echo '<label><span>' . e(t('admin.site_maintenance.utc_time', 'Start time, UTC')) . '</span><input type="time" name="site_maintenance_utc_time" value="' . e($utcTime) . '"></label>';
     echo '<label><span>' . e(t('admin.site_maintenance.window_hours', 'Overall maintenance window, hours')) . '</span><input type="number" name="site_maintenance_window_hours" min="0.25" max="24" step="0.25" value="' . e($windowHours) . '"></label>';
     echo '<label><span>' . e(t('admin.site_maintenance.batch_size', 'Max images checked per internal batch')) . '</span><input type="number" name="site_maintenance_batch_size" min="1" max="50" value="' . $batchSize . '"></label>';

@@ -36,7 +36,16 @@ declare(strict_types=1);
 
 use function Gallery\Core\cms_run;
 
-require __DIR__ . '/../app/bootstrap.php';
+require_once __DIR__ . '/../app/diagnostics/admin_test_run_early.php';
+\Gallery\Diagnostics\admin_test_run_early_init(dirname(__DIR__));
+\Gallery\Diagnostics\admin_test_run_early_phase_start('app_bootstrap_include');
+try {
+    require __DIR__ . '/../app/bootstrap.php';
+    \Gallery\Diagnostics\admin_test_run_early_phase_end('app_bootstrap_include');
+} catch (\Throwable $exception) {
+    \Gallery\Diagnostics\admin_test_run_early_phase_end('app_bootstrap_include', false, $exception);
+    throw $exception;
+}
 
 cms_run();
 
