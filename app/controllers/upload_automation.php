@@ -434,8 +434,10 @@ function cms_upload_automation_upload(): void
     if ($action === 'inventory') {
         // $candidates stores local files the active side wants to compare with this gallery.
         $candidates = upload_automation_inventory_candidates($jsonPayload);
+        // $deepCheck enables the bounded filesystem fallback only for ambiguous upload recovery.
+        $deepCheck = ($jsonPayload['deep_check'] ?? false) === true;
         mark_upload_automation_token_used((int) $tokenRow['id']);
-        upload_automation_json(upload_automation_gallery_inventory_response($galleryId, $gallery, $candidates));
+        upload_automation_json(upload_automation_gallery_inventory_response($galleryId, $gallery, $candidates, $deepCheck));
         return;
     }
 
@@ -495,10 +497,11 @@ function cms_upload_automation_upload(): void
         // $postUploadErrors stores optional post-store failures that must not poison the original upload response.
         $postUploadErrors = [];
         // $uploadResult stores the gallery mutation result produced under a
-        // short gallery-scoped advisory lock. Manual bulk upload can run several
-        // HTTP requests in parallel, but the existing scanner reconciles the
-        // whole target folder. The lock prevents two PHP workers from inserting
-        // the same discovered image row concurrently.
+        // short gallery-scoped advisory lock. The existing scanner reconciles
+        // the whole target folder, so the companion app intentionally serializes
+        // network uploads. The lock remains authoritative for other clients and
+        // prevents two PHP workers from inserting the same discovered image row
+        // concurrently.
         $uploadResult = upload_automation_with_gallery_lock($galleryId, function () use ($galleryId, $gallery, $entries, $clientThumbnailEntries, $imageClientIds, $simCameraMetadata, &$postUploadErrors): array {
             // $stored stores the existing upload pipeline result after filesystem storage and image scan.
             $stored = store_uploaded_gallery_images($galleryId, $entries);
@@ -903,7 +906,7 @@ function render_admin_gallery_upload_automation_panel(array $gallery, string $re
     echo '<div class="admin-upload-automation-grid">';
     echo '<div class="admin-upload-automation-copy">';
     echo '<label><span>' . e(t('upload_automation.endpoint', 'Upload endpoint')) . '</span><input type="text" readonly value="' . e($endpoint) . '"></label>';
-    echo '<p class="muted">' . e(t('upload_automation.endpoint_help', 'Use this endpoint with the generated API key in the Python watcher app. The clean URL /api/upload also works when URL rewriting is enabled.')) . '</p>';
+    echo '<p class="muted">' . e(t('upload_automation.endpoint_help', 'Use this exact endpoint with the generated API key in the Windows uploader. The query-string front-controller form is the portable canonical API URL; clean /api/upload routing is treated only as a compatibility fallback.')) . '</p>';
     if ($newToken !== '') {
         echo '<label><span>' . e(t('upload_automation.new_key', 'New API key')) . '</span><textarea readonly rows="3" class="admin-upload-automation-key">' . e($newToken) . '</textarea></label>';
         echo '<div class="notice">' . e(t('upload_automation.copy_now', 'Copy this API key now. For security, only its hash is stored and the raw value will not be shown again.')) . '</div>';

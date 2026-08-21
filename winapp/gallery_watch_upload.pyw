@@ -20,6 +20,7 @@ import hashlib
 import importlib
 import json
 import logging
+from logging.handlers import RotatingFileHandler
 import math
 import mimetypes
 import multiprocessing
@@ -37,6 +38,25 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 from urllib import error, parse, request
+
+from uploader.config import CONFIG_SCHEMA_VERSION, DEFAULTS as REDESIGN_CONFIG_DEFAULTS, migrate_config_payload
+from uploader.diagnostics import redact_text
+from uploader.discovery import (
+    ArchiveLimits,
+    cleanup_stale_staging,
+    discover_folder,
+    discover_selected_files,
+    stage_zip_archive,
+)
+from uploader.media import capability_notes, detect_suffix_capabilities, probe_file
+from uploader.models import ActivityEvent, ImportItem, ImportJob, ImportPlan, ITEM_ACTIVE_STATES, RECOVERABLE_ITEM_STATES
+from uploader.state_store import (
+    JobStateStore,
+    atomic_write_json,
+    load_upload_state,
+    merge_upload_sections,
+    quarantine_malformed,
+)
 
 try:
     import tkinter as tk
@@ -71,6 +91,7 @@ CONFIG_DIR = Path(os.environ.get("APPDATA", str(Path.home()))) / APP_NAME
 CONFIG_PATH = CONFIG_DIR / "config.json"
 STATE_PATH = CONFIG_DIR / "upload_state.json"
 LOG_PATH = CONFIG_DIR / "watcher.log"
+STAGING_ROOT = CONFIG_DIR / "staging"
 APP_DIR = Path(__file__).resolve().parent
 REQUIREMENTS_PATH = APP_DIR / "requirements.txt"
 ASSETS_DIR = APP_DIR / "assets"
@@ -126,9 +147,9 @@ AI_SEMANTIC_PROMPT_DEFAULT = (
 AI_VISION_BACKEND_CHOICES = ("auto", "pillow", "transformers", "ollama", "external")
 THUMBNAIL_SIZES = [300, 600, 800, 960, 1280, 1600]
 DEFAULT_THUMBNAIL_WORKERS = max(2, min(12, (os.cpu_count() or 4) // 2 or 2))
-DEFAULT_UPLOAD_WORKERS = 4
+DEFAULT_UPLOAD_WORKERS = 1
 MAX_THUMBNAIL_WORKERS = 32
-MAX_UPLOAD_WORKERS = 12
+MAX_UPLOAD_WORKERS = 1
 SIMCONNECT_CAMERA_QUERY_TIMEOUT_SECONDS = 1.0
 SIMCONNECT_POSITION_REFERENTIAL_WORLD = 2
 SIMCONNECT_DLL_ENV_VAR = "SIMCONNECT_DLL"
@@ -206,6 +227,7 @@ class WatcherConfig:
     @param ai_semantic_prompt: Prompt sent only to a local vision backend.
     """
 
+    schema_version: int = CONFIG_SCHEMA_VERSION
     watched_folder: str = ""
     gallery_url: str = ""
     api_key: str = ""
@@ -215,9 +237,18 @@ class WatcherConfig:
     attach_sim_camera_metadata: bool = True
     simconnect_dll_path: str = ""
     delete_uploaded_files: bool = False
+    watch_recursive: bool = bool(REDESIGN_CONFIG_DEFAULTS["watch_recursive"])
+    manual_thumbnail_mode: str = str(REDESIGN_CONFIG_DEFAULTS["manual_thumbnail_mode"])
     manual_thumbnail_workers: int = 0
     manual_upload_workers: int = 0
     inventory_refresh_seconds: float = DEFAULT_INVENTORY_REFRESH_SECONDS
+    archive_max_entries: int = int(REDESIGN_CONFIG_DEFAULTS["archive_max_entries"])
+    archive_max_uncompressed_bytes: int = int(REDESIGN_CONFIG_DEFAULTS["archive_max_uncompressed_bytes"])
+    archive_max_file_bytes: int = int(REDESIGN_CONFIG_DEFAULTS["archive_max_file_bytes"])
+    archive_max_compression_ratio: float = float(REDESIGN_CONFIG_DEFAULTS["archive_max_compression_ratio"])
+    staging_cleanup_age_hours: float = float(REDESIGN_CONFIG_DEFAULTS["staging_cleanup_age_hours"])
+    close_to_tray: bool = bool(REDESIGN_CONFIG_DEFAULTS["close_to_tray"])
+    activity_history_limit: int = int(REDESIGN_CONFIG_DEFAULTS["activity_history_limit"])
     ai_worker_enabled: bool = False
     ai_worker_poll_seconds: float = DEFAULT_AI_WORKER_POLL_SECONDS
     ai_worker_lease_seconds: int = DEFAULT_AI_WORKER_LEASE_SECONDS
@@ -247,7 +278,9 @@ class WatcherConfig:
         @return WatcherConfig Normalized WatcherConfig instance.
         @raises ValueError: Raised by float conversion when numeric values are present but cannot be parsed.
         """
+        data, _migrated = migrate_config_payload(data)
         return cls(
+            schema_version=CONFIG_SCHEMA_VERSION,
             watched_folder=str(data.get("watched_folder", "")),
             gallery_url=str(data.get("gallery_url", "")),
             api_key=str(data.get("api_key", "")),
@@ -257,9 +290,18 @@ class WatcherConfig:
             attach_sim_camera_metadata=bool(data.get("attach_sim_camera_metadata", True)),
             simconnect_dll_path=str(data.get("simconnect_dll_path", "")),
             delete_uploaded_files=bool(data.get("delete_uploaded_files", False)),
+            watch_recursive=bool(data.get("watch_recursive", REDESIGN_CONFIG_DEFAULTS["watch_recursive"])),
+            manual_thumbnail_mode=str(data.get("manual_thumbnail_mode", REDESIGN_CONFIG_DEFAULTS["manual_thumbnail_mode"]) or "server"),
             manual_thumbnail_workers=int(data.get("manual_thumbnail_workers", 0) or 0),
             manual_upload_workers=int(data.get("manual_upload_workers", 0) or 0),
             inventory_refresh_seconds=float(data.get("inventory_refresh_seconds", DEFAULT_INVENTORY_REFRESH_SECONDS) or DEFAULT_INVENTORY_REFRESH_SECONDS),
+            archive_max_entries=int(data.get("archive_max_entries", REDESIGN_CONFIG_DEFAULTS["archive_max_entries"]) or REDESIGN_CONFIG_DEFAULTS["archive_max_entries"]),
+            archive_max_uncompressed_bytes=int(data.get("archive_max_uncompressed_bytes", REDESIGN_CONFIG_DEFAULTS["archive_max_uncompressed_bytes"]) or REDESIGN_CONFIG_DEFAULTS["archive_max_uncompressed_bytes"]),
+            archive_max_file_bytes=int(data.get("archive_max_file_bytes", REDESIGN_CONFIG_DEFAULTS["archive_max_file_bytes"]) or REDESIGN_CONFIG_DEFAULTS["archive_max_file_bytes"]),
+            archive_max_compression_ratio=float(data.get("archive_max_compression_ratio", REDESIGN_CONFIG_DEFAULTS["archive_max_compression_ratio"]) or REDESIGN_CONFIG_DEFAULTS["archive_max_compression_ratio"]),
+            staging_cleanup_age_hours=float(data.get("staging_cleanup_age_hours", REDESIGN_CONFIG_DEFAULTS["staging_cleanup_age_hours"]) or REDESIGN_CONFIG_DEFAULTS["staging_cleanup_age_hours"]),
+            close_to_tray=bool(data.get("close_to_tray", REDESIGN_CONFIG_DEFAULTS["close_to_tray"])),
+            activity_history_limit=int(data.get("activity_history_limit", REDESIGN_CONFIG_DEFAULTS["activity_history_limit"]) or REDESIGN_CONFIG_DEFAULTS["activity_history_limit"]),
             ai_worker_enabled=bool(data.get("ai_worker_enabled", False)),
             ai_worker_poll_seconds=float(data.get("ai_worker_poll_seconds", DEFAULT_AI_WORKER_POLL_SECONDS) or DEFAULT_AI_WORKER_POLL_SECONDS),
             ai_worker_lease_seconds=int(data.get("ai_worker_lease_seconds", DEFAULT_AI_WORKER_LEASE_SECONDS) or DEFAULT_AI_WORKER_LEASE_SECONDS),
@@ -283,6 +325,7 @@ class WatcherConfig:
         @return Dict[str, Any] Plain dictionary suitable for json.dumps().
         """
         return {
+            "schema_version": CONFIG_SCHEMA_VERSION,
             "watched_folder": self.watched_folder,
             "gallery_url": self.gallery_url,
             "api_key": self.api_key,
@@ -292,9 +335,18 @@ class WatcherConfig:
             "attach_sim_camera_metadata": self.attach_sim_camera_metadata,
             "simconnect_dll_path": self.simconnect_dll_path,
             "delete_uploaded_files": self.delete_uploaded_files,
+            "watch_recursive": self.watch_recursive,
+            "manual_thumbnail_mode": self.manual_thumbnail_mode,
             "manual_thumbnail_workers": self.manual_thumbnail_workers,
             "manual_upload_workers": self.manual_upload_workers,
             "inventory_refresh_seconds": self.inventory_refresh_seconds,
+            "archive_max_entries": self.archive_max_entries,
+            "archive_max_uncompressed_bytes": self.archive_max_uncompressed_bytes,
+            "archive_max_file_bytes": self.archive_max_file_bytes,
+            "archive_max_compression_ratio": self.archive_max_compression_ratio,
+            "staging_cleanup_age_hours": self.staging_cleanup_age_hours,
+            "close_to_tray": self.close_to_tray,
+            "activity_history_limit": self.activity_history_limit,
             "ai_worker_enabled": self.ai_worker_enabled,
             "ai_worker_poll_seconds": self.ai_worker_poll_seconds,
             "ai_worker_lease_seconds": self.ai_worker_lease_seconds,
@@ -749,9 +801,19 @@ class ConfigStore:
         try:
             data = json.loads(self.path.read_text(encoding="utf-8"))
             if not isinstance(data, dict):
+                quarantine_malformed(self.path)
                 return WatcherConfig()
-            return WatcherConfig.from_dict(data)
-        except (OSError, json.JSONDecodeError, ValueError):
+            normalized, migrated = migrate_config_payload(data)
+            config = WatcherConfig.from_dict(normalized)
+            canonical_url = normalize_upload_url(config.gallery_url) if config.gallery_url.strip() else ""
+            if canonical_url and canonical_url != config.gallery_url:
+                config.gallery_url = canonical_url
+                migrated = True
+            if migrated:
+                atomic_write_json(self.path, config.to_dict())
+            return config
+        except (OSError, json.JSONDecodeError, ValueError, UnicodeError):
+            quarantine_malformed(self.path)
             return WatcherConfig()
 
     def save(self, config: WatcherConfig) -> None:
@@ -764,10 +826,7 @@ class ConfigStore:
         @param WatcherConfig config: Configuration object to persist.
         @raises OSError: Propagated when the file cannot be written.
         """
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        tmp_path = self.path.with_suffix(".tmp")
-        tmp_path.write_text(json.dumps(config.to_dict(), indent=2), encoding="utf-8")
-        tmp_path.replace(self.path)
+        atomic_write_json(self.path, config.to_dict())
 
 
 class UploadState:
@@ -788,9 +847,12 @@ class UploadState:
         """
         self.path = path
         self.data: Dict[str, Any] = {
+            "schema_version": 2,
             "uploaded_paths": {},
             "uploaded_hashes": {},
             "failures": {},
+            "jobs": {},
+            "recent_events": [],
         }
         self.load()
 
@@ -802,19 +864,16 @@ class UploadState:
         not invalidate all upload history. This matters because state is only an
         optimization and retry aid, not canonical gallery data.
         """
-        if not self.path.is_file():
-            return
-        try:
-            data = json.loads(self.path.read_text(encoding="utf-8"))
-            if isinstance(data, dict):
-                uploaded_paths = data.get("uploaded_paths", {})
-                uploaded_hashes = data.get("uploaded_hashes", {})
-                failures = data.get("failures", {})
-                self.data["uploaded_paths"] = uploaded_paths if isinstance(uploaded_paths, dict) else {}
-                self.data["uploaded_hashes"] = uploaded_hashes if isinstance(uploaded_hashes, dict) else {}
-                self.data["failures"] = failures if isinstance(failures, dict) else {}
-        except (OSError, json.JSONDecodeError):
-            return
+        data = load_upload_state(self.path, quarantine_bad=True)
+        uploaded_paths = data.get("uploaded_paths", {})
+        uploaded_hashes = data.get("uploaded_hashes", {})
+        failures = data.get("failures", {})
+        self.data["schema_version"] = 2
+        self.data["uploaded_paths"] = uploaded_paths if isinstance(uploaded_paths, dict) else {}
+        self.data["uploaded_hashes"] = uploaded_hashes if isinstance(uploaded_hashes, dict) else {}
+        self.data["failures"] = failures if isinstance(failures, dict) else {}
+        self.data["jobs"] = data.get("jobs", {}) if isinstance(data.get("jobs", {}), dict) else {}
+        self.data["recent_events"] = data.get("recent_events", []) if isinstance(data.get("recent_events", []), list) else []
 
     def save(self) -> None:
         """
@@ -822,10 +881,7 @@ class UploadState:
         
         @raises OSError: Propagated when the state file cannot be written.
         """
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        tmp_path = self.path.with_suffix(".tmp")
-        tmp_path.write_text(json.dumps(self.data, indent=2), encoding="utf-8")
-        tmp_path.replace(self.path)
+        merge_upload_sections(self.path, self.data)
 
     def already_uploaded_path(self, path: Path, file_hash: str) -> bool:
         """
@@ -991,149 +1047,228 @@ def setup_logging() -> None:
     and is more useful when diagnosing upload or hosting issues later.
     """
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    logging.basicConfig(
-        filename=str(LOG_PATH),
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(message)s",
-    )
+    root_logger = logging.getLogger()
+    if root_logger.handlers:
+        return
+    root_logger.setLevel(logging.INFO)
+    handler = RotatingFileHandler(str(LOG_PATH), maxBytes=2 * 1024 * 1024, backupCount=3, encoding="utf-8")
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+    root_logger.addHandler(handler)
 
 
-def normalize_upload_url(value: str) -> str:
+def upload_endpoint_candidates(value: str) -> List[str]:
     """
-    Convert a site root or endpoint-like value into the upload endpoint URL.
-    
-    Accepted input forms include a bare host, a gallery root URL, index.php, an
-    index.php URL already containing page=upload_automation_upload, or a future
-    /api/upload style endpoint. The function is deliberately tolerant because
-    users are likely to paste whatever URL they currently have open.
-    
-    @param str value: User-provided site URL or upload endpoint.
-    @return str Normalized upload endpoint URL, or an empty string for blank input.
+    Resolve a user-supplied Gallery URL into ordered upload endpoint candidates.
+
+    The query-string front-controller endpoint is always preferred, even when a
+    user pastes the optional /api/upload alias. Real shared-hosting deployments
+    can route clean URLs for ordinary GET pages while proxies/WAF rules still
+    treat POST requests under /api/ differently. The query-string endpoint is
+    therefore the portable canonical form. The clean route remains a bounded
+    fallback only when the canonical route is rejected by the hosting layer with
+    a non-JSON HTTP 404 before PHP Gallery is reached.
+
+    @param str value: User-provided Gallery root or upload endpoint URL.
+    @return List[str] Ordered unique HTTP(S) endpoint candidates.
     """
     raw = value.strip()
     if not raw:
-        return ""
+        return []
 
     parsed = parse.urlparse(raw)
     if not parsed.scheme:
         raw = "https://" + raw
         parsed = parse.urlparse(raw)
+    if parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc:
+        return []
 
+    parsed = parsed._replace(fragment="")
+    path = parsed.path or ""
+    stripped_path = path.rstrip("/")
     query = parse.parse_qs(parsed.query)
-    if query.get("page", [""])[0] == "upload_automation_upload" or parsed.path.rstrip("/").endswith("/api/upload"):
-        return raw
-    if parsed.path.rstrip("/").endswith("/index.php") or parsed.path == "/index.php":
-        return parse.urlunparse(parsed._replace(query="page=upload_automation_upload", fragment=""))
-    return raw.rstrip("/") + "/index.php?page=upload_automation_upload"
+    page = query.get("page", [""])[0]
+
+    if stripped_path.endswith("/api/upload"):
+        base_path = stripped_path[:-len("/api/upload")]
+    elif stripped_path.endswith("/index.php") or stripped_path == "/index.php":
+        base_path = stripped_path[:-len("/index.php")] if stripped_path != "/index.php" else ""
+    else:
+        base_path = stripped_path
+
+    base_path = base_path.rstrip("/")
+    clean_path = (base_path + "/api/upload") if base_path else "/api/upload"
+    query_path = (base_path + "/index.php") if base_path else "/index.php"
+
+    clean_url = parse.urlunparse(parsed._replace(path=clean_path, query="", fragment=""))
+    query_url = parse.urlunparse(parsed._replace(path=query_path, query="page=upload_automation_upload", fragment=""))
+
+    # Preserve an already-canonical URL exactly apart from the discarded fragment.
+    if (stripped_path.endswith("/index.php") or stripped_path == "/index.php") and page == "upload_automation_upload":
+        query_url = parse.urlunparse(parsed)
+
+    ordered = [query_url, clean_url]
+    unique: List[str] = []
+    seen: Set[str] = set()
+    for candidate in ordered:
+        if candidate not in seen:
+            seen.add(candidate)
+            unique.append(candidate)
+    return unique
+
+
+def normalize_upload_url(value: str) -> str:
+    """
+    Convert a site root or endpoint-like value into the preferred upload URL.
+
+    All accepted inputs, including the optional /api/upload alias, normalize to
+    the portable query-string front-controller endpoint. The clean route remains
+    available only as a routing-level 404 fallback through
+    upload_endpoint_candidates().
+
+    @param str value: User-provided site URL or upload endpoint.
+    @return str Preferred upload endpoint URL, or an empty string for invalid input.
+    """
+    candidates = upload_endpoint_candidates(value)
+    return candidates[0] if candidates else ""
 
 
 def revoke_upload_key(upload_url: str, api_key: str) -> Dict[str, Any]:
     """
-    Revoke the active upload automation key through the gallery endpoint.
-    
-    The gallery revokes the token identified by the authenticated API key, so
-    the companion app does not need a second admin-only credential or token id.
-    
-    @param str upload_url: Normalized PHP Gallery upload endpoint.
+    Revoke the active upload automation key through the authenticated API.
+
+    Revocation uses the same JSON request path and endpoint fallback rules as
+    inventory and other metadata commands. The server identifies the exact token
+    from X-Gallery-API-Key, so no admin session or token database id is required.
+
+    A gateway 502/503/504 is treated as ambiguous because the reverse proxy may
+    have lost the PHP response after the token was already revoked. One delayed
+    retry is allowed. If that retry reports the key as invalid/revoked, the desired
+    server state has been reached and the operation is considered successful. The
+    retry is intentionally bounded to avoid amplifying an overloaded server.
+
+    @param str upload_url: PHP Gallery upload endpoint or Gallery root URL.
     @param str api_key: Current gallery-scoped API key.
     @return Dict[str, Any] Parsed JSON response from the server.
-    @raises RuntimeError: Raised for network, HTTP, or non-JSON failures.
+    @raises RuntimeError: Raised for network, HTTP, non-JSON, or server failures.
     """
-    body = parse.urlencode({"action": "revoke"}).encode("ascii")
-    http_request = request.Request(
-        upload_url,
-        data=body,
-        headers={
-            "Content-Type": "application/x-www-form-urlencoded",
-            "Content-Length": str(len(body)),
-            "X-Gallery-API-Key": api_key,
-            "Accept": "application/json",
-            "User-Agent": "PHPGalleryUploader/1.1",
-        },
-        method="POST",
-    )
-
     try:
-        with request.urlopen(http_request, timeout=DEFAULT_TIMEOUT_SECONDS) as response:
-            response_body = response.read().decode("utf-8", errors="replace")
-    except error.HTTPError as exc:
-        response_body = exc.read().decode("utf-8", errors="replace")
+        return post_json(upload_url, api_key, {"action": "revoke"})
+    except RuntimeError as exc:
+        first_message = str(exc)
+        if not any(marker in first_message for marker in ("HTTP 502:", "HTTP 503:", "HTTP 504:")):
+            raise
+        logging.warning("API-key revocation received a transient gateway error; retrying once after a short delay.")
+        time.sleep(2.0)
         try:
-            payload = json.loads(response_body)
-            message = payload.get("error") if isinstance(payload, dict) else None
-        except json.JSONDecodeError:
-            message = None
-        raise RuntimeError(str(message or f"HTTP {exc.code}: {response_body[:300]}")) from exc
-    except error.URLError as exc:
-        raise RuntimeError(str(exc.reason)) from exc
+            return post_json(upload_url, api_key, {"action": "revoke"})
+        except RuntimeError as retry_exc:
+            retry_message = str(retry_exc).lower()
+            if "invalid or revoked api key" in retry_message:
+                return {
+                    "ok": True,
+                    "action": "revoke",
+                    "message": "API key is revoked.",
+                    "reconciled_after_gateway_error": True,
+                }
+            raise RuntimeError(
+                "Gallery server is temporarily unavailable while revoking the API key. "
+                "The key was kept locally because server revocation could not be confirmed. "
+                f"Original error: {first_message}; retry error: {retry_exc}"
+            ) from retry_exc
 
-    try:
-        payload = json.loads(response_body)
-    except json.JSONDecodeError as exc:
-        raise RuntimeError(f"Server returned non-JSON response: {response_body[:300]}") from exc
-    if not isinstance(payload, dict):
-        raise RuntimeError("Server returned an invalid JSON response.")
-    if not payload.get("ok"):
-        raise RuntimeError(str(payload.get("error") or "API key revocation failed."))
-    return payload
 
+def post_json_resolved(
+    upload_url: str,
+    api_key: str,
+    payload: Dict[str, Any],
+    timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
+) -> Tuple[Dict[str, Any], str]:
+    """
+    Submit one JSON API request and report the endpoint that actually succeeded.
+
+    Only a non-JSON HTTP 404 is treated as a front-controller routing failure and
+    retried against the alternate clean/query-string endpoint. Gallery-generated
+    JSON errors, including 404 gallery-not-found and 401/403 authentication
+    failures, are authoritative and are never hidden behind fallback retries.
+
+    @param str upload_url: PHP Gallery root or upload endpoint.
+    @param str api_key: Gallery-scoped API key sent as X-Gallery-API-Key.
+    @param Dict[str, Any] payload: JSON-serializable request object.
+    @param float timeout_seconds: Network timeout for this metadata request.
+    @return Tuple[Dict[str, Any], str] Parsed response and successful endpoint URL.
+    @raises RuntimeError: Raised for network, HTTP, non-JSON, or gallery errors.
+    """
+    body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    candidates = upload_endpoint_candidates(upload_url)
+    if not candidates:
+        raise RuntimeError("Gallery URL or upload endpoint is invalid.")
+
+    for index, endpoint in enumerate(candidates):
+        http_request = request.Request(
+            endpoint,
+            data=body,
+            headers={
+                "Content-Type": "application/json; charset=utf-8",
+                "Content-Length": str(len(body)),
+                "X-Gallery-API-Key": api_key,
+                "Accept": "application/json",
+                "User-Agent": "PHPGalleryUploader/1.4",
+            },
+            method="POST",
+        )
+
+        try:
+            with request.urlopen(http_request, timeout=max(5.0, float(timeout_seconds))) as response:
+                response_body = response.read().decode("utf-8", errors="replace")
+        except error.HTTPError as exc:
+            response_body = exc.read().decode("utf-8", errors="replace")
+            try:
+                error_payload = json.loads(response_body)
+                message = error_payload.get("error") if isinstance(error_payload, dict) else None
+                json_error = isinstance(error_payload, dict)
+            except json.JSONDecodeError:
+                message = None
+                json_error = False
+
+            has_fallback = index + 1 < len(candidates)
+            if exc.code == 404 and not json_error and has_fallback:
+                logging.warning("Upload endpoint route returned HTTP 404; retrying alternate Gallery API route.")
+                continue
+            raise RuntimeError(str(message or f"HTTP {exc.code}: {response_body[:300]}")) from exc
+        except error.URLError as exc:
+            raise RuntimeError(str(exc.reason)) from exc
+
+        try:
+            response_payload = json.loads(response_body)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"Server returned non-JSON response: {response_body[:300]}") from exc
+        if not isinstance(response_payload, dict):
+            raise RuntimeError("Server returned an invalid JSON response.")
+        if not response_payload.get("ok"):
+            raise RuntimeError(str(response_payload.get("error") or "API request failed."))
+        return response_payload, endpoint
+
+    raise RuntimeError("No usable PHP Gallery upload endpoint was found.")
 
 
 def post_json(upload_url: str, api_key: str, payload: Dict[str, Any], timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS) -> Dict[str, Any]:
     """
     Submit one JSON API request and parse the JSON response.
-    
+
     The companion app uses JSON only for metadata handshakes. Image bytes still
     use multipart/form-data because PHP Gallery routes them through the normal
-    upload pipeline. Keeping this helper separate from multipart_upload makes the
-    reconnect inventory request cheap and safe to call repeatedly during long
-    batches.
-    
-    @param str upload_url: Normalized PHP Gallery upload endpoint.
+    upload pipeline. Routing-only HTTP 404 responses may use the alternate
+    clean/query-string endpoint, while authenticated gallery errors remain final.
+
+    @param str upload_url: PHP Gallery root or upload endpoint.
     @param str api_key: Gallery-scoped API key sent as X-Gallery-API-Key.
     @param Dict[str, Any] payload: JSON-serializable request object.
     @param float timeout_seconds: Network timeout for this metadata request.
     @return Dict[str, Any] Parsed JSON response from the server.
     @raises RuntimeError: Raised for network, HTTP, non-JSON, or gallery errors.
     """
-    body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
-    http_request = request.Request(
-        upload_url,
-        data=body,
-        headers={
-            "Content-Type": "application/json; charset=utf-8",
-            "Content-Length": str(len(body)),
-            "X-Gallery-API-Key": api_key,
-            "Accept": "application/json",
-            "User-Agent": "PHPGalleryUploader/1.2",
-        },
-        method="POST",
-    )
-
-    try:
-        with request.urlopen(http_request, timeout=max(5.0, float(timeout_seconds))) as response:
-            response_body = response.read().decode("utf-8", errors="replace")
-    except error.HTTPError as exc:
-        response_body = exc.read().decode("utf-8", errors="replace")
-        try:
-            error_payload = json.loads(response_body)
-            message = error_payload.get("error") if isinstance(error_payload, dict) else None
-        except json.JSONDecodeError:
-            message = None
-        raise RuntimeError(str(message or f"HTTP {exc.code}: {response_body[:300]}")) from exc
-    except error.URLError as exc:
-        raise RuntimeError(str(exc.reason)) from exc
-
-    try:
-        response_payload = json.loads(response_body)
-    except json.JSONDecodeError as exc:
-        raise RuntimeError(f"Server returned non-JSON response: {response_body[:300]}") from exc
-    if not isinstance(response_payload, dict):
-        raise RuntimeError("Server returned an invalid JSON response.")
-    if not response_payload.get("ok"):
-        raise RuntimeError(str(response_payload.get("error") or "API request failed."))
+    response_payload, _resolved_url = post_json_resolved(upload_url, api_key, payload, timeout_seconds)
     return response_payload
-
 
 def post_binary_to_file(
     upload_url: str,
@@ -1159,41 +1294,54 @@ def post_binary_to_file(
     @raises RuntimeError: Raised for network or HTTP failures.
     """
     body = parse.urlencode(fields).encode("utf-8")
-    http_request = request.Request(
-        upload_url,
-        data=body,
-        headers={
-            "Content-Type": "application/x-www-form-urlencoded",
-            "Content-Length": str(len(body)),
-            "X-Gallery-API-Key": api_key,
-            "Accept": "application/octet-stream, application/json;q=0.8",
-            "User-Agent": "PHPGalleryUploader/1.3",
-        },
-        method="POST",
-    )
+    candidates = upload_endpoint_candidates(upload_url)
+    if not candidates:
+        raise RuntimeError("Gallery URL or upload endpoint is invalid.")
 
-    try:
-        with request.urlopen(http_request, timeout=max(5.0, float(timeout_seconds))) as response:
-            content_type = str(response.headers.get("Content-Type") or "application/octet-stream")
-            downloaded = 0
-            with target_path.open("wb") as handle:
-                while True:
-                    chunk = response.read(1024 * 256)
-                    if not chunk:
-                        break
-                    handle.write(chunk)
-                    downloaded += len(chunk)
-            return content_type, downloaded
-    except error.HTTPError as exc:
-        response_body = exc.read().decode("utf-8", errors="replace")
+    for index, endpoint in enumerate(candidates):
+        http_request = request.Request(
+            endpoint,
+            data=body,
+            headers={
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Content-Length": str(len(body)),
+                "X-Gallery-API-Key": api_key,
+                "Accept": "application/octet-stream, application/json;q=0.8",
+                "User-Agent": "PHPGalleryUploader/1.4",
+            },
+            method="POST",
+        )
+
         try:
-            error_payload = json.loads(response_body)
-            message = error_payload.get("error") if isinstance(error_payload, dict) else None
-        except json.JSONDecodeError:
-            message = None
-        raise RuntimeError(str(message or f"HTTP {exc.code}: {response_body[:300]}")) from exc
-    except error.URLError as exc:
-        raise RuntimeError(str(exc.reason)) from exc
+            with request.urlopen(http_request, timeout=max(5.0, float(timeout_seconds))) as response:
+                content_type = str(response.headers.get("Content-Type") or "application/octet-stream")
+                downloaded = 0
+                with target_path.open("wb") as handle:
+                    while True:
+                        chunk = response.read(1024 * 256)
+                        if not chunk:
+                            break
+                        handle.write(chunk)
+                        downloaded += len(chunk)
+                return content_type, downloaded
+        except error.HTTPError as exc:
+            response_body = exc.read().decode("utf-8", errors="replace")
+            try:
+                error_payload = json.loads(response_body)
+                message = error_payload.get("error") if isinstance(error_payload, dict) else None
+                json_error = isinstance(error_payload, dict)
+            except json.JSONDecodeError:
+                message = None
+                json_error = False
+            has_fallback = index + 1 < len(candidates)
+            if exc.code == 404 and not json_error and has_fallback:
+                logging.warning("Upload endpoint route returned HTTP 404 during binary API request; retrying alternate Gallery API route.")
+                continue
+            raise RuntimeError(str(message or f"HTTP {exc.code}: {response_body[:300]}")) from exc
+        except error.URLError as exc:
+            raise RuntimeError(str(exc.reason)) from exc
+
+    raise RuntimeError("No usable PHP Gallery upload endpoint was found.")
 
 
 def extension_for_content_type(content_type: str, fallback_name: str) -> str:
@@ -1259,6 +1407,56 @@ def enter_background_thread_mode() -> None:
         logging.debug("Could not set background thread priority.", exc_info=True)
 
 
+def upload_failure_needs_inventory_reconciliation(error_value: Any) -> bool:
+    """
+    Return whether a failed upload response is ambiguous enough to justify one inventory probe.
+
+    Gateway failures, timeouts, and dropped connections can happen after PHP has
+    already committed the upload. Authentication and other explicit HTTP client
+    errors are authoritative failures and must not trigger an immediate second
+    API request, especially while a shared host is already under pressure.
+
+    @param Any error_value: Exception or error text from the multipart request.
+    @return bool True when one bounded remote-inventory reconciliation is useful.
+    """
+    message = str(error_value).strip().lower()
+    if not message:
+        return False
+
+    definitive_markers = (
+        "http 400:",
+        "http 401:",
+        "http 403:",
+        "http 404:",
+        "http 405:",
+        "http 409:",
+        "http 413:",
+        "http 415:",
+        "http 422:",
+        "invalid api key",
+        "revoked api key",
+        "gallery assigned to this api key no longer exists",
+    )
+    if any(marker in message for marker in definitive_markers):
+        return False
+
+    ambiguous_markers = (
+        "http 500:",
+        "http 502:",
+        "http 503:",
+        "http 504:",
+        "timed out",
+        "timeout",
+        "connection reset",
+        "connection aborted",
+        "remote end closed",
+        "incomplete response",
+        "broken pipe",
+        "temporarily unavailable",
+    )
+    return any(marker in message for marker in ambiguous_markers)
+
+
 def inventory_candidate(path: Path, file_hash: Optional[str] = None, size: Optional[int] = None) -> Dict[str, Any]:
     """
     Build one file descriptor for a remote gallery inventory request.
@@ -1285,7 +1483,7 @@ class RemoteInventorySession:
 
     The session does not persist transfer state. It asks the remote gallery what
     already exists, remembers only the current process answer, and refreshes that
-    answer after the configured reconnect interval or immediately after an upload
+    answer after the configured reconnect interval or after an ambiguous upload
     failure. This is deliberately API-driven so a restarted client still treats
     the gallery as the authority.
     """
@@ -1334,14 +1532,27 @@ class RemoteInventorySession:
         self.last_fingerprint = str(payload.get("fingerprint", "") or self.last_fingerprint)
         return matched
 
-    def refresh(self, upload_url: str, api_key: str, candidates: List[Dict[str, Any]], force: bool = False) -> bool:
+    def refresh(
+        self,
+        upload_url: str,
+        api_key: str,
+        candidates: List[Dict[str, Any]],
+        force: bool = False,
+        deep_check: bool = False,
+    ) -> bool:
         """
         Ask the passive gallery which submitted files already exist.
         
+        Routine inventory is database-only. The expensive filesystem fallback is
+        requested only after an ambiguous upload failure, where the server may have
+        stored a file before the HTTP response was lost. This keeps normal watcher
+        polling and import preflight from scanning a large gallery directory.
+
         @param str upload_url: Normalized PHP Gallery upload endpoint.
         @param str api_key: Gallery-scoped API key.
         @param List[Dict[str, Any]] candidates: Local file descriptors to compare with the gallery.
         @param bool force: When True, refresh even before the planned interval elapses.
+        @param bool deep_check: Request the bounded disk fallback for failure reconciliation.
         @return bool True when the API call completed successfully.
         """
         if not candidates:
@@ -1355,7 +1566,7 @@ class RemoteInventorySession:
                 payload = post_json(
                     upload_url,
                     api_key,
-                    {"action": "inventory", "files": candidates},
+                    {"action": "inventory", "files": candidates, "deep_check": bool(deep_check)},
                     timeout_seconds=min(DEFAULT_TIMEOUT_SECONDS, max(10.0, self.refresh_seconds)),
                 )
                 matched = self.remember_existing(payload)
@@ -1379,14 +1590,14 @@ class RemoteInventorySession:
 
     def confirm_after_failure(self, upload_url: str, api_key: str, candidate: Dict[str, Any]) -> bool:
         """
-        Force a reconnect probe after an upload request failed or timed out.
+        Force a reconnect probe after an ambiguous upload request failure or timeout.
         
         @param str upload_url: Normalized PHP Gallery upload endpoint.
         @param str api_key: Gallery-scoped API key.
         @param Dict[str, Any] candidate: File descriptor for the request that just failed.
         @return bool True when the gallery now reports the file as already present.
         """
-        self.refresh(upload_url, api_key, [candidate], force=True)
+        self.refresh(upload_url, api_key, [candidate], force=True, deep_check=True)
         return self.has_hash(str(candidate.get("sha256", "")))
 
 
@@ -1408,25 +1619,35 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def iter_candidate_files(folder: Path) -> List[Path]:
+def iter_candidate_files(folder: Path, recursive: bool = False) -> List[Path]:
     """
-    Return supported image files directly inside the watched folder.
+    Return supported image files inside the watched folder.
     
-    The watcher is intentionally non-recursive. A watched import/drop folder is
-    expected to act as a flat staging area, while gallery hierarchy and final
-    placement remain controlled by PHP Gallery.
+    The historical default remains non-recursive so an existing watched
+    import/drop folder keeps acting as a flat staging area. Users may explicitly
+    enable recursive subfolders in the redesigned Watch folder view. Gallery
+    hierarchy and final placement remain controlled by PHP Gallery.
     
     @param Path folder: Folder to scan.
-    @return List[Path] Sorted list of supported image paths. Missing or unreadable folders.
+    @param bool recursive: Whether supported files in subfolders are included.
+    @return List[Path] Sorted list of supported image paths. Missing or unreadable folders return an empty list.
     """
     try:
-        candidates = [item for item in folder.iterdir() if item.is_file() and item.suffix.lower() in SUPPORTED_SUFFIXES]
+        iterator = folder.rglob("*") if recursive else folder.iterdir()
+        candidates = [item for item in iterator if item.is_file() and item.suffix.lower() in SUPPORTED_SUFFIXES]
     except OSError:
         return []
 
     # Oldest first produces stable, predictable upload order when several files
     # are copied into the folder at roughly the same time.
-    return sorted(candidates, key=lambda item: (item.stat().st_mtime if item.exists() else 0, item.name.lower()))
+    def sort_key(item: Path) -> Tuple[float, str]:
+        try:
+            modified = item.stat().st_mtime
+        except OSError:
+            modified = 0.0
+        return modified, str(item).lower()
+
+    return sorted(candidates, key=sort_key)
 
 
 def multipart_field_part(boundary: str, name: str, value: str) -> bytes:
@@ -1521,44 +1742,57 @@ def multipart_upload(
     body_parts.append(f"--{boundary}--\r\n".encode("ascii"))
     body = b"".join(body_parts)
 
-    http_request = request.Request(
-        upload_url,
-        data=body,
-        headers={
-            "Content-Type": f"multipart/form-data; boundary={boundary}",
-            "Content-Length": str(len(body)),
-            "X-Gallery-API-Key": api_key,
-            "Accept": "application/json",
-            "User-Agent": "PHPGalleryUploader/1.1",
-        },
-        method="POST",
-    )
+    candidates = upload_endpoint_candidates(upload_url)
+    if not candidates:
+        raise RuntimeError("Gallery URL or upload endpoint is invalid.")
 
-    try:
-        with request.urlopen(http_request, timeout=DEFAULT_TIMEOUT_SECONDS) as response:
-            response_body = response.read().decode("utf-8", errors="replace")
-    except error.HTTPError as exc:
-        # PHP Gallery should return a JSON error payload, but hosting errors or
-        # PHP fatal errors may return HTML. Preserve a safe excerpt for diagnosis.
-        response_body = exc.read().decode("utf-8", errors="replace")
+    for index, endpoint in enumerate(candidates):
+        http_request = request.Request(
+            endpoint,
+            data=body,
+            headers={
+                "Content-Type": f"multipart/form-data; boundary={boundary}",
+                "Content-Length": str(len(body)),
+                "X-Gallery-API-Key": api_key,
+                "Accept": "application/json",
+                "User-Agent": "PHPGalleryUploader/1.4",
+            },
+            method="POST",
+        )
+
+        try:
+            with request.urlopen(http_request, timeout=DEFAULT_TIMEOUT_SECONDS) as response:
+                response_body = response.read().decode("utf-8", errors="replace")
+        except error.HTTPError as exc:
+            # PHP Gallery returns JSON for application errors. Only an HTML/plain
+            # 404 from the hosting layer is eligible for alternate-route retry.
+            response_body = exc.read().decode("utf-8", errors="replace")
+            try:
+                error_payload = json.loads(response_body)
+                message = error_payload.get("error") if isinstance(error_payload, dict) else None
+                json_error = isinstance(error_payload, dict)
+            except json.JSONDecodeError:
+                message = None
+                json_error = False
+            has_fallback = index + 1 < len(candidates)
+            if exc.code == 404 and not json_error and has_fallback:
+                logging.warning("Upload endpoint route returned HTTP 404 during multipart upload; retrying alternate Gallery API route.")
+                continue
+            raise RuntimeError(str(message or f"HTTP {exc.code}: {response_body[:300]}")) from exc
+        except error.URLError as exc:
+            raise RuntimeError(str(exc.reason)) from exc
+
         try:
             payload = json.loads(response_body)
-            message = payload.get("error") if isinstance(payload, dict) else None
-        except json.JSONDecodeError:
-            message = None
-        raise RuntimeError(str(message or f"HTTP {exc.code}: {response_body[:300]}")) from exc
-    except error.URLError as exc:
-        raise RuntimeError(str(exc.reason)) from exc
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"Server returned non-JSON response: {response_body[:300]}") from exc
+        if not isinstance(payload, dict):
+            raise RuntimeError("Server returned an invalid JSON response.")
+        if not payload.get("ok"):
+            raise RuntimeError(str(payload.get("error") or "Upload failed."))
+        return payload
 
-    try:
-        payload = json.loads(response_body)
-    except json.JSONDecodeError as exc:
-        raise RuntimeError(f"Server returned non-JSON response: {response_body[:300]}") from exc
-    if not isinstance(payload, dict):
-        raise RuntimeError("Server returned an invalid JSON response.")
-    if not payload.get("ok"):
-        raise RuntimeError(str(payload.get("error") or "Upload failed."))
-    return payload
+    raise RuntimeError("No usable PHP Gallery upload endpoint was found.")
 
 
 def selected_image_filetypes() -> List[Tuple[str, str]]:
@@ -1650,10 +1884,10 @@ def automatic_upload_worker_count() -> int:
     """
     Choose a conservative manual upload worker count.
     
-    Upload concurrency should remain lower than thumbnail concurrency because the
-    shared-hosting server, PHP process limits, and network uplink are often the
-    bottleneck. Too many concurrent uploads can make the gallery slower instead
-    of faster.
+    PHP Gallery serializes mutations for one gallery under a server-side lock.
+    Parallel multipart requests therefore do not increase mutation throughput; they
+    only occupy additional PHP workers while waiting for the same gallery lock. A
+    single network upload worker is intentionally used to protect shared hosting.
     
     @return int Worker thread count for multipart uploads.
     """
@@ -1950,9 +2184,17 @@ class PeriodicAIHeartbeat(threading.Thread):
 
     def stop(self) -> None:
         """
-        Request heartbeat shutdown.
+        Request the watcher worker to stop without deleting any source data.
         """
-        self.stop_event.set()
+        if self.worker and self.worker.is_alive():
+            self.worker.stop()
+            self.status_var.set("Stopping")
+            self.watcher_activity_var.set("Watch: stopping")
+        else:
+            self.status_var.set("Stopped")
+            self.watcher_activity_var.set("Watch: stopped")
+        self.refresh_activity_monitor_state()
+        self.refresh_revoke_button_state()
 
     def run(self) -> None:
         """
@@ -2919,7 +3161,7 @@ class WatcherThread(threading.Thread):
             self.emit("error", "Gallery URL and API key are required.")
             return
 
-        self.initial_paths = set(iter_candidate_files(folder))
+        self.initial_paths = set(iter_candidate_files(folder, self.config.watch_recursive))
         self.emit("info", f"Watching {folder}")
         self.emit("info", f"Upload endpoint: {upload_url}")
         self.emit("info", f"Remote inventory reconnect interval: {self.config.inventory_refresh_seconds:g} seconds.")
@@ -2932,6 +3174,7 @@ class WatcherThread(threading.Thread):
 
         while not self.stop_event.is_set():
             self.scan_once(folder, upload_url)
+            self.events.put({"kind": "watch_scan", "payload": {"timestamp": time.time()}})
             self.stop_event.wait(max(0.2, self.config.scan_interval_seconds))
 
         self.emit("info", "Watcher stopped.")
@@ -2943,7 +3186,7 @@ class WatcherThread(threading.Thread):
         @param Path folder: Folder to scan.
         @param str upload_url: Normalized endpoint used for uploads.
         """
-        for path in iter_candidate_files(folder):
+        for path in iter_candidate_files(folder, self.config.watch_recursive):
             if self.stop_event.is_set():
                 return
 
@@ -2988,11 +3231,15 @@ class WatcherThread(threading.Thread):
             try:
                 self.emit("info", f"Uploading {path.name}")
                 metadata_fields = self.sim_camera_metadata_fields(path)
-                payload = multipart_upload(upload_url, self.config.api_key.strip(), path, self.config.create_thumbnails, metadata_fields=metadata_fields)
+                payload = self.upload_watched_file(upload_url, path, metadata_fields)
                 self.state.mark_uploaded(path, file_hash, size, payload)
                 uploaded = payload.get("uploaded", 0)
                 scanned = payload.get("scanned", 0)
-                self.emit("info", f"Uploaded {path.name}: uploaded={uploaded}, scanned={scanned}")
+                renamed = int(payload.get("renamed", 0) or 0)
+                self.emit("info", f"Uploaded {path.name}: uploaded={uploaded}, scanned={scanned}, renamed={renamed}")
+                rename_failures = payload.get("rename_failures")
+                if isinstance(rename_failures, list) and rename_failures:
+                    self.emit("warning", f"Upload succeeded but automatic rename policy was not fully enforced for {path.name}: {'; '.join(str(item) for item in rename_failures[:3])}")
                 sim_result = payload.get("sim_camera_metadata")
                 if isinstance(sim_result, dict):
                     attached_count = int(sim_result.get("attached", 0) or 0)
@@ -3005,14 +3252,67 @@ class WatcherThread(threading.Thread):
                     self.delete_uploaded_file(path, payload)
             except Exception as exc:  # noqa: BLE001
                 message = str(exc)
-                if self.remote_inventory.confirm_after_failure(upload_url, self.config.api_key.strip(), candidate):
-                    self.remote_skipped_paths.add((path, file_hash))
-                    self.emit("warning", f"Upload response failed after transfer, but gallery inventory confirms {path.name} is already present; skipping retry. Original response error: {message}")
-                    if self.config.delete_uploaded_files:
-                        self.delete_uploaded_file(path, {"uploaded": 1, "filenames": [path.name]})
-                    continue
+                if upload_failure_needs_inventory_reconciliation(exc):
+                    if self.remote_inventory.confirm_after_failure(upload_url, self.config.api_key.strip(), candidate):
+                        self.remote_skipped_paths.add((path, file_hash))
+                        self.emit("warning", f"Upload response failed after transfer, but gallery inventory confirms {path.name} is already present; skipping retry. Original response error: {message}")
+                        if self.config.delete_uploaded_files:
+                            self.delete_uploaded_file(path, {"uploaded": 1, "filenames": [path.name]})
+                        continue
                 self.state.mark_failure(path, file_hash, message)
                 self.emit("error", f"Upload failed for {path.name}: {message}")
+
+    def upload_watched_file(self, upload_url: str, path: Path, metadata_fields: Dict[str, str]) -> Dict[str, Any]:
+        """
+        Upload one stable watched file with local thumbnails when available.
+
+        Synchronous server-side generation of all responsive variants can keep one
+        PHP worker busy long enough for a shared-hosting proxy to return 502 even
+        though the original was stored successfully. Raster files that Pillow can
+        decode therefore use the same client-thumbnail protocol as manual import.
+        HEIC/HEIF/DNG and local decode failures fall back to the authoritative PHP
+        thumbnail pipeline.
+
+        @param str upload_url: Normalized gallery automation endpoint.
+        @param Path path: Stable watched source file.
+        @param Dict[str, str] metadata_fields: Optional multipart metadata fields.
+        @return Dict[str, Any] Parsed server response.
+        """
+        create_server_thumbnails = bool(self.config.create_thumbnails)
+        local_suffixes = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
+        if not create_server_thumbnails or not local_thumbnail_supported() or path.suffix.lower() not in local_suffixes:
+            return multipart_upload(
+                upload_url,
+                self.config.api_key.strip(),
+                path,
+                create_server_thumbnails,
+                metadata_fields=metadata_fields,
+            )
+
+        client_upload_id = uuid.uuid4().hex
+        with tempfile.TemporaryDirectory(prefix="php-gallery-watch-thumbs-") as temp_dir_name:
+            temp_root = Path(temp_dir_name)
+            try:
+                thumbnails = generate_local_thumbnails(path, temp_root, client_upload_id)
+                self.emit("info", f"Generated {len(thumbnails)} local thumbnail file(s) for {path.name}; server-side batch generation skipped.")
+                return multipart_upload(
+                    upload_url,
+                    self.config.api_key.strip(),
+                    path,
+                    False,
+                    thumbnails=thumbnails,
+                    client_upload_id=client_upload_id,
+                    metadata_fields=metadata_fields,
+                )
+            except Exception as exc:  # noqa: BLE001
+                self.emit("warning", f"Local thumbnails failed for {path.name}; falling back to server generation: {exc}")
+                return multipart_upload(
+                    upload_url,
+                    self.config.api_key.strip(),
+                    path,
+                    True,
+                    metadata_fields=metadata_fields,
+                )
 
     def sim_camera_metadata_fields(self, path: Path) -> Dict[str, str]:
         """
@@ -3082,7 +3382,9 @@ class ManualUploadThread(threading.Thread):
         client_thumbnails: bool,
         thumbnail_workers: int,
         upload_workers: int,
-        events: "queue.Queue[Tuple[str, str]]",
+        events: "queue.Queue[Any]",
+        job: Optional[ImportJob] = None,
+        job_store: Optional[JobStateStore] = None,
     ) -> None:
         """
         Create a manual upload worker.
@@ -3092,7 +3394,9 @@ class ManualUploadThread(threading.Thread):
         @param bool client_thumbnails: Whether to generate responsive thumbnails on.
         @param int thumbnail_workers: Process count used for local thumbnail work.
         @param int upload_workers: Thread count used for concurrent HTTP uploads.
-        @param queue.Queue[Tuple[str, str]] events: Thread-safe queue used to send status messages to the GUI.
+        @param queue.Queue[Any] events: Thread-safe queue used to send status messages to the GUI.
+        @param Optional[ImportJob] job: Durable import job record used for progress and restart recovery.
+        @param Optional[JobStateStore] job_store: Shared state store for job and activity persistence.
         """
         super().__init__(daemon=True)
         self.config = config
@@ -3102,18 +3406,137 @@ class ManualUploadThread(threading.Thread):
         self.upload_workers = resolve_upload_worker_count(upload_workers)
         self.events = events
         self.stop_event = threading.Event()
+        self.pause_event = threading.Event()
         self.uploaded = 0
         self.failed = 0
         self.skipped_existing = 0
         self.completed_uploads = 0
         self.progress_lock = threading.Lock()
         self.remote_inventory = RemoteInventorySession(config.inventory_refresh_seconds, self.emit)
+        self.job = job
+        self.job_store = job_store
+        self.job_lock = threading.RLock()
+        self.item_by_path: Dict[str, ImportItem] = {}
+        if self.job is not None:
+            for item in self.job.items:
+                self.item_by_path[os.path.normcase(os.path.abspath(item.path))] = item
+
 
     def stop(self) -> None:
         """
         Request the manual upload worker to stop after the current item.
         """
         self.stop_event.set()
+        self.pause_event.clear()
+
+    def pause(self) -> None:
+        """Pause submission of new manual-import work while in-flight requests finish."""
+        self.pause_event.set()
+        self.emit("info", "Manual import paused. In-flight requests may still finish.")
+        self.emit_structured("job_control", {"paused": True})
+
+    def resume(self) -> None:
+        """Resume a previously paused manual import."""
+        self.pause_event.clear()
+        self.emit("info", "Manual import resumed.")
+        self.emit_structured("job_control", {"paused": False})
+
+    def wait_if_paused(self) -> bool:
+        """Wait while paused and return False when cancellation was requested."""
+        while self.pause_event.is_set() and not self.stop_event.is_set():
+            self.stop_event.wait(0.1)
+        return not self.stop_event.is_set()
+
+    def emit_structured(self, kind: str, payload: Dict[str, Any]) -> None:
+        """Send one structured UI event without letting worker threads touch Tk widgets."""
+        event = {"kind": kind, "payload": dict(payload)}
+        if self.job is not None:
+            event["job_id"] = self.job.id
+        self.events.put(event)
+
+    def item_for_path(self, path: Path) -> Optional[ImportItem]:
+        """Return the durable item record associated with one local path."""
+        return self.item_by_path.get(os.path.normcase(os.path.abspath(str(path))))
+
+    def persist_job(self) -> None:
+        """Persist the current import job and emit a throttled-safe UI snapshot."""
+        if self.job is None or self.job_store is None:
+            return
+        with self.job_lock:
+            self.job_store.save_job(self.job)
+            counts = self.job.counts()
+            self.emit_structured(
+                "job_progress",
+                {
+                    "counts": counts,
+                    "bytes_total": self.job.bytes_total,
+                    "bytes_sent": self.job.bytes_sent,
+                    "started_at": self.job.started_at,
+                    "finished_at": self.job.finished_at,
+                },
+            )
+
+    def update_item(
+        self,
+        path: Path,
+        state: str,
+        reason: str = "",
+        file_hash: str = "",
+        server_result: Optional[Dict[str, Any]] = None,
+        increment_attempt: bool = False,
+        count_bytes: bool = False,
+    ) -> None:
+        """Apply one durable item transition and save the enclosing job."""
+        item = self.item_for_path(path)
+        if item is None or self.job is None:
+            return
+        with self.job_lock:
+            previous_state = item.state
+            item.transition(state, reason)
+            if file_hash:
+                item.sha256 = file_hash
+            if increment_attempt:
+                item.attempt_count += 1
+            if server_result is not None:
+                allowed = {"uploaded", "scanned", "filenames", "client_thumbnails"}
+                item.server_result = {key: value for key, value in server_result.items() if key in allowed}
+            if count_bytes and previous_state != "confirmed":
+                self.job.bytes_sent = min(self.job.bytes_total, self.job.bytes_sent + max(0, item.size))
+        self.persist_job()
+
+    def mark_remaining_cancelled(self) -> None:
+        """Persist cancellation for work that never reached a terminal state."""
+        if self.job is None:
+            return
+        changed = False
+        with self.job_lock:
+            for item in self.job.items:
+                if item.state in ITEM_ACTIVE_STATES:
+                    item.transition("cancelled", "Import cancelled before this item completed.")
+                    changed = True
+        if changed:
+            self.persist_job()
+
+    def finalize_job(self) -> None:
+        """Persist the terminal batch snapshot and clean staging after complete success."""
+        if self.job is None:
+            return
+        with self.job_lock:
+            self.job.finished_at = time.time()
+        self.persist_job()
+        successful_states = {"confirmed", "skipped_duplicate"}
+        if self.job.items and all(item.state in successful_states for item in self.job.items):
+            if self.job.staging_dir:
+                shutil.rmtree(self.job.staging_dir, ignore_errors=True)
+            if self.job.delete_source_zip_after_success and self.job.source_zip:
+                try:
+                    Path(self.job.source_zip).unlink()
+                    self.emit("info", f"Deleted source ZIP after confirmed import: {Path(self.job.source_zip).name}")
+                except FileNotFoundError:
+                    pass
+                except OSError as exc:
+                    self.emit("warning", f"Import completed, but the source ZIP could not be deleted: {exc}")
+
 
     def emit(self, level: str, message: str) -> None:
         """
@@ -3133,23 +3556,49 @@ class ManualUploadThread(threading.Thread):
         upload_url = normalize_upload_url(self.config.gallery_url)
         if not upload_url or not self.config.api_key.strip():
             self.emit("error", "Gallery URL and API key are required.")
+            if self.job is not None:
+                for path in self.paths:
+                    self.update_item(path, "failed_permanent", "Gallery URL or API key is missing.")
+                self.finalize_job()
             return
         if not self.paths:
             self.emit("warning", "No manual upload files were selected.")
+            if self.job is not None:
+                self.finalize_job()
             return
+
+        if self.job is not None:
+            with self.job_lock:
+                if self.job.started_at <= 0:
+                    self.job.started_at = time.time()
+                self.job.finished_at = 0.0
+                for path in self.paths:
+                    item = self.item_for_path(path)
+                    if item is not None and item.state in RECOVERABLE_ITEM_STATES:
+                        item.transition("queued")
+            self.persist_job()
 
         self.emit("info", f"Manual upload started: {len(self.paths)} file(s).")
         self.emit("info", f"Upload endpoint: {upload_url}")
         self.emit("info", f"Remote inventory reconnect interval: {self.config.inventory_refresh_seconds:g} seconds.")
 
-        self.preload_remote_inventory(upload_url)
+        try:
+            self.preload_remote_inventory(upload_url)
 
-        if self.client_thumbnails:
-            self.run_with_client_thumbnails(upload_url)
+            if self.client_thumbnails:
+                self.run_with_client_thumbnails(upload_url)
+            else:
+                self.run_with_server_thumbnails(upload_url)
+        finally:
+            if self.stop_event.is_set():
+                self.mark_remaining_cancelled()
+            self.finalize_job()
+
+        if self.stop_event.is_set():
+            self.emit("info", f"Manual upload stopped: uploaded={self.uploaded}, skipped_existing={self.skipped_existing}, failed={self.failed}.")
         else:
-            self.run_with_server_thumbnails(upload_url)
+            self.emit("info", f"Manual upload finished: uploaded={self.uploaded}, skipped_existing={self.skipped_existing}, failed={self.failed}.")
 
-        self.emit("info", f"Manual upload finished: uploaded={self.uploaded}, skipped_existing={self.skipped_existing}, failed={self.failed}.")
 
     def preload_remote_inventory(self, upload_url: str) -> None:
         """
@@ -3185,16 +3634,19 @@ class ManualUploadThread(threading.Thread):
         with self.progress_lock:
             self.skipped_existing += 1
             self.completed_uploads += 1
+        self.update_item(path, "skipped_duplicate", "Gallery inventory already contains this content.", file_hash=file_hash)
         self.emit("info", f"Skipped already present on gallery: {path.name}")
         return True
+
 
     def run_with_server_thumbnails(self, upload_url: str) -> None:
         """
         Upload selected originals and ask PHP Gallery to create thumbnails.
         
-        This mode still uses parallel HTTP uploads because multipart requests are
-        network-bound. The worker count is intentionally modest so shared hosting
-        is not overwhelmed by many simultaneous PHP upload requests.
+        This mode keeps the upload executor structure used by the client-thumbnail
+        pipeline, but the resolved network worker count is one. PHP Gallery already
+        serializes mutations for one gallery, so concurrent requests would only hold
+        extra PHP workers and can starve normal gallery page requests on shared hosting.
         
         @param str upload_url: Normalized PHP Gallery upload endpoint.
         """
@@ -3210,10 +3662,13 @@ class ManualUploadThread(threading.Thread):
                 
                 @return bool True when an upload task was queued.
                 """
+                if not self.wait_if_paused():
+                    return False
                 try:
                     index, path = next(path_iterator)
                 except StopIteration:
                     return False
+                self.update_item(path, "queued")
                 future = executor.submit(self.upload_one, upload_url, path, index, [], None, True)
                 pending[future] = path
                 return True
@@ -3224,9 +3679,10 @@ class ManualUploadThread(threading.Thread):
 
             while pending:
                 if self.stop_event.is_set():
-                    self.emit("info", "Manual upload stopped by user.")
                     return
-                done, _ = concurrent.futures.wait(pending.keys(), return_when=concurrent.futures.FIRST_COMPLETED)
+                done, _ = concurrent.futures.wait(pending.keys(), timeout=0.2, return_when=concurrent.futures.FIRST_COMPLETED)
+                if not done:
+                    continue
                 for future in done:
                     pending.pop(future)
                     try:
@@ -3237,6 +3693,7 @@ class ManualUploadThread(threading.Thread):
                         self.emit("error", f"Manual upload worker crashed: {exc}")
                     if not self.stop_event.is_set():
                         submit_next()
+
 
     def run_with_client_thumbnails(self, upload_url: str) -> None:
         """
@@ -3252,7 +3709,8 @@ class ManualUploadThread(threading.Thread):
         @param str upload_url: Normalized PHP Gallery upload endpoint.
         """
         if not local_thumbnail_supported():
-            self.emit("error", "Client-side thumbnails require Pillow. Run: python -m pip install Pillow")
+            self.emit("warning", "Local thumbnails are unavailable; falling back to server-side thumbnail generation.")
+            self.run_with_server_thumbnails(upload_url)
             return
 
         temp_root = Path(tempfile.mkdtemp(prefix="php_gallery_thumbs_"))
@@ -3275,22 +3733,27 @@ class ManualUploadThread(threading.Thread):
             @return bool True when a thumbnail task was submitted.
             """
             while not self.stop_event.is_set():
+                if not self.wait_if_paused():
+                    return False
                 try:
                     index, path = next(path_iterator)
                 except StopIteration:
                     return False
                 try:
+                    self.update_item(path, "hashing")
                     file_hash = sha256_file(path)
                     size = path.stat().st_size
                 except OSError as exc:
                     with self.progress_lock:
                         self.failed += 1
                         self.completed_uploads += 1
+                    self.update_item(path, "failed_permanent", f"Cannot read source file: {exc}")
                     self.emit("error", f"Cannot read {path.name}: {exc}")
                     continue
                 if self.remote_skip_before_work(upload_url, path, file_hash, size):
                     continue
                 client_upload_id = uuid.uuid4().hex
+                self.update_item(path, "staged", file_hash=file_hash)
                 future = thumbnail_executor.submit(generate_local_thumbnails, path, temp_root, client_upload_id)
                 pending_thumbnails[future] = (index, path, client_upload_id)
                 return True
@@ -3314,6 +3777,9 @@ class ManualUploadThread(threading.Thread):
             @param bool create_server_thumbnails: Whether the server should generate.
             @param Path cleanup_dir: Temporary directory to delete after upload.
             """
+            if not self.wait_if_paused():
+                return
+            self.update_item(path, "queued")
             future = upload_executor.submit(
                 self.upload_one,
                 upload_url,
@@ -3344,8 +3810,6 @@ class ManualUploadThread(threading.Thread):
                 try:
                     future.result()
                 except Exception as exc:  # noqa: BLE001
-                    # upload_one already traps normal upload failures. This guard
-                    # is for unexpected programming errors inside the upload thread.
                     with self.progress_lock:
                         self.failed += 1
                     self.emit("error", f"Manual upload worker crashed: {exc}")
@@ -3364,13 +3828,11 @@ class ManualUploadThread(threading.Thread):
 
             while pending_thumbnails or pending_uploads:
                 if self.stop_event.is_set():
-                    self.emit("info", "Manual upload stopped by user.")
                     return
 
                 while len(pending_uploads) >= upload_queue_limit:
                     drain_completed_uploads(wait_for_one=True)
                     if self.stop_event.is_set():
-                        self.emit("info", "Manual upload stopped by user.")
                         return
 
                 drain_completed_uploads(wait_for_one=False)
@@ -3396,6 +3858,7 @@ class ManualUploadThread(threading.Thread):
                         submit_upload(path, index, thumbnails, client_upload_id, False, thumbnail_dir)
                     except Exception as exc:  # noqa: BLE001
                         self.emit("warning", f"Local thumbnails failed for {path.name}; asking server to create them: {exc}")
+                        self.emit_structured("thumbnail_fallback", {"filename": path.name, "reason": str(exc)})
                         submit_upload(path, index, [], None, True, thumbnail_dir)
 
                     if not self.stop_event.is_set() and len(pending_thumbnails) < thumbnail_queue_limit:
@@ -3403,11 +3866,12 @@ class ManualUploadThread(threading.Thread):
 
             drain_completed_uploads(wait_for_one=False)
         finally:
-            thumbnail_executor.shutdown(wait=False, cancel_futures=True)
+            thumbnail_executor.shutdown(wait=True, cancel_futures=True)
             upload_executor.shutdown(wait=True, cancel_futures=True)
             for _path, cleanup_dir in list(pending_uploads.values()):
                 shutil.rmtree(cleanup_dir, ignore_errors=True)
             shutil.rmtree(temp_root, ignore_errors=True)
+
 
     def upload_one(
         self,
@@ -3428,7 +3892,11 @@ class ManualUploadThread(threading.Thread):
         @param Optional[str] client_upload_id: Request-local ID used to map thumbnails to the.
         @param bool create_server_thumbnails: Whether PHP Gallery should generate.
         """
+        if not self.wait_if_paused():
+            return
+        candidate: Optional[Dict[str, Any]] = None
         try:
+            self.update_item(path, "hashing")
             file_hash = sha256_file(path)
             size = path.stat().st_size
             candidate = inventory_candidate(path, file_hash, size)
@@ -3437,9 +3905,13 @@ class ManualUploadThread(threading.Thread):
                 with self.progress_lock:
                     self.skipped_existing += 1
                     self.completed_uploads += 1
+                self.update_item(path, "skipped_duplicate", "Gallery inventory already contains this content.", file_hash=file_hash)
                 self.emit("info", f"Skipped already present on gallery: {path.name}")
                 return
 
+            if not self.wait_if_paused():
+                return
+            self.update_item(path, "uploading", file_hash=file_hash, increment_attempt=True)
             self.emit("info", f"Uploading {index}/{len(self.paths)}: {path.name}")
             payload = multipart_upload(
                 upload_url,
@@ -3452,6 +3924,7 @@ class ManualUploadThread(threading.Thread):
             with self.progress_lock:
                 self.uploaded += int(payload.get("uploaded", 0) or 0)
                 self.completed_uploads += 1
+            self.update_item(path, "confirmed", file_hash=file_hash, server_result=payload, count_bytes=True)
             installed = 0
             failed_thumbnails = 0
             thumbnail_errors: List[str] = []
@@ -3462,16 +3935,32 @@ class ManualUploadThread(threading.Thread):
                 raw_errors = client_result.get("errors")
                 if isinstance(raw_errors, list):
                     thumbnail_errors = [str(item) for item in raw_errors[:3]]
-            self.emit("info", f"Uploaded {path.name}: uploaded={payload.get('uploaded', 0)}, scanned={payload.get('scanned', 0)}, client_thumbnails={installed}")
+            renamed = int(payload.get("renamed", 0) or 0)
+            self.emit("info", f"Uploaded {path.name}: uploaded={payload.get('uploaded', 0)}, scanned={payload.get('scanned', 0)}, renamed={renamed}, client_thumbnails={installed}")
+            rename_failures = payload.get("rename_failures")
+            if isinstance(rename_failures, list) and rename_failures:
+                self.emit("warning", f"Upload succeeded but automatic rename policy was not fully enforced for {path.name}: {'; '.join(str(item) for item in rename_failures[:3])}")
             if failed_thumbnails or thumbnail_errors:
                 details = "; ".join(thumbnail_errors) if thumbnail_errors else "no detailed server message"
-                self.emit("warning", f"Client thumbnails were partially rejected for {path.name}: failed={failed_thumbnails}; {details}")
+                self.emit("warning", f"Client thumbnails were partially rejected for {path.name}: failed={failed_thumbnails}; {details}. Server-side generation remains authoritative.")
         except Exception as exc:  # noqa: BLE001
             try:
-                if "candidate" in locals() and self.remote_inventory.confirm_after_failure(upload_url, self.config.api_key.strip(), candidate):
+                if (
+                    candidate is not None
+                    and upload_failure_needs_inventory_reconciliation(exc)
+                    and self.remote_inventory.confirm_after_failure(upload_url, self.config.api_key.strip(), candidate)
+                ):
                     with self.progress_lock:
                         self.skipped_existing += 1
                         self.completed_uploads += 1
+                    file_hash = str(candidate.get("sha256", ""))
+                    self.update_item(
+                        path,
+                        "confirmed",
+                        "Upload response was ambiguous, but remote inventory confirms the file is present.",
+                        file_hash=file_hash,
+                        count_bytes=True,
+                    )
                     self.emit("warning", f"Upload response failed after transfer, but gallery inventory confirms {path.name} is already present; skipping retry. Original response error: {exc}")
                     return
             except Exception as confirm_exc:  # noqa: BLE001
@@ -3479,7 +3968,246 @@ class ManualUploadThread(threading.Thread):
             with self.progress_lock:
                 self.failed += 1
                 self.completed_uploads += 1
+            message = str(exc)
+            lower = message.lower()
+            permanent = any(token in lower for token in ["api key", "authentication", "unauthorized", "forbidden", "unsupported", "invalid gallery", "http 400", "http 401", "http 403", "http 404", "http 422"])
+            state = "failed_permanent" if permanent else "failed_retryable"
+            self.update_item(path, state, message)
             self.emit("error", f"Manual upload failed for {path.name}: {exc}")
+
+
+
+class ImportPreflightThread(threading.Thread):
+    """
+    Background discovery and duplicate/capability preflight for manual imports.
+
+    The thread performs potentially expensive ZIP inspection, hashing, decoder
+    probes, and remote inventory checks without blocking Tkinter. It never
+    uploads image content. The user must explicitly start the prepared job.
+    """
+
+    def __init__(
+        self,
+        config: WatcherConfig,
+        source_kind: str,
+        source_paths: List[Path],
+        source_folder: Optional[Path],
+        source_zip: Optional[Path],
+        recursive: bool,
+        delete_source_zip_after_success: bool,
+        events: "queue.Queue[Any]",
+        job_store: JobStateStore,
+    ) -> None:
+        """
+        Create one preflight worker for the selected source.
+
+        @param WatcherConfig config: Connection and archive-safety settings.
+        @param str source_kind: files, folder, or zip.
+        @param List[Path] source_paths: Explicit file selection for files mode.
+        @param Optional[Path] source_folder: Selected folder for folder mode.
+        @param Optional[Path] source_zip: Selected ZIP archive for zip mode.
+        @param bool recursive: Whether folder discovery includes subfolders.
+        @param bool delete_source_zip_after_success: Whether a successful ZIP import may delete its original archive.
+        @param queue.Queue[Any] events: Thread-safe UI event queue.
+        @param JobStateStore job_store: Durable job history store.
+        """
+        super().__init__(daemon=True)
+        self.config = config
+        self.source_kind = source_kind
+        self.source_paths = list(source_paths)
+        self.source_folder = source_folder
+        self.source_zip = source_zip
+        self.recursive = recursive
+        self.delete_source_zip_after_success = delete_source_zip_after_success
+        self.events = events
+        self.job_store = job_store
+        self.stop_event = threading.Event()
+
+    def stop(self) -> None:
+        """Request cancellation of discovery before it publishes a plan."""
+        self.stop_event.set()
+
+    def emit(self, kind: str, payload: Dict[str, Any]) -> None:
+        """Send one structured preflight event to the Tkinter thread."""
+        self.events.put({"kind": kind, "payload": dict(payload)})
+
+    def run(self) -> None:
+        """Build and persist a preflight plan without uploading source media."""
+        upload_url = normalize_upload_url(self.config.gallery_url)
+        parsed = parse.urlparse(upload_url) if upload_url else None
+        target_label = parsed.netloc if parsed and parsed.netloc else "Gallery connection not configured"
+        if parsed and parsed.path and parsed.path not in {"", "/"}:
+            target_label += parsed.path
+
+        if self.source_kind == "files":
+            source_label = f"{len(self.source_paths)} selected file(s)"
+        elif self.source_kind == "folder":
+            source_label = str(self.source_folder or "")
+        else:
+            source_label = str(self.source_zip or "")
+        job = ImportJob.create(self.source_kind, source_label, target_label)
+        self.emit("preflight_started", {"job_id": job.id, "source_label": source_label})
+
+        limits = ArchiveLimits(
+            max_entries=self.config.archive_max_entries,
+            max_uncompressed_bytes=self.config.archive_max_uncompressed_bytes,
+            max_file_bytes=self.config.archive_max_file_bytes,
+            max_compression_ratio=self.config.archive_max_compression_ratio,
+        )
+        try:
+            if self.source_kind == "files":
+                discovery = discover_selected_files(self.source_paths, SUPPORTED_SUFFIXES)
+            elif self.source_kind == "folder":
+                if self.source_folder is None:
+                    raise ValueError("No source folder was selected.")
+                discovery = discover_folder(self.source_folder, SUPPORTED_SUFFIXES, self.recursive)
+            elif self.source_kind == "zip":
+                if self.source_zip is None:
+                    raise ValueError("No ZIP archive was selected.")
+                discovery = stage_zip_archive(self.source_zip, STAGING_ROOT, job.id, SUPPORTED_SUFFIXES, limits)
+                job.staging_dir = discovery.staging_dir
+                job.source_zip = str(self.source_zip)
+                job.delete_source_zip_after_success = self.delete_source_zip_after_success
+            else:
+                raise ValueError("Unknown import source kind: " + self.source_kind)
+        except Exception as exc:  # noqa: BLE001
+            self.emit("preflight_failed", {"message": str(exc), "job_id": job.id})
+            return
+
+        if self.stop_event.is_set():
+            if discovery.staging_dir:
+                shutil.rmtree(discovery.staging_dir, ignore_errors=True)
+            self.emit("preflight_cancelled", {"job_id": job.id})
+            return
+
+        generic_capabilities = detect_suffix_capabilities(SUPPORTED_SUFFIXES, Image)
+        notes = capability_notes(generic_capabilities)
+        local_state = load_upload_state(STATE_PATH, quarantine_bad=True)
+        uploaded_hashes = local_state.get("uploaded_hashes", {})
+        if not isinstance(uploaded_hashes, dict):
+            uploaded_hashes = {}
+
+        valid_items: List[ImportItem] = []
+        local_duplicates = 0
+        candidates: List[Dict[str, Any]] = []
+        item_by_hash: Dict[str, List[ImportItem]] = {}
+        total = max(1, len(discovery.items))
+        for index, item in enumerate(discovery.items, start=1):
+            if self.stop_event.is_set():
+                if discovery.staging_dir:
+                    shutil.rmtree(discovery.staging_dir, ignore_errors=True)
+                self.emit("preflight_cancelled", {"job_id": job.id})
+                return
+            path = Path(item.path)
+            self.emit("preflight_progress", {"current": index, "total": total, "filename": path.name})
+            try:
+                item.transition("hashing")
+                item.sha256 = sha256_file(path)
+                item.size = int(path.stat().st_size)
+            except OSError as exc:
+                bucket = "unreadable source"
+                discovery.unsupported[bucket] = discovery.unsupported.get(bucket, 0) + 1
+                discovery.warnings.append(f"{item.source_label}: cannot be read: {exc}")
+                continue
+
+            suffix = path.suffix.lower()
+            if suffix in {".heic", ".heif", ".dng"}:
+                capability = probe_file(path, SUPPORTED_SUFFIXES, Image)
+            else:
+                capability = generic_capabilities.get(suffix)
+            if capability is None or not capability.local_previewable:
+                item.local_decode = "server_only"
+            else:
+                item.local_decode = "local"
+
+            if item.sha256 in uploaded_hashes:
+                item.transition("skipped_duplicate", "Local upload history already contains this content.")
+                local_duplicates += 1
+            else:
+                item.transition("queued")
+                candidate = inventory_candidate(path, item.sha256, item.size)
+                candidates.append(candidate)
+                item_by_hash.setdefault(item.sha256, []).append(item)
+            valid_items.append(item)
+
+        job.items = valid_items
+        job.bytes_total = sum(max(0, item.size) for item in valid_items)
+        job.skipped = sum(discovery.unsupported.values()) + len(discovery.unsafe_entries)
+
+        remote_duplicates = 0
+        gallery_label = target_label
+        if candidates and upload_url and self.config.api_key.strip() and not self.stop_event.is_set():
+            existing_hashes: Set[str] = set()
+            try:
+                for start in range(0, len(candidates), 500):
+                    chunk = candidates[start : start + 500]
+                    payload = post_json(
+                        upload_url,
+                        self.config.api_key.strip(),
+                        {"action": "inventory", "files": chunk, "deep_check": False},
+                        timeout_seconds=min(DEFAULT_TIMEOUT_SECONDS, max(15.0, self.config.inventory_refresh_seconds)),
+                    )
+                    folder_label = str(payload.get("gallery_folder", "") or "").strip()
+                    if folder_label:
+                        gallery_label = folder_label
+                    rows = payload.get("existing", [])
+                    if isinstance(rows, list):
+                        for row in rows:
+                            if isinstance(row, dict):
+                                remote_hash = str(row.get("sha256", "") or "").lower()
+                                if len(remote_hash) == 64:
+                                    existing_hashes.add(remote_hash)
+                for file_hash in existing_hashes:
+                    for item in item_by_hash.get(file_hash, []):
+                        if item.state != "skipped_duplicate":
+                            item.transition("skipped_duplicate", "Remote gallery inventory already contains this content.")
+                            remote_duplicates += 1
+                job.target_gallery_label = gallery_label
+                self.emit("connection_ready", {"gallery_label": gallery_label, "normalized_url": upload_url})
+            except Exception as exc:  # noqa: BLE001
+                discovery.warnings.append("Remote duplicate preflight was unavailable: " + str(exc))
+                self.emit("connection_warning", {"message": str(exc), "normalized_url": upload_url})
+        elif not upload_url or not self.config.api_key.strip():
+            discovery.warnings.append("Connection is not configured. Preflight is local only until Gallery URL and API key are provided.")
+
+        plan = ImportPlan(
+            job=job,
+            unsupported=discovery.unsupported,
+            unsafe_entries=discovery.unsafe_entries,
+            duplicate_local=local_duplicates,
+            duplicate_remote=remote_duplicates,
+            capability_notes=notes,
+            warnings=discovery.warnings,
+        )
+        self.job_store.save_job(job)
+        self.emit("preflight_complete", {"plan": plan, "gallery_label": gallery_label})
+
+
+class ScrollableFrame(ttk.Frame if ttk is not None else object):
+    """Simple ttk scroll container used by the redesigned task views."""
+
+    def __init__(self, parent: Any) -> None:
+        """Create a vertical canvas-backed frame without external UI dependencies."""
+        if ttk is None or tk is None:
+            raise RuntimeError("Tkinter is not available.")
+        super().__init__(parent)
+        self.canvas = tk.Canvas(self, highlightthickness=0, borderwidth=0)
+        self.scrollbar = ttk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
+        self.content = ttk.Frame(self.canvas)
+        self.window_id = self.canvas.create_window((0, 0), window=self.content, anchor="nw")
+        self.canvas.configure(yscrollcommand=self.scrollbar.set)
+        self.canvas.pack(side="left", fill="both", expand=True)
+        self.scrollbar.pack(side="right", fill="y")
+        self.content.bind("<Configure>", self._sync_scrollregion, add="+")
+        self.canvas.bind("<Configure>", self._sync_width, add="+")
+
+    def _sync_scrollregion(self, _event: Any = None) -> None:
+        """Refresh the canvas scroll region after content geometry changes."""
+        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+
+    def _sync_width(self, event: Any) -> None:
+        """Keep the embedded content frame at least as wide as the viewport."""
+        self.canvas.itemconfigure(self.window_id, width=max(1, int(event.width)))
 
 
 class WatcherApp:
@@ -3503,36 +4231,61 @@ class WatcherApp:
 
         self.root = tk.Tk()
         self.root.title(APP_DISPLAY_NAME)
-        self.root.geometry("980x860")
+        self.root.geometry("1180x820")
+        self.root.minsize(900, 650)
 
         self.config_store = ConfigStore()
         self.config = self.config_store.load()
-        self.events: "queue.Queue[Tuple[str, str]]" = queue.Queue()
+        self.job_store = JobStateStore(STATE_PATH, self.config.activity_history_limit)
+        self.events: "queue.Queue[Any]" = queue.Queue()
         self.worker: Optional[WatcherThread] = None
         self.manual_worker: Optional[ManualUploadThread] = None
+        self.preflight_worker: Optional[ImportPreflightThread] = None
         self.ai_worker: Optional[AIAnalysisWorkerThread] = None
         self.ai_worker_stop_requested = False
         self.semantic_ai_install_running = False
         self.semantic_ai_install_button: Optional[Any] = None
+        self.connection_test_running = False
+        self.api_key_revoke_running = False
+        self.api_key_revoke_thread: Optional[threading.Thread] = None
         self.manual_paths: List[Path] = []
+        self.manual_folder: Optional[Path] = None
+        self.manual_zip: Optional[Path] = None
+        self.manual_plan: Optional[ImportPlan] = None
+        self.current_job: Optional[ImportJob] = None
         self.tray_icon: Optional[Any] = None
         self.tray_thread: Optional[threading.Thread] = None
         self.window_hidden_to_tray = False
         self.exiting = False
+        self.activity_events: List[ActivityEvent] = self.job_store.list_events()
+        self.media_capabilities = detect_suffix_capabilities(SUPPORTED_SUFFIXES, Image)
 
         self.watched_folder_var = tk.StringVar(value=self.config.watched_folder)
         self.gallery_url_var = tk.StringVar(value=self.config.gallery_url)
         self.api_key_var = tk.StringVar(value=self.config.api_key)
+        self.api_key_visible_var = tk.BooleanVar(value=False)
+        self.api_key_status_var = tk.StringVar(value="API key configured" if self.config.api_key.strip() else "API key not configured")
+        self.revoke_blocker_var = tk.StringVar(value="")
         self.interval_var = tk.StringVar(value=str(self.config.scan_interval_seconds))
         self.stable_var = tk.StringVar(value=str(self.config.stable_seconds))
         self.create_thumbnails_var = tk.BooleanVar(value=self.config.create_thumbnails)
         self.attach_sim_camera_metadata_var = tk.BooleanVar(value=self.config.attach_sim_camera_metadata)
         self.simconnect_dll_path_var = tk.StringVar(value=self.config.simconnect_dll_path)
         self.delete_uploaded_files_var = tk.BooleanVar(value=self.config.delete_uploaded_files)
-        self.manual_local_thumbnails_var = tk.BooleanVar(value=True)
+        self.watch_recursive_var = tk.BooleanVar(value=self.config.watch_recursive)
+        self.manual_folder_recursive_var = tk.BooleanVar(value=False)
+        self.delete_source_zip_var = tk.BooleanVar(value=False)
+        self.manual_local_thumbnails_var = tk.BooleanVar(value=self.config.manual_thumbnail_mode == "local")
         self.manual_thumbnail_workers_var = tk.StringVar(value=format_worker_choice(self.config.manual_thumbnail_workers))
         self.manual_upload_workers_var = tk.StringVar(value=format_worker_choice(self.config.manual_upload_workers))
         self.inventory_refresh_var = tk.StringVar(value=f"{self.config.inventory_refresh_seconds:g}")
+        self.archive_max_entries_var = tk.StringVar(value=str(self.config.archive_max_entries))
+        self.archive_max_total_gib_var = tk.StringVar(value=f"{self.config.archive_max_uncompressed_bytes / (1024 ** 3):g}")
+        self.archive_max_file_gib_var = tk.StringVar(value=f"{self.config.archive_max_file_bytes / (1024 ** 3):g}")
+        self.archive_max_ratio_var = tk.StringVar(value=f"{self.config.archive_max_compression_ratio:g}")
+        self.staging_cleanup_hours_var = tk.StringVar(value=f"{self.config.staging_cleanup_age_hours:g}")
+        self.close_to_tray_var = tk.BooleanVar(value=self.config.close_to_tray)
+        self.settings_advanced_visible_var = tk.BooleanVar(value=False)
         self.ai_worker_enabled_var = tk.BooleanVar(value=self.config.ai_worker_enabled)
         self.ai_worker_poll_var = tk.StringVar(value=f"{self.config.ai_worker_poll_seconds:g}")
         self.ai_worker_lease_var = tk.StringVar(value=str(self.config.ai_worker_lease_seconds))
@@ -3549,16 +4302,33 @@ class WatcherApp:
         self.ai_semantic_prompt_var = tk.StringVar(value=self.config.ai_semantic_prompt)
         self.ai_advanced_visible_var = tk.BooleanVar(value=False)
         self.ai_advanced_frame = None
+        self.settings_advanced_frame = None
         self.thumbnail_runtime_var = tk.StringVar(value=thumbnail_runtime_status())
-        self.manual_selection_var = tk.StringVar(value="No files selected")
+        self.manual_selection_var = tk.StringVar(value="Choose files, a folder, or a ZIP archive")
+        self.manual_preflight_var = tk.StringVar(value="Select a source to build an import summary. Nothing uploads until you press Start import.")
+        self.manual_status_var = tk.StringVar(value="Import idle")
+        self.manual_progress_text_var = tk.StringVar(value="No active import")
+        self.manual_progress_var = tk.DoubleVar(value=0.0)
         self.status_var = tk.StringVar(value="Watcher stopped")
-        self.manual_status_var = tk.StringVar(value="Manual upload idle")
+        self.watch_ignored_var = tk.StringVar(value="Ignored at startup: -")
+        self.watch_last_scan_var = tk.StringVar(value="Last scan: -")
         self.ai_status_var = tk.StringVar(value="AI metadata worker idle")
-        self.monitor_state_var = tk.StringVar(value="Monitoring disabled")
-        self.monitor_detail_var = tk.StringVar(value="No watcher is active.")
+        self.monitor_state_var = tk.StringVar(value="Idle")
+        self.monitor_detail_var = tk.StringVar(value="No background worker is active.")
+        self.connection_status_var = tk.StringVar(value="Not tested")
+        self.connection_detail_var = tk.StringVar(value="Save or test the gallery connection in Settings.")
+        self.gallery_label_var = tk.StringVar(value="Target gallery: unknown")
+        self.watcher_activity_var = tk.StringVar(value="Watch: stopped")
+        self.import_activity_var = tk.StringVar(value="Import: idle")
+        self.ai_activity_var = tk.StringVar(value="AI: stopped")
+        self.activity_filter_var = tk.StringVar(value="all")
+        self.activity_job_summary_var = tk.StringVar(value="No import job selected")
         self.monitor_state = "disabled"
-        self.monitor_detail = "No watcher is active."
+        self.monitor_detail = "No background worker is active."
         self.log_tags_ready = False
+
+        recoverable_ids = [job.id for job in self.job_store.recoverable_jobs()]
+        removed_staging = cleanup_stale_staging(STAGING_ROOT, self.config.staging_cleanup_age_hours, recoverable_ids)
 
         self.build_ui()
         self.configure_window_icon()
@@ -3566,76 +4336,104 @@ class WatcherApp:
         self.root.protocol("WM_DELETE_WINDOW", self.request_window_close)
         self.root.bind("<Unmap>", self.handle_window_unmap, add="+")
         self.root.after(200, self.drain_events)
+        self.root.after(350, self.offer_recoverable_jobs)
+        if removed_staging:
+            self.write_log(f"Cleaned {len(removed_staging)} stale staging directorie(s).", "system")
+
 
     def build_ui(self) -> None:
         """
         Create the visible controls and initial status text.
         """
-        outer = ttk.Frame(self.root, padding=16)
+        outer = ttk.Frame(self.root, padding=(14, 10))
         outer.pack(fill="both", expand=True)
+        outer.columnconfigure(0, weight=1)
+        outer.rowconfigure(2, weight=1)
 
-        title = ttk.Label(outer, text=APP_DISPLAY_NAME, font=("Segoe UI", 16, "bold"))
-        title.pack(anchor="w")
-        subtitle = ttk.Label(
-            outer,
-            text="Uploads images through one gallery-scoped API key, either from a watched folder, from a manual selection, or from the optional AI metadata worker.",
+        header = ttk.Frame(outer)
+        header.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+        header.columnconfigure(1, weight=1)
+        ttk.Label(header, text=APP_DISPLAY_NAME, font=("Segoe UI", 16, "bold")).grid(row=0, column=0, sticky="w")
+        status = ttk.Frame(header)
+        status.grid(row=0, column=1, sticky="e")
+        self.monitor_light = tk.Canvas(status, width=14, height=14, highlightthickness=0, bd=0)
+        self.monitor_light.pack(side="left", padx=(0, 5))
+        ttk.Label(status, textvariable=self.connection_status_var).pack(side="left", padx=(0, 14))
+        ttk.Label(status, textvariable=self.watcher_activity_var).pack(side="left", padx=(0, 10))
+        ttk.Label(status, textvariable=self.import_activity_var).pack(side="left", padx=(0, 10))
+        ttk.Label(status, textvariable=self.ai_activity_var).pack(side="left")
+        ttk.Button(header, text="Connection / API key", command=self.open_connection_dialog).grid(row=0, column=2, sticky="e", padx=(12, 0))
+        ttk.Button(header, text="Open app folder", command=self.open_config_folder).grid(row=0, column=3, sticky="e", padx=(8, 0))
+
+        subheader = ttk.Frame(outer)
+        subheader.grid(row=1, column=0, sticky="ew", pady=(0, 8))
+        subheader.columnconfigure(0, weight=1)
+        ttk.Label(subheader, textvariable=self.gallery_label_var, font=("Segoe UI", 9, "bold")).grid(row=0, column=0, sticky="w")
+        ttk.Label(subheader, textvariable=self.connection_detail_var, foreground="#666666").grid(row=1, column=0, sticky="w")
+
+        self.notebook = ttk.Notebook(outer)
+        self.notebook.grid(row=2, column=0, sticky="nsew")
+
+        tabs: Dict[str, ScrollableFrame] = {}
+        for key, label in [
+            ("import", "Import"),
+            ("watch", "Watch folder"),
+            ("activity", "Activity"),
+            ("ai", "AI metadata"),
+            ("settings", "Settings"),
+        ]:
+            host = ttk.Frame(self.notebook)
+            host.rowconfigure(0, weight=1)
+            host.columnconfigure(0, weight=1)
+            scroll = ScrollableFrame(host)
+            scroll.grid(row=0, column=0, sticky="nsew")
+            self.notebook.add(host, text=label)
+            tabs[key] = scroll
+        self.tab_hosts = tabs
+
+        self.build_manual_tab(tabs["import"].content)
+        self.build_watch_tab(tabs["watch"].content)
+        self.build_activity_tab(tabs["activity"].content)
+        self.build_ai_tab(tabs["ai"].content)
+        self.build_settings_tab(tabs["settings"].content)
+
+        drawer = ttk.LabelFrame(outer, text="Recent activity")
+        drawer.grid(row=3, column=0, sticky="ew", pady=(8, 0))
+        drawer.columnconfigure(0, weight=1)
+        controls = ttk.Frame(drawer)
+        controls.grid(row=0, column=0, sticky="ew", padx=8, pady=(6, 2))
+        ttk.Label(controls, text="Filter").pack(side="left")
+        activity_filter = ttk.Combobox(
+            controls,
+            textvariable=self.activity_filter_var,
+            values=("all", "active", "succeeded", "skipped", "failed", "warnings"),
+            width=12,
+            state="readonly",
         )
-        subtitle.pack(anchor="w", pady=(2, 14))
+        activity_filter.pack(side="left", padx=(6, 10))
+        activity_filter.bind("<<ComboboxSelected>>", lambda _event: self.refresh_activity_drawer())
+        ttk.Button(controls, text="Copy diagnostic details", command=self.copy_diagnostics).pack(side="right")
+        ttk.Button(controls, text="Retry failed", command=self.retry_failed_import).pack(side="right", padx=(0, 8))
+        self.activity_drawer = ttk.Treeview(drawer, columns=("time", "level", "filename", "operation", "message"), show="headings", height=5)
+        for column, title, width in [
+            ("time", "Time", 75),
+            ("level", "Status", 80),
+            ("filename", "File", 150),
+            ("operation", "Operation", 95),
+            ("message", "Event", 550),
+        ]:
+            self.activity_drawer.heading(column, text=title)
+            self.activity_drawer.column(column, width=width, stretch=column == "message")
+        self.activity_drawer.grid(row=1, column=0, sticky="ew", padx=8, pady=(0, 8))
 
-        monitor_strip = ttk.Frame(outer)
-        monitor_strip.pack(fill="x", pady=(0, 10))
-        self.monitor_light = tk.Canvas(monitor_strip, width=16, height=16, highlightthickness=0, bd=0)
-        self.monitor_light.pack(side="left", padx=(0, 8))
-        ttk.Label(monitor_strip, textvariable=self.monitor_state_var).pack(side="left")
-        ttk.Label(monitor_strip, textvariable=self.monitor_detail_var, foreground="#666666").pack(side="left", padx=(10, 0))
-
-        connection = ttk.LabelFrame(outer, text="Shared connection settings")
-        connection.pack(fill="x", pady=(0, 12))
-        connection.columnconfigure(1, weight=1)
-        connection.columnconfigure(3, weight=0)
-
-        ttk.Label(connection, text="Gallery URL or upload endpoint").grid(row=0, column=0, sticky="w", padx=8, pady=6)
-        ttk.Entry(connection, textvariable=self.gallery_url_var).grid(row=0, column=1, columnspan=2, sticky="ew", padx=8, pady=6)
-
-        ttk.Label(connection, text="API key").grid(row=1, column=0, sticky="w", padx=8, pady=6)
-        ttk.Entry(connection, textvariable=self.api_key_var, show="*").grid(row=1, column=1, columnspan=2, sticky="ew", padx=8, pady=6)
-
-        ttk.Label(connection, text="Inventory reconnect seconds").grid(row=2, column=0, sticky="w", padx=8, pady=6)
-        ttk.Entry(connection, textvariable=self.inventory_refresh_var, width=12).grid(row=2, column=1, sticky="w", padx=8, pady=6)
-        ttk.Label(connection, text="Default 30. The app asks the gallery what already exists before continuing long batches.", foreground="#666666").grid(row=2, column=2, columnspan=2, sticky="w", padx=8, pady=6)
-
-        ttk.Button(connection, text="Save configuration", command=self.save_config).grid(row=3, column=1, sticky="w", padx=8, pady=(4, 8))
-        self.revoke_button = ttk.Button(connection, text="Revoke API key", command=self.revoke_api_key)
-        self.revoke_button.grid(row=3, column=2, sticky="e", padx=8, pady=(4, 8))
-        ttk.Button(connection, text="Open config folder", command=self.open_config_folder).grid(row=3, column=3, sticky="e", padx=8, pady=(4, 8))
-
-        notebook = ttk.Notebook(outer)
-        notebook.pack(fill="x", pady=(0, 12))
-
-        watch_tab = ttk.Frame(notebook, padding=12)
-        manual_tab = ttk.Frame(notebook, padding=12)
-        ai_tab = ttk.Frame(notebook, padding=12)
-        notebook.add(watch_tab, text="Watch folder")
-        notebook.add(manual_tab, text="Manual upload")
-        notebook.add(ai_tab, text="AI metadata")
-
-        self.build_watch_tab(watch_tab)
-        self.build_manual_tab(manual_tab)
-        self.build_ai_tab(ai_tab)
-
-        log_frame = ttk.LabelFrame(outer, text="Status log")
-        log_frame.pack(fill="both", expand=True)
-        self.log_text = tk.Text(log_frame, height=18, wrap="word")
-        self.log_text.pack(fill="both", expand=True, padx=8, pady=8)
-        self.log_text.configure(state="disabled")
-        self.configure_log_tags()
-
+        self.refresh_activity_drawer()
         self.write_log(f"Configuration: {CONFIG_PATH}", "system")
         self.write_log(f"State: {STATE_PATH}", "system")
         self.write_log(f"Log: {LOG_PATH}", "system")
         self.write_log(thumbnail_runtime_status(), "system")
-        self.refresh_revoke_button_state()
-        self.update_monitor_state("disabled", "No watcher is active.")
+        self.refresh_connection_controls()
+        self.update_monitor_state("disabled", "No background worker is active.")
+
 
     def configure_window_icon(self) -> None:
         """
@@ -3664,14 +4462,20 @@ class WatcherApp:
                 icon_image = opened.convert("RGBA").copy()
             menu = pystray.Menu(
                 pystray.MenuItem("Open", self.tray_restore_window, default=True),
+                pystray.MenuItem("Open activity", self.tray_open_activity),
+                pystray.MenuItem("Connection / API key...", self.tray_open_connection),
+                pystray.MenuItem("Revoke API key...", self.tray_revoke_api_key),
+                pystray.MenuItem("Pause/resume current import", self.tray_toggle_import_pause),
+                pystray.Menu.SEPARATOR,
                 pystray.MenuItem("Start watching", self.tray_start_watching),
                 pystray.MenuItem("Stop watching", self.tray_stop_watching),
                 pystray.MenuItem("Start AI metadata worker", self.tray_start_ai_worker),
                 pystray.MenuItem("Stop AI metadata worker", self.tray_stop_ai_worker),
                 pystray.Menu.SEPARATOR,
+                pystray.MenuItem("Open log folder", self.tray_open_log_folder),
                 pystray.MenuItem("Exit", self.tray_exit_application),
             )
-            self.tray_icon = pystray.Icon(APP_NAME, icon_image, APP_DISPLAY_NAME, menu)
+            self.tray_icon = pystray.Icon(APP_NAME, icon_image, self.tray_tooltip_text(), menu)
             self.tray_thread = threading.Thread(target=self.tray_icon.run, name="PHPGalleryTray", daemon=True)
             self.tray_thread.start()
             self.write_log("System tray icon is active.", "system")
@@ -3696,10 +4500,39 @@ class WatcherApp:
     def tray_restore_window(self, *_args: Any) -> None:
         """
         Restore the hidden window from a tray icon action.
-        
+
         @param Any _args: Args value.
         """
         self.schedule_ui(self.restore_from_tray)
+
+    def tray_open_activity(self, *_args: Any) -> None:
+        """Restore the window and select the Activity section from the tray."""
+        self.schedule_ui(self.open_activity_tab)
+
+    def tray_open_connection(self, *_args: Any) -> None:
+        """Open the connection and API-key editor from the tray."""
+        self.schedule_ui(self.open_connection_dialog)
+
+    def tray_revoke_api_key(self, *_args: Any) -> None:
+        """Start the guarded API-key revocation flow from the tray."""
+        self.schedule_ui(self.revoke_api_key)
+
+    def tray_toggle_import_pause(self, *_args: Any) -> None:
+        """Pause or resume the current manual import from the tray."""
+        def toggle() -> None:
+            worker = self.manual_worker
+            if worker is None or not worker.is_alive():
+                self.write_log("No active manual import to pause or resume.", "system")
+                return
+            if worker.pause_event.is_set():
+                self.resume_manual_upload()
+            else:
+                self.pause_manual_upload()
+        self.schedule_ui(toggle)
+
+    def tray_open_log_folder(self, *_args: Any) -> None:
+        """Open the local app/log folder from the tray."""
+        self.schedule_ui(self.open_config_folder)
 
     def tray_start_watching(self, *_args: Any) -> None:
         """
@@ -3743,35 +4576,42 @@ class WatcherApp:
 
     def request_window_close(self) -> None:
         """
-        Hide to tray when the window close button is used.
+        Apply the configured close-to-tray policy or perform coordinated exit.
         """
-        if not self.tray_icon:
-            self.close()
+        if self.tray_icon and self.close_to_tray_var.get():
+            self.hide_to_tray()
             return
+        self.close()
 
-        if self.background_work_active():
-            choice = messagebox.askyesnocancel(
-                APP_DISPLAY_NAME,
-                "Background work is still running. Choose Yes to hide to tray, No to stop work and exit, or Cancel to keep this window open.",
-            )
-            if choice is None:
-                return
-            if choice is False:
-                self.close()
-                return
+    def api_key_request_blockers(self) -> List[str]:
+        """
+        Return exact activities that can still issue authenticated gallery requests.
 
-        self.hide_to_tray()
+        @return List[str] Human-readable blocker labels.
+        """
+        blockers: List[str] = []
+        if self.worker and self.worker.is_alive():
+            blockers.append("watch-folder uploader is running")
+        if self.manual_worker and self.manual_worker.is_alive():
+            blockers.append("manual import is running")
+        if self.preflight_worker and self.preflight_worker.is_alive():
+            blockers.append("import preflight is running")
+        if self.ai_worker and self.ai_worker.is_alive():
+            blockers.append("AI metadata worker is running")
+        if self.connection_test_running:
+            blockers.append("connection test is running")
+        return blockers
 
     def background_work_active(self) -> bool:
         """
-        Return whether any background worker is running.
-        
-        @return bool True when any background worker is alive.
+        Return whether any background worker or long-running lifecycle operation is running.
+
+        @return bool True when background work is active.
         """
         return bool(
-            (self.worker and self.worker.is_alive())
-            or (self.manual_worker and self.manual_worker.is_alive())
-            or (self.ai_worker and self.ai_worker.is_alive())
+            self.api_key_request_blockers()
+            or self.semantic_ai_install_running
+            or self.api_key_revoke_running
         )
 
     def handle_window_unmap(self, event: Any) -> None:
@@ -3786,9 +4626,9 @@ class WatcherApp:
 
     def hide_if_minimized(self) -> None:
         """
-        Hide the window to tray after a user minimize action.
+        Hide the window to tray after a user minimize action when configured.
         """
-        if self.exiting or self.window_hidden_to_tray or not self.tray_icon:
+        if self.exiting or self.window_hidden_to_tray or not self.tray_icon or not self.close_to_tray_var.get():
             return
         try:
             if self.root.state() == "iconic":
@@ -3841,107 +4681,258 @@ class WatcherApp:
         
         @param Any parent: Tkinter frame that receives the controls.
         """
-        parent.columnconfigure(1, weight=1)
-
-        ttk.Label(parent, text="Watched folder").grid(row=0, column=0, sticky="w", pady=5)
-        ttk.Entry(parent, textvariable=self.watched_folder_var).grid(row=0, column=1, sticky="ew", padx=8, pady=5)
-        ttk.Button(parent, text="Browse", command=self.browse_folder).grid(row=0, column=2, sticky="ew", pady=5)
-
-        ttk.Label(parent, text="Scan interval seconds").grid(row=1, column=0, sticky="w", pady=5)
-        ttk.Entry(parent, textvariable=self.interval_var, width=12).grid(row=1, column=1, sticky="w", padx=8, pady=5)
-
-        ttk.Label(parent, text="Stable file seconds").grid(row=2, column=0, sticky="w", pady=5)
-        ttk.Entry(parent, textvariable=self.stable_var, width=12).grid(row=2, column=1, sticky="w", padx=8, pady=5)
-
-        ttk.Checkbutton(
+        parent.columnconfigure(0, weight=1)
+        intro = ttk.Label(
             parent,
-            text="Ask gallery to create thumbnails after watched-folder upload",
-            variable=self.create_thumbnails_var,
-        ).grid(row=3, column=1, columnspan=2, sticky="w", padx=8, pady=5)
+            text="Watch a drop folder for new photos. Files already present when Start watching is pressed are ignored, and partially copied files wait until they remain stable.",
+            wraplength=950,
+        )
+        intro.grid(row=0, column=0, sticky="w", padx=10, pady=(10, 8))
 
-        ttk.Checkbutton(
-            parent,
-            text="Attach current Flight Simulator camera location to watched-folder uploads",
-            variable=self.attach_sim_camera_metadata_var,
-        ).grid(row=4, column=1, columnspan=2, sticky="w", padx=8, pady=5)
+        card = ttk.LabelFrame(parent, text="Watch folder")
+        card.grid(row=1, column=0, sticky="ew", padx=10, pady=6)
+        card.columnconfigure(1, weight=1)
+        ttk.Label(card, text="Folder").grid(row=0, column=0, sticky="w", padx=8, pady=7)
+        ttk.Entry(card, textvariable=self.watched_folder_var).grid(row=0, column=1, sticky="ew", padx=8, pady=7)
+        ttk.Button(card, text="Choose", command=self.browse_folder).grid(row=0, column=2, padx=4, pady=7)
+        ttk.Button(card, text="Open folder", command=self.open_watched_folder).grid(row=0, column=3, padx=(4, 8), pady=7)
+        ttk.Checkbutton(card, text="Include subfolders", variable=self.watch_recursive_var).grid(row=1, column=1, sticky="w", padx=8, pady=5)
 
-        ttk.Label(parent, text="SimConnect.dll override (optional)").grid(row=5, column=0, sticky="w", pady=5)
-        ttk.Entry(parent, textvariable=self.simconnect_dll_path_var).grid(row=5, column=1, sticky="ew", padx=8, pady=5)
-        ttk.Button(parent, text="Browse", command=self.browse_simconnect_dll).grid(row=5, column=2, sticky="ew", pady=5)
+        policy = ttk.LabelFrame(parent, text="Safety policy")
+        policy.grid(row=2, column=0, sticky="ew", padx=10, pady=6)
+        policy.columnconfigure(3, weight=1)
+        ttk.Label(policy, text="Stable for").grid(row=0, column=0, sticky="w", padx=8, pady=7)
+        ttk.Entry(policy, textvariable=self.stable_var, width=8).grid(row=0, column=1, sticky="w", pady=7)
+        ttk.Label(policy, text="seconds before upload").grid(row=0, column=2, sticky="w", padx=(4, 18), pady=7)
+        ttk.Label(policy, text="This protects against files that are visible before a copy finishes.", foreground="#666666").grid(row=0, column=3, sticky="w", pady=7)
+        ttk.Checkbutton(policy, text="Attach current Flight Simulator camera location when available", variable=self.attach_sim_camera_metadata_var).grid(row=1, column=0, columnspan=4, sticky="w", padx=8, pady=5)
+        ttk.Checkbutton(policy, text="Delete source only after the gallery confirms a successful upload", variable=self.delete_uploaded_files_var, command=self.refresh_watch_delete_warning).grid(row=2, column=0, columnspan=4, sticky="w", padx=8, pady=5)
+        self.watch_delete_warning = ttk.Label(policy, text="", foreground="#b36b00")
+        self.watch_delete_warning.grid(row=3, column=0, columnspan=4, sticky="w", padx=28, pady=(0, 6))
+        self.refresh_watch_delete_warning()
 
-        ttk.Checkbutton(
-            parent,
-            text="Delete watched-folder files after a confirmed successful upload",
-            variable=self.delete_uploaded_files_var,
-        ).grid(row=6, column=1, columnspan=2, sticky="w", padx=8, pady=5)
+        summary = ttk.LabelFrame(parent, text="Current folder state")
+        summary.grid(row=3, column=0, sticky="ew", padx=10, pady=6)
+        ttk.Label(summary, textvariable=self.watch_ignored_var).pack(side="left", padx=8, pady=7)
+        ttk.Label(summary, textvariable=self.watch_last_scan_var).pack(side="left", padx=18, pady=7)
+        ttk.Label(summary, textvariable=self.status_var).pack(side="right", padx=8, pady=7)
 
         actions = ttk.Frame(parent)
-        actions.grid(row=7, column=0, columnspan=3, sticky="ew", pady=(10, 0))
-        ttk.Button(actions, text="Start watching", command=self.start).pack(side="left")
-        ttk.Button(actions, text="Stop", command=self.stop).pack(side="left", padx=8)
-        ttk.Label(actions, textvariable=self.status_var).pack(side="right")
+        actions.grid(row=4, column=0, sticky="ew", padx=10, pady=(8, 14))
+        ttk.Button(actions, text="Check folder only", command=self.dry_run_watch_folder).pack(side="left")
+        ttk.Button(actions, text="Start watching", command=self.start).pack(side="left", padx=(8, 0))
+        ttk.Button(actions, text="Stop watcher", command=self.stop).pack(side="left", padx=8)
+
 
     def build_manual_tab(self, parent: Any) -> None:
         """
         Build controls dedicated to manual bulk uploading.
-        
+
+        Connection setup is deliberately visible here because confirming the
+        target gallery and inserting the gallery-scoped API key is part of the
+        primary import path, not an advanced setting.
+
         @param Any parent: Tkinter frame that receives the controls.
         """
         parent.columnconfigure(0, weight=1)
-
-        intro = ttk.Label(
+        ttk.Label(
             parent,
-            text="Select photos manually and upload them into the same gallery target as the API key. Local thumbnail conversion uses separate worker processes; uploads use parallel network threads.",
-            wraplength=880,
-        )
-        intro.grid(row=0, column=0, columnspan=4, sticky="w", pady=(0, 8))
+            text="Confirm the gallery connection, choose a source, review exactly what will be imported, then start the job. Selection and ZIP inspection never upload anything by themselves.",
+            wraplength=950,
+        ).grid(row=0, column=0, sticky="w", padx=10, pady=(10, 8))
 
-        ttk.Button(parent, text="Add pictures", command=self.select_manual_files).grid(row=1, column=0, sticky="w", pady=5)
-        ttk.Button(parent, text="Clear selection", command=self.clear_manual_files).grid(row=1, column=1, sticky="w", padx=8, pady=5)
-        ttk.Label(parent, textvariable=self.manual_selection_var).grid(row=1, column=2, columnspan=2, sticky="w", padx=8, pady=5)
+        connection = ttk.LabelFrame(parent, text="1. Connection and API key")
+        connection.grid(row=1, column=0, sticky="ew", padx=10, pady=6)
+        connection.columnconfigure(0, weight=1)
+        connection_summary = ttk.Frame(connection)
+        connection_summary.grid(row=0, column=0, sticky="ew", padx=8, pady=(8, 4))
+        connection_summary.columnconfigure(0, weight=1)
+        ttk.Label(connection_summary, textvariable=self.gallery_label_var, font=("Segoe UI", 9, "bold")).grid(row=0, column=0, sticky="w")
+        ttk.Label(connection_summary, textvariable=self.api_key_status_var).grid(row=1, column=0, sticky="w", pady=(2, 0))
+        ttk.Label(connection_summary, textvariable=self.connection_detail_var, foreground="#666666", wraplength=760).grid(row=2, column=0, sticky="w", pady=(2, 0))
+        connection_actions = ttk.Frame(connection)
+        connection_actions.grid(row=1, column=0, sticky="ew", padx=8, pady=(4, 4))
+        ttk.Button(connection_actions, text="Set / replace API key...", command=self.open_connection_dialog).pack(side="left")
+        ttk.Button(connection_actions, text="Test connection", command=self.test_connection).pack(side="left", padx=(8, 0))
+        self.import_revoke_button = ttk.Button(connection_actions, text="Revoke API key...", command=self.revoke_api_key)
+        self.import_revoke_button.pack(side="left", padx=(8, 0))
+        ttk.Button(connection_actions, text="Open Settings", command=lambda: self.notebook.select(4)).pack(side="right")
+        ttk.Label(connection, textvariable=self.revoke_blocker_var, foreground="#666666", wraplength=900).grid(row=2, column=0, sticky="w", padx=8, pady=(0, 8))
 
-        self.thumbnail_check = ttk.Checkbutton(
-            parent,
-            text="Generate responsive thumbnails on this PC before upload",
-            variable=self.manual_local_thumbnails_var,
-        )
-        self.thumbnail_check.grid(row=2, column=0, columnspan=4, sticky="w", pady=5)
+        source = ttk.LabelFrame(parent, text="2. Choose source")
+        source.grid(row=2, column=0, sticky="ew", padx=10, pady=6)
+        source.columnconfigure(3, weight=1)
+        ttk.Button(source, text="Choose files", command=self.select_manual_files).grid(row=0, column=0, padx=8, pady=8)
+        ttk.Button(source, text="Choose folder", command=self.select_manual_folder).grid(row=0, column=1, padx=4, pady=8)
+        ttk.Button(source, text="Choose ZIP archive", command=self.select_manual_zip).grid(row=0, column=2, padx=4, pady=8)
+        ttk.Button(source, text="Clear", command=self.clear_manual_files).grid(row=0, column=4, padx=8, pady=8)
+        ttk.Label(source, textvariable=self.manual_selection_var, wraplength=760).grid(row=1, column=0, columnspan=5, sticky="w", padx=8, pady=(0, 6))
+        ttk.Checkbutton(source, text="Include subfolders when importing a folder", variable=self.manual_folder_recursive_var, command=self.rebuild_manual_preflight).grid(row=2, column=0, columnspan=3, sticky="w", padx=8, pady=(0, 6))
+        ttk.Checkbutton(source, text="Delete original ZIP only after every accepted entry succeeds", variable=self.delete_source_zip_var, command=self.rebuild_manual_preflight).grid(row=2, column=3, columnspan=2, sticky="w", padx=8, pady=(0, 6))
 
-        performance = ttk.LabelFrame(parent, text="Manual upload performance")
-        performance.grid(row=3, column=0, columnspan=4, sticky="ew", pady=(4, 8))
-        performance.columnconfigure(4, weight=1)
-        ttk.Label(performance, text="Thumbnail processes").grid(row=0, column=0, sticky="w", padx=8, pady=6)
-        ttk.Combobox(
-            performance,
-            textvariable=self.manual_thumbnail_workers_var,
-            values=worker_choice_values(MAX_THUMBNAIL_WORKERS),
-            width=10,
-            state="readonly",
-        ).grid(row=0, column=1, sticky="w", padx=(0, 12), pady=6)
-        ttk.Label(performance, text="Upload threads").grid(row=0, column=2, sticky="w", padx=8, pady=6)
-        ttk.Combobox(
-            performance,
-            textvariable=self.manual_upload_workers_var,
-            values=worker_choice_values(MAX_UPLOAD_WORKERS),
-            width=10,
-            state="readonly",
-        ).grid(row=0, column=3, sticky="w", padx=(0, 12), pady=6)
-        auto_text = f"Auto uses {automatic_thumbnail_worker_count()} thumbnail process(es) and {automatic_upload_worker_count()} upload thread(s)."
-        ttk.Label(performance, text=auto_text).grid(row=0, column=4, sticky="w", padx=8, pady=6)
+        preflight = ttk.LabelFrame(parent, text="3. Review import")
+        preflight.grid(row=3, column=0, sticky="ew", padx=10, pady=6)
+        preflight.columnconfigure(0, weight=1)
+        ttk.Label(preflight, textvariable=self.manual_preflight_var, wraplength=950, justify="left").grid(row=0, column=0, sticky="w", padx=8, pady=8)
+        self.preflight_progress = ttk.Progressbar(preflight, mode="indeterminate")
+        self.preflight_progress.grid(row=1, column=0, sticky="ew", padx=8, pady=(0, 8))
+        self.preflight_progress.grid_remove()
 
-        runtime_row = ttk.Frame(parent)
-        runtime_row.grid(row=4, column=0, columnspan=4, sticky="ew", pady=(0, 6))
-        runtime_row.columnconfigure(0, weight=1)
-        ttk.Label(runtime_row, textvariable=self.thumbnail_runtime_var, wraplength=760).grid(row=0, column=0, sticky="w")
-        ttk.Button(runtime_row, text="Install or repair dependencies", command=self.repair_dependencies).grid(row=0, column=1, sticky="e", padx=(8, 0))
+        self.import_item_tree = ttk.Treeview(preflight, columns=("file", "size", "decode", "state", "reason"), show="headings", height=8)
+        for column, title, width in [
+            ("file", "File", 260),
+            ("size", "Size", 90),
+            ("decode", "Local media", 105),
+            ("state", "Preflight", 120),
+            ("reason", "Detail", 370),
+        ]:
+            self.import_item_tree.heading(column, text=title)
+            self.import_item_tree.column(column, width=width, stretch=column in {"file", "reason"})
+        self.import_item_tree.grid(row=2, column=0, sticky="ew", padx=8, pady=(0, 8))
+
+        thumbnails = ttk.LabelFrame(parent, text="Thumbnail handling")
+        thumbnails.grid(row=4, column=0, sticky="ew", padx=10, pady=6)
+        ttk.Radiobutton(thumbnails, text="Server creates thumbnails (simplest and most compatible)", variable=self.manual_local_thumbnails_var, value=False).grid(row=0, column=0, sticky="w", padx=8, pady=5)
+        self.thumbnail_check = ttk.Radiobutton(thumbnails, text="This PC creates thumbnails when a local decoder is available", variable=self.manual_local_thumbnails_var, value=True)
+        self.thumbnail_check.grid(row=1, column=0, sticky="w", padx=8, pady=5)
+        ttk.Label(thumbnails, text="Originals and server validation remain authoritative. A rejected or failed client thumbnail falls back to server generation.", foreground="#666666", wraplength=900).grid(row=2, column=0, sticky="w", padx=28, pady=(0, 7))
+
+        run = ttk.LabelFrame(parent, text="4. Import")
+        run.grid(row=5, column=0, sticky="ew", padx=10, pady=6)
+        run.columnconfigure(0, weight=1)
+        self.manual_progress = ttk.Progressbar(run, variable=self.manual_progress_var, maximum=100.0, mode="determinate")
+        self.manual_progress.grid(row=0, column=0, sticky="ew", padx=8, pady=(8, 3))
+        ttk.Label(run, textvariable=self.manual_progress_text_var).grid(row=1, column=0, sticky="w", padx=8, pady=(0, 7))
+        actions = ttk.Frame(run)
+        actions.grid(row=2, column=0, sticky="ew", padx=8, pady=(0, 8))
+        self.start_import_button = ttk.Button(actions, text="Start import", command=self.start_manual_upload, state="disabled")
+        self.start_import_button.pack(side="left")
+        self.pause_import_button = ttk.Button(actions, text="Pause", command=self.pause_manual_upload, state="disabled")
+        self.pause_import_button.pack(side="left", padx=(8, 0))
+        self.resume_import_button = ttk.Button(actions, text="Resume", command=self.resume_manual_upload, state="disabled")
+        self.resume_import_button.pack(side="left", padx=(8, 0))
+        self.cancel_import_button = ttk.Button(actions, text="Cancel", command=self.stop_manual_upload, state="disabled")
+        self.cancel_import_button.pack(side="left", padx=(8, 0))
+        self.retry_failed_button = ttk.Button(actions, text="Retry failed", command=self.retry_failed_import, state="disabled")
+        self.retry_failed_button.pack(side="left", padx=(8, 0))
+        ttk.Label(actions, textvariable=self.manual_status_var).pack(side="right")
 
         self.refresh_thumbnail_controls()
+        self.refresh_revoke_button_state()
 
-        actions = ttk.Frame(parent)
-        actions.grid(row=5, column=0, columnspan=4, sticky="ew", pady=(10, 0))
-        ttk.Button(actions, text="Start manual upload", command=self.start_manual_upload).pack(side="left")
-        ttk.Button(actions, text="Stop manual upload", command=self.stop_manual_upload).pack(side="left", padx=8)
-        ttk.Label(actions, textvariable=self.manual_status_var).pack(side="right")
+    def build_activity_tab(self, parent: Any) -> None:
+        """Build current-job details and durable recent job history."""
+        parent.columnconfigure(0, weight=1)
+        ttk.Label(parent, text="Current and recoverable imports are kept in upload_state.json so a restart does not silently resend or discard work.", wraplength=950).grid(row=0, column=0, sticky="w", padx=10, pady=(10, 8))
+        current = ttk.LabelFrame(parent, text="Current import")
+        current.grid(row=1, column=0, sticky="ew", padx=10, pady=6)
+        current.columnconfigure(0, weight=1)
+        ttk.Label(current, textvariable=self.activity_job_summary_var, wraplength=930).grid(row=0, column=0, sticky="w", padx=8, pady=8)
+        activity_actions = ttk.Frame(current)
+        activity_actions.grid(row=1, column=0, sticky="ew", padx=8, pady=(0, 8))
+        ttk.Button(activity_actions, text="Open Import tab", command=lambda: self.notebook.select(0)).pack(side="left")
+        ttk.Button(activity_actions, text="Retry failed", command=self.retry_failed_import).pack(side="left", padx=8)
+        self.activity_item_tree = ttk.Treeview(current, columns=("file", "state", "attempts", "detail"), show="headings", height=7)
+        for column, title, width in [
+            ("file", "File", 280),
+            ("state", "State", 135),
+            ("attempts", "Attempts", 75),
+            ("detail", "Result / error", 430),
+        ]:
+            self.activity_item_tree.heading(column, text=title)
+            self.activity_item_tree.column(column, width=width, stretch=column in {"file", "detail"})
+        self.activity_item_tree.grid(row=2, column=0, sticky="ew", padx=8, pady=(0, 8))
+
+        history = ttk.LabelFrame(parent, text="Job history")
+        history.grid(row=2, column=0, sticky="ew", padx=10, pady=6)
+        history.columnconfigure(0, weight=1)
+        self.job_history_tree = ttk.Treeview(history, columns=("created", "source", "target", "status"), show="headings", height=10)
+        for column, title, width in [
+            ("created", "Created", 145),
+            ("source", "Source", 300),
+            ("target", "Target", 220),
+            ("status", "Result", 300),
+        ]:
+            self.job_history_tree.heading(column, text=title)
+            self.job_history_tree.column(column, width=width, stretch=column in {"source", "status"})
+        self.job_history_tree.grid(row=0, column=0, sticky="ew", padx=8, pady=8)
+        self.job_history_tree.bind("<<TreeviewSelect>>", self.select_history_job)
+        self.refresh_job_history()
+
+    def build_settings_tab(self, parent: Any) -> None:
+        """Build connection, runtime, thumbnail, SimConnect, tray, and advanced diagnostic settings."""
+        parent.columnconfigure(0, weight=1)
+        connection = ttk.LabelFrame(parent, text="Connection")
+        connection.grid(row=0, column=0, sticky="ew", padx=10, pady=(10, 6))
+        connection.columnconfigure(1, weight=1)
+        ttk.Label(connection, text="Gallery URL or upload endpoint").grid(row=0, column=0, sticky="w", padx=8, pady=7)
+        self.gallery_url_entry = ttk.Entry(connection, textvariable=self.gallery_url_var)
+        self.gallery_url_entry.grid(row=0, column=1, columnspan=4, sticky="ew", padx=8, pady=7)
+        ttk.Label(connection, text="API key").grid(row=1, column=0, sticky="w", padx=8, pady=7)
+        self.api_key_entry = ttk.Entry(connection, textvariable=self.api_key_var, show="*")
+        self.api_key_entry.grid(row=1, column=1, sticky="ew", padx=8, pady=7)
+        ttk.Button(connection, text="Reveal", command=self.toggle_api_key_visibility).grid(row=1, column=2, padx=4, pady=7)
+        ttk.Button(connection, text="Paste API key", command=self.paste_api_key_from_clipboard).grid(row=1, column=3, padx=4, pady=7)
+        ttk.Button(connection, text="Copy", command=self.copy_api_key).grid(row=1, column=4, padx=(4, 8), pady=7)
+        ttk.Label(connection, textvariable=self.api_key_status_var, foreground="#666666").grid(row=2, column=1, sticky="w", padx=8, pady=(0, 3))
+        ttk.Label(connection, textvariable=self.connection_detail_var, foreground="#666666", wraplength=850).grid(row=3, column=1, columnspan=4, sticky="w", padx=8, pady=(0, 7))
+        actions = ttk.Frame(connection)
+        actions.grid(row=4, column=1, columnspan=4, sticky="ew", padx=8, pady=(0, 4))
+        ttk.Button(actions, text="Save settings", command=self.save_config).pack(side="left")
+        ttk.Button(actions, text="Test connection", command=self.test_connection).pack(side="left", padx=8)
+        ttk.Button(actions, text="Set / replace API key...", command=self.open_connection_dialog).pack(side="left")
+        self.revoke_button = ttk.Button(actions, text="Revoke API key...", command=self.revoke_api_key)
+        self.revoke_button.pack(side="left", padx=8)
+        ttk.Label(connection, textvariable=self.revoke_blocker_var, foreground="#666666", wraplength=850).grid(row=5, column=1, columnspan=4, sticky="w", padx=8, pady=(0, 8))
+
+        runtime = ttk.LabelFrame(parent, text="Runtime and integrations")
+        runtime.grid(row=1, column=0, sticky="ew", padx=10, pady=6)
+        runtime.columnconfigure(1, weight=1)
+        ttk.Label(runtime, text="Python runtime").grid(row=0, column=0, sticky="nw", padx=8, pady=7)
+        ttk.Label(runtime, textvariable=self.thumbnail_runtime_var, wraplength=760).grid(row=0, column=1, sticky="w", padx=8, pady=7)
+        ttk.Button(runtime, text="Install or repair dependencies", command=self.repair_dependencies).grid(row=0, column=2, padx=8, pady=7)
+        ttk.Label(runtime, text="SimConnect.dll override").grid(row=1, column=0, sticky="w", padx=8, pady=7)
+        ttk.Entry(runtime, textvariable=self.simconnect_dll_path_var).grid(row=1, column=1, sticky="ew", padx=8, pady=7)
+        ttk.Button(runtime, text="Choose", command=self.browse_simconnect_dll).grid(row=1, column=2, padx=8, pady=7)
+        ttk.Checkbutton(runtime, text="Close/minimize window to system tray when tray support is available", variable=self.close_to_tray_var).grid(row=2, column=1, columnspan=2, sticky="w", padx=8, pady=(0, 7))
+
+        advanced_toggle = ttk.Checkbutton(parent, text="Show advanced settings", variable=self.settings_advanced_visible_var, command=self.toggle_settings_advanced)
+        advanced_toggle.grid(row=2, column=0, sticky="w", padx=10, pady=6)
+        advanced = ttk.LabelFrame(parent, text="Advanced settings")
+        self.settings_advanced_frame = advanced
+        advanced.columnconfigure(1, weight=1)
+        rows = [
+            ("Watcher scan interval seconds", self.interval_var),
+            ("Remote inventory reconnect seconds", self.inventory_refresh_var),
+            ("ZIP max entries", self.archive_max_entries_var),
+            ("ZIP max total uncompressed GiB", self.archive_max_total_gib_var),
+            ("ZIP max single file GiB", self.archive_max_file_gib_var),
+            ("ZIP max compression ratio", self.archive_max_ratio_var),
+            ("Staging cleanup age hours", self.staging_cleanup_hours_var),
+        ]
+        for row, (label, variable) in enumerate(rows):
+            ttk.Label(advanced, text=label).grid(row=row, column=0, sticky="w", padx=8, pady=5)
+            ttk.Entry(advanced, textvariable=variable, width=18).grid(row=row, column=1, sticky="w", padx=8, pady=5)
+        workers_row = len(rows)
+        ttk.Label(advanced, text="Local thumbnail processes").grid(row=workers_row, column=0, sticky="w", padx=8, pady=5)
+        ttk.Combobox(advanced, textvariable=self.manual_thumbnail_workers_var, values=worker_choice_values(MAX_THUMBNAIL_WORKERS), width=10, state="readonly").grid(row=workers_row, column=1, sticky="w", padx=8, pady=5)
+        ttk.Label(advanced, text="Upload threads").grid(row=workers_row + 1, column=0, sticky="w", padx=8, pady=5)
+        ttk.Combobox(advanced, textvariable=self.manual_upload_workers_var, values=worker_choice_values(MAX_UPLOAD_WORKERS), width=10, state="readonly").grid(row=workers_row + 1, column=1, sticky="w", padx=8, pady=5)
+        self.toggle_settings_advanced()
+
+        diagnostics = ttk.LabelFrame(parent, text="Diagnostics")
+        diagnostics.grid(row=4, column=0, sticky="ew", padx=10, pady=6)
+        diagnostics.columnconfigure(0, weight=1)
+        diagnostic_actions = ttk.Frame(diagnostics)
+        diagnostic_actions.grid(row=0, column=0, sticky="ew", padx=8, pady=6)
+        ttk.Button(diagnostic_actions, text="Open app folder", command=self.open_config_folder).pack(side="left")
+        ttk.Button(diagnostic_actions, text="Open log", command=self.open_log_file).pack(side="left", padx=8)
+        ttk.Button(diagnostic_actions, text="Copy redacted diagnostics", command=self.copy_diagnostics).pack(side="left")
+        self.log_text = tk.Text(diagnostics, height=9, wrap="word")
+        self.log_text.grid(row=1, column=0, sticky="ew", padx=8, pady=(0, 8))
+        self.log_text.configure(state="disabled")
+        self.configure_log_tags()
+
 
     def build_ai_tab(self, parent: Any) -> None:
         """
@@ -4042,7 +5033,7 @@ class WatcherApp:
         ttk.Entry(advanced, textvariable=self.ai_external_command_var).grid(row=10, column=1, columnspan=2, sticky="ew", padx=8, pady=5)
         ttk.Label(
             advanced,
-            text="Optional. Use {image_path}, {filename}, and {job_id}. The command must print JSON metadata to stdout. Leave blank unless you use your own local analyzer.",
+            text="Optional. Use {image_path}, {filename}, and {job_id}. External analyzer output is treated as untrusted JSON and validated before use. Leave blank unless you use your own local analyzer.",
             foreground="#666666",
             wraplength=820,
         ).grid(row=11, column=1, columnspan=2, sticky="w", padx=8, pady=(0, 6))
@@ -4106,15 +5097,27 @@ class WatcherApp:
             thumbnail_workers = parse_worker_choice(self.manual_thumbnail_workers_var.get())
             upload_workers = parse_worker_choice(self.manual_upload_workers_var.get())
             inventory_refresh = max(1.0, float(self.inventory_refresh_var.get().strip() or DEFAULT_INVENTORY_REFRESH_SECONDS))
+            archive_max_entries = max(10, min(50000, int(self.archive_max_entries_var.get().strip() or REDESIGN_CONFIG_DEFAULTS["archive_max_entries"])))
+            archive_max_total = int(max(0.01, min(128.0, float(self.archive_max_total_gib_var.get().strip() or 16.0))) * (1024 ** 3))
+            archive_max_file = int(max(0.001, min(32.0, float(self.archive_max_file_gib_var.get().strip() or 2.0))) * (1024 ** 3))
+            archive_max_ratio = max(2.0, min(10000.0, float(self.archive_max_ratio_var.get().strip() or 250.0)))
+            staging_cleanup_hours = max(1.0, min(24.0 * 30.0, float(self.staging_cleanup_hours_var.get().strip() or 24.0)))
             ai_worker_poll = max(AI_WORKER_MIN_POLL_SECONDS, float(self.ai_worker_poll_var.get().strip() or DEFAULT_AI_WORKER_POLL_SECONDS))
             ai_worker_lease = max(60, min(AI_WORKER_MAX_LEASE_SECONDS, int(self.ai_worker_lease_var.get().strip() or DEFAULT_AI_WORKER_LEASE_SECONDS)))
             ai_transformers_detection_threshold = max(0.01, min(0.95, float(self.ai_transformers_detection_threshold_var.get().strip() or AI_TRANSFORMERS_DETECTION_THRESHOLD_DEFAULT)))
         except ValueError as exc:
-            raise ValueError("Scan interval, stable file seconds, inventory reconnect seconds, AI worker timing, detector threshold, and worker counts must be numeric.") from exc
+            raise ValueError("Timing, worker, archive-safety, and AI numeric settings must contain valid numbers.") from exc
+
+        gallery_url = self.gallery_url_var.get().strip()
+        if gallery_url:
+            gallery_url = normalize_upload_url(gallery_url)
+            if not gallery_url:
+                raise ValueError("Gallery URL must use HTTP or HTTPS and contain a valid host.")
 
         return WatcherConfig(
+            schema_version=CONFIG_SCHEMA_VERSION,
             watched_folder=self.watched_folder_var.get().strip(),
-            gallery_url=self.gallery_url_var.get().strip(),
+            gallery_url=gallery_url,
             api_key=self.api_key_var.get().strip(),
             scan_interval_seconds=interval,
             stable_seconds=stable,
@@ -4122,9 +5125,18 @@ class WatcherApp:
             attach_sim_camera_metadata=bool(self.attach_sim_camera_metadata_var.get()),
             simconnect_dll_path=self.simconnect_dll_path_var.get().strip(),
             delete_uploaded_files=bool(self.delete_uploaded_files_var.get()),
+            watch_recursive=bool(self.watch_recursive_var.get()),
+            manual_thumbnail_mode="local" if self.manual_local_thumbnails_var.get() else "server",
             manual_thumbnail_workers=thumbnail_workers,
             manual_upload_workers=upload_workers,
             inventory_refresh_seconds=inventory_refresh,
+            archive_max_entries=archive_max_entries,
+            archive_max_uncompressed_bytes=archive_max_total,
+            archive_max_file_bytes=archive_max_file,
+            archive_max_compression_ratio=archive_max_ratio,
+            staging_cleanup_age_hours=staging_cleanup_hours,
+            close_to_tray=bool(self.close_to_tray_var.get()),
+            activity_history_limit=self.config.activity_history_limit,
             ai_worker_enabled=bool(self.ai_worker_enabled_var.get()),
             ai_worker_poll_seconds=ai_worker_poll,
             ai_worker_lease_seconds=ai_worker_lease,
@@ -4141,6 +5153,7 @@ class WatcherApp:
             ai_semantic_prompt=self.ai_semantic_prompt_var.get().strip() or AI_SEMANTIC_PROMPT_DEFAULT,
         )
 
+
     def browse_folder(self) -> None:
         """
         Open a folder picker and store the selected path in the UI.
@@ -4148,6 +5161,9 @@ class WatcherApp:
         selected = filedialog.askdirectory(initialdir=self.watched_folder_var.get() or str(Path.home()))
         if selected:
             self.watched_folder_var.set(selected)
+            self.watch_ignored_var.set("Ignored at startup: not scanned yet")
+            self.watch_last_scan_var.set("Last scan: -")
+
 
     def browse_simconnect_dll(self) -> None:
         """
@@ -4166,58 +5182,246 @@ class WatcherApp:
         Open a file picker and add supported images to the manual upload list.
         """
         selected = filedialog.askopenfilenames(
-            title="Select pictures to upload",
+            title="Choose files to import",
             initialdir=self.watched_folder_var.get() or str(Path.home()),
-            filetypes=selected_image_filetypes(),
+            filetypes=selected_image_filetypes() + [("All files", "*.*")],
         )
         if not selected:
             return
+        self.manual_paths = [Path(value) for value in selected]
+        self.manual_folder = None
+        self.manual_zip = None
+        self.manual_selection_var.set(f"Files: {len(self.manual_paths)} selected")
+        self.rebuild_manual_preflight()
 
-        existing = {str(path): path for path in self.manual_paths}
-        for path in filter_supported_paths(selected):
-            existing[str(path)] = path
-        self.manual_paths = [existing[key] for key in sorted(existing.keys(), key=str.lower)]
-        self.refresh_manual_file_label()
+    def select_manual_folder(self) -> None:
+        """Choose one folder for explicit manual import discovery."""
+        selected = filedialog.askdirectory(initialdir=self.watched_folder_var.get() or str(Path.home()), title="Choose folder to import")
+        if not selected:
+            return
+        self.manual_paths = []
+        self.manual_folder = Path(selected)
+        self.manual_zip = None
+        self.manual_selection_var.set("Folder: " + str(self.manual_folder))
+        self.rebuild_manual_preflight()
+
+    def select_manual_zip(self) -> None:
+        """Choose one ZIP archive for bounded staging and preflight."""
+        selected = filedialog.askopenfilename(
+            title="Choose ZIP archive to import",
+            initialdir=self.watched_folder_var.get() or str(Path.home()),
+            filetypes=[("ZIP archives", "*.zip"), ("All files", "*.*")],
+        )
+        if not selected:
+            return
+        self.manual_paths = []
+        self.manual_folder = None
+        self.manual_zip = Path(selected)
+        self.manual_selection_var.set("ZIP: " + str(self.manual_zip))
+        self.rebuild_manual_preflight()
+
 
     def clear_manual_files(self) -> None:
         """
         Clear the manual upload selection.
         """
+        if self.preflight_worker and self.preflight_worker.is_alive():
+            self.preflight_worker.stop()
+        if self.manual_plan is not None and self.manual_plan.job.started_at <= 0:
+            if self.manual_plan.job.staging_dir:
+                shutil.rmtree(self.manual_plan.job.staging_dir, ignore_errors=True)
+            self.job_store.delete_job(self.manual_plan.job.id)
         self.manual_paths = []
+        self.manual_folder = None
+        self.manual_zip = None
+        self.manual_plan = None
+        self.current_job = None
+        self.manual_selection_var.set("Choose files, a folder, or a ZIP archive")
+        self.manual_preflight_var.set("Select a source to build an import summary. Nothing uploads until you press Start import.")
+        self.manual_progress_var.set(0.0)
+        self.manual_progress_text_var.set("No active import")
         self.refresh_manual_file_label()
+        self.refresh_import_item_tree(None)
+        self.start_import_button.configure(state="disabled")
+
+    def rebuild_manual_preflight(self) -> None:
+        """Start a new non-uploading discovery/preflight pass for the selected source."""
+        if self.api_key_revoke_running:
+            messagebox.showwarning("Connection", "Wait for API-key revocation to finish before starting import preflight.")
+            return
+        if self.manual_worker and self.manual_worker.is_alive():
+            return
+        if self.preflight_worker and self.preflight_worker.is_alive():
+            self.preflight_worker.stop()
+        if not self.manual_paths and self.manual_folder is None and self.manual_zip is None:
+            return
+        try:
+            config = self.current_config()
+        except ValueError as exc:
+            messagebox.showerror("Invalid settings", str(exc))
+            return
+        if self.manual_plan is not None and self.manual_plan.job.started_at <= 0:
+            if self.manual_plan.job.staging_dir:
+                shutil.rmtree(self.manual_plan.job.staging_dir, ignore_errors=True)
+            self.job_store.delete_job(self.manual_plan.job.id)
+        self.manual_plan = None
+        self.current_job = None
+        self.start_import_button.configure(state="disabled")
+        self.retry_failed_button.configure(state="disabled")
+        self.manual_preflight_var.set("Inspecting source, hashing files, checking media capabilities, and comparing remote inventory...")
+        self.preflight_progress.grid()
+        self.preflight_progress.start(12)
+        source_kind = "files" if self.manual_paths else ("folder" if self.manual_folder is not None else "zip")
+        self.preflight_worker = ImportPreflightThread(
+            config,
+            source_kind,
+            self.manual_paths,
+            self.manual_folder,
+            self.manual_zip,
+            bool(self.manual_folder_recursive_var.get()),
+            bool(self.delete_source_zip_var.get()),
+            self.events,
+            self.job_store,
+        )
+        self.preflight_worker.start()
+        self.manual_status_var.set("Preflight running")
+        self.import_activity_var.set("Import: preflight")
+        self.refresh_revoke_button_state()
+
+    def format_bytes(self, value: int) -> str:
+        """Format one byte count for compact UI summaries."""
+        size = float(max(0, value))
+        units = ["B", "KiB", "MiB", "GiB", "TiB"]
+        for unit in units:
+            if size < 1024.0 or unit == units[-1]:
+                return f"{size:.1f} {unit}" if unit != "B" else f"{int(size)} B"
+            size /= 1024.0
+        return f"{int(value)} B"
+
+    def render_preflight_plan(self, plan: ImportPlan) -> None:
+        """Render a compact explicit import summary and enable Start import when useful."""
+        job = plan.job
+        duplicates = plan.duplicate_local + plan.duplicate_remote
+        ready = sum(1 for item in job.items if item.state in RECOVERABLE_ITEM_STATES)
+        unsupported = sum(plan.unsupported.values())
+        lines = [
+            f"Target: {job.target_gallery_label}",
+            f"Supported files found: {len(job.items)}  |  Ready to upload: {ready}  |  Duplicate candidates: {duplicates}",
+            f"Estimated accepted bytes: {self.format_bytes(job.bytes_total)}  |  Unsupported skipped: {unsupported}  |  Unsafe ZIP entries rejected: {len(plan.unsafe_entries)}",
+            "Thumbnail mode: " + ("This PC creates derivatives with server fallback." if self.manual_local_thumbnails_var.get() else "Server creates thumbnails."),
+            "Source deletion: " + ("Original ZIP will be deleted only after all accepted entries succeed." if job.delete_source_zip_after_success else "Source files/archive are kept."),
+        ]
+        special = []
+        for suffix in (".heic", ".heif", ".dng"):
+            capability = self.media_capabilities.get(suffix)
+            if capability is not None:
+                special.append(f"{suffix}: {'local decoder available' if capability.local_previewable else 'server upload only on this PC'}")
+        if special:
+            lines.append("Local HEIC/DNG capability: " + "; ".join(special))
+        if plan.unsupported:
+            grouped = ", ".join(f"{key}: {count}" for key, count in sorted(plan.unsupported.items()))
+            lines.append("Unsupported: " + grouped)
+        if plan.unsafe_entries:
+            lines.append("Rejected archive entries: " + "; ".join(plan.unsafe_entries[:3]) + (" ..." if len(plan.unsafe_entries) > 3 else ""))
+        if plan.warnings:
+            lines.append("Warnings: " + " | ".join(plan.warnings[:3]))
+        self.manual_preflight_var.set("\n".join(lines))
+        self.refresh_import_item_tree(job)
+        self.start_import_button.configure(state="normal" if ready > 0 else "disabled")
+        self.retry_failed_button.configure(state="normal" if any(item.state in RECOVERABLE_ITEM_STATES or item.state == "failed_permanent" for item in job.items) else "disabled")
+        self.activity_job_summary_var.set(self.describe_job(job))
+
+    def refresh_import_item_tree(self, job: Optional[ImportJob]) -> None:
+        """Refresh preflight/current item rows from one job snapshot."""
+        if not hasattr(self, "import_item_tree"):
+            return
+        for iid in self.import_item_tree.get_children():
+            self.import_item_tree.delete(iid)
+        if hasattr(self, "activity_item_tree"):
+            for iid in self.activity_item_tree.get_children():
+                self.activity_item_tree.delete(iid)
+        if job is None:
+            return
+        for item in job.items[:1000]:
+            reason = item.reason
+            self.import_item_tree.insert(
+                "",
+                "end",
+                iid=item.id,
+                values=(Path(item.source_label).name or item.source_label, self.format_bytes(item.size), item.local_decode, item.state, reason),
+            )
+        if hasattr(self, "activity_item_tree"):
+            for item in job.items[:1000]:
+                detail = item.reason
+                if not detail and item.server_result:
+                    detail = f"uploaded={item.server_result.get('uploaded', 0)}, scanned={item.server_result.get('scanned', 0)}"
+                self.activity_item_tree.insert(
+                    "",
+                    "end",
+                    iid="activity-" + item.id,
+                    values=(Path(item.source_label).name or item.source_label, item.state, item.attempt_count, detail),
+                )
+
+    def describe_job(self, job: ImportJob) -> str:
+        """Return one compact status sentence for Activity and tray views."""
+        counts = job.counts()
+        progress = f"{self.format_bytes(job.bytes_sent)} / {self.format_bytes(job.bytes_total)}"
+        if job.started_at and not job.finished_at:
+            elapsed = max(0.001, time.time() - job.started_at)
+            rate = job.bytes_sent / elapsed
+            if rate > 0:
+                remaining = max(0, job.bytes_total - job.bytes_sent)
+                progress += f" at {self.format_bytes(int(rate))}/s, ETA {int(remaining / rate)}s"
+        return (
+            f"{job.source_kind}: {job.source_label} | target {job.target_gallery_label} | "
+            f"confirmed {counts['uploaded']}, duplicates {counts['duplicates']}, failed {counts['failed']}, "
+            f"cancelled {counts['cancelled']}, active {counts['active']} | {progress}"
+        )
+
 
     def refresh_manual_file_label(self) -> None:
         """
         Refresh the visible manual selection count.
         """
-        count = len(self.manual_paths)
-        if count == 0:
-            self.manual_selection_var.set("No files selected")
-        elif count == 1:
-            self.manual_selection_var.set("1 file selected")
+        if self.manual_paths:
+            self.manual_selection_var.set(f"Files: {len(self.manual_paths)} selected")
+        elif self.manual_folder is not None:
+            self.manual_selection_var.set("Folder: " + str(self.manual_folder))
+        elif self.manual_zip is not None:
+            self.manual_selection_var.set("ZIP: " + str(self.manual_zip))
         else:
-            self.manual_selection_var.set(f"{count} files selected")
+            self.manual_selection_var.set("Choose files, a folder, or a ZIP archive")
 
-    def save_config(self) -> None:
+
+    def save_config(self) -> bool:
         """
         Persist current settings to the local config file.
+
+        @return bool True when the configuration was saved.
         """
+        if self.api_key_revoke_running:
+            messagebox.showwarning("Configuration", "Wait for API-key revocation to finish before changing connection credentials.")
+            return False
         try:
             config = self.current_config()
             self.config_store.save(config)
             self.config = config
             self.write_log("Configuration saved.", "success")
-            self.refresh_revoke_button_state()
+            self.refresh_connection_controls()
+            return True
         except Exception as exc:  # noqa: BLE001
             messagebox.showerror("Configuration error", str(exc))
+            return False
 
     def start(self) -> None:
         """
         Start the watcher worker using the current form values.
-        
-        The configuration is saved before starting so command-line mode and later
-        GUI launches use the same values.
+
+        Files already present at start are intentionally counted and ignored.
         """
+        if self.api_key_revoke_running:
+            messagebox.showwarning("Connection", "Wait for API-key revocation to finish before starting watcher.")
+            return
         if self.worker and self.worker.is_alive():
             self.write_log("Watcher is already running.")
             return
@@ -4230,10 +5434,24 @@ class WatcherApp:
             messagebox.showerror("Configuration error", str(exc))
             return
 
+        folder = Path(config.watched_folder)
+        if not folder.is_dir():
+            messagebox.showerror("Watch folder", "Choose an existing readable watch folder before starting.")
+            return
+        if not normalize_upload_url(config.gallery_url) or not config.api_key.strip():
+            messagebox.showerror("Connection", "Gallery URL and API key are required before starting the watcher.")
+            return
+
+        existing = iter_candidate_files(folder, config.watch_recursive)
+        self.watch_ignored_var.set(f"Ignored at startup: {len(existing)}")
+        self.watch_last_scan_var.set("Last scan: starting now")
         self.worker = WatcherThread(config, self.events)
         self.worker.start()
         self.status_var.set("Running")
+        self.watcher_activity_var.set("Watch: running")
         self.write_log("Watcher started.", "success")
+        self.record_activity("success", "Watcher started.", "watcher")
+        self.refresh_activity_monitor_state()
         self.refresh_revoke_button_state()
 
     def stop(self) -> None:
@@ -4248,13 +5466,19 @@ class WatcherApp:
 
     def start_manual_upload(self) -> None:
         """
-        Start the manual upload worker using the current shared connection fields.
+        Start the explicitly reviewed import plan.
         """
-        if self.manual_worker and self.manual_worker.is_alive():
-            self.write_log("Manual upload is already running.")
+        if self.api_key_revoke_running:
+            messagebox.showwarning("Connection", "Wait for API-key revocation to finish before starting manual import.")
             return
-        if not self.manual_paths:
-            messagebox.showwarning("Manual upload", "Select at least one image first.")
+        if self.manual_worker and self.manual_worker.is_alive():
+            self.write_log("Manual import is already running.")
+            return
+        if self.preflight_worker and self.preflight_worker.is_alive():
+            messagebox.showwarning("Import", "Preflight is still running. Review the result before starting the import.")
+            return
+        if self.current_job is None:
+            messagebox.showwarning("Import", "Choose a source and complete preflight first.")
             return
 
         try:
@@ -4264,44 +5488,49 @@ class WatcherApp:
         except Exception as exc:  # noqa: BLE001
             messagebox.showerror("Configuration error", str(exc))
             return
+        if not normalize_upload_url(config.gallery_url) or not config.api_key.strip():
+            messagebox.showerror("Connection", "Gallery URL and API key are required before starting an import.")
+            return
 
-        use_local_thumbnails = bool(self.manual_local_thumbnails_var.get()) and local_thumbnail_supported()
-        if self.manual_local_thumbnails_var.get() and not local_thumbnail_supported():
-            self.write_log("WARNING: Local thumbnails were requested, but Pillow is unavailable. Server thumbnail generation will be used.")
-
-        self.manual_worker = ManualUploadThread(
-            config,
-            list(self.manual_paths),
-            use_local_thumbnails,
-            config.manual_thumbnail_workers,
-            config.manual_upload_workers,
-            self.events,
-        )
-        self.manual_worker.start()
-        self.manual_status_var.set("Manual upload running")
-        self.write_log("Manual upload worker started.", "success")
+        paths = [
+            Path(item.path)
+            for item in self.current_job.items
+            if item.state in RECOVERABLE_ITEM_STATES and Path(item.path).is_file()
+        ]
+        if not paths:
+            messagebox.showinfo("Import", "This job has no queued or recoverable files to upload.")
+            self.render_preflight_plan(self.manual_plan) if self.manual_plan is not None else None
+            return
+        self.launch_manual_job(self.current_job, paths, config)
 
     def stop_manual_upload(self) -> None:
         """
-        Request the manual upload worker to stop.
+        Request cancellation of the current manual import.
         """
-        if self.manual_worker:
+        if self.manual_worker and self.manual_worker.is_alive():
             self.manual_worker.stop()
-        self.manual_status_var.set("Manual upload stopped")
+            self.manual_status_var.set("Cancelling after in-flight requests")
+            self.import_activity_var.set("Import: cancelling")
+            self.cancel_import_button.configure(state="disabled")
+            self.write_log("Manual import cancellation requested.", "warning")
+            self.record_activity("warning", "Manual import cancellation requested.", "import", job_id=self.current_job.id if self.current_job else "")
         self.refresh_revoke_button_state()
 
     def repair_semantic_ai_dependencies(self) -> None:
         """
         Install optional in-process AI packages without freezing the tray UI.
-        
-        PyTorch and Transformers are large packages, so pip can run for a long
-        time and produce a lot of output. The installation is therefore handled
-        by a small background thread and reported through the same event queue as
-        watcher and AI worker messages. Tkinter remains responsive while pip is
-        downloading or checking packages.
+
+        PyTorch and Transformers are large packages and may also cause model
+        downloads later. Installation is therefore explicit and confirmed.
         """
         if self.semantic_ai_install_running:
             self.write_log("Optional local AI module dependency installation is already running.")
+            return
+        if not messagebox.askyesno(
+            "Install local AI module",
+            "This installs large optional Python packages such as PyTorch and Transformers into the current Python runtime. "
+            "Using those backends can later download large model files. Continue?",
+        ):
             return
 
         self.semantic_ai_install_running = True
@@ -4310,9 +5539,7 @@ class WatcherApp:
         self.write_log("Installing optional local AI module dependencies into the current Python runtime...")
 
         def installer() -> None:
-            """
-            Run pip installation away from the Tkinter event loop.
-            """
+            """Run pip installation away from the Tkinter event loop."""
             ok, output = install_semantic_ai_dependencies_for_current_runtime()
             safe_output = output.strip() if output else "pip produced no output"
             if ok:
@@ -4326,6 +5553,9 @@ class WatcherApp:
         """
         Start the optional AI metadata worker using current shared connection fields.
         """
+        if self.api_key_revoke_running:
+            messagebox.showwarning("Connection", "Wait for API-key revocation to finish before starting the AI metadata worker.")
+            return
         if self.ai_worker and self.ai_worker.is_alive():
             self.write_log("AI metadata worker is already running.")
             return
@@ -4341,185 +5571,921 @@ class WatcherApp:
         if not config.ai_worker_enabled:
             messagebox.showwarning("AI metadata worker", "Enable the AI metadata worker before starting it.")
             return
+        if not normalize_upload_url(config.gallery_url) or not config.api_key.strip():
+            messagebox.showerror("Connection", "Gallery URL and API key are required before starting the AI worker.")
+            return
 
         self.ai_worker_stop_requested = False
         self.ai_worker = AIAnalysisWorkerThread(config, self.events)
         self.ai_worker.start()
         self.ai_status_var.set("AI metadata worker running")
+        self.ai_activity_var.set("AI: running")
         self.write_log("AI metadata worker started.", "success")
+        self.record_activity("success", "AI metadata worker started.", "ai")
+        self.refresh_activity_monitor_state()
         self.refresh_revoke_button_state()
 
     def stop_ai_worker(self) -> None:
         """
-        Request the optional AI metadata worker to stop.
+        Request the optional AI metadata worker to stop after current work is safely reported.
         """
-        if self.ai_worker:
+        if self.ai_worker and self.ai_worker.is_alive():
             self.ai_worker.stop()
             self.ai_worker_stop_requested = True
-        self.ai_status_var.set("AI metadata worker stopping")
+            self.ai_status_var.set("AI metadata worker stopping")
+            self.ai_activity_var.set("AI: stopping")
+        else:
+            self.ai_activity_var.set("AI: stopped")
         self.refresh_activity_monitor_state()
         self.refresh_revoke_button_state()
 
+    def refresh_connection_controls(self) -> None:
+        """Refresh API-key presence, revocation blockers, and related controls."""
+        current_url = self.gallery_url_var.get().strip()
+        current_key = self.api_key_var.get().strip()
+        saved_url = self.config.gallery_url.strip()
+        saved_key = self.config.api_key.strip()
+        key_present = bool(current_key)
+        credentials_saved = current_url == saved_url and current_key == saved_key
+        if not key_present:
+            self.api_key_status_var.set("API key not configured")
+        elif credentials_saved:
+            self.api_key_status_var.set("API key configured and saved")
+        else:
+            self.api_key_status_var.set("API key or gallery URL changed, not saved")
+        blockers = self.api_key_request_blockers()
+        if self.api_key_revoke_running:
+            blocker_text = "Revocation in progress. Do not close the app until the server response returns."
+        elif blockers:
+            blocker_text = "Revocation unavailable while: " + "; ".join(blockers) + "."
+        elif key_present and not credentials_saved:
+            blocker_text = "Revocation unavailable because the connection fields contain unsaved changes. Save or restore the saved connection first."
+        elif key_present:
+            blocker_text = "API key can be revoked now. Revocation is permanent for this key and removes it from the local configuration after server confirmation."
+        else:
+            blocker_text = "Paste a gallery-scoped API key generated in PHP Gallery Admin before testing or uploading."
+        self.revoke_blocker_var.set(blocker_text)
+        enabled = key_present and credentials_saved and not blockers and not self.api_key_revoke_running
+        for attr in ("revoke_button", "import_revoke_button"):
+            button = getattr(self, attr, None)
+            if button is not None:
+                button.state(["!disabled"] if enabled else ["disabled"])
+        entry_state = "disabled" if self.api_key_revoke_running else "normal"
+        for attr in ("api_key_entry", "gallery_url_entry"):
+            entry = getattr(self, attr, None)
+            if entry is not None:
+                try:
+                    entry.configure(state=entry_state)
+                except Exception:  # noqa: BLE001
+                    logging.debug("Could not refresh connection entry state.", exc_info=True)
+
     def refresh_revoke_button_state(self) -> None:
         """
-        Enable revocation only when the watcher and manual uploader are idle.
+        Compatibility wrapper that refreshes all connection and revocation controls.
         """
-        if not hasattr(self, "revoke_button"):
+        self.refresh_connection_controls()
+
+    def paste_api_key_from_clipboard(self) -> None:
+        """Paste one API key from the clipboard into the masked Settings field."""
+        if self.api_key_revoke_running:
+            messagebox.showwarning("API key", "Wait for API-key revocation to finish before replacing the key.")
             return
-        api_key_present = bool(self.api_key_var.get().strip())
-        watcher_running = bool(self.worker and self.worker.is_alive())
-        manual_running = bool(self.manual_worker and self.manual_worker.is_alive())
-        ai_running = bool(self.ai_worker and self.ai_worker.is_alive())
-        if api_key_present and not watcher_running and not manual_running and not ai_running:
-            self.revoke_button.state(["!disabled"])
-        else:
-            self.revoke_button.state(["disabled"])
+        try:
+            value = str(self.root.clipboard_get()).strip()
+        except Exception:  # noqa: BLE001
+            messagebox.showwarning("API key", "The clipboard does not contain text.")
+            return
+        if not value:
+            messagebox.showwarning("API key", "The clipboard does not contain an API key.")
+            return
+        self.api_key_var.set(value)
+        self.api_key_status_var.set("API key entered but not saved")
+        self.connection_status_var.set("Not tested")
+        self.connection_detail_var.set("API key changed. Save and test the connection before starting work.")
+        self.refresh_connection_controls()
+
+    def open_connection_dialog(self) -> None:
+        """
+        Open a compact first-class editor for gallery URL and API-key insertion.
+
+        The dialog works with temporary values until Save or Save & Test is
+        pressed, so closing it cannot accidentally replace a working key.
+        """
+        self.restore_from_tray()
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Gallery connection and API key")
+        dialog.transient(self.root)
+        dialog.resizable(True, False)
+        dialog.columnconfigure(0, weight=1)
+        frame = ttk.Frame(dialog, padding=14)
+        frame.grid(row=0, column=0, sticky="nsew")
+        frame.columnconfigure(1, weight=1)
+
+        url_var = tk.StringVar(value=self.gallery_url_var.get())
+        key_var = tk.StringVar(value=self.api_key_var.get())
+        reveal_var = tk.BooleanVar(value=False)
+        ttk.Label(frame, text="PHP Gallery connection", font=("Segoe UI", 12, "bold")).grid(row=0, column=0, columnspan=4, sticky="w", pady=(0, 6))
+        ttk.Label(frame, text="Generate a gallery-scoped upload API key in PHP Gallery Admin, then paste it here. The desktop app never needs your Admin password.", wraplength=680, foreground="#555555").grid(row=1, column=0, columnspan=4, sticky="w", pady=(0, 10))
+        ttk.Label(frame, text="Gallery URL").grid(row=2, column=0, sticky="w", padx=(0, 8), pady=6)
+        ttk.Entry(frame, textvariable=url_var, width=70).grid(row=2, column=1, columnspan=3, sticky="ew", pady=6)
+        ttk.Label(frame, text="API key").grid(row=3, column=0, sticky="w", padx=(0, 8), pady=6)
+        key_entry = ttk.Entry(frame, textvariable=key_var, show="*", width=54)
+        key_entry.grid(row=3, column=1, sticky="ew", pady=6)
+
+        def toggle_reveal() -> None:
+            """Reveal or mask the temporary API-key field."""
+            key_entry.configure(show="" if reveal_var.get() else "*")
+
+        def paste_key() -> None:
+            """Paste clipboard text into the temporary API-key field."""
+            try:
+                value = str(dialog.clipboard_get()).strip()
+            except Exception:  # noqa: BLE001
+                messagebox.showwarning("API key", "The clipboard does not contain text.", parent=dialog)
+                return
+            if not value:
+                messagebox.showwarning("API key", "The clipboard does not contain an API key.", parent=dialog)
+                return
+            key_var.set(value)
+
+        ttk.Checkbutton(frame, text="Reveal", variable=reveal_var, command=toggle_reveal).grid(row=3, column=2, padx=6, pady=6)
+        ttk.Button(frame, text="Paste", command=paste_key).grid(row=3, column=3, pady=6)
+        status = "A key is currently stored locally." if self.api_key_var.get().strip() else "No API key is currently stored."
+        ttk.Label(frame, text=status, foreground="#666666").grid(row=4, column=1, columnspan=3, sticky="w", pady=(0, 10))
+
+        def apply_values(test_after: bool) -> None:
+            """Validate, store, and optionally test temporary connection values."""
+            if self.api_key_revoke_running:
+                messagebox.showwarning("Connection", "Wait for API-key revocation to finish before changing credentials.", parent=dialog)
+                return
+            url = url_var.get().strip()
+            key = key_var.get().strip()
+            if not normalize_upload_url(url):
+                messagebox.showerror("Connection", "Enter a valid HTTP(S) Gallery URL or upload endpoint.", parent=dialog)
+                return
+            if not key:
+                messagebox.showerror("Connection", "Paste the gallery-scoped API key before saving.", parent=dialog)
+                return
+            canonical_url = normalize_upload_url(url)
+            self.gallery_url_var.set(canonical_url)
+            self.api_key_var.set(key)
+            if not self.save_config():
+                return
+            dialog.destroy()
+            self.connection_status_var.set("Not tested")
+            self.connection_detail_var.set("Connection saved. Test authentication before starting work." if not test_after else "Connection saved. Testing authentication...")
+            self.refresh_connection_controls()
+            if test_after:
+                self.test_connection()
+
+        buttons = ttk.Frame(frame)
+        buttons.grid(row=5, column=0, columnspan=4, sticky="ew", pady=(4, 0))
+        ttk.Button(buttons, text="Save & Test", command=lambda: apply_values(True)).pack(side="left")
+        ttk.Button(buttons, text="Save", command=lambda: apply_values(False)).pack(side="left", padx=8)
+        revoke = ttk.Button(buttons, text="Revoke saved API key...", command=lambda: (dialog.destroy(), self.revoke_api_key()))
+        revoke.pack(side="left", padx=(8, 0))
+        if not self.api_key_var.get().strip() or self.api_key_request_blockers() or self.api_key_revoke_running:
+            revoke.state(["disabled"])
+        ttk.Button(buttons, text="Cancel", command=dialog.destroy).pack(side="right")
+        if url_var.get().strip():
+            key_entry.focus_set()
+        dialog.grab_set()
 
     def revoke_api_key(self) -> None:
         """
-        Revoke the saved API key on the gallery and clear it locally.
+        Revoke the currently configured API key on the gallery asynchronously.
+
+        Revocation is permitted only when no worker can still issue an
+        authenticated request with the key. The key is cleared locally only
+        after the server confirms revocation.
         """
-        if self.worker and self.worker.is_alive():
-            messagebox.showwarning("Revoke API key", "Stop watching before revoking the key.")
+        if self.api_key_revoke_running:
+            messagebox.showinfo("Revoke API key", "API-key revocation is already in progress.")
             return
-        if self.manual_worker and self.manual_worker.is_alive():
-            messagebox.showwarning("Revoke API key", "Wait for manual upload to finish before revoking the key.")
-            return
-        if self.ai_worker and self.ai_worker.is_alive():
-            messagebox.showwarning("Revoke API key", "Stop the AI metadata worker before revoking the key.")
+        blockers = self.api_key_request_blockers()
+        if blockers:
+            messagebox.showwarning("Revoke API key", "Cannot revoke the API key while: " + "; ".join(blockers) + ".")
+            self.refresh_connection_controls()
             return
 
-        upload_url = normalize_upload_url(self.gallery_url_var.get())
-        api_key = self.api_key_var.get().strip()
+        current_url = self.gallery_url_var.get().strip()
+        current_key = self.api_key_var.get().strip()
+        saved_url = self.config.gallery_url.strip()
+        saved_key = self.config.api_key.strip()
+        if current_url != saved_url or current_key != saved_key:
+            messagebox.showwarning("Revoke API key", "The connection fields contain unsaved changes. Save them or restore the saved values before revoking a key.")
+            self.refresh_connection_controls()
+            return
+        upload_url = normalize_upload_url(saved_url)
+        api_key = saved_key
         if not upload_url or not api_key:
-            messagebox.showwarning("Revoke API key", "Gallery URL and API key are required.")
+            messagebox.showwarning("Revoke API key", "A saved HTTP(S) Gallery URL and API key are required.")
+            return
+        if not messagebox.askyesno(
+            "Revoke API key",
+            "Permanently revoke this gallery-scoped API key on the server?\n\nAfter confirmation, the key will also be removed from this Windows app. This cannot be undone; a new key must be generated in PHP Gallery Admin.",
+        ):
             return
 
-        if not messagebox.askyesno("Revoke API key", "Revoke this API key on the gallery and remove it from this app?"):
-            return
+        self.api_key_revoke_running = True
+        self.connection_status_var.set("Revoking API key")
+        self.connection_detail_var.set("Waiting for the gallery to confirm permanent API-key revocation...")
+        self.write_log("API-key revocation requested. Waiting for server confirmation.", "system")
+        self.refresh_connection_controls()
 
-        self.write_log("Revoking API key on the gallery...")
-        try:
-            result = revoke_upload_key(upload_url, api_key)
-            self.api_key_var.set("")
-            self.config.api_key = ""
-            self.config_store.save(self.current_config())
-            self.write_log(str(result.get("message") or "API key revoked."))
-            messagebox.showinfo("Revoke API key", str(result.get("message") or "API key revoked."))
-            self.refresh_revoke_button_state()
-        except Exception as exc:  # noqa: BLE001
-            self.write_log(f"ERROR: {exc}")
-            messagebox.showerror("Revoke API key failed", str(exc))
+        def revoke_worker() -> None:
+            """Perform network revocation off the Tkinter UI thread."""
+            try:
+                result = revoke_upload_key(upload_url, api_key)
+                self.events.put({"kind": "api_key_revoked", "payload": {"message": str(result.get("message") or "API key revoked.")}})
+            except Exception as exc:  # noqa: BLE001
+                self.events.put({"kind": "api_key_revoke_error", "payload": {"message": str(exc)}})
+
+        self.api_key_revoke_thread = threading.Thread(target=revoke_worker, name="PHPGalleryKeyRevoke", daemon=True)
+        self.api_key_revoke_thread.start()
 
     def close(self) -> None:
         """
-        Stop background work and close the window.
+        Coordinate shutdown with bounded worker waits and preserve recoverable state.
         """
+        if self.api_key_revoke_running:
+            messagebox.showwarning("API-key revocation", "Wait for API-key revocation to finish before closing the app. This prevents a server-revoked key from remaining stored locally.")
+            return
         if self.exiting:
             return
         self.exiting = True
+        self.write_log("Application shutdown requested. Stopping background work safely.", "system")
+
+        if self.preflight_worker and self.preflight_worker.is_alive():
+            self.preflight_worker.stop()
+        if self.worker and self.worker.is_alive():
+            self.worker.stop()
+        if self.manual_worker and self.manual_worker.is_alive():
+            self.manual_worker.stop()
+        if self.ai_worker and self.ai_worker.is_alive():
+            self.ai_worker.stop()
+            self.ai_worker_stop_requested = True
+
+        deadline = time.monotonic() + 5.0
+        for worker in (self.preflight_worker, self.worker, self.manual_worker, self.ai_worker, self.api_key_revoke_thread):
+            if worker is None or not worker.is_alive():
+                continue
+            remaining = max(0.0, deadline - time.monotonic())
+            if remaining <= 0:
+                break
+            worker.join(timeout=remaining)
+
+        still_running = [
+            label
+            for label, worker in (
+                ("preflight", self.preflight_worker),
+                ("watcher", self.worker),
+                ("import", self.manual_worker),
+                ("AI", self.ai_worker),
+                ("API-key revocation", self.api_key_revoke_thread),
+            )
+            if worker is not None and worker.is_alive()
+        ]
+        if still_running:
+            message = (
+                "Shutdown wait expired for " + ", ".join(still_running) +
+                ". In-flight network work may still be returning, and durable import state is preserved."
+            )
+            self.write_log(message, "warning")
+            if self.tray_icon is not None and messagebox.askyesno(
+                "Background work is still stopping",
+                message + "\n\nKeep the application running in the tray instead of forcing it closed?",
+            ):
+                self.exiting = False
+                self.hide_to_tray()
+                self.root.after(200, self.drain_events)
+                return
         self.stop_tray_icon()
-        self.stop()
-        self.stop_manual_upload()
-        self.stop_ai_worker()
-        self.root.after(150, self.root.destroy)
+        self.root.destroy()
 
     def open_config_folder(self) -> None:
         """
-        Open the folder containing config, state, and log files.
+        Open the folder containing config, state, staging, and log files.
         """
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-        webbrowser.open(str(CONFIG_DIR))
+        self.open_local_path(CONFIG_DIR)
+
+    def open_local_path(self, path: Path) -> None:
+        """Open one local file/folder with the platform shell when possible."""
+        target = Path(path)
+        try:
+            if hasattr(os, "startfile"):
+                os.startfile(str(target))  # type: ignore[attr-defined]
+            else:
+                webbrowser.open(target.resolve().as_uri())
+        except Exception as exc:  # noqa: BLE001
+            self.write_log(f"Could not open {target}: {exc}", "warning")
+
+    def open_log_file(self) -> None:
+        """Open the rotating uploader log, creating it when necessary."""
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        if not LOG_PATH.exists():
+            LOG_PATH.touch()
+        self.open_local_path(LOG_PATH)
+
+    def open_watched_folder(self) -> None:
+        """Open the currently configured watch folder in Explorer."""
+        folder = Path(self.watched_folder_var.get().strip())
+        if not folder.is_dir():
+            messagebox.showwarning("Watch folder", "Choose an existing folder first.")
+            return
+        self.open_local_path(folder)
+
+    def open_activity_tab(self) -> None:
+        """Restore the main window and show durable Activity history."""
+        self.restore_from_tray()
+        try:
+            self.notebook.select(2)
+        except Exception:  # noqa: BLE001
+            logging.debug("Could not select Activity tab.", exc_info=True)
+
+    def tray_tooltip_text(self) -> str:
+        """Return a concise independent activity summary for the tray tooltip."""
+        watch = 1 if self.worker and self.worker.is_alive() else 0
+        importing = 1 if self.manual_worker and self.manual_worker.is_alive() else 0
+        ai = 1 if self.ai_worker and self.ai_worker.is_alive() and not self.ai_worker_stop_requested else 0
+        failures = self.current_job.counts()["failed"] if self.current_job is not None else 0
+        return f"PHP Gallery uploader | watch {watch} | import {importing} | AI {ai} | failures {failures}"
+
+    def toggle_settings_advanced(self) -> None:
+        """Show or hide low-level import/archive tuning settings."""
+        if self.settings_advanced_frame is None:
+            return
+        if self.settings_advanced_visible_var.get():
+            self.settings_advanced_frame.grid(row=3, column=0, sticky="ew", padx=10, pady=6)
+        else:
+            self.settings_advanced_frame.grid_remove()
+
+    def toggle_api_key_visibility(self) -> None:
+        """Reveal or remask the API key only on explicit user action."""
+        visible = not self.api_key_visible_var.get()
+        self.api_key_visible_var.set(visible)
+        self.api_key_entry.configure(show="" if visible else "*")
+
+    def copy_api_key(self) -> None:
+        """Copy the configured API key to the Windows clipboard on explicit action."""
+        value = self.api_key_var.get().strip()
+        if not value:
+            messagebox.showwarning("API key", "No API key is configured.")
+            return
+        self.root.clipboard_clear()
+        self.root.clipboard_append(value)
+        self.write_log("API key copied to clipboard by explicit user action.", "system")
+
+    def test_connection(self) -> None:
+        """Perform a minimal authenticated inventory request without uploading files."""
+        if self.api_key_revoke_running:
+            messagebox.showwarning("Connection", "Wait for API-key revocation to finish before testing the connection.")
+            return
+        if self.connection_test_running:
+            return
+        upload_url = normalize_upload_url(self.gallery_url_var.get())
+        api_key = self.api_key_var.get().strip()
+        if not upload_url:
+            messagebox.showerror("Connection", "Enter a valid HTTP or HTTPS Gallery URL/endpoint.")
+            return
+        if not api_key:
+            messagebox.showerror("Connection", "Enter an API key before testing the connection.")
+            return
+        self.connection_test_running = True
+        self.connection_status_var.set("Testing")
+        self.connection_detail_var.set("Checking endpoint and API-key authorization without uploading media...")
+        self.refresh_revoke_button_state()
+
+        def tester() -> None:
+            """Run the HTTP check away from Tkinter."""
+            try:
+                payload, resolved_url = post_json_resolved(upload_url, api_key, {"action": "inventory", "files": [], "deep_check": False}, timeout_seconds=20.0)
+                label = str(payload.get("gallery_folder", "") or payload.get("gallery", "") or "gallery").strip()
+                self.events.put({"kind": "connection_ready", "payload": {"gallery_label": label, "normalized_url": resolved_url, "explicit_test": True}})
+            except Exception as exc:  # noqa: BLE001
+                self.events.put({"kind": "connection_error", "payload": {"message": str(exc), "normalized_url": upload_url, "explicit_test": True}})
+
+        threading.Thread(target=tester, name="PHPGalleryConnectionTest", daemon=True).start()
+
+    def refresh_watch_delete_warning(self) -> None:
+        """Explain destructive watch-folder deletion policy next to its toggle."""
+        if not hasattr(self, "watch_delete_warning"):
+            return
+        if self.delete_uploaded_files_var.get():
+            self.watch_delete_warning.configure(text="Source deletion is destructive and occurs only after a server-confirmed stored upload. Duplicates and failures are kept.")
+        else:
+            self.watch_delete_warning.configure(text="Source files are kept after upload.")
+
+    def dry_run_watch_folder(self) -> None:
+        """Inspect watcher candidates without hashing, uploading, or changing durable state."""
+        folder = Path(self.watched_folder_var.get().strip())
+        if not folder.is_dir():
+            messagebox.showwarning("Watch folder", "Choose an existing folder first.")
+            return
+        result = discover_folder(folder, SUPPORTED_SUFFIXES, bool(self.watch_recursive_var.get()))
+        supported = len(result.items)
+        unsupported = sum(result.unsupported.values())
+        self.watch_ignored_var.set(f"Would ignore on start: {supported}")
+        self.watch_last_scan_var.set("Last check: " + time.strftime("%Y-%m-%d %H:%M:%S"))
+        detail = f"Watch-folder dry run: {supported} supported existing file(s) would be ignored at watcher start; {unsupported} unsupported file(s) found."
+        self.write_log(detail, "system")
+        self.record_activity("info", detail, "watcher")
+
+    def launch_manual_job(self, job: ImportJob, paths: List[Path], config: WatcherConfig) -> None:
+        """Launch one durable manual-import job over the supplied recoverable paths."""
+        if not paths:
+            return
+        use_local_thumbnails = bool(self.manual_local_thumbnails_var.get()) and local_thumbnail_supported()
+        if self.manual_local_thumbnails_var.get() and not local_thumbnail_supported():
+            self.write_log("Local thumbnail generation is unavailable. Server thumbnail generation will be used.", "warning")
+            use_local_thumbnails = False
+        self.current_job = job
+        self.job_store.save_job(job)
+        self.manual_worker = ManualUploadThread(
+            config,
+            list(paths),
+            use_local_thumbnails,
+            config.manual_thumbnail_workers,
+            config.manual_upload_workers,
+            self.events,
+            job=job,
+            job_store=self.job_store,
+        )
+        self.manual_worker.start()
+        self.manual_status_var.set("Import running")
+        self.import_activity_var.set("Import: running")
+        self.start_import_button.configure(state="disabled")
+        self.pause_import_button.configure(state="normal")
+        self.resume_import_button.configure(state="disabled")
+        self.cancel_import_button.configure(state="normal")
+        self.retry_failed_button.configure(state="disabled")
+        self.write_log(f"Manual import job started with {len(paths)} file(s).", "success")
+        self.record_activity("success", f"Manual import started with {len(paths)} file(s).", "import", job_id=job.id)
+        self.refresh_activity_monitor_state()
+        self.refresh_revoke_button_state()
+
+    def pause_manual_upload(self) -> None:
+        """Pause submission of new import work while allowing in-flight requests to finish."""
+        if self.manual_worker and self.manual_worker.is_alive():
+            self.manual_worker.pause()
+            self.manual_status_var.set("Import paused")
+            self.import_activity_var.set("Import: paused")
+            self.pause_import_button.configure(state="disabled")
+            self.resume_import_button.configure(state="normal")
+
+    def resume_manual_upload(self) -> None:
+        """Resume a paused manual import."""
+        if self.manual_worker and self.manual_worker.is_alive():
+            self.manual_worker.resume()
+            self.manual_status_var.set("Import running")
+            self.import_activity_var.set("Import: running")
+            self.pause_import_button.configure(state="normal")
+            self.resume_import_button.configure(state="disabled")
+
+    def retry_failed_import(self) -> None:
+        """Explicitly retry failed/cancelled or crash-interrupted items in the selected job."""
+        if self.api_key_revoke_running:
+            messagebox.showwarning("Connection", "Wait for API-key revocation to finish before retrying an import.")
+            return
+        if self.manual_worker and self.manual_worker.is_alive():
+            messagebox.showwarning("Retry import", "Wait for the current import to stop before retrying failed items.")
+            return
+        if self.current_job is None:
+            messagebox.showwarning("Retry import", "Select a job in Activity first.")
+            return
+        refreshed = self.job_store.get_job(self.current_job.id) or self.current_job
+        paths = []
+        missing = 0
+        for item in refreshed.items:
+            if item.state not in RECOVERABLE_ITEM_STATES and item.state != "failed_permanent":
+                continue
+            path = Path(item.path)
+            if not path.is_file():
+                item.transition("failed_permanent", "Local source is no longer available for retry.")
+                missing += 1
+                continue
+            if item.state == "failed_permanent":
+                item.transition("failed_retryable", "Explicit user retry requested.")
+            paths.append(path)
+        if missing:
+            self.job_store.save_job(refreshed)
+        if not paths:
+            messagebox.showinfo("Retry import", "No failed or recoverable local files are available for retry.")
+            self.current_job = refreshed
+            self.refresh_import_item_tree(refreshed)
+            self.refresh_job_history()
+            return
+        refreshed.finished_at = 0.0
+        try:
+            config = self.current_config()
+            self.config_store.save(config)
+            self.config = config
+        except Exception as exc:  # noqa: BLE001
+            messagebox.showerror("Configuration error", str(exc))
+            return
+        if not normalize_upload_url(config.gallery_url) or not config.api_key.strip():
+            messagebox.showerror("Connection", "Gallery URL and API key are required before retrying.")
+            return
+        self.current_job = refreshed
+        self.launch_manual_job(refreshed, paths, config)
+
+    def offer_recoverable_jobs(self) -> None:
+        """Offer the newest unfinished import for explicit recovery after application restart."""
+        if self.exiting or self.current_job is not None:
+            return
+        jobs = self.job_store.recoverable_jobs()
+        if not jobs:
+            return
+        job = jobs[0]
+        counts = job.counts()
+        answer = messagebox.askyesno(
+            "Recover unfinished import",
+            f"An unfinished import from {time.strftime('%Y-%m-%d %H:%M', time.localtime(job.created_at))} contains "
+            f"{counts['active'] + counts['failed'] + counts['cancelled']} recoverable item(s). Open it for review and resume/retry?",
+        )
+        if not answer:
+            self.record_activity("warning", "Recoverable import remains saved for later review.", "import", job_id=job.id)
+            return
+        self.current_job = job
+        self.manual_plan = ImportPlan(job=job)
+        self.manual_paths = [Path(item.path) for item in job.items if Path(item.path).is_file()]
+        self.manual_folder = None
+        self.manual_zip = Path(job.source_zip) if job.source_zip else None
+        self.manual_selection_var.set("Recovered import: " + job.source_label)
+        self.render_preflight_plan(self.manual_plan)
+        self.notebook.select(0)
+        self.write_log("Recovered unfinished import for explicit review. No upload was started automatically.", "warning")
+
+    def refresh_job_history(self) -> None:
+        """Refresh the durable import-job history table."""
+        if not hasattr(self, "job_history_tree"):
+            return
+        for iid in self.job_history_tree.get_children():
+            self.job_history_tree.delete(iid)
+        for job in self.job_store.list_jobs()[:200]:
+            counts = job.counts()
+            created = time.strftime("%Y-%m-%d %H:%M", time.localtime(job.created_at))
+            status = f"uploaded {counts['uploaded']}, duplicate {counts['duplicates']}, failed {counts['failed']}, cancelled {counts['cancelled']}, active {counts['active']}"
+            self.job_history_tree.insert("", "end", iid=job.id, values=(created, job.source_label, job.target_gallery_label, status))
+
+    def select_history_job(self, _event: Any = None) -> None:
+        """Select one durable job from Activity for inspection or explicit retry."""
+        if not hasattr(self, "job_history_tree"):
+            return
+        selection = self.job_history_tree.selection()
+        if not selection:
+            return
+        job = self.job_store.get_job(selection[0])
+        if job is None:
+            return
+        self.current_job = job
+        self.manual_plan = ImportPlan(job=job)
+        self.activity_job_summary_var.set(self.describe_job(job))
+        self.refresh_import_item_tree(job)
+        self.retry_failed_button.configure(
+            state="normal" if any(item.state in RECOVERABLE_ITEM_STATES or item.state == "failed_permanent" for item in job.items) else "disabled"
+        )
+
+    def record_activity(self, level: str, message: str, operation: str = "system", filename: str = "", job_id: str = "") -> None:
+        """Persist one bounded activity event without credentials."""
+        secret = self.api_key_var.get().strip() if hasattr(self, "api_key_var") else ""
+        safe_message = redact_text(message, [secret], redact_paths=False)
+        event = ActivityEvent(level=level, message=safe_message, operation=operation, filename=filename, job_id=job_id)
+        self.activity_events.append(event)
+        limit = max(50, int(getattr(self.config, "activity_history_limit", 500) or 500))
+        self.activity_events = self.activity_events[-limit:]
+        try:
+            self.job_store.append_event(event)
+        except Exception:  # noqa: BLE001
+            logging.exception("Could not persist uploader activity event.")
+        self.refresh_activity_drawer()
+
+    def refresh_activity_drawer(self) -> None:
+        """Render recent structured events using the selected operator filter."""
+        if not hasattr(self, "activity_drawer"):
+            return
+        for iid in self.activity_drawer.get_children():
+            self.activity_drawer.delete(iid)
+        selected = self.activity_filter_var.get().strip().lower() or "all"
+
+        def visible(event: ActivityEvent) -> bool:
+            level = event.level.lower()
+            message = event.message.lower()
+            if selected == "all":
+                return True
+            if selected == "warnings":
+                return level == "warning"
+            if selected == "failed":
+                return level == "error" or "failed" in message
+            if selected == "succeeded":
+                return level == "success" or "uploaded" in message or "finished" in message or "stored" in message
+            if selected == "skipped":
+                return "skip" in message or "duplicate" in message
+            if selected == "active":
+                return any(token in message for token in ("started", "running", "uploading", "preflight", "paused", "stopping"))
+            return True
+
+        rows = [event for event in self.activity_events if visible(event)][-100:]
+        for index, event in enumerate(reversed(rows)):
+            stamp = time.strftime("%H:%M:%S", time.localtime(event.timestamp))
+            filename = Path(event.filename).name if event.filename else ""
+            self.activity_drawer.insert("", "end", iid=f"event-{index}-{int(event.timestamp * 1000)}", values=(stamp, event.level, filename, event.operation, event.message))
+
+    def copy_diagnostics(self) -> None:
+        """Copy support diagnostics with API keys, tokens, and local paths redacted."""
+        job_summary = self.describe_job(self.current_job) if self.current_job is not None else "No selected job"
+        capability_summary = ", ".join(
+            f"{suffix}={'local' if capability.local_previewable else 'server-only'}"
+            for suffix, capability in sorted(self.media_capabilities.items())
+            if suffix in {".jpg", ".png", ".heic", ".heif", ".dng"}
+        )
+        recent = "\n".join(
+            f"{time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(event.timestamp))} [{event.level}/{event.operation}] {event.message}"
+            for event in self.activity_events[-30:]
+        )
+        raw = "\n".join(
+            [
+                f"App: {APP_DISPLAY_NAME}",
+                f"Python: {sys.version.split()[0]}",
+                f"OS: {os.name}",
+                f"Gallery URL: {self.gallery_url_var.get().strip()}",
+                f"API key: {self.api_key_var.get().strip()}",
+                f"Connection: {self.connection_status_var.get()} | {self.connection_detail_var.get()}",
+                f"Watcher: {self.watcher_activity_var.get()}",
+                f"Import: {self.import_activity_var.get()} | {job_summary}",
+                f"AI: {self.ai_activity_var.get()}",
+                f"Media capabilities: {capability_summary}",
+                f"Config path: {CONFIG_PATH}",
+                f"State path: {STATE_PATH}",
+                f"Log path: {LOG_PATH}",
+                "Recent activity:",
+                recent,
+            ]
+        )
+        safe = redact_text(raw, [self.api_key_var.get().strip()], redact_paths=True)
+        self.root.clipboard_clear()
+        self.root.clipboard_append(safe)
+        self.write_log("Redacted diagnostic details copied to clipboard.", "system")
 
     def refresh_activity_monitor_state(self) -> None:
         """
-        Recalculate the top activity indicator from the live worker objects.
-        
-        The tray app has three independent background activities: folder
-        monitoring, manual upload, and optional AI metadata processing. Stopping
-        one activity must not leave stale text from another activity in the
-        shared monitor strip.
+        Refresh independent watcher, import, AI, connection, and tray indicators.
         """
         watcher_running = bool(self.worker and self.worker.is_alive())
         manual_running = bool(self.manual_worker and self.manual_worker.is_alive())
         ai_running = bool(self.ai_worker and self.ai_worker.is_alive() and not self.ai_worker_stop_requested)
+        preflight_running = bool(self.preflight_worker and self.preflight_worker.is_alive())
 
-        if watcher_running:
-            self.update_monitor_state("green", "Folder monitoring is active.")
-            return
-        if manual_running:
-            self.update_monitor_state("green", "Manual upload is active.")
-            return
+        if watcher_running and not self.watcher_activity_var.get().endswith("stopping"):
+            self.watcher_activity_var.set("Watch: running")
+        elif not watcher_running:
+            self.watcher_activity_var.set("Watch: stopped")
+        if preflight_running:
+            self.import_activity_var.set("Import: preflight")
+        elif manual_running:
+            self.import_activity_var.set("Import: paused" if self.manual_worker and self.manual_worker.pause_event.is_set() else "Import: running")
+        elif not self.import_activity_var.get().startswith("Import: failed"):
+            self.import_activity_var.set("Import: idle")
         if ai_running:
-            self.update_monitor_state("green", "AI metadata worker is active.")
-            return
-        self.update_monitor_state("disabled", "No background worker is active.")
+            self.ai_activity_var.set("AI: running")
+        elif self.ai_worker_stop_requested and self.ai_worker and self.ai_worker.is_alive():
+            self.ai_activity_var.set("AI: stopping")
+        else:
+            self.ai_activity_var.set("AI: stopped")
+
+        active = watcher_running or manual_running or ai_running or preflight_running
+        self.update_monitor_state("green" if active else "disabled", "Background activity is running." if active else "No background worker is active.")
+        if self.tray_icon is not None:
+            try:
+                self.tray_icon.title = self.tray_tooltip_text()
+            except Exception:  # noqa: BLE001
+                logging.debug("Could not refresh tray tooltip.", exc_info=True)
 
     def drain_events(self) -> None:
         """
-        Move worker events into the visible log.
-        
-        This method is scheduled on the Tkinter event loop instead of being
-        called directly from the worker thread. Tkinter widgets must only be
-        updated by the main UI thread.
+        Move tuple and structured worker events into Tkinter and durable activity history.
         """
         if self.exiting:
             return
         while True:
             try:
-                level, message = self.events.get_nowait()
+                event = self.events.get_nowait()
             except queue.Empty:
                 break
+
+            if isinstance(event, dict):
+                kind = str(event.get("kind", "") or "")
+                payload = event.get("payload", {}) if isinstance(event.get("payload", {}), dict) else {}
+                job_id = str(event.get("job_id", payload.get("job_id", "")) or "")
+                if kind == "preflight_started":
+                    self.manual_status_var.set("Preflight running")
+                    self.import_activity_var.set("Import: preflight")
+                elif kind == "preflight_progress":
+                    current = int(payload.get("current", 0) or 0)
+                    total = max(1, int(payload.get("total", 1) or 1))
+                    filename = str(payload.get("filename", "") or "")
+                    self.manual_preflight_var.set(f"Inspecting {current}/{total}: {filename}")
+                elif kind == "preflight_complete":
+                    plan = payload.get("plan")
+                    self.preflight_progress.stop()
+                    self.preflight_progress.grid_remove()
+                    self.preflight_worker = None
+                    if isinstance(plan, ImportPlan):
+                        self.manual_plan = plan
+                        self.current_job = plan.job
+                        self.render_preflight_plan(plan)
+                        self.refresh_job_history()
+                        self.write_log("Import preflight completed. Review the summary before starting.", "success")
+                        self.record_activity("success", "Import preflight completed and is awaiting explicit Start import.", "import", job_id=plan.job.id)
+                    self.manual_status_var.set("Ready for review")
+                elif kind == "preflight_failed":
+                    self.preflight_progress.stop()
+                    self.preflight_progress.grid_remove()
+                    self.preflight_worker = None
+                    message = str(payload.get("message", "Preflight failed") or "Preflight failed")
+                    self.manual_preflight_var.set("Preflight failed: " + message)
+                    self.manual_status_var.set("Preflight failed")
+                    self.import_activity_var.set("Import: failed preflight")
+                    self.write_log("Import preflight failed: " + message, "error")
+                    self.record_activity("error", "Import preflight failed: " + message, "import", job_id=job_id)
+                elif kind == "preflight_cancelled":
+                    self.preflight_progress.stop()
+                    self.preflight_progress.grid_remove()
+                    self.preflight_worker = None
+                    self.manual_status_var.set("Preflight cancelled")
+                    self.import_activity_var.set("Import: idle")
+                elif kind == "watch_scan":
+                    timestamp = float(payload.get("timestamp", time.time()) or time.time())
+                    self.watch_last_scan_var.set("Last successful scan: " + time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(timestamp)))
+                elif kind in {"connection_ready", "connection_warning", "connection_error"}:
+                    explicit = bool(payload.get("explicit_test", False))
+                    if explicit:
+                        self.connection_test_running = False
+                    if kind == "connection_ready":
+                        label = str(payload.get("gallery_label", "gallery") or "gallery")
+                        resolved_url = str(payload.get("normalized_url", "") or "")
+                        self.gallery_label_var.set("Target gallery: " + label)
+                        self.connection_status_var.set("Connected")
+                        self.connection_detail_var.set("Authenticated endpoint available: " + resolved_url)
+                        if explicit:
+                            saved_url = self.config.gallery_url.strip()
+                            saved_key = self.config.api_key.strip()
+                            current_url = self.gallery_url_var.get().strip()
+                            current_key = self.api_key_var.get().strip()
+                            if resolved_url and resolved_url != saved_url and current_url == saved_url and current_key == saved_key:
+                                resolved_config = WatcherConfig.from_dict(self.config.to_dict())
+                                resolved_config.gallery_url = resolved_url
+                                try:
+                                    self.config_store.save(resolved_config)
+                                    self.config = resolved_config
+                                    self.gallery_url_var.set(resolved_url)
+                                    self.write_log("Working Gallery API route detected and saved: " + resolved_url, "system")
+                                except Exception as exc:  # noqa: BLE001
+                                    self.write_log("Connection succeeded, but saving the working API route failed: " + str(exc), "warning")
+                            self.write_log("Connection test succeeded for gallery " + label + ".", "success")
+                            self.record_activity("success", "Connection test succeeded for gallery " + label + ".", "system")
+                    elif kind == "connection_warning":
+                        self.connection_status_var.set("Connection warning")
+                        self.connection_detail_var.set(str(payload.get("message", "Remote preflight unavailable") or "Remote preflight unavailable"))
+                    else:
+                        message = str(payload.get("message", "Connection failed") or "Connection failed")
+                        auth_error = any(token in message.lower() for token in ("api key", "invalid or revoked", "unauthorized", "forbidden", "http 401", "http 403"))
+                        self.connection_status_var.set("Authentication error" if auth_error else "Connection failed")
+                        self.connection_detail_var.set(message)
+                        self.write_log("Connection test failed: " + message, "error")
+                        self.record_activity("error", "Connection test failed: " + message, "system")
+                elif kind == "api_key_revoked":
+                    self.api_key_revoke_running = False
+                    self.api_key_revoke_thread = None
+                    self.api_key_var.set("")
+                    cleared_config = WatcherConfig.from_dict(self.config.to_dict())
+                    cleared_config.api_key = ""
+                    try:
+                        self.config_store.save(cleared_config)
+                        self.config = cleared_config
+                    except Exception as exc:  # noqa: BLE001
+                        self.config.api_key = ""
+                        self.write_log("API key was revoked on the server, but clearing local configuration failed: " + str(exc), "error")
+                    message = str(payload.get("message", "API key revoked.") or "API key revoked.")
+                    self.connection_status_var.set("Not configured")
+                    self.gallery_label_var.set("Target gallery: unknown")
+                    self.connection_detail_var.set("API key was revoked by the gallery and removed from local configuration.")
+                    self.write_log(message, "success")
+                    self.record_activity("success", "API key revoked and removed from local configuration.", "system")
+                    self.refresh_connection_controls()
+                    messagebox.showinfo("Revoke API key", message)
+                elif kind == "api_key_revoke_error":
+                    self.api_key_revoke_running = False
+                    self.api_key_revoke_thread = None
+                    message = str(payload.get("message", "API-key revocation failed.") or "API-key revocation failed.")
+                    self.connection_status_var.set("Revocation failed")
+                    self.connection_detail_var.set(message)
+                    self.write_log("API-key revocation failed: " + message, "error")
+                    self.record_activity("error", "API-key revocation failed: " + message, "system")
+                    self.refresh_connection_controls()
+                    messagebox.showerror("Revoke API key failed", message)
+                elif kind == "job_progress":
+                    if self.current_job is not None and (not job_id or self.current_job.id == job_id):
+                        refreshed = self.job_store.get_job(self.current_job.id)
+                        if refreshed is not None:
+                            self.current_job = refreshed
+                        job = self.current_job
+                        counts = job.counts()
+                        terminal = counts["uploaded"] + counts["duplicates"] + counts["failed"] + counts["cancelled"] + counts["skipped"]
+                        total = max(1, len(job.items) + job.skipped)
+                        percent = min(100.0, terminal * 100.0 / total)
+                        self.manual_progress_var.set(percent)
+                        elapsed = max(0.001, time.time() - job.started_at) if job.started_at else 0.0
+                        rate = job.bytes_sent / elapsed if elapsed else 0.0
+                        remaining = max(0, job.bytes_total - job.bytes_sent)
+                        eta = (remaining / rate) if rate > 0 else 0.0
+                        rate_text = f"{self.format_bytes(int(rate))}/s" if rate > 0 else "rate pending"
+                        eta_text = f"ETA {int(eta)}s" if eta > 0 else "ETA pending"
+                        self.manual_progress_text_var.set(f"{terminal}/{total} terminal | {self.format_bytes(job.bytes_sent)} / {self.format_bytes(job.bytes_total)} | {rate_text} | {eta_text}")
+                        self.activity_job_summary_var.set(self.describe_job(job))
+                        self.refresh_import_item_tree(job)
+                        self.refresh_job_history()
+                elif kind == "job_control":
+                    paused = bool(payload.get("paused", False))
+                    self.manual_status_var.set("Import paused" if paused else "Import running")
+                    self.import_activity_var.set("Import: paused" if paused else "Import: running")
+                    self.pause_import_button.configure(state="disabled" if paused else "normal")
+                    self.resume_import_button.configure(state="normal" if paused else "disabled")
+                elif kind == "thumbnail_fallback":
+                    filename = str(payload.get("filename", "") or "")
+                    reason = str(payload.get("reason", "") or "")
+                    message = f"Local thumbnail fallback for {filename}: {reason}. Server generation remains authoritative."
+                    self.write_log(message, "warning")
+                    self.record_activity("warning", message, "import", filename=filename, job_id=job_id)
+                self.refresh_revoke_button_state()
+                self.refresh_activity_monitor_state()
+                continue
+
+            if not isinstance(event, tuple) or len(event) != 2:
+                self.write_log("Ignored malformed worker event.", "warning")
+                continue
+            level, message = str(event[0]), str(event[1])
             log_level = self.classify_log_level(level, message)
             self.write_log(f"{level.upper()}: {message}", log_level)
-            if message.startswith("Manual upload finished"):
-                self.manual_status_var.set("Manual upload idle")
-            elif message.startswith("Manual upload stopped"):
-                self.manual_status_var.set("Manual upload stopped")
-                self.refresh_revoke_button_state()
+            operation = "system"
+            if message.startswith(("Manual ", "Uploading ", "Uploaded ", "Skipped already present", "Generated ", "Local thumbnails")):
+                operation = "import" if (self.manual_worker and self.manual_worker.is_alive()) or message.startswith("Manual ") else "watcher"
+            elif message.startswith(("Watching ", "Watcher ", "Ignoring ", "Flight Simulator")):
+                operation = "watcher"
+            elif message.startswith("AI metadata"):
+                operation = "ai"
+            self.record_activity(log_level if log_level in {"success", "warning", "error"} else level, message, operation, job_id=self.current_job.id if operation == "import" and self.current_job else "")
+
+            if message.startswith("Manual upload started"):
+                self.manual_status_var.set("Import running")
+                self.import_activity_var.set("Import: running")
+            elif message.startswith(("Manual upload finished", "Manual upload stopped")):
+                if self.current_job is not None:
+                    refreshed = self.job_store.get_job(self.current_job.id)
+                    if refreshed is not None:
+                        self.current_job = refreshed
+                    self.refresh_import_item_tree(self.current_job)
+                    self.activity_job_summary_var.set(self.describe_job(self.current_job))
+                failed = self.current_job.counts()["failed"] if self.current_job else 0
+                cancelled = self.current_job.counts()["cancelled"] if self.current_job else 0
+                self.manual_status_var.set("Import finished" if message.startswith("Manual upload finished") else "Import cancelled")
+                self.import_activity_var.set("Import: idle" if not failed else "Import: failed items")
+                self.manual_progress_var.set(100.0 if not failed and not cancelled else self.manual_progress_var.get())
+                self.start_import_button.configure(state="disabled")
+                self.pause_import_button.configure(state="disabled")
+                self.resume_import_button.configure(state="disabled")
+                self.cancel_import_button.configure(state="disabled")
+                self.retry_failed_button.configure(state="normal" if (failed or cancelled) else "disabled")
+                self.refresh_job_history()
             elif message.startswith("Watcher stopped"):
                 self.status_var.set("Stopped")
-                self.update_monitor_state("disabled", "Watcher stopped.")
-                self.refresh_revoke_button_state()
+                self.watcher_activity_var.set("Watch: stopped")
+            elif message.startswith("Watching "):
+                self.status_var.set("Running")
+                self.watcher_activity_var.set("Watch: running")
+                self.watch_last_scan_var.set("Last scan: " + time.strftime("%Y-%m-%d %H:%M:%S"))
+            elif message.startswith("AI metadata worker claimed job"):
+                self.ai_status_var.set(message)
+                self.ai_activity_var.set("AI: working")
+            elif message.startswith("AI metadata stored"):
+                self.ai_status_var.set("AI metadata worker running")
+                self.ai_activity_var.set("AI: running")
             elif message.startswith("AI metadata worker stopped"):
                 self.ai_worker_stop_requested = False
                 self.ai_status_var.set("AI metadata worker stopped")
-                self.refresh_activity_monitor_state()
-                self.refresh_revoke_button_state()
+                self.ai_activity_var.set("AI: stopped")
             elif message.startswith("AI metadata worker started"):
                 self.ai_worker_stop_requested = False
                 self.ai_status_var.set("AI metadata worker running")
-                self.update_monitor_state("green", "AI metadata worker is active.")
-                self.refresh_revoke_button_state()
-            elif level == "error" or level == "warning":
-                self.status_var.set("Running with errors")
-                self.update_monitor_state("red", message)
-                if self.manual_worker and self.manual_worker.is_alive():
-                    self.manual_status_var.set("Manual upload has errors")
-                if self.ai_worker and self.ai_worker.is_alive() and not self.ai_worker_stop_requested:
-                    self.ai_status_var.set("AI metadata worker has errors")
-            elif level in {"info", "debug"}:
-                if "Upload failed" not in message and "error" not in message.lower():
-                    if self.worker and self.worker.is_alive():
-                        self.status_var.set("Running")
-                        self.update_monitor_state("green", "Folder monitoring is active.")
-                    if self.ai_worker and self.ai_worker.is_alive() and not self.ai_worker_stop_requested and message.startswith("AI metadata"):
-                        self.ai_status_var.set("AI metadata worker running")
-                        self.update_monitor_state("green", "AI metadata worker is active.")
-            if message.startswith("Watching ") or message.startswith("Upload endpoint:"):
-                self.update_monitor_state("green", "Folder monitoring is active.")
-            if message.startswith("Uploaded ") or message.startswith("Skipped duplicate content"):
-                self.update_monitor_state("green", "Folder monitoring is active.")
-            if message.startswith("AI metadata stored") and not self.ai_worker_stop_requested:
-                self.ai_status_var.set("AI metadata worker running")
-                self.update_monitor_state("green", "AI metadata worker is active.")
+                self.ai_activity_var.set("AI: running")
             if message.startswith("Optional local AI module dependency installation finished"):
                 self.semantic_ai_install_running = False
                 if self.semantic_ai_install_button is not None:
                     self.semantic_ai_install_button.configure(state="normal")
-            if message.startswith("Manual upload started"):
-                self.write_log("Manual upload job accepted.", "system")
 
+        self.refresh_activity_monitor_state()
+        self.refresh_revoke_button_state()
         self.root.after(200, self.drain_events)
 
     def configure_log_tags(self) -> None:
@@ -4585,17 +6551,22 @@ class WatcherApp:
 
     def write_log(self, message: str, tag: str = "system") -> None:
         """
-        Append one line to the status log.
-        
+        Append one secret-safe line to the status log.
+
         @param str message: Message text to append.
         @param str tag: Log color tag name.
         """
+        secret = self.api_key_var.get().strip() if hasattr(self, "api_key_var") else ""
+        safe_message = redact_text(message, [secret], redact_paths=False)
+        logging.info("UI: %s", redact_text(safe_message, [secret], redact_paths=False))
+        if not hasattr(self, "log_text"):
+            return
         stamp = time.strftime("%H:%M:%S")
         self.log_text.configure(state="normal")
         self.log_text.insert("end", "[", ("timestamp",))
         self.log_text.insert("end", stamp, ("timestamp",))
         self.log_text.insert("end", "] ", ("timestamp",))
-        self.log_text.insert("end", message, (tag if tag in self.log_text.tag_names() else "system",))
+        self.log_text.insert("end", safe_message, (tag if tag in self.log_text.tag_names() else "system",))
         self.log_text.insert("end", "\n")
         self.log_text.see("end")
         self.log_text.configure(state="disabled")

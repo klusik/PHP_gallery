@@ -54,6 +54,7 @@ use function Gallery\Services\admin_log_event;
 use function Gallery\Services\ai_image_analysis_latest_metadata_for_image;
 use function Gallery\Services\ai_image_analysis_metadata_pretty_json;
 use function Gallery\Services\ai_image_analysis_schema_ready;
+use function Gallery\Services\delete_gallery_images;
 use function Gallery\Services\delete_gallery_subtrees;
 use function Gallery\Services\exif_gps_schema_ready;
 use function Gallery\Services\feature_flag_enabled;
@@ -187,9 +188,31 @@ function cms_admin_public_update_image(): void
     // Variable $action stores this steps working value.
     $action = (string) ($_POST['action'] ?? 'save');
     if ($action === 'delete') {
-        // Variable $stmt stores this steps working value.
-        $stmt = db()->prepare('DELETE FROM images WHERE id = ?');
-        $stmt->execute([(int) $image['id']]);
+        // $galleryId stores the image owner so inline deletion uses the same
+        // filesystem-safe mutation service as bulk and duplicate-detector deletes.
+        $galleryId = (int) ($image['gallery_id'] ?? 0);
+        try {
+            // $deleted stores the complete database/filesystem cleanup result.
+            $deleted = delete_gallery_images($galleryId, [(int) $image['id']]);
+            if ((int) ($deleted['deleted'] ?? 0) <= 0) {
+                throw new \RuntimeException('Image was not deleted.');
+            }
+            admin_log_event('warning', 'image.public_inline_deleted', 'Admin deleted an image from the public inline editor.', [
+                'gallery_id' => $galleryId,
+                'image_id' => (int) $image['id'],
+                'files_deleted' => (int) ($deleted['files_deleted'] ?? 0),
+                'derivatives_deleted' => (int) ($deleted['derivatives_deleted'] ?? 0),
+                'missing_files' => (int) ($deleted['missing_files'] ?? 0),
+                'cleanup_failed' => (int) ($deleted['cleanup_failed'] ?? 0),
+            ], ['category' => 'other', 'severity' => 'warning']);
+        } catch (Throwable $exception) {
+            admin_log_event('error', 'image.public_inline_delete_failed', 'Public inline image deletion failed.', [
+                'gallery_id' => $galleryId,
+                'image_id' => (int) $image['id'],
+                'error' => $exception->getMessage(),
+            ], ['category' => 'other', 'severity' => 'error']);
+            flash_message('admin_notice', 'Image delete failed: ' . $exception->getMessage());
+        }
         redirect_to((string) ($_SERVER['HTTP_REFERER'] ?? url_for('home')));
     }
     if ($action === 'publish') {

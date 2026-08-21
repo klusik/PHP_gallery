@@ -809,6 +809,7 @@ function view_render_admin_dashboard_site_maintenance_card(array $model, string 
     $lastStep = is_array($state['last_step_summary'] ?? null) ? $state['last_step_summary'] : [];
     $enabled = !empty($status['enabled']);
     $requestTriggerEnabled = !empty($status['request_trigger_enabled']);
+    $requestTriggerSupported = !empty($status['request_trigger_supported']);
     $utcTime = (string) ($status['utc_time'] ?? '00:00');
     $batchSize = (int) ($status['batch_size'] ?? 20);
     $timeBudget = (int) ($status['time_budget_seconds'] ?? 20);
@@ -862,6 +863,10 @@ function view_render_admin_dashboard_site_maintenance_card(array $model, string 
 
     if (!empty($lastResult['busy'])) {
         echo '<span class="admin-site-maintenance-note is-warning">' . e(t('admin.site_maintenance.last_busy', 'The last maintenance call found another invocation already running.')) . '</span>';
+    }
+
+    if ($requestTriggerEnabled && !$requestTriggerSupported) {
+        echo '<span class="admin-site-maintenance-note is-warning">' . e(t('admin.site_maintenance.request_trigger_unsupported', 'This PHP runtime cannot detach background work from a visible page response, so request-triggered maintenance is suppressed to protect gallery latency. Use hosting cron or Run one safe check now instead.')) . '</span>';
     }
 
     if ($scheduledAtUtc !== '' && $windowEndsAtUtc !== '') {

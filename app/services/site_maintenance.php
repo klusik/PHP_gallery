@@ -762,13 +762,27 @@ function site_maintenance_finish_response_before_background_work(): void
 
     if (function_exists('litespeed_finish_request')) {
         @litespeed_finish_request();
-        return;
+    }
+}
+
+/**
+ * Return whether this PHP runtime can conclusively detach background maintenance
+ * from the visible HTTP response.
+ *
+ * Generic output-buffer flushing is not sufficient on many shared hosts: the
+ * client connection remains owned by the PHP request until shutdown finishes.
+ * Running a maintenance slice in that environment makes the first gallery
+ * request after the trigger interval appear to hang.
+ *
+ * @return bool True when a supported response-finishing primitive is available.
+ */
+function site_maintenance_request_trigger_can_detach_response(): bool
+{
+    if (PHP_SAPI === 'cli') {
+        return false;
     }
 
-    while (ob_get_level() > 0) {
-        @ob_end_flush();
-    }
-    @flush();
+    return function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request');
 }
 
 /**
@@ -829,7 +843,9 @@ function site_maintenance_register_request_trigger(string $page): void
         return;
     }
 
-    if (!site_maintenance_route_allows_request_trigger($page) || !site_maintenance_request_trigger_due()) {
+    if (!site_maintenance_route_allows_request_trigger($page)
+        || !site_maintenance_request_trigger_can_detach_response()
+        || !site_maintenance_request_trigger_due()) {
         return;
     }
 
@@ -1549,6 +1565,7 @@ function site_maintenance_status(): array
         'window_minutes' => site_maintenance_window_minutes(),
         'window_hours_value' => site_maintenance_window_hours_value(site_maintenance_window_minutes()),
         'request_trigger_enabled' => site_maintenance_request_trigger_enabled(),
+        'request_trigger_supported' => site_maintenance_request_trigger_can_detach_response(),
         'request_trigger_interval_seconds' => site_maintenance_request_trigger_interval_seconds(),
         'total_source_images' => site_maintenance_total_source_image_count(),
         'cron_url' => site_maintenance_cron_url(),

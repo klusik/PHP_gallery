@@ -444,7 +444,10 @@ function thumbnail_serving_url(array $image, array $gallery, int $size, string $
         return image_public_thumbnail_url($image, $gallery, $size, $format);
     }
     if (thumbnail_can_use_static_public_url($image, $gallery)) {
-        return gallery_static_file_url($gallery, 'thumbs/' . thumbnail_filename($image, $size, $format));
+        return image_public_asset_url_with_version(
+            gallery_static_file_url($gallery, 'thumbs/' . thumbnail_filename($image, $size, $format)),
+            $image
+        );
     }
     return image_public_asset_url_with_version(url_for('thumb', ['id' => $image['id'], 'size' => $size, 'format' => $format]), $image);
 }

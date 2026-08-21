@@ -67,6 +67,7 @@ namespace Gallery\Services {
 }
 
 namespace {
+    use function Gallery\Core\image_public_asset_version;
     use function Gallery\Core\image_public_media_url;
     use function Gallery\Core\image_public_thumbnail_url;
     use function Gallery\Core\image_public_url;
@@ -113,12 +114,18 @@ namespace {
         'gallery_id' => 7,
         'url_slug' => 'test na macu vlc snapy 0001',
         'filename' => 'test_na_macu_vlc_snapy_0001.jpg',
+        'relative_path_hash' => hash('sha256', 'test_na_macu_vlc_snapy_0001.jpg'),
+        'checksum_sha256' => str_repeat('a', 64),
+        'modified_at' => '2026-08-21 08:30:00',
+        'file_size' => 123456,
+        'thumbnail_derivative_version' => 3,
     ];
 
     $GLOBALS['cms_app_settings_cache'] = ['url_rewrite_enabled' => '0'];
     $queryImageUrl = 'https://example.test/index.php?page=gallery&public_path=Test+na+Macu%2FVLC+snapy%2Ftest-na-macu-vlc-snapy-0001';
-    $queryMediaUrl = 'https://example.test/index.php?page=public_media&public_path=Test+na+Macu%2FVLC+snapy%2Ftest-na-macu-vlc-snapy-0001';
-    $queryThumbnailUrl = 'https://example.test/index.php?page=public_thumb&public_path=Test+na+Macu%2FVLC+snapy%2Ftest-na-macu-vlc-snapy-0001&size=300&format=webp';
+    $assetVersion = image_public_asset_version($image);
+    $queryMediaUrl = 'https://example.test/index.php?page=public_media&public_path=Test+na+Macu%2FVLC+snapy%2Ftest-na-macu-vlc-snapy-0001&v=' . $assetVersion;
+    $queryThumbnailUrl = 'https://example.test/index.php?page=public_thumb&public_path=Test+na+Macu%2FVLC+snapy%2Ftest-na-macu-vlc-snapy-0001&size=300&format=webp&v=' . $assetVersion;
 
     assert_public_media_url_same($queryImageUrl, image_public_url($image, $gallery), 'rewrite-disabled image URL');
     assert_public_media_url_same($queryMediaUrl, image_public_media_url($image, $gallery), 'rewrite-disabled media URL');
@@ -135,8 +142,8 @@ namespace {
     $_SERVER['SCRIPT_NAME'] = '/index.php';
 
     $cleanImageUrl = 'https://example.test/gallery/Test%20na%20Macu/VLC%20snapy/test-na-macu-vlc-snapy-0001/';
-    $cleanMediaUrl = $cleanImageUrl . 'media';
-    $cleanThumbnailUrl = $cleanImageUrl . 'thumb-300.webp';
+    $cleanMediaUrl = $cleanImageUrl . 'media?v=' . $assetVersion;
+    $cleanThumbnailUrl = $cleanImageUrl . 'thumb-300.webp?v=' . $assetVersion;
 
     assert_public_media_url_same($cleanImageUrl, image_public_url($image, $gallery), 'rewrite-enabled image URL');
     assert_public_media_url_same($cleanMediaUrl, image_public_media_url($image, $gallery), 'rewrite-enabled media URL');
@@ -146,6 +153,14 @@ namespace {
     assert_public_media_url_same(rtrim($cleanImageUrl, '/'), $cleanBaseUrl, 'rewrite-enabled manifest image base URL');
     assert_public_media_url_same($cleanMediaUrl, public_gallery_media_manifest_media_url($image, $gallery, $cleanBaseUrl), 'rewrite-enabled manifest media URL');
     assert_public_media_url_same($cleanThumbnailUrl, public_gallery_media_manifest_variant_url($image, $gallery, $cleanBaseUrl, 300, 'webp'), 'rewrite-enabled manifest thumbnail URL');
+
+    $replacement = $image;
+    $replacement['id'] = 43;
+    assert_public_media_url_same(false, image_public_asset_version($replacement) === $assetVersion, 'delete/re-upload image id changes immutable media cache version');
+
+    $replacement = $image;
+    $replacement['thumbnail_derivative_version'] = 4;
+    assert_public_media_url_same(false, image_public_asset_version($replacement) === $assetVersion, 'thumbnail invalidation changes immutable media cache version');
 
     echo "Public media URL rewrite tests passed.\n";
 }

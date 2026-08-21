@@ -1,204 +1,401 @@
-# PHP Gallery uploader
+# PHP Gallery uploader for Windows
 
-This Windows companion app uploads images to one PHP Gallery target gallery through a gallery-scoped API key.
+The Windows companion app is a desktop import client for one PHP Gallery target gallery. PHP Gallery remains authoritative for authentication, validation, duplicate decisions, storage, image records, thumbnail acceptance, metadata, and AI job ownership.
 
-It supports two modes in the same app:
+The application keeps the existing `gallery_watch_upload.pyw` launcher, `run_gallery_watcher.bat`, and `--once` compatibility. Normal operation needs only Python plus the lightweight dependencies in `requirements.txt`.
 
-- Watch folder: upload new images that appear after the watcher starts.
-- Manual upload: select pictures directly and upload them as a bulk job.
+## Main window
 
-Both modes use the same saved gallery URL or upload endpoint and the same API key.
+The redesigned window is organized around five tasks:
 
-The shared connection area also includes `Revoke API key`. It is only usable when the watcher is stopped. When you revoke the key, the app asks the gallery to invalidate that token and then clears the saved API key locally.
+- **Import**: confirm the target gallery/API key, choose files, a folder, or a ZIP archive, review preflight, then explicitly start the import.
+- **Watch folder**: configure and start or stop the live drop-folder watcher.
+- **Activity**: inspect the current durable job, per-file state, attempts, result/error, throughput, ETA, and recent job history.
+- **AI metadata**: optional server-leased image analysis. Disabled by default.
+- **Settings**: gallery connection, API key, runtime, SimConnect, tray behavior, diagnostics, and advanced limits.
+
+The header reports connection state, target gallery label when the endpoint returns it, and watcher/import/AI activity independently.
+
+The lower Recent activity panel keeps a bounded durable event history. It can be filtered by active, succeeded, skipped, failed, and warning events. Diagnostic copying removes credentials and local paths.
 
 ## Setup
 
-1. Open the target gallery in the PHP Gallery admin editor.
-2. Go to the Images tab.
-3. Generate an API key in the upload automation panel.
-4. Copy the key immediately. The raw key is shown only once.
-5. Run `install.bat` from the `winapp` folder, or run `gallery_watch_upload.pyw` directly.
-6. Enter the gallery site URL or upload endpoint, paste the API key, and save the configuration.
+1. Open the target gallery in PHP Gallery admin.
+2. Generate a gallery-scoped upload automation API key.
+3. Copy the key when it is shown.
+4. Run `install.bat` from `winapp`, or start `gallery_watch_upload.pyw` directly.
+5. On the default **Import** screen, use **Set / replace API key...** in the **Connection and API key** card. The same action is available from the header as **Connection / API key** and from the tray menu.
+6. Enter the gallery site URL or upload endpoint.
+7. Paste the API key with the **Paste** button or type it into the masked field.
+8. Press **Save & Test**.
+9. Confirm that the header reports **Connected** and the expected target gallery.
 
-The upload endpoint is normally:
+PHP Gallery advertises the portable query-string front-controller endpoint as the canonical Windows-uploader URL:
 
 ```text
 https://example.com/index.php?page=upload_automation_upload
 ```
 
-When URL rewriting is enabled, this clean endpoint also works:
+A site root or the optional clean alias `https://example.com/api/upload` can still be entered. The desktop app canonicalizes either form to the query-string endpoint before saving or sending authenticated work. This is deliberate: some shared-hosting proxies and WAF configurations route ordinary clean URLs correctly but mishandle authenticated or multipart POST requests under `/api/`. If the canonical query-string endpoint is rejected by the web server with a non-JSON HTTP 404 before PHP Gallery is reached, the client may retry `/api/upload` as a compatibility fallback. Gallery-generated JSON errors such as invalid/revoked keys, forbidden access, or a missing target gallery remain authoritative and are not hidden by route fallback.
+
+### API key insertion and replacement
+
+API-key setup is intentionally not hidden in advanced settings. It is available in three places:
+
+- the default **Import > Connection and API key** card through **Set / replace API key...**;
+- the always-visible header through **Connection / API key**;
+- **Settings > Connection**, which also has a direct masked API-key field and **Paste API key** button.
+
+The compact connection dialog keeps edits temporary until **Save** or **Save & Test** is pressed. Closing the dialog cannot replace a working saved key accidentally. The key is generated in PHP Gallery Admin and is gallery-scoped; the Windows app does not ask for or store an Admin password.
+
+If the Settings URL/key fields differ from the saved connection, the app marks them as unsaved. Upload work may use explicitly saved settings, and API-key revocation is blocked until the connection fields are saved or restored.
+
+### Connection test
+
+**Test connection** sends a minimal authenticated `inventory` request with no media files. It verifies endpoint reachability and API-key authorization without uploading an image.
+
+The API key is masked by default. Reveal and Copy require explicit button presses. Redacted diagnostics never include the raw key.
+
+### Revoke API key
+
+**Revoke API key...** is available directly on the Import connection card, in **Settings > Connection**, and in the tray menu. Revocation uses the existing saved key to authenticate an `action=revoke` JSON request through the same upload API used by connection/inventory operations, so no Admin credential or token ID is required in the Windows app. If the canonical `index.php?page=upload_automation_upload` endpoint is rejected by the hosting layer with a non-JSON HTTP 404, revocation may retry the corresponding `/api/upload` alias as a compatibility fallback. A gateway 502/503/504 is treated as an ambiguous upstream failure: the client waits briefly and retries exactly once. If that retry reports that the key is already invalid/revoked, the desired server state is accepted as confirmed. Otherwise the local key is retained and the app reports that server revocation could not be confirmed.
+
+Revocation is deliberately guarded:
+
+- it is disabled while the watch-folder uploader, manual import, import preflight, AI metadata worker, or connection test can still issue authenticated requests;
+- the UI states the exact activity preventing revocation;
+- unsaved URL/API-key edits must be saved or reverted before revocation;
+- the network request runs off the Tkinter UI thread;
+- the local API key is cleared only after the gallery confirms server-side revocation;
+- if the request fails, the local key is retained so the user can retry;
+- closing the app is blocked while revocation is awaiting the server response, preventing a server-revoked key from remaining silently stored locally.
+
+Revocation is permanent for that key. To reconnect afterwards, generate a new gallery-scoped upload automation key in PHP Gallery Admin and insert it with **Set / replace API key...**.
+
+## Import workflow
+
+The Import tab uses one preflight and queue model for all manual sources.
+
+### Choose files
+
+Select one or more files. Supported image suffixes are discovered, unsupported selections are reported, and content hashes are compared with local history and, when a connection is configured, the remote gallery inventory.
+
+### Choose folder
+
+Select a folder. The default is non-recursive. Enable **Include subfolders when importing a folder** only when recursion is intended.
+
+### Choose ZIP archive
+
+ZIP mode accepts `.zip` only. The archive is inspected and supported media is extracted to a per-job staging directory under the app data folder.
+
+ZIP preflight rejects or bounds:
+
+- absolute archive paths;
+- Windows drive-letter paths;
+- `..` parent traversal;
+- NUL bytes;
+- symbolic-link entries;
+- reparse-point-like entries exposed by ZIP metadata;
+- archive entry count;
+- total uncompressed size;
+- individual uncompressed file size;
+- suspicious compression ratios.
+
+Unsupported archive entries are not extracted. Supported entries are staged with collision-safe local names while the original archive-relative name is retained for diagnostics.
+
+The original ZIP is kept by default. If **Delete original ZIP only after every accepted entry succeeds** is enabled, deletion occurs only after all accepted items finish as confirmed uploads or confirmed duplicates. Failed or cancelled jobs keep the source archive.
+
+Stale staging directories are cleaned on later startup after the configured conservative age threshold. Staging owned by a recoverable job is retained.
+
+## Preflight
+
+Selecting a source never starts an upload. Preflight performs discovery, safe ZIP staging when applicable, hashing, duplicate checks, and local media capability checks in a background thread.
+
+The review shows:
+
+- supported files found;
+- files ready to upload;
+- local and remote duplicate candidates;
+- estimated accepted bytes;
+- unsupported entries grouped by reason/extension;
+- unsafe ZIP entries rejected;
+- thumbnail mode;
+- HEIC/HEIF/DNG local capability;
+- target gallery label;
+- source deletion policy;
+- warnings such as a temporarily unavailable remote duplicate check.
+
+Press **Start import** only after reviewing the summary.
+
+## Durable import jobs
+
+Manual imports use explicit item states stored in `upload_state.json`:
 
 ```text
-https://example.com/api/upload
+discovered
+validating
+staged
+hashing
+queued
+uploading
+confirmed
+skipped_duplicate
+skipped_unsupported
+failed_retryable
+failed_permanent
+cancelled
 ```
 
-The app accepts either the site root URL or the full endpoint URL. If you enter the site root URL, it appends `index.php?page=upload_automation_upload` automatically.
+Each item stores a stable item id, local/staged path, source label, size, SHA-256 when known, attempt count, result/error, last update time, local decoder capability, and a small safe subset of server result data.
 
-## Watch folder mode
+Each job stores its source, target gallery label, accepted items, skipped count, byte totals, timestamps, ZIP staging ownership, and optional source-ZIP deletion policy.
 
-Existing images in the watched folder are treated as already present when the watcher starts.
+### Pause and resume
 
-That means:
+**Pause** stops submission of new work. HTTP requests already in flight are allowed to complete. **Resume** continues queued work.
 
-- Files already in the folder are ignored.
-- Only files added after pressing Start watching are uploaded.
-- Duplicate watched-folder uploads are avoided through the local upload state file.
-- Failed watched-folder uploads are retried with backoff.
-- Optional checkbox, enabled by default: attach the current Microsoft Flight Simulator camera location to watched-folder uploads when SimConnect is available.
-- Optional checkbox: delete watched-folder source files after the gallery confirms that the image was uploaded successfully.
+### Cancel
 
-The Flight Simulator camera-location option queries SimConnect immediately before each watched-folder upload. It sends latitude, longitude, and altitude to PHP Gallery as upload metadata and does not modify the image file. If Flight Simulator or SimConnect is unavailable, the upload continues without location metadata.
+**Cancel** requests an orderly stop. In-flight requests may finish. Items that did not reach a terminal state are persisted as cancelled so they can be reviewed or explicitly retried.
 
-The app first tries a local `SimConnect.dll` beside the winapp, then the `SIMCONNECT_DLL` environment variable, then a few common MSFS SDK install locations, and finally the normal Windows DLL loader. If you want to override that automatic search, use the optional `SimConnect.dll override` field.
+### Retry failed
 
-## Manual upload mode
+**Retry failed** retries locally available failed, cancelled, or crash-interrupted items. A permanent item can be retried only because the user explicitly requested it. Confirmed items are not silently resent.
 
-Manual upload lets you choose pictures directly from the file picker. It does not depend on the watched folder.
+### Restart recovery
 
-The checkbox `Generate responsive thumbnails on this PC before upload` controls the faster path:
+If the app finds an unfinished durable job at startup, it offers to open that job for review. Recovery never auto-starts an upload. Remote inventory remains authoritative for uncertain transfers.
 
-- Enabled: the app generates PHP Gallery thumbnail variants locally using separate worker processes, uploads originals in parallel upload threads, and sends the generated JPG/WebP thumbnails to the existing gallery upload endpoint.
-- Disabled: the app uploads originals in parallel upload threads and asks the gallery server to create thumbnails, matching the previous server-side behavior.
+If a request fails ambiguously after bytes may have reached the server, such as a 502/503/504, timeout, or dropped connection, the client performs one fresh remote inventory check before deciding to retry. Explicit client/authentication failures such as HTTP 401/403 do not trigger a second inventory request. Routine inventory and preflight are database-only. Only the narrow ambiguous-failure reconciliation request asks PHP Gallery for the bounded filesystem fallback, capped to a small candidate set. If the content hash is already present, the item is confirmed instead of uploaded again.
 
-The Manual upload tab has two performance controls:
+## Progress and Activity
 
-- Thumbnail processes: CPU-bound local resizing and JPG/WebP encoding workers. `Auto` uses a conservative value based on the CPU core count. On a 32-thread CPU, start with Auto or 12 to 16 before trying higher values.
-- Upload threads: network-bound multipart upload workers. `Auto` uses a small shared-hosting-friendly value. Increasing this too much can overload PHP process limits or the uplink.
+The Import and Activity views expose:
 
-The app pipelines the work. It does not generate thumbnails for the whole selection first. It keeps a bounded number of thumbnail jobs and upload jobs in flight, uploads images as soon as their thumbnails are ready, and removes temporary thumbnail files after each upload finishes.
+- confirmed count;
+- duplicate/skipped count;
+- failed count;
+- cancelled count;
+- active count;
+- bytes confirmed versus total bytes;
+- approximate throughput while a job is active;
+- approximate remaining time when enough progress exists;
+- per-item state;
+- per-item attempt count;
+- per-item result or error;
+- durable previous job history.
 
-Client-side thumbnails require Pillow. Tray support requires `pystray`. `install.bat` installs both from `requirements.txt` into the same Python runtime used by the Start Menu shortcut. This avoids the Windows file-association issue where `.pyw` files can start through a different Python version than the one used from Command Prompt.
+The lower Recent activity drawer stores bounded human-readable events separately from the rotating log.
 
-You can also install it manually into the Python shown inside the app:
+## Thumbnail modes
 
-```bat
-python -m pip install --user -r requirements.txt
-```
+Manual import exposes two normal choices:
 
-If the checkbox is disabled, open the Manual upload tab and check the runtime line. It shows the exact `pythonw.exe` or `python.exe` that is running the app. Use the `Install or repair dependencies` button to install the winapp packages into that exact runtime without guessing.
+### Server creates thumbnails
 
-If Pillow is missing, watch-folder uploads still work and manual uploads can still use server-side thumbnail generation. If `pystray` is missing, the app still opens but tray hiding is disabled until dependencies are installed.
+This is the default and most compatible mode. The original is uploaded and PHP Gallery creates derivatives through the existing server pipeline.
 
-## System tray
+### This PC creates thumbnails
 
-The Windows app includes a tray icon so uploads can continue while the main window is hidden.
+When Pillow and the local decoder are available, the client creates responsive JPG/WebP derivatives locally using bounded worker processes and sends them with the original. Originals and PHP Gallery validation remain authoritative.
 
-- Minimizing the window hides it to the system tray when tray support is available.
-- Closing the window hides it to the system tray instead of stopping the app.
-- If the watcher or a manual upload is running, closing asks whether to hide to tray, exit, or keep the window open.
-- The tray menu includes Open, Start watching, Stop watching, and Exit.
-- Use Exit from the tray menu when you want to stop background work and fully close the app.
+If local decoding or local thumbnail generation fails for one item, that item falls back to server thumbnail generation. One bad HEIC/DNG decoder result does not abort the batch.
 
-Tray support requires `pystray`, installed by `install.bat` from `requirements.txt`.
+Thumbnail sizes, thumbnail process count, remote inventory refresh interval, and ZIP limits are under **Settings > Show advanced settings**. Network upload concurrency is intentionally fixed to one request per gallery. PHP Gallery serializes mutations for a gallery under a server-side lock, so parallel upload requests do not increase write throughput and can instead occupy PHP workers needed by normal gallery pages on shared hosting.
 
-## Runtime files
+## HEIC, HEIF, and DNG
 
-Configuration and upload state are stored under the current Windows user profile, normally:
+The Windows uploader distinguishes three concepts:
+
+1. the suffix is accepted for submission to PHP Gallery;
+2. this Python/Pillow runtime can locally preview the file;
+3. this Python/Pillow runtime can locally create thumbnails for the file.
+
+A file is not rejected solely because the local machine lacks a decoder when it can still use the server-thumbnail path. Preflight reports HEIC/HEIF/DNG as local-decoder capable or server-upload-only on this PC.
+
+Per-file decoder failures are isolated and shown as item capability/result information.
+
+Large RAW/HEIC conversion stacks are not mandatory dependencies.
+
+## Watch folder
+
+Watch-folder behavior keeps the established safety semantics:
+
+- files present when the watcher starts are ignored;
+- only files appearing after start are considered;
+- recursion is disabled by default and must be explicitly enabled;
+- partially copied files wait until size and modification time remain stable for the configured period;
+- SHA-256 upload history prevents repeated local sends;
+- routine remote inventory checks are database-only and prevent re-sending indexed content already present on the gallery;
+- transient failures use backoff;
+- ambiguous gateway/timeout requests are checked against remote inventory before retry, while explicit 401/403 failures are not doubled with an immediate inventory call;
+- when Pillow can decode a watched JPG/PNG/GIF/WebP, responsive thumbnails are generated locally and uploaded with the original so PHP does not stay busy generating the full derivative set synchronously; unsupported local formats continue through the server path;
+- server-side validation remains authoritative.
+
+The Watch folder tab shows how many existing supported files will be ignored at startup, the last successful scan time, and a **Check folder only** dry run that performs no uploads.
+
+### Optional source deletion
+
+**Delete source only after the gallery confirms a successful upload** is destructive and disabled unless selected by the user. It removes only a source that PHP Gallery has confirmed as stored. Duplicates, skipped files, and failed files are kept.
+
+## SimConnect metadata
+
+The watcher can attach the current Microsoft Flight Simulator camera latitude, longitude, and altitude immediately before each watched upload.
+
+SimConnect metadata is optional. If Flight Simulator, the DLL, or a valid camera location is unavailable, the image upload continues without simulator metadata.
+
+DLL lookup order includes:
+
+1. bundled `winapp/SimConnect.dll`;
+2. the `SIMCONNECT_DLL` environment variable;
+3. common MSFS SDK locations;
+4. normal Windows DLL lookup.
+
+A manual `SimConnect.dll override` is available in Settings.
+
+`SimConnect.dll` is a binary dependency. It is not Python source.
+
+## AI metadata worker
+
+AI metadata processing remains optional and disabled by default. It is visually separated from upload/import actions.
+
+The simple AI tab exposes:
+
+- enable/disable;
+- vision backend;
+- model version;
+- Start;
+- Stop;
+- current worker/job status.
+
+Detailed model identifiers, object labels, thresholds, semantic prompt, Ollama URL, and external command are under **Show advanced AI settings**.
+
+### Server-owned job lifecycle
+
+PHP Gallery owns AI work allocation:
+
+- the client asks for one `ai_next_job`;
+- the server atomically leases a queued job;
+- the worker downloads only the assigned authenticated image asset;
+- heartbeats extend long leases;
+- success/failure is returned through `ai_complete`;
+- expired work can be reassigned by the server;
+- the Windows client never scans the gallery to invent global job ownership.
+
+AI worker failures do not cancel watcher/manual upload workers.
+
+### Optional local semantic models
+
+The normal requirements remain lightweight. The optional Transformers path can install large packages such as PyTorch and Transformers. The UI warns before starting that installation because package and later model downloads can be large.
+
+The first semantic model use can populate the current Windows user's Hugging Face cache.
+
+### External analyzer command
+
+The external command can use:
+
+- `{image_path}`
+- `{filename}`
+- `{job_id}`
+
+Its stdout is treated as untrusted JSON and parsed/validated by the client/server workflow. Leave the command empty unless you intentionally use a local analyzer.
+
+## System tray and shutdown
+
+When tray support is available and close/minimize-to-tray is enabled, the main window can be hidden without stopping background work.
+
+The tray menu includes:
+
+- Open;
+- Open activity;
+- Pause/resume current import;
+- Start watching;
+- Stop watching;
+- Start AI metadata worker;
+- Stop AI metadata worker;
+- Open log folder;
+- Exit.
+
+The tooltip reports watcher, import, AI, and current failure counts separately.
+
+**Exit** follows one coordinated shutdown path. It requests worker cancellation, waits for a bounded period, preserves durable recoverable state, and then exits. If an in-flight operation does not stop within the timeout and tray support exists, the UI can keep the process running in the tray instead of forcing it closed.
+
+Shutdown does not revoke credentials and does not perform extra source deletion.
+
+## Runtime files and migration
+
+Per-user runtime files are normally stored under:
 
 ```text
 %APPDATA%\PHPGalleryUploader\
 ```
 
-By default, the app does not delete local source photos.
+Important files/directories:
 
-If `Delete watched-folder files after a confirmed successful upload` is enabled, watch-folder mode removes only files that the gallery confirms as uploaded successfully. Failed, skipped, and duplicate files are kept locally.
-
-Watch-folder mode marks a file as uploaded only after the gallery returns a successful JSON response.
-
-## Notes
-
-- The API key decides the target gallery.
-- The Python app does not create a second authentication flow.
-- The PHP endpoint still stores originals through the existing gallery upload pipeline. When the server-side upload rename preference is enabled, the API response contains the final media-renamer filenames.
-- Client-generated thumbnails are accepted only after the corresponding original image is accepted by the gallery.
-- Partially copied watched-folder files are ignored until their size and modification time remain stable.
-- `gallery_watch_upload.pyw` starts without a console window.
-
-## Optional AI metadata worker
-
-The Windows companion app can also run as a low-priority client-side worker for internal image metadata. This mode is disabled by default and does not change the watched-folder or manual upload workflow.
-
-Architecture:
-
-- PHP Gallery remains the source of truth for work allocation.
-- The companion app never scans the gallery and never decides global ownership by itself.
-- The app asks the existing upload automation endpoint for one `ai_next_job` claim.
-- The server atomically leases one queued job to that worker and returns a claim token.
-- The worker downloads only the claimed asset through the authenticated API endpoint.
-- The worker analyzes the image locally and reports `ai_complete` with either success metadata or a retryable failure.
-- Heartbeats extend the lease while long processing continues.
-- If the worker disappears, the lease expires and the server can assign the job again later.
-
-Server requirements:
-
-1. Deploy the updated PHP Gallery files.
-2. Run pending database migrations from the admin maintenance flow or `php scripts/migrate.php`.
-3. Generate or reuse a gallery-scoped upload automation API key.
-4. Use that same Gallery URL and API key in the Windows app.
-
-Client configuration:
-
-1. Open the app and keep the normal shared connection settings filled in.
-2. Open the `AI metadata` tab.
-3. Enable `AI metadata worker on this PC`.
-4. Keep the default model name and version for the built-in Pillow analyzer, or set your own values when using an external local model.
-5. Optionally set an external analyzer command.
-6. Start the worker from the tab or from the tray menu.
-
-External analyzer command:
-
-The command receives placeholders expanded by the app:
-
-- `{image_path}` for the downloaded local image path
-- `{filename}` for the gallery filename
-- `{job_id}` for the server job id
-
-The command must write a JSON object to stdout. Recommended shape:
-
-```json
-{
-  "metadata": {
-    "internal_description": "night airport ramp with parked aircraft",
-    "labels": ["airport", "night", "aircraft", "ramp"]
-  },
-  "searchable_text": "night airport ramp parked aircraft apron lights"
-}
+```text
+config.json
+upload_state.json
+watcher.log
+watcher.log.1 ...
+staging\
 ```
 
-The metadata is stored as internal data in `image_ai_metadata`. It is searchable, but it is not shown as a public photo description and it does not overwrite user-written titles or descriptions.
+`config.json` and `upload_state.json` use explicit schema versions. Existing upload-path/hash/failure history is migrated without invalidating successful upload history.
 
-### Semantic object labels
+Writes use a same-directory temporary file and atomic replace. Malformed config/state files are preserved as timestamped `.malformed-*` copies before safe defaults are used.
 
-The built-in Pillow analyzer can describe geometry, brightness, contrast, colors, and other technical image properties. It cannot identify semantic objects such as people, bridges, guitars, houses, cars, animals, aircraft, or food because Pillow is not an object-recognition model.
+The log uses rotation instead of growing without a bound.
 
-For semantic search metadata, use the `Vision backend` field on the AI metadata tab:
+## Dependency installation
 
-- `auto`: tries the external command if configured, then the in-process Transformers backend, then local Ollama, then Pillow as the safe fallback.
-- `transformers`: runs Hugging Face Transformers and PyTorch directly inside this Python app process. It does not require a separate local server.
-- `ollama`: optional fallback for users who intentionally run a locally installed Ollama service with a vision-capable model.
-- `external`: uses the existing external analyzer command field.
-- `pillow`: uses only dependency-light visual and technical metadata.
+`install.bat` installs `requirements.txt` into the Python runtime used by the Windows shortcut. Current normal dependencies are Pillow and pystray.
 
-Recommended non-server setup on the Windows worker machine:
+Manual install:
 
-1. Open the `AI metadata` tab.
-2. Press `Install local AI module`.
-3. Restart the app after the installation finishes.
-4. Set `Vision backend` to `transformers` or leave it on `auto`.
-5. Keep the default caption model `Salesforce/blip-image-captioning-base` and detector model `google/owlvit-base-patch32`, or replace them with local Hugging Face model paths.
-6. Keep the default object label list, or add gallery-specific labels that matter for your photos.
+```bat
+python -m pip install --user -r requirements.txt
+```
 
-The optional local AI module installs large packages, mainly `torch`, `torchvision`, and `transformers`. They are not part of `requirements.txt` because normal uploading and the Pillow fallback should stay lightweight. First semantic run may download model files into the normal local Hugging Face cache for the current Windows user.
+If Pillow is unavailable:
 
-The Transformers backend stores internal fields such as `caption`, `objects`, `detections`, `labels`, and `internal_description`. These fields are added to the searchable text. They still do not replace the user-written photo title or description.
+- watch-folder uploads still work;
+- manual imports still work with server-created thumbnails;
+- local preview/thumbnail capability is reported accurately.
 
-Ollama remains available if you prefer it, but it does need a locally running Ollama service. For a no-server workflow, use `transformers`.
+If pystray is unavailable, the desktop window still works without tray hiding.
 
-### Reprocessing already analyzed gallery photos
+## Source organization
 
-If existing images were already processed with the previous Pillow-only metadata, you now have two options:
+`gallery_watch_upload.pyw` remains the compatibility launcher and currently retains legacy integration code while redesign services are extracted incrementally.
 
-- Change the AI metadata tab's model version, for example from `1` to `semantic-1`, before starting the worker. The server treats a model/version change as a new generation target.
-- Open the gallery admin editor, go to the `API` tab, and press `Force AI metadata regeneration`. This removes stored internal AI metadata and old queue rows for images in that gallery branch, then immediately queues fresh jobs for the same known model generation. The next AI worker poll will claim them.
+Testable redesign services live under:
 
-The force-regeneration action only resets server rows and prepares queue jobs. Heavy analysis still runs on the Windows app. The AI tab now keeps normal controls visible and places tuning fields under `Show advanced AI settings`.
+```text
+winapp/uploader/
+  config.py
+  diagnostics.py
+  discovery.py
+  media.py
+  models.py
+  state_store.py
+```
+
+This keeps versioned persistence, ZIP safety, media capability detection, job models, and diagnostic redaction independent from Tkinter while preserving the existing launcher and deployment workflow.
+
+## Verification
+
+Compile all Windows uploader Python files:
+
+```bat
+python -m py_compile winapp\gallery_watch_upload.pyw winapp\uploader\*.py winapp\tests\*.py
+```
+
+Run the deterministic redesign tests from repository root:
+
+```bat
+python -m unittest discover -s winapp\tests -v
+```
+
+The tests do not require a live gallery. They cover configuration/state migration, redaction, URL normalization, file stability, dedup/retry state, ZIP safety and cleanup, HEIC/DNG capability behavior, durable jobs, pause/cancel controls, SimConnect-unavailable handling, AI shutdown isolation, and tray callback scheduling.
+
+For a release build, also smoke-test on Windows with the real target gallery, tray, local thumbnail runtime, optional SimConnect, and any intentionally enabled AI backend.

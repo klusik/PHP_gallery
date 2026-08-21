@@ -971,7 +971,30 @@ function gallery_upload_auto_rename_image_ids(int $galleryId, array $imageIds): 
     }
 
     try {
-        return media_renamer_execute_gallery_image_batch($galleryId, $ids, media_renamer_default_pattern());
+        $result = media_renamer_execute_gallery_image_batch($galleryId, $ids, media_renamer_default_pattern());
+        // Upload-time renaming is a policy, not a best-effort cosmetic pass. Any
+        // selected row that remains blocked, missing, or skipped must be surfaced
+        // to API/browser callers instead of looking like a successful zero-rename.
+        $policyFailures = [];
+        foreach ((array) ($result['details'] ?? []) as $detail) {
+            $status = (string) ($detail['status'] ?? '');
+            if (!in_array($status, ['collision', 'missing', 'skipped'], true)) {
+                continue;
+            }
+            $old = trim((string) ($detail['old'] ?? ''));
+            $notes = array_values(array_filter(array_map('strval', (array) ($detail['notes'] ?? [])), static fn (string $note): bool => trim($note) !== ''));
+            $message = 'Automatic upload rename could not enforce the filename policy'
+                . ($old !== '' ? ' for ' . $old : '')
+                . '.';
+            if ($notes) {
+                $message .= ' ' . implode(' ', $notes);
+            }
+            $policyFailures[] = $message;
+        }
+        if ($policyFailures) {
+            $result['failures'] = array_values(array_unique(array_merge((array) ($result['failures'] ?? []), $policyFailures)));
+        }
+        return $result;
     } catch (Throwable $exception) {
         if (function_exists('Gallery\\Services\\admin_log_event')) {
             admin_log_event('warning', 'gallery.upload_auto_rename_failed', 'Upload-time media renaming failed after images were stored.', [

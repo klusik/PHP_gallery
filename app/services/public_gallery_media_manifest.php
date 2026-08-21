@@ -38,6 +38,7 @@ namespace Gallery\Services;
 
 use Throwable;
 use function Gallery\Core\db;
+use function Gallery\Core\image_public_asset_url_with_version;
 use function Gallery\Core\image_public_media_url;
 use function Gallery\Core\image_public_thumbnail_url;
 use function Gallery\Core\image_public_url;
@@ -191,13 +192,13 @@ function public_gallery_media_manifest_media_url(array $image, array $gallery, s
 {
     if (public_path_schema_ready()) {
         if (url_rewrite_should_emit_clean_urls()) {
-            return $imageBaseUrl . '/media';
+            return image_public_asset_url_with_version($imageBaseUrl . '/media', $image);
         }
         return image_public_media_url($image, $gallery);
     }
 
     unset($gallery);
-    return url_for('media', ['id' => (int) ($image['id'] ?? 0)]);
+    return image_public_asset_url_with_version(url_for('media', ['id' => (int) ($image['id'] ?? 0)]), $image);
 }
 
 /**
@@ -216,7 +217,7 @@ function public_gallery_media_manifest_variant_url(array $image, array $gallery,
     $format = $format === 'webp' ? 'webp' : 'jpg';
     if (public_path_schema_ready()) {
         if (url_rewrite_should_emit_clean_urls()) {
-            return $imageBaseUrl . '/thumb-' . (int) $size . '.' . $format;
+            return image_public_asset_url_with_version($imageBaseUrl . '/thumb-' . (int) $size . '.' . $format, $image);
         }
         return image_public_thumbnail_url($image, $gallery, (int) $size, $format);
     }

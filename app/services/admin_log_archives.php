@@ -1188,12 +1188,22 @@ function admin_log_archive_finish_response_before_background_work(): void
     }
     if (function_exists('litespeed_finish_request')) {
         @litespeed_finish_request();
-        return;
     }
-    while (ob_get_level() > 0) {
-        @ob_end_flush();
+}
+
+/**
+ * Return whether this runtime can detach archive maintenance from the visible
+ * browser response.
+ *
+ * @return bool True when background shutdown work will not keep the client request open.
+ */
+function admin_log_archive_request_trigger_can_detach_response(): bool
+{
+    if (PHP_SAPI === 'cli') {
+        return false;
     }
-    @flush();
+
+    return function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request');
 }
 
 /**
@@ -1209,6 +1219,7 @@ function admin_log_archive_register_request_trigger(string $page): void
     $method = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
     if (!in_array($method, ['GET', 'HEAD'], true)
         || !admin_log_archive_route_allows_request_trigger($page)
+        || !admin_log_archive_request_trigger_can_detach_response()
         || !admin_log_archive_request_trigger_due()) {
         return;
     }
