@@ -49,8 +49,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.92.3}
-\newcommand{\manualdate}{20 August 2026}
+\newcommand{\version}{0.93}
+\newcommand{\manualdate}{21 August 2026}
 
 \hypersetup{
   colorlinks=true,
@@ -152,8 +152,12 @@ The~manual is~organized around work that an~owner actually performs. The~early s
 
 For~a~new installation, begin with Section~\ref{sec:first-hour}. Collection planning is~covered in~Section~\ref{sec:planning}; routine gallery and~photo editing is~in~Sections~\ref{sec:create-edit-gallery} and~\ref{sec:photo-workflow}. Section~\ref{sec:audiences} is~useful before publishing because it~compares several common audience types. The~contents and~index are~intended for~jumping directly to~a~setting or~workflow when the~site is~already in~use.
 
-\subsection{What is~new in~Version 0.92.3}
-\index{Version 0.92.3}
+\subsection{What is~new in~Version 0.93}
+\index{Version 0.93}
+
+Version~0.93 is~an~operational performance and~reliability release. Request-triggered work now uses bounded budgets and~safer background scheduling, while request-local database caching, media concurrency controls, cache invalidation, and~resumable updater paths reduce avoidable latency without weakening access or~mutation policy. The~release also adds Admin test-run diagnostics and~improves maintenance, upload auto-renaming, inventory confirmation, and~clean public-home routing.
+
+The~Windows companion uploader receives a~redesigned import and~activity workflow with~safer state handling, ZIP/file discovery, capability-aware HEIC/HEIF/DNG reporting, progress and~recovery controls, modular worker services, and~preserved tray, SimConnect, local-thumbnail, and~optional AI behavior. Existing public galleries, Smart Galleries, lightbox zoom, progressive thumbnails, viewer accounts, protected media, and~no-JavaScript behavior remain supported.
 
 Version~0.92.3 makes~progressive thumbnail sharpening the~default renderer for~public photo cards. The~browser still receives a~usable server-rendered small image immediately, then may~activate larger bounded candidates near~the~viewport. The~responsive renderer remains permanently supported and~can~be~selected for~compatibility or~diagnostics; the~Admin labels now describe progressive as~the~default and~responsive as~the~legacy-compatible option.
 
