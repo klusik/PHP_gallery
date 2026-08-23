@@ -88,10 +88,10 @@ $root = Resolve-Path "$PSScriptRoot\.."
 # Variable $excludeDirs stores this scripts working value.
 $excludeDirs = @('.git', 'cache', 'logs', 'tmp', 'deploy')
 # Variable $excludeDirNamesAnywhere stores folder names skipped wherever they appear in the repository tree.
-$excludeDirNamesAnywhere = @('__pycache__')
+$excludeDirNamesAnywhere = @('__pycache__', '.pytest_cache', 'tests', 'http_monitor_logs')
 if (-not $includeMedia) { $excludeDirs += 'galleries' }
 # Variable $excludeFiles stores this scripts working value.
-$excludeFiles = @('.gitignore', 'config.php', '.env', '*.log', '*.tmp')
+$excludeFiles = @('.gitignore', 'config.php', '.env', '*.log', '*.tmp', '*.pyc')
 # Variable $alwaysIncludeRelatives stores deploy paths that must stay packaged even as filters evolve.
 $alwaysIncludeRelatives = @('app')
 
@@ -121,8 +121,19 @@ function Should-Skip($Path) {
     $relative = Get-DeployRelativePath $Path
     # Variable $portableRelative stores this scripts working value.
     $portableRelative = $relative.Replace('\', '/')
-    if ($portableRelative -eq 'cache/.htaccess' -or $portableRelative -eq 'galleries/.htaccess') {
+    $protectedDeployPaths = @(
+        'cache/.htaccess',
+        'galleries/.htaccess',
+        'data/admin-log-archives/.htaccess'
+    )
+    if ($protectedDeployPaths -contains $portableRelative) {
         return $false
+    }
+
+    # Runtime/user data must never be copied into a deployment package. The protected
+    # admin-log archive .htaccess above is the only data/ exception.
+    if ($portableRelative -eq 'data' -or $portableRelative.StartsWith('data/')) {
+        return $true
     }
     foreach ($alwaysIncludeRelative in $alwaysIncludeRelatives) {
         # Variable $portableAlwaysInclude stores one deploy path that must not be filtered out.

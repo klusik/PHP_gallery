@@ -59,9 +59,9 @@ deploy_target=""
 # Array exclude_dirs stores folders skipped by deployment.
 exclude_dirs=(".git" "cache" "logs" "tmp" "deploy")
 # Array exclude_dir_names_anywhere stores folder names skipped wherever they appear in the repository tree.
-exclude_dir_names_anywhere=("__pycache__")
+exclude_dir_names_anywhere=("__pycache__" ".pytest_cache" "tests" "http_monitor_logs")
 # Array exclude_files stores file name patterns skipped by deployment.
-exclude_files=(".gitignore" "config.php" ".env" "*.log" "*.tmp")
+exclude_files=(".gitignore" "config.php" ".env" "*.log" "*.tmp" "*.pyc")
 # Array always_include_relatives stores deploy paths that must stay packaged even as filters evolve.
 always_include_relatives=("app")
 
@@ -215,8 +215,16 @@ should_skip() {
     # Variable portable_relative stores this scripts working value.
     local portable_relative="${relative//\\//}"
 
-    if [[ "$portable_relative" == "cache/.htaccess" || "$portable_relative" == "galleries/.htaccess" ]]; then
+    if [[ "$portable_relative" == "cache/.htaccess" \
+        || "$portable_relative" == "galleries/.htaccess" \
+        || "$portable_relative" == "data/admin-log-archives/.htaccess" ]]; then
         return 1
+    fi
+
+    # Runtime/user data must never be copied into a deployment package. The protected
+    # admin-log archive .htaccess above is the only data/ exception.
+    if [[ "$portable_relative" == "data" || "$portable_relative" == "data/"* ]]; then
+        return 0
     fi
 
     if is_always_included "$portable_relative"; then
