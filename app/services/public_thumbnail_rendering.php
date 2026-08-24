@@ -76,7 +76,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-08-20
+ *   2026-08-24
  */
 
 declare(strict_types=1);
@@ -242,10 +242,21 @@ function public_thumbnail_render_picture_html(
     $rendererMarkerAttributes = 'data-public-thumbnail-rendering-mode="' . $effectiveMode . '" data-public-thumbnail-card-index="' . max(0, $cardIndex) . '"';
 
     if ($effectiveMode === PUBLIC_THUMBNAIL_RENDERING_PROGRESSIVE) {
+        // $progressiveSrcsetSizes exposes every already-generated derivative to the aspect-aware client selector.
+        // No thumbnail generation policy changes here; gallery/image thumbnail bounds still filter unavailable sizes.
+        // The full application provides thumbnail_sizes() from the thumbnail service. The focused standalone
+        // renderer contract may load this file without that service, so keep the canonical production sizes as a
+        // bounded fallback instead of allowing diagnostics/tests to fail with an undefined helper.
+        $availableThumbnailSizes = function_exists(__NAMESPACE__ . '\\thumbnail_sizes')
+            ? thumbnail_sizes()
+            : [300, 600, 800, 960, 1280, 1600];
+        $progressiveSrcsetSizes = array_values(array_unique(array_merge($srcsetSizes, $availableThumbnailSizes)));
+        sort($progressiveSrcsetSizes, SORT_NUMERIC);
+
         return thumbnail_progressive_picture_html(
             $image,
             $fallbackSize,
-            $srcsetSizes,
+            $progressiveSrcsetSizes,
             $sizes,
             $sizes,
             $alt,

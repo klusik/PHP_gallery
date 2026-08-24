@@ -13,7 +13,7 @@
  *   - Observe visible and near-visible thumbnails without starting distant upgrades
  *   - Wait for the small thumbnail to load before scheduling non-critical sharpening work
  *   - Bound larger-image preload/decode work through a two-slot priority queue
- *   - Measure actual rendered card width and account for a capped device pixel ratio
+ *   - Measure actual rendered card geometry and source aspect ratio while accounting for a capped device pixel ratio
  *   - Reconsider relevant cards after resize without duplicate queue entries or downgrade loops
  *   - Tear down observers, idle work, listeners, and queued jobs when public markup is reinitialized
  *
@@ -75,13 +75,13 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-08-09
+ *   2026-08-24
  */
 
 import {
     progressiveThumbnailRequiredWidth,
     upgradeProgressiveThumbnailImage,
-} from './progressive-thumbnail-upgrade.js?v=20260809-progressive-thumbnail-renderer';
+} from './progressive-thumbnail-upgrade.js?v=20260824-aspect-aware-thumbnail-selection';
 
 export const PROGRESSIVE_THUMBNAIL_UPGRADE_CONCURRENCY = 2;
 const PROGRESSIVE_THUMBNAIL_NEAR_ROOT_MARGIN = '720px 0px';
@@ -395,8 +395,23 @@ async function runProgressiveThumbnailUpgrade(image) {
     }
 
     const card = image.closest('.image-stage') || image.closest('.image-card') || image;
-    const renderedWidth = card.getBoundingClientRect().width || image.getBoundingClientRect().width;
-    const requiredWidth = progressiveThumbnailRequiredWidth(renderedWidth, window.devicePixelRatio || 1);
+    // $imageRect stores the actual CSS box used by object-fit: cover, including mobile square-card overrides.
+    const imageRect = image.getBoundingClientRect();
+    // $cardRect stores a safe geometry fallback when the image box is temporarily unavailable during layout.
+    const cardRect = card.getBoundingClientRect();
+    const renderedWidth = imageRect.width || cardRect.width;
+    const renderedHeight = imageRect.height || cardRect.height;
+    // $sourceWidth and $sourceHeight come from server-rendered orientation-aware intrinsic dimensions, not the small derivative.
+    const sourceWidth = Number.parseInt(image.getAttribute('width') || '0', 10) || 0;
+    const sourceHeight = Number.parseInt(image.getAttribute('height') || '0', 10) || 0;
+    const requiredWidth = progressiveThumbnailRequiredWidth(
+        renderedWidth,
+        window.devicePixelRatio || 1,
+        undefined,
+        renderedHeight,
+        sourceWidth,
+        sourceHeight
+    );
     if (requiredWidth <= 0) {
         return;
     }

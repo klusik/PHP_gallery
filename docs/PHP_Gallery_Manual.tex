@@ -49,8 +49,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.93}
-\newcommand{\manualdate}{21 August 2026}
+\newcommand{\version}{0.93.1}
+\newcommand{\manualdate}{24 August 2026}
 
 \hypersetup{
   colorlinks=true,
@@ -152,8 +152,12 @@ The~manual is~organized around work that an~owner actually performs. The~early s
 
 For~a~new installation, begin with Section~\ref{sec:first-hour}. Collection planning is~covered in~Section~\ref{sec:planning}; routine gallery and~photo editing is~in~Sections~\ref{sec:create-edit-gallery} and~\ref{sec:photo-workflow}. Section~\ref{sec:audiences} is~useful before publishing because it~compares several common audience types. The~contents and~index are~intended for~jumping directly to~a~setting or~workflow when the~site is~already in~use.
 
-\subsection{What is~new in~Version 0.93}
-\index{Version 0.93}
+\subsection{What is~new in~Version 0.93.1}
+\index{Version 0.93.1}
+
+Version~0.93.1 is~a~focused progressive-thumbnail and~traffic-diagnostics patch on~top of~Version~0.93. Progressive thumbnail dimension detection now remains consistent across the~server model, browser upgrade decisions, diagnostics, and~cache-busted gallery integrations. The~existing responsive and~progressive renderer contracts, access checks, and~no-JavaScript behavior remain unchanged.
+
+The~Windows HTTP monitor now supports scheduled short, medium, and~long traffic cycles, sentinel and~discovered-page comparisons, per-address checks, protocol-aware curl snapshots, bounded result retention, durable reports, and~consistent live ZIP creation. Deployment helpers exclude monitor logs, tests, Python caches, and~runtime data while preserving required protection files. These tools remain diagnostic and~do not change gallery content or~authentication state.
 
 Version~0.93 is~an~operational performance and~reliability release. Request-triggered work now uses bounded budgets and~safer background scheduling, while request-local database caching, media concurrency controls, cache invalidation, and~resumable updater paths reduce avoidable latency without weakening access or~mutation policy. The~release also adds Admin test-run diagnostics and~improves maintenance, upload auto-renaming, inventory confirmation, and~clean public-home routing.
 

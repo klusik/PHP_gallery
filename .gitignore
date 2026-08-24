@@ -18,3 +18,4 @@ __pycache__/
 *.pyc
 *.pyo
 Trace*
+winapp/http_monitor_logs/*.*
