@@ -75,7 +75,7 @@
 
 const PUBLIC_THUMBNAIL_DIAGNOSTIC_SELECTOR = 'img[data-public-thumbnail-rendering-mode]';
 const PUBLIC_THUMBNAIL_DIAGNOSTIC_REFRESH_MS = 120;
-const PUBLIC_THUMBNAIL_PROGRESSIVE_MODULE_URL = './progressive-thumbnail-renderer.js?v=20260809-progressive-thumbnail-renderer';
+const PUBLIC_THUMBNAIL_PROGRESSIVE_MODULE_URL = './progressive-thumbnail-renderer.js?v=20260824-aspect-aware-thumbnail-selection';
 
 /** Resolve one possibly relative media URL into the absolute form used by Resource Timing. */
 function publicThumbnailDiagnosticAbsoluteUrl(value) {

@@ -128,7 +128,7 @@ function setupProgressiveThumbnailRendererWhenPresent() {
     if (!document.querySelector('img[data-progressive-thumbnail]')) {
         return;
     }
-    import('./gallery-modules/progressive-thumbnail-renderer.js?v=20260809-progressive-thumbnail-renderer')
+    import('./gallery-modules/progressive-thumbnail-renderer.js?v=20260824-aspect-aware-thumbnail-selection')
         .then((module) => module.setupProgressiveThumbnailRenderer?.())
         .catch(() => {});
 }

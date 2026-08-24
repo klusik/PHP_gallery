@@ -10,7 +10,7 @@
  *
  * Responsibilities:
  *   - Parse inert width-descriptor candidate lists rendered by PHP
- *   - Convert rendered CSS width and device pixel ratio into a bounded source-width requirement
+ *   - Convert rendered card geometry, source aspect ratio, and device pixel ratio into a bounded max-side requirement
  *   - Select the smallest adequate candidate without downgrading an already active image
  *   - Preload and decode a browser-supported replacement before changing visible picture/srcset attributes
  *   - Preserve the visible small image when a replacement fails or the lifecycle is aborted
@@ -45,7 +45,7 @@
  *   This module is optional. Without JavaScript, the small src/srcset emitted by PHP remains visible and linked.
  *
  * Performance rationale:
- *   Candidate choice uses actual rendered card width and caps device pixel ratio so very dense displays do not
+ *   Candidate choice uses actual rendered card geometry and source aspect ratio, then caps device pixel ratio so very dense displays do not
  *   automatically demand disproportionate derivatives. Decode-before-swap prevents the small image from being
  *   replaced by an empty or partially decoded larger request.
  *
@@ -67,7 +67,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-08-09
+ *   2026-08-24
  */
 
 export const PROGRESSIVE_THUMBNAIL_DEVICE_PIXEL_RATIO_CAP = 2;
@@ -100,17 +100,28 @@ export function parseProgressiveThumbnailCandidates(srcset) {
 }
 
 /**
- * Calculate the source-pixel width required for the rendered card while bounding high-density display cost.
+ * Calculate the generated max-side thumbnail size required for the rendered card while bounding high-density display cost.
+ *
+ * Generated thumbnail size names describe their maximum side, not necessarily their pixel width. Public photo cards use
+ * object-fit: cover, so panoramic and portrait images can need a larger max-side derivative than the rendered CSS width
+ * alone suggests. When source and rendered geometry are known, calculate the cover scale and require enough pixels on
+ * the source image's limiting dimension. Missing geometry preserves the previous width-only behavior.
  *
  * @param {number} renderedWidth Measured CSS pixel width of the card image area.
  * @param {number} devicePixelRatio Current device pixel ratio.
  * @param {number} cap Maximum device pixel ratio considered for thumbnail selection.
- * @return {number} Required source width in pixels, rounded up, or zero for an invalid measurement.
+ * @param {number} renderedHeight Measured CSS pixel height of the card image area.
+ * @param {number} sourceWidth Orientation-aware source image width from server-rendered metadata.
+ * @param {number} sourceHeight Orientation-aware source image height from server-rendered metadata.
+ * @return {number} Required generated max-side size in pixels, rounded up, or zero for an invalid width measurement.
  */
 export function progressiveThumbnailRequiredWidth(
     renderedWidth,
     devicePixelRatio = 1,
-    cap = PROGRESSIVE_THUMBNAIL_DEVICE_PIXEL_RATIO_CAP
+    cap = PROGRESSIVE_THUMBNAIL_DEVICE_PIXEL_RATIO_CAP,
+    renderedHeight = 0,
+    sourceWidth = 0,
+    sourceHeight = 0
 ) {
     const cssWidth = Number(renderedWidth);
     if (!Number.isFinite(cssWidth) || cssWidth <= 0) {
@@ -121,7 +132,22 @@ export function progressiveThumbnailRequiredWidth(
     const rawCap = Number(cap);
     const safeRatio = Number.isFinite(rawRatio) && rawRatio > 0 ? rawRatio : 1;
     const safeCap = Number.isFinite(rawCap) && rawCap > 0 ? rawCap : PROGRESSIVE_THUMBNAIL_DEVICE_PIXEL_RATIO_CAP;
-    return Math.ceil(cssWidth * Math.min(safeRatio, safeCap));
+    const effectiveRatio = Math.min(safeRatio, safeCap);
+
+    const cssHeight = Number(renderedHeight);
+    const intrinsicWidth = Number(sourceWidth);
+    const intrinsicHeight = Number(sourceHeight);
+    if (
+        !Number.isFinite(cssHeight) || cssHeight <= 0
+        || !Number.isFinite(intrinsicWidth) || intrinsicWidth <= 0
+        || !Number.isFinite(intrinsicHeight) || intrinsicHeight <= 0
+    ) {
+        return Math.ceil(cssWidth * effectiveRatio);
+    }
+
+    const coverScale = Math.max(cssWidth / intrinsicWidth, cssHeight / intrinsicHeight);
+    const sourceMaxSide = Math.max(intrinsicWidth, intrinsicHeight);
+    return Math.ceil(Math.min(sourceMaxSide, sourceMaxSide * coverScale * effectiveRatio));
 }
 
 /**
