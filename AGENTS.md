@@ -74,6 +74,9 @@ browser matrix in `TESTING.md`. Preserve browser Ctrl/Command-wheel zoom, 100% m
 strip/carousel controls, slideshow reset behavior, authorized media access, and the no-JavaScript fallback.
 
 ## LaTeX Manual Typography
+
+The administrator manual is permanent product documentation, not a release-news feed. Do not add version-by-version “What is new”, patch-note, or release-history sections near the beginning of `docs/PHP_Gallery_Manual.tex`. Put release history in `PATCH_NOTES.md`; if a future manual genuinely needs historical material, add it deliberately as a documented appendix rather than inserting news before the usage guide. Before release, confirm the manual proceeds from its purpose/reading guide into the usage guide without a release-news block.
+
 For human-readable prose in `docs/PHP_Gallery_Manual.tex`, do not leave short function words stranded at the end of a rendered line. Use LaTeX non-breaking spaces (`~`) to bind them to the following word or visible phrase. Apply this throughout the manual, including headings, captions, list text, footnotes, and explanatory table text.
 
 As a general rule, bind ordinary standalone one-letter words (normally `a` and `I`) and ordinary two-letter words forward. Also bind common three-letter function words where appropriate, including `the`, `and`, `for`, `but`, `nor`, `yet`, `are`, `was`, `can`, `may`, `has`, `had`, `did`, `not`, `per`, and `via`. Apply the rule case-insensitively in prose and chain bindings naturally, for example `a~thing`, `the~thing`, `on~the~menu`, and `The~gallery needs to~be~formatted like this.` Keep all-uppercase technical abbreviations and operators such as `UI`, `IP`, `OS`, `DB`, `ID`, `AND`, `OR`, and `NOT` untouched regardless of length.

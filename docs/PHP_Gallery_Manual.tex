@@ -152,53 +152,9 @@ The~manual is~organized around work that an~owner actually performs. The~early s
 
 For~a~new installation, begin with Section~\ref{sec:first-hour}. Collection planning is~covered in~Section~\ref{sec:planning}; routine gallery and~photo editing is~in~Sections~\ref{sec:create-edit-gallery} and~\ref{sec:photo-workflow}. Section~\ref{sec:audiences} is~useful before publishing because it~compares several common audience types. The~contents and~index are~intended for~jumping directly to~a~setting or~workflow when the~site is~already in~use.
 
-\subsection{What is~new in~Version 0.93.1}
-\index{Version 0.93.1}
 
-Version~0.93.1 is~a~focused progressive-thumbnail and~traffic-diagnostics patch on~top of~Version~0.93. Progressive thumbnail dimension detection now remains consistent across the~server model, browser upgrade decisions, diagnostics, and~cache-busted gallery integrations. The~existing responsive and~progressive renderer contracts, access checks, and~no-JavaScript behavior remain unchanged.
 
-The~Windows HTTP monitor now supports scheduled short, medium, and~long traffic cycles, sentinel and~discovered-page comparisons, per-address checks, protocol-aware curl snapshots, bounded result retention, durable reports, and~consistent live ZIP creation. Deployment helpers exclude monitor logs, tests, Python caches, and~runtime data while preserving required protection files. These tools remain diagnostic and~do not change gallery content or~authentication state.
 
-Version~0.93 is~an~operational performance and~reliability release. Request-triggered work now uses bounded budgets and~safer background scheduling, while request-local database caching, media concurrency controls, cache invalidation, and~resumable updater paths reduce avoidable latency without weakening access or~mutation policy. The~release also adds Admin test-run diagnostics and~improves maintenance, upload auto-renaming, inventory confirmation, and~clean public-home routing.
-
-The~Windows companion uploader receives a~redesigned import and~activity workflow with~safer state handling, ZIP/file discovery, capability-aware HEIC/HEIF/DNG reporting, progress and~recovery controls, modular worker services, and~preserved tray, SimConnect, local-thumbnail, and~optional AI behavior. Existing public galleries, Smart Galleries, lightbox zoom, progressive thumbnails, viewer accounts, protected media, and~no-JavaScript behavior remain supported.
-
-Version~0.92.3 makes~progressive thumbnail sharpening the~default renderer for~public photo cards. The~browser still receives a~usable server-rendered small image immediately, then may~activate larger bounded candidates near~the~viewport. The~responsive renderer remains permanently supported and~can~be~selected for~compatibility or~diagnostics; the~Admin labels now describe progressive as~the~default and~responsive as~the~legacy-compatible option.
-
-The~release adds an~idempotent migration that normalizes the~missing public-thumbnail-rendering setting to~progressive without changing existing explicit selections. Smart Gallery presentation, Admin normalization, diagnostic wording, cache-busted browser modules, and~regression tests all use the~same two permanent renderer identifiers. No~source photographs or~generated derivatives are~moved by~the~migration.
-
-Version~0.92.2 is~a~focused lightbox reliability patch. Detached image requests, decoded-cache entries, preload generations, and~teardown callbacks are~now kept under~a~single ownership lifecycle during rapid navigation, close/reopen cycles, slideshow transitions, and~resource cancellation. Late loads and~decodes cannot repopulate a~newer photograph's state after~the~viewer has~moved on. The~existing zoom, progressive quality, fullscreen, map, favourite, protected-media, and~no-JavaScript behavior remains unchanged.
-
-The~release adds regression coverage for~metadata/resource cleanup and~requires no~database migration or~filesystem change. Existing Version~0.92.1 installations can~use the~normal updater.
-
-Version~0.92.1 adds a~bounded public-gallery benchmark for~administrators and~hardens the~viewer resource diagnostics introduced with~Version~0.92. The~benchmark runs isolated anonymous previews, measures server render counters and~browser navigation timing, and~can~collect authorized protected-media diagnostics without exposing private content. Results include bounded transfer, cache, decode, and~resource-lifecycle information suitable for~before/after comparisons on~shared hosting.
-
-The~benchmark state is~session-scoped, expires automatically, and~is~kept separate from~ordinary visitor sessions. Browser work is~processed in~limited batches with~clear completion and~failure states. Lightbox preview caching, detached-image cancellation, stale preload generations, slideshow preloading, and~protected-media session-lock release remain access-safe and~are~covered by~focused regression contracts. No~new database migration is~required for~this benchmark refinement.
-
-Version~0.92 adds the~invite-only multi-user viewer system on~top of~the~complete Version~0.91--0.91.3 foundation. Administrators can~create viewer accounts directly, issue and~revoke invitations, suspend or~restore accounts, force sign-out everywhere, and~keep the~viewer subsystem disabled through the~master feature switch until it~is~ready. Invitees verify their~email and~choose a~password; open public signup remains intentionally unavailable.
-
-The~release also hardens the~lightbox and~protected-media resource lifecycle. The~viewer keeps a~smaller decoded preview neighbourhood, cancels detached image requests during close, navigation, and~teardown, invalidates stale preload generations, removes failed or~aborted cache entries, and~prevents duplicate nearby or~slideshow loads. Slideshow preloading remains limited to~the~next authorized image, while fullscreen changes preserve the~active transition, timer, controls, and~photo identity. Protected thumbnail, media, cover, and~branding responses release the~PHP session lock after authorization and~cache-policy decisions, retaining private cache headers for access-sensitive responses and~immutable public caching only where it~is~safe.
-
-Verified viewers receive a~separate authentication boundary with remember-me credentials, scanner-safe password recovery, recent reauthentication for~sensitive changes, password and~email lifecycle controls, private favourites, ordered private collections, and~one revocable 30-day unlisted read-only collection share. Collection and~favourite references never grant gallery access: source gallery and~media authorization is~re-evaluated for~each rendered item and~share recipient. Registration, login, recovery, and~account actions use adaptive rate limits, anti-automation challenges, generic responses, bounded mail behavior, and~security-event recording.
-
-The~release also retains the~0.91.3 slideshow preloading and~fullscreen-transition fixes. Existing gallery access, protected media, Smart Gallery, zoom, responsive, no-JavaScript, and~administrator authentication behavior remains compatible.
-
-Published Smart Galleries can~appear to~anonymous viewers when their parent and~matched images are~accessible, while centralized visibility and~access checks prevent protected content or~counts from~leaking. Administrators can~configure Smart Gallery presentation, thumbnail behavior, placement above or~below normal gallery content, and~deterministic ordering for~multiple attachments.
-
-Smart Gallery relationships reject direct and~indirect cycles and~use bounded runtime evaluation for~legacy malformed data. The~public lightbox retains zoom, progressive quality promotion, fullscreen, map, slideshow, and~access behavior; ordinary arrows move one photograph, while holding Shift moves ten. Backward movement uses stable modular navigation. Existing installations should run the~normal updater so~the~Smart Gallery presentation and~attachment-order migrations are~applied; no~source files are~moved.
-
-\subsection{Version 0.91 foundation}
-\index{Version 0.91}
-
-Version~0.91 adds the~public lightbox zoom and~progressive quality system. Visitors can~use toolbar controls, keyboard shortcuts, wheel or~trackpad input, pointer dragging, and~touch pinch gestures to~inspect photographs between 100\% and~400\%. The~viewer preserves its~existing navigation, fullscreen, map, voting, access, and~no-JavaScript behavior.
-
-The~viewer starts from an~authorized preview and~requests a~sharper browser-displayable source only when the~active photograph needs more pixels. A~translated loading indicator remains visible during transfer and~decode. The~decoded image is~installed with its~existing zoom and~pan state, and~the~compositor is~repainted immediately so~a~fullscreen toggle is~not~needed. Navigation and~close boundaries reject stale work, and~each photograph owns an~independent promotion lifecycle.
-
-The~0.90 Smart Gallery, browser-local ZIP import, and~multilingual title/description foundations remain part of~the~release baseline. Smart Galleries store a~validated rule tree and~evaluate it~against photographs in~accessible physical galleries; no~source file is~copied simply because it~matches a~rule. Rules may~contain nested AND, OR, and~NOT groups, and~the~same Smart Gallery can~be~placed at~the~root or~under several physical galleries. Private editorial ratings remain separate from public votes.
-
-ZIP import is~handled in~the~browser for~ordinary stored or~Deflate archives. Supported images are~added to~the~existing preparation queue, while invalid or~unsupported members are~skipped without uploading the~archive itself to~PHP. Gallery and~photo editors can~store reviewed English, Czech, German, and~Swedish variants of~titles and~descriptions. Language selection changes presentation text only; slugs, paths, filenames, access policy, and~the~source fields keep their existing meaning.
-
-The~release adds four ordered migrations for~Smart Gallery definitions, editorial ratings, placements, and~multilingual content. Existing installations use the~normal updater and~migration runner. Smart Gallery membership is~evaluated rather than materialized, and~translated presentation does not~require images or~metadata to~be~rebuilt.
 
 \subsection{How to~use this manual}
 \index{manual!how to use}
