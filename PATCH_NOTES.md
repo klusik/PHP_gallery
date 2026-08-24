@@ -1,5 +1,36 @@
 # Patch notes
 
+## Version 0.93.1
+
+Version 0.93.1 is a focused progressive-thumbnail and Windows traffic-diagnostics patch on top of Version 0.93. It preserves the complete Version 0.93 performance, updater, uploader, viewer, Smart Gallery, zoom, protected-media, and deployment foundation.
+
+  ### Highlights
+
+  #### Progressive thumbnail correction
+
+  - Corrected progressive thumbnail dimension detection and candidate-size computation across the server rendering model and browser upgrade path.
+  - Kept progressive and responsive renderer identifiers, cache-busting, diagnostics, access checks, semantic markup, and no-JavaScript behavior unchanged.
+  - Updated gallery lifecycle integrations so detected and promoted dimensions remain consistent during progressive loading.
+
+  #### Windows HTTP traffic monitor
+
+  - Added configurable short, medium, and long idle schedules for repeatable traffic diagnosis.
+  - Added sentinel/discovered-page cold and warm comparisons, per-address validation with Host/SNI preservation, richer 404/SEO-guard classification, and protocol-aware curl snapshots for available HTTP versions.
+  - Added bounded result retention, incremental durable reports, and consistent live ZIP creation without retaining full request bodies in memory.
+  - Kept the monitor read-only: it generates only safe GET requests, does not import credentials, and redacts cookie/token values in diagnostics.
+
+  #### Deployment safety
+
+  - Updated PowerShell and shell deployment helpers to exclude tests, monitor logs, Python caches, `.pyc` files, and runtime/user data while preserving required protection files.
+  - Retained explicit manifest generation and verification as a release requirement.
+
+  ### Upgrade and release details
+
+  - No database migration is required for Version 0.93.1.
+  - No source photographs, generated derivatives, viewer preferences, or account data are changed by this patch.
+  - Updated runtime/version metadata, README, architecture/database/testing documentation, administrator manual and PDF, patch notes, and the core integrity manifest.
+  - Verified progressive renderer contracts, the complete PHP regression suite, focused benchmark/runtime checks, syntax validation, manifest generation/checking, and `git diff --check`.
+
 ## Version 0.93
 
 Version 0.93 is an operational performance, reliability, diagnostics, and Windows uploader release following Version 0.92.3. It reduces avoidable request work while preserving the existing security, access-control, mutation, viewer, Smart Gallery, thumbnail, and updater contracts.
