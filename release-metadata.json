@@ -529,6 +529,11 @@
                    "released_label":  "24. August 2026, 20:00",
                    "tag":  "v_0.93.1"
                 },
+    "0.93.2": {
+                   "released_at":  "2026-08-26 20:00:00",
+                   "released_label":  "26. August 2026, 20:00",
+                   "tag":  "v_0.93.2"
+                },
     "0.93": {
                    "released_at":  "2026-08-21 20:00:00",
                    "released_label":  "21. August 2026, 20:00",
