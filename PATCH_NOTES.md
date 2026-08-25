@@ -1,5 +1,57 @@
 # Patch notes
 
+## Version 0.93.2
+
+Version 0.93.2 is a focused media-renaming and Windows traffic-diagnostics refinement on top of Version 0.93.1. It makes automatic media names follow the current gallery-title context while preserving explicit physical-path naming, and adds a durable grouped HTML anomaly report that makes monitor findings easier to review without changing the monitor's safe read-only behavior.
+
+  ### Highlights
+
+  #### Gallery-aware automatic media naming
+
+  - Updated the default media-renamer pattern to use the normalized `{gallery_context}` value, so automatically generated filenames reflect the current gallery title when it is available.
+  - Kept parent folder segments in the automatic context while replacing only the current gallery leaf with its display title, making later gallery-title changes visible to availability checks and dry runs.
+  - Added the separate `{gallery_path}` placeholder for the normalized physical folder hierarchy, preserving explicit patterns that need the actual on-disk path rather than the display context.
+  - Kept existing `{gallery_title}`, `{photo_title}`, sequence, original-name, and image-ID placeholders compatible; the new context is opt-in for custom patterns and the default pattern only.
+  - Preserved collision checks, safe slugification, extension handling, dry-run behavior, and source-file safety during renaming.
+
+  #### Windows monitor anomaly reporting
+
+  - Added a standalone `anomalies/report.html` report to each monitor run, containing only primary anomalies instead of cluttering the report with ordinary successful requests or diagnostic probes.
+  - Grouped forced-address probes and immediate anomaly rechecks beneath their originating request, including compact outcome, delay, HTTP, TLS, timeout, reset, and slow-request context.
+  - Added readable classification for transport failures, generic Apache 404 responses, static-asset failures, slow TTFB, and slow total request time while retaining the underlying JSONL, CSV, and event-log records.
+  - Preserved bounded, deployment-safe diagnostics: the monitor remains GET-only and read-only, keeps Host/SNI behavior for address probes, and continues to avoid credentials, tokens, request bodies, and unbounded report content.
+
+  ### Technical Details
+
+  #### Backend and media renaming
+
+  - Updated `app/services/media_renamer.php` with separate gallery-context and physical-path normalization helpers and the `{gallery_context}` replacement.
+  - Kept `{gallery_path}` mapped to the normalized physical gallery hierarchy so existing explicit custom patterns retain their documented meaning.
+
+  #### Windows tooling
+
+  - Updated `winapp/gallery_http_monitor.py` to version `1.2.1` and added grouped anomaly-report generation through `RunLogger.write_anomaly_report()`.
+  - Kept report values bounded and human-readable without exposing raw private paths, credentials, cookies, or tokens.
+
+  #### Documentation, metadata, and tests
+
+  - Updated `app/bootstrap.php`, `README.md`, `release-metadata.json`, and the administrator manual to Version 0.93.2.
+  - Rebuilt the indexed `docs/PHP_Gallery_Manual.pdf` and regenerated `app/core-manifest.json` after the final release edits.
+  - Retained the focused media-renamer and monitor regression coverage and verified the complete PHP suite, syntax checks, manifest freshness, and documentation build.
+
+  ### Upgrade and User Impact
+
+  #### For administrators
+
+  - Automatic media renaming now follows a renamed gallery's display title in the default naming context; custom patterns using `{gallery_path}` continue to use the physical hierarchy.
+  - Windows monitor runs now provide a compact HTML anomaly summary for quick review alongside the existing detailed machine-readable records.
+  - No database migration, source-photo migration, or generated-thumbnail rebuild is required for Version 0.93.2.
+
+  #### Compatibility and safety
+
+  - Existing media-renamer collision, authorization, mutation, and source-file safety rules remain unchanged.
+  - The monitor remains read-only and deployment-safe, and normal updater/migration workflows remain the supported upgrade path.
+
 ## Version 0.93.1
 
 Version 0.93.1 is a focused progressive-thumbnail and Windows traffic-diagnostics patch on top of Version 0.93. It preserves the complete Version 0.93 performance, updater, uploader, viewer, Smart Gallery, zoom, protected-media, and deployment foundation.
