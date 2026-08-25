@@ -74,7 +74,7 @@ from typing import Any, Iterable
 from urllib.parse import parse_qsl, quote, urljoin, urlsplit, urlunsplit
 
 
-VERSION = "1.2.0"
+VERSION = "1.2.1"
 DEFAULT_HOURS = 0.0
 DEFAULT_IDLE_SECONDS = 120.0
 DEFAULT_MEDIUM_IDLE_SECONDS = 300.0
@@ -633,6 +633,7 @@ class RunLogger:
         self.run_dir.mkdir(parents=True, exist_ok=False)
         self.anomaly_dir = self.run_dir / "anomalies"
         self.anomaly_dir.mkdir()
+        self.anomaly_report_path = self.anomaly_dir / "report.html"
         self.jsonl_path = self.run_dir / "requests.jsonl"
         self.csv_path = self.run_dir / "requests.csv"
         self.events_path = self.run_dir / "events.log"
@@ -806,6 +807,255 @@ class RunLogger:
                     )
         return directory
 
+    @staticmethod
+    def _report_status_text(result: dict[str, Any]) -> str:
+        """Return a compact human-readable outcome for an anomaly report cell."""
+
+        error_type = str(result.get("error_type") or "")
+        error_message = str(result.get("error_message") or "").strip()
+        status = result.get("status")
+        not_found_class = str(result.get("not_found_class") or "")
+        ttfb = result.get("ttfb_seconds")
+        total = result.get("total_seconds")
+        url = str(result.get("url") or "")
+        path = urlsplit(url).path.lower()
+        extension = Path(path).suffix.lower()
+
+        if error_type:
+            if error_type in {"TimeoutError", "SSLError", "SSLEOFError"} and result.get("tcp_seconds") is not None:
+                label = f"TLS/transport error: {error_type}"
+            elif error_type == "ConnectionResetError":
+                label = "Connection reset by remote host"
+            else:
+                label = f"Transport error: {error_type}"
+            if error_message:
+                label += f" ({error_message})"
+            if total is not None:
+                label += f" after {float(total):.2f} s"
+            return label
+
+        if status is not None and int(status) >= 400:
+            if not_found_class == "generic_plain_not_found" and int(status) == 404:
+                prefix = "Static asset → " if extension in ASSET_EXTENSIONS else ""
+                label = f"{prefix}Generic Apache 404"
+            else:
+                reason = str(result.get("reason") or "").strip()
+                label = f"HTTP {status}" + (f" {reason}" if reason else "")
+            if ttfb is not None:
+                label += f", TTFB {float(ttfb) * 1000.0:.1f} ms"
+            return label
+
+        reasons = [str(item) for item in (result.get("anomaly_reasons") or [])]
+        slow_ttfb = next((item for item in reasons if item.startswith("slow_ttfb:")), "")
+        slow_total = next((item for item in reasons if item.startswith("slow_total:")), "")
+        if slow_ttfb:
+            label = f"Slow TTFB: {float(ttfb):.3f} s" if ttfb is not None else slow_ttfb.replace("slow_ttfb:", "Slow TTFB: ")
+            if status is not None:
+                label += f" (HTTP {status})"
+            return label
+        if slow_total:
+            label = f"Slow total time: {float(total):.3f} s" if total is not None else slow_total.replace("slow_total:", "Slow total: ")
+            if status is not None:
+                label += f" (HTTP {status})"
+            return label
+        return "Anomaly"
+
+    @staticmethod
+    def _report_probe_outcome(result: dict[str, Any]) -> str:
+        """Return a terse outcome for one forced-IP or immediate-recheck probe."""
+
+        ip = str(result.get("forced_ip") or result.get("remote_ip") or "-")
+        if ip.startswith("185.8.237."):
+            ip = "." + ip.rsplit(".", 1)[-1]
+        error_type = str(result.get("error_type") or "")
+        status = result.get("status")
+        if error_type:
+            if error_type == "ConnectionResetError":
+                outcome = "RESET"
+            elif "Timeout" in error_type:
+                outcome = "TIMEOUT"
+            elif error_type in {"SSLError", "SSLEOFError"}:
+                outcome = "TLS ERROR"
+            else:
+                outcome = error_type
+        elif status is None:
+            outcome = "NO STATUS"
+        else:
+            outcome = str(status)
+        return f"{ip} → {outcome}"
+
+    @staticmethod
+    def _report_timestamp(value: str) -> datetime | None:
+        """Parse one monitor ISO timestamp for relative-delay formatting."""
+
+        if not value:
+            return None
+        try:
+            return datetime.fromisoformat(value)
+        except ValueError:
+            return None
+
+    @classmethod
+    def _report_immediate_check(cls, primary: dict[str, Any], probes: list[dict[str, Any]]) -> str:
+        """Summarize forced-address probes and the immediate recheck for one primary anomaly."""
+
+        if not probes:
+            return "No immediate diagnostic probe recorded."
+        probes = sorted(probes, key=lambda item: int(item.get("request_id") or 0))
+        primary_time = cls._report_timestamp(str(primary.get("timestamp_local") or ""))
+        pieces: list[str] = []
+        first = True
+        for probe in probes:
+            phase = str(probe.get("phase") or "")
+            outcome = cls._report_probe_outcome(probe)
+            if first:
+                probe_time = cls._report_timestamp(str(probe.get("timestamp_local") or ""))
+                if primary_time is not None and probe_time is not None:
+                    delay_ms = max(0.0, (probe_time - primary_time).total_seconds() * 1000.0)
+                    if delay_ms < 2000.0:
+                        pieces.append(f"after {delay_ms:.0f} ms: {outcome}")
+                    else:
+                        pieces.append(outcome)
+                else:
+                    pieces.append(outcome)
+                first = False
+                continue
+            if phase.startswith("anomaly_recheck:"):
+                pieces.append(f"recheck {outcome}")
+            else:
+                pieces.append(outcome)
+        return "; ".join(pieces)
+
+    def write_anomaly_report(self) -> Path | None:
+        """Regenerate a standalone HTML table containing only primary monitor anomalies.
+
+        Normal successful requests and diagnostic forced/recheck requests are not
+        shown as independent rows.  Forced-address probes and the immediate
+        recheck are folded into the final column of their originating anomaly.
+        Known Gallery SEO-guard 404s are intentionally omitted.
+        """
+
+        with self._lock:
+            if not self.jsonl_path.exists():
+                return None
+            records: list[dict[str, Any]] = []
+            with self.jsonl_path.open("r", encoding="utf-8") as handle:
+                for line in handle:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        records.append(json.loads(line))
+                    except json.JSONDecodeError:
+                        continue
+
+            primaries: list[dict[str, Any]] = []
+            probes_by_primary: dict[int, list[dict[str, Any]]] = {}
+            for record in records:
+                phase = str(record.get("phase") or "")
+                request_id = int(record.get("request_id") or 0)
+                if phase.startswith("anomaly_forced_ip:"):
+                    try:
+                        parent = int(phase.split(":", 1)[1].split(":", 1)[0])
+                    except ValueError:
+                        parent = int(record.get("parent_request_id") or 0)
+                    if parent:
+                        probes_by_primary.setdefault(parent, []).append(record)
+                    continue
+                if phase.startswith("anomaly_recheck:"):
+                    match = re.match(r"anomaly_recheck:(\d+)", phase)
+                    if match:
+                        probes_by_primary.setdefault(int(match.group(1)), []).append(record)
+                    continue
+
+                reasons = record.get("anomaly_reasons") or []
+                if not reasons:
+                    continue
+                if str(record.get("not_found_class") or "") == "likely_gallery_seo_guard_404":
+                    continue
+                primaries.append(record)
+
+            if not primaries:
+                self.anomaly_report_path.unlink(missing_ok=True)
+                return None
+
+            primaries.sort(key=lambda item: int(item.get("request_id") or 0))
+            rows: list[str] = []
+            for primary in primaries:
+                request_id = int(primary.get("request_id") or 0)
+                timestamp = str(primary.get("timestamp_local") or "")
+                time_text = timestamp
+                parsed = self._report_timestamp(timestamp)
+                if parsed is not None:
+                    time_text = parsed.strftime("%H:%M:%S.") + f"{parsed.microsecond // 1000:03d}"
+                url = str(primary.get("url") or "")
+                remote_ip = str(primary.get("remote_ip") or primary.get("forced_ip") or "-")
+                what = self._report_status_text(primary)
+                check = self._report_immediate_check(primary, probes_by_primary.get(request_id, []))
+                rows.append(
+                    "<tr>"
+                    f"<td class=\"time\"><strong>{html.escape(time_text)}</strong></td>"
+                    f"<td class=\"url\"><a href=\"{html.escape(url, quote=True)}\"><code>{html.escape(url)}</code></a></td>"
+                    f"<td class=\"ip\"><code>{html.escape(remote_ip)}</code></td>"
+                    f"<td>{html.escape(what)}</td>"
+                    f"<td>{html.escape(check)}</td>"
+                    "</tr>"
+                )
+
+            generated = now_local_iso()
+            first_timestamp = str(primaries[0].get("timestamp_local") or "")
+            run_date = first_timestamp[:10] if len(first_timestamp) >= 10 else ""
+            document = f"""<!doctype html>
+<html lang=\"en\">
+<head>
+<meta charset=\"utf-8\">
+<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
+<title>PHP Gallery HTTP Monitor - Anomalies</title>
+<style>
+:root {{ color-scheme: light; font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; }}
+body {{ margin: 0; background: #f5f6f8; color: #1f2937; }}
+main {{ max-width: 1500px; margin: 32px auto; padding: 0 20px 40px; }}
+header {{ margin-bottom: 18px; }}
+h1 {{ margin: 0 0 8px; font-size: 24px; }}
+p {{ margin: 5px 0; color: #4b5563; }}
+.meta {{ font-size: 13px; }}
+.table-wrap {{ overflow-x: auto; background: #fff; border: 1px solid #dfe3e8; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.05); }}
+table {{ width: 100%; border-collapse: collapse; min-width: 1100px; }}
+th, td {{ padding: 11px 12px; text-align: left; vertical-align: top; border-bottom: 1px solid #e8ebef; }}
+th {{ position: sticky; top: 0; background: #eef1f4; font-size: 13px; white-space: nowrap; }}
+td {{ font-size: 13px; line-height: 1.45; }}
+tr:last-child td {{ border-bottom: 0; }}
+.time, .ip {{ white-space: nowrap; }}
+.url {{ min-width: 440px; max-width: 680px; overflow-wrap: anywhere; }}
+code {{ font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }}
+a {{ color: #155eef; text-decoration: none; }}
+a:hover {{ text-decoration: underline; }}
+.note {{ margin-top: 12px; font-size: 12px; color: #6b7280; }}
+</style>
+</head>
+<body>
+<main>
+<header>
+<h1>PHP Gallery HTTP Monitor - anomaly report</h1>
+<p><strong>{len(primaries)}</strong> primary anomalies{f' on {html.escape(run_date)}' if run_date else ''}.</p>
+<p class=\"meta\">Generated: {html.escape(generated)} · Monitor version: {html.escape(VERSION)}</p>
+</header>
+<div class=\"table-wrap\">
+<table>
+<thead><tr><th>Čas CEST</th><th>URL</th><th>WEDOS IP</th><th>Co se stalo</th><th>Bezprostřední kontrola</th></tr></thead>
+<tbody>
+{''.join(rows)}
+</tbody>
+</table>
+</div>
+<p class=\"note\">Normal HTTP 200 requests are omitted unless they themselves triggered a slow-request anomaly. Diagnostic forced-IP and immediate-recheck requests are folded into the last column instead of appearing as separate rows. Known Gallery SEO-guard 404 responses are omitted.</p>
+</main>
+</body>
+</html>
+"""
+            self._write_text_durable(self.anomaly_report_path, document)
+            return self.anomaly_report_path
+
     def _create_zip_locked(self, destination: Path) -> Path:
         """Create an atomic ZIP snapshot while normal request writers are paused by the logger lock."""
 
@@ -821,6 +1071,7 @@ class RunLogger:
     def create_archive(self) -> Path:
         """Create one upload-friendly ZIP containing the complete monitor run."""
 
+        self.write_anomaly_report()
         destination = Path(str(self.run_dir) + ".zip")
         with self._lock:
             return self._create_zip_locked(destination)
@@ -907,6 +1158,7 @@ class RunLogger:
                 f"  CSV: {self.csv_path}",
                 f"  Events: {self.events_path}",
                 f"  Anomalies: {self.anomaly_dir}",
+                f"  Anomaly HTML: {self.anomaly_report_path}",
                 f"  Live ZIP: {self.live_snapshot_path}",
             ]
         )
@@ -1308,6 +1560,13 @@ class HttpMonitor:
                         self.capture_curl_snapshots(result, anomaly_path)
                     if not phase.startswith("anomaly_recheck"):
                         self.anomaly_recheck(result, cycle)
+                    try:
+                        self.logger.write_anomaly_report()
+                    except Exception as exc:
+                        self.logger.event(
+                            f"Anomaly HTML report update failed request={result.request_id}: "
+                            f"{type(exc).__name__}: {exc}"
+                        )
             if result.error_type:
                 result.final_url_after_redirects = current
                 return result, chain
@@ -1980,6 +2239,8 @@ def main(argv: list[str] | None = None) -> int:
     console(f"Full JSONL: {logger.jsonl_path}")
     console(f"Compact CSV: {logger.csv_path}")
     console(f"Anomaly captures: {logger.anomaly_dir}")
+    if logger.anomaly_report_path.exists():
+        console(f"Anomaly HTML report: {logger.anomaly_report_path}")
     if archive_path is not None:
         console(f"Upload-friendly ZIP: {archive_path}")
     return 130 if interrupted else 0
