@@ -30,7 +30,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-06-02
+ *   2026-08-26
  */
 
 declare(strict_types=1);
@@ -711,7 +711,12 @@ function media_renamer_path_key(string $path): string
 }
 
 /**
- * Build the normalized context prefix from the gallery folder hierarchy.
+ * Build the normalized automatic filename context from the gallery hierarchy and title.
+ *
+ * Parent folders remain part of the context, while the current gallery leaf uses the
+ * display title when one is available. This keeps the default automatic naming stable
+ * for normally created galleries, where folder name and title describe the same leaf,
+ * and makes a later gallery-title rename visible to availability checks and dry runs.
  *
  * @param array $gallery Gallery row or gallery data.
  * @return string Text result for the caller.
@@ -719,13 +724,34 @@ function media_renamer_path_key(string $path): string
 function media_renamer_gallery_context_base(array $gallery): string
 {
     $folderPath = normalize_relative_path((string) ($gallery['folder_path'] ?? ''));
-    $base = media_renamer_ascii_slug(str_replace('/', '_', $folderPath));
-    if ($base !== '') {
-        return $base;
+    $segments = $folderPath !== '' ? explode('/', $folderPath) : [];
+    $title = media_renamer_ascii_slug((string) ($gallery['title'] ?? ''));
+
+    if ($title !== '') {
+        if ($segments) {
+            array_pop($segments);
+        }
+        $parentPath = media_renamer_ascii_slug(implode('_', $segments));
+        return $parentPath !== '' ? $parentPath . '_' . $title : $title;
     }
 
-    $title = media_renamer_ascii_slug((string) ($gallery['title'] ?? ''));
-    return $title !== '' ? $title : 'gallery';
+    $pathBase = media_renamer_gallery_path_base($gallery);
+    return $pathBase !== '' ? $pathBase : 'gallery';
+}
+
+/**
+ * Build the normalized physical gallery path placeholder value.
+ *
+ * This remains separate from the automatic filename context so an explicit
+ * {gallery_path} custom pattern continues to mean the actual on-disk hierarchy.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @return string Text result for the caller.
+ */
+function media_renamer_gallery_path_base(array $gallery): string
+{
+    $folderPath = normalize_relative_path((string) ($gallery['folder_path'] ?? ''));
+    return media_renamer_ascii_slug(str_replace('/', '_', $folderPath));
 }
 
 /**
@@ -776,7 +802,7 @@ function media_renamer_safe_extension(string $filename): string
  */
 function media_renamer_default_pattern(): string
 {
-    return '{gallery_path}_{seq4}';
+    return '{gallery_context}_{seq4}';
 }
 
 /**
@@ -798,7 +824,7 @@ function media_renamer_normalize_pattern(string $pattern): string
  */
 function media_renamer_pattern_help_text(): string
 {
-    return '{gallery_path}, {gallery_title}, {photo_title}, {old_name}, {old_stem}, {image_id}, {seq}, {seq2}, {seq3}, {seq4}, {seq5}';
+    return '{gallery_context}, {gallery_path}, {gallery_title}, {photo_title}, {old_name}, {old_stem}, {image_id}, {seq}, {seq2}, {seq3}, {seq4}, {seq5}';
 }
 
 /**
@@ -819,7 +845,8 @@ function media_renamer_pattern_stem(string $pattern, string $contextBase, int $s
     $photoTitle = trim((string) ($image['title'] ?? ''));
     $galleryTitle = trim((string) ($gallery['title'] ?? ''));
     $replacements = [
-        '{gallery_path}' => $contextBase,
+        '{gallery_context}' => $contextBase,
+        '{gallery_path}' => media_renamer_gallery_path_base($gallery),
         '{gallery_title}' => media_renamer_ascii_slug($galleryTitle),
         '{photo_title}' => media_renamer_ascii_slug($photoTitle),
         '{old_name}' => media_renamer_ascii_slug($oldFilename),
