@@ -85,6 +85,9 @@ function cms_prime_read_only_media_schema_cache(string $page): void
         || !function_exists('Gallery\\Services\\schema_inspection_prime_table_snapshots')) {
         return;
     }
+    if ($page === 'link_favicon_asset') {
+        return;
+    }
 
     \Gallery\Services\schema_inspection_prime_table_snapshots([
         'galleries',

@@ -136,12 +136,15 @@ function view_render_content_translation_suggestion_tool(string $entityType, arr
 function view_render_gallery_description_formatting_hint(): void
 {
     echo '<details class="gallery-description-format-help"><summary><span aria-hidden="true">&#128161;</span><span>' . e(t('admin.gallery_editor.description_format_hints', 'Formatting hints')) . '</span></summary><div class="gallery-description-format-help-popover">';
-    echo '<p>' . e(t('admin.gallery_editor.description_format_intro', 'Basic Markdown is supported in public gallery descriptions.')) . '</p>';
+    echo '<p>' . e(t('admin.gallery_editor.description_format_intro', 'Basic formatting is supported in public gallery descriptions.')) . '</p>';
     echo '<ul>';
     echo '<li><code>**' . e(t('admin.gallery_editor.description_format_bold_word', 'bold')) . '**</code> ' . e(t('admin.gallery_editor.description_format_bold', 'makes bold text')) . '</li>';
     echo '<li><code>*' . e(t('admin.gallery_editor.description_format_italic_word', 'italic')) . '*</code> ' . e(t('admin.gallery_editor.description_format_italic', 'makes italic text')) . '</li>';
     echo '<li><code>`code`</code> ' . e(t('admin.gallery_editor.description_format_code', 'uses inline code styling')) . '</li>';
-    echo '<li><code>[Link](https://example.com)</code> ' . e(t('admin.gallery_editor.description_format_link', 'creates a safe external link')) . '</li>';
+    echo '<li><code>[url]www.example.com[/url]</code> / <code>[link]https://example.com[/link]</code> ' . e(t('admin.gallery_editor.description_format_link', 'creates a clickable external link; URL and LINK tags are case-insensitive')) . '</li>';
+    echo '<li><code>[url=https://example.com]' . e(t('admin.gallery_editor.description_format_link_word', 'Link text')) . '[/url]</code> ' . e(t('admin.gallery_editor.description_format_link_named', 'creates a link with custom text; LINK= works the same way')) . '</li>';
+    echo '<li><code>[' . e(t('admin.gallery_editor.description_format_link_word', 'Link text')) . '](https://example.com)</code> ' . e(t('admin.gallery_editor.description_format_link_markdown', 'is the equivalent Markdown syntax')) . '</li>';
+    echo '<li>' . e(t('admin.gallery_editor.description_format_link_icon', 'Well-known sites such as YouTube, Facebook, X/Twitter, Instagram, Wikipedia, LinkedIn, GitHub, Reddit, TikTok, Discord, Twitch, and Vimeo use bundled local icons. For other HTTP(S) links, saving the gallery attempts to fetch a safe favicon into the shared local cache; when available, it is shown before the link text.')) . '</li>';
     echo '<li>' . e(t('admin.gallery_editor.description_format_newlines', 'A single Enter is preserved as a new line. Empty lines create separate paragraphs.')) . '</li>';
     echo '</ul></div></details>';
 }

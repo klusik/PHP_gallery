@@ -44,6 +44,7 @@ use function Gallery\Services\translation_normalize_language_code;
 use function Gallery\Views\view_browser_i18n_javascript;
 use function Gallery\Services\favicon_path;
 use function Gallery\Services\favicon_safe_size;
+use function Gallery\Services\link_favicon_public_asset;
 use function Gallery\Services\theme_background_asset_url;
 use function Gallery\Services\theme_background_original_path;
 use function Gallery\Services\theme_background_served_path;
@@ -177,6 +178,24 @@ function cms_favicon_asset(): void
     header('Content-Length: ' . (string) filesize($absolute));
     send_asset_cache_control('public, max-age=604800');
     readfile($absolute);
+}
+
+/**
+ * Stream one persistent gallery-description favicon when galleries/ is outside
+ * the active public document root.
+ */
+function cms_link_favicon_asset(): void
+{
+    $asset = link_favicon_public_asset((string) ($_GET['f'] ?? ''));
+    if ($asset === null) {
+        cms_not_found();
+        return;
+    }
+    $path = (string) $asset['path'];
+    header('Content-Type: ' . (string) $asset['mime_type']);
+    header('Content-Length: ' . (string) filesize($path));
+    send_asset_cache_control('public, max-age=31536000, immutable');
+    readfile($path);
 }
 
 /**

@@ -105,7 +105,7 @@ function discover_gallery_candidates(): array
     // Variable $candidates stores this steps working value.
     $candidates = [];
     // Variable $ignoreNames stores this steps working value.
-    $ignoreNames = ['cache', 'thumbs', 'thumbnail', 'thumbnails', 'preview', 'previews'];
+    $ignoreNames = ['cache', 'thumbs', 'thumbnail', 'thumbnails', 'preview', 'previews', '_php-gallery-internal'];
     // Variable $iterator stores this steps working value.
     $iterator = new RecursiveIteratorIterator(
         new RecursiveCallbackFilterIterator(
@@ -201,7 +201,7 @@ function normalize_gallery_sidecar_tags_recursive(): void
                     }
                     // Variable $name stores this steps working value.
                     $name = strtolower($file->getFilename());
-                    return !str_starts_with($name, '.') && !in_array($name, ['cache', 'thumbs', 'thumbnail', 'thumbnails', 'preview', 'previews'], true);
+                    return !str_starts_with($name, '.') && !in_array($name, ['cache', 'thumbs', 'thumbnail', 'thumbnails', 'preview', 'previews', '_php-gallery-internal'], true);
                 }
             )
         );

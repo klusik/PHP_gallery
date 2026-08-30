@@ -55,6 +55,7 @@ function cms_route_is_read_only_media_asset(string $page): bool
         'public_media',
         'gallery_cover_asset',
         'gallery_branding_asset',
+        'link_favicon_asset',
     ], true);
 }
 
