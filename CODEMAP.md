@@ -15,6 +15,7 @@ This file maps features to source files. It is optimized for fast maintenance an
 | Area | Files |
 | --- | --- |
 | Bootstrap coordinator and version constants | `app/bootstrap.php` |
+| Pre-bootstrap fatal handling and updater activation gate | `app/early_runtime.php`, `public/index.php`, `install.php` |
 | Configuration bootstrap | `app/bootstrap/configuration.php` |
 | Request and security-header lifecycle | `app/bootstrap/request.php` |
 | Session lifecycle | `app/bootstrap/session.php` |
@@ -67,7 +68,7 @@ This file maps features to source files. It is optimized for fast maintenance an
 
 | Task | Primary files | Notes |
 | --- | --- | --- |
-| Serve original media | `app/controllers/public_media.php` | Use access checks before streaming. |
+| Serve original media | `app/controllers/public_media.php` | Use access checks before streaming; public immutable URLs carry a stable image revision identity. |
 | Serve thumbnail | `app/controllers/public_media.php` | Calls thumbnail source helpers. |
 | Thumbnail URL/path helpers | `app/services/thumbnail_sources.php` | Central location for generated thumbnail paths. |
 | Thumbnail generation | `app/services/thumbnail_generation.php` | GD/Imagick handling. |

@@ -618,6 +618,10 @@ Use this order for each release so generated integrity data describes the final 
 
 If a local dependency such as PHP, Node, or a TeX tool is unavailable, record the exact blocked command and environment in the handoff. Do not describe the release as fully verified until that command has been run successfully.
 
+### Version 0.94.1 runtime-hardening regression
+
+Run `php tests/version_094_audit_hardening.php` and `php tests/public_media_version_routing_test.php` after changing the root/public rewrite rules, `app/early_runtime.php`, either front controller, updater activation publication, or public media URL generation. With real Apache, verify protected top-level internal trees under both a subdirectory installation and document-root installation return `403` or `404`, while later public slug components with the same words still route normally. Verify uncaught, PDO-style, missing-require, fatal-shutdown, JSON, and already-streaming fixtures with `display_errors=0`; no emergency response may expose a path, trace, SQL, or credential. Simulated activation must return private/no-store `503`, completed state must recover, corrupt state must fail closed, and all temporary marker state must be removed. Public originals must have stable version identities, unchanged payloads, and conditional `ETag`/`304` behavior. Production acceptance also requires `display_errors=0` at the hosting layer.
+
 When checking Admin dashboard performance, verify that opening `?page=admin` does not request `admin_dashboard_maintenance` until `#admin-tab-maintenance` is selected. Then verify that the authenticated JSON response replaces the placeholder, nested maintenance tabs initialize, and direct or no-JavaScript fallback links remain usable.
 
 ### Public Lightbox Zoom Verification

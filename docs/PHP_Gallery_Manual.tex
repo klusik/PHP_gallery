@@ -49,7 +49,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.94}
+\newcommand{\version}{0.94.1}
 \newcommand{\manualdate}{30 August 2026}
 
 \hypersetup{
@@ -1795,6 +1795,10 @@ Stable discovery and~package work are~separate bounded operations. A~discovery r
 
 Before activation, an~administrator can~cancel or~retry a~recoverable job. After activation, the~Admin recovery action can~restore managed application files from~the~saved rollback snapshot, but~file rollback does~not~reverse database migrations. Stable restore, clean reinstall, and~beta installation remain resumable jobs with their own package validation. The~standalone \filepath{reset.php} emergency path is~a~separate recovery tool for~returning to~the~stable branch when the~normal Admin route cannot be~used; it~still requires the~same careful backup and~integrity review.
 
+During the~short activation critical section, a~dependency-free early runtime gate prevents new ordinary requests from~loading a~partially replaced application. Such requests receive a~private, non-cacheable \codeword{503 Service Unavailable} response until activation completion is~durably recorded. The~authenticated update recovery/status path remains available, so~an~interrupted activation can~continue. Corrupt or~incomplete gate state fails closed instead of~presenting the~installation as~healthy.
+
+The~same early runtime boundary converts uncaught and~catchable fatal PHP failures into bounded \codeword{500} responses when PHP can~still control the~response. Production hosting must keep \codeword{display\_errors} disabled; otherwise the~PHP runtime itself may~print warning or~fatal details before application-level handling can~format a~safe response.
+
 \important{Run a~coordinated backup before an~application update. Keep the~backup available until runtime checks, migrations, public galleries, protected access, uploads, and~Admin operations have been verified.}
 
 \subsection{Integrity manifest}
@@ -1817,7 +1821,7 @@ The~following pages describe the~request path used by~the~application. They are~
 \index{controller dispatch}
 \index{request!life cycle}
 
-Ordinary requests enter through \filepath{public/index.php}; the~repository-root \filepath{index.php} is~a~supported compatibility entry point for~other hosting layouts. Both load \filepath{app/bootstrap.php} and~reach the~same request pipeline.
+Ordinary requests enter through \filepath{public/index.php}; the~repository-root \filepath{index.php} is~a~supported compatibility entry point for~other hosting layouts. The~public entry loads \filepath{app/early\_runtime.php} before \filepath{app/bootstrap.php}, then both layouts reach the~same normal request pipeline.
 
 Bootstrap reads local configuration and~establishes the~request context: database access where required, language, session state, security prerequisites, and~shared runtime services. Routing then translates the~incoming URL or~query-style fallback into an~internal route plus parameters such as~a~gallery path, page number, media size, or~share token. Dispatch calls the~controller registered for~that route.
 

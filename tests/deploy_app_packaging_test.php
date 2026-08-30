@@ -20,6 +20,15 @@ if (!str_contains($powershellDeploy, ".Replace('\\', '/')")) {
     $failures[] = 'The PowerShell deploy ZIP must use portable forward-slash entry paths.';
 }
 
+foreach (['*.aux', '*.idx', '*.ilg', '*.ind', '*.out', '*.toc'] as $latexIntermediate) {
+    if (!str_contains($powershellDeploy, "'" . $latexIntermediate . "'")) {
+        $failures[] = 'The PowerShell deploy script must exclude LaTeX intermediate ' . $latexIntermediate . '.';
+    }
+    if (!str_contains($shellDeploy, '"' . $latexIntermediate . '"')) {
+        $failures[] = 'The shell deploy script must exclude LaTeX intermediate ' . $latexIntermediate . '.';
+    }
+}
+
 foreach ([$powershellDeploy, $shellDeploy] as $deploySource) {
     if (stripos($deploySource, 'manifest') !== false
         || str_contains($deploySource, '& php ')
