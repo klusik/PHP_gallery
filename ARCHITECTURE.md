@@ -9,7 +9,7 @@ This document is intended to help future maintainers and AI coding agents unders
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.93.1';
+const CMS_VERSION = '0.94.1';
 ```
 
 Update-related code uses:
@@ -53,6 +53,7 @@ Typical request flow:
 ```text
 browser request
   -> index.php or public/index.php
+  -> app/early_runtime.php
   -> app/bootstrap.php
   -> cms_run()
   -> cms_route_from_request()
@@ -61,6 +62,8 @@ browser request
   -> service functions
   -> view helpers or JSON/file response
 ```
+
+`app/early_runtime.php` is intentionally dependency-free and executes before the normal bootstrap. It installs bounded uncaught/fatal error semantics and checks the updater activation marker. While active files are being published, ordinary new requests fail closed with a private, non-cacheable `503`; authenticated updater recovery/status requests remain available. Once PHP can no longer change committed headers or streamed bytes, the handler does not append an HTML error body. Production must disable `display_errors`, because host-level warning/fatal display can occur before application error formatting.
 
 ### Installer and recovery entry points
 
@@ -983,6 +986,8 @@ The Admin renders synchronized durable job cards in both the Status and Advanced
 ### Activation critical section
 
 `activate` is intentionally the only non-yielding stage. Its frozen plan contains only files proven to differ during preflight. It performs no network access, ZIP extraction, package-wide verification, rollback construction, or database migration. Each prepared file is copied to a sibling temporary file, hash-checked, and committed with `rename()`. Dependencies are committed before bootstrap and public entry points. On replay, a destination whose SHA-256 already equals the prepared file is treated as completed, so a killed activation can continue without rewriting work already committed. Obsolete managed paths are removed only after prepared replacements have been processed.
+
+Immediately before publication, the updater atomically writes `cache/updates/activation.json`. The early runtime checks this marker before loading the mutable application graph and returns `503 Service Unavailable` with `Cache-Control: no-store` while activation is incomplete. Corrupt or incomplete marker state fails closed. The gate clears only after durable activation completion is recorded, while the authenticated updater recovery/status path remains reachable so an interrupted activation can continue.
 
 A portable PHP application on ordinary shared hosting cannot atomically exchange an entire non-symlink directory tree. Therefore a process termination inside activation can still expose a short mixed-version tree. The rollback snapshot is already complete before that critical section begins, and the same activation stage is retry-safe, but eliminating this final window would require a different deployment architecture such as versioned release directories plus an atomic symlink/document-root switch, which many shared hosts do not provide.
 

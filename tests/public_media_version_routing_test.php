@@ -5,6 +5,7 @@
 declare(strict_types=1);
 
 namespace Gallery\Services {
+    /** Return whether this fixture should emit clean public URLs. */
     function url_rewrite_should_emit_clean_urls(): bool
     {
         return !empty($GLOBALS['php_gallery_test_clean_urls']);
@@ -12,6 +13,7 @@ namespace Gallery\Services {
 }
 
 namespace Gallery\Core {
+    /** Return a deterministic slug suitable for this isolated URL fixture. */
     function slugify(string $value): string
     {
         $value = strtolower(trim($value));
@@ -19,16 +21,19 @@ namespace Gallery\Core {
         return trim($value, '-') ?: 'item';
     }
 
+    /** Encode a slash-delimited public path one segment at a time. */
     function public_path_segment(string $path): string
     {
         return implode('/', array_map('rawurlencode', array_filter(explode('/', trim($path, '/')), static fn (string $part): bool => $part !== '')));
     }
 
+    /** Return the fixed public origin used by this isolated URL fixture. */
     function public_base_url(): string
     {
         return 'https://gallery.example.test';
     }
 
+    /** Build the fixture's query-style fallback URL. */
     function url_for(string $page, array $params = []): string
     {
         return '/index.php?' . http_build_query(['page' => $page] + $params, '', '&', PHP_QUERY_RFC3986);

@@ -91,7 +91,7 @@ $excludeDirs = @('.git', 'cache', 'logs', 'tmp', 'deploy')
 $excludeDirNamesAnywhere = @('__pycache__', '.pytest_cache', 'tests', 'http_monitor_logs')
 if (-not $includeMedia) { $excludeDirs += 'galleries' }
 # Variable $excludeFiles stores this scripts working value.
-$excludeFiles = @('.gitignore', 'config.php', '.env', '*.log', '*.tmp', '*.pyc')
+$excludeFiles = @('.gitignore', 'config.php', '.env', '*.log', '*.tmp', '*.pyc', '*.aux', '*.idx', '*.ilg', '*.ind', '*.out', '*.toc')
 # Variable $alwaysIncludeRelatives stores deploy paths that must stay packaged even as filters evolve.
 $alwaysIncludeRelatives = @('app')
 

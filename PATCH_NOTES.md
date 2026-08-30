@@ -1,5 +1,66 @@
 # Patch notes
 
+## Version 0.94.1
+
+Version 0.94.1 hardens request handling and release activation after the Version 0.94 runtime and routing audit. Internal application trees are consistently protected in subdirectory deployments, public original-media URLs carry stable cache identities, unexpected PHP failures return bounded server-error responses, and updater activation fails new requests closed until the active file set is coherent.
+
+  ### Highlights
+
+  #### Safer hosting and routing boundaries
+
+  - Fixed Apache protection for top-level internal directories when PHP Gallery is installed below a path such as `/Galerie/`, while preserving normal public routes whose later slug components contain words such as `app`.
+  - Added matching defense-in-depth protection to `public/.htaccess` and retained the explicit `.well-known` exception.
+  - Added an early runtime boundary that returns safe `500` responses for uncaught or catchable fatal PHP failures when response headers remain controllable.
+
+  #### Coherent updater activation
+
+  - Added a durable activation marker before active application files are replaced.
+  - Returned private, non-cacheable `503 Service Unavailable` responses to new ordinary requests during activation, while keeping authenticated updater recovery/status access available.
+  - Made corrupt or incomplete activation state fail closed and delayed marker removal until activation completion was durably recorded.
+
+  #### Stable immutable media
+
+  - Added canonical stable version identities to public full/original media URLs emitted by gallery pages, Smart Galleries, lightbox data, thumbnail bundles, and public media manifests.
+  - Preserved identical media bytes across canonical and legacy query routes while retaining `ETag` and conditional `304 Not Modified` behavior.
+
+  ### Technical Details
+
+  #### Backend
+
+  - Added dependency-free early failure and activation handling in `app/early_runtime.php`, loaded from `public/index.php` and `install.php` before the normal bootstrap.
+  - Updated `app/services/updates_jobs.php` to create, validate, recover, and clear `cache/updates/activation.json` around the non-yielding activation stage.
+  - Updated `.htaccess` and `public/.htaccess` to apply protected-tree rules in Apache per-directory rewrite context instead of relying on an origin-anchored redirect expression.
+  - Updated public media URL callers in `app/controllers/gallery_lightbox.php`, `app/controllers/public_gallery_lightbox.php`, `app/controllers/public_gallery_page.php`, `app/controllers/smart_galleries.php`, `app/services/public_gallery_media_manifest.php`, and `app/services/thumbnail_bundles.php`.
+  - Updated `scripts/deploy.ps1` and `scripts/deploy.sh` to exclude disposable LaTeX build intermediates from release packages.
+  - Required production hosts to keep `display_errors` disabled so PHP cannot print runtime details before the bounded emergency handler responds.
+
+  #### Database
+
+  - Added no migration and made no schema or stored-data change in Version 0.94.1.
+
+  #### Frontend
+
+  - Added no JavaScript or CSS dependency and preserved existing gallery, lightbox, and Admin interactions.
+
+  #### Tests
+
+  - Added `tests/version_094_audit_hardening.php` with focused contracts for rewrite protection, early `500` semantics, JSON failures, streaming safety, and activation-gate recovery.
+  - Added harmless runtime fixtures under `tests/fixtures/` for uncaught exceptions, PDO-style failures, missing requirements, fatal shutdown, JSON errors, conditional files, and already-committed streaming responses.
+  - Added `tests/public_media_version_routing_test.php` for stable media revision identities, canonical/legacy payload equivalence, private-cache policy, and revision changes when media identity changes.
+  - Extended `tests/deploy_app_packaging_test.php` to enforce the LaTeX-intermediate exclusion policy in both deployment helpers.
+
+  ### User Impact
+
+  #### For visitors
+
+  - Reduced the chance of seeing a partially activated release and made public original-image caching safe across media replacements.
+  - Preserved existing public URLs, gallery navigation, thumbnails, originals, and lightbox behavior.
+
+  #### For administrators
+
+  - Improved update recovery semantics without changing the normal update workflow.
+  - Required no database migration or content rewrite; production hosting should be verified with `display_errors=0` before deployment.
+
 ## Version 0.94
 
 Version 0.94 improves gallery descriptions with safe, recognizable external links. Administrators can use Markdown or compact link tags, visitors see bundled brand symbols for well-known services and locally cached favicons for other public sites, and the complete retrieval path remains bounded and isolated from public-page rendering.
