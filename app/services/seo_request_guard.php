@@ -185,6 +185,7 @@ function seo_request_guard_allowed_parameters_for_page(string $page): array
         'theme_background_asset' => ['variant', 'v'],
         'theme_branding_asset' => ['kind', 'v'],
         'favicon_asset' => ['s', 'v'],
+        'link_favicon_asset' => ['f'],
         'theme_css' => ['v'],
         'browser_i18n' => ['scope', 'lang', 'v'],
         'download_gallery' => ['id', 'token', 'share'],

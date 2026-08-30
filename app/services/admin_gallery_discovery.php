@@ -827,7 +827,7 @@ function admin_gallery_discovery_should_skip_directory(SplFileInfo $entry): bool
  */
 function admin_gallery_discovery_ignored_directory_names(): array
 {
-    return ['cache', 'thumbs', 'thumbnail', 'thumbnails', 'preview', 'previews'];
+    return ['cache', 'thumbs', 'thumbnail', 'thumbnails', 'preview', 'previews', '_php-gallery-internal'];
 }
 
 /**

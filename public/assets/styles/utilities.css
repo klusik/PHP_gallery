@@ -546,6 +546,19 @@ body.public-reorder-active {
     font-size: 0.88em;
 }
 
+.public-page .gallery-description-external-link .gallery-description-link-icon {
+    display: inline-block;
+    width: 1em;
+    height: 1em;
+    margin-right: 0.28em;
+    fill: currentColor;
+    vertical-align: -0.12em;
+}
+
+.public-page .gallery-description-external-link img.gallery-description-link-icon {
+    object-fit: contain;
+}
+
 .public-page .hero-description {
     max-width: min(84ch, 100%);
     margin-top: 0.15rem;

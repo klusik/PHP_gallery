@@ -2,7 +2,7 @@
 
 A modern PHP 8.0+ gallery CMS designed for ordinary shared hosting. The application uses the filesystem as the authoritative source for gallery structure, while storing all metadata, access rules, votes, user accounts, and audit logs in MySQL or MariaDB.
 
-**Current Version:** 0.93.2
+**Current Version:** 0.94
 
 **Key Benefit:** Deploy in minutes on shared hosting. No npm, no Composer, no framework overhead. Just PHP + MySQL.
 
@@ -14,7 +14,7 @@ A modern PHP 8.0+ gallery CMS designed for ordinary shared hosting. The applicat
 - **Gallery discovery** - Automatically detect and import new folders
 - **Manual creation** - Create empty gallery folders from the admin interface
 - **Bulk operations** - Rename, delete, move, reorder, or change visibility for multiple galleries at once
-- **Gallery metadata** - Title, description, optional date range, cover image, custom slug
+- **Gallery metadata** - Title, description, optional date range, cover image, custom slug, and safe external links with local brand icons or cached site favicons
 - **Folder management** - Moving galleries physically relocates the folder tree on disk
 
 ### Image Management

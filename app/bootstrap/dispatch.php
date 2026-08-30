@@ -73,6 +73,7 @@ function cms_dispatch_page(string $page): void
         'theme_background_asset' => '\\Gallery\\Controllers\\cms_theme_background_asset',
         'theme_branding_asset' => '\\Gallery\\Controllers\\cms_theme_branding_asset',
         'favicon_asset' => '\\Gallery\\Controllers\\cms_favicon_asset',
+        'link_favicon_asset' => '\\Gallery\\Controllers\\cms_link_favicon_asset',
         'vote' => '\\Gallery\\Controllers\\cms_vote',
         'theme_css' => '\\Gallery\\Controllers\\cms_theme_css',
         'browser_i18n' => '\\Gallery\\Controllers\\cms_browser_i18n',

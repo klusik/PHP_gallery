@@ -136,6 +136,7 @@ use function Gallery\Services\gallery_shows_filenames;
 use function Gallery\Services\gallery_visibility_storage_value;
 use function Gallery\Services\gallery_voting_schema_ready;
 use function Gallery\Services\likely_gallery_destination_id;
+use function Gallery\Services\link_favicon_refresh_gallery;
 use function Gallery\Services\media_renamer_default_pattern;
 use function Gallery\Services\media_renamer_execute_gallery;
 use function Gallery\Services\media_renamer_normalize_pattern;
@@ -868,6 +869,12 @@ function admin_save_gallery_from_input(array $gallery, array $input, array $file
     $gallery = find_gallery($galleryId, true) ?: $gallery;
     if ($gallery) {
         write_gallery_sidecar($gallery);
+    }
+    // Cache unknown-site favicons after the authoritative gallery and translation rows are saved.
+    // This best-effort cosmetic fetch must never make the gallery mutation fail.
+    try {
+        link_favicon_refresh_gallery($galleryId);
+    } catch (Throwable) {
     }
     // $notice stores an intermediate value used by the surrounding gallery workflow.
     $notice = t('admin.gallery_editor.notice_saved', 'Gallery saved.');
