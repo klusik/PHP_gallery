@@ -1,6 +1,6 @@
 # PHP Gallery Database Documentation
 
-This document describes the database schema used by PHP Gallery as of application version 0.93.1. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
+This document describes the database schema used by PHP Gallery as of application version 0.94. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
 
 ## Database Engine
 
@@ -86,6 +86,7 @@ Current migration sequence:
 | `202608180005_viewer_invitation_admin_management.php` | Adds nullable administrator-visible `viewer_invitations.target_email` metadata while retaining the existing HMAC email fingerprint as invitation authorization authority. |
 | `202608180006_viewer_admin_account_management.php` | Adds `viewer_accounts.must_change_password` with a default of `0`, allowing administrator-provisioned temporary passwords to be replaced before a normal viewer principal is established while preserving existing account login behavior. |
 | `202608200001_viewer_registration_verification_tokens.php` | Adds bounded child verification authorities for explicit registration resend without replacing the existing Phase 4.1 primary verification token. Stores only token hashes and cascades with the owning staged registration request. |
+| `202608300001_link_favicon_cache.php` | Adds hostname-keyed metadata for bounded gallery-description favicon discovery, including success/failure state, validated cached-file metadata, and retry timing. |
 
 ## Entity Relationship Overview
 
@@ -507,7 +508,10 @@ Phase 10 mutation policy:
 The final capability set is shown below. Metadata-organizer capture-date grouping
 also uses a narrow internal structured check for `images.exif_taken_at`; it is not a
 separate System Health card because it is a derivative consumer of the EXIF metadata
-surface rather than an independently configured feature.
+surface rather than an independently configured feature. Gallery-description favicon
+storage similarly uses the internal `presentation.link_favicon_cache` capability:
+confirmed missing storage omits the icon cache, while unknown inspection state omits
+and diagnoses the cosmetic operation without treating the failure as proof of absence.
 
 The final capability set is:
 
@@ -813,6 +817,18 @@ Stores hashed gallery-scoped API upload tokens.
 | `created_at` | Creation timestamp. |
 | `last_used_at` | Last successful use. |
 | `revoked_at` | Revocation timestamp. |
+
+## Gallery Description Favicon Cache
+
+### `link_favicon_cache`
+
+Stores one bounded favicon-discovery result per normalized hostname. `status` is
+`ok`, `missing`, `failed`, or `blocked`; `icon_file`, `mime_type`, `source_url`,
+`content_sha256`, and `fetched_at` describe only a validated successful local cache
+entry. `last_attempt_at`, `retry_after`, and `updated_at` bound refresh frequency.
+The database never stores downloaded response bodies, request headers, credentials,
+or cookies. Cached image bytes live under the internal gallery favicon directory and
+are served only through validated generated filenames.
 
 ## Telemetry Tables
 

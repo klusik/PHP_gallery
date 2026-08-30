@@ -49,8 +49,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.93.2}
-\newcommand{\manualdate}{26 August 2026}
+\newcommand{\version}{0.94}
+\newcommand{\manualdate}{30 August 2026}
 
 \hypersetup{
   colorlinks=true,
@@ -844,6 +844,8 @@ A~disabled feature is~hidden from~normal navigation and~its guarded routes refus
 \subsection{Gallery management}
 
 Gallery administration covers the~full life of~a~collection: creation, discovery, naming, description, dates, tags, privacy, passwords, branding, covers, layout, ordering, moving, and~eventual deletion. A~child gallery can~inherit useful choices from its parent. For~example, every gallery inside a~private family branch can~follow the~parent's protection, and~an~individual child can~use its own presentation choice where the~editor offers an~override. The~bulk gallery screen provides corresponding multi-gallery operations where the~same change is~appropriate for~several collections at~once.
+
+Gallery descriptions can~present safe external links written as~ordinary Markdown links, \codeword{[link=URL]label[/link]}, \codeword{[url=URL]label[/url]}, or~the~short forms whose visible text is~also the~target. Only HTTP and~HTTPS targets are~linked; other schemes remain inert text. Recognized services use bundled local brand symbols. For~other public hosts, saving the~gallery can~retrieve a~small validated favicon into the~local gallery cache. Retrieval is~hostname-deduplicated, bounded by~size, time, redirect, and~retry limits, rejects private or~reserved network destinations, and~never occurs while a~visitor renders the~public description. If~the~cache or~its database table is~unavailable, the~link remains usable without an~icon.
 
 When clean public-path storage is~available, \ui{Regenerate clean public paths} rebuilds the~stored gallery and~image paths from~the~current hierarchy and~reports separate gallery/image counts. Reordering and~selected editor saves also refresh paths when their changes require it. This maintenance action is~useful after hierarchy repair, migration, or~older imports; it~does not~turn URL rewriting on~by~itself, so~query-string routing remains the~fallback when rewriting is~disabled or~unsupported by~the~host.
 

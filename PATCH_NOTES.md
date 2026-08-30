@@ -1,5 +1,68 @@
 # Patch notes
 
+## Version 0.94
+
+Version 0.94 improves gallery descriptions with safe, recognizable external links. Administrators can use Markdown or compact link tags, visitors see bundled brand symbols for well-known services and locally cached favicons for other public sites, and the complete retrieval path remains bounded and isolated from public-page rendering.
+
+  ### Highlights
+
+  #### Gallery-description links
+
+  - Added `[link=URL]label[/link]`, `[url=URL]label[/url]`, `[link]URL[/link]`, and `[url]URL[/url]` alongside existing Markdown links.
+  - Restricted rendered targets to normalized HTTP or HTTPS addresses, including convenient `www.` input, while leaving unsupported or executable schemes as inert text.
+  - Opened external targets in a new tab with `noopener` and `noreferrer` protection.
+  - Added bundled local brand symbols for YouTube, Facebook, X/Twitter, Instagram, Wikipedia, LinkedIn, GitHub, Reddit, TikTok, Discord, Twitch, and Vimeo, with exact-domain or subdomain matching.
+  - Added locally cached favicons for other public websites; links remain fully usable without an icon when discovery, storage, or schema support is unavailable.
+
+  #### Bounded favicon discovery
+
+  - Triggered favicon refresh only after an administrator saves a gallery, never during anonymous public rendering.
+  - Deduplicated discovery by hostname across source and translated gallery descriptions and limited new network work per save.
+  - Blocked loopback, private, reserved, and otherwise non-public IPv4 destinations before connecting, while preserving host and TLS verification for approved public targets.
+  - Bounded redirects, response headers, HTML bytes, image bytes, image dimensions, request duration, and total save-time network work.
+  - Validated downloaded PNG, JPEG, GIF, WebP, and ICO content by file signature and image structure instead of trusting remote content-type claims; SVG and active content are not cached.
+  - Added retry windows for successful, missing, failed, and blocked results and retained a previous known-good icon through temporary refresh failures.
+
+  ### Technical Details
+
+  #### Backend and public delivery
+
+  - Added `app/services/link_favicons.php` for URL normalization, brand matching, description-link extraction, bounded fetching, cache persistence, and validated public asset resolution.
+  - Added the `link_favicon_asset` route in `app/bootstrap/routing.php`, `app/bootstrap/dispatch.php`, and `app/bootstrap/request.php` for installations whose public document root cannot serve the gallery cache directly.
+  - Added cacheable, type-specific favicon responses in `app/controllers/theme_assets.php` and registered the route with `app/services/seo_request_guard.php`.
+  - Updated `app/controllers/admin_galleries_edit_actions.php` so a successful gallery save performs best-effort favicon refresh without allowing cosmetic failures to fail the gallery mutation.
+
+  #### Database and storage
+
+  - Added migration `database/migrations/202608300001_link_favicon_cache.php` with the hostname-keyed `link_favicon_cache` table.
+  - Stored bounded status, local filename, MIME type, source URL, content hash, fetch time, last-attempt time, retry time, and update time; no remote response body, credential, cookie, or request header is stored in the database.
+  - Stored validated icon files under the internal gallery cache and exposed only filenames matching the generated hash-based format.
+  - Kept favicon behavior optional when the migration has not yet been applied: gallery links still render, no outbound refresh is attempted, and no persistent write is authorized from an unavailable cache table.
+
+  #### Frontend and assets
+
+  - Updated `app/views/gallery_descriptions.php` to render the supported link syntaxes through one escaped URL and anchor pipeline.
+  - Added the local symbol sprite in `public/assets/link-icons/brands.svg`, its license and usage documentation, and framework-free icon styling in `public/assets/styles/utilities.css`.
+
+  #### Schema policy, documentation, and tests
+
+  - Added the named `presentation.link_favicon_cache` three-state capability so cache reads and writes require verified schema, confirmed missing storage follows the no-icon compatibility path, and unknown inspection state omits the cosmetic operation with bounded diagnostics rather than acting as proof of absence.
+  - Added `tests/link_favicon_model_test.php` for URL-scheme rejection, exact-domain brand matching, supported markup extraction, relative favicon resolution, image validation, and the structured schema-policy boundary.
+  - Updated runtime/version metadata, README, database documentation, release metadata, and the permanent administrator manual; rebuilt the indexed PDF for Version 0.94.
+
+  ### Upgrade and User Impact
+
+  #### For visitors
+
+  - Gallery-description links are easier to recognize and continue to work when icons are unavailable.
+  - Public page requests use only local database and filesystem state for icons and do not contact linked third-party sites.
+
+  #### For administrators
+
+  - Run the normal updater or `php scripts/migrate.php` so `202608300001_link_favicon_cache.php` can create the optional favicon metadata table.
+  - Saving a gallery can briefly contact previously uncached public link hosts within the bounded fetch budget; known services use bundled icons and require no remote lookup.
+  - No source photographs, existing gallery descriptions, thumbnails, access rules, or viewer data are migrated or rewritten by Version 0.94.
+
 ## Version 0.93.2
 
 Version 0.93.2 is a focused media-renaming and Windows traffic-diagnostics refinement on top of Version 0.93.1. It makes automatic media names follow the current gallery-title context while preserving explicit physical-path naming, and adds a durable grouped HTML anomaly report that makes monitor findings easier to review without changing the monitor's safe read-only behavior.
