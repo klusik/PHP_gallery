@@ -51,6 +51,7 @@ use function Gallery\Core\db;
 use function Gallery\Core\e;
 use function Gallery\Core\gallery_public_url;
 use function Gallery\Core\image_alt_text;
+use function Gallery\Core\image_public_media_url;
 use function Gallery\Core\image_public_url;
 use function Gallery\Core\redirect_to;
 use function Gallery\Core\render_footer;
@@ -261,7 +262,7 @@ function render_lightbox_source_nodes(array $allImages, array $gallery, bool $ma
             continue;
         }
         // Variable $mediaUrl stores this steps working value.
-        $mediaUrl = url_for('media', ['id' => $image['id']]);
+        $mediaUrl = image_public_media_url($image, $gallery);
         // Variable $imagePageUrl stores this steps working value.
         $imagePageUrl = image_public_url($image, $gallery);
         // Variable $previewUrl stores this steps working value.

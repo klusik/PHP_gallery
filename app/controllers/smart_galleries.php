@@ -23,6 +23,7 @@ use function Gallery\Core\require_admin;
 use function Gallery\Core\url_for;
 use function Gallery\Core\verify_csrf;
 use function Gallery\Core\image_alt_text;
+use function Gallery\Core\image_public_media_url;
 use function Gallery\Core\image_public_url;
 use function Gallery\Services\find_gallery;
 use function Gallery\Services\pagination_current_page;
@@ -402,7 +403,7 @@ function smart_gallery_render_image_cards(array $images, array $sourceGalleries,
         $lightbox = $interactive && !empty($presentation['lightbox_enabled']);
         $attributes = '';
         if ($lightbox) {
-            $mediaUrl = url_for('media', ['id' => $image['id']]);
+            $mediaUrl = image_public_media_url($image, $source);
             $previewUrl = thumbnail_bundle_url($bundle, 1600);
             $attributes = ' ' . lightbox_image_data_attributes($image, $source, $mediaUrl, $previewUrl, $url, $title, (int) ($image['score'] ?? 0), (int) ($votes[(int) $image['id']] ?? 0), null, 'data-lightbox-image', $voting, $offset + $index, $bundle);
         }

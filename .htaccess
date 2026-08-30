@@ -33,6 +33,12 @@ Options -Indexes
 <IfModule mod_rewrite.c>
     RewriteEngine On
     RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+    # In per-directory context the RewriteRule path is relative to this application
+    # root, so this protects internal repository trees under both /Galerie/ and /
+    # without blocking public gallery slugs that merely contain these words later.
+    RewriteRule ^(?:app|database|scripts|cache|data|logs|tmp|tests|deploy)(?:/|$) - [R=404,L,NC]
+
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteCond %{REQUEST_FILENAME} !-d
     RewriteRule ^ public/index.php [L]
@@ -68,5 +74,4 @@ Options -Indexes
 
 RedirectMatch 404 (^|/)\.git(/|$)
 RedirectMatch 404 (^|/)\.(?!well-known/)
-RedirectMatch 404 ^/(app|database|scripts|cache|logs|tmp|tests|deploy)(/|$)
 
