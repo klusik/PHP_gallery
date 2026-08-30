@@ -309,7 +309,7 @@ function thumbnail_bundle_select_variant(array $bundle, int $preferredSize, stri
 
     public_render_profile_count('thumbnail_bundle_media_fallbacks');
     return [
-        'url' => (string) ($bundle['media_url'] ?? url_for('media', ['id' => (int) (($bundle['image']['id'] ?? 0))])),
+        'url' => (string) ($bundle['media_url'] ?? image_public_asset_url_with_version(url_for('media', ['id' => (int) (($bundle['image']['id'] ?? 0))]), (array) ($bundle['image'] ?? []))),
         'size' => $effectiveSize,
         'format' => 'media',
         'is_media_fallback' => true,

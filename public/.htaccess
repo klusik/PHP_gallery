@@ -30,6 +30,13 @@
 
 <IfModule mod_rewrite.c>
     RewriteEngine On
+
+    # Keep internal repository tree names outside the public route namespace too.
+    # In the recommended public/ document-root layout these trees are already
+    # physically outside the web root; this is defense in depth and preserves a
+    # deterministic 404 if a host exposes an unexpected mapping.
+    RewriteRule ^(?:app|database|scripts|cache|data|logs|tmp|tests|deploy)(?:/|$) - [R=404,L,NC]
+
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteCond %{REQUEST_FILENAME} !-d
     RewriteRule ^ index.php [L]

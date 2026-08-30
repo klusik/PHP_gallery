@@ -2,7 +2,7 @@
 
 A modern PHP 8.0+ gallery CMS designed for ordinary shared hosting. The application uses the filesystem as the authoritative source for gallery structure, while storing all metadata, access rules, votes, user accounts, and audit logs in MySQL or MariaDB.
 
-**Current Version:** 0.94
+**Current Version:** 0.94.1
 
 **Key Benefit:** Deploy in minutes on shared hosting. No npm, no Composer, no framework overhead. Just PHP + MySQL.
 
@@ -444,6 +444,8 @@ Public tag pages can use a dedicated presentation. In Theme > Appearance > Galle
 5. Old logs are kept (retention configurable)
 
 #### Updating the Application
+
+Public entry points load a dependency-free early runtime guard before the normal bootstrap. During the updater's file-activation critical section, new requests receive a private, non-cacheable `503 Service Unavailable` response until activation is durably complete; authenticated update recovery/status requests remain available. The guard also converts uncaught and catchable fatal PHP failures to bounded `500` responses where PHP can still control the response. Production hosting must keep `display_errors` disabled so the PHP runtime does not print warning or fatal details before the safe response handler runs.
 
 1. Go to **Updates** to check GitHub for new versions and read patch notes.
 2. Click **Update**. The Admin panel starts a durable job under `cache/updates/jobs/` and advances it through short authenticated requests instead of holding one PHP request open for the whole release.

@@ -341,7 +341,7 @@ function public_gallery_media_manifest_select_url(array $bundle, int $preferredS
 
     public_render_profile_count('thumbnail_bundle_media_fallbacks');
     public_render_profile_count('thumbnail_manifest_media_fallback_selections');
-    return (string) ($bundle['media_url'] ?? url_for('media', ['id' => (int) (($bundle['image']['id'] ?? 0))]));
+    return (string) ($bundle['media_url'] ?? image_public_asset_url_with_version(url_for('media', ['id' => (int) (($bundle['image']['id'] ?? 0))]), (array) ($bundle['image'] ?? [])));
 }
 
 /**

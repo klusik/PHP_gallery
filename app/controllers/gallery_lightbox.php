@@ -40,6 +40,7 @@ use function Gallery\Core\admin_anonymous_preview_active;
 use function Gallery\Core\current_user;
 use function Gallery\Core\csrf_token;
 use function Gallery\Core\gallery_public_url;
+use function Gallery\Core\image_public_media_url;
 use function Gallery\Core\image_public_url;
 use function Gallery\Core\url_for;
 use function Gallery\Services\current_user_is_known_under_18;
@@ -122,7 +123,7 @@ function cms_release_gallery_lightbox_session_lock(): void
 function gallery_lightbox_json_item(array $image, array $gallery, int $index, bool $mapsAllowed, bool $votingAllowed, array $votesById): array
 {
     $thumbnailBundle = public_render_profile_with_thumbnail_purpose('lazy lightbox bundle discovery', static fn (): array => thumbnail_bundle($image));
-    $mediaUrl = url_for('media', ['id' => $image['id']]);
+    $mediaUrl = image_public_media_url($image, $gallery);
     $previewUrl = public_render_profile_with_thumbnail_purpose('lazy lightbox preview 1600', static fn (): string => thumbnail_bundle_url($thumbnailBundle, 1600));
     $mapPoint = $mapsAllowed && image_has_gps($image)
         ? public_render_profile_with_thumbnail_purpose('lazy lightbox map preview 300', static fn (): array => image_map_point($image, $gallery, true, $thumbnailBundle))

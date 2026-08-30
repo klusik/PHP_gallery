@@ -1745,6 +1745,83 @@ function application_update_job_backup_slice(array &$job, array $budget): bool
 }
 
 /**
+ * Return the durable activation marker path in the existing updater workspace.
+ */
+function application_update_activation_gate_path(): string
+{
+    return application_update_jobs_root() . '/activation.json';
+}
+
+/**
+ * Persist the dependency-free activation marker before any managed production file is replaced.
+ *
+ * Replaying the same job keeps the existing marker. A marker owned by another
+ * job is never overwritten because doing so could reopen a partially activated
+ * release without proving that the earlier job reached activation_complete.
+ *
+ * @param array<string,mixed> $job Durable update job state.
+ */
+function application_update_activation_gate_begin(array $job): void
+{
+    $jobId = (string) ($job['id'] ?? '');
+    if ($jobId === '') {
+        throw new RuntimeException('Update activation job identifier is missing.');
+    }
+
+    $path = application_update_activation_gate_path();
+    $markerExists = is_file($path);
+    $existing = application_update_read_json($path);
+    if ($markerExists && $existing === []) {
+        throw new RuntimeException('Existing update activation gate state is unreadable.');
+    }
+    if ($existing !== []) {
+        $existingJobId = (string) ($existing['job_id'] ?? '');
+        if ($existingJobId === '' || !hash_equals($existingJobId, $jobId)) {
+            throw new RuntimeException('Another update activation gate is already active.');
+        }
+    }
+
+    $payload = [
+        'schema' => 1,
+        'job_id' => $jobId,
+        'trigger' => (string) ($job['trigger'] ?? ''),
+        'started_at' => (int) ($existing['started_at'] ?? time()),
+        'updated_at' => time(),
+    ];
+
+    // The session name is not an authentication secret. Persisting it lets the early
+    // gate recognize a pre-existing authenticated Admin session even when an automatic
+    // update was initiated by an anonymous request. The session id itself is never stored.
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        $sessionName = session_name();
+        if ($sessionName !== '' && preg_match('/^[A-Za-z0-9_-]{1,128}$/', $sessionName) === 1) {
+            $payload['admin_session_name'] = $sessionName;
+        }
+    } elseif (isset($existing['admin_session_name'])) {
+        $payload['admin_session_name'] = (string) $existing['admin_session_name'];
+    }
+
+    application_update_write_json_atomic($path, $payload);
+}
+
+/**
+ * Clear the activation marker only for the job that durably completed activation.
+ *
+ * Failure to unlink is intentionally non-fatal. The early gate independently
+ * verifies job.json activation_complete and retries stale-marker removal before
+ * allowing normal public traffic.
+ */
+function application_update_activation_gate_clear(string $jobId): void
+{
+    $path = application_update_activation_gate_path();
+    $marker = application_update_read_json($path);
+    if ($marker === [] || !hash_equals((string) ($marker['job_id'] ?? ''), $jobId)) {
+        return;
+    }
+    @unlink($path);
+}
+
+/**
  * Verify every pre-activation prerequisite immediately before the critical section.
  *
  * @param array $job Job state.
@@ -1781,7 +1858,9 @@ function application_update_activation_priority(string $path): int
 {
     return match ($path) {
         'index.php' => 50,
+        'install.php', 'reset.php' => 45,
         'public/index.php' => 40,
+        'app/early_runtime.php' => 35,
         'app/bootstrap.php' => 30,
         'app/services/updates.php' => 20,
         default => 0,
@@ -1801,6 +1880,7 @@ function application_update_activation_priority(string $path): int
 function application_update_job_activate(array &$job): void
 {
     application_update_job_assert_ready($job);
+    application_update_activation_gate_begin($job);
     $jobDir = application_update_job_dir((string) $job['id']);
     $root = application_update_project_root();
     $files = array_values((array) ($job['checkpoints']['activation_files'] ?? []));
@@ -1855,6 +1935,7 @@ function application_update_job_activate(array &$job): void
     $job['checkpoints']['activated_files'] = $activated;
     $job['progress'] = ['current' => $activated, 'total' => count($files), 'message' => 'Prepared release activated.', 'unit' => 'files'];
     application_update_save_job($job);
+    application_update_activation_gate_clear((string) $job['id']);
 }
 
 /**
