@@ -159,11 +159,30 @@ function link_favicon_known_icon_id(string $url): ?string
 }
 
 /**
- * Return whether the favicon cache migration is available.
+ * Return the explicit three-state capability for persistent favicon metadata.
+ *
+ * @return array{state:string,feature:string,requirements:array}
  */
-function link_favicon_cache_schema_ready(): bool
+function link_favicon_cache_schema_status(): array
 {
-    return db_table_exists(LINK_FAVICON_CACHE_TABLE);
+    return presentation_schema_tables_status('presentation.link_favicon_cache', [
+        LINK_FAVICON_CACHE_TABLE => [
+            'hostname', 'status', 'icon_file', 'mime_type', 'source_url',
+            'content_sha256', 'fetched_at', 'last_attempt_at', 'retry_after', 'updated_at',
+        ],
+    ]);
+}
+
+/**
+ * Authorize cache reads or writes only after conclusive schema inspection.
+ *
+ * Confirmed missing schema preserves the documented no-icon compatibility
+ * path. Unknown inspection state also omits the cosmetic operation, records
+ * bounded diagnostics, and is never treated as proof that storage is absent.
+ */
+function link_favicon_cache_schema_ready(string $operation = 'link_favicon_cache_read'): bool
+{
+    return presentation_schema_render_available(link_favicon_cache_schema_status(), $operation);
 }
 
 /**
@@ -227,7 +246,7 @@ function link_favicon_gallery_descriptions(int $galleryId): array
         $stmt->execute([$galleryId]);
         $descriptions = [(string) ($stmt->fetchColumn() ?: '')];
 
-        if (db_table_exists('gallery_translations')) {
+        if (content_localization_schema_ready('gallery')) {
             $translated = db()->prepare('SELECT description FROM gallery_translations WHERE gallery_id = ? AND description IS NOT NULL');
             $translated->execute([$galleryId]);
             foreach ($translated->fetchAll(PDO::FETCH_COLUMN) as $description) {
@@ -253,7 +272,7 @@ function link_favicon_refresh_gallery(int $galleryId): array
 {
     $result = ['candidates' => 0, 'attempted' => 0, 'stored' => 0, 'skipped' => 0];
     $networkDeadline = microtime(true) + LINK_FAVICON_SAVE_NETWORK_BUDGET_SECONDS;
-    if ($galleryId < 1 || !link_favicon_cache_schema_ready()) {
+    if ($galleryId < 1 || !link_favicon_cache_schema_ready('link_favicon_gallery_refresh')) {
         return $result;
     }
 
@@ -341,7 +360,7 @@ function link_favicon_host_needs_refresh(string $host): bool
  */
 function link_favicon_store_fetch_result(string $host, array $fetch): void
 {
-    if (!link_favicon_cache_schema_ready()) {
+    if (!link_favicon_cache_schema_ready('link_favicon_result_store')) {
         return;
     }
 
@@ -470,7 +489,7 @@ function link_favicon_limit_text(string $value, int $limit): string
  */
 function link_favicon_cached_public_url(string $url): ?string
 {
-    if (link_favicon_known_icon_id($url) !== null || !link_favicon_cache_schema_ready()) {
+    if (link_favicon_known_icon_id($url) !== null || !link_favicon_cache_schema_ready('link_favicon_public_render')) {
         return null;
     }
     $host = link_favicon_url_hostname($url);
