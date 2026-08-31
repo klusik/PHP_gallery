@@ -1,7 +1,7 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-This repository is a plain PHP 8.0+ gallery CMS with no Composer or Node build. Core application code lives in `app/`, split into `controllers/`, `services/`, and `views/`. Database schema changes live in `database/migrations/` and must be added as new timestamped files. Public web assets are under `public/assets/`; writable runtime data is kept in `cache/`, `galleries/`, and `data/`. Standalone test scripts live in `tests/`. Deployment helpers and CLI utilities are in `scripts/`, with Windows-specific tooling in `winapp/`.
+This repository is a plain PHP 8.1+ gallery CMS with no Composer or Node build. Core application code lives in `app/`, split into `controllers/`, `services/`, and `views/`. Database schema changes live in `database/migrations/` and must be added as new timestamped files. Public web assets are under `public/assets/`; writable runtime data is kept in `cache/`, `galleries/`, and `data/`. Standalone test scripts live in `tests/`. Deployment helpers and CLI utilities are in `scripts/`, with Windows-specific tooling in `winapp/`.
 
 ## Build, Test, and Development Commands
 - `php -S localhost:8000 -t public public/index.php` - run the app locally with the `public/` directory as the web root.

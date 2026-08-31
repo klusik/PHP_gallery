@@ -79,9 +79,9 @@ function pending_migration_files(array $files, array $appliedVersions): array
 /**
  * Return true when an array uses consecutive integer keys beginning at zero.
  *
- * PHP Gallery supports PHP 8.0, while array_is_list() was introduced in PHP
- * 8.1. Keeping this compatibility helper local to the migration subsystem
- * avoids raising the minimum runtime version merely to validate definitions.
+ * PHP Gallery requires PHP 8.1 or newer. Keeping this list-shape helper local
+ * to the migration subsystem keeps migration definition validation explicit and
+ * independent of other runtime helpers.
  *
  * @param array<mixed> $value Array value.
  * @return bool True when the array is a list.

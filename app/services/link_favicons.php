@@ -41,7 +41,6 @@ namespace Gallery\Services;
 
 use PDO;
 use Throwable;
-use function Gallery\Core\base_url;
 use function Gallery\Core\db;
 use function Gallery\Core\now_sql;
 use function Gallery\Core\url_for;
@@ -533,11 +532,12 @@ function link_favicon_valid_file_name(string $file): ?string
 }
 
 /**
- * Build a public favicon URL that works with repository-root and public/ web roots.
+ * Build the public URL for one cached favicon through the protected asset route.
  *
- * Repository-root deployments can let Apache/Nginx serve the persistent gallery
- * file directly. A public/ document root falls back to the cacheable PHP asset
- * route because galleries_root is intentionally outside that document root.
+ * Cached favicon files live below galleries_root, where direct browser access is
+ * intentionally denied. Serving every cached favicon through the existing asset
+ * controller keeps repository-root, public/ document-root, and custom gallery
+ * storage layouts consistent with that access-control policy.
  */
 function link_favicon_public_file_url(string $file): string
 {
@@ -546,17 +546,7 @@ function link_favicon_public_file_url(string $file): string
         return '';
     }
 
-    $script = str_replace('\\', '/', (string) ($_SERVER['SCRIPT_NAME'] ?? ''));
-    $scriptFile = str_replace('\\', '/', (string) ($_SERVER['SCRIPT_FILENAME'] ?? ''));
-    $projectGalleriesRoot = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'galleries';
-    $configuredGalleriesRoot = rtrim(galleries_root(), DIRECTORY_SEPARATOR);
-    $standardGalleriesRoot = rtrim($projectGalleriesRoot, DIRECTORY_SEPARATOR);
-    if ($configuredGalleriesRoot !== $standardGalleriesRoot
-        || (str_ends_with($scriptFile, '/public/index.php') && !str_ends_with($script, '/public/index.php'))) {
-        return url_for('link_favicon_asset', ['f' => $file]);
-    }
-
-    return base_url('galleries/' . LINK_FAVICON_INTERNAL_DIRECTORY . '/' . rawurlencode($file));
+    return url_for('link_favicon_asset', ['f' => $file]);
 }
 
 /**
