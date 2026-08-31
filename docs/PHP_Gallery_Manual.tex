@@ -49,7 +49,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.94.2}
+\newcommand{\version}{0.94.3}
 \newcommand{\manualdate}{31 August 2026}
 
 \hypersetup{
@@ -1582,6 +1582,8 @@ Long tag collections can~also use a~responsive internal scrollbar. This option i
 \index{WebDAV}
 
 Gallery downloads prepare authorized content as~ZIP archives and~stream the~finished archive to~the~browser. A~normal gallery download traverses the~permitted gallery subtree; Smart Gallery downloads re-evaluate the~saved query and~current access rules; Picture Manager selection downloads package only the~currently selected owned photographs; the~administrator can~also request an~all-galleries archive. Archive entry names are~normalized to~prevent traversal and~keep deterministic paths.
+
+On~a~modern browser, a~public gallery or~Smart Gallery download first requests a~private, bounded manifest. The~browser then requests each authorized original through an~independent media endpoint and~assembles the~ZIP locally, showing progress and~allowing cancellation or~retry without holding one long PHP archive request open. Every source request repeats the~current gallery, Smart Gallery membership, visitor visibility, media-version, and~path-containment checks; an~image identifier alone never grants access. File-count, cumulative source-byte, duplicate-name, memory, and~ZIP64 limits keep the~workflow bounded. Direct links and~no-JavaScript clients retain the~existing server-side ZIP fallback.
 
 Generated gallery/all/selection ZIPs use a~content signature derived from~the~relevant gallery/image metadata so~a~still-current cached archive can~be~reused and~a~changed collection produces a~new cache identity. This \emph{content signature} is~cache invalidation metadata, not~a~public HMAC download authorization token. Authorization is~checked by~the~download controller before an~archive is~served.
 

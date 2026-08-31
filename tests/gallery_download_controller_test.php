@@ -5,16 +5,19 @@ declare(strict_types=1);
 namespace Gallery\Services {
     final class GalleryDownloadManifestException extends \RuntimeException {}
 
+/** Test double for find_gallery(). */
     function find_gallery(int $id): ?array
     {
         return $GLOBALS['gallery_download_controller_galleries'][$id] ?? null;
     }
 
+/** Test double for visitor_can_access_gallery(). */
     function visitor_can_access_gallery(array $gallery): bool
     {
         return !empty($gallery['allowed']);
     }
 
+/** Test double for gallery_download_manifest(). */
     function gallery_download_manifest(array $gallery): array
     {
         if (!empty($GLOBALS['gallery_download_controller_manifest_error'])) {
@@ -23,57 +26,76 @@ namespace Gallery\Services {
         return $GLOBALS['gallery_download_controller_manifest'];
     }
 
+/** Test double for gallery_download_legacy_manifest_is_safe(). */
     function gallery_download_legacy_manifest_is_safe(array $manifest): bool
     {
         return (int) ($manifest['total_files'] ?? 0) <= 1000
             && (int) ($manifest['total_bytes'] ?? 0) <= 268435456;
     }
 
+/** Test double for gallery_download_authorized_source(). */
     function gallery_download_authorized_source(int $galleryId, int $imageId): ?array
     {
         return $GLOBALS['gallery_download_controller_sources'][$galleryId . ':' . $imageId] ?? null;
     }
 
+/** Test double for build_gallery_zip(). */
     function build_gallery_zip(int $galleryId, bool $publicOnly): string
     {
         $GLOBALS['gallery_download_controller_build_calls']++;
         return '/tmp/unused.zip';
     }
 
+/** Test double for send_download(). */
     function send_download(string $filePath, string $downloadName): void
     {
         $GLOBALS['gallery_download_controller_send_calls']++;
     }
 
+/** Test double for t(). */
     function t(string $key, string $fallback, array $replace = []): string
     {
         return $fallback;
     }
 
+/** Test double for admin_log_event(). */
     function admin_log_event(string $level, string $event, string $message, array $context = [], array $options = []): void {}
+/** Test double for build_all_zip(). */
     function build_all_zip(): string { return '/tmp/unused.zip'; }
+/** Test double for build_smart_gallery_zip(). */
     function build_smart_gallery_zip(array $gallery): string { return '/tmp/unused.zip'; }
+/** Test double for build_selected_images_zip(). */
     function build_selected_images_zip(int $galleryId, array $ids): string { return '/tmp/unused.zip'; }
+/** Test double for smart_gallery_effective_presentation(). */
     function smart_gallery_effective_presentation(array $gallery): array { return []; }
+/** Test double for smart_gallery_find_public_by_id(). */
     function smart_gallery_find_public_by_id(int $id): ?array { return null; }
+/** Test double for smart_gallery_zip_failure_reason(). */
     function smart_gallery_zip_failure_reason(\Throwable $exception): string { return 'test'; }
 }
 
 namespace Gallery\Core {
+/** Test double for slugify(). */
     function slugify(string $value): string { return 'gallery'; }
+/** Test double for require_admin(). */
     function require_admin(): void {}
+/** Test double for verify_csrf(). */
     function verify_csrf(): void {}
 }
 
 namespace Gallery\Controllers {
+/** Test double for cms_not_found(). */
     function cms_not_found(): void
     {
         http_response_code(404);
         echo 'not found';
     }
 
+/** Test double for picture_manager_image_ids_from_post(). */
     function picture_manager_image_ids_from_post(): array { return []; }
+/** Test double for picture_manager_require_logged_in_user(). */
     function picture_manager_require_logged_in_user(): void {}
+/** Test double for picture_manager_source_gallery_from_post(). */
     function picture_manager_source_gallery_from_post(): array { return []; }
 
     require_once dirname(__DIR__) . '/app/controllers/downloads.php';
@@ -84,6 +106,7 @@ namespace Gallery\Tests {
     use function Gallery\Controllers\cms_download_gallery_file;
     use function Gallery\Controllers\cms_download_gallery_manifest;
 
+/** Test double for expect(). */
     function expect(bool $condition, string $message): void
     {
         if (!$condition) {
@@ -92,6 +115,7 @@ namespace Gallery\Tests {
         }
     }
 
+/** Test double for runRequest(). */
     function runRequest(callable $callback): array
     {
         http_response_code(200);

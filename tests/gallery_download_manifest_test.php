@@ -8,8 +8,11 @@ namespace Gallery\Tests {
         private string $sql;
         private array $params = [];
 
+/** Test double for __construct(). */
         public function __construct(string $sql) { $this->sql = $sql; }
+/** Test double for execute(). */
         public function execute(array $params = []): bool { $this->params = $params; return true; }
+/** Test double for fetchAll(). */
         public function fetchAll(): array
         {
             if (str_contains($this->sql, 'FROM galleries WHERE folder_path')) {
@@ -33,14 +36,19 @@ namespace Gallery\Tests {
 
     final class FakeDb
     {
+/** Test double for prepare(). */
         public function prepare(string $sql): FakeStatement { return new FakeStatement($sql); }
     }
 }
 
 namespace Gallery\Core {
+/** Test double for db(). */
     function db(): \Gallery\Tests\FakeDb { return new \Gallery\Tests\FakeDb(); }
+/** Test double for cms_config(). */
     function cms_config(): array { return ['zip_cache_path' => sys_get_temp_dir()]; }
+/** Test double for now_sql(). */
     function now_sql(): string { return '2026-08-31 12:00:00'; }
+/** Test double for normalize_relative_path(). */
     function normalize_relative_path(string $path): string
     {
         $segments = [];
@@ -51,27 +59,42 @@ namespace Gallery\Core {
         }
         return implode('/', $segments);
     }
+/** Test double for path_inside(). */
     function path_inside(string $root, string $path): bool
     {
         $rootReal = realpath($root); $pathReal = realpath($path);
         return $rootReal !== false && $pathReal !== false && ($pathReal === $rootReal || str_starts_with($pathReal, rtrim($rootReal, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR));
     }
+/** Test double for slugify(). */
     function slugify(string $value): string { return strtolower(trim(preg_replace('/[^a-z0-9]+/i', '-', $value) ?? '', '-')); }
+/** Test double for image_public_asset_version(). */
     function image_public_asset_version(array $image): string { return 'v' . (int) $image['id']; }
+/** Test double for url_for(). */
     function url_for(string $page, array $params = []): string { return '/index.php?' . http_build_query(['page' => $page] + $params); }
 }
 
 namespace Gallery\Services {
+/** Test double for find_gallery(). */
     function find_gallery(int $id): ?array { foreach ($GLOBALS['gallery_download_test_galleries'] as $row) if ((int) $row['id'] === $id) return $row; return null; }
+/** Test double for find_image(). */
     function find_image(int $id): ?array { foreach ($GLOBALS['gallery_download_test_images'] as $row) if ((int) $row['id'] === $id) return $row; return null; }
+/** Test double for gallery_zip_signature(). */
     function gallery_zip_signature(int $galleryId, bool $publicOnly): string { return 'unused'; }
+/** Test double for image_abs_path(). */
     function image_abs_path(array $image, array $gallery): string { return (string) ($image['_path'] ?? ''); }
+/** Test double for gallery_abs_path(). */
     function gallery_abs_path(string $folderPath): string { return (string) ($GLOBALS['gallery_download_test_roots'][$folderPath] ?? ''); }
+/** Test double for image_public_display_file(). */
     function image_public_display_file(array $image, array $gallery, bool $allow = true): ?array { return null; }
+/** Test double for picture_manager_normalize_image_ids(). */
     function picture_manager_normalize_image_ids(array $ids): array { return $ids; }
+/** Test double for picture_manager_owned_images_for_selection(). */
     function picture_manager_owned_images_for_selection(int $id, array $ids, array &$failures): array { return []; }
+/** Test double for public_image_visible_to_current_visitor(). */
     function public_image_visible_to_current_visitor(array $image, array $gallery): bool { return ($image['visibility'] ?? '') === 'public' && visitor_can_access_gallery($gallery); }
+/** Test double for t(). */
     function t(string $key, string $fallback, array $replace = []): string { return $fallback; }
+/** Test double for visitor_can_access_gallery(). */
     function visitor_can_access_gallery(array $gallery): bool { return !empty($gallery['allowed']); }
 
     require_once dirname(__DIR__) . '/app/services/downloads.php';
@@ -82,6 +105,7 @@ namespace Gallery\Tests {
     use function Gallery\Services\gallery_download_authorized_source;
     use function Gallery\Services\gallery_download_manifest;
 
+/** Test double for expect(). */
     function expect(bool $condition, string $message): void
     {
         if (!$condition) { fwrite(STDERR, $message . "\n"); exit(1); }

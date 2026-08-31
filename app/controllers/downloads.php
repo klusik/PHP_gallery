@@ -213,7 +213,7 @@ function cms_download_smart_gallery(): void
         http_response_code(422);
         header('Content-Type: text/plain; charset=utf-8');
         header('Cache-Control: private, no-store');
-        echo $exception->getMessage();
+        echo t('smart_gallery.download_failed', 'Smart Gallery download could not be prepared.');
     } catch (Throwable $exception) {
         admin_log_event('error', 'smart_gallery.download_failed', 'Smart Gallery ZIP preparation failed.', [
             'smart_gallery_id' => (int) $gallery['id'],
