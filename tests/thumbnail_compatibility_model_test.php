@@ -40,9 +40,12 @@ use function Gallery\Services\set_thumbnail_compatibility_mode;
 use function Gallery\Services\thumbnail_compatibility_mode;
 use function Gallery\Services\thumbnail_compatibility_mode_normalize;
 use function Gallery\Services\thumbnail_formats_for_compatibility_policy;
+use function Gallery\Services\thumbnail_policy_format_allowed;
+use function Gallery\Services\thumbnail_policy_requested_formats;
 
 $GLOBALS['thumbnail_compatibility_test_settings'] = [];
 $GLOBALS['thumbnail_compatibility_test_root'] = '';
+$GLOBALS['thumbnail_compatibility_test_metadata_deletes'] = [];
 
 /**
  * Minimal translation stub used by this standalone test.
@@ -176,9 +179,12 @@ function assert_thumbnail_compatibility_same(mixed $expected, mixed $actual, str
 assert_thumbnail_compatibility_same('modern', thumbnail_compatibility_mode_normalize(''), 'empty mode normalizes to modern');
 assert_thumbnail_compatibility_same('legacy', thumbnail_compatibility_mode_normalize('LEGACY'), 'legacy mode is accepted case-insensitively');
 assert_thumbnail_compatibility_same('modern', thumbnail_compatibility_mode(), 'default stored mode is modern');
+assert_thumbnail_compatibility_same(['webp'], thumbnail_policy_requested_formats(), 'default mode requests WebP only');
+assert_thumbnail_compatibility_same(false, thumbnail_policy_format_allowed('jpg'), 'default mode rejects generated JPEG variants');
 
 set_thumbnail_compatibility_mode('legacy');
 assert_thumbnail_compatibility_same('legacy', thumbnail_compatibility_mode(), 'legacy mode persists');
+assert_thumbnail_compatibility_same(true, thumbnail_policy_format_allowed('jpg'), 'legacy mode allows generated JPEG variants');
 assert_thumbnail_compatibility_same(['jpg', 'webp'], thumbnail_formats_for_compatibility_policy('/tmp/photo.jpg', 'image/jpeg', true), 'legacy mode keeps JPG and WebP');
 
 set_thumbnail_compatibility_mode('modern');
@@ -191,7 +197,7 @@ $galleryDir = $root . DIRECTORY_SEPARATOR . 'gallery';
 $thumbsDir = $galleryDir . DIRECTORY_SEPARATOR . 'thumbs';
 mkdir($thumbsDir, 0775, true);
 $GLOBALS['thumbnail_compatibility_test_root'] = $root;
-$image = ['filename' => 'photo.jpg'];
+$image = ['id' => 41, 'filename' => 'photo.jpg'];
 $gallery = ['thumbs_dir' => $thumbsDir];
 file_put_contents($galleryDir . DIRECTORY_SEPARATOR . 'photo.jpg', 'original');
 file_put_contents($thumbsDir . DIRECTORY_SEPARATOR . 'photo_thumb300.jpg', 'legacy-small');
@@ -204,6 +210,12 @@ assert_thumbnail_compatibility_same(false, is_file($thumbsDir . DIRECTORY_SEPARA
 assert_thumbnail_compatibility_same(false, is_file($thumbsDir . DIRECTORY_SEPARATOR . 'photo_thumb600.jpg'), 'large JPG thumbnail was deleted');
 assert_thumbnail_compatibility_same(true, is_file($thumbsDir . DIRECTORY_SEPARATOR . 'photo_thumb300.webp'), 'WebP thumbnail was kept');
 assert_thumbnail_compatibility_same(true, is_file($galleryDir . DIRECTORY_SEPARATOR . 'photo.jpg'), 'original photo was kept');
+assert_thumbnail_compatibility_same(2, count($GLOBALS['thumbnail_compatibility_test_metadata_deletes']), 'cleanup removes JPEG metadata when generated files exist');
+
+$result = delete_legacy_jpg_thumbnails_for_image($image, $gallery);
+assert_thumbnail_compatibility_same(0, (int) $result['files_deleted'], 'cleanup tolerates already missing JPEG thumbnails');
+assert_thumbnail_compatibility_same(4, count($GLOBALS['thumbnail_compatibility_test_metadata_deletes']), 'cleanup still removes stale JPEG metadata when generated files are already missing');
+assert_thumbnail_compatibility_same(true, is_file($thumbsDir . DIRECTORY_SEPARATOR . 'photo_thumb300.webp'), 'repeat cleanup keeps WebP thumbnail metadata and file state untouched');
 
 @unlink($thumbsDir . DIRECTORY_SEPARATOR . 'photo_thumb300.webp');
 @rmdir($thumbsDir);

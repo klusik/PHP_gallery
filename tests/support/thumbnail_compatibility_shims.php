@@ -93,6 +93,16 @@ namespace Gallery\Services {
         $base = pathinfo((string) $image['filename'], PATHINFO_FILENAME);
         return rtrim((string) $gallery['thumbs_dir'], DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . $base . '_thumb' . $size . '.' . $format;
     }
+
+    /** Record metadata cleanup calls without requiring a database. */
+    function thumbnail_metadata_delete_variant(array|int $image, int $size, string $format): void
+    {
+        $GLOBALS['thumbnail_compatibility_test_metadata_deletes'][] = [
+            'image_id' => is_array($image) ? (int) ($image['id'] ?? 0) : (int) $image,
+            'size' => $size,
+            'format' => $format,
+        ];
+    }
 }
 
 namespace Gallery\Core {
