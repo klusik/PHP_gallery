@@ -1,5 +1,46 @@
 # Patch notes
 
+## Version 0.94.5
+
+Version 0.94.5 is a focused maintenance release that aligns the supported PHP runtime, protected cached-favicon delivery, and updater server-policy enforcement. It adds the reconciliation path needed to keep policy-managed files coherent across installs without changing gallery content or public media behavior.
+
+### Highlights
+
+- Raise the documented and installer-enforced minimum PHP version to 8.1.
+- Serve cached link favicons through the protected asset route in every document-root and gallery-storage layout.
+- Reconcile updater server-policy files during maintenance and update preparation, with a migration-backed repair path for existing installations.
+- Preserve resumable updater, rollback, activation, gallery authorization, and cache behavior.
+
+### Technical Details
+
+#### Runtime and asset access
+
+- Documentation, bootstrap checks, setup diagnostics, and migration validation now agree on PHP 8.1 as the minimum supported runtime.
+- Cached favicon URLs no longer expose the galleries storage tree directly; the existing protected asset controller handles repository-root, `public/`, and custom storage deployments consistently.
+
+#### Updater policy reconciliation
+
+- Added the updater server-policy reconciliation service and migration used to detect and repair managed policy files before activation.
+- Kept policy inspection and filesystem changes bounded and resumable, with existing rollback and recovery controls intact.
+- No gallery media rewrite, thumbnail regeneration, or content migration is performed.
+
+#### Tests and documentation
+
+- Updated the administrator manual, release metadata, testing guide, and integrity manifest for 0.94.5.
+- Release verification covers PHP/runtime checks, favicon access boundaries, updater reconciliation, migration consistency, packaging, and the complete regression suite.
+
+### User Impact
+
+#### For visitors
+
+- Cached external-link favicons continue to load through a protected, cacheable route without exposing internal gallery paths.
+- Gallery pages, downloads, thumbnails, and media authorization remain unchanged.
+
+#### For administrators
+
+- Hosts must provide PHP 8.1 or newer.
+- Existing installations can reconcile updater policy files safely without altering gallery content.
+
 ## Version 0.94.4
 
 Version 0.94.4 is a focused presentation fix for progressive gallery downloads. Download progress separators now render as a real middle dot instead of mojibake, and the corrected browser module is loaded through refreshed cache-busting identifiers.

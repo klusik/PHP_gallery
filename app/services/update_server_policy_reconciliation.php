@@ -154,6 +154,13 @@ function application_update_server_policy_known_root_hashes(): array
     ];
 }
 
+/**
+ * Read a previously published hash for one policy file from an integrity manifest.
+ *
+ * @param string $manifestPath Manifest JSON path.
+ * @param string $relativePath Project-relative policy path.
+ * @return ?string Normalized sha256 hash, or null when unavailable.
+ */
 function application_update_server_policy_previous_manifest_hash(string $manifestPath, string $relativePath): ?string
 {
     $manifest = application_update_server_policy_read_json($manifestPath);
