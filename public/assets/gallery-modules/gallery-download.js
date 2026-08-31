@@ -62,7 +62,6 @@ export function validGalleryDownloadManifest(payload) {
     if (payload.total_files !== payload.files.length) return false;
     const usedNames = new Set();
     let sum = 0;
-/** for supports the browser ZIP download workflow. */
     for (const entry of payload.files) {
         if (!entry || typeof entry.name !== 'string' || entry.name.length === 0 || typeof entry.url !== 'string') return false;
         if (!Number.isSafeInteger(entry.size) || entry.size < 0) return false;
@@ -89,7 +88,6 @@ export function galleryDownloadMemoryPolicy(payload, directStreaming = supportsD
     const sourceBytes = Number(payload?.total_bytes) || 0;
     const encoder = new TextEncoder();
     let zipOverheadBytes = 1024;
-/** for supports the browser ZIP download workflow. */
     for (const entry of payload?.files || []) {
         const nameBytes = encoder.encode(String(entry?.name || '')).byteLength;
         zipOverheadBytes += Math.max(512, 160 + (2 * nameBytes));
@@ -109,17 +107,14 @@ export async function fetchGalleryDownloadEntry(entry, signal, fetchImpl = globa
     const baseUrl = globalThis.location?.href || 'https://gallery.invalid/';
     const targetUrl = new URL(entry.url, baseUrl);
     const baseOrigin = new URL(baseUrl).origin;
-/** if supports the browser ZIP download workflow. */
     if (!['http:', 'https:'].includes(targetUrl.protocol) || targetUrl.origin !== baseOrigin) {
         throw new Error(tr('download.progress.file_failed', 'Could not download {name}.', {name: entry.name}));
     }
     const response = await fetchImpl(entry.url, {credentials: 'same-origin', signal});
-/** if supports the browser ZIP download workflow. */
     if (!response.ok || !response.body) {
         throw new Error(tr('download.progress.file_failed', 'Could not download {name}.', {name: entry.name}));
     }
     const declaredLength = response.headers.get('Content-Length');
-/** if supports the browser ZIP download workflow. */
     if (declaredLength !== null && Number(declaredLength) !== entry.size) {
         throw new Error(tr('download.progress.file_failed', 'Could not download {name}.', {name: entry.name}));
     }
@@ -227,7 +222,6 @@ class GalleryDownloadController {
             if (this.running) this.cancel(); else this.close();
         });
         panel.addEventListener('keydown', (event) => {
-/** if supports the browser ZIP download workflow. */
             if (event.key === 'Escape' && typeof panel.showModal !== 'function') {
                 event.preventDefault();
                 if (this.running) this.cancel(); else this.close();
@@ -248,7 +242,6 @@ class GalleryDownloadController {
     show() {
         this.panel.hidden = false;
         document.body.classList.add('gallery-download-modal-open');
-/** if supports the browser ZIP download workflow. */
         if (typeof this.panel.showModal === 'function') {
             if (!this.panel.open) this.panel.showModal();
         } else {
@@ -260,7 +253,6 @@ class GalleryDownloadController {
 /** close supports the browser ZIP download workflow. */
     close() {
         if (this.running) return;
-/** if supports the browser ZIP download workflow. */
         if (typeof this.panel.close === 'function' && this.panel.open) {
             this.panel.close();
         } else {
@@ -272,7 +264,6 @@ class GalleryDownloadController {
         this.manifestUrl = '';
         const returnFocus = this.returnFocus;
         this.returnFocus = null;
-/** if supports the browser ZIP download workflow. */
         if (returnFocus && returnFocus.isConnected && typeof returnFocus.focus === 'function') {
             returnFocus.focus();
         }
@@ -289,7 +280,6 @@ class GalleryDownloadController {
 
 /** prepare supports the browser ZIP download workflow. */
     async prepare(manifestUrl, rememberFocus = true) {
-/** if supports the browser ZIP download workflow. */
         if (rememberFocus) {
             this.returnFocus = document.activeElement;
         }
@@ -319,17 +309,14 @@ class GalleryDownloadController {
             } catch (_) {
                 throw new Error(tr('download.progress.invalid_manifest', 'The server returned an invalid download manifest.'));
             }
-/** if supports the browser ZIP download workflow. */
             if (!response.ok || payload?.ok !== true) {
                 throw new Error(String(payload?.error || tr('download.progress.failed', 'Download failed')));
             }
-/** if supports the browser ZIP download workflow. */
             if (!validGalleryDownloadManifest(payload)) {
                 throw new Error(tr('download.progress.invalid_manifest', 'The server returned an invalid download manifest.'));
             }
             this.manifest = payload;
-            this.summary.textContent = `${tr('download.progress.files', '{count} files', {count: payload.total_files})} Ă‚Â· ${formatBytes(payload.total_bytes)}`;
-/** if supports the browser ZIP download workflow. */
+            this.summary.textContent = `${tr('download.progress.files', '{count} files', {count: payload.total_files})} \u00B7 ${formatBytes(payload.total_bytes)}`;
             if (payload.total_files === 0) {
                 this.status.textContent = tr('download.progress.empty', 'This gallery has no downloadable files.');
                 this.cancelButton.hidden = true;
@@ -340,7 +327,6 @@ class GalleryDownloadController {
             }
 
             const memoryPolicy = galleryDownloadMemoryPolicy(payload);
-/** if supports the browser ZIP download workflow. */
             if (!memoryPolicy.allowed) {
                 this.warning.hidden = false;
                 this.warning.textContent = tr('download.progress.memory_too_large', 'Your browser cannot efficiently create an archive this large. Use a Chromium-based browser with direct file saving support.');
@@ -351,7 +337,6 @@ class GalleryDownloadController {
                 this.closeButton.focus();
                 return;
             }
-/** if supports the browser ZIP download workflow. */
             if (memoryPolicy.warning) {
                 this.warning.hidden = false;
                 this.warning.textContent = tr('download.progress.memory_warning', 'This browser cannot stream the ZIP directly to disk, so it must temporarily keep the archive in memory.');
@@ -361,14 +346,12 @@ class GalleryDownloadController {
             this.startButton.textContent = tr('download.progress.start', 'Save ZIP and start');
             this.startButton.focus();
         } catch (error) {
-/** if supports the browser ZIP download workflow. */
             if (error?.name === 'AbortError') {
                 this.showCancelled();
                 return;
             }
             throw error;
         } finally {
-/** if supports the browser ZIP download workflow. */
             if (this.abortController === prepareController) {
                 this.abortController = null;
                 this.running = false;
@@ -378,7 +361,6 @@ class GalleryDownloadController {
 
 /** createOutput supports the browser ZIP download workflow. */
     async createOutput() {
-/** if supports the browser ZIP download workflow. */
         if (supportsDirectFileStreaming()) {
             const handle = await window.showSaveFilePicker({
                 suggestedName: this.manifest.filename || 'gallery.zip',
@@ -441,7 +423,6 @@ class GalleryDownloadController {
         try {
             output = await this.createOutput();
             const writer = new ZipStreamWriter(output.sink);
-/** for supports the browser ZIP download workflow. */
             for (const entry of this.manifest.files) {
                 if (this.abortController.signal.aborted) throw new DOMException('Aborted', 'AbortError');
                 this.current.textContent = tr('download.progress.current', 'Current: {name}', {name: entry.name});
@@ -449,10 +430,10 @@ class GalleryDownloadController {
                 await writer.addReadable(entry.name, entry.size, response.body, (chunkBytes) => {
                     downloaded += chunkBytes;
                     this.progress.value = Math.min(downloaded, this.manifest.total_bytes);
-                    this.progressText.textContent = `${formatBytes(Math.min(downloaded, this.manifest.total_bytes))} / ${formatBytes(this.manifest.total_bytes)} Ă‚Â· ${tr('download.progress.file_count', '{done} / {total} files', {done: completedFiles, total: this.manifest.total_files})}`;
+                    this.progressText.textContent = `${formatBytes(Math.min(downloaded, this.manifest.total_bytes))} / ${formatBytes(this.manifest.total_bytes)} \u00B7 ${tr('download.progress.file_count', '{done} / {total} files', {done: completedFiles, total: this.manifest.total_files})}`;
                 });
                 completedFiles += 1;
-                this.progressText.textContent = `${formatBytes(downloaded)} / ${formatBytes(this.manifest.total_bytes)} Ă‚Â· ${tr('download.progress.file_count', '{done} / {total} files', {done: completedFiles, total: this.manifest.total_files})}`;
+                this.progressText.textContent = `${formatBytes(downloaded)} / ${formatBytes(this.manifest.total_bytes)} \u00B7 ${tr('download.progress.file_count', '{done} / {total} files', {done: completedFiles, total: this.manifest.total_files})}`;
             }
             this.status.textContent = tr('download.progress.finalizing', 'Finalizing archive');
             await writer.finalize();
@@ -466,11 +447,9 @@ class GalleryDownloadController {
             this.closeButton.textContent = tr('download.progress.close', 'Close');
             this.closeButton.focus();
         } catch (error) {
-/** if supports the browser ZIP download workflow. */
             if (output) {
                 try { await output.abort(); } catch (_) {}
             }
-/** if supports the browser ZIP download workflow. */
             if (error?.name === 'AbortError') {
                 this.showCancelled();
             } else {
@@ -498,7 +477,6 @@ class GalleryDownloadController {
 
 /** cancel supports the browser ZIP download workflow. */
     cancel() {
-/** if supports the browser ZIP download workflow. */
         if (!this.running) {
             this.close();
             return;
