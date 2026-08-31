@@ -53,6 +53,8 @@ function cms_route_is_read_only_media_asset(string $page): bool
         'public_thumb',
         'media',
         'public_media',
+        'download_gallery_file',
+        'download_smart_gallery_file',
         'gallery_cover_asset',
         'gallery_branding_asset',
         'link_favicon_asset',

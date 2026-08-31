@@ -46,9 +46,12 @@ use function Gallery\Core\normalize_relative_path;
 use function Gallery\Core\now_sql;
 use function Gallery\Core\path_inside;
 use function Gallery\Core\slugify;
+use function Gallery\Core\image_public_asset_version;
+use function Gallery\Core\url_for;
 use function Gallery\Services\find_gallery;
 use function Gallery\Services\gallery_zip_signature;
 use function Gallery\Services\image_abs_path;
+use function Gallery\Services\gallery_abs_path;
 use function Gallery\Services\image_public_display_file;
 use function Gallery\Services\picture_manager_normalize_image_ids;
 use function Gallery\Services\picture_manager_owned_images_for_selection;
@@ -58,6 +61,400 @@ use function Gallery\Services\visitor_can_access_gallery;
 
 const SMART_GALLERY_ZIP_MAX_IMAGES = 5000;
 const SMART_GALLERY_ZIP_DEFAULT_MAX_SOURCE_BYTES = 2147483648;
+const GALLERY_DOWNLOAD_MANIFEST_MAX_FILES = 20000;
+const GALLERY_DOWNLOAD_MANIFEST_MAX_GALLERIES = 5000;
+const GALLERY_DOWNLOAD_LEGACY_MAX_FILES = 1000;
+const GALLERY_DOWNLOAD_LEGACY_MAX_SOURCE_BYTES = 268435456;
+
+/**
+ * Stable public gallery-download initialization failure.
+ */
+final class GalleryDownloadManifestException extends RuntimeException
+{
+}
+
+/**
+ * Normalize one archive-relative path for a browser-generated ZIP.
+ *
+ * The database/filesystem path is never returned verbatim without this second
+ * ZIP-specific normalization. Control characters, Windows drive separators,
+ * traversal segments, and empty segments are removed or replaced while UTF-8
+ * display names remain intact.
+ */
+function gallery_download_safe_zip_path(string $path, string $fallback = 'photo'): string
+{
+    $path = str_replace('\\', '/', $path);
+    $segments = [];
+    foreach (explode('/', $path) as $segment) {
+        $segment = preg_replace('/[\x00-\x1F\x7F]/u', '', $segment) ?? '';
+        $segment = str_replace(':', '_', trim($segment));
+        $segment = trim($segment, " .\t\n\r\0\x0B");
+        if ($segment === '' || $segment === '.' || $segment === '..') {
+            continue;
+        }
+        $segments[] = $segment;
+    }
+    if ($segments === []) {
+        return $fallback;
+    }
+    return implode('/', $segments);
+}
+
+/**
+ * Make one archive entry path unique using deterministic numeric suffixes.
+ *
+ * @param array<string,bool> $usedNames Case-insensitive entry-name set.
+ */
+function gallery_download_unique_zip_path(string $path, array &$usedNames): string
+{
+    $path = gallery_download_safe_zip_path($path);
+    $directory = dirname($path);
+    $directory = $directory === '.' ? '' : $directory . '/';
+    $basename = basename($path);
+    $extension = pathinfo($basename, PATHINFO_EXTENSION);
+    $stem = pathinfo($basename, PATHINFO_FILENAME);
+    if ($stem === '') {
+        $stem = 'photo';
+    }
+    $suffix = $extension !== '' ? '.' . $extension : '';
+    $candidate = $directory . $stem . $suffix;
+    $counter = 2;
+    while (isset($usedNames[strtolower($candidate)])) {
+        $candidate = $directory . $stem . '-' . $counter . $suffix;
+        $counter++;
+    }
+    $usedNames[strtolower($candidate)] = true;
+    return $candidate;
+}
+
+/**
+ * Return a bounded, authorized gallery subtree for one browser download manifest.
+ *
+ * This mirrors gallery_zip_gallery_rows() but caps the raw SQL result before
+ * fetchAll() can materialize an arbitrarily large subtree.
+ *
+ * @param array<string,mixed> $gallery Root gallery row.
+ * @return array<int,array<string,mixed>> Authorized gallery rows.
+ */
+function gallery_download_gallery_rows(array $gallery): array
+{
+    $folderPath = normalize_relative_path((string) ($gallery['folder_path'] ?? ''));
+    if ($folderPath === '') {
+        return [];
+    }
+
+    $limit = GALLERY_DOWNLOAD_MANIFEST_MAX_GALLERIES + 1;
+    $stmt = db()->prepare('SELECT * FROM galleries WHERE folder_path = ? OR folder_path LIKE ? ORDER BY CHAR_LENGTH(folder_path), folder_path, id LIMIT ' . $limit);
+    $stmt->execute([$folderPath, $folderPath . '/%']);
+    $candidates = $stmt->fetchAll();
+    if (count($candidates) > GALLERY_DOWNLOAD_MANIFEST_MAX_GALLERIES) {
+        throw new GalleryDownloadManifestException(t('download.progress.manifest_too_large', 'This gallery contains too many files for one browser download.'));
+    }
+
+    $rows = [];
+    foreach ($candidates as $candidate) {
+        if (visitor_can_access_gallery($candidate)) {
+            $rows[] = $candidate;
+        }
+    }
+    return $rows;
+}
+
+/**
+ * Return the authorized source-file manifest used by the browser ZIP builder.
+ *
+ * This function performs only metadata/database/filesystem-stat work. It does
+ * not open a ZIP archive and never reads image payloads into PHP memory.
+ *
+ * @param array<string,mixed> $gallery Authorized root gallery row.
+ * @return array<string,mixed> Browser-safe manifest.
+ */
+function gallery_download_manifest(array $gallery): array
+{
+    if (!visitor_can_access_gallery($gallery)) {
+        throw new GalleryDownloadManifestException(t('download.progress.not_available', 'This gallery is not available for download.'));
+    }
+
+    $galleries = gallery_download_gallery_rows($gallery);
+    $galleryIds = gallery_zip_gallery_ids($galleries);
+    $imagesByGallery = [];
+    if ($galleryIds !== []) {
+        $placeholders = implode(',', array_fill(0, count($galleryIds), '?'));
+        $limit = GALLERY_DOWNLOAD_MANIFEST_MAX_FILES + 1;
+        $stmt = db()->prepare("SELECT * FROM images WHERE gallery_id IN ($placeholders) AND visibility = 'public' ORDER BY gallery_id, sort_order, filename, relative_path, id LIMIT $limit");
+        $stmt->execute($galleryIds);
+        $candidateImages = $stmt->fetchAll();
+        if (count($candidateImages) > GALLERY_DOWNLOAD_MANIFEST_MAX_FILES) {
+            throw new GalleryDownloadManifestException(t('download.progress.manifest_too_large', 'This gallery contains too many files for one browser download.'));
+        }
+        foreach ($candidateImages as $image) {
+            $imagesByGallery[(int) $image['gallery_id']][] = $image;
+        }
+    }
+
+    $files = [];
+    $usedNames = [];
+    $totalBytes = 0;
+    foreach ($galleries as $sourceGallery) {
+        foreach ($imagesByGallery[(int) $sourceGallery['id']] ?? [] as $image) {
+            if (!public_image_visible_to_current_visitor($image, $sourceGallery)) {
+                continue;
+            }
+            if (count($files) >= GALLERY_DOWNLOAD_MANIFEST_MAX_FILES) {
+                throw new GalleryDownloadManifestException(t('download.progress.manifest_too_large', 'This gallery contains too many files for one browser download.'));
+            }
+            $absolute = image_abs_path($image, $sourceGallery);
+            $galleryRoot = gallery_abs_path((string) $sourceGallery['folder_path']);
+            if (!is_file($absolute) || !path_inside($galleryRoot, $absolute)) {
+                throw new GalleryDownloadManifestException(t('download.progress.source_missing', 'A source file required for this download is unavailable.'));
+            }
+            $size = filesize($absolute);
+            if ($size === false || $size < 0) {
+                throw new GalleryDownloadManifestException(t('download.progress.source_size_failed', 'A source file size could not be determined.'));
+            }
+            $relativePath = normalize_relative_path((string) $image['relative_path']);
+            $zipPath = gallery_download_unique_zip_path((string) $sourceGallery['folder_path'] . '/' . $relativePath, $usedNames);
+            $version = image_public_asset_version($image);
+            $files[] = [
+                'name' => $zipPath,
+                'size' => (int) $size,
+                'url' => url_for('download_gallery_file', [
+                    'gallery_id' => (int) $gallery['id'],
+                    'image_id' => (int) $image['id'],
+                    'v' => $version,
+                ]),
+            ];
+            $totalBytes += (int) $size;
+        }
+    }
+
+    $downloadName = slugify((string) ($gallery['title'] ?? ''));
+    if ($downloadName === '') {
+        $downloadName = 'gallery-' . (int) ($gallery['id'] ?? 0);
+    }
+
+    return [
+        'ok' => true,
+        'filename' => $downloadName . '.zip',
+        'files' => $files,
+        'total_files' => count($files),
+        'total_bytes' => $totalBytes,
+        'memory_fallback_warning_bytes' => 268435456,
+        'memory_fallback_max_bytes' => 536870912,
+        'zip64' => true,
+    ];
+}
+
+/**
+ * Return whether a no-JavaScript legacy server ZIP is small enough to build safely.
+ *
+ * @param array<string,mixed> $manifest Browser manifest for the same gallery.
+ */
+function gallery_download_legacy_manifest_is_safe(array $manifest): bool
+{
+    return (int) ($manifest['total_files'] ?? 0) <= GALLERY_DOWNLOAD_LEGACY_MAX_FILES
+        && (int) ($manifest['total_bytes'] ?? 0) <= GALLERY_DOWNLOAD_LEGACY_MAX_SOURCE_BYTES;
+}
+
+/**
+ * Resolve and authorize one original source file referenced by a gallery manifest.
+ *
+ * @return array{gallery:array<string,mixed>,image:array<string,mixed>,path:string,filename:string,size:int,version:string}|null
+ */
+function gallery_download_authorized_source(int $rootGalleryId, int $imageId): ?array
+{
+    $rootGallery = find_gallery($rootGalleryId);
+    $image = find_image($imageId);
+    if (!$rootGallery || !$image || !visitor_can_access_gallery($rootGallery)) {
+        return null;
+    }
+    $sourceGallery = find_gallery((int) ($image['gallery_id'] ?? 0));
+    if (!$sourceGallery || !public_image_visible_to_current_visitor($image, $sourceGallery)) {
+        return null;
+    }
+
+    $rootFolder = normalize_relative_path((string) ($rootGallery['folder_path'] ?? ''));
+    $sourceFolder = normalize_relative_path((string) ($sourceGallery['folder_path'] ?? ''));
+    if ($sourceFolder !== $rootFolder
+        && ($rootFolder === '' || !str_starts_with($sourceFolder, $rootFolder . '/'))) {
+        return null;
+    }
+
+    $path = image_abs_path($image, $sourceGallery);
+    $galleryRoot = gallery_abs_path((string) $sourceGallery['folder_path']);
+    if (!is_file($path) || !path_inside($galleryRoot, $path)) {
+        return null;
+    }
+    $size = filesize($path);
+    if ($size === false || $size < 0) {
+        return null;
+    }
+
+    return [
+        'gallery' => $sourceGallery,
+        'image' => $image,
+        'path' => $path,
+        'filename' => basename((string) ($image['filename'] ?? $path)),
+        'size' => (int) $size,
+        'version' => image_public_asset_version($image),
+    ];
+}
+
+
+/**
+ * Return the browser manifest for one current visitor-authorized Smart Gallery.
+ *
+ * Membership and ordering come from the canonical Smart Gallery query service.
+ * Source payloads are never read here; only database metadata and filesystem
+ * stat information are collected before the browser starts its streamed ZIP.
+ *
+ * @param array<string,mixed> $smartGallery Published Smart Gallery definition.
+ * @return array<string,mixed> Browser-safe progressive-download manifest.
+ */
+function smart_gallery_download_manifest(array $smartGallery): array
+{
+    if ((int) ($smartGallery['id'] ?? 0) <= 0
+        || (int) ($smartGallery['enabled'] ?? 0) !== 1
+        || (string) ($smartGallery['visibility'] ?? '') !== 'public'
+        || empty(smart_gallery_effective_presentation($smartGallery)['download_enabled'])) {
+        throw new GalleryDownloadManifestException(t('download.progress.not_available', 'This gallery is not available for download.'));
+    }
+
+    $total = smart_gallery_count_images($smartGallery, true);
+    if ($total > GALLERY_DOWNLOAD_MANIFEST_MAX_FILES) {
+        throw new GalleryDownloadManifestException(t('download.progress.manifest_too_large', 'This gallery contains too many files for one browser download.'));
+    }
+
+    $files = [];
+    $usedNames = [];
+    $totalBytes = 0;
+    for ($offset = 0; $offset < $total; $offset += SMART_GALLERY_QUERY_MAX_PAGE_SIZE) {
+        $batch = smart_gallery_query_images($smartGallery, true, SMART_GALLERY_QUERY_MAX_PAGE_SIZE, $offset);
+        if ($batch === []) {
+            break;
+        }
+        $sourceGalleries = smart_gallery_source_galleries($batch);
+        foreach ($batch as $image) {
+            if (count($files) >= GALLERY_DOWNLOAD_MANIFEST_MAX_FILES) {
+                throw new GalleryDownloadManifestException(t('download.progress.manifest_too_large', 'This gallery contains too many files for one browser download.'));
+            }
+            $sourceGallery = $sourceGalleries[(int) ($image['gallery_id'] ?? 0)] ?? null;
+            if (!$sourceGallery || !public_image_visible_to_current_visitor($image, $sourceGallery)) {
+                throw new GalleryDownloadManifestException(t('download.progress.not_available', 'This gallery is not available for download.'));
+            }
+
+            $absolute = image_abs_path($image, $sourceGallery);
+            $galleryRoot = gallery_abs_path((string) $sourceGallery['folder_path']);
+            if (!is_file($absolute) || !path_inside($galleryRoot, $absolute)) {
+                throw new GalleryDownloadManifestException(t('download.progress.source_missing', 'A source file required for this download is unavailable.'));
+            }
+            $size = filesize($absolute);
+            if ($size === false || $size < 0) {
+                throw new GalleryDownloadManifestException(t('download.progress.source_size_failed', 'A source file size could not be determined.'));
+            }
+
+            $relativePath = normalize_relative_path((string) ($image['relative_path'] ?? ''));
+            $zipPath = gallery_download_unique_zip_path((string) $sourceGallery['folder_path'] . '/' . $relativePath, $usedNames);
+            $files[] = [
+                'name' => $zipPath,
+                'size' => (int) $size,
+                'url' => url_for('download_smart_gallery_file', [
+                    'smart_gallery_id' => (int) $smartGallery['id'],
+                    'image_id' => (int) $image['id'],
+                    'v' => image_public_asset_version($image),
+                ]),
+            ];
+            $totalBytes += (int) $size;
+        }
+    }
+
+    // A changing rule/result set between COUNT and paginated reads must not
+    // silently produce a partial archive. The browser can retry a fresh manifest.
+    if (count($files) !== $total) {
+        throw new GalleryDownloadManifestException(t('download.progress.source_changed', 'A source file changed after the download was prepared. Retry the download.'));
+    }
+
+    $downloadName = slugify((string) ($smartGallery['title'] ?? ''));
+    if ($downloadName === '') {
+        $downloadName = 'smart-gallery-' . (int) ($smartGallery['id'] ?? 0);
+    }
+
+    return [
+        'ok' => true,
+        'filename' => $downloadName . '.zip',
+        'files' => $files,
+        'total_files' => count($files),
+        'total_bytes' => $totalBytes,
+        'memory_fallback_warning_bytes' => 268435456,
+        'memory_fallback_max_bytes' => 536870912,
+        'zip64' => true,
+    ];
+}
+
+/**
+ * Resolve one Smart Gallery manifest source and re-authorize current membership.
+ *
+ * The image id is never treated as proof of membership. The current published
+ * Smart Gallery rules are recompiled for only the image's already-authorized
+ * source gallery, then the image id is matched inside that canonical predicate.
+ * This keeps each media request bounded without enumerating every gallery.
+ *
+ * @return array{gallery:array<string,mixed>,image:array<string,mixed>,path:string,filename:string,size:int,version:string}|null
+ */
+function smart_gallery_download_authorized_source(int $smartGalleryId, int $imageId): ?array
+{
+    $smartGallery = smart_gallery_find_public_by_id($smartGalleryId);
+    if (!$smartGallery || empty(smart_gallery_effective_presentation($smartGallery)['download_enabled'])) {
+        return null;
+    }
+
+    $image = find_image($imageId);
+    if (!$image) {
+        return null;
+    }
+    $sourceGallery = find_gallery((int) ($image['gallery_id'] ?? 0));
+    if (!$sourceGallery
+        || !gallery_is_public_listed($sourceGallery)
+        || !public_image_visible_to_current_visitor($image, $sourceGallery)) {
+        return null;
+    }
+
+    $query = smart_gallery_result_query_for_accessible_ids(
+        $smartGallery,
+        true,
+        [(int) $sourceGallery['id']]
+    );
+    $params = $query['params'];
+    $params[] = $imageId;
+    $stmt = db()->prepare(
+        'SELECT 1 FROM images i INNER JOIN galleries g ON g.id=i.gallery_id WHERE '
+        . $query['where']
+        . ' AND i.id = ? LIMIT 1'
+    );
+    $stmt->execute($params);
+    if (!$stmt->fetchColumn()) {
+        return null;
+    }
+
+    $path = image_abs_path($image, $sourceGallery);
+    $galleryRoot = gallery_abs_path((string) $sourceGallery['folder_path']);
+    if (!is_file($path) || !path_inside($galleryRoot, $path)) {
+        return null;
+    }
+    $size = filesize($path);
+    if ($size === false || $size < 0) {
+        return null;
+    }
+
+    return [
+        'gallery' => $sourceGallery,
+        'image' => $image,
+        'path' => $path,
+        'filename' => basename((string) ($image['filename'] ?? $path)),
+        'size' => (int) $size,
+        'version' => image_public_asset_version($image),
+    ];
+}
 
 /**
  * Stable Smart Gallery ZIP failure carrying only an allowlisted diagnostic reason.
