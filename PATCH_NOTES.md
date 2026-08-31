@@ -1,5 +1,53 @@
 # Patch notes
 
+## Version 0.94.3
+
+Version 0.94.3 adds secure progressive ZIP downloads for public galleries and Smart Galleries. Modern browsers can assemble an archive locally from a bounded private manifest while each original remains independently authorized by the server. Direct and no-JavaScript requests retain the existing bounded server-side ZIP fallback.
+
+### Highlights
+
+- Added progressive browser downloads for physical galleries and Smart Galleries with progress reporting, cancellation, retry, duplicate-name handling, ZIP64 output, and memory-aware fallback behavior.
+- Added private manifest and per-file streaming routes that never treat an image ID as proof of gallery membership.
+- Preserved the existing direct-download path for no-JavaScript clients and legacy browsers, with explicit source-count and cumulative-byte limits before archive creation.
+- Kept downloads behind the global feature flag and Smart Gallery presentation override; disabled features do not expose or serve download routes.
+
+### Technical Details
+
+#### Authorization and request boundaries
+
+- Smart Gallery manifests use the canonical current published rule set and visitor visibility checks, then repeat membership and media authorization for every streamed source.
+- Physical-gallery and Smart Gallery downloads retain gallery access, password/share-link, NSFW, image visibility, media-version, path-containment, and source-file checks.
+- Manifest and file responses are private and non-cacheable; failures return bounded localized responses without leaking filesystem paths, database details, or raw exceptions.
+
+#### Archive assembly and compatibility
+
+- The browser receives only authorized source descriptors and streams originals one at a time into a local ZIP, avoiding a long-running server archive request for modern clients.
+- ZIP64 support handles large archives while bounded file-count, source-size, memory, and duplicate-path rules keep resource use predictable.
+- Server-side fallback archives remain available for direct links and no-JavaScript requests, including the existing cached/locked archive behavior where applicable.
+- No database migration or stored-schema change is introduced.
+
+#### Frontend and release assets
+
+- Added localized download-dialog controls with native `<dialog>` behavior where supported, accessible status/progress messaging, cancellation, retry, and cache-busted module loading.
+- Updated public gallery and Smart Gallery markup, routing, dispatch, feature flags, SEO guards, and the integrity manifest.
+
+#### Tests
+
+- Added and ran focused controller, service, manifest, browser-client, ZIP, ZIP64, authorization, fallback, and Smart Gallery download regressions.
+- Existing thumbnail, access-control, Smart Gallery, updater, packaging, localization, and full-suite contracts remain part of release verification.
+
+### User Impact
+
+#### For visitors
+
+- Authorized visitors can download large physical or Smart Gallery result sets with visible progress and cancellation in modern browsers.
+- Downloading never grants access beyond the gallery and image permissions already enforced by the normal public routes.
+
+#### For administrators
+
+- The global download feature switch and per-Smart-Gallery download setting continue to control availability.
+- Existing direct-download behavior remains available, and no migration or content rewrite is required.
+
 ## Version 0.94.2
 
 Version 0.94.2 fixes a deterministic thumbnail format and metadata consistency bug. Public pages could combine historical `valid` JPEG metadata with the active modern policy and advertise `.jpg` candidates whose generated files no longer existed. Modern mode now remains strictly WebP-only at every shared thumbnail boundary, while legacy mode continues to support JPEG plus WebP compatibility derivatives.

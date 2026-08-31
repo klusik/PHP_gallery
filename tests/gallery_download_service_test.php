@@ -8,6 +8,7 @@ use function Gallery\Services\gallery_download_legacy_manifest_is_safe;
 use function Gallery\Services\gallery_download_safe_zip_path;
 use function Gallery\Services\gallery_download_unique_zip_path;
 
+/** Test double for assert_same(). */
 function assert_same(mixed $expected, mixed $actual, string $message): void
 {
     if ($expected !== $actual) {

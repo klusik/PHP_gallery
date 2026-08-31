@@ -27,6 +27,7 @@ const STORED_METHOD = 0;
 const VERSION_CLASSIC = 20;
 const VERSION_ZIP64 = 45;
 
+/** CRC32_TABLE supports the browser ZIP download workflow. */
 const CRC32_TABLE = (() => {
     const table = new Uint32Array(256);
     for (let i = 0; i < 256; i += 1) {
@@ -39,6 +40,7 @@ const CRC32_TABLE = (() => {
     return table;
 })();
 
+/** crc32Update supports the browser ZIP download workflow. */
 function crc32Update(crc, bytes) {
     let value = crc >>> 0;
     for (let i = 0; i < bytes.length; i += 1) {
@@ -47,14 +49,17 @@ function crc32Update(crc, bytes) {
     return value >>> 0;
 }
 
+/** writeUint16 supports the browser ZIP download workflow. */
 function writeUint16(view, offset, value) {
     view.setUint16(offset, Number(value), true);
 }
 
+/** writeUint32 supports the browser ZIP download workflow. */
 function writeUint32(view, offset, value) {
     view.setUint32(offset, Number(BigInt(value) & ZIP32_MAX), true);
 }
 
+/** writeUint64 supports the browser ZIP download workflow. */
 function writeUint64(view, offset, value) {
     let remaining = BigInt(value);
     view.setUint32(offset, Number(remaining & ZIP32_MAX), true);
@@ -62,10 +67,12 @@ function writeUint64(view, offset, value) {
     view.setUint32(offset + 4, Number(remaining & ZIP32_MAX), true);
 }
 
+/** concatBytes supports the browser ZIP download workflow. */
 function concatBytes(...parts) {
     const total = parts.reduce((sum, part) => sum + part.length, 0);
     const result = new Uint8Array(total);
     let offset = 0;
+/** for supports the browser ZIP download workflow. */
     for (const part of parts) {
         result.set(part, offset);
         offset += part.length;
@@ -73,6 +80,7 @@ function concatBytes(...parts) {
     return result;
 }
 
+/** dosDateTime supports the browser ZIP download workflow. */
 function dosDateTime(date = new Date()) {
     const year = Math.min(2107, Math.max(1980, date.getFullYear()));
     const month = date.getMonth() + 1;
@@ -86,6 +94,7 @@ function dosDateTime(date = new Date()) {
     };
 }
 
+/** zip64Extra supports the browser ZIP download workflow. */
 function zip64Extra(values) {
     const payloadLength = values.length * 8;
     const bytes = new Uint8Array(4 + payloadLength);
@@ -96,6 +105,7 @@ function zip64Extra(values) {
     return bytes;
 }
 
+/** localHeader supports the browser ZIP download workflow. */
 function localHeader(nameBytes, expectedSize, dateParts) {
     const zip64 = expectedSize >= ZIP32_MAX;
     const extra = zip64 ? zip64Extra([expectedSize, expectedSize]) : new Uint8Array(0);
@@ -115,11 +125,13 @@ function localHeader(nameBytes, expectedSize, dateParts) {
     return {bytes: concatBytes(bytes, nameBytes, extra), zip64};
 }
 
+/** dataDescriptor supports the browser ZIP download workflow. */
 function dataDescriptor(crc, size, zip64) {
     const bytes = new Uint8Array(zip64 ? 24 : 16);
     const view = new DataView(bytes.buffer);
     writeUint32(view, 0, 0x08074b50);
     writeUint32(view, 4, crc >>> 0);
+/** if supports the browser ZIP download workflow. */
     if (zip64) {
         writeUint64(view, 8, size);
         writeUint64(view, 16, size);
@@ -130,13 +142,16 @@ function dataDescriptor(crc, size, zip64) {
     return bytes;
 }
 
+/** centralDirectoryHeader supports the browser ZIP download workflow. */
 function centralDirectoryHeader(entry) {
     const needsSize64 = entry.size >= ZIP32_MAX;
     const needsOffset64 = entry.offset >= ZIP32_MAX;
     const extraValues = [];
+/** if supports the browser ZIP download workflow. */
     if (needsSize64) {
         extraValues.push(entry.size, entry.size);
     }
+/** if supports the browser ZIP download workflow. */
     if (needsOffset64) {
         extraValues.push(entry.offset);
     }
@@ -163,6 +178,7 @@ function centralDirectoryHeader(entry) {
     return concatBytes(bytes, entry.nameBytes, extra);
 }
 
+/** zip64EndOfCentralDirectory supports the browser ZIP download workflow. */
 function zip64EndOfCentralDirectory(entryCount, centralSize, centralOffset) {
     const bytes = new Uint8Array(56);
     const view = new DataView(bytes.buffer);
@@ -179,6 +195,7 @@ function zip64EndOfCentralDirectory(entryCount, centralSize, centralOffset) {
     return bytes;
 }
 
+/** zip64Locator supports the browser ZIP download workflow. */
 function zip64Locator(zip64EocdOffset) {
     const bytes = new Uint8Array(20);
     const view = new DataView(bytes.buffer);
@@ -189,6 +206,7 @@ function zip64Locator(zip64EocdOffset) {
     return bytes;
 }
 
+/** endOfCentralDirectory supports the browser ZIP download workflow. */
 function endOfCentralDirectory(entryCount, centralSize, centralOffset, useZip64) {
     const bytes = new Uint8Array(22);
     const view = new DataView(bytes.buffer);
@@ -214,7 +232,9 @@ export function zip64RequiredForArchive(entryCount, centralSize, centralOffset, 
 }
 
 export class ZipStreamWriter {
+/** constructor supports the browser ZIP download workflow. */
     constructor(sink) {
+/** if supports the browser ZIP download workflow. */
         if (!sink || typeof sink.write !== 'function') {
             throw new TypeError('ZIP sink must provide write(Uint8Array).');
         }
@@ -225,7 +245,9 @@ export class ZipStreamWriter {
         this.encoder = new TextEncoder();
     }
 
+/** write supports the browser ZIP download workflow. */
     async write(bytes) {
+/** if supports the browser ZIP download workflow. */
         if (!(bytes instanceof Uint8Array)) {
             bytes = new Uint8Array(bytes);
         }
@@ -237,13 +259,16 @@ export class ZipStreamWriter {
      * Add one file from a ReadableStream while calculating CRC and byte count.
      */
     async addReadable(name, expectedSize, readable, onChunk = null) {
+/** if supports the browser ZIP download workflow. */
         if (this.closed) {
             throw new Error('ZIP writer is already finalized.');
         }
+/** if supports the browser ZIP download workflow. */
         if (!readable || typeof readable.getReader !== 'function') {
             throw new Error('Response body streaming is not available.');
         }
         const size = BigInt(expectedSize);
+/** if supports the browser ZIP download workflow. */
         if (size < 0n) {
             throw new Error('Invalid expected file size.');
         }
@@ -256,6 +281,7 @@ export class ZipStreamWriter {
             throw new Error('ZIP entry name is unsafe.');
         }
         const nameBytes = this.encoder.encode(String(name));
+/** if supports the browser ZIP download workflow. */
         if (nameBytes.length === 0 || nameBytes.length > 0xffff) {
             throw new Error('ZIP entry name is invalid or too long.');
         }
@@ -268,18 +294,22 @@ export class ZipStreamWriter {
         let crc = 0xffffffff;
         const reader = readable.getReader();
         try {
+/** while supports the browser ZIP download workflow. */
             while (true) {
                 const {done, value} = await reader.read();
+/** if supports the browser ZIP download workflow. */
                 if (done) {
                     break;
                 }
                 const bytes = value instanceof Uint8Array ? value : new Uint8Array(value);
                 actualSize += BigInt(bytes.byteLength);
+/** if supports the browser ZIP download workflow. */
                 if (actualSize > size) {
                     throw new Error('Downloaded file exceeded the declared size.');
                 }
                 crc = crc32Update(crc, bytes);
                 await this.write(bytes);
+/** if supports the browser ZIP download workflow. */
                 if (typeof onChunk === 'function') {
                     onChunk(bytes.byteLength);
                 }
@@ -287,6 +317,7 @@ export class ZipStreamWriter {
         } finally {
             reader.releaseLock();
         }
+/** if supports the browser ZIP download workflow. */
         if (actualSize !== size) {
             throw new Error('Downloaded file length did not match the manifest.');
         }
@@ -306,16 +337,19 @@ export class ZipStreamWriter {
      * Write central directory records and close the logical ZIP stream.
      */
     async finalize() {
+/** if supports the browser ZIP download workflow. */
         if (this.closed) {
             return;
         }
         const centralOffset = this.offset;
+/** for supports the browser ZIP download workflow. */
         for (const entry of this.entries) {
             await this.write(centralDirectoryHeader(entry));
         }
         const centralSize = this.offset - centralOffset;
         const entryCount = BigInt(this.entries.length);
         const useZip64 = zip64RequiredForArchive(entryCount, centralSize, centralOffset, this.entries);
+/** if supports the browser ZIP download workflow. */
         if (useZip64) {
             const zip64EocdOffset = this.offset;
             await this.write(zip64EndOfCentralDirectory(entryCount, centralSize, centralOffset));
@@ -326,6 +360,7 @@ export class ZipStreamWriter {
     }
 }
 
+/** crc32ForBytes supports the browser ZIP download workflow. */
 export function crc32ForBytes(bytes) {
     return (crc32Update(0xffffffff, bytes) ^ 0xffffffff) >>> 0;
 }

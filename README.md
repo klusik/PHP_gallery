@@ -2,7 +2,7 @@
 
 A modern PHP 8.0+ gallery CMS designed for ordinary shared hosting. The application uses the filesystem as the authoritative source for gallery structure, while storing all metadata, access rules, votes, user accounts, and audit logs in MySQL or MariaDB.
 
-**Current Version:** 0.94.2
+**Current Version:** 0.94.3
 
 **Key Benefit:** Deploy in minutes on shared hosting. No npm, no Composer, no framework overhead. Just PHP + MySQL.
 
@@ -138,8 +138,9 @@ authorized thumbnail/media routes, so gallery, share, NSFW, map, voting, paginat
 behavior remains unchanged.
 
 ### Downloading
-- **ZIP archives** - Download a single gallery or all accessible galleries
-- **Streaming** - Archives streamed directly (not stored on disk)
+- **ZIP archives** - Download a single gallery, Smart Gallery, or all accessible galleries
+- **Progressive browser downloads** - Modern browsers receive a bounded private manifest and stream authorized originals into a local ZIP with progress, cancellation, retry, duplicate-name handling, and ZIP64 support
+- **Streaming fallback** - Direct and no-JavaScript requests retain the bounded server-side archive path
 - **Signed downloads** - Optional signature verification for secure links
 
 ### Theming & Customization
