@@ -557,6 +557,9 @@ function thumbnail_ensure_image_thumbnail_variant_file(array $image, array $gall
     if (!in_array($size, thumbnail_sizes(), true) || !in_array($format, ['jpg', 'webp'], true)) {
         return null;
     }
+    if (function_exists('Gallery\\Services\\thumbnail_policy_format_allowed') && !thumbnail_policy_format_allowed($format)) {
+        return null;
+    }
 
     try {
         // $path stores the concrete derivative requested by the public URL.

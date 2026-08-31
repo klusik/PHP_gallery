@@ -142,6 +142,18 @@ function thumbnail_policy_requested_formats(?string $mode = null): array
 }
 
 /**
+ * Return whether one generated thumbnail format is allowed by the active policy.
+ *
+ * @param string $format Format value.
+ * @param ?string $mode Optional compatibility mode override.
+ * @return bool True when the generated format may be used.
+ */
+function thumbnail_policy_format_allowed(string $format, ?string $mode = null): bool
+{
+    return in_array(strtolower(trim($format)), thumbnail_policy_requested_formats($mode), true);
+}
+
+/**
  * Return a readable label for one compatibility mode.
  *
  * @param string $mode Mode value.
@@ -261,6 +273,9 @@ function delete_legacy_jpg_thumbnails_for_image(array $image, array $gallery): a
             continue;
         }
         if (!is_file($path)) {
+            if (function_exists('Gallery\\Services\\thumbnail_metadata_delete_variant')) {
+                thumbnail_metadata_delete_variant($image, (int) $size, 'jpg');
+            }
             continue;
         }
         if (!path_inside($galleryRoot, $path)) {

@@ -811,6 +811,9 @@ function upload_automation_client_thumbnail_entries(): array
         if (!in_array($format, ['jpg', 'webp'], true)) {
             throw new RuntimeException(t('upload_automation.error.thumbnail_format_invalid', 'Uploaded client thumbnail uses an unsupported format.'));
         }
+        if (function_exists('Gallery\\Services\\thumbnail_policy_format_allowed') && !thumbnail_policy_format_allowed($format)) {
+            throw new RuntimeException(t('upload_automation.error.thumbnail_format_invalid', 'Uploaded client thumbnail uses an unsupported format.'));
+        }
 
         // $info stores image metadata used to reject wrong or damaged thumbnail files.
         $info = @getimagesize($tmpName);
@@ -980,10 +983,16 @@ function upload_automation_install_client_thumbnails(int $galleryId, array $gall
             $result['errors'][] = 'No stored image matched one uploaded client thumbnail.';
             continue;
         }
+        $format = strtolower((string) ($entry['format'] ?? ''));
+        if (function_exists('Gallery\\Services\\thumbnail_policy_format_allowed') && !thumbnail_policy_format_allowed($format)) {
+            $result['skipped']++;
+            $result['errors'][] = 'Client-generated thumbnail format is not allowed by the active compatibility mode.';
+            continue;
+        }
 
         try {
             // $targetPath stores the final gallery thumbnail cache path.
-            $targetPath = thumbnail_abs_path($image, $gallery, (int) $entry['size_px'], (string) $entry['format']);
+            $targetPath = thumbnail_abs_path($image, $gallery, (int) $entry['size_px'], $format);
             // $targetDir stores the parent folder for the generated thumbnail file.
             $targetDir = dirname($targetPath);
             if (!is_dir($targetDir) && !mkdir($targetDir, 0775, true)) {
@@ -995,7 +1004,7 @@ function upload_automation_install_client_thumbnails(int $galleryId, array $gall
             @touch($targetPath, time());
             if (function_exists('Gallery\\Services\\thumbnail_metadata_record_file')) {
                 // $metadataResult stores validation and DB registration for the uploaded client thumbnail.
-                $metadataResult = thumbnail_metadata_record_file($image, $gallery, (int) $entry['size_px'], (string) $entry['format'], $targetPath, image_abs_path($image, $gallery), true);
+                $metadataResult = thumbnail_metadata_record_file($image, $gallery, (int) $entry['size_px'], $format, $targetPath, image_abs_path($image, $gallery), true);
                 if (empty($metadataResult['valid']) && (string) ($metadataResult['status'] ?? '') !== 'metadata_unavailable') {
                     $result['failed']++;
                     $result['errors'][] = 'Client-generated thumbnail geometry did not match the original image.';

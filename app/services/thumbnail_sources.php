@@ -100,7 +100,8 @@ function thumbnail_srcset_for_format(array $image, array $sizes, string $format)
     $entries = [];
     // $gallery stores an intermediate value used by the surrounding gallery workflow.
     $gallery = find_gallery((int) $image['gallery_id']);
-    if (!$gallery || !in_array($format, ['jpg', 'webp'], true)) {
+    if (!$gallery || !in_array($format, ['jpg', 'webp'], true)
+        || (function_exists('Gallery\\Services\\thumbnail_policy_format_allowed') && !thumbnail_policy_format_allowed($format))) {
         return '';
     }
     if (function_exists('Gallery\\Services\\thumbnail_bound_filter_sizes')) {
@@ -348,6 +349,10 @@ function thumbnail_url(array $image, int $size, string $format = ''): string
     $format = $format !== '' ? $format : (function_exists('Gallery\\Services\\thumbnail_preferred_browser_format') ? thumbnail_preferred_browser_format() : 'jpg');
     $normalizedFormat = $format === 'webp' ? 'webp' : 'jpg';
     $format = $normalizedFormat;
+    if (function_exists('Gallery\\Services\\thumbnail_policy_format_allowed') && !thumbnail_policy_format_allowed($format)) {
+        $format = function_exists('Gallery\\Services\\thumbnail_preferred_browser_format') ? thumbnail_preferred_browser_format() : 'webp';
+        $normalizedFormat = $format === 'jpg' ? 'jpg' : 'webp';
+    }
     $purpose = function_exists('Gallery\\Services\\public_render_profile_thumbnail_purpose') ? public_render_profile_thumbnail_purpose() : 'unprofiled';
     $cacheKey = (int) ($image['id'] ?? 0) . ':' . (int) $size . ':' . $normalizedFormat;
     if (array_key_exists($cacheKey, $cache)) {
@@ -485,7 +490,9 @@ function thumbnail_existing_fallback(array $image, array $gallery, int $preferre
             return abs($left - $preferredSize) <=> abs($right - $preferredSize);
         });
         // Variable $formats stores this steps working value.
-        $formats = array_values(array_unique([$preferredFormat, 'jpg', 'webp']));
+        $allowedFormats = function_exists('Gallery\\Services\\thumbnail_policy_requested_formats') ? thumbnail_policy_requested_formats() : ['webp'];
+        $formats = array_values(array_unique(array_merge([$preferredFormat], $allowedFormats)));
+        $formats = array_values(array_intersect($formats, $allowedFormats));
 
         // $sourceGeometry stores source dimensions used to reject invalid stale thumbnails before serving them.
         $sourceGeometry = null;

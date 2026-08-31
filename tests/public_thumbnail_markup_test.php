@@ -67,6 +67,18 @@ namespace Gallery\Services {
         return 'jpg';
     }
 
+    /** Keep this structural markup fixture in explicit legacy compatibility mode. */
+    function thumbnail_policy_requested_formats(): array
+    {
+        return ['jpg', 'webp'];
+    }
+
+    /** Allow both formats in this explicit legacy compatibility fixture. */
+    function thumbnail_policy_format_allowed(string $format): bool
+    {
+        return in_array($format, thumbnail_policy_requested_formats(), true);
+    }
+
     /**
      * Apply deterministic synthetic min/max bounds supplied on the test gallery row.
      *

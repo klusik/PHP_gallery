@@ -1,5 +1,47 @@
 # Patch notes
 
+## Version 0.94.2
+
+Version 0.94.2 fixes a deterministic thumbnail format and metadata consistency bug. Public pages could combine historical `valid` JPEG metadata with the active modern policy and advertise `.jpg` candidates whose generated files no longer existed. Modern mode now remains strictly WebP-only at every shared thumbnail boundary, while legacy mode continues to support JPEG plus WebP compatibility derivatives.
+
+### Highlights
+
+- Modern is still the default and requests only WebP derivatives; stale metadata or historical JPEG files cannot override that setting.
+- Legacy remains opt-in and continues to advertise and serve valid JPEG and WebP compatibility derivatives.
+- Old cached `.jpg` thumbnail requests in modern mode are rejected without JPEG generation, setting changes, or policy bypasses.
+
+### Technical Details
+
+#### Thumbnail policy and public data
+
+- Applied the canonical requested-format policy to public media manifests, generic thumbnail bundles, candidate-size selection, thumbnail sources, HTML, browser rebuild/warmup paths, and upload automation.
+- Made the optimized public manifest query policy-aware so modern mode never loads historical JPEG variants into public bundles.
+- Preserved stable revision URLs and the existing batched metadata architecture; ordinary public rendering performs no new per-candidate filesystem discovery or repair.
+
+#### Metadata lifecycle and maintenance
+
+- Legacy JPEG cleanup now removes or invalidates matching metadata even when the generated JPEG file is already absent, preventing `valid` rows from describing missing derivatives.
+- Generation and publication ordering keeps metadata `valid` only after a derivative is successfully published.
+- A JPEG generation failure in legacy mode does not invalidate a successful WebP derivative; WebP failure in modern mode does not trigger an automatic JPEG fallback.
+- No database migration or original-photo deletion is introduced.
+
+#### Tests
+
+- Added focused consistency coverage for default modern behavior, stale metadata, historical JPEG files, legacy cleanup with present or missing files, independent format failures, old JPEG URLs, public manifests, progressive markup, responsive markup, authorization, and size bounds.
+- Extended compatibility and public thumbnail markup contracts to enforce WebP-only modern output and preserve explicit legacy JPEG plus WebP behavior.
+
+### User Impact
+
+#### For visitors
+
+- Modern galleries no longer emit generated JPEG thumbnail URLs that resolve to the Gallery's HTML 404 page.
+- Existing WebP thumbnail URLs, revision-based caching, authorization, progressive rendering, and responsive rendering remain intact.
+
+#### For administrators
+
+- The default remains modern/WebP-only. Selecting legacy compatibility mode remains the explicit way to enable JPEG thumbnails.
+- Maintenance and regeneration can repair stale legacy JPEG state without touching original photographs or WebP derivatives.
+
 ## Version 0.94.1
 
 Version 0.94.1 hardens request handling and release activation after the Version 0.94 runtime and routing audit. Internal application trees are consistently protected in subdirectory deployments, public original-media URLs carry stable cache identities, unexpected PHP failures return bounded server-error responses, and updater activation fails new requests closed until the active file set is coherent.

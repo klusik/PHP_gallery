@@ -381,10 +381,10 @@ function browser_upload_browser_config(): array
 {
     $settings = browser_upload_settings();
     $uploadLimit = browser_upload_server_upload_limit_bytes();
-    $formats = function_exists('Gallery\\Services\\thumbnail_policy_requested_formats') ? thumbnail_policy_requested_formats() : ['jpg', 'webp'];
+    $formats = function_exists('Gallery\\Services\\thumbnail_policy_requested_formats') ? thumbnail_policy_requested_formats() : ['webp'];
     $formats = array_values(array_filter(array_map('strval', $formats), static fn (string $format): bool => in_array($format, ['jpg', 'webp'], true)));
     if (!$formats) {
-        $formats = ['jpg'];
+        $formats = ['webp'];
     }
 
     return [

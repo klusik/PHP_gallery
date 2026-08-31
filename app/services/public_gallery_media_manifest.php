@@ -109,16 +109,24 @@ function public_gallery_media_manifest_renderable_rows(array $imagesById, array 
     $imagePlaceholders = implode(',', array_fill(0, count($imageIds), '?'));
     // $sizePlaceholders stores placeholders for thumbnail sizes.
     $sizePlaceholders = implode(',', array_fill(0, count($sizes), '?'));
-    // $params stores bound image ids and sizes.
-    $params = array_merge($imageIds, array_values($sizes));
+    // $formats stores only generated formats allowed by the active compatibility policy.
+    $formats = function_exists('Gallery\\Services\\thumbnail_policy_requested_formats') ? thumbnail_policy_requested_formats() : ['webp'];
+    $formats = array_values(array_intersect(['jpg', 'webp'], $formats));
+    if (!$formats) {
+        return [];
+    }
+    // $formatPlaceholders stores placeholders for policy-approved formats.
+    $formatPlaceholders = implode(',', array_fill(0, count($formats), '?'));
+    // $params stores bound image ids, sizes, and internally whitelisted formats.
+    $params = array_merge($imageIds, array_values($sizes), $formats);
 
     // $derivativeVersionSelect stores a compatible staleness marker for compact and older metadata schemas.
     $derivativeVersionSelect = thumbnail_metadata_variant_column_exists('derivative_version') ? 'derivative_version' : '0 AS derivative_version';
 
     try {
         // $metadataRows stores the measured database result for this manifest-only lookup.
-        $metadataRows = public_render_profile_db('media_manifest_query_metadata', static function () use ($imagePlaceholders, $sizePlaceholders, $derivativeVersionSelect, $params): array {
-            $stmt = db()->prepare("SELECT image_id, size_px, format, width, height, status, $derivativeVersionSelect FROM image_thumbnail_variants WHERE image_id IN ($imagePlaceholders) AND size_px IN ($sizePlaceholders) AND format IN ('jpg', 'webp') AND status = 'valid' ORDER BY image_id, size_px, format");
+        $metadataRows = public_render_profile_db('media_manifest_query_metadata', static function () use ($imagePlaceholders, $sizePlaceholders, $formatPlaceholders, $derivativeVersionSelect, $params): array {
+            $stmt = db()->prepare("SELECT image_id, size_px, format, width, height, status, $derivativeVersionSelect FROM image_thumbnail_variants WHERE image_id IN ($imagePlaceholders) AND size_px IN ($sizePlaceholders) AND format IN ($formatPlaceholders) AND status = 'valid' ORDER BY image_id, size_px, format");
             $stmt->execute($params);
             return $stmt->fetchAll();
         });
@@ -128,7 +136,7 @@ function public_gallery_media_manifest_renderable_rows(array $imagesById, array 
 
     public_render_profile_count('thumbnail_manifest_rows_loaded', count($metadataRows));
 
-    return public_render_profile_span('media_manifest_group_rows', static function () use ($imageIds, $imagesById, $sizes, $metadataRows): array {
+    return public_render_profile_span('media_manifest_group_rows', static function () use ($imageIds, $imagesById, $sizes, $formats, $metadataRows): array {
         // $rowsByImage stores renderable rows grouped in the shape expected by the bundle builder.
         $rowsByImage = [];
         foreach ($imageIds as $imageId) {
@@ -145,7 +153,7 @@ function public_gallery_media_manifest_renderable_rows(array $imagesById, array 
             $format = (string) ($row['format'] ?? '');
             // $size stores the generated thumbnail size represented by this metadata row.
             $size = (int) ($row['size_px'] ?? 0);
-            if (!isset($sizes[$size]) || !in_array($format, ['jpg', 'webp'], true)) {
+            if (!isset($sizes[$size]) || !in_array($format, $formats, true)) {
                 continue;
             }
             if (!thumbnail_metadata_row_is_renderable($row, $imagesById[$imageId])) {
@@ -237,6 +245,8 @@ function public_gallery_media_manifest_variant_url(array $image, array $gallery,
  */
 function public_gallery_media_manifest_metadata_bundle(array $image, array $gallery, array $allSizes, array $rows, string $imageBaseUrl): array
 {
+    // $formats stores the only generated formats allowed into this public bundle.
+    $formats = function_exists('Gallery\\Services\\thumbnail_policy_requested_formats') ? thumbnail_policy_requested_formats() : ['webp'];
     // $boundedSizes stores sizes allowed by gallery-specific thumbnail bounds.
     $boundedSizes = array_values($allSizes);
     if (function_exists('Gallery\\Services\\thumbnail_bound_filter_sizes')) {
@@ -265,7 +275,7 @@ function public_gallery_media_manifest_metadata_bundle(array $image, array $gall
         'warmup_sizes' => [],
     ];
 
-    foreach (['jpg', 'webp'] as $format) {
+    foreach ($formats as $format) {
         foreach ($rows[$format] ?? [] as $size => $row) {
             // $size stores the generated thumbnail size represented by this metadata row.
             $size = (int) $size;
@@ -303,7 +313,8 @@ function public_gallery_media_manifest_select_url(array $bundle, int $preferredS
 {
     public_render_profile_count('thumbnail_manifest_selection_attempts');
     // $preferredFormat stores the normalized caller preference used for URL selection.
-    $preferredFormat = $preferredFormat === 'jpg' ? 'jpg' : 'webp';
+    $formats = function_exists('Gallery\\Services\\thumbnail_policy_requested_formats') ? thumbnail_policy_requested_formats() : ['webp'];
+    $preferredFormat = in_array($preferredFormat, $formats, true) ? $preferredFormat : (string) ($formats[0] ?? 'webp');
     // $effectiveSize stores the preferred size after optional gallery bounds.
     $effectiveSize = thumbnail_bundle_effective_size($bundle, (int) $preferredSize);
     // $variants stores prepared generated URLs indexed by format and size.
@@ -316,7 +327,7 @@ function public_gallery_media_manifest_select_url(array $bundle, int $preferredS
 
     if ($candidateSizes === null) {
         $candidateSizes = [];
-        foreach (['jpg', 'webp'] as $format) {
+        foreach ($formats as $format) {
             foreach (array_keys($variants[$format] ?? []) as $size) {
                 $candidateSizes[(int) $size] = (int) $size;
             }
@@ -328,7 +339,7 @@ function public_gallery_media_manifest_select_url(array $bundle, int $preferredS
     });
 
     // $formats stores the same fallback order used by the generic bundle resolver.
-    $formats = $preferredFormat === 'webp' ? ['webp', 'jpg'] : ['jpg', 'webp'];
+    $formats = array_values(array_unique(array_merge([$preferredFormat], $formats)));
     foreach ($candidateSizes as $size) {
         foreach ($formats as $format) {
             if (isset($variants[$format][$size])) {
@@ -354,7 +365,8 @@ function public_gallery_media_manifest_candidate_sizes(array $bundle): array
 {
     // $candidateSizes stores generated derivative sizes available for this image.
     $candidateSizes = [];
-    foreach (['jpg', 'webp'] as $format) {
+    $formats = function_exists('Gallery\\Services\\thumbnail_policy_requested_formats') ? thumbnail_policy_requested_formats() : ['webp'];
+    foreach ($formats as $format) {
         foreach (array_keys((array) ($bundle['variants'][$format] ?? [])) as $size) {
             // $size stores one generated derivative size.
             $size = (int) $size;

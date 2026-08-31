@@ -187,7 +187,7 @@ function browser_thumbnail_rebuild_target_formats_for_image(string $sourcePath, 
         return browser_thumbnail_rebuild_normalized_formats(thumbnail_target_formats_for_source($sourcePath, $mime), false);
     }
 
-    return browser_thumbnail_rebuild_normalized_formats(function_exists('Gallery\\Services\\thumbnail_policy_requested_formats') ? thumbnail_policy_requested_formats() : ['jpg', 'webp']);
+    return browser_thumbnail_rebuild_normalized_formats(function_exists('Gallery\\Services\\thumbnail_policy_requested_formats') ? thumbnail_policy_requested_formats() : ['webp']);
 }
 
 /**
@@ -211,7 +211,7 @@ function browser_thumbnail_rebuild_browser_config(): array
 {
     $settings = function_exists('Gallery\\Services\\browser_upload_settings') ? browser_upload_settings() : ['enabled' => false];
     $uploadLimit = function_exists('Gallery\\Services\\browser_upload_server_upload_limit_bytes') ? browser_upload_server_upload_limit_bytes() : 8 * 1024 * 1024;
-    $formats = browser_thumbnail_rebuild_normalized_formats(function_exists('Gallery\\Services\\thumbnail_policy_requested_formats') ? thumbnail_policy_requested_formats() : ['jpg', 'webp']);
+    $formats = browser_thumbnail_rebuild_normalized_formats(function_exists('Gallery\\Services\\thumbnail_policy_requested_formats') ? thumbnail_policy_requested_formats() : ['webp']);
 
     return [
         'enabled' => (bool) ($settings['enabled'] ?? false),

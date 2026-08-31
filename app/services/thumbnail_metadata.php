@@ -126,7 +126,8 @@ function thumbnail_metadata_size_cache_key(array $sizes): string
     // $sizes stores normalized thumbnail sizes represented by this cache key.
     $sizes = array_values(array_unique(array_filter(array_map('intval', $sizes), static fn (int $size): bool => in_array($size, thumbnail_sizes(), true))));
     sort($sizes);
-    return implode(',', $sizes);
+    $formats = function_exists('Gallery\\Services\\thumbnail_policy_requested_formats') ? thumbnail_policy_requested_formats() : ['webp'];
+    return implode(',', $sizes) . '|' . implode(',', $formats);
 }
 
 /**
@@ -195,11 +196,19 @@ function thumbnail_metadata_preload_renderable_rows(array $images, array $sizes)
     $imagePlaceholders = implode(',', array_fill(0, count($missingImageIds), '?'));
     // $sizePlaceholders stores placeholders for thumbnail sizes.
     $sizePlaceholders = implode(',', array_fill(0, count($sizes), '?'));
-    // $params stores bound image ids and sizes.
-    $params = array_merge($missingImageIds, $sizes);
+    // $formats stores generated formats permitted in public metadata bundles.
+    $formats = function_exists('Gallery\\Services\\thumbnail_policy_requested_formats') ? thumbnail_policy_requested_formats() : ['webp'];
+    $formats = array_values(array_intersect(['jpg', 'webp'], $formats));
+    if (!$formats) {
+        return;
+    }
+    // $formatPlaceholders stores placeholders for policy-approved formats.
+    $formatPlaceholders = implode(',', array_fill(0, count($formats), '?'));
+    // $params stores bound image ids, sizes, and internally whitelisted formats.
+    $params = array_merge($missingImageIds, $sizes, $formats);
     try {
         // $stmt stores the batched thumbnail metadata query.
-        $stmt = db()->prepare("SELECT * FROM image_thumbnail_variants WHERE image_id IN ($imagePlaceholders) AND size_px IN ($sizePlaceholders) ORDER BY image_id, size_px, format");
+        $stmt = db()->prepare("SELECT * FROM image_thumbnail_variants WHERE image_id IN ($imagePlaceholders) AND size_px IN ($sizePlaceholders) AND format IN ($formatPlaceholders) ORDER BY image_id, size_px, format");
         $stmt->execute($params);
         $metadataRows = $stmt->fetchAll();
     } catch (Throwable) {
@@ -219,7 +228,7 @@ function thumbnail_metadata_preload_renderable_rows(array $images, array $sizes)
         $format = (string) ($row['format'] ?? '');
         // $size stores the thumbnail size for this metadata row.
         $size = (int) ($row['size_px'] ?? 0);
-        if (!in_array($format, ['jpg', 'webp'], true) || !in_array($size, $sizes, true)) {
+        if (!in_array($format, $formats, true) || !in_array($size, $sizes, true)) {
             continue;
         }
         if (!thumbnail_metadata_row_is_renderable($row, $imageById[$imageId])) {
@@ -577,13 +586,15 @@ function thumbnail_metadata_select_renderable_variant(array $image, array $sizes
     });
 
     // $formats stores the fallback format order, but never leaves DB metadata.
-    $formats = $allowAlternateFormats ? array_values(array_unique([$preferredFormat, 'jpg', 'webp'])) : [$preferredFormat];
+    $allowedFormats = function_exists('Gallery\\Services\\thumbnail_policy_requested_formats') ? thumbnail_policy_requested_formats() : ['webp'];
+    $formats = $allowAlternateFormats ? array_values(array_unique(array_merge([$preferredFormat], $allowedFormats))) : [$preferredFormat];
+    $formats = array_values(array_intersect($formats, $allowedFormats));
     // $metadataRows stores renderable variants already validated by metadata rules.
     $metadataRows = thumbnail_metadata_renderable_rows($image, $sizes);
 
     foreach ($sizes as $size) {
         foreach ($formats as $format) {
-            if (!in_array($format, ['jpg', 'webp'], true)) {
+            if (!in_array($format, $allowedFormats, true)) {
                 continue;
             }
             if (!isset($metadataRows[$format][(int) $size])) {
@@ -821,6 +832,10 @@ function thumbnail_metadata_record_file(array $image, array $gallery, int $size,
     if (!in_array($format, ['jpg', 'webp'], true) || !in_array($size, thumbnail_sizes(), true)) {
         return ['status' => 'unsupported_variant', 'valid' => false, 'deleted' => false, 'metadata_written' => false];
     }
+    if (function_exists('Gallery\\Services\\thumbnail_policy_format_allowed') && !thumbnail_policy_format_allowed($format)) {
+        thumbnail_metadata_delete_variant($image, $size, $format);
+        return ['status' => 'format_disallowed', 'valid' => false, 'deleted' => false, 'metadata_written' => false];
+    }
 
     if (!is_file($thumbnailPath)) {
         thumbnail_metadata_delete_variant($image, $size, $format);
@@ -964,6 +979,10 @@ function thumbnail_metadata_record_prepared_variant(array $image, array $gallery
     if (!in_array($format, ['jpg', 'webp'], true) || !in_array($size, thumbnail_sizes(), true)) {
         return ['status' => 'unsupported_variant', 'valid' => false, 'deleted' => false, 'metadata_written' => false];
     }
+    if (function_exists('Gallery\\Services\\thumbnail_policy_format_allowed') && !thumbnail_policy_format_allowed($format)) {
+        thumbnail_metadata_delete_variant($image, $size, $format);
+        return ['status' => 'format_disallowed', 'valid' => false, 'deleted' => false, 'metadata_written' => false];
+    }
     if (!is_file($thumbnailPath)) {
         thumbnail_metadata_delete_variant($image, $size, $format);
         return ['status' => 'missing', 'valid' => false, 'deleted' => false, 'metadata_written' => false];
@@ -1060,16 +1079,17 @@ function thumbnail_metadata_refresh_image(array $image, array $gallery, ?array $
     $invalidFiles = [];
     $metadataRowsWritten = 0;
     $metadataSourceSyncs = 0;
+    $formats = function_exists('Gallery\\Services\\thumbnail_policy_requested_formats') ? thumbnail_policy_requested_formats() : ['webp'];
 
     try {
         $sourcePath = image_abs_path($image, $gallery);
     } catch (Throwable) {
         thumbnail_metadata_delete_image_variants($image);
-        return ['checked' => 0, 'valid' => 0, 'missing' => count($sizes) * 2, 'invalid_deleted' => 0, 'invalid_files' => []];
+        return ['checked' => 0, 'valid' => 0, 'missing' => count($sizes) * count($formats), 'invalid_deleted' => 0, 'invalid_files' => []];
     }
 
     foreach ($sizes as $size) {
-        foreach (['jpg', 'webp'] as $format) {
+        foreach ($formats as $format) {
             $checked++;
             try {
                 $thumbnailPath = thumbnail_abs_path($image, $gallery, (int) $size, $format);
@@ -1132,7 +1152,8 @@ function thumbnail_metadata_bundle_data(array $image, array $gallery, array $siz
     }
 
     $rows = thumbnail_metadata_renderable_rows($image, $sizes);
-    foreach (['jpg', 'webp'] as $format) {
+    $formats = function_exists('Gallery\\Services\\thumbnail_policy_requested_formats') ? thumbnail_policy_requested_formats() : ['webp'];
+    foreach ($formats as $format) {
         foreach ($rows[$format] as $size => $row) {
             $variants[$format][(int) $size] = thumbnail_serving_url($image, $gallery, (int) $size, $format);
         }

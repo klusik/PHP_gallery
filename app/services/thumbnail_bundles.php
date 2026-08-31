@@ -50,10 +50,12 @@ use function Gallery\Core\url_for;
  */
 function thumbnail_bundle_cache_key(array $image): string
 {
+    $formats = function_exists('Gallery\\Services\\thumbnail_policy_requested_formats') ? thumbnail_policy_requested_formats() : ['webp'];
     return implode(':', [
         (int) ($image['id'] ?? 0),
         (int) ($image['gallery_id'] ?? 0),
         sha1((string) ($image['relative_path'] ?? '') . '|' . (string) ($image['filename'] ?? '')),
+        implode(',', $formats),
     ]);
 }
 
@@ -200,11 +202,12 @@ function thumbnail_bundle(array $image): array
             }
         }
 
+        $formats = function_exists('Gallery\\Services\\thumbnail_policy_requested_formats') ? thumbnail_policy_requested_formats() : ['webp'];
         foreach ($sizes as $size) {
             if (!in_array($size, thumbnail_sizes(), true)) {
                 continue;
             }
-            foreach (['jpg', 'webp'] as $format) {
+            foreach ($formats as $format) {
                 try {
                     // $path stores one concrete generated thumbnail candidate.
                     $path = thumbnail_abs_path($image, $gallery, $size, $format);
@@ -264,6 +267,10 @@ function thumbnail_bundle_select_variant(array $bundle, int $preferredSize, stri
     // $preferredFormat stores the caller's preferred browser format.
     $preferredFormat = $preferredFormat !== '' ? $preferredFormat : (function_exists('Gallery\\Services\\thumbnail_preferred_browser_format') ? thumbnail_preferred_browser_format() : 'jpg');
     $preferredFormat = thumbnail_bundle_normalize_format($preferredFormat);
+    $formats = function_exists('Gallery\\Services\\thumbnail_policy_requested_formats') ? thumbnail_policy_requested_formats() : ['webp'];
+    if (!in_array($preferredFormat, $formats, true)) {
+        $preferredFormat = (string) ($formats[0] ?? 'webp');
+    }
     // $effectiveSize stores the size after per-gallery bounds are applied.
     $effectiveSize = thumbnail_bundle_effective_size($bundle, $preferredSize);
     // $variants stores discovered generated variants indexed by format and size.
@@ -281,7 +288,7 @@ function thumbnail_bundle_select_variant(array $bundle, int $preferredSize, stri
 
     // $candidateSizes stores existing generated sizes closest to the preferred size first.
     $candidateSizes = [];
-    foreach (['jpg', 'webp'] as $format) {
+    foreach ($formats as $format) {
         foreach (array_keys($variants[$format] ?? []) as $size) {
             $candidateSizes[(int) $size] = (int) $size;
         }
@@ -291,7 +298,7 @@ function thumbnail_bundle_select_variant(array $bundle, int $preferredSize, stri
     });
 
     // $formats stores the same fallback order used by the legacy resolver.
-    $formats = array_values(array_unique([$preferredFormat, 'jpg', 'webp']));
+    $formats = array_values(array_unique(array_merge([$preferredFormat], $formats)));
     foreach ($candidateSizes as $size) {
         foreach ($formats as $format) {
             if (isset($variants[$format][$size])) {
@@ -409,6 +416,9 @@ function thumbnail_bundle_srcset(array $bundle, array $sizes, string $format): s
 {
     // $format stores the requested image format for this source set.
     $format = thumbnail_bundle_normalize_format($format);
+    if (function_exists('Gallery\\Services\\thumbnail_policy_format_allowed') && !thumbnail_policy_format_allowed($format)) {
+        return '';
+    }
     // $variants stores discovered generated thumbnails for the requested format.
     $variants = is_array($bundle['variants'][$format] ?? null) ? $bundle['variants'][$format] : [];
     if (!$variants) {
