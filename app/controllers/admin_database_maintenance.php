@@ -38,7 +38,6 @@ declare(strict_types=1);
 namespace Gallery\Controllers;
 
 use Throwable;
-use function Gallery\Core\cms_not_found;
 use function Gallery\Core\flash_message;
 use function Gallery\Core\redirect_to;
 use function Gallery\Core\request_method;

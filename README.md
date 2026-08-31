@@ -1,8 +1,8 @@
 # PHP Gallery CMS
 
-A modern PHP 8.0+ gallery CMS designed for ordinary shared hosting. The application uses the filesystem as the authoritative source for gallery structure, while storing all metadata, access rules, votes, user accounts, and audit logs in MySQL or MariaDB.
+A modern PHP 8.1+ gallery CMS designed for ordinary shared hosting. The application uses the filesystem as the authoritative source for gallery structure, while storing all metadata, access rules, votes, user accounts, and audit logs in MySQL or MariaDB.
 
-**Current Version:** 0.94.4
+**Current Version:** 0.94.5
 
 **Key Benefit:** Deploy in minutes on shared hosting. No npm, no Composer, no framework overhead. Just PHP + MySQL.
 
@@ -272,7 +272,7 @@ After successful installation, you can delete `setup-gallery.php` via FTP as an 
 ### Requirements
 
 **Minimum:**
-- PHP 8.0 or newer
+- PHP 8.1 or newer
 - MySQL 5.7+ or MariaDB 10.2+
 - PDO MySQL extension
 - ZipArchive extension

@@ -477,6 +477,20 @@ function application_update_cleanup_malformed_root_files(): array
 }
 
 /**
+ * Return application-owned Apache policy files that the online updater must keep current.
+ *
+ * These exact files are release artifacts even when they live inside otherwise protected
+ * runtime-data directories. Other dotfiles and all neighboring gallery/cache/data content
+ * remain outside updater ownership.
+ *
+ * @return array<int,string> Project-relative server policy files.
+ */
+function application_update_managed_server_policy_files(): array
+{
+    return application_update_server_policy_files();
+}
+
+/**
  * Return true when a path is within a directory that the updater owns.
  *
  * @param string $relativePath Relative path filesystem path.
@@ -487,7 +501,13 @@ function application_update_path_is_managed_by_updater(string $relativePath, boo
 {
     // $relativePath stores the normalized project-relative path tested against managed areas.
     $relativePath = ltrim(str_replace('\\', '/', $relativePath), '/');
-    if ($relativePath === '' || application_update_path_is_protected($relativePath)) {
+    if ($relativePath === '') {
+        return false;
+    }
+    if (in_array($relativePath, application_update_managed_server_policy_files(), true)) {
+        return true;
+    }
+    if (application_update_path_is_protected($relativePath)) {
         return false;
     }
     if ($cleanUnexpectedFiles) {
@@ -1118,7 +1138,7 @@ function application_update_path_is_protected(string $relativePath): bool
     if (in_array($relativePath, $protectedFiles, true)) {
         return true;
     }
-    if ($relativePath === 'galleries/.htaccess') {
+    if (in_array($relativePath, application_update_managed_server_policy_files(), true)) {
         return false;
     }
     foreach (['.git', '.well-known', 'cache', 'galleries', 'custom_css', '_for_codex'] as $directory) {

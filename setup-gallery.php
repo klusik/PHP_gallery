@@ -515,9 +515,9 @@ function gallery_bootstrap_environment_checks(string $root): array
     return [
         [
             'label' => 'PHP version',
-            'ok' => version_compare(PHP_VERSION, '8.0.0', '>='),
+            'ok' => version_compare(PHP_VERSION, '8.1.0', '>='),
             'required' => true,
-            'detail' => 'Detected PHP ' . PHP_VERSION . '. PHP 8.0 or newer is required.',
+            'detail' => 'Detected PHP ' . PHP_VERSION . '. PHP 8.1 or newer is required.',
         ],
         [
             'label' => 'Target directory writable',

@@ -1439,6 +1439,17 @@ function application_update_obsolete_paths(string $sourceRoot, string $destinati
         }
     }
 
+    // Exact application-owned server-policy files remain updater-managed even when
+    // their parent directories are protected from recursive cleanup. Add them for
+    // both normal updates and clean reinstalls without traversing gallery/cache data.
+    foreach (application_update_managed_server_policy_files() as $relativeFile) {
+        $path = $destinationRoot . '/' . str_replace('/', DIRECTORY_SEPARATOR, $relativeFile);
+        if (file_exists($path) || is_link($path)) {
+            $roots[] = $path;
+        }
+    }
+
+    $roots = array_values(array_unique($roots));
     foreach ($roots as $rootPath) {
         $relativeRoot = str_replace('\\', '/', substr($rootPath, strlen($destinationRoot) + 1));
         if ($relativeRoot === '' || application_update_path_is_protected($relativeRoot)) {
@@ -1980,6 +1991,22 @@ function application_update_job_finalize(array &$job): void
     $sourceRoot = (string) ($job['checkpoints']['source_root'] ?? '');
     $operation = (string) ($job['operation'] ?? '');
 
+    // Defense in depth: after the normal activation plan completes, verify the exact
+    // application-owned Apache policy files against the same validated release. This
+    // is normally a hash-only no-op, but it also repairs a policy file if a future
+    // planner regression accidentally omits one while preserving rollback metadata.
+    $serverPolicyReconciliation = $operation === 'rollback'
+        ? [
+            'checked' => 0,
+            'updated' => 0,
+            'unchanged' => 0,
+            'missing_from_release' => 0,
+            'skipped_customized' => 0,
+            'updated_files' => [],
+            'skipped_customized_files' => [],
+        ]
+        : application_update_reconcile_server_policy_files_for_job($job, false);
+
     application_update_invalidate_opcache($root, $sourceRoot);
     application_patch_notes_clear_cache();
     delete_app_settings(['application_update_check_cache', 'application_update_check_status_json', 'application_update_check_cached_at']);
@@ -2046,6 +2073,7 @@ function application_update_job_finalize(array &$job): void
         'removed_count' => count((array) ($job['checkpoints']['obsolete_paths'] ?? [])),
         'backup' => 'cache/updates/jobs/' . (string) $job['id'] . '/rollback',
         'migrations' => array_values((array) ($job['result']['migrations'] ?? [])),
+        'server_policy_reconciliation' => $serverPolicyReconciliation,
         'cache_invalidation' => [
             'runtime' => $runtimeCacheActions,
             'persistent' => $persistentCacheInvalidation,

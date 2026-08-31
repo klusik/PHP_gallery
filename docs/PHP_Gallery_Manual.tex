@@ -49,7 +49,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.94.4}
+\newcommand{\version}{0.94.5}
 \newcommand{\manualdate}{31 August 2026}
 
 \hypersetup{
@@ -226,7 +226,7 @@ Use this section when choosing a~hosting plan or~checking an~existing account. T
 Component & Requirement\\
 \midrule
 \endhead
-PHP & Version 8.0 or~newer.\\
+PHP & Version 8.1 or~newer.\\
 Database & MySQL 5.7 or~newer, or~MariaDB 10.2 or~newer.\\
 PDO & PDO MySQL extension for~application queries and~migrations.\\
 Image processing & GD for~common thumbnail generation. Additional local image tooling can~support specialized formats.\\
@@ -1794,6 +1794,8 @@ The~Admin update area also shows cached release information and~versioned patch 
 Temporary download or~hosting failures may~be~retried. A~package whose files do~not~match its own integrity manifest is~different: downloading the~same published build again cannot change those bytes. PHP Gallery therefore asks the~administrator to~cancel that prepared job and~choose a~newer release or~beta code instead of~offering an~endless retry loop.
 
 Stable discovery and~package work are~separate bounded operations. A~discovery request may~create a~durable background job, while a~later safe request or~the~CLI runner advances a~short slice through download, archive validation, extraction, manifest verification, staging, rollback backup, activation, migrations, and~cleanup. Range requests can~resume interrupted downloads, worker locks prevent concurrent advancement, and~a~stale lock can~be~recovered after its~owner expires. On~idle shared hosting, schedule \codeword{php scripts/application_update.php} from~cron, for~example every five minutes. Each invocation performs bounded discovery or~advances existing background work; correctness does~not~depend on~\codeword{set_time_limit()} or~\codeword{ignore_user_abort()}.
+
+Current releases also reconcile the~small set of~application-owned server-policy files during update preparation and~activation. This protects installations whose older updater skipped a~policy file: the~validated release copy is~compared and~published atomically, rollback metadata is~extended before replacement, and~a~migration-backed bootstrap path can~repair an~already activated older tree. The~reconciliation is~limited to~known policy paths and~does~not~alter gallery media or~user configuration.
 
 Before activation, an~administrator can~cancel or~retry a~recoverable job. After activation, the~Admin recovery action can~restore managed application files from~the~saved rollback snapshot, but~file rollback does~not~reverse database migrations. Stable restore, clean reinstall, and~beta installation remain resumable jobs with their own package validation. The~standalone \filepath{reset.php} emergency path is~a~separate recovery tool for~returning to~the~stable branch when the~normal Admin route cannot be~used; it~still requires the~same careful backup and~integrity review.
 
