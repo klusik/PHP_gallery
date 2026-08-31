@@ -584,6 +584,25 @@ function view_cms_browser_i18n_strings(?string $language = null): array
         'lightbox.no_gps_detail' => view_browser_i18n_string($strings, 'lightbox.no_gps_detail', 'This photo has no coordinates, so the fullscreen map is unavailable for this item.'),
         'viewer.favourites.add' => view_browser_i18n_string($strings, 'viewer.favourites.add', 'Add to favourites'),
         'viewer.favourites.remove' => view_browser_i18n_string($strings, 'viewer.favourites.remove', 'Remove from favourites'),
+        'download.progress.preparing' => view_browser_i18n_string($strings, 'download.progress.preparing', 'Preparing download...'),
+        'download.progress.downloading' => view_browser_i18n_string($strings, 'download.progress.downloading', 'Downloading files'),
+        'download.progress.finalizing' => view_browser_i18n_string($strings, 'download.progress.finalizing', 'Finalizing archive'),
+        'download.progress.saving' => view_browser_i18n_string($strings, 'download.progress.saving', 'Saving'),
+        'download.progress.complete' => view_browser_i18n_string($strings, 'download.progress.complete', 'Download complete'),
+        'download.progress.cancel' => view_browser_i18n_string($strings, 'download.progress.cancel', 'Cancel'),
+        'download.progress.retry' => view_browser_i18n_string($strings, 'download.progress.retry', 'Retry'),
+        'download.progress.start' => view_browser_i18n_string($strings, 'download.progress.start', 'Save ZIP and start'),
+        'download.progress.close' => view_browser_i18n_string($strings, 'download.progress.close', 'Close'),
+        'download.progress.failed' => view_browser_i18n_string($strings, 'download.progress.failed', 'Download failed'),
+        'download.progress.files' => view_browser_i18n_string($strings, 'download.progress.files', '{count} files'),
+        'download.progress.file_count' => view_browser_i18n_string($strings, 'download.progress.file_count', '{done} / {total} files'),
+        'download.progress.current' => view_browser_i18n_string($strings, 'download.progress.current', 'Current: {name}'),
+        'download.progress.memory_warning' => view_browser_i18n_string($strings, 'download.progress.memory_warning', 'This browser cannot stream the ZIP directly to disk, so it must temporarily keep the archive in memory.'),
+        'download.progress.memory_too_large' => view_browser_i18n_string($strings, 'download.progress.memory_too_large', 'Your browser cannot efficiently create an archive this large. Use a Chromium-based browser with direct file saving support.'),
+        'download.progress.empty' => view_browser_i18n_string($strings, 'download.progress.empty', 'This gallery has no downloadable files.'),
+        'download.progress.cancelled' => view_browser_i18n_string($strings, 'download.progress.cancelled', 'Download cancelled.'),
+        'download.progress.invalid_manifest' => view_browser_i18n_string($strings, 'download.progress.invalid_manifest', 'The server returned an invalid download manifest.'),
+        'download.progress.file_failed' => view_browser_i18n_string($strings, 'download.progress.file_failed', 'Could not download {name}.'),
         'viewer.favourites.unavailable' => view_browser_i18n_string($strings, 'viewer.favourites.unavailable', 'Favourites are temporarily unavailable.'),
     ]);
 }
@@ -635,6 +654,8 @@ function view_render_footer(): void
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/progressive-thumbnail-upgrade.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/public-thumbnail-render-diagnostics.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/thumbnail-warmup.js',
+        dirname(__DIR__, 2) . '/public/assets/gallery-modules/gallery-download.js',
+        dirname(__DIR__, 2) . '/public/assets/gallery-modules/zip-stream-writer.js',
     ] : [
         $scriptPath,
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/progressive-thumbnail-renderer.js',
@@ -657,6 +678,8 @@ function view_render_footer(): void
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-storage-statistics.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-gallery-report.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-test-run.js',
+        dirname(__DIR__, 2) . '/public/assets/gallery-modules/gallery-download.js',
+        dirname(__DIR__, 2) . '/public/assets/gallery-modules/zip-stream-writer.js',
     ];
     $resolvedScriptVersion = asset_dependency_revision($scriptVersionPaths);
     view_render_browser_i18n_script();
