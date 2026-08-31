@@ -1,5 +1,25 @@
 # Patch notes
 
+## Version 0.94.4
+
+Version 0.94.4 is a focused presentation fix for progressive gallery downloads. Download progress separators now render as a real middle dot instead of mojibake, and the corrected browser module is loaded through refreshed cache-busting identifiers.
+
+### Highlights
+
+- Replaced corrupted download-dialog separator characters with an explicit Unicode middle-dot escape that renders consistently across browsers and page encodings.
+- Refreshed the public and Admin gallery download module cache-busting identifiers so deployed browsers cannot retain the malformed asset.
+- Preserved download authorization, ZIP assembly, progress accounting, cancellation, retry, ZIP64 support, Smart Gallery checks, and server-side fallback behavior.
+
+### Technical Details
+
+- Changed only the download progress/summary presentation strings and their module version markers; no archive format, route, permission, or stored-data behavior changed.
+- Regenerated `app/core-manifest.json` after the asset update.
+- Added the release-specific documentation and retained the complete 0.94.3 progressive-download feature description below.
+
+### Tests
+
+- Re-ran the complete PHP regression suite, declaration documentation audit, download controller/service/manifest contracts, browser ZIP and ZIP64 tests, and JavaScript syntax checks.
+
 ## Version 0.94.3
 
 Version 0.94.3 adds secure progressive ZIP downloads for public galleries and Smart Galleries. Modern browsers can assemble an archive locally from a bounded private manifest while each original remains independently authorized by the server. Direct and no-JavaScript requests retain the existing bounded server-side ZIP fallback.
