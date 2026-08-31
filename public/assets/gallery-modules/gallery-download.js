@@ -328,7 +328,7 @@ class GalleryDownloadController {
                 throw new Error(tr('download.progress.invalid_manifest', 'The server returned an invalid download manifest.'));
             }
             this.manifest = payload;
-            this.summary.textContent = `${tr('download.progress.files', '{count} files', {count: payload.total_files})} Ă‚Â· ${formatBytes(payload.total_bytes)}`;
+            this.summary.textContent = `${tr('download.progress.files', '{count} files', {count: payload.total_files})} \u00B7 ${formatBytes(payload.total_bytes)}`;
 /** if supports the browser ZIP download workflow. */
             if (payload.total_files === 0) {
                 this.status.textContent = tr('download.progress.empty', 'This gallery has no downloadable files.');
@@ -449,10 +449,10 @@ class GalleryDownloadController {
                 await writer.addReadable(entry.name, entry.size, response.body, (chunkBytes) => {
                     downloaded += chunkBytes;
                     this.progress.value = Math.min(downloaded, this.manifest.total_bytes);
-                    this.progressText.textContent = `${formatBytes(Math.min(downloaded, this.manifest.total_bytes))} / ${formatBytes(this.manifest.total_bytes)} Ă‚Â· ${tr('download.progress.file_count', '{done} / {total} files', {done: completedFiles, total: this.manifest.total_files})}`;
+                    this.progressText.textContent = `${formatBytes(Math.min(downloaded, this.manifest.total_bytes))} / ${formatBytes(this.manifest.total_bytes)} \u00B7 ${tr('download.progress.file_count', '{done} / {total} files', {done: completedFiles, total: this.manifest.total_files})}`;
                 });
                 completedFiles += 1;
-                this.progressText.textContent = `${formatBytes(downloaded)} / ${formatBytes(this.manifest.total_bytes)} Ă‚Â· ${tr('download.progress.file_count', '{done} / {total} files', {done: completedFiles, total: this.manifest.total_files})}`;
+                this.progressText.textContent = `${formatBytes(downloaded)} / ${formatBytes(this.manifest.total_bytes)} \u00B7 ${tr('download.progress.file_count', '{done} / {total} files', {done: completedFiles, total: this.manifest.total_files})}`;
             }
             this.status.textContent = tr('download.progress.finalizing', 'Finalizing archive');
             await writer.finalize();

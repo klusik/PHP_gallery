@@ -42,7 +42,7 @@ const optionalPublicModules = {
     thumbnailWarmup: './gallery-modules/thumbnail-warmup.js?v=20260608-thumbnail-warmup-v1',
     heroTags: './gallery-modules/hero-tags.js?v=20260811-hero-tags-v1',
     viewerFavourites: './gallery-modules/viewer-favourites.js?v=20260818-viewer-favourites-v1',
-    galleryDownload: './gallery-modules/gallery-download.js?v=20260831-download-dialog-v3',
+    galleryDownload: './gallery-modules/gallery-download.js?v=20260831-download-dialog-v4',
 };
 
 /**
