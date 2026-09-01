@@ -61,7 +61,7 @@ exclude_dirs=(".git" "cache" "logs" "tmp" "deploy")
 # Array exclude_dir_names_anywhere stores folder names skipped wherever they appear in the repository tree.
 exclude_dir_names_anywhere=("__pycache__" ".pytest_cache" "tests" "http_monitor_logs")
 # Array exclude_files stores file name patterns skipped by deployment.
-exclude_files=(".gitignore" "config.php" ".env" "*.log" "*.tmp" "*.pyc" "*.aux" "*.idx" "*.ilg" "*.ind" "*.out" "*.toc")
+exclude_files=(".gitignore" ".DS_Store" "config.php" ".env" "*.log" "*.tmp" "*.pyc" "*.aux" "*.idx" "*.ilg" "*.ind" "*.out" "*.toc")
 # Array always_include_relatives stores deploy paths that must stay packaged even as filters evolve.
 always_include_relatives=("app")
 
