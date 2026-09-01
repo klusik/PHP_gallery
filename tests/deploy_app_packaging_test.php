@@ -29,6 +29,13 @@ foreach (['*.aux', '*.idx', '*.ilg', '*.ind', '*.out', '*.toc'] as $latexInterme
     }
 }
 
+if (!str_contains($powershellDeploy, "'.DS_Store'")) {
+    $failures[] = 'The PowerShell deploy script must exclude macOS .DS_Store metadata.';
+}
+if (!str_contains($shellDeploy, '".DS_Store"')) {
+    $failures[] = 'The shell deploy script must exclude macOS .DS_Store metadata.';
+}
+
 foreach ([$powershellDeploy, $shellDeploy] as $deploySource) {
     if (stripos($deploySource, 'manifest') !== false
         || str_contains($deploySource, '& php ')
