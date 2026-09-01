@@ -126,7 +126,7 @@ function admin_settings_specialized_catalog(): array
 
         // Theme: layout, cards, grids, shortcuts, lightbox, and media.
         ['theme_favorite_galleries', 'content', 'Favorite gallery shortcuts', 'Configure public-header shortcuts to the main page or selected galleries.', 'admin_theme', [], 'admin-theme-tab-layout'],
-        ['theme_gallery_count_badge_enabled', 'appearance', 'Gallery picture-count badge', 'Show the stacked-picture icon and image count on gallery cards.', 'admin_theme', [], 'admin-gallery-count-badge'],
+        ['theme_gallery_count_badge_enabled', 'appearance', 'Gallery picture-count badge', 'Show the stacked-picture image count on gallery cards and in opened gallery heroes.', 'admin_theme', [], 'admin-gallery-count-badge'],
         ['reset_all_gallery_grid_overrides', 'advanced', 'Reset gallery grid overrides', 'Clear every per-gallery custom grid and stale gallery.json grid key.', 'admin_theme', [], 'admin-home-grid'],
         ['theme_header_branding', 'appearance', 'Header branding image', 'Upload, position, size, crop, or remove the public header branding asset.', 'admin_theme', [], 'admin-theme-tab-media'],
         ['theme_background_image', 'appearance', 'Public background image', 'Upload, position, size, or remove the public page background.', 'admin_theme', [], 'admin-theme-tab-media'],

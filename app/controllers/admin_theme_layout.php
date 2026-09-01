@@ -339,7 +339,7 @@ function render_admin_theme_layout_tab(array $theme, array $paginationSettings, 
     echo '</div>';
     echo '</fieldset>';
     echo '<fieldset class="form-grid" id="admin-gallery-count-badge"><legend>' . e(t('admin.theme.layout.count_badge_legend', 'Contained-picture badge')) . '</legend>';
-    echo '<label class="checkbox-label"><input type="checkbox" name="theme_gallery_count_badge_enabled" value="1"' . (((string) ($theme['gallery_count_badge_enabled'] ?? '1')) === '1' ? ' checked' : '') . '> ' . e(t('admin.theme.layout.show_count_badge', 'Show stacked-picture icon and image count on gallery cards')) . '</label>';
+    echo '<label class="checkbox-label"><input type="checkbox" name="theme_gallery_count_badge_enabled" value="1"' . (((string) ($theme['gallery_count_badge_enabled'] ?? '1')) === '1' ? ' checked' : '') . '> ' . e(t('admin.theme.layout.show_count_badge', 'Show stacked-picture image count on gallery cards and opened gallery heroes')) . '</label>';
     echo '<p class="muted">' . e(t('admin.theme.layout.count_badge_hint', 'Enabled by default. Individual galleries can inherit this setting or override it in the gallery editor.')) . '</p>';
     echo '</fieldset>';
     echo '<fieldset class="form-grid" id="admin-public-thumbnail-rendering"><legend>' . e(t('admin.theme.layout.thumbnail_rendering_legend', 'Public thumbnail rendering')) . '</legend>';

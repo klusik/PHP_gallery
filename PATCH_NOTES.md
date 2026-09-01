@@ -1,5 +1,59 @@
 # Patch notes
 
+## Version 0.94.6
+
+Version 0.94.6 keeps gallery image totals visible when visitors move from a gallery card into the opened gallery. The existing contained-picture badge setting now controls the same branch count in the gallery hero, with matching accessibility text, translations, and responsive presentation.
+
+### Highlights
+
+- Added the current gallery's branch image count to the opened-gallery hero when the effective contained-picture badge setting is enabled.
+- Reused the existing Theme default and per-gallery override, so card and hero counts remain governed by one setting.
+- Clarified Admin labels and help text to describe the shared gallery-card and opened-gallery behavior.
+- Added localized hero count descriptions in English, Czech, German, and Swedish.
+- Excluded macOS `.DS_Store` metadata from release packages produced by both deployment helpers.
+
+### Technical Details
+
+#### Backend
+
+- Updated `app/controllers/public_gallery_page.php` to resolve the effective badge policy before counting and to use the canonical `gallery_branch_image_count()` service for the current gallery and accessible descendants.
+- Wrapped branch counting in the existing public render-profile span and skipped the count query when the effective badge setting is disabled.
+- Preserved the existing public-only, gallery access, visibility, and descendant-count semantics used by gallery cards.
+
+#### Database
+
+- Added no migration and made no schema or stored-data change in Version 0.94.6.
+- Continued to use the existing Theme setting and optional per-gallery count-badge override without changing their stored values or fallback behavior.
+
+#### Frontend and localization
+
+- Added the in-flow `.gallery-hero-count-badge` presentation to the existing responsive hero action row without introducing a second viewer or browser module.
+- Added translated accessible labels and explanatory hover text for all four maintained language catalogs.
+- Updated Admin Theme, gallery creation, gallery editing, settings inventory, and administrator manual wording to cover gallery cards and opened-gallery heroes.
+
+#### Release packaging
+
+- Updated `scripts/deploy.sh` and `scripts/deploy.ps1` to exclude `.DS_Store` files wherever they occur in the packaged tree.
+- Kept application files, the compiled manual, patch notes, release metadata, migrations, and the integrity manifest in the release archive.
+
+#### Tests
+
+- Added `tests/gallery_hero_count_badge_test.php` to cover the effective visibility policy, canonical branch-count call, profiling boundary, accessible markup, maintained translations, and responsive CSS contract.
+- Extended `tests/deploy_app_packaging_test.php` to enforce `.DS_Store` exclusion in both deployment helpers.
+- Retained the complete regression, localization, PHP syntax, documentation, packaging, and integrity-manifest checks as release gates.
+
+### User Impact
+
+#### For visitors
+
+- Visitors can see the total image count for the opened gallery and its accessible subgalleries directly in the hero panel.
+- Galleries whose effective contained-picture badge setting is hidden continue to show no card or hero count.
+
+#### For administrators
+
+- The existing Theme default and per-gallery Show/Hide/Inherit controls now apply consistently to gallery cards and opened-gallery heroes.
+- No migration, content rewrite, thumbnail regeneration, or configuration change is required.
+
 ## Version 0.94.5
 
 Version 0.94.5 is a focused maintenance release that aligns the supported PHP runtime, protected cached-favicon delivery, and updater server-policy enforcement. It adds the reconciliation path needed to keep policy-managed files coherent across installs without changing gallery content or public media behavior.
