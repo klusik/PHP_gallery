@@ -61,7 +61,7 @@ Per-gallery and per-image values are intentionally not global registry entries. 
 | `theme_page_width` | `theme.php`; Theme Appearance | enum `default`, `wide`, `full`, `custom` | `default`; invalid becomes `default` | no revision; no migration | Summary | Theme Appearance | normal |
 | `theme_page_width_custom` | `theme.php`; Theme Appearance | integer 1024..2048 px | 1440; malformed/out-of-range normalized | no revision; no migration | Summary | Theme Appearance | normal |
 | `theme_gallery_description_layout` | `gallery_description_layout.php`; Theme Layout | enum `vertical`, `horizontal` | `vertical`; invalid normalized to fallback | Revision on change; no migration | Summary | Theme Layout | normal |
-| `theme_gallery_count_badge_enabled` | Theme/Layout service; Theme Layout | boolean | enabled by default | no central mutation; no migration | Summary through Theme ownership | Theme Layout | normal |
+| `theme_gallery_count_badge_enabled` | Theme/Layout service; Theme Layout | boolean | enabled by default; shows the branch image count on gallery cards and in the opened-gallery hero unless a gallery override changes the effective state | no central mutation; no migration | Summary through Theme ownership | Theme Layout | normal |
 | `pagination_enabled` | `pagination.php`; Theme Layout | boolean | disabled unless configured | no revision; no migration | Summary | Theme Layout | normal |
 | `pagination_columns` | `pagination.php`; Theme Layout | integer 1..12 | 3; invalid uses default | no revision; no migration | Summary | Theme Layout | normal |
 | `pagination_rows` | `pagination.php`; Theme Layout | integer 1..50 | 3; invalid uses default | no revision; no migration | Summary | Theme Layout | normal |

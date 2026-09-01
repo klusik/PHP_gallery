@@ -448,6 +448,38 @@ body.public-reorder-active {
     text-align: right;
 }
 
+/* Open-gallery counterpart of the card badge. It stays in normal flow because the hero has no cover image to overlay. */
+.public-page .gallery-hero-count-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.42rem;
+    min-height: 2rem;
+    padding: 0.32rem 0.62rem;
+    border: 1px solid color-mix(in srgb, var(--line) 78%, transparent);
+    border-radius: var(--radius, 16px);
+    background: color-mix(in srgb, var(--gallery-panel) 82%, var(--paper));
+    color: var(--hero-text, var(--ink));
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.07);
+    font-size: 0.86rem;
+    line-height: 1;
+}
+
+.public-page .gallery-hero-count-badge .subgallery-stack-icon {
+    width: 1.05rem;
+    height: 1.05rem;
+}
+
+.public-page .gallery-hero-count-badge .subgallery-stack-icon span {
+    width: 0.74rem;
+    height: 0.74rem;
+}
+
+.public-page .gallery-hero-count-value {
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+}
+
+
 @media (max-width: 720px) {
     .public-page .subgallery-stack-badge {
         top: 0.45rem;

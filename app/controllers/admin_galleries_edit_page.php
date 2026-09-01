@@ -755,7 +755,7 @@ function cms_admin_edit_gallery(): void
         foreach (gallery_count_badge_override_values() as $countBadgeOption) {
             echo '<option value="' . e($countBadgeOption) . '"' . ($currentCountBadgeVisibility === $countBadgeOption ? ' selected' : '') . '>' . e(gallery_count_badge_override_label($countBadgeOption)) . '</option>';
         }
-        echo '</select></label><p class="muted">' . e(t('admin.gallery_editor.count_badge_help', 'Current source: {source}. Effective state: {state}. This controls the stacked-picture icon and contained-image number on gallery cards.', ['source' => gallery_count_badge_source_label($gallery), 'state' => gallery_count_badge_state_label($effectiveCountBadgeEnabled)])) . '</p></div>';
+        echo '</select></label><p class="muted">' . e(t('admin.gallery_editor.count_badge_help', 'Current source: {source}. Effective state: {state}. This controls the stacked-picture branch image count on gallery cards and in this gallery hero.', ['source' => gallery_count_badge_source_label($gallery), 'state' => gallery_count_badge_state_label($effectiveCountBadgeEnabled)])) . '</p></div>';
     } else {
         echo '<div class="admin-edit-card"><p class="muted">' . e(t('admin.gallery_editor.count_badge_migration_hidden', 'Contained-picture badge overrides will be available after the database migration is applied.')) . '</p></div>';
     }

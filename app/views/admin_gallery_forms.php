@@ -270,7 +270,7 @@ function view_render_admin_new_gallery_fields(int $prefillParentId, bool $panelM
             foreach (gallery_count_badge_override_values() as $countBadgeOption) {
                 echo '<option value="' . e($countBadgeOption) . '"' . ($countBadgeOption === 'inherit' ? ' selected' : '') . '>' . e(gallery_count_badge_override_label($countBadgeOption)) . '</option>';
             }
-            echo '</select><small>' . e(t('admin.gallery_editor.count_badge_new_gallery_help', 'Controls the stacked-picture icon and image count on this gallery card.')) . '</small></label></div>';
+            echo '</select><small>' . e(t('admin.gallery_editor.count_badge_new_gallery_help', 'Controls the stacked-picture branch image count on this gallery card and its opened-gallery hero.')) . '</small></label></div>';
         }
         return;
     }
@@ -287,7 +287,7 @@ function view_render_admin_new_gallery_fields(int $prefillParentId, bool $panelM
         foreach (gallery_count_badge_override_values() as $countBadgeOption) {
             echo '<option value="' . e($countBadgeOption) . '"' . ($countBadgeOption === 'inherit' ? ' selected' : '') . '>' . e(gallery_count_badge_override_label($countBadgeOption)) . '</option>';
         }
-        echo '</select><span class="muted">' . e(t('admin.gallery_editor.count_badge_new_gallery_help', 'Controls the stacked-picture icon and image count on this gallery card.')) . '</span></label>';
+        echo '</select><span class="muted">' . e(t('admin.gallery_editor.count_badge_new_gallery_help', 'Controls the stacked-picture branch image count on this gallery card and its opened-gallery hero.')) . '</span></label>';
     }
     echo '<label>' . e(t('admin.gallery_editor.description', 'Description')) . '<textarea name="description"></textarea></label>';
     view_render_gallery_description_formatting_hint();

@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-08-11
+ *   2026-09-02
  */
 
 declare(strict_types=1);
@@ -396,6 +396,12 @@ function cms_gallery(): void
     $heroTagScrollbarRows = theme_hero_tag_scrollbar_rows();
     // $heroTagCount determines whether an expand control is useful at all.
     $heroTagCount = count($heroTagGroups['gallery']) + count($heroTagGroups['contained']);
+    // $showHeroCountBadge keeps the opened-gallery summary aligned with the same Theme/per-gallery visibility policy used by gallery cards.
+    $showHeroCountBadge = gallery_effective_count_badge_enabled($gallery);
+    // $heroBranchImageCount reuses the canonical branch counter so the hero reports this gallery plus accessible descendants with the same visibility and access semantics as gallery cards.
+    $heroBranchImageCount = $showHeroCountBadge
+        ? public_render_profile_span('gallery_hero_branch_image_count', static fn (): int => gallery_branch_image_count((int) $gallery['id'], $publicOnly))
+        : 0;
 
     echo '<section class="hero">';
     // Keep the title, date, description, and breadcrumbs in one primary column so long descriptions do not become a narrow middle strip.
@@ -406,6 +412,13 @@ function cms_gallery(): void
     echo '</div>';
     echo '<div class="hero-meta">';
     echo '<div class="hero-actions" aria-label="' . e(t('gallery.actions', 'Gallery actions')) . '">';
+    if ($showHeroCountBadge) {
+        // Keep the branch count in the same responsive action row while its accessible label explains that descendants are included.
+        echo '<div class="gallery-hero-count-badge" aria-label="' . e(t('gallery.hero.branch_image_count_aria', 'Image count for this gallery and its subgalleries: {count}', ['count' => $heroBranchImageCount])) . '" title="' . e(t('gallery.hero.branch_image_count_hint', 'Includes images from this gallery and its subgalleries.')) . '">';
+        echo '<span class="subgallery-stack-icon" aria-hidden="true"><span></span><span></span><span></span></span>';
+        echo '<span class="gallery-hero-count-value">' . $heroBranchImageCount . '</span>';
+        echo '</div>';
+    }
     render_public_gallery_admin_delete_form($gallery, 'hero');
     render_public_gallery_admin_edit_link($gallery, 'hero');
     render_public_gallery_admin_add_child_link($gallery, 'hero');
