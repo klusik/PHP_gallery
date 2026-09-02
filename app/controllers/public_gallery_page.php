@@ -403,7 +403,7 @@ function cms_gallery(): void
         ? public_render_profile_span('gallery_hero_branch_image_count', static fn (): int => gallery_branch_image_count((int) $gallery['id'], true))
         : 0;
 
-    echo '<section class="hero">';
+    echo '<section class="hero" data-public-gallery-id="' . (int) $gallery['id'] . '">';
     // Keep the title, date, description, and breadcrumbs in one primary column so long descriptions do not become a narrow middle strip.
     echo '<div class="hero-topbar">';
     echo '<div class="hero-primary">';

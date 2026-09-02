@@ -1,5 +1,40 @@
 # Patch notes
 
+## Version 0.94.8
+
+Version 0.94.8 improves the embedded Admin gallery workflow by refreshing the background gallery in place after successful side-panel mutations, so newly created or edited galleries appear immediately without a manual page reload.
+
+### Highlights
+
+- Refreshed the affected background gallery after successful panel-created gallery mutations.
+- Kept the Admin side panel open while updating the gallery content in place.
+- Preserved the current URL and avoided full-page navigation or reloads.
+- Added no migration and made no schema or stored-data change.
+
+### Technical Details
+
+#### Frontend
+
+- Updated `public/assets/gallery-modules/admin-side-panel.js` and related gallery modules to coordinate successful mutation responses with the existing background gallery refresh path.
+- Updated cache-busting imports for changed browser modules.
+
+#### Backend
+
+- Preserved the existing gallery mutation, authorization, CSRF, and response behavior while making the refreshed gallery fragment available to the panel workflow.
+
+#### Tests
+
+- Added `tests/admin_side_panel_created_gallery_refresh_test.mjs` for created-gallery refresh behavior.
+- Added `tests/admin_side_panel_gallery_refresh_test.mjs` for in-place refresh, panel persistence, URL stability, and dynamic controls.
+- Added `tests/admin_side_panel_gallery_mutation_test.php` for the server-side mutation contract.
+
+### User Impact
+
+#### For visitors and administrators
+
+- Newly created galleries and edited gallery details become visible immediately in the background gallery after the operation succeeds.
+- Users no longer need to manually reload the page to see the result.
+
 ## Version 0.94.7
 
 Version 0.94.7 aligns opened-gallery picture counters with the public gallery-card count semantics, preventing signed-in viewers from seeing a broader visibility count in the gallery hero than on the card that opened it.

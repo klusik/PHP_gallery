@@ -1140,6 +1140,7 @@ function emptyBrowserAggregate(seed, galleryId, totalBatches) {
         parent_gallery_url: String(seed?.parent_gallery_url || ''),
         refresh_gallery_id: Number(seed?.refresh_gallery_id || galleryId || 0),
         refresh_url: String(seed?.refresh_url || ''),
+        created_gallery: Boolean(seed?.created_gallery),
         uploaded: 0,
         scanned: 0,
         thumbnails: 0,
@@ -1173,6 +1174,7 @@ function mergeBrowserResult(aggregate, result) {
     aggregate.parent_gallery_url = aggregate.parent_gallery_url || String(result.parent_gallery_url || '');
     aggregate.refresh_gallery_id = Number(result.refresh_gallery_id || aggregate.refresh_gallery_id || 0);
     aggregate.refresh_url = String(result.refresh_url || aggregate.refresh_url || '');
+    aggregate.created_gallery = Boolean(result.created_gallery) || Boolean(aggregate.created_gallery);
     aggregate.uploaded += Number(result.uploaded || 0);
     aggregate.scanned += Number(result.scanned || 0);
     aggregate.thumbnails += Number(result.thumbnails || 0);
