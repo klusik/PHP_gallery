@@ -27,7 +27,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-08-11
+ *   2026-09-02
  */
 
 import { setupImageBulkMoveFields } from './admin-bulk-actions.js?v=20260519-gallery-picker-v1';
@@ -41,7 +41,7 @@ import { setupAdminNestedTabs } from './admin-nested-tabs.js?v=20260608-admin-ci
 import { setupAdminImageReordering } from './admin-image-reordering.js?v=20260512-modular-admin-v1';
 import { setupPublicGalleryPageReordering } from './admin-gallery-list.js?v=20260512-modular-admin-v1';
 import { appendUploadProgressLog, escapeHtmlAttribute, escapeHtmlText, i18n, isThumbnailSubmission, thumbnailEndpoint, updateBasicProgress, updateThumbnailProgress, ensureThumbnailProgress, updateUploadProgressMetrics } from './admin-core.js?v=20260614-upload-order-v2';
-import { browserUploadRequested, browserUploadZipSelected, runBrowserGalleryUpload } from './admin-browser-upload.js?v=20260815-upload-zip-import-v1';
+import { browserUploadRequested, browserUploadZipSelected, runBrowserGalleryUpload } from './admin-browser-upload.js?v=20260902-gallery-created-refresh-v2';
 import { setupAdminSmartGalleries } from './admin-smart-galleries.js?v=20260817-smart-gallery-cycle-placement-v2';
 
 const adminSidePanelMotionDurationMs = 280;
@@ -372,8 +372,7 @@ export function setupAdminGallerySidePanel() {
         const panel = event.target instanceof Element ? event.target.closest('[data-admin-side-panel]') : document.querySelector('[data-admin-side-panel]');
         const source = String(event.detail?.source || '');
         const result = event.detail?.result || {};
-        const bulkAction = String(result.bulk_action || '');
-        const shouldKeepPanelOpen = (source === 'gallery-image-bulk' && (bulkAction === 'cover' || bulkAction === 'delete' || bulkAction === 'move_existing' || bulkAction === 'move_new')) || source === 'upload';
+        const shouldKeepPanelOpen = adminSidePanelMutationKeepsPanelOpen(source);
         if (panel instanceof HTMLElement && !shouldKeepPanelOpen) {
             closeAdminGallerySidePanel(panel);
         }
@@ -405,6 +404,20 @@ export function setupAdminGallerySidePanel() {
         }
         reflectCreatedGalleryInCurrentView(result);
     });
+}
+
+/**
+ * Return whether a completed side-panel mutation owns an in-place gallery workflow.
+ *
+ * Gallery create/edit/bulk/upload operations must leave the drawer mounted while
+ * the server-rendered background fragment is refreshed. Image/tag editors retain
+ * their existing completion behavior because they are separate workflows.
+ *
+ * @param {string} source Side-panel success source identifier.
+ * @return {boolean} True when the active side panel must remain open.
+ */
+function adminSidePanelMutationKeepsPanelOpen(source) {
+    return ['create', 'gallery-edit', 'gallery-image-bulk', 'upload'].includes(source);
 }
 
 /**
@@ -1389,6 +1402,11 @@ function currentVisiblePageRefreshUrl() {
  * @param {Record<string, *>} result Server response for the upload operation.
  */
 async function reflectUploadedGalleryInCurrentView(result) {
+    if (Boolean(result.created_gallery)) {
+        await reflectCreatedGalleryInCurrentView(result);
+        return;
+    }
+
     const message = String(result.message || i18n('admin.side_panel.upload_complete', 'Upload complete.'));
     const targetUrl = String(result.gallery_url || '');
     const refreshUrl = String(result.refresh_url || result.parent_gallery_url || result.gallery_url || '');
@@ -1626,16 +1644,19 @@ async function reflectCreatedGalleryInCurrentView(result) {
         return;
     }
 
+    const currentPageOwnsCreatedGallery = createdGalleryBelongsToCurrentPublicPage(result);
+
     if (String(result.edit_url || '') !== '') {
         await switchAdminSidePanelToGalleryEditor(result);
     }
 
-    if (refreshUrl !== '' && !adminSidePanelSamePageUrl(refreshUrl, window.location.href)) {
+    if (!currentPageOwnsCreatedGallery && refreshUrl !== '' && !adminSidePanelSamePageUrl(refreshUrl, window.location.href)) {
         showAdminGallerySidePanelResultNotice(galleryTitle, galleryUrl);
         return;
     }
 
-    const refreshed = await refreshPublicSubgallerySectionFromServer(galleryId);
+    const backgroundRefreshUrl = currentPageOwnsCreatedGallery ? currentVisiblePageRefreshUrl() : refreshUrl;
+    const refreshed = await refreshPublicSubgallerySectionFromServer(galleryId, backgroundRefreshUrl);
     if (refreshed) {
         showAdminGallerySidePanelResultNotice(String(result.message || galleryTitle), galleryUrl);
         return;
@@ -1890,32 +1911,77 @@ function copyElementIdentity(current, fresh) {
  * Refresh the visible subgallery area from the current server-rendered page.
  *
  * @param {string} galleryId Newly created gallery id used for scroll targeting.
- * @return {Promise<boolean>} True when the page fragment was refreshed.
+ * @param {string} sourceUrl Public gallery URL whose rendered fragment should be refreshed.
+ * @return {Promise<boolean>} True when the refreshed DOM contains the created gallery.
  */
-async function refreshPublicSubgallerySectionFromServer(galleryId) {
-    try {
-        const response = await fetch(window.location.href, {
-            credentials: 'same-origin',
-            headers: {
-                'Accept': 'text/html',
-                'X-Requested-With': 'XMLHttpRequest',
-            },
-        });
-        const html = await response.text();
-        if (!response.ok || html.trim() === '') {
-            return false;
+async function refreshPublicSubgallerySectionFromServer(galleryId, sourceUrl = '') {
+    // Reuse the canonical context refresh path so create mutations receive the same
+    // cache-busting, no-store request and lifecycle rebinding as edit/move/visibility
+    // mutations. A DOM replacement alone is not sufficient proof of success because
+    // a first read can still return the pre-mutation representation. Confirm that the
+    // newly-created gallery is actually in the refreshed subgallery grid before
+    // treating the background as current.
+    const refreshSource = sourceUrl || currentVisiblePageRefreshUrl();
+    const retryDelaysMs = [0, 120, 320];
+    for (const retryDelayMs of retryDelaysMs) {
+        if (retryDelayMs > 0) {
+            await waitForGalleryMutationRefreshRetry(retryDelayMs);
         }
-        const parsed = new DOMParser().parseFromString(html, 'text/html');
-        const replaced = replacePublicGalleryFragmentsFromParsedDocument(parsed);
-        if (!replaced) {
-            return false;
+        await refreshCurrentGalleryContextFromServer(refreshSource);
+        if (publicSubgalleryContainsGalleryId(galleryId)) {
+            focusCreatedGalleryCard(galleryId);
+            return true;
         }
-        rebindPublicGalleryLifecycleAfterRefresh();
-        focusCreatedGalleryCard(galleryId);
-        return true;
-    } catch (error) {
+    }
+    return false;
+}
+
+/**
+ * Return the gallery id rendered by the public hero behind the side panel.
+ *
+ * The id is more reliable than comparing canonical URLs because the visible page
+ * may carry clean pagination segments, language parameters, or other view state.
+ *
+ * @return {number} Current public gallery id, or zero outside a gallery page.
+ */
+function currentPublicGalleryId() {
+    const hero = document.querySelector('.hero[data-public-gallery-id]');
+    return hero instanceof HTMLElement ? Number(hero.dataset.publicGalleryId || 0) : 0;
+}
+
+/**
+ * Return whether a newly-created gallery belongs to the public gallery currently visible behind the drawer.
+ *
+ * @param {Record<string, *>} result Server mutation response.
+ * @return {boolean} True when the current public gallery is the persisted parent.
+ */
+function createdGalleryBelongsToCurrentPublicPage(result) {
+    const parentGalleryId = Number(result.parent_gallery_id || result.refresh_gallery_id || 0);
+    return parentGalleryId > 0 && parentGalleryId === currentPublicGalleryId();
+}
+
+/**
+ * Return whether the live public subgallery grid contains the expected gallery card.
+ *
+ * @param {string} galleryId Gallery id returned by the successful mutation.
+ * @return {boolean} True when the expected card is present in the refreshed DOM.
+ */
+function publicSubgalleryContainsGalleryId(galleryId) {
+    if (!galleryId) {
         return false;
     }
+    const grid = document.querySelector('[data-public-subgallery-grid]');
+    return grid instanceof HTMLElement && Boolean(grid.querySelector(`[data-gallery-id="${CSS.escape(galleryId)}"]`));
+}
+
+/**
+ * Wait briefly before retrying a successful mutation whose public read is still stale.
+ *
+ * @param {number} delayMs Retry delay in milliseconds.
+ * @return {Promise<void>} Resolves after the bounded delay.
+ */
+function waitForGalleryMutationRefreshRetry(delayMs) {
+    return new Promise((resolve) => window.setTimeout(resolve, Math.max(0, delayMs)));
 }
 
 /**
@@ -2190,6 +2256,7 @@ async function runGalleryUploadFiles(form, progress, createThumbnails) {
             parent_gallery_url: String(emptyResult.parent_gallery_url || ''),
             refresh_gallery_id: Number(emptyResult.refresh_gallery_id || 0),
             refresh_url: String(emptyResult.refresh_url || ''),
+            created_gallery: Boolean(emptyResult.created_gallery),
             uploaded: 0,
             scanned: 0,
             thumbnails: 0,
@@ -2235,6 +2302,8 @@ async function runGalleryUploadFiles(form, progress, createThumbnails) {
     let parentGalleryUrl = '';
     // parentGalleryId stores the selected parent identifier for newly-created galleries.
     let parentGalleryId = 0;
+    // createdGallery stores whether this upload workflow created the target gallery before storing files.
+    let createdGallery = false;
 
     for (let fileIndex = 0; fileIndex < files.length; fileIndex++) {
         // file stores state or configuration for the gallery front-end flow.
@@ -2287,6 +2356,7 @@ async function runGalleryUploadFiles(form, progress, createThumbnails) {
         refreshUrl = refreshUrl || String(uploadResult.refresh_url || '');
         parentGalleryUrl = parentGalleryUrl || String(uploadResult.parent_gallery_url || '');
         parentGalleryId = parentGalleryId || Number(uploadResult.parent_gallery_id || 0);
+        createdGallery = createdGallery || Boolean(uploadResult.created_gallery);
 
         if (createThumbnails) {
             // imageIds stores state or configuration for the gallery front-end flow.
@@ -2315,6 +2385,7 @@ async function runGalleryUploadFiles(form, progress, createThumbnails) {
         parent_gallery_url: parentGalleryUrl,
         refresh_gallery_id: parentGalleryId,
         refresh_url: refreshUrl,
+        created_gallery: createdGallery,
         uploaded,
         scanned,
         thumbnails,

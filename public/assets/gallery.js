@@ -100,7 +100,7 @@ import {
     setupAdminNavdataUpdateFeedback,
     setupAdminMediaRenamer,
     setupAdminMetadataOrganizer,
-} from './gallery-modules/admin-operations.js?v=20260817-smart-gallery-cycle-placement-v2';
+} from './gallery-modules/admin-operations.js?v=20260902-gallery-created-refresh-v2';
 
 /**
  * Runs a setup callback after the DOM is ready.
