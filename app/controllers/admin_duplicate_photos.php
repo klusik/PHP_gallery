@@ -39,8 +39,15 @@ namespace Gallery\Controllers;
 
 use InvalidArgumentException;
 use Throwable;
+use function Gallery\Core\admin_mutation_descriptor;
+use function Gallery\Core\admin_mutation_error_envelope;
+use function Gallery\Core\admin_mutation_panel_metadata;
+use function Gallery\Core\admin_mutation_postcondition;
+use function Gallery\Core\admin_mutation_public_gallery_context;
+use function Gallery\Core\admin_mutation_success_envelope;
 use function Gallery\Core\current_user;
 use function Gallery\Core\flash_message;
+use function Gallery\Core\gallery_public_url;
 use function Gallery\Core\redirect_to;
 use function Gallery\Core\render_footer;
 use function Gallery\Core\render_header;
@@ -80,6 +87,20 @@ use function Gallery\Views\view_render_admin_duplicate_photo_detector;
  */
 function admin_duplicate_photos_json_response(bool $ok, string $message, array $payload = []): void
 {
+    if (!$ok && !array_key_exists('contexts', $payload)) {
+        // Expected AJAX failures use the same canonical error shape as the
+        // persistent mutation paths. Existing detector callers can continue to
+        // read `error`/`message`, while the side-panel pipeline never receives
+        // an ad-hoc failure object for authentication, CSRF, or validation.
+        $payload = array_merge(
+            admin_mutation_error_envelope(
+                $message,
+                'duplicate_photo_detector.request_failed',
+                admin_duplicate_photos_post_mutation_descriptor()
+            ),
+            $payload
+        );
+    }
     header('Content-Type: application/json');
     echo json_encode(array_merge([
         'ok' => $ok,
@@ -166,12 +187,82 @@ function admin_duplicate_photos_missing_gallery_message(int $galleryId): string
 }
 
 /**
- * Handle a detector POST action and answer as JSON or normal redirect.
+ * Return a canonical mutation descriptor for the persistent detector POST action.
+ *
+ * Scan start/continuation requests only mutate bounded session job state, so they
+ * intentionally return null. Ledger and delete requests describe the durable CMS
+ * mutation without trusting a browser-supplied gallery id for ignore-gallery.
+ *
+ * @return array{type:string,entity:string,action:string,entity_ids:array<int,int>}|null
  */
-function admin_duplicate_photos_handle_post(): void
+function admin_duplicate_photos_post_mutation_descriptor(): ?array
 {
-    verify_csrf();
-    $wantsJson = admin_wants_json();
+    $action = (string) ($_POST['action'] ?? 'start');
+    if ($action === 'delete') {
+        return admin_mutation_descriptor(
+            'image.duplicate_delete',
+            'image',
+            'delete',
+            [(int) ($_POST['image_id'] ?? 0)]
+        );
+    }
+    if ($action === 'ignore_pair') {
+        return admin_mutation_descriptor(
+            'duplicate_photo_ledger.ignore_pair',
+            'image',
+            'ignore_pair',
+            [
+                (int) ($_POST['left_image_id'] ?? 0),
+                (int) ($_POST['right_image_id'] ?? 0),
+            ]
+        );
+    }
+    if ($action === 'clear_ledger') {
+        return admin_mutation_descriptor(
+            'duplicate_photo_ledger.clear',
+            'duplicate_photo_ledger',
+            'clear',
+            []
+        );
+    }
+    if ($action === 'ignore_gallery') {
+        return admin_mutation_descriptor(
+            'duplicate_photo_ledger.ignore_gallery',
+            'gallery',
+            'ignore_gallery',
+            []
+        );
+    }
+
+    return null;
+}
+
+/**
+ * Return whether the current detector POST contains the active Admin CSRF token.
+ *
+ * Enhanced JSON requests must validate CSRF before the classic verify_csrf()
+ * helper can emit plain text. Direct-page POSTs keep the existing helper and
+ * redirect behavior unchanged.
+ *
+ * @return bool True when the submitted CSRF token matches the active session.
+ */
+function admin_duplicate_photos_csrf_valid(): bool
+{
+    $token = (string) ($_POST['csrf_token'] ?? '');
+    return $token !== '' && hash_equals((string) ($_SESSION['csrf_token'] ?? ''), $token);
+}
+
+/**
+ * Handle a detector POST action and answer as JSON or normal redirect.
+ *
+ * @param bool $csrfVerified Whether the JSON entrypoint already validated CSRF.
+ */
+function admin_duplicate_photos_handle_post(bool $csrfVerified = false): void
+{
+    if (!$csrfVerified) {
+        verify_csrf();
+    }
+    $wantsJson = \Gallery\Core\admin_wants_json();
     $action = (string) ($_POST['action'] ?? 'start');
     $adminUserId = admin_duplicate_photos_current_admin_id();
 
@@ -292,10 +383,43 @@ function admin_duplicate_photos_handle_post(): void
         }
 
         if ($wantsJson) {
-            admin_duplicate_photos_json_response(true, $message, [
+            $panelUrl = admin_duplicate_photos_url((int) $gallery['id'], $token, $page);
+            if ($action === 'ignore_pair') {
+                $mutationDescriptor = admin_mutation_descriptor(
+                    'duplicate_photo_ledger.ignore_pair',
+                    'image',
+                    'ignore_pair',
+                    [
+                        (int) ($_POST['left_image_id'] ?? 0),
+                        (int) ($_POST['right_image_id'] ?? 0),
+                    ]
+                );
+            } elseif ($action === 'ignore_gallery') {
+                $mutationDescriptor = admin_mutation_descriptor(
+                    'duplicate_photo_ledger.ignore_gallery',
+                    'gallery',
+                    'ignore_gallery',
+                    [$ignoredGalleryId ?? 0]
+                );
+            } else {
+                $mutationDescriptor = admin_mutation_descriptor(
+                    'duplicate_photo_ledger.clear',
+                    'duplicate_photo_ledger',
+                    'clear',
+                    []
+                );
+            }
+            $mutationEnvelope = admin_mutation_success_envelope(
+                $message,
+                $mutationDescriptor,
+                admin_mutation_panel_metadata('duplicate-photo-detector', $panelUrl, true),
+                [],
+                ['redirect_url' => $panelUrl]
+            );
+            admin_duplicate_photos_json_response(true, $message, array_merge($mutationEnvelope, [
                 'job_token' => $token,
                 'panel_html' => admin_duplicate_photos_panel_html($gallery, $job, $page, $adminUserId),
-            ]);
+            ]));
             return;
         }
 
@@ -404,12 +528,25 @@ function admin_duplicate_photos_handle_post(): void
         }
 
         if ($wantsJson) {
-            admin_duplicate_photos_json_response(true, $message, [
+            $panelUrl = admin_duplicate_photos_url((int) $gallery['id'], $token, $page);
+            $imageGallery = find_gallery($imageGalleryId, true);
+            $mutationEnvelope = admin_mutation_success_envelope(
+                $message,
+                admin_mutation_descriptor('image.duplicate_delete', 'image', 'delete', [$imageId]),
+                admin_mutation_panel_metadata('duplicate-photo-detector', $panelUrl, true),
+                [admin_mutation_public_gallery_context(
+                    $imageGalleryId,
+                    gallery_public_url(is_array($imageGallery) ? $imageGallery : $gallery),
+                    admin_mutation_postcondition('image_absent', ['image_id' => $imageId])
+                )],
+                ['redirect_url' => $panelUrl]
+            );
+            admin_duplicate_photos_json_response(true, $message, array_merge($mutationEnvelope, [
                 'deleted_image_id' => $imageId,
                 'deleted_gallery_id' => $imageGalleryId,
                 'job_token' => $token,
                 'panel_html' => admin_duplicate_photos_panel_html($gallery, $updatedJob, $page, $adminUserId),
-            ]);
+            ]));
             return;
         }
 
@@ -525,6 +662,34 @@ function admin_duplicate_photos_handle_post(): void
  */
 function cms_admin_duplicate_photos(): void
 {
+    // JSON POSTs validate authentication and CSRF without triggering the
+    // classic login redirect or plain-text CSRF abort. This preserves the
+    // detector's side-panel JSON contract even when the Admin session expires.
+    $isJsonPost = request_method() === 'POST' && \Gallery\Core\admin_wants_json();
+    if ($isJsonPost) {
+        $user = current_user();
+        if (!$user || (string) ($user['role'] ?? '') !== 'admin') {
+            http_response_code(403);
+            admin_duplicate_photos_json_response(false, t('auth.admin_required', 'Admin access is required.'), admin_mutation_error_envelope(
+                t('auth.admin_required', 'Admin access is required.'),
+                'auth.admin_required',
+                admin_duplicate_photos_post_mutation_descriptor()
+            ));
+            return;
+        }
+        if (!admin_duplicate_photos_csrf_valid()) {
+            http_response_code(400);
+            admin_duplicate_photos_json_response(false, t('security.invalid_csrf', 'Invalid CSRF token.'), admin_mutation_error_envelope(
+                t('security.invalid_csrf', 'Invalid CSRF token.'),
+                'security.invalid_csrf',
+                admin_duplicate_photos_post_mutation_descriptor()
+            ));
+            return;
+        }
+        admin_duplicate_photos_handle_post(true);
+        return;
+    }
+
     require_admin();
 
     if (request_method() === 'POST') {

@@ -670,6 +670,7 @@ function gallery_metadata_organizer_apply_date_plan_batch(int $galleryId, array 
             'destination_status' => $createdThisGallery ? 'created' : 'existing',
             'requested' => count($imageIds),
             'moved' => (int) ($moveResult['moved'] ?? 0),
+            'image_ids' => array_values(array_map('intval', $imageIds)),
             'originals_moved' => (int) ($moveResult['originals_moved'] ?? 0),
             'derivatives_moved' => (int) ($moveResult['derivatives_moved'] ?? 0),
             'duration_ms' => $groupMoveMs,

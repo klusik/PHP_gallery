@@ -190,7 +190,8 @@ function render_admin_gallery_ai_reprocess_panel(array $gallery): void
         return;
     }
 
-    echo '<form method="post" class="admin-inline-form" onsubmit="return confirm(' . e(json_encode(t('admin.gallery_editor.ai_reprocess_confirm', 'Forget generated AI metadata for this gallery branch and let the Windows worker process these photos again?'), JSON_UNESCAPED_UNICODE)) . ');">' . csrf_field();
+    $confirmMessage = t('admin.gallery_editor.ai_reprocess_confirm', 'Forget generated AI metadata for this gallery branch and let the Windows worker process these photos again?');
+    echo '<form method="post" action="' . e(url_for('admin_edit_gallery', ['id' => $galleryId])) . '" class="admin-inline-form" data-admin-panel-ai-reprocess-form data-confirm="' . e($confirmMessage) . '" onsubmit="return confirm(' . e(json_encode($confirmMessage, JSON_UNESCAPED_UNICODE)) . ');">' . csrf_field();
     echo '<input type="hidden" name="id" value="' . $galleryId . '">';
     echo '<input type="hidden" name="return_tab" value="admin-edit-api">';
     echo '<button type="submit" name="action" value="force_ai_reprocess" class="secondary danger">' . e(t('admin.gallery_editor.ai_reprocess_button', 'Force AI metadata regeneration')) . '</button>';

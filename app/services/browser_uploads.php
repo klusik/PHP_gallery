@@ -158,7 +158,7 @@ function browser_upload_clamped_ratio(mixed $value, float $fallback): float
 }
 
 /**
- * Convert a human-editable megabyte setting into bytes for ZIP batch caps.
+ * Convert a human-editable megabyte setting into bytes for ZIP batch packing targets.
  *
  * @param mixed $value Value to process.
  * @param int $fallbackBytes Fallback bytes value.
@@ -353,7 +353,7 @@ function browser_upload_batch_target_bytes(int $uploadLimitBytes, float $ratio):
 }
 
 /**
- * Return the final browser ZIP target after PHP limits and the admin absolute cap are both applied.
+ * Return the normal browser ZIP packing target after PHP limits and the admin target are both applied.
  *
  * @param int $uploadLimitBytes Upload limit bytes value.
  * @param float $ratio Ratio value.
@@ -1054,6 +1054,63 @@ function browser_upload_validate_manifest_identity(array $manifest, string $sess
 }
 
 /**
+ * Require a complete browser-prepared thumbnail set before storing originals.
+ *
+ * When the administrator explicitly selected browser-side processing, the server
+ * must never accept a package that would leave missing thumbnails for the later
+ * PHP warmup pipeline to generate. Validate the complete expected size/format
+ * matrix while the ZIP is still only temporary request data.
+ *
+ * @param array $manifest Decoded browser package manifest.
+ * @param array $entries Parsed ZIP entries keyed by relative path.
+ */
+function browser_upload_validate_required_thumbnail_manifest(array $manifest, array $entries): void
+{
+    $sizes = function_exists('Gallery\\Services\\thumbnail_sizes') ? array_values(array_unique(array_map('intval', thumbnail_sizes()))) : [];
+    $formats = function_exists('Gallery\\Services\\thumbnail_policy_requested_formats') ? thumbnail_policy_requested_formats() : ['webp'];
+    $formats = array_values(array_filter(array_map('strval', $formats), static fn (string $format): bool => in_array($format, ['jpg', 'webp'], true)));
+    $items = browser_upload_manifest_items_in_source_order((array) ($manifest['items'] ?? []));
+
+    foreach ($items as $manifestIndex => $item) {
+        $variantIndex = [];
+        foreach ((array) ($item['variants'] ?? []) as $variant) {
+            if (!is_array($variant)) {
+                continue;
+            }
+            $size = (int) ($variant['size'] ?? 0);
+            $format = strtolower((string) ($variant['format'] ?? ''));
+            $path = normalize_relative_path((string) ($variant['path'] ?? ''));
+            if ($size <= 0 || !in_array($format, ['jpg', 'webp'], true) || $path === '') {
+                continue;
+            }
+            $variantIndex[$size . ':' . $format] = $path;
+        }
+
+        $missing = [];
+        foreach ($sizes as $size) {
+            foreach ($formats as $format) {
+                $key = $size . ':' . $format;
+                $path = (string) ($variantIndex[$key] ?? '');
+                if ($path === '' || !array_key_exists($path, $entries)) {
+                    $missing[] = $key;
+                }
+            }
+        }
+        if ($missing !== []) {
+            throw new BrowserUploadValidationException(
+                t('browser_upload.error_prepared_thumbnails_incomplete', 'The browser-prepared upload package is missing required thumbnail variants. The server-side thumbnail fallback was not started.'),
+                [
+                    'validation_stage' => 'prepared_thumbnail_manifest_incomplete',
+                    'manifest_index' => (int) ($item['_manifest_order_index'] ?? $manifestIndex),
+                    'source_index' => browser_upload_manifest_source_index($item, $manifestIndex),
+                    'missing_variants' => array_slice($missing, 0, 24),
+                ]
+            );
+        }
+    }
+}
+
+/**
  * Return manifest items in the original browser source order.
  *
  * The browser can prepare images concurrently, so this server-side safety net
@@ -1121,9 +1178,10 @@ function browser_upload_manifest_state_key(array $item, int $fallback): string
  * @param array $uploadedZip Uploaded zip value.
  * @param string $sessionId Session id identifier.
  * @param int $batchIndex Batch index value.
+ * @param bool $preparedThumbnailsRequired Require a complete browser-generated thumbnail matrix.
  * @return array<string mixed>.
  */
-function browser_upload_store_prepared_zip_batch(int $galleryId, array $uploadedZip, string $sessionId, int $batchIndex): array
+function browser_upload_store_prepared_zip_batch(int $galleryId, array $uploadedZip, string $sessionId, int $batchIndex, bool $preparedThumbnailsRequired = false): array
 {
     $startedAt = microtime(true);
     $events = [browser_upload_progress_event($startedAt, 'PHP received prepared ZIP request for batch ' . ($batchIndex + 1) . '.')];
@@ -1172,13 +1230,19 @@ function browser_upload_store_prepared_zip_batch(int $galleryId, array $uploaded
     $events[] = browser_upload_progress_event($startedAt, 'Uploaded ZIP is available in PHP temp storage, ' . browser_upload_format_bytes($zipSize) . '.');
 
     $uploadLimit = browser_upload_server_upload_limit_bytes();
-    $settings = browser_upload_settings();
-    $maxBatchBytes = browser_upload_effective_batch_target_bytes($uploadLimit, (float) $settings['zip_size_threshold_ratio'], (int) $settings['max_zip_batch_bytes']);
-    $entries = browser_upload_parse_store_zip($tmpName, $maxBatchBytes);
+    // The configured ZIP size remains a client-side packing target. One prepared
+    // image plus its thumbnails may legitimately exceed that target because the
+    // image package is atomic. PHP's effective request upload limit is therefore
+    // the authoritative hard ceiling for an already received browser upload ZIP.
+    $entries = browser_upload_parse_store_zip($tmpName, $uploadLimit);
     $events[] = browser_upload_progress_event($startedAt, 'Parsed store-only ZIP with ' . count($entries) . ' file entr' . (count($entries) === 1 ? 'y' : 'ies') . '.');
     $manifest = browser_upload_manifest_from_entries($entries);
     browser_upload_validate_manifest_identity($manifest, $sessionId, $batchIndex);
     $events[] = browser_upload_progress_event($startedAt, 'Validated ZIP manifest for batch ' . ($batchIndex + 1) . '.');
+    if ($preparedThumbnailsRequired) {
+        browser_upload_validate_required_thumbnail_manifest($manifest, $entries);
+        $events[] = browser_upload_progress_event($startedAt, 'Verified complete browser-prepared thumbnail coverage before storing originals.');
+    }
     $events[] = browser_upload_progress_event($startedAt, 'Preserving browser source order for accepted images.');
     $sortBase = browser_upload_session_sort_base($galleryId, $sessionId);
     $events[] = browser_upload_progress_event($startedAt, 'Reserved deterministic upload order base ' . $sortBase . ' for this browser session.');
@@ -1443,6 +1507,7 @@ function browser_upload_store_prepared_zip_batch(int $galleryId, array $uploaded
         'thumbnails' => $thumbsCreated,
         'thumbnail_skipped' => 0,
         'thumbnail_failed' => $thumbnailFailed,
+        'thumbnail_processing' => $preparedThumbnailsRequired ? 'browser_prepared' : 'none',
         'thumbnail_errors' => array_values(array_unique(array_filter($thumbnailErrors))),
         'scan_failed' => count($scanFailedFilenames),
         'scan_failed_filenames' => array_values($scanFailedFilenames),
@@ -1460,6 +1525,7 @@ function browser_upload_store_prepared_zip_batch(int $galleryId, array $uploaded
         'scanned' => $changed,
         'thumbnails' => $thumbsCreated,
         'thumbnail_failed' => $thumbnailFailed,
+        'thumbnail_processing' => $preparedThumbnailsRequired ? 'browser_prepared' : 'none',
         'batch_index' => $batchIndex,
     ]);
 

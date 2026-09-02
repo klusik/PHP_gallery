@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-06-10
+ *   2026-09-02
  */
 
 import { appendUploadProgressLog, i18n, updateBasicProgress, updateUploadProgressMetrics } from './admin-core.js?v=20260614-upload-original-diagnostics-v1';
@@ -60,18 +60,27 @@ export async function runBrowserGalleryUpload(form, progress) {
     const config = browserUploadConfig(form);
     const selectedFiles = selectedBrowserUploadFiles(form);
     const archiveSelected = selectedFiles.some(isBrowserUploadZipFile);
-    const allowEmptyPanelGallery = form.dataset.galleryPanelCloseOnSuccess === '1' && String(form.querySelector('input[name="upload_mode"]')?.value || '') === 'new';
-    if (!config.enabled || selectedFiles.length === 0 || allowEmptyPanelGallery && selectedFiles.length === 0) {
-        return {fallback: true, reason: 'not_applicable'};
+    const prepareThumbnails = Boolean(form.querySelector('input[name="create_thumbnails"]')?.checked);
+    if (selectedFiles.length === 0) {
+        return {fallback: true, reason: 'no_files'};
+    }
+    if (!config.enabled) {
+        throw new Error(i18n('admin.browser_upload.strict_unavailable', 'Browser-side processing is enabled for this upload, but it is unavailable. No files were uploaded. Uncheck browser-side processing to use the server path instead.'));
     }
     const capability = browserUploadCapability(config, selectedFiles);
     if (!capability.ok) {
         if (archiveSelected) throw new Error(i18n('admin.browser_upload.zip_browser_required', 'ZIP import requires the browser-assisted upload path and a compatible browser.'));
-        return {fallback: true, reason: capability.reason};
+        throw new Error(browserUploadStrictCapabilityMessage(capability.reason));
     }
 
+    const processingConfig = {
+        ...config,
+        thumbnailSizes: prepareThumbnails ? config.thumbnailSizes : [],
+        thumbnailFormats: prepareThumbnails ? config.thumbnailFormats : [],
+    };
+
     updateBasicProgress(progress, 1, archiveSelected ? i18n('admin.browser_upload.extracting_archives', 'Inspecting selected ZIP archives in the browser...') : i18n('admin.browser_upload.preparing', 'Preparing images in the browser...'));
-    const expanded = await expandBrowserUploadArchives(selectedFiles, config, progress);
+    const expanded = await expandBrowserUploadArchives(selectedFiles, processingConfig, progress);
     const files = expanded.files;
     if (files.length === 0) throw new Error(i18n('admin.browser_upload.zip_no_supported_images', 'No supported images were found in the selected ZIP archives.'));
     const progressState = createBrowserProgressState(files);
@@ -83,7 +92,7 @@ export async function runBrowserGalleryUpload(form, progress) {
     let serverSideStarted = false;
 
     try {
-        batcher = await createBrowserBatcher(config, uploadSessionId, {
+        batcher = await createBrowserBatcher(processingConfig, uploadSessionId, {
             onBatchPackaging: (batchIndex, itemCount, byteCount) => {
                 appendUploadProgressLog(progress, i18n('admin.browser_upload.log_packaging_batch', 'Packaging ZIP {index}: {count} image(s), estimated {bytes}.', {index: batchIndex + 1, count: itemCount, bytes: formatFileSize(byteCount)}));
             },
@@ -91,7 +100,7 @@ export async function runBrowserGalleryUpload(form, progress) {
                 appendUploadProgressLog(progress, i18n('admin.browser_upload.log_packaged_batch', 'ZIP {index} ready: {count} image(s), {bytes}.', {index: batch.index + 1, count: batch.itemCount || 0, bytes: formatFileSize(batch.blob?.size || 0)}));
             },
         });
-        await processFilesWithWorkerPool(files, config, async (item, completed, total) => {
+        await processFilesWithWorkerPool(files, processingConfig, async (item, completed, total) => {
             const prepared = await batcher.addItem(item);
             progressState.preparedFiles = completed;
             progressState.preparedOriginalBytes += Number(item.originalSize || 0);
@@ -110,7 +119,7 @@ export async function runBrowserGalleryUpload(form, progress) {
         appendUploadProgressLog(progress, i18n('admin.browser_upload.log_packaging_started', 'All images are prepared. Building upload ZIP files now.'));
         const batches = await batcher.finish();
         if (batches.length === 0) {
-            return {fallback: true, reason: 'empty_batches'};
+            throw new Error(i18n('admin.browser_upload.strict_empty_batches', 'Browser-side processing produced no upload batches. No files were uploaded; the server-side fallback was not started.'));
         }
         progressState.totalBatches = batches.length;
         progressState.totalZipBytes = batches.reduce((sum, batch) => sum + Number(batch.blob?.size || 0), 0);
@@ -142,7 +151,7 @@ export async function runBrowserGalleryUpload(form, progress) {
             updateUploadProgressMetrics(progress, browserProgressMetrics(progressState));
             appendUploadProgressLog(progress, i18n('admin.browser_upload.log_uploading_batch', 'Uploading ZIP {current}/{total}: {count} image(s), {bytes}.', {current: index + 1, total: batches.length, count: batch.itemCount || 0, bytes: formatFileSize(batch.blob?.size || 0)}));
             serverSideStarted = true;
-            const result = await uploadPreparedBatchWithRetry(form, config, galleryId, uploadSessionId, batch, index, batches.length, (event) => {
+            const result = await uploadPreparedBatchWithRetry(form, processingConfig, galleryId, uploadSessionId, batch, index, batches.length, prepareThumbnails, (event) => {
                 if (event.lengthComputable && event.total > 0) {
                     const ratio = Math.max(0, Math.min(1, event.loaded / event.total));
                     progressState.currentBatchUploadedBytes = Math.round(Number(batch.blob?.size || 0) * ratio);
@@ -166,16 +175,52 @@ export async function runBrowserGalleryUpload(form, progress) {
         updateBasicProgress(progress, 98, i18n('admin.browser_upload.finishing', 'Finishing browser-prepared upload...'));
         aggregate.total_files = files.length;
         aggregate.redirect_url = appendUploadResultParams(aggregate.redirect_url || window.location.href, aggregate.uploaded, aggregate.scanned, aggregate.thumbnails, aggregate.thumbnail_failed);
+        aggregate.fallback = {...(aggregate.fallback || {}), redirect_url: aggregate.redirect_url};
+        if (aggregate.created_gallery && aggregate.gallery_id > 0) {
+            aggregate.mutation = {
+                type: 'gallery.create_with_upload',
+                entity: 'gallery',
+                action: 'create',
+                entity_ids: [aggregate.gallery_id],
+            };
+        } else if (aggregate.mutation && typeof aggregate.mutation === 'object') {
+            aggregate.mutation = {
+                ...aggregate.mutation,
+                entity_ids: aggregate.image_ids.slice(),
+            };
+        }
         return aggregate;
     } catch (error) {
         if (batcher) {
             await batcher.abort();
         }
         if (!serverSideStarted && !archiveSelected) {
-            return {fallback: true, reason: error instanceof Error ? error.message : 'preparation_failed'};
+            const reason = error instanceof Error ? error.message : String(error || 'preparation_failed');
+            throw new Error(i18n('admin.browser_upload.strict_preparation_failed', 'Browser-side preparation failed before anything was written to the server. No server-side fallback was started. Details: {error}', {error: reason}));
         }
         throw error;
     }
+}
+
+/**
+ * Return a readable strict-mode failure for a missing browser capability.
+ *
+ * Browser-side processing is an explicit checkbox choice. When selected files
+ * cannot use that path, fail before persistence instead of silently changing the
+ * thumbnail-processing location to PHP.
+ *
+ * @param {string} reason Capability reason identifier.
+ * @return {string} Browser-visible failure message.
+ */
+function browserUploadStrictCapabilityMessage(reason) {
+    const detail = {
+        missing_core_browser_api: 'Required browser APIs are unavailable.',
+        missing_indexeddb: 'IndexedDB is unavailable.',
+        missing_canvas_worker_api: 'OffscreenCanvas or createImageBitmap is unavailable.',
+        unsupported_file_type: 'At least one selected file type cannot be prepared in the browser.',
+        single_file_larger_than_upload_limit: 'At least one selected file is larger than the server can accept in one prepared batch.',
+    }[String(reason || '')] || 'Browser capability validation failed.';
+    return i18n('admin.browser_upload.strict_capability_failed', 'Browser-side processing cannot be used for this upload. No files were uploaded and the server-side fallback was not started. {reason} Uncheck browser-side processing to use the server path instead.', {reason: detail});
 }
 
 /**
@@ -664,7 +709,11 @@ function processFilesWithWorkerPool(files, config, onItem) {
 async function createBrowserBatcher(config, uploadSessionId, hooks = {}) {
     const tempStore = await openPreparedBatchStore();
     const targetBytes = Number(config.batchTargetBytes || 1);
-    const maxBytes = targetBytes;
+    // The configured batch size is a packing target, not an absolute rejection limit.
+    // A single source image plus its prepared thumbnails cannot be split safely across
+    // requests, so allow that one-image batch to grow up to the detected PHP upload
+    // ceiling. Multi-image batches still split at targetBytes below.
+    const maxBytes = Math.max(targetBytes, Number(config.uploadLimitBytes || targetBytes));
     const maxItemsPerBatch = Math.max(1, Math.min(Number(config.maxItemsPerBatch || 8), 64));
     let nextBatchIndex = 0;
     const preparedItems = [];
@@ -766,6 +815,10 @@ async function createBrowserBatcher(config, uploadSessionId, hooks = {}) {
             let currentBytes = 0;
             for (const reference of preparedItems) {
                 const itemBytes = Number(reference.itemBytes || 0);
+                // Keep ordinary batches near the configured target. If one prepared
+                // image is itself larger than that target, finalize the previous batch
+                // first and let the oversized image stand alone. finalizeBatch() still
+                // enforces the real PHP upload ceiling through maxBytes.
                 if (current.length > 0 && (currentBytes + itemBytes > targetBytes || current.length >= maxItemsPerBatch)) {
                     await finalizeBatch(current);
                     current = [];
@@ -928,14 +981,15 @@ async function createGalleryForBrowserUpload(form) {
  * @param {Record<string, *>} batch Prepared batch.
  * @param {number} batchIndex Batch index.
  * @param {number} totalBatches Total batches.
+ * @param {boolean} preparedThumbnailsRequired Whether every configured thumbnail must be browser-prepared.
  * @param {Function} progressHandler Browser upload progress handler.
  * @return {Promise<Record<string, *>>} Server response.
  */
-async function uploadPreparedBatchWithRetry(form, config, galleryId, uploadSessionId, batch, batchIndex, totalBatches, progressHandler = () => {}) {
+async function uploadPreparedBatchWithRetry(form, config, galleryId, uploadSessionId, batch, batchIndex, totalBatches, preparedThumbnailsRequired, progressHandler = () => {}) {
     let lastError = null;
     for (let attempt = 1; attempt <= 3; attempt++) {
         try {
-            return await uploadPreparedBatch(form, config, galleryId, uploadSessionId, batch, batchIndex, totalBatches, progressHandler);
+            return await uploadPreparedBatch(form, config, galleryId, uploadSessionId, batch, batchIndex, totalBatches, preparedThumbnailsRequired, progressHandler);
         } catch (error) {
             lastError = error;
             if (!isRetryablePreparedUploadError(error)) {
@@ -959,10 +1013,11 @@ async function uploadPreparedBatchWithRetry(form, config, galleryId, uploadSessi
  * @param {Record<string, *>} batch Prepared batch.
  * @param {number} batchIndex Batch index.
  * @param {number} totalBatches Total batches.
+ * @param {boolean} preparedThumbnailsRequired Whether every configured thumbnail must be browser-prepared.
  * @param {Function} progressHandler Browser upload progress handler.
  * @return {Promise<Record<string, *>>} Server response.
  */
-function uploadPreparedBatch(form, config, galleryId, uploadSessionId, batch, batchIndex, totalBatches, progressHandler = () => {}) {
+function uploadPreparedBatch(form, config, galleryId, uploadSessionId, batch, batchIndex, totalBatches, preparedThumbnailsRequired, progressHandler = () => {}) {
     const body = new FormData();
     body.set('csrf_token', form.querySelector('input[name="csrf_token"]')?.value || '');
     body.set('ajax', '1');
@@ -970,6 +1025,7 @@ function uploadPreparedBatch(form, config, galleryId, uploadSessionId, batch, ba
     body.set('upload_session_id', uploadSessionId);
     body.set('batch_index', String(batchIndex));
     body.set('total_batches', String(totalBatches));
+    body.set('prepared_thumbnails_required', preparedThumbnailsRequired ? '1' : '0');
     const sourceUrl = form.querySelector('input[name="source_url"]')?.value || '';
     if (sourceUrl) {
         body.set('source_url', sourceUrl);
@@ -1141,6 +1197,12 @@ function emptyBrowserAggregate(seed, galleryId, totalBatches) {
         refresh_gallery_id: Number(seed?.refresh_gallery_id || galleryId || 0),
         refresh_url: String(seed?.refresh_url || ''),
         created_gallery: Boolean(seed?.created_gallery),
+        mutation: seed?.mutation && typeof seed.mutation === 'object' ? {...seed.mutation} : null,
+        panel: seed?.panel && typeof seed.panel === 'object' ? {...seed.panel} : null,
+        contexts: Array.isArray(seed?.contexts) ? seed.contexts.map((context) => ({...context})) : [],
+        fallback: seed?.fallback && typeof seed.fallback === 'object' ? {...seed.fallback} : {},
+        image_ids: Array.isArray(seed?.image_ids) ? seed.image_ids.map(Number).filter(Boolean) : [],
+        upload_events: Array.isArray(seed?.upload_events) ? seed.upload_events.slice() : [],
         uploaded: 0,
         scanned: 0,
         thumbnails: 0,
@@ -1175,6 +1237,14 @@ function mergeBrowserResult(aggregate, result) {
     aggregate.refresh_gallery_id = Number(result.refresh_gallery_id || aggregate.refresh_gallery_id || 0);
     aggregate.refresh_url = String(result.refresh_url || aggregate.refresh_url || '');
     aggregate.created_gallery = Boolean(result.created_gallery) || Boolean(aggregate.created_gallery);
+    aggregate.image_ids = Array.from(new Set([...(aggregate.image_ids || []), ...((result.image_ids || []).map(Number))].filter(Boolean)));
+    aggregate.upload_events = [...(aggregate.upload_events || []), ...((result.upload_events || []).slice())];
+    if (!aggregate.created_gallery) {
+        aggregate.mutation = result.mutation && typeof result.mutation === 'object' ? {...result.mutation} : aggregate.mutation;
+        aggregate.panel = result.panel && typeof result.panel === 'object' ? {...result.panel} : aggregate.panel;
+        aggregate.contexts = Array.isArray(result.contexts) ? result.contexts.map((context) => ({...context})) : aggregate.contexts;
+        aggregate.fallback = result.fallback && typeof result.fallback === 'object' ? {...result.fallback} : aggregate.fallback;
+    }
     aggregate.uploaded += Number(result.uploaded || 0);
     aggregate.scanned += Number(result.scanned || 0);
     aggregate.thumbnails += Number(result.thumbnails || 0);

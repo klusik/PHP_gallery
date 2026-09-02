@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-06-07
+ *   2026-09-02
  */
 
 declare(strict_types=1);
@@ -37,9 +37,20 @@ declare(strict_types=1);
 namespace Gallery\Controllers;
 
 use Throwable;
+use function Gallery\Core\admin_mutation_descriptor;
+use function Gallery\Core\admin_mutation_gallery_is_rendered_in_context;
+use function Gallery\Core\admin_mutation_gallery_membership_postcondition;
+use function Gallery\Core\admin_mutation_error_envelope;
+use function Gallery\Core\admin_mutation_panel_metadata;
+use function Gallery\Core\admin_mutation_postcondition;
+use function Gallery\Core\admin_mutation_public_gallery_context;
+use function Gallery\Core\admin_mutation_success_envelope;
+use function Gallery\Core\admin_wants_json;
 use function Gallery\Core\csrf_field;
+use function Gallery\Core\current_user;
 use function Gallery\Core\e;
 use function Gallery\Core\flash_message;
+use function Gallery\Core\gallery_public_url;
 use function Gallery\Core\redirect_to;
 use function Gallery\Core\render_footer;
 use function Gallery\Core\render_header;
@@ -57,6 +68,56 @@ use function Gallery\Services\gallery_date_save_range;
 use function Gallery\Services\t;
 use function Gallery\Views\view_render_admin_gallery_date_exif_suggestion;
 use function Gallery\Services\admin_log_event;
+
+
+/**
+ * Return the canonical mutation descriptor for one EXIF-derived gallery date update.
+ *
+ * @param int $galleryId Gallery identifier.
+ * @return array<string,mixed> Canonical mutation descriptor.
+ */
+function admin_gallery_date_suggestion_mutation_descriptor(int $galleryId): array
+{
+    return admin_mutation_descriptor(
+        'gallery.date_range_update',
+        'gallery',
+        'update',
+        $galleryId > 0 ? [$galleryId] : []
+    );
+}
+
+/**
+ * Return whether the current POST contains the active Admin CSRF token.
+ *
+ * JSON callers use this check before verify_csrf() so an expired token remains
+ * a JSON error instead of falling through to the classic plain-text abort.
+ *
+ * @return bool True when the submitted token is valid.
+ */
+function admin_gallery_date_suggestion_csrf_valid(): bool
+{
+    $token = (string) ($_POST['csrf_token'] ?? '');
+    return $token !== '' && hash_equals((string) ($_SESSION['csrf_token'] ?? ''), $token);
+}
+
+/**
+ * Build a canonical expected-error payload for the focused date suggestion mutation.
+ *
+ * @param string $message Human-readable failure message.
+ * @param string $errorCode Stable machine-readable error code.
+ * @param int $galleryId Gallery identifier when known.
+ * @param string $returnUrl Direct-page fallback URL when known.
+ * @return array<string,mixed> Canonical error envelope.
+ */
+function admin_gallery_date_suggestion_error_payload(string $message, string $errorCode, int $galleryId = 0, string $returnUrl = ''): array
+{
+    return admin_mutation_error_envelope(
+        $message,
+        $errorCode,
+        admin_gallery_date_suggestion_mutation_descriptor($galleryId),
+        $returnUrl !== '' ? ['redirect_url' => $returnUrl] : []
+    );
+}
 
 /**
  * Send a JSON response for the reusable gallery EXIF date suggestion workflow.
@@ -106,7 +167,12 @@ function admin_gallery_date_suggestion_handle_apply(int $galleryId, string $retu
     if (!$gallery) {
         $message = t('admin.gallery_dates.error_gallery_missing', 'Gallery #{id} no longer exists.', ['id' => (string) $galleryId]);
         if ($wantsJson) {
-            admin_gallery_date_suggestion_json_response(false, $message, ['error' => $message]);
+            admin_gallery_date_suggestion_json_response(false, $message, admin_gallery_date_suggestion_error_payload(
+                $message,
+                'gallery.date_suggestion.gallery_missing',
+                $galleryId,
+                $returnUrl
+            ));
             return;
         }
         flash_message('admin_notice', $message);
@@ -131,12 +197,46 @@ function admin_gallery_date_suggestion_handle_apply(int $galleryId, string $retu
         ], ['category' => 'gallery']);
         $message = t('admin.gallery_editor.exif_date_applied_notice', 'Applied EXIF date range {range} to this gallery.', ['range' => $rangeLabel]);
         if ($wantsJson) {
-            admin_gallery_date_suggestion_json_response(true, $message, [
+            // $updatedAt verifies both the current hero and the owning parent/root card against the persisted row.
+            $updatedAt = trim((string) ($updatedGallery['updated_at'] ?? ''));
+            // $galleryUrl is the authoritative public render source for the edited gallery.
+            $galleryUrl = gallery_public_url($updatedGallery);
+            // $parentId and $parentUrl identify the gallery card context whose displayed date range also changed.
+            $parentId = (int) ($updatedGallery['parent_id'] ?? 0);
+            $parent = $parentId > 0 ? find_gallery($parentId, true) : null;
+            $parentUrl = is_array($parent) ? gallery_public_url($parent) : url_for('home');
+            // $postcondition requires the server-rendered row timestamp when available; identity/presence remain safe fallbacks.
+            $galleryPostcondition = $updatedAt !== ''
+                ? admin_mutation_postcondition('gallery_updated_at', ['gallery_id' => $galleryId, 'updated_at' => $updatedAt])
+                : admin_mutation_postcondition('gallery_identity', ['gallery_id' => $galleryId]);
+            $parentPostcondition = admin_mutation_gallery_is_rendered_in_context($updatedGallery, $parentId)
+                ? ($updatedAt !== ''
+                    ? admin_mutation_postcondition('gallery_updated_at', ['gallery_id' => $galleryId, 'updated_at' => $updatedAt])
+                    : admin_mutation_postcondition('gallery_visibility', [
+                        'gallery_id' => $galleryId,
+                        'visibility' => (string) ($updatedGallery['visibility'] ?? ''),
+                    ]))
+                : admin_mutation_gallery_membership_postcondition($galleryId, $parentId, false);
+            // $editUrl identifies the owning editor fragment while this tool keeps its own small suggestion markup in sync locally.
+            $editUrl = admin_edit_gallery_tab_url($galleryId, 'admin-edit-identity');
+            // $envelope moves public invalidation onto the Stage 3 shared completion coordinator.
+            $envelope = admin_mutation_success_envelope(
+                $message,
+                admin_gallery_date_suggestion_mutation_descriptor($galleryId),
+                admin_mutation_panel_metadata('gallery-edit', $editUrl, true),
+                [
+                    admin_mutation_public_gallery_context($galleryId, $galleryUrl, $galleryPostcondition),
+                    admin_mutation_public_gallery_context($parentId, $parentUrl, $parentPostcondition),
+                ],
+                ['redirect_url' => $returnUrl]
+            );
+            admin_gallery_date_suggestion_json_response(true, $message, array_merge($envelope, [
+                // Temporary tool-specific fields remain for the in-place date-input and suggestion-fragment update.
                 'gallery_date' => (string) ($applyResult['start'] ?? ''),
                 'gallery_date_end' => (string) ($applyResult['end'] ?? ''),
                 'range_label' => $rangeLabel,
                 'suggestion_html' => admin_gallery_date_suggestion_panel_html($updatedGallery),
-            ]);
+            ]));
             return;
         }
         flash_message('admin_notice', $message);
@@ -146,7 +246,12 @@ function admin_gallery_date_suggestion_handle_apply(int $galleryId, string $retu
             'error' => $exception->getMessage(),
         ], ['category' => 'gallery']);
         if ($wantsJson) {
-            admin_gallery_date_suggestion_json_response(false, $exception->getMessage(), ['error' => $exception->getMessage()]);
+            admin_gallery_date_suggestion_json_response(false, $exception->getMessage(), admin_gallery_date_suggestion_error_payload(
+                $exception->getMessage(),
+                'gallery.date_suggestion.apply_failed',
+                $galleryId,
+                $returnUrl
+            ));
             return;
         }
         flash_message('admin_notice', $exception->getMessage());
@@ -160,6 +265,52 @@ function admin_gallery_date_suggestion_handle_apply(int $galleryId, string $retu
  */
 function cms_admin_gallery_date_suggestion(): void
 {
+    // JSON POSTs validate auth and CSRF before classic redirect/plain-text helpers so
+    // the side-panel mutation contract remains JSON-only even after session expiry.
+    $isJsonPost = request_method() === 'POST' && admin_wants_json();
+    if ($isJsonPost) {
+        $galleryId = (int) ($_POST['gallery_id'] ?? $_POST['id'] ?? 0);
+        $returnUrl = $galleryId > 0
+            ? admin_edit_gallery_tab_url($galleryId, 'admin-edit-identity')
+            : url_for('admin');
+        $user = current_user();
+        if (!$user || (string) ($user['role'] ?? '') !== 'admin') {
+            $message = t('auth.admin_required', 'Admin access is required.');
+            http_response_code(403);
+            admin_gallery_date_suggestion_json_response(false, $message, admin_gallery_date_suggestion_error_payload(
+                $message,
+                'auth.admin_required',
+                $galleryId,
+                $returnUrl
+            ));
+            return;
+        }
+        if (!admin_gallery_date_suggestion_csrf_valid()) {
+            $message = t('security.invalid_csrf', 'Invalid CSRF token.');
+            http_response_code(400);
+            admin_gallery_date_suggestion_json_response(false, $message, admin_gallery_date_suggestion_error_payload(
+                $message,
+                'security.invalid_csrf',
+                $galleryId,
+                $returnUrl
+            ));
+            return;
+        }
+        if ($galleryId <= 0) {
+            $message = t('admin.gallery_dates.error_gallery_missing', 'Gallery #{id} no longer exists.', ['id' => '0']);
+            http_response_code(400);
+            admin_gallery_date_suggestion_json_response(false, $message, admin_gallery_date_suggestion_error_payload(
+                $message,
+                'gallery.date_suggestion.gallery_missing',
+                0,
+                $returnUrl
+            ));
+            return;
+        }
+        admin_gallery_date_suggestion_handle_apply($galleryId, $returnUrl);
+        return;
+    }
+
     require_admin();
     if (request_method() !== 'POST') {
         redirect_to(url_for('admin'));
@@ -170,10 +321,6 @@ function cms_admin_gallery_date_suggestion(): void
     $galleryId = (int) ($_POST['gallery_id'] ?? $_POST['id'] ?? 0);
     if ($galleryId <= 0) {
         $message = t('admin.gallery_dates.error_gallery_missing', 'Gallery #{id} no longer exists.', ['id' => '0']);
-        if (admin_wants_json()) {
-            admin_gallery_date_suggestion_json_response(false, $message, ['error' => $message]);
-            return;
-        }
         flash_message('admin_notice', $message);
         redirect_to(url_for('admin'));
     }

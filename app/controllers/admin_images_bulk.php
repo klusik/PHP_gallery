@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-12
+ *   2026-09-02
  */
 
 declare(strict_types=1);
@@ -183,7 +183,12 @@ function cms_admin_bulk_images(): void
                     'image_ids' => $ownedIds,
                     'failures' => $moved['failures'],
                 ], ['category' => 'other', 'severity' => 'error']);
-                flash_message('admin_notice', 'Image move failed: ' . implode(' ', array_slice($moved['failures'], 0, 5)));
+                $moveFailureNotice = 'Image move failed: ' . implode(' ', array_slice($moved['failures'], 0, 5));
+                if (admin_wants_json()) {
+                    admin_panel_error_response($moveFailureNotice);
+                    return;
+                }
+                flash_message('admin_notice', $moveFailureNotice);
                 redirect_to(admin_edit_gallery_tab_url($galleryId, $returnTab));
             }
             admin_log_event('info', 'image.bulk_moved', 'Admin moved selected images between galleries.', [
@@ -201,7 +206,9 @@ function cms_admin_bulk_images(): void
             if (admin_wants_json()) {
                 $updated = find_gallery($galleryId, true) ?: find_gallery($galleryId) ?: $gallery;
                 $destinationGallery = find_gallery($destinationGalleryId, true) ?: find_gallery($destinationGalleryId) ?: null;
-                $response = admin_bulk_images_success_response($updated, $notice, $returnTab, $action, $ownedIds);
+                $response = admin_bulk_images_success_response($updated, $notice, $returnTab, $action, $ownedIds, [
+                    'destination_gallery' => $destinationGallery,
+                ]);
                 $response['source_gallery_id'] = $galleryId;
                 $response['source_gallery_url'] = gallery_public_url($updated);
                 $response['refresh_url'] = gallery_public_url($updated);
@@ -245,7 +252,12 @@ function cms_admin_bulk_images(): void
                 'action' => $action,
                 'error' => $exception->getMessage(),
             ], ['category' => 'other', 'severity' => 'error']);
-            flash_message('admin_notice', 'Image move failed: ' . $exception->getMessage());
+            $moveFailureNotice = 'Image move failed: ' . $exception->getMessage();
+            if (admin_wants_json()) {
+                admin_panel_error_response($moveFailureNotice);
+                return;
+            }
+            flash_message('admin_notice', $moveFailureNotice);
         }
         redirect_to(admin_edit_gallery_tab_url($galleryId, $returnTab));
     }
@@ -280,7 +292,12 @@ function cms_admin_bulk_images(): void
                 'image_ids' => $ownedIds,
                 'error' => $exception->getMessage(),
             ], ['category' => 'other', 'severity' => 'error']);
-            flash_message('admin_notice', 'Image delete failed: ' . $exception->getMessage());
+            $deleteFailureNotice = 'Image delete failed: ' . $exception->getMessage();
+            if (admin_wants_json()) {
+                admin_panel_error_response($deleteFailureNotice);
+                return;
+            }
+            flash_message('admin_notice', $deleteFailureNotice);
         }
         redirect_to(admin_edit_gallery_tab_url($galleryId, $returnTab));
     }
@@ -294,6 +311,13 @@ function cms_admin_bulk_images(): void
         // Variable $stmt stores this steps working value.
         $stmt = db()->prepare('UPDATE images SET visibility = ?, updated_at = ? WHERE id IN (' . $placeholders . ')');
         $stmt->execute(array_merge([$action, now_sql()], $ownedIds));
+        if (admin_wants_json()) {
+            $updated = find_gallery($galleryId, true) ?: find_gallery($galleryId) ?: $gallery;
+            $notice = 'Updated visibility on ' . count($ownedIds) . ' image(s).';
+            header('Content-Type: application/json');
+            echo json_encode(admin_bulk_images_success_response($updated, $notice, $returnTab, $action, $ownedIds));
+            return;
+        }
     }
     if (in_array($action, ['nsfw_on', 'nsfw_off'], true) && !nsfw_guard_schema_ready()) {
         // $nsfwSchemaStatus distinguishes a migration requirement from an inspection outage.
@@ -301,6 +325,10 @@ function cms_admin_bulk_images(): void
         $notice = ($nsfwSchemaStatus['state'] ?? '') === 'unknown'
             ? t('admin.gallery_editor.nsfw_change_inspection_failed', 'NSFW Guard was not changed because the required database schema could not be inspected. Check System Health and try again.')
             : t('admin.gallery_editor.nsfw_change_migration_required', 'NSFW Guard was not changed because its database migration has not been applied.');
+        if (admin_wants_json()) {
+            admin_panel_error_response($notice, 503);
+            return;
+        }
         flash_message('admin_notice', $notice);
         redirect_to(admin_edit_gallery_tab_url($galleryId, $returnTab));
     }
@@ -310,7 +338,14 @@ function cms_admin_bulk_images(): void
         // $stmt stores this steps working value.
         $stmt = db()->prepare('UPDATE images SET nsfw_enabled = ?, updated_at = ? WHERE id IN (' . $placeholders . ')');
         $stmt->execute(array_merge([$action === 'nsfw_on' ? 1 : 0, now_sql()], $ownedIds));
-        flash_message('admin_notice', 'Updated NSFW Guard on ' . count($ownedIds) . ' image(s).');
+        $notice = 'Updated NSFW Guard on ' . count($ownedIds) . ' image(s).';
+        if (admin_wants_json()) {
+            $updated = find_gallery($galleryId, true) ?: find_gallery($galleryId) ?: $gallery;
+            header('Content-Type: application/json');
+            echo json_encode(admin_bulk_images_success_response($updated, $notice, $returnTab, $action, $ownedIds));
+            return;
+        }
+        flash_message('admin_notice', $notice);
         redirect_to(admin_edit_gallery_tab_url($galleryId, $returnTab));
     }
     if ($action === 'thumbs') {
@@ -322,8 +357,22 @@ function cms_admin_bulk_images(): void
             }
         }
         thumbnail_maintenance_summary_cache_clear();
-        flash_message('admin_notice', t('admin.galleries.thumbnail_result', ['count' => $count]));
+        $notice = t('admin.galleries.thumbnail_result', ['count' => $count]);
+        if (admin_wants_json()) {
+            $updated = find_gallery($galleryId, true) ?: find_gallery($galleryId) ?: $gallery;
+            header('Content-Type: application/json');
+            echo json_encode(admin_bulk_images_success_response($updated, $notice, $returnTab, 'thumbs', $ownedIds));
+            return;
+        }
+        flash_message('admin_notice', $notice);
         redirect_to(admin_edit_gallery_tab_url($galleryId, $returnTab));
+    }
+    if (admin_wants_json()) {
+        $updated = find_gallery($galleryId, true) ?: find_gallery($galleryId) ?: $gallery;
+        $notice = 'Updated ' . count($ownedIds) . ' image(s).';
+        header('Content-Type: application/json');
+        echo json_encode(admin_bulk_images_success_response($updated, $notice, $returnTab, $action, $ownedIds));
+        return;
     }
     flash_message('admin_notice', 'Updated ' . count($ownedIds) . ' image(s).');
     redirect_to(admin_edit_gallery_tab_url($galleryId, $returnTab));

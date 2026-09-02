@@ -73,7 +73,7 @@ This file maps features to source files. It is optimized for fast maintenance an
 | Thumbnail URL/path helpers | `app/services/thumbnail_sources.php` | Central location for generated thumbnail paths. |
 | Thumbnail generation | `app/services/thumbnail_generation.php` | GD/Imagick handling. |
 | Thumbnail responsive HTML | `app/services/thumbnail_html.php`, `app/services/thumbnail_bundles.php` | Used by public pages. |
-| Thumbnail maintenance | `app/services/thumbnail_maintenance.php`, `app/controllers/admin_thumbnails.php` | Admin create/delete/rebuild status. |
+| Thumbnail maintenance | `app/services/thumbnail_maintenance.php`, `app/controllers/admin_thumbnails.php`, `public/assets/gallery-modules/admin-thumbnail-progress.js`, `public/assets/gallery-modules/admin-side-panel.js` | Admin create/delete/rebuild status. Gallery-editor side-panel rebuilds stay browser-batched, then forward the final gallery plus owning parent/root canonical mutation contexts to the shared public-context coordinator without replacing their progress UI. |
 | Scheduled site maintenance | `app/services/site_maintenance.php`, `app/controllers/site_maintenance.php`, `scripts/site_maintenance.php` | Cron-safe daily maintenance, request-triggered hidden runner, UTC maintenance window, chained safe web slices, per-image persisted thumbnail checks, metadata refresh and cleanup tasks. |
 | Thumbnail size bounds | `app/services/thumbnail_bounds.php` | Global/gallery/image min/max sizes. |
 | WebP behavior | `app/services/thumbnail_formats.php` | Format decisions. |
@@ -163,19 +163,20 @@ Future global settings should be registered summary-only first. Enable central e
 | Bulk gallery operations | `app/controllers/admin_galleries_bulk.php` | Bulk delete/rename/move/regenerate paths plus EXIF/GPS force on, force off and inherit-default actions. |
 | Reorder hierarchy | `app/controllers/admin_galleries_reorder.php` | Admin and public order. |
 | Gallery mutations | `app/services/gallery_mutations.php` | Create/update/delete/move service logic. |
+| Canonical side-panel mutation completion | `app/helpers_mutation.php`, `public/assets/gallery-modules/admin-mutation-completion.js`, `public/assets/gallery-modules/admin-side-panel.js`, `scripts/check_admin_mutation_contracts.php` | Server helpers define typed mutation/panel/context/postcondition envelopes; the browser coordinator owns no-store refresh, verification, bounded retry and race suppression; the side-panel module owns drawer interception/lifecycle only; the repository checker protects the contract. |
 | Gallery lookup | `app/services/gallery_lookup.php` | Read model and tree queries. |
 | Gallery paths and slugs | `app/services/gallery_paths.php`, `app/services/public_paths.php` | Clean URLs and filesystem path helpers. |
 | Gallery sidecars | `app/services/gallery_sidecars.php` | Metadata sidecar persistence. |
 | Gallery display settings | `app/services/gallery_display.php`, `app/services/gallery_grid.php`, `app/services/gallery_description_layout.php`, `app/services/gallery_count_badges.php`, `app/services/gallery_dates.php`, `app/services/exif.php` | Public rendering behavior, including date range display and effective EXIF/GPS display inheritance. |
-| EXIF-derived gallery date suggestions | `app/controllers/admin_gallery_dates.php`, `app/services/gallery_dates.php`, `app/views/admin_gallery_forms.php`, `public/assets/gallery-modules/admin-gallery-date-suggestion.js` | Aggregates `images.exif_taken_at` across each gallery branch, supports scoped branch reviews through `gallery_id`, lets admins approve, edit, or ignore suggested ranges, and applies the current gallery suggestion through the shared focused endpoint with AJAX or POST fallback. |
-| Duplicate Photo Detector | `app/controllers/admin_duplicate_photos.php`, `app/services/duplicate_photo_detector.php`, `app/services/duplicate_photo_ledger.php`, `app/views/admin_duplicate_photos.php`, `public/assets/gallery-modules/admin-duplicate-photo-detector.js`, `public/assets/styles/admin-duplicate-photo-detector.css`, `app/services/gallery_mutations.php`, `app/controllers/admin_galleries_edit.php`, `public/assets/gallery-modules/admin-side-panel.js`, `database/migrations/202608080001_duplicate_photo_ledger.php`, `tests/duplicate_photo_detector_test.php`, `tests/duplicate_photo_ledger_test.php` | Selected-gallery-branch or explicit all-gallery scan using stored SHA-256 and normalized EXIF metadata, rendered as deterministic left/right pair comparisons. Gallery/photo paths use existing public URL helpers. Per-admin ledger rules suppress one canonical pair or one exact gallery ID, with parent/child galleries independent; **Clear ledger** resets only that administrator's rules. Scan, ledger, clear, and single-click delete actions use the existing side-panel AJAX pipeline without reload/navigation; POST remains fallback-only. |
+| EXIF-derived gallery date suggestions | `app/controllers/admin_gallery_dates.php`, `app/services/gallery_dates.php`, `app/views/admin_gallery_forms.php`, `public/assets/gallery-modules/admin-gallery-date-suggestion.js`, `public/assets/gallery-modules/admin-side-panel.js` | Aggregates `images.exif_taken_at` across each gallery branch, supports scoped branch reviews through `gallery_id`, lets admins approve, edit, or ignore suggested ranges, and applies the current gallery suggestion through the shared focused endpoint. Enhanced side-panel saves emit the canonical mutation envelope and invalidate the edited gallery plus its parent/root context; direct-page POST/redirect remains the non-JavaScript fallback. |
+| Duplicate Photo Detector | `app/controllers/admin_duplicate_photos.php`, `app/services/duplicate_photo_detector.php`, `app/services/duplicate_photo_ledger.php`, `app/views/admin_duplicate_photos.php`, `public/assets/gallery-modules/admin-duplicate-photo-detector.js`, `public/assets/styles/admin-duplicate-photo-detector.css`, `app/services/gallery_mutations.php`, `app/controllers/admin_galleries_edit.php`, `public/assets/gallery-modules/admin-side-panel.js`, `database/migrations/202608080001_duplicate_photo_ledger.php`, `tests/duplicate_photo_detector_test.php`, `tests/duplicate_photo_ledger_test.php` | Selected-gallery-branch or explicit all-gallery scan using stored SHA-256 and normalized EXIF metadata, rendered as deterministic left/right pair comparisons. Gallery/photo paths use existing public URL helpers. Per-admin ledger rules suppress one canonical pair or one exact gallery ID, with parent/child galleries independent; **Clear ledger** resets only that administrator's rules. Scan actions keep their bounded detector-job JSON contract; durable ledger/clear/delete writes use the canonical Admin mutation envelope, preserve the panel, and keep auth/CSRF failures JSON-only. POST/redirect remains fallback-only. |
 
 ## Image Administration
 
 | Task | Files |
 | --- | --- |
 | Upload images and upload settings | `app/controllers/admin_uploads.php`, `app/views/admin_upload_settings.php`, `app/services/uploads.php`, `app/services/browser_uploads.php`, `public/assets/gallery-modules/admin-side-panel.js`, `public/assets/gallery-modules/admin-browser-upload.js`, `public/assets/gallery-modules/browser-image-worker.js` |
-| Thumbnail maintenance and browser rebuild | `app/controllers/admin_thumbnails.php`, `app/services/thumbnail_generation.php`, `app/services/thumbnail_sources.php`, `app/services/browser_thumbnail_rebuild.php`, `public/assets/gallery-modules/admin-thumbnail-progress.js`, `public/assets/gallery-modules/admin-browser-thumbnail-rebuild.js`, `public/assets/gallery-modules/browser-image-worker.js` |
+| Thumbnail maintenance and browser rebuild | `app/controllers/admin_thumbnails.php`, `app/services/thumbnail_generation.php`, `app/services/thumbnail_sources.php`, `app/services/browser_thumbnail_rebuild.php`, `public/assets/gallery-modules/admin-thumbnail-progress.js`, `public/assets/gallery-modules/admin-browser-thumbnail-rebuild.js`, `public/assets/gallery-modules/admin-side-panel.js`, `public/assets/gallery-modules/browser-image-worker.js` |
 | Scan images from filesystem | `app/controllers/admin_galleries_edit.php`, `app/services/image_scanning.php` |
 | Bulk image actions | `app/controllers/admin_images_bulk.php` |
 | Reorder images | `app/controllers/admin_images_reorder.php` |
@@ -259,7 +260,7 @@ The Gallery tags Theme subsection is rendered by app/controllers/admin_theme.php
 
 | Task | Files |
 | --- | --- |
-| Admin migration UI | `app/controllers/gallery_migration.php`, `app/views/admin_gallery_migration.php` |
+| Admin migration UI and side-panel completion | `app/controllers/gallery_migration.php`, `app/views/admin_gallery_migration.php`, `public/assets/gallery-modules/admin-gallery-migration.js`, `public/assets/gallery-modules/admin-side-panel.js` |
 | Migration service model | `app/services/gallery_migration.php` |
 | Manifest endpoint | Handler `cms_gallery_migration_manifest` |
 | Asset endpoint | Handler `cms_gallery_migration_asset` |
@@ -272,7 +273,7 @@ The Gallery tags Theme subsection is rendered by app/controllers/admin_theme.php
 
 | Task | Files |
 | --- | --- |
-| Admin token management | `app/controllers/upload_automation.php`, handler `cms_admin_upload_automation_token` |
+| Admin token management | `app/controllers/upload_automation.php`, `public/assets/gallery-modules/admin-side-panel.js`, handler `cms_admin_upload_automation_token` |
 | Upload API | `app/controllers/upload_automation.php`, handler `cms_upload_automation_upload` |
 | Token model | `app/services/upload_automation.php`, table `gallery_upload_tokens` |
 | Windows watcher | `winapp/gallery_watch_upload.pyw` |
@@ -429,6 +430,8 @@ dynamically, not test one known table identity.
 | --- | --- |
 | Linux deploy | `deploy.sh`, `scripts/deploy.sh` |
 | Windows deploy | `deploy.bat`, `scripts/deploy.ps1` |
+| Framework-free PHP test runner | `tests/run.php`, `tests/*_test.php` |
+| Standalone JavaScript model tests | `tests/*_test.mjs` |
 | Manual migration CLI | `scripts/migrate.php` |
 | Admin creation | `scripts/create_admin.php` |
 | Manifest generation | `scripts/generate_manifest.php` |
@@ -436,6 +439,8 @@ dynamically, not test one known table identity.
 | Site maintenance CLI | `scripts/site_maintenance.php` |
 
 ## Test Files
+
+`tests/` is the authoritative tracked regression tree. Production packages exclude it by default; local source-review folders/ZIPs may opt in with `--include-tests true` or `-IncludeTests true`.
 
 | Test | Purpose |
 | --- | --- |

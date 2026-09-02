@@ -35,6 +35,42 @@ namespace Gallery\Core {
         return 'POST';
     }
 
+    /** Return the minimal database facade needed by Stage 4 membership-count metadata. */
+    function db(): object
+    {
+        return new class {
+            /** Return a deterministic row-count result for direct count queries. */
+            public function query(string $sql): object
+            {
+                return new class {
+                    /** Return the deterministic count expected by this fixture. */
+                    public function fetchColumn(): int
+                    {
+                        return 1;
+                    }
+                };
+            }
+
+            /** Return a deterministic prepared-statement facade for count queries. */
+            public function prepare(string $sql): object
+            {
+                return new class {
+                    /** Accept fixture parameters without external database access. */
+                    public function execute(array $params = []): bool
+                    {
+                        return true;
+                    }
+
+                    /** Return the deterministic count expected by this fixture. */
+                    public function fetchColumn(): int
+                    {
+                        return 1;
+                    }
+                };
+            }
+        };
+    }
+
     /** Build deterministic public URLs for assertions. */
     function gallery_public_url(array $gallery): string
     {
@@ -65,26 +101,31 @@ namespace Gallery\Core {
         throw new \RuntimeException('Unexpected flash message: ' . $key . ' ' . $message);
     }
 
+    /** Return an empty CSRF field for rendering paths that must stay unused. */
     function csrf_field(): string
     {
         return '';
     }
 
+    /** Return a deterministic fixture CSRF token. */
     function csrf_token(): string
     {
         return 'test-csrf-token';
     }
 
+    /** Escape fixture output through the production-compatible HTML flags. */
     function e(string $value): string
     {
         return htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
     }
 
+    /** Fail if the JSON branch attempts direct-page header rendering. */
     function render_header(string $title): void
     {
         throw new \RuntimeException('Unexpected direct-page header: ' . $title);
     }
 
+    /** Fail if the JSON branch attempts direct-page footer rendering. */
     function render_footer(): void
     {
         throw new \RuntimeException('Unexpected direct-page footer.');
@@ -108,6 +149,18 @@ namespace Gallery\Services {
             'slug' => 'new-panel-gallery',
             'folder_path' => 'new-panel-gallery',
         ];
+    }
+
+    /** Mirror the public root listing policy used by the Stage 4 context-count helper. */
+    function public_gallery_listing_sql_fragment(string $alias = 'g'): string
+    {
+        return $alias . ".visibility = 'public'";
+    }
+
+    /** Treat this focused fixture as a listed public root gallery. */
+    function gallery_is_public_listed(array $gallery): bool
+    {
+        return true;
     }
 
     /** Preserve the controller's visibility normalization dependency. */
@@ -139,21 +192,25 @@ namespace Gallery\Services {
 }
 
 namespace Gallery\Views {
+    /** Fail if the JSON branch renders gallery date fields. */
     function view_render_admin_gallery_date_range_fields(...$args): void
     {
         throw new \RuntimeException('Unexpected date-range rendering.');
     }
 
+    /** Fail if the JSON branch renders new-gallery fields. */
     function view_render_admin_new_gallery_fields(...$args): void
     {
         throw new \RuntimeException('Unexpected new-gallery field rendering.');
     }
 
+    /** Fail if the JSON branch renders the side-panel form. */
     function view_render_admin_new_gallery_side_panel(...$args): void
     {
         throw new \RuntimeException('Unexpected side-panel rendering after JSON mutation.');
     }
 
+    /** Fail if the JSON branch renders description guidance. */
     function view_render_gallery_description_formatting_hint(...$args): void
     {
         throw new \RuntimeException('Unexpected description hint rendering.');
@@ -173,6 +230,7 @@ namespace Gallery\Controllers {
         return !empty($_POST['ajax']) || !empty($_POST['panel']);
     }
 
+    require_once __DIR__ . '/../app/helpers_mutation.php';
     require_once __DIR__ . '/../app/controllers/admin_galleries_discovery.php';
 
     /** Fail fast with a useful message instead of relying on assert.ini. */
@@ -209,6 +267,14 @@ namespace Gallery\Controllers {
     side_panel_test_expect(($payload['gallery_url'] ?? '') === '/gallery/new-panel-gallery', 'AJAX create response did not include the new public gallery URL.');
     side_panel_test_expect(($payload['refresh_url'] ?? null) === '/', 'Root create response did not provide the canonical background refresh URL.');
     side_panel_test_expect(($payload['refresh_gallery_id'] ?? null) === 0, 'Root create response returned an unexpected refresh gallery id.');
+    side_panel_test_expect(array_keys(array_intersect_key($payload, array_flip(['ok', 'message', 'mutation', 'panel', 'contexts', 'fallback']))) === ['ok', 'message', 'mutation', 'panel', 'contexts', 'fallback'], 'Create response must expose the canonical mutation envelope.');
+    side_panel_test_expect(($payload['mutation']['type'] ?? '') === 'gallery.create', 'Create response must identify the typed gallery mutation.');
+    side_panel_test_expect(($payload['mutation']['entity_ids'] ?? []) === [77], 'Create response must preserve the stable created gallery id.');
+    side_panel_test_expect(($payload['panel']['keep_open'] ?? false) === true, 'Enhanced create must keep the side panel open.');
+    side_panel_test_expect(($payload['contexts'][0]['postcondition']['type'] ?? '') === 'gallery_membership', 'Create response must use pagination-safe gallery membership verification.');
+    side_panel_test_expect(($payload['contexts'][0]['postcondition']['present'] ?? false) === true, 'Create response must expect the new public card to be present.');
+    side_panel_test_expect((int) ($payload['contexts'][0]['postcondition']['count'] ?? -1) === 1, 'Create response must carry the authoritative full root gallery count.');
+    side_panel_test_expect(($payload['fallback']['redirect_url'] ?? '') !== '', 'Classic redirect must remain fallback metadata.');
 
     fwrite(STDOUT, "PASS admin_side_panel_gallery_mutation_test\n");
 }

@@ -28,7 +28,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-27
+ *   2026-09-02
  */
 
 import { i18n } from './admin-core.js?v=20260512-modular-admin-v1';
@@ -94,6 +94,7 @@ async function runGalleryMigration(form) {
     const submitButtons = Array.from(form.querySelectorAll('button, input[type="submit"]'));
     const cancelButton = form.querySelector('[data-gallery-migration-cancel]');
     const reconnectSeconds = getReconnectSeconds(form);
+    let localMutationResult = null;
 
     form.dataset.galleryMigrationCancelled = '0';
     submitButtons.forEach((button) => {
@@ -111,6 +112,9 @@ async function runGalleryMigration(form) {
 
         const manifestAction = mode === 'source_push' ? 'push_manifest' : 'pull_manifest';
         const manifestResult = await postMigrationStep(form, manifestAction, {}, {timeoutSeconds: reconnectSeconds});
+        if (mode === 'target_pull' && manifestResult?.mutation && Array.isArray(manifestResult?.contexts)) {
+            localMutationResult = manifestResult;
+        }
         const assets = Array.isArray(manifestResult.assets) ? manifestResult.assets : [];
         const jobId = String(manifestResult.job_id || '');
         if (jobId === '') {
@@ -153,8 +157,18 @@ async function runGalleryMigration(form) {
         }
         const completeAction = mode === 'source_push' ? 'push_complete' : 'pull_complete';
         const completeResult = await postMigrationStep(form, completeAction, {job_id: jobId}, {timeoutSeconds: reconnectSeconds});
+        if (mode === 'target_pull' && completeResult?.mutation && Array.isArray(completeResult?.contexts)) {
+            localMutationResult = completeResult;
+        }
         updateMigrationProgress(form, 100, i18n('admin.gallery_migration.complete', 'Migration complete. {received}/{total} assets received.', {received: completeResult.assets_received || assets.length, total: completeResult.total_assets || assets.length}));
-        appendMigrationLog(form, i18n('admin.gallery_migration.completed_successfully', 'Migration completed successfully.'));
+        const completedMessage = i18n('admin.gallery_migration.completed_successfully', 'Migration completed successfully.');
+        appendMigrationLog(form, completedMessage);
+        if (mode === 'target_pull' && localMutationResult) {
+            dispatchGalleryMigrationMutationResult(form, localMutationResult, 'gallery-migration', {
+                refreshPanel: true,
+                statusMessage: completedMessage,
+            });
+        }
         if (completeResult.edit_url) {
             appendMigrationLog(form, i18n('admin.gallery_migration.target_editor', 'Target editor: {url}', {url: completeResult.edit_url}));
         }
@@ -162,6 +176,13 @@ async function runGalleryMigration(form) {
         const message = error instanceof Error ? error.message : i18n('admin.gallery_migration.failed', 'Migration failed.');
         updateMigrationProgress(form, 100, message);
         appendMigrationLog(form, message);
+        if (mode === 'target_pull' && localMutationResult) {
+            dispatchGalleryMigrationMutationResult(form, localMutationResult, 'gallery-migration-partial', {
+                refreshPanel: true,
+                statusMessage: message,
+                statusError: true,
+            });
+        }
     } finally {
         submitButtons.forEach((button) => {
             button.disabled = false;
@@ -171,6 +192,34 @@ async function runGalleryMigration(form) {
             cancelButton.disabled = false;
         }
     }
+}
+
+/**
+ * Hand local target-pull invalidation to the shared Admin mutation completion coordinator.
+ *
+ * Gallery Migration keeps ownership of its progress and log markup. This event therefore
+ * requests only public-context synchronization and does not ask the side panel to replace
+ * the migration tool fragment itself.
+ *
+ * @param {HTMLFormElement} form Active migration form.
+ * @param {Object<string, *>} result Canonical local migration mutation result.
+ * @param {string} source Stable integration source name.
+ * @param {Object<string, *>} options Optional panel-refresh and status behavior.
+ */
+function dispatchGalleryMigrationMutationResult(form, result, source, options = {}) {
+    if (!form.closest('[data-admin-side-panel]') || !result?.mutation || !Array.isArray(result?.contexts)) {
+        return;
+    }
+    form.dispatchEvent(new CustomEvent('php-gallery:auxiliary-mutation-success', {
+        bubbles: true,
+        detail: {
+            source,
+            result,
+            refreshPanel: options.refreshPanel === true,
+            statusMessage: String(options.statusMessage || ''),
+            statusError: options.statusError === true,
+        },
+    }));
 }
 
 /**

@@ -811,9 +811,16 @@ function upload_automation_client_thumbnail_entries(): array
         if (!in_array($format, ['jpg', 'webp'], true)) {
             throw new RuntimeException(t('upload_automation.error.thumbnail_format_invalid', 'Uploaded client thumbnail uses an unsupported format.'));
         }
-        if (function_exists('Gallery\\Services\\thumbnail_policy_format_allowed') && !thumbnail_policy_format_allowed($format)) {
-            throw new RuntimeException(t('upload_automation.error.thumbnail_format_invalid', 'Uploaded client thumbnail uses an unsupported format.'));
-        }
+        // Do not reject the whole automation request when a compatibility-capable
+        // client submits a valid thumbnail format that the active server policy
+        // does not currently use. The Windows uploader deliberately sends both
+        // JPG and WebP so the same client works against legacy and modern
+        // installations. Policy filtering belongs to the install phase, where an
+        // otherwise valid extra variant can be counted as skipped without
+        // preventing the original image and required variants from being stored.
+        //
+        // Unknown formats are still rejected above, and MIME/geometry validation
+        // below still applies before any accepted upload entry reaches storage.
 
         // $info stores image metadata used to reject wrong or damaged thumbnail files.
         $info = @getimagesize($tmpName);
@@ -985,8 +992,12 @@ function upload_automation_install_client_thumbnails(int $galleryId, array $gall
         }
         $format = strtolower((string) ($entry['format'] ?? ''));
         if (function_exists('Gallery\\Services\\thumbnail_policy_format_allowed') && !thumbnail_policy_format_allowed($format)) {
+            // Compatibility clients may submit both JPG and WebP because the
+            // active server policy is not known before upload. Treat an otherwise
+            // valid but currently unnecessary variant as an expected skip rather
+            // than a partial upload error. This keeps modern WebP-only servers and
+            // legacy JPG+WebP servers compatible with the same Windows uploader.
             $result['skipped']++;
-            $result['errors'][] = 'Client-generated thumbnail format is not allowed by the active compatibility mode.';
             continue;
         }
 

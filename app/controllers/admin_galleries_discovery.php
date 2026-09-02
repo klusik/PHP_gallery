@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-12
+ *   2026-09-02
  */
 
 declare(strict_types=1);
@@ -44,6 +44,14 @@ use function Gallery\Core\csrf_token;
 use function Gallery\Core\e;
 use function Gallery\Core\flash_message;
 use function Gallery\Core\gallery_public_url;
+use function Gallery\Core\admin_mutation_descriptor;
+use function Gallery\Core\admin_mutation_gallery_is_rendered_in_context;
+use function Gallery\Core\admin_mutation_gallery_membership_postcondition;
+use function Gallery\Core\admin_mutation_error_envelope;
+use function Gallery\Core\admin_mutation_panel_metadata;
+use function Gallery\Core\admin_mutation_postcondition;
+use function Gallery\Core\admin_mutation_public_gallery_context;
+use function Gallery\Core\admin_mutation_success_envelope;
 use function Gallery\Core\redirect_to;
 use function Gallery\Core\render_footer;
 use function Gallery\Core\render_header;
@@ -372,7 +380,11 @@ function cms_admin_new_gallery(): void
             if (admin_wants_json()) {
                 http_response_code(422);
                 header('Content-Type: application/json');
-                echo json_encode(['ok' => false, 'error' => $error]);
+                echo json_encode(admin_mutation_error_envelope(
+                    $error,
+                    'gallery_create_failed',
+                    admin_mutation_descriptor('gallery.create', 'gallery', 'create')
+                ));
                 return;
             }
         }
@@ -487,18 +499,45 @@ function admin_new_gallery_success_response(array $gallery): array
     // $parentGalleryUrl stores the public parent URL when the gallery was created below another gallery.
     $parentGalleryUrl = is_array($parentGallery) ? gallery_public_url($parentGallery) : '';
 
-    return [
-        'ok' => true,
-        'message' => t('admin.galleries.folder_created'),
-        'gallery_id' => (int) $gallery['id'],
+    // $galleryId stores the stable entity id returned to the completion coordinator.
+    $galleryId = (int) $gallery['id'];
+    // $galleryUrl stores the public location of the new gallery itself.
+    $galleryUrl = gallery_public_url($gallery);
+    // $editUrl stores the side-panel editor source and the classic fallback destination.
+    $editUrl = url_for('admin_edit_gallery', ['id' => $galleryId, 'created' => 1]);
+    // $refreshUrl stores the authoritative parent/root render source.
+    $refreshUrl = $parentGalleryUrl !== '' ? $parentGalleryUrl : url_for('home');
+    // $envelope stores the canonical mutation completion contract used by new migrations.
+    $envelope = admin_mutation_success_envelope(
+        t('admin.galleries.folder_created'),
+        admin_mutation_descriptor('gallery.create', 'gallery', 'create', [$galleryId]),
+        admin_mutation_panel_metadata('gallery-edit', $editUrl, true),
+        [
+            admin_mutation_public_gallery_context(
+                $parentGalleryId,
+                $refreshUrl,
+                admin_mutation_gallery_membership_postcondition(
+                    $galleryId,
+                    $parentGalleryId,
+                    admin_mutation_gallery_is_rendered_in_context($gallery, $parentGalleryId)
+                )
+            ),
+        ],
+        ['redirect_url' => $editUrl]
+    );
+
+    // Temporary top-level fields keep the pre-Stage-1 upload/create adapters compatible.
+    return array_merge($envelope, [
+        'gallery_id' => $galleryId,
         'gallery_title' => (string) ($gallery['title'] ?? ''),
-        'gallery_url' => gallery_public_url($gallery),
-        'edit_url' => url_for('admin_edit_gallery', ['id' => $gallery['id'], 'created' => 1]),
+        'gallery_url' => $galleryUrl,
+        'edit_url' => $editUrl,
         'parent_gallery_id' => $parentGalleryId,
         'parent_gallery_url' => $parentGalleryUrl,
-        'refresh_url' => $parentGalleryUrl !== '' ? $parentGalleryUrl : url_for('home'),
+        'refresh_url' => $refreshUrl,
         'refresh_gallery_id' => $parentGalleryId,
-    ];
+        'created_gallery' => true,
+    ]);
 }
 
 /**

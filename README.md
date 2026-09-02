@@ -185,8 +185,8 @@ behavior remains unchanged.
 - Progress bar for transfer and thumbnail generation
 - Immediate scanning after upload
 - Validation of file types and sizes
-- Optional browser-side preparation with client thumbnails, EXIF metadata, bounded ZIP batches, and server-side validation; user-selected ZIP archives are unpacked locally and contribute only supported images
-- Automatic fallback to normal server-side uploads when browser preparation is unavailable
+- Optional browser-side preparation with client thumbnails, EXIF metadata, bounded ZIP batches, and server-side validation; the configured ZIP size is a normal packing target, while one oversized atomic image package may use a singleton batch up to the detected PHP upload limit; user-selected ZIP archives are unpacked locally and contribute only supported images
+- Explicit browser-side processing for selected photos: when checked, client preparation failures stop before persistence instead of silently switching thumbnail generation to PHP; uncheck the option to choose the standard server-side upload path
 
 #### Gallery Management
 - Gallery list with filtering and search
@@ -877,11 +877,13 @@ Run the complete standalone regression suite:
 php tests/run.php
 ```
 
+The tracked `tests/` tree is the authoritative framework-free suite. Run standalone JavaScript models separately with `node tests/<name>_test.mjs`; `TESTING.md` lists the complete command sequence. Production deployment packages exclude tests by default. For a local source-review ZIP, use `./deploy.sh --mode local --deploy-folder deploy --upload-media false --make-zip-deploy true --include-tests true` (PowerShell: `scripts/deploy.ps1 -Mode local -DeployFolder deploy -UploadMedia false -MakeZipDeploy true -IncludeTests true`). The opt-in is refused for FTP deployment.
+
 ### Release preparation
 
 Release work is performed from a clean reviewable branch. Compare the branch with the previous release tag, inspect every commit and changed path, and confirm new migrations are ordered, idempotent under the project runner, and included in upgrade coverage. Update the runtime version, `release-metadata.json`, `PATCH_NOTES.md`, documentation version markers, cache-busting browser imports, and all affected user/developer documentation. Compile and visually inspect `docs/PHP_Gallery_Manual.pdf`; run the complete regression suite, focused PHP/Node tests, PHP and JavaScript syntax checks, migration consistency checks, translation consistency, and `git diff --check`. Finally run `php scripts/generate_manifest.php` followed by `php scripts/generate_manifest.php --check`; the generated `app/core-manifest.json` must be included in every release package. Inspect the packaged tree and confirm its version, patch-note heading, release-metadata tag, migration set, manual edition, and manifest agree before creating the release commit and `v_<version>` tag. The deployment helpers only collect files and create a folder or ZIP, so manifest generation and verification remain explicit release steps. See `TESTING.md` and `docs/LATEX_BUILD.md` for the authoritative checklist.
 
-The runner currently executes 58 focused PHP tests covering gallery models, paths, migrations, uploads, thumbnails, public assets, URL rewrites, AI settings, schema policy, language settings, and updater safety. Individual scripts can still be run directly when isolating a behavior. The project intentionally has no Composer or PHPUnit dependency.
+The runner discovers every tracked `tests/*_test.php` script deterministically. Individual scripts can still be run directly when isolating a behavior. The project intentionally has no Composer or PHPUnit dependency.
 
 ## Troubleshooting
 

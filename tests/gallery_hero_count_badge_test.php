@@ -56,8 +56,11 @@ if (!is_string($controller) || !is_string($styles)) {
 }
 
 assert_gallery_hero_count_contains($controller, '$showHeroCountBadge = gallery_effective_count_badge_enabled($gallery);', 'effective badge policy');
-assert_gallery_hero_count_contains($controller, '$showHeroCountBadge' . "\n" . "        ? public_render_profile_span('gallery_hero_branch_image_count'", 'disabled-state query guard and profile span');
-assert_gallery_hero_count_contains($controller, 'gallery_branch_image_count((int) $gallery[\'id\'], $publicOnly)', 'canonical branch counter');
+if (!str_contains($controller, '$heroBranchImageCount = $showHeroCountBadge')
+    || !str_contains($controller, "public_render_profile_span('gallery_hero_branch_image_count'")) {
+    throw new RuntimeException('disabled-state query guard and profile span contract is missing.');
+}
+assert_gallery_hero_count_contains($controller, 'gallery_branch_image_count((int) $gallery[\'id\'], true)', 'canonical public-only branch counter');
 assert_gallery_hero_count_contains($controller, 'if ($showHeroCountBadge) {', 'conditional hero rendering');
 assert_gallery_hero_count_contains($controller, 'gallery.hero.branch_image_count_aria', 'translated accessible label');
 assert_gallery_hero_count_contains($controller, 'gallery.hero.branch_image_count_hint', 'translated explanatory title');

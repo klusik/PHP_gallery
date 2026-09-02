@@ -39,7 +39,8 @@ param(
     [string]$RemoteFolder,
     [string]$DeployFolder,
     [string]$UploadMedia,
-    [string]$MakeZipDeploy
+    [string]$MakeZipDeploy,
+    [string]$IncludeTests = 'false'
 )
 
 if (-not $Mode) {
@@ -47,6 +48,12 @@ if (-not $Mode) {
     $answer = Read-Host "Deployment mode: local deploy folder or FTP upload? [L/f]"
     # Variable $Mode stores this scripts working value.
     $Mode = if ($answer -match '^[Ff]') { 'ftp' } else { 'local' }
+}
+# Tests are source-review material, not production deployment content. Keep the
+# default exclusion and refuse an FTP opt-in so the suite cannot be uploaded by accident.
+$includeRepositoryTests = ($IncludeTests -match '^(1|true|yes|y)$')
+if ($includeRepositoryTests -and $Mode -eq 'ftp') {
+    throw 'Tests may be included only in local deployment folders or ZIP packages.'
 }
 # Variable $includeMedia stores this scripts working value.
 $includeMedia = $false
@@ -89,6 +96,9 @@ $root = Resolve-Path "$PSScriptRoot\.."
 $excludeDirs = @('.git', 'cache', 'logs', 'tmp', 'deploy')
 # Variable $excludeDirNamesAnywhere stores folder names skipped wherever they appear in the repository tree.
 $excludeDirNamesAnywhere = @('__pycache__', '.pytest_cache', 'tests', 'http_monitor_logs')
+if ($includeRepositoryTests) {
+    $excludeDirNamesAnywhere = @($excludeDirNamesAnywhere | Where-Object { $_ -ne 'tests' })
+}
 if (-not $includeMedia) { $excludeDirs += 'galleries' }
 # Variable $excludeFiles stores this scripts working value.
 $excludeFiles = @('.gitignore', '.DS_Store', 'config.php', '.env', '*.log', '*.tmp', '*.pyc', '*.aux', '*.idx', '*.ilg', '*.ind', '*.out', '*.toc')

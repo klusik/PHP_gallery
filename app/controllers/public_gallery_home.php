@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-08-11
+ *   2026-09-02
  */
 
 declare(strict_types=1);
@@ -199,6 +199,18 @@ function cms_home(): void
     $allHomeGalleries = $galleries;
     // $homeGalleryCount stores the full front-page gallery count before optional slicing.
     $homeGalleryCount = count($allHomeGalleries);
+    // $homePhysicalGalleryCount and $homeSmartGalleryCount expose pagination-safe context counts for Admin mutation verification.
+    $homePhysicalGalleries = array_values(array_filter($allHomeGalleries, static fn (array $gallery): bool => empty($gallery['__smart_gallery'])));
+    $homePhysicalGalleryCount = count($homePhysicalGalleries);
+    $homeSmartGalleryCount = max(0, $homeGalleryCount - $homePhysicalGalleryCount);
+    // $homePhysicalGalleryRevision verifies an updated root card even when pagination hides that card on the current page.
+    $homePhysicalGalleryRevision = '';
+    foreach ($homePhysicalGalleries as $homePhysicalGallery) {
+        $candidateRevision = trim((string) ($homePhysicalGallery['updated_at'] ?? ''));
+        if ($candidateRevision > $homePhysicalGalleryRevision) {
+            $homePhysicalGalleryRevision = $candidateRevision;
+        }
+    }
     // Variable $galleryPagination stores this steps working value.
     $galleryPagination = pagination_model($homeGalleryCount, pagination_current_page('gallery_page'), (int) $paginationSettings['columns'], (int) $paginationSettings['rows'], 'gallery_page', null, static fn (int $pageNumber): string => pagination_home_gallery_clean_url($pageNumber));
     if (!empty($paginationSettings['enabled'])) {
@@ -218,12 +230,14 @@ function cms_home(): void
         $galleries = $allHomeGalleries;
     }
     render_header(site_name());
+    // The stable root-context marker lets Admin mutation completion preserve clean/query pagination URLs without confusing home with other non-gallery public routes.
+    echo '<div data-public-gallery-index data-public-root-gallery-count="' . (int) $homePhysicalGalleryCount . '" data-public-root-gallery-revision="' . e($homePhysicalGalleryRevision) . '" data-public-root-smart-gallery-count="' . (int) $homeSmartGalleryCount . '" data-admin-mutation-canonical-url="' . e(url_for('home')) . '" hidden></div>';
     render_public_search_bar();
     if ($homeGalleryCount > 0) {
         echo '<div class="gallery-list-frame" data-back-to-top-scope>';
         echo '<div class="gallery-list-content" data-back-to-top-list>';
         render_pagination_controls(!empty($paginationSettings['enabled']) ? $galleryPagination : [], t('gallery.pagination.gallery_pages', 'Gallery pages'));
-        echo '<section class="grid public-home-gallery-grid' . e(pagination_grid_columns_class($paginationSettings)) . '">';
+        echo '<section class="grid public-home-gallery-grid' . e(pagination_grid_columns_class($paginationSettings)) . '" data-public-gallery-index-grid data-public-root-gallery-count="' . (int) $homePhysicalGalleryCount . '" data-public-root-gallery-revision="' . e($homePhysicalGalleryRevision) . '" data-public-root-smart-gallery-count="' . (int) $homeSmartGalleryCount . '" data-public-gallery-page="' . (int) ($galleryPagination['current_page'] ?? 1) . '" data-public-gallery-total-pages="' . (int) ($galleryPagination['total_pages'] ?? 1) . '">';
         public_render_profile_count('rendered_subgalleries', count($galleries));
         $physicalGalleries = array_values(array_filter($galleries, static fn (array $gallery): bool => empty($gallery['__smart_gallery'])));
         $smartGalleries = array_values(array_filter($galleries, static fn (array $gallery): bool => !empty($gallery['__smart_gallery'])));

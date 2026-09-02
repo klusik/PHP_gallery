@@ -10,11 +10,19 @@ use InvalidArgumentException;
 use Throwable;
 use Gallery\Services\MutationSchemaUnavailableException;
 
+use function Gallery\Core\admin_mutation_descriptor;
+use function Gallery\Core\admin_mutation_error_envelope;
+use function Gallery\Core\admin_mutation_panel_metadata;
+use function Gallery\Core\admin_mutation_postcondition;
+use function Gallery\Core\admin_mutation_public_gallery_context;
+use function Gallery\Core\admin_mutation_success_envelope;
+use function Gallery\Core\admin_wants_json;
 use function Gallery\Core\csrf_field;
 use function Gallery\Core\csrf_token;
 use function Gallery\Core\current_user;
 use function Gallery\Core\e;
 use function Gallery\Core\flash_message;
+use function Gallery\Core\gallery_public_url;
 use function Gallery\Core\redirect_to;
 use function Gallery\Core\render_footer;
 use function Gallery\Core\render_header;
@@ -31,6 +39,7 @@ use function Gallery\Services\pagination_grid_columns_class;
 use function Gallery\Services\pagination_model;
 use function Gallery\Services\render_pagination_controls;
 use function Gallery\Services\smart_galleries_all;
+use function Gallery\Services\smart_galleries_for_placement;
 use function Gallery\Services\smart_gallery_count_images;
 use function Gallery\Services\smart_gallery_delete;
 use function Gallery\Services\smart_gallery_duplicate;
@@ -98,20 +107,49 @@ function cms_admin_smart_galleries(): void
     if (request_method() === 'POST') {
         verify_csrf();
         $action = (string) ($_POST['action'] ?? 'save');
+        // Preview is a non-persistent editor operation and intentionally keeps its server-rendered HTML response.
+        $wantsJson = admin_wants_json() && $action !== 'preview';
         try {
             if ($action === 'delete') {
                 $deletedId = max(0, (int) ($_POST['id'] ?? 0));
+                // $beforeDefinition and $beforePlacements preserve every public context invalidated by deletion.
+                $beforeDefinition = $deletedId > 0 ? smart_gallery_find($deletedId) : null;
+                $beforePlacements = $deletedId > 0 ? smart_gallery_placement_galleries($deletedId) : [];
                 smart_gallery_delete($deletedId);
                 admin_log_event('info', 'smart_gallery.deleted', 'Admin deleted a Smart Gallery definition.', ['action' => 'delete'], ['category' => 'gallery', 'subject_type' => 'smart_gallery', 'subject_id' => $deletedId]);
-                flash_message('smart_gallery_notice', t('smart_gallery.deleted', 'Smart Gallery deleted.'));
+                $message = t('smart_gallery.deleted', 'Smart Gallery deleted.');
+                if ($wantsJson) {
+                    smart_gallery_admin_json_response(
+                        $message,
+                        admin_mutation_descriptor('smart_gallery.delete', 'smart_gallery', 'delete', [$deletedId]),
+                        0,
+                        smart_gallery_admin_affected_contexts($deletedId, $beforeDefinition, null, $beforePlacements, []),
+                        url_for('admin_smart_galleries')
+                    );
+                    return;
+                }
+                flash_message('smart_gallery_notice', $message);
                 redirect_to(url_for('admin_smart_galleries'));
             }
             if ($action === 'duplicate') {
                 $sourceId = max(0, (int) ($_POST['id'] ?? 0));
                 $copy = smart_gallery_duplicate($sourceId);
                 admin_log_event('info', 'smart_gallery.duplicated', 'Admin duplicated a Smart Gallery definition.', ['action' => 'duplicate', 'source_id' => $sourceId], ['category' => 'gallery', 'subject_type' => 'smart_gallery', 'subject_id' => (int) $copy['id']]);
-                flash_message('smart_gallery_notice', t('smart_gallery.duplicated', 'A private disabled copy was created.'));
-                redirect_to(url_for('admin_smart_galleries', ['id' => $copy['id']]));
+                $message = t('smart_gallery.duplicated', 'A private disabled copy was created.');
+                $redirectUrl = url_for('admin_smart_galleries', ['id' => $copy['id']]);
+                if ($wantsJson) {
+                    smart_gallery_admin_json_response(
+                        $message,
+                        admin_mutation_descriptor('smart_gallery.duplicate', 'smart_gallery', 'duplicate', [(int) $copy['id']]),
+                        (int) $copy['id'],
+                        [],
+                        $redirectUrl,
+                        ['source_smart_gallery_id' => $sourceId]
+                    );
+                    return;
+                }
+                flash_message('smart_gallery_notice', $message);
+                redirect_to($redirectUrl);
             }
             if ($action === 'update_placement') {
                 $smartGalleryId = max(0, (int) ($_POST['id'] ?? 0));
@@ -120,16 +158,55 @@ function cms_admin_smart_galleries(): void
                 $placementOrder = (int) ($_POST['attachment_order'] ?? 0);
                 smart_gallery_update_placement($smartGalleryId, $galleryId, $placement, $placementOrder);
                 admin_log_event('info', 'smart_gallery.placement_updated', 'Admin updated one physical Smart Gallery placement.', ['action' => 'update_placement', 'gallery_id' => $galleryId, 'placement' => $placement === 'top' ? 'top' : 'bottom', 'placement_order' => $placementOrder], ['category' => 'gallery', 'subject_type' => 'smart_gallery', 'subject_id' => $smartGalleryId]);
-                flash_message('smart_gallery_notice', t('smart_gallery.placement_updated', 'Smart Gallery placement updated.'));
-                redirect_to(url_for('admin_smart_galleries', ['id' => $smartGalleryId]));
+                $message = t('smart_gallery.placement_updated', 'Smart Gallery placement updated.');
+                $redirectUrl = url_for('admin_smart_galleries', ['id' => $smartGalleryId]);
+                if ($wantsJson) {
+                    $physicalGallery = find_gallery($galleryId, true) ?: find_gallery($galleryId);
+                    $contexts = $physicalGallery ? [admin_mutation_public_gallery_context(
+                        $galleryId,
+                        gallery_public_url($physicalGallery),
+                        smart_gallery_admin_context_postcondition($smartGalleryId, $galleryId)
+                    )] : [];
+                    smart_gallery_admin_json_response(
+                        $message,
+                        admin_mutation_descriptor('smart_gallery.placement_update', 'smart_gallery', 'update_placement', [$smartGalleryId]),
+                        $smartGalleryId,
+                        $contexts,
+                        $redirectUrl,
+                        ['gallery_id' => $galleryId]
+                    );
+                    return;
+                }
+                flash_message('smart_gallery_notice', $message);
+                redirect_to($redirectUrl);
             }
             if ($action === 'remove_placement') {
                 $smartGalleryId = max(0, (int) ($_POST['id'] ?? 0));
                 $galleryId = max(0, (int) ($_POST['gallery_id'] ?? 0));
+                // Load the physical context before deleting the relationship row.
+                $physicalGallery = find_gallery($galleryId, true) ?: find_gallery($galleryId);
                 $removed = smart_gallery_remove_from_gallery($smartGalleryId, $galleryId);
                 admin_log_event('info', 'smart_gallery.placement_removed', 'Admin removed one physical Smart Gallery placement.', ['action' => 'remove_placement', 'gallery_id' => $galleryId, 'removed' => $removed], ['category' => 'gallery', 'subject_type' => 'smart_gallery', 'subject_id' => $smartGalleryId]);
-                flash_message('smart_gallery_notice', t('smart_gallery.hidden_from_gallery', 'Smart Gallery hidden from that physical gallery.'));
-                redirect_to(url_for('admin_smart_galleries', ['id' => $smartGalleryId]));
+                $message = t('smart_gallery.hidden_from_gallery', 'Smart Gallery hidden from that physical gallery.');
+                $redirectUrl = url_for('admin_smart_galleries', ['id' => $smartGalleryId]);
+                if ($wantsJson) {
+                    $contexts = $physicalGallery ? [admin_mutation_public_gallery_context(
+                        $galleryId,
+                        gallery_public_url($physicalGallery),
+                        smart_gallery_admin_context_postcondition($smartGalleryId, $galleryId)
+                    )] : [];
+                    smart_gallery_admin_json_response(
+                        $message,
+                        admin_mutation_descriptor('smart_gallery.placement_remove', 'smart_gallery', 'remove_placement', [$smartGalleryId]),
+                        $smartGalleryId,
+                        $contexts,
+                        $redirectUrl,
+                        ['gallery_id' => $galleryId, 'removed' => $removed]
+                    );
+                    return;
+                }
+                flash_message('smart_gallery_notice', $message);
+                redirect_to($redirectUrl);
             }
             $input = smart_gallery_admin_input();
             if ($action === 'preview') {
@@ -142,22 +219,55 @@ function cms_admin_smart_galleries(): void
                 admin_log_event('info', 'smart_gallery.previewed', 'Admin previewed Smart Gallery rules.', array_merge(smart_gallery_admin_log_context($input, 'preview'), ['matched_images' => $previewCount]), ['category' => 'gallery', 'subject_type' => 'smart_gallery', 'subject_id' => $id > 0 ? $id : null]);
             } else {
                 $saveAction = $id > 0 ? 'update' : 'create';
+                // Preserve the previous placement state so mode changes invalidate both old and new public contexts.
+                $beforeDefinition = $id > 0 ? smart_gallery_find($id) : null;
+                $beforePlacements = $id > 0 ? smart_gallery_placement_galleries($id) : [];
                 $selected = smart_gallery_save($input, $id);
+                $afterPlacements = smart_gallery_placement_galleries((int) $selected['id']);
                 admin_log_event('info', 'smart_gallery.saved', 'Admin saved a Smart Gallery definition.', smart_gallery_admin_log_context($input, $saveAction), ['category' => 'gallery', 'subject_type' => 'smart_gallery', 'subject_id' => (int) $selected['id']]);
-                flash_message('smart_gallery_notice', t('smart_gallery.saved', 'Smart Gallery saved.'));
-                redirect_to(url_for('admin_smart_galleries', ['id' => $selected['id']]));
+                $message = t('smart_gallery.saved', 'Smart Gallery saved.');
+                $redirectUrl = url_for('admin_smart_galleries', ['id' => $selected['id']]);
+                if ($wantsJson) {
+                    smart_gallery_admin_json_response(
+                        $message,
+                        admin_mutation_descriptor('smart_gallery.' . $saveAction, 'smart_gallery', $saveAction, [(int) $selected['id']]),
+                        (int) $selected['id'],
+                        smart_gallery_admin_affected_contexts((int) $selected['id'], $beforeDefinition, $selected, $beforePlacements, $afterPlacements),
+                        $redirectUrl,
+                        [
+                            'smart_gallery_id' => (int) $selected['id'],
+                            'smart_gallery_title' => (string) ($selected['title'] ?? ''),
+                            'smart_gallery_slug' => (string) ($selected['slug'] ?? ''),
+                        ]
+                    );
+                    return;
+                }
+                flash_message('smart_gallery_notice', $message);
+                redirect_to($redirectUrl);
             }
         } catch (InvalidArgumentException $exception) {
             admin_log_event('warning', 'smart_gallery.validation_failed', 'Smart Gallery Admin action failed validation.', array_merge(smart_gallery_admin_log_context(smart_gallery_admin_input(), $action), ['reason' => substr($exception->getMessage(), 0, 240)]), ['category' => 'gallery', 'severity' => 'warning', 'subject_type' => 'smart_gallery', 'subject_id' => $id > 0 ? $id : null]);
+            if ($wantsJson) {
+                smart_gallery_admin_json_error($exception->getMessage(), 'smart_gallery_validation_failed', $action, max($id, (int) ($_POST['id'] ?? 0)), 422);
+                return;
+            }
             $error = $exception->getMessage();
             if (in_array($action, ['save', 'preview'], true)) $selected = array_merge($selected ?: [], smart_gallery_admin_input(), ['id' => $id]);
         } catch (MutationSchemaUnavailableException $exception) {
             admin_log_event('warning', 'smart_gallery.schema_unavailable', 'Smart Gallery Admin action was refused because required schema was unavailable.', array_merge(smart_gallery_admin_log_context(smart_gallery_admin_input(), $action), ['feature' => $exception->feature, 'schema_state' => $exception->state, 'operation' => $exception->operation]), ['category' => 'database', 'severity' => 'warning', 'subject_type' => 'smart_gallery', 'subject_id' => $id > 0 ? $id : null]);
+            if ($wantsJson) {
+                smart_gallery_admin_json_error($exception->getMessage(), 'smart_gallery_schema_unavailable', $action, max($id, (int) ($_POST['id'] ?? 0)), 503);
+                return;
+            }
             $error = $exception->getMessage();
             if (in_array($action, ['save', 'preview'], true)) $selected = array_merge($selected ?: [], smart_gallery_admin_input(), ['id' => $id]);
         } catch (Throwable $exception) {
             admin_log_event('error', 'smart_gallery.action_failed', 'Smart Gallery Admin action failed unexpectedly.', array_merge(smart_gallery_admin_log_context(smart_gallery_admin_input(), $action), ['exception_class' => get_class($exception), 'exception_code' => (string) $exception->getCode()]), ['category' => 'gallery', 'severity' => 'error', 'subject_type' => 'smart_gallery', 'subject_id' => $id > 0 ? $id : null]);
             $error = t('smart_gallery.unexpected_error', 'The Smart Gallery could not be saved. Check Admin Logs for the request diagnostic.');
+            if ($wantsJson) {
+                smart_gallery_admin_json_error($error, 'smart_gallery_action_failed', $action, max($id, (int) ($_POST['id'] ?? 0)), 500);
+                return;
+            }
             if (in_array($action, ['save', 'preview'], true)) $selected = array_merge($selected ?: [], smart_gallery_admin_input(), ['id' => $id]);
         }
     }
@@ -179,6 +289,144 @@ function cms_admin_smart_galleries(): void
     if ($selected || isset($_GET['new'])) smart_gallery_render_editor($selected ?: [], $previewCount, $previewImages); else echo '<h2>' . e(t('smart_gallery.select', 'Select a Smart Gallery or create a new one.')) . '</h2>';
     echo '</section></div>';
     render_footer();
+}
+
+/**
+ * Build the observable public placement postcondition for one Smart Gallery context.
+ *
+ * Root cards may be paginated, so the full root Smart Gallery count is always
+ * included. Physical gallery attachments are not paginated and additionally expose
+ * placement/order metadata so moving a card between top and bottom cannot verify
+ * against structurally valid but stale HTML.
+ *
+ * @param int $smartGalleryId Stable Smart Gallery id.
+ * @param int $galleryId Physical parent gallery id, or zero for the root index.
+ * @return array<string, mixed> Canonical smart_gallery_presence postcondition.
+ */
+function smart_gallery_admin_context_postcondition(int $smartGalleryId, int $galleryId): array
+{
+    $rows = smart_galleries_for_placement($galleryId > 0 ? $galleryId : null, true);
+    $matched = null;
+    foreach ($rows as $row) {
+        if ((int) ($row['id'] ?? 0) === $smartGalleryId) {
+            $matched = $row;
+            break;
+        }
+    }
+
+    $data = [
+        'smart_gallery_id' => $smartGalleryId,
+        'present' => is_array($matched),
+        'count' => count($rows),
+    ];
+    if ($galleryId > 0 && is_array($matched)) {
+        $data['placement'] = (string) ($matched['placement'] ?? 'bottom');
+        $data['placement_order'] = max(0, (int) ($matched['placement_order'] ?? 0));
+    }
+    return admin_mutation_postcondition('smart_gallery_presence', $data);
+}
+
+/**
+ * Return every physical/root public context whose Smart Gallery output may have changed.
+ *
+ * @param int $smartGalleryId Stable Smart Gallery id whose placement/render state changed.
+ * @param ?array $beforeDefinition Definition before persistence, when available.
+ * @param ?array $afterDefinition Definition after persistence, when available.
+ * @param array<int, array<string, mixed>> $beforePlacements Physical placements before persistence.
+ * @param array<int, array<string, mixed>> $afterPlacements Physical placements after persistence.
+ * @return array<int, array<string, mixed>> Canonical affected public contexts.
+ */
+function smart_gallery_admin_affected_contexts(int $smartGalleryId, ?array $beforeDefinition, ?array $afterDefinition, array $beforePlacements, array $afterPlacements): array
+{
+    $contexts = [];
+    $seen = [];
+
+    $beforeMode = (string) ($beforeDefinition['placement_mode'] ?? '');
+    $afterMode = (string) ($afterDefinition['placement_mode'] ?? '');
+    if ($beforeMode === 'root' || $afterMode === 'root') {
+        $contexts[] = admin_mutation_public_gallery_context(
+            0,
+            url_for('home'),
+            smart_gallery_admin_context_postcondition($smartGalleryId, 0)
+        );
+        $seen['gallery_index'] = true;
+    }
+
+    foreach ([[$beforeMode, $beforePlacements], [$afterMode, $afterPlacements]] as [$mode, $placements]) {
+        if ($mode !== 'gallery') {
+            continue;
+        }
+        foreach ($placements as $placement) {
+            $galleryId = (int) ($placement['id'] ?? 0);
+            if ($galleryId <= 0 || isset($seen['gallery:' . $galleryId])) {
+                continue;
+            }
+            $gallery = find_gallery($galleryId, true) ?: find_gallery($galleryId);
+            if (!$gallery) {
+                continue;
+            }
+            $contexts[] = admin_mutation_public_gallery_context(
+                $galleryId,
+                gallery_public_url($gallery),
+                smart_gallery_admin_context_postcondition($smartGalleryId, $galleryId)
+            );
+            $seen['gallery:' . $galleryId] = true;
+        }
+    }
+
+    return $contexts;
+}
+
+/**
+ * Send one canonical Smart Gallery success response for an enhanced side-panel mutation.
+ *
+ * @param string $message Localized success message.
+ * @param array<string, mixed> $mutation Canonical mutation descriptor.
+ * @param int $selectedId Smart Gallery that should remain selected in the drawer, or zero for the list.
+ * @param array<int, array<string, mixed>> $contexts Affected public render contexts.
+ * @param string $fallbackUrl Direct-page fallback URL.
+ * @param array<string, mixed> $extra Temporary workflow-specific compatibility fields.
+ */
+function smart_gallery_admin_json_response(string $message, array $mutation, int $selectedId, array $contexts, string $fallbackUrl, array $extra = []): void
+{
+    $panelParams = ['panel' => 1];
+    if ($selectedId > 0) {
+        $panelParams['id'] = $selectedId;
+    }
+    $payload = admin_mutation_success_envelope(
+        $message,
+        $mutation,
+        admin_mutation_panel_metadata('smart-gallery', url_for('admin_smart_galleries', $panelParams), true),
+        $contexts,
+        ['redirect_url' => $fallbackUrl]
+    );
+    header('Content-Type: application/json');
+    echo json_encode(array_merge($payload, $extra), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+}
+
+/**
+ * Send one canonical Smart Gallery expected-error response.
+ *
+ * @param string $message Safe error message.
+ * @param string $errorCode Stable error category.
+ * @param string $action Requested Smart Gallery action.
+ * @param int $smartGalleryId Stable Smart Gallery id when known.
+ * @param int $status HTTP status code.
+ */
+function smart_gallery_admin_json_error(string $message, string $errorCode, string $action, int $smartGalleryId, int $status): void
+{
+    http_response_code($status);
+    header('Content-Type: application/json');
+    echo json_encode(admin_mutation_error_envelope(
+        $message,
+        $errorCode,
+        admin_mutation_descriptor(
+            'smart_gallery.' . ($action !== '' ? $action : 'mutation'),
+            'smart_gallery',
+            $action !== '' ? $action : 'mutation',
+            $smartGalleryId > 0 ? [$smartGalleryId] : []
+        )
+    ), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 }
 
 /** Normalize the Smart Gallery editor POST payload. */

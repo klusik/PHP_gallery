@@ -17,6 +17,8 @@ Use `declare(strict_types=1);` in new PHP files and follow the existing 4-space 
 ## Testing Guidelines
 Tests are plain PHP scripts rather than PHPUnit cases. Keep new tests executable from the command line with `php tests/<name>_test.php`. Favor focused tests that validate a single behavior without requiring a browser or live database unless the feature truly depends on one. When changing schema logic, add or update a migration and include a test where practical.
 
+The tracked `tests/` directory is the authoritative regression tree. `php tests/run.php` runs PHP tests; standalone `tests/*_test.mjs` files run with Node. Deployment packages exclude tests by default. Use `--include-tests true` (Bash) or `-IncludeTests true` (PowerShell) only for local source-review folders/ZIPs; FTP deployment must never include tests.
+
 ### Mandatory PHP Syntax Validation
 Before handing off or committing any change that creates or modifies PHP files, run `php -l` on every changed PHP file. A convenient Git-aware PowerShell check is:
 
@@ -35,6 +37,8 @@ Treat the existing Admin right-side panel as the primary interaction surface for
 Because side-panel content is injected dynamically, bind handlers in a way that also covers newly rendered panel fragments and prevent generic form handlers from taking over panel-owned actions. When a JavaScript module that owns a panel action changes, update its cache-busting import so deployed browsers cannot continue running an older handler. Add focused regression checks for panel persistence and in-place refresh whenever a side-panel action is added or changed.
 
 Persistent mutations launched from the right-side panel, including review/ignore ledgers and reset actions, must use the JSON/AJAX path as the primary browser pipeline and replace only the owned panel fragment or affected page elements. Treat the POST/redirect implementation as fallback compatibility. For every new panel button, test that the browser URL is unchanged, the panel remains open, and a dynamically re-rendered copy of the same control is still intercepted without rebinding the whole page.
+
+Every successful persistent side-panel AJAX mutation must return the canonical envelope built by `app/helpers_mutation.php`: `ok`, `message`, typed `mutation` metadata with stable `entity_ids`, optional `panel` refresh metadata, explicit affected `contexts` with observable postconditions where meaningful, and `fallback` metadata for direct-page use. Browser code must preserve that envelope through batching/aggregation and pass it to `public/assets/gallery-modules/admin-mutation-completion.js`; do not reconstruct completion semantics from workflow-specific top-level URLs, counters, or flags. Public refresh retry, cache/stale-read handling, postcondition verification, and stale/out-of-order suppression belong only to the shared coordinator. Workflow modules may own progress UI and their panel fragment, but must not add a parallel refresh/retry pipeline. Run `php scripts/check_admin_mutation_contracts.php` whenever a persistent side-panel mutation, its response shape, or its dynamic form wiring changes.
 
 Do not invent browser confirmation dialogs or extra intermediate navigation for an explicitly requested one-click/in-place panel action unless the feature requirements specifically call for confirmation. Destructive operations must still use the existing authentication, CSRF, authorization, path-safety, and mutation services.
 

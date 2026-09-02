@@ -30,7 +30,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-16
+ *   2026-09-02
  */
 
 declare(strict_types=1);
@@ -44,6 +44,11 @@ use RuntimeException;
 use Throwable;
 use const Gallery\Services\AI_IMAGE_ANALYSIS_DEFAULT_LEASE_SECONDS;
 use function Gallery\Core\absolute_public_url;
+use function Gallery\Core\admin_mutation_descriptor;
+use function Gallery\Core\admin_mutation_error_envelope;
+use function Gallery\Core\admin_mutation_panel_metadata;
+use function Gallery\Core\admin_mutation_success_envelope;
+use function Gallery\Core\admin_wants_json;
 use function Gallery\Core\csrf_field;
 use function Gallery\Core\current_user;
 use function Gallery\Core\e;
@@ -651,18 +656,20 @@ function cms_admin_upload_automation_token(): void
         // $user stores the current user for JSON requests. Anonymous or expired sessions must return JSON, not a login page.
         $user = current_user();
         if (!$user || (string) ($user['role'] ?? '') !== 'admin') {
-            upload_automation_token_json_response([
-                'ok' => false,
-                'error' => t('auth.admin_required', 'Admin access is required.'),
-            ], 403);
+            upload_automation_token_json_response(admin_mutation_error_envelope(
+                t('auth.admin_required', 'Admin access is required.'),
+                'auth.admin_required',
+                upload_automation_token_mutation_descriptor((string) ($_POST['action'] ?? 'create'))
+            ), 403);
             return;
         }
 
         if (!upload_automation_token_csrf_valid()) {
-            upload_automation_token_json_response([
-                'ok' => false,
-                'error' => t('security.invalid_csrf', 'Invalid CSRF token.'),
-            ], 400);
+            upload_automation_token_json_response(admin_mutation_error_envelope(
+                t('security.invalid_csrf', 'Invalid CSRF token.'),
+                'security.invalid_csrf',
+                upload_automation_token_mutation_descriptor((string) ($_POST['action'] ?? 'create'))
+            ), 400);
             return;
         }
     } else {
@@ -676,10 +683,11 @@ function cms_admin_upload_automation_token(): void
     $gallery = find_gallery($galleryId, true) ?: find_gallery($galleryId);
     if (!$gallery) {
         if ($wantsJson) {
-            upload_automation_token_json_response([
-                'ok' => false,
-                'error' => t('admin.gallery_not_found', 'Gallery not found.'),
-            ], 404);
+            upload_automation_token_json_response(admin_mutation_error_envelope(
+                t('admin.gallery_not_found', 'Gallery not found.'),
+                'gallery.not_found',
+                upload_automation_token_mutation_descriptor((string) ($_POST['action'] ?? 'create'))
+            ), 404);
             return;
         }
         cms_not_found();
@@ -742,14 +750,37 @@ function cms_admin_upload_automation_token(): void
     // $returnUrl stores the page or panel route that should be refreshed after the mutation.
     $returnUrl = upload_automation_token_return_url($galleryId);
     if ($wantsJson) {
-        upload_automation_token_json_response([
-            'ok' => $actionOk,
-            'message' => $notice,
+        // $normalizedAction stores the stable lifecycle verb emitted by both canonical and compatibility fields.
+        $normalizedAction = $action === 'revoke' ? 'revoke' : 'create';
+        // $mutation stores typed identity for the API-key row changed by this request.
+        $mutation = upload_automation_token_mutation_descriptor($normalizedAction, $tokenId);
+        if ($actionOk) {
+            // $payload stores the canonical side-panel completion envelope. API-key changes have no public gallery context.
+            $payload = admin_mutation_success_envelope(
+                $notice,
+                $mutation,
+                admin_mutation_panel_metadata('gallery-edit', $returnUrl, true),
+                [],
+                ['redirect_url' => $returnUrl]
+            );
+        } else {
+            // $payload stores a canonical expected-error envelope while preserving the direct-page fallback target.
+            $payload = admin_mutation_error_envelope(
+                $notice,
+                'upload_automation.token_' . $normalizedAction . '_failed',
+                $mutation,
+                ['redirect_url' => $returnUrl]
+            );
+        }
+
+        // Temporary compatibility fields remain while older deployed JavaScript may still read the legacy token response.
+        $payload += [
             'refresh_url' => $returnUrl,
             'gallery_id' => $galleryId,
-            'action' => $action === 'revoke' ? 'revoke' : 'create',
+            'action' => $normalizedAction,
             'token_id' => $tokenId,
-        ], $actionOk ? 200 : $failureStatus);
+        ];
+        upload_automation_token_json_response($payload, $actionOk ? 200 : $failureStatus);
         return;
     }
 
@@ -767,12 +798,28 @@ function cms_admin_upload_automation_token(): void
  */
 function upload_automation_token_request_wants_json(): bool
 {
-    return !empty($_POST['ajax'])
-        || !empty($_GET['ajax'])
-        || !empty($_POST['panel'])
-        || !empty($_GET['panel'])
-        || strtolower((string) ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '')) === 'xmlhttprequest'
-        || str_contains((string) ($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json');
+    return admin_wants_json();
+}
+
+/**
+ * Build the canonical mutation descriptor for one gallery-scoped API-key lifecycle action.
+ *
+ * The gallery owns the key but the stable mutated entity is the token row itself. A failed
+ * create can legitimately have no entity id yet, while a revoke keeps the submitted row id.
+ *
+ * @param string $action Requested create or revoke action.
+ * @param int $tokenId Created or revoked token row id when known.
+ * @return array{type:string,entity:string,action:string,entity_ids:array<int,int>}
+ */
+function upload_automation_token_mutation_descriptor(string $action, int $tokenId = 0): array
+{
+    $normalizedAction = $action === 'revoke' ? 'revoke' : 'create';
+    return admin_mutation_descriptor(
+        'upload_automation.token.' . $normalizedAction,
+        'upload_automation_token',
+        $normalizedAction,
+        $tokenId > 0 ? [$tokenId] : []
+    );
 }
 
 /**

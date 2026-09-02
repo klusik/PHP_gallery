@@ -16,6 +16,23 @@ if (!str_contains($shellDeploy, 'always_include_relatives=("app")')) {
     $failures[] = 'The shell deploy script must always include the complete app directory.';
 }
 
+foreach ([
+    [$powershellDeploy, '[string]$IncludeTests'],
+    [$shellDeploy, '--include-tests true|false'],
+] as [$deploySource, $optionContract]) {
+    if (!str_contains($deploySource, $optionContract)) {
+        $failures[] = 'Deploy helper is missing the opt-in tests package option: ' . $optionContract;
+    }
+    if (!str_contains($deploySource, 'Tests may be included only in local deployment folders or ZIP packages.')) {
+        $failures[] = 'Deploy helper must refuse including tests during FTP deployment.';
+    }
+}
+
+if (!str_contains($powershellDeploy, "@('__pycache__', '.pytest_cache', 'tests', 'http_monitor_logs')")
+    || !str_contains($shellDeploy, 'exclude_dir_names_anywhere=("__pycache__" ".pytest_cache" "tests" "http_monitor_logs")')) {
+    $failures[] = 'Tests must remain in the default deployment exclusion set.';
+}
+
 if (!str_contains($powershellDeploy, ".Replace('\\', '/')")) {
     $failures[] = 'The PowerShell deploy ZIP must use portable forward-slash entry paths.';
 }

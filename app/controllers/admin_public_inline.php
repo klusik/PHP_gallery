@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-12
+ *   2026-09-02
  */
 
 declare(strict_types=1);
@@ -37,6 +37,13 @@ declare(strict_types=1);
 namespace Gallery\Controllers;
 
 use Throwable;
+use function Gallery\Core\admin_mutation_descriptor;
+use function Gallery\Core\admin_mutation_gallery_is_rendered_in_context;
+use function Gallery\Core\admin_mutation_gallery_membership_postcondition;
+use function Gallery\Core\admin_mutation_error_envelope;
+use function Gallery\Core\admin_mutation_postcondition;
+use function Gallery\Core\admin_mutation_public_gallery_context;
+use function Gallery\Core\admin_mutation_success_envelope;
 use function Gallery\Core\csrf_field;
 use function Gallery\Core\db;
 use function Gallery\Core\e;
@@ -81,10 +88,82 @@ use function Gallery\Views\view_render_admin_openai_text_assist_tool;
 use function Gallery\Views\view_render_content_localization_fields;
 
 /**
+ * Start a private output buffer for one JSON mutation response.
+ *
+ * Shared-hosting PHP configurations can print non-fatal warnings as HTML even when
+ * the mutation itself is handled correctly. That output would corrupt the JSON body
+ * and make the browser report an opaque "HTML instead of JSON" failure. The caller
+ * receives the previous buffer level so only buffers opened by this request path are
+ * discarded before the canonical JSON payload is emitted.
+ *
+ * @param bool $wantsJson Whether the current request expects JSON.
+ * @return int Previous output-buffer level, or -1 when buffering was not started.
+ */
+function admin_public_inline_json_buffer_start(bool $wantsJson): int
+{
+    if (!$wantsJson || headers_sent()) {
+        return -1;
+    }
+    $previousLevel = ob_get_level();
+    ob_start();
+    return $previousLevel;
+}
+
+/**
+ * Emit one clean JSON response and record any accidental buffered PHP output.
+ *
+ * @param array<string,mixed> $payload Canonical JSON payload.
+ * @param int $status HTTP response status.
+ * @param int $bufferLevel Previous output-buffer level returned by admin_public_inline_json_buffer_start().
+ */
+function admin_public_inline_json_response(array $payload, int $status = 200, int $bufferLevel = -1): void
+{
+    $bufferedChunks = [];
+    if ($bufferLevel >= 0) {
+        while (ob_get_level() > $bufferLevel) {
+            $chunk = ob_get_clean();
+            if (is_string($chunk) && $chunk !== '') {
+                array_unshift($bufferedChunks, $chunk);
+            }
+        }
+    }
+
+    $unexpectedOutput = trim(implode('', $bufferedChunks));
+    if ($unexpectedOutput !== '') {
+        $plainOutput = trim((string) preg_replace('/\s+/', ' ', strip_tags($unexpectedOutput)));
+        $snippet = substr($plainOutput !== '' ? $plainOutput : $unexpectedOutput, 0, 1200);
+        error_log('[PHP Gallery] Discarded unexpected output before Admin public mutation JSON response: ' . $snippet);
+
+        // The diagnostic write is intentionally isolated too. A broken optional Admin-log
+        // schema must not reintroduce displayed PHP output after the mutation buffer was cleaned.
+        $diagnosticBufferLevel = ob_get_level();
+        ob_start();
+        try {
+            admin_log_event('warning', 'gallery.public_json_output_discarded', 'Unexpected PHP output was discarded before an Admin public mutation JSON response.', [
+                'output' => $snippet,
+            ], ['category' => 'gallery', 'severity' => 'warning']);
+        } finally {
+            while (ob_get_level() > $diagnosticBufferLevel) {
+                ob_end_clean();
+            }
+        }
+    }
+
+    http_response_code($status);
+    header('Content-Type: application/json; charset=UTF-8');
+    header('Cache-Control: no-store, private, max-age=0');
+    $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    echo $json === false
+        ? '{"ok":false,"error":"The server could not encode the mutation response.","error_code":"json_encode_failed"}'
+        : $json;
+}
+
+/**
  * Handles cms admin public update gallery logic for the gallery application.
  */
 function cms_admin_public_update_gallery(): void
 {
+    $wantsJson = \Gallery\Core\admin_wants_json();
     require_admin();
     if (request_method() !== 'POST') {
         cms_not_found();
@@ -94,14 +173,26 @@ function cms_admin_public_update_gallery(): void
     // Variable $gallery stores this steps working value.
     $gallery = find_gallery((int) ($_POST['gallery_id'] ?? 0));
     if (!$gallery) {
+        if ($wantsJson) {
+            admin_public_inline_json_response(admin_mutation_error_envelope(
+                t('admin.side_panel.gallery_delete_failed', 'Gallery delete failed.'),
+                'gallery_not_found',
+                admin_mutation_descriptor('gallery.update', 'gallery', 'update')
+            ), 404);
+            return;
+        }
         cms_not_found();
         return;
     }
     // Variable $action stores this steps working value.
     $action = (string) ($_POST['action'] ?? 'save');
     if ($action === 'delete') {
+        // $jsonBufferLevel isolates accidental PHP warning output from the JSON body.
+        $jsonBufferLevel = admin_public_inline_json_buffer_start($wantsJson);
         // Variable $redirect stores this steps working value.
         $redirect = url_for('home');
+        // $parentGalleryId stores the public listing that should lose this card after deletion.
+        $parentGalleryId = (int) ($gallery['parent_id'] ?? 0);
         if (!empty($gallery['parent_id'])) {
             // Variable $parent stores this steps working value.
             $parent = find_gallery((int) $gallery['parent_id'], true);
@@ -120,13 +211,39 @@ function cms_admin_public_update_gallery(): void
                 'deleted_rows' => (int) ($deleted['row_count'] ?? 0),
                 'missing_folders' => (int) ($deleted['missing_folders'] ?? 0),
             ]);
+            if ($wantsJson) {
+                admin_public_inline_json_response(admin_mutation_success_envelope(
+                    t('admin.galleries.deleted_result', 'Deleted {count} gallery folder(s).', ['count' => (int) ($deleted['root_count'] ?? 1)]),
+                    admin_mutation_descriptor('gallery.delete', 'gallery', 'delete', [(int) $gallery['id']]),
+                    null,
+                    [
+                        admin_mutation_public_gallery_context(
+                            $parentGalleryId,
+                            $redirect,
+                            admin_mutation_gallery_membership_postcondition((int) $gallery['id'], $parentGalleryId, false)
+                        ),
+                    ],
+                    ['redirect_url' => $redirect]
+                ), 200, $jsonBufferLevel);
+                return;
+            }
         } catch (Throwable $exception) {
             admin_log_event('error', 'gallery.public_delete_failed', 'Public-page gallery delete failed.', [
                 'gallery_id' => (int) $gallery['id'],
                 'folder_path' => (string) $gallery['folder_path'],
                 'error' => $exception->getMessage(),
             ]);
-            flash_message('admin_notice', t('admin.galleries.delete_failed', 'Gallery delete failed: {error}', ['error' => $exception->getMessage()]));
+            $deleteFailureMessage = t('admin.galleries.delete_failed', 'Gallery delete failed: {error}', ['error' => $exception->getMessage()]);
+            if ($wantsJson) {
+                admin_public_inline_json_response(admin_mutation_error_envelope(
+                    $deleteFailureMessage,
+                    'gallery_delete_failed',
+                    admin_mutation_descriptor('gallery.delete', 'gallery', 'delete', [(int) $gallery['id']]),
+                    ['redirect_url' => $redirect]
+                ), 422, $jsonBufferLevel);
+                return;
+            }
+            flash_message('admin_notice', $deleteFailureMessage);
         }
         redirect_to($redirect);
     }
@@ -191,6 +308,9 @@ function cms_admin_public_update_image(): void
         // $galleryId stores the image owner so inline deletion uses the same
         // filesystem-safe mutation service as bulk and duplicate-detector deletes.
         $galleryId = (int) ($image['gallery_id'] ?? 0);
+        // $gallery and $fallbackUrl preserve the owning public context before the image row disappears.
+        $gallery = $galleryId > 0 ? (find_gallery($galleryId, true) ?: find_gallery($galleryId)) : null;
+        $fallbackUrl = (string) ($_SERVER['HTTP_REFERER'] ?? ($gallery ? gallery_public_url($gallery) : url_for('home')));
         try {
             // $deleted stores the complete database/filesystem cleanup result.
             $deleted = delete_gallery_images($galleryId, [(int) $image['id']]);
@@ -205,15 +325,45 @@ function cms_admin_public_update_image(): void
                 'missing_files' => (int) ($deleted['missing_files'] ?? 0),
                 'cleanup_failed' => (int) ($deleted['cleanup_failed'] ?? 0),
             ], ['category' => 'other', 'severity' => 'warning']);
+            if (\Gallery\Core\admin_wants_json()) {
+                $contexts = $gallery ? [
+                    admin_mutation_public_gallery_context(
+                        $galleryId,
+                        gallery_public_url($gallery),
+                        admin_mutation_postcondition('image_absent', ['image_id' => (int) $image['id']])
+                    ),
+                ] : [];
+                header('Content-Type: application/json');
+                echo json_encode(admin_mutation_success_envelope(
+                    t('admin.gallery_editor.image_deleted', 'Image deleted.'),
+                    admin_mutation_descriptor('image.delete', 'image', 'delete', [(int) $image['id']]),
+                    null,
+                    $contexts,
+                    ['redirect_url' => $fallbackUrl]
+                ));
+                return;
+            }
         } catch (Throwable $exception) {
             admin_log_event('error', 'image.public_inline_delete_failed', 'Public inline image deletion failed.', [
                 'gallery_id' => $galleryId,
                 'image_id' => (int) $image['id'],
                 'error' => $exception->getMessage(),
             ], ['category' => 'other', 'severity' => 'error']);
-            flash_message('admin_notice', 'Image delete failed: ' . $exception->getMessage());
+            $failureMessage = 'Image delete failed: ' . $exception->getMessage();
+            if (\Gallery\Core\admin_wants_json()) {
+                http_response_code(422);
+                header('Content-Type: application/json');
+                echo json_encode(admin_mutation_error_envelope(
+                    $failureMessage,
+                    'image_delete_failed',
+                    admin_mutation_descriptor('image.delete', 'image', 'delete', [(int) $image['id']]),
+                    ['redirect_url' => $fallbackUrl]
+                ));
+                return;
+            }
+            flash_message('admin_notice', $failureMessage);
         }
-        redirect_to((string) ($_SERVER['HTTP_REFERER'] ?? url_for('home')));
+        redirect_to($fallbackUrl);
     }
     if ($action === 'publish') {
         // $visibility stores an intermediate value used by the surrounding gallery workflow.

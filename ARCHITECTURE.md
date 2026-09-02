@@ -42,6 +42,28 @@ const CMS_UPDATE_BRANCHES = ['main', 'master'];
 7. **Feature isolation**
    Recent features are usually introduced as focused controller and service files instead of expanding old monolithic files.
 
+## Canonical Admin Mutation Completion Pipeline
+
+Persistent mutations launched from the Admin right-side panel use one response and completion architecture. Server mutation logic remains authoritative for authentication, authorization, CSRF, validation, schema/path safety, and persistence. Successful AJAX mutations describe completion through helpers in `app/helpers_mutation.php` rather than through workflow-specific redirect conventions.
+
+The canonical success envelope contains:
+
+- `ok` and `message` for the operation result;
+- a typed `mutation` descriptor with `type`, `entity`, `action`, and stable `entity_ids`;
+- optional `panel` metadata naming the mounted workflow and its authoritative refresh URL;
+- explicit affected public `contexts`, identified by stable gallery/tag identity, each with a server render URL, render mode, and an observable `postcondition` where meaningful;
+- `fallback` metadata, normally a redirect URL, used only by direct-page/non-JavaScript behavior.
+
+Controllers may append workflow-specific fields for progress displays or editor targeting, but browser completion semantics must not be reconstructed from those fields. Batch clients such as classic upload, browser-prepared upload, and Metadata Organizer must preserve the canonical envelope and aggregate stable affected IDs without discarding contexts or postconditions. Expected AJAX failures use the corresponding bounded error envelope and must not fall through into HTML redirects.
+
+Browser-assisted upload treats the checked browser-processing control as an explicit execution choice whenever media files are selected. Client capability/preparation failures stop before persistence instead of silently switching thumbnail generation to PHP. The literal boolean `fallback === true` is therefore reserved for an empty create-gallery submission where there are no files to prepare; successful canonical mutation envelopes still carry `fallback` as an object containing direct-page metadata. Browser batches that request thumbnails also declare that prepared thumbnails are required, and PHP validates the complete configured size/format matrix in the temporary ZIP before storing originals. This prevents later background warmup from becoming an accidental server-side substitute for a browser-selected upload path. Once browser upload has started server-side persistence, a successful canonical fallback object must never be interpreted as permission to replay the classic create/upload workflow, because that would create a second independent gallery and upload the selected files twice.
+
+`public/assets/gallery-modules/admin-mutation-completion.js` owns completion after persistence. It matches affected contexts by stable identity, selects the authoritative server-render source independently from the visible browser URL, fetches with `cache: 'no-store'` and cache busting, verifies the declared postcondition before replacing public markup, performs the single bounded retry policy for stale reads, and suppresses aborted or out-of-order panel/public responses by operation generation. Server-rendered HTML remains the rendering authority. A synchronization failure therefore reports that the server mutation succeeded but the visible view could not be verified; it does not undo or misreport persistence.
+
+`public/assets/gallery-modules/admin-side-panel.js` owns drawer lifecycle, dynamic form interception, workflow progress, and panel refresh callbacks. It must not hard reload, rewrite browser history, or navigate on an enhanced success path. Direct-page redirects remain independent fallback behavior. Dynamic panel forms use delegated or lifecycle-safe handlers because panel fragments may be replaced with `innerHTML`. Common source-contract regressions are checked by `php scripts/check_admin_mutation_contracts.php`.
+
+Public fragment replacement may also re-run `setupGalleryLightbox()` on parent gallery-list views that currently contain no lightbox-capable photo cards. Such a setup instance is still registered for teardown even when it returns early. Every state value referenced by its cleanup callback must therefore be initialized before cleanup registration and before the no-overlay/no-cards early return. This lifecycle invariant prevents successful create/delete mutations from being followed by a JavaScript temporal-dead-zone exception during the next fragment refresh.
+
 ## Runtime Entry Points
 
 ### Public request entry
@@ -953,7 +975,7 @@ When adding a setting:
 
 ## Browser-Prepared Upload Path
 
-The default upload form now uses browser-side preparation when the browser pipeline is enabled. Selected files are prepared in the browser, including originals, responsive thumbnails, and client-read metadata, then batched into store-only ZIP archives under the server upload-size limit, the admin absolute ZIP cap, and the admin maximum-images-per-batch cap. Each batch posts to `admin_upload_browser_batch`. The server remains authoritative for CSRF validation, gallery ownership, ZIP validation, final filename selection, unpacking and thumbnail metadata registration. The per-upload checkbox is checked by default. If it is unchecked, or if browser capability checks fail before any server-side write starts, the JavaScript uploader uses the normal server-side `admin_upload` fallback. The browser JSON endpoint also detects PHP-discarded multipart bodies and returns a JSON 413 response when PHP receives an empty request after upload limits are exceeded.
+The default upload form now uses browser-side preparation when the browser pipeline is enabled. Selected files are prepared in the browser, including originals, responsive thumbnails, and client-read metadata, then batched into store-only ZIP archives using the admin ZIP size as a soft packing target and the admin maximum-images-per-batch cap. If one atomic image package (original plus its prepared thumbnails) is larger than the normal ZIP target, it is emitted as a singleton batch; the detected PHP upload limit remains the hard ceiling. Each batch posts to `admin_upload_browser_batch`. The server remains authoritative for CSRF validation, gallery ownership, ZIP validation, final filename selection, unpacking and thumbnail metadata registration. The per-upload checkbox is checked by default. If it is unchecked, or if browser capability checks fail before any server-side write starts, the JavaScript uploader uses the normal server-side `admin_upload` fallback. The browser JSON endpoint also detects PHP-discarded multipart bodies and returns a JSON 413 response when PHP receives an empty request after upload limits are exceeded.
 
 The browser implementation lives in `public/assets/gallery-modules/admin-browser-upload.js` and `public/assets/gallery-modules/browser-image-worker.js`. The server orchestration and guard logic live in `app/services/browser_uploads.php`; the dedicated settings view lives in `app/views/admin_upload_settings.php`. Controllers only handle HTTP validation, persistence orchestration, and response formatting.
 
@@ -1256,7 +1278,7 @@ Important concepts:
 2. Source images remain in gallery folders.
 3. Generated thumbnails can be JPEG and sometimes WebP depending on source and PHP imaging support.
 4. Thumbnail bounds can be configured globally, per gallery and per image.
-5. Admin maintenance screens can generate or delete thumbnails.
+5. Admin maintenance screens can generate or delete thumbnails. Gallery-scoped thumbnail rebuilds launched from an injected gallery-editor side panel remain browser-batched, but the final JSON batch also emits the canonical mutation envelope for that gallery. The affected context set includes the edited gallery plus its owning parent/root so a repaired cover thumbnail is refreshed whether the drawer was opened from inside the gallery or from its gallery card. `admin-thumbnail-progress.js` keeps ownership of progress markup and forwards only those affected public contexts to the shared side-panel completion coordinator. The direct-page POST/redirect path remains unchanged, and JSON authentication/CSRF failures stay JSON instead of falling through to the Admin login/plain-text response path.
 6. Scheduled site maintenance calls the same thumbnail generation service in bounded cron-safe batches, records progress after each image, reuses valid existing thumbnails and only repairs missing, stale or invalid-ratio variants. Automatic maintenance runs only inside the configured UTC window and can chain safe web slices until the cycle completes or the window ends.
 7. Public thumbnail cards always keep server-rendered semantic picture/img markup; renderer policy only changes how candidate URLs become active.
 
@@ -1367,13 +1389,17 @@ Panel content is dynamically replaced, so feature modules must use delegated or 
 
 A one-click/in-place workflow must not gain an unsolicited browser confirmation dialog or intermediate page. Destructive actions still require the normal server-side Admin authentication, CSRF validation, scope/authorization checks, path safety, and existing mutation services.
 
+The shared mutation completion coordinator verifies server-rendered postconditions before replacing public fragments. For physical gallery membership, direct observation of the target card is authoritative when the target is on the fetched page. Aggregate context counts are only a fallback for paginated contexts where the target may legitimately be off-page. This prevents a freshly created child card from being rejected merely because auxiliary count metadata differs while still detecting stale off-page create/delete responses.
+
+Server-rendered mutation forms are posted back to the browser's current origin using their rendered path and query, rather than blindly fetching an absolute configured base URL. This preserves the active Admin session when the same installation is reached through a valid host alias or scheme. JSON mutation security boundaries must return JSON for expired Admin authentication and invalid CSRF instead of redirecting to HTML or emitting plain text. Public gallery-card deletion additionally isolates accidental displayed PHP output before its JSON response; discarded output is sent to the PHP error log and, when available, the Admin log without allowing a secondary logging warning to corrupt the response again.
+
 ## Gallery Date Ranges and EXIF Suggestions
 
 Manual gallery dates use `galleries.gallery_date` as the start date and `galleries.gallery_date_end` as the optional end date. The public renderer keeps single-date galleries compact and only renders a range when both endpoints differ; visible ranges use an en dash (`–`) between endpoints. Gallery sidecars persist both values when present, so filesystem imports and migration transfer preserve the date range.
 
 The Admin gallery dates tool builds suggestions from `images.exif_taken_at`. For each gallery, it aggregates the minimum and maximum EXIF capture date from images directly inside that gallery and all descendant galleries. Suggestions are only advisory: the admin can apply, edit, or ignore each row. Existing manual date ranges are shown and are not selected by default, which prevents accidental overwrite of curated dates.
 
-The gallery editor surfaces the same recursive branch suggestion directly beside the date range fields. The **Apply to this gallery** action persists the suggested range for the current gallery only, using all images in that gallery and descendants. Both the full admin editor and side-panel editor use the same rendered suggestion component and the same `admin_gallery_date_suggestion` POST endpoint. JavaScript enhances this action through `public/assets/gallery-modules/admin-gallery-date-suggestion.js`, reads gallery id, CSRF token and endpoint URL from component data attributes, updates the From/To inputs and refreshed suggestion panel in place, and preserves the normal POST/redirect fallback for browsers without JavaScript. The **Review branch suggestions** link opens `admin_gallery_dates` with `gallery_id`, limiting the review table to that gallery branch so a parent trip gallery and its daily subgalleries can be approved from one focused screen.
+The gallery editor surfaces the same recursive branch suggestion directly beside the date range fields. The **Apply to this gallery** action persists the suggested range for the current gallery only, using all images in that gallery and descendants. Both the full admin editor and side-panel editor use the same rendered suggestion component and the same `admin_gallery_date_suggestion` POST endpoint. JavaScript enhances this action through `public/assets/gallery-modules/admin-gallery-date-suggestion.js`, reads gallery id, CSRF token and endpoint URL from component data attributes, and keeps ownership of the From/To inputs plus the compact refreshed suggestion fragment. A successful enhanced save now returns the canonical Admin mutation envelope with `gallery.date_range_update`, `panel.workflow=gallery-edit`, and affected public contexts for both the edited gallery and its owning parent/root. Those contexts use the persisted gallery `updated_at` value as the observable postcondition, so the shared side-panel completion coordinator refreshes the current hero or gallery card from server-rendered HTML instead of treating the local input update as proof of public synchronization. Enhanced authentication and CSRF failures remain canonical JSON; normal POST/redirect and classic CSRF behavior remain available for direct-page or JavaScript-disabled use. The **Review branch suggestions** link opens `admin_gallery_dates` with `gallery_id`, limiting the review table to that gallery branch so a parent trip gallery and its daily subgalleries can be approved from one focused screen.
 
 
 ## Duplicate Photo Detector
@@ -1404,7 +1430,7 @@ Ledger filtering is applied to completed results and to later searches for the s
 
 ### Side-panel mutations
 
-**Delete this**, **Ignore this pair from now on**, both independent **Ignore all from this gallery** controls, and **Clear ledger** are normal POST forms for non-JavaScript/direct-route fallback, but the primary browser pipeline is AJAX. `admin-duplicate-photo-detector.js` intercepts dynamically injected forms in the capture phase before generic Admin form handlers, adds the existing AJAX markers, consumes the controller's JSON response, replaces only the detector fragment, and leaves the reusable right-side panel open. Every POST action passes Admin authentication and CSRF validation. The controller also requires a completed server-owned job for pair, gallery, and delete mutations, verifies submitted images or pairs belong to its result groups, reloads current image ownership, and checks gallery membership against the immutable job scope. These actions must not call `window.location`, assign `location.href`, reload the page, or introduce a browser confirmation dialog unless explicitly required by a future feature. The module import is cache-busted whenever this interaction contract changes so deployed browsers do not fall through to stale POST behavior.
+**Delete this**, **Ignore this pair from now on**, both independent **Ignore all from this gallery** controls, and **Clear ledger** are normal POST forms for non-JavaScript/direct-route fallback, but the primary browser pipeline is AJAX. `admin-duplicate-photo-detector.js` intercepts dynamically injected forms in the capture phase before generic Admin form handlers, adds the existing AJAX markers, consumes the controller's JSON response, replaces only the detector fragment, and leaves the reusable right-side panel open. Durable delete and ledger writes return the canonical Admin mutation envelope. The detector remains responsible for its own result fragment, while canonical durable results are also forwarded to the shared mutation completion coordinator. Ledger mutations intentionally declare no public gallery contexts because they alter only administrator review state, not gallery/image presentation. Every AJAX POST validates Admin authentication and CSRF before any classic login redirect or plain-text CSRF abort can run, so expired-authentication and invalid-CSRF failures remain JSON. The controller also requires a completed server-owned job for pair, gallery, and delete mutations, verifies submitted images or pairs belong to its result groups, reloads current image ownership, and checks gallery membership against the immutable job scope. These actions must not call `window.location`, assign `location.href`, reload the page, or introduce a browser confirmation dialog unless explicitly required by a future feature. The module import is cache-busted whenever this interaction contract changes so deployed browsers do not fall through to stale POST behavior.
 
 Per-image deletion still delegates to `delete_gallery_images()` so original-file deletion, image-row deletion, thumbnail/DNG derivative cleanup, title-picture cleanup, path boundaries, and existing mutation semantics are reused. Successful deletion also prunes the image from the persisted detector job before the panel fragment is rendered again. Ledger actions never delete or modify gallery/image content.
 
@@ -1419,9 +1445,15 @@ Gallery migration is implemented by:
 app/controllers/gallery_migration.php
 app/services/gallery_migration.php
 app/views/admin_gallery_migration.php
+public/assets/gallery-modules/admin-gallery-migration.js
+public/assets/gallery-modules/admin-side-panel.js
 ```
 
 The migration feature exchanges manifests and assets between two gallery installs. It supports receive status and completion endpoints so a transfer can compare already-present files and avoid re-sending successful assets after reconnects.
+
+The Admin migration endpoint is a JSON-only enhanced workflow. Authentication, CSRF, missing-gallery, expected step failures, and success responses therefore remain JSON and do not redirect the injected editor to a standalone Admin page. `target_pull` is a local persistent mutation as soon as the source manifest is accepted because `gallery_migration_prepare_target_job()` applies gallery metadata before asset transfer finishes. The pull-manifest and pull-complete responses consequently carry the canonical mutation result for the stable local gallery ID plus the current gallery and owning parent/root public render contexts. Imported slug changes use the new canonical render URL while the visible browser URL remains unchanged.
+
+`admin-gallery-migration.js` owns transfer progress, reconnect/status handling, cancellation, and log markup while transfer is active. When it runs inside the gallery side panel, it forwards canonical local pull results through `php-gallery:auxiliary-mutation-success`. The result also identifies the `gallery-edit` panel fragment. Final target-pull completion, and partial failure after manifest acceptance, explicitly request a server-rendered editor refresh through `admin-side-panel.js`; the active API tab and drawer remain mounted while stale Identity/Access/Display/Media values are replaced. This prevents a later Save from writing pre-import form values back over imported metadata. Public invalidation and panel refresh remain separate coordinator responsibilities, and a partial transfer failure is reported in the persistent drawer status after already-applied local state is synchronized. Source-push completion emits a typed remote mutation result but declares no local public contexts.
 
 ## Upload Automation and Windows Watcher
 
@@ -1430,11 +1462,16 @@ Upload automation is implemented by:
 ```text
 app/controllers/upload_automation.php
 app/services/upload_automation.php
+public/assets/gallery-modules/admin-side-panel.js
 winapp/gallery_watch_upload.pyw
 winapp/requirements.txt
 ```
 
 `gallery_upload_tokens` stores hashed tokens scoped to galleries. External tools should authenticate with those tokens and should not require admin session cookies.
+
+The Windows uploader intentionally uses one compatibility multipart contract across thumbnail policies. When local thumbnail generation is enabled it can submit both JPG and WebP variants for every supported size. The API validates the submitted files, then the server-side install phase applies the active thumbnail compatibility policy: modern WebP-only installations silently skip valid JPG extras, while legacy installations keep both formats. A policy-mismatched but otherwise valid client thumbnail must never reject the original API upload or force the watcher into server-side thumbnail generation.
+
+Gallery-scoped API-key create/revoke forms are also embedded in the gallery editor. Their enhanced path uses the canonical Admin mutation success/error envelope and `panel.workflow=gallery-edit`; the token mutation itself has no public gallery context because changing an API credential does not change public rendering. `admin-side-panel.js` delegates the successful response to the shared completion coordinator and refreshes the API-key fragment from the server-provided panel URL while keeping the drawer mounted. The ordinary POST/redirect route remains the non-JavaScript/direct-page fallback.
 
 ## Telemetry Model
 
@@ -1484,6 +1521,8 @@ Keep JavaScript vanilla unless the project explicitly adopts a front-end depende
 ## Testing
 
 Tests live in `tests/`. Current tests are direct PHP scripts rather than a PHPUnit suite.
+
+`tests/run.php` deterministically runs the PHP `*_test.php` scripts without a production database or runtime-data mutation. JavaScript `*_test.mjs` models remain separate Node commands. Deployment filtering treats the suite as source-review material: it is excluded by default and may be included only in an explicitly opted-in local folder or ZIP, never an FTP deployment.
 
 Examples:
 

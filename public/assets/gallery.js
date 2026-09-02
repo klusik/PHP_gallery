@@ -27,7 +27,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-08-11
+ *   2026-09-02
  */
 
 /**
@@ -69,9 +69,9 @@ import { setupAdminSettingsSearch } from './gallery-modules/admin-settings-searc
 import { setupAdminLanguageSelectorDesign } from './gallery-modules/admin-language-selector-design.js?v=20260814-language-selector-design-v1';
 import { setupAdminSmartGalleries } from './gallery-modules/admin-smart-galleries.js?v=20260817-smart-gallery-cycle-placement-v2';
 import { setupAdminUpdateJobs } from './gallery-modules/admin-update-jobs.js?v=20260813-resumable-updates-v3';
-import { setupAdminGalleryMigration } from './gallery-modules/admin-gallery-migration.js?v=20260527-gallery-migration-reconnect-v1';
-import { setupAdminGalleryDateSuggestions } from './gallery-modules/admin-gallery-date-suggestion.js?v=20260607-date-suggestion-endpoint-v2';
-import { setupAdminDuplicatePhotoDetector } from './gallery-modules/admin-duplicate-photo-detector.js?v=20260808-duplicate-photo-detector-ledger-v4';
+import { setupAdminGalleryMigration } from './gallery-modules/admin-gallery-migration.js?v=20260902-mutation-stage3-v1';
+import { setupAdminGalleryDateSuggestions } from './gallery-modules/admin-gallery-date-suggestion.js?v=20260902-mutation-stage3-part6-v1';
+import { setupAdminDuplicatePhotoDetector } from './gallery-modules/admin-duplicate-photo-detector.js?v=20260902-mutation-stage3-v2';
 import { setupAdminStorageStatistics } from './gallery-modules/admin-storage-statistics.js?v=20260608-storage-statistics-v1';
 import { setupAdminGalleryReport } from './gallery-modules/admin-gallery-report.js?v=20260615-admin-gallery-report-v1';
 import { setupAdminGalleryBenchmark } from './gallery-modules/admin-gallery-benchmark.js?v=20260820-benchmark-diagnostics-v4.2';
@@ -100,7 +100,7 @@ import {
     setupAdminNavdataUpdateFeedback,
     setupAdminMediaRenamer,
     setupAdminMetadataOrganizer,
-} from './gallery-modules/admin-operations.js?v=20260902-gallery-created-refresh-v2';
+} from './gallery-modules/admin-operations.js?v=20260903-oversized-single-batch-v1';
 
 /**
  * Runs a setup callback after the DOM is ready.

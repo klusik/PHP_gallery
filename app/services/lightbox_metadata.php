@@ -90,6 +90,33 @@ function gallery_lightbox_image_where_sql(bool $publicOnly, bool $excludeRestric
 }
 
 /**
+ * Return the full top-level image count plus a gallery-wide image-state revision.
+ *
+ * The revision is the maximum persisted image updated_at timestamp across the same
+ * visibility scope used by the caller. It lets mutation completion verify changes
+ * that may live on a different pagination page without loading every image row.
+ *
+ * @param array $gallery Gallery database row.
+ * @param bool $publicOnly True when only public image rows should be included.
+ * @param bool $excludeRestrictedNsfw True when restricted NSFW rows should be removed.
+ * @return array{count:int,revision:string} Full count and aggregate image revision.
+ */
+function gallery_lightbox_state_summary(array $gallery, bool $publicOnly, bool $excludeRestrictedNsfw = false): array
+{
+    if (gallery_lightbox_gallery_restricted_by_nsfw($gallery, $publicOnly, $excludeRestrictedNsfw)) {
+        return ['count' => 0, 'revision' => ''];
+    }
+
+    $stmt = db()->prepare("SELECT COUNT(*) AS image_count, COALESCE(MAX(i.updated_at), '') AS image_revision FROM images i WHERE " . gallery_lightbox_image_where_sql($publicOnly, $excludeRestrictedNsfw));
+    $stmt->execute([(int) $gallery['id']]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+    return [
+        'count' => max(0, (int) ($row['image_count'] ?? 0)),
+        'revision' => trim((string) ($row['image_revision'] ?? '')),
+    ];
+}
+
+/**
  * Count ordered top-level photos in one gallery.
  *
  * @param array $gallery Gallery database row.

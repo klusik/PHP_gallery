@@ -28,13 +28,12 @@ $galleryJs = (string) file_get_contents($root . '/public/assets/gallery.js');
 $adminOperations = (string) file_get_contents($root . '/public/assets/gallery-modules/admin-operations.js');
 $sidePanel = (string) file_get_contents($root . '/public/assets/gallery-modules/admin-side-panel.js');
 
-$revision = '20260817-smart-gallery-cycle-placement-v2';
 smart_gallery_high_priority_assert(
-    str_contains($galleryJs, "admin-smart-galleries.js?v={$revision}")
-    && str_contains($galleryJs, "admin-operations.js?v={$revision}")
-    && str_contains($adminOperations, "admin-side-panel.js?v={$revision}")
-    && str_contains($sidePanel, "admin-smart-galleries.js?v={$revision}"),
-    'Every Admin import edge affected by Smart Gallery side-panel work uses the same current cache-busting revision.'
+    str_contains($galleryJs, 'admin-smart-galleries.js?v=20260817-smart-gallery-cycle-placement-v2')
+    && str_contains($galleryJs, 'admin-operations.js?v=20260902-mutation-stage4-v1')
+    && str_contains($adminOperations, 'admin-side-panel.js?v=20260902-mutation-stage4-v1')
+    && str_contains($sidePanel, 'admin-smart-galleries.js?v=20260817-smart-gallery-cycle-placement-v2'),
+    'Every Admin import edge uses the current cache-busting revision of the module it imports.'
 );
 smart_gallery_high_priority_assert(
     !str_contains($galleryJs, 'admin-smart-galleries.js?v=20260814-smart-galleries-v6')

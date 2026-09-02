@@ -29,13 +29,20 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-12
+ *   2026-09-02
  */
 
 declare(strict_types=1);
 
 namespace Gallery\Controllers;
 
+use function Gallery\Core\admin_mutation_descriptor;
+use function Gallery\Core\admin_mutation_error_envelope;
+use function Gallery\Core\admin_mutation_panel_metadata;
+use function Gallery\Core\admin_mutation_postcondition;
+use function Gallery\Core\admin_mutation_public_tag_context;
+use function Gallery\Core\admin_mutation_success_envelope;
+use function Gallery\Core\admin_wants_json;
 use function Gallery\Core\csrf_field;
 use function Gallery\Core\e;
 use function Gallery\Core\flash_message;
@@ -119,7 +126,12 @@ function cms_admin_tags(): void
             $result = delete_tag_by_id($tagId);
             if (!($result['ok'] ?? false)) {
                 if ($wantsJson) {
-                    admin_tags_json_response(['ok' => false, 'error' => admin_tags_error_message((string) ($result['error'] ?? 'delete_failed'))], 422);
+                    $message = admin_tags_error_message((string) ($result['error'] ?? 'delete_failed'));
+                    admin_tags_json_response(admin_mutation_error_envelope(
+                        $message,
+                        'tag_delete_failed',
+                        admin_mutation_descriptor('tag.delete', 'tag', 'delete', [$tagId])
+                    ), 422);
                 }
                 flash_message('admin_tags_error', admin_tags_error_message((string) ($result['error'] ?? 'delete_failed')));
                 redirect_to(url_for('admin_tags', ['id' => $tagId, 'sort' => $postedSort]));
@@ -130,11 +142,15 @@ function cms_admin_tags(): void
                 'slug' => (string) ($deletedTag['slug'] ?? ''),
             ]);
             if ($wantsJson) {
-                admin_tags_json_response([
-                    'ok' => true,
-                    'message' => t('admin.tags.deleted', 'Tag deleted.'),
-                    'return_url' => url_for('home'),
-                ]);
+                $returnUrl = url_for('home');
+                $payload = admin_mutation_success_envelope(
+                    t('admin.tags.deleted', 'Tag deleted.'),
+                    admin_mutation_descriptor('tag.delete', 'tag', 'delete', [$tagId]),
+                    admin_mutation_panel_metadata('tag-edit', url_for('admin_tags', ['panel' => 1]), true),
+                    [],
+                    ['redirect_url' => $returnUrl]
+                );
+                admin_tags_json_response(array_merge($payload, ['return_url' => $returnUrl]));
             }
             flash_message('admin_tags_notice', t('admin.tags.deleted', 'Tag deleted.'));
             redirect_to(admin_tags_safe_return_url((string) ($_POST['return_url'] ?? url_for('admin_tags', ['sort' => $postedSort]))));
@@ -149,7 +165,12 @@ function cms_admin_tags(): void
         );
         if (!($result['ok'] ?? false)) {
             if ($wantsJson) {
-                admin_tags_json_response(['ok' => false, 'error' => admin_tags_error_message((string) ($result['error'] ?? 'save_failed'))], 422);
+                $message = admin_tags_error_message((string) ($result['error'] ?? 'save_failed'));
+                admin_tags_json_response(admin_mutation_error_envelope(
+                    $message,
+                    'tag_update_failed',
+                    admin_mutation_descriptor('tag.update', 'tag', 'update', [$tagId])
+                ), 422);
             }
             flash_message('admin_tags_error', admin_tags_error_message((string) ($result['error'] ?? 'save_failed')));
             redirect_to(url_for('admin_tags', ['id' => $tagId, 'sort' => $postedSort]));
@@ -162,15 +183,31 @@ function cms_admin_tags(): void
             'slug' => (string) ($updatedTag['slug'] ?? ''),
         ]);
         if ($wantsJson) {
-            admin_tags_json_response([
-                'ok' => true,
-                'message' => t('admin.tags.saved', 'Tag saved.'),
+            // $editUrl refreshes the mounted editor without changing the browser URL.
+            $editUrl = url_for('admin_tags', ['id' => $tagId, 'panel' => 1]);
+            // $publicUrl is canonical after a slug rename and is therefore separate from the visible browser URL.
+            $publicUrl = url_for('tag', ['slug' => (string) ($updatedTag['slug'] ?? '')]);
+            $payload = admin_mutation_success_envelope(
+                t('admin.tags.saved', 'Tag saved.'),
+                admin_mutation_descriptor('tag.update', 'tag', 'update', [$tagId]),
+                admin_mutation_panel_metadata('tag-edit', $editUrl, true),
+                [
+                    admin_mutation_public_tag_context(
+                        $tagId,
+                        $publicUrl,
+                        admin_mutation_postcondition('tag_identity', ['tag_id' => $tagId]),
+                        'canonical'
+                    ),
+                ],
+                ['redirect_url' => url_for('admin_tags', ['id' => $tagId, 'sort' => $postedSort])]
+            );
+            admin_tags_json_response(array_merge($payload, [
                 'tag_id' => $tagId,
                 'tag_name' => (string) ($updatedTag['name'] ?? ''),
                 'tag_slug' => (string) ($updatedTag['slug'] ?? ''),
-                'edit_url' => url_for('admin_tags', ['id' => $tagId, 'panel' => 1]),
-                'public_url' => url_for('tag', ['slug' => (string) ($updatedTag['slug'] ?? '')]),
-            ]);
+                'edit_url' => $editUrl,
+                'public_url' => $publicUrl,
+            ]));
         }
         flash_message('admin_tags_notice', t('admin.tags.saved', 'Tag saved.'));
         redirect_to(url_for('admin_tags', ['id' => $tagId, 'sort' => $postedSort]));
@@ -327,7 +364,7 @@ function render_admin_tag_form(array $tag, string $sortMode = 'usage'): void
  */
 function admin_tags_request_wants_json(): bool
 {
-    return isset($_POST['ajax']) || isset($_POST['panel']) || str_contains((string) ($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json');
+    return admin_wants_json();
 }
 
 /**
