@@ -1,5 +1,36 @@
 # Patch notes
 
+## Version 0.94.7
+
+Version 0.94.7 aligns opened-gallery picture counters with the public gallery-card count semantics, preventing signed-in viewers from seeing a broader visibility count in the gallery hero than on the card that opened it.
+
+### Highlights
+
+- Fixed opened-gallery hero counters to report the same public-only branch image total as gallery cards.
+- Preserved the existing gallery access, visibility, and contained-picture badge policy.
+- Added no migration and made no schema or stored-data change.
+
+### Technical Details
+
+#### Backend
+
+- Updated `app/controllers/public_gallery_page.php` to pass the public-only count policy to `gallery_branch_image_count()` for the hero counter.
+- Kept the count query conditional on the effective count-badge setting and inside the existing public render-profile span.
+
+#### Tests
+
+- Retained the gallery hero count and public visibility regression coverage for the corrected counter semantics.
+
+### User Impact
+
+#### For visitors
+
+- Gallery cards and opened-gallery heroes now show the same exact image total, including when a viewer is signed in.
+
+#### For administrators
+
+- No configuration, migration, content rewrite, or thumbnail regeneration is required.
+
 ## Version 0.94.6
 
 Version 0.94.6 keeps gallery image totals visible when visitors move from a gallery card into the opened gallery. The existing contained-picture badge setting now controls the same branch count in the gallery hero, with matching accessibility text, translations, and responsive presentation.
