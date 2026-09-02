@@ -9,7 +9,7 @@ This document is intended to help future maintainers and AI coding agents unders
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.94.8';
+const CMS_VERSION = '0.95';
 ```
 
 Update-related code uses:
@@ -975,7 +975,7 @@ When adding a setting:
 
 ## Browser-Prepared Upload Path
 
-The default upload form now uses browser-side preparation when the browser pipeline is enabled. Selected files are prepared in the browser, including originals, responsive thumbnails, and client-read metadata, then batched into store-only ZIP archives using the admin ZIP size as a soft packing target and the admin maximum-images-per-batch cap. If one atomic image package (original plus its prepared thumbnails) is larger than the normal ZIP target, it is emitted as a singleton batch; the detected PHP upload limit remains the hard ceiling. Each batch posts to `admin_upload_browser_batch`. The server remains authoritative for CSRF validation, gallery ownership, ZIP validation, final filename selection, unpacking and thumbnail metadata registration. The per-upload checkbox is checked by default. If it is unchecked, or if browser capability checks fail before any server-side write starts, the JavaScript uploader uses the normal server-side `admin_upload` fallback. The browser JSON endpoint also detects PHP-discarded multipart bodies and returns a JSON 413 response when PHP receives an empty request after upload limits are exceeded.
+The default upload form uses browser-side preparation when the browser pipeline is enabled and selected for the request. Selected files are prepared in the browser, including originals, responsive thumbnails, and client-read metadata, then batched into store-only ZIP archives using the admin ZIP size as a soft packing target and the admin maximum-images-per-batch cap. If one atomic image package (original plus its prepared thumbnails) is larger than the normal ZIP target, it is emitted as a singleton batch; the detected PHP upload limit remains the hard ceiling. Each batch posts to `admin_upload_browser_batch`. The server remains authoritative for CSRF validation, gallery ownership, ZIP validation, final filename selection, unpacking and thumbnail metadata registration. The per-upload checkbox is checked by default. Unchecking it before submission explicitly selects the normal server-side `admin_upload` path. When browser preparation remains selected and files are present, a browser capability or preparation failure stops before persistence instead of silently changing the selected execution path. The browser JSON endpoint also detects PHP-discarded multipart bodies and returns a JSON 413 response when PHP receives an empty request after upload limits are exceeded.
 
 The browser implementation lives in `public/assets/gallery-modules/admin-browser-upload.js` and `public/assets/gallery-modules/browser-image-worker.js`. The server orchestration and guard logic live in `app/services/browser_uploads.php`; the dedicated settings view lives in `app/views/admin_upload_settings.php`. Controllers only handle HTTP validation, persistence orchestration, and response formatting.
 
