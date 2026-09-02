@@ -49,8 +49,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.94.8}
-\newcommand{\manualdate}{2 September 2026}
+\newcommand{\version}{0.95}
+\newcommand{\manualdate}{3 September 2026}
 
 \hypersetup{
   colorlinks=true,
@@ -811,6 +811,22 @@ The~public gallery itself also exposes contextual Admin controls while a~normal 
 The~Admin gallery table can~filter rows by~visibility: all, unpublished, public, or~private. Filtering is~a~browser-side view aid, not~an~access-policy change. A~row hidden by~the~filter is~also unchecked, and~the~master selection is~cleared, so~a~hidden stale checkbox cannot accidentally enter the~next bulk action. The~summary reports the~displayed/eligible gallery count.
 
 The~gallery tree supports per-branch expand/collapse plus \ui{Collapse all} and~\ui{Expand all}. It~remembers which gallery branches the~administrator collapsed. The~browser sends the~collapsed gallery IDs through an~authenticated CSRF-protected action and~the~application stores that UI state, so~returning to~the~Admin tree keeps the~same branches closed rather than~expanding the~entire hierarchy again. Descendants hidden by~a~collapsed branch are~also unchecked before bulk work. Reordering refreshes the~tree controls when a~gallery gains or~loses children.
+
+\subsection{Reliable in-place side-panel changes}
+\index{administration!side-panel mutations}
+\index{side panel!mutation completion}
+
+When JavaScript is~available, a~persistent action started in~the~Admin right-side panel completes in~that panel. The~drawer stays mounted and~open, the~address in~the~browser remains unchanged, and~the~page is~not~reloaded merely to~show the~result. This applies to~gallery create/edit/move/delete, image upload/edit/delete/move/reorder/visibility/NSFW/cover actions, scan/import, EXIF date suggestions, thumbnail creation, Media Renamer, Metadata Organizer, Duplicate Photo Detector review/deletion actions, Upload Automation credentials, Gallery Migration target pulls, tag edits, and~Smart Gallery create/edit/placement/detach/duplicate/delete actions. A~standalone Admin page and~ordinary POST/redirect behavior remain available when JavaScript is~disabled or~the~route is~opened directly.
+
+The~saved database/filesystem state remains authoritative. After persistence, the~server describes the~changed entity, the~panel fragment that may~need re-rendering, and~every affected public context. Stable gallery, image, tag, and~Smart Gallery identifiers are~used instead of~assuming that the~old URL still names the~saved object. This matters after a~gallery folder/slug rename, gallery reparenting, or~tag slug change: the~application can~fetch the~new canonical render source while leaving the~visible browser address untouched. Source and~destination galleries are~both described for~moves; old/new parents and~the~moved gallery are~described for~reparenting; Smart Gallery placement changes describe every affected root or~physical parent context.
+
+A~successful fragment request is~not~by~itself proof that the~change is~visible. The~refreshed server-rendered HTML must satisfy an~operation-specific observable condition where one exists. Examples include gallery/card presence or~absence and~full counts, exact effective visibility, saved gallery revision, image absence/visibility/NSFW state, gallery-wide image revision for~off-page changes, cover image identity, persisted image order, tag identity, and~Smart Gallery placement/order. Pagination-aware checks accept a~directly visible matching card before using aggregate counts, while an~off-page result still waits for~the~authoritative total to~converge. Thumbnail cache repair is~the~intentional exception: it~refreshes affected contexts but~has no~stable database-backed public-HTML condition.
+
+Independent render requests can~briefly return stale data on~shared hosting. PHP Gallery therefore performs one centralized bounded retry sequence only after the~mutation itself succeeded and~the~declared condition is~not~yet observable. Each completion receives a~new operation generation; a~newer mutation aborts or~supersedes older fetches, retry wakeups, and~panel responses for~the~same context. Structurally valid but~stale HTML is~verified before replacement, so~an~older response cannot overwrite a~newer visible state. Refreshes bypass browser caches and~preserve applicable pagination, sorting, language, filter, active-tab, drawer-scroll, and~page-scroll state.
+
+If persistence succeeds but~the~refreshed view cannot be~verified within the~bounded retry budget, the~panel reports a~synchronization problem and~keeps the~saved server change. It~does not~misreport the~mutation as~failed, silently reload the~page, navigate away, or~rewrite browser history. Authentication, authorization, CSRF, schema readiness, path safety, and~validation failures return an~expected structured error to~the~enhanced workflow and~are~not~retried. Dynamically refreshed controls remain active because the~panel uses lifecycle-safe delegated handling rather than bindings that disappear after fragment replacement.
+
+Browser-assisted create/upload has~additional safeguards. Selecting browser processing is~an~explicit execution choice: a~missing browser capability or~failed worker preparation stops before persistence instead of~silently switching to~server thumbnail generation. PHP validates that every required prepared thumbnail size/format is~present before it~stores originals. Once browser persistence starts, direct-page fallback metadata is~never interpreted as~permission to~replay the~classic create/upload request, preventing duplicate galleries and~duplicate photographs. The~configured ZIP batch size is~a~soft packing target: one atomic photograph package that exceeds that target can~travel alone in~one batch, but~the~effective PHP upload ceiling remains a~hard limit. Windows upload automation may~send the~complete JPEG+WebP compatibility matrix; a~modern WebP-only server accepts required WebP variants and~safely skips valid extra JPEG variants, while malformed, mismatched, unknown-size, or~unsupported thumbnail payloads remain hard failures.
 
 \subsection{Central Settings hub}
 \index{Settings!central hub}
@@ -1748,7 +1764,7 @@ Voting & Per-image reversible positive vote with score synchronization, anonymou
 Picture Game & Optional branch-level pair comparison using eligible public images, persistent pair/winner state, leaderboard/result aggregation, and~schema-safe refusal when storage is~unknown.\\
 Picture Manager & Logged-in public-view administrative selection overlay with checkmark/range/toggle/select-all controls, move/copy/create-child actions, drag-to-visible-subgallery movement, native multi-file Web Share where supported, and~selected-photo ZIP fallback/download.\\
 Downloads & Authorized gallery ZIPs, Smart Gallery ZIPs, selected-photo ZIPs, administrator all-gallery ZIP, normalized archive paths, cache content signatures, bounded Smart Gallery source-count/byte limits, and~safe cache cleanup.\\
-Browser uploads & Existing/new-gallery upload flows, optional browser thumbnail preparation, bounded workers/batches, safe fallback to~server processing before writes, format-policy hinting, local ZIP import, and~post-scan automatic renaming.\\
+Browser uploads & Existing/new-gallery upload flows, explicit browser or~server processing choice, complete prepared-thumbnail validation, bounded workers/batches with singleton oversize packages below the~hard PHP limit, format-policy hinting, local ZIP import, and~post-scan automatic renaming.\\
 Filesystem discovery & Session-backed bounded folder scan; skips symlink/hidden/generated directories; imports image-bearing hierarchy in~place; can~move unmanaged photos into an~existing gallery or~delete safe unmanaged candidate trees; reports metadata-only sidecars separately.\\
 Filesystem metadata sidecars & Optional per-gallery \filepath{gallery.json} written from~editable gallery state and~read during discovery/parent repair for~supported metadata; useful for~filesystem portability but~not~a~replacement for~database backup.\\
 Upload API & Gallery-scoped one-time-visible API keys, central API manager, key revocation, shared ingestion pipeline, and~authenticated automation endpoint.\\

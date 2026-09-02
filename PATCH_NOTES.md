@@ -1,5 +1,179 @@
 # Patch notes
 
+## Version 0.95
+
+Version 0.95 fundamentally hardens every persistent mutation launched from the Admin right-side panel. Gallery, image, upload, metadata, thumbnail, migration, duplicate-review, tag, date, and Smart Gallery actions now share one typed server response and one browser completion coordinator. Successful work remains in place with the panel open and the browser URL unchanged, while authoritative server-rendered contexts are refreshed, checked against explicit postconditions, protected from stale/out-of-order responses, and retried only through one bounded policy. The release also closes related gallery-visibility, deletion-refresh, browser-upload, thumbnail compatibility, and Windows uploader defects discovered during staged qualification.
+
+### Highlights
+
+#### One mutation completion architecture
+
+- Added a canonical Admin mutation success/error envelope containing `ok`, `message`, typed `mutation` metadata, stable `entity_ids`, optional `panel` refresh metadata, explicit affected `contexts`, typed observable `postcondition` data, and direct-page `fallback` metadata.
+- Added one shared browser completion coordinator in `public/assets/gallery-modules/admin-mutation-completion.js` for public-context refresh, verification, retry, stale-response rejection, diagnostics, and fragment replacement.
+- Kept server mutation services authoritative for authentication, authorization, CSRF, schema readiness, path safety, validation, database/filesystem persistence, and logging.
+- Kept server-rendered HTML authoritative instead of creating a second client-side rendering model.
+- Preserved normal POST/redirect behavior for direct-page and JavaScript-disabled use without allowing fallback metadata to navigate a successful enhanced side-panel workflow.
+
+#### Persistent side-panel behavior
+
+- Kept the right-side panel mounted and open after successful enhanced mutations.
+- Preserved the visible browser URL byte-for-byte instead of assigning `window.location`, calling `window.location.reload()`, or rewriting history to conceal a canonical URL change.
+- Added lifecycle-safe delegated form handling so controls injected by a panel refresh remain intercepted on the next mutation.
+- Separated workflow-owned progress/editor fragments from authoritative public gallery/tag context refreshes.
+- Reported a controlled synchronization failure when persistence succeeded but the visible result could not be verified, while clearly preserving the completed server mutation.
+
+#### Verified and race-safe public refreshes
+
+- Matched gallery and tag contexts by stable entity identity rather than relying only on URL string equality.
+- Distinguished the visible browser URL from the authoritative render URL needed after gallery rename, folder/slug change, reparenting, or tag slug change.
+- Added explicit source, destination, old-parent, new-parent, moved-gallery, root, physical-parent, and Smart Gallery context sets for multi-context mutations.
+- Added server-rendered identity/state metadata for gallery heroes, gallery cards, root listings, tag pages, image grids, pagination, ordering, and Smart Gallery placement.
+- Verified refreshed HTML before public DOM replacement instead of treating a successful fetch or fragment swap as proof that the mutation became visible.
+- Added a monotonic operation generation, per-context ownership, active-fetch aborts, stale retry suppression, and stale panel-response rejection so older work cannot overwrite newer state.
+- Centralized a bounded shared-hosting read-after-write retry sequence and used it only after persistence succeeded but a declared postcondition remained temporarily unobservable.
+- Preserved applicable pagination, sorting, language, filtering, active Admin tab, panel scroll, and public-page scroll during refresh.
+
+#### Gallery and image workflows
+
+- Migrated empty gallery creation and create-with-upload completion to the canonical pipeline while preserving created gallery identity through aggregation.
+- Migrated gallery save, title/metadata edits, folder/slug rename, path changes, reparenting, visibility changes, cover/title-picture changes, and enhanced gallery-card deletion.
+- Used canonical render mode for identity-changing saves while leaving the visible browser URL unchanged and storing the new render source for later panel operations.
+- Added pagination-safe `gallery_membership` verification using direct card presence/absence plus authoritative full-context counts.
+- Added exact `gallery_visibility` verification for Published/Unpublished transitions instead of relying on an indirect timestamp proxy.
+- Reflected the persisted visibility scalar immediately on an already visible child card while the authoritative parent refresh converges on shared hosting.
+- Avoided remote favicon retrieval on unrelated gallery saves by refreshing cached external-link favicons only when persisted description content changed.
+- Migrated bulk and single-row image deletion, move-to-existing, move-to-new-gallery, draft/public/private visibility, NSFW on/off, cover selection, thumbnail generation, and ordinary/browser-prepared upload completion.
+- Fixed bulk visibility and NSFW AJAX branches so a successful database mutation cannot fall through to flash/redirect HTML when JSON was requested.
+- Verified image absence, visibility, NSFW state, gallery-wide image revision, full counts, cover identity, and persisted reorder sequence as appropriate to each action.
+- Kept gallery hero deletion as a normal navigation workflow because the deleted page has no valid same-URL context to refresh.
+- Kept Picture Manager hard navigation as an explicit standalone public-toolbar exception rather than incorrectly treating it as a side-panel mutation.
+
+#### Embedded and auxiliary workflows
+
+- Made embedded scan/import panel-owned and added canonical JSON completion while retaining direct-page fallback behavior.
+- Added canonical queued-work completion for Force AI metadata regeneration, refreshed the API editor fragment, and deliberately declared no immediate public context while future worker processing remains pending.
+- Migrated Media Renamer public invalidation to the coordinator while preserving its tool-owned preview and result UI.
+- Migrated Metadata Organizer batch completion, preserved source/destination counts and moved image IDs, and removed reload/reconstructed-URL fallbacks.
+- Routed Duplicate Photo Detector deletion through authoritative gallery refresh instead of treating local element removal as final synchronization.
+- Migrated Duplicate Photo Detector `ignore_pair`, `ignore_gallery`, and `clear_ledger` persistence to typed canonical envelopes while retaining detector-owned result rendering and excluding temporary scan progress from the persistent contract.
+- Migrated image reorder integration to canonical completion and persisted-order verification.
+- Migrated image editing to gallery-context completion with an `image_visibility` postcondition.
+- Migrated tag editing to stable `tag_id` identity and canonical tag render URLs without changing the visible browser URL after a slug rename.
+- Added canonical public photo-card deletion with `image_absent` verification.
+- Migrated gallery-scoped Upload Automation API-key creation/revocation, Gallery Migration `target_pull`, browser-batched gallery thumbnail creation, and per-gallery EXIF date suggestion application.
+- Kept Gallery Migration progress/log UI tool-owned while synchronizing accepted partial/final target mutations and refreshing the server-rendered editor before a later save can overwrite imported metadata.
+- Migrated every persistent Smart Gallery side-panel action: create, update, placement update, detach, duplicate, and delete.
+- Refreshed all previous/new root and physical parent contexts affected by Smart Gallery placement changes and verified authoritative presence, count, top/bottom placement, and order.
+
+#### Browser upload and automation hardening
+
+- Treated selected browser processing as an explicit execution choice: capability or worker-preparation failure now stops before persistence instead of silently switching to classic server processing.
+- Reserved literal `fallback === true` for an empty create-gallery request with no selected files; canonical successful responses retain a `fallback` object only as direct-page metadata.
+- Prevented successful browser create/upload completion from replaying the classic workflow, eliminating duplicate gallery and duplicate-photo creation.
+- Required browser batches that request thumbnails to send `prepared_thumbnails_required=1` and validated the complete configured size/format matrix before originals are stored.
+- Kept malformed manifests, missing required variants, MIME/signature mismatches, unknown formats/sizes, and unsupported thumbnail payloads as hard failures.
+- Treated the configured browser ZIP batch size as a soft packing target, allowing one atomic original-plus-thumbnails package above that target to travel alone while retaining the effective PHP upload limit as a hard ceiling.
+- Preserved stable image IDs, source ordering, batch/session metadata, progress events, created-gallery identity, contexts, postconditions, and fallback metadata through classic and browser-assisted upload aggregation.
+- Accepted a complete JPEG+WebP prepared-thumbnail compatibility matrix from the Windows uploader: modern WebP-only servers keep required WebP variants and count valid extra JPEG variants as skipped, while legacy servers accept both formats.
+- Preserved strict rejection for invalid/unknown formats, MIME mismatches, unsupported sizes, and malformed automation thumbnail uploads.
+
+#### JSON, refresh, and lifecycle fixes
+
+- Added canonical JSON authentication and CSRF failures for enhanced public/Admin mutation routes instead of returning login-page HTML or plain text.
+- Posted server-rendered mutation forms to the active browser origin so valid host aliases or schemes retain the current Admin session.
+- Isolated accidental displayed PHP output before public gallery-card deletion JSON, logged only bounded discarded-output context, and prevented secondary logging warnings from corrupting the response.
+- Added a rejection boundary around asynchronous side-panel success reflection so a failed independent refresh cannot leave the drawer stuck at “Saving”.
+- Preserved visible non-routing query state while excluding routing identity parameters from canonical render URLs.
+- Added explicit browser no-cache request headers alongside no-store/cache-busting behavior for independent verification fetches.
+- Initialized lightbox teardown state before early setup returns, preventing temporal-dead-zone errors when a parent view with no photo cards is refreshed repeatedly after child gallery create/delete operations.
+
+#### Test and package handling
+
+- Added an opt-in `--include-tests true` / `-IncludeTests true` mode for local source-review folders and ZIPs while keeping production packages test-free by default.
+- Refused test inclusion for FTP deployment so development regression sources cannot be uploaded accidentally.
+- Preserved existing exclusions for secrets, runtime data, caches, logs, `.git`, temporary files, gallery media, and macOS metadata.
+
+### Technical Details
+
+#### Stage 1: canonical contract and coordinator foundation
+
+- Added `app/helpers_mutation.php` with shared JSON-request detection, success/error envelope construction, typed mutation descriptors, panel metadata, public context builders, and postcondition helpers.
+- Added `admin_wants_json()` as the shared enhanced Admin mutation detector.
+- Defined `render_mode=preserve_view` for stable-identity refreshes and `render_mode=canonical` for mutations whose old route no longer represents the persisted entity.
+- Added `public/assets/gallery-modules/admin-mutation-completion.js` with envelope normalization, stable context matching, authoritative render URL resolution, cache-busted no-store requests, owned-fragment replacement, typed postcondition verification, bounded retry, synchronization diagnostics, and stale-response primitives.
+- Adapted the existing gallery create/upload verified refresh to the shared coordinator while retaining temporary compatibility for not-yet-migrated workflows during the staged rollout.
+
+#### Stage 2: core gallery and image migration
+
+- Updated `app/controllers/admin_galleries_edit_actions.php`, `app/controllers/admin_galleries_discovery.php`, `app/controllers/admin_images_bulk.php`, `app/controllers/admin_uploads.php`, and related public gallery controllers to emit canonical mutation results.
+- Added stable gallery revision, effective visibility, full membership count, image count/revision, cover identity, and image-state metadata to public render contexts.
+- Preserved canonical completion metadata and all uploaded image IDs across classic one-file and browser batch aggregation.
+- Delegated gallery saves, image bulk operations, and existing/new-gallery uploads from `public/assets/gallery-modules/admin-side-panel.js` to the coordinator.
+- Preserved panel workflow/tab/scroll state while refreshing only affected editor/public fragments.
+
+#### Stage 3: embedded and auxiliary migration
+
+- Updated scan/import, Force AI regeneration, Media Renamer, Metadata Organizer, Duplicate Photo Detector, image reorder/edit, tag edit, public inline deletion, Upload Automation tokens, Gallery Migration, gallery thumbnails, EXIF date suggestions, and Smart Gallery actions to use canonical completion.
+- Kept tool-specific previews, logs, progress, and compact fragments in their existing workflow modules while forwarding durable public invalidation through one auxiliary completion bridge.
+- Added JSON-only expected auth, CSRF, validation, and mutation-failure responses before legacy HTML helpers on enhanced endpoints.
+- Preserved direct-page forms and explicit standalone navigation exceptions.
+- Advanced cache-busting imports through changed modules and their `admin-operations.js` / `gallery.js` entry chains.
+
+#### Stage 4: postconditions, multi-context, race, and cache hardening
+
+- Added pre-replacement verification for `gallery_membership`, `gallery_identity`, `gallery_updated_at`, `gallery_visibility`, image count/revision/state/order, cover identity, tag identity, and Smart Gallery presence/placement/order postconditions.
+- Added operation generations, context claims, abort controllers, stale retry guards, and guarded panel refreshes.
+- Classified request, HTTP, parse, abort, wrong-context, structurally stale, superseded, unverified, and exhausted-postcondition outcomes with bounded development diagnostics.
+- Stripped query strings from diagnostic render URLs so CSRF, share, and private query values are not recorded.
+- Represented thumbnail repair with explicit `postcondition: null` and reported it as refreshed but unverified rather than falsely verified.
+
+#### Stage 5: strict enforcement and cleanup
+
+- Removed the browser compatibility adapter that reconstructed completion semantics from legacy top-level fields.
+- Made missing canonical completion metadata a contract error.
+- Removed duplicate/create-specific/tool-specific public refresh helpers and hard reload/history-rewrite recovery paths superseded by the coordinator.
+- Required classic upload and Metadata Organizer aggregation to preserve the server-authored canonical envelope.
+- Added `scripts/check_admin_mutation_contracts.php` as a deployment-tree static guard for strict envelope consumption, stable ID survival, aggregation, delegated dynamic controls, centralized retry ownership, JSON return boundaries, visibility postconditions, current-origin form posting, and navigation/reload/history invariants.
+- Added permanent rules and ownership documentation to `AGENTS.md`, `ARCHITECTURE.md`, `CODEMAP.md`, `README.md`, `TESTING.md`, and the administrator manual.
+- Removed the temporary staged roadmap during final Version 0.95 release cleanup only after its completed reports were transferred into permanent release and product documentation.
+
+#### Database and compatibility
+
+- Added no migration, table, column, index, or stored-data rewrite in Version 0.95.
+- Reused existing gallery/image/tag/Smart Gallery, upload, thumbnail, duplicate ledger, API credential, and migration services and their existing schema policies.
+- Preserved PHP 8.1+ compatibility and the framework-free, dependency-free browser architecture.
+- Preserved public gallery/password/share-link/visibility/NSFW/media authorization and existing direct-page/non-JavaScript behavior.
+
+#### Tests
+
+- Added `tests/mutation_response_contract_test.php` for canonical PHP envelope shape and response metadata.
+- Added `tests/admin_mutation_completion_test.mjs` for normalization, stable identity, postconditions, retries, and stale completion behavior.
+- Added `tests/admin_mutation_stage4_hardening_test.mjs` for pagination-safe membership, image ordering/revisions, Smart Gallery placement, pre-replacement stale rejection, supersession, aborts, panel race protection, wrong-context retries, explicit unverified contexts, and diagnostic redaction.
+- Added `tests/admin_side_panel_delegation_test.mjs` for dynamic side-panel interception.
+- Added `tests/stage3_auxiliary_mutation_contract_test.php` for auxiliary workflow envelope and event wiring.
+- Added `tests/stage4_mutation_hardening_contract_test.php` for server-rendered verification metadata and workflow boundaries.
+- Extended `tests/admin_side_panel_gallery_mutation_test.php`, `tests/admin_side_panel_gallery_refresh_test.mjs`, and `tests/admin_side_panel_created_gallery_refresh_test.mjs` for URL stability, panel persistence, canonical render sources, visibility, deletion, upload, refresh, and lifecycle behavior.
+- Extended Duplicate Photo Detector, Smart Gallery, hero count, and deployment packaging contracts.
+- Reconciled stale source-pattern expectations with the final strict browser-upload choice and final cache-busting import chain discovered by the complete source-tree suite.
+- Added the two canonical-contract failure strings missing from the maintained English, Czech, German, and Swedish catalogs.
+- Added and extended the 60-check `scripts/check_admin_mutation_contracts.php` repository guard.
+- Retained complete PHP, Node, localization, migration, syntax, documentation, package, manifest, and manual browser qualification as release gates.
+
+### User Impact
+
+#### For visitors
+
+- Public gallery, tag, image, cover, and Smart Gallery content now reflects completed administrator changes more reliably without stale fragments being accepted as current state.
+- Existing access, visibility, NSFW, password, share-link, media authorization, pagination, and no-JavaScript behavior remain intact.
+
+#### For administrators
+
+- Persistent actions launched from the right-side panel stay in place, keep the panel open, preserve the current URL, and refresh the affected server-rendered content automatically.
+- Renames, reparenting, image moves, visibility changes, Smart Gallery placement, and other multi-context operations update every relevant visible context without forcing navigation.
+- A delayed shared-host read is handled by bounded verification retries; a genuine synchronization failure is reported without losing or misrepresenting the successful server change.
+- Browser-assisted uploads no longer silently switch execution pipelines, replay completed creation, omit required prepared thumbnails, or reject a single valid image package merely because it exceeds the soft batch target.
+- No database migration, manual metadata rebuild, thumbnail regeneration, or configuration change is required for the Version 0.95 upgrade.
+
 ## Version 0.94.8
 
 Version 0.94.8 improves the embedded Admin gallery workflow by refreshing the background gallery in place after successful side-panel mutations, so newly created or edited galleries appear immediately without a manual page reload.

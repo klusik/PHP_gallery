@@ -31,7 +31,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-06-10
+ *   2026-09-03
  */
 
 declare(strict_types=1);
@@ -131,7 +131,9 @@ $uploadControllerSource = file_get_contents(__DIR__ . '/../app/controllers/admin
 browser_upload_test_assert(is_string($browserUploadSource) && str_contains($browserUploadSource, 'expandBrowserUploadArchives') && str_contains($browserUploadSource, "action: 'extractUploadZip'"), 'browser upload expands selected ZIP archives before image preparation');
 browser_upload_test_assert(is_string($browserWorkerSource) && str_contains($browserWorkerSource, '0x02014b50') && str_contains($browserWorkerSource, "DecompressionStream('deflate-raw')"), 'browser worker parses central-directory entries and supports normal Deflate ZIP payloads');
 browser_upload_test_assert(str_contains((string) $browserWorkerSource, 'safeUploadZipImagePath') && str_contains((string) $browserWorkerSource, 'uncompressedSize > compressedSize * 250'), 'browser ZIP extraction rejects unsafe paths and suspicious expansion ratios');
-browser_upload_test_assert(is_string($sidePanelSource) && str_contains($sidePanelSource, 'browserUploadZipSelected(form) && !browserUploadRequested(form)'), 'ZIP selections cannot fall through to classic PHP upload');
+browser_upload_test_assert(is_string($sidePanelSource) && str_contains($sidePanelSource, 'browserUploadZipSelected(form) && !useBrowserUpload'), 'ZIP selections cannot fall through to classic PHP upload');
+browser_upload_test_assert(str_contains((string) $sidePanelSource, 'if (!useBrowserUpload || result?.fallback === true)') && str_contains((string) $browserUploadSource, "return {fallback: true, reason: 'no_files'};"), 'classic fallback is limited to an explicit server choice or an empty create-gallery submission');
+browser_upload_test_assert(str_contains((string) $browserUploadSource, 'No files were uploaded and the server-side fallback was not started.'), 'selected browser processing fails closed before persistence when browser capability or preparation fails');
 browser_upload_test_assert(is_string($uploadControllerSource) && str_contains($uploadControllerSource, "',.zip,application/zip,application/x-zip-compressed'") && str_contains($uploadControllerSource, 'admin_browser_upload_accept_value()'), 'browser-enabled upload inputs advertise ZIP selection');
 
 fwrite(STDOUT, "browser_upload_settings_test passed\n");
