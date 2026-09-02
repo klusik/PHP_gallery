@@ -398,9 +398,9 @@ function cms_gallery(): void
     $heroTagCount = count($heroTagGroups['gallery']) + count($heroTagGroups['contained']);
     // $showHeroCountBadge keeps the opened-gallery summary aligned with the same Theme/per-gallery visibility policy used by gallery cards.
     $showHeroCountBadge = gallery_effective_count_badge_enabled($gallery);
-    // $heroBranchImageCount reuses the canonical branch counter so the hero reports this gallery plus accessible descendants with the same visibility and access semantics as gallery cards.
+    // $heroBranchImageCount deliberately uses the public-only branch view even for signed-in viewers. The matching gallery-card badge is a public-content summary, so using the page's broader admin/viewer visibility here would make the same gallery show two different exact counts.
     $heroBranchImageCount = $showHeroCountBadge
-        ? public_render_profile_span('gallery_hero_branch_image_count', static fn (): int => gallery_branch_image_count((int) $gallery['id'], $publicOnly))
+        ? public_render_profile_span('gallery_hero_branch_image_count', static fn (): int => gallery_branch_image_count((int) $gallery['id'], true))
         : 0;
 
     echo '<section class="hero">';
