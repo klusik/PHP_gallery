@@ -12,6 +12,7 @@
  *   - Intercept only the focused EXIF date suggestion action
  *   - Keep the no-JavaScript submit and redirect fallback intact
  *   - Refresh the visible date range fields and suggestion panel after a successful save
+ *   - Forward durable side-panel mutations to the shared public-context completion coordinator
  *   - Reuse the same endpoint for the full editor and side-panel editor contexts
  *
  * Author:
@@ -28,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-06-07
+ *   2026-09-02
  */
 
 import { i18n } from './admin-core.js?v=20260512-modular-admin-v1';
@@ -185,6 +186,33 @@ function replaceSuggestionPanel(button, html) {
 }
 
 /**
+ * Forward a durable side-panel date mutation to the shared completion coordinator.
+ *
+ * The date-suggestion module keeps ownership of its two date inputs and compact
+ * suggestion fragment. The coordinator remains authoritative for refreshing the
+ * public gallery hero/card contexts affected by the persisted date-range change.
+ *
+ * @param {HTMLButtonElement} button Button that started the action.
+ * @param {Record<string, *>} result Canonical server mutation response.
+ */
+function dispatchDateSuggestionMutationResult(button, result) {
+    if (!(button.closest('[data-admin-side-panel]') instanceof HTMLElement)) {
+        return;
+    }
+    if (!result || typeof result !== 'object' || !result.mutation || !Array.isArray(result.contexts)) {
+        return;
+    }
+
+    button.dispatchEvent(new CustomEvent('php-gallery:auxiliary-mutation-success', {
+        bubbles: true,
+        detail: {
+            source: 'gallery-date-suggestion',
+            result,
+        },
+    }));
+}
+
+/**
  * Apply the current gallery EXIF date suggestion through AJAX.
  *
  * @param {HTMLFormElement|null} form Gallery editor form, if the button belongs to one.
@@ -229,6 +257,8 @@ async function applyGalleryDateSuggestion(form, button) {
             updateDateInput(form, 'gallery_date', result.gallery_date || '');
             updateDateInput(form, 'gallery_date_end', result.gallery_date_end || '');
         }
+        // Dispatch before replacing the owning fragment so closest(side-panel) still resolves from the live button.
+        dispatchDateSuggestionMutationResult(button, result);
         replaceSuggestionPanel(button, result.suggestion_html || '');
         showAdminNotice(result.message || i18n('admin.gallery_dates.js_applied', 'EXIF date suggestion applied.'));
     } catch (error) {

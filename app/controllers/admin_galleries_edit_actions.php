@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-12
+ *   2026-09-02
  */
 
 declare(strict_types=1);
@@ -42,6 +42,14 @@ use const Gallery\Services\CMS_PAGINATION_DEFAULT_COLUMNS;
 use const Gallery\Services\CMS_PAGINATION_DEFAULT_ROWS;
 use const Gallery\Services\CMS_PAGINATION_MAX_COLUMNS;
 use const Gallery\Services\CMS_PAGINATION_MAX_ROWS;
+use function Gallery\Core\admin_mutation_descriptor;
+use function Gallery\Core\admin_mutation_gallery_is_rendered_in_context;
+use function Gallery\Core\admin_mutation_gallery_membership_postcondition;
+use function Gallery\Core\admin_mutation_error_envelope;
+use function Gallery\Core\admin_mutation_panel_metadata;
+use function Gallery\Core\admin_mutation_postcondition;
+use function Gallery\Core\admin_mutation_public_gallery_context;
+use function Gallery\Core\admin_mutation_success_envelope;
 use function Gallery\Core\csrf_field;
 use function Gallery\Core\csrf_token;
 use function Gallery\Core\current_user;
@@ -107,6 +115,7 @@ use function Gallery\Services\gallery_effective_description_layout;
 use function Gallery\Services\gallery_effective_gps_map_enabled;
 use function Gallery\Services\gallery_effective_grid_settings;
 use function Gallery\Services\gallery_effective_lightbox_browsing_mode;
+use function Gallery\Services\gallery_effective_visibility;
 use function Gallery\Services\gallery_filename_display_schema_ready;
 use function Gallery\Services\gallery_flight_map_row;
 use function Gallery\Services\gallery_flight_map_unresolved_from_row;
@@ -123,6 +132,8 @@ use function Gallery\Services\gallery_lightbox_browsing_mode_override_label;
 use function Gallery\Services\gallery_lightbox_browsing_mode_schema_ready;
 use function Gallery\Services\gallery_lightbox_browsing_mode_source_label;
 use function Gallery\Services\gallery_lightbox_browsing_mode_storage_value;
+use function Gallery\Services\gallery_lightbox_total_count;
+use function Gallery\Services\gallery_lightbox_state_summary;
 use function Gallery\Services\gallery_metadata_organizer_apply_date_plan;
 use function Gallery\Services\gallery_metadata_organizer_apply_date_plan_batch;
 use function Gallery\Services\gallery_metadata_organizer_apply_notice;
@@ -133,9 +144,11 @@ use function Gallery\Services\gallery_metadata_organizer_options;
 use function Gallery\Services\gallery_metadata_organizer_schema_ready;
 use function Gallery\Services\gallery_share_token_for_admin;
 use function Gallery\Services\gallery_shows_filenames;
+use function Gallery\Services\gallery_visibility_label;
 use function Gallery\Services\gallery_visibility_storage_value;
 use function Gallery\Services\gallery_voting_schema_ready;
 use function Gallery\Services\likely_gallery_destination_id;
+use function Gallery\Services\link_favicon_gallery_descriptions;
 use function Gallery\Services\link_favicon_refresh_gallery;
 use function Gallery\Services\media_renamer_default_pattern;
 use function Gallery\Services\media_renamer_execute_gallery;
@@ -196,7 +209,44 @@ function cms_admin_scan_images(): void
     foreach ($galleryIds as $galleryId) {
         $count += scan_gallery_images((int) $galleryId);
     }
-    flash_message('admin_notice', t('admin.galleries.scan_result', ['count' => $count]));
+    $message = t('admin.galleries.scan_result', ['count' => $count]);
+    if (admin_wants_json()) {
+        $contexts = [];
+        $normalizedGalleryIds = [];
+        foreach ($galleryIds as $galleryId) {
+            $normalizedGalleryId = (int) $galleryId;
+            $gallery = $normalizedGalleryId > 0 ? find_gallery($normalizedGalleryId, true) : null;
+            if (!is_array($gallery)) {
+                continue;
+            }
+            $normalizedGalleryIds[] = $normalizedGalleryId;
+            $contexts[] = admin_mutation_public_gallery_context(
+                $normalizedGalleryId,
+                gallery_public_url($gallery),
+                admin_mutation_postcondition('gallery_image_count', [
+                    'gallery_id' => $normalizedGalleryId,
+                    'count' => gallery_lightbox_total_count($gallery, false, false),
+                ])
+            );
+        }
+        $primaryGalleryId = (int) ($normalizedGalleryIds[0] ?? 0);
+        $editUrl = $primaryGalleryId > 0
+            ? admin_edit_gallery_tab_url($primaryGalleryId, 'admin-edit-images')
+            : url_for('admin');
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode(array_merge(
+            admin_mutation_success_envelope(
+                $message,
+                admin_mutation_descriptor('image.scan_import', 'image', 'import', $normalizedGalleryIds),
+                admin_mutation_panel_metadata('gallery-edit', $editUrl, true),
+                $contexts,
+                ['redirect_url' => url_for('admin')]
+            ),
+            ['imported_count' => $count, 'edit_url' => $editUrl]
+        ), JSON_THROW_ON_ERROR);
+        return;
+    }
+    flash_message('admin_notice', $message);
     redirect_to(url_for('admin'));
 }
 
@@ -269,18 +319,126 @@ function admin_return_tab_from_post(string $fallback = ''): string
  * @param string $returnTab Return tab value.
  * @return array Structured result data for the caller.
  */
-function admin_edit_gallery_success_response(array $gallery, string $notice, string $returnTab): array
+function admin_edit_gallery_success_response(array $gallery, string $notice, string $returnTab, array $saveResult = []): array
 {
-    return [
-        'ok' => true,
-        'type' => 'gallery',
-        'message' => $notice,
-        'gallery_id' => (int) $gallery['id'],
-        'gallery_title' => (string) ($gallery['title'] ?? ''),
-        'gallery_url' => gallery_public_url($gallery),
-        'edit_url' => admin_edit_gallery_tab_url((int) $gallery['id'], $returnTab),
-        'refresh_url' => gallery_public_url($gallery),
+    // $galleryId stores the stable gallery identity used across path and parent changes.
+    $galleryId = (int) ($gallery['id'] ?? 0);
+    // $originalGallery stores the pre-mutation row so source-parent and route identity are never inferred after save.
+    $originalGallery = is_array($saveResult['original_gallery'] ?? null) ? $saveResult['original_gallery'] : $gallery;
+    // $oldParentId and $newParentId describe the hierarchy edge before and after persistence.
+    $oldParentId = (int) ($saveResult['old_parent_id'] ?? $originalGallery['parent_id'] ?? 0);
+    $newParentId = (int) ($gallery['parent_id'] ?? 0);
+    // $oldGalleryUrl stores the public route that represented this stable id before the mutation.
+    $oldGalleryUrl = (string) ($saveResult['original_gallery_url'] ?? gallery_public_url($originalGallery));
+    // $galleryUrl stores the authoritative route after the mutation.
+    $galleryUrl = gallery_public_url($gallery);
+    // $identityChanged forces a canonical fetch when the currently visible old route can no longer render this gallery.
+    $identityChanged = $oldGalleryUrl !== $galleryUrl;
+    // $galleryUpdatedAt verifies ordinary metadata saves without trusting stable identity alone.
+    $galleryUpdatedAt = trim((string) ($gallery['updated_at'] ?? ''));
+    // Visibility changes have a stronger observable invariant than updated_at: the freshly
+    // rendered gallery hero must expose the exact persisted effective visibility. Using the
+    // timestamp for this case made a successful Published/Unpublished save depend on an
+    // indirect database/render timestamp comparison instead of the state the admin changed.
+    $originalVisibility = gallery_effective_visibility($originalGallery);
+    $galleryVisibility = gallery_effective_visibility($gallery);
+    $visibilityChanged = $originalVisibility !== $galleryVisibility;
+    $galleryPostcondition = $visibilityChanged
+        ? admin_mutation_postcondition('gallery_visibility', [
+            'gallery_id' => $galleryId,
+            'visibility' => $galleryVisibility,
+        ])
+        : ($galleryUpdatedAt !== ''
+            ? admin_mutation_postcondition('gallery_updated_at', [
+                'gallery_id' => $galleryId,
+                'updated_at' => $galleryUpdatedAt,
+            ])
+            : admin_mutation_postcondition('gallery_identity', ['gallery_id' => $galleryId]));
+    // $editUrl keeps the active editor tab while the side panel remains mounted.
+    $editUrl = admin_edit_gallery_tab_url($galleryId, $returnTab);
+
+    // $contexts stores every public render context whose server-rendered state can have changed.
+    $contexts = [
+        admin_mutation_public_gallery_context(
+            $galleryId,
+            $galleryUrl,
+            $galleryPostcondition,
+            $identityChanged ? 'canonical' : 'preserve_view'
+        ),
     ];
+
+    // $oldParent and $newParent are loaded after persistence only for authoritative render URLs.
+    $oldParent = $oldParentId > 0 ? find_gallery($oldParentId, true) : null;
+    $newParent = $newParentId > 0 ? find_gallery($newParentId, true) : null;
+    $oldParentUrl = is_array($oldParent) ? gallery_public_url($oldParent) : url_for('home');
+    $newParentUrl = is_array($newParent) ? gallery_public_url($newParent) : url_for('home');
+
+    if ($oldParentId === $newParentId) {
+        $galleryRenderedInParent = admin_mutation_gallery_is_rendered_in_context($gallery, $newParentId);
+        $contexts[] = admin_mutation_public_gallery_context(
+            $newParentId,
+            $newParentUrl,
+            $galleryRenderedInParent
+                ? ($visibilityChanged
+                    ? admin_mutation_postcondition('gallery_visibility', [
+                        'gallery_id' => $galleryId,
+                        'visibility' => $galleryVisibility,
+                    ])
+                    : ($galleryUpdatedAt !== ''
+                        ? admin_mutation_postcondition('gallery_updated_at', [
+                            'gallery_id' => $galleryId,
+                            'updated_at' => $galleryUpdatedAt,
+                        ])
+                        : admin_mutation_postcondition('gallery_identity', ['gallery_id' => $galleryId])))
+                : admin_mutation_gallery_membership_postcondition($galleryId, $newParentId, false)
+        );
+    } else {
+        $contexts[] = admin_mutation_public_gallery_context(
+            $oldParentId,
+            $oldParentUrl,
+            admin_mutation_gallery_membership_postcondition($galleryId, $oldParentId, false)
+        );
+        $contexts[] = admin_mutation_public_gallery_context(
+            $newParentId,
+            $newParentUrl,
+            admin_mutation_gallery_membership_postcondition(
+                $galleryId,
+                $newParentId,
+                admin_mutation_gallery_is_rendered_in_context($gallery, $newParentId)
+            )
+        );
+    }
+
+    // $envelope stores the Stage 2 canonical completion result used by the shared coordinator.
+    $envelope = admin_mutation_success_envelope(
+        $notice,
+        admin_mutation_descriptor('gallery.update', 'gallery', 'update', [$galleryId]),
+        admin_mutation_panel_metadata('gallery-edit', $editUrl, true),
+        $contexts,
+        ['redirect_url' => $editUrl]
+    );
+
+    // Workflow-specific result fields remain available to the editor UI; completion semantics live only in the canonical envelope.
+    return array_merge($envelope, [
+        'type' => 'gallery',
+        'gallery_id' => $galleryId,
+        'gallery_title' => (string) ($gallery['title'] ?? ''),
+        'gallery_url' => $galleryUrl,
+        'edit_url' => $editUrl,
+        'refresh_url' => $galleryUrl,
+        'old_gallery_url' => $oldGalleryUrl,
+        'identity_changed' => $identityChanged,
+        'old_parent_gallery_id' => $oldParentId,
+        'old_parent_gallery_url' => $oldParentUrl,
+        'parent_gallery_id' => $newParentId,
+        'parent_gallery_url' => $newParentUrl,
+        'gallery_visibility' => $galleryVisibility,
+        'gallery_visibility_changed' => $visibilityChanged,
+        'gallery_visibility_label' => gallery_visibility_label($galleryVisibility),
+        'gallery_visibility_hint' => $galleryVisibility === 'unpublished'
+            ? t('gallery.card.unpublished_admin_hint', 'Only logged-in admins can see this gallery in listings.')
+            : '',
+    ]);
 }
 
 /**
@@ -293,14 +451,134 @@ function admin_edit_gallery_success_response(array $gallery, string $notice, str
  * @param array $imageIds Image ids value.
  * @return array Structured result data for the caller.
  */
-function admin_bulk_images_success_response(array $gallery, string $notice, string $returnTab, string $action, array $imageIds = []): array
+function admin_bulk_images_success_response(array $gallery, string $notice, string $returnTab, string $action, array $imageIds = [], array $details = []): array
 {
-    $payload = admin_edit_gallery_success_response($gallery, $notice, $returnTab);
-    $payload['type'] = 'gallery_image_bulk';
-    $payload['bulk_action'] = $action;
-    $payload['image_ids'] = array_values(array_map('intval', $imageIds));
-    $payload['cover_image_id'] = (int) ($gallery['cover_image_id'] ?? 0);
-    return $payload;
+    // $galleryId stores the source gallery for every bulk image mutation.
+    $galleryId = (int) ($gallery['id'] ?? 0);
+    // $normalizedImageIds stores stable image identities without duplicates or invalid values.
+    $normalizedImageIds = [];
+    foreach ($imageIds as $imageId) {
+        $normalizedImageId = (int) $imageId;
+        if ($normalizedImageId > 0 && !in_array($normalizedImageId, $normalizedImageIds, true)) {
+            $normalizedImageIds[] = $normalizedImageId;
+        }
+    }
+    // $galleryUrl and $editUrl are authoritative server render sources for public and panel refreshes.
+    $galleryUrl = gallery_public_url($gallery);
+    $editUrl = admin_edit_gallery_tab_url($galleryId, $returnTab);
+    // $contexts stores observable server-rendered postconditions for the affected public galleries.
+    $contexts = [];
+    // $imageStateRevision verifies image mutations even when the affected card is on another pagination page.
+    $imageStateRevision = trim((string) (gallery_lightbox_state_summary($gallery, false, false)['revision'] ?? ''));
+    // $mutationType and $mutationAction describe the persisted operation independently from the submitted bulk-action value.
+    $mutationType = 'image.bulk_update';
+    $mutationAction = 'update';
+
+    if ($action === 'delete') {
+        $mutationType = 'image.delete';
+        $mutationAction = 'delete';
+        $contexts[] = admin_mutation_public_gallery_context(
+            $galleryId,
+            $galleryUrl,
+            admin_mutation_postcondition('gallery_image_count', [
+                'gallery_id' => $galleryId,
+                'count' => gallery_lightbox_total_count($gallery, false, false),
+            ])
+        );
+    } elseif ($action === 'move_existing' || $action === 'move_new') {
+        $mutationType = 'image.move';
+        $mutationAction = 'move';
+        $contexts[] = admin_mutation_public_gallery_context(
+            $galleryId,
+            $galleryUrl,
+            admin_mutation_postcondition('gallery_image_count', [
+                'gallery_id' => $galleryId,
+                'count' => gallery_lightbox_total_count($gallery, false, false),
+            ])
+        );
+        $destinationGallery = is_array($details['destination_gallery'] ?? null) ? $details['destination_gallery'] : null;
+        if ($destinationGallery !== null) {
+            $destinationGalleryId = (int) ($destinationGallery['id'] ?? 0);
+            $contexts[] = admin_mutation_public_gallery_context(
+                $destinationGalleryId,
+                gallery_public_url($destinationGallery),
+                admin_mutation_postcondition('gallery_image_count', [
+                    'gallery_id' => $destinationGalleryId,
+                    'count' => gallery_lightbox_total_count($destinationGallery, false, false),
+                ])
+            );
+            if ($action === 'move_new') {
+                $destinationParentId = (int) ($destinationGallery['parent_id'] ?? 0);
+                $destinationParent = $destinationParentId > 0 ? find_gallery($destinationParentId, true) : null;
+                $contexts[] = admin_mutation_public_gallery_context(
+                    $destinationParentId,
+                    is_array($destinationParent) ? gallery_public_url($destinationParent) : url_for('home'),
+                    admin_mutation_gallery_membership_postcondition(
+                        $destinationGalleryId,
+                        $destinationParentId,
+                        admin_mutation_gallery_is_rendered_in_context($destinationGallery, $destinationParentId)
+                    )
+                );
+            }
+        }
+    } elseif (in_array($action, ['draft', 'public', 'private'], true)) {
+        $mutationType = 'image.visibility';
+        $mutationAction = 'visibility';
+        $contexts[] = admin_mutation_public_gallery_context(
+            $galleryId,
+            $galleryUrl,
+            admin_mutation_postcondition('image_visibility', [
+                'image_ids' => $normalizedImageIds,
+                'visibility' => $action,
+                'revision' => $imageStateRevision,
+            ])
+        );
+    } elseif (in_array($action, ['nsfw_on', 'nsfw_off'], true)) {
+        $mutationType = 'image.nsfw';
+        $mutationAction = 'nsfw';
+        $contexts[] = admin_mutation_public_gallery_context(
+            $galleryId,
+            $galleryUrl,
+            admin_mutation_postcondition('image_nsfw', [
+                'image_ids' => $normalizedImageIds,
+                'enabled' => $action === 'nsfw_on',
+                'revision' => $imageStateRevision,
+            ])
+        );
+    } elseif ($action === 'cover') {
+        $mutationType = 'gallery.cover';
+        $mutationAction = 'cover';
+        $contexts[] = admin_mutation_public_gallery_context(
+            $galleryId,
+            $galleryUrl,
+            admin_mutation_postcondition('cover_image', ['image_id' => (int) ($gallery['cover_image_id'] ?? 0)])
+        );
+    } elseif ($action === 'thumbs') {
+        $mutationType = 'image.thumbnails';
+        $mutationAction = 'generate';
+    }
+
+    // $envelope stores the canonical Stage 2 result consumed by the shared completion coordinator.
+    $envelope = admin_mutation_success_envelope(
+        $notice,
+        admin_mutation_descriptor($mutationType, $action === 'cover' ? 'gallery' : 'image', $mutationAction, $action === 'cover' ? [$galleryId] : $normalizedImageIds),
+        admin_mutation_panel_metadata('gallery-edit', $editUrl, true),
+        $contexts,
+        ['redirect_url' => $editUrl]
+    );
+
+    // Workflow-specific result fields remain available to the editor UI; completion semantics live only in the canonical envelope.
+    return array_merge($envelope, [
+        'type' => 'gallery_image_bulk',
+        'gallery_id' => $galleryId,
+        'gallery_title' => (string) ($gallery['title'] ?? ''),
+        'gallery_url' => $galleryUrl,
+        'edit_url' => $editUrl,
+        'refresh_url' => $galleryUrl,
+        'bulk_action' => $action,
+        'image_ids' => $normalizedImageIds,
+        'cover_image_id' => (int) ($gallery['cover_image_id'] ?? 0),
+    ]);
 }
 
 /**
@@ -362,10 +640,34 @@ function admin_edit_image_success_response(array $image): array
 {
     // $gallery stores the image gallery used to rebuild public context URLs after saving.
     $gallery = find_gallery((int) ($image['gallery_id'] ?? 0));
-    return [
-        'ok' => true,
+    // $galleryUrl stores the authoritative public render source for this image owner.
+    $galleryUrl = $gallery ? gallery_public_url($gallery) : '';
+    // $editUrl keeps the mounted side-panel editor on the freshly persisted image.
+    $editUrl = url_for('admin_edit_image', ['id' => (int) $image['id'], 'panel' => 1]);
+    // $imageStateRevision lets off-page image edits verify against the full gallery state.
+    $imageStateRevision = $gallery ? trim((string) (gallery_lightbox_state_summary($gallery, false, false)['revision'] ?? '')) : '';
+    // $contexts tells the shared coordinator which public gallery render may now be stale.
+    $contexts = $gallery ? [
+        admin_mutation_public_gallery_context(
+            (int) $gallery['id'],
+            $galleryUrl,
+            admin_mutation_postcondition('image_visibility', [
+                'image_id' => (int) $image['id'],
+                'visibility' => (string) ($image['visibility'] ?? ''),
+                'revision' => $imageStateRevision,
+            ])
+        ),
+    ] : [];
+    // $payload is canonical; the additional top-level fields are workflow-specific editor data, not mutation completion metadata.
+    $payload = admin_mutation_success_envelope(
+        t('admin.gallery_editor.image_saved'),
+        admin_mutation_descriptor('image.update', 'image', 'update', [(int) $image['id']]),
+        admin_mutation_panel_metadata('image-edit', $editUrl, true),
+        $contexts,
+        ['redirect_url' => url_for('admin_edit_image', ['id' => (int) $image['id'], 'saved' => 1])]
+    );
+    return array_merge($payload, [
         'type' => 'image',
-        'message' => t('admin.gallery_editor.image_saved'),
         'image_id' => (int) $image['id'],
         'gallery_id' => (int) ($image['gallery_id'] ?? 0),
         'image_title' => (string) ($image['title'] ?? ''),
@@ -373,9 +675,9 @@ function admin_edit_image_success_response(array $image): array
         'image_visibility' => (string) ($image['visibility'] ?? ''),
         'image_sort_order' => (int) ($image['sort_order'] ?? 0),
         'image_url' => $gallery ? image_public_url($image, $gallery) : '',
-        'gallery_url' => $gallery ? gallery_public_url($gallery) : '',
-        'edit_url' => url_for('admin_edit_image', ['id' => (int) $image['id'], 'saved' => 1]),
-    ];
+        'gallery_url' => $galleryUrl,
+        'edit_url' => $editUrl,
+    ]);
 }
 
 /**
@@ -388,7 +690,7 @@ function admin_panel_error_response(string $message, int $statusCode = 422): voi
 {
     http_response_code($statusCode);
     header('Content-Type: application/json');
-    echo json_encode(['ok' => false, 'error' => $message]);
+    echo json_encode(admin_mutation_error_envelope($message, 'admin_mutation_failed'));
 }
 
 
@@ -507,6 +809,15 @@ function admin_save_gallery_from_input(array $gallery, array $input, array $file
     $accessLegacy = gallery_access_schema_is_confirmed_legacy($accessSchemaStatus);
     // $galleryId stores the gallery being edited.
     $galleryId = (int) ($gallery['id'] ?? 0);
+    // $originalGallery preserves stable pre-mutation placement and route metadata for the completion contract.
+    $originalGallery = $gallery;
+    // $originalGalleryUrl stores the route that represented this gallery before any folder/slug mutation.
+    $originalGalleryUrl = gallery_public_url($gallery);
+    // $oldParentId stores the hierarchy source before a possible reparent operation.
+    $oldParentId = (int) ($gallery['parent_id'] ?? 0);
+    // $faviconDescriptionsBeforeSave snapshots only persisted description content. Remote favicon discovery must not run for unrelated edits such as visibility changes.
+    $faviconDescriptionsBeforeSave = link_favicon_gallery_descriptions($galleryId);
+    sort($faviconDescriptionsBeforeSave, SORT_STRING);
     // $title stores the submitted or preserved public gallery title.
     $title = trim((string) ($input['title'] ?? $gallery['title'] ?? ''));
     if ($title === '') {
@@ -870,11 +1181,19 @@ function admin_save_gallery_from_input(array $gallery, array $input, array $file
     if ($gallery) {
         write_gallery_sidecar($gallery);
     }
-    // Cache unknown-site favicons after the authoritative gallery and translation rows are saved.
-    // This best-effort cosmetic fetch must never make the gallery mutation fail.
-    try {
-        link_favicon_refresh_gallery($galleryId);
-    } catch (Throwable) {
+    // Compare persisted descriptions before starting any outbound favicon work. A full
+    // gallery form contains many fields even when the admin changed only visibility,
+    // so an unconditional favicon refresh would put unrelated remote HTTP latency on
+    // the critical save-response path after the database mutation had already succeeded.
+    $faviconDescriptionsAfterSave = link_favicon_gallery_descriptions($galleryId);
+    sort($faviconDescriptionsAfterSave, SORT_STRING);
+    if ($faviconDescriptionsBeforeSave !== $faviconDescriptionsAfterSave) {
+        // Cache unknown-site favicons only when link-bearing content actually changed.
+        // This best-effort cosmetic fetch must never make the gallery mutation fail.
+        try {
+            link_favicon_refresh_gallery($galleryId);
+        } catch (Throwable) {
+        }
     }
     // $notice stores an intermediate value used by the surrounding gallery workflow.
     $notice = t('admin.gallery_editor.notice_saved', 'Gallery saved.');
@@ -893,6 +1212,9 @@ function admin_save_gallery_from_input(array $gallery, array $input, array $file
         'notice' => $notice,
         'return_tab' => $returnTab,
         'moved' => !empty($moveResult['moved']),
+        'original_gallery' => $originalGallery,
+        'original_gallery_url' => $originalGalleryUrl,
+        'old_parent_id' => $oldParentId,
     ];
 }
 

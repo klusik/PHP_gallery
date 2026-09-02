@@ -103,6 +103,7 @@ use function Gallery\Services\gallery_sort_rows_by_date_preserving_undated_posit
 use function Gallery\Services\gallery_lightbox_excludes_restricted_nsfw;
 use function Gallery\Services\gallery_lightbox_fetch_images;
 use function Gallery\Services\gallery_lightbox_image_position;
+use function Gallery\Services\gallery_lightbox_state_summary;
 use function Gallery\Services\gallery_lightbox_total_count;
 use function Gallery\Services\gallery_nsfw_requirement;
 use function Gallery\Services\gallery_voting_allowed;
@@ -252,8 +253,12 @@ function cms_gallery(): void
     $publicOnly = !$viewer;
     // $lightboxExcludesRestrictedNsfw stores whether the async lightbox list must omit restricted rows.
     $lightboxExcludesRestrictedNsfw = gallery_lightbox_excludes_restricted_nsfw($gallery, $publicOnly);
+    // $imageStateSummary stores the complete photo count plus an aggregate revision used by Admin mutation verification.
+    $imageStateSummary = public_render_profile_db('gallery_image_count_query', static fn (): array => gallery_lightbox_state_summary($gallery, $publicOnly, false));
     // $imageTotalCount stores the complete top-level photo count used by public pagination.
-    $imageTotalCount = public_render_profile_db('gallery_image_count_query', static fn (): int => gallery_lightbox_total_count($gallery, $publicOnly, false));
+    $imageTotalCount = (int) ($imageStateSummary['count'] ?? 0);
+    // $imageStateRevision verifies all-page image mutations without requiring the changed image to be visible on this pagination page.
+    $imageStateRevision = (string) ($imageStateSummary['revision'] ?? '');
     // $lightboxTotalCount stores the async lightbox count after visitor-specific restrictions are applied.
     $lightboxTotalCount = public_render_profile_db('gallery_lightbox_count_query', static fn (): int => gallery_lightbox_total_count($gallery, $publicOnly, true));
     // Variable $images stores the visible page photo rows. It is filled after pagination knows the requested offset.
@@ -283,6 +288,14 @@ function cms_gallery(): void
     }
     // Variable $allChildren stores the complete sorted physical child-gallery list before optional pagination slicing.
     $allChildren = $children;
+    // $subgalleryStateRevision exposes an aggregate child revision for off-page mutation verification.
+    $subgalleryStateRevision = '';
+    foreach ($allChildren as $childGallery) {
+        $candidateRevision = trim((string) ($childGallery['updated_at'] ?? ''));
+        if ($candidateRevision > $subgalleryStateRevision) {
+            $subgalleryStateRevision = $candidateRevision;
+        }
+    }
     // Variable $photoMapsAllowed stores whether individual photos may expose EXIF GPS points.
     $photoMapsAllowed = gallery_allows_gps_maps($gallery);
     // Variable $galleryMapAvailable stores whether the map button should be shown without building the full payload.
@@ -403,7 +416,7 @@ function cms_gallery(): void
         ? public_render_profile_span('gallery_hero_branch_image_count', static fn (): int => gallery_branch_image_count((int) $gallery['id'], true))
         : 0;
 
-    echo '<section class="hero" data-public-gallery-id="' . (int) $gallery['id'] . '">';
+    echo '<section class="hero" data-public-gallery-id="' . (int) $gallery['id'] . '" data-public-gallery-visibility="' . e(gallery_effective_visibility($gallery)) . '" data-public-gallery-updated-at="' . e((string) ($gallery['updated_at'] ?? '')) . '" data-public-cover-image-id="' . max(0, (int) ($gallery['cover_image_id'] ?? 0)) . '" data-public-image-count="' . (int) $imageTotalCount . '" data-public-image-revision="' . e($imageStateRevision) . '" data-public-subgallery-count="' . count($allChildren) . '" data-public-subgallery-revision="' . e($subgalleryStateRevision) . '" data-public-smart-gallery-count="' . (count($topSmartChildren) + count($bottomSmartChildren)) . '" data-admin-mutation-canonical-url="' . e(gallery_public_url($gallery)) . '">';
     // Keep the title, date, description, and breadcrumbs in one primary column so long descriptions do not become a narrow middle strip.
     echo '<div class="hero-topbar">';
     echo '<div class="hero-primary">';
@@ -460,13 +473,13 @@ function cms_gallery(): void
     }
     render_public_smart_gallery_attachment_group($topSmartChildren, 'top', $paginationSettings, $smartGalleryCardContexts);
     if ($children) {
-        echo '<section class="panel public-subgallery-panel" data-public-subgallery-section aria-label="' . e(t('public.subgalleries', 'Subgalleries')) . '">';
+        echo '<section class="panel public-subgallery-panel" data-public-subgallery-section data-public-context-gallery-id="' . (int) $gallery['id'] . '" data-public-subgallery-total-count="' . count($allChildren) . '" data-public-subgallery-revision="' . e($subgalleryStateRevision) . '" data-public-gallery-page="' . (int) ($childPagination['current_page'] ?? 1) . '" data-public-gallery-total-pages="' . (int) ($childPagination['total_pages'] ?? 1) . '" aria-label="' . e(t('public.subgalleries', 'Subgalleries')) . '">';
         render_public_subgallery_date_sort_toolbar($gallery, $subgalleryDateSortMode, $datedSubgalleryCount, count($allChildren));
         if ($subgalleryDateSortMode === '') {
             render_public_page_reorder_toolbar('gallery', $gallery, !empty($paginationSettings['enabled']) ? $childPagination : [], count($children), count($allChildren));
         }
         render_pagination_controls(!empty($paginationSettings['enabled']) ? $childPagination : [], t('pagination.subgallery_pages', 'Subgallery pages'));
-        echo '<div class="grid' . e(pagination_grid_columns_class($paginationSettings)) . '" data-public-reorder-list="gallery" data-public-subgallery-grid>';
+        echo '<div class="grid' . e(pagination_grid_columns_class($paginationSettings)) . '" data-public-reorder-list="gallery" data-public-subgallery-grid data-public-context-gallery-id="' . (int) $gallery['id'] . '" data-public-subgallery-total-count="' . count($allChildren) . '" data-public-subgallery-revision="' . e($subgalleryStateRevision) . '" data-public-gallery-page="' . (int) ($childPagination['current_page'] ?? 1) . '" data-public-gallery-total-pages="' . (int) ($childPagination['total_pages'] ?? 1) . '">';
         public_render_profile_count('rendered_subgalleries', count($children));
         $subgalleryCardContexts = public_render_profile_span('subgallery_card_context_preload', static fn (): array => public_gallery_card_rendering_contexts($children, true, true));
         public_render_profile_span('render_subgallery_cards', static function () use ($children, $publicSubgalleryReorderEnabled, $subgalleryCardContexts): void {
@@ -501,7 +514,7 @@ function cms_gallery(): void
             $lightboxEndpointParams['view_as'] = 'anonymous';
         }
         $lightboxConfigAttributes = $lightboxFeatureEnabled ? ' data-lightbox-config data-lightbox-endpoint="' . e(url_for('gallery_lightbox_data', $lightboxEndpointParams)) . '" data-lightbox-total="' . (int) $lightboxTotalCount . '" data-lightbox-window-size="60" data-lightbox-browsing-mode="' . e($lightboxBrowsingMode) . '" data-lightbox-maps-enabled="' . ($mapsAllowed ? '1' : '0') . '" data-lightbox-gallery-map-url="' . e($galleryMapUrl) . '" data-lightbox-gallery-map-title="' . e((string) $gallery['title']) . '"' : '';
-        echo '<section class="grid gallery-image-grid' . e(pagination_grid_columns_class($paginationSettings)) . '" data-public-reorder-list="photo" data-gallery-image-list' . $lightboxConfigAttributes . '>';
+        echo '<section class="grid gallery-image-grid' . e(pagination_grid_columns_class($paginationSettings)) . '" data-public-reorder-list="photo" data-gallery-image-list data-public-context-gallery-id="' . (int) $gallery['id'] . '" data-public-image-total-count="' . (int) $imageTotalCount . '" data-public-image-revision="' . e($imageStateRevision) . '" data-public-image-page="' . (int) ($photoPagination['current_page'] ?? $photoCurrentPage) . '" data-public-image-total-pages="' . (int) ($photoPagination['total_pages'] ?? 1) . '"' . $lightboxConfigAttributes . '>';
     }
     public_render_profile_count('rendered_images', count($images));
     // Viewer favourites are personalized only for an authenticated viewer and never participate in gallery authorization.
@@ -524,7 +537,7 @@ function cms_gallery(): void
         // Variable $imageNeedsNsfwGate stores whether this card must avoid exposing thumbnail/media URLs.
         $imageNeedsNsfwGate = $publicOnly && image_nsfw_restricted($image, $gallery) && !visitor_can_access_nsfw_content();
         if ($imageNeedsNsfwGate) {
-            echo '<article class="image-card nsfw-card"><div class="image-stage nsfw-stage"><a class="nsfw-placeholder" href="' . e(image_public_url($image, $gallery)) . '"><strong>' . e(t('public.nsfw_photo_title', '18+ photo')) . '</strong><span>' . e(t('public.nsfw_photo_message', 'Confirm your age to view this restricted photo.')) . '</span></a></div>';
+            echo '<article class="image-card nsfw-card" data-public-photo-order-item data-public-order-id="' . (int) $image['id'] . '" data-public-image-visibility="' . e((string) ($image['visibility'] ?? '')) . '" data-public-image-nsfw="' . ((int) ($image['nsfw_enabled'] ?? 0) === 1 ? '1' : '0') . '" data-public-image-updated-at="' . e((string) ($image['updated_at'] ?? '')) . '"><div class="image-stage nsfw-stage"><a class="nsfw-placeholder" href="' . e(image_public_url($image, $gallery)) . '"><strong>' . e(t('public.nsfw_photo_title', '18+ photo')) . '</strong><span>' . e(t('public.nsfw_photo_message', 'Confirm your age to view this restricted photo.')) . '</span></a></div>';
             render_public_image_admin_edit_link($image);
             render_public_image_admin_delete_form($image);
             echo '</article>';
@@ -569,7 +582,7 @@ function cms_gallery(): void
         $viewerFavouriteAttribute = $viewerFavouriteAvailableForImage ? ' data-viewer-favourite="' . (!empty($viewerFavouriteStates[(int) $image['id']]) ? '1' : '0') . '"' : '';
         $viewerCollectionAvailableForImage = $viewerCollectionControlsEnabled
             && (!$viewerCollectionRequiresSourceRecheck || viewer_source_image_can_reference((int) $image['id']));
-        echo '<article class="' . e($imageCardClass) . '" data-public-photo-order-item data-public-order-id="' . (int) $image['id'] . '"' . $pictureManagerAttributes . $lightboxAttributes . $viewerFavouriteAttribute . '>';
+        echo '<article class="' . e($imageCardClass) . '" data-public-photo-order-item data-public-order-id="' . (int) $image['id'] . '" data-public-image-visibility="' . e((string) ($image['visibility'] ?? '')) . '" data-public-image-nsfw="' . ((int) ($image['nsfw_enabled'] ?? 0) === 1 ? '1' : '0') . '" data-public-image-updated-at="' . e((string) ($image['updated_at'] ?? '')) . '"' . $pictureManagerAttributes . $lightboxAttributes . $viewerFavouriteAttribute . '>';
         if ($publicPhotoReorderEnabled) {
             echo '<button type="button" class="public-reorder-handle public-photo-reorder-handle" data-public-reorder-handle aria-label="' . e(t('public.reorder.drag_photo_label', 'Drag photo to reorder visible photos')) . '" title="' . e(t('public.reorder.drag_photo_title', 'Drag to reorder this visible photo')) . '"><span aria-hidden="true">↕</span><span>' . e(t('public.reorder.move_photo', 'Move photo')) . '</span></button>';
         }

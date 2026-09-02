@@ -114,12 +114,12 @@ function evaluateFunction(declaration, context = {}) {
 assert.match(createControllerSource, /\$gallery\s*=\s*admin_create_gallery_from_input\(\$_POST\);/);
 assert.match(createControllerSource, /if \(admin_wants_json\(\)\)[\s\S]*admin_new_gallery_success_response\(\$gallery\)/);
 assert.match(createControllerSource, /'gallery_id'\s*=>\s*\(int\) \$gallery\['id'\]/);
-assert.match(createControllerSource, /'refresh_url'\s*=>\s*\$parentGalleryUrl !== '' \? \$parentGalleryUrl : url_for\('home'\)/);
+assert.match(createControllerSource, /admin_mutation_public_gallery_context\([\s\S]*admin_mutation_gallery_membership_postcondition\(/);
 
 // Create and edit submissions are delegated at document level, so forms injected
 // by a later panel refresh are intercepted without rebinding the whole page.
 assert.match(sidePanelSource, /document\.addEventListener\('submit', async \(event\) => \{[\s\S]*?\[data-gallery-panel-create-form\][\s\S]*?submitAdminGalleryPanelCreateForm\(form\)/);
-assert.match(sidePanelSource, /document\.addEventListener\('submit', async \(event\) => \{[\s\S]*?\[data-admin-panel-edit-form\][\s\S]*?submitAdminPanelEditForm\(form\)/);
+assert.match(sidePanelSource, /document\.addEventListener\('submit', async \(event\) => \{[\s\S]*?\[data-admin-panel-edit-form\][\s\S]*?submitAdminPanelEditForm\(form,/);
 assert.match(sidePanelSource, /body\.innerHTML = sidePanelContentFromHtml\(html, workflow\);[\s\S]*prepareAdminSidePanelLoadedContent\(body, workflow,/);
 
 // Bind the real delegated setup once, then create form objects afterwards to model
@@ -203,140 +203,25 @@ assert.equal(delegatedEditCalls, 1, 'Dynamically rendered edit form must use the
 // Gallery mutations are explicitly panel-persistent. Other editors keep their
 // previous completion behavior and are intentionally outside this fix.
 const keepsPanelOpen = evaluateFunction(extractFunction(sidePanelSource, 'adminSidePanelMutationKeepsPanelOpen'));
-for (const source of ['create', 'gallery-edit', 'gallery-image-bulk', 'upload']) {
+for (const source of ['create', 'gallery-edit', 'gallery-image-bulk', 'image-edit', 'tag-edit', 'upload']) {
     assert.equal(keepsPanelOpen(source), true, `${source} must keep the panel open`);
 }
-for (const source of ['image-edit', 'tag-edit', '']) {
+for (const source of ['']) {
     assert.equal(keepsPanelOpen(source), false, `${source || 'empty source'} must retain existing close behavior`);
 }
 assert.match(sidePanelSource, /const shouldKeepPanelOpen = adminSidePanelMutationKeepsPanelOpen\(source\);[\s\S]*if \(panel instanceof HTMLElement && !shouldKeepPanelOpen\) \{\s*closeAdminGallerySidePanel\(panel\);/);
 
-// Create refresh must call the canonical context refresher, which already owns
-// cache busting, no-store semantics, fragment replacement, and lifecycle rebinding.
+// Create refresh delegates fetch/cache semantics and owned replacement to the
+// canonical coordinator helpers rather than duplicating them in this module.
 const canonicalRefreshSource = extractFunction(sidePanelSource, 'refreshCurrentGalleryContextFromServer');
-assert.match(canonicalRefreshSource, /searchParams\.set\('_panel_refresh', String\(Date\.now\(\)\)\)/);
-assert.match(canonicalRefreshSource, /cache:\s*'no-store'/);
-assert.match(canonicalRefreshSource, /replacePublicGalleryFragmentsFromParsedDocument\(parsed\)/);
+assert.match(canonicalRefreshSource, /fetchAdminMutationRenderDocument\(source,/);
+assert.match(canonicalRefreshSource, /replaceOwnedPublicGalleryFragments\(parsed,/);
 assert.doesNotMatch(canonicalRefreshSource, /window\.location\.(?:href\s*=|reload\s*\()/);
-
-let refreshedUrl = '';
-let focusedGalleryId = '';
-const refreshCreatedSection = evaluateFunction(
-    extractFunction(sidePanelSource, 'refreshPublicSubgallerySectionFromServer'),
-    {
-        currentVisiblePageRefreshUrl: () => 'https://example.test/gallery/parent/3/',
-        refreshCurrentGalleryContextFromServer: async (url) => {
-            refreshedUrl = url;
-            return true;
-        },
-        publicSubgalleryContainsGalleryId: () => true,
-        waitForGalleryMutationRefreshRetry: async () => {},
-        focusCreatedGalleryCard: (galleryId) => {
-            focusedGalleryId = galleryId;
-        },
-    },
-);
-assert.equal(await refreshCreatedSection('77'), true);
-assert.equal(refreshedUrl, 'https://example.test/gallery/parent/3/');
-assert.equal(focusedGalleryId, '77');
-
-focusedGalleryId = '';
-const failedRefreshCreatedSection = evaluateFunction(
-    extractFunction(sidePanelSource, 'refreshPublicSubgallerySectionFromServer'),
-    {
-        currentVisiblePageRefreshUrl: () => 'https://example.test/gallery/parent/3/',
-        refreshCurrentGalleryContextFromServer: async () => false,
-        publicSubgalleryContainsGalleryId: () => false,
-        waitForGalleryMutationRefreshRetry: async () => {},
-        focusCreatedGalleryCard: (galleryId) => {
-            focusedGalleryId = galleryId;
-        },
-    },
-);
-assert.equal(await failedRefreshCreatedSection('77'), false);
-assert.equal(focusedGalleryId, '', 'Failed refresh must not pretend the created card was found');
-
-// Model the canonical public fragment replacement with a stale live section and
-// a fresh server section that contains the newly created/edited gallery card.
-class FakeElement {
-    constructor(label, liveMap = null) {
-        this.label = label;
-        this.liveMap = liveMap;
-        this.galleryIds = [];
-    }
-
-    replaceWith(fresh) {
-        if (!this.liveMap) {
-            return;
-        }
-        for (const [selector, value] of this.liveMap.entries()) {
-            if (value === this) {
-                this.liveMap.set(selector, fresh);
-            }
-        }
-    }
-
-    remove() {
-        if (!this.liveMap) {
-            return;
-        }
-        for (const [selector, value] of this.liveMap.entries()) {
-            if (value === this) {
-                this.liveMap.set(selector, null);
-            }
-        }
-    }
-}
-
-const liveMap = new Map();
-const staleSection = new FakeElement('stale subgallery section', liveMap);
-staleSection.galleryIds = ['12'];
-const freshSection = new FakeElement('fresh subgallery section');
-freshSection.galleryIds = ['12', '77'];
-liveMap.set('.hero', null);
-liveMap.set('[data-back-to-top-scope]', null);
-liveMap.set('[data-public-subgallery-section]', staleSection);
-liveMap.set('[data-gallery-image-list]', null);
-const freshMap = new Map([
-    ['.hero', null],
-    ['[data-back-to-top-scope]', null],
-    ['[data-public-subgallery-section]', freshSection],
-    ['[data-gallery-image-list]', null],
-]);
-let teardownCount = 0;
-let replacementEventCount = 0;
-const replacePublicFragments = evaluateFunction(
-    extractFunction(sidePanelSource, 'replacePublicGalleryFragmentsFromParsedDocument'),
-    {
-        HTMLElement: FakeElement,
-        document: {
-            querySelector: (selector) => liveMap.get(selector) ?? null,
-            dispatchEvent: () => {
-                replacementEventCount++;
-            },
-        },
-        CustomEvent: class CustomEvent {},
-        replacePublicGalleryFrame: () => false,
-        teardownPublicGalleryLifecycleBeforeRefresh: () => {
-            teardownCount++;
-        },
-    },
-);
-const parsedDocument = {
-    querySelector: (selector) => freshMap.get(selector) ?? null,
-};
-assert.equal(replacePublicFragments(parsedDocument), true);
-assert.equal(liveMap.get('[data-public-subgallery-section]'), freshSection);
-assert.deepEqual(liveMap.get('[data-public-subgallery-section]').galleryIds, ['12', '77']);
-assert.equal(teardownCount, 1);
-assert.equal(replacementEventCount, 1);
 
 // The gallery mutation completion path must not rewrite or reload the browser URL.
 for (const functionName of [
     'submitAdminGalleryPanelCreateForm',
-    'reflectCreatedGalleryInCurrentView',
     'reflectSavedGalleryInCurrentView',
-    'refreshPublicSubgallerySectionFromServer',
     'refreshCurrentGalleryContextFromServer',
 ]) {
     const functionSource = extractFunction(sidePanelSource, functionName);
@@ -345,6 +230,6 @@ for (const functionName of [
 }
 
 // Changing the side-panel module must also change its import cache key.
-assert.match(operationsSource, /admin-side-panel\.js\?v=20260902-gallery-created-refresh-v2/);
+assert.match(operationsSource, /admin-side-panel\.js\?v=20260902-mutation-stage4-v1/);
 
 console.log('PASS admin_side_panel_gallery_refresh_test');

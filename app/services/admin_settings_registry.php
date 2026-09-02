@@ -145,7 +145,7 @@ function admin_settings_specialized_catalog(): array
         ['browser_upload_hard_worker_cap', 'uploads', 'Browser upload worker hard cap', 'Absolute safety cap for browser preparation workers.', 'admin_upload_settings', ['tab' => 'browser'], ''],
         ['browser_upload_batch_size_policy', 'uploads', 'Browser upload batch policy', 'Choose how prepared ZIP batches are bounded against server limits.', 'admin_upload_settings', ['tab' => 'browser'], ''],
         ['browser_upload_zip_size_threshold_ratio', 'uploads', 'Browser ZIP threshold ratio', 'Target fraction of the PHP upload limit used by each ZIP batch.', 'admin_upload_settings', ['tab' => 'browser'], ''],
-        ['browser_upload_max_zip_batch_bytes', 'uploads', 'Absolute browser ZIP batch cap', 'Hard byte-size limit applied to each prepared upload ZIP.', 'admin_upload_settings', ['tab' => 'browser'], ''],
+        ['browser_upload_max_zip_batch_bytes', 'uploads', 'Preferred browser ZIP batch target', 'Soft byte-size target for normal prepared ZIP batches; one atomic image package may exceed it up to the PHP upload limit.', 'admin_upload_settings', ['tab' => 'browser'], ''],
         ['browser_thumbnail_rebuild_source_chunk', 'uploads', 'Browser thumbnail source chunk', 'Original-file download chunk size for browser thumbnail rebuilding.', 'admin_upload_settings', ['tab' => 'browser'], ''],
         ['upload_api_key_management', 'advanced', 'Upload automation API keys', 'Create, revoke, and inspect gallery-scoped upload API credentials.', 'admin_api_manager', [], ''],
 

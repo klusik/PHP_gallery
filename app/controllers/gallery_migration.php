@@ -30,7 +30,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-27
+ *   2026-09-02
  */
 
 declare(strict_types=1);
@@ -40,8 +40,16 @@ namespace Gallery\Controllers;
 use RuntimeException;
 use Throwable;
 use const Gallery\Services\GALLERY_MIGRATION_PROTOCOL_VERSION;
+use function Gallery\Core\admin_mutation_descriptor;
+use function Gallery\Core\admin_mutation_error_envelope;
+use function Gallery\Core\admin_mutation_panel_metadata;
+use function Gallery\Core\admin_mutation_postcondition;
+use function Gallery\Core\admin_mutation_public_gallery_context;
+use function Gallery\Core\admin_mutation_success_envelope;
+use function Gallery\Core\current_user;
+use function Gallery\Core\gallery_public_url;
 use function Gallery\Core\request_method;
-use function Gallery\Core\require_admin;
+use function Gallery\Core\url_for;
 use function Gallery\Services\find_gallery;
 use function Gallery\Services\find_upload_automation_token;
 use function Gallery\Services\gallery_migration_asset_ref_from_input;
@@ -294,20 +302,41 @@ function cms_gallery_migration_receive_status(): void
  */
 function cms_admin_gallery_migration(): void
 {
-    require_admin();
+    // $user stores the authenticated administrator for this JSON-only browser workflow.
+    $user = current_user();
+    if (!$user || (string) ($user['role'] ?? '') !== 'admin') {
+        gallery_migration_json(admin_mutation_error_envelope(
+            t('auth.admin_required', 'Admin access is required.'),
+            'auth.admin_required',
+            gallery_migration_admin_mutation_descriptor((string) ($_POST['action'] ?? ''), (int) ($_POST['gallery_id'] ?? 0))
+        ), 403);
+        return;
+    }
     if (request_method() !== 'POST') {
-        gallery_migration_json(['ok' => false, 'error' => gallery_migration_t('gallery_migration.error.method_not_allowed', 'Method not allowed.')], 405);
+        gallery_migration_json(admin_mutation_error_envelope(
+            gallery_migration_t('gallery_migration.error.method_not_allowed', 'Method not allowed.'),
+            'gallery_migration.method_not_allowed',
+            gallery_migration_admin_mutation_descriptor((string) ($_POST['action'] ?? ''), (int) ($_POST['gallery_id'] ?? 0))
+        ), 405);
         return;
     }
     if (!upload_automation_token_csrf_valid()) {
-        gallery_migration_json(['ok' => false, 'error' => t('security.invalid_csrf', 'Invalid CSRF token.')], 400);
+        gallery_migration_json(admin_mutation_error_envelope(
+            t('security.invalid_csrf', 'Invalid CSRF token.'),
+            'security.invalid_csrf',
+            gallery_migration_admin_mutation_descriptor((string) ($_POST['action'] ?? ''), (int) ($_POST['gallery_id'] ?? 0))
+        ), 400);
         return;
     }
 
     $galleryId = (int) ($_POST['gallery_id'] ?? 0);
     $gallery = find_gallery($galleryId, true) ?: find_gallery($galleryId);
     if (!$gallery) {
-        gallery_migration_json(['ok' => false, 'error' => t('admin.gallery_not_found', 'Gallery not found.')], 404);
+        gallery_migration_json(admin_mutation_error_envelope(
+            t('admin.gallery_not_found', 'Gallery not found.'),
+            'gallery.not_found',
+            gallery_migration_admin_mutation_descriptor((string) ($_POST['action'] ?? ''), $galleryId)
+        ), 404);
         return;
     }
 
@@ -316,17 +345,21 @@ function cms_admin_gallery_migration(): void
         $payload = match ($action) {
             'pull_manifest' => gallery_migration_admin_pull_manifest($galleryId),
             'pull_asset' => gallery_migration_admin_pull_asset($galleryId),
-            'pull_complete' => gallery_migration_complete_job((string) ($_POST['job_id'] ?? ''), $galleryId),
+            'pull_complete' => gallery_migration_admin_pull_complete($galleryId),
             'pull_status' => gallery_migration_job_status_response((string) ($_POST['job_id'] ?? ''), $galleryId, gallery_migration_asset_ref_from_input($_POST)),
             'push_manifest' => gallery_migration_admin_push_manifest($galleryId),
             'push_asset' => gallery_migration_admin_push_asset($galleryId),
             'push_status' => gallery_migration_admin_push_status(),
-            'push_complete' => gallery_migration_admin_push_complete(),
+            'push_complete' => gallery_migration_admin_push_complete($galleryId),
             default => throw new RuntimeException(gallery_migration_t('gallery_migration.error.action_invalid', 'Unsupported migration action.')),
         };
         gallery_migration_json($payload);
     } catch (Throwable $exception) {
-        gallery_migration_json(['ok' => false, 'error' => $exception->getMessage()], 422);
+        gallery_migration_json(admin_mutation_error_envelope(
+            $exception->getMessage(),
+            'gallery_migration.step_failed',
+            gallery_migration_admin_mutation_descriptor((string) ($_POST['action'] ?? ''), $galleryId)
+        ), 422);
     }
 }
 
@@ -352,7 +385,7 @@ function gallery_migration_admin_pull_manifest(int $targetGalleryId): array
     }
 
     $prepared = gallery_migration_prepare_target_job($targetGalleryId, $manifest, 'target_pull');
-    return [
+    $payload = [
         'ok' => true,
         'mode' => 'target_pull',
         'job_id' => $prepared['job_id'],
@@ -361,6 +394,7 @@ function gallery_migration_admin_pull_manifest(int $targetGalleryId): array
         'counts' => $prepared['counts'],
         'message' => gallery_migration_t('gallery_migration.pull_manifest_ready', 'Source manifest accepted. Asset transfer can start.'),
     ];
+    return gallery_migration_admin_local_completion_payload($targetGalleryId, $payload);
 }
 
 /**
@@ -391,6 +425,19 @@ function gallery_migration_admin_pull_asset(int $targetGalleryId): array
     } finally {
         @unlink($tmp);
     }
+}
+
+/**
+ * Complete a browser-driven pull into the local gallery and return canonical invalidation metadata.
+ *
+ * @param int $targetGalleryId Local target gallery id.
+ * @return array Structured completion payload for the migration browser workflow.
+ */
+function gallery_migration_admin_pull_complete(int $targetGalleryId): array
+{
+    $payload = gallery_migration_complete_job((string) ($_POST['job_id'] ?? ''), $targetGalleryId);
+    $payload['message'] = gallery_migration_t('gallery_migration.complete_local', 'Gallery migration completed successfully.');
+    return gallery_migration_admin_local_completion_payload($targetGalleryId, $payload);
 }
 
 /**
@@ -482,7 +529,7 @@ function gallery_migration_admin_push_status(): array
  *
  * @return array Structured result data for the caller.
  */
-function gallery_migration_admin_push_complete(): array
+function gallery_migration_admin_push_complete(int $sourceGalleryId): array
 {
     $targetUrl = (string) ($_POST['target_url'] ?? '');
     $targetApiKey = trim((string) ($_POST['target_api_key'] ?? ''));
@@ -491,7 +538,91 @@ function gallery_migration_admin_push_complete(): array
     }
 
     $endpoint = gallery_migration_endpoint_url($targetUrl, 'gallery_migration_receive_complete');
-    return gallery_migration_http_post_form_json($endpoint, ['job_id' => (string) ($_POST['job_id'] ?? '')], $targetApiKey, gallery_migration_request_timeout_seconds());
+    $payload = gallery_migration_http_post_form_json($endpoint, ['job_id' => (string) ($_POST['job_id'] ?? '')], $targetApiKey, gallery_migration_request_timeout_seconds());
+    $payload['message'] = (string) ($payload['message'] ?? gallery_migration_t('gallery_migration.complete_remote', 'Remote gallery migration completed successfully.'));
+    return array_merge($payload, admin_mutation_success_envelope(
+        (string) $payload['message'],
+        gallery_migration_admin_mutation_descriptor('push_complete', $sourceGalleryId),
+        null,
+        [],
+        []
+    ));
+}
+
+/**
+ * Add the canonical side-panel mutation envelope to a local target-pull result.
+ *
+ * Gallery Migration owns progress/result markup while transfer is running. The envelope also
+ * identifies the owning gallery-editor fragment because imported metadata makes the other editor
+ * tabs stale. The browser decides when to refresh that fragment, while canonical render mode
+ * handles imported slug/path changes without rewriting the visible browser URL behind the drawer.
+ *
+ * @param int $galleryId Local target gallery id.
+ * @param array<string,mixed> $payload Existing migration step/completion payload.
+ * @return array<string,mixed> Existing fields plus canonical mutation completion metadata.
+ */
+function gallery_migration_admin_local_completion_payload(int $galleryId, array $payload): array
+{
+    $gallery = find_gallery($galleryId, true) ?: find_gallery($galleryId);
+    $renderUrl = $gallery ? gallery_public_url($gallery) : (string) ($payload['gallery_url'] ?? '');
+    $contexts = [];
+    if ($galleryId > 0 && $renderUrl !== '') {
+        $updatedAt = trim((string) ($gallery['updated_at'] ?? ''));
+        $contexts[] = admin_mutation_public_gallery_context(
+            $galleryId,
+            $renderUrl,
+            $updatedAt !== ''
+                ? admin_mutation_postcondition('gallery_updated_at', ['gallery_id' => $galleryId, 'updated_at' => $updatedAt])
+                : admin_mutation_postcondition('gallery_identity', ['gallery_id' => $galleryId]),
+            'canonical'
+        );
+
+        // The parent/root card can change when imported title, visibility, slug, or display metadata changes.
+        $parentId = (int) ($gallery['parent_id'] ?? 0);
+        $parent = $parentId > 0 ? find_gallery($parentId, true) : null;
+        $contexts[] = admin_mutation_public_gallery_context(
+            $parentId,
+            is_array($parent) ? gallery_public_url($parent) : url_for('home'),
+            $updatedAt !== ''
+                ? admin_mutation_postcondition('gallery_updated_at', ['gallery_id' => $galleryId, 'updated_at' => $updatedAt])
+                : null
+        );
+    }
+    $message = (string) ($payload['message'] ?? gallery_migration_t('gallery_migration.local_state_changed', 'Local gallery migration state changed.'));
+    $panelUrl = url_for('admin_edit_gallery', ['id' => $galleryId, 'panel' => 1]);
+    $envelope = admin_mutation_success_envelope(
+        $message,
+        gallery_migration_admin_mutation_descriptor('pull_complete', $galleryId),
+        admin_mutation_panel_metadata('gallery-edit', $panelUrl, true),
+        $contexts,
+        []
+    );
+
+    // Existing transfer fields stay available to the migration progress UI during Stage 3 migration.
+    return array_merge($payload, $envelope, [
+        'gallery_id' => $galleryId,
+    ]);
+}
+
+/**
+ * Build typed mutation metadata for one browser-driven migration direction.
+ *
+ * Remote target ids live in another installation namespace and therefore are never emitted
+ * as local stable entity ids for push operations.
+ *
+ * @param string $action Migration step/action name.
+ * @param int $galleryId Local source or target gallery id.
+ * @return array{type:string,entity:string,action:string,entity_ids:array<int,int>}
+ */
+function gallery_migration_admin_mutation_descriptor(string $action, int $galleryId): array
+{
+    $isPull = str_starts_with($action, 'pull_');
+    return admin_mutation_descriptor(
+        $isPull ? 'gallery.migration.pull' : 'gallery.migration.push',
+        $isPull ? 'gallery' : 'remote_gallery',
+        $isPull ? 'import' : 'export',
+        $isPull && $galleryId > 0 ? [$galleryId] : []
+    );
 }
 
 /**

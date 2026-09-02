@@ -28,7 +28,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-06-16
+ *   2026-09-02
  */
 
 import {escapeHtmlAttribute, escapeHtmlText, i18n} from './admin-core.js?v=20260614-upload-order-v2';
@@ -214,11 +214,11 @@ async function applyMetadataOrganizerDraft(form, submitter) {
             const payload = await readJsonResponse(response);
             const result = payload.result || {};
             result.client_ms = clientMs;
-            mergeApplyResult(aggregate, result);
-            mergeApplyPayloadUrls(aggregate, payload);
             if (!response.ok || payload.ok === false) {
                 throw new Error(payload.error || payload.message || firstFailure(result) || i18n('admin.metadata_organizer.progress_apply_failed', 'Metadata organizer apply failed.'));
             }
+            mergeApplyResult(aggregate, result);
+            mergeApplyMutationEnvelope(aggregate, payload);
 
             if (total <= 0) {
                 total = Number(result.remaining_before || 0);
@@ -744,24 +744,25 @@ function emptyApplyAggregate() {
         derivatives_moved: 0,
         group_results: [],
         failures: [],
-        edit_url: '',
-        gallery_url: '',
+        mutation_envelope: null,
     };
 }
 
 /**
- * Copy top-level refresh URLs from an apply JSON response.
+ * Preserve the canonical successful mutation envelope from an apply batch.
+ *
+ * The organizer may use multiple server requests, but browser completion semantics
+ * must always come from the server-authored envelope. The final successful batch
+ * carries the latest postcondition for the gallery editor and public context.
  *
  * @param {Record<string, *>} target Mutable aggregate.
  * @param {Record<string, *>} payload Apply JSON response.
  */
-function mergeApplyPayloadUrls(target, payload) {
-    if (String(payload.edit_url || '') !== '') {
-        target.edit_url = String(payload.edit_url || '');
+function mergeApplyMutationEnvelope(target, payload) {
+    if (!payload.mutation || typeof payload.mutation !== 'object' || !Array.isArray(payload.contexts)) {
+        throw new Error(i18n('admin.metadata_organizer.mutation_contract_missing', 'The organizer saved changes, but the server did not return the required mutation completion contract.'));
     }
-    if (String(payload.gallery_url || '') !== '') {
-        target.gallery_url = String(payload.gallery_url || '');
-    }
+    target.mutation_envelope = payload;
 }
 
 /**
@@ -771,25 +772,21 @@ function mergeApplyPayloadUrls(target, payload) {
  * @param {Record<string, *>} aggregate Apply aggregate.
  */
 function refreshAfterApply(root, aggregate) {
+    if (!aggregate.mutation_envelope) {
+        throw new Error(i18n('admin.metadata_organizer.mutation_contract_missing', 'The organizer saved changes, but the server did not return the required mutation completion contract.'));
+    }
     appendLog(root, i18n('admin.metadata_organizer.log_refresh_start', 'Refreshing visible gallery content...'));
     const detail = {
         handled: false,
-        result: {
-            edit_url: String(aggregate.edit_url || ''),
-            gallery_url: String(aggregate.gallery_url || ''),
-            message: applySummaryText(aggregate),
-        },
+        result: aggregate.mutation_envelope,
     };
     document.dispatchEvent(new CustomEvent('php-gallery:metadata-organizer-applied', {
         bubbles: true,
         detail,
     }));
-    if (detail.handled) {
-        return;
+    if (!detail.handled) {
+        setProgress(root, 100, i18n('admin.metadata_organizer.refresh_unavailable', 'The organizer completed, but the visible gallery could not be synchronized. Reopen the page later to verify the saved result.'));
     }
-    window.setTimeout(() => {
-        window.location.reload();
-    }, 350);
 }
 
 /**

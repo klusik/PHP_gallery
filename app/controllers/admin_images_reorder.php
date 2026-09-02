@@ -37,8 +37,14 @@ declare(strict_types=1);
 namespace Gallery\Controllers;
 
 use Throwable;
+use function Gallery\Core\admin_mutation_descriptor;
+use function Gallery\Core\admin_mutation_panel_metadata;
+use function Gallery\Core\admin_mutation_postcondition;
+use function Gallery\Core\admin_mutation_public_gallery_context;
+use function Gallery\Core\admin_mutation_success_envelope;
 use function Gallery\Core\db;
 use function Gallery\Core\flash_message;
+use function Gallery\Core\gallery_public_url;
 use function Gallery\Core\now_sql;
 use function Gallery\Core\redirect_to;
 use function Gallery\Core\require_admin;
@@ -99,7 +105,7 @@ function cms_admin_reorder_images(): void
                 'visible_count' => $visibleCount,
                 'submitted_image_ids' => $submittedIds,
             ]);
-            admin_reorder_images_response(true, 'Visible photo order saved.', $galleryId);
+            admin_reorder_images_response(true, 'Visible photo order saved.', $galleryId, $nextIds);
         } catch (Throwable $exception) {
             admin_reorder_images_response(false, 'Image order could not be saved: ' . $exception->getMessage(), $galleryId);
         }
@@ -121,7 +127,7 @@ function cms_admin_reorder_images(): void
         admin_save_image_order($galleryId, $submittedIds, 'image.reordered', 'Admin reordered gallery images.', [
             'images' => count($submittedIds),
         ]);
-        admin_reorder_images_response(true, 'Image order saved.', $galleryId);
+        admin_reorder_images_response(true, 'Image order saved.', $galleryId, $submittedIds);
     } catch (Throwable $exception) {
         admin_reorder_images_response(false, 'Image order could not be saved: ' . $exception->getMessage(), $galleryId);
     }
@@ -176,8 +182,9 @@ function admin_save_image_order(int $galleryId, array $orderedIds, string $event
  * @param bool $ok Whether the reorder operation completed successfully.
  * @param string $message Human-readable status message for the admin UI.
  * @param int $galleryId Gallery id used to build the redirect fallback.
+ * @param array<int> $orderedIds Complete persisted image order after a successful save.
  */
-function admin_reorder_images_response(bool $ok, string $message, int $galleryId): void
+function admin_reorder_images_response(bool $ok, string $message, int $galleryId, array $orderedIds = []): void
 {
     // Variable $acceptHeader stores the browser Accept header used to detect the JavaScript request path.
     $acceptHeader = (string) ($_SERVER['HTTP_ACCEPT'] ?? '');
@@ -185,7 +192,27 @@ function admin_reorder_images_response(bool $ok, string $message, int $galleryId
     $isJsonRequest = str_contains($acceptHeader, 'application/json') || (string) ($_POST['ajax'] ?? '') === '1';
     if ($isJsonRequest) {
         header('Content-Type: application/json; charset=utf-8');
-        echo json_encode(['ok' => $ok, 'message' => $message], JSON_THROW_ON_ERROR);
+        if ($ok) {
+            $gallery = $galleryId > 0 ? find_gallery($galleryId, true) : null;
+            $editUrl = admin_edit_gallery_tab_url($galleryId, 'admin-edit-images');
+            $normalizedOrderedIds = array_values(array_unique(array_filter(array_map('intval', $orderedIds), static fn (int $imageId): bool => $imageId > 0)));
+            echo json_encode(admin_mutation_success_envelope(
+                $message,
+                admin_mutation_descriptor('image.reorder', 'image', 'reorder', $normalizedOrderedIds),
+                admin_mutation_panel_metadata('gallery-edit', $editUrl, true),
+                is_array($gallery) ? [admin_mutation_public_gallery_context(
+                    $galleryId,
+                    gallery_public_url($gallery),
+                    admin_mutation_postcondition('image_order', [
+                        'image_ids' => $normalizedOrderedIds,
+                        'count' => count($normalizedOrderedIds),
+                    ])
+                )] : [],
+                ['redirect_url' => $editUrl]
+            ), JSON_THROW_ON_ERROR);
+        } else {
+            echo json_encode(['ok' => false, 'message' => $message, 'error' => $message], JSON_THROW_ON_ERROR);
+        }
         return;
     }
     flash_message('admin_notice', $message);

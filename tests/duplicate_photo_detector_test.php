@@ -455,7 +455,7 @@ $galleryEntrypointSource = file_get_contents(__DIR__ . '/../public/assets/galler
 if (!is_string($galleryEntrypointSource)) {
     throw new RuntimeException('Could not read gallery JavaScript entrypoint for detector cache-busting assertion.');
 }
-assert_duplicate_detector_true(str_contains($galleryEntrypointSource, 'admin-duplicate-photo-detector.js?v=20260808-duplicate-photo-detector-ledger-v4'), 'gallery entrypoint cache-busts the detector module after the in-panel review-ledger enhancement');
+assert_duplicate_detector_true(str_contains($galleryEntrypointSource, 'admin-duplicate-photo-detector.js?v=20260902-mutation-stage3-v2'), 'gallery entrypoint cache-busts the detector module after the canonical in-panel review-ledger enhancement');
 
 $editorSource = (string) file_get_contents(__DIR__ . '/../app/controllers/admin_galleries_edit.php')
     . (string) file_get_contents(__DIR__ . '/../app/controllers/admin_galleries_edit_page.php')

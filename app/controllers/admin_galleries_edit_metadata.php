@@ -42,6 +42,11 @@ use const Gallery\Services\CMS_PAGINATION_DEFAULT_COLUMNS;
 use const Gallery\Services\CMS_PAGINATION_DEFAULT_ROWS;
 use const Gallery\Services\CMS_PAGINATION_MAX_COLUMNS;
 use const Gallery\Services\CMS_PAGINATION_MAX_ROWS;
+use function Gallery\Core\admin_mutation_descriptor;
+use function Gallery\Core\admin_mutation_panel_metadata;
+use function Gallery\Core\admin_mutation_postcondition;
+use function Gallery\Core\admin_mutation_public_gallery_context;
+use function Gallery\Core\admin_mutation_success_envelope;
 use function Gallery\Core\csrf_field;
 use function Gallery\Core\csrf_token;
 use function Gallery\Core\current_user;
@@ -117,6 +122,7 @@ use function Gallery\Services\gallery_lightbox_browsing_mode_override_label;
 use function Gallery\Services\gallery_lightbox_browsing_mode_schema_ready;
 use function Gallery\Services\gallery_lightbox_browsing_mode_source_label;
 use function Gallery\Services\gallery_lightbox_browsing_mode_storage_value;
+use function Gallery\Services\gallery_lightbox_total_count;
 use function Gallery\Services\gallery_metadata_organizer_apply_date_plan;
 use function Gallery\Services\gallery_metadata_organizer_apply_date_plan_batch;
 use function Gallery\Services\gallery_metadata_organizer_apply_notice;
@@ -360,13 +366,60 @@ function admin_apply_gallery_metadata_organizer_date_plan_batch(array $gallery):
         $limit = max(1, min(10, (int) ($_POST['batch_limit'] ?? 1)));
         $result = gallery_metadata_organizer_apply_date_plan_batch($galleryId, $_POST, $limit);
         $ok = empty($result['failures']);
-        admin_gallery_metadata_organizer_json_response([
+        $message = gallery_metadata_organizer_apply_notice($result);
+        $editUrl = admin_edit_gallery_tab_url($galleryId, 'admin-edit-organizer');
+        $sourceGallery = find_gallery($galleryId, true) ?: $gallery;
+        $galleryUrl = gallery_public_url($sourceGallery);
+        // $movedImageIds and $contexts describe every source/destination page touched by this batch.
+        $movedImageIds = [];
+        $contexts = [admin_mutation_public_gallery_context(
+            $galleryId,
+            $galleryUrl,
+            admin_mutation_postcondition('gallery_image_count', [
+                'gallery_id' => $galleryId,
+                'count' => gallery_lightbox_total_count($sourceGallery, false, false),
+            ])
+        )];
+        $seenDestinationIds = [];
+        foreach ((array) ($result['group_results'] ?? []) as $groupResult) {
+            foreach ((array) ($groupResult['image_ids'] ?? []) as $imageId) {
+                $imageId = (int) $imageId;
+                if ($imageId > 0 && !in_array($imageId, $movedImageIds, true)) {
+                    $movedImageIds[] = $imageId;
+                }
+            }
+            $destinationGalleryId = (int) ($groupResult['destination_gallery_id'] ?? 0);
+            if ($destinationGalleryId <= 0 || isset($seenDestinationIds[$destinationGalleryId])) {
+                continue;
+            }
+            $destinationGallery = find_gallery($destinationGalleryId, true);
+            if (!$destinationGallery) {
+                continue;
+            }
+            $seenDestinationIds[$destinationGalleryId] = true;
+            $contexts[] = admin_mutation_public_gallery_context(
+                $destinationGalleryId,
+                gallery_public_url($destinationGallery),
+                admin_mutation_postcondition('gallery_image_count', [
+                    'gallery_id' => $destinationGalleryId,
+                    'count' => gallery_lightbox_total_count($destinationGallery, false, false),
+                ])
+            );
+        }
+        $payload = $ok ? admin_mutation_success_envelope(
+            $message,
+            admin_mutation_descriptor('image.metadata_organize', 'image', 'move', $movedImageIds),
+            admin_mutation_panel_metadata('gallery-edit', $editUrl, true),
+            $contexts,
+            ['redirect_url' => $editUrl]
+        ) : ['ok' => false];
+        admin_gallery_metadata_organizer_json_response(array_merge($payload, [
             'ok' => $ok,
-            'message' => gallery_metadata_organizer_apply_notice($result),
+            'message' => $message,
             'result' => $result,
-            'edit_url' => admin_edit_gallery_tab_url($galleryId, 'admin-edit-organizer'),
-            'gallery_url' => gallery_public_url($gallery),
-        ], $ok ? 200 : 422);
+            'edit_url' => $editUrl,
+            'gallery_url' => $galleryUrl,
+        ]), $ok ? 200 : 422);
     } catch (Throwable $exception) {
         admin_gallery_metadata_organizer_json_response([
             'ok' => false,

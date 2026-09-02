@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-08-11
+ *   2026-09-02
  */
 
 declare(strict_types=1);
@@ -295,7 +295,7 @@ function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicR
     // $showAdminUnpublishedMarker keeps unpublished galleries visible to admins while making their non-public state obvious.
     $showAdminUnpublishedMarker = current_user() && !admin_anonymous_preview_active() && $effectiveVisibility === 'unpublished';
     $galleryCardClass = 'gallery-card is-gallery-description-' . $descriptionLayout . ($isProtectedPublicCard ? ' is-protected-gallery' : '') . ($showPublicReorderHandle ? ' has-public-reorder-handle' : '') . ($showAdminUnpublishedMarker ? ' is-admin-unpublished-gallery' : '');
-    echo '<article class="' . e($galleryCardClass) . '" data-gallery-id="' . (int) $gallery['id'] . '" data-gallery-visibility="' . e($effectiveVisibility) . '" data-public-gallery-order-item data-public-order-id="' . (int) $gallery['id'] . '">';
+    echo '<article class="' . e($galleryCardClass) . '" data-gallery-id="' . (int) $gallery['id'] . '" data-gallery-visibility="' . e($effectiveVisibility) . '" data-gallery-updated-at="' . e((string) ($gallery['updated_at'] ?? '')) . '" data-public-gallery-order-item data-public-order-id="' . (int) $gallery['id'] . '">';
     if ($showAdminUnpublishedMarker) {
         echo '<span class="admin-gallery-visibility-marker" title="' . e(t('gallery.card.unpublished_admin_hint', 'Only logged-in admins can see this gallery in listings.')) . '">' . e(t('gallery.visibility.unpublished', 'unpublished')) . '</span>';
     }
@@ -374,7 +374,13 @@ function render_smart_gallery_card(array $smartGallery, int $cardIndex = 0, arra
     $sourceGallery = isset($cardContext['source_gallery']) && is_array($cardContext['source_gallery']) ? $cardContext['source_gallery'] : [];
     $presentation = smart_gallery_effective_presentation($smartGallery);
     $url = url_for('smart_gallery', ['slug' => (string) $smartGallery['slug']]);
-    echo '<article class="gallery-card smart-gallery-card is-gallery-description-' . e((string) $presentation['card_layout']) . '" data-smart-gallery-id="' . (int) $smartGallery['id'] . '">';
+    // $placementAttributes expose physical attachment ordering for Stage 4 mutation verification.
+    $placementAttributes = '';
+    if (array_key_exists('placement', $smartGallery)) {
+        $placementAttributes .= ' data-smart-gallery-placement="' . e((string) $smartGallery['placement']) . '"';
+        $placementAttributes .= ' data-smart-gallery-placement-order="' . max(0, (int) ($smartGallery['placement_order'] ?? 0)) . '"';
+    }
+    echo '<article class="gallery-card smart-gallery-card is-gallery-description-' . e((string) $presentation['card_layout']) . '" data-smart-gallery-id="' . (int) $smartGallery['id'] . '"' . $placementAttributes . '>';
     echo '<a class="gallery-card-media" href="' . e($url) . '" aria-label="' . e(t('smart_gallery.open_named', 'Open Smart Gallery {title}', ['title' => (string) $smartGallery['title']])) . '">';
     echo '<span class="subgallery-stack-badge" aria-label="' . e(t('gallery.card.subgallery_image_count', 'Subgallery containing {count} images', ['count' => $count])) . '"><span class="subgallery-stack-icon" aria-hidden="true"><span></span><span></span><span></span></span><span class="subgallery-stack-count">' . $count . '</span></span>';
     if (is_array($cover)) {

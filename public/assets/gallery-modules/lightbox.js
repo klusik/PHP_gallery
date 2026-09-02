@@ -115,6 +115,11 @@ export function setupGalleryLightbox() {
     const controller = new AbortController();
     galleryLightboxState.controller = controller;
 
+    // lightboxHiddenCleanupTimer must exist before cleanup registration because this setup may
+    // return early on gallery-list views that contain no lightbox-capable photo cards. A later
+    // fragment refresh still tears down that setup instance and therefore executes its cleanup.
+    let lightboxHiddenCleanupTimer = 0;
+
     // cards stores the authoritative image order for the viewer.
     let cards = [];
     // Variable `overlay` stores this steps working value.
@@ -707,8 +712,6 @@ export function setupGalleryLightbox() {
     let lightboxPreloadDrainHandle = 0;
     // lightboxPreloadDrainUsesIdleCallback tracks which browser timer API owns the drain handle.
     let lightboxPreloadDrainUsesIdleCallback = false;
-    // lightboxHiddenCleanupTimer releases settled reusable decoded entries only after a sustained hidden period.
-    let lightboxHiddenCleanupTimer = 0;
     // fullscreenHideTimer stores state or configuration for the gallery front-end flow.
     let fullscreenHideTimer = null;
     // lightboxSlideshowTimer stores the automatic advance timer while slideshow mode is active.

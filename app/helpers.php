@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-08-11
+ *   2026-09-02
  */
 
 declare(strict_types=1);
@@ -38,6 +38,7 @@ namespace Gallery\Core;
 
 
 require_once __DIR__ . '/helpers_request.php';
+require_once __DIR__ . '/helpers_mutation.php';
 require_once __DIR__ . '/helpers_public_urls.php';
 require_once __DIR__ . '/helpers_runtime.php';
 require_once __DIR__ . '/helpers_admin_rendering.php';

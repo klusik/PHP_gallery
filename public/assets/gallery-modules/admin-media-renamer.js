@@ -125,6 +125,12 @@ async function handleMediaRenamerSubmit(event) {
         }
         setRenamerProgress(progress, 92, i18n('admin.media_renamer.progress_refreshing', 'Refreshing the renamer view...'));
         replaceRenamerWorkspace(form, payload);
+        if (payload.mutation && Array.isArray(payload.contexts)) {
+            document.dispatchEvent(new CustomEvent('php-gallery:auxiliary-mutation-success', {
+                bubbles: true,
+                detail: {source: 'media-renamer', result: payload},
+            }));
+        }
         setRenamerProgress(null, 100, '');
     } catch (error) {
         setRenamerProgress(progress, 100, error instanceof Error ? error.message : String(error));
@@ -765,8 +771,7 @@ function replaceRenamerWorkspace(form, payload) {
     const selector = form.dataset.mediaRenamerTarget || '';
     const target = selector ? document.querySelector(selector) : findRenamerWorkspace(form);
     if (!(target instanceof HTMLElement)) {
-        window.location.reload();
-        return;
+        throw new Error(i18n('admin.media_renamer.refresh_target_missing', 'The rename completed, but its panel result could not be refreshed. Reopen the tool to verify the saved result.'));
     }
 
     if (typeof payload.panel_html === 'string' && payload.panel_html !== '') {
@@ -777,5 +782,5 @@ function replaceRenamerWorkspace(form, payload) {
         target.outerHTML = payload.body_html;
         return;
     }
-    window.location.reload();
+    throw new Error(i18n('admin.media_renamer.refresh_markup_missing', 'The rename completed, but the server did not return refreshed panel markup. Reopen the tool to verify the saved result.'));
 }

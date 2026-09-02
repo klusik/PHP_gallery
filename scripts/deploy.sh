@@ -53,6 +53,8 @@ deploy_folder=""
 upload_media=""
 # Variable make_zip_deploy stores whether a zip package is created.
 make_zip_deploy=""
+# Variable include_tests stores whether a local source package includes repository tests.
+include_tests="false"
 # Variable deploy_target stores the resolved local deployment target.
 deploy_target=""
 
@@ -79,11 +81,12 @@ Options:
   --deploy-folder PATH
   --upload-media true|false
   --make-zip-deploy true|false
+  --include-tests true|false   Include tests in local source packages (default: false; unavailable for FTP)
   -h, --help
 
 Compatibility aliases:
   -Mode, -HostName, -UserName, -Password, -RemoteFolder, -DeployFolder,
-  -UploadMedia, -MakeZipDeploy
+  -UploadMedia, -MakeZipDeploy, -IncludeTests
 USAGE
 }
 
@@ -147,6 +150,10 @@ parse_arguments() {
                 ;;
             --make-zip-deploy|-MakeZipDeploy)
                 make_zip_deploy="${2:-}"
+                shift 2
+                ;;
+            --include-tests|-IncludeTests)
+                include_tests="${2:-}"
                 shift 2
                 ;;
             -h|--help)
@@ -345,6 +352,22 @@ fi
 if [[ "$mode" != "local" && "$mode" != "ftp" ]]; then
     printf 'Deployment mode must be local or ftp.\n' >&2
     exit 2
+fi
+
+# Tests are source-review material, not production deployment content. Keep the
+# default exclusion and refuse an FTP opt-in so the suite cannot be uploaded by accident.
+if is_truthy "$include_tests"; then
+    if [[ "$mode" == "ftp" ]]; then
+        printf '%s\n' 'Tests may be included only in local deployment folders or ZIP packages.' >&2
+        exit 2
+    fi
+    filtered_exclude_dir_names=()
+    for excluded_dir_name in "${exclude_dir_names_anywhere[@]}"; do
+        if [[ "$excluded_dir_name" != "tests" ]]; then
+            filtered_exclude_dir_names+=("$excluded_dir_name")
+        fi
+    done
+    exclude_dir_names_anywhere=("${filtered_exclude_dir_names[@]}")
 fi
 
 # Variable include_media stores this scripts working value.

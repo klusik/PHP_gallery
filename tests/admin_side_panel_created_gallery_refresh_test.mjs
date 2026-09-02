@@ -112,28 +112,13 @@ assert.match(
 );
 assert.match(
     sidePanelSource,
-    /if \(Boolean\(result\.created_gallery\)\) \{\s*await reflectCreatedGalleryInCurrentView\(result\);\s*return;/s,
-    'Created upload workflows must use the created-gallery background refresh path.'
+    /return \['create', 'gallery-edit', 'gallery-image-bulk', 'image-edit', 'tag-edit', 'upload'\]\.includes\(source\);/,
+    'Persistent editor and create/upload completion must keep the side panel open.'
 );
 assert.match(
     sidePanelSource,
-    /return \['create', 'gallery-edit', 'gallery-image-bulk', 'upload'\]\.includes\(source\);/,
-    'Create-and-upload completion must keep the side panel open.'
-);
-assert.match(
-    sidePanelSource,
-    /const backgroundRefreshUrl = currentPageOwnsCreatedGallery \? currentVisiblePageRefreshUrl\(\) : refreshUrl;/,
-    'A child created for the visible gallery must refresh the exact current URL, not only the canonical parent URL.'
-);
-assert.match(
-    sidePanelSource,
-    /const retryDelaysMs = \[0, 120, 320\];/,
-    'Created-gallery refresh must use bounded retries.'
-);
-assert.match(
-    sidePanelSource,
-    /if \(publicSubgalleryContainsGalleryId\(galleryId\)\)/,
-    'A fragment replacement is successful only after the new gallery card is actually visible.'
+    /completeAdminMutation\(result, \{/,
+    'Created upload workflows must converge on the canonical completion coordinator.'
 );
 
 const browserFns = loadFunctions(browserUploadSource, ['emptyBrowserAggregate', 'mergeBrowserResult']);
@@ -153,99 +138,24 @@ const aggregateFromExisting = browserFns.emptyBrowserAggregate(null, 100, 1);
 browserFns.mergeBrowserResult(aggregateFromExisting, {created_gallery: true});
 assert.equal(aggregateFromExisting.created_gallery, true, 'A batch response can promote the aggregate to created_gallery.');
 
-class FakeHTMLElement {
-    constructor(dataset = {}, querySelector = () => null) {
-        this.dataset = dataset;
-        this._querySelector = querySelector;
-    }
-    querySelector(selector) {
-        return this._querySelector(selector);
-    }
-}
-
-let hero = new FakeHTMLElement({publicGalleryId: '42'});
-let gridGalleryIds = new Set(['100']);
-const sidePanelFns = loadFunctions(
-    sidePanelSource,
-    ['currentPublicGalleryId', 'createdGalleryBelongsToCurrentPublicPage', 'publicSubgalleryContainsGalleryId'],
-    {
-        HTMLElement: FakeHTMLElement,
-        document: {
-            querySelector(selector) {
-                if (selector === '.hero[data-public-gallery-id]') return hero;
-                if (selector === '[data-public-subgallery-grid]') {
-                    return new FakeHTMLElement({}, (childSelector) => {
-                        const match = childSelector.match(/data-gallery-id="([^"]+)"/);
-                        return match && gridGalleryIds.has(match[1]) ? new FakeHTMLElement() : null;
-                    });
-                }
-                return null;
-            },
-        },
-        CSS: {escape: (value) => String(value)},
-    }
-);
-assert.equal(sidePanelFns.currentPublicGalleryId(), 42);
-assert.equal(sidePanelFns.createdGalleryBelongsToCurrentPublicPage({parent_gallery_id: 42}), true);
-assert.equal(sidePanelFns.createdGalleryBelongsToCurrentPublicPage({parent_gallery_id: 7}), false);
-assert.equal(sidePanelFns.publicSubgalleryContainsGalleryId('100'), true);
-assert.equal(sidePanelFns.publicSubgalleryContainsGalleryId('101'), false);
-
-let refreshAttempts = 0;
-let focusedGalleryId = '';
-const retryGridGalleryIds = new Set();
-const refreshFns = loadFunctions(
-    sidePanelSource,
-    ['refreshPublicSubgallerySectionFromServer', 'publicSubgalleryContainsGalleryId', 'waitForGalleryMutationRefreshRetry'],
-    {
-        HTMLElement: FakeHTMLElement,
-        CSS: {escape: (value) => String(value)},
-        window: {setTimeout: (callback) => callback()},
-        document: {
-            querySelector(selector) {
-                if (selector !== '[data-public-subgallery-grid]') return null;
-                return new FakeHTMLElement({}, (childSelector) => {
-                    const match = childSelector.match(/data-gallery-id="([^"]+)"/);
-                    return match && retryGridGalleryIds.has(match[1]) ? new FakeHTMLElement() : null;
-                });
-            },
-        },
-        currentVisiblePageRefreshUrl: () => 'https://example.test/gallery/parent/2/?photo_page=3',
-        refreshCurrentGalleryContextFromServer: async (sourceUrl) => {
-            refreshAttempts++;
-            assert.equal(sourceUrl, 'https://example.test/gallery/parent/2/?photo_page=3');
-            if (refreshAttempts === 2) retryGridGalleryIds.add('101');
-            return true;
-        },
-        focusCreatedGalleryCard: (galleryId) => { focusedGalleryId = String(galleryId); },
-    }
-);
-assert.equal(
-    await refreshFns.refreshPublicSubgallerySectionFromServer('101', 'https://example.test/gallery/parent/2/?photo_page=3'),
-    true,
-    'A stale first fragment must be retried until the created gallery is present.'
-);
-assert.equal(refreshAttempts, 2, 'The refresh should stop immediately after the created card appears.');
-assert.equal(focusedGalleryId, '101', 'The created card should be focused only after the DOM postcondition succeeds.');
-
 assert.match(
     publicGalleryPageSource,
-    /<section class="hero" data-public-gallery-id="' \. \(int\) \$gallery\['id'\] \. '">/,
+    /<section class="hero" data-public-gallery-id="' \. \(int\) \$gallery\['id'\]/,
     'Public gallery hero must expose the current gallery id for pagination-safe refresh ownership.'
 );
 assert.match(
     adminOperationsSource,
-    /admin-side-panel\.js\?v=20260902-gallery-created-refresh-v2/,
+    /admin-side-panel\.js\?v=20260902-mutation-stage4-v1/,
     'admin-operations must cache-bust the changed side-panel module.'
 );
 assert.match(
     sidePanelSource,
-    /admin-browser-upload\.js\?v=20260902-gallery-created-refresh-v2/,
+    /admin-browser-upload\.js\?v=20260902-mutation-stage2-v1/,
     'The side-panel module must cache-bust the changed browser-upload module.'
 );
 assert.match(
     galleryEntrySource,
-    /admin-operations\.js\?v=20260902-gallery-created-refresh-v2/,
+    /admin-operations\.js\?v=20260902-mutation-stage4-v1/,
     'The gallery entrypoint must cache-bust the changed admin operations module.'
 );
 

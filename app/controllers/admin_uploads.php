@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-04
+ *   2026-09-02
  */
 
 declare(strict_types=1);
@@ -44,6 +44,14 @@ use function Gallery\Core\current_user;
 use function Gallery\Core\e;
 use function Gallery\Core\flash_message;
 use function Gallery\Core\gallery_public_url;
+use function Gallery\Core\admin_mutation_descriptor;
+use function Gallery\Core\admin_mutation_gallery_is_rendered_in_context;
+use function Gallery\Core\admin_mutation_gallery_membership_postcondition;
+use function Gallery\Core\admin_mutation_error_envelope;
+use function Gallery\Core\admin_mutation_panel_metadata;
+use function Gallery\Core\admin_mutation_postcondition;
+use function Gallery\Core\admin_mutation_public_gallery_context;
+use function Gallery\Core\admin_mutation_success_envelope;
 use function Gallery\Core\redirect_to;
 use function Gallery\Core\render_footer;
 use function Gallery\Core\render_header;
@@ -64,6 +72,7 @@ use function Gallery\Services\find_gallery;
 use function Gallery\Services\find_image;
 use function Gallery\Services\gallery_upload_entries;
 use function Gallery\Services\gallery_upload_entries_or_empty;
+use function Gallery\Services\gallery_lightbox_total_count;
 use function Gallery\Services\heic_conversion_supported;
 use function Gallery\Services\raw_conversion_supported;
 use function Gallery\Services\set_admin_upload_auto_rename_enabled;
@@ -77,10 +86,23 @@ use function Gallery\Services\admin_log_event;
 
 /**
  * Admin upload controller model.
- * 
- * This module owns the admin upload endpoint and JSON response detection used by asynchronous upload flows.
+ *
+ * This module owns the admin upload endpoint and preserves the controller-namespace facade for the shared JSON mutation detector.
  */
 
+
+/**
+ * Preserve the historical controller-namespace JSON detector while delegating to the canonical helper.
+ *
+ * Existing Stage 2/3 controllers call Gallery\Controllers\admin_wants_json()
+ * without imports. Keep this compatibility facade until those controllers migrate.
+ *
+ * @return bool True when the shared Admin mutation detector expects JSON.
+ */
+function admin_wants_json(): bool
+{
+    return \Gallery\Core\admin_wants_json();
+}
 
 /**
  * Return a safe same-origin URL supplied by the side-panel upload workflow.
@@ -161,12 +183,18 @@ function admin_upload_browser_reject_discarded_body(): bool
         'content_length' => $contentLength,
         'upload_limit_bytes' => $uploadLimit,
     ]);
-    admin_upload_browser_json_response([
-        'ok' => false,
-        'error' => t('browser_upload.error_php_discarded_body', 'The prepared ZIP batch was larger than this PHP request can accept. Lower the browser ZIP ratio, maximum ZIP batch size, or maximum images per batch in Admin upload settings.'),
-        'content_length' => $contentLength,
-        'upload_limit_bytes' => $uploadLimit,
-    ], 413);
+    $message = t('browser_upload.error_php_discarded_body', 'The prepared ZIP batch was larger than this PHP request can accept. Lower the browser ZIP ratio, maximum ZIP batch size, or maximum images per batch in Admin upload settings.');
+    admin_upload_browser_json_response(array_merge(
+        admin_mutation_error_envelope(
+            $message,
+            'browser_upload_body_too_large',
+            admin_mutation_descriptor('image.upload', 'image', 'upload')
+        ),
+        [
+            'content_length' => $contentLength,
+            'upload_limit_bytes' => $uploadLimit,
+        ]
+    ), 413);
     return true;
 }
 
@@ -284,11 +312,19 @@ function cms_admin_upload_browser_batch(): void
 {
     $user = current_user();
     if (!$user || $user['role'] !== 'admin') {
-        admin_upload_browser_json_response(['ok' => false, 'error' => t('admin.upload.error_session_expired', 'Your admin session expired. Please sign in again.')], 401);
+        admin_upload_browser_json_response(admin_mutation_error_envelope(
+            t('admin.upload.error_session_expired', 'Your admin session expired. Please sign in again.'),
+            'admin_session_expired',
+            admin_mutation_descriptor('image.upload', 'image', 'upload')
+        ), 401);
         return;
     }
     if (request_method() !== 'POST') {
-        admin_upload_browser_json_response(['ok' => false, 'error' => t('admin.upload.error_method_not_allowed', 'This upload endpoint accepts POST requests only.')], 405);
+        admin_upload_browser_json_response(admin_mutation_error_envelope(
+            t('admin.upload.error_method_not_allowed', 'This upload endpoint accepts POST requests only.'),
+            'method_not_allowed',
+            admin_mutation_descriptor('image.upload', 'image', 'upload')
+        ), 405);
         return;
     }
     if (admin_upload_browser_reject_discarded_body()) {
@@ -307,10 +343,39 @@ function cms_admin_upload_browser_batch(): void
             $sessionId = bin2hex(random_bytes(12));
         }
         $batchIndex = max(0, (int) ($_POST['batch_index'] ?? 0));
-        $response = browser_upload_store_prepared_zip_batch($galleryId, $_FILES['zip_batch'] ?? [], $sessionId, $batchIndex);
+        $preparedThumbnailsRequired = (string) ($_POST['prepared_thumbnails_required'] ?? '') === '1';
+        $response = browser_upload_store_prepared_zip_batch($galleryId, $_FILES['zip_batch'] ?? [], $sessionId, $batchIndex, $preparedThumbnailsRequired);
         $callerRefreshUrl = admin_upload_safe_refresh_url($_POST['source_url'] ?? '');
         if ($callerRefreshUrl !== '') {
             $response['refresh_url'] = $callerRefreshUrl;
+        }
+        // $gallery stores the authoritative post-batch row used to attach the same canonical completion contract as classic uploads.
+        $gallery = find_gallery($galleryId, true) ?: find_gallery($galleryId);
+        if (is_array($gallery)) {
+            // $imageIds stores stable identifiers returned by this batch before browser-side aggregation combines all batches.
+            $imageIds = array_values(array_filter(array_map('intval', (array) ($response['image_ids'] ?? [])), static fn (int $imageId): bool => $imageId > 0));
+            // $editUrl keeps the editor on its images tab after the batch while the drawer remains mounted.
+            $editUrl = (string) ($response['edit_url'] ?? url_for('admin_edit_gallery', ['id' => $galleryId, 'tab' => 'admin-edit-images']) . '#admin-edit-images');
+            // $renderUrl is the authoritative gallery route. The browser coordinator preserves any visible pagination/query state for this stable gallery id.
+            $renderUrl = gallery_public_url($gallery);
+            // $mutationEnvelope keeps browser batching on the canonical completion contract instead of reconstructing mutation semantics from workflow counters.
+            $mutationEnvelope = admin_mutation_success_envelope(
+                (string) ($response['message'] ?? t('admin.upload.complete', 'Upload complete.')),
+                admin_mutation_descriptor('image.upload', 'image', 'upload', $imageIds),
+                admin_mutation_panel_metadata('gallery-edit', $editUrl, true),
+                [
+                    admin_mutation_public_gallery_context(
+                        $galleryId,
+                        $renderUrl,
+                        admin_mutation_postcondition('gallery_image_count', [
+                            'gallery_id' => $galleryId,
+                            'count' => gallery_lightbox_total_count($gallery, false, false),
+                        ])
+                    ),
+                ],
+                ['redirect_url' => (string) ($response['redirect_url'] ?? $editUrl)]
+            );
+            $response = array_merge($mutationEnvelope, $response);
         }
         admin_upload_browser_json_response($response);
     } catch (Throwable $exception) {
@@ -323,16 +388,20 @@ function cms_admin_upload_browser_batch(): void
             'zip_upload_error' => (int) ($_FILES['zip_batch']['error'] ?? UPLOAD_ERR_NO_FILE),
             'zip_upload_size' => (int) ($_FILES['zip_batch']['size'] ?? 0),
             'zip_upload_name' => (string) ($_FILES['zip_batch']['name'] ?? ''),
+            'prepared_thumbnails_required' => (string) ($_POST['prepared_thumbnails_required'] ?? '') === '1',
         ];
         if ($exception instanceof \Gallery\Services\BrowserUploadValidationException) {
             $errorContext['validation'] = $exception->details();
         }
         admin_log_event('error', 'gallery.browser_upload_failed', 'Browser-prepared upload batch failed.', $errorContext);
-        $response = [
-            'ok' => false,
-            'error' => $exception->getMessage(),
-            'retryable' => false,
-        ];
+        $response = array_merge(
+            admin_mutation_error_envelope(
+                $exception->getMessage(),
+                'browser_upload_batch_failed',
+                admin_mutation_descriptor('image.upload', 'image', 'upload')
+            ),
+            ['retryable' => false]
+        );
         if ($exception instanceof \Gallery\Services\BrowserUploadValidationException) {
             $response['error_context'] = $exception->details();
         }
@@ -355,7 +424,10 @@ function cms_admin_upload(): void
         if ($isAjaxUpload) {
             http_response_code(401);
             header('Content-Type: application/json');
-            echo json_encode(['ok' => false, 'error' => t('admin.upload.error_session_expired', 'Your admin session expired. Please sign in again.')]);
+            echo json_encode(admin_mutation_error_envelope(
+                    t('admin.upload.error_session_expired', 'Your admin session expired. Please sign in again.'),
+                    'admin_session_expired'
+                ));
             return;
         }
         // Preserve the upload URL for normal browser requests so login can resume from the same admin context.
@@ -462,9 +534,41 @@ function cms_admin_upload(): void
             }
             // $editUrl stores the gallery editor target used after upload so the admin can continue managing photos immediately.
             $editUrl = url_for('admin_edit_gallery', ['id' => $gallery['id'], 'uploaded' => (int) $stored['uploaded'], 'scanned' => (int) $stored['scanned'], 'tab' => 'admin-edit-images']) . '#admin-edit-images';
-            // $response stores an intermediate value used by the surrounding gallery workflow.
-            $response = [
-                'ok' => true,
+            // $imageIds stores the stable uploaded image ids used by both the mutation descriptor and upload progress result.
+            $imageIds = array_map('intval', $stored['image_ids'] ?? []);
+            // $redirectUrl stores only the classic/direct-page fallback destination.
+            $redirectUrl = url_for('admin_edit_gallery', ['id' => $gallery['id'], 'uploaded' => (int) $stored['uploaded'], 'scanned' => (int) $stored['scanned'], 'thumbnails' => $thumbnails, 'thumbnail_failed' => $thumbnailFailed, 'scan_failed' => count($scanFailedFilenames), 'tab' => 'admin-edit-images']) . '#admin-edit-images';
+            // $mutationContext stores the public context that may be stale after this upload.
+            $mutationContext = $mode === 'new'
+                ? admin_mutation_public_gallery_context(
+                    $parentGalleryId,
+                    $refreshUrl,
+                    admin_mutation_gallery_membership_postcondition(
+                    (int) $gallery['id'],
+                    $parentGalleryId,
+                    admin_mutation_gallery_is_rendered_in_context($gallery, $parentGalleryId)
+                )
+                )
+                : admin_mutation_public_gallery_context(
+                    (int) $gallery['id'],
+                    $refreshUrl,
+                    admin_mutation_postcondition('gallery_image_count', [
+                        'gallery_id' => (int) $gallery['id'],
+                        'count' => gallery_lightbox_total_count($gallery, false, false),
+                    ])
+                );
+            // $mutationEnvelope stores the Stage 1 canonical completion contract.
+            $mutationEnvelope = admin_mutation_success_envelope(
+                t('admin.operations.upload_complete', 'Upload complete.'),
+                $mode === 'new'
+                    ? admin_mutation_descriptor('gallery.create_with_upload', 'gallery', 'create', [(int) $gallery['id']])
+                    : admin_mutation_descriptor('image.upload', 'image', 'upload', $imageIds),
+                admin_mutation_panel_metadata('gallery-edit', $editUrl, true),
+                [$mutationContext],
+                ['redirect_url' => $redirectUrl]
+            );
+            // $response stores the canonical completion envelope plus workflow-specific upload result fields.
+            $response = array_merge($mutationEnvelope, [
                 'gallery_id' => (int) $gallery['id'],
                 'gallery_ids' => [(int) $gallery['id']],
                 'gallery_title' => (string) ($gallery['title'] ?? ''),
@@ -475,7 +579,7 @@ function cms_admin_upload(): void
                 'refresh_gallery_id' => $refreshGalleryId,
                 'refresh_url' => $refreshUrl,
                 'created_gallery' => $mode === 'new',
-                'image_ids' => array_map('intval', $stored['image_ids'] ?? []),
+                'image_ids' => $imageIds,
                 'filenames' => array_values($stored['filenames'] ?? []),
                 'uploaded' => (int) $stored['uploaded'],
                 'scanned' => (int) $stored['scanned'],
@@ -488,8 +592,8 @@ function cms_admin_upload(): void
                 'rename_warnings' => array_values((array) ($stored['rename_warnings'] ?? [])),
                 'rename_failures' => array_values((array) ($stored['rename_failures'] ?? [])),
                 'upload_events' => array_values((array) ($stored['upload_events'] ?? [])),
-                'redirect_url' => url_for('admin_edit_gallery', ['id' => $gallery['id'], 'uploaded' => (int) $stored['uploaded'], 'scanned' => (int) $stored['scanned'], 'thumbnails' => $thumbnails, 'thumbnail_failed' => $thumbnailFailed, 'scan_failed' => count($scanFailedFilenames), 'tab' => 'admin-edit-images']) . '#admin-edit-images',
-            ];
+                'redirect_url' => $redirectUrl,
+            ]);
             if ($wantsJson) {
                 if (ob_get_level() > 0) {
                     ob_end_clean();
@@ -504,7 +608,11 @@ function cms_admin_upload(): void
             if ($wantsJson) {
                 http_response_code(422);
                 header('Content-Type: application/json');
-                echo json_encode(['ok' => false, 'error' => $exception->getMessage()]);
+                echo json_encode(admin_mutation_error_envelope(
+                    $exception->getMessage(),
+                    'gallery_upload_failed',
+                    admin_mutation_descriptor('image.upload', 'image', 'upload')
+                ));
                 return;
             }
             $_SESSION['admin_upload_error'] = $exception->getMessage();
@@ -626,7 +734,7 @@ function render_admin_upload_browser_checkbox(bool $panelMode = false): void
     $disabled = empty($config['enabled']);
     $checked = $disabled ? '' : ' checked';
     $className = $panelMode ? 'admin-side-panel-browser-upload-toggle' : 'browser-upload-toggle';
-    echo '<label class="' . e($className) . '"><input type="checkbox" name="browser_client_upload" value="1" data-browser-upload-toggle data-browser-upload-config="' . e($encodedConfig) . '"' . $checked . ($disabled ? ' disabled' : '') . '> <span>' . e(t('admin.upload.browser_client_upload_label', 'Prepare thumbnails and ZIP batches in this browser')) . '</span><span class="muted">' . e(t('admin.upload.browser_client_upload_help', 'Checked by default. If browser preparation fails before any server-side write starts, the upload automatically uses the normal server fallback. Uncheck this to use the standard server-side upload path immediately.')) . '</span><span class="muted">' . e(t('admin.upload.browser_zip_help', 'You may also select ZIP archives. Supported images are extracted locally; other entries are skipped. ZIP import never uses the PHP fallback.')) . '</span></label>';
+    echo '<label class="' . e($className) . '"><input type="checkbox" name="browser_client_upload" value="1" data-browser-upload-toggle data-browser-upload-config="' . e($encodedConfig) . '"' . $checked . ($disabled ? ' disabled' : '') . '> <span>' . e(t('admin.upload.browser_client_upload_label', 'Prepare thumbnails and ZIP batches in this browser')) . '</span><span class="muted">' . e(t('admin.upload.browser_client_upload_help', 'Checked by default. When selected photos are present, browser-side processing is strict: preparation failures stop the upload instead of silently switching thumbnail generation to PHP. Uncheck this option to use the standard server-side path.')) . '</span><span class="muted">' . e(t('admin.upload.browser_zip_help', 'You may also select ZIP archives. Supported images are extracted locally; other entries are skipped. ZIP import never uses the PHP fallback.')) . '</span></label>';
 }
 
 /** Return image accept hints plus ZIP only when browser-assisted upload is enabled. */
@@ -732,20 +840,5 @@ function render_admin_upload_new_gallery_form_shell(int $prefillParentId, bool $
     echo '<p class="muted">' . e(t('admin.upload.progress_top_panel_during_upload', 'Progress appears at the top of this panel during upload.')) . '</p>';
     echo '</div>';
     echo '</form></section>';
-}
-
-/**
- * Handles admin wants json logic for the gallery application.
- *
- * @return mixed Result produced by this operation.
- */
-function admin_wants_json(): bool
-{
-    return !empty($_POST['ajax'])
-        || !empty($_GET['ajax'])
-        || !empty($_POST['panel'])
-        || !empty($_GET['panel'])
-        || strtolower((string) ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '')) === 'xmlhttprequest'
-        || str_contains((string) ($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json');
 }
 

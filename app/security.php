@@ -77,8 +77,41 @@ function verify_csrf(): void
     $token = (string) ($_POST['csrf_token'] ?? '');
     if ($token === '' || !hash_equals((string) ($_SESSION['csrf_token'] ?? ''), $token)) {
         http_response_code(400);
+        if (security_request_wants_json()) {
+            header('Content-Type: application/json; charset=UTF-8');
+            header('Cache-Control: no-store, private, max-age=0');
+            echo json_encode([
+                'ok' => false,
+                'error' => t('security.invalid_csrf', 'Invalid CSRF token.'),
+                'error_code' => 'security.invalid_csrf',
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            exit;
+        }
         exit('Invalid CSRF token.');
     }
+}
+
+/**
+ * Return whether the current security boundary should answer with JSON.
+ *
+ * Security checks run before most controller-specific response handling. Enhanced
+ * Admin mutations must therefore not redirect a fetch request to an HTML login page
+ * or emit a plain-text CSRF failure when the caller explicitly requested JSON.
+ *
+ * @return bool True when the request expects JSON mutation semantics.
+ */
+function security_request_wants_json(): bool
+{
+    if (function_exists(__NAMESPACE__ . '\\admin_wants_json')) {
+        return admin_wants_json();
+    }
+
+    return !empty($_POST['ajax'])
+        || !empty($_GET['ajax'])
+        || !empty($_POST['panel'])
+        || !empty($_GET['panel'])
+        || strtolower((string) ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '')) === 'xmlhttprequest'
+        || str_contains(strtolower((string) ($_SERVER['HTTP_ACCEPT'] ?? '')), 'application/json');
 }
 
 /**
@@ -140,6 +173,20 @@ function require_admin(): void
     // Variable $user stores this steps working value.
     $user = current_user();
     if (!$user || $user['role'] !== 'admin') {
+        // Enhanced mutation requests must not follow an authentication redirect and
+        // accidentally parse the HTML login page as their JSON mutation response.
+        if (security_request_wants_json()) {
+            http_response_code(401);
+            header('Content-Type: application/json; charset=UTF-8');
+            header('Cache-Control: no-store, private, max-age=0');
+            echo json_encode([
+                'ok' => false,
+                'error' => t('auth.admin_required', 'Admin access is required.'),
+                'error_code' => 'auth.admin_required',
+                'login_url' => url_for('admin_login', ['return' => current_login_return_target()]),
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            exit;
+        }
         // Preserve the protected URL so successful login resumes the intended admin action.
         redirect_to(url_for('admin_login', ['return' => current_login_return_target()]));
     }

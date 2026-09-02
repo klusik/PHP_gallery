@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-12
+ *   2026-09-02
  */
 
 declare(strict_types=1);
@@ -42,6 +42,11 @@ use const Gallery\Services\CMS_PAGINATION_DEFAULT_COLUMNS;
 use const Gallery\Services\CMS_PAGINATION_DEFAULT_ROWS;
 use const Gallery\Services\CMS_PAGINATION_MAX_COLUMNS;
 use const Gallery\Services\CMS_PAGINATION_MAX_ROWS;
+use function Gallery\Core\admin_mutation_descriptor;
+use function Gallery\Core\admin_mutation_error_envelope;
+use function Gallery\Core\admin_mutation_panel_metadata;
+use function Gallery\Core\admin_mutation_postcondition;
+use function Gallery\Core\admin_mutation_success_envelope;
 use function Gallery\Core\csrf_field;
 use function Gallery\Core\csrf_token;
 use function Gallery\Core\current_user;
@@ -122,6 +127,7 @@ use function Gallery\Services\gallery_lightbox_browsing_mode_override_label;
 use function Gallery\Services\gallery_lightbox_browsing_mode_schema_ready;
 use function Gallery\Services\gallery_lightbox_browsing_mode_source_label;
 use function Gallery\Services\gallery_lightbox_browsing_mode_storage_value;
+use function Gallery\Services\gallery_lightbox_state_summary;
 use function Gallery\Services\gallery_metadata_organizer_apply_date_plan;
 use function Gallery\Services\gallery_metadata_organizer_apply_date_plan_batch;
 use function Gallery\Services\gallery_metadata_organizer_apply_notice;
@@ -267,23 +273,55 @@ function cms_admin_edit_gallery(): void
             return;
         }
         if ((string) ($_POST['action'] ?? '') === 'force_ai_reprocess') {
+            $aiEditUrl = admin_edit_gallery_tab_url((int) $gallery['id'], 'admin-edit-api');
             if (function_exists('Gallery\\Services\\feature_flag_enabled') && !feature_flag_enabled('ai_image_metadata')) {
-                flash_message('admin_notice', t('admin.gallery_editor.ai_reprocess_disabled', 'AI metadata is disabled in Admin > Features.'));
-                redirect_to(admin_edit_gallery_tab_url((int) $gallery['id'], 'admin-edit-api'));
+                $message = t('admin.gallery_editor.ai_reprocess_disabled', 'AI metadata is disabled in Admin > Features.');
+                if (admin_wants_json()) {
+                    header('Content-Type: application/json; charset=utf-8');
+                    echo json_encode(admin_mutation_error_envelope($message, 'ai_metadata_disabled', null, ['redirect_url' => $aiEditUrl]), JSON_THROW_ON_ERROR);
+                    return;
+                }
+                flash_message('admin_notice', $message);
+                redirect_to($aiEditUrl);
             }
             if (!function_exists('Gallery\\Services\\ai_image_analysis_force_gallery_reprocess') || !ai_image_analysis_schema_ready()) {
-                flash_message('admin_notice', t('admin.gallery_editor.ai_reprocess_unavailable', 'AI metadata reset will be available after the AI image-analysis migration is applied.'));
-                redirect_to(admin_edit_gallery_tab_url((int) $gallery['id'], 'admin-edit-api'));
+                $message = t('admin.gallery_editor.ai_reprocess_unavailable', 'AI metadata reset will be available after the AI image-analysis migration is applied.');
+                if (admin_wants_json()) {
+                    header('Content-Type: application/json; charset=utf-8');
+                    echo json_encode(admin_mutation_error_envelope($message, 'ai_metadata_unavailable', null, ['redirect_url' => $aiEditUrl]), JSON_THROW_ON_ERROR);
+                    return;
+                }
+                flash_message('admin_notice', $message);
+                redirect_to($aiEditUrl);
             }
             $resetResult = ai_image_analysis_force_gallery_reprocess((int) $gallery['id']);
-            flash_message('admin_notice', t('admin.gallery_editor.ai_reprocess_queued', 'AI metadata reset for {images} photo(s) across {galleries} gallery node(s). Removed {metadata} metadata row(s), removed {jobs} old queue row(s), and queued {queued} fresh job(s). The next AI worker poll will claim them.', [
+            $message = t('admin.gallery_editor.ai_reprocess_queued', 'AI metadata reset for {images} photo(s) across {galleries} gallery node(s). Removed {metadata} metadata row(s), removed {jobs} old queue row(s), and queued {queued} fresh job(s). The next AI worker poll will claim them.', [
                 'images' => (int) ($resetResult['images'] ?? 0),
                 'galleries' => (int) ($resetResult['galleries'] ?? 0),
                 'metadata' => (int) ($resetResult['metadata_deleted'] ?? 0),
                 'jobs' => (int) ($resetResult['jobs_deleted'] ?? 0),
                 'queued' => (int) ($resetResult['jobs_queued'] ?? 0),
-            ]));
-            redirect_to(admin_edit_gallery_tab_url((int) $gallery['id'], 'admin-edit-api'));
+            ]);
+            if (admin_wants_json()) {
+                header('Content-Type: application/json; charset=utf-8');
+                echo json_encode(array_merge(
+                    admin_mutation_success_envelope(
+                        $message,
+                        admin_mutation_descriptor('image.ai_metadata_reprocess', 'image', 'queue', []),
+                        admin_mutation_panel_metadata('gallery-edit', $aiEditUrl, true),
+                        [],
+                        ['redirect_url' => $aiEditUrl]
+                    ),
+                    [
+                        'background_queued' => true,
+                        'queue_result' => $resetResult,
+                        'edit_url' => $aiEditUrl,
+                    ]
+                ), JSON_THROW_ON_ERROR);
+                return;
+            }
+            flash_message('admin_notice', $message);
+            redirect_to($aiEditUrl);
         }
         if ((string) ($_POST['action'] ?? '') === 'rename_files') {
             if (!$mediaRenamerFeatureEnabled) {
@@ -353,13 +391,47 @@ function cms_admin_edit_gallery(): void
                 }
             }
             $updatedGallery = find_gallery((int) $gallery['id'], true) ?: $gallery;
-            if (admin_wants_json() && function_exists('Gallery\\Controllers\\admin_media_renamer_render_gallery_panel_html')) {
+            if (admin_wants_json() && function_exists('Gallery\Controllers\admin_media_renamer_render_gallery_panel_html')) {
                 header('Content-Type: application/json');
-                echo json_encode([
-                    'ok' => $renameResult !== null,
+                // $renamedImageIds stores only rows whose persisted filename/path changed.
+                $renamedImageIds = [];
+                foreach ((array) ($renameResult['details'] ?? []) as $detail) {
+                    if ((string) ($detail['status'] ?? '') !== 'renamed') {
+                        continue;
+                    }
+                    $imageId = (int) ($detail['image_id'] ?? 0);
+                    if ($imageId > 0 && !in_array($imageId, $renamedImageIds, true)) {
+                        $renamedImageIds[] = $imageId;
+                    }
+                }
+                // $mediaRenameContexts stays empty when the execution was a true no-op.
+                $mediaRenameContexts = [];
+                if ($renameResult !== null && $renamedImageIds !== []) {
+                    $imageState = gallery_lightbox_state_summary($updatedGallery, false, false);
+                    $revision = trim((string) ($imageState['revision'] ?? ''));
+                    $mediaRenameContexts[] = \Gallery\Core\admin_mutation_public_gallery_context(
+                        (int) $updatedGallery['id'],
+                        gallery_public_url($updatedGallery),
+                        $revision !== ''
+                            ? admin_mutation_postcondition('gallery_image_revision', [
+                                'gallery_id' => (int) $updatedGallery['id'],
+                                'revision' => $revision,
+                            ])
+                            : null
+                    );
+                }
+                $payload = $renameResult !== null ? admin_mutation_success_envelope(
+                    $notice,
+                    admin_mutation_descriptor('image.media_rename', 'image', 'rename', $renamedImageIds),
+                    admin_mutation_panel_metadata('media-renamer', $renamerReturnUrl, true),
+                    $mediaRenameContexts,
+                    ['redirect_url' => $renamerReturnUrl]
+                ) : admin_mutation_error_envelope($notice, 'media_rename_failed', null, ['redirect_url' => $renamerReturnUrl]);
+                echo json_encode(array_merge($payload, [
                     'message' => $notice,
                     'panel_html' => admin_media_renamer_render_gallery_panel_html($updatedGallery, $renamerPattern, $notice, $renameResult),
-                ]);
+                    'gallery_id' => (int) $updatedGallery['id'],
+                ]));
                 return;
             }
             flash_message('admin_notice', $notice);
@@ -393,7 +465,7 @@ function cms_admin_edit_gallery(): void
         $notice = (string) ($saveResult['notice'] ?? t('admin.gallery_editor.notice_saved', 'Gallery saved.'));
         if (admin_wants_json()) {
             header('Content-Type: application/json');
-            echo json_encode(admin_edit_gallery_success_response($gallery, $notice, $returnTab));
+            echo json_encode(admin_edit_gallery_success_response($gallery, $notice, $returnTab, $saveResult));
             return;
         }
         flash_message('admin_notice', $notice);
@@ -829,7 +901,7 @@ function cms_admin_edit_gallery(): void
     echo '</form>';
 
     ob_start();
-    $scanImagesActionHtml = '<form method="post" action="' . e(url_for('admin_scan_images')) . '">' . csrf_field() . '<input type="hidden" name="gallery_id" value="' . (int) $gallery['id'] . '"><button type="submit" class="secondary">' . e(t('admin.gallery_editor.scan_import_images', 'Scan/import images')) . '</button></form>';
+    $scanImagesActionHtml = '<form method="post" action="' . e(url_for('admin_scan_images')) . '" data-admin-panel-scan-images-form>' . csrf_field() . '<input type="hidden" name="gallery_id" value="' . (int) $gallery['id'] . '"><button type="submit" class="secondary">' . e(t('admin.gallery_editor.scan_import_images', 'Scan/import images')) . '</button></form>';
     view_render_admin_tab_intro([
         'kicker' => t('admin.gallery_editor.tab_images', 'Images'),
         'title' => t('admin.gallery_editor.images_title', 'Photos and ordering'),

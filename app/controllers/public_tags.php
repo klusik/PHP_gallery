@@ -96,7 +96,7 @@ function cms_tag(): void
     $tagCardLayout = tag_page_gallery_description_layout();
     render_header(t('public.tag.title_value', 'Tag: {tag}', ['tag' => (string) $tag['name']]));
     echo '<nav class="breadcrumbs" aria-label="' . e(t('public.common.breadcrumbs', 'Breadcrumbs')) . '"><a href="' . e(url_for('home')) . '">' . e(t('public.gallery.galleries', 'Galleries')) . '</a><span aria-hidden="true">/</span><span>' . e(t('public.tag.title_value', 'Tag: {tag}', ['tag' => (string) $tag['name']])) . '</span></nav>';
-    echo '<section class="hero" data-public-tag-page data-tag-id="' . (int) $tag['id'] . '"><div class="hero-title-row"><div><h1>' . e(t('public.tag.title_value', 'Tag: {tag}', ['tag' => (string) $tag['name']])) . '</h1></div>';
+    echo '<section class="hero" data-public-tag-page data-tag-id="' . (int) $tag['id'] . '" data-public-tag-gallery-count="' . count($galleries) . '" data-admin-mutation-canonical-url="' . e(url_for('tag', ['slug' => (string) $tag['slug']])) . '"><div class="hero-title-row"><div><h1>' . e(t('public.tag.title_value', 'Tag: {tag}', ['tag' => (string) $tag['name']])) . '</h1></div>';
     render_public_tag_admin_actions($tag);
     echo '</div>';
     if (tag_description_schema_ready() && trim((string) ($tag['description'] ?? '')) !== '') {

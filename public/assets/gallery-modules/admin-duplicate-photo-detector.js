@@ -160,6 +160,7 @@ async function runDuplicatePhotoDelete(root, form) {
 
     const payload = await postDuplicatePhotoDetectorForm(endpoint, new FormData(form));
     reflectDuplicatePhotoDeletionInCurrentView(payload);
+    dispatchDuplicatePhotoMutationResult(payload, 'duplicate-photo-detector');
     const replacement = replaceDuplicatePhotoDetector(root, payload);
     setDuplicatePhotoDetectorSuccess(replacement, String(payload.message || i18n('admin.duplicate_photos.delete_success_generic', 'Photo deleted.')));
 }
@@ -186,7 +187,28 @@ async function runDuplicatePhotoLedgerAction(root, form) {
 
     const payload = await postDuplicatePhotoDetectorForm(endpoint, new FormData(form));
     const replacement = replaceDuplicatePhotoDetector(root, payload);
+    dispatchDuplicatePhotoMutationResult(payload, 'duplicate-photo-ledger');
     setDuplicatePhotoDetectorSuccess(replacement, String(payload.message || i18n('admin.duplicate_photos.ledger_updated', 'Duplicate review ledger updated.')));
+}
+
+/**
+ * Hand a persistent Duplicate Photo Detector mutation to the shared completion coordinator.
+ *
+ * The detector continues to own its scan/progress/result markup. Only canonical
+ * durable mutation responses are forwarded, which keeps temporary detector-job
+ * updates out of the application-wide mutation completion contract.
+ *
+ * @param {Record<string, *>} payload Successful detector JSON response.
+ * @param {string} source Stable integration source name.
+ */
+function dispatchDuplicatePhotoMutationResult(payload, source) {
+    if (!payload?.mutation || !Array.isArray(payload?.contexts)) {
+        return;
+    }
+    document.dispatchEvent(new CustomEvent('php-gallery:auxiliary-mutation-success', {
+        bubbles: true,
+        detail: {source, result: payload},
+    }));
 }
 
 /**

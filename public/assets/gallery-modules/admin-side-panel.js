@@ -36,13 +36,14 @@ import { setupBackToTopButton, teardownBackToTopButton } from './back-to-top.js?
 import { setupGalleryLightbox, setupTagSuggestions, teardownGalleryLightbox } from './lightbox-deferred.js?v=20260811-leaflet-safari-marker-v1';
 import { setupPictureManager, teardownPictureManager } from './picture-manager.js?v=20260519-picture-manager-v5';
 import { setupResponsiveThumbnailSizes, teardownResponsiveThumbnailSizes } from './responsive-thumbnails.js?v=20260510-lazy-map-v1';
-import { activateAdminTabInRoot, activeAdminTabId, setupAdminTabs, setupAdminTabsInRoot } from './admin-tabs.js?v=20260812-deferred-maintenance-v2';
+import { activateAdminTabInRoot, activeAdminTabId, setupAdminTabsInRoot } from './admin-tabs.js?v=20260812-deferred-maintenance-v2';
 import { setupAdminNestedTabs } from './admin-nested-tabs.js?v=20260608-admin-cinematic-v1';
 import { setupAdminImageReordering } from './admin-image-reordering.js?v=20260512-modular-admin-v1';
 import { setupPublicGalleryPageReordering } from './admin-gallery-list.js?v=20260512-modular-admin-v1';
 import { appendUploadProgressLog, escapeHtmlAttribute, escapeHtmlText, i18n, isThumbnailSubmission, thumbnailEndpoint, updateBasicProgress, updateThumbnailProgress, ensureThumbnailProgress, updateUploadProgressMetrics } from './admin-core.js?v=20260614-upload-order-v2';
-import { browserUploadRequested, browserUploadZipSelected, runBrowserGalleryUpload } from './admin-browser-upload.js?v=20260902-gallery-created-refresh-v2';
+import { browserUploadRequested, browserUploadZipSelected, runBrowserGalleryUpload } from './admin-browser-upload.js?v=20260903-oversized-single-batch-v1';
 import { setupAdminSmartGalleries } from './admin-smart-galleries.js?v=20260817-smart-gallery-cycle-placement-v2';
+import { completeAdminMutation, replaceOwnedPublicGalleryFragments } from './admin-mutation-completion.js?v=20260902-create-delete-hotfix1';
 
 const adminSidePanelMotionDurationMs = 280;
 
@@ -92,13 +93,18 @@ async function runGalleryUpload(form) {
         const createThumbnails = Boolean(form.querySelector('input[name="create_thumbnails"]')?.checked);
         // result stores state or configuration for the gallery front-end flow.
         let result;
-        if (browserUploadZipSelected(form) && !browserUploadRequested(form)) {
+        const useBrowserUpload = browserUploadRequested(form);
+        if (browserUploadZipSelected(form) && !useBrowserUpload) {
             throw new Error(i18n('admin.browser_upload.zip_browser_required', 'ZIP import requires the browser-assisted upload path and a compatible browser.'));
         }
-        if (browserUploadRequested(form)) {
+        if (useBrowserUpload) {
             result = await runBrowserGalleryUpload(form, progress);
         }
-        if (!result || result.fallback) {
+        // Checked browser preparation is a strict execution choice whenever files
+        // are selected. The browser helper may ask for the classic path only for an
+        // empty create-gallery submission where there is no media to prepare. Never
+        // silently switch selected photos to server-side thumbnail generation.
+        if (!useBrowserUpload || result?.fallback === true) {
             result = await runGalleryUploadFiles(form, progress, createThumbnails);
         }
         if (createThumbnails) {
@@ -108,7 +114,7 @@ async function runGalleryUpload(form) {
         } else {
             updateBasicProgress(progress, 100, i18n('admin.operations.uploaded_scanning_complete', 'Uploaded {count} images. Scanning complete.', {count: result.uploaded || 0}));
         }
-        if (galleryUploadShouldClosePanel(form)) {
+        if (galleryUploadCompletesInSidePanel(form)) {
             dispatchAdminSidePanelSuccess(form, result);
             return;
         }
@@ -151,12 +157,12 @@ function revealPanelUploadProgress(form, progress) {
 }
 
 /**
- * Return whether an upload form should complete inside the side-panel workflow.
+ * Return whether an upload form is owned by the mounted side-panel completion workflow.
  *
  * @param {HTMLFormElement} form Upload form submitted by the admin.
- * @return {boolean} True when the side panel owns the completion behavior.
+ * @return {boolean} True when the mounted side panel owns the completion behavior.
  */
-function galleryUploadShouldClosePanel(form) {
+function galleryUploadCompletesInSidePanel(form) {
     return form.dataset.galleryPanelCloseOnSuccess === '1' && Boolean(form.closest('[data-admin-side-panel]'));
 }
 
@@ -191,34 +197,45 @@ export function setupAdminGallerySidePanel() {
         document.body.dataset.adminGallerySidePanelBound = '1';
     }
 
-    document.addEventListener('php-gallery:admin-image-order-saved', async () => {
+    document.addEventListener('php-gallery:admin-image-order-saved', async (event) => {
         const panel = document.querySelector('[data-admin-side-panel]:not([hidden])');
         if (!(panel instanceof HTMLElement)) {
             return;
         }
-        await refreshCurrentGalleryContextFromServer('');
+        const result = event.detail?.result || {};
+        await completeCoreGalleryMutationInCurrentView(result);
     });
 
     document.addEventListener('php-gallery:metadata-organizer-applied', async (event) => {
         const detail = event.detail || {};
-        detail.handled = true;
         const result = detail.result || {};
         const panel = document.querySelector('[data-admin-side-panel]:not([hidden])');
-        const editUrl = String(result.edit_url || '');
-        const galleryUrl = String(result.gallery_url || '');
         if (panel instanceof HTMLElement) {
+            detail.handled = true;
             writeAdminGallerySidePanelStatus(panel, i18n('admin.metadata_organizer.refreshing', 'Refreshing gallery view...'), false);
-            const panelRefreshed = await refreshAdminSidePanelFromServer(editUrl);
-            const contextRefreshed = await refreshCurrentGalleryContextFromServer(galleryUrl);
-            writeAdminGallerySidePanelStatus(panel, String(result.message || i18n('admin.metadata_organizer.apply_done_title', 'Organizer applied')), false);
-            if (!panelRefreshed && !contextRefreshed) {
-                window.location.reload();
-            }
-            return;
+            await completeCoreGalleryMutationInCurrentView(result);
         }
-        const refreshed = await refreshCurrentGalleryContextFromServer(galleryUrl);
-        if (!refreshed) {
-            window.location.reload();
+    });
+
+    document.addEventListener('php-gallery:auxiliary-mutation-success', async (event) => {
+        const detail = event.detail || {};
+        const result = detail.result || {};
+        const shouldRefreshPanel = detail.refreshPanel === true;
+        const syncResult = await completeCoreGalleryMutationInCurrentView(result, {
+            refreshPanel: shouldRefreshPanel
+                ? async (panelMetadata, _envelope, completionGuard) => {
+                    const refreshed = await refreshAdminSidePanelFromServer(String(panelMetadata?.refresh_url || ''), completionGuard);
+                    if (!refreshed) {
+                        throw new Error(i18n('admin.side_panel.refresh_failed_after_success', 'The server change was kept, but the refreshed editor could not be loaded.'));
+                    }
+                    return true;
+                }
+                : async () => true,
+        });
+        const panel = document.querySelector('[data-admin-side-panel]');
+        const statusMessage = String(detail.statusMessage || '');
+        if (syncResult.synchronized && statusMessage !== '' && panel instanceof HTMLElement) {
+            writeAdminGallerySidePanelStatus(panel, statusMessage, detail.statusError === true);
         }
     });
 
@@ -261,6 +278,42 @@ export function setupAdminGallerySidePanel() {
         if (!window.confirm(message)) {
             event.preventDefault();
         }
+    }, true);
+
+    document.addEventListener('submit', async (event) => {
+        const form = event.target;
+        if (!(form instanceof HTMLFormElement)
+            || !form.matches('.public-admin-delete-form-card[data-public-admin-delete-form][data-public-admin-delete-kind="gallery"]')
+            || event.defaultPrevented) {
+            return;
+        }
+        if (!window.fetch || !window.DOMParser) {
+            return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        if (typeof event.stopImmediatePropagation === 'function') {
+            event.stopImmediatePropagation();
+        }
+        await submitPublicGalleryCardDelete(form);
+    }, true);
+
+    document.addEventListener('submit', async (event) => {
+        const form = event.target;
+        if (!(form instanceof HTMLFormElement)
+            || !form.matches('.public-admin-delete-form-card[data-public-admin-delete-form][data-public-admin-delete-kind="photo"]')
+            || event.defaultPrevented) {
+            return;
+        }
+        if (!window.fetch || !window.DOMParser) {
+            return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        if (typeof event.stopImmediatePropagation === 'function') {
+            event.stopImmediatePropagation();
+        }
+        await submitPublicImageCardDelete(form);
     }, true);
 
     document.addEventListener('click', (event) => {
@@ -321,8 +374,43 @@ export function setupAdminGallerySidePanel() {
             return;
         }
         event.preventDefault();
-        await submitAdminPanelEditForm(form);
+        await submitAdminPanelEditForm(form, event.submitter instanceof HTMLElement ? event.submitter : null);
     });
+
+    document.addEventListener('submit', async (event) => {
+        const form = event.target;
+        if (!(form instanceof HTMLFormElement) || !form.matches('[data-admin-panel-scan-images-form]') || !form.closest('[data-admin-side-panel]')) {
+            return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        if (typeof event.stopImmediatePropagation === 'function') {
+            event.stopImmediatePropagation();
+        }
+        await submitAdminPanelAuxiliaryMutation(form, event.submitter instanceof HTMLElement ? event.submitter : null);
+    }, true);
+
+    document.addEventListener('submit', async (event) => {
+        const form = event.target;
+        if (!(form instanceof HTMLFormElement) || !form.matches('[data-admin-panel-ai-reprocess-form]') || !form.closest('[data-admin-side-panel]')) {
+            return;
+        }
+        const confirmMessage = String(form.dataset.confirm || '');
+        if (confirmMessage !== '' && !window.confirm(confirmMessage)) {
+            event.preventDefault();
+            event.stopPropagation();
+            if (typeof event.stopImmediatePropagation === 'function') {
+                event.stopImmediatePropagation();
+            }
+            return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        if (typeof event.stopImmediatePropagation === 'function') {
+            event.stopImmediatePropagation();
+        }
+        await submitAdminPanelAuxiliaryMutation(form, event.submitter instanceof HTMLElement ? event.submitter : null);
+    }, true);
 
     document.addEventListener('submit', async (event) => {
         const form = event.target;
@@ -377,33 +465,60 @@ export function setupAdminGallerySidePanel() {
             closeAdminGallerySidePanel(panel);
         }
         if (source === 'gallery-image-bulk') {
-            reflectGalleryImageBulkInCurrentView(result);
+            runAdminSidePanelSuccessTask(panel, () => reflectGalleryImageBulkInCurrentView(result));
             if (panel instanceof HTMLElement && shouldKeepPanelOpen) {
                 writeAdminGallerySidePanelStatus(panel, String(result.message || i18n('admin.side_panel.title_picture_saved', 'Gallery title picture saved.')), false);
             }
             return;
         }
         if (source === 'gallery-edit') {
-            reflectSavedGalleryInCurrentView(result);
+            runAdminSidePanelSuccessTask(panel, () => reflectSavedGalleryInCurrentView(result));
             return;
         }
         if (source === 'image-edit') {
-            reflectSavedImageInCurrentView(result);
+            runAdminSidePanelSuccessTask(panel, () => reflectSavedImageInCurrentView(result));
             return;
         }
         if (source === 'tag-edit') {
-            reflectSavedTagInCurrentView(result);
+            runAdminSidePanelSuccessTask(panel, () => reflectSavedTagInCurrentView(result));
             return;
         }
         if (source === 'upload') {
             if (panel instanceof HTMLElement) {
                 writeAdminGallerySidePanelStatus(panel, String(result.message || i18n('admin.side_panel.upload_complete', 'Upload complete.')), false);
             }
-            reflectUploadedGalleryInCurrentView(result);
+            runAdminSidePanelSuccessTask(panel, () => reflectUploadedGalleryInCurrentView(result));
             return;
         }
-        reflectCreatedGalleryInCurrentView(result);
+        runAdminSidePanelSuccessTask(panel, () => reflectCreatedGalleryInCurrentView(result));
     });
+}
+
+/**
+ * Run one asynchronous side-panel success reflection without allowing a rejected
+ * synchronization promise to leave the drawer permanently showing its saving state.
+ *
+ * CustomEvent dispatch is synchronous and cannot await async listeners. Every
+ * reflection task therefore owns an explicit rejection boundary here. Persistence
+ * has already succeeded when this helper runs, so failures are reported as refresh
+ * failures and never misrepresented as a failed gallery save.
+ *
+ * @param {HTMLElement|null} panel Active side-panel root.
+ * @param {() => Promise<void>} task Asynchronous success reflection task.
+ */
+function runAdminSidePanelSuccessTask(panel, task) {
+    Promise.resolve()
+        .then(task)
+        .catch((error) => {
+            if (panel instanceof HTMLElement) {
+                writeAdminGallerySidePanelStatus(
+                    panel,
+                    i18n('admin.side_panel.sync_failed_after_success', 'The gallery was saved, but the refreshed public view could not be verified. The server change was kept; continue working or reopen the page later.'),
+                    true
+                );
+            }
+            console.error('PHP Gallery side-panel success reflection failed after persistence.', error);
+        });
 }
 
 /**
@@ -417,7 +532,7 @@ export function setupAdminGallerySidePanel() {
  * @return {boolean} True when the active side panel must remain open.
  */
 function adminSidePanelMutationKeepsPanelOpen(source) {
-    return ['create', 'gallery-edit', 'gallery-image-bulk', 'upload'].includes(source);
+    return ['create', 'gallery-edit', 'gallery-image-bulk', 'image-edit', 'tag-edit', 'upload'].includes(source);
 }
 
 /**
@@ -921,7 +1036,7 @@ async function submitAdminGalleryPanelCreateForm(form) {
         const body = new FormData(form);
         body.set('ajax', '1');
         body.set('panel', '1');
-        const response = await fetch(form.action || window.location.href, {
+        const response = await fetch(renderedFormActionRequestUrl(form), {
             method: 'POST',
             body,
             headers: {'Accept': 'application/json'},
@@ -997,8 +1112,18 @@ async function submitAdminPanelUploadAutomationTokenForm(form) {
         if (String(result.action || 'create') === 'create' && Number(result.token_id || 0) <= 0) {
             throw new Error(i18n('admin.side_panel.api_key_created_missing', 'API key update failed. The server did not report a created API key.'));
         }
-        const refreshed = await refreshAdminSidePanelFromServer(String(result.refresh_url || refreshUrl || ''));
-        writeAdminGallerySidePanelStatus(panel, String(result.message || i18n('admin.side_panel.api_key_updated', 'API key updated.')), !refreshed);
+        const syncResult = await completeCoreGalleryMutationInCurrentView(result, {
+            refreshPanel: async (panelMetadata, _envelope, completionGuard) => {
+                const refreshed = await refreshAdminSidePanelFromServer(String(panelMetadata?.refresh_url || result.refresh_url || refreshUrl || ''), completionGuard);
+                if (!refreshed) {
+                    throw new Error(i18n('admin.side_panel.api_key_refresh_failed', 'The API key was updated, but the refreshed API-key panel could not be loaded. The server change was kept.'));
+                }
+                return true;
+            },
+        });
+        if (syncResult.synchronized) {
+            writeAdminGallerySidePanelStatus(panel, String(result.message || i18n('admin.side_panel.api_key_updated', 'API key updated.')), false);
+        }
     } catch (error) {
         writeAdminGallerySidePanelStatus(panel, error.message || i18n('admin.side_panel.api_key_failed', 'API key update failed.'), true);
     } finally {
@@ -1038,10 +1163,11 @@ function uploadAutomationTokenRequestUrl(form) {
 }
 
 /**
- * Submit a Smart Gallery form through its normal HTML POST path while keeping the side panel mounted.
+ * Submit a Smart Gallery editor form without leaving the current public/admin context.
  *
- * The controller remains the single non-JavaScript fallback. The enhanced path follows redirects,
- * extracts the server-rendered editor workspace, and rebinds the dynamic rule/presentation controls.
+ * Preview remains an HTML-only, non-persistent workflow. Persistent actions request
+ * the canonical mutation envelope and delegate panel/public synchronization to the
+ * shared coordinator. Direct-page submissions retain the controller redirect fallback.
  *
  * @param {HTMLFormElement} form Smart Gallery form rendered in the side panel.
  * @param {HTMLElement|null} submitter Submit button whose name/value must be included in the POST.
@@ -1053,16 +1179,22 @@ async function submitAdminSmartGalleryPanelForm(form, submitter) {
         HTMLFormElement.prototype.submit.call(form);
         return;
     }
+    const formData = new FormData(form);
+    if (submitter instanceof HTMLElement) {
+        const name = String(submitter.getAttribute('name') || '');
+        const value = String(submitter.getAttribute('value') || '');
+        if (name !== '') formData.set(name, value);
+    }
+    const action = String(formData.get('action') || 'save');
+    const persistentAction = action !== 'preview';
+    if (persistentAction && action === 'delete' && String(form.dataset.confirm || '') !== '' && !window.confirm(String(form.dataset.confirm))) {
+        return;
+    }
+
     const buttons = Array.from(form.querySelectorAll('button, input[type="submit"]'));
     buttons.forEach((button) => { button.disabled = true; });
     writeAdminGallerySidePanelStatus(panel, i18n('smart_gallery.panel_saving', 'Updating Smart Gallery...'), false);
     try {
-        const formData = new FormData(form);
-        if (submitter instanceof HTMLElement) {
-            const name = String(submitter.getAttribute('name') || '');
-            const value = String(submitter.getAttribute('value') || '');
-            if (name !== '') formData.set(name, value);
-        }
         const actionUrl = new URL(form.getAttribute('action') || form.action || window.location.href, window.location.href);
         actionUrl.searchParams.set('panel', '1');
         const requestUrl = String(actionUrl.searchParams.get('page') || '') === 'admin_smart_galleries'
@@ -1071,34 +1203,64 @@ async function submitAdminSmartGalleryPanelForm(form, submitter) {
         if (requestUrl === '') {
             throw new Error(i18n('smart_gallery.panel_save_failed', 'The Smart Gallery update failed.'));
         }
+
+        formData.set('panel', '1');
+        if (persistentAction) {
+            formData.set('ajax', '1');
+        }
         const response = await fetch(requestUrl, {
             method: 'POST',
             body: formData,
             credentials: 'same-origin',
             headers: {
-                'Accept': 'text/html',
+                'Accept': persistentAction ? 'application/json' : 'text/html',
                 'X-Requested-With': 'XMLHttpRequest',
             },
         });
-        const html = await response.text();
-        if (!response.ok || html.trim() === '') {
-            throw new Error(i18n('smart_gallery.panel_save_failed', 'The Smart Gallery update failed.'));
+
+        if (!persistentAction) {
+            const html = await response.text();
+            if (!response.ok || html.trim() === '') {
+                throw new Error(i18n('smart_gallery.panel_save_failed', 'The Smart Gallery update failed.'));
+            }
+            const workflow = {
+                name: 'smart-gallery',
+                kicker: i18n('smart_gallery.admin_title', 'Smart Galleries'),
+                title: i18n('smart_gallery.admin_title', 'Smart Galleries'),
+                loadingMessage: i18n('smart_gallery.panel_loading', 'Loading Smart Gallery editor...'),
+                loadErrorMessage: i18n('smart_gallery.panel_load_failed', 'The Smart Gallery editor could not be loaded.'),
+            };
+            bodyElement.innerHTML = sidePanelContentFromHtml(html, workflow);
+            panel.dataset.adminSidePanelSourceUrl = response.url || actionUrl.toString();
+            prepareAdminSidePanelLoadedContent(bodyElement, workflow, response.url || actionUrl.toString());
+            const titleInput = bodyElement.querySelector('[data-smart-gallery-editor] input[name="title"]');
+            if (titleInput instanceof HTMLInputElement && titleInput.value.trim() !== '') {
+                setAdminGallerySidePanelHeading(panel, workflow.kicker, titleInput.value.trim());
+            }
+            writeAdminGallerySidePanelStatus(panel, '', false);
+            return;
         }
-        const workflow = {
-            name: 'smart-gallery',
-            kicker: i18n('smart_gallery.admin_title', 'Smart Galleries'),
-            title: i18n('smart_gallery.admin_title', 'Smart Galleries'),
-            loadingMessage: i18n('smart_gallery.panel_loading', 'Loading Smart Gallery editor...'),
-            loadErrorMessage: i18n('smart_gallery.panel_load_failed', 'The Smart Gallery editor could not be loaded.'),
-        };
-        bodyElement.innerHTML = sidePanelContentFromHtml(html, workflow);
-        panel.dataset.adminSidePanelSourceUrl = response.url || actionUrl.toString();
-        prepareAdminSidePanelLoadedContent(bodyElement, workflow, response.url || actionUrl.toString());
-        const titleInput = bodyElement.querySelector('[data-smart-gallery-editor] input[name="title"]');
-        if (titleInput instanceof HTMLInputElement && titleInput.value.trim() !== '') {
-            setAdminGallerySidePanelHeading(panel, workflow.kicker, titleInput.value.trim());
+
+        const result = await readJsonResponseSafely(response, i18n('smart_gallery.panel_save_failed', 'The Smart Gallery update failed.'));
+        if (!response.ok || !result.ok) {
+            throw new Error(result.error || result.message || i18n('smart_gallery.panel_save_failed', 'The Smart Gallery update failed.'));
         }
-        writeAdminGallerySidePanelStatus(panel, '', false);
+        await completeCoreGalleryMutationInCurrentView(result, {
+            refreshPanel: async (panelMetadata, _envelope, completionGuard) => {
+                const refreshed = await refreshAdminSidePanelFromServer(String(panelMetadata?.refresh_url || ''), completionGuard);
+                if (refreshed) {
+                    const refreshedBody = panel.querySelector('[data-admin-side-panel-body]');
+                    const titleInput = refreshedBody?.querySelector?.('[data-smart-gallery-editor] input[name="title"]');
+                    const title = titleInput instanceof HTMLInputElement ? titleInput.value.trim() : '';
+                    setAdminGallerySidePanelHeading(
+                        panel,
+                        i18n('smart_gallery.admin_title', 'Smart Galleries'),
+                        title || i18n('smart_gallery.admin_title', 'Smart Galleries')
+                    );
+                }
+                return refreshed;
+            },
+        });
     } catch (error) {
         writeAdminGallerySidePanelStatus(panel, error.message || i18n('smart_gallery.panel_save_failed', 'The Smart Gallery update failed.'), true);
     } finally {
@@ -1112,9 +1274,10 @@ async function submitAdminSmartGalleryPanelForm(form, submitter) {
  * The side panel stays open while the existing admin save route returns JSON.
  *
  * @param {HTMLFormElement} form Side-panel edit form.
+ * @param {HTMLElement|null} submitter Submit button that selected a named action.
  * @return {Promise<void>} Resolves after success handling or error reporting.
  */
-async function submitAdminPanelEditForm(form) {
+async function submitAdminPanelEditForm(form, submitter = null) {
     const panel = form.closest('[data-admin-side-panel]');
     if (!(panel instanceof HTMLElement)) {
         HTMLFormElement.prototype.submit.call(form);
@@ -1128,6 +1291,9 @@ async function submitAdminPanelEditForm(form) {
     writeAdminGallerySidePanelStatus(panel, workflowName === 'image-edit' ? i18n('admin.side_panel.saving_photo', 'Saving photo...') : (workflowName === 'tag-edit' ? i18n('admin.side_panel.saving_tag', 'Saving tag...') : i18n('admin.side_panel.saving_gallery', 'Saving gallery...')), false);
     try {
         const body = new FormData(form);
+        if ((submitter instanceof HTMLButtonElement || submitter instanceof HTMLInputElement) && submitter.name !== '') {
+            body.set(submitter.name, submitter.value);
+        }
         body.set('ajax', '1');
         body.set('panel', '1');
         const response = await fetch(form.dataset.adminPanelAction || form.action || window.location.href, {
@@ -1156,6 +1322,51 @@ async function submitAdminPanelEditForm(form) {
         buttons.forEach((button) => {
             button.disabled = false;
         });
+    }
+}
+
+/**
+ * Submit a small panel-owned auxiliary form through the canonical mutation coordinator.
+ *
+ * @param {HTMLFormElement} form Auxiliary mutation form.
+ * @param {HTMLElement|null} submitter Submit control whose name/value must be included in the POST.
+ * @return {Promise<void>} Resolves after synchronization or controlled error reporting.
+ */
+async function submitAdminPanelAuxiliaryMutation(form, submitter = null) {
+    const panel = form.closest('[data-admin-side-panel]');
+    if (!(panel instanceof HTMLElement)) {
+        HTMLFormElement.prototype.submit.call(form);
+        return;
+    }
+    const buttons = Array.from(form.querySelectorAll('button, input[type="submit"]'));
+    buttons.forEach((button) => { button.disabled = true; });
+    writeAdminGallerySidePanelStatus(panel, i18n('admin.side_panel.processing', 'Processing...'), false);
+    try {
+        const body = new FormData(form);
+        if (submitter instanceof HTMLElement) {
+            const name = String(submitter.getAttribute('name') || '');
+            const value = String(submitter.getAttribute('value') || '');
+            if (name !== '') {
+                body.set(name, value);
+            }
+        }
+        body.set('ajax', '1');
+        body.set('panel', '1');
+        const response = await fetch(renderedFormActionRequestUrl(form), {
+            method: 'POST',
+            body,
+            credentials: 'same-origin',
+            headers: {'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest'},
+        });
+        const result = await readJsonResponseSafely(response, i18n('admin.side_panel.mutation_failed', 'The operation failed.'));
+        if (!response.ok || !result.ok) {
+            throw new Error(result.error || result.message || i18n('admin.side_panel.mutation_failed', 'The operation failed.'));
+        }
+        await completeCoreGalleryMutationInCurrentView(result);
+    } catch (error) {
+        writeAdminGallerySidePanelStatus(panel, error.message || i18n('admin.side_panel.mutation_failed', 'The operation failed.'), true);
+    } finally {
+        buttons.forEach((button) => { button.disabled = false; });
     }
 }
 
@@ -1271,45 +1482,16 @@ async function submitAdminPanelImageBulkForm(form, submitter) {
  */
 async function reflectGalleryImageBulkInCurrentView(result) {
     const action = String(result.bulk_action || '');
-    const coverImageId = String(result.cover_image_id || '');
-    if (action === 'delete' || action === 'move_existing' || action === 'move_new') {
-        const removedIds = Array.isArray(result.image_ids) ? result.image_ids.map((value) => String(value || '')) : [];
-        removedIds.forEach((imageId) => {
-            if (!imageId) {
-                return;
-            }
-            document.querySelectorAll(`[data-admin-image-order-row][data-image-id="${CSS.escape(imageId)}"]`).forEach((row) => {
-                if (row instanceof HTMLElement) {
-                    row.remove();
-                }
-            });
-            document.querySelectorAll(`[data-lightbox-image][data-image-id="${CSS.escape(imageId)}"]`).forEach((card) => {
-                if (card instanceof HTMLElement) {
-                    card.remove();
-                }
-            });
-        });
-        const refreshUrl = String(result.refresh_url || result.source_gallery_url || result.gallery_url || '');
-        await refreshAdminSidePanelFromServer(String(result.edit_url || ''));
-        await refreshCurrentGalleryContextFromServer(refreshUrl);
-        const noticeTarget = action === 'delete' ? String(result.gallery_url || '') : String(result.destination_gallery_url || result.gallery_url || '');
-        showAdminGallerySidePanelResultNotice(String(result.message || (action === 'delete' ? i18n('admin.side_panel.photo_deleted', 'Photo deleted.') : i18n('admin.side_panel.photo_move_completed', 'Photo move completed.'))), noticeTarget);
-        return;
-    }
-        if (action === 'cover' && coverImageId !== '') {
-            document.querySelectorAll('[data-admin-image-order-row]').forEach((row) => {
-                if (!(row instanceof HTMLElement)) {
-                    return;
-                }
-            const coverCell = row.querySelector('[data-admin-image-cover-cell]');
-            if (coverCell instanceof HTMLElement) {
-                coverCell.textContent = String(row.dataset.imageId || '') === coverImageId ? i18n('admin.side_panel.title_picture', 'Title picture') : '';
-            }
-        });
-        await refreshAdminSidePanelFromServer();
-        await refreshCurrentGalleryContextFromServer(String(result.refresh_url || result.gallery_url || ''));
-    }
-    showAdminGallerySidePanelResultNotice(String(result.message || i18n('admin.side_panel.photo_action_completed', 'Photo action completed.')), String(result.gallery_url || ''));
+    const noticeTarget = action === 'delete'
+        ? String(result.gallery_url || '')
+        : String(result.destination_gallery_url || result.gallery_url || '');
+    await completeCoreGalleryMutationInCurrentView(result);
+    showAdminGallerySidePanelResultNotice(
+        String(result.message || (action === 'delete'
+            ? i18n('admin.side_panel.photo_deleted', 'Photo deleted.')
+            : i18n('admin.side_panel.photo_action_completed', 'Photo action completed.'))),
+        noticeTarget
+    );
 }
 
 /**
@@ -1322,24 +1504,11 @@ async function reflectGalleryImageBulkInCurrentView(result) {
  * @param {Record<string, *>} result Server response for the saved tag.
  */
 async function reflectSavedTagInCurrentView(result) {
-    const panel = document.querySelector('[data-admin-side-panel]');
-    const publicUrl = String(result.public_url || '');
-    const editUrl = String(result.edit_url || '');
-    if (panel instanceof HTMLElement) {
-        writeAdminGallerySidePanelStatus(panel, String(result.message || i18n('admin.tags.saved', 'Tag saved.')), false);
-        if (editUrl !== '') {
-            panel.dataset.adminSidePanelSourceUrl = editUrl;
-            await refreshAdminSidePanelFromServer(editUrl);
-        }
-    }
-    if (publicUrl !== '') {
-        if (document.querySelector('[data-public-tag-page]')) {
-            window.history.replaceState({}, '', publicUrl);
-            await refreshCurrentGalleryContextFromServer(publicUrl);
-        } else {
-            showAdminGallerySidePanelResultNotice(String(result.message || i18n('admin.tags.saved', 'Tag saved.')), publicUrl);
-        }
-    }
+    await completeCoreGalleryMutationInCurrentView(result);
+    showAdminGallerySidePanelResultNotice(
+        String(result.message || i18n('admin.tags.saved', 'Tag saved.')),
+        String(result.public_url || '')
+    );
 }
 
 /**
@@ -1351,16 +1520,69 @@ async function reflectSavedTagInCurrentView(result) {
  * @return {Promise<void>} Resolves after the visible gallery state is refreshed.
  */
 async function reflectSavedGalleryInCurrentView(result) {
-    const galleryTitle = String(result.gallery_title || i18n('admin.gallery_list.gallery_fallback', 'Gallery'));
-    await refreshAdminSidePanelFromServer(String(result.edit_url || ''));
-    const refreshed = await refreshCurrentGalleryContextFromServer('');
-    if (!refreshed) {
-        const heading = document.querySelector('.hero h1, .gallery-branding-title');
-        if (heading instanceof HTMLElement && galleryTitle) {
-            heading.textContent = galleryTitle;
-        }
+    const panel = document.querySelector('[data-admin-side-panel]');
+    if (panel instanceof HTMLElement) {
+        // Persistence has already succeeded at this point. Do not leave the drawer
+        // saying "Saving gallery..." while the independent public GET converges.
+        writeAdminGallerySidePanelStatus(panel, String(result.message || i18n('admin.side_panel.gallery_saved', 'Gallery saved.')), false);
     }
-    showAdminGallerySidePanelResultNotice(String(result.message || `${galleryTitle} saved`), String(result.gallery_url || ''));
+    // Reflect the exact persisted visibility scalar immediately on a currently
+    // visible child card. The canonical server-rendered refresh below remains
+    // authoritative for the complete card and parent context, but this bounded
+    // micro-update prevents a successful Published/Unpublished save from looking
+    // unchanged while a shared host finishes read-after-write convergence.
+    updatePublicGalleryCardVisibilityFromResult(result);
+    await completeCoreGalleryMutationInCurrentView(result);
+    showAdminGallerySidePanelResultNotice(
+        String(result.message || i18n('admin.side_panel.gallery_saved', 'Gallery saved.')),
+        String(result.gallery_url || '')
+    );
+}
+
+/**
+ * Apply the persisted visibility scalar to a gallery card already visible behind the editor.
+ *
+ * This is deliberately a bounded micro-update, not an alternate gallery renderer.
+ * The server-provided mutation result owns the scalar state and the shared mutation
+ * coordinator still refreshes the complete parent fragment from PHP immediately after.
+ *
+ * @param {Record<string, *>} result Canonical gallery-save result.
+ */
+function updatePublicGalleryCardVisibilityFromResult(result) {
+    if (result?.gallery_visibility_changed !== true) {
+        return;
+    }
+    const galleryId = String(result?.gallery_id || '');
+    const visibility = String(result?.gallery_visibility || '');
+    if (galleryId === '' || !['public', 'unpublished', 'private'].includes(visibility)) {
+        return;
+    }
+    const escapedId = CSS.escape(galleryId);
+    const card = document.querySelector(`[data-public-subgallery-grid] [data-gallery-id="${escapedId}"], .public-home-gallery-grid [data-gallery-id="${escapedId}"]`);
+    if (!(card instanceof HTMLElement)) {
+        return;
+    }
+
+    card.dataset.galleryVisibility = visibility;
+    const unpublished = visibility === 'unpublished';
+    card.classList.toggle('is-admin-unpublished-gallery', unpublished);
+
+    const existingMarker = card.querySelector('.admin-gallery-visibility-marker');
+    if (!unpublished) {
+        existingMarker?.remove();
+        return;
+    }
+    if (existingMarker instanceof HTMLElement) {
+        existingMarker.textContent = String(result?.gallery_visibility_label || 'unpublished');
+        existingMarker.title = String(result?.gallery_visibility_hint || '');
+        return;
+    }
+
+    const marker = document.createElement('span');
+    marker.className = 'admin-gallery-visibility-marker';
+    marker.textContent = String(result?.gallery_visibility_label || 'unpublished');
+    marker.title = String(result?.gallery_visibility_hint || '');
+    card.prepend(marker);
 }
 
 /**
@@ -1371,14 +1593,13 @@ async function reflectSavedGalleryInCurrentView(result) {
 async function reflectSavedImageInCurrentView(result) {
     const imageId = String(result.image_id || '');
     if (imageId) {
+        // These bounded micro-updates improve perceived responsiveness only.
+        // The canonical server-rendered refresh below remains authoritative.
         updateAdminImageRowsFromResult(imageId, result);
         updatePublicImageCardsFromResult(imageId, result);
     }
 
-    // Photo edits are often launched from a paginated public gallery page.
-    // Refreshing from the bare gallery URL would silently redraw page one.
-    // Using the current browser URL preserves pagination, filters, and hash state.
-    await refreshCurrentGalleryContextFromServer(currentVisiblePageRefreshUrl());
+    await completeCoreGalleryMutationInCurrentView(result);
     showAdminGallerySidePanelResultNotice(String(result.message || i18n('admin.side_panel.photo_saved', 'Photo saved.')), String(result.image_url || ''));
 }
 
@@ -1407,17 +1628,154 @@ async function reflectUploadedGalleryInCurrentView(result) {
         return;
     }
 
-    const message = String(result.message || i18n('admin.side_panel.upload_complete', 'Upload complete.'));
-    const targetUrl = String(result.gallery_url || '');
-    const refreshUrl = String(result.refresh_url || result.parent_gallery_url || result.gallery_url || '');
-    showAdminGallerySidePanelResultNotice(message, targetUrl);
-    if (String(result.edit_url || '') !== '') {
-        await switchAdminSidePanelToGalleryEditor(result);
-    } else {
-        await refreshAdminSidePanelFromServer();
+    await completeCoreGalleryMutationInCurrentView(result, {
+        refreshPanel: async (_panelMetadata, _envelope, completionGuard) => switchAdminSidePanelToGalleryEditor(result, completionGuard),
+    });
+    showAdminGallerySidePanelResultNotice(
+        String(result.message || i18n('admin.side_panel.upload_complete', 'Upload complete.')),
+        String(result.gallery_url || '')
+    );
+}
+
+/**
+ * Complete a canonical gallery/image mutation through the shared coordinator.
+ *
+ * @param {Record<string, *>} result Canonical mutation response.
+ * @param {Record<string, *>} overrides Optional workflow-specific completion callbacks.
+ * @return {Promise<Record<string, *>>} Coordinator synchronization result.
+ */
+async function completeCoreGalleryMutationInCurrentView(result, overrides = {}) {
+    const panel = document.querySelector('[data-admin-side-panel]');
+    const syncResult = await completeAdminMutation(result, {
+        documentRoot: document,
+        currentUrl: currentVisiblePageRefreshUrl(),
+        refreshPanel: typeof overrides.refreshPanel === 'function'
+            ? overrides.refreshPanel
+            : async (panelMetadata, _envelope, completionGuard) => refreshAdminSidePanelFromServer(String(panelMetadata?.refresh_url || ''), completionGuard),
+        replacePublicContext: (parsed) => replaceOwnedPublicGalleryFragments(parsed, {
+            documentRoot: document,
+            beforeReplace: teardownPublicGalleryLifecycleBeforeRefresh,
+        }),
+        afterPublicReplace: () => {
+            document.dispatchEvent(new CustomEvent('php-gallery:public-content-replaced'));
+            rebindPublicGalleryLifecycleAfterRefresh();
+        },
+        reportSynchronizationError: () => {
+            if (panel instanceof HTMLElement) {
+                writeAdminGallerySidePanelStatus(
+                    panel,
+                    i18n('admin.side_panel.sync_failed_after_success', 'The gallery was saved, but the refreshed public view could not be verified. The server change was kept; continue working or reopen the page later.'),
+                    true
+                );
+            }
+        },
+    });
+    if (panel instanceof HTMLElement && syncResult.synchronized) {
+        writeAdminGallerySidePanelStatus(panel, String(result.message || ''), false);
     }
-    if (refreshUrl === '' || adminSidePanelSamePageUrl(refreshUrl, window.location.href) || document.querySelector('main.site-main .admin-edit-gallery-hero')) {
-        await refreshCurrentGalleryContextFromServer(refreshUrl);
+    return syncResult;
+}
+
+/**
+ * Delete one gallery card from the currently visible parent through the shared mutation coordinator.
+ *
+ * Hero deletion intentionally keeps its direct-page redirect fallback because the deleted
+ * gallery page itself has no valid same-URL server-rendered postcondition. Stage 2 enhances
+ * only card deletion, where the owning parent/root context can be verified in place.
+ *
+ * @param {HTMLFormElement} form Public gallery-card delete form.
+ * @return {Promise<void>} Resolves after mutation completion or an inline failure notice.
+ */
+async function submitPublicGalleryCardDelete(form) {
+    const submitButton = form.querySelector('button[type="submit"], input[type="submit"]');
+    if (submitButton instanceof HTMLButtonElement || submitButton instanceof HTMLInputElement) {
+        submitButton.disabled = true;
+    }
+    try {
+        const body = new FormData(form);
+        body.set('ajax', '1');
+        const response = await fetch(renderedFormActionRequestUrl(form), {
+            method: 'POST',
+            body,
+            credentials: 'same-origin',
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+        });
+        const result = await readJsonResponseSafely(response, i18n('admin.side_panel.gallery_delete_failed', 'Gallery delete failed.'));
+        if (!response.ok || !result.ok) {
+            throw new Error(result.error || result.message || i18n('admin.side_panel.gallery_delete_failed', 'Gallery delete failed.'));
+        }
+        const syncResult = await completeCoreGalleryMutationInCurrentView(result);
+        if (!syncResult.synchronized) {
+            showAdminGallerySidePanelResultNotice(
+                i18n('admin.side_panel.sync_failed_after_success', 'The gallery was saved, but the refreshed public view could not be verified. The server change was kept; continue working or reopen the page later.'),
+                String(result.fallback?.redirect_url || '')
+            );
+            return;
+        }
+        showAdminGallerySidePanelResultNotice(String(result.message || i18n('admin.side_panel.gallery_deleted', 'Gallery deleted.')), '');
+    } catch (error) {
+        showAdminGallerySidePanelResultNotice(
+            error instanceof Error ? error.message : i18n('admin.side_panel.gallery_delete_failed', 'Gallery delete failed.'),
+            ''
+        );
+    } finally {
+        if (submitButton instanceof HTMLButtonElement || submitButton instanceof HTMLInputElement) {
+            submitButton.disabled = false;
+        }
+    }
+}
+
+/**
+ * Delete one public photo card through the canonical mutation coordinator.
+ *
+ * The owning gallery remains the visible context, so the enhanced path can verify
+ * that the deleted image id is absent without navigating away from the page.
+ *
+ * @param {HTMLFormElement} form Public image-card delete form.
+ * @return {Promise<void>} Resolves after mutation completion or an inline failure notice.
+ */
+async function submitPublicImageCardDelete(form) {
+    const submitButton = form.querySelector('button[type="submit"], input[type="submit"]');
+    if (submitButton instanceof HTMLButtonElement || submitButton instanceof HTMLInputElement) {
+        submitButton.disabled = true;
+    }
+    try {
+        const body = new FormData(form);
+        body.set('ajax', '1');
+        const response = await fetch(renderedFormActionRequestUrl(form), {
+            method: 'POST',
+            body,
+            credentials: 'same-origin',
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+        });
+        const result = await readJsonResponseSafely(response, i18n('admin.side_panel.photo_delete_failed', 'Photo delete failed.'));
+        if (!response.ok || !result.ok) {
+            throw new Error(result.error || result.message || i18n('admin.side_panel.photo_delete_failed', 'Photo delete failed.'));
+        }
+        const syncResult = await completeCoreGalleryMutationInCurrentView(result);
+        if (!syncResult.synchronized) {
+            showAdminGallerySidePanelResultNotice(
+                i18n('admin.side_panel.sync_failed_after_success', 'The gallery was saved, but the refreshed public view could not be verified. The server change was kept; continue working or reopen the page later.'),
+                String(result.fallback?.redirect_url || '')
+            );
+            return;
+        }
+        showAdminGallerySidePanelResultNotice(String(result.message || i18n('admin.side_panel.photo_deleted', 'Photo deleted.')), '');
+    } catch (error) {
+        showAdminGallerySidePanelResultNotice(
+            error instanceof Error ? error.message : i18n('admin.side_panel.photo_delete_failed', 'Photo delete failed.'),
+            ''
+        );
+    } finally {
+        if (submitButton instanceof HTMLButtonElement || submitButton instanceof HTMLInputElement) {
+            submitButton.disabled = false;
+        }
     }
 }
 
@@ -1428,10 +1786,14 @@ async function reflectUploadedGalleryInCurrentView(result) {
  * and other gallery metadata without a full navigation reload.
  *
  * @param {string} sourceUrl Optional panel source URL. Falls back to the active form or current page.
+ * @param {{isCurrent?:Function,signal?:*}|null} completionGuard Optional coordinator generation guard.
  * @return {Promise<boolean>} True when the current admin editor was refreshed.
  */
-async function refreshAdminSidePanelFromServer(sourceUrl = '') {
+async function refreshAdminSidePanelFromServer(sourceUrl = '', completionGuard = null) {
     try {
+        if (completionGuard?.isCurrent && !completionGuard.isCurrent()) {
+            return true;
+        }
         const panel = document.querySelector('[data-admin-side-panel]');
         const body = panel instanceof HTMLElement ? panel.querySelector('[data-admin-side-panel-body]') : null;
         const workflowName = panel instanceof HTMLElement ? String(panel.dataset.adminSidePanelWorkflow || 'create') : 'create';
@@ -1447,12 +1809,16 @@ async function refreshAdminSidePanelFromServer(sourceUrl = '') {
         const response = await fetch(fetchUrl.toString(), {
             credentials: 'same-origin',
             cache: 'no-store',
+            signal: completionGuard?.signal || undefined,
             headers: {
                 'Accept': 'text/html',
                 'X-Requested-With': 'XMLHttpRequest',
             },
         });
         const html = await response.text();
+        if (completionGuard?.isCurrent && !completionGuard.isCurrent()) {
+            return true;
+        }
         if (!response.ok || html.trim() === '') {
             return false;
         }
@@ -1466,11 +1832,16 @@ async function refreshAdminSidePanelFromServer(sourceUrl = '') {
         }
         if (panelDialog instanceof HTMLElement) {
             requestAnimationFrame(() => {
-                panelDialog.scrollTop = panel.classList.contains('is-uploading') ? 0 : panelScrollTop;
+                if (!completionGuard?.isCurrent || completionGuard.isCurrent()) {
+                    panelDialog.scrollTop = panel.classList.contains('is-uploading') ? 0 : panelScrollTop;
+                }
             });
         }
         return true;
     } catch (error) {
+        if (completionGuard?.isCurrent && !completionGuard.isCurrent()) {
+            return true;
+        }
         return false;
     }
 }
@@ -1498,6 +1869,28 @@ function panelSourceUrlForRefresh(panel, workflowName, explicitSourceUrl, active
         url.hash = activeTabId;
     }
     return url.toString();
+}
+
+/**
+ * Resolve a server-rendered form action onto the browser's current origin.
+ *
+ * url_for() may contain the configured canonical host while an administrator is
+ * legitimately using the same installation through another host alias or scheme.
+ * Posting the absolute action with fetch() can then lose the current session and
+ * follow an HTML login response. The form action itself is trusted server markup,
+ * so retain its application path/query while using the origin that owns this page.
+ *
+ * @param {HTMLFormElement} form Server-rendered mutation form.
+ * @return {string} Current-origin path/query/hash for fetch().
+ */
+function renderedFormActionRequestUrl(form) {
+    const actionValue = String(form.getAttribute('action') || form.action || window.location.href).trim();
+    try {
+        const url = new URL(actionValue || window.location.href, window.location.href);
+        return `${url.pathname}${url.search}${url.hash}`;
+    } catch (error) {
+        return `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    }
 }
 
 /**
@@ -1607,21 +2000,30 @@ function adminSidePanelSamePageUrl(left, right) {
  * Switch the open side panel from create/upload mode to the editor for the newly created gallery.
  *
  * @param {Record<string, *>} result Server response containing the created gallery edit URL.
+ * @param {{isCurrent?:Function,signal?:*}|null} completionGuard Optional coordinator generation guard.
  * @return {Promise<boolean>} True when the editor was loaded into the side panel.
  */
-async function switchAdminSidePanelToGalleryEditor(result) {
+async function switchAdminSidePanelToGalleryEditor(result, completionGuard = null) {
+    if (completionGuard?.isCurrent && !completionGuard.isCurrent()) {
+        return true;
+    }
     const panel = document.querySelector('[data-admin-side-panel]');
     const editUrl = String(result.edit_url || '');
     if (!(panel instanceof HTMLElement) || editUrl === '') {
         return false;
+    }
+    if (completionGuard?.isCurrent && !completionGuard.isCurrent()) {
+        return true;
     }
     panel.dataset.adminSidePanelWorkflow = 'gallery-edit';
     panel.dataset.adminSidePanelSourceUrl = editUrl;
     panel.classList.add('is-edit-panel');
     setAdminGallerySidePanelHeading(panel, i18n('admin.side_panel.gallery_editor_kicker', 'Gallery editor'), String(result.gallery_title || i18n('admin.side_panel.edit_gallery', 'Edit gallery')));
     writeAdminGallerySidePanelStatus(panel, 'Loading gallery editor...', false);
-    const refreshed = await refreshAdminSidePanelFromServer(editUrl);
-    writeAdminGallerySidePanelStatus(panel, '', false);
+    const refreshed = await refreshAdminSidePanelFromServer(editUrl, completionGuard);
+    if (!completionGuard?.isCurrent || completionGuard.isCurrent()) {
+        writeAdminGallerySidePanelStatus(panel, '', false);
+    }
     return refreshed;
 }
 
@@ -1638,168 +2040,46 @@ async function reflectCreatedGalleryInCurrentView(result) {
     const galleryUrl = String(result.gallery_url || '');
     const galleryTitle = String(result.gallery_title || i18n('admin.side_panel.new_gallery', 'New gallery'));
     const galleryId = String(result.gallery_id || '');
-    const refreshUrl = String(result.refresh_url || result.parent_gallery_url || '');
     if (!galleryUrl) {
         showAdminGallerySidePanelResultNotice(galleryTitle, '');
         return;
     }
 
-    const currentPageOwnsCreatedGallery = createdGalleryBelongsToCurrentPublicPage(result);
-
-    if (String(result.edit_url || '') !== '') {
-        await switchAdminSidePanelToGalleryEditor(result);
-    }
-
-    if (!currentPageOwnsCreatedGallery && refreshUrl !== '' && !adminSidePanelSamePageUrl(refreshUrl, window.location.href)) {
-        showAdminGallerySidePanelResultNotice(galleryTitle, galleryUrl);
-        return;
-    }
-
-    const backgroundRefreshUrl = currentPageOwnsCreatedGallery ? currentVisiblePageRefreshUrl() : refreshUrl;
-    const refreshed = await refreshPublicSubgallerySectionFromServer(galleryId, backgroundRefreshUrl);
-    if (refreshed) {
-        showAdminGallerySidePanelResultNotice(String(result.message || galleryTitle), galleryUrl);
-        return;
-    }
-
-    let grid = document.querySelector('[data-public-subgallery-grid]');
-    if (!(grid instanceof HTMLElement)) {
-        grid = createPublicSubgallerySection();
-    }
-    if (!(grid instanceof HTMLElement)) {
-        showAdminGallerySidePanelResultNotice(galleryTitle, galleryUrl);
-        return;
-    }
-
-    const card = document.createElement('article');
-    card.className = 'gallery-card';
-    card.dataset.galleryId = galleryId;
-    card.dataset.sidePanelCreatedGallery = 'true';
-    card.innerHTML = `
-        <a class="gallery-card-link" href="${escapeHtmlAttribute(galleryUrl)}">
-            <span class="gallery-card-body">
-                <h2>${escapeHtmlText(galleryTitle)}</h2>
-                <p class="muted">Created just now</p>
-            </span>
-        </a>`;
-    grid.prepend(card);
-    card.scrollIntoView({behavior: 'smooth', block: 'nearest'});
-}
-
-/**
- * Refresh the currently visible gallery or admin editor behind the side panel.
- *
- * @param {string} sourceUrl Optional public gallery URL returned by the server.
- * @return {Promise<boolean>} True when at least one visible region was replaced.
- */
-async function refreshCurrentGalleryContextFromServer(sourceUrl = '') {
-    try {
-        const source = document.querySelector('main.site-main .admin-edit-gallery-hero') ? window.location.href : (sourceUrl || window.location.href);
-        const fetchUrl = new URL(source, window.location.href);
-        fetchUrl.searchParams.set('_panel_refresh', String(Date.now()));
-        const response = await fetch(fetchUrl.toString(), {
-            credentials: 'same-origin',
-            cache: 'no-store',
-            headers: {
-                'Accept': 'text/html',
-                'X-Requested-With': 'XMLHttpRequest',
-            },
-        });
-        const html = await response.text();
-        if (!response.ok || html.trim() === '') {
-            return false;
-        }
-        const parsed = new DOMParser().parseFromString(html, 'text/html');
-        let replaced = false;
-        let publicGalleryReplaced = false;
-        replaced = replaceAdminEditorMainFromParsedDocument(parsed) || replaced;
-        publicGalleryReplaced = replacePublicGalleryFragmentsFromParsedDocument(parsed);
-        replaced = publicGalleryReplaced || replaced;
-        if (replaced) {
-            setupAdminTabs(document);
-            setupAdminImageReordering();
-            if (publicGalleryReplaced) {
-                rebindPublicGalleryLifecycleAfterRefresh();
-            } else {
-                setupPublicGalleryPageReordering();
+    const syncResult = await completeAdminMutation(result, {
+        documentRoot: document,
+        currentUrl: currentVisiblePageRefreshUrl(),
+        refreshPanel: async (panelMetadata, _envelope, completionGuard) => {
+            if (String(panelMetadata?.refresh_url || '') === '') {
+                return false;
             }
-        }
-        return replaced;
-    } catch (error) {
-        return false;
-    }
-}
-
-/**
- * Replace the full admin editor main area behind an open side panel.
- *
- * @param {Document} parsed Fresh server-rendered document.
- * @return {boolean} True when the editor main area was replaced.
- */
-function replaceAdminEditorMainFromParsedDocument(parsed) {
-    const currentMain = document.querySelector('main.site-main');
-    const freshMain = parsed.querySelector('main.site-main');
-    if (!(currentMain instanceof HTMLElement) || !(freshMain instanceof HTMLElement)) {
-        return false;
-    }
-    if (!currentMain.querySelector('.admin-edit-gallery-hero') || !freshMain.querySelector('.admin-edit-gallery-hero')) {
-        return false;
-    }
-    const activeTabId = activeAdminTabId(currentMain);
-    currentMain.innerHTML = freshMain.innerHTML;
-    setupAdminTabsInRoot(currentMain);
-    setupAdminNestedTabs(currentMain);
-    if (activeTabId) {
-        activateAdminTabInRoot(currentMain, activeTabId);
-    }
-    return true;
-}
-
-/**
- * Replace public gallery lists behind an open side panel.
- *
- * @param {Document} parsed Fresh server-rendered document.
- * @return {boolean} True when any public gallery fragment was replaced.
- */
-function replacePublicGalleryFragmentsFromParsedDocument(parsed) {
-    let replaced = false;
-    const currentHero = document.querySelector('.hero');
-    const freshHero = parsed.querySelector('.hero');
-    if (currentHero instanceof HTMLElement && freshHero instanceof HTMLElement) {
-        currentHero.replaceWith(freshHero);
-        replaced = true;
-    }
-
-    const currentFrame = document.querySelector('[data-back-to-top-scope]');
-    const freshFrame = parsed.querySelector('[data-back-to-top-scope]');
-    const frameChanged = replacePublicGalleryFrame(currentFrame, freshFrame);
-    if (frameChanged) {
-        document.dispatchEvent(new CustomEvent('php-gallery:public-content-replaced'));
-        return true;
-    }
-
-    const fragmentPairs = [
-        ['[data-public-subgallery-section]', '[data-public-subgallery-section]'],
-        ['[data-gallery-image-list]', '[data-gallery-image-list]'],
-    ];
-    fragmentPairs.forEach(([currentSelector, freshSelector]) => {
-        const current = document.querySelector(currentSelector);
-        const fresh = parsed.querySelector(freshSelector);
-        if (current instanceof HTMLElement && fresh instanceof HTMLElement) {
-            teardownPublicGalleryLifecycleBeforeRefresh();
-            current.replaceWith(fresh);
-            replaced = true;
-        } else if (current instanceof HTMLElement && !(fresh instanceof HTMLElement)) {
-            teardownPublicGalleryLifecycleBeforeRefresh();
-            current.remove();
-            replaced = true;
-        }
+            return switchAdminSidePanelToGalleryEditor(result, completionGuard);
+        },
+        replacePublicContext: (parsed) => replaceOwnedPublicGalleryFragments(parsed, {
+            documentRoot: document,
+            beforeReplace: teardownPublicGalleryLifecycleBeforeRefresh,
+        }),
+        afterPublicReplace: () => {
+            document.dispatchEvent(new CustomEvent('php-gallery:public-content-replaced'));
+            rebindPublicGalleryLifecycleAfterRefresh();
+        },
+        reportSynchronizationError: () => {
+            const panel = document.querySelector('[data-admin-side-panel]');
+            if (panel instanceof HTMLElement) {
+                writeAdminGallerySidePanelStatus(
+                    panel,
+                    i18n('admin.side_panel.sync_failed_after_success', 'The gallery was saved, but the refreshed public view could not be verified. The server change was kept; continue working or reopen the page later.'),
+                    true
+                );
+            }
+        },
     });
-    if (replaced) {
-        document.dispatchEvent(new CustomEvent('php-gallery:public-content-replaced'));
+
+    if (syncResult.synchronized && galleryId !== '') {
+        focusCreatedGalleryCard(galleryId);
     }
-    return replaced;
+    showAdminGallerySidePanelResultNotice(String(result.message || galleryTitle), galleryUrl);
 }
+
 
 /**
  * Releases browser-side public gallery bindings before server-rendered content is replaced.
@@ -1823,168 +2103,6 @@ function rebindPublicGalleryLifecycleAfterRefresh() {
 }
 
 /**
- * Refreshes the public gallery frame while keeping stable controls outside the replaced content.
- *
- * @param {Element|null} currentFrame Current public gallery frame.
- * @param {Element|null} freshFrame Fresh public gallery frame from the server-rendered response.
- * @return {boolean} True when the public gallery frame changed.
- */
-function replacePublicGalleryFrame(currentFrame, freshFrame) {
-    if (currentFrame instanceof HTMLElement && freshFrame instanceof HTMLElement) {
-        teardownPublicGalleryLifecycleBeforeRefresh();
-        replacePublicGalleryFrameChildren(currentFrame, freshFrame);
-        return true;
-    }
-    if (currentFrame instanceof HTMLElement && !(freshFrame instanceof HTMLElement)) {
-        teardownPublicGalleryLifecycleBeforeRefresh();
-        currentFrame.remove();
-        return true;
-    }
-    if (!(currentFrame instanceof HTMLElement) && freshFrame instanceof HTMLElement) {
-        const main = document.querySelector('main.site-main');
-        const lightbox = main instanceof HTMLElement ? main.querySelector('[data-lightbox]') : null;
-        if (lightbox instanceof HTMLElement) {
-            lightbox.insertAdjacentElement('beforebegin', freshFrame);
-            return true;
-        }
-        if (main instanceof HTMLElement) {
-            main.append(freshFrame);
-            return true;
-        }
-    }
-    return false;
-}
-
-/**
- * Replaces frame content without discarding the existing back-to-top shell.
- *
- * @param {HTMLElement} currentFrame Current public gallery frame.
- * @param {HTMLElement} freshFrame Fresh public gallery frame from the server-rendered response.
- */
-function replacePublicGalleryFrameChildren(currentFrame, freshFrame) {
-    copyElementIdentity(currentFrame, freshFrame);
-
-    const currentButton = currentFrame.querySelector('[data-back-to-top-button]');
-    const freshButton = freshFrame.querySelector('[data-back-to-top-button]');
-    if (freshButton instanceof HTMLElement) {
-        freshButton.remove();
-    }
-
-    Array.from(currentFrame.childNodes).forEach((node) => {
-        if (node !== currentButton) {
-            node.remove();
-        }
-    });
-
-    const anchor = currentButton instanceof HTMLElement ? currentButton : null;
-    Array.from(freshFrame.childNodes).forEach((node) => {
-        if (anchor) {
-            currentFrame.insertBefore(node, anchor);
-        } else {
-            currentFrame.appendChild(node);
-        }
-    });
-
-    if (!(currentButton instanceof HTMLElement) && freshButton instanceof HTMLElement) {
-        currentFrame.appendChild(freshButton);
-    }
-}
-
-/**
- * Copies attributes from a fresh server-rendered element to a persistent element.
- *
- * @param {HTMLElement} current Current element kept in the live document.
- * @param {HTMLElement} fresh Fresh element parsed from the server response.
- */
-function copyElementIdentity(current, fresh) {
-    Array.from(current.attributes).forEach((attribute) => {
-        if (!fresh.hasAttribute(attribute.name)) {
-            current.removeAttribute(attribute.name);
-        }
-    });
-    Array.from(fresh.attributes).forEach((attribute) => {
-        current.setAttribute(attribute.name, attribute.value);
-    });
-}
-
-/**
- * Refresh the visible subgallery area from the current server-rendered page.
- *
- * @param {string} galleryId Newly created gallery id used for scroll targeting.
- * @param {string} sourceUrl Public gallery URL whose rendered fragment should be refreshed.
- * @return {Promise<boolean>} True when the refreshed DOM contains the created gallery.
- */
-async function refreshPublicSubgallerySectionFromServer(galleryId, sourceUrl = '') {
-    // Reuse the canonical context refresh path so create mutations receive the same
-    // cache-busting, no-store request and lifecycle rebinding as edit/move/visibility
-    // mutations. A DOM replacement alone is not sufficient proof of success because
-    // a first read can still return the pre-mutation representation. Confirm that the
-    // newly-created gallery is actually in the refreshed subgallery grid before
-    // treating the background as current.
-    const refreshSource = sourceUrl || currentVisiblePageRefreshUrl();
-    const retryDelaysMs = [0, 120, 320];
-    for (const retryDelayMs of retryDelaysMs) {
-        if (retryDelayMs > 0) {
-            await waitForGalleryMutationRefreshRetry(retryDelayMs);
-        }
-        await refreshCurrentGalleryContextFromServer(refreshSource);
-        if (publicSubgalleryContainsGalleryId(galleryId)) {
-            focusCreatedGalleryCard(galleryId);
-            return true;
-        }
-    }
-    return false;
-}
-
-/**
- * Return the gallery id rendered by the public hero behind the side panel.
- *
- * The id is more reliable than comparing canonical URLs because the visible page
- * may carry clean pagination segments, language parameters, or other view state.
- *
- * @return {number} Current public gallery id, or zero outside a gallery page.
- */
-function currentPublicGalleryId() {
-    const hero = document.querySelector('.hero[data-public-gallery-id]');
-    return hero instanceof HTMLElement ? Number(hero.dataset.publicGalleryId || 0) : 0;
-}
-
-/**
- * Return whether a newly-created gallery belongs to the public gallery currently visible behind the drawer.
- *
- * @param {Record<string, *>} result Server mutation response.
- * @return {boolean} True when the current public gallery is the persisted parent.
- */
-function createdGalleryBelongsToCurrentPublicPage(result) {
-    const parentGalleryId = Number(result.parent_gallery_id || result.refresh_gallery_id || 0);
-    return parentGalleryId > 0 && parentGalleryId === currentPublicGalleryId();
-}
-
-/**
- * Return whether the live public subgallery grid contains the expected gallery card.
- *
- * @param {string} galleryId Gallery id returned by the successful mutation.
- * @return {boolean} True when the expected card is present in the refreshed DOM.
- */
-function publicSubgalleryContainsGalleryId(galleryId) {
-    if (!galleryId) {
-        return false;
-    }
-    const grid = document.querySelector('[data-public-subgallery-grid]');
-    return grid instanceof HTMLElement && Boolean(grid.querySelector(`[data-gallery-id="${CSS.escape(galleryId)}"]`));
-}
-
-/**
- * Wait briefly before retrying a successful mutation whose public read is still stale.
- *
- * @param {number} delayMs Retry delay in milliseconds.
- * @return {Promise<void>} Resolves after the bounded delay.
- */
-function waitForGalleryMutationRefreshRetry(delayMs) {
-    return new Promise((resolve) => window.setTimeout(resolve, Math.max(0, delayMs)));
-}
-
-/**
  * Scroll the newly created gallery card into view after fragment replacement.
  *
  * @param {string} galleryId Newly created gallery id.
@@ -1993,34 +2111,11 @@ function focusCreatedGalleryCard(galleryId) {
     if (!galleryId) {
         return;
     }
-    const card = document.querySelector(`[data-gallery-id="${CSS.escape(galleryId)}"]`);
+    const escapedId = CSS.escape(galleryId);
+    const card = document.querySelector(`[data-public-subgallery-grid] [data-gallery-id="${escapedId}"], .public-home-gallery-grid [data-gallery-id="${escapedId}"]`);
     if (card instanceof HTMLElement) {
         card.scrollIntoView({behavior: 'smooth', block: 'nearest'});
     }
-}
-
-/**
- * Create a subgallery section when the current gallery did not have children yet.
- *
- * @return {HTMLElement|null} New or existing subgallery grid.
- */
-function createPublicSubgallerySection() {
-    const main = document.querySelector('main.site-main');
-    if (!(main instanceof HTMLElement)) {
-        return null;
-    }
-    const section = document.createElement('section');
-    section.className = 'panel';
-    section.dataset.publicSubgallerySection = 'true';
-    section.innerHTML = `<h2>${escapeHtmlText(i18n('admin.side_panel.subgalleries', 'Subgalleries'))}</h2><div class="grid" data-public-subgallery-grid></div>`;
-
-    const insertionPoint = main.querySelector('.gallery-list-frame, [data-gallery-image-list], [data-lightbox]');
-    if (insertionPoint instanceof HTMLElement) {
-        insertionPoint.insertAdjacentElement('beforebegin', section);
-    } else {
-        main.append(section);
-    }
-    return section.querySelector('[data-public-subgallery-grid]');
 }
 
 /**
@@ -2243,20 +2338,22 @@ async function runGalleryUploadFiles(form, progress, createThumbnails) {
 
     if (files.length === 0 && allowEmptyPanelGallery) {
         updateBasicProgress(progress, 20, i18n('admin.side_panel.creating_gallery', 'Creating gallery...'));
-        const emptyResult = await sendGalleryUploadChunk(form, galleryUploadBaseBody(form), () => {});
+        const emptyResult = requireCanonicalUploadMutationResult(await sendGalleryUploadChunk(form, galleryUploadBaseBody(form), () => {}));
+        const emptyGalleryId = Number(emptyResult.gallery_id || 0);
         updateBasicProgress(progress, 100, i18n('admin.side_panel.gallery_created', 'Gallery created.'));
         return {
+            ...emptyResult,
             ok: true,
-            gallery_id: Number(emptyResult.gallery_id || 0),
-            gallery_ids: emptyResult.gallery_id ? [Number(emptyResult.gallery_id)] : [],
-            gallery_title: String(emptyResult.gallery_title || ''),
-            gallery_url: String(emptyResult.gallery_url || ''),
-            edit_url: String(emptyResult.edit_url || ''),
-            parent_gallery_id: Number(emptyResult.parent_gallery_id || 0),
-            parent_gallery_url: String(emptyResult.parent_gallery_url || ''),
-            refresh_gallery_id: Number(emptyResult.refresh_gallery_id || 0),
-            refresh_url: String(emptyResult.refresh_url || ''),
-            created_gallery: Boolean(emptyResult.created_gallery),
+            gallery_id: emptyGalleryId,
+            gallery_ids: emptyGalleryId ? [emptyGalleryId] : [],
+            mutation: {
+                ...emptyResult.mutation,
+                entity_ids: emptyGalleryId ? [emptyGalleryId] : [],
+            },
+            panel: emptyResult.panel && typeof emptyResult.panel === 'object' ? {...emptyResult.panel} : null,
+            contexts: emptyResult.contexts.map((context) => ({...context})),
+            fallback: emptyResult.fallback && typeof emptyResult.fallback === 'object' ? {...emptyResult.fallback} : {},
+            image_ids: [],
             uploaded: 0,
             scanned: 0,
             thumbnails: 0,
@@ -2264,7 +2361,6 @@ async function runGalleryUploadFiles(form, progress, createThumbnails) {
             thumbnail_failed: 0,
             thumbnail_errors: [],
             total_files: 0,
-            redirect_url: String(emptyResult.redirect_url || ''),
         };
     }
 
@@ -2290,6 +2386,8 @@ async function runGalleryUploadFiles(form, progress, createThumbnails) {
     let redirectUrl = '';
     // galleryIds stores state or configuration for the gallery front-end flow.
     const galleryIds = [];
+    // imageIds stores all persisted image ids across classic one-file upload requests.
+    const imageIds = [];
     // galleryTitle stores the created or selected gallery title reported by the first upload response.
     let galleryTitle = '';
     // galleryUrl stores the public gallery URL reported by the first upload response.
@@ -2298,12 +2396,19 @@ async function runGalleryUploadFiles(form, progress, createThumbnails) {
     let editUrl = '';
     // refreshUrl stores the page that should redraw the visible context behind the panel.
     let refreshUrl = '';
+    // refreshGalleryId stores the canonical public context owner reported by the server.
+    let refreshGalleryId = 0;
     // parentGalleryUrl stores the selected parent public URL for newly-created galleries.
     let parentGalleryUrl = '';
     // parentGalleryId stores the selected parent identifier for newly-created galleries.
     let parentGalleryId = 0;
     // createdGallery stores whether this upload workflow created the target gallery before storing files.
     let createdGallery = false;
+    // mutation/panel/contexts/fallback preserve the canonical completion envelope through batching.
+    let mutation = null;
+    let panel = null;
+    let contexts = [];
+    let fallback = {};
 
     for (let fileIndex = 0; fileIndex < files.length; fileIndex++) {
         // file stores state or configuration for the gallery front-end flow.
@@ -2318,7 +2423,7 @@ async function runGalleryUploadFiles(form, progress, createThumbnails) {
         updateUploadProgressMetrics(progress, classicUploadProgressMetrics(progressState));
         appendUploadProgressLog(progress, i18n('admin.side_panel.upload_log_uploading_file', 'Uploading picture {current}/{total}: {name}, {bytes}.', {current: humanIndex, total: files.length, name: file.name, bytes: formatFileSize(file.size || 0)}));
         // uploadResult stores state or configuration for the gallery front-end flow.
-        const uploadResult = await sendGalleryUploadChunk(form, cloneGalleryUploadBody(form, [file], galleryId), (event) => {
+        const uploadResult = requireCanonicalUploadMutationResult(await sendGalleryUploadChunk(form, cloneGalleryUploadBody(form, [file], galleryId), (event) => {
             if (!event.lengthComputable) {
                 updateBasicProgress(progress, Math.round((fileIndex / files.length) * 100), `Uploading ${humanIndex} of ${files.length}: ${file.name}`);
                 updateUploadProgressMetrics(progress, classicUploadProgressMetrics(progressState));
@@ -2333,7 +2438,7 @@ async function runGalleryUploadFiles(form, progress, createThumbnails) {
             progressState.uploadedBytes = uploadedBeforeFile + progressState.currentFileUploadedBytes;
             updateBasicProgress(progress, Math.round((completedPart + currentPart) * 100), `Uploading ${humanIndex} of ${files.length}: ${file.name}`);
             updateUploadProgressMetrics(progress, classicUploadProgressMetrics(progressState));
-        });
+        }));
         appendServerUploadEvents(progress, uploadResult.upload_events || []);
         progressState.uploadedFiles = humanIndex;
         progressState.uploadedBytes = uploadedBeforeFile + Number(file.size || 0);
@@ -2341,29 +2446,45 @@ async function runGalleryUploadFiles(form, progress, createThumbnails) {
         updateUploadProgressMetrics(progress, classicUploadProgressMetrics(progressState));
         appendUploadProgressLog(progress, i18n('admin.side_panel.upload_log_uploaded_file', 'Finished picture {current}/{total}: {name}.', {current: humanIndex, total: files.length, name: file.name}));
 
+        const resultCreatedGallery = Boolean(uploadResult.created_gallery);
         if (!galleryId) {
             galleryId = Number(uploadResult.gallery_id || 0);
         }
         if (galleryId && !galleryIds.includes(galleryId)) {
             galleryIds.push(galleryId);
         }
+        (Array.isArray(uploadResult.image_ids) ? uploadResult.image_ids : []).forEach((imageId) => {
+            const normalizedId = Number(imageId || 0);
+            if (normalizedId > 0 && !imageIds.includes(normalizedId)) {
+                imageIds.push(normalizedId);
+            }
+        });
         uploaded += Number(uploadResult.uploaded || 0);
         scanned += Number(uploadResult.scanned || 0);
-        redirectUrl = uploadResult.redirect_url || redirectUrl;
+        redirectUrl = String(uploadResult.redirect_url || redirectUrl || '');
         galleryTitle = galleryTitle || String(uploadResult.gallery_title || '');
         galleryUrl = galleryUrl || String(uploadResult.gallery_url || '');
-        editUrl = editUrl || String(uploadResult.edit_url || '');
-        refreshUrl = refreshUrl || String(uploadResult.refresh_url || '');
+        editUrl = String(uploadResult.edit_url || editUrl || '');
+        refreshGalleryId = Number(uploadResult.refresh_gallery_id || refreshGalleryId || 0);
+        refreshUrl = String(uploadResult.refresh_url || refreshUrl || '');
         parentGalleryUrl = parentGalleryUrl || String(uploadResult.parent_gallery_url || '');
-        parentGalleryId = parentGalleryId || Number(uploadResult.parent_gallery_id || 0);
-        createdGallery = createdGallery || Boolean(uploadResult.created_gallery);
+        parentGalleryId = Number(uploadResult.parent_gallery_id || parentGalleryId || 0);
+
+        // For an existing-gallery upload the latest response owns the final postcondition.
+        // For create-with-upload, preserve the first response because it describes the
+        // parent membership mutation rather than a later per-file upload mutation.
+        if (mutation === null || (!createdGallery && !resultCreatedGallery)) {
+            mutation = {...uploadResult.mutation};
+            panel = uploadResult.panel && typeof uploadResult.panel === 'object' ? {...uploadResult.panel} : null;
+            contexts = uploadResult.contexts.map((context) => ({...context}));
+            fallback = uploadResult.fallback && typeof uploadResult.fallback === 'object' ? {...uploadResult.fallback} : {};
+        }
+        createdGallery = createdGallery || resultCreatedGallery;
 
         if (createThumbnails) {
-            // imageIds stores state or configuration for the gallery front-end flow.
-            const imageIds = Array.isArray(uploadResult.image_ids) ? uploadResult.image_ids : [];
             appendUploadProgressLog(progress, i18n('admin.side_panel.upload_log_thumbnails_started', 'Creating server thumbnails for picture {current}/{total}: {name}.', {current: humanIndex, total: files.length, name: file.name}));
             // thumbResult stores state or configuration for the gallery front-end flow.
-            const thumbResult = await runUploadedImageThumbnailJob(form, progress, imageIds, humanIndex, files.length, file.name, thumbnails, thumbnailSkipped);
+            const thumbResult = await runUploadedImageThumbnailJob(form, progress, uploadResult.image_ids || [], humanIndex, files.length, file.name, thumbnails, thumbnailSkipped);
             appendUploadProgressLog(progress, i18n('admin.side_panel.upload_log_thumbnails_finished', 'Thumbnail job finished for picture {current}/{total}: {name}.', {current: humanIndex, total: files.length, name: file.name}));
             thumbnails += Number(thumbResult.created || 0);
             thumbnailSkipped += Number(thumbResult.skipped || 0);
@@ -2374,16 +2495,30 @@ async function runGalleryUploadFiles(form, progress, createThumbnails) {
         }
     }
 
+    if (!mutation) {
+        throw new Error(i18n('admin.side_panel.mutation_contract_missing', 'The upload completed, but the server did not return the required mutation completion contract.'));
+    }
+
+    const finalRedirectUrl = appendUploadResultParams(redirectUrl, uploaded, scanned, thumbnails, thumbnailFailed);
+    const finalMutation = createdGallery && galleryId > 0
+        ? {...mutation, type: 'gallery.create_with_upload', entity: 'gallery', action: 'create', entity_ids: [galleryId]}
+        : {...mutation, entity_ids: imageIds.slice()};
+
     return {
         ok: true,
+        mutation: finalMutation,
+        panel,
+        contexts,
+        fallback: {...fallback, redirect_url: finalRedirectUrl},
         gallery_id: galleryId,
         gallery_ids: galleryIds.length > 0 ? galleryIds : (galleryId ? [galleryId] : []),
+        image_ids: imageIds,
         gallery_title: galleryTitle,
         gallery_url: galleryUrl,
         edit_url: editUrl,
         parent_gallery_id: parentGalleryId,
         parent_gallery_url: parentGalleryUrl,
-        refresh_gallery_id: parentGalleryId,
+        refresh_gallery_id: refreshGalleryId,
         refresh_url: refreshUrl,
         created_gallery: createdGallery,
         uploaded,
@@ -2393,8 +2528,25 @@ async function runGalleryUploadFiles(form, progress, createThumbnails) {
         thumbnail_failed: thumbnailFailed,
         thumbnail_errors: Array.from(new Set(thumbnailErrors.filter(Boolean))),
         total_files: files.length,
-        redirect_url: appendUploadResultParams(redirectUrl, uploaded, scanned, thumbnails, thumbnailFailed),
+        redirect_url: finalRedirectUrl,
     };
+}
+
+/**
+ * Require the canonical successful mutation envelope from one classic upload request.
+ *
+ * Stage 5 deliberately rejects workflow-specific legacy reconstruction here. Every
+ * persistent AJAX upload must carry its server-authored mutation, context, and
+ * postcondition metadata through the client batching layer unchanged.
+ *
+ * @param {Record<string, *>} result Server JSON response.
+ * @return {Record<string, *>} Canonical successful response.
+ */
+function requireCanonicalUploadMutationResult(result) {
+    if (!result || result.ok !== true || !result.mutation || typeof result.mutation !== 'object' || !Array.isArray(result.contexts)) {
+        throw new Error(i18n('admin.side_panel.mutation_contract_missing', 'The upload completed, but the server did not return the required mutation completion contract.'));
+    }
+    return result;
 }
 
 /**

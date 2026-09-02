@@ -27,7 +27,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-12
+ *   2026-09-02
  */
 
 import { adminUrlWithParams, ensureThumbnailProgress, i18n, isThumbnailSubmission, thumbnailEndpoint, updateThumbnailProgress } from './admin-core.js?v=20260512-modular-admin-v1';
@@ -446,6 +446,28 @@ function formatBytes(bytes) {
 }
 
 /**
+ * Hand a completed gallery-scoped thumbnail job to the shared side-panel
+ * mutation coordinator without replacing this module's progress UI.
+ *
+ * @param {HTMLFormElement} form Submitted thumbnail form.
+ * @param {Record<string, *>} result Final server response.
+ */
+function dispatchThumbnailMutationResult(form, result) {
+    if (!(form.closest('[data-admin-side-panel]') instanceof HTMLElement)) {
+        return;
+    }
+    if (!result || typeof result !== 'object' || !result.mutation || !Array.isArray(result.contexts)) {
+        return;
+    }
+    document.dispatchEvent(new CustomEvent('php-gallery:auxiliary-mutation-success', {
+        detail: {
+            source: 'thumbnail-progress',
+            result,
+        },
+    }));
+}
+
+/**
  * Handles run import with thumbnail progress behavior for the gallery UI.
  *
  * @param {*} form Value supplied by the caller or event context.
@@ -675,6 +697,7 @@ async function runThumbnailJob(form, submitter, options = {}) {
                 if (failed > 0) {
                     updateThumbnailProgress(progress, total, total, created, skipped, `${finalLabel} ${failed} file(s) failed.`);
                 }
+                dispatchThumbnailMutationResult(form, result);
                 break;
             }
         }

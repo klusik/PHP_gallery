@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-04
+ *   2026-09-02
  */
 
 declare(strict_types=1);
@@ -39,9 +39,15 @@ namespace Gallery\Controllers;
 use RuntimeException;
 use Throwable;
 use const Gallery\Services\THUMBNAIL_COMPATIBILITY_MODERN;
+use function Gallery\Core\admin_mutation_descriptor;
+use function Gallery\Core\admin_mutation_error_envelope;
+use function Gallery\Core\admin_mutation_public_gallery_context;
+use function Gallery\Core\admin_mutation_success_envelope;
 use function Gallery\Core\csrf_field;
+use function Gallery\Core\current_user;
 use function Gallery\Core\e;
 use function Gallery\Core\flash_message;
+use function Gallery\Core\gallery_public_url;
 use function Gallery\Core\now_sql;
 use function Gallery\Core\redirect_to;
 use function Gallery\Core\request_method;
@@ -476,12 +482,37 @@ function thumbnail_maintenance_notice_is_dismissed(array $summary): bool
  */
 function cms_admin_create_thumbnails(): void
 {
-    require_admin();
-    verify_csrf();
-    if (!empty($_POST['ajax']) || str_contains((string) ($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json')) {
+    // $isJsonRequest keeps the browser-driven batch contract JSON-only even when authentication or CSRF expires.
+    $isJsonRequest = !empty($_POST['ajax']) || str_contains(strtolower((string) ($_SERVER['HTTP_ACCEPT'] ?? '')), 'application/json');
+    if ($isJsonRequest) {
+        // $user stores the authenticated administrator without triggering the normal HTML login redirect.
+        $user = current_user();
+        if (!$user || (string) ($user['role'] ?? '') !== 'admin') {
+            http_response_code(403);
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(admin_mutation_error_envelope(
+                t('auth.admin_required', 'Admin access is required.'),
+                'auth.admin_required',
+                cms_admin_thumbnail_mutation_descriptor($_POST)
+            ));
+            return;
+        }
+        if (!cms_admin_thumbnail_csrf_valid()) {
+            http_response_code(400);
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(admin_mutation_error_envelope(
+                t('security.invalid_csrf', 'Invalid CSRF token.'),
+                'security.invalid_csrf',
+                cms_admin_thumbnail_mutation_descriptor($_POST)
+            ));
+            return;
+        }
         cms_admin_create_thumbnails_batch();
         return;
     }
+
+    require_admin();
+    verify_csrf();
     // Variable $count stores this steps working value.
     $count = 0;
     if (($_POST['scope'] ?? '') === 'metadata') {
@@ -747,6 +778,23 @@ function cms_admin_create_thumbnails_batch(): void
             'maintenance_after' => $maintenanceAfter,
             'remaining_image_count' => count($remainingImageIds),
         ];
+        if ($done) {
+            // Only explicit gallery-scoped jobs need public invalidation metadata. Global maintenance jobs keep their compact dashboard response.
+            $galleryId = cms_admin_thumbnail_explicit_gallery_id($_POST);
+            $gallery = $galleryId > 0 ? find_gallery($galleryId, true) : null;
+            if (is_array($gallery)) {
+                $message = $scope === 'metadata'
+                    ? t('admin.thumbnails.metadata_refresh_complete', 'Thumbnail database refresh complete.')
+                    : t('admin.thumbnails.job_complete', 'Thumbnail job complete.');
+                $response = array_merge($response, admin_mutation_success_envelope(
+                    $message,
+                    cms_admin_thumbnail_mutation_descriptor($_POST),
+                    null,
+                    cms_admin_thumbnail_public_contexts($gallery),
+                    []
+                ));
+            }
+        }
         // $discardedOutput stores any incidental output such as PHP warnings that would otherwise corrupt JSON.
         $discardedOutput = (string) ob_get_clean();
         if (trim($discardedOutput) !== '') {
@@ -775,13 +823,83 @@ function cms_admin_create_thumbnails_batch(): void
             'discarded_output_preview' => $discardedOutput !== '' ? mb_substr(trim(preg_replace('/\s+/', ' ', $discardedOutput)), 0, 500) : null,
         ], ['category' => 'other', 'severity' => 'error']);
         http_response_code(500);
-        header('Content-Type: application/json');
-        echo json_encode([
-            'ok' => false,
-            'error' => t('admin.thumbnails.request_failed', 'Thumbnail request failed. Check the admin logs or PHP error log for details.'),
-        ]);
+        header('Content-Type: application/json; charset=utf-8');
+        $message = t('admin.thumbnails.request_failed', 'Thumbnail request failed. Check the admin logs or PHP error log for details.');
+        echo json_encode(admin_mutation_error_envelope(
+            $message,
+            'thumbnail.batch_failed',
+            cms_admin_thumbnail_mutation_descriptor($_POST)
+        ));
         return;
     }
+}
+
+/**
+ * Return whether the submitted CSRF token matches the current administrator session.
+ *
+ * The browser-driven thumbnail endpoint must not call verify_csrf(), because that
+ * helper exits with a plain-text body and would corrupt the JSON completion path.
+ */
+function cms_admin_thumbnail_csrf_valid(): bool
+{
+    $token = (string) ($_POST['csrf_token'] ?? '');
+    return $token !== '' && hash_equals((string) ($_SESSION['csrf_token'] ?? ''), $token);
+}
+
+/**
+ * Return the one explicit gallery id owned by a gallery-editor thumbnail job.
+ *
+ * Global dashboard maintenance may touch many galleries and intentionally returns
+ * no public context list. Side-panel gallery jobs always carry one stable id.
+ *
+ * @param array<string, mixed> $post Submitted thumbnail request.
+ */
+function cms_admin_thumbnail_explicit_gallery_id(array $post): int
+{
+    $galleryId = (int) ($post['thumbnail_gallery_id'] ?? $post['gallery_id'] ?? 0);
+    return max(0, $galleryId);
+}
+
+/**
+ * Return the public gallery contexts whose rendered thumbnail URLs may need retrying.
+ *
+ * The edited gallery is required when the drawer is opened from inside that gallery.
+ * Its owning parent or the root index is also required when the drawer was opened from
+ * a gallery card whose cover thumbnail may have been repaired by this job.
+ *
+ * @param array<string, mixed> $gallery Explicit gallery row for the thumbnail job.
+ * @return array<int, array<string, mixed>> Canonical public render contexts.
+ */
+function cms_admin_thumbnail_public_contexts(array $gallery): array
+{
+    $galleryId = (int) ($gallery['id'] ?? 0);
+    if ($galleryId <= 0) {
+        return [];
+    }
+
+    // Thumbnail repair changes generated cache artifacts, not a stable database field rendered in markup, so this context explicitly has no immediate postcondition.
+    $contexts = [admin_mutation_public_gallery_context($galleryId, gallery_public_url($gallery), null)];
+    $parentId = (int) ($gallery['parent_id'] ?? 0);
+    $parent = $parentId > 0 ? find_gallery($parentId, true) : null;
+    $contexts[] = admin_mutation_public_gallery_context(
+        $parentId,
+        is_array($parent) ? gallery_public_url($parent) : url_for('home'),
+        null
+    );
+    return $contexts;
+}
+
+/**
+ * Build canonical mutation metadata for a browser-driven thumbnail job.
+ *
+ * @param array<string, mixed> $post Submitted thumbnail request.
+ * @return array<string, mixed> Canonical mutation descriptor.
+ */
+function cms_admin_thumbnail_mutation_descriptor(array $post): array
+{
+    $scope = trim((string) ($post['scope'] ?? ''));
+    $action = $scope === 'metadata' ? 'refresh_metadata' : 'rebuild';
+    return admin_mutation_descriptor('thumbnail.' . $action, 'thumbnail', $action, []);
 }
 
 
