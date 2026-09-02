@@ -229,6 +229,8 @@ const refreshCreatedSection = evaluateFunction(
             refreshedUrl = url;
             return true;
         },
+        publicSubgalleryContainsGalleryId: () => true,
+        waitForGalleryMutationRefreshRetry: async () => {},
         focusCreatedGalleryCard: (galleryId) => {
             focusedGalleryId = galleryId;
         },
@@ -244,6 +246,8 @@ const failedRefreshCreatedSection = evaluateFunction(
     {
         currentVisiblePageRefreshUrl: () => 'https://example.test/gallery/parent/3/',
         refreshCurrentGalleryContextFromServer: async () => false,
+        publicSubgalleryContainsGalleryId: () => false,
+        waitForGalleryMutationRefreshRetry: async () => {},
         focusCreatedGalleryCard: (galleryId) => {
             focusedGalleryId = galleryId;
         },
@@ -341,6 +345,6 @@ for (const functionName of [
 }
 
 // Changing the side-panel module must also change its import cache key.
-assert.match(operationsSource, /admin-side-panel\.js\?v=20260902-gallery-panel-background-refresh-v1/);
+assert.match(operationsSource, /admin-side-panel\.js\?v=20260902-gallery-created-refresh-v2/);
 
 console.log('PASS admin_side_panel_gallery_refresh_test');
