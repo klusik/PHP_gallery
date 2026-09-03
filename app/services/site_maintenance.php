@@ -31,7 +31,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-08-18
+ *   2026-09-03
  */
 
 declare(strict_types=1);
@@ -1424,6 +1424,14 @@ function site_maintenance_record_interrupted_thumbnail_attempt(array &$state): v
 function site_maintenance_process_cleanup_step(array &$state, float $deadline): array
 {
     $cleanup = [];
+
+    if (function_exists(__NAMESPACE__ . '\\cleanup_download_manifest_cache')) {
+        $cleanup['download_manifests'] = cleanup_download_manifest_cache();
+    }
+
+    if (function_exists(__NAMESPACE__ . '\\cleanup_legacy_download_artifact_cache')) {
+        $cleanup['legacy_download_artifacts'] = cleanup_legacy_download_artifact_cache();
+    }
 
     if (function_exists('cleanup_expired_zip_cache')) {
         $cleanup['zip_cache'] = cleanup_expired_zip_cache();

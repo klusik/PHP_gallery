@@ -34,6 +34,7 @@ use function Gallery\Core\image_alt_text;
 use function Gallery\Core\image_public_media_url;
 use function Gallery\Core\image_public_url;
 use function Gallery\Services\find_gallery;
+use function Gallery\Services\download_capability_issue;
 use function Gallery\Services\pagination_current_page;
 use function Gallery\Services\pagination_grid_columns_class;
 use function Gallery\Services\pagination_model;
@@ -94,6 +95,8 @@ use function Gallery\Services\admin_test_run_mark;
 use function Gallery\Services\admin_test_run_record_component;
 use const Gallery\Services\SMART_GALLERY_QUERY_MAX_PAGE_SIZE;
 use const Gallery\Services\SMART_GALLERY_LIGHTBOX_MAX_WINDOW;
+use const Gallery\Services\DOWNLOAD_CAPABILITY_RESOURCE_SMART_GALLERY;
+use const Gallery\Services\DOWNLOAD_CAPABILITY_SCOPE_LEGACY;
 
 /** Render and process Smart Gallery administration. */
 function cms_admin_smart_galleries(): void
@@ -740,7 +743,11 @@ function cms_smart_gallery(): void
     if ($testRunActive) admin_test_run_mark('smart_gallery_render_begin');
     render_header((string) $gallery['title']);
     echo '<section class="hero"><div class="hero-topbar"><div class="hero-primary"><div><p class="admin-kicker">' . e(t('smart_gallery.public_kicker', 'Smart Gallery')) . '</p><h1>' . e((string) $gallery['title']) . '</h1><p>' . e((string) $gallery['description']) . '</p><p class="muted">' . e(t('smart_gallery.dynamic_count', '{count} matching images', ['count' => $total])) . '</p></div></div><div class="hero-meta"><div class="hero-actions" aria-label="' . e(t('gallery.actions', 'Gallery actions')) . '">';
-    if (!empty($presentation['download_enabled']) && $total > 0) echo '<a class="button hero-icon-button hero-download-button" href="' . e(url_for('download_smart_gallery', ['id' => (int) $gallery['id']])) . '" data-gallery-download data-gallery-download-manifest-url="' . e(url_for('download_smart_gallery_manifest', ['id' => (int) $gallery['id']])) . '" aria-label="' . e(t('smart_gallery.download', 'Download Smart Gallery')) . '" title="' . e(t('smart_gallery.download', 'Download Smart Gallery')) . '"><span aria-hidden="true">&#10515;</span><span class="visually-hidden">' . e(t('smart_gallery.download', 'Download Smart Gallery')) . '</span></a>';
+    if (!empty($presentation['download_enabled']) && $total > 0) {
+        $downloadLabel = t('smart_gallery.download', 'Download Smart Gallery');
+        $legacyDownloadCapability = download_capability_issue(DOWNLOAD_CAPABILITY_RESOURCE_SMART_GALLERY, (int) $gallery['id'], DOWNLOAD_CAPABILITY_SCOPE_LEGACY);
+        echo '<form class="public-download-legacy-form" method="post" action="' . e(url_for('download_smart_gallery')) . '"><input type="hidden" name="id" value="' . (int) $gallery['id'] . '"><input type="hidden" name="capability" value="' . e($legacyDownloadCapability) . '"><button type="submit" class="button hero-icon-button hero-download-button" data-gallery-download data-gallery-download-start-url="' . e(url_for('download_smart_gallery_start', ['id' => (int) $gallery['id']])) . '" aria-label="' . e($downloadLabel) . '" title="' . e($downloadLabel) . '"><span aria-hidden="true">&#10515;</span><span class="visually-hidden">' . e($downloadLabel) . '</span></button></form>';
+    }
     echo '</div></div></div></section>';
     if ($pagination !== null) render_pagination_controls($pagination, t('pagination.photo_pages', 'Photo pages'));
 

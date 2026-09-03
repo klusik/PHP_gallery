@@ -42,6 +42,7 @@ namespace Gallery\Services;
 use RuntimeException;
 use Throwable;
 use function Gallery\Core\cms_config;
+use function Gallery\Core\cms_runtime_limit;
 use function Gallery\Core\db;
 use function Gallery\Core\gallery_public_url;
 use function Gallery\Core\is_dng_image_path;
@@ -50,19 +51,7 @@ use function Gallery\Core\normalize_relative_path;
 use function Gallery\Core\now_sql;
 use function Gallery\Core\url_for;
 
-const BROWSER_UPLOAD_DEFAULT_WORKER_COUNT = 8;
-const BROWSER_UPLOAD_MIN_WORKER_COUNT = 1;
-const BROWSER_UPLOAD_HARD_WORKER_CAP = 32;
-const BROWSER_UPLOAD_DEFAULT_ZIP_RATIO = 0.80;
-const BROWSER_UPLOAD_MIN_ZIP_RATIO = 0.10;
-const BROWSER_UPLOAD_MAX_ZIP_RATIO = 0.95;
 const BROWSER_UPLOAD_BATCH_POLICY_LIMIT_RATIO = 'upload_limit_ratio';
-const BROWSER_UPLOAD_DEFAULT_MAX_ITEMS_PER_BATCH = 8;
-const BROWSER_UPLOAD_MIN_ITEMS_PER_BATCH = 1;
-const BROWSER_UPLOAD_MAX_ITEMS_PER_BATCH = 64;
-const BROWSER_UPLOAD_DEFAULT_MAX_ZIP_BATCH_BYTES = 24 * 1024 * 1024;
-const BROWSER_UPLOAD_MIN_MAX_ZIP_BATCH_BYTES = 1 * 1024 * 1024;
-const BROWSER_UPLOAD_HARD_MAX_ZIP_BATCH_BYTES = 128 * 1024 * 1024;
 
 /**
  * Runtime exception with structured context for browser upload validation.
@@ -104,14 +93,14 @@ function browser_upload_default_settings(): array
 {
     return [
         'enabled' => true,
-        'default_worker_count' => BROWSER_UPLOAD_DEFAULT_WORKER_COUNT,
-        'max_worker_count' => BROWSER_UPLOAD_HARD_WORKER_CAP,
-        'hard_worker_cap' => BROWSER_UPLOAD_HARD_WORKER_CAP,
+        'default_worker_count' => (int) cms_runtime_limit('browser_upload.default_worker_count'),
+        'max_worker_count' => (int) cms_runtime_limit('browser_upload.hard_worker_cap'),
+        'hard_worker_cap' => (int) cms_runtime_limit('browser_upload.hard_worker_cap'),
         'batch_size_policy' => BROWSER_UPLOAD_BATCH_POLICY_LIMIT_RATIO,
-        'zip_size_threshold_ratio' => BROWSER_UPLOAD_DEFAULT_ZIP_RATIO,
-        'max_items_per_batch' => BROWSER_UPLOAD_DEFAULT_MAX_ITEMS_PER_BATCH,
-        'max_zip_batch_bytes' => BROWSER_UPLOAD_DEFAULT_MAX_ZIP_BATCH_BYTES,
-        'thumbnail_rebuild_source_chunk_bytes' => defined('Gallery\\Services\\BROWSER_THUMBNAIL_SOURCE_DEFAULT_CHUNK_BYTES') ? BROWSER_THUMBNAIL_SOURCE_DEFAULT_CHUNK_BYTES : 512 * 1024 * 1024,
+        'zip_size_threshold_ratio' => (float) cms_runtime_limit('browser_upload.default_zip_ratio'),
+        'max_items_per_batch' => (int) cms_runtime_limit('browser_upload.default_max_items_per_batch'),
+        'max_zip_batch_bytes' => (int) cms_runtime_limit('browser_upload.default_max_zip_batch_bytes'),
+        'thumbnail_rebuild_source_chunk_bytes' => (int) cms_runtime_limit('browser_thumbnail_rebuild.default_chunk_bytes'),
     ];
 }
 
@@ -154,7 +143,7 @@ function browser_upload_clamped_ratio(mixed $value, float $fallback): float
     } else {
         $ratio = (float) $value;
     }
-    return max(BROWSER_UPLOAD_MIN_ZIP_RATIO, min(BROWSER_UPLOAD_MAX_ZIP_RATIO, $ratio));
+    return max((float) cms_runtime_limit('browser_upload.min_zip_ratio'), min((float) cms_runtime_limit('browser_upload.max_zip_ratio'), $ratio));
 }
 
 /**
@@ -190,20 +179,20 @@ function browser_upload_normalize_settings(array $raw): array
     $defaults = browser_upload_default_settings();
     $hardCap = browser_upload_clamped_int(
         $raw['hard_worker_cap'] ?? $defaults['hard_worker_cap'],
-        BROWSER_UPLOAD_HARD_WORKER_CAP,
-        BROWSER_UPLOAD_MIN_WORKER_COUNT,
-        BROWSER_UPLOAD_HARD_WORKER_CAP
+        (int) cms_runtime_limit('browser_upload.hard_worker_cap'),
+        (int) cms_runtime_limit('browser_upload.min_worker_count'),
+        (int) cms_runtime_limit('browser_upload.hard_worker_cap')
     );
     $maxWorkers = browser_upload_clamped_int(
         $raw['max_worker_count'] ?? $defaults['max_worker_count'],
-        BROWSER_UPLOAD_HARD_WORKER_CAP,
-        BROWSER_UPLOAD_MIN_WORKER_COUNT,
+        (int) cms_runtime_limit('browser_upload.hard_worker_cap'),
+        (int) cms_runtime_limit('browser_upload.min_worker_count'),
         $hardCap
     );
     $defaultWorkers = browser_upload_clamped_int(
         $raw['default_worker_count'] ?? $defaults['default_worker_count'],
-        BROWSER_UPLOAD_DEFAULT_WORKER_COUNT,
-        BROWSER_UPLOAD_MIN_WORKER_COUNT,
+        (int) cms_runtime_limit('browser_upload.default_worker_count'),
+        (int) cms_runtime_limit('browser_upload.min_worker_count'),
         $maxWorkers
     );
     $policy = trim((string) ($raw['batch_size_policy'] ?? BROWSER_UPLOAD_BATCH_POLICY_LIMIT_RATIO));
@@ -219,19 +208,19 @@ function browser_upload_normalize_settings(array $raw): array
         'batch_size_policy' => $policy,
         'zip_size_threshold_ratio' => browser_upload_clamped_ratio(
             $raw['zip_size_threshold_ratio'] ?? $defaults['zip_size_threshold_ratio'],
-            BROWSER_UPLOAD_DEFAULT_ZIP_RATIO
+            (float) cms_runtime_limit('browser_upload.default_zip_ratio')
         ),
         'max_items_per_batch' => browser_upload_clamped_int(
             $raw['max_items_per_batch'] ?? $defaults['max_items_per_batch'],
-            BROWSER_UPLOAD_DEFAULT_MAX_ITEMS_PER_BATCH,
-            BROWSER_UPLOAD_MIN_ITEMS_PER_BATCH,
-            BROWSER_UPLOAD_MAX_ITEMS_PER_BATCH
+            (int) cms_runtime_limit('browser_upload.default_max_items_per_batch'),
+            (int) cms_runtime_limit('browser_upload.min_items_per_batch'),
+            (int) cms_runtime_limit('browser_upload.max_items_per_batch')
         ),
         'max_zip_batch_bytes' => browser_upload_clamped_int(
             $raw['max_zip_batch_bytes'] ?? $defaults['max_zip_batch_bytes'],
-            BROWSER_UPLOAD_DEFAULT_MAX_ZIP_BATCH_BYTES,
-            BROWSER_UPLOAD_MIN_MAX_ZIP_BATCH_BYTES,
-            BROWSER_UPLOAD_HARD_MAX_ZIP_BATCH_BYTES
+            (int) cms_runtime_limit('browser_upload.default_max_zip_batch_bytes'),
+            (int) cms_runtime_limit('browser_upload.min_max_zip_batch_bytes'),
+            (int) cms_runtime_limit('browser_upload.hard_max_zip_batch_bytes')
         ),
         'thumbnail_rebuild_source_chunk_bytes' => function_exists('Gallery\\Services\\browser_thumbnail_rebuild_clamped_source_chunk_bytes')
             ? browser_thumbnail_rebuild_clamped_source_chunk_bytes($raw['thumbnail_rebuild_source_chunk_bytes'] ?? $defaults['thumbnail_rebuild_source_chunk_bytes'])
@@ -248,14 +237,14 @@ function browser_upload_settings(): array
 {
     return browser_upload_normalize_settings([
         'enabled' => app_setting('browser_upload_enabled', '1'),
-        'default_worker_count' => app_setting('browser_upload_default_worker_count', (string) BROWSER_UPLOAD_DEFAULT_WORKER_COUNT),
-        'max_worker_count' => app_setting('browser_upload_max_worker_count', (string) BROWSER_UPLOAD_HARD_WORKER_CAP),
-        'hard_worker_cap' => app_setting('browser_upload_hard_worker_cap', (string) BROWSER_UPLOAD_HARD_WORKER_CAP),
+        'default_worker_count' => app_setting('browser_upload_default_worker_count', (string) (int) cms_runtime_limit('browser_upload.default_worker_count')),
+        'max_worker_count' => app_setting('browser_upload_max_worker_count', (string) (int) cms_runtime_limit('browser_upload.hard_worker_cap')),
+        'hard_worker_cap' => app_setting('browser_upload_hard_worker_cap', (string) (int) cms_runtime_limit('browser_upload.hard_worker_cap')),
         'batch_size_policy' => app_setting('browser_upload_batch_size_policy', BROWSER_UPLOAD_BATCH_POLICY_LIMIT_RATIO),
-        'zip_size_threshold_ratio' => app_setting('browser_upload_zip_size_threshold_ratio', (string) BROWSER_UPLOAD_DEFAULT_ZIP_RATIO),
-        'max_items_per_batch' => app_setting('browser_upload_max_items_per_batch', (string) BROWSER_UPLOAD_DEFAULT_MAX_ITEMS_PER_BATCH),
-        'max_zip_batch_bytes' => app_setting('browser_upload_max_zip_batch_bytes', (string) BROWSER_UPLOAD_DEFAULT_MAX_ZIP_BATCH_BYTES),
-        'thumbnail_rebuild_source_chunk_bytes' => app_setting('browser_thumbnail_rebuild_source_chunk_bytes', (string) (defined('Gallery\\Services\\BROWSER_THUMBNAIL_SOURCE_DEFAULT_CHUNK_BYTES') ? BROWSER_THUMBNAIL_SOURCE_DEFAULT_CHUNK_BYTES : 512 * 1024 * 1024)),
+        'zip_size_threshold_ratio' => app_setting('browser_upload_zip_size_threshold_ratio', (string) (float) cms_runtime_limit('browser_upload.default_zip_ratio')),
+        'max_items_per_batch' => app_setting('browser_upload_max_items_per_batch', (string) (int) cms_runtime_limit('browser_upload.default_max_items_per_batch')),
+        'max_zip_batch_bytes' => app_setting('browser_upload_max_zip_batch_bytes', (string) (int) cms_runtime_limit('browser_upload.default_max_zip_batch_bytes')),
+        'thumbnail_rebuild_source_chunk_bytes' => app_setting('browser_thumbnail_rebuild_source_chunk_bytes', (string) ((int) cms_runtime_limit('browser_thumbnail_rebuild.default_chunk_bytes'))),
     ]);
 }
 
@@ -269,16 +258,16 @@ function set_browser_upload_settings(array $input): array
 {
     $settings = browser_upload_normalize_settings([
         'enabled' => !empty($input['browser_upload_enabled']) ? '1' : '0',
-        'default_worker_count' => $input['browser_upload_default_worker_count'] ?? BROWSER_UPLOAD_DEFAULT_WORKER_COUNT,
-        'max_worker_count' => $input['browser_upload_max_worker_count'] ?? BROWSER_UPLOAD_HARD_WORKER_CAP,
-        'hard_worker_cap' => $input['browser_upload_hard_worker_cap'] ?? BROWSER_UPLOAD_HARD_WORKER_CAP,
+        'default_worker_count' => $input['browser_upload_default_worker_count'] ?? (int) cms_runtime_limit('browser_upload.default_worker_count'),
+        'max_worker_count' => $input['browser_upload_max_worker_count'] ?? (int) cms_runtime_limit('browser_upload.hard_worker_cap'),
+        'hard_worker_cap' => $input['browser_upload_hard_worker_cap'] ?? (int) cms_runtime_limit('browser_upload.hard_worker_cap'),
         'batch_size_policy' => $input['browser_upload_batch_size_policy'] ?? BROWSER_UPLOAD_BATCH_POLICY_LIMIT_RATIO,
-        'zip_size_threshold_ratio' => $input['browser_upload_zip_size_threshold_ratio'] ?? BROWSER_UPLOAD_DEFAULT_ZIP_RATIO,
-        'max_items_per_batch' => $input['browser_upload_max_items_per_batch'] ?? BROWSER_UPLOAD_DEFAULT_MAX_ITEMS_PER_BATCH,
-        'max_zip_batch_bytes' => browser_upload_megabytes_to_bytes($input['browser_upload_max_zip_batch_megabytes'] ?? null, BROWSER_UPLOAD_DEFAULT_MAX_ZIP_BATCH_BYTES),
+        'zip_size_threshold_ratio' => $input['browser_upload_zip_size_threshold_ratio'] ?? (float) cms_runtime_limit('browser_upload.default_zip_ratio'),
+        'max_items_per_batch' => $input['browser_upload_max_items_per_batch'] ?? (int) cms_runtime_limit('browser_upload.default_max_items_per_batch'),
+        'max_zip_batch_bytes' => browser_upload_megabytes_to_bytes($input['browser_upload_max_zip_batch_megabytes'] ?? null, (int) cms_runtime_limit('browser_upload.default_max_zip_batch_bytes')),
         'thumbnail_rebuild_source_chunk_bytes' => function_exists('Gallery\\Services\\browser_thumbnail_rebuild_megabytes_to_bytes')
             ? browser_thumbnail_rebuild_megabytes_to_bytes($input['browser_thumbnail_rebuild_source_chunk_megabytes'] ?? null)
-            : (512 * 1024 * 1024),
+            : (int) cms_runtime_limit('browser_thumbnail_rebuild.default_chunk_bytes'),
     ]);
 
     set_app_setting('browser_upload_enabled', $settings['enabled'] ? '1' : '0');
@@ -331,7 +320,7 @@ function browser_upload_server_upload_limit_bytes(): int
     $postMax = browser_upload_php_size_to_bytes((string) ini_get('post_max_size'));
     $limits = array_values(array_filter([$uploadMax, $postMax], static fn (int $bytes): bool => $bytes > 0));
     if (!$limits) {
-        return 8 * 1024 * 1024;
+        return max(1, (int) cms_runtime_limit('browser_upload.fallback_server_upload_limit_bytes'));
     }
     return min($limits);
 }
@@ -346,8 +335,14 @@ function browser_upload_server_upload_limit_bytes(): int
 function browser_upload_batch_target_bytes(int $uploadLimitBytes, float $ratio): int
 {
     $uploadLimitBytes = max(1, $uploadLimitBytes);
-    $ratio = browser_upload_clamped_ratio($ratio, BROWSER_UPLOAD_DEFAULT_ZIP_RATIO);
-    $reservedBytes = min(512 * 1024, max(64 * 1024, (int) floor($uploadLimitBytes * 0.05)));
+    $ratio = browser_upload_clamped_ratio($ratio, (float) cms_runtime_limit('browser_upload.default_zip_ratio'));
+    $reservedBytes = min(
+        max(1, (int) cms_runtime_limit('browser_upload.request_reserve_max_bytes')),
+        max(
+            max(1, (int) cms_runtime_limit('browser_upload.request_reserve_min_bytes')),
+            (int) floor($uploadLimitBytes * (float) cms_runtime_limit('browser_upload.request_reserve_ratio'))
+        )
+    );
     $target = (int) floor($uploadLimitBytes * $ratio);
     return max(1, min($target, max(1, $uploadLimitBytes - $reservedBytes)));
 }
@@ -365,9 +360,9 @@ function browser_upload_effective_batch_target_bytes(int $uploadLimitBytes, floa
     $ratioTarget = browser_upload_batch_target_bytes($uploadLimitBytes, $ratio);
     $maxZipBatchBytes = browser_upload_clamped_int(
         $maxZipBatchBytes,
-        BROWSER_UPLOAD_DEFAULT_MAX_ZIP_BATCH_BYTES,
-        BROWSER_UPLOAD_MIN_MAX_ZIP_BATCH_BYTES,
-        BROWSER_UPLOAD_HARD_MAX_ZIP_BATCH_BYTES
+        (int) cms_runtime_limit('browser_upload.default_max_zip_batch_bytes'),
+        (int) cms_runtime_limit('browser_upload.min_max_zip_batch_bytes'),
+        (int) cms_runtime_limit('browser_upload.hard_max_zip_batch_bytes')
     );
     return max(1, min($ratioTarget, $maxZipBatchBytes));
 }
@@ -492,7 +487,7 @@ function browser_upload_parse_store_zip(string $zipPath, int $maxBytes): array
             $entries[$name] = substr($data, $dataOffset, $compressedSize);
             $entryCount++;
         }
-        if ($entryCount > 20000) {
+        if ($entryCount > max(1, (int) cms_runtime_limit('browser_upload.max_zip_entries'))) {
             throw new RuntimeException(t('browser_upload.error_zip_entry_count', 'The prepared upload package contains too many files.'));
         }
         $offset = $dataOffset + $compressedSize;

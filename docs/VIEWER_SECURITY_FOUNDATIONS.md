@@ -26,6 +26,12 @@ This is particularly important because the current gallery authorization model i
 
 No viewer state is written to `$_SESSION['user_id']`. No viewer row is written to `users`. No viewer role is added to the administrator role model.
 
+## Public download capability boundary
+
+Public gallery-download capabilities are deliberately outside the Viewer identity domain. A download capability is a short-lived HMAC-signed bearer for one resource, one resource ID, and one action scope (`progressive` or `legacy`). It does not identify a viewer, create a session, persist gallery access, or bypass the canonical gallery/image visibility checks. Every progressive manifest and source request revalidates the capability and then re-runs current resource authorization; reusable manifest metadata contains no capability or permission snapshot. Legacy POST fallback similarly validates its separate scope before current resource authorization and bounded archive handling.
+
+Viewer login therefore neither replaces nor broadens the public download capability contract. Collection/favourite membership is not accepted as download authority, a shared collection token is not accepted as gallery-download authority, and cached download metadata never converts earlier viewer/gallery visibility into a persistent grant. The public-download hardening intentionally relies on cheap scoped authorization, cache-key control, bounded server work, and artifact reuse rather than CAPTCHA or Viewer-account enrollment.
+
 ## Collection permission invariant
 
 **A collection reference is not an authorization grant.**

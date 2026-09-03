@@ -44,9 +44,10 @@ return [
     'base_url' => '',
     'galleries_root' => __DIR__ . '/galleries',
     'zip_cache_path' => __DIR__ . '/cache/zips',
-    // Aggregate size of original files accepted for one public Smart Gallery ZIP.
-    // Existing config.php files without this key use the same 2 GiB default.
-    'smart_gallery_zip_max_source_bytes' => 2 * 1024 * 1024 * 1024,
+    // Operational limits are centralized in app/configuration_defaults.php.
+    // A deployment may override individual values by adding a runtime_limits
+    // array to config.php. Existing legacy smart_gallery_zip_max_source_bytes
+    // overrides remain supported for backward compatibility.
     'admin_session_name' => 'gallery_admin_session',
     'visitor_vote_secret' => 'replace-with-a-long-random-secret',
     'setup_key' => 'replace-with-a-temporary-setup-key',

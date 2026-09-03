@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-08-12
+ *   2026-09-03
  */
 
 declare(strict_types=1);
@@ -100,7 +100,39 @@ function cms_config(): array
         $configFile = dirname(__DIR__, 2) . '/config.example.php';
     }
 
+    // Central operational defaults are merged first so existing config.php files
+    // automatically receive newly introduced safe limits after an update. Local
+    // configuration wins only for explicitly overridden keys.
+    $defaults = require dirname(__DIR__) . '/configuration_defaults.php';
+    $loaded = require $configFile;
+    if (!is_array($loaded)) {
+        $loaded = [];
+    }
+
     // Variable $config stores this steps working value.
-    $config = require $configFile;
+    $config = array_replace_recursive($defaults, $loaded);
     return $config;
+}
+
+/**
+ * Return one centralized operational runtime limit.
+ *
+ * Runtime limits are deliberately addressed by stable dotted keys so feature
+ * modules never redeclare numeric policy defaults locally.
+ *
+ * @return int|float Numeric runtime-limit value.
+ */
+function cms_runtime_limit(string $key): int|float
+{
+    $config = cms_config();
+    $limits = is_array($config['runtime_limits'] ?? null) ? $config['runtime_limits'] : [];
+    if (!array_key_exists($key, $limits) || !is_numeric($limits[$key])) {
+        $defaults = require dirname(__DIR__) . '/configuration_defaults.php';
+        $defaultLimits = is_array($defaults['runtime_limits'] ?? null) ? $defaults['runtime_limits'] : [];
+        if (!array_key_exists($key, $defaultLimits) || !is_numeric($defaultLimits[$key])) {
+            throw new \InvalidArgumentException('Unknown runtime limit: ' . $key);
+        }
+        return $defaultLimits[$key] + 0;
+    }
+    return $limits[$key] + 0;
 }
