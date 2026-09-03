@@ -1,6 +1,6 @@
 # Testing Guide
 
-This guide applies to PHP Gallery Version 0.95. Release verification must include the canonical Admin side-panel mutation envelope and completion coordinator, multi-context postcondition verification, stale/out-of-order suppression, browser upload pipeline safeguards, opened-gallery branch image counters and their Theme/per-gallery visibility policy, progressive thumbnail dimension detection and responsive compatibility, the Version 0.93 request-budget/TTFB behavior, request-local database caching, resumable updater safety, updater server-policy reconciliation, Admin test-run diagnostics, public media concurrency and cache invalidation, clean-home URL handling, upload auto-renaming and inventory behavior, the redesigned Windows uploader, the Windows HTTP monitor schedules/protocol snapshots/report ZIPs, deployment exclusion rules, lightbox detached-image cleanup, decoded-cache ownership, preload-generation invalidation, teardown/reopen cycles, public lightbox zoom and progressive quality promotion, Shift+Left/Right ten-photo navigation, public Smart Gallery visibility, presentation settings, cycle-safe placement/order evaluation, viewer account privacy/access, collection sharing, bounded gallery benchmark diagnostics, access intersection and pagination; multilingual gallery/photo content and fallbacks; browser-local ZIP imports; progressive gallery and Smart Gallery ZIP downloads; browser download symbol rendering; ordered migration upgrades; complete deployment packaging; updater safety; the configurable public language selector; hourly automatic-update throttling; and the supported English, Czech, German, and Swedish catalogs.
+This guide applies to PHP Gallery Version 0.95.1. Release verification must include the canonical Admin side-panel mutation envelope and completion coordinator, multi-context postcondition verification, stale/out-of-order suppression, browser upload pipeline safeguards, opened-gallery branch image counters and their Theme/per-gallery visibility policy, progressive thumbnail dimension detection and responsive compatibility, the Version 0.93 request-budget/TTFB behavior, request-local database caching, resumable updater safety, updater server-policy reconciliation, Admin test-run diagnostics, public media concurrency and cache invalidation, clean-home URL handling, upload auto-renaming and inventory behavior, the redesigned Windows uploader, the Windows HTTP monitor schedules/protocol snapshots/report ZIPs, deployment exclusion rules, lightbox detached-image cleanup, decoded-cache ownership, preload-generation invalidation, teardown/reopen cycles, public lightbox zoom and progressive quality promotion, Shift+Left/Right ten-photo navigation, public Smart Gallery visibility, presentation settings, cycle-safe placement/order evaluation, viewer account privacy/access, collection sharing, bounded gallery benchmark diagnostics, access intersection and pagination; multilingual gallery/photo content and fallbacks; browser-local ZIP imports; progressive gallery and Smart Gallery ZIP downloads; browser download symbol rendering; ordered migration upgrades; complete deployment packaging; updater safety; the configurable public language selector; hourly automatic-update throttling; and the supported English, Czech, German, and Swedish catalogs.
 
 ## Purpose
 This project is a plain PHP gallery CMS without a formal browser automation stack. The most reliable testing approach is a mix of fast syntax checks, focused script-level checks, and a repeatable manual smoke-test scenario that exercises the core gallery lifecycle.
@@ -21,6 +21,97 @@ php -l path/to/file.php
 ```
 
 For JavaScript, use whatever local parser or linter is available in your environment. Syntax checks catch obvious breakage, but they do not prove the app still behaves correctly.
+
+The Stage 1 through Stage 6 download sections below preserve the acceptance criteria that applied immediately after each incremental stage. Later stages intentionally supersede some earlier compatibility expectations, for example Stage 4 removes Stage 2 tokenless manifest/source access and legacy capability issuance from the progressive start response. For the current post-Stage-7 release, execute the Stage 7 checklist plus the retained invariants referenced there; use earlier sections when bisecting or validating a rollback to that specific stage.
+
+### Public download hardening: Stage 1
+
+Stage 1 keeps the existing download contract unchanged while adding operational diagnostics and crawler hygiene. Before moving to the capability stages, verify all of the following against the deployed build:
+
+1. A normal physical-gallery Download click still opens the progressive browser dialog, fetches `download_gallery_manifest`, streams source files, and produces the ZIP locally.
+2. Direct navigation to `index.php?page=download_gallery&id=<public-gallery-id>` still reaches the bounded no-JavaScript/server-ZIP fallback. Repeat the equivalent Smart Gallery checks.
+3. Public download anchors render both `rel="nofollow"` and the `download` attribute while retaining `data-gallery-download` and `data-gallery-download-manifest-url`.
+4. All physical and Smart Gallery legacy/manifest/source download responses include `X-Robots-Tag: noindex, nofollow`. A normal `gallery` or `smart_gallery` page must not receive that header from this policy.
+5. `robots.txt` explicitly disallows all six download route names in query-string routing.
+6. Force one controlled legacy preparation failure in a local/test gallery and inspect the Admin log. The event must contain the resource ID, exception class, sanitized exception message, request method, route, request ID when available, `download_mode=legacy`, stable failure stage/reason, bounded User-Agent, Referer without query/fragment data, and a keyed client-IP fingerprint rather than a raw address. SQL, stack traces, filesystem paths, cookies, share/access tokens, and arbitrary headers must not appear.
+
+Finish with `php -l` for every changed PHP file and `php scripts/generate_manifest.php --check` after regenerating `app/core-manifest.json`. The deployment ZIP normally omits `tests/`, so absence of the source test tree in a production deployment package is expected and must not be "fixed" by adding ad-hoc runtime test files.
+
+### Public download hardening: Stage 2
+
+Stage 2 adds optional stateless HMAC download capabilities while preserving every tokenless Stage 1 route. Verify both paths because the capability path is intentionally parallel, not mandatory yet:
+
+1. Request `index.php?page=download_gallery_start&id=<public-gallery-id>` and confirm the JSON response contains `ok=true`, a `progressive` capability, a separate legacy capability, expiry metadata, and capability-bearing manifest/legacy URLs. No ZIP artifact should be created by this request.
+2. Open the returned physical-gallery manifest URL. Confirm it succeeds, every returned source URL carries the same progressive capability, and the browser ZIP can be assembled normally. Repeat with a public downloadable Smart Gallery using `download_smart_gallery_start`.
+3. Change one character in a capability, use it with another gallery ID, use a physical-gallery token on a Smart Gallery route, and use a progressive token on the legacy route. Each request must fail cheaply with HTTP 403 before manifest traversal or ZIP building.
+4. Verify expiry by issuing a test token with the service-level test harness or by temporarily shortening `runtime_limits['download.capability_ttl_seconds']` in a local config. Expired capabilities must return 403. Oversized/malformed capabilities must also be rejected before JSON/resource work.
+5. Re-run the original tokenless `download_gallery_manifest`, `download_gallery_file`, `download_gallery`, and all Smart Gallery equivalents. They must behave exactly as Stage 1 did. This is the Stage 2 rollback/compatibility invariant.
+6. Confirm `download_gallery_start` and `download_smart_gallery_start` are behind the existing Downloads feature flag, receive `X-Robots-Tag: noindex, nofollow`, and are listed in `robots.txt`.
+7. Confirm existing `config.php` files need no edits. Capability signing must derive a purpose-specific key from the existing stable application secret unless a dedicated `download_security.capability_secret` override is explicitly configured.
+8. Review `app/configuration_defaults.php` as the canonical source for download/browser-upload operational limits. Feature modules must consume these values through `cms_runtime_limit()` rather than redeclaring numeric policy constants.
+
+Finish with PHP syntax checks for every changed PHP file, the focused capability regression script from the source test tree when available, and `php scripts/generate_manifest.php --check`.
+
+### Public download hardening: Stage 3
+
+Stage 3 moves the normal JavaScript downloader to header-transport capabilities while keeping the bounded query transport only for compatibility. Verify:
+
+1. Click Download on a physical gallery and a downloadable Smart Gallery. The browser must POST to the corresponding `*_start` route before any manifest/source request and must not navigate away from the page.
+2. In Network, confirm normal manifest and source URLs contain no `capability=` query parameter. Requests instead carry `X-PHP-Gallery-Download-Capability`, responses are `private, no-store`, and `Referrer-Policy: no-referrer` is present.
+3. Remove the header, alter the token, use the wrong scope/resource type/ID, or let the token expire. Manifest/source requests must return 403 before bounded enumeration/source resolution.
+4. Exercise the documented query-token compatibility path manually and confirm it remains resource/scoped, bounded, and noindex. Supplying different header and query tokens must fail.
+5. Confirm the browser still validates source `Content-Length` against manifest `size`, handles source-version 409 by failing/retrying the download rather than silently creating a corrupt ZIP, and preserves ZIP64 behavior for large local archives.
+
+### Public download hardening: Stage 4
+
+Stage 4 makes every crawler-reachable legacy GET/HEAD route cheap and non-building. Verify:
+
+1. `GET` and `HEAD` for `download_gallery?id=<id>` and `download_smart_gallery?id=<id>` may render/describe the explicit fallback confirmation, but must not enumerate a manifest, create a partial ZIP, or change the immutable artifact/cache tree.
+2. The public hero control is an explicit POST form containing resource ID plus a valid `legacy` capability. With JavaScript enabled, progressive enhancement intercepts it and uses the progressive start handshake. With JavaScript disabled, POST submits the bounded legacy fallback.
+3. A POST without capability, with malformed/expired capability, wrong resource ID/type, or a `progressive` token must return 403 before manifest enumeration or ZIP building.
+4. Confirm large legacy requests still stop at configured file/byte caps with a controlled response. Normal progressive browser downloads are not subject to the smaller legacy fallback cap.
+5. Confirm no normal public page contains a crawlable URL whose GET alone can trigger server ZIP construction.
+
+### Public download hardening: Stage 5
+
+Stage 5 adds canonical single-flight and global build admission around the remaining deliberate legacy build path. Verify with two or more parallel POST requests against an uncached small gallery:
+
+1. Only one request owns the canonical build lock. A duplicate build receives HTTP 503 plus bounded `Retry-After`, or reuses the completed result if publication wins the race.
+2. Start builds for different resources until `download.legacy_max_concurrent_builds` is reached. Further uncached builds must return 503 without waiting indefinitely or beginning ZIP work.
+3. A completed cache/artifact hit must not consume a global build slot and transfer speed must not be throttled.
+4. Changing only capability nonce, request ID, User-Agent, host, or irrelevant query parameters must not change the canonical build key. A true gallery/result revision must change it.
+5. Kill a local build process while it owns a lock and retry. Kernel `flock()` release must allow recovery without manual lease deletion; incomplete partial output must never be served.
+
+### Public download hardening: Stage 6
+
+Stage 6 makes completed legacy fallback ZIPs immutable managed artifacts. Verify:
+
+1. First authorized legacy POST builds and atomically publishes one artifact. The next POST for unchanged content reuses it without invoking ZIP construction again.
+2. Mutate a physical gallery or change the canonical Smart Gallery result. The new revision/fingerprint must use a distinct artifact identity; the old artifact remains isolated until maintenance eligibility.
+3. Inspect `metadata.json` in a local cache fixture. It may contain bounded artifact identity, timestamps, size, and expected count, but never capability tokens, visitor/client identity, public URLs, or source paths.
+4. Simulate interrupted publication. `.partial-*` content must not be returned by artifact lookup/serve paths.
+5. Run maintenance while one artifact is served/built under its lease. Active content must be skipped. Eligible expired artifacts, abandoned partials, and stale inactive coordination state may be removed only from managed cache roots.
+6. Temporarily lower `download.legacy_artifact_cache_max_bytes` or raise the free-space margin enough to refuse a new build. Confirm HTTP 507, no partial published artifact, and an Admin event `download.legacy_cache_capacity_refused`.
+7. Restore production limits and confirm physical default retention is seven days, Smart Gallery retention one day, partial retention six hours, and inactive coordination retention 24 hours unless locally overridden.
+
+### Public download hardening: Stage 7
+
+Stage 7 reduces repeated progressive-manifest filesystem cost without weakening current authorization. Verify both physical and Smart Gallery routes:
+
+1. Use an Admin test run or browser/devtools timing against a small, medium, and large gallery. On the first authorized request inspect the `download_manifest_profile` component, `Server-Timing`, and `X-PHP-Gallery-Manifest-Cache: miss`. Record SQL query delta when Admin test instrumentation is active, gallery/image row counts, filesystem checks/size reads/realpath checks, elapsed time, and memory. Repeat immediately and expect `hit` with the per-source filesystem work absent while normal authorization/query work remains.
+2. Repeat the exact request with irrelevant parameters such as `&noise=1`, a different request ID, or a newly issued capability for the same content. It must resolve to the same revision-keyed cache entry. Do not use arbitrary query parameters that the dispatcher itself rejects as a proxy for cache identity; verify the cache header and on-disk revision filename instead.
+3. Inspect one cached `.download-manifests/<type>/<id>/<revision>.json` fixture. It may contain only format/resource/revision/timestamp plus normalized `name`, `size`, `image_id`, `version` data and totals. Search the file for the active capability token and confirm it is absent.
+4. Change gallery/image metadata that affects the physical content revision, or change Smart Gallery rules so the ordered result changes. The next manifest must miss the old identity and produce current metadata. Changing only title/host/client/query data that does not affect downloaded file content must not create a new revision entry.
+5. While a metadata cache entry exists, revoke access or make a source image/gallery non-public. A request that is no longer authorized must fail before the cache can grant content. Smart Gallery membership must be recomputed before cache reuse. Capability validation remains mandatory on every protected manifest/source request.
+6. Request one manifest/source with POST or HEAD, malformed/oversized/non-decimal IDs, array parameters, or malformed source version. Expect 405/400 before DB/filesystem work as applicable. Valid GET follows capability, resource lookup, authorization, revision/cache, bounded work, then transfer ordering.
+7. Source-file requests must still independently resolve gallery/Smart Gallery membership, image visibility, containment, size, and optional `v` version. Generated URLs also contain `mr` and `s`; confirm the SEO request guard accepts both parameters on `download_gallery_file` and `download_smart_gallery_file` before dispatch. When the actual size differs, the endpoint must return 409 and invalidate only an exact cache entry that proves the same image/version/expected-size tuple. Tampering with `s` must not evict a valid cache entry. The successful response retains exact `Content-Length`, no intentional bandwidth throttle, and authorized PHP `readfile()` streaming.
+8. Exercise the SEO guard with a deliberately unexpected parameter while the same request also contains a fake `capability`, `token`, or `share` value. The sampled Admin security event may record the request path and unexpected parameter names, but its `request_uri` field must replace the entire query string with `?[query-redacted]`; no bearer/query value may appear in the event context.
+9. For the no-JavaScript legacy path, mutate a source file size after a manifest has been cached. Before any ZIP build, the server must recompute current aggregate source bytes, invalidate stale manifest metadata on mismatch, and enforce `download.legacy_max_source_bytes` against actual bytes rather than the cached total.
+10. Run scheduled/site maintenance and confirm expired/corrupt manifest metadata and old partials are removed within `download.manifest_cache_cleanup_max_entries`; unrelated ZIP/cache/media files must not be touched by this cleanup.
+11. Disable JavaScript and verify the explicit Stage 4-6 bounded legacy POST fallback still works for a small physical and Smart Gallery. Re-enable JavaScript and verify both progressive downloads end-to-end, including ZIP creation in the browser.
+12. Confirm PHP 8.1 compatibility for changed syntax/APIs, run `php -l` on every changed PHP file, regenerate `app/core-manifest.json`, run `php scripts/generate_manifest.php --check`, and run `php tests/run.php` plus standalone Node tests when the source test tree is available. Production deployment ZIPs normally omit `tests/`, so record that absence rather than inventing runtime tests.
+
+Stage 7 runtime defaults are centrally merged and require no existing `config.php` edit: physical manifest metadata retention 86400 seconds, Smart Gallery retention 900 seconds, maximum single metadata file 16777216 bytes, and bounded cleanup scan 10000 entries. A rollback may delete only the private `.download-manifests` subtree; the next authorized request follows the cache-miss path and the progressive protocol remains unchanged.
 
 ### 2. Script-Level Tests
 The repository uses current direct PHP regression tests under `tests/`. Run the complete isolated suite with:

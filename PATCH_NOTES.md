@@ -1,5 +1,113 @@
 # Patch notes
 
+## Version 0.95.1
+
+Version 0.95.1 hardens public physical-gallery and Smart Gallery downloads through a complete seven-stage security and resource-control pipeline. The release keeps the existing browser ZIP experience and no-JavaScript fallback while making crawler-triggered requests cheap, requiring short-lived scoped authority for protected work, bounding server-side preparation, reusing immutable results safely, and preventing download metadata or bearer credentials from amplifying filesystem, CPU, memory, or logging costs.
+
+### Highlights
+
+#### Stage 1: observability and crawler hygiene
+
+- Added structured, bounded diagnostics for legacy download preparation failures, including resource identity, stable failure stage and reason, request method, route, request correlation, bounded User-Agent and Referer data, and a keyed client-IP fingerprint.
+- Prevented raw SQL, stack traces, filesystem paths, cookies, share/access tokens, arbitrary headers, and raw client addresses from entering download failure diagnostics.
+- Added `X-Robots-Tag: noindex, nofollow` to physical and Smart Gallery download responses without applying it to ordinary gallery pages.
+- Added explicit `robots.txt` exclusions for download initialization, legacy, manifest, and source routes.
+
+#### Stage 2: stateless signed download capabilities
+
+- Added versioned stateless HMAC-SHA-256 capabilities in `app/services/download_capabilities.php`.
+- Bound every capability to a resource type, positive resource ID, purpose-specific scope, issue time, expiry time, and random nonce.
+- Added strict length, envelope, base64url, signature, expiry, clock-skew, resource, and scope validation before resource traversal or archive work.
+- Added purpose-separated key derivation from the dedicated `download_security.capability_secret`, with compatibility fallback to the existing stable application secret and then `setup_key`.
+- Kept `progressive` and `legacy` authority separate so a browser capability cannot authorize server-side legacy ZIP construction.
+
+#### Stage 3: header-based progressive browser downloads
+
+- Changed the normal JavaScript download flow to POST to `download_gallery_start` or `download_smart_gallery_start` before requesting a manifest.
+- Moved normal progressive bearer transport to `X-PHP-Gallery-Download-Capability`, keeping capability values out of ordinary browser URLs and access logs.
+- Retained a bounded query-token compatibility path for older/manual clients and rejected requests that provide disagreeing header and query capabilities.
+- Preserved private no-store caching and `Referrer-Policy: no-referrer` on capability-bearing progressive responses.
+- Kept browser-side source `Content-Length` validation, source-version conflict handling, ZIP64 support, and local ZIP assembly.
+
+#### Stage 4: safe legacy fallback boundary
+
+- Made historic physical and Smart Gallery legacy GET and HEAD routes confirmation-only; they no longer enumerate manifests or construct ZIP archives.
+- Replaced crawlable build-triggering controls with explicit POST forms containing only the resource ID and a short-lived `legacy` capability.
+- Preserved JavaScript enhancement on the same form while keeping the bounded POST fallback available when JavaScript is disabled or unavailable.
+- Rejected missing, malformed, expired, cross-resource, cross-type, and progressive capabilities before manifest enumeration or archive creation.
+- Preserved configured legacy file and aggregate-byte limits while keeping the normal progressive browser path independent of the smaller server fallback ceiling.
+
+#### Stage 5: single-flight and bounded build admission
+
+- Added canonical content-only legacy build keys that exclude capabilities, request IDs, client identity, hosts, User-Agent values, and irrelevant query parameters.
+- Added non-blocking per-build filesystem `flock()` locks so concurrent requests cannot duplicate the same expensive preparation.
+- Added a shared global build-slot pool with centralized defaults of two concurrent legacy builds and a bounded five-second `Retry-After` response under pressure.
+- Ensured completed artifact hits bypass build admission and that archive transfers are not intentionally bandwidth-throttled.
+- Revalidated content identity after admission and relied on kernel lock release for crash recovery; stale lock files cannot become permanent leases.
+- Added incremental Smart Gallery file-count and aggregate source-byte enforcement with safe centralized runtime defaults.
+
+#### Stage 6: immutable managed legacy artifacts
+
+- Added `app/services/download_artifact_cache.php` for immutable physical-gallery and Smart Gallery fallback artifacts.
+- Published completed ZIPs only after successful archive creation, close, entry-count sanity validation, bounded metadata persistence, and atomic directory rename.
+- Restricted artifact metadata to bounded resource/build identity, revision, timestamp, archive size, and expected entry count; capabilities, visitor identity, client identity, public URLs, and source paths are never persisted.
+- Added serve leases and build coordination locks so active artifacts and builds are skipped by maintenance.
+- Added managed capacity reservations, a 4 GiB default artifact budget, a 512 MiB free-space margin, controlled HTTP 507 refusal, and `download.legacy_cache_capacity_refused` logging.
+- Added retention and cleanup policy for physical artifacts, dynamic Smart Gallery artifacts, abandoned partials, inactive reservations, and stale coordination state, limited to managed download-cache roots.
+
+#### Stage 7: progressive manifest and source cost hardening
+
+- Added revision-keyed capability-free manifest metadata caching in `app/services/download_manifest_cache.php`.
+- Derived physical revisions from the authorized ordered image set and stable source identity, and Smart Gallery revisions from the bounded canonical result set.
+- Kept current capability validation, resource lookup, visitor authorization, visibility, NSFW policy, and Smart Gallery membership evaluation ahead of every cache lookup.
+- Stored only normalized ZIP names, image IDs, source versions, sizes, totals, resource identity, revision, and bounded timestamps; current-request URLs and capabilities are injected only into the response.
+- Preserved cache-miss filesystem existence, containment, realpath, and size validation while avoiding repeated per-file work on cache hits.
+- Added generated `mr` revision and `s` expected-size snapshots to source URLs and invalidated only an exact cache entry after matching image, version, and expected-size verification.
+- Kept source delivery PHP-authorized through exact `Content-Length` and `readfile()` streaming because no portable protected internal redirect can be assumed on supported shared hosting.
+- Added cheap method and parameter rejection before capability, database, filesystem, manifest, or archive work; progressive manifest/source routes accept GET only and reject HEAD with 405.
+- Added credential-free manifest profiling, SQL/row/filesystem counters, elapsed and memory diagnostics, `Server-Timing`, and `X-PHP-Gallery-Manifest-Cache` response headers.
+- Added bounded maintenance cleanup for expired/corrupt manifest metadata and partial files, isolated from media and unrelated cache trees.
+- Updated the SEO request guard to accept `mr` and `s` on both source routes and to redact query strings from security logs, preventing compatibility capabilities and share tokens from being recorded.
+
+### Technical Details
+
+#### Backend and configuration
+
+- Added centralized download limits to `app/configuration_defaults.php`, including manifest limits, capability bounds, legacy admission, artifact retention/capacity, and manifest-cache retention/cleanup settings.
+- Updated `app/bootstrap/configuration.php` to merge deployment defaults without requiring existing `config.php` files to change.
+- Updated `app/controllers/downloads.php`, `app/services/downloads.php`, `app/services/download_capabilities.php`, `app/services/download_artifact_cache.php`, and `app/services/download_manifest_cache.php` for the staged flow.
+- Integrated both download-cache cleanup services into `app/services/site_maintenance.php`.
+- Preserved existing gallery/password/share-link/visibility/NSFW/media authorization and added no database migration, table, column, or stored-data rewrite.
+
+#### Frontend and routing
+
+- Updated `public/assets/gallery-modules/gallery-download.js` and its cache-busting import chain for POST initialization, header capabilities, manifest validation, source-size validation, retry behavior, and ZIP assembly.
+- Updated physical and Smart Gallery public controls to use explicit no-JavaScript-compatible POST forms.
+- Registered separate initialization, legacy, manifest, and source routes in `app/bootstrap/dispatch.php`.
+- Added download route crawler policy and source snapshot query validation in `app/services/seo_request_guard.php` and `app/controllers/public_media.php`.
+
+#### Tests and documentation
+
+- Retained focused service, manifest, controller, Smart Gallery, public-media, browser-client, ZIP, ZIP64, and source-boundary regression coverage under `tests/`.
+- Documented the seven-stage acceptance criteria, threat model, capability semantics, GET safety invariant, progressive and legacy flows, concurrency limits, cache lifecycle, maintenance behavior, rollback safety, and manual verification in `TESTING.md`, `ARCHITECTURE.md`, `CODEMAP.md`, and `README.md` before retiring the temporary implementation plan.
+- Regenerated `app/core-manifest.json` after final source, documentation, version, and patch-note edits.
+
+### User Impact
+
+#### For visitors
+
+- Normal Download actions continue to assemble ZIP files in the browser with progress reporting and ZIP64 support.
+- Public download links remain compatible with direct navigation and no-JavaScript fallback use, but crawler visits no longer trigger expensive server ZIP creation.
+- Public and Smart Gallery access, visibility, NSFW, password, share-link, and source authorization behavior remains enforced.
+- Changed source files produce a controlled retry response instead of silently creating a corrupt archive.
+
+#### For administrators
+
+- Repeated legacy requests reuse immutable artifacts and no longer duplicate expensive ZIP work.
+- Concurrent server preparations are bounded and produce controlled retry or capacity responses instead of indefinite waiting.
+- Download cache capacity, active leases, stale partials, and manifest-cache maintenance are handled automatically by scheduled maintenance.
+- Existing installations require no configuration edit and no database migration for this release.
+
 ## Version 0.95
 
 Version 0.95 fundamentally hardens every persistent mutation launched from the Admin right-side panel. Gallery, image, upload, metadata, thumbnail, migration, duplicate-review, tag, date, and Smart Gallery actions now share one typed server response and one browser completion coordinator. Successful work remains in place with the panel open and the browser URL unchanged, while authoritative server-rendered contexts are refreshed, checked against explicit postconditions, protected from stale/out-of-order responses, and retried only through one bounded policy. The release also closes related gallery-visibility, deletion-refresh, browser-upload, thumbnail compatibility, and Windows uploader defects discovered during staged qualification.

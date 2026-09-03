@@ -16,7 +16,7 @@ This file maps features to source files. It is optimized for fast maintenance an
 | --- | --- |
 | Bootstrap coordinator and version constants | `app/bootstrap.php` |
 | Pre-bootstrap fatal handling and updater activation gate | `app/early_runtime.php`, `public/index.php`, `install.php` |
-| Configuration bootstrap | `app/bootstrap/configuration.php` |
+| Configuration bootstrap | `app/bootstrap/configuration.php`, `app/configuration_defaults.php` for merged local config and centralized operational runtime-limit defaults |
 | Request and security-header lifecycle | `app/bootstrap/request.php` |
 | Session lifecycle | `app/bootstrap/session.php` |
 | Public-path and query routing | `app/bootstrap/routing.php` |
@@ -226,8 +226,13 @@ The Gallery tags Theme subsection is rendered by app/controllers/admin_theme.php
 | Gallery password access | `app/services/gallery_access.php`, `app/controllers/public_gallery.php` |
 | Share links | `app/services/gallery_access.php`, `app/controllers/public_gallery.php` |
 | Download signatures | `app/services/download_signatures.php` |
-| ZIP generation | `app/services/downloads.php`, `app/controllers/downloads.php`, including gallery, all-gallery and selected-photo fallback archives |
-| Archive cache table | `zip_archives` |
+| Stateless download capabilities | `app/services/download_capabilities.php`, `app/controllers/downloads.php` for signed capability issuance/validation, POST-only progressive initialization, mandatory progressive manifest/source authorization, and POST-only bounded legacy fallback |
+| Progressive manifest metadata/cache | `app/services/download_manifest_cache.php`, `app/services/downloads.php`, `app/controllers/downloads.php`; revision-keyed capability-free metadata, manifest profiling, cheap rejection ordering, current-request URL/capability injection, bounded maintenance |
+| Progressive source delivery | `app/controllers/downloads.php`, `app/services/downloads.php`; independent capability and source authorization, source-version/size snapshot parity with verified stale-cache invalidation, session-lock release, exact-length authorized `readfile()` streaming |
+| Legacy build admission | `app/services/downloads.php`; canonical content keys, non-blocking single-flight `flock()`, bounded global build slots and Retry-After behavior |
+| Immutable legacy artifact cache | `app/services/download_artifact_cache.php`, `app/services/site_maintenance.php`; atomic publication, serve/build leases, retention, managed-capacity reservations, safe cleanup |
+| ZIP generation | `app/services/downloads.php`, `app/controllers/downloads.php`, including gallery, Smart Gallery, all-gallery and selected-photo fallback archives |
+| Archive cache table | `zip_archives` for historical ordinary ZIP cache rows; Stage 6 immutable legacy artifacts and Stage 7 manifest metadata use private filesystem metadata and no new schema |
 
 ## AI and Metadata Generation
 
@@ -531,7 +536,7 @@ dynamically, not test one known table identity.
 | `app/bootstrap/dispatch.php` | Registers the seven Phase 1.0 viewer routes plus `admin_viewer_invitations`. Phase 1.0 itself adds no signup/content-management route; later Phase 1.1 adds the isolated favourites routes below. |
 | `app/bootstrap/request.php` | Attempts viewer remember restoration before security-header/cache classification. |
 | `app/security.php` | Treats viewer remember bearer presence as sensitive state so it cannot enter anonymous shared/public caching. |
-| `app/services/seo_request_guard.php` | Exempts dedicated `viewer_*` bearer/pre-auth routes from the generic public query-string guard so valid token URLs are not rejected and complete bearer URLs are not sampled into SEO security logs. Viewer controllers remain responsible for strict token validation. |
+| `app/services/seo_request_guard.php` | Central public query-string allowlist and sampled rejection guard. Dedicated `viewer_*` bearer/pre-auth routes remain exempt; Stage 7 progressive source routes explicitly allow `mr`/`s`; sampled rejection events redact all query-string values from `request_uri` so capability/share/access tokens are not copied into Admin logs. Route controllers remain responsible for strict bearer validation. |
 | `app/views/layout.php` | Adds the unobtrusive public `Login` or `Account` entry only when viewer accounts are enabled and suppresses the Admin-login return parameter on secret-bearing `viewer_*` routes. |
 | `app/views/admin_chrome.php` | Adds `Viewer accounts` to the existing Admin Account menu and hides it when the master `viewer_accounts` feature wrapper is disabled; the historical route identifier remains compatible. |
 | `app/lang/{en,cs,de,sv}.json` | Maintained translations for the Phase 1.0 viewer and invitation UI/email text. |

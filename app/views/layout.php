@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-08-13
+ *   2026-09-03
  */
 
 declare(strict_types=1);
@@ -594,6 +594,7 @@ function view_cms_browser_i18n_strings(?string $language = null): array
         'download.progress.start' => view_browser_i18n_string($strings, 'download.progress.start', 'Save ZIP and start'),
         'download.progress.close' => view_browser_i18n_string($strings, 'download.progress.close', 'Close'),
         'download.progress.failed' => view_browser_i18n_string($strings, 'download.progress.failed', 'Download failed'),
+        'download.progress.authorization_expired' => view_browser_i18n_string($strings, 'download.progress.authorization_expired', 'Download authorization expired. Retry to restart the download safely.'),
         'download.progress.files' => view_browser_i18n_string($strings, 'download.progress.files', '{count} files'),
         'download.progress.file_count' => view_browser_i18n_string($strings, 'download.progress.file_count', '{done} / {total} files'),
         'download.progress.current' => view_browser_i18n_string($strings, 'download.progress.current', 'Current: {name}'),

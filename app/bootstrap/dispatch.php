@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-04
+ *   2026-09-03
  */
 
 declare(strict_types=1);
@@ -43,6 +43,7 @@ use function Gallery\Services\feature_flag_route_enabled;
 use function Gallery\Services\gallery_access_assert_public_policy_available;
 use function Gallery\Services\gallery_visibility_assert_public_policy_available;
 use function Gallery\Services\nsfw_guard_assert_public_policy_available;
+use function Gallery\Services\seo_request_guard_emit_route_robots_header;
 
 /**
  * Dispatch a resolved page identifier to the existing controller route table.
@@ -116,9 +117,11 @@ function cms_dispatch_page(string $page): void
         'picture_manager_copy' => '\\Gallery\\Controllers\\cms_picture_manager_copy',
         'picture_manager_create_gallery' => '\\Gallery\\Controllers\\cms_picture_manager_create_gallery',
         'picture_manager_download_selection' => '\\Gallery\\Controllers\\cms_picture_manager_download_selection',
+        'download_gallery_start' => '\\Gallery\\Controllers\\cms_download_gallery_start',
         'download_gallery' => '\\Gallery\\Controllers\\cms_download_gallery',
         'download_gallery_manifest' => '\\Gallery\\Controllers\\cms_download_gallery_manifest',
         'download_gallery_file' => '\\Gallery\\Controllers\\cms_download_gallery_file',
+        'download_smart_gallery_start' => '\\Gallery\\Controllers\\cms_download_smart_gallery_start',
         'download_smart_gallery' => '\\Gallery\\Controllers\\cms_download_smart_gallery',
         'download_smart_gallery_manifest' => '\\Gallery\\Controllers\\cms_download_smart_gallery_manifest',
         'download_smart_gallery_file' => '\\Gallery\\Controllers\\cms_download_smart_gallery_file',
@@ -236,6 +239,9 @@ function cms_dispatch_page(string $page): void
         'setup' => '\\Gallery\\Controllers\\cms_setup',
     ];
 
+    // Download endpoints are crawler-excluded independently of authorization, feature state, and response type.
+    seo_request_guard_emit_route_robots_header($page);
+
     if (function_exists('Gallery\\Services\\feature_flag_route_enabled') && !feature_flag_route_enabled($page)) {
         feature_flag_render_disabled_route($page);
         return;
@@ -245,7 +251,7 @@ function cms_dispatch_page(string $page): void
     $handler = $routes[$page] ?? '\\Gallery\\Controllers\\cms_not_found';
     try {
         // Verify access/privacy policy before a sensitive controller can emit partial HTML, metadata, archives, or media bytes.
-        if (in_array($page, ['home', 'gallery', 'smart_gallery', 'gallery_access', 'share', 'tag', 'sitemap', 'picture_game', 'media', 'thumb', 'public_media', 'public_thumb', 'thumbnail_warmup', 'gallery_cover_asset', 'gallery_branding_asset', 'vote', 'gallery_map_data', 'gallery_lightbox_data', 'smart_gallery_lightbox_data', 'public_search', 'download_gallery', 'download_gallery_manifest', 'download_gallery_file', 'download_smart_gallery', 'download_smart_gallery_manifest', 'download_smart_gallery_file'], true)) {
+        if (in_array($page, ['home', 'gallery', 'smart_gallery', 'gallery_access', 'share', 'tag', 'sitemap', 'picture_game', 'media', 'thumb', 'public_media', 'public_thumb', 'thumbnail_warmup', 'gallery_cover_asset', 'gallery_branding_asset', 'vote', 'gallery_map_data', 'gallery_lightbox_data', 'smart_gallery_lightbox_data', 'public_search', 'download_gallery_start', 'download_gallery', 'download_gallery_manifest', 'download_gallery_file', 'download_smart_gallery_start', 'download_smart_gallery', 'download_smart_gallery_manifest', 'download_smart_gallery_file'], true)) {
             gallery_visibility_assert_public_policy_available();
             gallery_access_assert_public_policy_available();
             nsfw_guard_assert_public_policy_available();

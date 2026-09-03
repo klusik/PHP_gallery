@@ -30,7 +30,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-06-07
+ *   2026-09-03
  */
 
 declare(strict_types=1);
@@ -102,6 +102,42 @@ function seo_request_guard_status(): array
         'log_count' => max(0, (int) app_setting('seo_request_guard_log_count', '0')),
         'log_limit' => CMS_SEO_REQUEST_GUARD_LOG_LIMIT_PER_DAY,
     ];
+}
+
+/**
+ * Return whether a public route is an explicit non-indexable download endpoint.
+ *
+ * This is crawler hygiene only. Authorization remains entirely in the route
+ * controllers/services and must not depend on robots metadata.
+ */
+function seo_request_guard_route_is_non_indexable_download(string $page): bool
+{
+    return in_array($page, [
+        'download_gallery_start',
+        'download_gallery',
+        'download_gallery_manifest',
+        'download_gallery_file',
+        'download_smart_gallery_start',
+        'download_smart_gallery',
+        'download_smart_gallery_manifest',
+        'download_smart_gallery_file',
+    ], true);
+}
+
+/**
+ * Emit standards-compatible crawler exclusion for download route responses.
+ *
+ * The dispatcher calls this before the download controller so successful ZIP,
+ * JSON manifest, source-stream, controlled error, and authorization responses
+ * consistently remain outside search indexes. Normal gallery pages are not
+ * affected.
+ */
+function seo_request_guard_emit_route_robots_header(string $page): void
+{
+    if (!seo_request_guard_route_is_non_indexable_download($page) || headers_sent()) {
+        return;
+    }
+    header('X-Robots-Tag: noindex, nofollow');
 }
 
 /**
@@ -188,12 +224,14 @@ function seo_request_guard_allowed_parameters_for_page(string $page): array
         'link_favicon_asset' => ['f'],
         'theme_css' => ['v'],
         'browser_i18n' => ['scope', 'lang', 'v'],
-        'download_gallery' => ['id', 'token', 'share'],
-        'download_gallery_manifest' => ['id', 'token', 'share'],
-        'download_gallery_file' => ['gallery_id', 'image_id', 'v', 'token', 'share'],
-        'download_smart_gallery' => ['id'],
-        'download_smart_gallery_manifest' => ['id'],
-        'download_smart_gallery_file' => ['smart_gallery_id', 'image_id', 'v'],
+        'download_gallery_start' => ['id', 'token', 'share'],
+        'download_gallery' => ['id', 'token', 'share', 'capability'],
+        'download_gallery_manifest' => ['id', 'token', 'share', 'capability'],
+        'download_gallery_file' => ['gallery_id', 'image_id', 'v', 'mr', 's', 'token', 'share', 'capability'],
+        'download_smart_gallery_start' => ['id'],
+        'download_smart_gallery' => ['id', 'capability'],
+        'download_smart_gallery_manifest' => ['id', 'capability'],
+        'download_smart_gallery_file' => ['smart_gallery_id', 'image_id', 'v', 'mr', 's', 'capability'],
         'robots' => [],
         'sitemap' => [],
         'not_found' => [],
@@ -275,6 +313,35 @@ function seo_request_guard_reject(string $page, array $unexpected): void
 }
 
 /**
+ * Return a bounded request target safe for security logging.
+ *
+ * Query-string values are intentionally omitted because public routes may carry
+ * bearer credentials such as download capabilities or share/access tokens. The
+ * unexpected parameter-name list is logged separately, so retaining query
+ * values adds credential-exposure risk without useful diagnostic value.
+ *
+ * @return string Request path with a marker when a query string was present.
+ */
+function seo_request_guard_safe_request_target_for_log(): string
+{
+    $requestUri = (string) ($_SERVER['REQUEST_URI'] ?? '');
+    if ($requestUri === '') {
+        return '';
+    }
+
+    $queryPosition = strpos($requestUri, '?');
+    $hasQuery = $queryPosition !== false;
+    $path = $hasQuery ? substr($requestUri, 0, $queryPosition) : $requestUri;
+    if ($path === '') {
+        $path = '/';
+    }
+
+    $suffix = $hasQuery ? '?[query-redacted]' : '';
+    $maxPathLength = max(0, 500 - strlen($suffix));
+    return substr($path, 0, $maxPathLength) . $suffix;
+}
+
+/**
  * Log sampled query rejections without allowing crawler floods to fill the log table.
  *
  * @param string $page Page number or page data.
@@ -316,7 +383,7 @@ function seo_request_guard_log_rejection(string $page, array $unexpected): void
     admin_log_event('warning', 'seo.request_guard_rejected', 'Rejected suspicious public query string before rendering.', [
         'page' => $page,
         'unexpected_parameters' => $unexpected,
-        'request_uri' => substr((string) ($_SERVER['REQUEST_URI'] ?? ''), 0, 500),
+        'request_uri' => seo_request_guard_safe_request_target_for_log(),
         'remote_addr' => substr((string) ($_SERVER['REMOTE_ADDR'] ?? ''), 0, 80),
         'user_agent' => substr((string) ($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 300),
     ], ['category' => 'security', 'severity' => 'warning', 'route_name' => $page]);

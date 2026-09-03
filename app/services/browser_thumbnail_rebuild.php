@@ -41,15 +41,11 @@ namespace Gallery\Services;
 use RuntimeException;
 use Throwable;
 use function Gallery\Core\is_dng_image_path;
+use function Gallery\Core\cms_runtime_limit;
 use function Gallery\Core\normalize_relative_path;
 use function Gallery\Core\url_for;
 
-const BROWSER_THUMBNAIL_SOURCE_DEFAULT_CHUNK_BYTES = 512 * 1024 * 1024;
-const BROWSER_THUMBNAIL_SOURCE_MIN_CHUNK_BYTES = 16 * 1024 * 1024;
-const BROWSER_THUMBNAIL_SOURCE_HARD_CHUNK_BYTES = 3 * 1024 * 1024 * 1024;
 const BROWSER_THUMBNAIL_SOURCE_ZIP_MAX_ENTRY_BYTES = 0xffffffff;
-const BROWSER_THUMBNAIL_SOURCE_DEFAULT_MAX_ITEMS_PER_CHUNK = 96;
-const BROWSER_THUMBNAIL_SOURCE_HARD_MAX_ITEMS_PER_CHUNK = 512;
 
 /**
  * Clamp a large byte setting used for browser source-download chunks.
@@ -58,8 +54,9 @@ const BROWSER_THUMBNAIL_SOURCE_HARD_MAX_ITEMS_PER_CHUNK = 512;
  * @param int $fallback Fallback value.
  * @return int Integer result for the caller.
  */
-function browser_thumbnail_rebuild_clamped_source_chunk_bytes(mixed $value, int $fallback = BROWSER_THUMBNAIL_SOURCE_DEFAULT_CHUNK_BYTES): int
+function browser_thumbnail_rebuild_clamped_source_chunk_bytes(mixed $value, ?int $fallback = null): int
 {
+    $fallback ??= (int) cms_runtime_limit('browser_thumbnail_rebuild.default_chunk_bytes');
     if (is_string($value)) {
         $value = trim($value);
     }
@@ -68,7 +65,7 @@ function browser_thumbnail_rebuild_clamped_source_chunk_bytes(mixed $value, int 
     } else {
         $bytes = (int) $value;
     }
-    return max(BROWSER_THUMBNAIL_SOURCE_MIN_CHUNK_BYTES, min(BROWSER_THUMBNAIL_SOURCE_HARD_CHUNK_BYTES, $bytes));
+    return max((int) cms_runtime_limit('browser_thumbnail_rebuild.min_chunk_bytes'), min((int) cms_runtime_limit('browser_thumbnail_rebuild.hard_chunk_bytes'), $bytes));
 }
 
 /**
@@ -78,8 +75,9 @@ function browser_thumbnail_rebuild_clamped_source_chunk_bytes(mixed $value, int 
  * @param int $fallbackBytes Fallback bytes value.
  * @return int Integer result for the caller.
  */
-function browser_thumbnail_rebuild_megabytes_to_bytes(mixed $value, int $fallbackBytes = BROWSER_THUMBNAIL_SOURCE_DEFAULT_CHUNK_BYTES): int
+function browser_thumbnail_rebuild_megabytes_to_bytes(mixed $value, ?int $fallbackBytes = null): int
 {
+    $fallbackBytes ??= (int) cms_runtime_limit('browser_thumbnail_rebuild.default_chunk_bytes');
     if (is_string($value)) {
         $value = trim($value);
     }
@@ -101,7 +99,7 @@ function browser_thumbnail_rebuild_megabytes_to_bytes(mixed $value, int $fallbac
 function browser_thumbnail_rebuild_source_chunk_bytes(): int
 {
     return browser_thumbnail_rebuild_clamped_source_chunk_bytes(
-        app_setting('browser_thumbnail_rebuild_source_chunk_bytes', (string) BROWSER_THUMBNAIL_SOURCE_DEFAULT_CHUNK_BYTES)
+        app_setting('browser_thumbnail_rebuild_source_chunk_bytes', (string) cms_runtime_limit('browser_thumbnail_rebuild.default_chunk_bytes'))
     );
 }
 
@@ -132,14 +130,14 @@ function set_browser_thumbnail_rebuild_settings(array $input): int
  */
 function browser_thumbnail_rebuild_source_chunk_item_cap(): int
 {
-    $configured = app_setting('browser_thumbnail_rebuild_source_chunk_item_cap', (string) BROWSER_THUMBNAIL_SOURCE_DEFAULT_MAX_ITEMS_PER_CHUNK);
+    $configured = app_setting('browser_thumbnail_rebuild_source_chunk_item_cap', (string) cms_runtime_limit('browser_thumbnail_rebuild.default_max_items_per_chunk'));
     if (is_string($configured)) {
         $configured = trim($configured);
     }
     if ($configured === '' || !is_numeric($configured)) {
-        return BROWSER_THUMBNAIL_SOURCE_DEFAULT_MAX_ITEMS_PER_CHUNK;
+        return (int) cms_runtime_limit('browser_thumbnail_rebuild.default_max_items_per_chunk');
     }
-    return max(1, min(BROWSER_THUMBNAIL_SOURCE_HARD_MAX_ITEMS_PER_CHUNK, (int) $configured));
+    return max(1, min((int) cms_runtime_limit('browser_thumbnail_rebuild.hard_max_items_per_chunk'), (int) $configured));
 }
 
 /**
@@ -210,19 +208,21 @@ function browser_thumbnail_rebuild_expected_variant_count(array $formats): int
 function browser_thumbnail_rebuild_browser_config(): array
 {
     $settings = function_exists('Gallery\\Services\\browser_upload_settings') ? browser_upload_settings() : ['enabled' => false];
-    $uploadLimit = function_exists('Gallery\\Services\\browser_upload_server_upload_limit_bytes') ? browser_upload_server_upload_limit_bytes() : 8 * 1024 * 1024;
+    $uploadLimit = function_exists('Gallery\\Services\\browser_upload_server_upload_limit_bytes')
+        ? browser_upload_server_upload_limit_bytes()
+        : max(1, (int) cms_runtime_limit('browser_upload.fallback_server_upload_limit_bytes'));
     $formats = browser_thumbnail_rebuild_normalized_formats(function_exists('Gallery\\Services\\thumbnail_policy_requested_formats') ? thumbnail_policy_requested_formats() : ['webp']);
 
     return [
         'enabled' => (bool) ($settings['enabled'] ?? false),
         'source_endpoint' => url_for('admin_thumbnail_browser_source_chunk'),
         'upload_endpoint' => url_for('admin_thumbnail_browser_upload_batch'),
-        'worker_count' => (int) ($settings['default_worker_count'] ?? BROWSER_UPLOAD_DEFAULT_WORKER_COUNT),
-        'max_worker_count' => (int) ($settings['max_worker_count'] ?? BROWSER_UPLOAD_HARD_WORKER_CAP),
-        'hard_worker_cap' => (int) ($settings['hard_worker_cap'] ?? BROWSER_UPLOAD_HARD_WORKER_CAP),
+        'worker_count' => (int) ($settings['default_worker_count'] ?? cms_runtime_limit('browser_upload.default_worker_count')),
+        'max_worker_count' => (int) ($settings['max_worker_count'] ?? cms_runtime_limit('browser_upload.hard_worker_cap')),
+        'hard_worker_cap' => (int) ($settings['hard_worker_cap'] ?? cms_runtime_limit('browser_upload.hard_worker_cap')),
         'upload_limit_bytes' => $uploadLimit,
-        'batch_target_bytes' => function_exists('Gallery\\Services\\browser_upload_effective_batch_target_bytes') ? browser_upload_effective_batch_target_bytes($uploadLimit, (float) ($settings['zip_size_threshold_ratio'] ?? BROWSER_UPLOAD_DEFAULT_ZIP_RATIO), (int) ($settings['max_zip_batch_bytes'] ?? BROWSER_UPLOAD_DEFAULT_MAX_ZIP_BATCH_BYTES)) : (int) floor($uploadLimit * 0.8),
-        'max_items_per_batch' => (int) ($settings['max_items_per_batch'] ?? BROWSER_UPLOAD_DEFAULT_MAX_ITEMS_PER_BATCH),
+        'batch_target_bytes' => function_exists('Gallery\\Services\\browser_upload_effective_batch_target_bytes') ? browser_upload_effective_batch_target_bytes($uploadLimit, (float) ($settings['zip_size_threshold_ratio'] ?? cms_runtime_limit('browser_upload.default_zip_ratio')), (int) ($settings['max_zip_batch_bytes'] ?? cms_runtime_limit('browser_upload.default_max_zip_batch_bytes'))) : (int) floor($uploadLimit * (float) cms_runtime_limit('browser_upload.default_zip_ratio')),
+        'max_items_per_batch' => (int) ($settings['max_items_per_batch'] ?? cms_runtime_limit('browser_upload.default_max_items_per_batch')),
         'source_chunk_bytes' => browser_thumbnail_rebuild_source_chunk_bytes(),
         'source_chunk_item_cap' => browser_thumbnail_rebuild_source_chunk_item_cap(),
         'thumbnail_sizes' => function_exists('Gallery\\Services\\thumbnail_sizes') ? array_values(array_map('intval', thumbnail_sizes())) : [300, 600, 800, 960, 1280, 1600],
@@ -530,7 +530,7 @@ function browser_thumbnail_rebuild_stream_file_payload(string $path): void
  */
 function browser_thumbnail_rebuild_stream_source_zip(array $plan): void
 {
-    @set_time_limit(300);
+    @set_time_limit(max(1, (int) cms_runtime_limit('browser_thumbnail_rebuild.request_time_limit_seconds')));
     $timestamp = time();
     $manifestItems = [];
     $entries = [];

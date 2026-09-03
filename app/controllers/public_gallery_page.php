@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-09-02
+ *   2026-09-03
  */
 
 declare(strict_types=1);
@@ -69,6 +69,7 @@ use function Gallery\Services\current_viewer;
 use function Gallery\Services\content_localize_entities;
 use function Gallery\Services\content_localize_entity;
 use function Gallery\Services\feature_flag_enabled;
+use function Gallery\Services\download_capability_issue;
 use function Gallery\Services\find_gallery;
 use function Gallery\Services\find_gallery_by_folder_path;
 use function Gallery\Services\find_gallery_by_slug;
@@ -170,6 +171,8 @@ use function Gallery\Services\viewer_favourites_storage_available;
 use function Gallery\Services\viewer_collections_for_owner;
 use function Gallery\Services\viewer_collections_storage_available;
 use function Gallery\Services\viewer_source_image_can_reference;
+use const Gallery\Services\DOWNLOAD_CAPABILITY_RESOURCE_GALLERY;
+use const Gallery\Services\DOWNLOAD_CAPABILITY_SCOPE_LEGACY;
 use function Gallery\Views\view_gallery_description_markdown_excerpt;
 use function Gallery\Views\view_gallery_description_markdown_html;
 use function Gallery\Views\view_render_gallery_json_ld;
@@ -435,7 +438,9 @@ function cms_gallery(): void
     render_public_gallery_admin_delete_form($gallery, 'hero');
     render_public_gallery_admin_edit_link($gallery, 'hero');
     render_public_gallery_admin_add_child_link($gallery, 'hero');
-    echo '<a class="button hero-icon-button hero-download-button" href="' . e(url_for('download_gallery', ['id' => $gallery['id']])) . '" data-gallery-download data-gallery-download-manifest-url="' . e(url_for('download_gallery_manifest', ['id' => $gallery['id']])) . '" aria-label="' . e(t('gallery.download', 'Download gallery')) . '" title="' . e(t('gallery.download', 'Download gallery')) . '"><span aria-hidden="true">&#10515;</span><span class="visually-hidden">' . e(t('gallery.download', 'Download gallery')) . '</span></a>';
+    $downloadLabel = t('gallery.download', 'Download gallery');
+    $legacyDownloadCapability = download_capability_issue(DOWNLOAD_CAPABILITY_RESOURCE_GALLERY, (int) $gallery['id'], DOWNLOAD_CAPABILITY_SCOPE_LEGACY);
+    echo '<form class="public-download-legacy-form" method="post" action="' . e(url_for('download_gallery')) . '"><input type="hidden" name="id" value="' . (int) $gallery['id'] . '"><input type="hidden" name="capability" value="' . e($legacyDownloadCapability) . '"><button type="submit" class="button hero-icon-button hero-download-button" data-gallery-download data-gallery-download-start-url="' . e(url_for('download_gallery_start', ['id' => $gallery['id']])) . '" aria-label="' . e($downloadLabel) . '" title="' . e($downloadLabel) . '"><span aria-hidden="true">&#10515;</span><span class="visually-hidden">' . e($downloadLabel) . '</span></button></form>';
     if ($galleryMapAvailable) {
         echo '<button type="button" class="button secondary map-button" data-gallery-map-url="' . e($galleryMapUrl) . '" data-gallery-map-title="' . e((string) $gallery['title']) . '">' . e(t('gallery.show_map', 'Show gallery map')) . '</button>';
     }

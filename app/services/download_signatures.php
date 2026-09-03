@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-04
+ *   2026-09-03
  */
 
 declare(strict_types=1);
@@ -75,7 +75,9 @@ function gallery_zip_signature(int $galleryId, bool $publicOnly): string
     // Variable $imageVisibilitySql stores this steps working value.
     $imageVisibilitySql = $publicOnly ? " AND i.visibility = 'public'" : '';
     // Variable $stmt stores this steps working value.
-    $stmt = db()->prepare("SELECT g.folder_path, g.updated_at AS gallery_updated_at, i.relative_path, i.file_size, i.modified_at, i.visibility
+    $stmt = db()->prepare("SELECT g.id AS gallery_id, g.parent_id, g.folder_path, g.visibility AS gallery_visibility,
+            g.access_mode, g.updated_at AS gallery_updated_at, i.id AS image_id, i.relative_path, i.relative_path_hash,
+            i.file_size, i.modified_at, i.checksum_sha256, i.visibility, i.updated_at AS image_updated_at
         FROM galleries g
         LEFT JOIN images i ON i.gallery_id = g.id" . $imageVisibilitySql . "
         WHERE g.id IN ($placeholders)

@@ -2,7 +2,7 @@
 
 A modern PHP 8.1+ gallery CMS designed for ordinary shared hosting. The application uses the filesystem as the authoritative source for gallery structure, while storing all metadata, access rules, votes, user accounts, and audit logs in MySQL or MariaDB.
 
-**Current Version:** 0.95
+**Current Version:** 0.95.1
 
 **Key Benefit:** Deploy in minutes on shared hosting. No npm, no Composer, no framework overhead. Just PHP + MySQL.
 
@@ -139,9 +139,13 @@ behavior remains unchanged.
 
 ### Downloading
 - **ZIP archives** - Download a single gallery, Smart Gallery, or all accessible galleries
-- **Progressive browser downloads** - Modern browsers receive a bounded private manifest and stream authorized originals into a local ZIP with progress, cancellation, retry, duplicate-name handling, and ZIP64 support
-- **Streaming fallback** - Direct and no-JavaScript requests retain the bounded server-side archive path
+- **Progressive browser downloads** - Modern browsers POST for a short-lived resource-scoped capability, receive a bounded private manifest, and stream independently authorized originals into a local ZIP with progress, cancellation, retry, duplicate-name handling, and ZIP64 support
+- **Revision-keyed manifest reuse** - Repeated progressive requests reuse private capability-free metadata for unchanged content; visitor authorization and capability validation still run on every protected request, and Smart Gallery result membership is recomputed before reuse
+- **Explicit no-JavaScript fallback** - Legacy server ZIP preparation is POST-only, separately capability-scoped, file/byte bounded, single-flight/global-admission controlled, and reuses immutable managed artifacts; GET/HEAD compatibility requests never build ZIPs
+- **Unthrottled authorized source transfer** - Original files remain private and are streamed through the authorized PHP source endpoint; the project does not require hosting-specific internal-redirect modules
 - **Signed downloads** - Optional signature verification for secure links
+
+Deployment-tunable download limits are centralized in `app/configuration_defaults.php` and may be selectively overridden through `runtime_limits` in local `config.php`. Stage 7 manifest-cache defaults are 24 hours for physical galleries, 15 minutes for Smart Galleries, 16 MiB maximum metadata-entry size, and 10,000 entries per bounded maintenance scan. Existing installations require no configuration edit after update.
 
 ### Theming & Customization
 - **Theme editor** - Customize colors, fonts, spacing and default lightbox browsing mode from the admin interface

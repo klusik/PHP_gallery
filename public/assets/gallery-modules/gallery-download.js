@@ -25,6 +25,17 @@ import {ZipStreamWriter} from './zip-stream-writer.js?v=20260831-client-zip-v1';
 
 const DEFAULT_WARNING_BYTES = 256 * 1024 * 1024;
 const DEFAULT_MAX_MEMORY_BYTES = 512 * 1024 * 1024;
+const DOWNLOAD_CAPABILITY_HEADER = 'X-PHP-Gallery-Download-Capability';
+const MAX_DOWNLOAD_CAPABILITY_LENGTH = 4096;
+const CAPABILITY_RENEWAL_SAFETY_SECONDS = 30;
+
+/** Stable error used when a progressive bearer capability must be renewed. */
+class DownloadCapabilityRejectedError extends Error {
+    constructor() {
+        super(tr('download.progress.authorization_expired', 'Download authorization expired. Retry to restart the download safely.'));
+        this.name = 'DownloadCapabilityRejectedError';
+    }
+}
 
 /** strings supports the browser ZIP download workflow. */
 function strings() {
@@ -80,6 +91,25 @@ export function validGalleryDownloadManifest(payload) {
     return sum === payload.total_bytes;
 }
 
+/** Validate the cheap Stage 3 download-start response before using bearer metadata. */
+export function validGalleryDownloadStart(payload) {
+    if (!payload || payload.ok !== true) return false;
+    if (typeof payload.capability !== 'string' || payload.capability.length < 32 || payload.capability.length > MAX_DOWNLOAD_CAPABILITY_LENGTH) return false;
+    if (!Number.isSafeInteger(payload.issued_at) || !Number.isSafeInteger(payload.expires_at) || payload.expires_at <= payload.issued_at) return false;
+    if (payload.expires_at <= Math.floor(Date.now() / 1000)) return false;
+    if (payload.capability_transport?.type !== 'header' || payload.capability_transport?.header !== DOWNLOAD_CAPABILITY_HEADER) return false;
+    if (typeof payload.manifest_url !== 'string' || payload.manifest_url.length === 0) return false;
+
+    try {
+        const baseUrl = globalThis.location?.href || 'https://gallery.invalid/';
+        const manifestUrl = new URL(payload.manifest_url, baseUrl);
+        const baseOrigin = new URL(baseUrl).origin;
+        return ['http:', 'https:'].includes(manifestUrl.protocol) && manifestUrl.origin === baseOrigin;
+    } catch (_) {
+        return false;
+    }
+}
+
 
 /** galleryDownloadMemoryPolicy supports the browser ZIP download workflow. */
 export function galleryDownloadMemoryPolicy(payload, directStreaming = supportsDirectFileStreaming()) {
@@ -103,14 +133,29 @@ export function galleryDownloadMemoryPolicy(payload, directStreaming = supportsD
 }
 
 /** fetchGalleryDownloadEntry supports the browser ZIP download workflow. */
-export async function fetchGalleryDownloadEntry(entry, signal, fetchImpl = globalThis.fetch) {
+export async function fetchGalleryDownloadEntry(entry, signal, fetchImpl = globalThis.fetch, capability = '') {
     const baseUrl = globalThis.location?.href || 'https://gallery.invalid/';
     const targetUrl = new URL(entry.url, baseUrl);
     const baseOrigin = new URL(baseUrl).origin;
     if (!['http:', 'https:'].includes(targetUrl.protocol) || targetUrl.origin !== baseOrigin) {
         throw new Error(tr('download.progress.file_failed', 'Could not download {name}.', {name: entry.name}));
     }
-    const response = await fetchImpl(entry.url, {credentials: 'same-origin', signal});
+    if (capability !== '' && (typeof capability !== 'string' || capability.length > MAX_DOWNLOAD_CAPABILITY_LENGTH)) {
+        throw new DownloadCapabilityRejectedError();
+    }
+
+    const request = {
+        credentials: 'same-origin',
+        referrerPolicy: 'no-referrer',
+        signal,
+    };
+    if (capability !== '') {
+        request.headers = {[DOWNLOAD_CAPABILITY_HEADER]: capability};
+    }
+    const response = await fetchImpl(entry.url, request);
+    if (response.status === 403 && capability !== '') {
+        throw new DownloadCapabilityRejectedError();
+    }
     if (!response.ok || !response.body) {
         throw new Error(tr('download.progress.file_failed', 'Could not download {name}.', {name: entry.name}));
     }
@@ -203,7 +248,9 @@ class GalleryDownloadController {
         this.cancelButton = panel.querySelector('[data-download-cancel]');
         this.closeButton = panel.querySelector('[data-download-close]');
         this.manifest = null;
-        this.manifestUrl = '';
+        this.startUrl = '';
+        this.capability = '';
+        this.capabilityExpiresAt = 0;
         this.abortController = null;
         this.activeSink = null;
         this.activeWritable = null;
@@ -212,8 +259,8 @@ class GalleryDownloadController {
 
         this.startButton.addEventListener('click', () => this.start().catch((error) => this.fail(error)));
         this.retryButton.addEventListener('click', () => {
-            const retry = this.manifest ? this.start() : this.prepare(this.manifestUrl, false);
-            retry.catch((error) => this.fail(error));
+            if (this.startUrl === '') return;
+            this.prepare(this.startUrl, false).catch((error) => this.fail(error));
         });
         this.cancelButton.addEventListener('click', () => this.cancel());
         this.closeButton.addEventListener('click', () => this.close());
@@ -261,7 +308,9 @@ class GalleryDownloadController {
         this.panel.hidden = true;
         document.body.classList.remove('gallery-download-modal-open');
         this.manifest = null;
-        this.manifestUrl = '';
+        this.startUrl = '';
+        this.capability = '';
+        this.capabilityExpiresAt = 0;
         const returnFocus = this.returnFocus;
         this.returnFocus = null;
         if (returnFocus && returnFocus.isConnected && typeof returnFocus.focus === 'function') {
@@ -279,15 +328,17 @@ class GalleryDownloadController {
     }
 
 /** prepare supports the browser ZIP download workflow. */
-    async prepare(manifestUrl, rememberFocus = true) {
+    async prepare(startUrl, rememberFocus = true) {
         if (rememberFocus) {
             this.returnFocus = document.activeElement;
         }
         this.abortController?.abort();
         const prepareController = new AbortController();
         this.abortController = prepareController;
-        this.manifestUrl = manifestUrl;
+        this.startUrl = startUrl;
         this.manifest = null;
+        this.capability = '';
+        this.capabilityExpiresAt = 0;
         this.running = true;
         this.resetButtons();
         this.title.textContent = tr('gallery.download', 'Download gallery');
@@ -298,9 +349,41 @@ class GalleryDownloadController {
         this.show();
 
         try {
-            const response = await fetch(manifestUrl, {
+            const baseUrl = globalThis.location?.href || 'https://gallery.invalid/';
+            const resolvedStartUrl = new URL(startUrl, baseUrl);
+            if (!['http:', 'https:'].includes(resolvedStartUrl.protocol) || resolvedStartUrl.origin !== new URL(baseUrl).origin) {
+                throw new Error(tr('download.progress.failed', 'Download failed'));
+            }
+
+            const startResponse = await fetch(resolvedStartUrl.toString(), {
+                method: 'POST',
                 credentials: 'same-origin',
                 headers: {'Accept': 'application/json'},
+                referrerPolicy: 'no-referrer',
+                signal: prepareController.signal,
+            });
+            let startPayload = null;
+            try {
+                startPayload = await startResponse.json();
+            } catch (_) {
+                throw new Error(tr('download.progress.failed', 'Download failed'));
+            }
+            if (!startResponse.ok || startPayload?.ok !== true) {
+                throw new Error(String(startPayload?.error || tr('download.progress.failed', 'Download failed')));
+            }
+            if (!validGalleryDownloadStart(startPayload)) {
+                throw new Error(tr('download.progress.failed', 'Download failed'));
+            }
+
+            this.capability = startPayload.capability;
+            this.capabilityExpiresAt = startPayload.expires_at;
+            const response = await fetch(startPayload.manifest_url, {
+                credentials: 'same-origin',
+                headers: {
+                    'Accept': 'application/json',
+                    [DOWNLOAD_CAPABILITY_HEADER]: this.capability,
+                },
+                referrerPolicy: 'no-referrer',
                 signal: prepareController.signal,
             });
             let payload = null;
@@ -308,6 +391,9 @@ class GalleryDownloadController {
                 payload = await response.json();
             } catch (_) {
                 throw new Error(tr('download.progress.invalid_manifest', 'The server returned an invalid download manifest.'));
+            }
+            if (response.status === 403) {
+                throw new DownloadCapabilityRejectedError();
             }
             if (!response.ok || payload?.ok !== true) {
                 throw new Error(String(payload?.error || tr('download.progress.failed', 'Download failed')));
@@ -405,6 +491,11 @@ class GalleryDownloadController {
 /** start supports the browser ZIP download workflow. */
     async start() {
         if (this.running || !this.manifest) return;
+        const nowSeconds = Math.floor(Date.now() / 1000);
+        if (this.capability === '' || this.capabilityExpiresAt <= nowSeconds + CAPABILITY_RENEWAL_SAFETY_SECONDS) {
+            await this.prepare(this.startUrl, false);
+            return;
+        }
         this.running = true;
         this.resetButtons();
         this.startButton.hidden = true;
@@ -426,7 +517,7 @@ class GalleryDownloadController {
             for (const entry of this.manifest.files) {
                 if (this.abortController.signal.aborted) throw new DOMException('Aborted', 'AbortError');
                 this.current.textContent = tr('download.progress.current', 'Current: {name}', {name: entry.name});
-                const response = await fetchGalleryDownloadEntry(entry, this.abortController.signal);
+                const response = await fetchGalleryDownloadEntry(entry, this.abortController.signal, globalThis.fetch, this.capability);
                 await writer.addReadable(entry.name, entry.size, response.body, (chunkBytes) => {
                     downloaded += chunkBytes;
                     this.progress.value = Math.min(downloaded, this.manifest.total_bytes);
@@ -492,7 +583,12 @@ class GalleryDownloadController {
         this.current.textContent = '';
         this.startButton.hidden = true;
         this.cancelButton.hidden = true;
-        this.retryButton.hidden = this.manifest === null && this.manifestUrl === '';
+        if (error?.name === 'DownloadCapabilityRejectedError') {
+            this.manifest = null;
+            this.capability = '';
+            this.capabilityExpiresAt = 0;
+        }
+        this.retryButton.hidden = this.startUrl === '';
         this.retryButton.textContent = tr('download.progress.retry', 'Retry');
         this.closeButton.hidden = false;
         this.closeButton.textContent = tr('download.progress.close', 'Close');
@@ -503,19 +599,27 @@ class GalleryDownloadController {
 let controller = null;
 
 /**
- * Attach progressive behavior to server-rendered Download gallery links.
+ * Progressively enhance Stage 4 POST fallback controls with the Stage 3 browser ZIP flow.
+ *
+ * The server-rendered form remains authoritative when JavaScript is unavailable.
+ * Once this module is active, every activation of the download submit control is
+ * intercepted so modifier keys cannot accidentally enter the expensive legacy path.
  */
 export function setupGalleryDownload() {
-    const links = Array.from(document.querySelectorAll('[data-gallery-download][data-gallery-download-manifest-url]'));
-    if (links.length === 0) return;
+    const controls = Array.from(document.querySelectorAll('[data-gallery-download][data-gallery-download-start-url]'));
+    if (controls.length === 0) return;
     if (!controller) controller = new GalleryDownloadController(createPanel());
-    links.forEach((link) => {
-        if (link.dataset.galleryDownloadReady === '1') return;
-        link.dataset.galleryDownloadReady = '1';
-        link.addEventListener('click', (event) => {
-            if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    controls.forEach((control) => {
+        if (control.dataset.galleryDownloadReady === '1') return;
+        control.dataset.galleryDownloadReady = '1';
+        const activate = (event) => {
             event.preventDefault();
-            controller.prepare(link.dataset.galleryDownloadManifestUrl).catch((error) => controller.fail(error));
-        });
+            controller.prepare(control.dataset.galleryDownloadStartUrl).catch((error) => controller.fail(error));
+        };
+        if (control.form) {
+            control.form.addEventListener('submit', activate);
+        } else {
+            control.addEventListener('click', activate);
+        }
     });
 }

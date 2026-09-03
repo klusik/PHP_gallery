@@ -55,7 +55,10 @@ function contract_file(string $root, string $relative, array &$failures): string
         $failures[] = $relative . ': file could not be read.';
         return '';
     }
-    return $contents;
+
+    // Source contracts describe code structure rather than repository line-ending style.
+    // Normalize CRLF/CR so multiline literal checks behave identically on all platforms.
+    return str_replace(["\r\n", "\r"], "\n", $contents);
 }
 
 /**

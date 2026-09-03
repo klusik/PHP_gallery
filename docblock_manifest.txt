@@ -1,4 +1,5 @@
 app/bootstrap.php
+app/configuration_defaults.php
 app/controllers/admin_auth.php
 app/controllers/admin_dashboard.php
 app/controllers/admin_diagnostics.php
@@ -21,6 +22,7 @@ app/controllers/admin_tags.php
 app/controllers/admin_telemetry.php
 app/controllers/admin_thumbnails.php
 app/controllers/admin_uploads.php
+app/controllers/downloads.php
 app/controllers/gallery_lightbox.php
 app/controllers/gallery_migration.php
 app/controllers/http_helpers.php
@@ -54,6 +56,9 @@ app/services/custom_css.php
 app/services/database_helpers.php
 app/services/database_observer.php
 app/services/dng_derivatives.php
+app/services/download_artifact_cache.php
+app/services/download_capabilities.php
+app/services/download_manifest_cache.php
 app/services/download_signatures.php
 app/services/downloads.php
 app/services/exif.php

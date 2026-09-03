@@ -30,13 +30,14 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-06-10
+ *   2026-09-03
  */
 
 declare(strict_types=1);
 
 namespace Gallery\Views;
 
+use function Gallery\Core\cms_runtime_limit;
 use function Gallery\Core\csrf_field;
 use function Gallery\Core\e;
 use function Gallery\Core\render_footer;
@@ -179,8 +180,24 @@ function view_render_admin_upload_general_settings_form(array $model): void
  */
 function view_render_admin_upload_browser_settings_form(array $settings): void
 {
-    $maxZipMegabytes = number_format(((int) ($settings['max_zip_batch_bytes'] ?? (24 * 1024 * 1024))) / 1048576, 0, '.', '');
-    $sourceChunkMegabytes = number_format(((int) ($settings['thumbnail_rebuild_source_chunk_bytes'] ?? (512 * 1024 * 1024))) / 1048576, 0, '.', '');
+    $workerMinimum = (int) cms_runtime_limit('browser_upload.min_worker_count');
+    $workerDefault = (int) cms_runtime_limit('browser_upload.default_worker_count');
+    $workerHardCap = (int) cms_runtime_limit('browser_upload.hard_worker_cap');
+    $zipRatioMinimum = (float) cms_runtime_limit('browser_upload.min_zip_ratio');
+    $zipRatioDefault = (float) cms_runtime_limit('browser_upload.default_zip_ratio');
+    $zipRatioMaximum = (float) cms_runtime_limit('browser_upload.max_zip_ratio');
+    $itemsMinimum = (int) cms_runtime_limit('browser_upload.min_items_per_batch');
+    $itemsDefault = (int) cms_runtime_limit('browser_upload.default_max_items_per_batch');
+    $itemsMaximum = (int) cms_runtime_limit('browser_upload.max_items_per_batch');
+    $zipBytesMinimum = (int) cms_runtime_limit('browser_upload.min_max_zip_batch_bytes');
+    $zipBytesDefault = (int) cms_runtime_limit('browser_upload.default_max_zip_batch_bytes');
+    $zipBytesMaximum = (int) cms_runtime_limit('browser_upload.hard_max_zip_batch_bytes');
+    $sourceChunkBytesMinimum = (int) cms_runtime_limit('browser_thumbnail_rebuild.min_chunk_bytes');
+    $sourceChunkBytesDefault = (int) cms_runtime_limit('browser_thumbnail_rebuild.default_chunk_bytes');
+    $sourceChunkBytesMaximum = (int) cms_runtime_limit('browser_thumbnail_rebuild.hard_chunk_bytes');
+
+    $maxZipMegabytes = number_format(((int) ($settings['max_zip_batch_bytes'] ?? $zipBytesDefault)) / 1048576, 0, '.', '');
+    $sourceChunkMegabytes = number_format(((int) ($settings['thumbnail_rebuild_source_chunk_bytes'] ?? $sourceChunkBytesDefault)) / 1048576, 0, '.', '');
 
     view_render_admin_tab_intro([
         'kicker' => t('admin.upload_settings.browser_kicker', 'Browser'),
@@ -192,14 +209,14 @@ function view_render_admin_upload_browser_settings_form(array $settings): void
     echo '<input type="hidden" name="update_browser_upload_settings" value="1">';
     echo '<div class="browser-upload-settings-grid">';
     echo '<label class="checkbox-label"><input type="checkbox" name="browser_upload_enabled" value="1"' . (!empty($settings['enabled']) ? ' checked' : '') . '> <span>' . e(t('admin.upload.browser_enabled', 'Enable browser-side upload preparation')) . '</span><span class="muted">' . e(t('admin.upload.browser_enabled_help', 'When enabled, upload forms use browser-side preparation by default. Unchecking the upload-form option uses the normal server-side fallback.')) . '</span></label>';
-    echo '<label>' . e(t('admin.upload.browser_default_workers', 'Default worker count')) . '<input type="number" name="browser_upload_default_worker_count" min="1" max="32" value="' . (int) ($settings['default_worker_count'] ?? 8) . '"><span class="muted">' . e(t('admin.upload.browser_default_workers_help', 'Default is 8. The browser will also respect the maximum worker count and hard cap.')) . '</span></label>';
-    echo '<label>' . e(t('admin.upload.browser_max_workers', 'Maximum worker count')) . '<input type="number" name="browser_upload_max_worker_count" min="1" max="32" value="' . (int) ($settings['max_worker_count'] ?? 32) . '"><span class="muted">' . e(t('admin.upload.browser_max_workers_help', 'Upper bound for worker pool parallelism.')) . '</span></label>';
-    echo '<label>' . e(t('admin.upload.browser_hard_cap', 'Worker hard cap')) . '<input type="number" name="browser_upload_hard_worker_cap" min="1" max="32" value="' . (int) ($settings['hard_worker_cap'] ?? 32) . '"><span class="muted">' . e(t('admin.upload.browser_hard_cap_help', 'Absolute maximum is 32, even if the submitted value is higher.')) . '</span></label>';
+    echo '<label>' . e(t('admin.upload.browser_default_workers', 'Default worker count')) . '<input type="number" name="browser_upload_default_worker_count" min="' . $workerMinimum . '" max="' . $workerHardCap . '" value="' . (int) ($settings['default_worker_count'] ?? $workerDefault) . '"><span class="muted">' . e(t('admin.upload.browser_default_workers_help', 'Configured default is {default}. The browser will also respect the maximum worker count and hard cap.', ['default' => $workerDefault])) . '</span></label>';
+    echo '<label>' . e(t('admin.upload.browser_max_workers', 'Maximum worker count')) . '<input type="number" name="browser_upload_max_worker_count" min="' . $workerMinimum . '" max="' . $workerHardCap . '" value="' . (int) ($settings['max_worker_count'] ?? $workerHardCap) . '"><span class="muted">' . e(t('admin.upload.browser_max_workers_help', 'Upper bound for worker pool parallelism.')) . '</span></label>';
+    echo '<label>' . e(t('admin.upload.browser_hard_cap', 'Worker hard cap')) . '<input type="number" name="browser_upload_hard_worker_cap" min="' . $workerMinimum . '" max="' . $workerHardCap . '" value="' . (int) ($settings['hard_worker_cap'] ?? $workerHardCap) . '"><span class="muted">' . e(t('admin.upload.browser_hard_cap_help', 'Configured absolute maximum is {max}, even if the submitted value is higher.', ['max' => $workerHardCap])) . '</span></label>';
     echo '<label>' . e(t('admin.upload.browser_batch_policy', 'Batch size policy')) . '<select name="browser_upload_batch_size_policy"><option value="upload_limit_ratio" selected>' . e(t('admin.upload.browser_batch_policy_ratio', 'Use PHP upload limit ratio')) . '</option></select><span class="muted">' . e(t('admin.upload.browser_batch_policy_help', 'ZIP packages are split below the detected upload_max_filesize and post_max_size limits.')) . '</span></label>';
-    echo '<label>' . e(t('admin.upload.browser_zip_ratio', 'ZIP size threshold ratio')) . '<input type="number" name="browser_upload_zip_size_threshold_ratio" min="0.10" max="0.95" step="0.05" value="' . e(number_format((float) ($settings['zip_size_threshold_ratio'] ?? 0.8), 2, '.', '')) . '"><span class="muted">' . e(t('admin.upload.browser_zip_ratio_help', '0.80 means each store-only ZIP batch targets about 80% of the server upload limit.')) . '</span></label>';
-    echo '<label>' . e(t('admin.upload.browser_max_items_per_batch', 'Maximum images per ZIP batch')) . '<input type="number" name="browser_upload_max_items_per_batch" min="1" max="64" value="' . (int) ($settings['max_items_per_batch'] ?? 8) . '"><span class="muted">' . e(t('admin.upload.browser_max_items_per_batch_help', 'Default is 8. This keeps many small uploads from becoming one huge server-side unpacking job.')) . '</span></label>';
-    echo '<label>' . e(t('admin.upload.browser_max_zip_batch_mb', 'Preferred ZIP batch target, MB')) . '<input type="number" name="browser_upload_max_zip_batch_megabytes" min="1" max="128" step="1" value="' . e($maxZipMegabytes) . '"><span class="muted">' . e(t('admin.upload.browser_max_zip_batch_mb_help', 'Default is 24 MB. Normal multi-image ZIP batches stay below this target. If one image plus its browser-prepared thumbnails is larger, it is sent alone and may exceed this target up to the detected PHP upload limit.')) . '</span></label>';
-    echo '<label>' . e(t('admin.upload.browser_thumbnail_source_chunk_mb', 'Thumbnail rebuild source chunk, MB')) . '<input type="number" name="browser_thumbnail_rebuild_source_chunk_megabytes" min="16" max="3072" step="16" value="' . e($sourceChunkMegabytes) . '"><span class="muted">' . e(t('admin.upload.browser_thumbnail_source_chunk_mb_help', 'Default is 512 MB. This controls how many original source files the browser downloads per browser thumbnail rebuild chunk. Large values are fast on strong browsers but use more RAM and bandwidth.')) . '</span></label>';
+    echo '<label>' . e(t('admin.upload.browser_zip_ratio', 'ZIP size threshold ratio')) . '<input type="number" name="browser_upload_zip_size_threshold_ratio" min="' . e(number_format($zipRatioMinimum, 2, '.', '')) . '" max="' . e(number_format($zipRatioMaximum, 2, '.', '')) . '" step="0.05" value="' . e(number_format((float) ($settings['zip_size_threshold_ratio'] ?? $zipRatioDefault), 2, '.', '')) . '"><span class="muted">' . e(t('admin.upload.browser_zip_ratio_help', 'Configured default {default} targets about {percent}% of the server upload limit for each store-only ZIP batch.', ['default' => number_format($zipRatioDefault, 2, '.', ''), 'percent' => number_format($zipRatioDefault * 100, 0, '.', '')])) . '</span></label>';
+    echo '<label>' . e(t('admin.upload.browser_max_items_per_batch', 'Maximum images per ZIP batch')) . '<input type="number" name="browser_upload_max_items_per_batch" min="' . $itemsMinimum . '" max="' . $itemsMaximum . '" value="' . (int) ($settings['max_items_per_batch'] ?? $itemsDefault) . '"><span class="muted">' . e(t('admin.upload.browser_max_items_per_batch_help', 'Configured default is {default}. This keeps many small uploads from becoming one huge server-side unpacking job.', ['default' => $itemsDefault])) . '</span></label>';
+    echo '<label>' . e(t('admin.upload.browser_max_zip_batch_mb', 'Preferred ZIP batch target, MB')) . '<input type="number" name="browser_upload_max_zip_batch_megabytes" min="' . (int) ceil($zipBytesMinimum / 1048576) . '" max="' . (int) floor($zipBytesMaximum / 1048576) . '" step="1" value="' . e($maxZipMegabytes) . '"><span class="muted">' . e(t('admin.upload.browser_max_zip_batch_mb_help', 'Configured default is {default} MB. Normal multi-image ZIP batches stay below this target. If one image plus its browser-prepared thumbnails is larger, it is sent alone and may exceed this target up to the detected PHP upload limit.', ['default' => number_format($zipBytesDefault / 1048576, 0, '.', '')])) . '</span></label>';
+    echo '<label>' . e(t('admin.upload.browser_thumbnail_source_chunk_mb', 'Thumbnail rebuild source chunk, MB')) . '<input type="number" name="browser_thumbnail_rebuild_source_chunk_megabytes" min="' . (int) ceil($sourceChunkBytesMinimum / 1048576) . '" max="' . (int) floor($sourceChunkBytesMaximum / 1048576) . '" step="16" value="' . e($sourceChunkMegabytes) . '"><span class="muted">' . e(t('admin.upload.browser_thumbnail_source_chunk_mb_help', 'Configured default is {default} MB. This controls how many original source files the browser downloads per browser thumbnail rebuild chunk. Large values are fast on strong browsers but use more RAM and bandwidth.', ['default' => number_format($sourceChunkBytesDefault / 1048576, 0, '.', '')])) . '</span></label>';
     echo '</div>';
     echo '<button type="submit" class="secondary">' . e(t('admin.upload_settings.save_browser', 'Save browser upload settings')) . '</button>';
     echo '</form>';

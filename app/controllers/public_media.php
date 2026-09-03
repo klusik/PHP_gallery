@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-04
+ *   2026-09-03
  */
 
 declare(strict_types=1);
@@ -584,6 +584,20 @@ function cms_robots_txt(): void
     echo "Disallow: /index.php?page=admin\n";
     echo "Disallow: /index.php?page=admin_\n";
     echo "Disallow: /admin/\n";
+    // Download routes remain publicly usable but should not be crawled or indexed.
+    foreach ([
+        'download_gallery_start',
+        'download_gallery',
+        'download_gallery_manifest',
+        'download_gallery_file',
+        'download_smart_gallery_start',
+        'download_smart_gallery',
+        'download_smart_gallery_manifest',
+        'download_smart_gallery_file',
+    ] as $downloadPage) {
+        echo "Disallow: /*?page=" . $downloadPage . "\n";
+        echo "Disallow: /*&page=" . $downloadPage . "\n";
+    }
     foreach (['l', 'mod', 'uri', 'name'] as $spamParameter) {
         echo "Disallow: /*?" . $spamParameter . "=\n";
         echo "Disallow: /*&" . $spamParameter . "=\n";

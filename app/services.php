@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-08-18
+ *   2026-09-03
  */
 
 declare(strict_types=1);
@@ -129,7 +129,13 @@ require_once __DIR__ . '/services/admin_storage_statistics.php';
 require_once __DIR__ . '/services/gallery_display.php';
 require_once __DIR__ . '/services/lightbox_metadata.php';
 require_once __DIR__ . '/services/download_signatures.php';
+// Load stateless capability primitives before download manifests/controllers consume them.
+require_once __DIR__ . '/services/download_capabilities.php';
+// Load revision-keyed progressive manifest metadata caching before download builders consume it.
+require_once __DIR__ . '/services/download_manifest_cache.php';
 require_once __DIR__ . '/services/downloads.php';
+// Load immutable legacy artifact caching after the core ZIP builders and before maintenance.
+require_once __DIR__ . '/services/download_artifact_cache.php';
 // Load media renaming after downloads so stale ZIP archives can be invalidated.
 require_once __DIR__ . '/services/media_renamer.php';
 require_once __DIR__ . '/services/logs.php';
