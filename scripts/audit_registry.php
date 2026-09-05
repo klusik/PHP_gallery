@@ -64,6 +64,7 @@ return [
             'php-lint',
             'js-lint',
             'browser-map',
+            'release-consistency',
             'manifest',
             'git-diff-check',
         ],

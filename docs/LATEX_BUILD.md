@@ -19,6 +19,8 @@ Update `\version` and `\manualdate` once near the beginning of `PHP_Gallery_Manu
 
 ## Release-documentation workflow
 
+`RELEASE.md` is authoritative for the complete release sequence. This section documents only the manual-specific portion and must not be interpreted as a second release checklist. `scripts/prepare_release.php <version>` updates `\version` and `\manualdate` mechanically; maintainers still review the manual content and rebuild the PDF after the final LaTeX edit.
+
 For a release, start from a clean release branch and compare the working tree with the exact previous release tag before editing the manual. Review every intervening commit and changed path, especially migrations, browser entrypoints/cache keys, translations, generated files, and packaging policy. Update the runtime version in `app/bootstrap.php`, the release entry and `v_<version>` tag in `release-metadata.json`, and the newest `PATCH_NOTES.md` entry before changing the edition metadata above. Review the release-specific sections of `README.md`, `ARCHITECTURE.md`, `DATABASE.md`, `TESTING.md`, `CODEMAP.md`, and `docs/ADMIN_SETTINGS_INVENTORY.md` for stale behavior descriptions.
 
 After the final source and documentation edits, build the PDF with the four commands above from `docs/`. Inspect the generated PDF title page, table of contents, bookmarks, index, page breaks, and feature documentation. Confirm that the opening guide flows from the purpose/reading guide directly into “How to use this manual” and contains no release-news block. Intermediate `.aux`, `.idx`, `.ilg`, `.log`, and related files are disposable and remain ignored; `docs/PHP_Gallery_Manual.pdf` is the tracked release artifact.

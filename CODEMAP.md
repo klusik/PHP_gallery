@@ -436,6 +436,7 @@ dynamically, not test one known table identity.
 | Linux deploy | `deploy.sh`, `scripts/deploy.sh` |
 | Windows deploy | `deploy.bat`, `scripts/deploy.ps1` |
 | Central source audit and registry | `scripts/audit.php`, `scripts/audit_lib.php`, `scripts/audit_registry.php`, `tests/audit_runner_test.php`<br>Coordinates PHP/Node/Python regressions, syntax checks, contract utilities, release checks, timeout handling, normalized status, and compact Markdown/JSON reporting. |
+| Release preparation and consistency | `RELEASE.md`, `scripts/prepare_release.php`, `scripts/check_release.php`, `scripts/release_lib.php`, `tests/release_tooling_test.php`<br>Owns registered current-version markers, release metadata scaffolding, read-only cross-artifact consistency, and the release workflow contract. Release consistency is included in the central `release` audit profile. |
 | PHP regression compatibility entrypoint | `tests/run.php`, `tests/*_test.php`<br>Historical `php tests/run.php` delegates to the central audit runner's `php-regression` suite. |
 | Standalone JavaScript model tests | `tests/*_test.mjs` |
 | Manual migration CLI | `scripts/migrate.php` |

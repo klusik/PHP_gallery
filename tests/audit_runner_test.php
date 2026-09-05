@@ -72,6 +72,7 @@ audit_test_assert(in_array('php-regression', $profiles['quick'], true), 'Quick p
 audit_test_assert(in_array('node-fast', $profiles['quick'], true), 'Quick profile must use the fast Node suite.');
 audit_test_assert(in_array('node-full', $profiles['full'], true), 'Full profile must include slow deterministic Node coverage.');
 audit_test_assert(in_array('browser-map', $profiles['release'], true), 'Release profile must include browser integration coverage.');
+audit_test_assert(in_array('release-consistency', $profiles['release'], true), 'Release profile must verify release metadata and documentation consistency.');
 audit_test_assert(in_array('manifest', $profiles['release'], true), 'Release profile must verify the core manifest.');
 
 audit_test_assert(!empty($registry['node_tests']['gallery_download_zip64_test.mjs']['slow']), 'ZIP64 boundary coverage must stay classified as slow.');
