@@ -148,8 +148,8 @@ leaflet_marker_assert_contains($lightbox, "event.target.closest('[data-map-open-
 leaflet_marker_assert_contains($lightbox, 'preserveMapSplit: Boolean(', 'fullscreen split-map preservation');
 leaflet_marker_assert_contains($lightbox, 'window.location.assign(pageUrl);', 'canonical page fallback');
 leaflet_marker_assert_contains($lightbox, 'data-map-photo-page-url=', 'popup canonical fallback attribute');
-leaflet_marker_assert_contains($galleryEntrypoint, '20260905-map-popup-viewer-navigation-v1', 'authenticated entrypoint cache revision');
-leaflet_marker_assert_contains($publicEntrypoint, '20260905-map-popup-viewer-navigation-v1', 'public entrypoint cache revision');
+leaflet_marker_assert_contains($galleryEntrypoint, '20260905-map-popup-viewer-navigation-v2', 'authenticated entrypoint cache revision');
+leaflet_marker_assert_contains($publicEntrypoint, '20260905-map-popup-viewer-navigation-v2', 'public entrypoint cache revision');
 leaflet_marker_assert_not_contains($lightboxCss, '.lightbox.is-fullscreen figure a', 'fullscreen popup anchor sizing');
 
 foreach ([$helpers, $layout] as $assetRendererSource) {

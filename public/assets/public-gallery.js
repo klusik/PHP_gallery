@@ -30,7 +30,7 @@
  *   2026-09-05
  */
 
-import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20260905-map-popup-viewer-navigation-v1';
+import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20260905-map-popup-viewer-navigation-v2';
 
 const optionalPublicModules = {
     votes: './gallery-modules/votes.js?v=20260512-lightbox-vote-clone-widget-v6',

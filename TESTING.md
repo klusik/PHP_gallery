@@ -783,8 +783,12 @@ Manual browser coverage remains required because the repository has no productio
    correct photograph in the existing lightbox without exposing a raw-media URL. Repeat in desktop fullscreen split-map
    mode and confirm the map stays mounted while only the photograph pane changes; click two markers rapidly and confirm
    the second click does not toggle fullscreen on the underlying stage. From the ordinary map overlay, confirm the overlay
-   closes before the selected photograph appears. Disable JavaScript and confirm the popup link reaches the canonical
-   authorized photograph page. Repeat with password/share access where configured and confirm no access rule is weakened.
+   closes before the selected photograph appears. Re-select a previously loaded off-page marker and confirm no new target
+   request is needed. Delay metadata responses, select a second marker, then close the map or viewer: cancelled/older work
+   must neither change the photo nor navigate away, including after reopen. Repeat after exiting fullscreen or changing
+   photos with the keyboard. Fail a current lookup deliberately and confirm its canonical photo-page fallback still works.
+   Copy a popup's canonical link, disable JavaScript, and open that URL directly to verify the authorized page fallback.
+   Repeat as a public visitor and Admin, with password/share access where configured, and confirm no access rule is weakened.
 10. After changing `lightbox.js`, reload page source and confirm `data-gallery-asset-revision` changes even if another
    dependency has a later filesystem modification time. Confirm the deferred `lightbox.js?v=...` request uses the new
    revision. Disable JavaScript and confirm the ordinary server-rendered photo/navigation fallback remains usable. Watch
@@ -798,6 +802,25 @@ Manual browser coverage remains required because the repository has no productio
    `setupGalleryLightbox()` instance that returned before mounting a viewer.
 
 ### 3. Manual Functional Smoke Tests
+
+Map-photo navigation regression commands:
+
+```text
+php tests/seo_lightbox_target_guard_test.php
+node tests/lightbox_map_navigation_test.mjs
+node tests/lightbox_map_browser_test.mjs "C:\Program Files\Google\Chrome\Application\chrome.exe"
+```
+
+The PHP test executes the real request guard in isolated public/Admin requests, including rejection of unknown parameters
+and rejection of `target_image_id` on an endpoint that does not support it. The Node test executes production closure
+functions with controlled fetch/DOM/timer boundaries; it covers detached-cache reuse, cancellation, supersession, close/reopen,
+and genuine-failure fallback. The browser runner requires an installed Chromium executable and uses a fresh profile under
+`cache/` plus a loopback-only fixture server. It loads the complete production lightbox module with synthetic photographs
+and controlled metadata responses. Its popup-shaped links exercise real DOM event routing and CSS fullscreen split state;
+it does not validate Leaflet rendering, native fullscreen, touch gestures, or live database/media authorization. Run the
+manual matrix above for those integration checks. `--baseline` on either Node runner loads the committed `HEAD` lightbox
+source to reproduce a regression before committing a fix.
+
 For feature work, use the same end-to-end scenario every time. Keep one dedicated test installation or local database so you can create and remove test content freely.
 
 Recommended flow:
