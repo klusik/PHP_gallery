@@ -1,5 +1,48 @@
 # Patch notes
 
+## Version 0.96.2
+
+Version 0.96.2 is a maintenance release with no schema, migration, or user-facing behavior changes. It adds deterministic release preparation and consistency tooling so version bumps and pre-release qualification no longer depend on a maintainer or agent manually touching every version marker by hand.
+
+### Highlights
+
+#### Release preparation and consistency tooling
+
+- Added `scripts/prepare_release.php <version>` to apply only the registered mechanical current-version markers for a release: `app/bootstrap.php` `CMS_VERSION`, the `README.md`/`TESTING.md`/`DATABASE.md` current-version markers, the `ARCHITECTURE.md` `CMS_VERSION` example, `docs/PHP_Gallery_Manual.tex` version/edition date, and the `release-metadata.json` entry and `v_<version>` tag. It also scaffolds a new `PATCH_NOTES.md` section when the target version has no entry yet, and deliberately leaves editorial notes, manual compilation, manifest regeneration, Git history, and publication as explicit follow-up steps.
+- Added `scripts/check_release.php` as a read-only checker that cross-verifies runtime, documentation, manual, release-metadata, patch-note, and core-manifest versions for agreement and flags a manual PDF older than its LaTeX source.
+- Registered the checker as the `release-consistency` suite in `scripts/audit.php` and `scripts/audit_registry.php`, so `--profile=release` now verifies release consistency as part of the normal audit run instead of requiring a separate manual pass.
+- Added `RELEASE.md` as the authoritative release-lifecycle playbook, and pointed `AGENTS.md`, `ARCHITECTURE.md`, `CODEMAP.md`, `README.md`, and `docs/LATEX_BUILD.md` at it instead of duplicating the release checklist in each document.
+- `AGENTS.md` now states explicitly that release preparation or a passing release audit must never by itself result in a release commit, tag, push, or publication unless the user asks for that action.
+
+### Technical Details
+
+#### Backend
+
+- Added `scripts/release_lib.php`, centralizing reusable release operations: detecting the current `CMS_VERSION`, updating registered current-version markers, updating `docs/PHP_Gallery_Manual.tex` version/edition-date commands, upserting `release-metadata.json`, and scaffolding a new `PATCH_NOTES.md` entry.
+- Added `scripts/prepare_release.php` and `scripts/check_release.php` as thin CLI entrypoints over `scripts/release_lib.php`.
+- Updated `scripts/audit.php` and `scripts/audit_registry.php` to register and run `release-consistency` (`scripts/check_release.php --quiet`) as part of the `release` profile.
+- Regenerated `app/core-manifest.json` after the source and documentation changes.
+
+#### Documentation
+
+- Added `RELEASE.md` describing the complete release lifecycle: scoping, mechanical preparation, release-note/documentation completion, manual build/inspection, standalone consistency checks, manifest regeneration, the authoritative release audit, package inspection, and commit/tag/publish authorization.
+- Updated `AGENTS.md`, `ARCHITECTURE.md`, `CODEMAP.md`, `README.md`, and `docs/LATEX_BUILD.md` to reference `RELEASE.md` as the single source of truth for the release workflow instead of repeating the checklist.
+
+### Tests
+
+- Added `tests/release_tooling_test.php` covering `scripts/release_lib.php` marker updates, release-metadata upsert behavior, and patch-note scaffolding.
+- Extended `tests/audit_runner_test.php` to assert that the `release` profile includes the new `release-consistency` suite.
+
+### User Impact
+
+#### For administrators
+
+- No visible change to the public site, Admin UI, or any stored data. This release exists to make future release preparation faster and less error-prone for maintainers.
+
+#### For visitors
+
+- No user-facing change.
+
 ## Version 0.96.1
 
 Version 0.96.1 is a maintenance release with no schema, migration, or user-facing behavior changes. It introduces a central audit runner that consolidates the project's PHP, Node, and WinApp regression suites behind three selectable profiles, and hardens the local/ZIP deployment scripts' tests-folder opt-in prompt. Release verification for this version is a superset of the Version 0.96 checklist run through the new central runner.
