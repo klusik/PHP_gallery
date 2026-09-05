@@ -17,6 +17,7 @@
  *   - Prevent nested CSS transforms from returning inside Leaflet marker icons
  *   - Preserve all public marker roles and their role-specific visual classes
  *   - Verify deferred lightbox imports inherit the server asset revision
+ *   - Protect canonical map-photo fallback and in-viewer navigation behavior
  *
  * Author:
  *   Rudolf Klusal
@@ -32,7 +33,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-08-11
+ *   2026-09-05
  */
 
 declare(strict_types=1);
@@ -82,6 +83,11 @@ function leaflet_marker_assert_not_contains(string $source, string $needle, stri
 
 $lightbox = leaflet_marker_read_source('public/assets/gallery-modules/lightbox.js');
 $deferred = leaflet_marker_read_source('public/assets/gallery-modules/lightbox-deferred.js');
+$galleryEntrypoint = leaflet_marker_read_source('public/assets/gallery.js');
+$publicEntrypoint = leaflet_marker_read_source('public/assets/public-gallery.js');
+$lightboxController = leaflet_marker_read_source('app/controllers/gallery_lightbox.php');
+$exifService = leaflet_marker_read_source('app/services/exif.php');
+$lightboxCss = leaflet_marker_read_source('public/assets/styles/lightbox.css');
 $sharedCss = leaflet_marker_read_source('public/assets/styles/public-shared.css');
 $helpers = leaflet_marker_read_source('app/helpers.php')
     . leaflet_marker_read_source('app/helpers_page_rendering.php');
@@ -130,6 +136,21 @@ leaflet_marker_assert_contains($deferred, "new URL('./lightbox.js', import.meta.
 leaflet_marker_assert_contains($deferred, "script[data-gallery-asset-revision]", 'server asset revision lookup');
 leaflet_marker_assert_contains($deferred, "moduleUrl.searchParams.set('v', assetRevision)", 'deferred lightbox cache revision');
 leaflet_marker_assert_not_contains($deferred, "./lightbox.js?v=", 'hard-coded deferred lightbox revision');
+
+leaflet_marker_assert_contains($exifService, "'page_url' => image_public_url(\$image, \$gallery)", 'canonical map-photo page URL');
+leaflet_marker_assert_contains($exifService, "'gallery_id' => (int) \$gallery['id']", 'map-photo gallery identity');
+leaflet_marker_assert_contains($exifService, "'payload_version' => 3", 'map payload cache invalidation');
+leaflet_marker_assert_contains($lightboxController, "\$_GET['target_image_id']", 'target-image lightbox request');
+leaflet_marker_assert_contains($lightboxController, 'gallery_lightbox_image_position(', 'authorized target position lookup');
+leaflet_marker_assert_contains($lightboxController, "'target_index' => \$targetIndex", 'target index response');
+leaflet_marker_assert_contains($lightbox, "url.searchParams.set('target_image_id', String(imageId))", 'bounded map target request');
+leaflet_marker_assert_contains($lightbox, "event.target.closest('[data-map-open-photo], [data-map-photo-page-url]')", 'captured popup photo action');
+leaflet_marker_assert_contains($lightbox, 'preserveMapSplit: Boolean(', 'fullscreen split-map preservation');
+leaflet_marker_assert_contains($lightbox, 'window.location.assign(pageUrl);', 'canonical page fallback');
+leaflet_marker_assert_contains($lightbox, 'data-map-photo-page-url=', 'popup canonical fallback attribute');
+leaflet_marker_assert_contains($galleryEntrypoint, '20260905-map-popup-viewer-navigation-v1', 'authenticated entrypoint cache revision');
+leaflet_marker_assert_contains($publicEntrypoint, '20260905-map-popup-viewer-navigation-v1', 'public entrypoint cache revision');
+leaflet_marker_assert_not_contains($lightboxCss, '.lightbox.is-fullscreen figure a', 'fullscreen popup anchor sizing');
 
 foreach ([$helpers, $layout] as $assetRendererSource) {
     leaflet_marker_assert_contains($assetRendererSource, "gallery-modules/lightbox.js'", 'anonymous lightbox asset-version dependency');

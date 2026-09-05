@@ -2,7 +2,7 @@
 
 A modern PHP 8.1+ gallery CMS designed for ordinary shared hosting. The application uses the filesystem as the authoritative source for gallery structure, while storing all metadata, access rules, votes, user accounts, and audit logs in MySQL or MariaDB.
 
-**Current Version:** 0.95.1
+**Current Version:** 0.95.2
 
 **Key Benefit:** Deploy in minutes on shared hosting. No npm, no Composer, no framework overhead. Just PHP + MySQL.
 
@@ -348,7 +348,7 @@ Use **Settings** in the Admin navigation as the central overview for important g
 
 The hub can directly edit only settings that already have a safe canonical service setter: site name, public language, URL rewrite, public search when available, the public thumbnail renderer, the global EXIF/GPS display default when its existing schema is ready, and development diagnostics. Theme layout, tag presentation, upload tuning, telemetry, Account credentials, language-pack editing, raw CSS, API keys, database tools and destructive maintenance remain on their existing specialized pages. Those pages remain fully supported and link back to the relevant Settings section.
 
-Version 0.93.2 is a focused media-renaming and Windows traffic-diagnostics refinement on top of Version 0.93.1. It makes automatic media names follow the current gallery-title context while preserving the explicit physical-path placeholder, and adds a durable grouped HTML anomaly report to the Windows monitor with transport, HTTP, timing, forced-address, and immediate-recheck context. The complete Version 0.93 performance, updater, uploader, viewer, Smart Gallery, zoom, progressive-thumbnail, and protected-media foundation remains intact.
+Version 0.95.2 improves the connection between gallery maps and the public lightbox. Selecting **Open photo** in a map marker now opens that photograph in the existing viewer when it belongs to the active gallery, even when pagination has not loaded its card yet. Fullscreen split-map navigation keeps the map mounted while the photograph changes, and ordinary map overlays return to the lightbox cleanly. If enhanced navigation is unavailable, the marker uses the canonical authorized photograph page instead of linking directly to raw media. No database migration or configuration change is required.
 
 Deep links use stable identifiers such as `?page=admin_settings&section=appearance#settings-appearance`. JavaScript tab changes update the complete query plus hash URL so Back/Forward and refresh preserve the selected section. Without JavaScript, the tab links load the same section as normal pages. See `docs/ADMIN_SETTINGS_INVENTORY.md` for canonical ownership, defaults, fallbacks, sensitivity and migration status.
 

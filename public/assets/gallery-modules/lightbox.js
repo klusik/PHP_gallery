@@ -27,7 +27,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-08-11
+ *   2026-09-05
  */
 
 /**
@@ -531,6 +531,68 @@ export function setupGalleryLightbox() {
                 }
                 return false;
             })
+            .finally(() => {
+                if (lightboxPendingWindows.get(key) === promise) {
+                    lightboxPendingWindows.delete(key);
+                }
+            });
+        lightboxPendingWindows.set(key, promise);
+        return promise;
+    }
+
+    /**
+     * Fetch the metadata window containing one map-selected image.
+     *
+     * This avoids a full page navigation when a gallery map points at an
+     * image outside the currently loaded pagination window.
+     *
+     * @param {number} imageId Database image id from the map marker payload.
+     * @return {Promise<number>} Loaded lightbox index, or -1 when unavailable.
+     */
+    function fetchLightboxTargetIndex(imageId) {
+        if (!lightboxEndpoint || cards.length === 0 || imageId <= 0) {
+            return Promise.resolve(-1);
+        }
+        const existingIndex = cards.findIndex((candidate) => candidate && String(candidate.dataset.imageId || '') === String(imageId));
+        if (existingIndex >= 0) {
+            return Promise.resolve(existingIndex);
+        }
+        const key = `target:${imageId}`;
+        if (lightboxPendingWindows.has(key)) {
+            return lightboxPendingWindows.get(key);
+        }
+        const metadataSignal = currentLightboxMetadataSignal();
+        if (!metadataSignal) {
+            return Promise.resolve(-1);
+        }
+        const requestGeneration = lightboxMetadataGeneration;
+        const url = new URL(lightboxEndpoint, window.location.href);
+        url.searchParams.set('target_image_id', String(imageId));
+        url.searchParams.set('limit', String(lightboxWindowSize));
+        let promise = null;
+        promise = fetch(url.toString(), {
+            credentials: 'same-origin',
+            headers: {'Accept': 'application/json'},
+            signal: metadataSignal,
+        })
+            .then((response) => {
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                return response.json();
+            })
+            .then((payload) => {
+                if (metadataSignal.aborted || controller.signal.aborted || requestGeneration !== lightboxMetadataGeneration) {
+                    return -1;
+                }
+                mergeLightboxItems(payload?.items || []);
+                const targetIndex = Number.parseInt(String(payload?.target_index ?? '-1'), 10);
+                if (Number.isInteger(targetIndex) && targetIndex >= 0 && cards[targetIndex]?.dataset.imageId === String(imageId)) {
+                    return targetIndex;
+                }
+                return cards.findIndex((candidate) => candidate && String(candidate.dataset.imageId || '') === String(imageId));
+            })
+            .catch(() => -1)
             .finally(() => {
                 if (lightboxPendingWindows.get(key) === promise) {
                     lightboxPendingWindows.delete(key);
@@ -4012,6 +4074,8 @@ export function setupGalleryLightbox() {
             });
         }
         const revealHud = options.revealHud !== false;
+        const forceImmediateSwap = options.forceImmediateSwap === true;
+        const preserveMapSplit = options.preserveMapSplit === true;
         clearLightboxSlideshowTimer();
         const normalizedIndex = ((index % cards.length) + cards.length) % cards.length;
         resetLightboxZoom(false);
@@ -4089,7 +4153,7 @@ export function setupGalleryLightbox() {
         const navigationRequestedAt = performance.now();
         const rapidManualNavigation = !shouldShowImmediately && !lightboxSlideshowActive && navigationRequestedAt - lastLightboxNavigationRequestedAt <= lightboxRapidNavigationThreshold;
         lastLightboxNavigationRequestedAt = navigationRequestedAt;
-        const shouldSwapImmediately = shouldShowImmediately || rapidManualNavigation;
+        const shouldSwapImmediately = forceImmediateSwap || shouldShowImmediately || rapidManualNavigation;
         // slideshowPreparedImage is supplied only by automatic slideshow navigation after the full source has decoded.
         const slideshowPreparedImage = lightboxSlideshowActive
             && options.slideshowPreparedImage instanceof HTMLImageElement
@@ -4156,7 +4220,7 @@ export function setupGalleryLightbox() {
             scheduleLightboxSlideshowNext();
         });
         syncPictureStrip(normalizedIndex);
-        if (lightboxMapSplit && !lightboxMapSplit.hidden) {
+        if (lightboxMapSplit && !lightboxMapSplit.hidden && !preserveMapSplit) {
             if (!sharedLightboxMapUiAvailable() || !isLightboxFullscreen()) {
                 closeLightboxMapSplit();
             } else if (mapPoint) {
@@ -5505,6 +5569,16 @@ export function setupGalleryLightbox() {
             if (!(event.target instanceof Element)) {
                 return;
             }
+            // Capture map popup photo actions before Leaflet can contain the click
+            // inside its map DOM. Both body-level and fullscreen split maps therefore
+            // enter the same navigation pipeline.
+            const mapPhotoLink = event.target.closest('[data-map-open-photo], [data-map-photo-page-url]');
+            if (mapPhotoLink) {
+                event.preventDefault();
+                event.stopPropagation();
+                scheduleMapPhotoLinkNavigation(mapPhotoLink);
+                return;
+            }
             // Variable `photoButton` stores this steps working value.
             const photoButton = event.target.closest('[data-photo-map]');
             if (photoButton) {
@@ -6829,6 +6903,118 @@ export function setupGalleryLightbox() {
         }
     }
 
+    /**
+     * Prepare the active map surface for a popup photo navigation.
+     *
+     * A body-level map overlay must close so the normal lightbox becomes visible.
+     * The fullscreen split map is different: it is part of the active viewer and must
+     * remain mounted while the photo pane changes. Tearing it down exposes the stage
+     * underneath the pointer and can turn a rapid second click into a fullscreen toggle.
+     *
+     * @param {boolean} preserveMapSplit Keep the fullscreen split map mounted.
+     */
+    function closeMapSurfaceForPhotoNavigation(preserveMapSplit = false) {
+        if (!preserveMapSplit && lightboxMapSplit instanceof HTMLElement && !lightboxMapSplit.hidden) {
+            closeLightboxMapSplit();
+        }
+        closeMapOverlay();
+    }
+
+    /**
+     * Snapshot one map popup photo target before Leaflet is allowed to tear down the popup DOM.
+     *
+     * @param {Element} mapPhotoLink Popup link carrying image and gallery metadata.
+     * @return {{imageId: number, galleryId: number, pageUrl: string, preserveMapSplit: boolean}} Stable navigation target.
+     */
+    function mapPhotoNavigationTarget(mapPhotoLink) {
+        return {
+            imageId: Number.parseInt(mapPhotoLink.dataset.mapOpenPhoto || '0', 10),
+            galleryId: Number.parseInt(mapPhotoLink.dataset.mapPhotoGalleryId || '0', 10),
+            pageUrl: String(mapPhotoLink.dataset.mapPhotoPageUrl || mapPhotoLink.getAttribute('href') || '').trim(),
+            preserveMapSplit: Boolean(
+                isLightboxFullscreen()
+                && lightboxMapSplit instanceof HTMLElement
+                && !lightboxMapSplit.hidden
+            ),
+        };
+    }
+
+    /**
+     * Navigate one map popup photo target through the active lightbox when possible.
+     *
+     * Body-level maps are dismissed separately by scheduleMapPhotoLinkNavigation().
+     * Fullscreen split maps remain mounted and the selected photo is committed directly
+     * into the existing photo pane, without rebuilding the map or exposing the stage.
+     *
+     * @param {{imageId: number, galleryId: number, pageUrl: string, preserveMapSplit: boolean}} target Stable popup target.
+     * @return {Promise<void>} Resolves after in-viewer navigation or page fallback.
+     */
+    async function openMapPhotoTarget(target) {
+        const imageId = Number.parseInt(String(target?.imageId || '0'), 10);
+        const galleryId = Number.parseInt(String(target?.galleryId || '0'), 10);
+        const pageUrl = String(target?.pageUrl || '').trim();
+        let targetIndex = -1;
+
+        try {
+            if (imageId > 0 && overlay instanceof HTMLElement && !overlay.hidden) {
+                refreshLightboxOrderFromDom();
+                targetIndex = cards.findIndex((candidate) => candidate && String(candidate.dataset.imageId || '') === String(imageId));
+                const activeGalleryId = Number.parseInt(String(cards[currentIndex]?.dataset.galleryId || '0'), 10);
+                if (targetIndex < 0 && galleryId > 0 && activeGalleryId === galleryId) {
+                    targetIndex = await fetchLightboxTargetIndex(imageId);
+                }
+            }
+        } catch {
+            targetIndex = -1;
+        }
+
+        if (controller.signal.aborted) {
+            return;
+        }
+        try {
+            if (targetIndex >= 0) {
+                if (targetIndex !== currentIndex) {
+                    openAt(targetIndex, {
+                        forceImmediateSwap: target.preserveMapSplit === true,
+                        preserveMapSplit: target.preserveMapSplit === true,
+                    });
+                }
+                return;
+            }
+        } catch {
+            // Canonical page navigation below is the final fail-safe.
+        }
+
+        if (pageUrl !== '') {
+            window.location.assign(pageUrl);
+        }
+    }
+
+    /**
+     * Schedule one popup link navigation after the current Leaflet event dispatch.
+     *
+     * Body-level map overlays close after the Leaflet event dispatch so the normal
+     * lightbox is revealed. Fullscreen split maps deliberately stay mounted: the popup
+     * action changes only the photo pane and keeps the map interaction surface stable.
+     *
+     * @param {Element} mapPhotoLink Popup link carrying image and gallery metadata.
+     */
+    function scheduleMapPhotoLinkNavigation(mapPhotoLink) {
+        const target = mapPhotoNavigationTarget(mapPhotoLink);
+        window.setTimeout(() => {
+            if (controller.signal.aborted) {
+                return;
+            }
+            try {
+                closeMapSurfaceForPhotoNavigation(target.preserveMapSplit === true);
+            } catch {
+                // Target resolution still proceeds and retains the canonical fallback.
+            }
+            void openMapPhotoTarget(target);
+        }, 0);
+    }
+
+
     // Function `mapPopupHtml` executes this focused behavior.
     /**
      * Handle map popup html.
@@ -6845,8 +7031,15 @@ export function setupGalleryLightbox() {
         const description = point.description ? `<p>${escapeHtml(point.description)}</p>` : '';
         // Variable `thumb` stores this steps working value.
         const thumb = point.thumb ? `<img decoding="async" loading="lazy" src="${escapeAttribute(point.thumb)}" alt="">` : '';
-        // Variable `image` stores this steps working value.
-        const image = point.image ? `<p><a href="${escapeAttribute(point.image)}">${escapeHtml(i18n('lightbox.open_photo', 'Open photo'))}</a></p>` : '';
+        // photoPageUrl is the canonical gallery route for this photo; raw media remains a last-resort legacy fallback.
+        const photoPageUrl = String(point.page_url || point.pageUrl || point.image || '').trim();
+        // imageId lets popup clicks switch the already-open lightbox without leaving fullscreen or reloading the page.
+        const imageId = Number.parseInt(String(point.id || '0'), 10);
+        // galleryId distinguishes current-gallery photos from recursive subgallery markers.
+        const galleryId = Number.parseInt(String(point.gallery_id || point.galleryId || '0'), 10);
+        const image = photoPageUrl
+            ? `<p><a href="${escapeAttribute(photoPageUrl)}" data-map-photo-page-url="${escapeAttribute(photoPageUrl)}"${imageId > 0 ? ` data-map-open-photo="${imageId}" data-map-photo-gallery-id="${galleryId > 0 ? galleryId : 0}"` : ''}>${escapeHtml(i18n('lightbox.open_photo', 'Open photo'))}</a></p>`
+            : '';
         return `<div class="map-popup">${thumb}<h3>${title}</h3>${description}${image}</div>`;
     }
 

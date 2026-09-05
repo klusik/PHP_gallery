@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-17
+ *   2026-09-05
  */
 
 declare(strict_types=1);
@@ -49,11 +49,13 @@ use function Gallery\Services\current_votes_for_images;
 use function Gallery\Services\content_localize_entities;
 use function Gallery\Services\content_localize_entity;
 use function Gallery\Services\find_gallery;
+use function Gallery\Services\find_image;
 use function Gallery\Services\gallery_allows_gps_maps;
 use function Gallery\Services\gallery_benchmark_record_auxiliary_render;
 use function Gallery\Services\gallery_benchmark_request_trace_enabled;
 use function Gallery\Services\gallery_benchmark_trace_mark;
 use function Gallery\Services\gallery_lightbox_fetch_images;
+use function Gallery\Services\gallery_lightbox_image_position;
 use function Gallery\Services\gallery_lightbox_total_count;
 use function Gallery\Services\gallery_voting_allowed;
 use function Gallery\Services\image_has_gps;
@@ -180,6 +182,20 @@ function cms_gallery_lightbox_data(): void
     $limit = max(1, min(80, (int) ($_GET['limit'] ?? 60)));
     $total = gallery_lightbox_total_count($gallery, $publicOnly, true);
     $offset = max(0, (int) ($_GET['offset'] ?? 0));
+    // $targetImageId optionally asks the endpoint for the window containing one map-selected photo.
+    $targetImageId = max(0, (int) ($_GET['target_image_id'] ?? 0));
+    // $targetIndex remains null when the requested image is outside this authorized lightbox scope.
+    $targetIndex = null;
+    if ($targetImageId > 0) {
+        $targetImage = find_image($targetImageId);
+        if ($targetImage) {
+            $candidateIndex = gallery_lightbox_image_position($targetImage, $gallery, $publicOnly, true);
+            if ($candidateIndex >= 0) {
+                $targetIndex = $candidateIndex;
+                $offset = max(0, min(max(0, $total - $limit), $candidateIndex - intdiv($limit, 2)));
+            }
+        }
+    }
     if ($total > 0 && $offset >= $total) {
         $offset = max(0, $total - $limit);
     }
@@ -241,6 +257,7 @@ function cms_gallery_lightbox_data(): void
         'offset' => $offset,
         'limit' => $limit,
         'count' => count($items),
+        'target_index' => $targetIndex,
         'items' => $items,
     ]);
 }

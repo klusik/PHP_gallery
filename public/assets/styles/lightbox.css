@@ -267,6 +267,12 @@
     height: 100%;
     cursor: zoom-out;
 }
+
+/*
+ * Keep fullscreen sizing scoped to the stage control. Do not broaden this to
+ * figure anchors: Leaflet popup controls and photo links are anchors too, and a
+ * 100% anchor size would place the popup close target over the popup contents.
+ */
 .lightbox-zoom-surface {
     position: absolute;
     left: 50%;
@@ -1002,11 +1008,6 @@
 
 .lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-next {
     right: calc(max(560px, 38vw) + env(safe-area-inset-right, 0px) + 1rem);
-}
-
-.lightbox.is-fullscreen figure a {
-    width: 100%;
-    height: 100%;
 }
 
 .has-lightbox {
