@@ -1,5 +1,64 @@
 # Patch notes
 
+## Version 0.96
+
+Version 0.96 expands gallery-to-gallery migration into a resumable hierarchy transfer. Administrators can move one gallery or its complete descendant tree between compatible PHP Gallery installations, recreate the imported hierarchy safely below a selected receiving gallery, and transfer originals, existing thumbnails, gallery assets, and metadata in bounded ZIP packages that resume after interrupted connections.
+
+### Highlights
+
+#### Recursive gallery migration
+
+- Added an **Include subgalleries** option, enabled by default, for both push and pull migration workflows.
+- Recreated the selected source gallery as a new child below the receiving gallery and preserved the descendant hierarchy in deterministic parent-first order.
+- Preserved supported gallery and image metadata, translations, flight-map data, originals, generated thumbnails, and gallery branding assets across the imported tree.
+- Kept single-gallery transfer available by clearing the recursive option.
+
+#### Bounded and resumable ZIP transfer
+
+- Replaced one-asset browser transfer steps with deterministic ZIP packages sized to the receiving server's upload policy.
+- Kept each original grouped with its existing thumbnails and stored photograph bytes without unnecessary recompression.
+- Added target-side package status so interrupted or timed-out transfers can skip assets already installed before retrying.
+- Refused completion until every manifest asset is present and retained durable gallery and image mappings for safe resume.
+
+#### Transfer safety
+
+- Kept exact application-version compatibility and gallery-scoped API-key authorization for manifests, packages, status, and completion.
+- Validated recursive tree structure, package membership, stable ZIP entry names, file sizes, SHA-256 checksums, target paths, schema readiness, and imported asset ownership before mutation.
+- Created imported roots as unpublished child galleries during preparation and applied final metadata only after the transfer completes.
+
+### Technical Details
+
+#### Backend
+
+- Updated `app/services/gallery_migration.php` for recursive manifests, legacy single-gallery manifest normalization, deterministic package planning, source ZIP construction, target ZIP validation, durable source-to-target gallery mappings, and completeness-checked finalization.
+- Updated `app/controllers/gallery_migration.php` with package send/receive actions for Admin push and pull workflows and recursive-scope handling for API requests.
+- Registered the new package routes in `app/bootstrap/dispatch.php`, `app/early_runtime.php`, `app/services/feature_flags.php`, and `app/services/seo_request_guard.php` without widening unrelated public request contracts.
+- Added no database migration, table, column, stored-data rewrite, or configuration requirement.
+
+#### Frontend and localization
+
+- Updated `public/assets/gallery-modules/admin-gallery-migration.js` to process receiver-defined package plans, query target status before retries, skip completed packages, and keep progress resumable.
+- Updated the Admin migration form and English, Czech, German, and Swedish catalogs for recursive selection, ZIP-package progress, reconnect, retry, and validation messages.
+- Updated the authenticated gallery entrypoint cache revision so deployed browsers load the new migration workflow.
+
+#### Tests and documentation
+
+- Extended `tests/gallery_migration_model_test.php` with behavioral coverage for recursive manifest normalization, cross-gallery asset identity, atomic image package grouping, deterministic package plans, soft and hard size bounds, and malformed tree/package rejection.
+- Updated architecture, code-map, testing, README, database-version, and administrator-manual documentation for the recursive child-tree and bounded ZIP-package contracts.
+- Regenerated `app/core-manifest.json` after the final source, test, version, and documentation changes.
+
+### User Impact
+
+#### For administrators
+
+- Complete nested gallery structures can be transferred between same-version installations without rebuilding the hierarchy manually.
+- Interrupted transfers can resume from target-confirmed package state instead of restarting completed work.
+- The selected receiving gallery remains intact and becomes the parent of the newly imported root.
+
+#### For visitors
+
+- Imported galleries remain unpublished while transfer preparation is incomplete and become visible only according to their restored final visibility and normal access policy.
+
 ## Version 0.95.4
 
 Version 0.95.4 restores focused regression coverage for the browser download and Smart Gallery contracts. The production download path remains unchanged; isolated test fixtures now provide the runtime and request helpers required to exercise it reliably, while the related capability and activation contracts stay aligned with the current implementation.

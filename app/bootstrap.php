@@ -36,7 +36,7 @@ declare(strict_types=1);
 
 namespace Gallery\Core;
 
-const CMS_VERSION = '0.95.4';
+const CMS_VERSION = '0.96';
 const CMS_GITHUB_REPOSITORY = 'klusik/PHP_gallery';
 const CMS_UPDATE_BRANCHES = ['main', 'master'];
 
