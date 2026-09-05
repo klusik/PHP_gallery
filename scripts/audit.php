@@ -106,7 +106,7 @@ Environment overrides:
 Profiles:
   quick    Full PHP regression plus fast Node/Python/contracts and changed-file syntax checks.
   full     Complete deterministic source audit, including slow ZIP64 coverage and full syntax checks.
-  release  Full audit plus browser integration, core-manifest freshness, and git diff validation.
+  release  Full audit plus browser integration, release consistency, manifest freshness, and Git validation.
 TEXT
     );
     exit(0);
@@ -146,6 +146,7 @@ $knownSuites = [
     'js-lint',
     'js-lint-changed',
     'browser-map',
+    'release-consistency',
     'manifest',
     'git-diff-check',
 ];
@@ -678,6 +679,7 @@ function audit_suite_console_label(string $suiteId): string
         'php-lint-changed' => 'PHP syntax (changed)',
         'js-lint' => 'JavaScript syntax',
         'js-lint-changed' => 'JavaScript syntax (changed)',
+        'release-consistency' => 'Release consistency',
         'manifest' => 'Core manifest freshness',
         'git-diff-check' => 'Git whitespace check',
         default => $suiteId,
@@ -700,6 +702,7 @@ foreach ($suiteIds as $suiteIndex => $suiteId) {
         'node-fast' => audit_run_node_suite('node-fast', 'Node regression (fast)', audit_select_node_tests($registry, false), $node),
         'node-full' => audit_run_node_suite('node-full', 'Node regression', audit_select_node_tests($registry, true), $node),
         'browser-map' => audit_run_node_suite('browser-map', 'Chromium map integration', audit_select_node_tests($registry, true, true), $node, $browser),
+        'release-consistency' => audit_run_php_command('release-consistency', 'Release consistency', 'scripts/check_release.php', ['--quiet'], 30),
         'winapp' => audit_run_winapp($python),
         'mutation-contracts' => audit_run_php_command('mutation-contracts', 'Admin mutation contracts', 'scripts/check_admin_mutation_contracts.php'),
         'version-audit' => audit_run_php_command('version-audit', 'Runtime hardening audit', 'tests/version_094_audit_hardening.php'),

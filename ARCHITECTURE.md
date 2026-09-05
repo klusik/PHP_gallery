@@ -9,7 +9,7 @@ This document is intended to help future maintainers and AI coding agents unders
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.96.1';
+const CMS_VERSION = '0.96.2';
 ```
 
 Update-related code uses:
@@ -1641,7 +1641,9 @@ Detailed behavior is documented in `docs/SMART_GALLERIES.md`.
 
 ## Release Documentation
 
-Patch note formatting is standardized in `PATCH_NOTES_TEMPLATE.md`. AI coding agents and maintainers should use it when preparing new `PATCH_NOTES.md` entries so releases keep consistent structure, technical references, filename citation style, and user impact descriptions.
+`RELEASE.md` is the authoritative release lifecycle contract. `scripts/prepare_release.php` applies only registered mechanical current-version markers and delegates reusable operations to `scripts/release_lib.php`; it deliberately leaves editorial release notes, behavior-sensitive documentation, manual compilation, manifest generation, Git history, and publication explicit. `scripts/check_release.php` is read-only and validates runtime/document/manual/metadata/patch-note/manifest version consistency plus manual-PDF freshness. The central `release` audit profile registers that checker as `release-consistency`, so maintainers and agents do not need to run a second consistency pass immediately before release qualification. Audit profiles are alternatives rather than cumulative steps: release work finishes with one `--profile=release` run, not quick then full then release.
+
+Patch note formatting remains standardized in `PATCH_NOTES_TEMPLATE.md`. AI coding agents and maintainers should use it when replacing the preparation scaffold in `PATCH_NOTES.md` so releases keep consistent structure, technical references, filename citation style, and user impact descriptions.
 
 ## Phase 1.0 Viewer Account HTTP Boundary
 
