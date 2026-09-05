@@ -1,5 +1,47 @@
 # Patch notes
 
+## Version 0.95.4
+
+Version 0.95.4 restores focused regression coverage for the browser download and Smart Gallery contracts. The production download path remains unchanged; isolated test fixtures now provide the runtime and request helpers required to exercise it reliably, while the related capability and activation contracts stay aligned with the current implementation.
+
+### Highlights
+
+#### Download regression coverage
+
+- Restored download controller, manifest, service, and Smart Gallery regression tests that were failing because isolated fixtures lacked production runtime and request helpers.
+- Preserved the existing browser download activation behavior and verified its production contract without changing the user-facing download workflow.
+- Kept Smart Gallery file-count and aggregate source-byte limits, trusted route parameters, and capability behavior covered by focused tests.
+
+### Technical Details
+
+#### Backend and test fixtures
+
+- Documented the constructor contract in `app/services/download_capabilities.php`.
+- Updated download and Smart Gallery test fixtures to provide the runtime-limit, request-method, and SEO response helpers used by production code.
+- Added the missing controller and manifest assertions needed to exercise request validation and download response behavior.
+- Made no migration, table, column, stored-data rewrite, configuration, or production authorization change.
+
+#### Frontend
+
+- Kept the browser download activation contract in `public/assets/gallery-modules/gallery-download.js` aligned with the existing production pipeline.
+
+#### Tests and documentation
+
+- Extended `tests/admin_settings_normalization_test.php`, `tests/browser_upload_settings_test.php`, `tests/gallery_download_controller_test.php`, `tests/gallery_download_manifest_test.php`, `tests/gallery_download_service_test.php`, `tests/smart_gallery_medium_hardening_test.php`, and `tests/smart_gallery_public_contract_test.php`.
+- Updated the isolated dispatcher fixtures used by `tests/support/nsfw_policy_dispatch_fixture.php` and `tests/support/security_schema_policy_dispatch_fixture.php`.
+- Regenerated `app/core-manifest.json` after the final source and test changes.
+
+### User Impact
+
+#### For visitors
+
+- Browser-based gallery downloads continue to use the existing bounded, authorized workflow.
+- Smart Gallery download limits and trusted route handling remain enforced.
+
+#### For administrators
+
+- No configuration or migration action is required; this patch improves release confidence and test reliability without changing the Admin download workflow.
+
 ## Version 0.95.3
 
 Version 0.95.3 fixes map-marker navigation regressions introduced around Version 0.95.2. Public visitors can again open photographs outside the current pagination window in the active lightbox, previously loaded sparse photograph metadata remains available when its card is no longer rendered, and cancelled or superseded selections can no longer change the photograph or unexpectedly navigate away after the map or viewer closes.
