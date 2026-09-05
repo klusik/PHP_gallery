@@ -46,7 +46,7 @@ This file maps features to source files. It is optimized for fast maintenance an
 | Selected-gallery thumbnail renderer setting | `app/services/public_thumbnail_rendering.php`, `app/controllers/admin_theme.php` | Stable key `public_thumbnail_rendering_mode`; allowed values `responsive` and `progressive`; progressive is the default and fallback; responsive is the supported legacy option. |
 | Progressive browser activation | `public/assets/gallery-modules/progressive-thumbnail-renderer.js`, `public/assets/gallery-modules/progressive-thumbnail-upgrade.js` | Conditional from `public/assets/public-gallery.js` and `public/assets/gallery.js`; near-viewport observer, two-slot scheduler, measured candidate selection, decode-before-swap. |
 | Public thumbnail placeholder/layout CSS | `public/assets/styles/utilities.css` | Existing stable image-slot background and no-flicker rules are shared; intrinsic image dimensions are emitted by `thumbnail_html.php`. |
-| Lightbox JSON | `app/controllers/gallery_lightbox.php` | `app/services/lightbox_metadata.php` |
+| Lightbox JSON | `app/controllers/gallery_lightbox.php` | `app/services/lightbox_metadata.php`; bounded sparse metadata windows, including authorized `target_image_id` lookup for map-selected photos outside the current page. |
 | Lightbox browsing modes | `app/services/gallery_lightbox_mode.php` | Theme default plus per-gallery override resolution for single-image, picture-strip, and 3D-carousel modes. |
 | Lightbox image zoom | `public/assets/gallery-modules/lightbox.js`, `public/assets/gallery-modules/lightbox-zoom-model.js` | Centered growing-frame geometry, cursor/pinch anchoring, pan and immediate active-original promotion. Server controls: `app/controllers/public_gallery_lightbox.php`; authorized quality candidates: `app/services/thumbnail_bundles.php`, `app/controllers/gallery_lightbox.php`; desktop/mobile styles and fullscreen clipping/HUD stacking: `public/assets/styles/lightbox.css`, `public/assets/styles/mobile-gallery.css`; dependency cache revision: `app/helpers_page_rendering.php`; focused contracts: `tests/lightbox_zoom_*` and `tests/lightbox_zoom_model_test.mjs`. |
 | Public tags | `app/controllers/public_tags.php` | `app/services/tags.php`, `app/services/tag_metadata.php` |
@@ -254,7 +254,7 @@ The Gallery tags Theme subsection is rendered by app/controllers/admin_theme.php
 | SimBrief admin endpoint | `app/controllers/admin_simbrief.php` |
 | SimBrief UI | `app/views/simbrief_descriptions.php` |
 | Flight map persistence | `app/services/flight_maps.php`, table `gallery_flight_maps` |
-| EXIF and map data endpoint | `app/controllers/exif.php`, `app/services/exif.php` |
+| EXIF and map data endpoint | `app/controllers/exif.php`, `app/services/exif.php` | Authorized map points include canonical photo-page URLs and stable image/gallery identifiers so marker actions can reuse the active lightbox and retain page navigation as fallback. |
 | Navigation lookup | `app/services/navigation_data.php`, `app/controllers/navigation_data.php` |
 | Navigation admin UI | `app/views/navigation_data.php` |
 | Bundled navdata | `data/navdata/local_nav_points.csv` |
