@@ -1,6 +1,6 @@
 {
     "version": "0.95.3",
-    "generated_at": "2026-09-05T15:08:01+00:00",
+    "generated_at": "2026-09-05T15:21:50+00:00",
     "algorithm": "sha256",
     "hash_mode": "normalized-text-sha256",
     "files": {
@@ -145,7 +145,7 @@
         "app/services/database_observer.php": "sha256:6107e77d0ab11bbab2a42bffc529321d2e7fc3435d37fba1433caf1cced219df",
         "app/services/dng_derivatives.php": "sha256:af61a7aa408fc47359e03fe0ecbc97e7bf7f34d34a7112e5cce25260af6ded42",
         "app/services/download_artifact_cache.php": "sha256:c12a4d06f2c3596e371a9edb3a842ab3b417d9199300246da045444230df8dc8",
-        "app/services/download_capabilities.php": "sha256:559f67aed80ff91236f65f71be8b883d7599af1c694b784933ac56a836d26ecc",
+        "app/services/download_capabilities.php": "sha256:86f788b31a40e40291660d2a768faa95c3ab4151f8522a549a9062136fa59212",
         "app/services/download_manifest_cache.php": "sha256:553729b123a117af7810051348a4ef996785632924e8f017ba71d7c724b9675b",
         "app/services/download_signatures.php": "sha256:dbc570ee6fd1f4f8c2379fc0866e0a44eca825d2976853e2a113180a1bdba504",
         "app/services/downloads.php": "sha256:85cf77ce5fa74c0434ed851060ce47acb7efdf442fb6bc89b621d4b9d4c20b99",
@@ -386,7 +386,7 @@
         "public/assets/gallery-modules/back-to-top.js": "sha256:ec93e814ccd68387111e2d821b8ba18a4ce31f3a044bcc9894d1b1c8bf16385b",
         "public/assets/gallery-modules/browser-image-worker.js": "sha256:b0257143a4a4d7f9c00260408b45176dd1efd99d48efe416714c4d7131b06f3d",
         "public/assets/gallery-modules/favicon-cropper.js": "sha256:81c74ff629d25710c518b347d83eddd3db79f90f10da0b9d24545feb50acd172",
-        "public/assets/gallery-modules/gallery-download.js": "sha256:779912b3ad9540f6c1018d4e0ddfdb4c0a9e1e24a809fbcf327d76903760ee74",
+        "public/assets/gallery-modules/gallery-download.js": "sha256:ec434df55d5c3c93a1383d4aac885a8b62acb34f28567f7d20baa6c9c6237bec",
         "public/assets/gallery-modules/hero-tags.js": "sha256:46a7579bbe7339219205806f52746114dd8441f06698e5ce4f524a04e6ced6e0",
         "public/assets/gallery-modules/lightbox-deferred.js": "sha256:50ba1faafe0747e913b6cf473cdac813a9499c807604fec056fcae26739056ea",
         "public/assets/gallery-modules/lightbox-votes.js": "sha256:4eebd33ec0dd0147e92a28543d20db78c11350c160f9e443e0f4852d8f8b4bfb",

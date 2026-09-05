@@ -31,6 +31,7 @@ const CAPABILITY_RENEWAL_SAFETY_SECONDS = 30;
 
 /** Stable error used when a progressive bearer capability must be renewed. */
 class DownloadCapabilityRejectedError extends Error {
+    /** Create the stable client-side signal for an expired or rejected capability. */
     constructor() {
         super(tr('download.progress.authorization_expired', 'Download authorization expired. Retry to restart the download safely.'));
         this.name = 'DownloadCapabilityRejectedError';
@@ -612,6 +613,7 @@ export function setupGalleryDownload() {
     controls.forEach((control) => {
         if (control.dataset.galleryDownloadReady === '1') return;
         control.dataset.galleryDownloadReady = '1';
+        /** Intercept one progressive download activation and keep legacy POST as the no-JavaScript fallback. */
         const activate = (event) => {
             event.preventDefault();
             controller.prepare(control.dataset.galleryDownloadStartUrl).catch((error) => controller.fail(error));

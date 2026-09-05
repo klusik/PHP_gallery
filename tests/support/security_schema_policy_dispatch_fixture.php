@@ -45,6 +45,12 @@ namespace Gallery\Core {
 }
 
 namespace Gallery\Services {
+    /** Keep crawler-header dispatch outside this schema-policy fixture's scope. */
+    function seo_request_guard_emit_route_robots_header(string $page): void
+    {
+    }
+
+
     /**
      * Return deterministic translated wording for the dispatcher fixture.
      *

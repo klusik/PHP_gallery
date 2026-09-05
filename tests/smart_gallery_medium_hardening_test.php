@@ -24,7 +24,7 @@ $publicPaths = (string) file_get_contents($root . '/app/services/public_paths.ph
 $reorder = (string) file_get_contents($root . '/app/controllers/admin_galleries_reorder.php');
 $downloads = (string) file_get_contents($root . '/app/services/downloads.php');
 $downloadController = (string) file_get_contents($root . '/app/controllers/downloads.php');
-$config = (string) file_get_contents($root . '/config.example.php');
+$config = (string) file_get_contents($root . '/app/configuration_defaults.php');
 
 $syncStart = strpos($mutations, 'function sync_gallery_parent_ids');
 $syncEnd = strpos($mutations, '/**', $syncStart === false ? 0 : $syncStart + 1);
@@ -77,10 +77,11 @@ smart_gallery_medium_hardening_assert(
 );
 
 smart_gallery_medium_hardening_assert(
-    str_contains($downloads, 'const SMART_GALLERY_ZIP_MAX_IMAGES = 5000;')
-    && str_contains($downloads, 'const SMART_GALLERY_ZIP_DEFAULT_MAX_SOURCE_BYTES = 2147483648;')
+    str_contains($downloads, "cms_runtime_limit('download.smart_gallery_zip_max_images')")
     && str_contains($downloads, 'function smart_gallery_zip_max_source_bytes()')
-    && str_contains($config, "'smart_gallery_zip_max_source_bytes' => 2 * 1024 * 1024 * 1024"),
+    && str_contains($downloads, "cms_runtime_limit('download.smart_gallery_zip_max_source_bytes')")
+    && str_contains($config, "'download.smart_gallery_zip_max_images' => 5000")
+    && str_contains($config, "'download.smart_gallery_zip_max_source_bytes' => 2 * 1024 * 1024 * 1024"),
     'Smart Gallery ZIP generation has separate file-count and configurable aggregate source-byte ceilings with a safe default for existing installs.'
 );
 smart_gallery_medium_hardening_assert(
@@ -90,25 +91,27 @@ smart_gallery_medium_hardening_assert(
     'Aggregate source bytes are checked incrementally before accepting each original into the archive.'
 );
 smart_gallery_medium_hardening_assert(
-    str_contains($downloads, 'fopen($lockPath, \'c\')')
-    && str_contains($downloads, 'flock($lockHandle, LOCK_EX)')
+    str_contains($downloads, "@fopen(\$lockPath, 'c')")
+    && str_contains($downloads, 'flock($lockHandle, LOCK_EX | LOCK_NB)')
     && str_contains($downloads, 'zip_cache_file_is_fresh($filePath)')
     && str_contains($downloads, ".partial-")
-    && str_contains($downloads, 'rename($partialPath, $filePath)')
-    && str_contains($downloads, 'flock($lockHandle, LOCK_UN)'),
+    && str_contains($downloads, '@rename($partialPath, $filePath)')
+    && str_contains($downloads, '@flock($lockHandle, LOCK_UN)'),
     'Smart Gallery ZIP builds use an exclusive signature lock, recheck cache state, write a unique partial archive, and atomically publish the final path.'
 );
 
-$controllerStart = strpos($downloadController, 'function cms_download_smart_gallery');
+$controllerStart = strpos($downloadController, 'function cms_download_smart_gallery(): void');
 $controllerEnd = strpos($downloadController, '/**', $controllerStart === false ? 0 : $controllerStart + 1);
 $controllerSource = $controllerStart !== false
     ? substr($downloadController, $controllerStart, $controllerEnd !== false ? $controllerEnd - $controllerStart : null)
     : '';
 smart_gallery_medium_hardening_assert(
     $controllerSource !== ''
-    && str_contains($controllerSource, "'reason' => smart_gallery_zip_failure_reason(\$exception)")
-    && str_contains($controllerSource, "'exception_class' => get_class(\$exception)")
-    && !str_contains($controllerSource, '$exception->getMessage()'),
+    && str_contains($controllerSource, 'smart_gallery_zip_failure_reason($exception)')
+    && str_contains($controllerSource, 'cms_download_failure_request_context(\'download_smart_gallery\', $failureStage, $reason, $exception)')
+    && str_contains($downloadController, '\'exception_class\' => get_class($exception)')
+    && str_contains($downloadController, '\'exception_message\' => cms_download_failure_exception_message($exception)')
+    && !str_contains($controllerSource, '\'exception_message\' => $exception->getMessage()'),
     'Persistent Smart Gallery download failures use stable reason/class diagnostics and never store raw exception messages.'
 );
 

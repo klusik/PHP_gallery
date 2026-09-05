@@ -46,6 +46,19 @@ namespace Gallery\Core {
     function db(): \Gallery\Tests\FakeDb { return new \Gallery\Tests\FakeDb(); }
 /** Test double for cms_config(). */
     function cms_config(): array { return ['zip_cache_path' => sys_get_temp_dir()]; }
+/** Return centralized runtime limits while keeping the manifest fixture database-free. */
+    function cms_runtime_limit(string $key): int|float
+    {
+        static $limits = null;
+        if ($limits === null) {
+            $defaults = require dirname(__DIR__) . '/app/configuration_defaults.php';
+            $limits = is_array($defaults['runtime_limits'] ?? null) ? $defaults['runtime_limits'] : [];
+        }
+        if (!array_key_exists($key, $limits) || !is_numeric($limits[$key])) {
+            throw new \InvalidArgumentException('Unknown runtime limit in gallery download fixture: ' . $key);
+        }
+        return $limits[$key] + 0;
+    }
 /** Test double for now_sql(). */
     function now_sql(): string { return '2026-08-31 12:00:00'; }
 /** Test double for normalize_relative_path(). */
@@ -97,6 +110,7 @@ namespace Gallery\Services {
 /** Test double for visitor_can_access_gallery(). */
     function visitor_can_access_gallery(array $gallery): bool { return !empty($gallery['allowed']); }
 
+    require_once dirname(__DIR__) . '/app/services/download_manifest_cache.php';
     require_once dirname(__DIR__) . '/app/services/downloads.php';
 }
 
