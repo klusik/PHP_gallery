@@ -9,7 +9,7 @@ This document is intended to help future maintainers and AI coding agents unders
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.95.1';
+const CMS_VERSION = '0.95.2';
 ```
 
 Update-related code uses:
@@ -1193,6 +1193,8 @@ app/services/gallery_sidecars.php
 Public rendering emits the resolved value as `data-lightbox-browsing-mode` from `app/controllers/public_gallery.php`. Browser behavior is owned by `public/assets/gallery-modules/lightbox.js`; the visual treatment is owned by `public/assets/styles/lightbox.css` and mobile fallback rules in `public/assets/styles/mobile-gallery.css`. The JSON lightbox endpoint remains unchanged, so slideshow, fullscreen, map overlays, votes, admin inline editing and image ordering continue to use the existing metadata pipeline. Both enhanced modes share the same neighbor-selection logic in JavaScript, while CSS decides whether the neighbors render as a flat strip or as a layered 3D carousel.
 
 The `picture_strip` and `3d_carousel` modes select adjacent images from already-rendered gallery cards and lazily request sparse lightbox metadata when a neighbor is missing. Neighbor previews are preloaded opportunistically and navigation remains index-based, so paginated or partially hydrated lightbox data degrades to the available nearby photos instead of failing. The carousel skips rendering a duplicate active thumbnail, because the main stage itself is the active state.
+
+Gallery-map photo markers use the same viewer pipeline. Map payloads carry the canonical authorized photo-page URL plus image and gallery identifiers. When a selected image belongs to the active physical gallery but is outside the current pagination window, `gallery_lightbox_data` accepts `target_image_id`, resolves its position through the same authorized ordering, and returns a bounded window containing that image. The browser merges that window into the sparse cache and opens the existing lightbox item. A fullscreen split map remains mounted while only the photo pane changes; a body-level map overlay closes before the lightbox is revealed. Cross-gallery, unavailable, stale, or failed enhanced targets fall back to the canonical photo page and never make a map marker a separate media-authorization route.
 
 Persistence details:
 

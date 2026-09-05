@@ -49,8 +49,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.95.1}
-\newcommand{\manualdate}{3 September 2026}
+\newcommand{\version}{0.95.2}
+\newcommand{\manualdate}{5 September 2026}
 
 \hypersetup{
   colorlinks=true,
@@ -1203,6 +1203,8 @@ Zoom affects presentation only. It~does not~alter the~stored photograph or~bypas
 EXIF is~information many cameras and~phones save inside a~photograph. It~can~include capture date, camera, lens, exposure, dimensions, orientation, and~GPS coordinates. PHP Gallery can~use this information for~date suggestions, maps, technical details, ordering assistance, and~duplicate review.
 
 Maps load when a~visitor asks to~see them, which saves work for~visitors interested only in~the~photographs. A~gallery can~show individual photo locations and~an~overview of~available points. Parent and~child settings determine which galleries expose this information. The~global EXIF/GPS public-display setting is~the~fallback for~galleries whose override is~set to~inherit. Admin also shows how many galleries currently have~an~explicit override and~can~reset all of~those overrides back to~inherit in~one confirmed settings save. The~reset is~schema-guarded: if~the~override state cannot~be~verified, the~application refuses the~change and~directs the~administrator to~System Health instead of~guessing.
+
+Selecting \ui{Open photo} in~a~gallery-map marker opens that photograph in~the~current lightbox when it belongs to~the~active gallery. This also works when the~photograph is~outside the~currently displayed pagination page: the~viewer requests only a~bounded metadata window around the~selected photograph. In~full-screen split-map mode the~map stays open while the~photograph pane changes. From a~normal map overlay, the~map closes and~reveals the~selected photograph in~the~viewer. If~the~enhanced viewer cannot resolve the~selection, the~same control follows the~canonical photograph page; it does not~link directly to~the~raw image file.
 
 \securitynote{GPS data can~reveal sensitive locations. Administrators should review inherited map settings, image metadata, and~public access before publishing personal photographs.}
 

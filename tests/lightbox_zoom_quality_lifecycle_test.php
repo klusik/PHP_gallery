@@ -163,8 +163,8 @@ lightbox_zoom_quality_lifecycle_assert(
     'Teardown, navigation, and close must invalidate pending quality work.'
 );
 lightbox_zoom_quality_lifecycle_assert(
-    str_contains($publicEntrypointSource, 'lightbox-zoom-centered-frame-v12')
-        && str_contains($authenticatedEntrypointSource, 'lightbox-zoom-centered-frame-v12')
+    str_contains($publicEntrypointSource, 'map-popup-viewer-navigation-v1')
+        && str_contains($authenticatedEntrypointSource, 'map-popup-viewer-navigation-v1')
         && str_contains($lightboxSource, 'lightbox-zoom-model.js?v=20260817-lightbox-zoom-centered-frame-v5'),
     'All public lightbox module paths must invalidate stale browser caches together.'
 );

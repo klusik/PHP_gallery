@@ -1,5 +1,62 @@
 # Patch notes
 
+## Version 0.95.2
+
+Version 0.95.2 makes gallery-map photo markers lead back into the photograph experience instead of exposing raw media or disrupting the active viewer. Marker actions now use canonical photo-page URLs as durable fallbacks, open matching photos directly in the existing lightbox when possible, load a bounded authorized metadata window for photos outside the current pagination page, and preserve the fullscreen split map while its photo pane changes.
+
+### Highlights
+
+#### Map markers open photographs in the viewer
+
+- Changed **Open photo** links in gallery-map popups to select the matching photograph in the active lightbox instead of navigating to the raw media response.
+- Added in-viewer navigation for map-selected photographs that are already present in the current sparse lightbox cache.
+- Added bounded target-window loading so a marker can open a photograph from another pagination page without preloading the complete gallery.
+- Kept the fullscreen split map mounted while changing the photograph pane, including rapid repeated marker selections.
+- Closed ordinary body-level map overlays cleanly before revealing the selected photograph in the lightbox.
+
+#### Canonical fallback and interaction safety
+
+- Added canonical authorized photo-page URLs and gallery identifiers to photo-marker payloads.
+- Retained normal page navigation as the fallback when JavaScript is unavailable, the viewer is not active, a marker belongs to another gallery, or enhanced target resolution fails.
+- Removed an over-broad fullscreen anchor sizing rule that could place a Leaflet popup link over other popup controls.
+- Preserved the existing gallery, visibility, password, share-link, NSFW, GPS-display, and media authorization boundaries.
+
+### Technical Details
+
+#### Backend
+
+- Updated `app/services/exif.php` to emit `page_url` and `gallery_id` for photo map points and advanced the cached map-payload fingerprint version so existing payloads are invalidated.
+- Updated `app/controllers/gallery_lightbox.php` to accept an optional positive `target_image_id`, resolve it through the current gallery's authorized lightbox ordering, and return a capped metadata window plus `target_index`.
+- Reused the existing `find_image()`, `gallery_lightbox_image_position()`, and lightbox metadata services; no new media route or authorization path was introduced.
+
+#### Frontend
+
+- Updated `public/assets/gallery-modules/lightbox.js` to capture popup actions before Leaflet removes popup DOM, merge target metadata into the sparse viewer cache, and use the existing `openAt()` lifecycle.
+- Kept fullscreen split-map state during successful marker navigation while retaining immediate photo swaps and existing navigation/quality-generation guards.
+- Updated `public/assets/gallery.js` and `public/assets/public-gallery.js` cache-busting imports so deployed browsers load the new map/lightbox behavior.
+- Updated `public/assets/styles/lightbox.css` so fullscreen dimensions remain scoped to the photo zoom surface and do not affect Leaflet popup anchors.
+
+#### Database, compatibility, and tests
+
+- Added no migration, table, column, stored-data rewrite, or configuration requirement.
+- Kept map payload reads optional under the existing presentation-schema policy and kept all lightbox target lookup inside the established access-controlled endpoint.
+- Extended the Leaflet/lightbox regression contract for canonical popup targets, bounded target-window lookup, split-map persistence, page fallback, cache-busting imports, and popup hit-testing.
+- Updated the release documentation and rebuilt the administrator manual for Version 0.95.2.
+
+### User Impact
+
+#### For visitors
+
+- **Open photo** from a gallery map now opens the intended photograph in context, including photographs beyond the currently visible page.
+- Fullscreen visitors can choose several map markers without the split map closing or a rapid second click toggling the underlying photo stage.
+- Direct and no-JavaScript use continues to reach the normal photograph page rather than a bare image response.
+
+#### For administrators
+
+- Existing galleries and GPS metadata work without migration or reconfiguration.
+- Updated map payloads replace earlier cached payloads automatically through the new payload fingerprint.
+- Access controls and public GPS-display policy remain unchanged.
+
 ## Version 0.95.1
 
 Version 0.95.1 hardens public physical-gallery and Smart Gallery downloads through a complete seven-stage security and resource-control pipeline. The release keeps the existing browser ZIP experience and no-JavaScript fallback while making crawler-triggered requests cheap, requiring short-lived scoped authority for protected work, bounding server-side preparation, reusing immutable results safely, and preventing download metadata or bearer credentials from amplifying filesystem, CPU, memory, or logging costs.
