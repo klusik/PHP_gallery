@@ -39,7 +39,7 @@ smart_gallery_public_contract_assert(str_contains($dispatch, "'smart_gallery_lig
 smart_gallery_public_contract_assert(substr_count($dispatch, "'smart_gallery_lightbox_data'") >= 2, 'Smart Gallery lazy lightbox endpoint is also covered by public route policy.');
 smart_gallery_public_contract_assert(str_contains($seoGuard, "'smart_gallery' => ['slug', 'photo_page', 'view_as']"), 'Anonymous Smart Gallery pages allow their canonical route and pagination parameters through the SEO request guard.');
 smart_gallery_public_contract_assert(str_contains($seoGuard, "'smart_gallery_lightbox_data' => ['id', 'limit', 'offset', 'view_as']"), 'Anonymous Smart Gallery lazy-lightbox requests allow their bounded window parameters through the SEO request guard.');
-smart_gallery_public_contract_assert(str_contains($seoGuard, "'download_smart_gallery' => ['id']"), 'Anonymous Smart Gallery downloads allow the trusted Smart Gallery id route parameter through the SEO request guard.');
+smart_gallery_public_contract_assert(str_contains($seoGuard, "'download_smart_gallery' => ['id', 'capability']"), 'Anonymous Smart Gallery downloads allow the trusted Smart Gallery id route parameter through the SEO request guard.');
 smart_gallery_public_contract_assert(str_contains($seoGuard, "if (\$page === 'smart_gallery')") && str_contains($seoGuard, "url_for('smart_gallery', ['slug' => \$slug])"), 'Smart Gallery direct pages emit their clean canonical URL.');
 smart_gallery_public_contract_assert(str_contains($controller, 'class="hero-meta"><div class="hero-actions"') && str_contains($controller, 'hero-download-button'), 'Smart Gallery download action uses the established compact hero action container instead of stretching across the hero.');
 
@@ -53,7 +53,7 @@ smart_gallery_public_contract_assert(str_contains($sidePanel, "workflow.name ===
 smart_gallery_public_contract_assert(str_contains($sidePanel, "String(actionUrl.searchParams.get('page') || '') === 'admin_smart_galleries'"), 'Smart Gallery side-panel POSTs remain on the current browser origin for local host aliases.');
 
 smart_gallery_public_contract_assert(str_contains($downloadController, 'function cms_download_smart_gallery()') && str_contains($downloads, 'function build_smart_gallery_zip'), 'Smart Gallery download has an authorized controller and server-side archive service.');
-smart_gallery_public_contract_assert(str_contains($downloads, 'if ($total > SMART_GALLERY_ZIP_MAX_IMAGES)') && str_contains($downloads, 'smart_gallery_zip_max_source_bytes()'), 'Smart Gallery ZIP creation has explicit image-count and aggregate source-byte guards.');
+smart_gallery_public_contract_assert(str_contains($downloads, 'if ($total > max(1, (int) cms_runtime_limit(\'download.smart_gallery_zip_max_images\')))') && str_contains($downloads, 'smart_gallery_zip_max_source_bytes()'), 'Smart Gallery ZIP creation has explicit image-count and aggregate source-byte guards.');
 smart_gallery_public_contract_assert(!str_contains($controller, 'folder_path AS download_url'), 'Public Smart Gallery controller never serializes filesystem paths as download URLs.');
 
 smart_gallery_public_contract_assert(str_contains($lightboxView, 'bool $slideshowAllowed = true'), 'Normal gallery lightbox keeps slideshow enabled by default.');

@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+require_once dirname(__DIR__) . '/app/bootstrap/configuration.php';
 require_once dirname(__DIR__) . '/app/services/downloads.php';
 
 use function Gallery\Services\gallery_download_legacy_manifest_is_safe;

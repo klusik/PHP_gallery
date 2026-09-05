@@ -53,6 +53,12 @@ final class DownloadCapabilityException extends RuntimeException
 {
     private string $reason;
 
+    /**
+     * Create a capability-validation failure with a stable machine-readable reason.
+     *
+     * @param string $reason Stable validation reason.
+     * @param string $message Visitor-safe exception message.
+     */
     public function __construct(string $reason, string $message = 'Invalid download capability.')
     {
         parent::__construct($message);

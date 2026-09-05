@@ -45,6 +45,7 @@ use function Gallery\Services\browser_upload_megabytes_to_bytes;
 use function Gallery\Services\browser_upload_normalize_settings;
 use function Gallery\Services\browser_upload_php_size_to_bytes;
 
+require_once __DIR__ . '/../app/bootstrap/configuration.php';
 require_once __DIR__ . '/../app/services/browser_uploads.php';
 require_once __DIR__ . '/../app/services/browser_thumbnail_rebuild.php';
 

@@ -54,6 +54,7 @@ function url_for(string $page, array $params = []): string
     return '/index.php?page=' . rawurlencode($page);
 }
 
+require_once __DIR__ . '/../app/bootstrap/configuration.php';
 require_once __DIR__ . '/../app/services/public_thumbnail_rendering.php';
 require_once __DIR__ . '/../app/services/browser_uploads.php';
 require_once __DIR__ . '/../app/services/admin_settings_registry.php';
