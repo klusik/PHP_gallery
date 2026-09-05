@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-04
+ *   2026-09-05
  */
 
 declare(strict_types=1);
@@ -41,6 +41,7 @@ use Throwable;
 use function Gallery\Core\db;
 use function Gallery\Core\normalize_relative_path;
 use function Gallery\Core\now_sql;
+use function Gallery\Core\image_public_url;
 use function Gallery\Core\url_for;
 
 /**
@@ -626,6 +627,9 @@ function image_map_point(array $image, array $gallery, bool $includeThumb = true
         'title' => $displayTitle,
         'description' => (string) ($image['description'] ?? ''),
         'image' => url_for('media', ['id' => $image['id']]),
+        // page_url keeps map popup navigation inside the gallery viewer instead of exposing raw media.
+        'page_url' => image_public_url($image, $gallery),
+        'gallery_id' => (int) $gallery['id'],
         'gallery' => (string) $gallery['title'],
         'type' => 'photo_point',
         'point_type' => 'photo_point',
@@ -711,7 +715,8 @@ function gallery_map_cache_fingerprint(array $gallery, bool $publicOnly, bool $r
     });
     return hash('sha256', json_encode([
         'gallery_id' => (int) $gallery['id'],
-        'payload_version' => 2,
+        // Version 3 adds canonical photo-page URLs and gallery IDs to marker payloads.
+        'payload_version' => 3,
         'public_only' => $publicOnly,
         'recursive' => $recursive,
         'point_count' => (int) ($row['point_count'] ?? 0),

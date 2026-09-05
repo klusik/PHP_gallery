@@ -27,10 +27,10 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-09-03
+ *   2026-09-05
  */
 
-import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20260817-lightbox-zoom-centered-frame-v12';
+import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20260905-map-popup-viewer-navigation-v1';
 
 const optionalPublicModules = {
     votes: './gallery-modules/votes.js?v=20260512-lightbox-vote-clone-widget-v6',
