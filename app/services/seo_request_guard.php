@@ -162,8 +162,12 @@ function seo_request_guard_route_is_exempt(string $page): bool
         'mobile_webdav',
         'site_maintenance_cron',
         'upload_automation_upload',
+        'gallery_migration_manifest',
+        'gallery_migration_asset',
+        'gallery_migration_package',
         'gallery_migration_receive_manifest',
         'gallery_migration_receive_asset',
+        'gallery_migration_receive_package',
         'gallery_migration_receive_complete',
         'gallery_migration_receive_status',
     ], true);

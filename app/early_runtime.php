@@ -74,6 +74,8 @@ function request_expects_json(): bool
         'admin_storage_statistics_update',
         'gallery_migration_manifest',
         'gallery_migration_receive_manifest',
+        'gallery_migration_receive_asset',
+        'gallery_migration_receive_package',
         'gallery_migration_receive_complete',
         'gallery_migration_receive_status',
         'upload_automation_upload',

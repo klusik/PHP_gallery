@@ -10,7 +10,7 @@
  *
  * Responsibilities:
  *   - Run source-push and target-pull migrations through small AJAX steps
- *   - Transfer one migration asset per request
+ *   - Transfer deterministic ZIP packages prepared by the receiving instance
  *   - Keep visible progress and failure messages readable
  *   - Avoid exposing API keys in logs or generated markup
  *
@@ -28,7 +28,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-09-02
+ *   2026-09-05
  */
 
 import { i18n } from './admin-core.js?v=20260512-modular-admin-v1';
@@ -36,7 +36,7 @@ import { i18n } from './admin-core.js?v=20260512-modular-admin-v1';
 const DEFAULT_RECONNECT_SECONDS = 30;
 const MIN_RECONNECT_SECONDS = 5;
 const MAX_RECONNECT_SECONDS = 300;
-const MAX_ASSET_RETRIES = 6;
+const MAX_PACKAGE_RETRIES = 6;
 const STATUS_PROBE_COUNT = 4;
 const STATUS_PROBE_DELAY_MS = 1500;
 
@@ -79,7 +79,7 @@ export function setupAdminGalleryMigration() {
             return;
         }
         form.dataset.galleryMigrationCancelled = '1';
-        appendMigrationLog(form, 'Cancel requested. The current request will finish or time out, then the transfer will stop.');
+        appendMigrationLog(form, i18n('admin.gallery_migration.cancel_requested', 'Cancel requested. The current request will finish or time out, then the transfer will stop.'));
         button.disabled = true;
     });
 }
@@ -115,7 +115,7 @@ async function runGalleryMigration(form) {
         if (mode === 'target_pull' && manifestResult?.mutation && Array.isArray(manifestResult?.contexts)) {
             localMutationResult = manifestResult;
         }
-        const assets = Array.isArray(manifestResult.assets) ? manifestResult.assets : [];
+        const packages = Array.isArray(manifestResult.packages) ? manifestResult.packages : [];
         const jobId = String(manifestResult.job_id || '');
         if (jobId === '') {
             throw new Error(i18n('admin.gallery_migration.job_id_missing', 'The migration job id was not returned.'));
@@ -123,32 +123,35 @@ async function runGalleryMigration(form) {
 
         appendMigrationLog(form, manifestResult.message || i18n('admin.gallery_migration.manifest_accepted', 'Manifest accepted.'));
         appendMigrationLog(form, i18n('admin.gallery_migration.version_check', 'Version check: {message}.', {message: versionMessage(manifestResult.compatibility)}));
-        appendMigrationLog(form, i18n('admin.gallery_migration.assets_queued', 'Assets queued: {count}.', {count: assets.length}));
+        appendMigrationLog(form, i18n('admin.gallery_migration.packages_queued', 'ZIP packages queued: {count}.', {count: packages.length}));
+        if (manifestResult?.counts?.galleries) {
+            appendMigrationLog(form, i18n('admin.gallery_migration.galleries_queued', 'Galleries in tree: {count}.', {count: manifestResult.counts.galleries}));
+        }
 
         const receivedAssetKeys = await loadInitialReceivedAssetKeys(form, mode, jobId, manifestResult, reconnectSeconds);
         if (receivedAssetKeys.size > 0) {
-            appendMigrationLog(form, i18n('admin.gallery_migration.remote_received', 'Remote status reports {count} already received asset(s). They will be skipped.', {count: receivedAssetKeys.size}));
+            appendMigrationLog(form, i18n('admin.gallery_migration.remote_received', 'Target status reports {count} already received asset(s). They will be skipped.', {count: receivedAssetKeys.size}));
         }
 
-        for (let index = 0; index < assets.length; index += 1) {
+        for (let index = 0; index < packages.length; index += 1) {
             if (form.dataset.galleryMigrationCancelled === '1') {
                 throw new Error(i18n('admin.gallery_migration.cancelled', 'Migration cancelled by user.'));
             }
 
-            const asset = assets[index] || {};
-            const assetKey = String(asset.asset_key || '');
-            if (assetKey !== '' && receivedAssetKeys.has(assetKey)) {
-                updateMigrationProgress(form, Math.round(((index + 1) / Math.max(assets.length, 1)) * 95), i18n('admin.gallery_migration.skipping_asset', 'Skipping already received {asset} ({current}/{total})...', {asset: assetLabel(asset), current: index + 1, total: assets.length}));
-                appendMigrationLog(form, i18n('admin.gallery_migration.skipped_asset', 'Skipped already received asset: {asset}.', {asset: assetLabel(asset)}));
+            const packageDescriptor = packages[index] || {};
+            const packageKeys = packageAssetKeys(packageDescriptor);
+            if (packageKeys.length > 0 && packageKeys.every((key) => receivedAssetKeys.has(key))) {
+                updateMigrationProgress(form, Math.round(((index + 1) / Math.max(packages.length, 1)) * 95), i18n('admin.gallery_migration.skipping_package', 'Skipping already received ZIP package {current}/{total}...', {current: index + 1, total: packages.length}));
+                appendMigrationLog(form, i18n('admin.gallery_migration.skipped_package', 'Skipped already received ZIP package {current}/{total}.', {current: index + 1, total: packages.length}));
                 continue;
             }
 
-            const action = mode === 'source_push' ? 'push_asset' : 'pull_asset';
-            updateMigrationProgress(form, Math.round((index / Math.max(assets.length, 1)) * 95), i18n('admin.gallery_migration.transferring_asset', 'Transferring {asset} ({current}/{total})...', {asset: assetLabel(asset), current: index + 1, total: assets.length}));
-            const transferResult = await transferAssetWithReconnect(form, mode, action, asset, jobId, index, assets.length, reconnectSeconds);
-            const confirmedKey = String(transferResult.asset_key || assetKey || '');
-            if (confirmedKey !== '') {
-                receivedAssetKeys.add(confirmedKey);
+            const action = mode === 'source_push' ? 'push_package' : 'pull_package';
+            updateMigrationProgress(form, Math.round((index / Math.max(packages.length, 1)) * 95), i18n('admin.gallery_migration.transferring_package', 'Transferring ZIP package {current}/{total} ({assets} assets)...', {current: index + 1, total: packages.length, assets: packageKeys.length}));
+            const transferResult = await transferPackageWithReconnect(form, mode, action, packageDescriptor, jobId, reconnectSeconds);
+            collectReceivedAssetKeys(transferResult, receivedAssetKeys);
+            if (Array.isArray(transferResult.asset_keys)) {
+                transferResult.asset_keys.forEach((key) => receivedAssetKeys.add(String(key || '')));
             }
         }
 
@@ -160,17 +163,18 @@ async function runGalleryMigration(form) {
         if (mode === 'target_pull' && completeResult?.mutation && Array.isArray(completeResult?.contexts)) {
             localMutationResult = completeResult;
         }
-        updateMigrationProgress(form, 100, i18n('admin.gallery_migration.complete', 'Migration complete. {received}/{total} assets received.', {received: completeResult.assets_received || assets.length, total: completeResult.total_assets || assets.length}));
+        const fallbackTotal = Number(manifestResult?.counts?.assets || receivedAssetKeys.size || 0);
+        updateMigrationProgress(form, 100, i18n('admin.gallery_migration.complete', 'Migration complete. {received}/{total} assets received.', {received: completeResult.assets_received || receivedAssetKeys.size, total: completeResult.total_assets || fallbackTotal}));
         const completedMessage = i18n('admin.gallery_migration.completed_successfully', 'Migration completed successfully.');
         appendMigrationLog(form, completedMessage);
         if (mode === 'target_pull' && localMutationResult) {
             dispatchGalleryMigrationMutationResult(form, localMutationResult, 'gallery-migration', {
-                refreshPanel: true,
+                refreshPanel: false,
                 statusMessage: completedMessage,
             });
         }
         if (completeResult.edit_url) {
-            appendMigrationLog(form, i18n('admin.gallery_migration.target_editor', 'Target editor: {url}', {url: completeResult.edit_url}));
+            appendMigrationLog(form, i18n('admin.gallery_migration.target_editor', 'Imported gallery editor: {url}', {url: completeResult.edit_url}));
         }
     } catch (error) {
         const message = error instanceof Error ? error.message : i18n('admin.gallery_migration.failed', 'Migration failed.');
@@ -178,7 +182,7 @@ async function runGalleryMigration(form) {
         appendMigrationLog(form, message);
         if (mode === 'target_pull' && localMutationResult) {
             dispatchGalleryMigrationMutationResult(form, localMutationResult, 'gallery-migration-partial', {
-                refreshPanel: true,
+                refreshPanel: false,
                 statusMessage: message,
                 statusError: true,
             });
@@ -223,57 +227,53 @@ function dispatchGalleryMigrationMutationResult(form, result, source, options = 
 }
 
 /**
- * Transfer one asset and verify target-side status before every retry.
+ * Transfer one ZIP package and verify target-side status before every retry.
  *
  * @param {HTMLFormElement} form Migration form.
  * @param {string} mode Migration mode.
  * @param {string} action Server transfer action.
- * @param {Object<string, *>} asset Manifest asset.
+ * @param {Object<string, *>} packageDescriptor Package descriptor.
  * @param {string} jobId Migration job id.
- * @param {number} index Zero-based asset index.
- * @param {number} total Total asset count.
  * @param {number} reconnectSeconds Request refresh interval.
  * @return {Promise<Object<string, *>>} Transfer or status response.
  */
-async function transferAssetWithReconnect(form, mode, action, asset, jobId, index, total, reconnectSeconds) {
+async function transferPackageWithReconnect(form, mode, action, packageDescriptor, jobId, reconnectSeconds) {
     let lastError = null;
-    for (let attempt = 1; attempt <= MAX_ASSET_RETRIES; attempt += 1) {
+    for (let attempt = 1; attempt <= MAX_PACKAGE_RETRIES; attempt += 1) {
         if (form.dataset.galleryMigrationCancelled === '1') {
             throw new Error(i18n('admin.gallery_migration.cancelled', 'Migration cancelled by user.'));
         }
 
         try {
-            return await postMigrationStep(form, action, assetFields(asset, jobId), {timeoutSeconds: reconnectSeconds});
+            return await postMigrationStep(form, action, packageFields(packageDescriptor, jobId), {timeoutSeconds: reconnectSeconds});
         } catch (error) {
             lastError = error;
-            const message = error instanceof Error ? error.message : i18n('admin.gallery_migration.connection_interrupted', 'Connection interrupted during asset transfer.');
-            appendMigrationLog(form, i18n('admin.gallery_migration.checking_status', '{message} Checking target gallery status before retry.', {message}));
+            const message = error instanceof Error ? error.message : i18n('admin.gallery_migration.connection_interrupted', 'Connection interrupted during ZIP package transfer.');
+            appendMigrationLog(form, i18n('admin.gallery_migration.checking_status', '{message} Checking target status before retry.', {message}));
 
-            const status = await confirmAssetOnReconnect(form, mode, asset, jobId, reconnectSeconds);
-            if (status.asset_received) {
-                appendMigrationLog(form, i18n('admin.gallery_migration.target_already_has', 'Target gallery already has {asset}. Continuing without resending it.', {asset: assetLabel(asset)}));
+            const status = await confirmPackageOnReconnect(form, mode, packageDescriptor, jobId, reconnectSeconds);
+            if (packageIsReceived(packageDescriptor, status)) {
+                appendMigrationLog(form, i18n('admin.gallery_migration.package_already_received', 'Target already has this ZIP package. Continuing without resending it.'));
                 return status;
             }
 
-            if (attempt >= MAX_ASSET_RETRIES) {
+            if (attempt >= MAX_PACKAGE_RETRIES) {
                 break;
             }
-
-            updateMigrationProgress(form, Math.round((index / Math.max(total, 1)) * 95), i18n('admin.gallery_migration.reconnecting_asset', 'Reconnecting for {asset} ({attempt}/{max})...', {asset: assetLabel(asset), attempt: attempt + 1, max: MAX_ASSET_RETRIES}));
-            appendMigrationLog(form, i18n('admin.gallery_migration.target_missing_retry', 'Target gallery does not report this asset yet. Reconnecting and retrying {attempt}/{max}.', {attempt: attempt + 1, max: MAX_ASSET_RETRIES}));
+            appendMigrationLog(form, i18n('admin.gallery_migration.retrying_package', 'Retrying ZIP package, attempt {attempt}/{total}.', {attempt: attempt + 1, total: MAX_PACKAGE_RETRIES}));
         }
     }
 
-    throw lastError instanceof Error ? lastError : new Error(i18n('admin.gallery_migration.transfer_failed_retries', 'Migration asset transfer failed after reconnect retries.'));
+    throw lastError instanceof Error ? lastError : new Error(i18n('admin.gallery_migration.package_failed', 'ZIP package transfer failed.'));
 }
 
 /**
- * Load target-side status after the manifest is accepted.
+ * Load target-side state before the package loop starts.
  *
  * @param {HTMLFormElement} form Migration form.
  * @param {string} mode Migration mode.
  * @param {string} jobId Migration job id.
- * @param {Object<string, *>} manifestResult Manifest response.
+ * @param {Object<string, *>} manifestResult Manifest-step result.
  * @param {number} reconnectSeconds Request refresh interval.
  * @return {Promise<Set<string>>} Already received asset keys.
  */
@@ -282,7 +282,7 @@ async function loadInitialReceivedAssetKeys(form, mode, jobId, manifestResult, r
     collectReceivedAssetKeys(manifestResult.status, keys);
 
     try {
-        const status = await requestMigrationStatus(form, mode, jobId, null, reconnectSeconds);
+        const status = await requestMigrationStatus(form, mode, jobId, reconnectSeconds);
         collectReceivedAssetKeys(status, keys);
     } catch (error) {
         const message = error instanceof Error ? error.message : i18n('admin.gallery_migration.target_status_missing', 'Could not read target status.');
@@ -293,16 +293,16 @@ async function loadInitialReceivedAssetKeys(form, mode, jobId, manifestResult, r
 }
 
 /**
- * Check whether the target accepted an asset after a timeout or broken request.
+ * Check whether the target accepted a complete package after a timeout or broken request.
  *
  * @param {HTMLFormElement} form Migration form.
  * @param {string} mode Migration mode.
- * @param {Object<string, *>} asset Manifest asset.
+ * @param {Object<string, *>} packageDescriptor Package descriptor.
  * @param {string} jobId Migration job id.
  * @param {number} reconnectSeconds Request refresh interval.
  * @return {Promise<Object<string, *>>} Status response.
  */
-async function confirmAssetOnReconnect(form, mode, asset, jobId, reconnectSeconds) {
+async function confirmPackageOnReconnect(form, mode, packageDescriptor, jobId, reconnectSeconds) {
     let lastStatus = null;
     let lastError = null;
 
@@ -310,10 +310,9 @@ async function confirmAssetOnReconnect(form, mode, asset, jobId, reconnectSecond
         if (probe > 1) {
             await sleep(STATUS_PROBE_DELAY_MS);
         }
-
         try {
-            lastStatus = await requestMigrationStatus(form, mode, jobId, asset, reconnectSeconds);
-            if (lastStatus.asset_received) {
+            lastStatus = await requestMigrationStatus(form, mode, jobId, reconnectSeconds);
+            if (packageIsReceived(packageDescriptor, lastStatus)) {
                 return lastStatus;
             }
         } catch (error) {
@@ -324,7 +323,6 @@ async function confirmAssetOnReconnect(form, mode, asset, jobId, reconnectSecond
     if (lastStatus) {
         return lastStatus;
     }
-
     const message = lastError instanceof Error ? lastError.message : i18n('admin.gallery_migration.target_status_failed', 'Target status check failed.');
     throw new Error(message);
 }
@@ -335,14 +333,12 @@ async function confirmAssetOnReconnect(form, mode, asset, jobId, reconnectSecond
  * @param {HTMLFormElement} form Migration form.
  * @param {string} mode Migration mode.
  * @param {string} jobId Migration job id.
- * @param {Object<string, *>|null} asset Optional asset to check.
  * @param {number} reconnectSeconds Request refresh interval.
  * @return {Promise<Object<string, *>>} Status response.
  */
-async function requestMigrationStatus(form, mode, jobId, asset, reconnectSeconds) {
+async function requestMigrationStatus(form, mode, jobId, reconnectSeconds) {
     const action = mode === 'source_push' ? 'push_status' : 'pull_status';
-    const fields = asset ? assetFields(asset, jobId) : {job_id: jobId};
-    return postMigrationStep(form, action, fields, {timeoutSeconds: reconnectSeconds});
+    return postMigrationStep(form, action, {job_id: jobId}, {timeoutSeconds: reconnectSeconds});
 }
 
 /**
@@ -362,6 +358,10 @@ async function postMigrationStep(form, action, extraFields, options = {}) {
     }
 
     const body = new FormData(form);
+    const includeControl = form.elements.namedItem('include_subgalleries');
+    if (includeControl instanceof HTMLInputElement && includeControl.type === 'checkbox') {
+        body.set('include_subgalleries', includeControl.checked ? '1' : '0');
+    }
     body.set('action', action);
     Object.entries(extraFields).forEach(([name, value]) => {
         body.set(name, String(value));
@@ -399,21 +399,45 @@ async function postMigrationStep(form, action, extraFields, options = {}) {
 }
 
 /**
- * Return form fields needed to transfer or check one asset.
+ * Return form fields needed to transfer one package.
  *
- * @param {Object<string, *>} asset Manifest asset.
+ * @param {Object<string, *>} packageDescriptor Package descriptor.
  * @param {string} jobId Migration job id.
  * @return {Object<string, string|number>} Request fields.
  */
-function assetFields(asset, jobId) {
+function packageFields(packageDescriptor, jobId) {
     return {
         job_id: jobId,
-        scope: String(asset.scope || ''),
-        kind: String(asset.kind || ''),
-        source_image_id: Number(asset.source_image_id || 0),
-        size: Number(asset.size || 0),
-        format: String(asset.format || ''),
+        package_id: String(packageDescriptor.package_id || ''),
+        assets_json: JSON.stringify(Array.isArray(packageDescriptor.assets) ? packageDescriptor.assets : []),
     };
+}
+
+/**
+ * Return stable asset keys declared by one package.
+ *
+ * @param {Object<string, *>} packageDescriptor Package descriptor.
+ * @return {string[]} Asset keys.
+ */
+function packageAssetKeys(packageDescriptor) {
+    if (!Array.isArray(packageDescriptor.asset_keys)) {
+        return [];
+    }
+    return packageDescriptor.asset_keys.map((key) => String(key || '')).filter((key) => key !== '');
+}
+
+/**
+ * Return whether target status confirms every asset from one package.
+ *
+ * @param {Object<string, *>} packageDescriptor Package descriptor.
+ * @param {Object<string, *>} status Status response.
+ * @return {boolean} True when all package asset keys are present.
+ */
+function packageIsReceived(packageDescriptor, status) {
+    const keys = new Set();
+    collectReceivedAssetKeys(status, keys);
+    const expected = packageAssetKeys(packageDescriptor);
+    return expected.length > 0 && expected.every((key) => keys.has(key));
 }
 
 /**
@@ -433,23 +457,6 @@ function collectReceivedAssetKeys(status, keys) {
             keys.add(text);
         }
     });
-}
-
-/**
- * Return a readable label for one asset.
- *
- * @param {Object<string, *>} asset Manifest asset.
- * @return {string} Label.
- */
-function assetLabel(asset) {
-    const label = String(asset.label || asset.relative_path || asset.filename || asset.kind || i18n('admin.gallery_migration.asset_fallback', 'asset'));
-    if (asset.kind === 'thumbnail') {
-        return i18n('admin.gallery_migration.thumbnail_suffix', '{label} thumbnail {size} {format}', {label, size: asset.size || '', format: asset.format || ''}).trim();
-    }
-    if (asset.scope === 'gallery') {
-        return i18n('admin.gallery_migration.gallery_asset_suffix', '{label} gallery asset', {label});
-    }
-    return label;
 }
 
 /**
