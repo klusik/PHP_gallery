@@ -108,8 +108,8 @@ foreach (['fetch(', 'localStorage', 'sessionStorage', 'document.cookie', 'XMLHtt
 }
 
 lightbox_zoom_integration_assert(
-    str_contains($publicEntrypointSource, 'lightbox-deferred.js?v=20260905-map-popup-viewer-navigation-v1')
-        && str_contains($authenticatedEntrypointSource, 'lightbox-deferred.js?v=20260905-map-popup-viewer-navigation-v1'),
+    str_contains($publicEntrypointSource, 'lightbox-deferred.js?v=20260905-map-popup-viewer-navigation-v2')
+        && str_contains($authenticatedEntrypointSource, 'lightbox-deferred.js?v=20260905-map-popup-viewer-navigation-v2'),
     'Anonymous and authenticated browser entrypoints must invalidate the deferred lightbox cache together.'
 );
 lightbox_zoom_integration_assert(

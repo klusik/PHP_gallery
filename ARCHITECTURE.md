@@ -9,7 +9,7 @@ This document is intended to help future maintainers and AI coding agents unders
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.95.2';
+const CMS_VERSION = '0.95.3';
 ```
 
 Update-related code uses:
@@ -1194,7 +1194,7 @@ Public rendering emits the resolved value as `data-lightbox-browsing-mode` from 
 
 The `picture_strip` and `3d_carousel` modes select adjacent images from already-rendered gallery cards and lazily request sparse lightbox metadata when a neighbor is missing. Neighbor previews are preloaded opportunistically and navigation remains index-based, so paginated or partially hydrated lightbox data degrades to the available nearby photos instead of failing. The carousel skips rendering a duplicate active thumbnail, because the main stage itself is the active state.
 
-Gallery-map photo markers use the same viewer pipeline. Map payloads carry the canonical authorized photo-page URL plus image and gallery identifiers. When a selected image belongs to the active physical gallery but is outside the current pagination window, `gallery_lightbox_data` accepts `target_image_id`, resolves its position through the same authorized ordering, and returns a bounded window containing that image. The browser merges that window into the sparse cache and opens the existing lightbox item. A fullscreen split map remains mounted while only the photo pane changes; a body-level map overlay closes before the lightbox is revealed. Cross-gallery, unavailable, stale, or failed enhanced targets fall back to the canonical photo page and never make a map marker a separate media-authorization route.
+Gallery-map photo markers use the same viewer pipeline. Map payloads carry the canonical authorized photo-page URL plus image and gallery identifiers. When a selected image belongs to the active physical gallery but is outside the current pagination window, `gallery_lightbox_data` accepts `target_image_id`, resolves its position through the same authorized ordering, and returns a bounded window containing that image. The public SEO guard permits this parameter only on that endpoint. The browser merges that window into the existing sparse `cards` cache and opens the lightbox item without rebuilding metadata from DOM cards. Cache resets remain explicit setup, close, and authoritative order-change boundaries. A fullscreen split map remains mounted while only the photo pane changes; a body-level map overlay closes before the lightbox is revealed. Each popup selection owns an abort controller from click scheduling through target lookup and commit. A newer selection, ordinary viewer navigation, map/viewer closure, fullscreen exit, or component teardown cancels that intent; cancelled or superseded work cannot merge target metadata, change the photo, or navigate to a fallback. Target requests are separate from shared nearby-range requests, so superseding a selection does not cancel unrelated preloads. Cross-gallery, unavailable, or genuinely failed enhanced targets retain the canonical photo-page fallback while their selection is still current. A map marker never becomes a separate media-authorization route.
 
 Persistence details:
 

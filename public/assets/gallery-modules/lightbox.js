@@ -182,6 +182,9 @@ export function setupGalleryLightbox() {
     let lightboxMetadataAbortController = null;
     // lightboxMetadataGeneration prevents an aborted previous viewer lifecycle from merging stale metadata after reopen.
     let lightboxMetadataGeneration = 0;
+    // mapPhotoNavigationController owns the latest popup selection, including its deferred click and target fetch.
+    // It is separate from shared range fetches so superseding one selection does not cancel ordinary preloads.
+    let mapPhotoNavigationController = null;
     // lightboxBenchmarkParams captures benchmark identity before lightbox history replaces the gallery URL with photo URLs.
     const lightboxBenchmarkParams = new URLSearchParams(window.location.search);
     // lightboxBenchmarkToken stores the opaque benchmark id for lazy requests started after photo history changes.
@@ -244,8 +247,13 @@ export function setupGalleryLightbox() {
      * saved gallery order without requiring a full page reload. Paginated pages
      * use a sparse client-side cache, so non-visible images are fetched only when
      * the user approaches them in the viewer.
+     *
+     * This is an explicit cache reset at setup, close, or an authoritative order
+     * change. In-viewer map navigation must use cards directly: detached metadata
+     * is owned by that sparse cache and cannot be reconstructed from the DOM.
      */
     function refreshLightboxOrderFromDom() {
+        cancelMapPhotoNavigation();
         const nextVisibleCards = Array.from(document.querySelectorAll('[data-lightbox-image]'));
         const nextSourceCards = Array.from(document.querySelectorAll('[data-lightbox-source]'));
         if (nextSourceCards.length > 0) {
@@ -414,6 +422,7 @@ export function setupGalleryLightbox() {
      * merely dropping their Promise references while PHP continues working.
      */
     function cancelLightboxMetadataRequests() {
+        cancelMapPhotoNavigation();
         if (lightboxBenchmarkDiagnosticsEnabled) {
             lightboxBenchmarkDiagnosticsState.metadataCancelCalls += 1;
             lightboxBenchmarkDiagnosticsState.metadataPendingAtLastCancel = lightboxPendingWindows.size;
@@ -547,59 +556,44 @@ export function setupGalleryLightbox() {
      * image outside the currently loaded pagination window.
      *
      * @param {number} imageId Database image id from the map marker payload.
-     * @return {Promise<number>} Loaded lightbox index, or -1 when unavailable.
+     * @param {AbortSignal} navigationSignal Cancellation scope of the popup selection.
+     * @return {Promise<number>} Loaded lightbox index, or -1 when not in this scope.
+     * @throws {DOMException} AbortError on cancellation; transport/JSON failures also reject.
      */
-    function fetchLightboxTargetIndex(imageId) {
+    async function fetchLightboxTargetIndex(imageId, navigationSignal) {
+        if (navigationSignal.aborted || controller.signal.aborted) {
+            throw new DOMException('Map photo selection cancelled.', 'AbortError');
+        }
         if (!lightboxEndpoint || cards.length === 0 || imageId <= 0) {
-            return Promise.resolve(-1);
+            return -1;
         }
         const existingIndex = cards.findIndex((candidate) => candidate && String(candidate.dataset.imageId || '') === String(imageId));
         if (existingIndex >= 0) {
-            return Promise.resolve(existingIndex);
+            return existingIndex;
         }
-        const key = `target:${imageId}`;
-        if (lightboxPendingWindows.has(key)) {
-            return lightboxPendingWindows.get(key);
-        }
-        const metadataSignal = currentLightboxMetadataSignal();
-        if (!metadataSignal) {
-            return Promise.resolve(-1);
-        }
+        // Only the current selection owns target work; shared nearby ranges retain their own deduplication.
         const requestGeneration = lightboxMetadataGeneration;
         const url = new URL(lightboxEndpoint, window.location.href);
         url.searchParams.set('target_image_id', String(imageId));
         url.searchParams.set('limit', String(lightboxWindowSize));
-        let promise = null;
-        promise = fetch(url.toString(), {
+        const response = await fetch(url.toString(), {
             credentials: 'same-origin',
             headers: {'Accept': 'application/json'},
-            signal: metadataSignal,
-        })
-            .then((response) => {
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}`);
-                }
-                return response.json();
-            })
-            .then((payload) => {
-                if (metadataSignal.aborted || controller.signal.aborted || requestGeneration !== lightboxMetadataGeneration) {
-                    return -1;
-                }
-                mergeLightboxItems(payload?.items || []);
-                const targetIndex = Number.parseInt(String(payload?.target_index ?? '-1'), 10);
-                if (Number.isInteger(targetIndex) && targetIndex >= 0 && cards[targetIndex]?.dataset.imageId === String(imageId)) {
-                    return targetIndex;
-                }
-                return cards.findIndex((candidate) => candidate && String(candidate.dataset.imageId || '') === String(imageId));
-            })
-            .catch(() => -1)
-            .finally(() => {
-                if (lightboxPendingWindows.get(key) === promise) {
-                    lightboxPendingWindows.delete(key);
-                }
-            });
-        lightboxPendingWindows.set(key, promise);
-        return promise;
+            signal: navigationSignal,
+        });
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        const payload = await response.json();
+        if (navigationSignal.aborted || controller.signal.aborted || requestGeneration !== lightboxMetadataGeneration) {
+            throw new DOMException('Map photo selection cancelled.', 'AbortError');
+        }
+        mergeLightboxItems(payload?.items || []);
+        const targetIndex = Number.parseInt(String(payload?.target_index ?? '-1'), 10);
+        if (Number.isInteger(targetIndex) && targetIndex >= 0 && cards[targetIndex]?.dataset.imageId === String(imageId)) {
+            return targetIndex;
+        }
+        return cards.findIndex((candidate) => candidate && String(candidate.dataset.imageId || '') === String(imageId));
     }
 
         /**
@@ -4059,6 +4053,10 @@ export function setupGalleryLightbox() {
      * @param {object} options Optional behavior flags.
      */
     function openAt(index, options = {}) {
+        // Keyboard, strip, slideshow, and direct-card navigation supersede a pending popup selection.
+        if (options.mapPhotoNavigation !== mapPhotoNavigationController) {
+            cancelMapPhotoNavigation();
+        }
         if (cards.length === 0) {
             return;
         }
@@ -5086,6 +5084,7 @@ export function setupGalleryLightbox() {
             return;
         }
         if (!document.fullscreenElement && overlay.classList.contains('is-fullscreen')) {
+            cancelMapPhotoNavigation();
             overlay.classList.remove('is-fullscreen');
             overlay.classList.remove('is-mobile-fullscreen');
             overlay.classList.remove('is-ui-visible');
@@ -6455,8 +6454,12 @@ export function setupGalleryLightbox() {
 
         /**
      * Closes the persistent map overlay without changing the current photo viewer.
+     * @param {boolean} cancelPhotoNavigation False only for dismissal by the owning popup selection.
      */
-    function closeMapOverlay() {
+    function closeMapOverlay(cancelPhotoNavigation = true) {
+        if (cancelPhotoNavigation) {
+            cancelMapPhotoNavigation();
+        }
         // mapOverlay stores state or configuration for the gallery front-end flow.
         const mapOverlay = document.querySelector('[data-map-overlay]');
         if (mapOverlay instanceof HTMLElement) {
@@ -6871,8 +6874,12 @@ export function setupGalleryLightbox() {
 
         /**
      * Handles close lightbox map split behavior for the gallery UI.
+     * @param {boolean} cancelPhotoNavigation False only for dismissal by the owning popup selection.
      */
-    function closeLightboxMapSplit() {
+    function closeLightboxMapSplit(cancelPhotoNavigation = true) {
+        if (cancelPhotoNavigation) {
+            cancelMapPhotoNavigation();
+        }
         clearLightboxSplitMapRuntime();
         clearFullscreenMapImageFit();
         if (lightboxMapSplit) {
@@ -6914,25 +6921,48 @@ export function setupGalleryLightbox() {
      * @param {boolean} preserveMapSplit Keep the fullscreen split map mounted.
      */
     function closeMapSurfaceForPhotoNavigation(preserveMapSplit = false) {
-        if (!preserveMapSplit && lightboxMapSplit instanceof HTMLElement && !lightboxMapSplit.hidden) {
-            closeLightboxMapSplit();
+        if (overlay instanceof HTMLElement && cards.length > 0 && !preserveMapSplit && lightboxMapSplit instanceof HTMLElement && !lightboxMapSplit.hidden) {
+            closeLightboxMapSplit(false);
         }
-        closeMapOverlay();
+        closeMapOverlay(false);
+    }
+
+    /** Abort the latest popup intent without cancelling shared metadata range requests. */
+    function cancelMapPhotoNavigation() {
+        const navigation = mapPhotoNavigationController;
+        mapPhotoNavigationController = null;
+        navigation?.abort();
+    }
+
+    /**
+     * Check ownership before deferred work, photo commits, and page fallbacks.
+     * @param {object} target Snapshot of the viewer/map that originated the selection.
+     * @param {AbortController} navigation Latest selection's cancellation scope.
+     * @return {boolean} Whether the originating interaction is still active.
+     */
+    function mapPhotoNavigationIsCurrent(target, navigation) {
+        return mapPhotoNavigationController === navigation
+            && !navigation.signal.aborted
+            && !controller.signal.aborted
+            && (!target.viewerOpen || (overlay instanceof HTMLElement && !overlay.hidden))
+            && (!target.preserveMapSplit || (isLightboxFullscreen() && !lightboxMapSplit.hidden));
     }
 
     /**
      * Snapshot one map popup photo target before Leaflet is allowed to tear down the popup DOM.
      *
      * @param {Element} mapPhotoLink Popup link carrying image and gallery metadata.
-     * @return {{imageId: number, galleryId: number, pageUrl: string, preserveMapSplit: boolean}} Stable navigation target.
+     * @return {{imageId: number, galleryId: number, pageUrl: string, viewerOpen: boolean, preserveMapSplit: boolean}} Stable navigation target.
      */
     function mapPhotoNavigationTarget(mapPhotoLink) {
+        const viewerOpen = overlay instanceof HTMLElement && !overlay.hidden && cards.length > 0;
         return {
             imageId: Number.parseInt(mapPhotoLink.dataset.mapOpenPhoto || '0', 10),
             galleryId: Number.parseInt(mapPhotoLink.dataset.mapPhotoGalleryId || '0', 10),
             pageUrl: String(mapPhotoLink.dataset.mapPhotoPageUrl || mapPhotoLink.getAttribute('href') || '').trim(),
+            viewerOpen,
             preserveMapSplit: Boolean(
-                isLightboxFullscreen()
+                viewerOpen && isLightboxFullscreen()
                 && lightboxMapSplit instanceof HTMLElement
                 && !lightboxMapSplit.hidden
             ),
@@ -6946,10 +6976,14 @@ export function setupGalleryLightbox() {
      * Fullscreen split maps remain mounted and the selected photo is committed directly
      * into the existing photo pane, without rebuilding the map or exposing the stage.
      *
-     * @param {{imageId: number, galleryId: number, pageUrl: string, preserveMapSplit: boolean}} target Stable popup target.
-     * @return {Promise<void>} Resolves after in-viewer navigation or page fallback.
+     * @param {{imageId: number, galleryId: number, pageUrl: string, viewerOpen: boolean, preserveMapSplit: boolean}} target Stable popup target.
+     * @param {AbortController} navigation Selection owner, invalidated on close or supersession.
+     * @return {Promise<void>} Resolves after navigation, genuine-failure fallback, or silent cancellation.
      */
-    async function openMapPhotoTarget(target) {
+    async function openMapPhotoTarget(target, navigation) {
+        if (!mapPhotoNavigationIsCurrent(target, navigation)) {
+            return;
+        }
         const imageId = Number.parseInt(String(target?.imageId || '0'), 10);
         const galleryId = Number.parseInt(String(target?.galleryId || '0'), 10);
         const pageUrl = String(target?.pageUrl || '').trim();
@@ -6957,26 +6991,30 @@ export function setupGalleryLightbox() {
 
         try {
             if (imageId > 0 && overlay instanceof HTMLElement && !overlay.hidden) {
-                refreshLightboxOrderFromDom();
+                // cards owns both visible and detached metadata for the active ordered result set.
                 targetIndex = cards.findIndex((candidate) => candidate && String(candidate.dataset.imageId || '') === String(imageId));
                 const activeGalleryId = Number.parseInt(String(cards[currentIndex]?.dataset.galleryId || '0'), 10);
                 if (targetIndex < 0 && galleryId > 0 && activeGalleryId === galleryId) {
-                    targetIndex = await fetchLightboxTargetIndex(imageId);
+                    targetIndex = await fetchLightboxTargetIndex(imageId, navigation.signal);
                 }
             }
-        } catch {
+        } catch (error) {
+            if (error?.name === 'AbortError') {
+                return;
+            }
             targetIndex = -1;
         }
 
-        if (controller.signal.aborted) {
+        if (!mapPhotoNavigationIsCurrent(target, navigation)) {
             return;
         }
         try {
-            if (targetIndex >= 0) {
+            if (targetIndex >= 0 && cards[targetIndex]?.dataset.imageId === String(imageId)) {
                 if (targetIndex !== currentIndex) {
                     openAt(targetIndex, {
                         forceImmediateSwap: target.preserveMapSplit === true,
                         preserveMapSplit: target.preserveMapSplit === true,
+                        mapPhotoNavigation: navigation,
                     });
                 }
                 return;
@@ -6985,7 +7023,7 @@ export function setupGalleryLightbox() {
             // Canonical page navigation below is the final fail-safe.
         }
 
-        if (pageUrl !== '') {
+        if (pageUrl !== '' && mapPhotoNavigationIsCurrent(target, navigation)) {
             window.location.assign(pageUrl);
         }
     }
@@ -7000,9 +7038,12 @@ export function setupGalleryLightbox() {
      * @param {Element} mapPhotoLink Popup link carrying image and gallery metadata.
      */
     function scheduleMapPhotoLinkNavigation(mapPhotoLink) {
+        cancelMapPhotoNavigation();
         const target = mapPhotoNavigationTarget(mapPhotoLink);
+        const navigation = new AbortController();
+        mapPhotoNavigationController = navigation;
         window.setTimeout(() => {
-            if (controller.signal.aborted) {
+            if (!mapPhotoNavigationIsCurrent(target, navigation)) {
                 return;
             }
             try {
@@ -7010,7 +7051,11 @@ export function setupGalleryLightbox() {
             } catch {
                 // Target resolution still proceeds and retains the canonical fallback.
             }
-            void openMapPhotoTarget(target);
+            void openMapPhotoTarget(target, navigation).finally(() => {
+                if (mapPhotoNavigationController === navigation) {
+                    mapPhotoNavigationController = null;
+                }
+            });
         }, 0);
     }
 

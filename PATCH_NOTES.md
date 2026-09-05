@@ -1,5 +1,56 @@
 # Patch notes
 
+## Version 0.95.3
+
+Version 0.95.3 fixes map-marker navigation regressions introduced around Version 0.95.2. Public visitors can again open photographs outside the current pagination window in the active lightbox, previously loaded sparse photograph metadata remains available when its card is no longer rendered, and cancelled or superseded selections can no longer change the photograph or unexpectedly navigate away after the map or viewer closes.
+
+### Highlights
+
+#### Reliable map-to-lightbox navigation
+
+- Fixed a false 404 that rejected the public lightbox metadata request used to resolve a map photograph outside the current pagination window.
+- Preserved previously loaded sparse photograph metadata across map selections when lazy loading or pagination removes its card from the rendered page.
+- Kept rapid repeated marker selections deterministic so only the latest active selection can load metadata or change the photograph.
+
+#### Safe cancellation and fallback behavior
+
+- Prevented cancelled, superseded, closed, or stale map selections from merging metadata, changing the current photograph, or navigating to another page.
+- Kept map-target lookup cancellation independent from shared nearby metadata and preload requests.
+- Preserved the canonical authorized photograph-page fallback for current selections whose enhanced lookup or viewer rendering genuinely fails.
+
+### Technical Details
+
+#### Backend
+
+- Updated `app/services/seo_request_guard.php` to allow `target_image_id` only for the public `gallery_lightbox_data` request contract; unrelated public routes and unknown parameters remain rejected, while authenticated Admin handling remains unchanged.
+- Added no migration, table, column, stored-data rewrite, configuration change, or new media authorization route.
+
+#### Frontend
+
+- Updated `public/assets/gallery-modules/lightbox.js` so its sparse metadata cache remains authoritative between explicit lifecycle resets instead of being rebuilt from the current DOM during map navigation.
+- Added explicit per-selection ownership and cancellation through deferred click handling, target lookup, metadata merge, photo commit, and canonical-page fallback.
+- Updated the matching cache revisions in `public/assets/gallery.js` and `public/assets/public-gallery.js` so authenticated and public visitors load the corrected lightbox path together.
+
+#### Tests and documentation
+
+- Added `tests/seo_lightbox_target_guard_test.php` for the real public/Admin request guard, supported-route acceptance, and rejection of unsupported parameters and routes.
+- Added `tests/lightbox_map_navigation_test.mjs` to execute production lightbox functions across detached-cache reuse, repeated selection, cancellation, close/reopen, stale-response, failure-fallback, and shared-request isolation paths.
+- Added `tests/lightbox_map_browser_test.mjs` and `tests/fixtures/lightbox_map_navigation.html` for headless Chromium coverage of the production lightbox module with controlled metadata responses and popup-shaped DOM interactions.
+- Updated the established lightbox, zoom, Leaflet marker, architecture, and testing contracts for the corrected lifecycle and cache behavior.
+
+### User Impact
+
+#### For visitors
+
+- **Open photo** from a gallery map reliably opens the intended photograph in context, including photographs beyond the currently rendered page and photographs whose metadata was loaded earlier.
+- Closing the map or viewer, leaving fullscreen, or choosing a newer marker no longer allows an older pending selection to change the photograph or redirect the page.
+- A genuine current lookup or rendering failure still reaches the normal authorized photograph page.
+
+#### For administrators
+
+- Public and authenticated gallery views use the same corrected map/lightbox lifecycle without weakening the stricter public request guard.
+- Existing galleries require no migration or configuration change.
+
 ## Version 0.95.2
 
 Version 0.95.2 makes gallery-map photo markers lead back into the photograph experience instead of exposing raw media or disrupting the active viewer. Marker actions now use canonical photo-page URLs as durable fallbacks, open matching photos directly in the existing lightbox when possible, load a bounded authorized metadata window for photos outside the current pagination page, and preserve the fullscreen split map while its photo pane changes.

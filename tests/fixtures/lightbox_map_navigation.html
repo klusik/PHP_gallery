@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>Lightbox map navigation fixture</title>
+<style>
+    [hidden] { display: none !important; }
+    [data-lightbox] { position: fixed; inset: 0; background: white; }
+    .lightbox-stage-link { display: block; width: 800px; height: 600px; }
+    [data-lightbox-img] { max-width: 100%; max-height: 100%; }
+</style>
+<body>
+<pre id="results">RUNNING</pre>
+<div data-lightbox-config data-lightbox-endpoint="/metadata?page=gallery_lightbox_data&amp;id=7" data-lightbox-total="200" data-lightbox-window-size="12" data-lightbox-maps-enabled="1"></div>
+<a id="card" href="/photo/1" data-lightbox-image data-image-id="1" data-gallery-id="7" data-lightbox-index="0" data-page-url="/photo/1" data-title="Photo 1" data-image-width="800" data-image-height="600">Photo 1</a>
+<div data-lightbox hidden data-lightbox-maps-enabled="1">
+    <button data-lightbox-action="close">Close</button>
+    <button data-lightbox-action="next">Next</button>
+    <figure><a class="lightbox-stage-link" data-lightbox-stage><div class="lightbox-zoom-surface" data-lightbox-zoom-surface><img data-lightbox-img alt="Photo"></div></a></figure>
+    <div class="lightbox-meta"><h2 data-lightbox-title></h2><p data-lightbox-description></p><span data-lightbox-counter></span></div>
+    <div data-lightbox-map-split hidden><button data-lightbox-map-split-close>Close map</button><div data-lightbox-map-split-canvas></div></div>
+</div>
+<div data-map-overlay hidden></div>
+<script type="module">
+    import {setupGalleryLightbox, teardownGalleryLightbox} from '/public/assets/gallery-modules/lightbox.js';
+    const result = document.querySelector('#results');
+    const errors = [];
+    window.addEventListener('error', event => errors.push(event.message));
+    window.addEventListener('unhandledrejection', event => errors.push(String(event.reason)));
+    const overlay = document.querySelector('[data-lightbox]');
+    const split = document.querySelector('[data-lightbox-map-split]');
+    const card = document.querySelector('#card');
+    const media = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><rect width="800" height="600" fill="steelblue"/></svg>');
+    card.dataset.previewSrc = media; card.dataset.fullSrc = media;
+    const pending = [];
+    const requests = [];
+    const originalFetch = window.fetch;
+    window.fetch = async (url, options = {}) => {
+        const parsed = new URL(url, location.href);
+        if (parsed.pathname !== '/metadata') return originalFetch(url, options);
+        requests.push(parsed);
+        if (parsed.searchParams.has('target_image_id')) {
+            return new Promise((resolve, reject) => {
+                const request = {id: Number(parsed.searchParams.get('target_image_id')), signal: options.signal, resolve, reject};
+                pending.push(request);
+                options.signal.addEventListener('abort', () => reject(new DOMException('Cancelled', 'AbortError')), {once: true});
+            });
+        }
+        // Do not prefill target photos via neighbor preloads; each target lookup is observable.
+        return new Response(JSON.stringify({items: []}), {headers: {'Content-Type': 'application/json'}});
+    };
+    /** Advance task and promise callbacks, including production deferred popup handling. */
+    const tick = () => new Promise(resolve => setTimeout(resolve, 30));
+    /** Fail visibly in the dumped DOM on any broken contract. */
+    function check(value, message) { if (!value) throw new Error(message); }
+    /** Create a popup-shaped link and dispatch through the production document capture handler. */
+    function select(id) {
+        const link = document.createElement('a');
+        link.href = `/photo/${id}`;
+        link.dataset.mapOpenPhoto = String(id); link.dataset.mapPhotoGalleryId = '7'; link.dataset.mapPhotoPageUrl = `/photo/${id}`;
+        link.textContent = 'Open photo';
+        (split.hidden ? document.querySelector('[data-map-overlay]') : split).append(link);
+        link.click();
+    }
+    /** Deliver a controlled successful metadata window to the real browser code. */
+    function respond(request, id, index) {
+        request.resolve(new Response(JSON.stringify({target_index: index, items: [{id, index, gallery_id: 7, title: `Photo ${id}`, page_url: `/photo/${id}`, full_src: media, preview_src: media, width: 800, height: 600}]}), {headers: {'Content-Type': 'application/json'}}));
+    }
+    try {
+        setupGalleryLightbox(); card.click(); await tick();
+        check(!overlay.hidden, 'card click must open actual viewer');
+        select(101); await tick(); check(pending.length === 1, 'cross-page marker must fetch');
+        respond(pending[0], 101, 100); await tick();
+        check(document.querySelector('[data-lightbox-title]').textContent === 'Photo 101', 'target metadata must render selected photo');
+        select(151); await tick(); check(pending.length === 2, 'detached current card must retain gallery identity');
+        respond(pending[1], 151, 150); await tick();
+        select(101); await tick(); check(pending.length === 2, 'previously loaded photo must use sparse cache');
+        check(document.querySelector('[data-lightbox-title]').textContent === 'Photo 101', 'cached photo must render');
+
+        select(170); await tick(); const older = pending.at(-1);
+        select(180); await tick(); const newer = pending.at(-1);
+        check(older.signal.aborted, 'newer click must abort old target request');
+        respond(newer, 180, 179); await tick();
+        check(document.querySelector('[data-lightbox-title]').textContent === 'Photo 180', 'newest selection must render');
+
+        // Exercise the CSS split-map path; native fullscreen/user activation and Leaflet are not simulated as verified.
+        overlay.classList.add('is-fullscreen'); split.hidden = false;
+        select(101); await tick(); check(!split.hidden, 'split map must remain mounted');
+        select(190); await tick(); const splitRequest = pending.at(-1);
+        document.querySelector('[data-lightbox-map-split-close]').click(); await tick();
+        check(splitRequest.signal.aborted, 'split close control must abort selection');
+        overlay.classList.remove('is-fullscreen');
+
+        overlay.classList.add('is-fullscreen'); split.hidden = false;
+        select(192); await tick(); const exitRequest = pending.at(-1);
+        document.dispatchEvent(new Event('fullscreenchange')); await tick();
+        check(exitRequest.signal.aborted, 'fullscreen exit handler must abort selection');
+        document.querySelector('[data-lightbox-map-split-close]').click();
+
+        select(193); await tick(); const nextRequest = pending.at(-1);
+        document.querySelector('[data-lightbox-action="next"]').click(); await tick();
+        check(nextRequest.signal.aborted, 'ordinary photo navigation must supersede selection');
+        document.querySelector('[data-lightbox-action="close"]').click(); card.click(); await tick();
+
+        select(191); await tick(); const closeRequest = pending.at(-1);
+        document.querySelector('[data-lightbox-action="close"]').click(); await tick();
+        check(closeRequest.signal.aborted, 'viewer close control must abort selection');
+        check(overlay.hidden, 'viewer must remain closed');
+        check(location.pathname === '/', 'cancelled selection must not navigate away from restored gallery URL');
+        card.click(); await tick(); const requestCount = pending.length;
+        select(194); document.querySelector('[data-lightbox-action="close"]').click(); await tick();
+        check(pending.length === requestCount, 'close before deferred dispatch must prevent target fetch');
+        check(location.pathname === '/', 'close before dispatch must prevent page fallback');
+        teardownGalleryLightbox(); await tick();
+        check(errors.length === 0, `browser errors: ${errors.join('; ')}`);
+        result.textContent = 'BROWSER PASS: real module setup, card open, cross-page fetch, detached cache reuse, superseding clicks, CSS split persistence, split close, fullscreen-exit handler, ordinary next navigation, viewer close/reopen, close before dispatch, teardown, URL preservation.';
+    } catch (error) {
+        result.textContent = `BROWSER FAIL: ${error.stack}\n${errors.join('\n')}`;
+    } finally { teardownGalleryLightbox(); window.fetch = originalFetch; }
+</script>
+</body></html>
