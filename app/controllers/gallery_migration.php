@@ -54,6 +54,7 @@ use function Gallery\Services\find_gallery;
 use function Gallery\Services\find_upload_automation_token;
 use function Gallery\Services\gallery_migration_asset_ref_from_input;
 use function Gallery\Services\gallery_migration_build_manifest;
+use function Gallery\Services\gallery_migration_build_package_file;
 use function Gallery\Services\gallery_migration_complete_job;
 use function Gallery\Services\gallery_migration_current_version;
 use function Gallery\Services\gallery_migration_endpoint_url;
@@ -61,10 +62,15 @@ use function Gallery\Services\gallery_migration_http_get_json;
 use function Gallery\Services\gallery_migration_http_get_to_file;
 use function Gallery\Services\gallery_migration_http_post_file_json;
 use function Gallery\Services\gallery_migration_http_post_form_json;
+use function Gallery\Services\gallery_migration_http_post_form_to_file;
 use function Gallery\Services\gallery_migration_install_asset_file;
+use function Gallery\Services\gallery_migration_install_package_file;
 use function Gallery\Services\gallery_migration_job_status_response;
+use function Gallery\Services\gallery_migration_job_package;
+use function Gallery\Services\gallery_migration_load_job;
 use function Gallery\Services\gallery_migration_manifest_asset_refs;
 use function Gallery\Services\gallery_migration_manifest_asset_refs_with_keys;
+use function Gallery\Services\gallery_migration_package_assets_from_json;
 use function Gallery\Services\gallery_migration_prepare_target_job;
 use function Gallery\Services\gallery_migration_request_timeout_seconds;
 use function Gallery\Services\gallery_migration_source_asset_descriptor;
@@ -120,6 +126,22 @@ function gallery_migration_api_gallery(): array
 }
 
 /**
+ * Read the recursive migration checkbox from request input.
+ *
+ * Missing input keeps the documented default enabled for direct API clients.
+ *
+ * @param array $input Request values.
+ * @return bool True when source descendants should be included.
+ */
+function gallery_migration_include_subgalleries(array $input): bool
+{
+    if (!array_key_exists('include_subgalleries', $input)) {
+        return true;
+    }
+    return !in_array(strtolower(trim((string) $input['include_subgalleries'])), ['0', 'false', 'off', 'no'], true);
+}
+
+/**
  * Return the source manifest authorized by the supplied API key.
  */
 function cms_gallery_migration_manifest(): void
@@ -132,17 +154,21 @@ function cms_gallery_migration_manifest(): void
     try {
         $authorized = gallery_migration_api_gallery();
         $gallery = $authorized['gallery'];
-        $requestedGalleryId = (int) ($_GET['gallery_id'] ?? $_POST['gallery_id'] ?? 0);
+        $input = array_merge($_GET, $_POST);
+        $requestedGalleryId = (int) ($input['gallery_id'] ?? 0);
         if ($requestedGalleryId > 0 && $requestedGalleryId !== (int) ($gallery['id'] ?? 0)) {
             gallery_migration_json(['ok' => false, 'error' => gallery_migration_t('gallery_migration.error.api_key_scope', 'API key is not allowed to export the requested gallery.')], 403);
             return;
         }
 
-        $manifest = gallery_migration_build_manifest((int) $gallery['id']);
+        $includeSubgalleries = gallery_migration_include_subgalleries($input);
+        $manifest = gallery_migration_build_manifest((int) $gallery['id'], $includeSubgalleries);
         mark_upload_automation_token_used((int) ($authorized['token_row']['id'] ?? 0));
         admin_log_event('info', 'gallery_migration.manifest_exported', 'Gallery migration manifest exported through API.', [
             'gallery_id' => (int) $gallery['id'],
-            'image_count' => count((array) ($manifest['images'] ?? [])),
+            'include_subgalleries' => $includeSubgalleries,
+            'gallery_count' => (int) (($manifest['counts']['galleries'] ?? 1)),
+            'image_count' => (int) (($manifest['counts']['images'] ?? count((array) ($manifest['images'] ?? [])))),
             'asset_count' => count(gallery_migration_manifest_asset_refs($manifest)),
         ]);
 
@@ -184,6 +210,39 @@ function cms_gallery_migration_asset(): void
 }
 
 /**
+ * Build and stream one source ZIP package authorized by the supplied API key.
+ */
+function cms_gallery_migration_package(): void
+{
+    if (request_method() !== 'POST') {
+        gallery_migration_json(['ok' => false, 'error' => gallery_migration_t('gallery_migration.error.method_not_allowed', 'Method not allowed.')], 405);
+        return;
+    }
+
+    $zipPath = '';
+    try {
+        $authorized = gallery_migration_api_gallery();
+        $gallery = $authorized['gallery'];
+        $includeSubgalleries = gallery_migration_include_subgalleries($_POST);
+        $assets = gallery_migration_package_assets_from_json((string) ($_POST['assets_json'] ?? ''));
+        $zipPath = gallery_migration_build_package_file((int) $gallery['id'], $assets, $includeSubgalleries);
+        mark_upload_automation_token_used((int) ($authorized['token_row']['id'] ?? 0));
+
+        header('Content-Type: application/zip');
+        header('Content-Length: ' . (string) filesize($zipPath));
+        header('Content-Disposition: attachment; filename="php-gallery-migration-package.zip"');
+        readfile($zipPath);
+    } catch (Throwable $exception) {
+        gallery_migration_json(['ok' => false, 'error' => $exception->getMessage()], 422);
+    } finally {
+        if ($zipPath !== '') {
+            @unlink($zipPath);
+        }
+    }
+}
+
+
+/**
  * Receive and prepare a target migration job authorized by target gallery API key.
  */
 function cms_gallery_migration_receive_manifest(): void
@@ -210,8 +269,12 @@ function cms_gallery_migration_receive_manifest(): void
             'job_id' => $prepared['job_id'],
             'compatibility' => $prepared['compatibility'],
             'target_gallery_id' => (int) $gallery['id'],
-            'assets' => $prepared['assets'],
+            'imported_root_gallery_id' => (int) ($prepared['imported_root_gallery_id'] ?? 0),
+            'gallery_ids' => $prepared['gallery_ids'] ?? [],
+            'packages' => $prepared['packages'] ?? [],
+            'assets' => $prepared['assets'] ?? [],
             'counts' => $prepared['counts'],
+            'status' => $prepared['status'] ?? null,
         ]);
     } catch (Throwable $exception) {
         gallery_migration_json(['ok' => false, 'error' => $exception->getMessage()], 422);
@@ -252,6 +315,42 @@ function cms_gallery_migration_receive_asset(): void
         gallery_migration_json(['ok' => false, 'error' => $exception->getMessage()], 422);
     }
 }
+
+/**
+ * Receive one target migration ZIP package authorized by target gallery API key.
+ */
+function cms_gallery_migration_receive_package(): void
+{
+    if (request_method() !== 'POST') {
+        gallery_migration_json(['ok' => false, 'error' => gallery_migration_t('gallery_migration.error.method_not_allowed', 'Method not allowed.')], 405);
+        return;
+    }
+
+    try {
+        $authorized = gallery_migration_api_gallery();
+        $gallery = $authorized['gallery'];
+        $file = $_FILES['package'] ?? null;
+        if (!is_array($file) || (int) ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+            throw new RuntimeException(gallery_migration_t('gallery_migration.error.package_missing', 'Migration ZIP package is not available.'));
+        }
+        $tmpName = (string) ($file['tmp_name'] ?? '');
+        if ($tmpName === '' || !is_uploaded_file($tmpName)) {
+            throw new RuntimeException(gallery_migration_t('gallery_migration.error.package_missing', 'Migration ZIP package is not available.'));
+        }
+
+        $result = gallery_migration_install_package_file(
+            (string) ($_POST['job_id'] ?? ''),
+            (int) $gallery['id'],
+            (string) ($_POST['package_id'] ?? ''),
+            $tmpName
+        );
+        mark_upload_automation_token_used((int) ($authorized['token_row']['id'] ?? 0));
+        gallery_migration_json($result);
+    } catch (Throwable $exception) {
+        gallery_migration_json(['ok' => false, 'error' => $exception->getMessage()], 422);
+    }
+}
+
 
 /**
  * Complete a target migration job authorized by target gallery API key.
@@ -345,10 +444,12 @@ function cms_admin_gallery_migration(): void
         $payload = match ($action) {
             'pull_manifest' => gallery_migration_admin_pull_manifest($galleryId),
             'pull_asset' => gallery_migration_admin_pull_asset($galleryId),
+            'pull_package' => gallery_migration_admin_pull_package($galleryId),
             'pull_complete' => gallery_migration_admin_pull_complete($galleryId),
             'pull_status' => gallery_migration_job_status_response((string) ($_POST['job_id'] ?? ''), $galleryId, gallery_migration_asset_ref_from_input($_POST)),
             'push_manifest' => gallery_migration_admin_push_manifest($galleryId),
             'push_asset' => gallery_migration_admin_push_asset($galleryId),
+            'push_package' => gallery_migration_admin_push_package($galleryId),
             'push_status' => gallery_migration_admin_push_status(),
             'push_complete' => gallery_migration_admin_push_complete($galleryId),
             default => throw new RuntimeException(gallery_migration_t('gallery_migration.error.action_invalid', 'Unsupported migration action.')),
@@ -364,9 +465,9 @@ function cms_admin_gallery_migration(): void
 }
 
 /**
- * Fetch a remote source manifest and prepare the local target gallery.
+ * Fetch a remote source manifest and prepare a new child tree below the local target gallery.
  *
- * @param int $targetGalleryId Target gallery id identifier.
+ * @param int $targetGalleryId Receiving parent gallery id.
  * @return array Structured result data for the caller.
  */
 function gallery_migration_admin_pull_manifest(int $targetGalleryId): array
@@ -377,7 +478,10 @@ function gallery_migration_admin_pull_manifest(int $targetGalleryId): array
         throw new RuntimeException(gallery_migration_t('gallery_migration.error.api_key_required', 'Enter the migration API key.'));
     }
 
-    $endpoint = gallery_migration_endpoint_url($sourceUrl, 'gallery_migration_manifest');
+    $includeSubgalleries = gallery_migration_include_subgalleries($_POST);
+    $endpoint = gallery_migration_endpoint_url($sourceUrl, 'gallery_migration_manifest', [
+        'include_subgalleries' => $includeSubgalleries ? '1' : '0',
+    ]);
     $response = gallery_migration_http_get_json($endpoint, $sourceApiKey, gallery_migration_request_timeout_seconds());
     $manifest = $response['manifest'] ?? null;
     if (!is_array($manifest)) {
@@ -390,9 +494,13 @@ function gallery_migration_admin_pull_manifest(int $targetGalleryId): array
         'mode' => 'target_pull',
         'job_id' => $prepared['job_id'],
         'compatibility' => $prepared['compatibility'],
-        'assets' => $prepared['assets'],
+        'imported_root_gallery_id' => (int) ($prepared['imported_root_gallery_id'] ?? 0),
+        'gallery_ids' => $prepared['gallery_ids'] ?? [],
+        'packages' => $prepared['packages'] ?? [],
+        'assets' => $prepared['assets'] ?? [],
         'counts' => $prepared['counts'],
-        'message' => gallery_migration_t('gallery_migration.pull_manifest_ready', 'Source manifest accepted. Asset transfer can start.'),
+        'status' => $prepared['status'] ?? null,
+        'message' => gallery_migration_t('gallery_migration.pull_manifest_ready', 'Source manifest accepted. ZIP package transfer can start.'),
     ];
     return gallery_migration_admin_local_completion_payload($targetGalleryId, $payload);
 }
@@ -414,6 +522,7 @@ function gallery_migration_admin_pull_asset(int $targetGalleryId): array
     $request = gallery_migration_asset_ref_from_input($_POST);
     $endpoint = gallery_migration_endpoint_url($sourceUrl, 'gallery_migration_asset', array_filter([
         'scope' => $request['scope'],
+        'source_gallery_id' => $request['source_gallery_id'],
         'kind' => $request['kind'],
         'source_image_id' => $request['source_image_id'],
         'size' => $request['size'],
@@ -426,6 +535,44 @@ function gallery_migration_admin_pull_asset(int $targetGalleryId): array
         @unlink($tmp);
     }
 }
+
+/**
+ * Pull one source ZIP package and install it into the prepared local target tree.
+ *
+ * @param int $targetGalleryId Receiving parent gallery id.
+ * @return array Structured result data for the caller.
+ */
+function gallery_migration_admin_pull_package(int $targetGalleryId): array
+{
+    $sourceUrl = (string) ($_POST['source_url'] ?? '');
+    $sourceApiKey = trim((string) ($_POST['source_api_key'] ?? ''));
+    if ($sourceApiKey === '') {
+        throw new RuntimeException(gallery_migration_t('gallery_migration.error.api_key_required', 'Enter the migration API key.'));
+    }
+
+    $jobId = (string) ($_POST['job_id'] ?? '');
+    $packageId = (string) ($_POST['package_id'] ?? '');
+    $job = gallery_migration_load_job($jobId);
+    if ((int) ($job['target_gallery_id'] ?? 0) !== $targetGalleryId) {
+        throw new RuntimeException(gallery_migration_t('gallery_migration.error.job_target_mismatch', 'Migration job does not belong to this target gallery.'));
+    }
+    $package = gallery_migration_job_package($job, $packageId);
+    if ($package === null) {
+        throw new RuntimeException(gallery_migration_t('gallery_migration.error.package_not_in_job', 'Migration ZIP package is not part of this job.'));
+    }
+    $manifest = (array) ($job['manifest'] ?? []);
+    $endpoint = gallery_migration_endpoint_url($sourceUrl, 'gallery_migration_package');
+    $tmp = gallery_migration_http_post_form_to_file($endpoint, [
+        'assets_json' => json_encode((array) ($package['assets'] ?? []), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '[]',
+        'include_subgalleries' => !empty($manifest['include_subgalleries']) ? '1' : '0',
+    ], $sourceApiKey, gallery_migration_request_timeout_seconds());
+    try {
+        return gallery_migration_install_package_file($jobId, $targetGalleryId, $packageId, $tmp);
+    } finally {
+        @unlink($tmp);
+    }
+}
+
 
 /**
  * Complete a browser-driven pull into the local gallery and return canonical invalidation metadata.
@@ -441,7 +588,7 @@ function gallery_migration_admin_pull_complete(int $targetGalleryId): array
 }
 
 /**
- * Send the local source manifest to a remote target gallery.
+ * Send the local source manifest to a remote receiving parent gallery.
  *
  * @param int $sourceGalleryId Source gallery id identifier.
  * @return array Structured result data for the caller.
@@ -454,7 +601,8 @@ function gallery_migration_admin_push_manifest(int $sourceGalleryId): array
         throw new RuntimeException(gallery_migration_t('gallery_migration.error.api_key_required', 'Enter the migration API key.'));
     }
 
-    $manifest = gallery_migration_build_manifest($sourceGalleryId);
+    $includeSubgalleries = gallery_migration_include_subgalleries($_POST);
+    $manifest = gallery_migration_build_manifest($sourceGalleryId, $includeSubgalleries);
     $endpoint = gallery_migration_endpoint_url($targetUrl, 'gallery_migration_receive_manifest');
     $response = gallery_migration_http_post_form_json($endpoint, [
         'manifest_json' => json_encode($manifest, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}',
@@ -465,10 +613,13 @@ function gallery_migration_admin_push_manifest(int $sourceGalleryId): array
         'mode' => 'source_push',
         'job_id' => (string) ($response['job_id'] ?? ''),
         'compatibility' => $response['compatibility'] ?? null,
+        'imported_root_gallery_id' => (int) ($response['imported_root_gallery_id'] ?? 0),
+        'gallery_ids' => $response['gallery_ids'] ?? [],
+        'packages' => $response['packages'] ?? [],
         'assets' => gallery_migration_manifest_asset_refs_with_keys($manifest),
         'counts' => $response['counts'] ?? ($manifest['counts'] ?? ['assets' => count(gallery_migration_manifest_asset_refs($manifest))]),
         'status' => $response['status'] ?? null,
-        'message' => gallery_migration_t('gallery_migration.push_manifest_ready', 'Target accepted the manifest. Asset transfer can start.'),
+        'message' => gallery_migration_t('gallery_migration.push_manifest_ready', 'Target accepted the manifest. ZIP package transfer can start.'),
     ];
 }
 
@@ -492,12 +643,41 @@ function gallery_migration_admin_push_asset(int $sourceGalleryId): array
     return gallery_migration_http_post_file_json($endpoint, [
         'job_id' => (string) ($_POST['job_id'] ?? ''),
         'scope' => (string) $request['scope'],
+        'source_gallery_id' => (string) (int) $request['source_gallery_id'],
         'kind' => (string) $request['kind'],
         'source_image_id' => (string) (int) $request['source_image_id'],
         'size' => (string) (int) $request['size'],
         'format' => (string) $request['format'],
     ], $descriptor['path'], $descriptor['filename'], $descriptor['mime_type'], $targetApiKey, gallery_migration_request_timeout_seconds());
 }
+
+/**
+ * Build one local source ZIP package and push it to the remote target job.
+ *
+ * @param int $sourceGalleryId Source root gallery id.
+ * @return array Structured result data for the caller.
+ */
+function gallery_migration_admin_push_package(int $sourceGalleryId): array
+{
+    $targetUrl = (string) ($_POST['target_url'] ?? '');
+    $targetApiKey = trim((string) ($_POST['target_api_key'] ?? ''));
+    if ($targetApiKey === '') {
+        throw new RuntimeException(gallery_migration_t('gallery_migration.error.api_key_required', 'Enter the migration API key.'));
+    }
+
+    $assets = gallery_migration_package_assets_from_json((string) ($_POST['assets_json'] ?? ''));
+    $zipPath = gallery_migration_build_package_file($sourceGalleryId, $assets, gallery_migration_include_subgalleries($_POST));
+    try {
+        $endpoint = gallery_migration_endpoint_url($targetUrl, 'gallery_migration_receive_package');
+        return gallery_migration_http_post_file_json($endpoint, [
+            'job_id' => (string) ($_POST['job_id'] ?? ''),
+            'package_id' => (string) ($_POST['package_id'] ?? ''),
+        ], $zipPath, 'php-gallery-migration-package.zip', 'application/zip', $targetApiKey, gallery_migration_request_timeout_seconds(), 'package');
+    } finally {
+        @unlink($zipPath);
+    }
+}
+
 
 /**
  * Ask the remote target gallery which migration assets it already received.
@@ -517,6 +697,7 @@ function gallery_migration_admin_push_status(): array
     return gallery_migration_http_post_form_json($endpoint, [
         'job_id' => (string) ($_POST['job_id'] ?? ''),
         'scope' => (string) $request['scope'],
+        'source_gallery_id' => (string) (int) $request['source_gallery_id'],
         'kind' => (string) $request['kind'],
         'source_image_id' => (string) (int) $request['source_image_id'],
         'size' => (string) (int) $request['size'],
@@ -550,57 +731,49 @@ function gallery_migration_admin_push_complete(int $sourceGalleryId): array
 }
 
 /**
- * Add the canonical side-panel mutation envelope to a local target-pull result.
+ * Add canonical invalidation metadata to a local target-pull result.
  *
- * Gallery Migration owns progress/result markup while transfer is running. The envelope also
- * identifies the owning gallery-editor fragment because imported metadata makes the other editor
- * tabs stale. The browser decides when to refresh that fragment, while canonical render mode
- * handles imported slug/path changes without rewriting the visible browser URL behind the drawer.
+ * The selected gallery remains the receiving parent. Imported source metadata
+ * belongs to a newly created child tree, so the receiving parent public context
+ * is invalidated without replacing the editor fragment currently hosting the
+ * migration tool.
  *
- * @param int $galleryId Local target gallery id.
+ * @param int $galleryId Local receiving parent gallery id.
  * @param array<string,mixed> $payload Existing migration step/completion payload.
- * @return array<string,mixed> Existing fields plus canonical mutation completion metadata.
+ * @return array<string,mixed> Existing fields plus canonical mutation metadata.
  */
 function gallery_migration_admin_local_completion_payload(int $galleryId, array $payload): array
 {
-    $gallery = find_gallery($galleryId, true) ?: find_gallery($galleryId);
-    $renderUrl = $gallery ? gallery_public_url($gallery) : (string) ($payload['gallery_url'] ?? '');
+    $parent = find_gallery($galleryId, true) ?: find_gallery($galleryId);
     $contexts = [];
-    if ($galleryId > 0 && $renderUrl !== '') {
-        $updatedAt = trim((string) ($gallery['updated_at'] ?? ''));
+    if ($parent) {
         $contexts[] = admin_mutation_public_gallery_context(
             $galleryId,
-            $renderUrl,
-            $updatedAt !== ''
-                ? admin_mutation_postcondition('gallery_updated_at', ['gallery_id' => $galleryId, 'updated_at' => $updatedAt])
-                : admin_mutation_postcondition('gallery_identity', ['gallery_id' => $galleryId]),
+            gallery_public_url($parent),
+            admin_mutation_postcondition('gallery_identity', ['gallery_id' => $galleryId]),
             'canonical'
         );
+    }
 
-        // The parent/root card can change when imported title, visibility, slug, or display metadata changes.
-        $parentId = (int) ($gallery['parent_id'] ?? 0);
-        $parent = $parentId > 0 ? find_gallery($parentId, true) : null;
+    $importedRootId = (int) ($payload['imported_root_gallery_id'] ?? 0);
+    $importedRoot = $importedRootId > 0 ? (find_gallery($importedRootId, true) ?: find_gallery($importedRootId)) : null;
+    if ($importedRoot) {
         $contexts[] = admin_mutation_public_gallery_context(
-            $parentId,
-            is_array($parent) ? gallery_public_url($parent) : url_for('home'),
-            $updatedAt !== ''
-                ? admin_mutation_postcondition('gallery_updated_at', ['gallery_id' => $galleryId, 'updated_at' => $updatedAt])
-                : null
+            $importedRootId,
+            gallery_public_url($importedRoot),
+            admin_mutation_postcondition('gallery_identity', ['gallery_id' => $importedRootId]),
+            'canonical'
         );
     }
-    $message = (string) ($payload['message'] ?? gallery_migration_t('gallery_migration.local_state_changed', 'Local gallery migration state changed.'));
-    $panelUrl = url_for('admin_edit_gallery', ['id' => $galleryId, 'panel' => 1]);
-    $envelope = admin_mutation_success_envelope(
-        $message,
-        gallery_migration_admin_mutation_descriptor('pull_complete', $galleryId),
-        admin_mutation_panel_metadata('gallery-edit', $panelUrl, true),
-        $contexts,
-        []
-    );
 
-    // Existing transfer fields stay available to the migration progress UI during Stage 3 migration.
+    $message = (string) ($payload['message'] ?? gallery_migration_t('gallery_migration.local_state_changed', 'Local gallery migration state changed.'));
+    $entityIds = array_values(array_filter(array_map('intval', (array) ($payload['gallery_ids'] ?? [])), static fn (int $id): bool => $id > 0));
+    $descriptor = admin_mutation_descriptor('gallery', 'gallery', 'pull_complete', $entityIds ?: [$galleryId]);
+    $envelope = admin_mutation_success_envelope($message, $descriptor, null, $contexts, []);
+
     return array_merge($payload, $envelope, [
         'gallery_id' => $galleryId,
+        'target_parent_gallery_id' => $galleryId,
     ]);
 }
 

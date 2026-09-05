@@ -102,12 +102,12 @@ assert.match(
 
 assert.match(
     sidePanelSource,
-    /created_gallery:\s*Boolean\(emptyResult\.created_gallery\)/,
-    'Empty create-and-upload must preserve created_gallery in the classic upload result.'
+    /return \{\s*\.\.\.emptyResult,[\s\S]*created_gallery/,
+    'Empty create-and-upload must preserve the canonical server result, including created_gallery.'
 );
 assert.match(
     sidePanelSource,
-    /createdGallery\s*=\s*createdGallery\s*\|\|\s*Boolean\(uploadResult\.created_gallery\)/,
+    /const resultCreatedGallery = Boolean\(uploadResult\.created_gallery\);[\s\S]*createdGallery = createdGallery \|\| resultCreatedGallery;/,
     'Per-file classic upload aggregation must preserve created_gallery.'
 );
 assert.match(
@@ -145,17 +145,17 @@ assert.match(
 );
 assert.match(
     adminOperationsSource,
-    /admin-side-panel\.js\?v=20260902-mutation-stage4-v1/,
+    /admin-side-panel\.js\?v=20260903-oversized-single-batch-v1/,
     'admin-operations must cache-bust the changed side-panel module.'
 );
 assert.match(
     sidePanelSource,
-    /admin-browser-upload\.js\?v=20260902-mutation-stage2-v1/,
+    /admin-browser-upload\.js\?v=20260903-oversized-single-batch-v1/,
     'The side-panel module must cache-bust the changed browser-upload module.'
 );
 assert.match(
     galleryEntrySource,
-    /admin-operations\.js\?v=20260902-mutation-stage4-v1/,
+    /admin-operations\.js\?v=20260903-oversized-single-batch-v1/,
     'The gallery entrypoint must cache-bust the changed admin operations module.'
 );
 

@@ -1,6 +1,6 @@
 # PHP Gallery Database Documentation
 
-This document describes the database schema used by PHP Gallery as of application version 0.95.4. Version 0.95.4 introduces no schema change; the updater server-policy reconciliation migration from Version 0.94.5 remains the newest migration. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
+This document describes the database schema used by PHP Gallery as of application version 0.96. Version 0.96 introduces no schema change; the updater server-policy reconciliation migration from Version 0.94.5 remains the newest migration. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
 
 ## Database Engine
 

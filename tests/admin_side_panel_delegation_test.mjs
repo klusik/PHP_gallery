@@ -20,9 +20,9 @@ assert(source.includes("form.matches('[data-smart-gallery-panel-form]')"), 'Dyna
 assert(source.includes("form.matches('[data-admin-panel-scan-images-form]')"), 'Dynamically injected scan/import forms must remain delegated.');
 assert(source.includes("form.matches('[data-admin-panel-ai-reprocess-form]')"), 'Dynamically injected AI reprocess forms must remain delegated.');
 assert(source.includes("form.matches('[data-admin-upload-automation-token-form]')"), 'Dynamically injected API-key forms must remain delegated.');
-assert(source.includes("submitAdminPanelAuxiliaryMutation(form, 'scan-import'"), 'Scan/import must use the shared auxiliary completion path.');
-assert(source.includes("submitAdminPanelAuxiliaryMutation(form, 'force-ai-reprocess'"), 'AI reprocess must use the shared auxiliary completion path.');
-assert(source.includes("completeCoreGalleryMutationInCurrentView(result, source)"), 'Auxiliary side-panel success must reach the canonical coordinator.');
+assert(source.match(/data-admin-panel-scan-images-form[\s\S]*submitAdminPanelAuxiliaryMutation\(form, event\.submitter/), 'Scan/import must use the shared auxiliary completion path.');
+assert(source.match(/data-admin-panel-ai-reprocess-form[\s\S]*submitAdminPanelAuxiliaryMutation\(form, event\.submitter/), 'AI reprocess must use the shared auxiliary completion path.');
+assert(source.includes('await completeCoreGalleryMutationInCurrentView(result);'), 'Auxiliary side-panel success must reach the canonical coordinator.');
 
 const completionPath = path.join(projectRoot, 'public/assets/gallery-modules/admin-mutation-completion.js');
 const completionSource = await fs.readFile(completionPath, 'utf8');
