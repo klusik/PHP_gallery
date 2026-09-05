@@ -53,8 +53,8 @@ deploy_folder=""
 upload_media=""
 # Variable make_zip_deploy stores whether a zip package is created.
 make_zip_deploy=""
-# Variable include_tests stores whether a local source package includes repository tests.
-include_tests="false"
+# Variable include_tests stores an explicit CLI override for including repository tests.
+include_tests=""
 # Variable deploy_target stores the resolved local deployment target.
 deploy_target=""
 
@@ -354,22 +354,6 @@ if [[ "$mode" != "local" && "$mode" != "ftp" ]]; then
     exit 2
 fi
 
-# Tests are source-review material, not production deployment content. Keep the
-# default exclusion and refuse an FTP opt-in so the suite cannot be uploaded by accident.
-if is_truthy "$include_tests"; then
-    if [[ "$mode" == "ftp" ]]; then
-        printf '%s\n' 'Tests may be included only in local deployment folders or ZIP packages.' >&2
-        exit 2
-    fi
-    filtered_exclude_dir_names=()
-    for excluded_dir_name in "${exclude_dir_names_anywhere[@]}"; do
-        if [[ "$excluded_dir_name" != "tests" ]]; then
-            filtered_exclude_dir_names+=("$excluded_dir_name")
-        fi
-    done
-    exclude_dir_names_anywhere=("${filtered_exclude_dir_names[@]}")
-fi
-
 # Variable include_media stores this scripts working value.
 include_media="false"
 if [[ -n "$upload_media" ]]; then
@@ -386,6 +370,36 @@ fi
 
 if [[ "$include_media" != "true" ]]; then
     exclude_dirs+=("galleries")
+fi
+
+# Variable include_repository_tests stores whether repository tests are included in this deploy.
+include_repository_tests="false"
+if [[ -n "$include_tests" ]]; then
+    if is_truthy "$include_tests"; then
+        include_repository_tests="true"
+    fi
+elif [[ "$mode" == "local" ]]; then
+    # Variable tests_answer stores the interactive tests-folder choice.
+    tests_answer="$(read_answer 'Include tests folder? y/N ')"
+    if [[ "$tests_answer" =~ ^[Yy] ]]; then
+        include_repository_tests="true"
+    fi
+fi
+
+# Tests are source-review material, not production deployment content. Keep the
+# default exclusion and refuse an FTP opt-in so the suite cannot be uploaded by accident.
+if [[ "$include_repository_tests" == "true" ]]; then
+    if [[ "$mode" == "ftp" ]]; then
+        printf '%s\n' 'Tests may be included only in local deployment folders or ZIP packages.' >&2
+        exit 2
+    fi
+    filtered_exclude_dir_names=()
+    for excluded_dir_name in "${exclude_dir_names_anywhere[@]}"; do
+        if [[ "$excluded_dir_name" != "tests" ]]; then
+            filtered_exclude_dir_names+=("$excluded_dir_name")
+        fi
+    done
+    exclude_dir_names_anywhere=("${filtered_exclude_dir_names[@]}")
 fi
 
 if [[ "$mode" == "ftp" ]]; then
