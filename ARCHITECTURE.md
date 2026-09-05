@@ -9,7 +9,7 @@ This document is intended to help future maintainers and AI coding agents unders
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.96';
+const CMS_VERSION = '0.96.1';
 ```
 
 Update-related code uses:
@@ -1564,7 +1564,7 @@ Stage 7 adds four deployment-tunable defaults in `app/configuration_defaults.php
 
 Tests live in `tests/`. Current tests are direct PHP scripts rather than a PHPUnit suite.
 
-`tests/run.php` deterministically runs the PHP `*_test.php` scripts without a production database or runtime-data mutation. JavaScript `*_test.mjs` models remain separate Node commands. Deployment filtering treats the suite as source-review material: it is excluded by default and may be included only in an explicitly opted-in local folder or ZIP, never an FTP deployment.
+`scripts/audit.php` is the canonical source-tree quality gate. It runs isolated PHP regressions, explicitly registered Node models and fixtures, WinApp Python unittests, syntax checks, repository contract utilities, and profile-specific release checks behind one bounded orchestration layer. `scripts/audit_registry.php` owns exceptional invocations such as temporary ZIP outputs, the slow ZIP64 boundary test, browser integration, and per-test extension requirements; broad filename globs are not used for Node execution. Successful child stdout is collapsed into suite counts, while Markdown/JSON summaries and drill-down logs are written under `cache/test-audit/`. `quick`, `full`, and `release` profiles separate edit-cycle, deterministic full-tree, and release-only work. PASS/FAIL/SKIP/BLOCKED remain distinct so unavailable MySQL/browser/GD coverage cannot be misreported as a passing assertion. `tests/run.php` is a compatibility wrapper for the PHP-regression suite only. Deployment filtering still treats `tests/` as source-review material: it is excluded by default and may be included only in an explicitly opted-in local folder or ZIP, never an FTP deployment.
 
 Examples:
 

@@ -2,7 +2,7 @@
 
 A modern PHP 8.1+ gallery CMS designed for ordinary shared hosting. The application uses the filesystem as the authoritative source for gallery structure, while storing all metadata, access rules, votes, user accounts, and audit logs in MySQL or MariaDB.
 
-**Current Version:** 0.96
+**Current Version:** 0.96.1
 
 **Key Benefit:** Deploy in minutes on shared hosting. No npm, no Composer, no framework overhead. Just PHP + MySQL.
 
@@ -878,14 +878,14 @@ The codebase is organized for easy extension:
 Run the complete standalone regression suite:
 
 ```bash
-php tests/run.php
+php scripts/audit.php --profile=full
 ```
 
-The tracked `tests/` tree is the authoritative framework-free suite. Run standalone JavaScript models separately with `node tests/<name>_test.mjs`; `TESTING.md` lists the complete command sequence. Production deployment packages exclude tests by default. For a local source-review ZIP, use `./deploy.sh --mode local --deploy-folder deploy --upload-media false --make-zip-deploy true --include-tests true` (PowerShell: `scripts/deploy.ps1 -Mode local -DeployFolder deploy -UploadMedia false -MakeZipDeploy true -IncludeTests true`). The opt-in is refused for FTP deployment.
+The tracked `tests/` tree is the authoritative framework-free suite, and `php scripts/audit.php` is its canonical orchestration entrypoint. Use `--profile=quick` during edit cycles, `--profile=full` for complete deterministic source verification, and `--profile=release` before publishing. The runner executes PHP, explicitly registered Node, WinApp Python, syntax, contract, and release-specific checks without streaming successful child output into the agent context. It writes a compact `cache/test-audit/latest.md`, a machine-readable `latest.json`, and per-suite drill-down logs. Direct focused PHP/Node commands are for diagnosis, not the default full-suite workflow. `php tests/run.php` remains a PHP-suite compatibility wrapper. Production deployment packages exclude tests by default. For a local source-review ZIP, use `./deploy.sh --mode local --deploy-folder deploy --upload-media false --make-zip-deploy true --include-tests true` (PowerShell: `scripts/deploy.ps1 -Mode local -DeployFolder deploy -UploadMedia false -MakeZipDeploy true -IncludeTests true`). The opt-in is refused for FTP deployment.
 
 ### Release preparation
 
-Release work is performed from a clean reviewable branch. Compare the branch with the previous release tag, inspect every commit and changed path, and confirm new migrations are ordered, idempotent under the project runner, and included in upgrade coverage. Update the runtime version, `release-metadata.json`, `PATCH_NOTES.md`, documentation version markers, cache-busting browser imports, and all affected user/developer documentation. Compile and visually inspect `docs/PHP_Gallery_Manual.pdf`; run the complete regression suite, focused PHP/Node tests, PHP and JavaScript syntax checks, migration consistency checks, translation consistency, and `git diff --check`. Finally run `php scripts/generate_manifest.php` followed by `php scripts/generate_manifest.php --check`; the generated `app/core-manifest.json` must be included in every release package. Inspect the packaged tree and confirm its version, patch-note heading, release-metadata tag, migration set, manual edition, and manifest agree before creating the release commit and `v_<version>` tag. The deployment helpers only collect files and create a folder or ZIP, so manifest generation and verification remain explicit release steps. See `TESTING.md` and `docs/LATEX_BUILD.md` for the authoritative checklist.
+Release work is performed from a clean reviewable branch. Compare the branch with the previous release tag, inspect every commit and changed path, and confirm new migrations are ordered, idempotent under the project runner, and included in upgrade coverage. Update the runtime version, `release-metadata.json`, `PATCH_NOTES.md`, documentation version markers, cache-busting browser imports, and all affected user/developer documentation. Compile and visually inspect `docs/PHP_Gallery_Manual.pdf`; run `php scripts/audit.php --profile=release`, then inspect `cache/test-audit/latest.md` for any skipped or blocked coverage that still requires manual qualification. The release profile centralizes the regression suites, syntax checks, contract checks, manifest freshness, browser integration when the host can safely provide a Chromium-family executable, and `git diff --check`. Regenerate the manifest before the final release audit with `php scripts/generate_manifest.php`; then the audit's manifest check must remain green. The generated `app/core-manifest.json` must be included in every release package. Inspect the packaged tree and confirm its version, patch-note heading, release-metadata tag, migration set, manual edition, and manifest agree before creating the release commit and `v_<version>` tag. The deployment helpers only collect files and create a folder or ZIP, so manifest generation and verification remain explicit release steps. See `TESTING.md` and `docs/LATEX_BUILD.md` for the authoritative checklist.
 
 The runner discovers every tracked `tests/*_test.php` script deterministically. Individual scripts can still be run directly when isolating a behavior. The project intentionally has no Composer or PHPUnit dependency.
 

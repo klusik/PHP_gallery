@@ -40,7 +40,7 @@ param(
     [string]$DeployFolder,
     [string]$UploadMedia,
     [string]$MakeZipDeploy,
-    [string]$IncludeTests = 'false'
+    [string]$IncludeTests
 )
 
 if (-not $Mode) {
@@ -48,12 +48,6 @@ if (-not $Mode) {
     $answer = Read-Host "Deployment mode: local deploy folder or FTP upload? [L/f]"
     # Variable $Mode stores this scripts working value.
     $Mode = if ($answer -match '^[Ff]') { 'ftp' } else { 'local' }
-}
-# Tests are source-review material, not production deployment content. Keep the
-# default exclusion and refuse an FTP opt-in so the suite cannot be uploaded by accident.
-$includeRepositoryTests = ($IncludeTests -match '^(1|true|yes|y)$')
-if ($includeRepositoryTests -and $Mode -eq 'ftp') {
-    throw 'Tests may be included only in local deployment folders or ZIP packages.'
 }
 # Variable $includeMedia stores this scripts working value.
 $includeMedia = $false
@@ -63,6 +57,20 @@ if ($PSBoundParameters.ContainsKey('UploadMedia')) {
 } else {
     # Variable $includeMedia stores this scripts working value.
     $includeMedia = ((Read-Host "Upload media folders? y/N") -match '^[Yy]')
+}
+# Variable $includeRepositoryTests stores whether repository tests are included in this deploy.
+$includeRepositoryTests = $false
+if ($PSBoundParameters.ContainsKey('IncludeTests')) {
+    # Variable $includeRepositoryTests stores the explicit command-line tests-folder choice.
+    $includeRepositoryTests = ($IncludeTests -match '^(1|true|yes|y)$')
+} elseif ($Mode -eq 'local') {
+    # Variable $includeRepositoryTests stores the interactive tests-folder choice.
+    $includeRepositoryTests = ((Read-Host "Include tests folder? y/N") -match '^[Yy]')
+}
+# Tests are source-review material, not production deployment content. Keep the
+# default exclusion and refuse an FTP opt-in so the suite cannot be uploaded by accident.
+if ($includeRepositoryTests -and $Mode -eq 'ftp') {
+    throw 'Tests may be included only in local deployment folders or ZIP packages.'
 }
 if ($Mode -eq 'ftp') {
     if (-not $HostName) { $HostName = Read-Host "FTP host" }

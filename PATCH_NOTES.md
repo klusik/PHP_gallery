@@ -1,5 +1,52 @@
 # Patch notes
 
+## Version 0.96.1
+
+Version 0.96.1 is a maintenance release with no schema, migration, or user-facing behavior changes. It introduces a central audit runner that consolidates the project's PHP, Node, and WinApp regression suites behind three selectable profiles, and hardens the local/ZIP deployment scripts' tests-folder opt-in prompt. Release verification for this version is a superset of the Version 0.96 checklist run through the new central runner.
+
+### Highlights
+
+#### Central test audit runner
+
+- Added a single orchestration entrypoint that runs the complete PHP regression suite, the registered Node test suite, and the WinApp Python suite behind three profiles: `quick` (fast, Git-changed-file syntax checks plus the full PHP regression suite), `full` (complete deterministic source verification including the slow ZIP64 boundary fixture and full PHP/JavaScript syntax validation), and `release` (adds Chromium map integration, `app/core-manifest.json` freshness, and `git diff --check`).
+- Replaced ad-hoc per-suite invocation with structured, persisted reporting: a compact `cache/test-audit/latest.md`, a machine-readable `cache/test-audit/latest.json`, and per-suite drill-down logs under `cache/test-audit/<run-id>/`.
+- Kept `php tests/run.php` working as a thin compatibility wrapper that delegates to `php scripts/audit.php --suite=php-regression --no-report`.
+
+#### Deployment tests-folder prompt
+
+- Fixed the local/ZIP deployment scripts (`scripts/deploy.sh`, `scripts/deploy.ps1`) so the tests-folder inclusion choice is asked interactively for local-mode runs when not supplied on the command line, instead of silently defaulting to excluded.
+- Kept the existing safeguard that refuses the tests-folder opt-in for FTP deployments.
+
+### Technical Details
+
+#### Backend
+
+- Added `scripts/audit.php` as the central orchestrator: subprocess management, profile selection, verbose/quiet modes, and structured Markdown/JSON report generation.
+- Added `scripts/audit_lib.php` with reusable audit utilities: registry loading, suite execution, result normalization, and subprocess output capture.
+- Added `scripts/audit_registry.php` as the registry-driven source of truth for every registered Node test's execution arguments, environment requirements, and output-parsing rules, so Node coverage is no longer discovered through a blind `*_test.mjs` glob.
+- Simplified `tests/run.php` to delegate to the central audit runner for backward compatibility.
+- Fixed `winapp/tests/test_redesign.py` so its SimConnect regression correctly exercises the nonfatal missing-DLL fallback branch instead of assuming a deliberately invalid manual override means no usable SimConnect DLL exists.
+- Updated `scripts/deploy.sh` and `scripts/deploy.ps1` to prompt for the tests-folder inclusion choice on local-mode runs when `--include-tests`/`-IncludeTests` is not explicitly provided.
+
+#### Tests
+
+- Added `tests/audit_runner_test.php` as a meta-test that prevents unregistered Node tests from silently escaping profile coverage and guards against profile drift.
+
+#### Documentation
+
+- Updated `AGENTS.md`, `ARCHITECTURE.md`, `CODEMAP.md`, `README.md`, and `TESTING.md` to describe the central audit runner, its profiles, Python-discovery behavior, and the updated deployment tests-folder prompt as the canonical verification workflow.
+- Regenerated `app/core-manifest.json` after the final source, test, version, and documentation changes.
+
+### User Impact
+
+#### For administrators
+
+- No visible change to the public site, Admin UI, or any stored data. This release exists to make release verification faster and more reliable for maintainers.
+
+#### For visitors
+
+- No user-facing change.
+
 ## Version 0.96
 
 Version 0.96 expands gallery-to-gallery migration into a resumable hierarchy transfer. Administrators can move one gallery or its complete descendant tree between compatible PHP Gallery installations, recreate the imported hierarchy safely below a selected receiving gallery, and transfer originals, existing thumbnails, gallery assets, and metadata in bounded ZIP packages that resume after interrupted connections.

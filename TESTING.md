@@ -1,26 +1,74 @@
 # Testing Guide
 
-This guide applies to PHP Gallery Version 0.96. Release verification must include recursive, resumable gallery migration with bounded ZIP packages and imported child-tree reconstruction; canonical map-marker photo-page fallbacks and in-viewer map navigation across physical-gallery pagination, fullscreen split-map persistence, the canonical Admin side-panel mutation envelope and completion coordinator, multi-context postcondition verification, stale/out-of-order suppression, browser upload pipeline safeguards, opened-gallery branch image counters and their Theme/per-gallery visibility policy, progressive thumbnail dimension detection and responsive compatibility, the Version 0.93 request-budget/TTFB behavior, request-local database caching, resumable updater safety, updater server-policy reconciliation, Admin test-run diagnostics, public media concurrency and cache invalidation, clean-home URL handling, upload auto-renaming and inventory behavior, the redesigned Windows uploader, the Windows HTTP monitor schedules/protocol snapshots/report ZIPs, deployment exclusion rules, lightbox detached-image cleanup, decoded-cache ownership, preload-generation invalidation, teardown/reopen cycles, public lightbox zoom and progressive quality promotion, Shift+Left/Right ten-photo navigation, public Smart Gallery visibility, presentation settings, cycle-safe placement/order evaluation, viewer account privacy/access, collection sharing, bounded gallery benchmark diagnostics, access intersection and pagination; multilingual gallery/photo content and fallbacks; browser-local ZIP imports; progressive gallery and Smart Gallery ZIP downloads; browser download symbol rendering; ordered migration upgrades; complete deployment packaging; updater safety; the configurable public language selector; hourly automatic-update throttling; and the supported English, Czech, German, and Swedish catalogs.
+This guide applies to PHP Gallery Version 0.96.1. Release verification must include the central audit runner's `quick`/`full`/`release` profiles and the deployment scripts' interactive tests-folder prompt, plus the retained Version 0.96 coverage: recursive, resumable gallery migration with bounded ZIP packages and imported child-tree reconstruction; canonical map-marker photo-page fallbacks and in-viewer map navigation across physical-gallery pagination, fullscreen split-map persistence, the canonical Admin side-panel mutation envelope and completion coordinator, multi-context postcondition verification, stale/out-of-order suppression, browser upload pipeline safeguards, opened-gallery branch image counters and their Theme/per-gallery visibility policy, progressive thumbnail dimension detection and responsive compatibility, the Version 0.93 request-budget/TTFB behavior, request-local database caching, resumable updater safety, updater server-policy reconciliation, Admin test-run diagnostics, public media concurrency and cache invalidation, clean-home URL handling, upload auto-renaming and inventory behavior, the redesigned Windows uploader, the Windows HTTP monitor schedules/protocol snapshots/report ZIPs, deployment exclusion rules, lightbox detached-image cleanup, decoded-cache ownership, preload-generation invalidation, teardown/reopen cycles, public lightbox zoom and progressive quality promotion, Shift+Left/Right ten-photo navigation, public Smart Gallery visibility, presentation settings, cycle-safe placement/order evaluation, viewer account privacy/access, collection sharing, bounded gallery benchmark diagnostics, access intersection and pagination; multilingual gallery/photo content and fallbacks; browser-local ZIP imports; progressive gallery and Smart Gallery ZIP downloads; browser download symbol rendering; ordered migration upgrades; complete deployment packaging; updater safety; the configurable public language selector; hourly automatic-update throttling; and the supported English, Czech, German, and Swedish catalogs.
 
 ## Purpose
-This project is a plain PHP gallery CMS without a formal browser automation stack. The most reliable testing approach is a mix of fast syntax checks, focused script-level checks, and a repeatable manual smoke-test scenario that exercises the core gallery lifecycle.
+This project is a plain PHP gallery CMS without a formal browser automation stack. Automated verification is centralized through `scripts/audit.php`; focused commands documented later are diagnostic and manual-acceptance tools, not a second test plan that agents should execute in addition to the audit.
+
+
+## Central Audit Runner
+
+### Agent execution rule
+
+Automated agents must use the central audit runner as the default and authoritative verification interface. **This rule overrides later wording such as "run these tests", "run", or lists of focused PHP/Node commands elsewhere in this guide.** Those lists document coverage ownership and give humans/agents precise reproduction commands after a failure; they are not instructions to replay the regression tree before or after a successful central audit.
+
+For normal agent work:
+
+```text
+edit/debug cycle          php scripts/audit.php --profile=quick
+final code handoff/ZIP    php scripts/audit.php --profile=full
+actual release            php scripts/audit.php --profile=release
+```
+
+Do not enumerate `tests/`, do not create shell/PowerShell loops over test files, do not run every focused command listed in a feature section, and do not separately run whole-tree `php -l`/`node --check` passes when the selected audit profile already performs them. Run a focused command only to reproduce a specific audit failure, develop/register a new test, perform genuinely manual/browser acceptance outside the automated runner, or satisfy an explicit user request. Once diagnosis is complete, rerun the appropriate central profile once rather than manually replaying sibling tests.
+
+The central runner intentionally suppresses passing child stdout to protect agent context. Read the console summary first; read `cache/test-audit/latest.md` only when needed; open raw suite logs only for `FAIL`, `BLOCKED`, or a materially relevant `SKIP`. A successful suite does not justify reading its raw log.
+
+
+```bash
+php scripts/audit.php --profile=quick
+php scripts/audit.php --profile=full
+php scripts/audit.php --profile=release
+```
+
+`quick` keeps the complete PHP regression suite but omits intentionally slow/browser-only work and prefers Git-changed PHP/JavaScript syntax targets. If Git metadata is unavailable, changed-file linting safely falls back to the full source tree. `full` runs all deterministic source checks, including the slow ZIP64 boundary fixture and full PHP/JavaScript syntax validation. `release` adds Chromium map integration when the host can safely provide a browser, `app/core-manifest.json` freshness, and `git diff --check` when checkout metadata is available.
+
+The runner captures subprocess stdout/stderr instead of streaming passing-test noise. Its console output is deliberately compact, but it prints and flushes a `RUN` line before every suite and that suite's normalized result immediately after completion, so long Windows process-spawn phases never look like a hung command. Normal persisted output is:
+
+```text
+cache/test-audit/latest.md
+cache/test-audit/latest.json
+cache/test-audit/<run-id>/report.md
+cache/test-audit/<run-id>/report.json
+cache/test-audit/<run-id>/*.log
+```
+
+Read `latest.md` first. Open a suite log only when that suite is `FAIL` or `BLOCKED`, or when diagnosing a `SKIP`. Status has strict meaning: `PASS` executed and passed; `FAIL` executed and detected a regression; `SKIP` is intentionally unavailable optional coverage such as a missing real browser or self-skipped database integration; `BLOCKED` means required coverage could not execute because its source/dependency is unavailable. The overall command exits `0` on PASS, `1` on FAIL, and `2` on BLOCKED.
+
+Node execution is registry-driven through `scripts/audit_registry.php`, not a blind `*_test.mjs` glob. This is required because ZIP writer fixtures need temporary output arguments, the ZIP64 test is deliberately slow, and the real lightbox browser test needs a Chromium-family executable. Per-test PHP environment requirements also belong in that registry. `tests/audit_runner_test.php` prevents unregistered Node tests and profile drift.
+
+Python discovery is execution-based rather than filesystem-only. The runner probes `python3 --version`, `python --version`, and `py -3 --version` in order and accepts only a successful Python 3 response. This is intentional on Windows: App Execution Aliases and launchers can be runnable from `PATH` even when PHP does not expose the alias as an ordinary file to `is_file()`. `PHP_GALLERY_PYTHON` remains available as an explicit executable-name/path override and is validated by the same Python 3 probe before WinApp tests start.
+
+WinApp tests that exercise optional host integrations must remain isolated from the developer workstation. In particular, SimConnect tests must not assume that a deliberately invalid manual override means no usable SimConnect DLL exists: the runtime intentionally falls back to automatic DLL discovery. The regression fixture therefore stubs DLL resolution when testing the nonfatal missing-DLL branch. The audit also parses Python `unittest` trailers so the compact console/report summary distinguishes passed tests, assertion failures, errors, and skips without dumping the full Python log.
+
+`php tests/run.php` is retained only for compatibility and delegates to `scripts/audit.php --suite=php-regression --no-report`. It is not an agent entrypoint. Focused commands elsewhere in this document are reproduction/diagnostic references or manual acceptance steps only; the global agent execution rule above takes precedence over them. Do not pre-run focused tests "just in case", and do not replay them after a successful central audit. Duplicate runs are justified only while investigating a concrete failure or validating a new test before registry integration.
 
 ## Multilingual Content
 
 Run `php tests/content_localization_model_test.php`, `php tests/admin_content_localization_test.php`, `php tests/public_content_localization_test.php`, `php tests/openai_text_assist_model_test.php`, `php tests/public_language_preference_test.php`, `php tests/translation_catalog_consistency_test.php`, and `php tests/migration_consistency_test.php`.
 
-Coverage includes unclassified existing content, all maintained languages, invalid-language rejection, independent gallery-field fallback, non-mixed photo caption variants, blank-row deletion, batch/cache behavior, side-panel FormData ownership, access-before-localization ordering, server-rendered cards/lightbox/SEO, translated search terms, sidecar transfer, and review-only provider drafts. Translation behavior must not alter slugs, paths, ordering, filenames, visibility, access, NSFW, or media authorization. Finish with syntax checks for changed PHP files and `php tests/run.php`.
+Coverage includes unclassified existing content, all maintained languages, invalid-language rejection, independent gallery-field fallback, non-mixed photo caption variants, blank-row deletion, batch/cache behavior, side-panel FormData ownership, access-before-localization ordering, server-rendered cards/lightbox/SEO, translated search terms, sidecar transfer, and review-only provider drafts. Translation behavior must not alter slugs, paths, ordering, filenames, visibility, access, NSFW, or media authorization. Finish with syntax checks for changed PHP files and `php scripts/audit.php --profile=full`.
 
 ## Test Layers
 
 ### 1. Syntax Checks
-Use these first when touching PHP or JavaScript:
+Syntax checks are owned by the central audit during normal agent verification. For targeted diagnosis of a parser failure, a single file can still be checked directly:
 
 ```bash
 php -l path/to/file.php
 ```
 
-For JavaScript, use whatever local parser or linter is available in your environment. Syntax checks catch obvious breakage, but they do not prove the app still behaves correctly.
+The full profile performs repository PHP and JavaScript syntax validation automatically. Do not duplicate that work with a second manual tree walk after the audit.
 
 ### Version 0.96 recursive gallery migration
 
@@ -32,7 +80,7 @@ php tests/mutation_schema_policy_test.php
 php tests/stage3_auxiliary_mutation_contract_test.php
 php tests/translation_catalog_consistency_test.php
 node --check public/assets/gallery-modules/admin-gallery-migration.js
-php tests/run.php
+php scripts/audit.php --profile=full
 ```
 
 The focused model test exercises production helpers for legacy and recursive manifest normalization, parent-first tree validation, cross-gallery asset identity, atomic original/thumbnail grouping, deterministic receiver-sized package plans, soft and hard byte limits, package JSON validation, and malformed-tree rejection. The full suite retains route, feature-flag, SEO guard, schema policy, localization, function-documentation, cache-revision, and manifest integration coverage.
@@ -126,7 +174,7 @@ Stage 7 reduces repeated progressive-manifest filesystem cost without weakening 
 9. For the no-JavaScript legacy path, mutate a source file size after a manifest has been cached. Before any ZIP build, the server must recompute current aggregate source bytes, invalidate stale manifest metadata on mismatch, and enforce `download.legacy_max_source_bytes` against actual bytes rather than the cached total.
 10. Run scheduled/site maintenance and confirm expired/corrupt manifest metadata and old partials are removed within `download.manifest_cache_cleanup_max_entries`; unrelated ZIP/cache/media files must not be touched by this cleanup.
 11. Disable JavaScript and verify the explicit Stage 4-6 bounded legacy POST fallback still works for a small physical and Smart Gallery. Re-enable JavaScript and verify both progressive downloads end-to-end, including ZIP creation in the browser.
-12. Confirm PHP 8.1 compatibility for changed syntax/APIs, run `php -l` on every changed PHP file, regenerate `app/core-manifest.json`, run `php scripts/generate_manifest.php --check`, and run `php tests/run.php` plus standalone Node tests when the source test tree is available. Production deployment ZIPs normally omit `tests/`, so record that absence rather than inventing runtime tests.
+12. Confirm PHP 8.1 compatibility for changed syntax/APIs, run `php -l` on every changed PHP file, regenerate `app/core-manifest.json`, run `php scripts/generate_manifest.php --check`, and run `php scripts/audit.php --profile=full` when the source test tree is available. The central full profile already owns the registered Node suite. Production deployment ZIPs normally omit `tests/`, so record that absence rather than inventing runtime tests.
 
 Stage 7 runtime defaults are centrally merged and require no existing `config.php` edit: physical manifest metadata retention 86400 seconds, Smart Gallery retention 900 seconds, maximum single metadata file 16777216 bytes, and bounded cleanup scan 10000 entries. A rollback may delete only the private `.download-manifests` subtree; the next authorized request follows the cache-miss path and the progressive protocol remains unchanged.
 
@@ -134,18 +182,10 @@ Stage 7 runtime defaults are centrally merged and require no existing `config.ph
 The repository uses current direct PHP regression tests under `tests/`. Run the complete isolated suite with:
 
 ```bash
-php tests/run.php
+php scripts/audit.php --profile=full
 ```
 
-The PHP runner does not invoke Node. Run every standalone JavaScript model separately from the repository root:
-
-```powershell
-Get-ChildItem tests -Filter '*_test.mjs' | Where-Object { $_.Name -notin @('gallery_download_zip_test.mjs', 'gallery_download_zip64_test.mjs') } | Sort-Object Name | ForEach-Object { node $_.FullName; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE } }
-node tests/gallery_download_zip_test.mjs "$env:TEMP/gallery-download-test.zip"
-node tests/gallery_download_zip64_test.mjs "$env:TEMP/gallery-download-zip64-test.zip"
-```
-
-The two download ZIP scripts require the shown temporary output path and validate the generated archive fixture; remove those temporary files after the run.
+The central full profile owns every registered standalone Node model. Do not glob `tests/*_test.mjs` manually: the ZIP writer tests require managed temporary output paths, ZIP64 is classified as slow coverage, and browser integration has a different environment contract. When diagnosing one Node failure directly, use the exact invocation recorded in `scripts/audit_registry.php`. The central runner creates and removes temporary ZIP outputs automatically.
 
 Deployment packages remain production-like and omit `tests/` by default. A normal local ZIP is created with `./deploy.sh --mode local --deploy-folder deploy --upload-media false --make-zip-deploy true`; add `--include-tests true` only for a development/source-review ZIP. On Windows use `scripts/deploy.ps1 -Mode local -DeployFolder deploy -UploadMedia false -MakeZipDeploy true`, adding `-IncludeTests true` for the review package. Test inclusion is local-only and is rejected in FTP mode; all existing secret, runtime-data, cache, log, `.git`, and media exclusions remain in force.
 
@@ -204,7 +244,7 @@ The translation catalog consistency test requires English, Czech, German, and Sw
 
 The public thumbnail rendering model test covers progressive default/fallback normalization, supported setting persistence, invalid Admin input normalization, the narrow renderer dispatch boundary, the unchanged responsive eager/lazy/fetchpriority thresholds, and progressive small-thumbnail thresholds. The public thumbnail markup test covers complete responsive srcsets, small-only progressive active srcsets, inert larger candidates, WebP/JPEG structures, missing variants, synthetic bounds, intrinsic dimensions, media fallback, warm-up attributes, and selected-gallery NSFW gate ordering. The hero tag Theme model test covers 20-tag and five-row defaults, server-side clamping, display-all and scrollbar booleans, usage/alphabetical mode normalization, Admin persistence wiring, complete server-rendered hero groups, full-width CSS overrides, anonymous/logged-in browser entrypoints, accessible disclosure state, row-based scrollbar activation, and English/Czech public strings. `tests/progressive_thumbnail_renderer_test.mjs` covers browser-independent candidate parsing, smallest-adequate selection, capped DPR width calculation, queue deduplication, visible priority, and the two-worker concurrency bound. DOM intersection, actual browser network order, decode timing, cache reuse, lightbox/maps/votes interaction, hero tag wrapping at real browser widths, and reduced-motion rendering remain manual checks.
 
-These tests are maintained against the current namespaced production code. They are best for pure logic, helper functions, and regression checks that do not require a browser session. A release patch should not be published while `php tests/run.php` reports a failure.
+These tests are maintained against the current namespaced production code. They are best for pure logic, helper functions, and regression checks that do not require a browser session. A release patch should not be published while `php scripts/audit.php --profile=full` reports a failure.
 
 ### Viewer Phase 0 security-foundation coverage
 
@@ -222,7 +262,7 @@ php tests/viewer_identity_boundary_test.php
 
 `viewer_identity_boundary_test.php` guards the most important repository-specific security invariant: `current_user()` continues to use only the administrator `users` table and `$_SESSION['user_id']`, while `current_viewer()` uses only viewer session/tables. It also proves the historical `visitor_can_access_gallery()` administrator bypass still depends only on `current_user()`, public media does not consult viewer auth, existing administrator auth/persistent-login code remains viewer-unaware, the existing CSRF contract is unchanged, and historical gallery share-token validation remains separate from future collection sharing.
 
-These focused tests supplement, rather than replace, `php tests/run.php`, `tests/migration_consistency_test.php`, authentication schema-policy tests, gallery-access schema-policy tests, and the Node model tests. Fresh installation and upgrade safety are represented by the shared migration directory/runner contract plus migration preflight/replay tests. When a disposable MySQL/MariaDB instance is available, release qualification should additionally execute a fresh install and an upgrade from a pre-Phase-0 database because MySQL DDL cannot be rolled back as one transaction.
+These focused tests supplement, rather than replace, `php scripts/audit.php --profile=full`, `tests/migration_consistency_test.php`, authentication schema-policy tests, gallery-access schema-policy tests, and the Node model tests. Fresh installation and upgrade safety are represented by the shared migration directory/runner contract plus migration preflight/replay tests. When a disposable MySQL/MariaDB instance is available, release qualification should additionally execute a fresh install and an upgrade from a pre-Phase-0 database because MySQL DDL cannot be rolled back as one transaction.
 
 ### Viewer Phase 0.5 registration/mail-abuse foundation coverage
 
@@ -396,7 +436,7 @@ php tests/service_unavailable_response_test.php
 php tests/admin_nsfw_system_health_test.php
 php tests/migration_schema_cache_reset_test.php
 php tests/migration_consistency_test.php
-php tests/run.php
+php scripts/audit.php --profile=full
 ```
 
 Manual NSFW outage verification should simulate an inspection failure on a
@@ -480,7 +520,7 @@ php tests/admin_nsfw_system_health_test.php
 php tests/service_unavailable_response_test.php
 php tests/migration_schema_cache_reset_test.php
 php tests/translation_catalog_consistency_test.php
-php tests/run.php
+php scripts/audit.php --profile=full
 ```
 
 Manual Phase 9 outage verification should use a disposable installation and
@@ -568,7 +608,7 @@ php tests/database_maintenance_schema_repair_test.php
 php tests/updater_safety_model_test.php
 php tests/security_schema_system_health_test.php
 php tests/translation_catalog_consistency_test.php
-php tests/run.php
+php scripts/audit.php --profile=full
 ```
 
 Manual Phase 10 outage verification must use a disposable installation with a
@@ -671,7 +711,7 @@ php tests/migration_schema_cache_reset_test.php
 php tests/security_schema_system_health_test.php
 php tests/mutation_schema_policy_test.php
 php tests/translation_catalog_consistency_test.php
-php tests/run.php
+php scripts/audit.php --profile=full
 ```
 
 Manual Phase 11 verification should use a disposable database or a database user
@@ -734,8 +774,8 @@ Use this order for each release so generated integrity data describes the final 
 2. Audit every new migration in timestamp order. Run migration consistency and legacy-runner compatibility tests, confirm upgrades require no manual schema edits or metadata rebuild unless explicitly documented, and verify partial/unknown schema states still follow the applicable security, mutation, or presentation policy.
 3. Update `app/bootstrap.php`, `release-metadata.json`, `PATCH_NOTES.md`, README/architecture/database/testing version markers, and all affected user/developer documentation. Keep the newest patch-note entry above historical entries and follow `PATCH_NOTES_TEMPLATE.md`. Confirm changed browser modules have a fresh cache-busting import chain.
 4. Compile and visually inspect `docs/PHP_Gallery_Manual.pdf` using all commands in `docs/LATEX_BUILD.md`. Check the title/version/date, permanent purpose and usage guide, table of contents, bookmarks, index, page breaks, and newly changed feature sections. Confirm no release-news or version-history section was inserted at the beginning; release history belongs in `PATCH_NOTES.md` or a deliberate appendix only.
-5. Run `php -l` on every changed PHP file, JavaScript syntax checks for every changed module, all relevant focused PHP/Node tests, translation consistency, function-documentation coverage, migration tests, and the complete `php tests/run.php` suite. Run `git diff --check` after the final textual edit.
-6. Run `php scripts/generate_manifest.php`, then `php scripts/generate_manifest.php --check`. Confirm its version matches `CMS_VERSION`, newly managed files and migrations are covered, and no source edit follows generation without another refresh.
+5. Complete the final textual/source edit, then run `php scripts/audit.php --profile=full`. Use focused PHP/Node commands only to diagnose any reported regression. Resolve all deterministic failures and inspect skipped or blocked environment-dependent coverage before generating release integrity data.
+6. Run `php scripts/generate_manifest.php`, then run `php scripts/audit.php --profile=release`. The release profile re-runs deterministic coverage and executes `php scripts/generate_manifest.php --check`, browser integration when the host can safely provide Chromium, and `git diff --check` when checkout metadata is available. Manifest freshness must be PASS; confirm its version matches `CMS_VERSION`, newly managed files and migrations are covered, and no source edit follows generation without another refresh.
 7. Run the deployment helper to create the requested local folder or ZIP. The helper packages files only; it does not execute PHP or silently repair a stale manifest. Re-run the manifest check after packaging and inspect the archive with a listing tool before publishing.
 8. Confirm the archive contains the current manual PDF, patch notes, release metadata, all migrations, and `app/core-manifest.json`, while excluding `config.php`, caches, logs, temporary files, local tooling, gallery media according to the chosen package policy, and deploy output. Confirm `CMS_VERSION`, the newest patch-note heading, release-metadata key/tag, manifest version, archive/release name, and intended Git tag all identify the same version.
 9. Review `git status`, the staged diff, and the final archive inventory. Create the release commit and annotated `v_<version>` tag only after all checks pass; publish that exact commit and archive, then perform an updater smoke test from the previous stable version and verify migrations, Admin login, public rendering, and integrity status.
@@ -744,7 +784,7 @@ If a local dependency such as PHP, Node, or a TeX tool is unavailable, record th
 
 ### Version 0.94.2 thumbnail-policy regression
 
-Run `php tests/thumbnail_format_metadata_consistency_test.php`, `php tests/thumbnail_compatibility_model_test.php`, `php tests/public_thumbnail_markup_test.php`, `php tests/public_thumbnail_rendering_model_test.php`, `php tests/thumbnail_warmup_model_test.php`, and `php tests/run.php` after changing thumbnail compatibility, metadata, manifest, bundle, generation, maintenance, or public rendering code. Verify that the default and explicit `modern` mode advertise only WebP derivatives, including progressive and responsive candidates, even with historical valid JPEG metadata or files present. Verify that explicit `legacy` mode continues to advertise valid JPEG and WebP derivatives, and that cleanup removes stale JPEG metadata whether or not the generated file exists. Confirm old `.jpg` requests in modern mode do not generate files or mutate settings.
+Run `php tests/thumbnail_format_metadata_consistency_test.php`, `php tests/thumbnail_compatibility_model_test.php`, `php tests/public_thumbnail_markup_test.php`, `php tests/public_thumbnail_rendering_model_test.php`, `php tests/thumbnail_warmup_model_test.php`, and `php scripts/audit.php --profile=full` after changing thumbnail compatibility, metadata, manifest, bundle, generation, maintenance, or public rendering code. Verify that the default and explicit `modern` mode advertise only WebP derivatives, including progressive and responsive candidates, even with historical valid JPEG metadata or files present. Verify that explicit `legacy` mode continues to advertise valid JPEG and WebP derivatives, and that cleanup removes stale JPEG metadata whether or not the generated file exists. Confirm old `.jpg` requests in modern mode do not generate files or mutate settings.
 
 ### Version 0.94.1 runtime-hardening regression
 
@@ -882,7 +922,7 @@ Manual browser verification:
 7. Verify Theme, Tags, Upload settings, Telemetry, Account and Dashboard settings still save directly when opened without visiting the central hub.
 8. Verify central links to Theme Gallery tags use `appearance_subtab=admin-theme-appearance-subtab-gallery-tags#admin-theme-tab-appearance`.
 9. Confirm `password_reset_smtp_password`, site-maintenance tokens, OpenAI keys and upload API keys never appear in central page source, error output or Admin logs.
-10. Re-run `hero_tag_theme_model_test.php`, `tag_page_theme_model_test.php`, upload/settings tests, telemetry tests and the complete `php tests/run.php` suite.
+10. Re-run `hero_tag_theme_model_test.php`, `tag_page_theme_model_test.php`, upload/settings tests, telemetry tests and the complete `php scripts/audit.php --profile=full` suite.
 
 ### Public Thumbnail Rendering Smoke Test
 
@@ -922,7 +962,7 @@ Use a gallery with more than 20 direct and/or contained tags, including several 
 8. Switch to **Alphabetical**, save, and verify each semantic group is alphabetically ordered. Switch back to **Most used first** and verify tags with more direct gallery plus photo assignments appear first within their own group; equal counts should be alphabetical. Direct gallery and contained groups must not be merged together.
 9. Resize the browser until tags wrap across different numbers of lines. With the scrollbar enabled and its threshold set low enough to trigger, confirm scrolling appears only after the measured visual row count exceeds the configured threshold. Resize wider so the rows fall below the threshold and confirm the internal scrollbar disappears automatically. Disable the scrollbar setting and confirm the hero grows naturally at all widths.
 10. Disable JavaScript and reload the gallery. Confirm every tag is visible, usable and server-rendered, and the progressive disclosure control stays hidden. Re-enable JavaScript and repeat anonymously plus in the logged-in public view.
-11. Run `php tests/hero_tag_theme_model_test.php`, JavaScript syntax checks for `hero-tags.js`, `theme-form.js`, both public entrypoints, and then the full `php tests/run.php` suite.
+11. Run `php tests/hero_tag_theme_model_test.php`, JavaScript syntax checks for `hero-tags.js`, `theme-form.js`, both public entrypoints, and then the full `php scripts/audit.php --profile=full` suite.
 
 ### Duplicate Photo Detector Smoke Test
 
@@ -942,7 +982,7 @@ Use a gallery with more than 20 direct and/or contained tags, including several 
 14. Confirm deletion reuses the existing gallery image mutation semantics for original files, image rows, derivatives, cover references, path safety, and Admin logging. Repeat for a nested subgallery and global-search result.
 15. Confirm forged/stale pair IDs, image IDs, moved images outside an immutable local scope, and missing/expired detector jobs are rejected server-side. For AJAX requests, also test an invalid CSRF token and an expired/non-admin session: both must return JSON error envelopes rather than plain text or a login-page redirect.
 16. Disable JavaScript or use the detector route directly and verify normal POST/redirect forms still work as fallback for scan continuation, ledger actions, and explicit deletion. This fallback is not the expected JavaScript interaction path.
-17. Run `php tests/duplicate_photo_detector_test.php`, `php tests/duplicate_photo_ledger_test.php`, `php tests/migration_consistency_test.php`, and the full `php tests/run.php` suite.
+17. Run `php tests/duplicate_photo_detector_test.php`, `php tests/duplicate_photo_ledger_test.php`, `php tests/migration_consistency_test.php`, and the full `php scripts/audit.php --profile=full` suite.
 
 
 ## What To Retest After A Change
@@ -983,7 +1023,7 @@ For any change to a persistent Admin side-panel mutation, its server response, b
 php scripts/check_admin_mutation_contracts.php
 ```
 
-In a source checkout that contains the tracked regression tree, also run `php tests/run.php` plus the focused mutation-related PHP/Node tests touched by the change. Deployment ZIPs intentionally exclude `tests/`, so absence of that directory in a deployment artifact is not a passing test result and must be reported as an unavailable source-tree validation step. Run `php -l` on every changed PHP file and `node --check` on every changed JavaScript file.
+In a source checkout that contains the tracked regression tree, run `php scripts/audit.php --profile=full`. Invoke focused mutation-related PHP/Node tests separately only when diagnosing an audit failure or reproducing a specific mutation regression. Deployment ZIPs intentionally exclude `tests/`, so absence of that directory in a deployment artifact is not a passing test result and must be reported as an unavailable source-tree validation step. Run `php -l` on every changed PHP file and `node --check` on every changed JavaScript file.
 
 The mutation contract check protects strict canonical-envelope consumption, stable ID survival through classic upload aggregation, Metadata Organizer envelope preservation, dynamic form interception, centralized retry ownership, the known bulk visibility/NSFW JSON return boundary, exact effective-visibility postconditions for gallery Published/Unpublished transitions, direct-card-first gallery membership verification, current-origin posting of server-rendered side-panel mutation forms, clean JSON authentication/CSRF/delete response boundaries, and the absence of hard reload/history rewriting in enhanced side-panel completion. It intentionally permits direct-page navigation fallbacks outside the mounted-panel success path.
 
@@ -1046,7 +1086,7 @@ php tests/smart_gallery_public_contract_test.php
 
 `smart_gallery_presentation_test.php` exercises Theme/site inheritance, malformed JSON, unknown presentation versions, explicit booleans, invalid grid/renderer/lightbox values, Admin preview precedence, normalized thumbnail ranges, and physical-gallery thumbnail guardrails. `smart_gallery_public_contract_test.php` protects the shared public membership predicate, stable ordering, bounded page/lightbox windows, route policy, side-panel enhancement, preview renderer reuse, download authorization structure, and normal-gallery slideshow default.
 
-Then run `php tests/run.php`. Manually create a tag-plus-rating collection, preview and publish it, verify multiple pages, then move one image between three and five stars and confirm membership changes immediately. Test nested logic, deleted references, query-string and clean URLs, search conversion, and inaccessible matching images. Logged-out counts, covers, page rows, lazy lightbox metadata, and downloads must exclude private, locked, unpublished, share-only-without-valid-access, and otherwise inaccessible source galleries.
+Then run `php scripts/audit.php --profile=full`. Manually create a tag-plus-rating collection, preview and publish it, verify multiple pages, then move one image between three and five stars and confirm membership changes immediately. Test nested logic, deleted references, query-string and clean URLs, search conversion, and inaccessible matching images. Logged-out counts, covers, page rows, lazy lightbox metadata, and downloads must exclude private, locked, unpublished, share-only-without-valid-access, and otherwise inaccessible source galleries.
 
 Test all placement modes: unlisted must remain absent from listings; root must participate in homepage pagination; gallery mode must render independently around the selected physical parent's normal content. For one parent attach at least two Smart Galleries above and two below, give them differing and equal order values, and verify the sequence is `top -> normal subgalleries/photos -> bottom` with Smart Gallery ID as the equal-order tie breaker. Attach one Smart Gallery beneath multiple physical galleries, change placement/order in only one parent, remove it from another, and verify every other assignment remains intact. Disabled or private Smart Galleries must remain absent regardless of placement and must not leave an empty attachment panel.
 

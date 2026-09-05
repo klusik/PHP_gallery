@@ -8,8 +8,9 @@ This repository is a plain PHP 8.1+ gallery CMS with no Composer or Node build. 
 - `php -S localhost:8000 index.php` - alternate local run mode using the repository root router.
 - `php scripts/migrate.php` - apply pending database migrations.
 - `php scripts/create_admin.php <username> <password>` - create the first admin account during setup.
-- `php tests/gallery_visibility_model_test.php` - run a direct PHP test script.
-- `php tests/gallery_branding_model_test.php` - run another standalone test script.
+- `php scripts/audit.php --profile=quick` - run the normal edit-cycle audit with full PHP regression and fast cross-language checks.
+- `php scripts/audit.php --profile=full` - run the complete deterministic source-tree audit.
+- `php scripts/audit.php --profile=release` - run release qualification, including manifest, browser integration when available, and Git whitespace checks.
 
 ## Coding Style & Naming Conventions
 Use `declare(strict_types=1);` in new PHP files and follow the existing 4-space indentation style. Keep functions small and explicit; prefer service helpers over duplicated controller logic. Name controller files by feature area, for example `admin_galleries_edit.php` or `public_media.php`. Migration files must be timestamp-prefixed, such as `202606040001_mobile_webdav_upload_tokens.php`. JavaScript and CSS assets should stay framework-free and be placed in `public/assets/`.
@@ -17,19 +18,24 @@ Use `declare(strict_types=1);` in new PHP files and follow the existing 4-space 
 ## Testing Guidelines
 Tests are plain PHP scripts rather than PHPUnit cases. Keep new tests executable from the command line with `php tests/<name>_test.php`. Favor focused tests that validate a single behavior without requiring a browser or live database unless the feature truly depends on one. When changing schema logic, add or update a migration and include a test where practical.
 
-The tracked `tests/` directory is the authoritative regression tree. `php tests/run.php` runs PHP tests; standalone `tests/*_test.mjs` files run with Node. Deployment packages exclude tests by default. Use `--include-tests true` (Bash) or `-IncludeTests true` (PowerShell) only for local source-review folders/ZIPs; FTP deployment must never include tests.
+### Mandatory Agent Verification Contract
+For automated agents, `php scripts/audit.php` is the authoritative test orchestration interface. This rule takes precedence over every later focused-test command or checklist in `AGENTS.md`, `TESTING.md`, architecture notes, and task-specific documentation. Do not enumerate `tests/`, loop over `*_test.php`/`*_test.mjs`, manually run every documented focused test, or separately lint the tree when the central audit already owns that coverage. Avoid duplicate verification because it wastes execution time and agent context without increasing coverage.
 
-### Mandatory PHP Syntax Validation
-Before handing off or committing any change that creates or modifies PHP files, run `php -l` on every changed PHP file. A convenient Git-aware PowerShell check is:
+Use exactly this workflow unless the user explicitly requests something else:
 
-```powershell
-$changedPhp = git diff --name-only --diff-filter=ACMR HEAD -- '*.php'
-foreach ($file in $changedPhp) { php -l $file; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE } }
-```
+1. During implementation, run `php scripts/audit.php --profile=quick` when a verification pass is useful.
+2. Before handing off code or building an affected ZIP, run `php scripts/audit.php --profile=full` once.
+3. Before an actual release, regenerate the manifest as required and run `php scripts/audit.php --profile=release` once.
+4. Read the compact console summary first. Read `cache/test-audit/latest.md` only when more detail is needed. Open an individual suite log only for `FAIL`, `BLOCKED`, or a `SKIP` that materially affects the task. Do not read passing child-process logs.
+5. Run an individual PHP, Node, Python, syntax, contract, or browser test only to reproduce/diagnose a specific failure reported by the central audit, to develop a newly added test before it is registered, or when the user explicitly asks for that focused check. After fixing a diagnosed failure, return to the appropriate central audit instead of manually replaying the rest of the test tree.
+6. If the central runner itself cannot execute because a required runtime such as PHP is unavailable, report that verification as blocked. Do not replace it with a token-heavy manual walk of the regression tree and do not claim the central audit passed.
 
-Also include staged PHP files when validating a staged-only change, for example with `git diff --cached --name-only --diff-filter=ACMR -- '*.php'`. Do not rely on visual review, substring assertions, or a focused behavioral test as a substitute for PHP parsing. Pay particular attention after editing nested calls, null-coalescing expressions, concatenated HTML, arrays, and ternaries, where a missing `)`, `]`, quote, or semicolon can take down the whole application.
+The tracked `tests/` directory remains the authoritative regression tree, while `scripts/audit.php` owns orchestration, timeouts, PHP/JavaScript syntax validation, registered Node fixtures, WinApp tests, contract checks, normalized PASS/FAIL/SKIP/BLOCKED status, and compact reporting. `php tests/run.php` exists only as a compatibility wrapper for the PHP regression suite and is not an agent verification entrypoint. Deployment packages exclude `tests/` by default. Use `--include-tests true` (Bash) or `-IncludeTests true` (PowerShell) only for local source-review folders/ZIPs; FTP deployment must never include tests.
 
-If `php` is unavailable in the execution environment, do not claim PHP syntax validation passed. State clearly that linting is blocked, perform the strongest available static checks, and tell the user that `php -l` must run before deployment. For changes intended for immediate deployment, treat unavailable PHP linting as an unresolved verification gap rather than silently proceeding as fully verified.
+### PHP Syntax Validation
+PHP syntax validation is mandatory, but agents normally satisfy it through the central audit. `quick` checks the appropriate changed-file syntax set when Git metadata is available and safely falls back when it is not; `full` validates the complete PHP/JavaScript source tree. Do not run a second manual `php -l` loop after a successful central audit merely to duplicate the same result.
+
+A direct `php -l path/to/file.php` is appropriate while diagnosing a syntax failure, while developing `scripts/audit.php` itself, or when the central runner is temporarily unusable but PHP CLI is available. If PHP is unavailable, do not claim syntax validation passed; report the central verification as blocked.
 
 ## Admin Side-Panel Interaction Priority
 Treat the existing Admin right-side panel as the primary interaction surface for every action launched from that panel. When JavaScript is enabled, panel forms and buttons must complete in place through the existing side-panel/AJAX workflow: keep the panel open, do not navigate to a standalone Admin route, do not change `window.location`, and do not reload the page. A normal POST/redirect route may remain only as a non-JavaScript or direct-page fallback; it must not be the normal behavior of an action initiated inside the panel.
@@ -146,7 +152,7 @@ authentication storage. Preserve these policies in future edits:
 `admin_security_schema_health_statuses()` is the shared Admin registration for
 converted security/authentication capabilities. Runtime Diagnostics and dashboard
 System Health must consume the same bounded models. Add focused available/missing/
-unknown tests for any policy change and keep `tests/run.php` green.
+unknown tests for any policy change and keep `php scripts/audit.php --profile=full` green.
 
 Phase 10 converts destructive and ingestion workflows through
 `app/services/mutation_schema_policy.php`. Preserve these mutation rules:
