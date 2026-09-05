@@ -9,7 +9,7 @@ This document is intended to help future maintainers and AI coding agents unders
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.95.4';
+const CMS_VERSION = '0.96';
 ```
 
 Update-related code uses:
@@ -287,7 +287,7 @@ The complete source audit and setting inventory is maintained in `docs/ADMIN_SET
 | `upload_automation_upload` | `cms_upload_automation_upload` | External watcher upload API. |
 | `admin_upload_automation_token` | `cms_admin_upload_automation_token` | Token management for upload automation. |
 | `admin_api_manager` | `cms_admin_api_manager` | API/export/import manager entry. |
-| `gallery_migration_*` | Multiple handlers | Manifest, asset transfer, receive status and completion for gallery migration. |
+| `gallery_migration_*` | Multiple handlers | Recursive manifests, bounded ZIP-package transfer, receive status, resume, and completion for gallery migration. |
 | `admin_gallery_migration` | `cms_admin_gallery_migration` | Admin UI for gallery migration. |
 | `admin_openai_text_assist` | `cms_admin_openai_text_assist` | OpenAI text and image-description helper endpoint. |
 | `admin_simbrief_description` | `cms_admin_simbrief_description` | SimBrief-derived gallery description generation. |

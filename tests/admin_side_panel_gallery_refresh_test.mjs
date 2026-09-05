@@ -211,10 +211,13 @@ for (const source of ['']) {
 }
 assert.match(sidePanelSource, /const shouldKeepPanelOpen = adminSidePanelMutationKeepsPanelOpen\(source\);[\s\S]*if \(panel instanceof HTMLElement && !shouldKeepPanelOpen\) \{\s*closeAdminGallerySidePanel\(panel\);/);
 
-// Create refresh delegates fetch/cache semantics and owned replacement to the
-// canonical coordinator helpers rather than duplicating them in this module.
-const canonicalRefreshSource = extractFunction(sidePanelSource, 'refreshCurrentGalleryContextFromServer');
-assert.match(canonicalRefreshSource, /fetchAdminMutationRenderDocument\(source,/);
+// Gallery refresh delegates fetch/cache semantics and owned replacement to the
+// canonical coordinator rather than duplicating them in this module.
+const canonicalRefreshStart = sidePanelSource.indexOf('async function completeCoreGalleryMutationInCurrentView');
+const canonicalRefreshEnd = sidePanelSource.indexOf('\n/**', canonicalRefreshStart);
+assert.notEqual(canonicalRefreshStart, -1, 'Canonical gallery mutation completion function must exist.');
+const canonicalRefreshSource = sidePanelSource.slice(canonicalRefreshStart, canonicalRefreshEnd);
+assert.match(canonicalRefreshSource, /completeAdminMutation\(result, \{/);
 assert.match(canonicalRefreshSource, /replaceOwnedPublicGalleryFragments\(parsed,/);
 assert.doesNotMatch(canonicalRefreshSource, /window\.location\.(?:href\s*=|reload\s*\()/);
 
@@ -222,14 +225,15 @@ assert.doesNotMatch(canonicalRefreshSource, /window\.location\.(?:href\s*=|reloa
 for (const functionName of [
     'submitAdminGalleryPanelCreateForm',
     'reflectSavedGalleryInCurrentView',
-    'refreshCurrentGalleryContextFromServer',
 ]) {
     const functionSource = extractFunction(sidePanelSource, functionName);
     assert.doesNotMatch(functionSource, /window\.location\.(?:href\s*=|reload\s*\()/, `${functionName} must not navigate or reload`);
     assert.doesNotMatch(functionSource, /history\.(?:pushState|replaceState)\s*\(/, `${functionName} must not rewrite the URL`);
 }
+assert.doesNotMatch(canonicalRefreshSource, /window\.location\.(?:href\s*=|reload\s*\()/, 'completeCoreGalleryMutationInCurrentView must not navigate or reload');
+assert.doesNotMatch(canonicalRefreshSource, /history\.(?:pushState|replaceState)\s*\(/, 'completeCoreGalleryMutationInCurrentView must not rewrite the URL');
 
 // Changing the side-panel module must also change its import cache key.
-assert.match(operationsSource, /admin-side-panel\.js\?v=20260902-mutation-stage4-v1/);
+assert.match(operationsSource, /admin-side-panel\.js\?v=20260903-oversized-single-batch-v1/);
 
 console.log('PASS admin_side_panel_gallery_refresh_test');

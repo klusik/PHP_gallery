@@ -49,7 +49,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.95.4}
+\newcommand{\version}{0.96}
 \newcommand{\manualdate}{5 September 2026}
 
 \hypersetup{
@@ -1609,11 +1609,13 @@ Generated gallery/all/selection ZIPs use a~content signature derived from~the~re
 \index{gallery migration}
 \index{API migration}
 
-The~gallery editor's API area supports both transfer directions between compatible PHP Gallery installations. \ui{Export this gallery to~another instance} treats the~current gallery as~the~source and~uses a~gallery-scoped API key created for~the~receiving target gallery. \ui{Import into this gallery from~another instance} treats the~current gallery as~the~target and~uses an~API key created for~the~remote source gallery. Import fills the~existing target gallery folder; it~does not~move that target to~a~different place in~its local hierarchy.
+The~gallery editor's API area supports both transfer directions between compatible PHP Gallery installations. \ui{Export this gallery to~another instance} treats the~current gallery as~the~source and~uses a~gallery-scoped API key created for~the~receiving parent gallery. \ui{Import into this gallery from~another instance} treats the~current gallery as~the~receiving parent and~uses an~API key created for~the~remote source gallery. The~import creates a~new child gallery below that parent; it never overwrites or~moves the~selected receiving gallery.
 
-A~transfer begins with a~versioned manifest containing gallery metadata, image metadata, flight-map state, and~descriptors for~the~owned source/thumbnail/branding assets. The~current compatibility policy requires source and~target to~run exactly the~same application version. Assets carry SHA-256 checksums and~are~staged/validated before final installation. The~workflow intentionally sends or~receives one manifest or~one asset per~bounded request rather than~holding a~whole gallery transfer open in~one PHP request.
+\ui{Include subgalleries} is~enabled by~default. When selected, the~versioned manifest describes the~source gallery and~its complete descendant hierarchy in~parent-first order. The~target recreates that hierarchy below the~new imported root and~preserves supported gallery/image metadata, translations, flight-map state, originals, existing thumbnails, and~gallery branding assets. Turning the~option off transfers only the~selected source gallery. The~current compatibility policy requires source and~target to~run exactly the~same application version.
 
-The~administrator chooses a~reconnect interval from~5 to~300 seconds. After a~timeout, reload, or~interrupted connection, the~active side asks the~target job which asset references were already accepted and~continues with the~remaining work instead of~blindly retransmitting everything. Completion is~a~separate step after the~manifest assets have~been installed. Cancelling the~browser workflow stops further requests; credentials should still be~revoked when a~temporary migration key is~no~longer needed.
+The~receiving server creates a~deterministic package plan bounded by~its upload limits. Each original remains grouped with its already-generated thumbnails, while gallery-level assets can~be~packaged independently. ZIP entries use stable asset keys, store existing bytes without recompressing photographs, and~are~checked against the~manifest's sizes and~SHA-256 checksums before installation. Exact API-key scope, gallery-tree structure, target paths, database readiness, and~asset completeness are~validated at~their mutation boundaries.
+
+The~administrator chooses a~reconnect interval from~5 to~300 seconds. After a~timeout, reload, or~interrupted connection, the~active side asks the~durable target job which asset keys are~already present and~skips completed packages instead of~blindly retransmitting them. Folder mappings and~received assets are~saved incrementally so~the~same transfer can~resume safely. Completion remains a~separate step and~is refused until every declared asset is~present. Cancelling the~browser workflow stops further requests; credentials should still be~revoked when a~temporary migration key is~no~longer needed.
 
 \subsection{Mobile WebDAV transfer}
 \index{WebDAV!mobile upload}

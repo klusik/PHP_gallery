@@ -47,17 +47,21 @@ function galleryRoot(galleryId, cards = [], images = []) {
     };
 }
 
-const legacy = mutation.normalizeAdminMutationEnvelope({
-    ok: true,
-    gallery_id: 123,
-    parent_gallery_id: 55,
-    gallery_url: '/gallery/parent/new/',
-    edit_url: '/admin/edit?id=123',
-    refresh_url: '/gallery/parent/',
-}, 'create');
-assert(legacy.mutation.type === 'gallery.create', 'Legacy create response must normalize to gallery.create.');
-assert(legacy.contexts.length === 1 && legacy.contexts[0].gallery_id === 55, 'Legacy create response must preserve parent stable identity.');
-assert(legacy.contexts[0].postcondition.gallery_id === 123, 'Legacy create response must carry gallery_present postcondition.');
+let legacyRejected = false;
+try {
+    mutation.normalizeAdminMutationEnvelope({
+        ok: true,
+        gallery_id: 123,
+        parent_gallery_id: 55,
+        gallery_url: '/gallery/parent/new/',
+        edit_url: '/admin/edit?id=123',
+        refresh_url: '/gallery/parent/',
+    }, 'create');
+} catch (error) {
+    legacyRejected = error instanceof TypeError
+        && error.message.includes('canonical completion envelope');
+}
+assert(legacyRejected, 'Legacy mutation responses without the canonical completion envelope must be rejected.');
 
 const currentRoot = galleryRoot(55, []);
 const context = {
@@ -114,9 +118,11 @@ const adminOnlyImageIdRoot = {
 assert(mutation.evaluateAdminMutationPostcondition({type: 'image_present', image_ids: [77]}, adminOnlyImageIdRoot) === false, 'Admin/editor data-image-id elements must not satisfy a public image postcondition.');
 
 assert(mutation.adminMutationRetryDelay(0) === 0, 'First refresh attempt must be immediate.');
-assert(mutation.adminMutationRetryDelay(1) === 120, 'Second refresh attempt delay changed unexpectedly.');
-assert(mutation.adminMutationRetryDelay(2) === 320, 'Third refresh attempt delay changed unexpectedly.');
-assert(mutation.adminMutationRetryDelay(3) === null, 'Retry policy must be bounded.');
+assert(mutation.adminMutationRetryDelay(1) === 150, 'Second refresh attempt delay changed unexpectedly.');
+assert(mutation.adminMutationRetryDelay(2) === 450, 'Third refresh attempt delay changed unexpectedly.');
+assert(mutation.adminMutationRetryDelay(3) === 1000, 'Fourth refresh attempt delay changed unexpectedly.');
+assert(mutation.adminMutationRetryDelay(4) === 2000, 'Fifth refresh attempt delay changed unexpectedly.');
+assert(mutation.adminMutationRetryDelay(5) === null, 'Retry policy must be bounded.');
 
 const firstToken = mutation.beginAdminMutationRefresh(context);
 const secondToken = mutation.beginAdminMutationRefresh(context);
