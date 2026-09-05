@@ -1,5 +1,37 @@
 # Patch notes
 
+## Version 0.96.3
+
+Version 0.96.3 is a maintenance release with no schema or migration changes. It fixes a stale Admin update-status display: after a stable update, beta install, or rollback job finished activating, the Admin update page briefly lost all cached GitHub update information and fell back to a "no cached data yet, use Force check" placeholder until an administrator forced a check or the next automatic hourly probe ran.
+
+### Highlights
+
+#### Immediate post-update status refresh
+
+- Fixed the Admin update page so it reflects the newly activated version right after an update job completes, instead of requiring a manual Force check to leave the empty placeholder state.
+- Kept the existing safety property that a just-installed version is never shown as still needing an update: the stale pre-update cache is still cleared before the fresh result is stored.
+
+### Technical Details
+
+#### Backend
+
+- Updated `application_update_job_finalize()` in `app/services/updates_jobs.php` so it recomputes the GitHub update-check status against the now-active version and re-caches it immediately after deleting the stale pre-update cache entry.
+- Wrapped the refresh in a non-fatal `try`/`catch`: `check_application_update()` already reports its own remote/parsing failures inside a diagnostic array rather than throwing, but the call is still guarded so a local failure while persisting the cached setting can never fail an otherwise-successful, already-activated update job.
+
+### Tests
+
+- Extended `tests/updater_resumable_state_machine_test.php` with source-level assertions confirming that finalization still clears the stale cache, immediately refreshes it with a fresh GitHub result for the activated version, and keeps that refresh guarded by the non-fatal `catch` block.
+
+### User Impact
+
+#### For administrators
+
+- The Admin update page shows the correct "up to date" status immediately after a stable update, beta install, or rollback completes, without needing to click Force check.
+
+#### For visitors
+
+- No user-facing change.
+
 ## Version 0.96.2
 
 Version 0.96.2 is a maintenance release with no schema, migration, or user-facing behavior changes. It adds deterministic release preparation and consistency tooling so version bumps and pre-release qualification no longer depend on a maintainer or agent manually touching every version marker by hand.

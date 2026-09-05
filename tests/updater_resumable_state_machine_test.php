@@ -381,6 +381,12 @@ foreach (['application_update_job_download_slice', 'application_update_job_extra
 
 $filesystemSource = (string) file_get_contents($root . '/app/services/updates_filesystem.php');
 assert_updater_resumable(str_contains($jobsSource, 'application_update_invalidate_persistent_caches('), 'Updater finalization no longer invalidates version-sensitive persistent caches.');
+$finalizeStart = strpos($jobsSource, 'function application_update_job_finalize(');
+$finalizeEnd = strpos($jobsSource, 'function ', (int) $finalizeStart + 1);
+$finalizeSource = substr($jobsSource, (int) $finalizeStart, (int) $finalizeEnd - (int) $finalizeStart);
+assert_updater_resumable(str_contains($finalizeSource, "delete_app_settings(['application_update_check_cache', 'application_update_check_status_json', 'application_update_check_cached_at']);"), 'Update finalization no longer clears the stale pre-update GitHub check cache.');
+assert_updater_resumable(str_contains($finalizeSource, 'check_application_update()') && str_contains($finalizeSource, 'cache_application_update_check($freshUpdateStatus)'), 'Update finalization no longer refreshes the GitHub check cache for the newly activated version, leaving Admin on a stale "Force check" placeholder.');
+assert_updater_resumable((int) strpos($finalizeSource, 'catch (Throwable $exception)') > (int) strpos($finalizeSource, 'check_application_update()'), 'Finalization refresh of the GitHub check cache is not guarded against a local failure blocking an otherwise-successful update.');
 assert_updater_resumable(str_contains($jobsSource, 'application_update_delete_tree_slice('), 'Updater cleanup no longer uses bounded physical cache deletion.');
 assert_updater_resumable(str_contains($jobsSource, 'if (!application_update_job_cleanup($job, $budget))'), 'Updater cleanup no longer yields across bounded worker slices.');
 assert_updater_resumable(str_contains($filesystemSource, "'github-api'") && str_contains($filesystemSource, "'patch-notes'") && str_contains($filesystemSource, "'integrity-status.json'"), 'Version-sensitive cache invalidation coverage regressed.');
