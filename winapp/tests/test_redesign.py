@@ -10,6 +10,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest import mock
 import zipfile
 from pathlib import Path
 
@@ -432,10 +433,22 @@ class IsolationAndCallbackTests(unittest.TestCase):
                 MAIN.LOG_PATH = original_log
 
     def test_simconnect_missing_override_is_nonfatal(self):
-        client = MAIN.SimConnectCameraClient("Z:/definitely/missing/SimConnect.dll")
-        location, message = client.current_camera_location()
+        missing_path = Path("Z:/definitely/missing/SimConnect.dll")
+        client = MAIN.SimConnectCameraClient(str(missing_path))
+
+        # Keep the test independent from the developer workstation. A Windows host may have a
+        # valid SimConnect.dll in an SDK/common location, so an invalid override alone does not
+        # guarantee that automatic fallback discovery will fail.
+        with mock.patch.object(MAIN.os, "name", "nt"), mock.patch.object(
+            client,
+            "resolve_dll_path",
+            return_value=(None, [missing_path]),
+        ):
+            location, message = client.current_camera_location()
+
         self.assertIsNone(location)
-        self.assertTrue(message)
+        self.assertIn("SimConnect.dll is unavailable", message)
+        self.assertIn(str(missing_path), message)
 
     def test_ai_stop_is_independent_from_upload_worker_state(self):
         config = MAIN.WatcherConfig(gallery_url="https://example.test", api_key="key", ai_worker_enabled=True)

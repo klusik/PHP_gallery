@@ -435,7 +435,8 @@ dynamically, not test one known table identity.
 | --- | --- |
 | Linux deploy | `deploy.sh`, `scripts/deploy.sh` |
 | Windows deploy | `deploy.bat`, `scripts/deploy.ps1` |
-| Framework-free PHP test runner | `tests/run.php`, `tests/*_test.php` |
+| Central source audit and registry | `scripts/audit.php`, `scripts/audit_lib.php`, `scripts/audit_registry.php`, `tests/audit_runner_test.php`<br>Coordinates PHP/Node/Python regressions, syntax checks, contract utilities, release checks, timeout handling, normalized status, and compact Markdown/JSON reporting. |
+| PHP regression compatibility entrypoint | `tests/run.php`, `tests/*_test.php`<br>Historical `php tests/run.php` delegates to the central audit runner's `php-regression` suite. |
 | Standalone JavaScript model tests | `tests/*_test.mjs` |
 | Manual migration CLI | `scripts/migrate.php` |
 | Admin creation | `scripts/create_admin.php` |

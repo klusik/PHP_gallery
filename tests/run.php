@@ -5,16 +5,16 @@
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/run.php
- * Module Type: Test Runner
+ * Module Type: Test Runner Compatibility Wrapper
  *
  * Purpose:
- *   Runs every current standalone PHP regression test in an isolated process.
+ *   Preserves the historical PHP regression command while delegating execution to the central audit runner.
  *
  * Responsibilities:
- *   - Discover current test scripts by the *_test.php naming convention
- *   - Preserve process isolation between tests and their helper shims
- *   - Return a non-zero exit code when any test fails
- *   - Print one compact final pass or failure summary
+ *   - Keep `php tests/run.php` valid for existing developer workflows
+ *   - Delegate PHP test discovery, isolation, timeout, and status handling to scripts/audit.php
+ *   - Return the central runner's exit status unchanged
+ *   - Avoid maintaining a second independent PHP regression implementation
  *
  * Author:
  *   Rudolf Klusal
@@ -27,10 +27,10 @@
  *
  * Notes:
  *   - Keep comments and docstrings intact when modifying this file.
- *   - Prefer small, readable changes over broad rewrites.
+ *   - New automated verification should call scripts/audit.php directly.
  *
  * Last Updated:
- *   2026-07-12
+ *   2026-09-05
  */
 
 declare(strict_types=1);
@@ -40,38 +40,16 @@ if (PHP_SAPI !== 'cli') {
     exit(2);
 }
 
-$testFiles = glob(__DIR__ . '/*_test.php') ?: [];
-sort($testFiles, SORT_STRING);
-
-if ($testFiles === []) {
-    fwrite(STDERR, "No test scripts were found.\n");
+$auditPath = dirname(__DIR__) . '/scripts/audit.php';
+if (!is_file($auditPath)) {
+    fwrite(STDERR, "Central audit runner is missing: scripts/audit.php\n");
     exit(2);
 }
 
-$passed = 0;
-$failed = [];
-
-foreach ($testFiles as $testFile) {
-    $relativeName = basename($testFile);
-    fwrite(STDOUT, "\n=== {$relativeName} ===\n");
-
-    $command = escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg($testFile);
-    $exitCode = 0;
-    passthru($command, $exitCode);
-
-    if ($exitCode === 0) {
-        $passed++;
-        continue;
-    }
-
-    $failed[] = $relativeName;
-}
-
-fwrite(STDOUT, "\nPassed: {$passed}/" . count($testFiles) . "\n");
-if ($failed === []) {
-    fwrite(STDOUT, "All current PHP regression tests passed.\n");
-    exit(0);
-}
-
-fwrite(STDERR, "Failed: " . implode(', ', $failed) . "\n");
-exit(1);
+$command = escapeshellarg(PHP_BINARY)
+    . ' '
+    . escapeshellarg($auditPath)
+    . ' --suite=php-regression --no-report';
+$exitCode = 0;
+passthru($command, $exitCode);
+exit($exitCode);
