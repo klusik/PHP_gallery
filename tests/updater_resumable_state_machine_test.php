@@ -30,6 +30,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/support/module_source.php';
+
 require_once __DIR__ . '/../app/services/updates.php';
 
 use function Gallery\Services\application_update_acquire_lock;
@@ -315,7 +317,8 @@ if (class_exists(ZipArchive::class)) {
 }
 
 $root = dirname(__DIR__);
-$jobsSource = (string) file_get_contents($root . '/app/services/updates_jobs.php');
+// The updater job service is split into part files; assert against the whole module.
+$jobsSource = module_source($root . '/app/services/updates_jobs.php');
 $installSource = (string) file_get_contents($root . '/app/services/updates_install.php');
 $controllerSource = (string) file_get_contents($root . '/app/controllers/updates.php');
 $adminAuthSource = (string) file_get_contents($root . '/app/controllers/admin_auth.php');
@@ -395,7 +398,7 @@ assert_updater_resumable(!str_contains($filesystemSource, "'favicon' =>") && !st
 $serviceFiles = glob($root . '/app/services/updates_*.php') ?: [];
 foreach ($serviceFiles as $serviceFile) {
     if (basename($serviceFile) === 'updates_jobs.php') {
-        $source = (string) file_get_contents($serviceFile);
+        $source = module_source($serviceFile);
         // Exclude the boundary's one intentional internal-message extraction line
         // before auditing the remaining updater service for raw disclosure.
         $source = preg_replace('/^\s*\$internal = .*?->getMessage\(\).*?;\R/m', '', $source, 1) ?? $source;

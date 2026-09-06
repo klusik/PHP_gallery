@@ -56,6 +56,24 @@ function contract_file(string $root, string $relative, array &$failures): string
         return '';
     }
 
+    // A module split into part files still forms one contract surface. Append the
+    // parts in require_once order so before/after offset checks keep their meaning.
+    $partDirectory = dirname($path) . DIRECTORY_SEPARATOR . basename($path, '.php');
+    if (is_dir($partDirectory)) {
+        $matches = [];
+        preg_match_all("#require_once __DIR__ \. '/([^']+)';#", $contents, $matches);
+        foreach ($matches[1] as $partRelative) {
+            $partPath = dirname($path) . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $partRelative);
+            if (!str_starts_with($partPath, $partDirectory . DIRECTORY_SEPARATOR)) {
+                continue;
+            }
+            $part = @file_get_contents($partPath);
+            if (is_string($part)) {
+                $contents .= "\n" . $part;
+            }
+        }
+    }
+
     // Source contracts describe code structure rather than repository line-ending style.
     // Normalize CRLF/CR so multiline literal checks behave identically on all platforms.
     return str_replace(["\r\n", "\r"], "\n", $contents);

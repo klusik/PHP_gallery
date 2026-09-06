@@ -5,6 +5,7 @@
 declare(strict_types=1);
 
 namespace Gallery\Services {
+    require_once __DIR__ . '/support/module_source.php';
     require_once dirname(__DIR__) . '/app/services/smart_galleries.php';
 
     /** Fail the standalone cycle/placement test with one precise contract message. */
@@ -144,7 +145,7 @@ namespace Gallery\Services {
     smart_gallery_cycle_test_assert(str_contains((string) $galleryMutationSource, 'smart_gallery_validate_gallery_parent_change'), 'Single physical gallery moves preflight Smart Gallery relationship cycles.');
     smart_gallery_cycle_test_assert(str_contains((string) $reorderSource, 'smart_gallery_validate_gallery_parent_map($submittedParentById);'), 'Admin drag-and-drop hierarchy moves validate the complete resulting relationship graph before the first filesystem move.');
 
-    $adminGallerySource = file_get_contents(dirname(__DIR__) . '/app/controllers/admin_galleries_edit_page.php');
+    $adminGallerySource = module_source(dirname(__DIR__) . '/app/controllers/admin_galleries_edit_page.php');
     $adminSmartSource = file_get_contents(dirname(__DIR__) . '/app/controllers/smart_galleries.php');
     $sidePanelSource = file_get_contents(dirname(__DIR__) . '/public/assets/gallery-modules/admin-side-panel.js');
     smart_gallery_cycle_test_assert(str_contains((string) $adminGallerySource, 'smart_gallery_children_present') && str_contains((string) $adminGallerySource, '[placement]') && str_contains((string) $adminGallerySource, '[placement_order]'), 'Physical gallery Admin editing exposes no-JavaScript attachment, placement, and order form fields.');

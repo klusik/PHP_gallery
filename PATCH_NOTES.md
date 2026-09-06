@@ -1,5 +1,59 @@
 # Patch notes
 
+## Version 0.96.4
+
+Version 0.96.4 is a maintenance and maintainability release with no database schema or migration changes and no change to the public gallery feature set. It reorganizes the largest Admin and backend modules into focused, ordered part files while preserving their historical entry points, include contracts, runtime behavior, and updater integrity metadata. The release also adds source-level checks for module path resolution and makes the split-module architecture easier to review and maintain.
+
+### Highlights
+
+#### Maintainable application modules
+
+- Split the large Admin gallery editor into named capability, controller, overview, post-action, and tab modules while keeping `app/controllers/admin_galleries_edit_page.php` as the stable entry point.
+- Split gallery reporting, Admin test-run analysis, and Admin test-run storage into focused service parts without changing their existing service registration or callers.
+- Split browser uploads, gallery migration, and updater jobs into ordered part files covering validation, transfer planning, persistence, recovery, activation, and lifecycle behavior.
+- Preserved the existing module include contract so callers continue to load the original top-level service or controller path.
+
+#### Path and review hardening
+
+- Fixed project-root path resolution used by the newly split modules, preventing nested part files from resolving shared application paths relative to the wrong directory.
+- Added a dedicated module-split review audit and documented the supported split-module structure for future contributors and automated agents.
+
+### Technical Details
+
+#### Backend
+
+- Kept the original entry points `app/controllers/admin_galleries_edit_page.php`, `app/services/admin_gallery_report.php`, `app/services/admin_test_run_analysis.php`, `app/services/admin_test_runs.php`, `app/services/browser_uploads.php`, `app/services/gallery_migration.php`, and `app/services/updates_jobs.php` as module boundaries with ordered `require_once` lists.
+- Added focused module parts under `app/controllers/admin_galleries_edit_page/` and `app/services/{admin_gallery_report,admin_test_run_analysis,admin_test_runs,browser_uploads,gallery_migration,updates_jobs}/`.
+- Centralized source inspection support in `tests/support/module_source.php` and updated `scripts/check_admin_mutation_contracts.php` so contract checks read complete split modules rather than only their entry files.
+
+#### Database
+
+- Added no migration, table, column, index, or data rewrite.
+- Preserved all existing schema-sensitive policies and compatibility behavior; the refactoring changes file organization and path resolution only.
+
+#### Frontend and documentation
+
+- Made no browser feature or public URL changes; existing Admin and visitor workflows continue to use the same controllers, services, templates, and assets.
+- Updated `AGENTS.md`, `ARCHITECTURE.md`, `CODEMAP.md`, and `TESTING.md` with the split-module architecture, path-resolution expectations, and review/audit guidance.
+- Regenerated `app/core-manifest.json` so all updater-managed application files have current integrity hashes.
+
+### Tests
+
+- Added `tests/module_split_path_resolution_test.php` to verify project-root resolution and stable entry-point loading across the split modules.
+- Updated Admin localization, test-run, duplicate-photo, mutation-schema, presentation-schema, Smart Gallery, stage-hardening, updater, and version-audit contracts to inspect complete module sources where required.
+- Added the module-split review audit and retained the existing regression coverage for upload, migration, updater, Admin mutation, and presentation-schema workflows.
+
+### User Impact
+
+#### For administrators
+
+- Admin gallery editing, reporting, test diagnostics, uploads, gallery migration, and application update workflows retain their existing behavior and URLs while becoming easier to maintain and diagnose.
+- No database upgrade or configuration change is required.
+
+#### For visitors
+
+- No public gallery, media, authentication, download, or presentation behavior changed in this maintenance release.
+
 ## Version 0.96.3
 
 Version 0.96.3 is a maintenance release with no schema or migration changes. It fixes a stale Admin update-status display: after a stable update, beta install, or rollback job finished activating, the Admin update page briefly lost all cached GitHub update information and fell back to a "no cached data yet, use Force check" placeholder until an administrator forced a check or the next automatic hourly probe ran.

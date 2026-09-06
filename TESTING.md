@@ -1,6 +1,6 @@
 # Testing Guide
 
-This guide applies to PHP Gallery Version 0.96.3. Release verification uses the central audit runner's `release` profile as the single authoritative automated qualification pass, plus any material environment-dependent/manual coverage reported by that profile and the retained Version 0.96 coverage: recursive, resumable gallery migration with bounded ZIP packages and imported child-tree reconstruction; canonical map-marker photo-page fallbacks and in-viewer map navigation across physical-gallery pagination, fullscreen split-map persistence, the canonical Admin side-panel mutation envelope and completion coordinator, multi-context postcondition verification, stale/out-of-order suppression, browser upload pipeline safeguards, opened-gallery branch image counters and their Theme/per-gallery visibility policy, progressive thumbnail dimension detection and responsive compatibility, the Version 0.93 request-budget/TTFB behavior, request-local database caching, resumable updater safety, updater server-policy reconciliation, Admin test-run diagnostics, public media concurrency and cache invalidation, clean-home URL handling, upload auto-renaming and inventory behavior, the redesigned Windows uploader, the Windows HTTP monitor schedules/protocol snapshots/report ZIPs, deployment exclusion rules, lightbox detached-image cleanup, decoded-cache ownership, preload-generation invalidation, teardown/reopen cycles, public lightbox zoom and progressive quality promotion, Shift+Left/Right ten-photo navigation, public Smart Gallery visibility, presentation settings, cycle-safe placement/order evaluation, viewer account privacy/access, collection sharing, bounded gallery benchmark diagnostics, access intersection and pagination; multilingual gallery/photo content and fallbacks; browser-local ZIP imports; progressive gallery and Smart Gallery ZIP downloads; browser download symbol rendering; ordered migration upgrades; complete deployment packaging; updater safety; the configurable public language selector; hourly automatic-update throttling; and the supported English, Czech, German, and Swedish catalogs.
+This guide applies to PHP Gallery Version 0.96.4. Release verification uses the central audit runner's `release` profile as the single authoritative automated qualification pass, plus any material environment-dependent/manual coverage reported by that profile and the retained Version 0.96 coverage: recursive, resumable gallery migration with bounded ZIP packages and imported child-tree reconstruction; canonical map-marker photo-page fallbacks and in-viewer map navigation across physical-gallery pagination, fullscreen split-map persistence, the canonical Admin side-panel mutation envelope and completion coordinator, multi-context postcondition verification, stale/out-of-order suppression, browser upload pipeline safeguards, opened-gallery branch image counters and their Theme/per-gallery visibility policy, progressive thumbnail dimension detection and responsive compatibility, the Version 0.93 request-budget/TTFB behavior, request-local database caching, resumable updater safety, updater server-policy reconciliation, Admin test-run diagnostics, public media concurrency and cache invalidation, clean-home URL handling, upload auto-renaming and inventory behavior, the redesigned Windows uploader, the Windows HTTP monitor schedules/protocol snapshots/report ZIPs, deployment exclusion rules, lightbox detached-image cleanup, decoded-cache ownership, preload-generation invalidation, teardown/reopen cycles, public lightbox zoom and progressive quality promotion, Shift+Left/Right ten-photo navigation, public Smart Gallery visibility, presentation settings, cycle-safe placement/order evaluation, viewer account privacy/access, collection sharing, bounded gallery benchmark diagnostics, access intersection and pagination; multilingual gallery/photo content and fallbacks; browser-local ZIP imports; progressive gallery and Smart Gallery ZIP downloads; browser download symbol rendering; ordered migration upgrades; complete deployment packaging; updater safety; the configurable public language selector; hourly automatic-update throttling; and the supported English, Czech, German, and Swedish catalogs.
 
 ## Purpose
 This project is a plain PHP gallery CMS without a formal browser automation stack. Automated verification is centralized through `scripts/audit.php`; focused commands documented later are diagnostic and manual-acceptance tools, not a second test plan that agents should execute in addition to the audit.
@@ -58,6 +58,48 @@ WinApp tests that exercise optional host integrations must remain isolated from 
 Run `php tests/content_localization_model_test.php`, `php tests/admin_content_localization_test.php`, `php tests/public_content_localization_test.php`, `php tests/openai_text_assist_model_test.php`, `php tests/public_language_preference_test.php`, `php tests/translation_catalog_consistency_test.php`, and `php tests/migration_consistency_test.php`.
 
 Coverage includes unclassified existing content, all maintained languages, invalid-language rejection, independent gallery-field fallback, non-mixed photo caption variants, blank-row deletion, batch/cache behavior, side-panel FormData ownership, access-before-localization ordering, server-rendered cards/lightbox/SEO, translated search terms, sidecar transfer, and review-only provider drafts. Translation behavior must not alter slugs, paths, ordering, filenames, visibility, access, NSFW, or media authorization. Finish with syntax checks for changed PHP files and `php scripts/audit.php --profile=full`.
+
+## Path Resolution In Split Modules
+
+`tests/module_split_path_resolution_test.php` protects the one regression class
+that a mechanical module split introduces without changing a single byte of a
+function body: a part file lives one directory deeper than its module entry
+file, so a moved `dirname(__DIR__, 2)` resolves to `app/` instead of the project
+root. The code still parses and still runs; it just reads and writes the wrong
+location, so neither `php -l` nor a byte-for-byte function comparison detects it.
+
+The test discovers every part directory in the repository, ignores comments so a
+docblock may warn about the wrong depth, proves each `dirname(__DIR__, N)`
+resolves to the repository root, and then asserts the concrete outcomes that
+matter: Admin test-run storage stays at `cache/admin-test-runs`, migration job
+storage stays at `cache/gallery-migrations`, neither moves inside `app/`, the
+migration instance identifier stays derived from the repository root because it
+feeds migration job identity, and SQL callsite reporting still excludes the whole
+instrumentation module. Extend it whenever a split module gains a new
+project-root path or a new stored location.
+
+## Source Contracts Against Split Modules
+
+Several services and controllers are split into part files under a sibling directory named after
+the module, with the original file kept as the module entry point. A source
+contract that reads such a module with `file_get_contents()` sees only the entry
+point and silently stops protecting the implementation.
+
+Read the whole module instead:
+
+- in a PHP test, `require_once __DIR__ . '/support/module_source.php';` and call
+  `module_source(__DIR__ . '/../app/services/<module>.php')`;
+- in `scripts/check_admin_mutation_contracts.php`, `contract_file()` already
+  appends part files, so existing contract calls need no change.
+
+In a test that uses bracketed `namespace X { }` blocks, put the `require_once`
+inside a namespace block rather than before the first one.
+
+Both helpers append parts in `require_once` order, so assertions that require one
+token to appear before another keep their meaning. Both are safe for modules that
+were never split, including JavaScript paths, so a shared source helper used for
+mixed file types can route every read through them. The current split modules are
+listed under "Split Modules" in `ARCHITECTURE.md`.
 
 ## Test Layers
 

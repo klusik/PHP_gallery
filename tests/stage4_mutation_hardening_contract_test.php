@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/support/module_source.php';
+
 /**
  * Focused Stage 4 source-boundary contracts for mutation synchronization hardening.
  *
@@ -17,7 +19,8 @@ $root = dirname(__DIR__);
 function stage4_source(string $relative): string
 {
     global $root;
-    $source = file_get_contents($root . '/' . $relative);
+    // module_source() also covers controllers that are split into part files.
+    $source = module_source($root . '/' . $relative);
     if (!is_string($source) || $source === '') {
         throw new RuntimeException('Could not read ' . $relative);
     }

@@ -10,6 +10,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/support/module_source.php';
+
 $root = dirname(__DIR__);
 $failures = [];
 
@@ -87,7 +89,8 @@ $assert(str_contains($earlyRuntimeSource, 'E_ERROR, E_PARSE, E_CORE_ERROR, E_COM
 $installerEntrypoint = file_get_contents($root . '/install.php') ?: '';
 $assert(strpos($installerEntrypoint, 'enforce_activation_gate(__DIR__)') < strpos($installerEntrypoint, "require_once __DIR__ . '/app/migration_definitions.php'"), 'Installer must enforce the activation gate before loading application migration code.');
 
-$updaterSource = file_get_contents($root . '/app/services/updates_jobs.php') ?: '';
+// The updater job service is split into part files; assert against the whole module.
+$updaterSource = module_source($root . '/app/services/updates_jobs.php');
 $assert(str_contains($updaterSource, 'application_update_activation_gate_begin($job);'), 'Updater must persist activation state before publishing managed files.');
 $assert(str_contains($updaterSource, "'app/early_runtime.php' => 35"), 'Early runtime must activate after ordinary dependencies but before HTTP front controllers.');
 $assert(str_contains($updaterSource, "'install.php', 'reset.php' => 45"), 'Direct HTTP utility entrypoints must activate after the early gate and public front controller.');

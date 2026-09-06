@@ -9,7 +9,7 @@ This document is intended to help future maintainers and AI coding agents unders
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.96.3';
+const CMS_VERSION = '0.96.4';
 ```
 
 Update-related code uses:
@@ -394,6 +394,61 @@ Key service families:
 | AI | `ai_image_analysis.php`, `openai_text_assist.php` | Local AI metadata queue, OpenAI text/image-description integration. |
 | Telemetry | `telemetry.php`, `telemetry_privacy.php`, `telemetry_settings.php`, `telemetry_rollup.php`, `database_observer.php` | Anonymous usage events, media serving metrics, privacy bucketing and rollups. |
 | Admin operations | `admin_dashboard.php`, `admin_render_profiler.php`, `logs.php`, `admin_log_archives.php`, `updates.php`, `github.php`, `gallery_migration.php`, `site_maintenance.php` | Dashboard model, diagnostics, grouped and exportable audit logs, protected day archives, GitHub update checks, API migration and resumable scheduled maintenance. |
+
+### Split Modules
+
+A service or controller that grows past comfortable reading length is split into
+part files under a sibling directory named after the module. The original file
+stays at its original path and becomes the module entry point: it keeps the
+module docblock, the shared constants, any shared type declaration, and an
+ordered `require_once` list of its parts. Nothing outside the module changes, so
+`app/services.php` keeps its single registration line and the historical include
+contract and load order are preserved.
+
+| Module entry point | Part directory | Parts |
+| --- | --- | --- |
+| `app/services/admin_gallery_report.php` | `app/services/admin_gallery_report/` | `job.php`, `image_summary.php`, `gps.php`, `system_summary.php`, `database_section.php`, `content_summary.php`, `query_helpers.php`, `format.php`, `render.php` |
+| `app/services/admin_test_runs.php` | `app/services/admin_test_runs/` | `paths.php`, `storage.php`, `context.php`, `snapshot.php`, `lifecycle.php`, `recording.php`, `summary.php`, `panel.php` |
+| `app/services/admin_test_run_analysis.php` | `app/services/admin_test_run_analysis/` | `sql_analysis.php`, `sanitization.php`, `browser.php`, `cache_analysis.php`, `maintenance_analysis.php`, `request_analysis.php`, `flags.php` |
+| `app/services/browser_uploads.php` | `app/services/browser_uploads/` | `exception.php`, `settings.php`, `zip_parsing.php`, `batch_state.php`, `payload_validation.php`, `manifest.php`, `pipeline.php` |
+| `app/services/gallery_migration.php` | `app/services/gallery_migration/` | `versions.php`, `jobs.php`, `metadata.php`, `assets.php`, `manifest.php`, `packages.php`, `target_setup.php`, `install.php`, `recovery.php`, `http.php` |
+| `app/services/updates_jobs.php` | `app/services/updates_jobs/` | `budget.php`, `errors.php`, `state.php`, `lifecycle.php`, `download.php`, `plan.php`, `activation.php`, `cleanup.php` |
+| `app/controllers/admin_galleries_edit_page.php` | `app/controllers/admin_galleries_edit_page/` | `capabilities.php`, `post_actions.php`, `overview.php`, `tab_identity.php`, `tab_access.php`, `tab_display.php`, `tab_media.php`, `tab_images.php`, `tab_tools.php`, `controller.php` |
+
+The gallery edit page was one 984-line function rather than many functions, so
+its split also introduced named phases. `controller.php` owns request
+orchestration: it authorizes the request, answers the read-only JSON panel
+endpoints, resolves capabilities once, hands POST requests to `post_actions.php`,
+and otherwise renders the phases in order. Identity, Access, Display, and Media
+render inside one shared editor form opened and closed by `controller.php`;
+Images, Organizer, File renamer, and API own their own forms after it. Schema and
+feature readiness is resolved once in `capabilities.php` and passed to every
+phase, so a control cannot be hidden in one tab and writable in another.
+
+Rules for split modules:
+
+- **a part file sits one directory deeper than the module entry file, so every
+  filesystem-relative expression must be re-based when a function moves into
+  one.** From `app/<layer>/<module>/<part>.php`, the project root is
+  `dirname(__DIR__, 3)`; the `dirname(__DIR__, 2)` that was correct in the entry
+  file now resolves to `app/`. This is silent: the expression is still valid PHP
+  and the code still runs, it just reads and writes the wrong location. Part
+  files that resolve project-root paths carry a path note in their docblock, and
+  `tests/module_split_path_resolution_test.php` enforces the depth for every
+  part file in the repository;
+- a function that filters or normalizes file paths by naming its own module —
+  backtrace filtering, for example — must be widened to the whole part
+  directory, not just the entry file it used to live in;
+
+- every part file declares `strict_types`, the module namespace, and its own
+  `use` imports, so it reads independently;
+- shared constants and shared types stay in the entry point and are loaded
+  before any part that uses them;
+- a part file is never required directly from outside its own module;
+- source-level contract checks must read the whole module, not the entry file.
+  Tests use `module_source()` from `tests/support/module_source.php`;
+  `scripts/check_admin_mutation_contracts.php` does the same inside
+  `contract_file()`.
 
 ## View Layer
 
