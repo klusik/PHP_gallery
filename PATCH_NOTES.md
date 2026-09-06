@@ -1,5 +1,36 @@
 # Patch notes
 
+## Version 0.96.6
+
+Version 0.96.6 is a small maintenance release with no database schema or migration changes. It fixes the fullscreen full-quality progress bar introduced in Version 0.96.5, whose fill element did not render or size correctly.
+
+### Highlights
+
+#### Fullscreen progress bar rendering fix
+
+- Fixed the fullscreen/mobile-fullscreen full-quality progress bar so its fill indicator renders and sizes correctly while an original-quality photo downloads.
+
+### Technical Details
+
+#### Frontend
+
+- Added `display: block;` to `.lightbox-quality-progress-fill` in `public/assets/styles/lightbox.css`. The fill element is a `<span>`, which is inline by default and does not apply an explicit `width`/`height`, so the bar's completion fill was not rendering as intended.
+- Regenerated `app/core-manifest.json` for the changed stylesheet. The deployed browser entrypoint's cache-busting revision is computed from actual file bytes at request time, so no separate version marker needed updating for this change.
+
+### Tests
+
+- No test changes. The fix is a single CSS display-mode correction with no behavioral branching to cover beyond the existing Version 0.96.5 manual verification steps in `TESTING.md`.
+
+### User Impact
+
+#### For visitors
+
+- The fullscreen/mobile-fullscreen full-quality progress bar now visibly fills as the photo downloads, instead of staying visually broken.
+
+#### For administrators
+
+- No Admin-facing change.
+
 ## Version 0.96.5
 
 Version 0.96.5 is a public lightbox release with no database schema or migration changes. It adds a real byte-progress indicator for full-quality photo loading in fullscreen and mobile fullscreen lightbox, and replaces the previous zoom-to-original `<img src>` swap with the same tracked fetch-and-decode path already used for passive quality upgrades, so both paths report accurate progress and cancel cleanly.
