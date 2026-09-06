@@ -39,6 +39,7 @@ function assert_admin_test_run_v11(bool $condition, string $label): void
     }
 }
 
+require_once __DIR__ . '/support/module_source.php';
 require_once __DIR__ . '/../app/diagnostics/admin_test_run_early.php';
 require_once __DIR__ . '/../app/services/admin_test_runs.php';
 require_once __DIR__ . '/../app/services/admin_test_run_analysis.php';
@@ -58,8 +59,9 @@ assert_admin_test_run_v11(
 $earlySource = (string) file_get_contents(__DIR__ . '/../app/diagnostics/admin_test_run_early.php');
 $bootstrapSource = (string) file_get_contents(__DIR__ . '/../app/bootstrap.php');
 $controllerSource = (string) file_get_contents(__DIR__ . '/../app/controllers/admin_test_runs.php');
-$serviceSource = (string) file_get_contents(__DIR__ . '/../app/services/admin_test_runs.php');
-$analysisSource = (string) file_get_contents(__DIR__ . '/../app/services/admin_test_run_analysis.php');
+// These two services are split into part files; assert against the whole module.
+$serviceSource = module_source(__DIR__ . '/../app/services/admin_test_runs.php');
+$analysisSource = module_source(__DIR__ . '/../app/services/admin_test_run_analysis.php');
 $thumbnailMaintenanceSource = (string) file_get_contents(__DIR__ . '/../app/services/thumbnail_maintenance.php');
 $browserSource = (string) file_get_contents(__DIR__ . '/../public/assets/gallery-modules/admin-test-run.js');
 $gallerySource = (string) file_get_contents(__DIR__ . '/../public/assets/gallery.js');

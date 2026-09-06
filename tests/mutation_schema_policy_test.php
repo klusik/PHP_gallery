@@ -35,6 +35,7 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/support/module_source.php';
 require_once __DIR__ . '/../app/services/schema_inspection.php';
 require_once __DIR__ . '/../app/services/mutation_schema_policy.php';
 
@@ -176,7 +177,8 @@ $phase10MutationSources = [
     'app/services/updates_jobs.php',
 ];
 foreach ($phase10MutationSources as $relativePath) {
-    $source = (string) file_get_contents(__DIR__ . '/../' . $relativePath);
+    // module_source() also covers services that are split into part files.
+    $source = module_source(__DIR__ . '/../' . $relativePath);
     mutation_policy_assert_true(!str_contains($source, 'db_table_exists('), $relativePath . ' has no legacy table-exists mutation policy');
     mutation_policy_assert_true(!str_contains($source, 'db_column_exists('), $relativePath . ' has no legacy column-exists mutation policy');
 }
@@ -217,7 +219,7 @@ mutation_policy_assert_true(
     strpos($uploadSource, "thumbnail_metadata_preflight_write_schema('upload.thumbnail_metadata_preflight')") < strpos($uploadSource, 'move_uploaded_file('),
     'classic upload metadata preflight occurs before first gallery file move'
 );
-$browserUploadSource = (string) file_get_contents(__DIR__ . '/../app/services/browser_uploads.php');
+$browserUploadSource = module_source(__DIR__ . '/../app/services/browser_uploads.php');
 $browserFunctionStart = strpos($browserUploadSource, 'function browser_upload_store_prepared_zip_batch');
 $browserPreflight = strpos($browserUploadSource, "thumbnail_metadata_preflight_write_schema('browser_upload.thumbnail_metadata_preflight')", $browserFunctionStart);
 $browserGalleryWrite = strpos($browserUploadSource, 'file_put_contents($targetPath', $browserFunctionStart);
@@ -229,7 +231,7 @@ $generationPreflight = strpos($thumbnailGenerationSource, "thumbnail_metadata_pr
 $generationDirectoryMutation = strpos($thumbnailGenerationSource, 'gallery_thumbs_dir($gallery, true)', $generationFunctionStart);
 mutation_policy_assert_true($generationPreflight !== false && $generationDirectoryMutation !== false && $generationPreflight < $generationDirectoryMutation, 'thumbnail schema preflight occurs before derivative directory mutation');
 
-$updateJobsSource = (string) file_get_contents(__DIR__ . '/../app/services/updates_jobs.php');
+$updateJobsSource = module_source(__DIR__ . '/../app/services/updates_jobs.php');
 $updatePlanStart = strpos($updateJobsSource, 'function application_update_job_build_plan');
 $updatePlanPreflight = $updatePlanStart === false
     ? false

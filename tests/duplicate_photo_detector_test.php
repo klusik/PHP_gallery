@@ -33,6 +33,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/support/module_source.php';
+
 use function Gallery\Services\duplicate_photo_detector_exif_fingerprint;
 use function Gallery\Services\duplicate_photo_detector_finalize_job;
 use function Gallery\Services\duplicate_photo_detector_group_references;
@@ -458,7 +460,7 @@ if (!is_string($galleryEntrypointSource)) {
 assert_duplicate_detector_true(str_contains($galleryEntrypointSource, 'admin-duplicate-photo-detector.js?v=20260902-mutation-stage3-v2'), 'gallery entrypoint cache-busts the detector module after the canonical in-panel review-ledger enhancement');
 
 $editorSource = (string) file_get_contents(__DIR__ . '/../app/controllers/admin_galleries_edit.php')
-    . (string) file_get_contents(__DIR__ . '/../app/controllers/admin_galleries_edit_page.php')
+    . module_source(__DIR__ . '/../app/controllers/admin_galleries_edit_page.php')
     . (string) file_get_contents(__DIR__ . '/../app/controllers/admin_galleries_edit_views.php');
 if (!is_string($editorSource)) {
     throw new RuntimeException('Could not read gallery editor source for side-panel entry assertion.');

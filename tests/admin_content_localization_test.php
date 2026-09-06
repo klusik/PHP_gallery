@@ -4,9 +4,12 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/support/module_source.php';
+
 $root = dirname(__DIR__);
 $view = (string) file_get_contents($root . '/app/views/admin_gallery_forms.php');
-$galleryPage = (string) file_get_contents($root . '/app/controllers/admin_galleries_edit_page.php');
+// The edit page is split into part files; assert against the whole module.
+$galleryPage = module_source($root . '/app/controllers/admin_galleries_edit_page.php');
 $gallerySave = (string) file_get_contents($root . '/app/controllers/admin_galleries_edit_actions.php');
 $imageEdit = (string) file_get_contents($root . '/app/controllers/admin_public_inline.php');
 $sidePanel = (string) file_get_contents($root . '/public/assets/gallery-modules/admin-side-panel.js');

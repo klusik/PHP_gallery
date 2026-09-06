@@ -57,6 +57,8 @@ namespace Gallery\Services {
 }
 
 namespace {
+    require_once __DIR__ . '/support/module_source.php';
+
     use Gallery\Services\PresentationSchemaUnavailableException;
     use function Gallery\Services\presentation_picture_game_schema_status;
     use function Gallery\Services\presentation_schema_assert_known;
@@ -191,12 +193,14 @@ namespace {
         'app/services/telemetry_rollup.php',
     ];
     foreach ($convertedFiles as $relativePath) {
-        $source = file_get_contents(__DIR__ . '/../' . $relativePath) ?: '';
+        // module_source() also covers services that are split into part files.
+        $source = module_source(__DIR__ . '/../' . $relativePath);
         presentation_policy_assert(!preg_match('/\bdb_(?:table|column)_exists\s*\(/', $source), $relativePath . ' still contains a legacy boolean schema probe.');
         presentation_policy_assert(!str_contains($source, 'SHOW COLUMNS'), $relativePath . ' still contains a direct SHOW COLUMNS schema probe.');
     }
 
-    $reportSource = file_get_contents(__DIR__ . '/../app/services/admin_gallery_report.php') ?: '';
+    // The Admin report service is split into part files; assert against the whole module.
+    $reportSource = module_source(__DIR__ . '/../app/services/admin_gallery_report.php');
     presentation_policy_assert(!preg_match('/\bdb_(?:table|column)_exists\s*\(/', $reportSource), 'Admin report must use structured named-object inspection.');
     presentation_policy_assert(str_contains($reportSource, 'information_schema.TABLES'), 'Admin report must retain its explicitly justified dynamic base-table inventory query.');
     presentation_policy_assert(!str_contains($reportSource, '$exception->getMessage()'), 'Admin report must not export raw database exception messages.');

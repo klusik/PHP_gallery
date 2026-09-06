@@ -39,9 +39,12 @@ function assert_admin_test_run_feature(bool $condition, string $label): void
     }
 }
 
+require_once __DIR__ . '/support/module_source.php';
+
 $featureSource = (string) file_get_contents(__DIR__ . '/../app/services/feature_flags.php');
 $layoutSource = (string) file_get_contents(__DIR__ . '/../app/views/layout.php');
-$serviceSource = (string) file_get_contents(__DIR__ . '/../app/services/admin_test_runs.php');
+// The test-run service is split into part files; assert against the whole module.
+$serviceSource = module_source(__DIR__ . '/../app/services/admin_test_runs.php');
 $controllerSource = (string) file_get_contents(__DIR__ . '/../app/controllers/admin_test_runs.php');
 $databaseSource = (string) file_get_contents(__DIR__ . '/../app/database.php');
 $smartSource = (string) file_get_contents(__DIR__ . '/../app/controllers/smart_galleries.php');

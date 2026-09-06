@@ -59,6 +59,48 @@ Run `php tests/content_localization_model_test.php`, `php tests/admin_content_lo
 
 Coverage includes unclassified existing content, all maintained languages, invalid-language rejection, independent gallery-field fallback, non-mixed photo caption variants, blank-row deletion, batch/cache behavior, side-panel FormData ownership, access-before-localization ordering, server-rendered cards/lightbox/SEO, translated search terms, sidecar transfer, and review-only provider drafts. Translation behavior must not alter slugs, paths, ordering, filenames, visibility, access, NSFW, or media authorization. Finish with syntax checks for changed PHP files and `php scripts/audit.php --profile=full`.
 
+## Path Resolution In Split Modules
+
+`tests/module_split_path_resolution_test.php` protects the one regression class
+that a mechanical module split introduces without changing a single byte of a
+function body: a part file lives one directory deeper than its module entry
+file, so a moved `dirname(__DIR__, 2)` resolves to `app/` instead of the project
+root. The code still parses and still runs; it just reads and writes the wrong
+location, so neither `php -l` nor a byte-for-byte function comparison detects it.
+
+The test discovers every part directory in the repository, ignores comments so a
+docblock may warn about the wrong depth, proves each `dirname(__DIR__, N)`
+resolves to the repository root, and then asserts the concrete outcomes that
+matter: Admin test-run storage stays at `cache/admin-test-runs`, migration job
+storage stays at `cache/gallery-migrations`, neither moves inside `app/`, the
+migration instance identifier stays derived from the repository root because it
+feeds migration job identity, and SQL callsite reporting still excludes the whole
+instrumentation module. Extend it whenever a split module gains a new
+project-root path or a new stored location.
+
+## Source Contracts Against Split Modules
+
+Several services and controllers are split into part files under a sibling directory named after
+the module, with the original file kept as the module entry point. A source
+contract that reads such a module with `file_get_contents()` sees only the entry
+point and silently stops protecting the implementation.
+
+Read the whole module instead:
+
+- in a PHP test, `require_once __DIR__ . '/support/module_source.php';` and call
+  `module_source(__DIR__ . '/../app/services/<module>.php')`;
+- in `scripts/check_admin_mutation_contracts.php`, `contract_file()` already
+  appends part files, so existing contract calls need no change.
+
+In a test that uses bracketed `namespace X { }` blocks, put the `require_once`
+inside a namespace block rather than before the first one.
+
+Both helpers append parts in `require_once` order, so assertions that require one
+token to appear before another keep their meaning. Both are safe for modules that
+were never split, including JavaScript paths, so a shared source helper used for
+mixed file types can route every read through them. The current split modules are
+listed under "Split Modules" in `ARCHITECTURE.md`.
+
 ## Test Layers
 
 ### 1. Syntax Checks

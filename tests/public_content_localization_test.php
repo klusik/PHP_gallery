@@ -4,13 +4,16 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/support/module_source.php';
+
 $root = dirname(__DIR__);
 $galleryPage = (string) file_get_contents($root . '/app/controllers/public_gallery_page.php');
 $lightbox = (string) file_get_contents($root . '/app/controllers/gallery_lightbox.php');
 $service = (string) file_get_contents($root . '/app/services/content_localization.php');
 $sidecars = (string) file_get_contents($root . '/app/services/gallery_sidecars.php');
 $search = (string) file_get_contents($root . '/app/services/public_search.php');
-$migration = (string) file_get_contents($root . '/app/services/gallery_migration.php');
+// The gallery migration service is split into part files; assert against the whole module.
+$migration = module_source($root . '/app/services/gallery_migration.php');
 
 /**
  * Assert one public localization source or ordering contract.

@@ -6,7 +6,7 @@ This file maps features to source files. It is optimized for fast maintenance an
 
 1. Find the feature area below.
 2. Open the listed controller first when the change is request/response related.
-3. Open the listed service first when the change is business logic, storage, validation or shared behavior.
+3. Open the listed service first when the change is business logic`app/services/browser_uploads/`, `app/services/gallery_migration/`, `app/services/updates_jobs/`, `app/controllers/admin_galleries_edit_page/`storage, validation or shared behavior.
 4. Open the listed migration only to understand schema history. Add a new migration for changes.
 5. Open public assets only for browser-side behavior or styling.
 
@@ -24,6 +24,8 @@ This file maps features to source files. It is optimized for fast maintenance an
 | Route table and controller dispatch | `app/bootstrap/dispatch.php` |
 | Controller loader | `app/controllers.php` |
 | Service loader | `app/services.php` |
+| Split modules | `app/services/admin_gallery_report/`, `app/services/admin_test_runs/`, `app/services/admin_test_run_analysis/`, `app/services/browser_uploads/`, `app/services/gallery_migration/`, `app/services/updates_jobs/`, `app/controllers/admin_galleries_edit_page/` hold the part files of the module named by their directory; the same-named `.php` file beside each directory stays the entry point and keeps the shared constants and the `require_once` list. See "Split Modules" in `ARCHITECTURE.md`. |
+| Whole-module source reading for contract tests | `tests/support/module_source.php`, `contract_file()` in `scripts/check_admin_mutation_contracts.php` |
 | View loader | `app/views.php` |
 | Database connection | `app/database.php` |
 | Migration runner | `app/migrations.php` |
@@ -266,7 +268,7 @@ The Gallery tags Theme subsection is rendered by app/controllers/admin_theme.php
 | Task | Files |
 | --- | --- |
 | Admin migration UI and side-panel completion | `app/controllers/gallery_migration.php`, `app/views/admin_gallery_migration.php`, `public/assets/gallery-modules/admin-gallery-migration.js`, `public/assets/gallery-modules/admin-side-panel.js` |
-| Migration service model | `app/services/gallery_migration.php` |
+| Migration service model | `app/services/gallery_migration.php` (parts in `app/services/gallery_migration/`) |
 | Manifest endpoint | Handler `cms_gallery_migration_manifest` |
 | Asset endpoint | Handler `cms_gallery_migration_asset` |
 | Receive manifest | Handler `cms_gallery_migration_receive_manifest` |
@@ -316,7 +318,7 @@ The Gallery tags Theme subsection is rendered by app/controllers/admin_theme.php
 | --- | --- | --- |
 | GitHub API helper/cache | `app/services/github.php` | Shared GitHub metadata/content transport. |
 | Update status/service router | `app/services/updates.php`, `app/services/updates_status.php`, `app/services/updates_remote.php` | Bounded release discovery and updater service composition. |
-| Resumable update state machine | `app/services/updates_jobs.php` | Durable jobs, bounded download/archive/extract/verify/stage/backup checkpoints, Range/If-Range resume, worker locks, pre-activation cancellation, changed-file activation, migration continuation, rollback and cleanup. |
+| Resumable update state machine | `app/services/updates_jobs.php` (parts in `app/services/updates_jobs/`) | Durable jobs, bounded download/archive/extract/verify/stage/backup checkpoints, Range/If-Range resume, worker locks, pre-activation cancellation, changed-file activation, migration continuation, rollback and cleanup. |
 | Update install/background entry points | `app/services/updates_install.php`, `scripts/application_update.php` | Legacy API starters plus request-triggered/cron continuation; discovery and package work are split across invocations. |
 | Admin update UI | `app/controllers/updates.php`, `public/assets/gallery-modules/admin-update-jobs.js` | Authenticated CSRF-protected start/continue/retry/cancel/rollback controls with delegated in-panel progress refresh and non-JavaScript POST fallback. |
 | Patch notes | `PATCH_NOTES.md` | Release-note source, not modified as part of updater hardening. |
@@ -362,9 +364,9 @@ English is the canonical default and fallback. English, Czech, German, and Swedi
 | Mutation schema policy | `app/services/mutation_schema_policy.php` defines the Phase 10 capability registry, fail-closed assertions, optional-dependency compatibility checks, narrow credential-revocation capabilities, bounded `database.mutation_schema_refused` diagnostics, and the shared `MutationSchemaUnavailableException`. `tests/mutation_schema_policy_test.php` protects state semantics, request-cache budgets, preflight ordering, health registration, updater package requirements, and removal of legacy boolean probes from converted mutation paths. |
 | Gallery destructive mutations | `app/services/gallery_mutations.php`, `app/services/picture_manager.php` preflight gallery/image ownership, path, hash, ordering, tag-propagation, and dependency cleanup before deletion, move, or copy. Confirmed absent optional dependency tables/columns may be skipped; unknown dependencies stop the mutation. |
 | Duplicate Photo Detector ledger schema | `app/services/duplicate_photo_ledger.php`, `app/controllers/admin_duplicate_photos.php` distinguish missing ledger migration from unknown inspection state and refuse per-admin ignore/reset writes on unknown schema. |
-| Upload ingestion schema | `app/services/uploads.php`, `app/services/browser_uploads.php` require current gallery/image registration schema plus conclusive thumbnail write-shape inspection before source files are moved or prepared ZIP entries are written into a gallery. |
+| Upload ingestion schema | `app/services/uploads.php`, `app/services/browser_uploads.php` (parts in `app/services/browser_uploads/`) require current gallery/image registration schema plus conclusive thumbnail write-shape inspection before source files are moved or prepared ZIP entries are written into a gallery. |
 | Upload automation schema | `app/services/upload_automation.php`, `app/controllers/upload_automation.php` require the complete `gallery_upload_tokens` shape for issuance/authentication/usage and a smaller verified revocation shape for disabling an existing API key. |
-| Gallery migration schema | `app/services/gallery_migration.php` preflights target gallery/image schema, optional imported metadata columns, thumbnail write compatibility, recursive child-tree creation, bounded ZIP-package installation, and job completion so an inspection outage pauses the resumable job before target mutation. |
+| Gallery migration schema | `app/services/gallery_migration.php` and its part files preflight target gallery/image schema, optional imported metadata columns, thumbnail write compatibility, recursive child-tree creation, bounded ZIP-package installation, and job completion so an inspection outage pauses the resumable job before target mutation. |
 | Mobile WebDAV schema | `app/services/mobile_webdav.php`, `app/controllers/mobile_webdav.php` separate full credential/authentication readiness from narrow credential deletion and verify upload-ingestion schema before PUT storage crosses into a gallery. |
 | Thumbnail mutation schema | `app/services/thumbnail_metadata.php`, `app/services/thumbnail_generation.php`, `app/services/thumbnail_maintenance.php` preserve confirmed table-absent file-only compatibility while refusing unknown metadata/write-shape state before generation, variant deletion, repair, or bulk derivative deletion. |
 | Database maintenance mutation schema | `app/services/database_maintenance.php` requires conclusive `schema_migrations` inspection before cleanup/repair. Confirmed absence may enter the migration bootstrap path; unknown state refuses mutation. |
@@ -377,7 +379,7 @@ English is the canonical default and fallback. English, Czech, German, and Swedi
 | OpenAI and local AI presentation schema | `app/services/openai_text_assist.php`, `app/services/ai_image_analysis.php`, `app/controllers/upload_automation.php` distinguish core OpenAI settings, optional image input, and AI metadata/queue storage; worker schema failures use bounded responses instead of raw exceptions. |
 | SimBrief and navigation integration | `app/services/simbrief_descriptions.php`, `app/services/navigation_data.php` keep remote/session behavior independent from optional persistent route/account/cache storage while refusing unknown account persistence and using a narrow verified disconnect capability. |
 | Telemetry presentation/reporting | `app/services/telemetry.php`, `app/services/telemetry_settings.php`, `app/services/telemetry_rollup.php`, `app/controllers/admin_telemetry.php` distinguish safe read omission, verified settings writes, complete report shape, and maintenance refusal on unknown schema. |
-| Complete Admin Gallery Report | `app/services/admin_gallery_report.php` uses structured named-object inspection for known optional sections, retains a justified dynamic `information_schema.TABLES` inventory query, and suppresses raw database exception text. |
+| Complete Admin Gallery Report | `app/services/admin_gallery_report.php` and its part files in `app/services/admin_gallery_report/` use structured named-object inspection for known optional sections, retains a justified dynamic `information_schema.TABLES` inventory query, and suppresses raw database exception text. |
 | Presentation System Health | `app/services/admin_dashboard.php`, `app/views/admin_dashboard_sections.php`, `app/controllers/admin_diagnostics.php` expose the same fifteen lazy Phase 11 capability resolvers as `available`, `missing`, `unknown`, or feature-flag `disabled`. |
 | Migration files | `database/migrations/*.php` |
 | Schema documentation | `DATABASE.md` |
