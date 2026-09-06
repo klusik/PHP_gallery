@@ -17,6 +17,8 @@
  *   - Preserve transform state and preview fallback when promotion fails
  *   - Install the decoded node so transformed previews repaint immediately
  *   - Keep lazy metadata hydration on the same quality-source contract
+ *   - Start the tracked byte-progress download synchronously with the zoom input, before any decode/installation work
+ *   - Abort a superseded tracked download instead of letting it finish, without recording the abort as a failure
  */
 
 declare(strict_types=1);
@@ -64,8 +66,8 @@ $explicitUpgradeEnd = $explicitUpgradeStart === false
 $explicitUpgradeSource = ($explicitUpgradeStart !== false && $explicitUpgradeEnd !== false)
     ? substr($lightboxSource, $explicitUpgradeStart, $explicitUpgradeEnd - $explicitUpgradeStart)
     : '';
-$liveSourceAssignmentPosition = strpos($explicitUpgradeSource, 'targetImage.src = fullSrc;');
-$asyncDecodePosition = strpos($explicitUpgradeSource, 'loadFreshDecodedLightboxImage(');
+$trackedDownloadStartPosition = strpos($explicitUpgradeSource, 'loadTrackedDecodedLightboxImage(fullSrc, {');
+$explicitInstallPosition = strpos($explicitUpgradeSource, 'installDecodedLightboxQualityImage(loadedImage, fullSrc');
 $setZoomStart = strpos($lightboxSource, 'function setLightboxZoomScale(');
 $setZoomEnd = $setZoomStart === false ? false : strpos($lightboxSource, 'function resetLightboxZoom(', $setZoomStart);
 $setZoomSource = ($setZoomStart !== false && $setZoomEnd !== false)
@@ -87,22 +89,28 @@ lightbox_zoom_quality_lifecycle_assert(
         && str_contains($explicitUpgradeSource, 'activeLightboxTransitionToken += 1;')
         && str_contains($explicitUpgradeSource, 'removeTransitionImage();')
         && str_contains($lightboxSource, 'delete image.dataset.lightboxExplicitZoomQuality;')
-        && str_contains($explicitUpgradeSource, 'targetImage.dataset.lightboxExplicitZoomQuality = imageId;')
-        && str_contains($explicitUpgradeSource, "targetImage.fetchPriority = 'high';")
-        && str_contains($explicitUpgradeSource, "devMarkSource(fullSrc, 'loading', 'zoom-live-original');")
-        && str_contains($explicitUpgradeSource, "devMarkSource(fullSrc, 'ready', 'zoom-live-original', targetImage);")
-        && $liveSourceAssignmentPosition !== false
-        && ($asyncDecodePosition === false || $liveSourceAssignmentPosition < $asyncDecodePosition)
-        && !str_contains($explicitUpgradeSource, 'installDecodedLightboxQualityImage(')
+        && str_contains($explicitUpgradeSource, 'image.dataset.lightboxExplicitZoomQuality = imageId;')
+        && str_contains($explicitUpgradeSource, "devMarkSource(fullSrc, 'loading', 'zoom-tracked-original');")
+        && str_contains($explicitUpgradeSource, "devMarkSource(fullSrc, 'ready', 'zoom-tracked-original', image);")
+        && $trackedDownloadStartPosition !== false
+        && $explicitInstallPosition !== false
+        && $trackedDownloadStartPosition < $explicitInstallPosition
         && !str_contains($explicitUpgradeSource, 'promoteLightboxQualityIfNeeded(')
         && substr_count($lightboxSource, 'scheduleLightboxQualityUpgrade(') >= 4,
-    'Button/keyboard, wheel, and pinch zoom must synchronously assign the original URL to the live image without waiting for a detached decode or mode transition.'
+    'Button/keyboard, wheel, and pinch zoom must synchronously start the tracked original-quality download before any decode/installation work, without waiting for a detached decode or mode transition.'
 );
 lightbox_zoom_quality_lifecycle_assert(
-    str_contains($lightboxSource, 'loadFreshDecodedLightboxImage(desired.src')
+    str_contains($lightboxSource, 'loadTrackedDecodedLightboxImage(desired.src')
         && str_contains($lightboxSource, 'qualityToken !== activeLightboxQualityRequestToken')
         && str_contains($lightboxSource, '!isCurrentLightboxImageRequest(index, imageToken)'),
     'Passive high-resolution decode must stay transient and reject stale image generations.'
+);
+lightbox_zoom_quality_lifecycle_assert(
+    str_contains($lightboxSource, 'const qualityAbortController = new AbortController();')
+        && substr_count($lightboxSource, 'activeLightboxQualityAbortController.abort();') >= 2
+        && str_contains($lightboxSource, "if (error?.name !== 'AbortError') {")
+        && str_contains($lightboxSource, 'failedLightboxQualitySources.add(failureKey);'),
+    'A newer quality request, navigation, or close must abort the previous tracked download instead of letting it finish, and an aborted transfer must not be recorded as a failed source.'
 );
 lightbox_zoom_quality_lifecycle_assert(
     str_contains($lightboxSource, 'failedLightboxQualitySources.add(failureKey)')
