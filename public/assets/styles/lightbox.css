@@ -527,7 +527,7 @@
         animation: none;
     }
 }
-.lightbox.is-quality-loading:not(.is-initial-loading):not(.is-navigation-loading) .lightbox-stage-link::after {
+.lightbox.is-quality-loading:not(.is-initial-loading):not(.is-navigation-loading):not(.is-fullscreen):not(.is-mobile-fullscreen) .lightbox-stage-link::after {
     content: attr(data-quality-loading-label);
     position: absolute;
     bottom: 1rem;
@@ -549,7 +549,7 @@
     pointer-events: none;
     backdrop-filter: blur(8px);
 }
-.lightbox.is-quality-loading:not(.is-initial-loading):not(.is-navigation-loading) .lightbox-stage-link::before {
+.lightbox.is-quality-loading:not(.is-initial-loading):not(.is-navigation-loading):not(.is-fullscreen):not(.is-mobile-fullscreen) .lightbox-stage-link::before {
     content: '';
     position: absolute;
     bottom: 1.53rem;
@@ -569,8 +569,87 @@
     }
 }
 @media (prefers-reduced-motion: reduce) {
-    .lightbox.is-quality-loading:not(.is-initial-loading):not(.is-navigation-loading) .lightbox-stage-link::before {
+    .lightbox.is-quality-loading:not(.is-initial-loading):not(.is-navigation-loading):not(.is-fullscreen):not(.is-mobile-fullscreen) .lightbox-stage-link::before {
         animation: none;
+    }
+}
+
+.lightbox-quality-progress {
+    position: absolute;
+    left: 50%;
+    bottom: 1.1rem;
+    z-index: 9;
+    display: none;
+    width: min(26rem, calc(100% - 2rem));
+    padding: 0.62rem 0.72rem 0.58rem;
+    transform: translateX(-50%);
+    gap: 0.42rem;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    border-radius: 0.72rem;
+    background: rgba(8, 12, 20, 0.7);
+    box-shadow: 0 0.65rem 2rem rgba(0, 0, 0, 0.34);
+    color: #fffdf8;
+    pointer-events: none;
+    backdrop-filter: blur(8px);
+}
+.lightbox-quality-progress[hidden] {
+    display: none !important;
+}
+.lightbox.is-quality-loading.is-fullscreen:not(.is-initial-loading):not(.is-navigation-loading) .lightbox-quality-progress,
+.lightbox.is-quality-loading.is-mobile-fullscreen:not(.is-initial-loading):not(.is-navigation-loading) .lightbox-quality-progress {
+    display: grid;
+}
+.lightbox-quality-progress-track {
+    width: 100%;
+    height: 0.34rem;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.18);
+}
+.lightbox-quality-progress-fill {
+    width: 0%;
+    height: 100%;
+    border-radius: inherit;
+    background: rgba(255, 255, 255, 0.88);
+    transition: width 90ms linear;
+}
+.lightbox-quality-progress-metrics {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    min-width: 0;
+    font-size: 0.78rem;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.2;
+}
+.lightbox-quality-progress-percent {
+    flex: 0 0 auto;
+    font-weight: 800;
+}
+.lightbox-quality-progress-bytes {
+    min-width: 0;
+    overflow: hidden;
+    color: rgba(255, 255, 255, 0.84);
+    font-weight: 650;
+    text-align: right;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+@media (max-width: 560px) {
+    .lightbox-quality-progress {
+        bottom: 0.8rem;
+        width: min(22rem, calc(100% - 1.4rem));
+        padding: 0.56rem 0.62rem 0.52rem;
+    }
+    .lightbox-quality-progress-metrics {
+        gap: 0.7rem;
+        font-size: 0.74rem;
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .lightbox-quality-progress-fill {
+        transition: none;
     }
 }
 .lightbox:not(.is-fullscreen):not(.is-mobile-fullscreen) .lightbox-stage-link {

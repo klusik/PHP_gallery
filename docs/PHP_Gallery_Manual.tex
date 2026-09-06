@@ -49,7 +49,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.96.4}
+\newcommand{\version}{0.96.5}
 \newcommand{\manualdate}{6 September 2026}
 
 \hypersetup{
@@ -1192,7 +1192,7 @@ Mouse-wheel and~trackpad zoom follows the~pointer: the~part of~the~photograph un
 
 At~100\%, the~photograph is~fitted and~centered in~the~viewer. Full-screen mode uses the~same zoom and~pan behavior, and~its Close and~other controls remain clickable while the~image is~enlarged.
 
-Zooming above 100\% immediately requests the~protected full-quality source for~the~active photograph. The~existing preview remains visible until the~larger image is~ready, and~the~current zoom and~pan position are~preserved. Changing photographs cancels the~pending upgrade for~the~previous image. A~failed full-quality request leaves the~protected preview in~place.
+Zooming above 100\% immediately requests the~protected full-quality source for~the~active photograph. The~existing preview remains visible until the~larger image is~ready, and~the~current zoom and~pan position are~preserved. In~full screen and~mobile full screen, this transfer shows a~progress bar with a~percentage and~a~byte count; the~normal (non-full-screen) viewer keeps the~existing compact loading indicator instead. Changing photographs, closing the~viewer, or~starting a~newer full-quality request cancels the~previous transfer. A~failed or~cancelled full-quality request leaves the~protected preview in~place.
 
 Navigation, slideshow start, close, and~reopen return the~viewer to~a~centered 100\%. Entering or~leaving full screen keeps the~current scale when the~photograph itself has~not~changed and~adjusts pan to~the~new viewport. Reduced-motion preferences remove the~short discrete zoom transition.
 

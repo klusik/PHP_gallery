@@ -1,5 +1,45 @@
 # Patch notes
 
+## Version 0.96.5
+
+Version 0.96.5 is a public lightbox release with no database schema or migration changes. It adds a real byte-progress indicator for full-quality photo loading in fullscreen and mobile fullscreen lightbox, and replaces the previous zoom-to-original `<img src>` swap with the same tracked fetch-and-decode path already used for passive quality upgrades, so both paths report accurate progress and cancel cleanly.
+
+### Highlights
+
+#### Fullscreen full-quality progress bar
+
+- Added a progress bar shown only in fullscreen and mobile fullscreen lightbox while the original-quality image downloads, with a percentage and a dynamically unit-scaled byte readout such as `8.4 MB / 22.7 MB`.
+- Kept the existing compact loading pill/ring for normal (non-fullscreen) lightbox mode so the added metrics do not consume space on smaller cards.
+- Unified the passive 100% quality-upgrade path and the deliberate pinch/scroll zoom-to-original path onto the same tracked download, so both now report real progress instead of only the zoom path swapping the image source directly.
+
+### Technical Details
+
+#### Frontend
+
+- Added `primeLightboxImageCacheWithProgress()` in `public/assets/gallery-modules/lightbox.js`, which fetches the authorized image through the Fetch API and streams the response body with a reader so real loaded/total byte counts are available from `Content-Length`, then lets the existing decode helper reuse the now browser-cached URL.
+- Added `loadTrackedDecodedLightboxImage()` combining that byte-tracked fetch with the existing decode helper, used by both the passive quality upgrade and the explicit zoom-to-original path.
+- Replaced the previous zoom-to-original flow's direct `<img src>` assignment and `load`/`error` listener pair with the same tracked fetch-and-decode path used for passive upgrades, giving both paths one consistent original-image installation path.
+- Added an `AbortController` per quality request so navigating, closing, or starting a newer quality request cancels the in-flight transfer instead of letting a stale download finish and affect the wrong photograph. Aborted transfers are no longer recorded as failed sources.
+- Added `setLightboxQualityProgress()` and `formatLightboxQualityTransfer()` to drive the progress bar fill, percentage, and byte readout.
+- Added the `.lightbox-quality-progress` markup and CSS in `public/assets/styles/lightbox.css`, restricted to fullscreen/mobile-fullscreen modes; excluded `is-fullscreen`/`is-mobile-fullscreen` from the existing corner spinner/backdrop selectors so the two indicators never overlap.
+- Regenerated `app/core-manifest.json` for the changed lightbox module and stylesheet. The deployed browser entrypoint's cache-busting revision is computed from actual file bytes at request time, so no separate version marker needed updating for this change.
+
+### Tests
+
+- Updated `tests/lightbox_zoom_quality_indicator_test.php` and `tests/lightbox_zoom_quality_lifecycle_test.php`, which previously asserted the removed synchronous `<img src>` zoom-to-original assignment, to instead verify the tracked fetch-and-decode path: the download still starts synchronously with the zoom input before any decode/installation work, the fullscreen/mobile-fullscreen progress element toggles correctly and stays excluded from the normal-mode indicator selectors, and a superseded download is aborted rather than recorded as a failed source.
+- Extended `TESTING.md`'s Public Lightbox Zoom Verification checklist with manual coverage for the fullscreen progress bar's percentage/byte readout, its absence in normal lightbox mode, and cancellation behavior when navigating, closing, or re-zooming during an in-flight full-quality transfer.
+
+### User Impact
+
+#### For visitors
+
+- Fullscreen and mobile fullscreen lightbox now show real download progress while a sharper photo loads, instead of only a generic busy indicator.
+- Rapidly navigating, zooming, or closing the lightbox during a full-quality download no longer leaves a stale transfer that could affect a later photograph.
+
+#### For administrators
+
+- No Admin-facing change.
+
 ## Version 0.96.4
 
 Version 0.96.4 is a maintenance and maintainability release with no database schema or migration changes and no change to the public gallery feature set. It reorganizes the largest Admin and backend modules into focused, ordered part files while preserving their historical entry points, include contracts, runtime behavior, and updater integrity metadata. The release also adds source-level checks for module path resolution and makes the split-module architecture easier to review and maintain.

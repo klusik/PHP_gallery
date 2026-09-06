@@ -27,7 +27,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-09-05
+ *   2026-09-06
  */
 
 /**
@@ -644,6 +644,36 @@ export function setupGalleryLightbox() {
     const zoomSurface = overlay.querySelector('[data-lightbox-zoom-surface]');
     // stageLink stores state or configuration for the gallery front-end flow.
     const stageLink = image ? image.closest('.lightbox-stage-link') : null;
+    // qualityProgress renders real byte-transfer progress while fullscreen promotes the active photo.
+    let qualityProgress = null;
+    // qualityProgressFill stores the visual completion fill inside the fullscreen quality progress bar.
+    let qualityProgressFill = null;
+    // qualityProgressPercent stores the numeric transfer percentage shown beside the bar.
+    let qualityProgressPercent = null;
+    // qualityProgressBytes stores the downloaded and total byte counts in one dynamically selected unit.
+    let qualityProgressBytes = null;
+    if (stageLink instanceof HTMLElement) {
+        qualityProgress = document.createElement('span');
+        qualityProgress.className = 'lightbox-quality-progress';
+        qualityProgress.hidden = true;
+        qualityProgress.setAttribute('aria-hidden', 'true');
+
+        const qualityProgressTrack = document.createElement('span');
+        qualityProgressTrack.className = 'lightbox-quality-progress-track';
+        qualityProgressFill = document.createElement('span');
+        qualityProgressFill.className = 'lightbox-quality-progress-fill';
+        qualityProgressTrack.append(qualityProgressFill);
+
+        const qualityProgressMetrics = document.createElement('span');
+        qualityProgressMetrics.className = 'lightbox-quality-progress-metrics';
+        qualityProgressPercent = document.createElement('span');
+        qualityProgressPercent.className = 'lightbox-quality-progress-percent';
+        qualityProgressBytes = document.createElement('span');
+        qualityProgressBytes.className = 'lightbox-quality-progress-bytes';
+        qualityProgressMetrics.append(qualityProgressPercent, qualityProgressBytes);
+        qualityProgress.append(qualityProgressTrack, qualityProgressMetrics);
+        stageLink.append(qualityProgress);
+    }
     // zoomStatuses mirror the current scale in the normal toolbar and fullscreen HUD.
     const zoomStatuses = Array.from(overlay.querySelectorAll('[data-lightbox-zoom-status]'));
     // zoomAnnouncement is the single polite screen-reader status for deliberate scale changes.
@@ -690,6 +720,8 @@ export function setupGalleryLightbox() {
     let pendingLightboxQualityTimer = 0;
     // activeLightboxQualityRequestToken invalidates late high-resolution decodes after navigation or close.
     let activeLightboxQualityRequestToken = 0;
+    // activeLightboxQualityAbortController cancels the active byte-tracked quality transfer on navigation or close.
+    let activeLightboxQualityAbortController = null;
     // activeLightboxQualitySource records the current image source without relying on absolute URL normalization.
     let activeLightboxQualitySource = '';
     // pendingLightboxQualitySource prevents duplicate decodes while one larger source is already in flight.
@@ -927,6 +959,7 @@ export function setupGalleryLightbox() {
         controller.abort();
         cards = [];
         clearPendingLightboxQualityUpgrade();
+        qualityProgress?.remove();
         clearLightboxNavigationPending();
         clearLightboxHudTimer();
         activeLightboxImageToken += 1;
@@ -1044,19 +1077,82 @@ export function setupGalleryLightbox() {
             window.clearTimeout(pendingLightboxQualityTimer);
             pendingLightboxQualityTimer = 0;
         }
+        if (activeLightboxQualityAbortController) {
+            activeLightboxQualityAbortController.abort();
+            activeLightboxQualityAbortController = null;
+        }
         activeLightboxQualityRequestToken += 1;
         pendingLightboxQualitySource = '';
         setLightboxQualityLoading(false);
     }
 
     /**
-     * Synchronize the visible spinner and accessible full-quality loading status.
+     * Format a byte-transfer pair with one shared dynamically selected unit.
+     *
+     * Using the total size to choose the unit keeps values such as
+     * `8.4 MB / 22.7 MB` directly comparable throughout the transfer.
+     *
+     * @param {number} loadedBytes Number of response bytes received so far.
+     * @param {number} totalBytes Total response size from Content-Length, when known.
+     * @return {string} Human-readable transfer amount.
+     */
+    function formatLightboxQualityTransfer(loadedBytes, totalBytes) {
+        const loaded = Math.max(0, Number(loadedBytes) || 0);
+        const total = Math.max(0, Number(totalBytes) || 0);
+        const reference = Math.max(loaded, total);
+        const units = ['B', 'KB', 'MB', 'GB'];
+        let divisor = 1;
+        let unitIndex = 0;
+        while (reference / divisor >= 1024 && unitIndex < units.length - 1) {
+            divisor *= 1024;
+            unitIndex += 1;
+        }
+        const digits = unitIndex === 0 ? 0 : 1;
+        const loadedText = (loaded / divisor).toFixed(digits);
+        if (total <= 0) {
+            return `${loadedText} ${units[unitIndex]}`;
+        }
+        return `${loadedText} ${units[unitIndex]} / ${(total / divisor).toFixed(digits)} ${units[unitIndex]}`;
+    }
+
+    /**
+     * Update the visible fullscreen quality-transfer metrics from real response bytes.
+     *
+     * @param {number} loadedBytes Number of response bytes received so far.
+     * @param {number} totalBytes Total response size from Content-Length, when known.
+     */
+    function setLightboxQualityProgress(loadedBytes, totalBytes) {
+        const loaded = Math.max(0, Number(loadedBytes) || 0);
+        const total = Math.max(0, Number(totalBytes) || 0);
+        const percent = total > 0 ? Math.max(0, Math.min(100, (loaded / total) * 100)) : 0;
+        if (qualityProgressFill instanceof HTMLElement) {
+            qualityProgressFill.style.width = `${percent.toFixed(2)}%`;
+        }
+        if (qualityProgressPercent instanceof HTMLElement) {
+            qualityProgressPercent.textContent = total > 0 ? `${Math.round(percent)}%` : '...';
+        }
+        if (qualityProgressBytes instanceof HTMLElement) {
+            qualityProgressBytes.textContent = formatLightboxQualityTransfer(loaded, total);
+        }
+    }
+
+    /**
+     * Synchronize the visible quality indicator and accessible full-quality loading status.
+     *
+     * Fullscreen uses a byte-accurate progress bar. Normal lightbox mode keeps the
+     * compact legacy busy indicator so the additional metrics do not occupy card space.
      *
      * @param {boolean} loading Whether an active-photo quality decode is in progress.
      */
     function setLightboxQualityLoading(loading) {
         const isLoading = Boolean(loading && !overlay.hidden);
         overlay.classList.toggle('is-quality-loading', isLoading);
+        if (qualityProgress instanceof HTMLElement) {
+            qualityProgress.hidden = !isLoading;
+            if (!isLoading) {
+                setLightboxQualityProgress(0, 0);
+            }
+        }
         if (stageLink instanceof HTMLElement) {
             if (isLoading) {
                 const label = i18n('lightbox.quality_loading', 'Loading full-quality image...');
@@ -1689,6 +1785,79 @@ export function setupGalleryLightbox() {
         } catch {
             return String(src).split('?')[0].slice(-220);
         }
+    }
+
+    /**
+     * Prime the browser HTTP cache while reporting the real response-byte progress.
+     *
+     * The protected media routes emit Content-Length and cacheable responses. Reading
+     * the Fetch body here therefore provides accurate progress without changing media
+     * authorization, while the subsequent Image decode reuses the freshly cached URL.
+     *
+     * @param {string} src Authorized image source URL.
+     * @param {object} options Optional transfer controls.
+     * @param {AbortSignal|null} options.signal Cancellation signal for navigation or close.
+     * @param {string} options.priority Fetch priority hint.
+     * @param {Function|null} options.onProgress Callback receiving loaded and total bytes.
+     * @return {Promise<void>} Resolves after the response body has been fully consumed.
+     */
+    async function primeLightboxImageCacheWithProgress(src, options = {}) {
+        if (!src) {
+            throw new Error(i18n('lightbox.missing_image_source', 'Missing lightbox image source.'));
+        }
+        const requestOptions = {
+            method: 'GET',
+            credentials: 'same-origin',
+            cache: 'default',
+            signal: options.signal || undefined,
+        };
+        if (options.priority) {
+            requestOptions.priority = options.priority;
+        }
+        const response = await fetch(src, requestOptions);
+        if (!response.ok) {
+            throw new Error(i18n('lightbox.image_load_failed', 'Lightbox image load failed.'));
+        }
+        const declaredTotal = Math.max(0, Number.parseInt(response.headers.get('Content-Length') || '0', 10) || 0);
+        let loaded = 0;
+        const reportProgress = typeof options.onProgress === 'function' ? options.onProgress : null;
+        reportProgress?.(0, declaredTotal);
+
+        if (!response.body || typeof response.body.getReader !== 'function') {
+            const body = await response.blob();
+            loaded = Math.max(0, body.size || 0);
+            reportProgress?.(loaded, declaredTotal || loaded);
+            return;
+        }
+
+        const reader = response.body.getReader();
+        try {
+            while (true) {
+                const result = await reader.read();
+                if (result.done) {
+                    break;
+                }
+                loaded += result.value?.byteLength || 0;
+                reportProgress?.(loaded, declaredTotal);
+            }
+        } finally {
+            reader.releaseLock();
+        }
+        reportProgress?.(loaded, declaredTotal || loaded);
+    }
+
+    /**
+     * Download one active-photo quality source with real byte progress, then decode it.
+     *
+     * @param {string} src Authorized image source URL.
+     * @param {object} options Optional transfer and decode controls.
+     * @return {Promise<HTMLImageElement>} Fully decoded image node.
+     */
+    function loadTrackedDecodedLightboxImage(src, options = {}) {
+        return primeLightboxImageCacheWithProgress(src, options).then(() => loadFreshDecodedLightboxImage(src, {
+            priority: options.priority || 'high',
+            signal: options.signal || null,
+        }));
     }
 
     /**
@@ -2797,9 +2966,19 @@ export function setupGalleryLightbox() {
 
         activeLightboxQualityRequestToken += 1;
         const qualityToken = activeLightboxQualityRequestToken;
+        if (activeLightboxQualityAbortController) {
+            activeLightboxQualityAbortController.abort();
+        }
+        const qualityAbortController = new AbortController();
+        activeLightboxQualityAbortController = qualityAbortController;
         pendingLightboxQualitySource = desired.src;
         setLightboxQualityLoading(true);
-        return loadFreshDecodedLightboxImage(desired.src, {priority: 'high'}).then((loadedImage) => {
+        setLightboxQualityProgress(0, 0);
+        return loadTrackedDecodedLightboxImage(desired.src, {
+            priority: 'high',
+            signal: qualityAbortController.signal,
+            onProgress: setLightboxQualityProgress,
+        }).then((loadedImage) => {
             if (
                 !isCurrentLightboxImageRequest(index, imageToken)
                 || qualityToken !== activeLightboxQualityRequestToken
@@ -2816,19 +2995,30 @@ export function setupGalleryLightbox() {
                     || image.dataset.lightboxImageId !== imageId
                 ) {
                     if (qualityToken === activeLightboxQualityRequestToken) {
+                        if (activeLightboxQualityAbortController === qualityAbortController) {
+                            activeLightboxQualityAbortController = null;
+                        }
                         setLightboxQualityLoading(false);
                     }
                     return false;
                 }
                 updateNormalLightboxStageSizeFromLoadedImage(loadedImage);
                 applyLightboxZoomState(false);
+                if (activeLightboxQualityAbortController === qualityAbortController) {
+                    activeLightboxQualityAbortController = null;
+                }
                 setLightboxQualityLoading(false);
                 return true;
             });
-        }).catch(() => {
+        }).catch((error) => {
+            if (activeLightboxQualityAbortController === qualityAbortController) {
+                activeLightboxQualityAbortController = null;
+            }
             if (qualityToken === activeLightboxQualityRequestToken) {
                 pendingLightboxQualitySource = '';
-                failedLightboxQualitySources.add(failureKey);
+                if (error?.name !== 'AbortError') {
+                    failedLightboxQualitySources.add(failureKey);
+                }
                 setLightboxQualityLoading(false);
             }
             return false;
@@ -2853,19 +3043,18 @@ export function setupGalleryLightbox() {
     }
 
     /**
-     * Switch the live lightbox image to the protected original on deliberate zoom.
+     * Switch the active lightbox image to the protected original on deliberate zoom.
      *
-     * Explicit zoom must change the source on the image that is already visible.
-     * The browser therefore starts the original request in the same input task as
-     * the scale change instead of waiting for a detached decode, fullscreen change,
-     * resize, or passive quality timer. The preview remains the browser's current
-     * decoded pixels only until the live element receives the original response.
+     * The original request starts immediately through Fetch so fullscreen can expose
+     * real Content-Length based progress while the already-visible preview remains in
+     * place. After the response body is cached and decoded, the same stable zoom-surface
+     * installation path promotes it without a second visible layout transition.
      *
-     * A failed original request restores the authorized preview when one exists.
-     * Navigation and close invalidate the request token so late load/error events
-     * cannot alter the next photograph.
+     * A failed original request keeps the authorized preview. Navigation and close
+     * abort the transfer and invalidate its token so late completion cannot alter the
+     * next photograph.
      *
-     * @return {boolean} True when the live image was switched to the original.
+     * @return {boolean} True when an original-quality request was started.
      */
     function requestLightboxQualityUpgradeNow() {
         if (lightboxZoomState.scale <= LIGHTBOX_ZOOM_MIN_SCALE || overlay.hidden || currentIndex < 0) {
@@ -2887,10 +3076,12 @@ export function setupGalleryLightbox() {
             pendingLightboxQualityTimer = 0;
         }
 
-        if (
-            image.dataset.lightboxExplicitZoomQuality === imageId
-            && image.getAttribute('src') === fullSrc
-        ) {
+        if (activeLightboxQualitySource === fullSrc || pendingLightboxQualitySource === fullSrc) {
+            return false;
+        }
+
+        const failureKey = `${imageId}:${fullSrc}`;
+        if (failedLightboxQualitySources.has(failureKey)) {
             return false;
         }
 
@@ -2898,87 +3089,72 @@ export function setupGalleryLightbox() {
         const qualityToken = activeLightboxQualityRequestToken;
         const index = currentIndex;
         const imageToken = activeLightboxImageToken;
-        const previewSrc = String(card.dataset.previewSrc || '').trim();
-        const targetImage = image;
+        if (activeLightboxQualityAbortController) {
+            activeLightboxQualityAbortController.abort();
+        }
+        const qualityAbortController = new AbortController();
+        activeLightboxQualityAbortController = qualityAbortController;
 
         pendingLightboxQualitySource = fullSrc;
-        targetImage.dataset.lightboxExplicitZoomQuality = imageId;
-        targetImage.loading = 'eager';
-        targetImage.decoding = 'async';
-        if ('fetchPriority' in targetImage) {
-            targetImage.fetchPriority = 'high';
-        }
+        image.dataset.lightboxExplicitZoomQuality = imageId;
         setLightboxQualityLoading(true);
-        devMarkSource(fullSrc, 'loading', 'zoom-live-original');
+        setLightboxQualityProgress(0, 0);
+        devMarkSource(fullSrc, 'loading', 'zoom-tracked-original');
 
-        /**
-         * Remove the paired live-original completion listeners from the active image.
-         */
-        const clearOriginalListeners = () => {
-            targetImage.removeEventListener('load', finishOriginalLoad);
-            targetImage.removeEventListener('error', handleOriginalError);
-        };
-
-        /**
-         * Finalize a successful live original-source load for the active photograph.
-         */
-        const finishOriginalLoad = () => {
-            clearOriginalListeners();
+        loadTrackedDecodedLightboxImage(fullSrc, {
+            priority: 'high',
+            signal: qualityAbortController.signal,
+            onProgress: setLightboxQualityProgress,
+        }).then((loadedImage) => {
             if (
-                image !== targetImage
-                || !isCurrentLightboxImageRequest(index, imageToken)
+                !isCurrentLightboxImageRequest(index, imageToken)
                 || qualityToken !== activeLightboxQualityRequestToken
-                || targetImage.dataset.lightboxImageId !== imageId
-                || targetImage.getAttribute('src') !== fullSrc
+                || pendingLightboxQualitySource !== fullSrc
+                || image.dataset.lightboxImageId !== imageId
             ) {
+                return false;
+            }
+            pendingLightboxQualitySource = '';
+            return installDecodedLightboxQualityImage(loadedImage, fullSrc, card.dataset.title || '', imageId).then((installed) => {
+                if (
+                    !installed
+                    || !isCurrentLightboxImageRequest(index, imageToken)
+                    || qualityToken !== activeLightboxQualityRequestToken
+                    || image.dataset.lightboxImageId !== imageId
+                ) {
+                    if (qualityToken === activeLightboxQualityRequestToken) {
+                        pendingLightboxQualitySource = '';
+                        if (activeLightboxQualityAbortController === qualityAbortController) {
+                            activeLightboxQualityAbortController = null;
+                        }
+                        setLightboxQualityLoading(false);
+                    }
+                    return false;
+                }
+                image.dataset.lightboxExplicitZoomQuality = imageId;
+                updateNormalLightboxStageSizeFromLoadedImage(loadedImage);
+                applyLightboxZoomState(false);
+                devMarkSource(fullSrc, 'ready', 'zoom-tracked-original', image);
+                if (activeLightboxQualityAbortController === qualityAbortController) {
+                    activeLightboxQualityAbortController = null;
+                }
+                setLightboxQualityLoading(false);
+                return true;
+            });
+        }).catch((error) => {
+            if (activeLightboxQualityAbortController === qualityAbortController) {
+                activeLightboxQualityAbortController = null;
+            }
+            if (qualityToken !== activeLightboxQualityRequestToken) {
                 return;
             }
             pendingLightboxQualitySource = '';
-            activeLightboxQualitySource = fullSrc;
-            galleryDevModeState.currentSource = fullSrc;
-            galleryDevModeState.currentSourceKind = devFindSourceKind(fullSrc);
-            devMarkSource(fullSrc, 'ready', 'zoom-live-original', targetImage);
-            updateNormalLightboxStageSizeFromLoadedImage(targetImage);
-            applyLightboxZoomState(false);
-            setLightboxQualityLoading(false);
-        };
-
-        /**
-         * Restore the protected preview when the explicit original-source request fails.
-         */
-        const handleOriginalError = () => {
-            clearOriginalListeners();
-            if (
-                image !== targetImage
-                || !isCurrentLightboxImageRequest(index, imageToken)
-                || qualityToken !== activeLightboxQualityRequestToken
-                || targetImage.dataset.lightboxImageId !== imageId
-            ) {
-                return;
+            delete image.dataset.lightboxExplicitZoomQuality;
+            if (error?.name !== 'AbortError') {
+                failedLightboxQualitySources.add(failureKey);
             }
-            pendingLightboxQualitySource = '';
-            failedLightboxQualitySources.add(`${imageId}:${fullSrc}`);
-            delete targetImage.dataset.lightboxExplicitZoomQuality;
             setLightboxQualityLoading(false);
-            if (previewSrc && targetImage.getAttribute('src') === fullSrc) {
-                activeLightboxQualitySource = previewSrc;
-                targetImage.src = previewSrc;
-            }
-        };
-
-        targetImage.addEventListener('load', finishOriginalLoad);
-        targetImage.addEventListener('error', handleOriginalError);
-
-        // This assignment is deliberately synchronous with the user's zoom input.
-        // No application-controlled decode or mode transition sits in front of it.
-        activeLightboxQualitySource = fullSrc;
-        galleryDevModeState.currentSource = fullSrc;
-        galleryDevModeState.currentSourceKind = devFindSourceKind(fullSrc);
-        targetImage.src = fullSrc;
-
-        if (targetImage.complete && targetImage.naturalWidth > 0) {
-            finishOriginalLoad();
-        }
+        });
         return true;
     }
 
