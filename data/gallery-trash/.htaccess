@@ -1,0 +1,30 @@
+# Project: PHP Gallery
+# Repository: https://github.com/klusik/PHP_gallery
+#
+# File: data/gallery-trash/.htaccess
+# Module Type: Web Server Configuration
+#
+# Purpose:
+#   Prevents direct HTTP access to recoverable gallery trash payloads.
+#
+# Responsibilities:
+#   - Keep deleted gallery files behind authenticated Admin restore/purge routes
+#   - Prevent guessed trash tokens, manifests, and original media from being served
+#
+# Author:
+#   Rudolf Klusal
+#
+# Contact:
+#   https://github.com/klusik
+#
+# License:
+#   MIT License (see LICENSE file in repository)
+#
+# Notes:
+#   - Runtime trash payloads are user data and are never updater-owned.
+#   - Keep comments and docstrings intact when modifying this file.
+#
+# Last Updated:
+#   2026-09-07
+
+Require all denied

@@ -155,7 +155,7 @@ assert.match(
 );
 assert.match(
     galleryEntrySource,
-    /admin-operations\.js\?v=20260903-oversized-single-batch-v1/,
+    /admin-operations\.js\?v=20260907-gallery-trash-v1/,
     'The gallery entrypoint must cache-bust the changed admin operations module.'
 );
 

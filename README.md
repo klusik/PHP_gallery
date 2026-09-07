@@ -196,6 +196,7 @@ Deployment-tunable download limits are centralized in `app/configuration_default
 - Gallery list with filtering and search
 - Expandable/collapsible hierarchy tree
 - Bulk rename, delete, move galleries
+- Recoverable gallery trash bin: gallery subtree deletes move out of the live gallery root, can be restored from Admin > Maintenance > Trash, and remain indefinitely by default unless manually purged; optional retention-based auto-purge is disabled by default
 - Reorder galleries within parent hierarchy
 - Inline gallery editing with side panel
 - Cover image selection and upload

@@ -37,6 +37,7 @@ declare(strict_types=1);
 namespace Gallery\Controllers;
 
 use Throwable;
+use function Gallery\Core\current_user;
 use function Gallery\Core\db;
 use function Gallery\Core\flash_message;
 use function Gallery\Core\now_sql;
@@ -47,6 +48,10 @@ use function Gallery\Core\url_for;
 use function Gallery\Core\verify_csrf;
 use function Gallery\Services\create_gallery_thumbnails;
 use function Gallery\Services\delete_gallery_subtrees;
+use function Gallery\Services\gallery_trash_enabled;
+use function Gallery\Services\gallery_trash_available;
+use function Gallery\Services\gallery_trash_schema_status;
+use function Gallery\Services\move_gallery_subtrees_to_trash;
 use function Gallery\Services\exif_gps_override_schema_ready;
 use function Gallery\Services\exif_gps_schema_ready;
 use function Gallery\Services\find_gallery;
@@ -94,7 +99,43 @@ function cms_admin_bulk_galleries(): void
         redirect_to(url_for('admin'));
     }
     if ($action === 'delete' && $galleryIds) {
+        // $trashEnabled freezes the delete policy for this request so a concurrent settings change
+        // cannot make the mutation result and its audit/message disagree.
+        $trashEnabled = gallery_trash_enabled();
+        // The trash bin is the normal destination for an administrator delete. Only an
+        // explicit opt-out returns to immediate destruction; an unverifiable trash
+        // schema must never silently fall back to permanent deletion.
+        if ($trashEnabled && !gallery_trash_available()) {
+            $trashSchemaStatus = gallery_trash_schema_status();
+            $trashUnavailableMessage = (string) ($trashSchemaStatus['state'] ?? 'unknown') === 'missing'
+                ? t('admin.galleries.trash_requires_migration', 'The trash bin needs a database migration. Run pending migrations, then try again.')
+                : t('admin.galleries.trash_temporarily_unavailable', 'The trash bin is temporarily unavailable because its database schema could not be verified. Nothing was deleted.');
+            flash_message('admin_notice', $trashUnavailableMessage);
+            redirect_to(url_for('admin'));
+        }
         try {
+            if ($trashEnabled) {
+                // $trashed stores the recoverable trash result for the selected roots.
+                $trashed = move_gallery_subtrees_to_trash($galleryIds, [
+                    'user_id' => (int) (current_user()['id'] ?? 0),
+                    'deleted_from' => 'dashboard_bulk',
+                ]);
+                admin_log_event('warning', 'gallery.bulk_trashed', t('admin.galleries.log_bulk_trashed', 'Admin moved galleries to the trash bin.'), [
+                    'gallery_ids' => $galleryIds,
+                    'trashed_roots' => (int) $trashed['root_count'],
+                    'trashed_rows' => (int) $trashed['row_count'],
+                    'missing_folders' => (int) $trashed['missing_folders'],
+                    'failed_roots' => (int) ($trashed['failed_root_count'] ?? 0),
+                ]);
+                $failedRoots = (int) ($trashed['failed_root_count'] ?? 0);
+                flash_message('admin_notice', $failedRoots > 0
+                    ? t('admin.galleries.trash_partial_result', 'Moved {count} gallery folder(s) to the trash; {failed} selected root(s) could not be moved.', [
+                        'count' => (int) $trashed['root_count'],
+                        'failed' => $failedRoots,
+                    ])
+                    : t('admin.galleries.trashed_result', 'Moved {count} gallery folder(s) to the trash.', ['count' => (int) $trashed['root_count']]));
+                redirect_to(url_for('admin'));
+            }
             // $deleted stores an intermediate value used by the surrounding gallery workflow.
             $deleted = delete_gallery_subtrees($galleryIds);
             admin_log_event('warning', 'gallery.bulk_deleted', t('admin.galleries.log_bulk_deleted'), [

@@ -93,6 +93,9 @@ use function Gallery\Services\gallery_effective_lightbox_browsing_mode;
 use function Gallery\Services\gallery_count_dated_rows;
 use function Gallery\Services\gallery_effective_visibility;
 use function Gallery\Services\gallery_has_map_payload;
+use function Gallery\Services\gallery_trash_auto_purge_enabled;
+use function Gallery\Services\gallery_trash_enabled;
+use function Gallery\Services\gallery_trash_retention_days;
 use function Gallery\Services\gallery_lightbox_browsing_mode_normalize;
 use function Gallery\Services\gallery_sort_row_has_start_date;
 use function Gallery\Services\gallery_sort_rows_by_date_preserving_undated_positions;
@@ -455,9 +458,13 @@ function render_public_gallery_admin_delete_form(array $gallery, string $placeme
         return;
     }
     $name = trim((string) ($gallery['title'] ?? 'gallery'));
-    $label = $placement === 'hero' ? t('gallery.remove_current', 'Remove current gallery from CMS') : t('gallery.remove_named', 'Remove gallery {name} from CMS', ['name' => $name]);
+    $trashEnabled = gallery_trash_enabled();
+    $trashAutoPurgeEnabled = gallery_trash_auto_purge_enabled();
+    $label = $trashEnabled
+        ? ($placement === 'hero' ? t('gallery.trash_current', 'Move current gallery to trash') : t('gallery.trash_named', 'Move gallery {name} to trash', ['name' => $name]))
+        : ($placement === 'hero' ? t('gallery.remove_current', 'Remove current gallery from CMS') : t('gallery.remove_named', 'Remove gallery {name} from CMS', ['name' => $name]));
     $class = $placement === 'hero' ? 'public-admin-delete-form public-admin-delete-form-hero' : 'public-admin-delete-form public-admin-delete-form-card';
-    echo '<form class="' . e($class) . '" method="post" action="' . e(url_for('admin_public_update_gallery')) . '" data-public-admin-card-action data-public-admin-delete-form data-public-admin-delete-name="' . e($name) . '" data-public-admin-delete-kind="gallery">';
+    echo '<form class="' . e($class) . '" method="post" action="' . e(url_for('admin_public_update_gallery')) . '" data-public-admin-card-action data-public-admin-delete-form data-public-admin-delete-name="' . e($name) . '" data-public-admin-delete-kind="gallery" data-public-admin-delete-mode="' . ($trashEnabled ? 'trash' : 'permanent') . '" data-public-admin-delete-auto-purge-enabled="' . ($trashAutoPurgeEnabled ? '1' : '0') . '" data-public-admin-delete-retention-days="' . (int) gallery_trash_retention_days() . '">';
     echo csrf_field();
     echo '<input type="hidden" name="gallery_id" value="' . (int) $gallery['id'] . '">';
     echo '<input type="hidden" name="action" value="delete">';

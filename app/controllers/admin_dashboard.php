@@ -99,7 +99,9 @@ function cms_admin(): void
     // Explicit maintenance deep links render their target during the main request so the requested tool is
     // immediately usable and does not depend on a second deferred AJAX request succeeding.
     $requestedMaintenanceTab = strtolower(trim((string) ($_GET['maintenance_tab'] ?? '')));
-    $dashboardModel = admin_dashboard_view_model($requestedMaintenanceTab === 'media');
+    $maintenanceDeepLink = in_array($requestedMaintenanceTab, ['content', 'media', 'navigation', 'system', 'trash'], true);
+    $dashboardModel = admin_dashboard_view_model($maintenanceDeepLink);
+    $dashboardModel['maintenance_loaded'] = $maintenanceDeepLink;
     $dashboardModel['notices'] = admin_dashboard_notice_messages($_GET, (string) flash_message('admin_notice'));
     view_render_admin_dashboard($dashboardModel);
 }

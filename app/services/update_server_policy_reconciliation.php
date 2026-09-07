@@ -58,6 +58,7 @@ function application_update_server_policy_files(): array
         'galleries/.htaccess',
         'cache/.htaccess',
         'data/admin-log-archives/.htaccess',
+        'data/gallery-trash/.htaccess',
     ];
 }
 

@@ -100,7 +100,8 @@ import {
     setupAdminNavdataUpdateFeedback,
     setupAdminMediaRenamer,
     setupAdminMetadataOrganizer,
-} from './gallery-modules/admin-operations.js?v=20260903-oversized-single-batch-v1';
+    setupAdminTrashActions,
+} from './gallery-modules/admin-operations.js?v=20260907-gallery-trash-v1';
 
 /**
  * Runs a setup callback after the DOM is ready.
@@ -163,6 +164,7 @@ function bootGalleryBrowserFeatures() {
     setupAdminGalleryMigration();
     setupAdminMediaRenamer();
     setupAdminMetadataOrganizer();
+    setupAdminTrashActions();
     setupAdminGalleryFilters();
     setupAdminGalleryTree();
     setupAdminGalleryReordering();

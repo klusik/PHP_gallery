@@ -142,14 +142,15 @@ function Should-Skip($Path) {
     $protectedDeployPaths = @(
         'cache/.htaccess',
         'galleries/.htaccess',
-        'data/admin-log-archives/.htaccess'
+        'data/admin-log-archives/.htaccess',
+        'data/gallery-trash/.htaccess'
     )
     if ($protectedDeployPaths -contains $portableRelative) {
         return $false
     }
 
-    # Runtime/user data must never be copied into a deployment package. The protected
-    # admin-log archive .htaccess above is the only data/ exception.
+    # Runtime/user data must never be copied into a deployment package. The release-owned
+    # runtime protection .htaccess files above are the only data/ exceptions.
     if ($portableRelative -eq 'data' -or $portableRelative.StartsWith('data/')) {
         return $true
     }

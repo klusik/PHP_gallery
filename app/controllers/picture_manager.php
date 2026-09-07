@@ -331,6 +331,8 @@ function cms_picture_manager_create_gallery(): void
         // $copied stores filesystem and database copy details.
         $copied = copy_gallery_images($sourceGalleryId, $createdGalleryId, $imageIds);
         if (!empty($copied['failures'])) {
+            // Rollback of a gallery this failed operation just created. It never held
+            // administrator content, so it is destroyed instead of entering the trash bin.
             delete_gallery_subtrees([$createdGalleryId]);
             picture_manager_json_response([
                 'ok' => false,
@@ -374,7 +376,9 @@ function cms_picture_manager_create_gallery(): void
                 $createdGalleryImageCountStmt = db()->prepare('SELECT COUNT(*) FROM images WHERE gallery_id = ?');
                 $createdGalleryImageCountStmt->execute([$createdGalleryId]);
                 if ((int) $createdGalleryImageCountStmt->fetchColumn() === 0) {
-                    delete_gallery_subtrees([$createdGalleryId]);
+                    // Rollback of a gallery this failed operation just created. It never held
+            // administrator content, so it is destroyed instead of entering the trash bin.
+            delete_gallery_subtrees([$createdGalleryId]);
                 }
             } catch (Throwable) {
             }

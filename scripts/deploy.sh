@@ -224,12 +224,13 @@ should_skip() {
 
     if [[ "$portable_relative" == "cache/.htaccess" \
         || "$portable_relative" == "galleries/.htaccess" \
-        || "$portable_relative" == "data/admin-log-archives/.htaccess" ]]; then
+        || "$portable_relative" == "data/admin-log-archives/.htaccess" \
+        || "$portable_relative" == "data/gallery-trash/.htaccess" ]]; then
         return 1
     fi
 
-    # Runtime/user data must never be copied into a deployment package. The protected
-    # admin-log archive .htaccess above is the only data/ exception.
+    # Runtime/user data must never be copied into a deployment package. The release-owned
+    # runtime protection .htaccess files above are the only data/ exceptions.
     if [[ "$portable_relative" == "data" || "$portable_relative" == "data/"* ]]; then
         return 0
     fi

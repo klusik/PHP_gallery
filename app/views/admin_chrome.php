@@ -88,6 +88,7 @@ function view_admin_menu_structure(): array
         [
             'label' => t('admin.menu.maintenance', 'Maintenance'),
             'items' => [
+                ['label' => t('admin.menu.trash', 'Trash'), 'page' => 'admin_trash', 'url' => url_for('admin_trash')],
                 ['label' => t('admin.menu.logs', 'Logs'), 'page' => 'admin_logs', 'url' => url_for('admin_logs')],
                 ['label' => t('admin.menu.telemetry', 'Telemetry'), 'page' => 'admin_telemetry', 'url' => url_for('admin_telemetry'), 'feature' => 'telemetry'],
                 ['label' => t('admin.menu.gallery_report', 'Complete report'), 'page' => 'admin_gallery_report', 'url' => url_for('admin_gallery_report')],

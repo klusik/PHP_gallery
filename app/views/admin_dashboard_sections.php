@@ -262,11 +262,18 @@ function view_render_admin_dashboard_maintenance_panel(array $model): void
             break;
         }
     }
+    // $trashSummary stores active Trash counters loaded only with the Maintenance model.
+    $trashSummary = view_admin_dashboard_array($model, 'gallery_trash_summary');
+    // $trashCount stores the normal recoverable count requested by the Trash badge.
+    $trashCount = (int) ($trashSummary['trashed_count'] ?? 0);
+    // $trashProblemCount keeps crash-recovery/problem rows visible even when no normal trashed item remains.
+    $trashProblemCount = (int) ($trashSummary['problem_count'] ?? 0);
 
     $maintenanceSubtabs = [
         ['id' => 'admin-maintenance-content', 'label' => t('admin.dashboard.maintenance_content_display_tab', 'Content and display')],
         ['id' => 'admin-maintenance-media', 'label' => t('admin.dashboard.maintenance_media_cache_tab', 'Media and cache'), 'badge' => $missingThumbnailVariants > 0 ? (string) $missingThumbnailVariants : null],
         ['id' => 'admin-maintenance-navigation', 'label' => t('admin.dashboard.maintenance_navigation_tab', 'Maps and navdata')],
+        ['id' => 'admin-maintenance-trash', 'label' => t('admin.trash.title', 'Trash'), 'badge' => $trashCount > 0 ? (string) $trashCount : ($trashProblemCount > 0 ? t('admin.dashboard.badge_action', 'Action') : null)],
         ['id' => 'admin-maintenance-system', 'label' => t('admin.dashboard.maintenance_system_health_tab', 'System health'), 'badge' => $systemHealthActionRequired ? t('admin.dashboard.badge_action', 'Action') : null],
     ];
 
@@ -280,7 +287,14 @@ function view_render_admin_dashboard_maintenance_panel(array $model): void
     echo '</div>';
     echo '<div class="admin-subtab-scope admin-dashboard-maintenance-scope" data-admin-subtab-scope>';
     $requestedMaintenanceTab = strtolower(trim((string) ($_GET['maintenance_tab'] ?? '')));
-    $activeMaintenanceTab = $requestedMaintenanceTab === 'media' ? 'admin-maintenance-media' : 'admin-maintenance-content';
+    $maintenanceTabMap = [
+        'content' => 'admin-maintenance-content',
+        'media' => 'admin-maintenance-media',
+        'navigation' => 'admin-maintenance-navigation',
+        'trash' => 'admin-maintenance-trash',
+        'system' => 'admin-maintenance-system',
+    ];
+    $activeMaintenanceTab = (string) ($maintenanceTabMap[$requestedMaintenanceTab] ?? 'admin-maintenance-content');
     view_render_admin_subtabs($maintenanceSubtabs, $activeMaintenanceTab, t('admin.dashboard.maintenance_subtabs_aria', 'Maintenance tool groups'));
 
     ob_start();
@@ -293,11 +307,19 @@ function view_render_admin_dashboard_maintenance_panel(array $model): void
 
     ob_start();
     view_render_admin_dashboard_navigation_tools($model);
-    view_render_admin_subtab_panel('admin-maintenance-navigation', (string) ob_get_clean(), false);
+    view_render_admin_subtab_panel('admin-maintenance-navigation', (string) ob_get_clean(), $activeMaintenanceTab === 'admin-maintenance-navigation');
+
+    ob_start();
+    render_admin_trash_page(
+        view_admin_dashboard_array($model, 'gallery_trash_entries'),
+        $trashSummary,
+        true
+    );
+    view_render_admin_subtab_panel('admin-maintenance-trash', (string) ob_get_clean(), $activeMaintenanceTab === 'admin-maintenance-trash');
 
     ob_start();
     view_render_admin_dashboard_system_tools($model);
-    view_render_admin_subtab_panel('admin-maintenance-system', (string) ob_get_clean(), false);
+    view_render_admin_subtab_panel('admin-maintenance-system', (string) ob_get_clean(), $activeMaintenanceTab === 'admin-maintenance-system');
 
     echo '</div>';
 }
@@ -506,6 +528,7 @@ function view_render_admin_dashboard_mutation_schema_card(string $feature, array
 {
     $labels = [
         'mutation_gallery_delete' => t('admin.dashboard.mutation_schema_feature_gallery_delete', 'Gallery and image deletion'),
+        'mutation_gallery_trash' => t('admin.dashboard.mutation_schema_feature_gallery_trash', 'Gallery trash bin'),
         'mutation_gallery_move' => t('admin.dashboard.mutation_schema_feature_gallery_move', 'Gallery and image move/copy'),
         'mutation_duplicate_photo_ledger' => t('admin.dashboard.mutation_schema_feature_duplicate_ledger', 'Duplicate Photo Detector ledger'),
         'mutation_upload_ingestion' => t('admin.dashboard.mutation_schema_feature_upload_ingestion', 'Gallery upload ingestion'),

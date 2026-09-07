@@ -30,9 +30,11 @@ assert_admin_dashboard_deferred_contains($serviceSource, 'function admin_dashboa
 assert_admin_dashboard_deferred_contains($serviceSource, '$databaseUsage = $includeMaintenance &&', 'database usage is maintenance-only');
 assert_admin_dashboard_deferred_contains($controllerSource, 'function cms_admin_dashboard_maintenance(): void', 'deferred maintenance controller exists');
 assert_admin_dashboard_deferred_contains($controllerSource, 'use function Gallery\\Views\\view_render_admin_dashboard_maintenance_panel;', 'deferred maintenance controller imports its panel renderer');
-assert_admin_dashboard_deferred_contains($controllerSource, "admin_dashboard_view_model(\$requestedMaintenanceTab === 'media')", 'explicit thumbnail maintenance links render maintenance during the main request');
+assert_admin_dashboard_deferred_contains($controllerSource, 'admin_dashboard_view_model($maintenanceDeepLink)', 'explicit Maintenance deep links render maintenance during the main request');
+assert_admin_dashboard_deferred_contains($controllerSource, "['content', 'media', 'navigation', 'system', 'trash']", 'Maintenance deep-link allowlist includes the Trash subtab');
 assert_admin_dashboard_deferred_contains($viewSource, 'data-admin-dashboard-maintenance-placeholder', 'dashboard renders a deferred maintenance placeholder');
-assert_admin_dashboard_deferred_contains($viewSource, "['maintenance_tab' => 'media']", 'dashboard forwards the thumbnail maintenance deep link to its deferred endpoint');
+assert_admin_dashboard_deferred_contains($viewSource, '$maintenanceEndpointParams', 'dashboard forwards the selected Maintenance deep link to its deferred endpoint');
+assert_admin_dashboard_deferred_contains($viewSource, "['content', 'media', 'navigation', 'system', 'trash']", 'dashboard deferred endpoint preserves every supported Maintenance deep link');
 assert_admin_dashboard_deferred_contains($tabsSource, 'loadDeferredAdminPanel', 'tab activation loads deferred panels');
 assert_admin_dashboard_deferred_contains($bootstrapSource, "'admin_dashboard_maintenance'", 'deferred maintenance route is registered');
 assert_admin_dashboard_deferred_contains($bootstrapSource, "'admin_dashboard_maintenance_client_log'", 'maintenance browser failure logging route is registered');
@@ -42,6 +44,7 @@ assert_admin_dashboard_deferred_contains($viewSource, 'data-maintenance-log-endp
 assert_admin_dashboard_deferred_contains($tabsSource, "body.set('response_snippet'", 'browser reports the failed maintenance response snippet');
 assert_admin_dashboard_deferred_contains($sectionsSource, "['maintenance_tab' => 'media']", 'thumbnail gap metric links to media maintenance');
 assert_admin_dashboard_deferred_contains($sectionsSource, "strtolower(trim((string) (\$_GET['maintenance_tab'] ?? '')))", 'thumbnail maintenance deep-link parameter is parsed with balanced function calls');
-assert_admin_dashboard_deferred_contains($sectionsSource, "\$requestedMaintenanceTab === 'media' ? 'admin-maintenance-media'", 'thumbnail maintenance deep link activates the media subtab');
+assert_admin_dashboard_deferred_contains($sectionsSource, "'media' => 'admin-maintenance-media'", 'thumbnail maintenance deep link activates the media subtab');
+assert_admin_dashboard_deferred_contains($sectionsSource, "'trash' => 'admin-maintenance-trash'", 'trash maintenance deep link activates the Trash subtab');
 
 echo "Deferred Admin dashboard maintenance tests passed.\n";

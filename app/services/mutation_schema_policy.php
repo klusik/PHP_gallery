@@ -331,6 +331,43 @@ function gallery_deletion_schema_status(): array
     ]);
 }
 
+/**
+ * Inspect the gallery trash bin storage used by recoverable gallery deletion.
+ *
+ * The trash bin owns an irreversible filesystem move plus gallery row deletion,
+ * so its own storage must be verified before the first destructive step. An
+ * unknown state must never silently fall back to permanent deletion.
+ *
+ * @return array{state:string,feature:string,requirements:array}
+ */
+function gallery_trash_schema_status(): array
+{
+    return mutation_schema_table_columns_status('mutation.gallery_trash', 'gallery_trash_entries', [
+        'id',
+        'trash_token',
+        'status',
+        'original_folder_path',
+        'original_parent_folder_path',
+        'title',
+        'subtree_gallery_count',
+        'image_count',
+        'byte_size',
+        'snapshot_version',
+        'snapshot_json',
+        'trash_relative_path',
+        'deleted_by_user_id',
+        'deleted_from',
+        'deleted_at',
+        'purge_after',
+        'operation_started_at',
+        'restored_at',
+        'purged_at',
+        'last_error_code',
+        'created_at',
+        'updated_at',
+    ]);
+}
+
 /** @return array{state:string,feature:string,requirements:array} */
 function gallery_move_schema_status(): array
 {
