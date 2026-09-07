@@ -49,8 +49,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.96.6}
-\newcommand{\manualdate}{6 September 2026}
+\newcommand{\version}{0.97}
+\newcommand{\manualdate}{7 September 2026}
 
 \hypersetup{
   colorlinks=true,
@@ -531,6 +531,10 @@ When an~administrator is~signed in~while viewing a~public gallery, direct child 
 
 Gallery deletion can~affect source files, descendants, metadata, thumbnails, links, and~visitor bookmarks. Review the~exact selected gallery and~its children, create a~backup, and~use the~normal Admin deletion workflow. A~temporary visibility change can~provide a~safer preparation period when a~gallery may~still be~needed.
 
+The~gallery trash bin is~enabled by~default. Deleting a~gallery through a~normal administrator gallery-delete action moves the~selected folder and~its complete descendant tree out~of~the~live gallery root, records the~metadata required for~recovery, and~lists the~entry under \ui{Maintenance > Trash}. Public pages stop discovering that subtree immediately, but~an~administrator can~restore it~to~its~original path while that path remains free. Restore never overwrites a~new live gallery occupying the~same location.
+
+From the~Trash panel, choose \ui{Restore}, \ui{Delete permanently}, or~\ui{Empty Trash}. Permanent deletion and~Empty Trash cannot~be~undone. Empty Trash works in~bounded batches so~large trash collections do~not~require one unbounded request. Individual-photo deletion is~not~part of~this gallery-level recovery feature and~remains permanent. A~backup remains necessary protection against storage failure, administrative permanent purge, or~damage outside PHP Gallery.
+
 \section{Smart Galleries}
 \index{Smart Galleries}
 \index{virtual galleries}
@@ -806,7 +810,7 @@ Tags provide another route through the~archive. A~\emph{night photography} tag c
 
 After signing in, an~administrator sees private controls for~the~dashboard, galleries, photographs, theme, tags, maintenance, updates, logs, and~account settings. Many edits open in~the~right-side panel, leaving the~gallery visible while one item is~changed and~saved.\footnote{A~full Admin page remains available for~workflows that need more space or~when browser enhancement is~unavailable.}
 
-The~public gallery itself also exposes contextual Admin controls while a~normal administrator session is~active. Gallery and~photo pencil controls open the~same full editors in~the~side panel. Compact gallery removal uses the~normal subtree-deletion service, including the~owned filesystem tree and~database rows. Compact photo removal is~deliberately labeled \ui{Remove photo ... from CMS}: that quick public-page action removes the~catalog image row and~does not~run the~full source-file deletion service. Use the~normal photo/bulk deletion workflow when the~original file and~generated derivatives should also be~deleted. Anonymous-preview mode hides these contextual Admin controls.
+The~public gallery itself also exposes contextual Admin controls while a~normal administrator session is~active. Gallery and~photo pencil controls open the~same full editors in~the~side panel. Compact gallery removal uses the~recoverable trash workflow when Trash is~enabled; disabling Trash returns future gallery removals to~the~legacy permanent subtree-deletion service. Compact photo removal is~deliberately labeled \ui{Remove photo ... from CMS}: that quick public-page action removes the~catalog image row and~does not~run the~full source-file deletion service. Use the~normal photo/bulk deletion workflow when the~original file and~generated derivatives should also be~deleted. Anonymous-preview mode hides these contextual Admin controls.
 
 The~Admin gallery table can~filter rows by~visibility: all, unpublished, public, or~private. Filtering is~a~browser-side view aid, not~an~access-policy change. A~row hidden by~the~filter is~also unchecked, and~the~master selection is~cleared, so~a~hidden stale checkbox cannot accidentally enter the~next bulk action. The~summary reports the~displayed/eligible gallery count.
 
@@ -1661,6 +1665,19 @@ The~shared readiness states and~their owner actions are~defined in~Section~\ref{
 During an~upgrade, \ui{Missing} can~be~expected when new application files arrive before their migration has~run. \ui{Unknown} instead means PHP Gallery could not~inspect the~selected database reliably. For~\ui{Missing}, back up~and~apply the~pending migration. For~\ui{Unknown}, check database connectivity, the~selected schema, and~metadata-inspection permissions before changing schema.
 
 After repair, reload \ui{System Health} and~retest the~affected feature. Keep any request reference with the~time and~application version when asking a~hosting provider or~maintainer for~help.
+
+\subsection{Gallery trash and~recovery}
+\index{gallery!trash}
+\index{gallery!restoration}
+\index{trash!automatic purge}
+
+Open \ui{Maintenance > Trash} to~review recoverable gallery deletions. Each active row shows the~original path, deletion time, gallery/photo counts, stored size, lifecycle status, and~automatic-purge deadline when that policy is~active. Problem entries remain visible for~inspection; PHP Gallery does~not~guess that an~ambiguous filesystem/database state is~safe to~destroy.
+
+The~main Trash switch controls future gallery deletes and~is~enabled by~default. Turning it~off does~not~hide or~delete existing entries: restore and~manual permanent deletion remain available. Automatic purge is~a~separate opt-in and~is~off by~default. Its retention defaults to~30~days, its maintenance batch is~bounded, and~automatic deletion pauses whenever Trash is~disabled. Enabling automatic purge after a~pause gives current recoverable entries a~fresh full retention window before scheduled deletion can~begin.
+
+Migrations \filepath{202609070001_gallery_trash_bin.php} and~\filepath{202609070002_gallery_trash_state_machine.php} add the~durable operation records. When Trash is~enabled, deletion checks this schema before the~first filesystem move or~database-row deletion. Confirmed missing or~unknown storage stops recoverable deletion and~directs the~administrator to~apply/check migrations; it~does not~silently fall through to~permanent deletion. Scheduled Site Maintenance reconciles stale in-progress operations conservatively and~runs expired auto-purge work only when both Trash and~automatic purge are~enabled.
+
+Trash payloads live in~protected persistent \filepath{data/gallery-trash/} storage rather than~the~cache or~live gallery tree. Deployment packages carry the~directory's access-policy file but~exclude stored trash contents. Include that runtime directory and~the~database in~backup and~restore planning; neither half alone is~a~complete recoverable entry.
 
 \subsection{Thumbnail maintenance}
 
