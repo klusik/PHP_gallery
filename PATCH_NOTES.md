@@ -1,5 +1,46 @@
 # Patch notes
 
+## Version 0.97.1
+
+Version 0.97.1 is a focused public-lightbox maintenance patch. It makes the byte-accurate full-quality progress indicator consistent in normal and fullscreen viewing and keeps rapidly arriving download progress visually current.
+
+### Highlights
+
+#### Consistent full-quality progress feedback
+
+- Fixed the full-quality download indicator so it appears consistently in normal lightbox, fullscreen, and mobile-fullscreen viewing.
+- Kept the existing accessible loading status while replacing the obsolete normal-mode pill/ring styling with the same byte-progress bar used by fullscreen.
+- Made rapid stream-progress updates repaint immediately instead of being delayed by repeated CSS width transitions.
+
+### Technical Details
+
+#### Frontend
+
+- Updated `public/assets/gallery-modules/lightbox.js` to expose the shared byte-progress state in every lightbox mode and update the fill through a bounded `scaleX()` transform.
+- Updated `public/assets/styles/lightbox.css` so the progress track owns a full-width fill and the loading selector is shared across normal and fullscreen modes; removed superseded pill/ring rules.
+- Refreshed `app/core-manifest.json` for the changed lightbox module and stylesheet.
+
+#### Backend and compatibility
+
+- Added no database migrations, configuration changes, routes, or backend behavior.
+- Preserved the existing quality-request cancellation, authorization, navigation, zoom, and fallback behavior.
+
+### Tests
+
+- Updated `tests/lightbox_zoom_quality_indicator_test.php` to cover the shared normal/fullscreen progress contract, transform-based fill updates, hidden-state lifecycle, accessibility attributes, and removal of obsolete spinner CSS.
+- The existing lightbox zoom lifecycle, rendering, browser map/lightbox, and full release audit coverage remains applicable to the unchanged request and viewer lifecycle behavior.
+
+### User Impact
+
+#### For visitors
+
+- Full-quality lightbox downloads now show the same useful byte and percentage progress whether the viewer is windowed, fullscreen, or mobile fullscreen.
+- Progress bars remain responsive during fast downloads and do not interfere with image controls.
+
+#### For administrators
+
+- No administrator-facing behavior changed.
+
 ## Version 0.97
 
 Version 0.97 adds a recoverable gallery trash bin for administrator-initiated gallery deletion. Deleted gallery trees leave the live public hierarchy immediately but remain restorable from Admin by default, while permanent and optional retention-based cleanup stay explicit, bounded, and fail-closed.

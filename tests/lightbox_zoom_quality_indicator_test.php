@@ -15,8 +15,7 @@
  *   - Clear feedback on success, failure, navigation, close, and teardown
  *   - Keep the indicator pointer-transparent and reduced-motion safe
  *   - Announce the translated loading state without adding another live region
- *   - Keep the fullscreen/mobile-fullscreen byte-progress bar decorative and scoped
- *     away from the normal-mode pill/ring indicator
+ *   - Keep one decorative byte-progress bar consistent across normal and fullscreen modes
  */
 
 declare(strict_types=1);
@@ -56,30 +55,29 @@ lightbox_zoom_quality_indicator_assert(
     'The stage and existing polite status must expose translated loading state to assistive technology.'
 );
 lightbox_zoom_quality_indicator_assert(
-    str_contains($lightboxStyles, '.lightbox.is-quality-loading:not(.is-initial-loading):not(.is-navigation-loading):not(.is-fullscreen):not(.is-mobile-fullscreen) .lightbox-stage-link::before')
-        && str_contains($lightboxStyles, 'animation: lightbox-quality-spinner')
-        && str_contains($lightboxStyles, 'content: attr(data-quality-loading-label)')
+    !str_contains($lightboxStyles, 'animation: lightbox-quality-spinner')
+        && !str_contains($lightboxStyles, 'data-quality-loading-label')
+        && str_contains($lightboxStyles, '.lightbox-quality-progress')
         && str_contains($lightboxStyles, 'pointer-events: none;'),
-    'The visible pill/ring indicator must include a pointer-transparent translated label, a circular spinner, and stay excluded from fullscreen/mobile-fullscreen, which use the byte-progress bar instead.'
+    'The obsolete pill/ring indicator must remain removed; the shared byte-progress bar must stay pointer-transparent.'
 );
 lightbox_zoom_quality_indicator_assert(
-    str_contains($lightboxStyles, '@media (prefers-reduced-motion: reduce)')
-        && str_contains($lightboxStyles, '.lightbox.is-quality-loading:not(.is-initial-loading):not(.is-navigation-loading):not(.is-fullscreen):not(.is-mobile-fullscreen) .lightbox-stage-link::before')
-        && str_contains($lightboxStyles, 'animation: none;'),
-    'Reduced-motion users must receive a static activity ring and label.'
+    str_contains($lightboxStyles, 'width: 100%;')
+        && str_contains($lightboxStyles, 'transform: scaleX(0);')
+        && str_contains($lightboxStyles, 'transform-origin: left center;'),
+    'The progress fill must use a full-width transform-based track so rapid stream updates do not lag behind the byte metrics.'
 );
 lightbox_zoom_quality_indicator_assert(
     str_contains($lightboxSource, "qualityProgress.className = 'lightbox-quality-progress';")
         && str_contains($lightboxSource, 'qualityProgress.hidden = true;')
         && str_contains($lightboxSource, "qualityProgress.setAttribute('aria-hidden', 'true');")
         && str_contains($lightboxSource, 'qualityProgress.hidden = !isLoading;'),
-    'Fullscreen and mobile fullscreen must expose a dedicated, decorative byte-progress element that toggles with the loading state.'
+    'The lightbox must expose one dedicated, decorative byte-progress element that toggles with the loading state.'
 );
 lightbox_zoom_quality_indicator_assert(
-    str_contains($lightboxStyles, '.lightbox.is-quality-loading.is-fullscreen:not(.is-initial-loading):not(.is-navigation-loading) .lightbox-quality-progress')
-        && str_contains($lightboxStyles, '.lightbox.is-quality-loading.is-mobile-fullscreen:not(.is-initial-loading):not(.is-navigation-loading) .lightbox-quality-progress')
+    str_contains($lightboxStyles, '.lightbox.is-quality-loading:not(.is-initial-loading):not(.is-navigation-loading) .lightbox-quality-progress')
         && str_contains($lightboxStyles, '.lightbox-quality-progress[hidden]'),
-    'The byte-progress bar must be scoped to fullscreen/mobile-fullscreen and stay hidden through the [hidden] attribute otherwise.'
+    'The byte-progress bar must be available in both lightbox modes and stay hidden through the [hidden] attribute otherwise.'
 );
 
 echo "Lightbox zoom quality indicator checks passed.\n";
