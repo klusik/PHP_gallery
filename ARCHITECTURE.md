@@ -9,7 +9,7 @@ This document is intended to help future maintainers and AI coding agents unders
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.97';
+const CMS_VERSION = '0.97.1';
 ```
 
 Update-related code uses:
@@ -1312,8 +1312,8 @@ The live image keeps its existing DOM identity while the original transfers. Loa
 active image ID, navigation token, and quality token. Success keeps the current zoom surface geometry and clears the
 loading state; failure restores the protected preview and leaves controls usable. Full originals are never eagerly queued
 for neighboring photos. While a larger source is pending, `setLightboxQualityLoading()` applies `aria-busy`, translated
-loading text, and the existing pointer-transparent activity indicator; navigation, close, teardown, success, and failure
-all clear it.
+loading text, and the shared pointer-transparent byte-progress indicator; navigation, close, teardown, success, and
+failure all clear it.
 
 `public/assets/styles/lightbox.css` owns the centered/growing zoom surface, normal-lightbox overflow, fullscreen clipping,
 cursor states, HUD stacking, focus, and reduced-motion behavior. `public/assets/styles/mobile-gallery.css` keeps controls
