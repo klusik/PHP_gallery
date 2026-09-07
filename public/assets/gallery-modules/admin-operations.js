@@ -42,3 +42,4 @@ export { setupAdminGalleryFilters, setupAdminGalleryTree, setupAdminGalleryReord
 export { setupAdminImageReordering } from './admin-image-reordering.js?v=20260519-drag-ghost-v1';
 export { setupAdminMediaRenamer } from './admin-media-renamer.js?v=20260902-mutation-stage3-v1';
 export { setupAdminMetadataOrganizer } from './admin-metadata-organizer.js?v=20260902-mutation-stage5-v1';
+export { setupAdminTrashActions } from './admin-trash.js?v=20260907-gallery-trash-v1';

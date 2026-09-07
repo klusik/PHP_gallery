@@ -9,7 +9,7 @@ This document is intended to help future maintainers and AI coding agents unders
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.96.6';
+const CMS_VERSION = '0.97';
 ```
 
 Update-related code uses:
@@ -1383,6 +1383,34 @@ scripts/site_maintenance.php --quiet
 ```
 
 The hidden cron endpoint must never be called without its generated token. The CLI runner is preferable when hosting exposes PHP CLI and completely unattended execution is required on a site with no traffic. The web endpoint remains available for shared hosting control panels and for the internal request-triggered runner.
+
+## Gallery Trash Bin
+
+Administrator-initiated gallery deletion is recoverable by default. `app/services/gallery_trash.php`
+keeps the filesystem as the source of truth by moving the selected gallery subtree out of
+`galleries_root()` into persistent `data/gallery-trash/<token>/payload/...`, then deleting the live
+DB subtree in the same lifecycle transition that marks the trash entry `trashed`. Public discovery,
+search, sitemap, downloads and normal gallery scans therefore need no soft-delete filters.
+
+`gallery_trash_entries` stores one durable operation record and a versioned metadata snapshot. The
+lifecycle is an explicit state machine: `preparing -> trashed -> restoring -> restored` or
+`preparing -> trashed -> purging -> purged`, with `broken` reserved for ambiguous states that
+maintenance cannot reconcile safely. Filesystem movement and DB transitions fail closed. Stale
+`preparing`, `restoring`, and `purging` rows are reconciled by scheduled maintenance; ambiguous
+states are preserved for administrator inspection instead of being deleted speculatively.
+
+The Trash feature is enabled by default and controls only future administrator delete actions.
+Disabling it returns those future deletes to the legacy hard-delete path but does not hide, purge, or
+otherwise mutate existing trash entries. Manual restore, permanent per-entry deletion and Empty
+Trash remain available. Retention-based automatic purge is a separate setting and is disabled by
+default. When automatic purge becomes active after being paused, current recoverable/in-flight
+entries receive a fresh full retention window before scheduled deletion may resume.
+
+The trash store is persistent runtime data, not cache. `gallery_trash_root()` refuses any configured
+layout where the trash store overlaps `galleries_root()`, the runtime `.htaccess` denies direct HTTP
+access, deploy tooling excludes token payloads, and only the release-owned policy file may ship.
+The authoritative restore snapshot remains in the database; the adjacent `manifest.json` is a
+sanitized recovery aid and must not contain password hashes or bearer/share credentials.
 
 ## AI Metadata and OpenAI Text Assist
 

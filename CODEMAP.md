@@ -173,6 +173,23 @@ Future global settings should be registered summary-only first. Enable central e
 | EXIF-derived gallery date suggestions | `app/controllers/admin_gallery_dates.php`, `app/services/gallery_dates.php`, `app/views/admin_gallery_forms.php`, `public/assets/gallery-modules/admin-gallery-date-suggestion.js`, `public/assets/gallery-modules/admin-side-panel.js` | Aggregates `images.exif_taken_at` across each gallery branch, supports scoped branch reviews through `gallery_id`, lets admins approve, edit, or ignore suggested ranges, and applies the current gallery suggestion through the shared focused endpoint. Enhanced side-panel saves emit the canonical mutation envelope and invalidate the edited gallery plus its parent/root context; direct-page POST/redirect remains the non-JavaScript fallback. |
 | Duplicate Photo Detector | `app/controllers/admin_duplicate_photos.php`, `app/services/duplicate_photo_detector.php`, `app/services/duplicate_photo_ledger.php`, `app/views/admin_duplicate_photos.php`, `public/assets/gallery-modules/admin-duplicate-photo-detector.js`, `public/assets/styles/admin-duplicate-photo-detector.css`, `app/services/gallery_mutations.php`, `app/controllers/admin_galleries_edit.php`, `public/assets/gallery-modules/admin-side-panel.js`, `database/migrations/202608080001_duplicate_photo_ledger.php`, `tests/duplicate_photo_detector_test.php`, `tests/duplicate_photo_ledger_test.php` | Selected-gallery-branch or explicit all-gallery scan using stored SHA-256 and normalized EXIF metadata, rendered as deterministic left/right pair comparisons. Gallery/photo paths use existing public URL helpers. Per-admin ledger rules suppress one canonical pair or one exact gallery ID, with parent/child galleries independent; **Clear ledger** resets only that administrator's rules. Scan actions keep their bounded detector-job JSON contract; durable ledger/clear/delete writes use the canonical Admin mutation envelope, preserve the panel, and keep auth/CSRF failures JSON-only. POST/redirect remains fallback-only. |
 
+### Recoverable Gallery Trash
+
+| Concern | Files |
+| --- | --- |
+| Trash/restore/purge state machine and persistent payload storage | `app/services/gallery_trash.php` |
+| Transaction-neutral live subtree cleanup used by trash commit/restore rollback | `app/services/gallery_mutations.php` |
+| Schema readiness and System Health capability | `app/services/mutation_schema_policy.php`, `app/services/admin_dashboard.php` |
+| Admin Maintenance > Trash UI and mutations | `app/controllers/admin_trash.php`, `app/views/admin_trash.php`, `app/views/admin_dashboard_sections.php` |
+| User-facing delete routing | `app/controllers/admin_galleries_bulk.php`, `app/controllers/admin_public_inline.php`, `app/controllers/public_gallery_cards.php` |
+| Scheduled reconciliation and optional auto-purge | `app/services/site_maintenance.php` |
+| Storage policy | `data/gallery-trash/.htaccess`, `scripts/deploy.sh`, `scripts/deploy.ps1` |
+| Schema | `database/migrations/202609070001_gallery_trash_bin.php`, `database/migrations/202609070002_gallery_trash_state_machine.php` |
+| Focused regression model | `tests/gallery_trash_model_test.php` |
+
+The feature is enabled by default, while retention-based automatic purge is disabled by default.
+Disabling Trash affects future deletes only; existing trash entries remain visible and recoverable.
+
 ## Image Administration
 
 | Task | Files |

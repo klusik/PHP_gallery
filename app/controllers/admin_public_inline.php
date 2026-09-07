@@ -45,6 +45,7 @@ use function Gallery\Core\admin_mutation_postcondition;
 use function Gallery\Core\admin_mutation_public_gallery_context;
 use function Gallery\Core\admin_mutation_success_envelope;
 use function Gallery\Core\csrf_field;
+use function Gallery\Core\current_user;
 use function Gallery\Core\db;
 use function Gallery\Core\e;
 use function Gallery\Core\flash_message;
@@ -63,6 +64,10 @@ use function Gallery\Services\ai_image_analysis_metadata_pretty_json;
 use function Gallery\Services\ai_image_analysis_schema_ready;
 use function Gallery\Services\delete_gallery_images;
 use function Gallery\Services\delete_gallery_subtrees;
+use function Gallery\Services\gallery_trash_enabled;
+use function Gallery\Services\gallery_trash_available;
+use function Gallery\Services\gallery_trash_schema_status;
+use function Gallery\Services\move_gallery_subtrees_to_trash;
 use function Gallery\Services\exif_gps_schema_ready;
 use function Gallery\Services\feature_flag_enabled;
 use function Gallery\Services\find_gallery;
@@ -187,6 +192,9 @@ function cms_admin_public_update_gallery(): void
     // Variable $action stores this steps working value.
     $action = (string) ($_POST['action'] ?? 'save');
     if ($action === 'delete') {
+        // $trashEnabled freezes the delete policy for this request so a concurrent settings change
+        // cannot make the mutation result, logging, and user-facing message disagree.
+        $trashEnabled = gallery_trash_enabled();
         // $jsonBufferLevel isolates accidental PHP warning output from the JSON body.
         $jsonBufferLevel = admin_public_inline_json_buffer_start($wantsJson);
         // Variable $redirect stores this steps working value.
@@ -201,10 +209,36 @@ function cms_admin_public_update_gallery(): void
                 $redirect = gallery_public_url($parent);
             }
         }
+        // An enabled trash bin without verified storage must stop before deletion instead
+        // of silently destroying the gallery through the legacy path.
+        if ($trashEnabled && !gallery_trash_available()) {
+            // $trashSchemaStatus distinguishes a known missing migration from a temporary inspection failure.
+            $trashSchemaStatus = gallery_trash_schema_status();
+            // $trashUnavailableMessage keeps UNKNOWN fail-closed without incorrectly telling the admin to migrate.
+            $trashUnavailableMessage = (string) ($trashSchemaStatus['state'] ?? 'unknown') === 'missing'
+                ? t('admin.galleries.trash_requires_migration', 'The trash bin needs a database migration. Run pending migrations, then try again.')
+                : t('admin.galleries.trash_temporarily_unavailable', 'The trash bin is temporarily unavailable because its database schema could not be verified. Nothing was deleted.');
+            if ($wantsJson) {
+                admin_public_inline_json_response(admin_mutation_error_envelope(
+                    $trashUnavailableMessage,
+                    'gallery_trash_unavailable',
+                    admin_mutation_descriptor('gallery.delete', 'gallery', 'delete', [(int) $gallery['id']]),
+                    ['redirect_url' => $redirect]
+                ), 422, $jsonBufferLevel);
+                return;
+            }
+            flash_message('admin_notice', $trashUnavailableMessage);
+            redirect_to($redirect);
+        }
         try {
-            // $deleted stores the filesystem and database deletion result.
-            $deleted = delete_gallery_subtrees([(int) $gallery['id']]);
-            admin_log_event('warning', 'gallery.public_deleted', 'Admin deleted a gallery from the public page.', [
+            // $deleted stores the trash or permanent deletion result for this gallery.
+            $deleted = $trashEnabled
+                ? move_gallery_subtrees_to_trash([(int) $gallery['id']], [
+                    'user_id' => (int) (current_user()['id'] ?? 0),
+                    'deleted_from' => 'public_inline',
+                ])
+                : delete_gallery_subtrees([(int) $gallery['id']]);
+            admin_log_event('warning', $trashEnabled ? 'gallery.public_trashed' : 'gallery.public_deleted', $trashEnabled ? 'Admin moved a gallery to the trash from the public page.' : 'Admin deleted a gallery from the public page.', [
                 'gallery_id' => (int) $gallery['id'],
                 'folder_path' => (string) $gallery['folder_path'],
                 'deleted_roots' => (int) ($deleted['root_count'] ?? 0),
@@ -213,7 +247,9 @@ function cms_admin_public_update_gallery(): void
             ]);
             if ($wantsJson) {
                 admin_public_inline_json_response(admin_mutation_success_envelope(
-                    t('admin.galleries.deleted_result', 'Deleted {count} gallery folder(s).', ['count' => (int) ($deleted['root_count'] ?? 1)]),
+                    $trashEnabled
+                        ? t('admin.galleries.trashed_result', 'Moved {count} gallery folder(s) to the trash.', ['count' => (int) ($deleted['root_count'] ?? 1)])
+                        : t('admin.galleries.deleted_result', 'Deleted {count} gallery folder(s).', ['count' => (int) ($deleted['root_count'] ?? 1)]),
                     admin_mutation_descriptor('gallery.delete', 'gallery', 'delete', [(int) $gallery['id']]),
                     null,
                     [

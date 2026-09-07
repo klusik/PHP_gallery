@@ -115,6 +115,6 @@ stage4_expect(str_contains($sidePanel, 'admin-mutation-completion.js?v=20260902-
 $operations = stage4_source('public/assets/gallery-modules/admin-operations.js');
 stage4_expect(str_contains($operations, 'admin-side-panel.js?v=20260903-oversized-single-batch-v1'), 'Admin operations must load the current side-panel cache version.');
 $galleryJs = stage4_source('public/assets/gallery.js');
-stage4_expect(str_contains($galleryJs, 'admin-operations.js?v=20260903-oversized-single-batch-v1'), 'Gallery entrypoint must load the current admin-operations cache version.');
+stage4_expect(str_contains($galleryJs, 'admin-operations.js?v=20260907-gallery-trash-v1'), 'Gallery entrypoint must load the current admin-operations cache version.');
 
 echo "Stage 4 mutation hardening contracts passed.\n";

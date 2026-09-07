@@ -1451,6 +1451,20 @@ function site_maintenance_process_cleanup_step(array &$state, float $deadline): 
         $cleanup['viewer_security'] = viewer_security_maintenance_cleanup();
     }
 
+    if (function_exists('Gallery\\Services\\reconcile_gallery_trash_transitional_entries')) {
+        // Recover deterministic stale PREPARING/RESTORING/PURGING operations before
+        // selecting new expired entries. Ambiguous states fail closed as BROKEN.
+        $cleanup['gallery_trash_reconciliation'] = reconcile_gallery_trash_transitional_entries(
+            min(100, max(1, gallery_trash_purge_batch_size()))
+        );
+    }
+
+    if (function_exists('Gallery\\Services\\purge_expired_gallery_trash')) {
+        // Trashed galleries are destroyed only after their configured retention
+        // window. The work is bounded per slice and each candidate is atomically claimed.
+        $cleanup['gallery_trash'] = purge_expired_gallery_trash();
+    }
+
     if (function_exists('telemetry_run_maintenance') && (!function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('telemetry'))) {
         $cleanup['telemetry'] = telemetry_run_maintenance();
     }

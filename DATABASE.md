@@ -1,6 +1,6 @@
 # PHP Gallery Database Documentation
 
-This document describes the database schema used by PHP Gallery as of application version 0.96.6. Versions 0.96.1 through 0.96.6 introduce no schema change; the updater server-policy reconciliation migration from Version 0.94.5 remains the newest migration. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
+This document describes the database schema used by PHP Gallery as of application version 0.97. Version 0.97 adds the recoverable gallery-trash state machine through migrations `202609070001_gallery_trash_bin.php` and `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6 introduced no schema changes. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
 
 ## Database Engine
 
@@ -272,6 +272,36 @@ Important columns:
 | `logo_image_path` | Gallery logo asset path. |
 | `separator_image_path` | Gallery separator asset path. |
 | `created_at`, `updated_at` | Audit timestamps. |
+
+### `gallery_trash_entries`
+
+Durable state-machine record for recoverable administrator deletion of gallery subtrees. One row
+represents one selected root and survives deletion of the corresponding live `galleries` rows. It
+has no foreign key to `galleries` by design.
+
+Important columns:
+
+- `trash_token`: random 32-character hexadecimal identity and storage-directory key.
+- `status`: lifecycle state (`preparing`, `trashed`, `restoring`, `purging`, `restored`, `purged`, or
+  `broken`).
+- `original_folder_path` / `original_parent_folder_path`: stable restore location metadata.
+- `subtree_gallery_count`, `image_count`, `byte_size`: bounded Admin display and audit counters.
+- `snapshot_version`, `snapshot_json`: versioned durable restore metadata. The JSON is `LONGTEXT`
+  because large gallery subtrees can contain many image metadata records; finalized restore/purge
+  paths may clear it after it is no longer needed.
+- `trash_relative_path`: project-relative persistent storage identity. Current entries use
+  `data/gallery-trash/<trash_token>`; early development entries under `cache/gallery-trash` are
+  resolved only for backward-compatible recovery.
+- `deleted_by_user_id`: nullable audit attribution with `ON DELETE SET NULL` to `users`.
+- `deleted_at`, `purge_after`: local application timestamps matching `now_sql()`. `purge_after` is
+  inert while automatic purge is disabled.
+- `operation_started_at`, `last_error_code`: crash-reconciliation metadata for transitional/problem
+  states.
+- `restored_at`, `purged_at`: terminal lifecycle timestamps.
+
+The Trash feature itself defaults on. Retention-based automatic purge is an independent app setting
+and defaults off. Manual restore and permanent deletion do not depend on automatic purge being
+enabled. Existing rows and payloads remain available if the Trash feature is disabled.
 
 ### EXIF/GPS Display Defaults
 

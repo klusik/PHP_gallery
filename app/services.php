@@ -120,6 +120,8 @@ require_once __DIR__ . '/services/gallery_lookup.php';
 require_once __DIR__ . '/services/gallery_lightbox_mode.php';
 require_once __DIR__ . '/services/gallery_sidecars.php';
 require_once __DIR__ . '/services/gallery_paths.php';
+// Load the recoverable gallery trash bin after gallery paths, sidecars, and mutation helpers exist.
+require_once __DIR__ . '/services/gallery_trash.php';
 // Load persistent gallery-description favicon caching after gallery paths are available.
 require_once __DIR__ . '/services/link_favicons.php';
 // Load browser-driven discovery after path and sidecar helpers can inspect gallery folders.

@@ -642,6 +642,8 @@ function gallery_metadata_organizer_apply_date_plan_batch(int $galleryId, array 
             $moveResult = move_gallery_images($galleryId, $destinationGalleryId, $imageIds, ['defer_maintenance' => true]);
         } catch (Throwable $exception) {
             if ($createdThisGallery) {
+                // Rollback of a gallery this failed operation just created. It never held
+                // administrator content, so it is destroyed instead of entering the trash bin.
                 delete_gallery_subtrees([$destinationGalleryId]);
             }
             $failures[] = (string) ($group['title'] ?? '') . ': ' . $exception->getMessage();
@@ -650,6 +652,8 @@ function gallery_metadata_organizer_apply_date_plan_batch(int $galleryId, array 
 
         if (!empty($moveResult['failures'])) {
             if ($createdThisGallery) {
+                // Rollback of a gallery this failed operation just created. It never held
+                // administrator content, so it is destroyed instead of entering the trash bin.
                 delete_gallery_subtrees([$destinationGalleryId]);
             }
             foreach ((array) ($moveResult['failures'] ?? []) as $failure) {
@@ -865,6 +869,8 @@ function gallery_metadata_organizer_apply_date_plan(int $galleryId, array $input
             $moveResult = move_gallery_images($galleryId, $destinationGalleryId, $imageIds);
         } catch (Throwable $exception) {
             if ($createdThisGallery) {
+                // Rollback of a gallery this failed operation just created. It never held
+                // administrator content, so it is destroyed instead of entering the trash bin.
                 delete_gallery_subtrees([$destinationGalleryId]);
             }
             $failures[] = (string) ($group['title'] ?? '') . ': ' . $exception->getMessage();
@@ -873,6 +879,8 @@ function gallery_metadata_organizer_apply_date_plan(int $galleryId, array $input
 
         if (!empty($moveResult['failures'])) {
             if ($createdThisGallery) {
+                // Rollback of a gallery this failed operation just created. It never held
+                // administrator content, so it is destroyed instead of entering the trash bin.
                 delete_gallery_subtrees([$destinationGalleryId]);
             }
             foreach ((array) ($moveResult['failures'] ?? []) as $failure) {

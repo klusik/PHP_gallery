@@ -82,6 +82,9 @@ function view_render_admin_dashboard(array $model): void
     $totalImages = (int) ($model['total_images'] ?? 0);
     $missingThumbnailVariants = (int) ($model['missing_thumbnail_variants'] ?? 0);
     $notices = is_array($model['notices'] ?? null) ? $model['notices'] : [];
+    $galleryTrashEnabled = !empty($model['gallery_trash_enabled']);
+    $galleryTrashAutoPurgeEnabled = !empty($model['gallery_trash_auto_purge_enabled']);
+    $galleryTrashRetentionDays = max(1, min(365, (int) ($model['gallery_trash_retention_days'] ?? 30)));
     // Security/auth schema health surfaces before the deferred Maintenance panel opens.
     $securitySchemaStatuses = is_array($model['security_schema_statuses'] ?? null) ? $model['security_schema_statuses'] : [];
     // Destructive/ingestion schema health uses the same badge so paused mutations are visible immediately.
@@ -140,14 +143,16 @@ function view_render_admin_dashboard(array $model): void
             ['label' => t('admin.dashboard.upload_photos', 'Upload photos'), 'url' => url_for('admin_upload'), 'class' => 'button secondary'],
         ],
     ]);
-    echo '<form method="post" action="' . e(url_for('admin_bulk_galleries')) . '" data-gallery-bulk-form data-admin-gallery-order-form data-thumbnail-progress-target="#admin-dashboard-thumbnail-progress">' . csrf_field();
+    echo '<form method="post" action="' . e(url_for('admin_bulk_galleries')) . '" data-gallery-bulk-form data-gallery-trash-enabled="' . ($galleryTrashEnabled ? '1' : '0') . '" data-gallery-trash-auto-purge-enabled="' . ($galleryTrashAutoPurgeEnabled ? '1' : '0') . '" data-gallery-trash-retention-days="' . $galleryTrashRetentionDays . '" data-admin-gallery-order-form data-thumbnail-progress-target="#admin-dashboard-thumbnail-progress">' . csrf_field();
     echo '<section class="admin-gallery-workspace" aria-label="' . e(t('admin.dashboard.gallery_management', 'Gallery management')) . '">';
     echo '<div class="admin-gallery-command-panel">';
     echo '<div class="admin-image-order-toolbar admin-gallery-order-toolbar" data-admin-gallery-order-toolbar data-reorder-url="' . e(url_for('admin_reorder_galleries')) . '"><div><strong>' . e(t('admin.dashboard.tree_ordering', 'Tree ordering')) . '</strong><p class="muted">' . e(t('admin.dashboard.tree_ordering_hint', 'Drag a gallery thumbnail or title area to reorder. Move right to nest a gallery, or left to move it back out.')) . '</p></div><span class="admin-image-order-status" data-admin-gallery-order-status aria-live="polite">' . e(t('admin.dashboard.gallery_ordering_ready', 'Gallery ordering ready.')) . '</span></div>';
     echo '<div class="bulk-row admin-gallery-controls">';
     echo '<label>' . e(t('admin.dashboard.filter', 'Filter')) . '<select data-gallery-visibility-filter><option value="all">' . e(t('admin.dashboard.filter_all_statuses', 'All statuses')) . '</option><option value="unpublished">' . e(t('admin.dashboard.filter_only_unpublished', 'Only unpublished')) . '</option><option value="public">' . e(t('admin.dashboard.filter_only_public', 'Only public')) . '</option><option value="private">' . e(t('admin.dashboard.filter_only_private', 'Only private')) . '</option></select></label>';
     echo '<span class="muted admin-gallery-filter-summary" data-gallery-filter-summary></span>';
-    echo '<label class="admin-gallery-select-all"><input type="checkbox" data-select-all="gallery_ids[]"> ' . e(t('admin.dashboard.select_displayed', 'Select displayed')) . '</label><label>' . e(t('admin.dashboard.bulk_action', 'Bulk action')) . '<select name="action"><option value="scan">' . e(t('admin.dashboard.bulk_scan_images', 'Scan/import images')) . '</option><option value="thumbs">' . e(t('admin.dashboard.bulk_create_thumbnails', 'Create thumbnails')) . '</option><option value="public">' . e(t('admin.dashboard.bulk_set_public', 'Set public')) . '</option><option value="unpublished">' . e(t('admin.dashboard.bulk_set_unpublished', 'Set unpublished')) . '</option><option value="private">' . e(t('admin.dashboard.bulk_set_private', 'Set private')) . '</option><option value="maps_on">' . e(t('admin.dashboard.bulk_enable_gps_maps', 'Force GPS maps on')) . '</option><option value="maps_off">' . e(t('admin.dashboard.bulk_disable_gps_maps', 'Force GPS maps off')) . '</option>' . ($gpsMapOverrideReady ? '<option value="maps_inherit">' . e(t('admin.dashboard.bulk_inherit_gps_maps', 'Use GPS map default')) . '</option>' : '') . '<option value="delete">' . e(t('admin.dashboard.bulk_delete_selected', 'Delete selected galleries')) . '</option>';
+    echo '<label class="admin-gallery-select-all"><input type="checkbox" data-select-all="gallery_ids[]"> ' . e(t('admin.dashboard.select_displayed', 'Select displayed')) . '</label><label>' . e(t('admin.dashboard.bulk_action', 'Bulk action')) . '<select name="action"><option value="scan">' . e(t('admin.dashboard.bulk_scan_images', 'Scan/import images')) . '</option><option value="thumbs">' . e(t('admin.dashboard.bulk_create_thumbnails', 'Create thumbnails')) . '</option><option value="public">' . e(t('admin.dashboard.bulk_set_public', 'Set public')) . '</option><option value="unpublished">' . e(t('admin.dashboard.bulk_set_unpublished', 'Set unpublished')) . '</option><option value="private">' . e(t('admin.dashboard.bulk_set_private', 'Set private')) . '</option><option value="maps_on">' . e(t('admin.dashboard.bulk_enable_gps_maps', 'Force GPS maps on')) . '</option><option value="maps_off">' . e(t('admin.dashboard.bulk_disable_gps_maps', 'Force GPS maps off')) . '</option>' . ($gpsMapOverrideReady ? '<option value="maps_inherit">' . e(t('admin.dashboard.bulk_inherit_gps_maps', 'Use GPS map default')) . '</option>' : '') . '<option value="delete">' . e($galleryTrashEnabled
+        ? t('admin.dashboard.bulk_trash_selected', 'Move selected galleries to trash')
+        : t('admin.dashboard.bulk_delete_selected', 'Delete selected galleries')) . '</option>';
     if ($filenameDisplayReady) {
         echo '<option value="filenames_on">' . e(t('admin.dashboard.bulk_show_file_names', 'Show file names')) . '</option><option value="filenames_off">' . e(t('admin.dashboard.bulk_hide_file_names', 'Hide file names')) . '</option>';
     }
@@ -210,7 +215,10 @@ function view_render_admin_dashboard(array $model): void
     if (!empty($model['maintenance_loaded'])) {
         view_render_admin_dashboard_maintenance_panel($model);
     } else {
-        $maintenanceEndpointParams = strtolower(trim((string) ($_GET['maintenance_tab'] ?? ''))) === 'media' ? ['maintenance_tab' => 'media'] : [];
+        $requestedMaintenanceTab = strtolower(trim((string) ($_GET['maintenance_tab'] ?? '')));
+        $maintenanceEndpointParams = in_array($requestedMaintenanceTab, ['content', 'media', 'navigation', 'system', 'trash'], true)
+            ? ['maintenance_tab' => $requestedMaintenanceTab]
+            : [];
         echo '<div class="admin-dashboard-deferred-panel" data-admin-dashboard-maintenance-placeholder data-maintenance-endpoint="' . e(url_for('admin_dashboard_maintenance', $maintenanceEndpointParams)) . '" data-maintenance-log-endpoint="' . e(url_for('admin_dashboard_maintenance_client_log')) . '" data-csrf-token="' . e(csrf_token()) . '" role="status"><p class="muted">' . e(t('admin.dashboard.maintenance_loading', 'Loading maintenance tools…')) . '</p><noscript><a href="' . e(url_for('admin_storage_statistics')) . '">' . e(t('admin.storage.open_details', 'Open storage and maintenance details')) . '</a></noscript></div>';
     }
     $maintenanceHtml = (string) ob_get_clean();

@@ -224,6 +224,18 @@ function admin_dashboard_view_model(bool $includeMaintenance = false): array
     $updateLabel = application_update_nav_label($updatePending);
     // $siteMaintenanceStatus stores the persisted cron-safe maintenance state for the media maintenance card.
     $siteMaintenanceStatus = $includeMaintenance ? admin_render_profile_setting_read('site_maintenance_status', static fn (): array => function_exists('Gallery\\Services\\site_maintenance_status') ? site_maintenance_status() : []) : [];
+    // Trash mode affects the always-visible gallery bulk action, so expose its small settings even before deferred Maintenance loads.
+    $galleryTrashEnabled = function_exists('Gallery\Services\gallery_trash_enabled') && gallery_trash_enabled();
+    $galleryTrashAutoPurgeEnabled = function_exists('Gallery\Services\gallery_trash_auto_purge_enabled') && gallery_trash_auto_purge_enabled();
+    $galleryTrashRetentionDays = function_exists('Gallery\Services\gallery_trash_retention_days') ? gallery_trash_retention_days() : 30;
+    // $galleryTrashSummary stores bounded counters for the Maintenance > Trash badge and panel.
+    $galleryTrashSummary = $includeMaintenance && function_exists('Gallery\\Services\\gallery_trash_summary')
+        ? admin_render_profile_db('gallery_trash_summary', static fn (): array => gallery_trash_summary())
+        : ['available' => false, 'count' => 0, 'trashed_count' => 0, 'broken_count' => 0, 'transitional_count' => 0, 'problem_count' => 0, 'purgeable_count' => 0, 'active_count' => 0, 'bytes' => 0];
+    // $galleryTrashEntries stores active/recoverable/problem rows. Historical restored/purged rows stay out of the dashboard payload.
+    $galleryTrashEntries = $includeMaintenance && !empty($galleryTrashSummary['available']) && function_exists('Gallery\\Services\\gallery_trash_entries')
+        ? admin_render_profile_db('gallery_trash_entries', static fn (): array => gallery_trash_entries(['status' => 'active', 'limit' => 200]))
+        : [];
     // $thumbnailSummary stores an intermediate value used by the surrounding gallery workflow.
     admin_render_profile_set_counter('thumbnail_maintenance_sample_limit', 1000);
     $thumbnailSummary = admin_render_profile_span('thumbnail_maintenance_summary_cached_read', static fn (): array => cached_thumbnail_maintenance_summary_if_available(null, 1000));
@@ -303,6 +315,11 @@ function admin_dashboard_view_model(bool $includeMaintenance = false): array
         'update_label' => $updateLabel,
         'thumbnail_summary' => $thumbnailSummary,
         'site_maintenance_status' => $siteMaintenanceStatus,
+        'gallery_trash_enabled' => $galleryTrashEnabled,
+        'gallery_trash_auto_purge_enabled' => $galleryTrashAutoPurgeEnabled,
+        'gallery_trash_retention_days' => $galleryTrashRetentionDays,
+        'gallery_trash_summary' => $galleryTrashSummary,
+        'gallery_trash_entries' => $galleryTrashEntries,
         'original_storage_label' => $originalStorageLabel,
         'gallery_database_usage_label' => $galleryDatabaseUsageLabel,
         'database_usage_label' => $databaseUsageLabel,
@@ -435,6 +452,7 @@ function admin_mutation_schema_health_statuses(): array
     $requestId = function_exists('Gallery\Services\telemetry_request_id') ? telemetry_request_id() : '';
     $definitions = [
         'mutation_gallery_delete' => gallery_deletion_schema_status(),
+        'mutation_gallery_trash' => gallery_trash_schema_status(),
         'mutation_gallery_move' => gallery_move_schema_status(),
         'mutation_duplicate_photo_ledger' => duplicate_photo_ledger_schema_status(),
         'mutation_upload_ingestion' => upload_ingestion_schema_status(),

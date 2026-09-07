@@ -269,12 +269,24 @@ export function setupAdminGallerySidePanel() {
         const kindValue = String(form.dataset.publicAdminDeleteKind || 'photo');
         const kind = ['gallery', 'photo', 'tag'].includes(kindValue) ? kindValue : 'photo';
         const name = String(form.dataset.publicAdminDeleteName || kind).trim();
-        const message = [
-            `Remove this ${kind} from CMS?`,
-            name ? `Item: ${name}` : '',
-            '',
-            'This removes the CMS record. Continue?'
-        ].filter((line) => line !== '').join('\n');
+        const galleryTrashMode = kind === 'gallery' && String(form.dataset.publicAdminDeleteMode || '') === 'trash';
+        const autoPurgeEnabled = String(form.dataset.publicAdminDeleteAutoPurgeEnabled || '0') === '1';
+        const retentionDays = Math.max(1, Number(form.dataset.publicAdminDeleteRetentionDays || 30));
+        const message = galleryTrashMode
+            ? [
+                i18n('js.admin.inline.trash_gallery_title', 'Move this gallery and all subgalleries to the trash?'),
+                name ? `Item: ${name}` : '',
+                '',
+                autoPurgeEnabled
+                    ? i18n('js.admin.inline.trash_gallery_detail', 'It leaves the live gallery immediately and can be restored for {days} day(s).', {days: retentionDays})
+                    : i18n('js.admin.inline.trash_gallery_detail_manual', 'It leaves the live gallery immediately and stays in the trash until you restore or permanently delete it.')
+            ].filter((line) => line !== '').join('\n')
+            : [
+                `Remove this ${kind} from CMS?`,
+                name ? `Item: ${name}` : '',
+                '',
+                'This removes the CMS record. Continue?'
+            ].filter((line) => line !== '').join('\n');
         if (!window.confirm(message)) {
             event.preventDefault();
         }

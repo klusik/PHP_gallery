@@ -136,12 +136,21 @@ export function setupGalleryBulkDeleteConfirmation() {
         // Variable `names` stores this steps working value.
         const names = selectedRows.map((row) => row.dataset.galleryTitle || row.querySelector('.tree-title a')?.textContent?.trim() || i18n('admin.bulk.gallery_fallback', 'Gallery {id}', {id: row.dataset.galleryId || ''}).trim());
         // Variable `message` stores this steps working value.
+        const trashEnabled = String(form.dataset.galleryTrashEnabled || '0') === '1';
+        const autoPurgeEnabled = String(form.dataset.galleryTrashAutoPurgeEnabled || '0') === '1';
+        const retentionDays = Math.max(1, Number(form.dataset.galleryTrashRetentionDays || 30));
         const message = [
-            i18n('admin.bulk.delete_galleries_title', 'Delete these gallery folders and all subgalleries?'),
+            trashEnabled
+                ? i18n('js.admin.bulk.trash_galleries_title', 'Move these gallery folders and all subgalleries to the trash?')
+                : i18n('admin.bulk.delete_galleries_title', 'Delete these gallery folders and all subgalleries?'),
             '',
             ...names.map((name) => `• ${name}`),
             '',
-            i18n('admin.bulk.delete_galleries_detail', 'This removes the folders from disk and deletes their database records. This cannot be undone.')
+            trashEnabled
+                ? (autoPurgeEnabled
+                    ? i18n('js.admin.bulk.trash_galleries_detail', 'They leave the live gallery immediately and can be restored for {days} day(s).', {days: retentionDays})
+                    : i18n('js.admin.bulk.trash_galleries_detail_manual', 'They leave the live gallery immediately and stay in the trash until you restore or permanently delete them.'))
+                : i18n('admin.bulk.delete_galleries_detail', 'This removes the folders from disk and deletes their database records. This cannot be undone.')
         ].join('\n');
         if (!window.confirm(message)) {
             event.preventDefault();

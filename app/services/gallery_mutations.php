@@ -48,6 +48,25 @@ use function Gallery\Core\now_sql;
 use function Gallery\Core\path_inside;
 
 /**
+ * Build a literal folder-path descendant pattern for SQL LIKE predicates.
+ *
+ * Folder names may legally contain SQL wildcard characters such as `_` and `%`.
+ * Use `=` as the explicit escape character so subtree queries never interpret
+ * gallery-authored path text as a pattern.
+ *
+ * @param string $folderPath Normalized gallery folder path.
+ * @return string Escaped LIKE pattern matching descendants only.
+ */
+function gallery_folder_path_descendant_like_pattern(string $folderPath): string
+{
+    // $folderPath stores a normalized literal path before SQL wildcard escaping.
+    $folderPath = normalize_relative_path($folderPath);
+    // Escape the escape character first, then the two LIKE wildcards.
+    $escaped = str_replace(['=', '%', '_'], ['==', '=%', '=_'], $folderPath);
+    return $escaped . '/%';
+}
+
+/**
  * Gallery mutation model.
  *
  * This module owns filesystem-backed gallery changes: subtree deletion, folder moves, imports, ancestor creation, and parent synchronization. It intentionally keeps the filesystem as the source of truth and updates the database to follow it.
@@ -65,8 +84,8 @@ function gallery_subtree_rows(int $galleryId): array
     // $folderPath stores an intermediate value used by the surrounding gallery workflow.
     $folderPath = normalize_relative_path((string) $gallery['folder_path']);
     // $stmt stores an intermediate value used by the surrounding gallery workflow.
-    $stmt = db()->prepare('SELECT * FROM galleries WHERE folder_path = ? OR folder_path LIKE ? ORDER BY folder_path');
-    $stmt->execute([$folderPath, $folderPath . '/%']);
+    $stmt = db()->prepare("SELECT * FROM galleries WHERE folder_path = ? OR folder_path LIKE ? ESCAPE '=' ORDER BY folder_path");
+    $stmt->execute([$folderPath, gallery_folder_path_descendant_like_pattern($folderPath)]);
     return $stmt->fetchAll();
 }
 
@@ -199,47 +218,12 @@ function gallery_delete_database_subtree_rows(array $galleryIds): int
         'Gallery deletion is temporarily unavailable because the required database schema could not be verified.'
     );
 
-    // $imageIds stores all images that belong to the removed gallery rows.
-    $imageIds = gallery_image_ids_for_gallery_ids($galleryIds);
     // $pdo stores the active connection for the atomic database cleanup.
     $pdo = db();
     $pdo->beginTransaction();
     try {
-        if ($imageIds) {
-            gallery_null_rows_by_ids('galleries', 'cover_image_id', $imageIds);
-            gallery_null_rows_by_ids('telemetry_sessions', 'first_image_id', $imageIds);
-            gallery_null_rows_by_ids('telemetry_sessions', 'last_image_id', $imageIds);
-            gallery_null_rows_by_ids('telemetry_events', 'image_id', $imageIds);
-            gallery_null_rows_by_ids('telemetry_job_runs', 'image_id', $imageIds);
-
-            gallery_delete_rows_by_ids('image_thumbnail_variants', 'image_id', $imageIds);
-            gallery_delete_rows_by_ids('image_ai_analysis_jobs', 'image_id', $imageIds);
-            gallery_delete_rows_by_ids('image_ai_metadata', 'image_id', $imageIds);
-            gallery_delete_rows_by_ids('picture_game_votes', 'image_a_id', $imageIds);
-            gallery_delete_rows_by_ids('picture_game_votes', 'image_b_id', $imageIds);
-            gallery_delete_rows_by_ids('picture_game_votes', 'winner_image_id', $imageIds);
-            gallery_delete_rows_by_ids('image_tags', 'image_id', $imageIds);
-            gallery_delete_rows_by_ids('image_votes', 'image_id', $imageIds);
-        }
-
-        gallery_null_rows_by_ids('telemetry_sessions', 'first_gallery_id', $galleryIds);
-        gallery_null_rows_by_ids('telemetry_sessions', 'last_gallery_id', $galleryIds);
-        gallery_null_rows_by_ids('telemetry_events', 'gallery_id', $galleryIds);
-        gallery_null_rows_by_ids('telemetry_job_runs', 'gallery_id', $galleryIds);
-        gallery_null_rows_by_ids('galleries', 'parent_id', $galleryIds);
-
-        gallery_delete_rows_by_ids('gallery_flight_maps', 'gallery_id', $galleryIds);
-        gallery_delete_rows_by_ids('gallery_upload_tokens', 'gallery_id', $galleryIds);
-        gallery_delete_rows_by_ids('mobile_webdav_upload_tokens', 'gallery_id', $galleryIds);
-        gallery_delete_rows_by_ids('image_thumbnail_variants', 'gallery_id', $galleryIds);
-        gallery_delete_rows_by_ids('image_ai_analysis_jobs', 'gallery_id', $galleryIds);
-        gallery_delete_rows_by_ids('picture_game_votes', 'gallery_id', $galleryIds);
-        gallery_delete_rows_by_ids('gallery_tags', 'gallery_id', $galleryIds);
-        gallery_delete_rows_by_ids('zip_archives', 'gallery_id', $galleryIds);
-        gallery_delete_rows_by_ids('images', 'gallery_id', $galleryIds);
-
         // $deletedRows stores the actual number of galleries removed.
-        $deletedRows = gallery_delete_rows_by_ids('galleries', 'id', $galleryIds);
+        $deletedRows = gallery_delete_database_subtree_rows_in_transaction($galleryIds);
         $pdo->commit();
         return $deletedRows;
     } catch (Throwable $exception) {
@@ -248,6 +232,69 @@ function gallery_delete_database_subtree_rows(array $galleryIds): int
         }
         throw $exception;
     }
+}
+
+/**
+ * Delete gallery database rows inside an already-open transaction.
+ *
+ * This transaction-neutral primitive lets compound mutations, notably the
+ * gallery trash bin, commit dependent-row deletion and their lifecycle state
+ * transition atomically. Callers must verify schema before use and must own an
+ * active transaction on the shared PDO connection.
+ *
+ * @param array<int> $galleryIds Gallery row ids to remove.
+ * @return int Number of gallery rows deleted.
+ */
+function gallery_delete_database_subtree_rows_in_transaction(array $galleryIds): int
+{
+    // $galleryIds stores unique positive gallery ids accepted by SQL cleanup.
+    $galleryIds = array_values(array_unique(array_filter(array_map('intval', $galleryIds), static fn (int $galleryId): bool => $galleryId > 0)));
+    if (!$galleryIds) {
+        return 0;
+    }
+
+    // $pdo stores the shared transaction-owning connection.
+    $pdo = db();
+    if (!$pdo->inTransaction()) {
+        throw new RuntimeException('Gallery database subtree cleanup requires an active transaction.');
+    }
+
+    // $imageIds stores all images that belong to the removed gallery rows.
+    $imageIds = gallery_image_ids_for_gallery_ids($galleryIds);
+    if ($imageIds) {
+        gallery_null_rows_by_ids('galleries', 'cover_image_id', $imageIds);
+        gallery_null_rows_by_ids('telemetry_sessions', 'first_image_id', $imageIds);
+        gallery_null_rows_by_ids('telemetry_sessions', 'last_image_id', $imageIds);
+        gallery_null_rows_by_ids('telemetry_events', 'image_id', $imageIds);
+        gallery_null_rows_by_ids('telemetry_job_runs', 'image_id', $imageIds);
+
+        gallery_delete_rows_by_ids('image_thumbnail_variants', 'image_id', $imageIds);
+        gallery_delete_rows_by_ids('image_ai_analysis_jobs', 'image_id', $imageIds);
+        gallery_delete_rows_by_ids('image_ai_metadata', 'image_id', $imageIds);
+        gallery_delete_rows_by_ids('picture_game_votes', 'image_a_id', $imageIds);
+        gallery_delete_rows_by_ids('picture_game_votes', 'image_b_id', $imageIds);
+        gallery_delete_rows_by_ids('picture_game_votes', 'winner_image_id', $imageIds);
+        gallery_delete_rows_by_ids('image_tags', 'image_id', $imageIds);
+        gallery_delete_rows_by_ids('image_votes', 'image_id', $imageIds);
+    }
+
+    gallery_null_rows_by_ids('telemetry_sessions', 'first_gallery_id', $galleryIds);
+    gallery_null_rows_by_ids('telemetry_sessions', 'last_gallery_id', $galleryIds);
+    gallery_null_rows_by_ids('telemetry_events', 'gallery_id', $galleryIds);
+    gallery_null_rows_by_ids('telemetry_job_runs', 'gallery_id', $galleryIds);
+    gallery_null_rows_by_ids('galleries', 'parent_id', $galleryIds);
+
+    gallery_delete_rows_by_ids('gallery_flight_maps', 'gallery_id', $galleryIds);
+    gallery_delete_rows_by_ids('gallery_upload_tokens', 'gallery_id', $galleryIds);
+    gallery_delete_rows_by_ids('mobile_webdav_upload_tokens', 'gallery_id', $galleryIds);
+    gallery_delete_rows_by_ids('image_thumbnail_variants', 'gallery_id', $galleryIds);
+    gallery_delete_rows_by_ids('image_ai_analysis_jobs', 'gallery_id', $galleryIds);
+    gallery_delete_rows_by_ids('picture_game_votes', 'gallery_id', $galleryIds);
+    gallery_delete_rows_by_ids('gallery_tags', 'gallery_id', $galleryIds);
+    gallery_delete_rows_by_ids('zip_archives', 'gallery_id', $galleryIds);
+    gallery_delete_rows_by_ids('images', 'gallery_id', $galleryIds);
+
+    return gallery_delete_rows_by_ids('galleries', 'id', $galleryIds);
 }
 
 /**
@@ -265,8 +312,8 @@ function delete_missing_gallery_database_subtree_by_folder_path(string $folderPa
     }
 
     // $stmt stores the lookup for stale exact and descendant gallery rows.
-    $stmt = db()->prepare('SELECT id FROM galleries WHERE folder_path = ? OR folder_path LIKE ? ORDER BY folder_path DESC');
-    $stmt->execute([$folderPath, $folderPath . '/%']);
+    $stmt = db()->prepare("SELECT id FROM galleries WHERE folder_path = ? OR folder_path LIKE ? ESCAPE '=' ORDER BY folder_path DESC");
+    $stmt->execute([$folderPath, gallery_folder_path_descendant_like_pattern($folderPath)]);
     // $ids stores stale gallery ids that can no longer be reached on disk.
     $ids = array_values(array_unique(array_filter(array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN)), static fn (int $galleryId): bool => $galleryId > 0)));
     if (!$ids) {
@@ -424,10 +471,21 @@ function delete_directory_tree(string $directory, string $allowedRoot): void
     foreach ($iterator as $entry) {
         // Variable $path stores this steps working value.
         $path = $entry->getPathname();
+        if ($entry->isLink()) {
+            // Never resolve or follow a link target for deletion. The link itself is safe to
+            // unlink only when its containing directory is inside the allowed managed root.
+            if (!path_inside($allowedRoot, dirname($path))) {
+                throw new RuntimeException('Refusing to delete a symbolic link outside the gallery root.');
+            }
+            if (!@unlink($path)) {
+                throw new RuntimeException('Could not remove symbolic link: ' . $path);
+            }
+            continue;
+        }
         if (!path_inside($allowedRoot, $path)) {
             throw new RuntimeException('Refusing to delete a path outside the gallery root.');
         }
-        if ($entry->isDir() && !$entry->isLink()) {
+        if ($entry->isDir()) {
             if (!@rmdir($path)) {
                 throw new RuntimeException('Could not remove directory: ' . $path);
             }
@@ -1640,8 +1698,8 @@ function gallery_subtree_ids(int $galleryId): array
     // Variable $folderPath stores this steps working value.
     $folderPath = normalize_relative_path((string) $gallery['folder_path']);
     // Variable $stmt stores this steps working value.
-    $stmt = db()->prepare('SELECT id FROM galleries WHERE folder_path = ? OR folder_path LIKE ? ORDER BY folder_path');
-    $stmt->execute([$folderPath, $folderPath . '/%']);
+    $stmt = db()->prepare("SELECT id FROM galleries WHERE folder_path = ? OR folder_path LIKE ? ESCAPE '=' ORDER BY folder_path");
+    $stmt->execute([$folderPath, gallery_folder_path_descendant_like_pattern($folderPath)]);
     return array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
 }
 

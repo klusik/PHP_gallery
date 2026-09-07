@@ -175,6 +175,8 @@ function cms_admin_bulk_images(): void
             $moved = move_gallery_images($galleryId, $destinationGalleryId, $ownedIds);
             if (!empty($moved['failures'])) {
                 if ($createdGalleryId > 0) {
+            // Rollback of a gallery this failed operation just created. It never held
+            // administrator content, so it is destroyed instead of entering the trash bin.
                     delete_gallery_subtrees([$createdGalleryId]);
                 }
                 admin_log_event('error', 'image.bulk_move_failed', 'Admin image move validation failed.', [
@@ -241,7 +243,9 @@ function cms_admin_bulk_images(): void
                 }
                 if (!$moveAttempted || $createdGalleryImageCount === 0) {
                     try {
-                        delete_gallery_subtrees([$createdGalleryId]);
+                // Rollback of a gallery this failed operation just created. It never held
+            // administrator content, so it is destroyed instead of entering the trash bin.
+                    delete_gallery_subtrees([$createdGalleryId]);
                     } catch (Throwable) {
                     }
                 }

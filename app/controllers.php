@@ -65,6 +65,7 @@ require_once __DIR__ . '/controllers/mobile_webdav.php';
 require_once __DIR__ . '/controllers/gallery_migration.php';
 require_once __DIR__ . '/controllers/admin_media_renamer.php';
 require_once __DIR__ . '/controllers/admin_galleries.php';
+require_once __DIR__ . '/controllers/admin_trash.php';
 require_once __DIR__ . '/controllers/admin_gallery_dates.php';
 require_once __DIR__ . '/controllers/admin_duplicate_photos.php';
 require_once __DIR__ . '/controllers/admin_tags.php';
