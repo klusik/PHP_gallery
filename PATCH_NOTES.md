@@ -1,5 +1,69 @@
 # Patch notes
 
+## Version 0.97
+
+Version 0.97 adds a recoverable gallery trash bin for administrator-initiated gallery deletion. Deleted gallery trees leave the live public hierarchy immediately but remain restorable from Admin by default, while permanent and optional retention-based cleanup stay explicit, bounded, and fail-closed.
+
+### Highlights
+
+#### Recoverable gallery deletion
+
+- Changed normal administrator gallery deletion to move the selected gallery and its complete descendant tree into protected persistent trash storage before removing its live database rows.
+- Added **Maintenance > Trash**, where administrators can review deleted gallery counts, photo counts, stored size, lifecycle state, and retention status; restore one entry; permanently delete one entry; or empty the trash.
+- Restored recoverable galleries to their original hierarchy and metadata while refusing to overwrite an occupied live path.
+- Kept individual-photo deletion outside the gallery trash feature; it remains a permanent operation.
+
+#### Explicit retention and recovery policy
+
+- Enabled recoverable gallery deletion by default while keeping automatic purge disabled by default.
+- Added independent 1–365 day retention and bounded 1–100 entry maintenance-batch settings, with defaults of 30 days and 25 entries.
+- Preserved existing trash entries when Trash is disabled and returned only future gallery deletes to the legacy permanent path.
+- Re-armed current recoverable entries with a fresh full retention window when automatic purge resumes after being inactive, preventing old entries from being destroyed immediately.
+- Added conservative reconciliation for interrupted trash, restore, and purge operations; ambiguous entries remain visible as problems rather than being deleted speculatively.
+
+### Technical Details
+
+#### Backend
+
+- Added `app/services/gallery_trash.php`, which owns protected storage paths, versioned restore snapshots, verified filesystem moves/copies, lifecycle claims, rollback, restoration, permanent purge, bounded emptying, automatic cleanup, and stale-operation reconciliation.
+- Added `app/controllers/admin_trash.php` and `app/views/admin_trash.php` for authenticated, POST-only, CSRF-protected Trash settings and mutations. Enhanced actions return the canonical Admin mutation envelope; direct/no-JavaScript requests retain redirect fallback behavior.
+- Routed Admin bulk deletion and public-page administrator gallery deletion through one policy snapshot: when Trash is enabled, confirmed missing or unknown trash schema blocks the operation before any permanent-delete path can run. Disabling Trash is the explicit compatibility choice that permits future legacy hard deletion.
+- Registered `mutation.gallery_trash` with System Health and the three-state mutation schema policy. `available` enables the recoverable workflow; confirmed `missing` and `unknown` both stop it before the first irreversible target mutation.
+- Integrated bounded reconciliation and optional expired-entry purge with scheduled Site Maintenance. Automatic purge selects only `trashed` entries past their deadline and runs only while both Trash and automatic purge are enabled.
+- Kept the restore snapshot authoritative in the database and wrote a sanitized adjacent recovery manifest without password hashes, share credentials, or bearer tokens.
+
+#### Database
+
+- Added migration `database/migrations/202609070001_gallery_trash_bin.php`, creating `gallery_trash_entries` with durable token, original-path, snapshot, counts, lifecycle, retention, attribution, timestamp, and lookup-index fields. Trash rows intentionally do not reference `galleries`, because they must survive deletion of the live hierarchy they describe.
+- Added migration `database/migrations/202609070002_gallery_trash_state_machine.php`, upgrading early development installations to extensible lifecycle states, `LONGTEXT` snapshots, snapshot versions, operation timestamps, bounded error categories, and original-path indexing.
+
+#### Frontend, localization, and deployment
+
+- Added `public/assets/gallery-modules/admin-trash.js` so restore, permanent purge, and multi-batch Empty Trash complete in place inside the Maintenance surface without changing the browser URL.
+- Updated the Admin dashboard, gallery cards, bulk actions, and side-panel completion paths to expose trash state and keep canonical mutation coordination intact.
+- Added Trash UI messages to the maintained English, Czech, German, and Swedish catalogs.
+- Added `data/gallery-trash/.htaccess` to deny direct HTTP access. Deployment helpers include only that policy file and exclude runtime trash payloads from release/deployment archives.
+- Updated `README.md`, `ARCHITECTURE.md`, `CODEMAP.md`, `DATABASE.md`, `TESTING.md`, and the administrator manual with the permanent recovery, schema, storage, maintenance, and operational contracts.
+
+### Tests
+
+- Added `tests/gallery_trash_model_test.php` covering settings, retention, token/path validation, disjoint storage roots, real nested filesystem moves, SHA-256-verified cross-filesystem copy fallback, schema-before-mutation ordering, rollback and path guards, bounded maintenance purge, authenticated POST/CSRF routes, canonical mutation envelopes, migrations, and maintained translations.
+- Updated dashboard-deferral, Admin side-panel/cache-revision, Smart Gallery import-edge, and Stage 4 mutation hardening contracts for the new modules and current browser cache revisions.
+- Kept the new test registered in the central PHP regression tree; release qualification runs it through `php scripts/audit.php --profile=release` together with repository syntax, mutation-contract, migration, translation, manifest, browser, and packaging-related checks.
+
+### User Impact
+
+#### For administrators
+
+- Accidental gallery deletion is recoverable by default from **Maintenance > Trash**, including nested galleries, files, and supported metadata.
+- Permanent cleanup remains deliberate: administrators must explicitly purge entries, empty the trash, or opt into retention-based scheduled purge.
+- Upgrading requires the two Version 0.97 migrations before enabled recoverable deletion can proceed; a missing or uninspectable trash schema is reported instead of silently deleting permanently.
+
+#### For visitors
+
+- A trashed gallery disappears from public gallery discovery and related public surfaces immediately, just as with permanent deletion.
+- Restoring a gallery makes its reconstructed hierarchy available again under the normal visibility, access, NSFW, and media-authorization rules.
+
 ## Version 0.96.6
 
 Version 0.96.6 is a small maintenance release with no database schema or migration changes. It fixes the fullscreen full-quality progress bar introduced in Version 0.96.5, whose fill element did not render or size correctly.
