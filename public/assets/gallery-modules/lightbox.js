@@ -644,9 +644,9 @@ export function setupGalleryLightbox() {
     const zoomSurface = overlay.querySelector('[data-lightbox-zoom-surface]');
     // stageLink stores state or configuration for the gallery front-end flow.
     const stageLink = image ? image.closest('.lightbox-stage-link') : null;
-    // qualityProgress renders real byte-transfer progress while fullscreen promotes the active photo.
+    // qualityProgress renders real byte-transfer progress while the active photo is promoted in lightbox or fullscreen.
     let qualityProgress = null;
-    // qualityProgressFill stores the visual completion fill inside the fullscreen quality progress bar.
+    // qualityProgressFill stores the visual completion fill inside the quality progress bar.
     let qualityProgressFill = null;
     // qualityProgressPercent stores the numeric transfer percentage shown beside the bar.
     let qualityProgressPercent = null;
@@ -1116,7 +1116,7 @@ export function setupGalleryLightbox() {
     }
 
     /**
-     * Update the visible fullscreen quality-transfer metrics from real response bytes.
+     * Update the visible lightbox/fullscreen quality-transfer metrics from real response bytes.
      *
      * @param {number} loadedBytes Number of response bytes received so far.
      * @param {number} totalBytes Total response size from Content-Length, when known.
@@ -1126,7 +1126,10 @@ export function setupGalleryLightbox() {
         const total = Math.max(0, Number(totalBytes) || 0);
         const percent = total > 0 ? Math.max(0, Math.min(100, (loaded / total) * 100)) : 0;
         if (qualityProgressFill instanceof HTMLElement) {
-            qualityProgressFill.style.width = `${percent.toFixed(2)}%`;
+            // Transforming a full-width fill is both layout-cheap and exact for rapidly arriving
+            // stream chunks. A CSS width transition causes repeated progress updates to retarget
+            // the same in-flight animation, which makes the visual bar lag far behind its metrics.
+            qualityProgressFill.style.transform = `scaleX(${(percent / 100).toFixed(4)})`;
         }
         if (qualityProgressPercent instanceof HTMLElement) {
             qualityProgressPercent.textContent = total > 0 ? `${Math.round(percent)}%` : '...';
@@ -1139,8 +1142,8 @@ export function setupGalleryLightbox() {
     /**
      * Synchronize the visible quality indicator and accessible full-quality loading status.
      *
-     * Fullscreen uses a byte-accurate progress bar. Normal lightbox mode keeps the
-     * compact legacy busy indicator so the additional metrics do not occupy card space.
+     * Both normal lightbox and fullscreen use the same byte-accurate progress bar
+     * whenever an active-photo quality request is being tracked.
      *
      * @param {boolean} loading Whether an active-photo quality decode is in progress.
      */
