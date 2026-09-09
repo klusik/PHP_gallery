@@ -105,6 +105,12 @@ Git history uses short, imperative messages, often with a feature prefix, for ex
 ## Security & Configuration Tips
 Do not commit `config.php`, local caches, uploads, or generated deploy archives. Use `config.example.php` as the baseline for new environments. Keep access checks in `app/services/gallery_access.php` and route-sensitive logic centralized in controllers and services rather than duplicated in views.
 
+## Agent-Local State
+
+Agents may create and use repository-local hidden folders for machine-specific, non-product state, including discovered executable paths, local environment variables, tool settings, and diagnostic notes. Use an ignored folder such as `.claude/`, `.codex/`, `.agent/`, or `.agent-local/`; do not store credentials, production data, generated deployment files, or application source there. Keep repository-owned metadata such as `.agents/` and `.github/` under normal version-control rules. Add any new agent-state folder explicitly to `.gitignore` before using it, and never include agent-local state in commits, manifests, deployment packages, or release archives.
+
+When a required executable is found outside `PATH`, record its repository-local path in the applicable ignored agent-state folder for reuse during the current workspace work. Do not repeatedly retry a missing command: check the saved value first, verify that it still exists, and report the tool as unavailable if it does not.
+
 ## Patch Notes Guidelines
 Patch note generation rules are documented in `PATCH_NOTES_TEMPLATE.md`. When creating release notes, follow that template and the existing `PATCH_NOTES.md` style. Do not edit existing historical entries unless explicitly requested.
 
