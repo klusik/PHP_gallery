@@ -41,11 +41,25 @@ function assert_public_home_clean_url(bool $condition, string $label): void
 }
 
 $source = (string) file_get_contents(__DIR__ . '/../app/helpers_request.php');
+$seoSource = (string) file_get_contents(__DIR__ . '/../app/services/seo_request_guard.php');
 
 assert_public_home_clean_url(
     str_contains($source, "if (\$page === 'home' && \$params === [] && url_rewrite_should_emit_clean_urls())")
         && str_contains($source, 'return base_url();'),
     'url_for(home) must prefer the clean deployment root when rewrite support is usable.'
+);
+
+assert_public_home_clean_url(
+    str_contains($seoSource, "if (\$page === 'home' && \$unexpected)")
+        && str_contains($seoSource, "header('Location: ' . \$location, true, 301);")
+        && str_contains($seoSource, "['gallery_page', 'view_as', 'lang']"),
+    'Unexpected homepage query parameters must permanently redirect while retaining only supported homepage parameters.'
+);
+
+assert_public_home_clean_url(
+    str_contains($seoSource, "\$location = rtrim(public_base_url(), '/') . '/';")
+        && str_contains($seoSource, "\$location .= '?' . http_build_query(\$query);"),
+    'Homepage canonical redirects must use the existing canonical base and explicitly control query-string output.'
 );
 
 assert_public_home_clean_url(

@@ -282,16 +282,45 @@ function seo_request_guard_enforce(string $page): void
     if (seo_request_guard_route_is_exempt($page)) {
         return;
     }
+
+    $unexpected = seo_request_guard_unexpected_query_parameters($page);
+    if ($page === 'home' && $unexpected) {
+        seo_request_guard_redirect_home_with_supported_query();
+    }
     if (current_user() !== null) {
         return;
     }
 
-    $unexpected = seo_request_guard_unexpected_query_parameters($page);
     if (!$unexpected) {
         return;
     }
 
     seo_request_guard_reject($page, $unexpected);
+}
+
+/**
+ * Permanently redirect a public homepage query-string variant to its canonical URL.
+ *
+ * Only parameters owned by the homepage are retained. The explicit query string
+ * in the Location header prevents Apache/PHP from carrying the original query.
+ */
+function seo_request_guard_redirect_home_with_supported_query(): never
+{
+    $supported = array_fill_keys(['gallery_page', 'view_as', 'lang'], true);
+    $query = [];
+    foreach ($_GET as $name => $value) {
+        if (isset($supported[(string) $name])) {
+            $query[(string) $name] = $value;
+        }
+    }
+
+    $location = rtrim(public_base_url(), '/') . '/';
+    if ($query !== []) {
+        $location .= '?' . http_build_query($query);
+    }
+
+    header('Location: ' . $location, true, 301);
+    exit;
 }
 
 /**

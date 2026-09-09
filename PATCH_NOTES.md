@@ -1,5 +1,45 @@
 # Patch notes
 
+## Version 0.97.2
+
+Version 0.97.2 is a focused SEO and canonicalization patch for the public gallery homepage. It prevents unsupported homepage query-string variants from remaining crawlable duplicate URLs while preserving existing routing and supported homepage options.
+
+### Highlights
+
+#### Canonical homepage query handling
+
+- Redirected public homepage requests containing unsupported query parameters to the clean canonical homepage with HTTP 301.
+- Removed bogus query parameters from the redirect target while retaining the supported `gallery_page`, `view_as`, and `lang` parameters.
+- Kept normal homepage requests at HTTP 200 and left query-string behavior for gallery, media, download, authentication, Admin, and other routes unchanged.
+
+### Technical Details
+
+#### Backend
+
+- Updated `app/services/seo_request_guard.php` to perform homepage-specific canonicalization in the existing centralized request guard.
+- Reused the existing `public_base_url()` canonical host and scheme handling.
+- Explicitly rebuilt the redirect query string so Apache or PHP cannot inherit the original unsupported query.
+
+#### Database and frontend
+
+- Added no database migrations, dependencies, visible page changes, or frontend changes.
+- Preserved existing authorization, routing, canonical metadata, and non-homepage query parameters.
+
+### Tests
+
+- Extended `tests/public_home_clean_url_test.php` with source-contract checks for the permanent redirect, supported parameter allowlist, canonical base URL, and explicit query construction.
+
+### User Impact
+
+#### For visitors
+
+- Clean homepage requests continue to render normally with HTTP 200.
+- Crawler-discovered homepage URLs with arbitrary parameters now resolve permanently to the canonical homepage instead of producing duplicate 200 responses.
+
+#### For administrators
+
+- No administrator-facing behavior changed.
+
 ## Version 0.97.1
 
 Version 0.97.1 is a focused public-lightbox maintenance patch. It makes the byte-accurate full-quality progress indicator consistent in normal and fullscreen viewing and keeps rapidly arriving download progress visually current.
