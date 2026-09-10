@@ -59,6 +59,7 @@ use function Gallery\Services\gallery_filename_display_schema_ready;
 use function Gallery\Services\gallery_subtree_ids;
 use function Gallery\Services\gallery_visibility_storage_value;
 use function Gallery\Services\gallery_visibility_values;
+use function Gallery\Services\feature_capability_effective_enabled;
 use function Gallery\Services\gallery_voting_schema_ready;
 use function Gallery\Services\presentation_picture_game_schema_status;
 use function Gallery\Services\presentation_schema_log_degraded;
@@ -171,6 +172,12 @@ function cms_admin_bulk_galleries(): void
         redirect_to(url_for('admin'));
     }
     if (in_array($action, ['maps_on', 'maps_off', 'maps_inherit'], true) && $galleryIds) {
+        if (!feature_capability_effective_enabled('gallery_maps')) {
+            flash_message('admin_notice', t('admin.features.disabled_route_message', 'This feature is disabled in Admin > Features: {feature}', [
+                'feature' => t('admin.features.gallery_maps.label', 'EXIF GPS gallery maps'),
+            ]));
+            redirect_to(url_for('admin'));
+        }
         if (!exif_gps_schema_ready() || ($action === 'maps_inherit' && !exif_gps_override_schema_ready())) {
             admin_log_event('warning', 'gps_maps.schema_missing', t('admin.galleries.log_gps_maps_schema_missing'), [
                 'gallery_ids' => $galleryIds,
@@ -207,6 +214,12 @@ function cms_admin_bulk_galleries(): void
         redirect_to(url_for('admin'));
     }
     if (in_array($action, ['vote_on', 'vote_off'], true) && $galleryIds) {
+        if (!feature_capability_effective_enabled('image_voting')) {
+            flash_message('admin_notice', t('admin.features.disabled_route_message', 'This feature is disabled in Admin > Features: {feature}', [
+                'feature' => t('admin.features.image_voting.label', 'Image voting'),
+            ]));
+            redirect_to(url_for('admin'));
+        }
         if (!gallery_voting_schema_ready()) {
             admin_log_event('warning', 'votes.schema_missing', t('admin.galleries.log_voting_schema_missing'), [
                 'gallery_ids' => $galleryIds,
@@ -273,6 +286,12 @@ function cms_admin_bulk_galleries(): void
         redirect_to(url_for('admin'));
     }
     if (in_array($action, ['game_on', 'game_off'], true) && $galleryIds) {
+        if (!feature_capability_effective_enabled('picture_game')) {
+            flash_message('admin_notice', t('admin.features.disabled_route_message', 'This feature is disabled in Admin > Features: {feature}', [
+                'feature' => t('admin.features.picture_game.label', 'Picture game'),
+            ]));
+            redirect_to(url_for('admin'));
+        }
         $pictureGameStatus = presentation_picture_game_schema_status();
         if (!schema_inspection_is_available($pictureGameStatus)) {
             if (schema_inspection_is_unknown($pictureGameStatus)) {

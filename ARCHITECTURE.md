@@ -9,7 +9,7 @@ This document is intended to help future maintainers and AI coding agents unders
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.97.2';
+const CMS_VERSION = '0.98';
 ```
 
 Update-related code uses:
@@ -41,6 +41,27 @@ const CMS_UPDATE_BRANCHES = ['main', 'master'];
 
 7. **Feature isolation**
    Recent features are usually introduced as focused controller and service files instead of expanding old monolithic files.
+
+## Canonical Capability Policy
+
+Optional runtime behavior is coordinated by one capability registry rather than controller-local toggles. `app/services/feature_flags.php` remains the public module entry point and compatibility surface; implementation is split into `registry.php`, `adapters.php`, `policy.php`, `admin.php`, and `routes.php`.
+
+The registry is declarative. Each capability may declare its group, user-facing metadata, dependencies, route ownership, storage source, Admin editability, non-destructive disable policy, operational behavior tags, and a specialized Settings destination. Three persisted storage models are supported: the historical `feature_flag.<key>.enabled` convention, an explicit existing `app_settings` key, or a domain adapter that delegates to the subsystem's established getter/setter. Derived state is read-only. This prevents a feature master from becoming a second source of truth for an existing setting such as Gallery Trash, public thumbnail warmup, or Development Diagnostics.
+
+Capability state has two deliberate layers:
+
+- **configured state** is the administrator's persisted preference and is returned by `feature_capability_configured_enabled()`;
+- **effective state** is configured state after recursively applying declared dependencies and is returned by `feature_capability_effective_enabled()`.
+
+Disabling a dependency therefore makes dependent UI/routes unavailable without rewriting the dependent preference. Re-enabling the dependency restores the prior configured state automatically. The historical `feature_flag_enabled()` wrapper is retained for compatibility and intentionally exposes configured state, while new dependency-aware runtime boundaries should use the effective API. Unknown canonical capability lookups fail closed; legacy wrappers preserve their historical compatibility behavior for partially deployed extension code.
+
+Route policy is centralized before controller dispatch in `app/bootstrap/dispatch.php`. Simple routes have one registry owner. Compound routes use `feature_capability_multi_route_requirements()` with `all_of` or `any_of`; for example Smart Gallery lightbox and Smart Gallery ZIP routes require both the Smart Galleries master and the corresponding browsing/download master. Mixed core pages, such as the updater and database-maintenance page, remain dispatchable while their destructive/install actions enforce their own capability boundary. This keeps read-only status, inspection, patch notes, and dry-run diagnostics available.
+
+Master switches are non-destructive by policy. OFF hides or rejects owned behavior but does not delete subsystem data, clear subordinate settings, remove translations/tags/ledger rows, or rewrite cached/local assets that are still safe to use. Existing state must survive OFF -> ON. Fresh-install default seeding is separate from upgrade compatibility: only writable persisted sources may declare `fresh_default_enabled`, the lifecycle seeder runs once, and existing explicit values always win.
+
+Admin > Features renders a bounded health snapshot from `feature_capability_admin_health_snapshot()`. It reports configured/effective state, blockers, storage source type, specialized Settings links, and only caller-supplied/already-resolved schema state. It does not independently probe every optional schema and it never exposes raw stored values, secrets, database exceptions, or private paths. Admin navigation entries may declare a capability key and are filtered through the central policy. The centralized Settings registry indexes feature ownership for discovery but does not become a second persistence layer.
+
+The permanent regression boundary is `tests/feature_policy_core_test.php`, `tests/feature_policy_adapters_test.php`, `tests/feature_policy_admin_test.php`, `tests/feature_policy_inventory_test.php`, and `tests/feature_policy_stage13_contract_test.php`. They validate registry shape, storage adapters, configured/effective semantics, route/dependency safety, Admin health, non-destructive policy, and OFF-path query/work budgets. `scripts/audit.php` remains the authoritative orchestrator.
 
 ## Canonical Admin Mutation Completion Pipeline
 
@@ -412,6 +433,7 @@ contract and load order are preserved.
 | `app/services/admin_test_run_analysis.php` | `app/services/admin_test_run_analysis/` | `sql_analysis.php`, `sanitization.php`, `browser.php`, `cache_analysis.php`, `maintenance_analysis.php`, `request_analysis.php`, `flags.php` |
 | `app/services/browser_uploads.php` | `app/services/browser_uploads/` | `exception.php`, `settings.php`, `zip_parsing.php`, `batch_state.php`, `payload_validation.php`, `manifest.php`, `pipeline.php` |
 | `app/services/gallery_migration.php` | `app/services/gallery_migration/` | `versions.php`, `jobs.php`, `metadata.php`, `assets.php`, `manifest.php`, `packages.php`, `target_setup.php`, `install.php`, `recovery.php`, `http.php` |
+| `app/services/feature_flags.php` | `app/services/feature_flags/` | `registry.php`, `adapters.php`, `policy.php`, `admin.php`, `routes.php` |
 | `app/services/updates_jobs.php` | `app/services/updates_jobs/` | `budget.php`, `errors.php`, `state.php`, `lifecycle.php`, `download.php`, `plan.php`, `activation.php`, `cleanup.php` |
 | `app/controllers/admin_galleries_edit_page.php` | `app/controllers/admin_galleries_edit_page/` | `capabilities.php`, `post_actions.php`, `overview.php`, `tab_identity.php`, `tab_access.php`, `tab_display.php`, `tab_media.php`, `tab_images.php`, `tab_tools.php`, `controller.php` |
 

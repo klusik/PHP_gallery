@@ -190,6 +190,14 @@ Maintenance run state, last-result and completion marker settings are runtime st
 7. The viewer-language selector is independent from Admin language and the site-wide public default. Disabling the feature suppresses personal overrides; filtering its languages never removes maintained catalogs from administrative tools.
 8. Sensitive resources are represented only as status such as `Configured`, `Not configured` or `Specialized page only`.
 
+## Feature capability ownership
+
+Admin > Features and the centralized Settings hub intentionally share discovery metadata but not persistence ownership. `app/services/feature_flags/registry.php` is authoritative for optional-capability keys, configured/effective semantics, dependencies, route ownership, storage source, behavior tags, and specialized destinations. `app/services/admin_settings_registry.php` may index those capabilities so search and status pages can find them, but it must not create a second copy of a feature master or write arbitrary `feature_flag.*` keys. Feature changes are saved through the feature policy/domain adapter that already owns the value.
+
+Three capability storage patterns are valid: the historical `feature_flag.<key>.enabled` app-setting convention, an explicit existing scalar app-setting key, or a domain adapter around an established subsystem setting. Existing masters such as Gallery Trash, public thumbnail self-healing, and Development Diagnostics therefore keep their established storage. A specialized Settings link is navigation metadata only; it does not transfer ownership to the central registry.
+
+The feature policy may declare a one-time `fresh_default_enabled` only for writable persisted sources. Fresh defaults do not overwrite explicit upgrade state. Disabled persistent capabilities preserve their subsystem data and subordinate preferences.
+
 ## Future registration rule
 
 A new global setting should be added to the registry only after its canonical owner and normalization path are known. Prefer summary-only registration first. Central editing is allowed only when the registry save callback can delegate to the same service setter used by the specialized page, including the same feature/schema guards and side effects. Do not register per-gallery/per-image values, raw secrets, destructive actions or file editors as centrally editable controls.

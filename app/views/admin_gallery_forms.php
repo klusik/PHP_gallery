@@ -43,6 +43,7 @@ use function Gallery\Core\csrf_token;
 use function Gallery\Core\current_user;
 use function Gallery\Core\e;
 use function Gallery\Core\url_for;
+use function Gallery\Services\feature_capability_effective_enabled;
 use function Gallery\Services\gallery_count_badge_override_label;
 use function Gallery\Services\gallery_count_badge_override_values;
 use function Gallery\Services\gallery_count_badge_schema_ready;
@@ -56,6 +57,7 @@ use function Gallery\Services\openai_text_assist_available;
 use function Gallery\Services\openai_text_assist_default_language;
 use function Gallery\Services\openai_text_assist_image_input_allowed;
 use function Gallery\Services\openai_text_assist_language_catalog;
+use function Gallery\Services\content_localization_enabled;
 use function Gallery\Services\content_localization_schema_ready;
 use function Gallery\Services\content_supported_languages;
 use function Gallery\Services\content_translation_rows;
@@ -70,6 +72,9 @@ use function Gallery\Services\translation_language_presentation;
  */
 function view_render_content_localization_fields(string $entityType, array $entity): void
 {
+    if (!content_localization_enabled()) {
+        return;
+    }
     if (!content_localization_schema_ready($entityType)) {
         echo '<p class="muted">' . e(t('admin.content_localization.migration_required', 'Other-language content will be available after the multilingual-content database migration is applied.')) . '</p>';
         return;
@@ -156,6 +161,10 @@ function view_render_gallery_description_formatting_hint(): void
  */
 function view_render_admin_gallery_date_exif_suggestion(array $gallery): void
 {
+    if (!feature_capability_effective_enabled('exif_gallery_date_suggestions')) {
+        return;
+    }
+
     // $galleryId stores the branch root whose own images and descendants form the suggestion.
     $galleryId = (int) ($gallery['id'] ?? 0);
     if ($galleryId <= 0 || !gallery_date_exif_suggestions_schema_ready()) {

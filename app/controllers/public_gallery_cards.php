@@ -94,6 +94,7 @@ use function Gallery\Services\gallery_count_dated_rows;
 use function Gallery\Services\gallery_effective_visibility;
 use function Gallery\Services\gallery_has_map_payload;
 use function Gallery\Services\gallery_trash_auto_purge_enabled;
+use function Gallery\Services\feature_capability_effective_enabled;
 use function Gallery\Services\gallery_trash_enabled;
 use function Gallery\Services\gallery_trash_retention_days;
 use function Gallery\Services\gallery_lightbox_browsing_mode_normalize;
@@ -412,7 +413,7 @@ function render_smart_gallery_card(array $smartGallery, int $cardIndex = 0, arra
  */
 function render_public_gallery_admin_add_child_link(array $gallery, string $placement = 'card'): void
 {
-    if (!current_user() || admin_anonymous_preview_active()) {
+    if (!current_user() || admin_anonymous_preview_active() || !feature_capability_effective_enabled('inline_administration')) {
         return;
     }
     $label = $placement === 'hero' ? t('gallery.add_here', 'Add gallery here') : t('gallery.add_inside', 'Add gallery inside {title}', ['title' => (string) $gallery['title']]);
@@ -433,7 +434,7 @@ function render_public_gallery_admin_add_child_link(array $gallery, string $plac
  */
 function render_public_gallery_admin_edit_link(array $gallery, string $placement = 'card'): void
 {
-    if (!current_user() || admin_anonymous_preview_active()) {
+    if (!current_user() || admin_anonymous_preview_active() || !feature_capability_effective_enabled('inline_administration')) {
         return;
     }
     $label = $placement === 'hero' ? t('gallery.edit_current', 'Edit current gallery') : t('gallery.edit_named', 'Edit gallery {title}', ['title' => (string) $gallery['title']]);
@@ -454,7 +455,7 @@ function render_public_gallery_admin_edit_link(array $gallery, string $placement
  */
 function render_public_gallery_admin_delete_form(array $gallery, string $placement = 'card'): void
 {
-    if (!current_user() || admin_anonymous_preview_active()) {
+    if (!current_user() || admin_anonymous_preview_active() || !feature_capability_effective_enabled('inline_administration')) {
         return;
     }
     $name = trim((string) ($gallery['title'] ?? 'gallery'));
@@ -482,7 +483,7 @@ function render_public_gallery_admin_delete_form(array $gallery, string $placeme
  */
 function render_public_image_admin_edit_link(array $image): void
 {
-    if (!current_user() || admin_anonymous_preview_active()) {
+    if (!current_user() || admin_anonymous_preview_active() || !feature_capability_effective_enabled('inline_administration')) {
         return;
     }
     $title = trim((string) ($image['title'] ?? ''));
@@ -503,7 +504,7 @@ function render_public_image_admin_edit_link(array $image): void
  */
 function render_public_image_admin_delete_form(array $image): void
 {
-    if (!current_user() || admin_anonymous_preview_active()) {
+    if (!current_user() || admin_anonymous_preview_active() || !feature_capability_effective_enabled('inline_administration')) {
         return;
     }
     $title = trim((string) ($image['title'] ?? ''));

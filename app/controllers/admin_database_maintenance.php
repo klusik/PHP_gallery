@@ -52,6 +52,7 @@ use function Gallery\Services\database_maintenance_inspect;
 use function Gallery\Services\database_maintenance_optimize_tables;
 use function Gallery\Services\database_maintenance_preview_optimize_tables;
 use function Gallery\Services\database_maintenance_schema_repair_plan;
+use function Gallery\Services\feature_capability_effective_enabled;
 use function Gallery\Services\t;
 
 /**
@@ -72,6 +73,30 @@ function admin_database_maintenance_require_post(): bool
 function admin_database_maintenance_redirect(): void
 {
     redirect_to(url_for('admin_storage_statistics', ['tab' => 'maintenance']));
+}
+
+/**
+ * Return whether advanced database mutation operations are currently allowed.
+ *
+ * Read-only inspection and dry-run planning intentionally remain available while
+ * the capability is disabled.
+ */
+function admin_database_maintenance_mutations_enabled(): bool
+{
+    return feature_capability_effective_enabled('advanced_database_maintenance');
+}
+
+/**
+ * Redirect with a consistent notice when an advanced database mutation is disabled.
+ */
+function admin_database_maintenance_require_mutation_enabled(): bool
+{
+    if (admin_database_maintenance_mutations_enabled()) {
+        return true;
+    }
+    flash_message('admin_notice', t('admin.features.advanced_database_maintenance.disabled_action', 'Advanced database mutations are disabled in Admin > Features. Inspection and dry-run planning remain available.'));
+    admin_database_maintenance_redirect();
+    return false;
 }
 
 /**
@@ -113,6 +138,9 @@ function cms_admin_database_maintenance_cleanup(): void
 
     $dryRun = !empty($_POST['dry_run']);
     $restart = !empty($_POST['restart']);
+    if (!$dryRun && !admin_database_maintenance_require_mutation_enabled()) {
+        return;
+    }
     if (!$dryRun && strtoupper(trim((string) ($_POST['confirmation_text'] ?? ''))) !== 'CLEAN') {
         flash_message('admin_notice', t('admin.database_maintenance.cleanup_confirmation_required', 'Type CLEAN to confirm logical database cleanup.'));
         admin_database_maintenance_redirect();
@@ -149,6 +177,9 @@ function cms_admin_database_maintenance_repair(): void
     verify_csrf();
 
     $dryRun = !empty($_POST['dry_run']);
+    if (!$dryRun && !admin_database_maintenance_require_mutation_enabled()) {
+        return;
+    }
     if (!$dryRun && strtoupper(trim((string) ($_POST['confirmation_text'] ?? ''))) !== 'REPAIR') {
         flash_message('admin_notice', t('admin.database_maintenance.repair_confirmation_required', 'Type REPAIR to confirm the listed legacy schema changes.'));
         admin_database_maintenance_redirect();
@@ -182,6 +213,9 @@ function cms_admin_database_maintenance_analyze(): void
         return;
     }
     verify_csrf();
+    if (!admin_database_maintenance_require_mutation_enabled()) {
+        return;
+    }
 
     try {
         $result = database_maintenance_analyze_tables(array_map('strval', (array) ($_POST['tables'] ?? [])));
@@ -225,6 +259,9 @@ function cms_admin_database_maintenance_optimize(): void
     verify_csrf();
 
     $dryRun = !empty($_POST['dry_run']);
+    if (!$dryRun && !admin_database_maintenance_require_mutation_enabled()) {
+        return;
+    }
     if (!$dryRun && strtoupper(trim((string) ($_POST['confirmation_text'] ?? ''))) !== 'OPTIMIZE') {
         flash_message('admin_notice', t('admin.database_maintenance.optimize_confirmation_required', 'Type OPTIMIZE to confirm the selected table rebuild/optimization.'));
         admin_database_maintenance_redirect();

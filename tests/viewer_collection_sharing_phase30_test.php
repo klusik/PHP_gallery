@@ -86,6 +86,7 @@ function viewer_phase30_assert_function_imports_resolve(string $root, string $mo
 }
 
 $root = dirname(__DIR__);
+require_once $root . '/tests/support/module_source.php';
 $servicePath = 'app/services/viewer_collection_shares.php';
 $controllerPath = 'app/controllers/viewer_collection_shares.php';
 $service = (string) file_get_contents($root . '/' . $servicePath);
@@ -97,7 +98,7 @@ $accountsService = (string) file_get_contents($root . '/app/services/viewer_acco
 $adminAccountsService = (string) file_get_contents($root . '/app/services/viewer_admin_accounts.php');
 $lifecycleService = (string) file_get_contents($root . '/app/services/viewer_lifecycle.php');
 $rateLimits = (string) file_get_contents($root . '/app/services/viewer_rate_limits.php');
-$featureFlags = (string) file_get_contents($root . '/app/services/feature_flags.php');
+$featureFlags = module_source($root . '/app/services/feature_flags.php');
 $dispatch = (string) file_get_contents($root . '/app/bootstrap/dispatch.php');
 $routing = (string) file_get_contents($root . '/app/bootstrap/routing.php');
 $urlHelpers = (string) file_get_contents($root . '/app/helpers_request.php');
@@ -165,11 +166,13 @@ foreach ($phase30Routes as $route) {
     viewer_phase30_assert(substr_count($dispatch, "'{$route}' =>") === 1, 'Missing or duplicated Phase 3 route: ' . $route);
     viewer_phase30_assert(str_starts_with($route, 'viewer_'), 'Phase 3 route must remain under the viewer master feature namespace: ' . $route);
 }
-$featureOwner = viewer_phase30_function_source($featureFlags, 'feature_flag_for_route');
-viewer_phase30_assert(str_contains($featureOwner, 'str_starts_with($page, \'viewer_\')') && str_contains($featureOwner, "return 'viewer_accounts'"), 'All Phase 3 viewer_* routes must be owned by the global Viewer Accounts feature.');
+viewer_phase30_assert(
+    preg_match("/'viewer_accounts'\s*=>\s*\[.*?'route_prefixes'\s*=>\s*\['viewer_'\]/s", $featureFlags) === 1,
+    'All Phase 3 viewer_* routes must be owned by canonical Viewer Accounts route-prefix metadata.'
+);
 viewer_phase30_assert(str_contains($featureFlags, "'viewer_accounts' =>") && str_contains($featureFlags, "'default_enabled' => false"), 'Viewer Accounts master feature must remain default OFF.');
 $disabledRoute = viewer_phase30_function_source($featureFlags, 'feature_flag_render_disabled_route');
-viewer_phase30_assert(str_contains($disabledRoute, 'if ($featureKey === \'viewer_accounts\')') && str_contains($disabledRoute, 'http_response_code(404)'), 'Anonymous Viewer Accounts routes must remain generic not-found while the master feature is OFF.');
+viewer_phase30_assert(str_contains($disabledRoute, 'if (!$isAdmin)') && str_contains($disabledRoute, 'http_response_code(404)'), 'Anonymous Viewer Accounts routes must remain generic not-found while the master feature is OFF.');
 viewer_phase30_assert(str_contains($routing, "'viewer_collection_share_exchange'") && str_contains($routing, "'viewer_collection_shared'"), 'Clean exchange/shared routes must be parsed by the existing router.');
 viewer_phase30_assert(str_contains($urlHelpers, "'viewer_collection_share_exchange'") && str_contains($urlHelpers, "'viewer_collection_shared'"), 'Phase 3 URLs must be built through url_for clean-route support.');
 viewer_phase30_assert(!str_contains($controller, 'localhost') && !str_contains($controller, 'Galerie/index.php'), 'Phase 3 controller must not hard-code installation paths.');

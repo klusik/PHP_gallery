@@ -43,6 +43,7 @@ use function Gallery\Core\render_footer;
 use function Gallery\Core\render_header;
 use function Gallery\Core\request_method;
 use function Gallery\Core\require_admin;
+use function Gallery\Services\feature_capability_effective_enabled;
 use function Gallery\Services\find_gallery;
 use function Gallery\Services\gallery_images;
 use function Gallery\Services\media_renamer_normalize_pattern;
@@ -126,6 +127,15 @@ function admin_edit_gallery_handle_json_panel_request(array $gallery): bool
         return true;
     }
     if ((string) ($_GET['action'] ?? '') === 'metadata_organizer_preview_batch') {
+        if (!feature_capability_effective_enabled('metadata_organizer')) {
+            admin_gallery_metadata_organizer_json_response([
+                'ok' => false,
+                'error' => t('admin.features.disabled_route_message', 'This feature is disabled in Admin > Features: {feature}', [
+                    'feature' => t('admin.features.metadata_organizer.label', 'Metadata Organizer'),
+                ]),
+            ], 403);
+            return true;
+        }
         admin_gallery_metadata_organizer_preview_batch_response($gallery);
         return true;
     }

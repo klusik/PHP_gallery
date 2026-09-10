@@ -52,6 +52,7 @@ use function Gallery\Core\run_migrations;
 use function Gallery\Core\url_for;
 use function Gallery\Core\verify_csrf;
 use function Gallery\Services\t;
+use function Gallery\Services\feature_capability_seed_fresh_install_defaults;
 
 /**
  * Setup controller model.
@@ -83,6 +84,10 @@ function cms_setup(): void
         render_footer();
         return;
     }
+
+    // Seed conservative capability defaults only inside the confirmed first-install lifecycle.
+    feature_capability_seed_fresh_install_defaults();
+
     if (request_method() === 'POST') {
         verify_csrf();
         // Variable $username stores this steps working value.

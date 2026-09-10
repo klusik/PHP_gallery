@@ -85,8 +85,10 @@ Review the actual diff and update documentation where behavior changed. At minim
 - `DATABASE.md`;
 - `TESTING.md`;
 - `CODEMAP.md`;
-- `docs/ADMIN_SETTINGS_INVENTORY.md` when Settings ownership changes;
+- `docs/ADMIN_SETTINGS_INVENTORY.md` when Settings or capability ownership changes;
 - `docs/PHP_Gallery_Manual.tex` for user/admin-visible behavior.
+
+Remove temporary implementation roadmaps, scratch migration plans, and other explicitly temporary release scaffolding once their permanent architecture/testing documentation has been incorporated. For capability-policy changes, confirm the canonical registry/adapters/routes and Admin Settings discovery documentation agree before release; do not leave a historical stage plan as the only explanation of current behavior.
 
 Do not mechanically rewrite historical version references. For schema changes, describe the new migration and final schema accurately instead of merely replacing the document's current-version marker. For frontend module changes, verify the deployed browser entrypoint or import chain receives the required cache-busting update.
 

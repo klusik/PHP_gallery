@@ -126,6 +126,10 @@ function gallery_benchmark_media_cookie_name(): string
  */
 function gallery_benchmark_media_context_from_cookie(): ?array
 {
+    if (function_exists(__NAMESPACE__ . '\feature_capability_effective_enabled') && !feature_capability_effective_enabled('development_diagnostics')) {
+        return null;
+    }
+
     static $cachedRaw = null;
     static $cachedContext = null;
     static $cacheReady = false;
@@ -376,6 +380,9 @@ function gallery_benchmark_media_request_finish(?string $requestId, array $conte
  */
 function gallery_benchmark_request_trace_enabled(): bool
 {
+    if (function_exists(__NAMESPACE__ . '\\dev_mode_enabled') && !dev_mode_enabled()) {
+        return false;
+    }
     $token = strtolower(trim((string) ($_GET['benchmark_token'] ?? '')));
     $runIndex = (int) ($_GET['benchmark_run'] ?? 0);
     if ($runIndex > 0 && gallery_benchmark_token_is_valid($token)) {
@@ -601,6 +608,10 @@ function gallery_benchmark_run_skeleton(int $runIndex): array
  */
 function gallery_benchmark_start(array $gallery, int $runsTotal = 5): array
 {
+    if (function_exists(__NAMESPACE__ . '\feature_capability_effective_enabled') && !feature_capability_effective_enabled('development_diagnostics')) {
+        throw new RuntimeException('Development diagnostics are disabled.');
+    }
+
     // $runsTotal stores the bounded number of browser-driven benchmark passes.
     $runsTotal = max(1, min(20, $runsTotal));
     // $token stores an opaque identifier used by the iframe benchmark requests.
@@ -836,6 +847,10 @@ function gallery_benchmark_ensure_run_index(array &$log, int $runIndex): int
  */
 function gallery_benchmark_record_public_render(array $gallery, array $snapshot): void
 {
+    if (function_exists(__NAMESPACE__ . '\\feature_capability_effective_enabled') && !feature_capability_effective_enabled('development_diagnostics')) {
+        return;
+    }
+
     $token = strtolower(trim((string) ($_GET['benchmark_token'] ?? '')));
     $runIndex = (int) ($_GET['benchmark_run'] ?? 0);
     $phase = substr(trim((string) ($_GET['benchmark_phase'] ?? '')), 0, 80);
@@ -900,6 +915,10 @@ function gallery_benchmark_record_public_render(array $gallery, array $snapshot)
  */
 function gallery_benchmark_record_auxiliary_render(array $gallery, array $snapshot, string $type): void
 {
+    if (function_exists(__NAMESPACE__ . '\\feature_capability_effective_enabled') && !feature_capability_effective_enabled('development_diagnostics')) {
+        return;
+    }
+
     $token = strtolower(trim((string) ($_GET['benchmark_token'] ?? '')));
     $runIndex = (int) ($_GET['benchmark_run'] ?? 0);
     $type = substr(trim($type), 0, 80);
@@ -944,6 +963,10 @@ function gallery_benchmark_record_auxiliary_render(array $gallery, array $snapsh
  */
 function gallery_benchmark_record_request_completion(string $page): void
 {
+    if (function_exists(__NAMESPACE__ . '\\feature_capability_effective_enabled') && !feature_capability_effective_enabled('development_diagnostics')) {
+        return;
+    }
+
     if ($page !== 'gallery') {
         return;
     }
@@ -1058,6 +1081,9 @@ function gallery_benchmark_correlate_media_requests(array &$run): void
  */
 function gallery_benchmark_record_browser_load(string $token, int $runIndex, array $browserPayload): array
 {
+    if (function_exists(__NAMESPACE__ . '\feature_capability_effective_enabled') && !feature_capability_effective_enabled('development_diagnostics')) {
+        throw new RuntimeException('Development diagnostics are disabled.');
+    }
     gallery_benchmark_merge_media_sidecars($token);
     return gallery_benchmark_update_log($token, static function (array $log) use ($runIndex, $browserPayload): array {
         $targetIndex = gallery_benchmark_ensure_run_index($log, $runIndex);

@@ -80,6 +80,7 @@ use function Gallery\Services\create_image_thumbnails_result;
 use function Gallery\Services\find_gallery;
 use function Gallery\Services\find_image;
 use function Gallery\Services\find_upload_automation_token;
+use function Gallery\Services\feature_capability_effective_enabled;
 use function Gallery\Services\gallery_upload_automation_tokens;
 use function Gallery\Services\gallery_upload_entries;
 use function Gallery\Services\mark_upload_automation_token_used;
@@ -189,6 +190,11 @@ function upload_automation_request_action(array $jsonPayload): string
  */
 function upload_automation_handle_ai_action(string $action, int $galleryId, array $gallery, array $tokenRow, array $jsonPayload): void
 {
+    if (!feature_capability_effective_enabled('ai_image_metadata')) {
+        upload_automation_json(['ok' => false, 'error' => t('admin.gallery_editor.ai_reprocess_disabled', 'AI metadata is disabled in Admin > Features.')], 403);
+        return;
+    }
+
     $schemaStatus = presentation_ai_image_analysis_schema_status();
     if (!schema_inspection_is_available($schemaStatus)) {
         if (schema_inspection_is_unknown($schemaStatus)) {

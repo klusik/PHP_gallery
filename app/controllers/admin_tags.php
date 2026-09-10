@@ -58,6 +58,7 @@ use function Gallery\Services\admin_tag_rows;
 use function Gallery\Services\admin_tag_usage_rows;
 use function Gallery\Services\app_setting;
 use function Gallery\Services\delete_tag_by_id;
+use function Gallery\Services\feature_capability_effective_enabled;
 use function Gallery\Services\find_tag_by_id;
 use function Gallery\Services\normalize_existing_tags;
 use function Gallery\Services\normalize_gallery_sidecar_tags_recursively;
@@ -185,20 +186,21 @@ function cms_admin_tags(): void
         if ($wantsJson) {
             // $editUrl refreshes the mounted editor without changing the browser URL.
             $editUrl = url_for('admin_tags', ['id' => $tagId, 'panel' => 1]);
-            // $publicUrl is canonical after a slug rename and is therefore separate from the visible browser URL.
-            $publicUrl = url_for('tag', ['slug' => (string) ($updatedTag['slug'] ?? '')]);
+            // $publicUrl is canonical after a slug rename only while public tag browsing is enabled.
+            $publicTagBrowsingEnabled = feature_capability_effective_enabled('public_tag_browsing');
+            $publicUrl = $publicTagBrowsingEnabled ? url_for('tag', ['slug' => (string) ($updatedTag['slug'] ?? '')]) : '';
             $payload = admin_mutation_success_envelope(
                 t('admin.tags.saved', 'Tag saved.'),
                 admin_mutation_descriptor('tag.update', 'tag', 'update', [$tagId]),
                 admin_mutation_panel_metadata('tag-edit', $editUrl, true),
-                [
+                $publicTagBrowsingEnabled ? [
                     admin_mutation_public_tag_context(
                         $tagId,
                         $publicUrl,
                         admin_mutation_postcondition('tag_identity', ['tag_id' => $tagId]),
                         'canonical'
                     ),
-                ],
+                ] : [],
                 ['redirect_url' => url_for('admin_tags', ['id' => $tagId, 'sort' => $postedSort])]
             );
             admin_tags_json_response(array_merge($payload, [
@@ -206,7 +208,7 @@ function cms_admin_tags(): void
                 'tag_name' => (string) ($updatedTag['name'] ?? ''),
                 'tag_slug' => (string) ($updatedTag['slug'] ?? ''),
                 'edit_url' => $editUrl,
-                'public_url' => $publicUrl,
+                'public_url' => $publicUrl !== '' ? $publicUrl : null,
             ]));
         }
         flash_message('admin_tags_notice', t('admin.tags.saved', 'Tag saved.'));
@@ -350,7 +352,9 @@ function render_admin_tag_form(array $tag, string $sortMode = 'usage'): void
     echo '<label>' . e(t('admin.tags.public_description', 'Public description')) . '<textarea name="description" rows="6">' . e($description) . '</textarea><span class="muted">' . e(t('admin.tags.description_help', 'Optional text shown on the public tag landing page.')) . '</span></label>';
     echo '<div class="bulk-row">';
     echo '<button type="submit">' . e(t('admin.tags.save', 'Save tag')) . '</button>';
-    echo '<a class="button secondary" href="' . e(url_for('tag', ['slug' => (string) $tag['slug']])) . '">' . e(t('admin.tags.view_public', 'View public tag')) . '</a>';
+    if (feature_capability_effective_enabled('public_tag_browsing')) {
+        echo '<a class="button secondary" href="' . e(url_for('tag', ['slug' => (string) $tag['slug']])) . '">' . e(t('admin.tags.view_public', 'View public tag')) . '</a>';
+    }
     echo '<a class="button secondary" href="' . e(url_for('admin_theme', ['appearance_subtab' => 'admin-theme-appearance-subtab-gallery-tags']) . '#admin-theme-tab-appearance') . '">' . e(t('admin.tags.configure_display', 'Configure tag display')) . '</a>';
     echo '</div>';
     echo '</form>';

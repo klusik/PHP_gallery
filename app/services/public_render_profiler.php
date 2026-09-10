@@ -55,6 +55,9 @@ function public_render_profile_enabled(): bool
     if (!function_exists('Gallery\\Core\\current_user')) {
         return false;
     }
+    if (function_exists(__NAMESPACE__ . '\\dev_mode_enabled') && !dev_mode_enabled()) {
+        return false;
+    }
     return current_user() !== null;
 }
 

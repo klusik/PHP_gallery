@@ -81,7 +81,7 @@ use function Gallery\Services\auth_throttle_visitor_subject;
 use function Gallery\Services\telemetry_request_id;
 use function Gallery\Services\db_column_exists;
 use function Gallery\Services\db_table_exists;
-use function Gallery\Services\feature_flag_enabled;
+use function Gallery\Services\feature_capability_effective_enabled;
 use function Gallery\Services\google_auth_authorization_url;
 use function Gallery\Services\google_auth_claims_from_code;
 use function Gallery\Services\google_auth_config;
@@ -1245,7 +1245,7 @@ function cms_admin_account(): void
             }
             }
         } elseif ($accountAction === 'openai_text_settings') {
-            if (function_exists('Gallery\\Services\\feature_flag_enabled') && !feature_flag_enabled('openai_text_assist')) {
+            if (function_exists('Gallery\\Services\\feature_capability_effective_enabled') && !feature_capability_effective_enabled('openai_text_assist')) {
                 $error = t('admin.openai.feature_disabled', 'OpenAI text assistance is disabled in Admin > Features.');
             } else {
             // $currentPassword stores the profile password used to authorize credential changes.
@@ -1378,7 +1378,7 @@ function cms_admin_account(): void
     // $resetReady stores an intermediate value used by the surrounding gallery workflow.
     $resetReady = schema_inspection_is_available($resetSchemaStatus) && $resetSettings['enabled'] && $accountEmail !== '' && $resetSettings['from_email'] !== '';
     // $openaiFeatureEnabled stores whether OpenAI profile controls should be visible.
-    $openaiFeatureEnabled = !function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('openai_text_assist');
+    $openaiFeatureEnabled = !function_exists('Gallery\\Services\\feature_capability_effective_enabled') || feature_capability_effective_enabled('openai_text_assist');
     // $openaiSettings stores the current user's optional OpenAI profile integration settings.
     $openaiSettings = $openaiFeatureEnabled && function_exists('Gallery\\Services\\openai_text_assist_user_settings') ? openai_text_assist_user_settings((int) $user['id']) : [];
     // $openaiSchemaReady stores whether the required optional OpenAI settings table exists.

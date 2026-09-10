@@ -40,6 +40,7 @@ namespace Gallery\Controllers;
 use function Gallery\Core\e;
 use function Gallery\Core\render_admin_tab_panel;
 use function Gallery\Core\url_for;
+use function Gallery\Services\feature_capability_effective_enabled;
 use function Gallery\Services\t;
 use function Gallery\Views\view_render_admin_tab_intro;
 
@@ -51,6 +52,9 @@ use function Gallery\Views\view_render_admin_tab_intro;
  */
 function admin_edit_gallery_render_organizer_tab(array $gallery, string $activeEditTab): void
 {
+    if (!feature_capability_effective_enabled('metadata_organizer')) {
+        return;
+    }
     ob_start();
     render_admin_gallery_metadata_organizer_panel($gallery);
     render_admin_tab_panel('admin-edit-organizer', (string) ob_get_clean(), $activeEditTab === 'admin-edit-organizer');

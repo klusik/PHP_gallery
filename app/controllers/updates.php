@@ -70,6 +70,7 @@ use function Gallery\Services\application_update_cleanup_malformed_root_files;
 use function Gallery\Services\application_update_github_api_status;
 use function Gallery\Services\application_update_normalize_version;
 use function Gallery\Services\application_update_status_for_admin;
+use function Gallery\Services\feature_capability_effective_enabled;
 use function Gallery\Services\clean_reinstall_current_application_version;
 use function Gallery\Services\cms_github_project_url;
 use function Gallery\Services\install_application_beta;
@@ -237,7 +238,7 @@ function cms_update_stage_label(string $stage): string
  *
  * @param array|null $job Safe job state or null when no job is active.
  */
-function cms_render_update_job_card(?array $job): void
+function cms_render_update_job_card(?array $job, bool $installerEnabled = true): void
 {
     echo '<section class="admin-update-job" data-update-job-scope';
     if ($job === null) {
@@ -262,7 +263,7 @@ function cms_render_update_job_card(?array $job): void
         echo '<div class="notice" data-update-job-cancelled>Prepared update cancelled before activation. No application files were changed.</div>';
     }
     echo '<div data-update-job-actions>';
-    if (!empty($job['can_resume'])) {
+    if ($installerEnabled && !empty($job['can_resume'])) {
         echo '<form method="post" class="inline-action-form" data-update-job-control>' . csrf_field();
         echo '<input type="hidden" name="update_action" value="' . ((string) ($job['status'] ?? '') === 'failed' ? 'job_retry' : 'job_continue') . '">';
         echo '<input type="hidden" name="job_id" value="' . e((string) ($job['id'] ?? '')) . '">';
@@ -276,7 +277,7 @@ function cms_render_update_job_card(?array $job): void
         echo '<button type="submit" class="button secondary">Cancel prepared update</button>';
         echo '</form>';
     }
-    if (!empty($job['can_rollback'])) {
+    if ($installerEnabled && !empty($job['can_rollback'])) {
         echo '<form method="post" class="inline-action-form" data-update-job-control onsubmit="return confirm(\'Restore the application files from the pre-update snapshot? Database migrations are not reversed.\');">' . csrf_field();
         echo '<input type="hidden" name="update_action" value="job_rollback">';
         echo '<input type="hidden" name="job_id" value="' . e((string) ($job['id'] ?? '')) . '">';
@@ -311,6 +312,10 @@ function cms_admin_update(): void
         verify_csrf();
         try {
             $action = (string) ($_POST['update_action'] ?? 'stable_update');
+            $installerMutationActions = ['stable_update', 'beta_install', 'beta_revert', 'clean_reinstall', 'job_continue', 'job_retry', 'job_rollback'];
+            if (in_array($action, $installerMutationActions, true) && !feature_capability_effective_enabled('built_in_update_installer')) {
+                throw new RuntimeException(t('admin.features.built_in_update_installer.disabled_action', 'The built-in update installer is disabled in Admin > Features. Read-only update checks remain available.'));
+            }
             if ($action === 'autoupdate_settings') {
                 set_application_autoupdate_enabled(!empty($_POST['application_autoupdate_enabled']));
                 $_SESSION['admin_update_notice'] = t('admin.updates.autoupdate_settings_saved', 'Automatic update settings were saved.');
@@ -437,6 +442,8 @@ function cms_admin_update(): void
     $status = application_update_status_for_admin(false);
     // $betaActive stores an intermediate value used by the surrounding gallery workflow.
     $betaActive = application_update_beta_active();
+    // $installerEnabled stores the effective Built-in Update Installer master state.
+    $installerEnabled = feature_capability_effective_enabled('built_in_update_installer');
     // $autoupdateStatus stores the persisted automatic update setting and runtime state.
     $autoupdateStatus = application_autoupdate_status();
     // $githubApiStatus stores the latest GitHub API headers and policy backoff diagnostics.
@@ -496,7 +503,7 @@ function cms_admin_update(): void
 
     ob_start();
     echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.updates.status_kicker', 'Release status')) . '</p><h2>' . e(t('admin.updates.status')) . '</h2></div><p class="muted">' . e(t('admin.updates.status_hint', 'The updater checks GitHub metadata through the service layer and runs installs as durable, resumable jobs with bounded request-time slices.')) . '</p></div>';
-    cms_render_update_job_card($activeUpdateJob);
+    cms_render_update_job_card($activeUpdateJob, $installerEnabled);
     echo '<div class="admin-metric-grid admin-update-metric-grid">';
     echo '<article class="admin-metric-card"><span>' . e(t('admin.updates.installed_version')) . '</span><strong>' . e(cms_current_version()) . '</strong><small>' . e(t('admin.updates.installed_version_hint', 'Version currently running on this installation.')) . '</small></article>';
     echo '<article class="admin-metric-card"><span>' . e(t('admin.updates.latest_version')) . '</span><strong>' . e($latestVersion) . '</strong><small>' . e(empty($status['branch']) ? t('admin.updates.branch_unknown', 'Branch not available') : t('admin.updates.checked_branch_value', ['branch' => (string) $status['branch']])) . '</small></article>';
@@ -531,7 +538,9 @@ function cms_admin_update(): void
     echo '</article>';
     echo '<article class="admin-update-card">';
     echo '<div><p class="admin-kicker">' . e(t('admin.updates.autoupdate_kicker', 'Automatic updates')) . '</p><h3>' . e(!empty($autoupdateStatus['enabled']) ? t('admin.common.enabled', 'Enabled') : t('admin.common.disabled', 'Disabled')) . '</h3></div>';
-    if (!empty($autoupdateStatus['beta_active'])) {
+    if (!$installerEnabled) {
+        echo '<p class="muted">' . e(t('admin.features.built_in_update_installer.autoupdate_inactive', 'The automatic-update preference is preserved, but installation is inactive while Built-in Update Installer is disabled.')) . '</p>';
+    } elseif (!empty($autoupdateStatus['beta_active'])) {
         echo '<p class="muted">' . e(t('admin.updates.autoupdate_beta_disabled_hint', 'Automatic updates are checked in settings, but ignored while beta code is installed. The setting is not changed.')) . '</p>';
     } else {
     echo '<p class="muted">' . e(t('admin.updates.autoupdate_hint', 'When enabled, normal page requests check for a stable update at most once every hour and install it automatically when available. The dry check button forces a fresh metadata-only check immediately.')) . '</p>';
@@ -564,10 +573,14 @@ function cms_admin_update(): void
         $statusSafeError = application_update_safe_error((string) $status['error']);
         echo '<p class="muted">Update metadata check failed. Reference: <code>' . e($statusSafeError['reference']) . '</code></p>';
     } elseif (!empty($status['update_available'])) {
-        echo '<form method="post" class="form-grid admin-update-action-form" data-update-job-form>' . csrf_field();
-        echo '<input type="hidden" name="update_action" value="stable_update">';
         echo '<p>' . t('admin.updates.newer_available_description') . '</p>';
-        echo '<button type="submit" class="is-update-pending">' . e(t('admin.updates.update_button')) . '</button></form>';
+        if ($installerEnabled) {
+            echo '<form method="post" class="form-grid admin-update-action-form" data-update-job-form>' . csrf_field();
+            echo '<input type="hidden" name="update_action" value="stable_update">';
+            echo '<button type="submit" class="is-update-pending">' . e(t('admin.updates.update_button')) . '</button></form>';
+        } else {
+            echo '<p class="muted">' . e(t('admin.features.built_in_update_installer.disabled_action', 'The built-in update installer is disabled in Admin > Features. Read-only update checks remain available.')) . '</p>';
+        }
     } else {
         echo '<p class="muted">' . e(t('admin.updates.current')) . '</p>';
         echo '<a class="button secondary" href="#admin-update-tab-notes">' . e(t('admin.updates.patch_notes_title', 'Patch notes')) . '</a>';
@@ -692,33 +705,39 @@ function cms_admin_update(): void
     ob_start();
     echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.updates.advanced_kicker', 'Recovery and testing')) . '</p><h2>' . e(t('admin.updates.advanced_tools', 'Advanced tools')) . '</h2></div><p class="muted">' . e(t('admin.updates.advanced_hint', 'Use beta installs and clean reinstall only when you intentionally need to test or repair the deployed code.')) . '</p></div>';
     echo '<p class="muted admin-update-progress-location">' . e(t('admin.updates.advanced_progress_hint', 'Update progress stays visible here after an advanced operation starts. You can leave and reopen this page; the saved job resumes from its last safe checkpoint.')) . '</p>';
-    cms_render_update_job_card($activeUpdateJob);
+    cms_render_update_job_card($activeUpdateJob, $installerEnabled);
     echo '<div class="admin-maintenance-grid admin-update-tools-grid">';
-    echo '<article class="admin-maintenance-card admin-update-tool-card"><strong>' . e(t('admin.updates.beta_build')) . '</strong><span>' . e(t('admin.updates.beta_code_help')) . '</span>';
-    echo '<form method="post" class="form-grid" data-update-job-form>' . csrf_field();
-    echo '<input type="hidden" name="update_action" value="beta_install">';
-    echo '<label>' . e(t('admin.updates.beta_code')) . '<input name="beta_commit" value="' . e(application_update_beta_commit()) . '" placeholder="abcdef1234567890"></label>';
-    echo '<button type="submit">' . e(t('admin.updates.install_beta')) . '</button>';
-    echo '</form></article>';
-    if ($betaActive) {
-        echo '<article class="admin-maintenance-card admin-update-tool-card"><strong>' . e(t('admin.updates.restore_stable')) . '</strong><span>' . e(t('admin.updates.restore_stable_help')) . '</span>';
+    if ($installerEnabled) {
+        echo '<article class="admin-maintenance-card admin-update-tool-card"><strong>' . e(t('admin.updates.beta_build')) . '</strong><span>' . e(t('admin.updates.beta_code_help')) . '</span>';
         echo '<form method="post" class="form-grid" data-update-job-form>' . csrf_field();
-        echo '<input type="hidden" name="update_action" value="beta_revert">';
-        echo '<button type="submit" class="button secondary">' . e(t('admin.updates.restore_stable')) . '</button>';
+        echo '<input type="hidden" name="update_action" value="beta_install">';
+        echo '<label>' . e(t('admin.updates.beta_code')) . '<input name="beta_commit" value="' . e(application_update_beta_commit()) . '" placeholder="abcdef1234567890"></label>';
+        echo '<button type="submit">' . e(t('admin.updates.install_beta')) . '</button>';
         echo '</form></article>';
+        if ($betaActive) {
+            echo '<article class="admin-maintenance-card admin-update-tool-card"><strong>' . e(t('admin.updates.restore_stable')) . '</strong><span>' . e(t('admin.updates.restore_stable_help')) . '</span>';
+            echo '<form method="post" class="form-grid" data-update-job-form>' . csrf_field();
+            echo '<input type="hidden" name="update_action" value="beta_revert">';
+            echo '<button type="submit" class="button secondary">' . e(t('admin.updates.restore_stable')) . '</button>';
+            echo '</form></article>';
+        }
+    } else {
+        echo '<article class="admin-maintenance-card admin-update-tool-card"><strong>' . e(t('admin.features.built_in_update_installer.label', 'Built-in Update Installer')) . '</strong><span>' . e(t('admin.features.built_in_update_installer.disabled_action', 'The built-in update installer is disabled in Admin > Features. Read-only update checks remain available.')) . '</span><a class="button secondary" href="' . e(url_for('admin_features')) . '">' . e(t('admin.features.title', 'Features')) . '</a></article>';
     }
     echo '<article class="admin-maintenance-card admin-update-tool-card"><strong>' . e(t('admin.updates.malformed_root_cleanup_title', 'Clean misplaced deployment files')) . '</strong><span>' . e(t('admin.updates.malformed_root_cleanup_description', 'Back up and remove root files with literal backslashes and known application modules that belong under app/. Unrelated files are preserved. No reinstall or migrations are performed.')) . '</span>';
     echo '<form method="post" class="form-grid">' . csrf_field();
     echo '<input type="hidden" name="update_action" value="cleanup_malformed_root_files">';
     echo '<button type="submit" class="button secondary">' . e(t('admin.updates.malformed_root_cleanup_button', 'Run misplaced file cleanup')) . '</button>';
     echo '</form></article>';
-    echo '<article class="admin-maintenance-card admin-update-tool-card is-danger"><strong>' . e(t('admin.updates.clean_reinstall_title')) . '</strong><span>' . e(t('admin.updates.clean_reinstall_description')) . '</span>';
-    echo '<form method="post" class="form-grid danger-zone" data-update-job-form>' . csrf_field();
-    echo '<input type="hidden" name="update_action" value="clean_reinstall">';
-    echo '<p class="muted">' . t('admin.updates.clean_reinstall_protected') . '</p>';
-    echo '<label>' . e(t('admin.updates.confirm_reinstall_label')) . '<input name="clean_reinstall_confirm" autocomplete="off" placeholder="REINSTALL"></label>';
-    echo '<button type="submit" class="button danger">' . e(t('admin.updates.clean_reinstall_button')) . '</button>';
-    echo '</form></article>';
+    if ($installerEnabled) {
+        echo '<article class="admin-maintenance-card admin-update-tool-card is-danger"><strong>' . e(t('admin.updates.clean_reinstall_title')) . '</strong><span>' . e(t('admin.updates.clean_reinstall_description')) . '</span>';
+        echo '<form method="post" class="form-grid danger-zone" data-update-job-form>' . csrf_field();
+        echo '<input type="hidden" name="update_action" value="clean_reinstall">';
+        echo '<p class="muted">' . t('admin.updates.clean_reinstall_protected') . '</p>';
+        echo '<label>' . e(t('admin.updates.confirm_reinstall_label')) . '<input name="clean_reinstall_confirm" autocomplete="off" placeholder="REINSTALL"></label>';
+        echo '<button type="submit" class="button danger">' . e(t('admin.updates.clean_reinstall_button')) . '</button>';
+        echo '</form></article>';
+    }
     echo '<article class="admin-maintenance-card admin-update-tool-card"><strong>' . e(t('admin.updates.runtime_diagnostics_card_title', 'Runtime diagnostics')) . '</strong><span>' . e(t('admin.updates.runtime_diagnostics_card_help', 'Inspect PHP, GD, Imagick, and image format support on this host.')) . '</span><a class="button secondary" href="' . e(url_for('admin_diagnostics')) . '">' . e(t('admin.updates.open_diagnostics', 'Open diagnostics')) . '</a></article>';
     echo '</div>';
     $advancedHtml = (string) ob_get_clean();

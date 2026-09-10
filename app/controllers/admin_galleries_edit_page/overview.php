@@ -42,6 +42,7 @@ use function Gallery\Core\flash_message;
 use function Gallery\Core\gallery_public_url;
 use function Gallery\Core\render_admin_tabs;
 use function Gallery\Core\url_for;
+use function Gallery\Services\feature_capability_effective_enabled;
 use function Gallery\Services\gallery_folder_name_from_path;
 use function Gallery\Services\normalize_gallery_visibility;
 use function Gallery\Services\t;
@@ -113,8 +114,10 @@ function admin_edit_gallery_render_overview(array $gallery, int $imageCount, str
         ['id' => 'admin-edit-media', 'label' => t('admin.gallery_editor.tab_media')],
         ['id' => 'admin-edit-api', 'label' => t('admin.gallery_editor.tab_api', 'API')],
         ['id' => 'admin-edit-images', 'label' => t('admin.gallery_editor.tab_images'), 'badge' => $imageCount],
-        ['id' => 'admin-edit-organizer', 'label' => t('admin.metadata_organizer.tab_label', 'Organizer')],
     ];
+    if (feature_capability_effective_enabled('metadata_organizer')) {
+        $adminTabs[] = ['id' => 'admin-edit-organizer', 'label' => t('admin.metadata_organizer.tab_label', 'Organizer')];
+    }
     if ($capabilities['media_renamer_feature_enabled']) {
         $adminTabs[] = ['id' => 'admin-edit-renamer', 'label' => t('admin.media_renamer.tab_label', 'File renamer')];
     }

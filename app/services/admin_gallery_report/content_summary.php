@@ -173,13 +173,8 @@ function admin_gallery_report_feature_summary(): array
     if (admin_gallery_report_table_exists('app_settings')) {
         $settings = admin_gallery_report_rows("SELECT setting_key, setting_value, updated_at FROM app_settings WHERE setting_key LIKE 'feature_%' OR setting_key LIKE '%enabled%' OR setting_key LIKE '%telemetry%' OR setting_key LIKE '%thumbnail%' ORDER BY setting_key ASC LIMIT 250");
     }
-    $telemetrySettings = [];
-    if (function_exists('Gallery\\Services\\telemetry_settings_schema_ready') && telemetry_settings_schema_ready() && function_exists('Gallery\\Services\\telemetry_all_settings')) {
-        $telemetrySettings = telemetry_all_settings();
-    }
     return [
         'settings_rows' => $settings,
-        'telemetry_settings' => $telemetrySettings,
     ];
 }
 
@@ -215,6 +210,9 @@ function admin_gallery_report_admin_log_summary(): array
  */
 function admin_gallery_report_telemetry_section(int $days): array
 {
+    if (function_exists(__NAMESPACE__ . '\\feature_capability_effective_enabled') && !feature_capability_effective_enabled('telemetry')) {
+        return ['available' => false, 'disabled' => true, 'days' => $days];
+    }
     if (!function_exists('Gallery\\Services\\telemetry_schema_ready') || !telemetry_schema_ready()) {
         return ['available' => false, 'days' => $days, 'message' => 'Telemetry schema is not available.'];
     }

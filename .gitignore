@@ -19,3 +19,9 @@ __pycache__/
 *.pyo
 Trace*
 winapp/http_monitor_logs/*.*
+
+# Local agent state and discovered tool paths/settings; never package or commit.
+.claude/
+.codex/
+.agent/
+.agent-local/

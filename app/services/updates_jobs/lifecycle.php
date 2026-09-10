@@ -100,6 +100,9 @@ function application_update_job_parameters(string $operation, array $parameters)
  */
 function application_update_start_job(string $operation, array $parameters = [], string $trigger = 'api'): array
 {
+    if (function_exists(__NAMESPACE__ . '\feature_capability_effective_enabled') && !feature_capability_effective_enabled('built_in_update_installer')) {
+        throw new RuntimeException('Built-in Update Installer is disabled.');
+    }
     if ($operation !== 'rollback' && !class_exists(ZipArchive::class)) {
         throw new RuntimeException('The PHP ZipArchive extension is required for application updates.');
     }
@@ -170,6 +173,9 @@ function application_update_start_job(string $operation, array $parameters = [],
  */
 function application_update_start_rollback_job(string $sourceJobId, string $trigger = 'api'): array
 {
+    if (function_exists(__NAMESPACE__ . '\feature_capability_effective_enabled') && !feature_capability_effective_enabled('built_in_update_installer')) {
+        throw new RuntimeException('Built-in Update Installer is disabled.');
+    }
     $sourceJobId = trim($sourceJobId);
     if (!preg_match('/^\d{14}-[0-9a-f]{12}$/', $sourceJobId)) {
         throw new RuntimeException('Rollback source job identifier is invalid.');
@@ -250,6 +256,9 @@ function application_update_start_rollback_job(string $sourceJobId, string $trig
  */
 function application_update_process_job(string $jobId, float $budgetSeconds = 8.0): array
 {
+    if (function_exists(__NAMESPACE__ . '\feature_capability_effective_enabled') && !feature_capability_effective_enabled('built_in_update_installer')) {
+        throw new RuntimeException('Built-in Update Installer is disabled.');
+    }
     $jobDir = application_update_job_dir($jobId);
     $lock = application_update_acquire_lock($jobDir . '/worker.lock', 30);
     if ($lock === null) {
@@ -450,6 +459,9 @@ function application_update_cancel_job(string $jobId): array
  */
 function application_update_retry_job(string $jobId): array
 {
+    if (function_exists(__NAMESPACE__ . '\\feature_capability_effective_enabled') && !feature_capability_effective_enabled('built_in_update_installer')) {
+        throw new RuntimeException('Built-in Update Installer is disabled.');
+    }
     $startLock = application_update_acquire_lock(application_update_jobs_root() . '/start.lock', 15);
     if ($startLock === null) {
         return application_update_job_public_state(application_update_load_job($jobId));

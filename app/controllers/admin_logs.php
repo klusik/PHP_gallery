@@ -51,6 +51,7 @@ use function Gallery\Core\url_for;
 use function Gallery\Core\verify_csrf;
 use function Gallery\Services\app_setting;
 use function Gallery\Services\delete_app_settings;
+use function Gallery\Services\feature_capability_effective_enabled;
 use function Gallery\Services\set_app_setting;
 use function Gallery\Services\t;
 use function Gallery\Services\translation_interpolate;
@@ -891,7 +892,9 @@ function render_admin_log_page_heading(string $activeSection): void
 {
     echo '<section class="hero"><h1>' . e(admin_log_english_t('admin.logs.title', 'Admin log')) . '</h1><p>' . e(admin_log_english_t('admin.logs.intro', 'Operational events, failures, and maintenance actions.')) . '</p><nav class="nav">';
     echo '<a class="button secondary" href="' . e(url_for('admin')) . '">' . e(admin_log_english_t('admin.logs.back_to_dashboard', 'Back to dashboard')) . '</a>';
-    echo '<a class="button secondary" href="' . e(url_for('admin_telemetry')) . '">' . e(admin_log_english_t('admin.logs.anonymous_telemetry', 'Anonymous telemetry')) . '</a>';
+    if (feature_capability_effective_enabled('telemetry')) {
+        echo '<a class="button secondary" href="' . e(url_for('admin_telemetry')) . '">' . e(admin_log_english_t('admin.logs.anonymous_telemetry', 'Anonymous telemetry')) . '</a>';
+    }
     echo '</nav></section>';
     render_admin_log_section_tabs($activeSection);
 }

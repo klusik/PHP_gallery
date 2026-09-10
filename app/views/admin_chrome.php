@@ -42,6 +42,7 @@ use function Gallery\Core\e;
 use function Gallery\Core\url_for;
 use function Gallery\Services\application_update_nav_label;
 use function Gallery\Services\application_update_pending;
+use function Gallery\Services\feature_capability_effective_enabled;
 use function Gallery\Services\feature_flag_enabled;
 use function Gallery\Services\t;
 
@@ -69,7 +70,7 @@ function view_admin_menu_structure(): array
             'items' => [
                 ['label' => t('admin.menu.all_galleries', 'All galleries'), 'page' => 'admin', 'url' => url_for('admin') . '#admin-tab-galleries'],
                 ['label' => t('admin.menu.create_gallery', 'Create gallery'), 'page' => 'admin_new_gallery', 'url' => url_for('admin_new_gallery')],
-                ['label' => t('admin.menu.smart_galleries', 'Smart Galleries'), 'page' => 'admin_smart_galleries', 'url' => url_for('admin_smart_galleries')],
+                ['label' => t('admin.menu.smart_galleries', 'Smart Galleries'), 'page' => 'admin_smart_galleries', 'url' => url_for('admin_smart_galleries'), 'feature' => 'smart_galleries'],
                 ['label' => t('admin.menu.upload_photos', 'Upload photos'), 'page' => 'admin_upload', 'url' => url_for('admin_upload')],
                 ['label' => t('admin.menu.upload_settings', 'Upload settings'), 'page' => 'admin_upload_settings', 'url' => url_for('admin_upload_settings')],
                 ['label' => t('admin.menu.mobile_uploads', 'Mobile uploads'), 'page' => 'admin_mobile_uploads', 'url' => url_for('admin_mobile_uploads'), 'feature' => 'mobile_webdav'],
@@ -91,7 +92,7 @@ function view_admin_menu_structure(): array
                 ['label' => t('admin.menu.trash', 'Trash'), 'page' => 'admin_trash', 'url' => url_for('admin_trash')],
                 ['label' => t('admin.menu.logs', 'Logs'), 'page' => 'admin_logs', 'url' => url_for('admin_logs')],
                 ['label' => t('admin.menu.telemetry', 'Telemetry'), 'page' => 'admin_telemetry', 'url' => url_for('admin_telemetry'), 'feature' => 'telemetry'],
-                ['label' => t('admin.menu.gallery_report', 'Complete report'), 'page' => 'admin_gallery_report', 'url' => url_for('admin_gallery_report')],
+                ['label' => t('admin.menu.gallery_report', 'Complete report'), 'page' => 'admin_gallery_report', 'url' => url_for('admin_gallery_report'), 'feature' => 'complete_gallery_report'],
                 ['label' => t('admin.menu.integrity', 'Integrity'), 'page' => 'admin_integrity', 'url' => url_for('admin_integrity')],
                 ['label' => t('admin.menu.navdata', 'Navigation data'), 'page' => 'admin_navdata', 'url' => url_for('admin_navdata'), 'feature' => 'navigation_data'],
                 ['label' => $updateLabel, 'page' => 'admin_update', 'url' => url_for('admin_update'), 'highlight' => $updatePending],
@@ -342,7 +343,11 @@ function view_render_admin_sidebar(string $currentPage): void
         echo '<nav class="admin-menu-links">';
         foreach ((array) $group['items'] as $item) {
             $featureKey = (string) ($item['feature'] ?? '');
-            if ($featureKey !== '' && function_exists('Gallery\\Services\\feature_flag_enabled') && !feature_flag_enabled($featureKey)) {
+            $featureEnabled = $featureKey === ''
+                || (function_exists('Gallery\\Services\\feature_capability_effective_enabled')
+                    ? feature_capability_effective_enabled($featureKey)
+                    : (!function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled($featureKey)));
+            if (!$featureEnabled) {
                 continue;
             }
             $activeClass = view_admin_menu_item_is_active($item, $currentPage) ? ' is-active' : '';

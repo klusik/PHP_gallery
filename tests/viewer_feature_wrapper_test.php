@@ -86,6 +86,7 @@ namespace {
     }
 
     $root = dirname(__DIR__);
+    require_once $root . '/tests/support/module_source.php';
     require_once $root . '/app/services/feature_flags.php';
     require_once $root . '/app/services/viewer_accounts.php';
 
@@ -137,7 +138,7 @@ namespace {
     viewer_feature_wrapper_assert(viewer_registration_mode() === 'disabled', 'Disabling the wrapper must hide subordinate registration mode.');
 
     $definitions = feature_flag_definitions();
-    viewer_feature_wrapper_assert(count($definitions) === 19, 'Feature registry audit expected 19 current switches after adding the opt-in Admin test-run diagnostics feature.');
+    viewer_feature_wrapper_assert(count($definitions) === 33, 'Feature registry audit expected the complete current 33-switch capability set.');
     viewer_feature_wrapper_assert(!feature_flag_default_enabled('admin_test_runs'), 'Admin test-run diagnostics must remain disabled by default.');
 
     $routeMap = feature_flag_route_map();
@@ -171,14 +172,13 @@ namespace {
         'Public Viewer Login/Account navigation must remain behind the effective viewer-account gate.'
     );
 
-    $featureService = (string) file_get_contents($root . '/app/services/feature_flags.php');
+    $featureService = module_source($root . '/app/services/feature_flags.php');
     viewer_feature_wrapper_assert(
-        str_contains($featureService, "if (str_starts_with(\$page, 'viewer_'))")
-            && str_contains($featureService, "return 'viewer_accounts';"),
-        'The central dispatcher feature owner must cover the complete viewer_* route family.'
+        ($definitions['viewer_accounts']['route_prefixes'] ?? []) === ['viewer_'],
+        'The canonical capability registry must own the complete viewer_* route family.'
     );
     viewer_feature_wrapper_assert(
-        str_contains($featureService, "if (\$featureKey === 'viewer_accounts')")
+        str_contains($featureService, 'if (!$isAdmin)')
             && str_contains($featureService, "http_response_code(404);")
             && str_contains($featureService, "'error' => 'not_found'"),
         'Disabled public viewer routes must look unavailable rather than advertise the hidden subsystem.'

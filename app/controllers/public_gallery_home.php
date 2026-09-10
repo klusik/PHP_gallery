@@ -87,6 +87,7 @@ use function Gallery\Services\gallery_cover_image;
 use function Gallery\Services\gallery_date_range_display_value;
 use function Gallery\Services\gallery_effective_count_badge_enabled;
 use function Gallery\Services\gallery_effective_description_layout;
+use function Gallery\Services\feature_capability_effective_enabled;
 use function Gallery\Services\gallery_description_layout_normalize;
 use function Gallery\Services\gallery_effective_grid_settings;
 use function Gallery\Services\gallery_effective_lightbox_browsing_mode;
@@ -290,8 +291,8 @@ function cms_public_search(): void
             'ok' => true,
             'query' => $query,
             'results' => public_search_results($query, 14, public_search_context_from_request()),
-            'save_smart_gallery_url' => current_user() ? url_for('admin_smart_galleries', ['from_search' => $query]) : null,
-            'save_smart_gallery_label' => current_user() ? t('smart_gallery.save_search', 'Save search as Smart Gallery') : null,
+            'save_smart_gallery_url' => current_user() && feature_capability_effective_enabled('smart_galleries') ? url_for('admin_smart_galleries', ['from_search' => $query]) : null,
+            'save_smart_gallery_label' => current_user() && feature_capability_effective_enabled('smart_galleries') ? t('smart_gallery.save_search', 'Save search as Smart Gallery') : null,
         ]);
     } catch (Throwable $exception) {
         admin_log_event('warning', 'public_search.failed', 'Public search request failed.', [

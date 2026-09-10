@@ -82,7 +82,7 @@ function gallery_voting_schema_ready(): bool
  */
 function gallery_voting_allowed(array $gallery): bool
 {
-    if (function_exists('Gallery\\Services\\feature_flag_enabled') && !feature_flag_enabled('image_voting')) {
+    if (function_exists(__NAMESPACE__ . '\\feature_capability_effective_enabled') && !feature_capability_effective_enabled('image_voting')) {
         return false;
     }
     return gallery_voting_schema_ready() && (int) ($gallery['voting_enabled'] ?? 0) === 1;
@@ -260,6 +260,9 @@ function picture_game_available_image_count(array $gallery, int $minimum = 2): i
  */
 function picture_game_available(array $gallery, ?array $images = null): bool
 {
+    if (function_exists(__NAMESPACE__ . '\\feature_capability_effective_enabled') && !feature_capability_effective_enabled('picture_game')) {
+        return false;
+    }
     if ($images !== null) {
         return count($images) >= 2;
     }

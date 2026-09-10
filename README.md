@@ -2,7 +2,7 @@
 
 A modern PHP 8.1+ gallery CMS designed for ordinary shared hosting. The application uses the filesystem as the authoritative source for gallery structure, while storing all metadata, access rules, votes, user accounts, and audit logs in MySQL or MariaDB.
 
-**Current Version:** 0.97.2
+**Current Version:** 0.98
 
 **Key Benefit:** Deploy in minutes on shared hosting. No npm, no Composer, no framework overhead. Just PHP + MySQL.
 
@@ -348,6 +348,8 @@ Then open `http://localhost:8000/` in your browser.
 Use **Settings** in the Admin navigation as the central overview for important global configuration. The hub is intentionally not one giant form. It groups stable peer sections for General, Public appearance, Content, Media and browsing, Uploads and automation, Privacy and diagnostics, and Advanced configuration. Each section shows current values and whether a value is explicitly configured, inherited, or using its default.
 
 The hub can directly edit only settings that already have a safe canonical service setter: site name, public language, URL rewrite, public search when available, the public thumbnail renderer, the global EXIF/GPS display default when its existing schema is ready, and development diagnostics. Theme layout, tag presentation, upload tuning, telemetry, Account credentials, language-pack editing, raw CSS, API keys, database tools and destructive maintenance remain on their existing specialized pages. Those pages remain fully supported and link back to the relevant Settings section.
+
+**Admin > Features** is the separate master-capability surface. A switch records the configured administrator preference; dependencies can make a configured feature temporarily ineffective without erasing that preference. Disabled capability-owned routes and navigation are hidden or guarded centrally. Feature masters are non-destructive: disabling Smart Galleries, Gallery Trash, authored translations, duplicate detection, public tag browsing, Viewer Accounts, or another persistent optional subsystem does not delete its stored data. Re-enabling the master restores access to the existing state. Shared pages retain unrelated core/read-only functions, for example update status/checks and database inspection/dry-run remain available when their installer/advanced-maintenance masters are disabled.
 
 Version 0.97 adds a recoverable gallery trash bin. Administrator gallery deletion now moves the complete selected subtree out of the live gallery root and stores a durable metadata snapshot before removing live rows. Administrators can restore an entry to its original path, permanently delete one entry, or empty the trash in bounded batches from **Maintenance > Trash**. Trash is enabled by default; optional retention-based automatic purge is disabled by default and integrates with scheduled Site Maintenance. Existing installations receive the required state-machine storage through two ordered migrations.
 
@@ -862,9 +864,11 @@ The codebase is organized for easy extension:
 
 1. **New controller** - Add file in `app/controllers/`
 2. **New service** - Add file in `app/services/` for business logic
-3. **New route** - Register in `app/bootstrap.php` route table
-4. **New migration** - Add dated file in `database/migrations/`
-5. **Translations** - Add the canonical key to `app/lang/en.json` and keep `app/lang/cs.json`, `app/lang/de.json`, and `app/lang/sv.json` synchronized
+3. **New route** - Register it through the existing bootstrap/dispatcher routing structure
+4. **Optional capability** - Before adding a new toggle, check `app/services/feature_flags/registry.php`. Reuse an existing master when the behavior belongs to the same subsystem. New masters must declare one canonical storage owner, dependencies, owned routes, non-destructive OFF behavior, and Admin/Settings metadata rather than adding controller-local settings.
+5. **New migration** - Add a dated file in `database/migrations/` only when persistence/schema actually changes
+6. **Translations** - Add the canonical key to `app/lang/en.json` and keep `app/lang/cs.json`, `app/lang/de.json`, and `app/lang/sv.json` synchronized
+7. **Tests** - Extend the appropriate feature-policy contract when capability metadata/routing changes, then use the central audit runner as the authoritative verification interface
 
 ### Code Standards
 

@@ -142,6 +142,10 @@ function telemetry_setting_enabled(string $key, string $default = '0'): bool
  */
 function telemetry_public_usage_enabled(): bool
 {
+    if (function_exists(__NAMESPACE__ . '\\feature_capability_effective_enabled') && !feature_capability_effective_enabled('telemetry')) {
+        return false;
+    }
+
     return telemetry_setting_enabled('telemetry_enabled') && telemetry_setting_enabled('telemetry_public_usage_enabled');
 }
 

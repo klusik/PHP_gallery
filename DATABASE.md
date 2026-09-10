@@ -1,6 +1,6 @@
 # PHP Gallery Database Documentation
 
-This document describes the database schema used by PHP Gallery as of application version 0.97.2. Version 0.97 adds the recoverable gallery-trash state machine through migrations `202609070001_gallery_trash_bin.php` and `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6 introduced no schema changes. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
+This document describes the database schema used by PHP Gallery as of application version 0.98. Version 0.97 adds the recoverable gallery-trash state machine through migrations `202609070001_gallery_trash_bin.php` and `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6 introduced no schema changes. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
 
 ## Database Engine
 
@@ -669,6 +669,10 @@ Public tag-page presentation uses scalar settings in this existing table: tag_pa
 | `updated_at` | Last update timestamp. |
 
 Use `app/services/app_settings.php` to access this table.
+
+The canonical optional-capability policy reuses this table and introduces no schema migration. Capabilities using the default storage adapter persist explicit administrator choices as `feature_flag.<capability>.enabled`; missing keys fall back to the registry default. Existing domain-owned masters are not copied into that namespace: Gallery Trash continues to use `gallery_trash_enabled` plus its independent purge/retention settings, public thumbnail self-healing continues to use `thumbnail_background_warmup_enabled`, and Development Diagnostics continues to use `dev_mode_enabled`. Remote Favicon Discovery uses the explicit scalar key `remote_favicon_discovery_enabled`. The one-time fresh-install seeder records `feature_capability.fresh_defaults_seeded` after initializing declared fresh defaults; it never overwrites an explicit pre-existing value.
+
+Capability OFF does not delete related rows or files. Smart Gallery definitions/attachments, Trash entries and purge preferences, authored translations, duplicate-review ledger data, tags, Viewer Account data, and other persisted optional subsystem state remain in their existing tables/storage so OFF -> ON is reversible. Route/UI gating is application policy, not a schema mutation.
 
 Public language configuration uses four independent keys in this table. `public_language` stores the site-wide public interface default. `public_language_selector_enabled` controls whether visitors may override that default and is treated as enabled (`1`) when missing. `public_language_selector_languages` stores the site-wide ordered availability list containing a non-empty subset of the maintained `en`, `cs`, `de`, and `sv` codes; missing, malformed, or empty values fall back to all four. `public_language_selector_design` stores normalized JSON containing the selected five-preset design, browser-visible elements, layout choices, and safe per-preset visual overrides; colors accept validated hex values or the literal `transparent`, and missing or malformed content falls back to Classic with flags and codes enabled. Basic Settings writes merge preset/flag changes into this document so detailed Theme overrides are retained. These keys configure whether, what, and how viewers may choose, but never store an individual viewer's choice. That personal preference is persisted only in the viewer's browser cookie and mirrored in the request session. The viewer settings require no migration and do not change which catalogs administrators may select or edit.
 

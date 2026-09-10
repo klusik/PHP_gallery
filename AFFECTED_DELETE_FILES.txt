@@ -1,0 +1,4 @@
+The following repository files are intentionally deleted by this affected-files checkpoint.
+Delete them when applying the ZIP over an older checkout:
+
+TEMP_FEATURES_POLICY_IMPLEMENTATION_PLAN.md

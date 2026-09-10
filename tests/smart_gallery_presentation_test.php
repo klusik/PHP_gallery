@@ -24,11 +24,16 @@ namespace Gallery\Services {
         return $number === false ? $default : (int) $number;
     }
 
-    /** Keep both optional site features enabled for deterministic defaults. */
+    /** Return the isolated configured feature state for deterministic presentation tests. */
     function feature_flag_enabled(string $feature): bool
     {
-        unset($feature);
-        return true;
+        return (bool) ($GLOBALS['smart_gallery_feature_states'][$feature] ?? true);
+    }
+
+    /** Return the isolated effective feature state for deterministic presentation tests. */
+    function feature_capability_effective_enabled(string $feature): bool
+    {
+        return feature_flag_enabled($feature);
     }
 
     /** Return the configured site renderer default. */
@@ -110,6 +115,12 @@ namespace Gallery\Services {
         }
     }
 
+    $GLOBALS['smart_gallery_feature_states'] = [
+        'lightbox_modes' => true,
+        'downloads' => true,
+        'image_voting' => true,
+    ];
+
     $defaults = smart_gallery_presentation_defaults();
     smart_gallery_presentation_assert($defaults['grid_columns'] === 5 && $defaults['grid_rows'] === 7, 'Smart Gallery defaults inherit the current site grid.');
     smart_gallery_presentation_assert($defaults['thumbnail_rendering_mode'] === 'progressive', 'Smart Gallery defaults inherit the current site thumbnail renderer.');
@@ -176,6 +187,37 @@ smart_gallery_presentation_assert($badValues['card_layout'] === 'horizontal', 'I
         thumbnail_sizes()
     );
     smart_gallery_presentation_assert($sourceConflict === [600, 800], 'Physical gallery thumbnail guardrails remain authoritative when Smart Gallery bounds conflict.');
+
+    $storedLocalPreferences = [
+        'presentation_json' => json_encode([
+            'version' => 1,
+            'lightbox_enabled' => true,
+            'slideshow_enabled' => true,
+            'download_enabled' => true,
+            'voting_enabled' => true,
+        ]),
+    ];
+    $GLOBALS['smart_gallery_feature_states'] = [
+        'lightbox_modes' => false,
+        'downloads' => false,
+        'image_voting' => false,
+    ];
+    $mastersOff = smart_gallery_effective_presentation($storedLocalPreferences);
+    smart_gallery_presentation_assert(!$mastersOff['lightbox_enabled'], 'Global Lightbox master must override a stored Smart Gallery local ON preference.');
+    smart_gallery_presentation_assert(!$mastersOff['slideshow_enabled'], 'Smart Gallery slideshow must become ineffective while its Lightbox master is OFF.');
+    smart_gallery_presentation_assert(!$mastersOff['download_enabled'], 'Global Downloads master must override a stored Smart Gallery local ON preference.');
+    smart_gallery_presentation_assert(!$mastersOff['voting_enabled'], 'Global Image Voting master must override a stored Smart Gallery local ON preference.');
+
+    $GLOBALS['smart_gallery_feature_states'] = [
+        'lightbox_modes' => true,
+        'downloads' => true,
+        'image_voting' => true,
+    ];
+    $mastersRestored = smart_gallery_effective_presentation($storedLocalPreferences);
+    smart_gallery_presentation_assert($mastersRestored['lightbox_enabled'], 'Re-enabling the Lightbox master must restore the stored Smart Gallery local preference.');
+    smart_gallery_presentation_assert($mastersRestored['slideshow_enabled'], 'Re-enabling the Lightbox master must restore the stored Smart Gallery slideshow preference.');
+    smart_gallery_presentation_assert($mastersRestored['download_enabled'], 'Re-enabling Downloads must restore the stored Smart Gallery local preference.');
+    smart_gallery_presentation_assert($mastersRestored['voting_enabled'], 'Re-enabling Image Voting must restore the stored Smart Gallery local preference.');
 
     fwrite(STDOUT, "Smart Gallery presentation tests passed.\n");
 }

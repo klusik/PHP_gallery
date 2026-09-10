@@ -156,6 +156,10 @@ function telemetry_delete_older_than(string $tableName, string $columnName, int 
  */
 function telemetry_run_maintenance(): array
 {
+    if (function_exists(__NAMESPACE__ . '\\feature_capability_effective_enabled') && !feature_capability_effective_enabled('telemetry')) {
+        return ['rolled_up' => 0, 'deleted' => []];
+    }
+
     // $result stores the maintenance result shown in the admin UI.
     $result = [
         'rolled_up' => telemetry_rollup_daily(),

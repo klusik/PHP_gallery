@@ -1465,7 +1465,7 @@ function site_maintenance_process_cleanup_step(array &$state, float $deadline): 
         $cleanup['gallery_trash'] = purge_expired_gallery_trash();
     }
 
-    if (function_exists('telemetry_run_maintenance') && (!function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('telemetry'))) {
+    if (function_exists('telemetry_run_maintenance') && (!function_exists('Gallery\\Services\\feature_capability_effective_enabled') || feature_capability_effective_enabled('telemetry'))) {
         $cleanup['telemetry'] = telemetry_run_maintenance();
     }
 
