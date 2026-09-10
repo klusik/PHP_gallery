@@ -1,5 +1,61 @@
 # Patch notes
 
+## Version 0.98
+
+Version 0.98 establishes a single, dependency-aware capability policy for optional PHP Gallery features. It aligns feature availability, route protection, Admin navigation, settings discovery, health reporting, and caller behavior around registered capability definitions while preserving existing setting owners and stored data.
+
+### Highlights
+
+#### Centralized capability policy
+
+- Added the canonical capability registry in `app/services/feature_flags/`, covering definitions, storage adapters, effective-state policy, route requirements, and Admin presentation.
+- Distinguished persisted configured preferences from effective runtime availability, including dependency-aware checks and explicit `all_of`/`any_of` route requirements.
+- Preserved compatibility helpers such as `feature_flag_enabled()`, `set_feature_flag_enabled()`, and `feature_flag_for_route()` with their established configured-state semantics.
+- Kept capability disablement non-destructive: existing galleries, files, translations, tags, Trash contents, review ledgers, and subordinate preferences remain stored and become available again when a capability is re-enabled.
+
+#### Consistent feature integration
+
+- Updated Admin dashboards, Settings, Features, gallery editing, reports, logs, maintenance, theme, test-run, and authentication surfaces to use the shared effective capability policy.
+- Applied registered capability ownership to public gallery pages, gallery cards, controls, tags, search, upload automation, Smart Galleries, viewer accounts, Picture Game, OpenAI assistance, EXIF, lightbox settings, telemetry, and updater-related workflows.
+- Added bounded Admin health and Runtime Diagnostics reporting for capability readiness without exposing raw SQL, database exceptions, credentials, tokens, or private filesystem paths.
+
+### Technical Details
+
+#### Backend
+
+- Added `app/services/feature_flags/registry.php`, `policy.php`, `adapters.php`, `routes.php`, and `admin.php` as ordered implementation parts behind `app/services/feature_flags.php`.
+- Registered canonical keys, labels, descriptions, dependencies, owned routes/prefixes, data-disable policies, behavior tags, storage owners, and specialized Settings destinations.
+- Kept domain-owned master settings authoritative instead of creating shadow feature flags, and retained lazy schema inspection and existing migration behavior.
+- Updated callers to gate optional actions and background/network work at the appropriate boundary while leaving shared pages available for core functionality.
+
+#### Database
+
+- Added no database migrations and made no schema changes in Version 0.98.
+- Preserved existing storage ownership and persisted administrator preferences during upgrades and capability disablement.
+
+#### Frontend and Admin
+
+- Updated Admin navigation, settings discovery, dashboard/report sections, gallery editor controls, and runtime health presentation to hide or disable only capability-owned affordances whose effective policy is unavailable.
+- Updated maintained language catalogs and Admin views for the new capability status and settings presentation.
+
+#### Tests
+
+- Added `tests/feature_policy_core_test.php`, `tests/feature_policy_adapters_test.php`, `tests/feature_policy_admin_test.php`, `tests/feature_policy_inventory_test.php`, and `tests/feature_policy_stage13_contract_test.php`.
+- Extended feature-policy, Admin test-run, localization, Smart Gallery, updater, viewer-account, and security-operation coverage.
+- Covered configured versus effective state, dependency handling, route ownership, storage adapters, Admin registration, compatibility wrappers, and disabled/available policy behavior.
+
+### User Impact
+
+#### For visitors
+
+- Public routes and controls now follow the same effective capability policy as the corresponding server-side feature behavior.
+- Core gallery pages remain usable when an optional capability is unavailable; only controls and operations owned by that capability are withheld.
+
+#### For administrators
+
+- Admin > Features and Settings provide a consistent view of configured and effective optional capability state, including dependencies and actionable health information.
+- Disabling an optional capability preserves its data and preferences, and re-enabling it restores access to the retained state.
+
 ## Version 0.97.2
 
 Version 0.97.2 is a focused SEO and canonicalization patch for the public gallery homepage. It prevents unsupported homepage query-string variants from remaining crawlable duplicate URLs while preserving existing routing and supported homepage options.
