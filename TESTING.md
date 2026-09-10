@@ -53,6 +53,20 @@ WinApp tests that exercise optional host integrations must remain isolated from 
 
 `php tests/run.php` is retained only for compatibility and delegates to `scripts/audit.php --suite=php-regression --no-report`. It is not an agent entrypoint. Focused commands elsewhere in this document are reproduction/diagnostic references or manual acceptance steps only; the global agent execution rule above takes precedence over them. Do not pre-run focused tests "just in case", and do not replay them after a successful central audit. Duplicate runs are justified only while investigating a concrete failure or validating a new test before registry integration.
 
+## Canonical Feature Capability Policy
+
+The optional-feature architecture is protected by five focused PHP contracts that are registered in the normal PHP regression suite:
+
+- `tests/feature_policy_core_test.php` validates canonical definitions, configured/effective state, dependency semantics, simple and compound route ownership, registry validation, and compatibility wrappers.
+- `tests/feature_policy_adapters_test.php` validates default feature-flag storage, explicit app-setting storage, domain adapters, subordinate-setting preservation, and idempotent fresh-install seeding.
+- `tests/feature_policy_admin_test.php` validates grouped Admin > Features state, stale revision rejection, dependency blockers, configured checkbox state, and bounded health presentation.
+- `tests/feature_policy_inventory_test.php` statically audits registered capability literals, owned UI/routes, Admin navigation/settings metadata, and feature-specific guard placement.
+- `tests/feature_policy_stage13_contract_test.php` applies reusable OFF/ON route checks across the registry, dependency recovery, bounded/redacted health diagnostics, non-destructive data policy, and early exits for expensive optional work.
+
+These tests do not replace subsystem regressions. Multilingual content still proves loader suppression and translation recovery, Gallery Trash tests still own Trash data/settings behavior, Viewer tests still own account data, and feature-specific tests still own Smart Gallery, duplicate detector, tag, updater, database-maintenance, favicon, benchmark, and thumbnail behavior. The capability tests protect the cross-feature orchestration boundary.
+
+For manual Admin acceptance after a policy change, verify one enabled and one disabled capability in **Admin > Features**, one dependency-blocked capability when applicable, a direct owned route, the corresponding navigation/control visibility, and OFF -> ON restoration of already stored subsystem state. On a mixed core page, verify read-only/core actions remain reachable while only the disabled optional mutation is refused. Do not trigger every optional schema merely by opening Admin > Features.
+
 ## Multilingual Content
 
 Run `php tests/content_localization_model_test.php`, `php tests/admin_content_localization_test.php`, `php tests/public_content_localization_test.php`, `php tests/openai_text_assist_model_test.php`, `php tests/public_language_preference_test.php`, `php tests/translation_catalog_consistency_test.php`, and `php tests/migration_consistency_test.php`.

@@ -44,6 +44,20 @@ function content_supported_languages(): array
 }
 
 /**
+ * Return whether translated authored gallery/photo content is globally enabled.
+ *
+ * Interface language remains independent and continues to use the normal UI
+ * translation catalogs even when this authored-content capability is disabled.
+ *
+ * @return bool True when public authored-content resolution and Admin translation editing are enabled.
+ */
+function content_localization_enabled(): bool
+{
+    return !function_exists(__NAMESPACE__ . '\feature_capability_effective_enabled')
+        || feature_capability_effective_enabled('multilingual_content');
+}
+
+/**
  * Return the Open Graph locale for one supported content language.
  *
  * @param string $language Supported two-letter code.
@@ -206,7 +220,7 @@ function content_localized_fields(array $entity, string $language, array $transl
 {
     $requested = content_language_normalize($language) ?? translation_default_language();
     $sourceLanguage = content_language_normalize($entity['content_language'] ?? null);
-    $translation = isset($translations[$requested]) && is_array($translations[$requested]) ? $translations[$requested] : null;
+    $translation = content_localization_enabled() && isset($translations[$requested]) && is_array($translations[$requested]) ? $translations[$requested] : null;
     $baseTitle = trim((string) ($entity['title'] ?? ''));
     $baseDescription = (string) ($entity['description'] ?? '');
     $translatedTitle = trim((string) ($translation['title'] ?? ''));
@@ -237,7 +251,7 @@ function content_localized_fields(array $entity, string $language, array $transl
 function content_localize_entities(string $entityType, array $entities, string $language): array
 {
     $ids = array_map(static fn (array $entity): int => (int) ($entity['id'] ?? 0), $entities);
-    $translations = content_translation_rows($entityType, $ids, $language);
+    $translations = content_localization_enabled() ? content_translation_rows($entityType, $ids, $language) : [];
     foreach ($entities as &$entity) {
         $id = (int) ($entity['id'] ?? 0);
         // A photo translation is one visible caption variant. Once present, its

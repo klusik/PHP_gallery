@@ -41,7 +41,7 @@ function assert_admin_test_run_feature(bool $condition, string $label): void
 
 require_once __DIR__ . '/support/module_source.php';
 
-$featureSource = (string) file_get_contents(__DIR__ . '/../app/services/feature_flags.php');
+$featureSource = module_source(__DIR__ . '/../app/services/feature_flags.php');
 $layoutSource = (string) file_get_contents(__DIR__ . '/../app/views/layout.php');
 // The test-run service is split into part files; assert against the whole module.
 $serviceSource = module_source(__DIR__ . '/../app/services/admin_test_runs.php');
@@ -55,15 +55,16 @@ assert_admin_test_run_feature(
     'Admin test runs must be disabled by default for existing and new installations.'
 );
 assert_admin_test_run_feature(
-    str_contains($featureSource, "'admin_test_run_start' => 'admin_test_runs'")
-        && str_contains($featureSource, "'admin_test_run_finish' => 'admin_test_runs'")
-        && str_contains($featureSource, "'admin_test_run_finalize' => 'admin_test_runs'")
-        && str_contains($featureSource, "'admin_test_run_download' => 'admin_test_runs'"),
+    str_contains($featureSource, "'admin_test_runs' => [")
+        && str_contains($featureSource, "'admin_test_run_start'")
+        && str_contains($featureSource, "'admin_test_run_finish'")
+        && str_contains($featureSource, "'admin_test_run_finalize'")
+        && str_contains($featureSource, "'admin_test_run_download'"),
     'All Admin test-run routes must be owned by the opt-in feature flag.'
 );
 assert_admin_test_run_feature(
     str_contains($layoutSource, "in_array(\$page, ['gallery', 'smart_gallery'], true)")
-        && str_contains($layoutSource, "feature_flag_enabled('admin_test_runs')")
+        && str_contains($layoutSource, "feature_capability_effective_enabled('admin_test_runs')")
         && str_contains($layoutSource, 'method="post"')
         && str_contains($layoutSource, 'name="csrf_token"')
         && str_contains($layoutSource, "url_for('admin_test_run_start')"),

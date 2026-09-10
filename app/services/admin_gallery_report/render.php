@@ -232,6 +232,9 @@ function admin_gallery_report_render_html(array $report): string
  */
 function admin_gallery_report_render_telemetry_section(array $telemetry): string
 {
+    if (!empty($telemetry['disabled'])) {
+        return '';
+    }
     if (empty($telemetry['available'])) {
         return '<section class="panel"><h2>' . admin_gallery_report_h(t('admin.gallery_report.export.telemetry', 'Telemetry')) . '</h2><p class="muted">' . admin_gallery_report_h(t('admin.gallery_report.export.telemetry_unavailable', 'Telemetry is not available on this installation or the schema is not migrated yet.')) . '</p></section>';
     }

@@ -135,6 +135,7 @@ function view_render_admin_database_thumbnail_distribution_panel(array $audit): 
  */
 function view_render_admin_database_cleanup_panel(array $candidates, array $cleanupState): void
 {
+    $mutationsEnabled = \Gallery\Services\feature_capability_effective_enabled('advanced_database_maintenance');
     echo '<section class="panel admin-database-cleanup-panel">';
     echo '<div class="admin-panel-heading"><div><p class="admin-kicker">' . e(t('admin.database_maintenance.cleanup_kicker', 'Logical cleanup')) . '</p><h2>' . e(t('admin.database_maintenance.cleanup_title', 'Clean safe database data')) . '</h2></div><p class="muted">' . e(t('admin.database_maintenance.cleanup_hint', 'Only high-confidence orphan, deterministic duplicate, and explicitly expired temporary rows are eligible. Content, accounts, logs, telemetry, unknown tables, and filesystem files are protected.')) . '</p></div>';
 
@@ -182,13 +183,15 @@ function view_render_admin_database_cleanup_panel(array $candidates, array $clea
     echo '<label>' . e(t('admin.database_maintenance.batch_size', 'Batch size')) . '<input type="number" name="batch_size" min="1" max="1000" value="250"></label>';
     echo '<button type="submit" class="button secondary">' . e(t('admin.database_maintenance.run_dry_run', 'Run cleanup dry-run')) . '</button></form></article>';
 
-    echo '<article class="admin-storage-chart-card"><h3>' . e(t('admin.database_maintenance.live_cleanup_title', 'Confirmed cleanup batch')) . '</h3><p class="muted">' . e(t('admin.database_maintenance.live_cleanup_hint', 'Each request processes one bounded rule batch. Retry or continue safely until the persisted state reports completion.')) . '</p>';
-    echo '<form method="post" action="' . e(url_for('admin_database_maintenance_cleanup')) . '">';
-    echo csrf_field();
-    echo '<label>' . e(t('admin.database_maintenance.batch_size', 'Batch size')) . '<input type="number" name="batch_size" min="1" max="1000" value="250"></label>';
-    echo '<label>' . e(t('admin.database_maintenance.type_clean', 'Type CLEAN to confirm')) . '<input type="text" name="confirmation_text" autocomplete="off"></label>';
-    echo '<label class="admin-database-checkbox-label"><input type="checkbox" name="restart" value="1"> ' . e(t('admin.database_maintenance.restart_operation', 'Start a new operation instead of continuing the current state')) . '</label>';
-    echo '<button type="submit" class="button danger">' . e(t('admin.database_maintenance.clean_button', 'Clean safe database data')) . '</button></form></article>';
+    if ($mutationsEnabled) {
+        echo '<article class="admin-storage-chart-card"><h3>' . e(t('admin.database_maintenance.live_cleanup_title', 'Confirmed cleanup batch')) . '</h3><p class="muted">' . e(t('admin.database_maintenance.live_cleanup_hint', 'Each request processes one bounded rule batch. Retry or continue safely until the persisted state reports completion.')) . '</p>';
+        echo '<form method="post" action="' . e(url_for('admin_database_maintenance_cleanup')) . '">';
+        echo csrf_field();
+        echo '<label>' . e(t('admin.database_maintenance.batch_size', 'Batch size')) . '<input type="number" name="batch_size" min="1" max="1000" value="250"></label>';
+        echo '<label>' . e(t('admin.database_maintenance.type_clean', 'Type CLEAN to confirm')) . '<input type="text" name="confirmation_text" autocomplete="off"></label>';
+        echo '<label class="admin-database-checkbox-label"><input type="checkbox" name="restart" value="1"> ' . e(t('admin.database_maintenance.restart_operation', 'Start a new operation instead of continuing the current state')) . '</label>';
+        echo '<button type="submit" class="button danger">' . e(t('admin.database_maintenance.clean_button', 'Clean safe database data')) . '</button></form></article>';
+    }
     echo '</div></section>';
 }
 
@@ -200,6 +203,7 @@ function view_render_admin_database_cleanup_panel(array $candidates, array $clea
  */
 function view_render_admin_database_schema_repair_panel(array $findings, array $readiness): void
 {
+    $mutationsEnabled = \Gallery\Services\feature_capability_effective_enabled('advanced_database_maintenance');
     echo '<section class="panel admin-database-schema-repair-panel">';
     echo '<div class="admin-panel-heading"><div><p class="admin-kicker">' . e(t('admin.database_maintenance.schema_kicker', 'Legacy schema')) . '</p><h2>' . e(t('admin.database_maintenance.schema_title', 'Repair legacy schema')) . '</h2></div><p class="muted">' . e(t('admin.database_maintenance.schema_hint', 'The dedicated migration inspects every object before alteration, preserves source geometry first, and tolerates legacy, partial, and already repaired schemas. DDL may auto-commit.')) . '</p></div>';
 
@@ -223,7 +227,7 @@ function view_render_admin_database_schema_repair_panel(array $findings, array $
         echo '<p class="notice warning">' . e(t('admin.database_maintenance.repair_blocked', 'Repair is blocked until normal pending migrations are applied: {versions}', ['versions' => implode(', ', $blocked)])) . '</p>';
     } elseif (!empty($readiness['already_applied'])) {
         echo '<p class="muted">' . e(t('admin.database_maintenance.repair_applied', 'The dedicated repair migration is already recorded. Reinspect after any database restore or manual schema change.')) . '</p>';
-    } else {
+    } elseif ($mutationsEnabled) {
         echo '<form method="post" action="' . e(url_for('admin_database_maintenance_repair')) . '" class="inline-action-form">';
         echo csrf_field();
         echo '<label>' . e(t('admin.database_maintenance.type_repair', 'Type REPAIR to confirm')) . '<input type="text" name="confirmation_text" autocomplete="off"></label>';
@@ -239,12 +243,17 @@ function view_render_admin_database_schema_repair_panel(array $findings, array $
  */
 function view_render_admin_database_physical_operations_panel(array $tables): void
 {
+    $mutationsEnabled = \Gallery\Services\feature_capability_effective_enabled('advanced_database_maintenance');
     echo '<section class="panel admin-database-physical-panel">';
     echo '<div class="admin-panel-heading"><div><p class="admin-kicker">' . e(t('admin.database_maintenance.physical_kicker', 'Physical maintenance')) . '</p><h2>' . e(t('admin.database_maintenance.physical_title', 'Statistics and table space')) . '</h2></div><p class="muted">' . e(t('admin.database_maintenance.physical_hint', 'ANALYZE refreshes optimizer metadata. OPTIMIZE may lock or rebuild tables and may be expensive on shared hosting. Neither action runs automatically.')) . '</p></div>';
 
     echo '<div class="admin-storage-chart-grid">';
     echo '<article class="admin-storage-chart-card"><h3>' . e(t('admin.database_maintenance.analyze_title', 'Refresh database statistics')) . '</h3>';
-    view_render_admin_database_table_selection_form('admin_database_maintenance_analyze', $tables, false);
+    if ($mutationsEnabled) {
+        view_render_admin_database_table_selection_form('admin_database_maintenance_analyze', $tables, false);
+    } else {
+        echo '<p class="muted">' . e(t('admin.features.advanced_database_maintenance.disabled_action', 'Advanced database mutations are disabled in Admin > Features. Inspection and dry-run planning remain available.')) . '</p>';
+    }
     echo '</article>';
     echo '<article class="admin-storage-chart-card"><h3>' . e(t('admin.database_maintenance.optimize_title', 'Reclaim table space')) . '</h3><p class="muted">' . e(t('admin.database_maintenance.optimize_warning', 'The database engine may rebuild and lock selected tables. The displayed data_free value is an estimate, not a guaranteed reduction.')) . '</p>';
     view_render_admin_database_table_selection_form('admin_database_maintenance_optimize', $tables, true);
@@ -260,6 +269,7 @@ function view_render_admin_database_physical_operations_panel(array $tables): vo
  */
 function view_render_admin_database_table_selection_form(string $route, array $tables, bool $requiresConfirmation): void
 {
+    $mutationsEnabled = \Gallery\Services\feature_capability_effective_enabled('advanced_database_maintenance');
     echo '<form method="post" action="' . e(url_for($route)) . '">';
     echo csrf_field();
     echo '<div class="admin-database-table-selection">';
@@ -271,7 +281,9 @@ function view_render_admin_database_table_selection_form(string $route, array $t
         echo '<label>' . e(t('admin.database_maintenance.type_optimize', 'Type OPTIMIZE to confirm')) . '<input type="text" name="confirmation_text" autocomplete="off"></label>';
         echo '<div class="admin-database-operation-actions">';
         echo '<button type="submit" name="dry_run" value="1" class="button secondary">' . e(t('admin.database_maintenance.optimize_dry_run_button', 'Preview selected optimization')) . '</button>';
-        echo '<button type="submit" class="button danger">' . e(t('admin.database_maintenance.optimize_button', 'Optimize selected tables')) . '</button>';
+        if ($mutationsEnabled) {
+            echo '<button type="submit" class="button danger">' . e(t('admin.database_maintenance.optimize_button', 'Optimize selected tables')) . '</button>';
+        }
         echo '</div>';
     } else {
         echo '<button type="submit" class="button">' . e(t('admin.database_maintenance.analyze_button', 'Analyze selected tables')) . '</button>';

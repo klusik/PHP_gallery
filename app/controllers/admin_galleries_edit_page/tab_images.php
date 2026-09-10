@@ -41,6 +41,7 @@ use function Gallery\Core\csrf_field;
 use function Gallery\Core\e;
 use function Gallery\Core\render_admin_tab_panel;
 use function Gallery\Core\url_for;
+use function Gallery\Services\feature_capability_effective_enabled;
 use function Gallery\Services\gallery_shows_filenames;
 use function Gallery\Services\t;
 use function Gallery\Services\thumbnail_url;
@@ -57,35 +58,38 @@ function admin_edit_gallery_render_images_tab(array $gallery, array $images, str
 {
     ob_start();
     $scanImagesActionHtml = '<form method="post" action="' . e(url_for('admin_scan_images')) . '" data-admin-panel-scan-images-form>' . csrf_field() . '<input type="hidden" name="gallery_id" value="' . (int) $gallery['id'] . '"><button type="submit" class="secondary">' . e(t('admin.gallery_editor.scan_import_images', 'Scan/import images')) . '</button></form>';
+    $actions = [
+        [
+            'label' => t('admin.gallery_editor.upload_photos_here', 'Upload photos here'),
+            'url' => url_for('admin_upload', ['gallery_id' => $gallery['id']]),
+            'class' => 'button',
+            'attributes' => [
+                'data-gallery-side-panel-link' => true,
+                'data-admin-side-panel-workflow' => 'upload',
+                'data-admin-side-panel-kicker' => t('admin.gallery_editor.upload_workflow', 'Upload workflow'),
+                'data-admin-side-panel-title' => t('admin.gallery_editor.upload_photos', 'Upload photos'),
+                'data-gallery-side-panel-url' => url_for('admin_upload', ['gallery_id' => $gallery['id'], 'panel' => 1]),
+            ],
+        ],
+    ];
+    if (feature_capability_effective_enabled('duplicate_photo_detector')) {
+        $actions[] = [
+            'label' => t('admin.duplicate_photos.action_label', 'Find duplicate photos'),
+            'url' => url_for('admin_duplicate_photos', ['gallery_id' => $gallery['id']]),
+            'class' => 'button secondary',
+            'attributes' => [
+                'data-gallery-side-panel-link' => true,
+                'data-admin-side-panel-workflow' => 'duplicate-detector',
+                'data-admin-side-panel-kicker' => t('admin.duplicate_photos.kicker', 'Gallery tools'),
+                'data-admin-side-panel-title' => t('admin.duplicate_photos.page_title', 'Duplicate Photo Detector'),
+                'data-gallery-side-panel-url' => url_for('admin_duplicate_photos', ['gallery_id' => $gallery['id'], 'panel' => 1]),
+            ],
+        ];
+    }
     view_render_admin_tab_intro([
         'kicker' => t('admin.gallery_editor.tab_images', 'Images'),
         'title' => t('admin.gallery_editor.images_title', 'Photos and ordering'),
-        'actions' => [
-            [
-                'label' => t('admin.gallery_editor.upload_photos_here', 'Upload photos here'),
-                'url' => url_for('admin_upload', ['gallery_id' => $gallery['id']]),
-                'class' => 'button',
-                'attributes' => [
-                    'data-gallery-side-panel-link' => true,
-                    'data-admin-side-panel-workflow' => 'upload',
-                    'data-admin-side-panel-kicker' => t('admin.gallery_editor.upload_workflow', 'Upload workflow'),
-                    'data-admin-side-panel-title' => t('admin.gallery_editor.upload_photos', 'Upload photos'),
-                    'data-gallery-side-panel-url' => url_for('admin_upload', ['gallery_id' => $gallery['id'], 'panel' => 1]),
-                ],
-            ],
-            [
-                'label' => t('admin.duplicate_photos.action_label', 'Find duplicate photos'),
-                'url' => url_for('admin_duplicate_photos', ['gallery_id' => $gallery['id']]),
-                'class' => 'button secondary',
-                'attributes' => [
-                    'data-gallery-side-panel-link' => true,
-                    'data-admin-side-panel-workflow' => 'duplicate-detector',
-                    'data-admin-side-panel-kicker' => t('admin.duplicate_photos.kicker', 'Gallery tools'),
-                    'data-admin-side-panel-title' => t('admin.duplicate_photos.page_title', 'Duplicate Photo Detector'),
-                    'data-gallery-side-panel-url' => url_for('admin_duplicate_photos', ['gallery_id' => $gallery['id'], 'panel' => 1]),
-                ],
-            ],
-        ],
+        'actions' => $actions,
         'actions_html' => $scanImagesActionHtml,
     ]);
     echo '<form method="post" action="' . e(url_for('admin_bulk_images')) . '" data-admin-image-bulk-form>' . csrf_field();

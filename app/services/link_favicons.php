@@ -270,6 +270,9 @@ function link_favicon_gallery_descriptions(int $galleryId): array
 function link_favicon_refresh_gallery(int $galleryId): array
 {
     $result = ['candidates' => 0, 'attempted' => 0, 'stored' => 0, 'skipped' => 0];
+    if (function_exists(__NAMESPACE__ . '\feature_capability_effective_enabled') && !feature_capability_effective_enabled('remote_favicon_discovery')) {
+        return $result;
+    }
     $networkDeadline = microtime(true) + LINK_FAVICON_SAVE_NETWORK_BUDGET_SECONDS;
     if ($galleryId < 1 || !link_favicon_cache_schema_ready('link_favicon_gallery_refresh')) {
         return $result;
@@ -584,6 +587,9 @@ function link_favicon_public_asset(string $file): ?array
  */
 function link_favicon_fetch_site_icon(string $pageUrl, ?float $deadline = null): array
 {
+    if (function_exists(__NAMESPACE__ . '\feature_capability_effective_enabled') && !feature_capability_effective_enabled('remote_favicon_discovery')) {
+        return ['status' => 'blocked', 'reason' => 'remote_discovery_disabled'];
+    }
     $pageUrl = link_favicon_normalize_url($pageUrl);
     if ($pageUrl === null) {
         return ['status' => 'blocked'];

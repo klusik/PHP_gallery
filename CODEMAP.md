@@ -135,6 +135,28 @@ There is intentionally no viewer controller, view, route, JavaScript, CSS, mail 
 
 Future global settings should be registered summary-only first. Enable central editing only after the entry can call the same service normalizer and setter as its specialized owner. Never register per-gallery/per-image values, raw secrets, file editors or destructive actions as generic centrally editable keys.
 
+## Feature Capability Policy
+
+| Path | Responsibility |
+| --- | --- |
+| `app/services/feature_flags.php` | Stable module entry point, constants, load order, and legacy compatibility surface. |
+| `app/services/feature_flags/registry.php` | Canonical capability definitions/groups, stable keys, dependencies, route ownership, storage metadata, behavior tags, specialized Settings destinations, and legacy registry views. |
+| `app/services/feature_flags/adapters.php` | Lazy storage adapters for historical `feature_flag.<key>.enabled` values, explicit `app_settings` keys, and existing domain-owned master setters. Also owns fresh-install source writes without duplicating subsystem persistence. |
+| `app/services/feature_flags/policy.php` | Configured versus effective state, dependency recursion, canonical writes, fresh-install default seeding, registry validation, and legacy state wrappers. |
+| `app/services/feature_flags/admin.php` | Registry revision token, dependency blockers, grouped Admin presentation, bounded health snapshot, save orchestration, and stale-form protection. |
+| `app/services/feature_flags/routes.php` | Simple/compound route requirements, route-to-capability compatibility map, dispatcher availability decision, and disabled-route responses. |
+| `app/controllers/admin_features.php` | Admin > Features UI. Renders configured/effective health, storage source, dependency blockers, operational badges, and deep links; POST delegates all writes back to the policy service. |
+| `app/bootstrap/dispatch.php` | Enforces canonical route requirements before controller execution. |
+| `app/views/admin_chrome.php` | Filters Admin navigation entries that declare a capability master. |
+| `app/services/admin_settings_registry.php` | Adds feature-aware discovery/status to the centralized Settings index without becoming the feature persistence owner. |
+| `tests/feature_policy_core_test.php` | Canonical keys, defaults, dependencies, route ownership/compound requirements, validator behavior, and configured/effective semantics. |
+| `tests/feature_policy_adapters_test.php` | Storage-owner delegation, preservation of subordinate domain settings, and one-time fresh-install seeding. |
+| `tests/feature_policy_admin_test.php` | Admin grouping/save/revision semantics and bounded health rendering contract. |
+| `tests/feature_policy_inventory_test.php` | Static inventory proving routes, UI boundaries, settings metadata, and capability literals stay registered. |
+| `tests/feature_policy_stage13_contract_test.php` | Cross-capability master OFF/ON, dependency restoration, bounded health/redaction, data-preservation policy, navigation metadata, and expensive OFF-path guards. |
+
+When changing a feature master, first decide whether the behavior is a new capability or another surface of an existing capability. Shared pages should normally retain their core/read-only route and gate only the optional mutation or affordance. Persistent subsystem data is preserved on OFF by default.
+
 ## Admin Dashboard and Maintenance
 
 | Task | Primary files | Notes |

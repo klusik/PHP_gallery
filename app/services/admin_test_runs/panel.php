@@ -52,7 +52,7 @@ function render_admin_test_run_panel(): void
 {
     $user = current_user();
     $page = (string) ($_GET['page'] ?? 'home');
-    if (!$user || !in_array($page, ['gallery', 'smart_gallery'], true) || !feature_flag_enabled('admin_test_runs')) {
+    if (!$user || !in_array($page, ['gallery', 'smart_gallery'], true) || !feature_capability_effective_enabled('admin_test_runs')) {
         return;
     }
     $target = admin_test_run_normalize_target((string) ($_SERVER['REQUEST_URI'] ?? '/'));

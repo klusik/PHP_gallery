@@ -75,12 +75,13 @@ use function Gallery\Services\ai_image_analysis_schema_ready;
 use function Gallery\Services\delete_gallery_branding_asset;
 use function Gallery\Services\exif_gps_override_schema_ready;
 use function Gallery\Services\exif_gps_schema_ready;
-use function Gallery\Services\feature_flag_enabled;
+use function Gallery\Services\feature_capability_effective_enabled;
 use function Gallery\Services\find_gallery;
 use function Gallery\Services\find_image;
 use function Gallery\Services\flight_map_schema_ready;
 use function Gallery\Services\gallery_access_schema_ready;
 use function Gallery\Services\schema_inspection_is_available;
+use function Gallery\Services\content_localization_enabled;
 use function Gallery\Services\content_localization_schema_ready;
 use function Gallery\Services\content_save_localizations;
 use function Gallery\Services\gallery_share_token_assert_mutation_available;
@@ -702,7 +703,7 @@ function admin_panel_error_response(string $message, int $statusCode = 422): voi
  */
 function render_admin_simbrief_description_tool(int $galleryId): void
 {
-    if (function_exists('Gallery\\Services\\feature_flag_enabled') && !feature_flag_enabled('simbrief')) {
+    if (function_exists('Gallery\\Services\\feature_capability_effective_enabled') && !feature_capability_effective_enabled('simbrief')) {
         return;
     }
     if (function_exists('Gallery\\Views\\view_render_admin_simbrief_description_tool')) {
@@ -765,44 +766,52 @@ function admin_gallery_checkbox_input(array $input, string $key, bool $defaultWh
  */
 function admin_save_gallery_from_input(array $gallery, array $input, array $files, string $returnTab, bool $completeForm = true): array
 {
-    $shouldUpdateLocalization = array_key_exists('content_language', $input) || array_key_exists('translations', $input);
+    $shouldUpdateLocalization = content_localization_enabled()
+        && (array_key_exists('content_language', $input) || array_key_exists('translations', $input));
     if ($shouldUpdateLocalization && !content_localization_schema_ready('gallery')) {
         throw new RuntimeException(t('admin.content_localization.save_unavailable', 'Multilingual content was not saved because its database migration is unavailable.'));
     }
     if (!empty($input['nsfw_field_present']) && !nsfw_guard_schema_ready()) {
         throw new RuntimeException(admin_nsfw_guard_mutation_error());
     }
+    // Resolve feature masters before optional schema work. Stale forms may still
+    // submit fields for a feature that was disabled after the form was opened;
+    // those values are ignored without probing or rewriting preserved feature data.
+    $pictureGameFeatureEnabled = !function_exists('Gallery\\Services\\feature_capability_effective_enabled') || feature_capability_effective_enabled('picture_game');
+    $gpsMapFeatureEnabled = !function_exists('Gallery\\Services\\feature_capability_effective_enabled') || feature_capability_effective_enabled('gallery_maps');
+    $flightMapFeatureEnabled = !function_exists('Gallery\\Services\\feature_capability_effective_enabled') || feature_capability_effective_enabled('flight_maps');
+    $votingFeatureEnabled = !function_exists('Gallery\\Services\\feature_capability_effective_enabled') || feature_capability_effective_enabled('image_voting');
+    $lightboxModeFeatureEnabled = !function_exists('Gallery\\Services\\feature_capability_effective_enabled') || feature_capability_effective_enabled('lightbox_modes');
     // Stale admin forms must not turn a Phase 11 inspection outage into an implicit
-    // field omission. Only fields that were actually submitted are preflighted so
-    // unrelated gallery edits can continue when an optional presentation feature
-    // is not part of the request.
-    if (array_key_exists('picture_game_enabled', $input)) {
+    // field omission. Only effectively enabled fields that were actually submitted
+    // are preflighted so unrelated or disabled-feature edits remain schema-lazy.
+    if ($pictureGameFeatureEnabled && array_key_exists('picture_game_enabled', $input)) {
         presentation_schema_assert_known(presentation_picture_game_schema_status(), 'gallery_picture_game_setting_save');
     }
-    if (array_key_exists('voting_enabled', $input)) {
+    if ($votingFeatureEnabled && array_key_exists('voting_enabled', $input)) {
         presentation_schema_assert_known(presentation_voting_schema_status(), 'gallery_voting_setting_save');
     }
-    if (array_key_exists('gps_map_enabled', $input)) {
+    if ($gpsMapFeatureEnabled && array_key_exists('gps_map_enabled', $input)) {
         presentation_schema_assert_known(presentation_gps_override_schema_status(), 'gallery_gps_override_save');
     }
-    if (array_key_exists('lightbox_browsing_mode', $input)) {
+    if ($lightboxModeFeatureEnabled && array_key_exists('lightbox_browsing_mode', $input)) {
         presentation_schema_assert_known(presentation_lightbox_override_schema_status(), 'gallery_lightbox_override_save');
     }
-    if (array_key_exists('flight_route_text', $input)) {
+    if ($flightMapFeatureEnabled && array_key_exists('flight_route_text', $input)) {
         presentation_schema_assert_known(presentation_flight_map_schema_status(), 'gallery_flight_map_setting_save');
     }
     // $pictureGameReady stores this steps working value.
-    $pictureGameReady = picture_game_schema_ready() && (!function_exists('Gallery\\Services\\feature_flag_enabled') || (feature_flag_enabled('picture_game') && feature_flag_enabled('image_voting')));
+    $pictureGameReady = $pictureGameFeatureEnabled && picture_game_schema_ready();
     // $gpsMapReady stores this steps working value.
-    $gpsMapReady = exif_gps_schema_ready() && (!function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('gallery_maps'));
+    $gpsMapReady = $gpsMapFeatureEnabled && exif_gps_schema_ready();
     // $gpsMapOverrideReady stores whether GPS display supports inherited per-gallery overrides.
     $gpsMapOverrideReady = $gpsMapReady && exif_gps_override_schema_ready();
     // $flightMapReady stores this steps working value.
-    $flightMapReady = flight_map_schema_ready() && (!function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('flight_maps'));
+    $flightMapReady = $flightMapFeatureEnabled && flight_map_schema_ready();
     // $votingReady stores this steps working value.
-    $votingReady = gallery_voting_schema_ready() && (!function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('image_voting'));
+    $votingReady = $votingFeatureEnabled && gallery_voting_schema_ready();
     // $lightboxModeReady stores this steps working value.
-    $lightboxModeReady = gallery_lightbox_browsing_mode_schema_ready() && (!function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('lightbox_modes'));
+    $lightboxModeReady = $lightboxModeFeatureEnabled && gallery_lightbox_browsing_mode_schema_ready();
     // Structured gallery-access state prevents partial/unknown migrations from becoming permissive saves.
     $accessSchemaStatus = gallery_access_schema_status();
     $accessReady = schema_inspection_is_available($accessSchemaStatus);

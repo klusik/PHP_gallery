@@ -374,6 +374,7 @@ namespace {
     }
 
     $root = dirname(__DIR__);
+    require_once $root . '/tests/support/module_source.php';
     require_once $root . '/app/services/viewer_registration.php';
     require_once $root . '/app/services/viewer_http.php';
 
@@ -493,13 +494,13 @@ namespace {
     $requestHelpers = (string) file_get_contents($root . '/app/helpers_request.php');
     $layout = (string) file_get_contents($root . '/app/views/layout.php');
     $accountsService = (string) file_get_contents($root . '/app/services/viewer_accounts.php');
-    $featureFlags = (string) file_get_contents($root . '/app/services/feature_flags.php');
+    $featureFlags = module_source($root . '/app/services/feature_flags.php');
 
     // New route and clean routing are explicit and remain behind the global viewer feature wrapper.
     viewer_phase41_assert(str_contains($dispatch, "'viewer_register' => '\\\\Gallery\\\\Controllers\\\\cms_viewer_register'"), 'Dispatch must expose viewer_register through cms_viewer_register().');
     viewer_phase41_assert(str_contains($routing, "\$segments === ['viewer', 'register']") && str_contains($routing, "['page' => 'viewer_register'"), 'Clean /viewer/register input routing must resolve to viewer_register.');
     viewer_phase41_assert(str_contains($requestHelpers, "\$page === 'viewer_register'") && str_contains($requestHelpers, "base_url('viewer/register')"), 'Clean URL output must support /viewer/register when rewriting is enabled.');
-    viewer_phase41_assert(str_contains($featureFlags, "str_starts_with(\$page, 'viewer_')") && str_contains($featureFlags, "return 'viewer_accounts';"), 'Global Viewer Accounts feature wrapper must own the generic registration route.');
+    viewer_phase41_assert(preg_match("/'viewer_accounts'\s*=>\s*\[.*?'route_prefixes'\s*=>\s*\['viewer_'\]/s", $featureFlags) === 1, 'Global Viewer Accounts capability metadata must own the generic registration route.');
 
     $register = viewer_phase41_function_source($controller, 'cms_viewer_register');
     $deliver = viewer_phase41_function_source($controller, 'viewer_deliver_registration_verification');

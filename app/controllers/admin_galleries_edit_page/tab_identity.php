@@ -39,7 +39,7 @@ namespace Gallery\Controllers;
 
 use function Gallery\Core\e;
 use function Gallery\Core\render_admin_tab_panel;
-use function Gallery\Services\feature_flag_enabled;
+use function Gallery\Services\feature_capability_effective_enabled;
 use function Gallery\Services\gallery_date_input_value;
 use function Gallery\Services\gallery_date_schema_ready;
 use function Gallery\Services\gallery_folder_name_from_path;
@@ -81,7 +81,7 @@ function admin_edit_gallery_render_identity_tab(array $gallery, string $activeEd
     render_gallery_description_formatting_hint();
     view_render_content_localization_fields('gallery', $gallery);
     render_admin_simbrief_description_tool((int) $gallery['id']);
-    if ((!function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('openai_text_assist')) && function_exists('Gallery\\Views\\view_render_admin_openai_text_assist_tool')) {
+    if ((!function_exists('Gallery\\Services\\feature_capability_effective_enabled') || feature_capability_effective_enabled('openai_text_assist')) && function_exists('Gallery\\Views\\view_render_admin_openai_text_assist_tool')) {
         view_render_admin_openai_text_assist_tool((int) $gallery['id'], 0, 'gallery');
     }
     echo '</div>';
@@ -104,6 +104,10 @@ function admin_edit_gallery_render_identity_tab(array $gallery, string $activeEd
  */
 function admin_edit_gallery_render_smart_gallery_attachments(array $gallery): void
 {
+    if (function_exists('Gallery\Services\feature_capability_effective_enabled')
+        && !feature_capability_effective_enabled('smart_galleries')) {
+        return;
+    }
     if (!smart_gallery_schema_ready()) {
         return;
     }

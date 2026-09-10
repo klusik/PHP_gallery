@@ -13,6 +13,14 @@ namespace Gallery\Core {
 }
 
 namespace Gallery\Services {
+    $GLOBALS['content_localization_feature_enabled'] = true;
+
+    /** Return the isolated authored-content capability state. */
+    function feature_capability_effective_enabled(string $key): bool
+    {
+        return $key !== 'multilingual_content' || !empty($GLOBALS['content_localization_feature_enabled']);
+    }
+
     require_once dirname(__DIR__) . '/app/services/translations.php';
 
     /**
@@ -108,6 +116,19 @@ namespace Gallery\Services {
     content_localization_reset_request_cache();
     content_localize_entities('gallery', $rows, 'sv');
     content_test_same(2, $calls, 'Cache reset reloads rows');
+
+    $GLOBALS['content_localization_feature_enabled'] = false;
+    content_localization_reset_request_cache();
+    $disabledLocalized = content_localize_entities('gallery', $rows, 'sv');
+    content_test_same(2, $calls, 'Disabled authored-content localization skips the translation loader entirely');
+    content_test_same('Two', $disabledLocalized[0]['title'], 'Disabled localization renders canonical source title');
+    content_test_same('Second', $disabledLocalized[0]['description'], 'Disabled localization renders canonical source description');
+    content_test_same(['en', 'cs', 'de', 'sv'], content_supported_languages(), 'Maintained language catalog remains available while authored localization is disabled');
+    $GLOBALS['content_localization_feature_enabled'] = true;
+    content_localization_reset_request_cache();
+    $reenabledLocalized = content_localize_entities('gallery', $rows, 'sv');
+    content_test_same(3, $calls, 'Re-enabled authored localization resumes translation loading');
+    content_test_same('Ett', $reenabledLocalized[1]['title'], 'Re-enabled authored localization restores stored translated content');
 
     try {
         content_localization_storage('tag');

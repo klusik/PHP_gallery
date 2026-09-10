@@ -58,7 +58,7 @@ use function Gallery\Services\custom_css_url;
 use function Gallery\Services\dev_mode_enabled;
 use function Gallery\Services\favicon_asset_url;
 use function Gallery\Services\admin_test_run_active;
-use function Gallery\Services\feature_flag_enabled;
+use function Gallery\Services\feature_capability_effective_enabled;
 use function Gallery\Services\render_admin_test_run_panel;
 use function Gallery\Services\gallery_branding_asset_url;
 use function Gallery\Services\gallery_branding_schema_ready;
@@ -379,7 +379,7 @@ function view_render_header(string $title, ?array $currentGallery = null, bool $
             $updateClass = $updatePending ? ' class="is-update-pending"' : '';
             $updateLabel = application_update_nav_label($updatePending);
             echo '<a href="' . e(url_for('admin')) . '">' . e(t('nav.admin', 'Admin')) . '</a>';
-            if (in_array($page, ['gallery', 'smart_gallery'], true) && feature_flag_enabled('admin_test_runs')) {
+            if (in_array($page, ['gallery', 'smart_gallery'], true) && feature_capability_effective_enabled('admin_test_runs')) {
                 if (admin_test_run_active()) {
                     echo '<span class="button secondary is-disabled" aria-disabled="true">' . e(t('admin.test_run.running_button', 'Test run running')) . '</span>';
                 } else {

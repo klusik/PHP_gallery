@@ -40,6 +40,25 @@ PHP syntax validation is mandatory, but agents normally satisfy it through the c
 
 A direct `php -l path/to/file.php` is appropriate while diagnosing a syntax failure, while developing `scripts/audit.php` itself, or when the central runner is temporarily unusable but PHP CLI is available. If PHP is unavailable, do not claim syntax validation passed; report the central verification as blocked.
 
+## Capability Policy Guidelines
+
+`app/services/feature_flags.php` is the compatibility entry point for the canonical optional-capability policy implemented in `app/services/feature_flags/`. Before adding a new toggle, route guard, or feature-specific enable helper, search the registry and existing domain service first. Reuse an existing capability or storage owner when the new behavior is another surface of the same feature. Do not create a second setting merely because one controller needs a differently named check.
+
+When adding or changing a capability:
+
+1. Register the canonical key in `feature_capability_definitions()` and keep the key stable. Declare group, label, description, dependencies, explicit owned routes or prefixes, data-disable policy, behavior tags, and specialized Settings destination where applicable.
+2. Choose one storage owner. Plain capability switches use the existing `feature_flag.<key>.enabled` app-setting convention. Existing domain-owned masters must use a `domain_adapter`; an already established scalar may use an explicit `app_setting` source. Do not shadow an existing domain setting with a second feature flag. Derived/read-only state is not writable.
+3. Distinguish configured state from effective state. `feature_capability_configured_enabled()` is the persisted administrator preference. `feature_capability_effective_enabled()` additionally applies dependencies and is the normal runtime/UI availability check. Legacy `feature_flag_enabled()` intentionally means configured state for compatibility and must not be substituted for dependency-aware gating without reviewing the caller.
+4. Put route ownership in the canonical registry. Routes requiring more than one capability belong in `feature_capability_multi_route_requirements()` using `all_of` or `any_of`; do not approximate a compound requirement with one arbitrary owner. The dispatcher in `app/bootstrap/dispatch.php` enforces these requirements before controller execution.
+5. Master OFF is non-destructive unless a future design explicitly documents otherwise. Preserve subsystem rows, files, review ledgers, translations, tags, Trash contents, and subordinate preferences. Turning a capability back on should expose the same stored state.
+6. Hide capability-owned navigation and controls with the same effective policy that protects their actions. For shared pages containing both core and optional actions, gate the individual mutation or UI affordance rather than making the whole page optional. Read-only diagnostics may remain available when only destructive/installer actions are disabled.
+7. Preserve schema laziness. Admin > Features health may consume an already resolved schema state, but opening the page must not fan out optional table/column probes. Feature policy chooses availability; `schema_inspection.php`, mutation schema policy, and presentation schema policy remain the schema authorities.
+8. Fresh-install defaults are allowed only for writable persisted sources and are seeded through the existing lifecycle marker. An upgrade fallback and a fresh-install default are different concepts; do not rewrite an existing administrator preference during upgrade.
+9. Register global discoverability through the existing Admin Settings registry instead of creating a parallel Settings index. Specialized mutation pages remain the owner of their own complex settings and actions.
+10. Extend the focused capability contracts when registry structure, adapters, routes, dependency semantics, Admin health, or expensive OFF-path behavior changes. The authoritative handoff is still the central audit described above, not a manual stack of focused tests.
+
+Compatibility wrappers such as `feature_flag_enabled()`, `set_feature_flag_enabled()`, and `feature_flag_for_route()` remain intentionally supported because existing callers and tests use them. Do not remove or silently change their semantics unless all callers are migrated and the regression suite proves the compatibility contract can be retired.
+
 ## Admin Side-Panel Interaction Priority
 Treat the existing Admin right-side panel as the primary interaction surface for every action launched from that panel. When JavaScript is enabled, panel forms and buttons must complete in place through the existing side-panel/AJAX workflow: keep the panel open, do not navigate to a standalone Admin route, do not change `window.location`, and do not reload the page. A normal POST/redirect route may remain only as a non-JavaScript or direct-page fallback; it must not be the normal behavior of an action initiated inside the panel.
 

@@ -49,6 +49,7 @@ use function Gallery\Core\now_sql;
 use function Gallery\Core\redirect_to;
 use function Gallery\Core\require_admin;
 use function Gallery\Core\verify_csrf;
+use function Gallery\Services\feature_capability_effective_enabled;
 use function Gallery\Services\find_gallery;
 use function Gallery\Services\gallery_images;
 use function Gallery\Services\admin_log_event;
@@ -87,6 +88,11 @@ function cms_admin_reorder_images(): void
     $currentOrderedIds = array_map(static fn (array $image): int => (int) $image['id'], $currentRows);
     // $reorderScope stores whether this request is the full Admin table or the public visible-page path.
     $reorderScope = (string) ($_POST['reorder_scope'] ?? 'full');
+
+    if ($reorderScope === 'visible_page' && !feature_capability_effective_enabled('inline_administration')) {
+        admin_reorder_images_response(false, 'Inline administration on public pages is disabled.', $galleryId);
+        return;
+    }
 
     if ($reorderScope === 'visible_page') {
         // $visibleOffset stores the first image position rendered on the current pagination page.

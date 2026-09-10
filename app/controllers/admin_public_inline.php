@@ -69,7 +69,7 @@ use function Gallery\Services\gallery_trash_available;
 use function Gallery\Services\gallery_trash_schema_status;
 use function Gallery\Services\move_gallery_subtrees_to_trash;
 use function Gallery\Services\exif_gps_schema_ready;
-use function Gallery\Services\feature_flag_enabled;
+use function Gallery\Services\feature_capability_effective_enabled;
 use function Gallery\Services\find_gallery;
 use function Gallery\Services\find_image;
 use function Gallery\Services\gallery_visibility_storage_value;
@@ -87,6 +87,7 @@ use function Gallery\Services\tag_names_for_entity;
 use function Gallery\Services\thumbnail_bound_pair_from_post;
 use function Gallery\Services\thumbnail_bounds_schema_ready;
 use function Gallery\Services\thumbnail_url;
+use function Gallery\Services\content_localization_enabled;
 use function Gallery\Services\content_localization_schema_ready;
 use function Gallery\Services\content_save_localizations;
 use function Gallery\Views\view_render_admin_openai_text_assist_tool;
@@ -443,7 +444,7 @@ function cms_admin_public_update_image(): void
  */
 function render_admin_image_ai_metadata_panel(array $image): void
 {
-    if (function_exists('Gallery\\Services\\feature_flag_enabled') && !feature_flag_enabled('ai_image_metadata')) {
+    if (function_exists('Gallery\\Services\\feature_capability_effective_enabled') && !feature_capability_effective_enabled('ai_image_metadata')) {
         return;
     }
     if (!function_exists('Gallery\\Services\\ai_image_analysis_latest_metadata_for_image')) {
@@ -506,7 +507,8 @@ function cms_admin_edit_image(): void
     }
     if (request_method() === 'POST') {
         verify_csrf();
-        $shouldUpdateLocalization = array_key_exists('content_language', $_POST) || array_key_exists('translations', $_POST);
+        $shouldUpdateLocalization = content_localization_enabled()
+            && (array_key_exists('content_language', $_POST) || array_key_exists('translations', $_POST));
         if ($shouldUpdateLocalization && !content_localization_schema_ready('image')) {
             if (admin_wants_json()) {
                 admin_panel_error_response(t('admin.content_localization.save_unavailable', 'Multilingual content was not saved because its database migration is unavailable.'), 503);
@@ -515,7 +517,8 @@ function cms_admin_edit_image(): void
             flash_message('admin_notice', t('admin.content_localization.save_unavailable', 'Multilingual content was not saved because its database migration is unavailable.'));
             redirect_to(url_for('admin_edit_image', ['id' => $image['id']]));
         }
-        if (isset($_POST['editorial_rating'])) {
+        $smartGalleriesEnabled = feature_capability_effective_enabled('smart_galleries');
+        if ($smartGalleriesEnabled && isset($_POST['editorial_rating'])) {
             smart_gallery_assert_mutation_ready('image.editorial_rating');
         }
         if (!empty($_POST['nsfw_field_present']) && !nsfw_guard_schema_ready()) {
@@ -535,7 +538,7 @@ function cms_admin_edit_image(): void
             'visibility = ?' => $visibility,
             'sort_order = ?' => (int) $_POST['sort_order'],
         ];
-        if (isset($_POST['editorial_rating'])) {
+        if ($smartGalleriesEnabled && isset($_POST['editorial_rating'])) {
             $rating = max(0, min(5, (int) $_POST['editorial_rating']));
             $fields['editorial_rating = ?'] = $rating > 0 ? $rating : null;
         }
@@ -584,7 +587,7 @@ function cms_admin_edit_image(): void
         echo '<p class="muted">' . e(t('admin.gallery_editor.photo_nsfw_help', 'When enabled, anonymous visitors must confirm they are 18+ before this photo, thumbnail, or original media file is served. Before using NSFW content, please verify that your hosting provider or web hosting plan permits it, as adult content may violate their policies.')) . '</p>';
     }
     echo '<label>' . e(t('admin.gallery_editor.sort_order', 'Sort order')) . '<input name="sort_order" type="number" value="' . (int) $image['sort_order'] . '"></label>';
-    if (smart_gallery_schema_ready()) {
+    if (feature_capability_effective_enabled('smart_galleries') && smart_gallery_schema_ready()) {
         echo '<label>' . e(t('smart_gallery.editorial_rating', 'Editorial rating')) . '<select name="editorial_rating"><option value="0">' . e(t('smart_gallery.unrated', 'Unrated')) . '</option>';
         for ($ratingOption = 1; $ratingOption <= 5; $ratingOption++) {
             echo '<option value="' . $ratingOption . '"' . ((int) ($image['editorial_rating'] ?? 0) === $ratingOption ? ' selected' : '') . '>' . e(t('smart_gallery.rating_stars', '{count} stars', ['count' => $ratingOption])) . '</option>';

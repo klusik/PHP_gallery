@@ -68,7 +68,7 @@ use function Gallery\Services\current_votes_for_images;
 use function Gallery\Services\current_viewer;
 use function Gallery\Services\content_localize_entities;
 use function Gallery\Services\content_localize_entity;
-use function Gallery\Services\feature_flag_enabled;
+use function Gallery\Services\feature_capability_effective_enabled;
 use function Gallery\Services\download_capability_issue;
 use function Gallery\Services\find_gallery;
 use function Gallery\Services\find_gallery_by_folder_path;
@@ -280,7 +280,7 @@ function cms_gallery(): void
     $bottomSmartChildren = (array) ($smartAttachmentGroups['bottom'] ?? []);
     $smartGalleryCardContexts = smart_gallery_card_summaries(array_merge($topSmartChildren, $bottomSmartChildren), true);
     // $adminSubgalleryDateSortEnabled stores whether this viewer may use the date sort overlay.
-    $adminSubgalleryDateSortEnabled = current_user() && !admin_anonymous_preview_active();
+    $adminSubgalleryDateSortEnabled = current_user() && !admin_anonymous_preview_active() && feature_capability_effective_enabled('inline_administration');
     // $subgalleryDateSortMode stores the requested preview date sort mode for this page.
     $subgalleryDateSortMode = $adminSubgalleryDateSortEnabled ? public_subgallery_date_sort_mode() : '';
     // $datedSubgalleryCount stores how many direct children have a start date available for sorting.
@@ -438,9 +438,11 @@ function cms_gallery(): void
     render_public_gallery_admin_delete_form($gallery, 'hero');
     render_public_gallery_admin_edit_link($gallery, 'hero');
     render_public_gallery_admin_add_child_link($gallery, 'hero');
-    $downloadLabel = t('gallery.download', 'Download gallery');
-    $legacyDownloadCapability = download_capability_issue(DOWNLOAD_CAPABILITY_RESOURCE_GALLERY, (int) $gallery['id'], DOWNLOAD_CAPABILITY_SCOPE_LEGACY);
-    echo '<form class="public-download-legacy-form" method="post" action="' . e(url_for('download_gallery')) . '"><input type="hidden" name="id" value="' . (int) $gallery['id'] . '"><input type="hidden" name="capability" value="' . e($legacyDownloadCapability) . '"><button type="submit" class="button hero-icon-button hero-download-button" data-gallery-download data-gallery-download-start-url="' . e(url_for('download_gallery_start', ['id' => $gallery['id']])) . '" aria-label="' . e($downloadLabel) . '" title="' . e($downloadLabel) . '"><span aria-hidden="true">&#10515;</span><span class="visually-hidden">' . e($downloadLabel) . '</span></button></form>';
+    if (feature_capability_effective_enabled('downloads')) {
+        $downloadLabel = t('gallery.download', 'Download gallery');
+        $legacyDownloadCapability = download_capability_issue(DOWNLOAD_CAPABILITY_RESOURCE_GALLERY, (int) $gallery['id'], DOWNLOAD_CAPABILITY_SCOPE_LEGACY);
+        echo '<form class="public-download-legacy-form" method="post" action="' . e(url_for('download_gallery')) . '"><input type="hidden" name="id" value="' . (int) $gallery['id'] . '"><input type="hidden" name="capability" value="' . e($legacyDownloadCapability) . '"><button type="submit" class="button hero-icon-button hero-download-button" data-gallery-download data-gallery-download-start-url="' . e(url_for('download_gallery_start', ['id' => $gallery['id']])) . '" aria-label="' . e($downloadLabel) . '" title="' . e($downloadLabel) . '"><span aria-hidden="true">&#10515;</span><span class="visually-hidden">' . e($downloadLabel) . '</span></button></form>';
+    }
     if ($galleryMapAvailable) {
         echo '<button type="button" class="button secondary map-button" data-gallery-map-url="' . e($galleryMapUrl) . '" data-gallery-map-title="' . e((string) $gallery['title']) . '">' . e(t('gallery.show_map', 'Show gallery map')) . '</button>';
     }
@@ -467,11 +469,11 @@ function cms_gallery(): void
     render_public_gallery_preview_toolbar($gallery);
     render_public_search_bar($gallery);
     // Variable $publicPageReorderEnabled stores whether the logged-in admin can reorder visible public-page cards.
-    $publicPageReorderEnabled = current_user() && !admin_anonymous_preview_active();
+    $publicPageReorderEnabled = current_user() && !admin_anonymous_preview_active() && feature_capability_effective_enabled('inline_administration');
     // $publicSubgalleryReorderEnabled stores whether subgallery cards can expose drag ordering handles.
     $publicSubgalleryReorderEnabled = $publicPageReorderEnabled && $subgalleryDateSortMode === '';
     // $pictureManagerEnabled stores whether the logged-in viewer can select and manage visible photos.
-    $pictureManagerEnabled = current_user() && !admin_anonymous_preview_active() && (!function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('picture_manager'));
+    $pictureManagerEnabled = current_user() && !admin_anonymous_preview_active() && (!function_exists('Gallery\\Services\\feature_capability_effective_enabled') || feature_capability_effective_enabled('picture_manager'));
     if ($topSmartChildren || $children || $images || $bottomSmartChildren) {
         echo '<div class="gallery-list-frame" data-back-to-top-scope>';
         echo '<div class="gallery-list-content" data-back-to-top-list>';
@@ -499,7 +501,7 @@ function cms_gallery(): void
     // Variable $publicPhotoReorderEnabled stores whether visible photo cards should render drag handles.
     $publicPhotoReorderEnabled = $publicPageReorderEnabled && count($images) > 1;
     // $lightboxFeatureEnabled stores whether cards should open in the JavaScript lightbox instead of plain image URLs.
-    $lightboxFeatureEnabled = !function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('lightbox_modes');
+    $lightboxFeatureEnabled = !function_exists('Gallery\\Services\\feature_capability_effective_enabled') || feature_capability_effective_enabled('lightbox_modes');
     // $publicThumbnailRenderingMode stores the validated site-level picture strategy for selected-gallery photo cards.
     $publicThumbnailRenderingMode = public_thumbnail_rendering_mode();
     if ($images) {

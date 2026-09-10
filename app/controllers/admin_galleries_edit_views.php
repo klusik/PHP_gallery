@@ -67,7 +67,7 @@ use function Gallery\Services\ai_image_analysis_schema_ready;
 use function Gallery\Services\delete_gallery_branding_asset;
 use function Gallery\Services\exif_gps_override_schema_ready;
 use function Gallery\Services\exif_gps_schema_ready;
-use function Gallery\Services\feature_flag_enabled;
+use function Gallery\Services\feature_capability_effective_enabled;
 use function Gallery\Services\find_gallery;
 use function Gallery\Services\find_image;
 use function Gallery\Services\flight_map_schema_ready;
@@ -176,7 +176,7 @@ use function Gallery\Services\admin_log_event;
  */
 function render_admin_gallery_ai_reprocess_panel(array $gallery): void
 {
-    if (function_exists('Gallery\\Services\\feature_flag_enabled') && !feature_flag_enabled('ai_image_metadata')) {
+    if (function_exists('Gallery\\Services\\feature_capability_effective_enabled') && !feature_capability_effective_enabled('ai_image_metadata')) {
         return;
     }
     $galleryId = (int) ($gallery['id'] ?? 0);

@@ -65,7 +65,7 @@ use function Gallery\Services\admin_test_run_store_browser_payload;
 use function Gallery\Services\admin_test_run_target_with_params;
 use function Gallery\Services\admin_test_run_token_valid;
 use function Gallery\Services\admin_test_run_zip_path;
-use function Gallery\Services\feature_flag_enabled;
+use function Gallery\Services\feature_capability_effective_enabled;
 use function Gallery\Services\t;
 
 /**
@@ -99,7 +99,7 @@ function cms_admin_test_run_start(): void
     if (function_exists('Gallery\\Diagnostics\\admin_test_run_early_mark')) {
         \Gallery\Diagnostics\admin_test_run_early_mark('starter.authentication_complete');
     }
-    if (!feature_flag_enabled('admin_test_runs')) {
+    if (!feature_capability_effective_enabled('admin_test_runs')) {
         http_response_code(403);
         echo t('admin.test_run.disabled', 'Admin test runs are disabled in Features.');
         return;
@@ -162,7 +162,7 @@ function cms_admin_test_run_start(): void
 function cms_admin_test_run_probe(): void
 {
     require_admin();
-    if (!feature_flag_enabled('admin_test_runs')) {
+    if (!feature_capability_effective_enabled('admin_test_runs')) {
         admin_test_run_json_response(['ok' => false, 'error' => 'feature_disabled'], 403);
     }
     $context = admin_test_run_active_context();
@@ -193,7 +193,7 @@ function cms_admin_test_run_probe(): void
 function cms_admin_test_run_finish(): void
 {
     require_admin();
-    if (!feature_flag_enabled('admin_test_runs')) {
+    if (!feature_capability_effective_enabled('admin_test_runs')) {
         admin_test_run_json_response(['ok' => false, 'error' => 'feature_disabled'], 403);
     }
     if (request_method() !== 'POST') {
@@ -241,7 +241,7 @@ function cms_admin_test_run_finish(): void
 function cms_admin_test_run_finalize(): void
 {
     require_admin();
-    if (!feature_flag_enabled('admin_test_runs')) {
+    if (!feature_capability_effective_enabled('admin_test_runs')) {
         admin_test_run_json_response(['ok' => false, 'error' => 'feature_disabled'], 403);
     }
     if (request_method() !== 'POST') {

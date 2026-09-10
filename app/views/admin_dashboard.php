@@ -52,6 +52,7 @@ use function Gallery\Services\gallery_background_source;
 use function Gallery\Services\gallery_effective_gps_map_enabled;
 use function Gallery\Services\gallery_effective_visibility;
 use function Gallery\Services\gallery_visibility_label;
+use function Gallery\Services\feature_capability_effective_enabled;
 use function Gallery\Services\render_admin_render_profile_panel;
 use function Gallery\Services\t;
 use function Gallery\Services\url_rewrite_compatibility;
@@ -150,9 +151,15 @@ function view_render_admin_dashboard(array $model): void
     echo '<div class="bulk-row admin-gallery-controls">';
     echo '<label>' . e(t('admin.dashboard.filter', 'Filter')) . '<select data-gallery-visibility-filter><option value="all">' . e(t('admin.dashboard.filter_all_statuses', 'All statuses')) . '</option><option value="unpublished">' . e(t('admin.dashboard.filter_only_unpublished', 'Only unpublished')) . '</option><option value="public">' . e(t('admin.dashboard.filter_only_public', 'Only public')) . '</option><option value="private">' . e(t('admin.dashboard.filter_only_private', 'Only private')) . '</option></select></label>';
     echo '<span class="muted admin-gallery-filter-summary" data-gallery-filter-summary></span>';
-    echo '<label class="admin-gallery-select-all"><input type="checkbox" data-select-all="gallery_ids[]"> ' . e(t('admin.dashboard.select_displayed', 'Select displayed')) . '</label><label>' . e(t('admin.dashboard.bulk_action', 'Bulk action')) . '<select name="action"><option value="scan">' . e(t('admin.dashboard.bulk_scan_images', 'Scan/import images')) . '</option><option value="thumbs">' . e(t('admin.dashboard.bulk_create_thumbnails', 'Create thumbnails')) . '</option><option value="public">' . e(t('admin.dashboard.bulk_set_public', 'Set public')) . '</option><option value="unpublished">' . e(t('admin.dashboard.bulk_set_unpublished', 'Set unpublished')) . '</option><option value="private">' . e(t('admin.dashboard.bulk_set_private', 'Set private')) . '</option><option value="maps_on">' . e(t('admin.dashboard.bulk_enable_gps_maps', 'Force GPS maps on')) . '</option><option value="maps_off">' . e(t('admin.dashboard.bulk_disable_gps_maps', 'Force GPS maps off')) . '</option>' . ($gpsMapOverrideReady ? '<option value="maps_inherit">' . e(t('admin.dashboard.bulk_inherit_gps_maps', 'Use GPS map default')) . '</option>' : '') . '<option value="delete">' . e($galleryTrashEnabled
+    echo '<label class="admin-gallery-select-all"><input type="checkbox" data-select-all="gallery_ids[]"> ' . e(t('admin.dashboard.select_displayed', 'Select displayed')) . '</label><label>' . e(t('admin.dashboard.bulk_action', 'Bulk action')) . '<select name="action"><option value="scan">' . e(t('admin.dashboard.bulk_scan_images', 'Scan/import images')) . '</option><option value="thumbs">' . e(t('admin.dashboard.bulk_create_thumbnails', 'Create thumbnails')) . '</option><option value="public">' . e(t('admin.dashboard.bulk_set_public', 'Set public')) . '</option><option value="unpublished">' . e(t('admin.dashboard.bulk_set_unpublished', 'Set unpublished')) . '</option><option value="private">' . e(t('admin.dashboard.bulk_set_private', 'Set private')) . '</option><option value="delete">' . e($galleryTrashEnabled
         ? t('admin.dashboard.bulk_trash_selected', 'Move selected galleries to trash')
         : t('admin.dashboard.bulk_delete_selected', 'Delete selected galleries')) . '</option>';
+    if ($gpsMapReady) {
+        echo '<option value="maps_on">' . e(t('admin.dashboard.bulk_enable_gps_maps', 'Force GPS maps on')) . '</option><option value="maps_off">' . e(t('admin.dashboard.bulk_disable_gps_maps', 'Force GPS maps off')) . '</option>';
+        if ($gpsMapOverrideReady) {
+            echo '<option value="maps_inherit">' . e(t('admin.dashboard.bulk_inherit_gps_maps', 'Use GPS map default')) . '</option>';
+        }
+    }
     if ($filenameDisplayReady) {
         echo '<option value="filenames_on">' . e(t('admin.dashboard.bulk_show_file_names', 'Show file names')) . '</option><option value="filenames_off">' . e(t('admin.dashboard.bulk_hide_file_names', 'Hide file names')) . '</option>';
     }
@@ -288,6 +295,9 @@ function view_render_admin_exif_gps_defaults_card(string $className, bool $defau
  */
 function view_render_admin_gallery_dates_card(string $className): void
 {
+    if (!feature_capability_effective_enabled('exif_gallery_date_suggestions')) {
+        return;
+    }
     echo '<article class="' . e($className) . '"><strong>' . e(t('admin.dashboard.gallery_dates', 'Gallery dates')) . '</strong><span>' . e(t('admin.dashboard.gallery_dates_hint', 'Approve editable date ranges suggested from scanned EXIF capture dates, including subgalleries.')) . '</span><a class="button secondary" href="' . e(url_for('admin_gallery_dates')) . '">' . e(t('admin.dashboard.open_gallery_dates', 'Open gallery dates')) . '</a></article>';
 }
 

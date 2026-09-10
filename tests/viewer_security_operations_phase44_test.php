@@ -299,6 +299,7 @@ namespace {
     }
 
     $root = dirname(__DIR__);
+    require_once $root . '/tests/support/module_source.php';
     $GLOBALS['viewer_phase44_master_enabled'] = true;
     $GLOBALS['viewer_phase44_registration_mode'] = 'open';
     $GLOBALS['viewer_phase44_schema'] = [
@@ -449,12 +450,12 @@ namespace {
     $servicesBootstrap = (string) file_get_contents($root . '/app/services.php');
     $dispatch = (string) file_get_contents($root . '/app/bootstrap/dispatch.php');
     $routing = (string) file_get_contents($root . '/app/bootstrap/routing.php');
-    $featureFlags = (string) file_get_contents($root . '/app/services/feature_flags.php');
+    $featureFlags = module_source($root . '/app/services/feature_flags.php');
 
     viewer_phase44_assert(str_contains($viewerController, 'function cms_admin_viewer_invitations(): void') && str_contains($viewerController, 'require_admin();'), 'Operations must remain behind the existing Admin authentication boundary.');
     viewer_phase44_assert(substr_count($dispatch, "'admin_viewer_invitations' =>") === 1, 'Phase 4.4 must reuse the existing Admin Viewer route.');
     viewer_phase44_assert(!str_contains($dispatch, 'viewer_security_operations') && !str_contains($routing, 'viewer_security_operations'), 'Phase 4.4 must add no public or Viewer metrics route.');
-    viewer_phase44_assert(str_contains($featureFlags, "'admin_viewer_invitations' => 'viewer_accounts'"), 'Existing Viewer master feature ownership must remain authoritative for the Admin route.');
+    viewer_phase44_assert(preg_match("/'viewer_accounts'\s*=>\s*\[.*?'routes'\s*=>\s*\['admin_viewer_invitations'\]/s", $featureFlags) === 1, 'Existing Viewer master feature ownership must remain authoritative for the Admin route.');
     viewer_phase44_assert(str_contains($servicesBootstrap, 'viewer_security_operations.php'), 'The focused operations service must load through the shared service bootstrap.');
 
     foreach (['viewer_security_events', 'viewer_rate_limit_buckets', 'viewer_rate_limits', 'viewer_registration_requests', 'viewer_registration_state', 'viewer_account_state', 'viewer_accounts'] as $existingStore) {

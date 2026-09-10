@@ -50,7 +50,7 @@ const PUBLIC_HOME_SEARCH_SETTING = 'public_home_search_enabled';
  */
 function public_home_search_enabled(): bool
 {
-    if (function_exists('Gallery\\Services\\feature_flag_enabled') && !feature_flag_enabled('public_search')) {
+    if (function_exists('Gallery\\Services\\feature_capability_effective_enabled') && !feature_capability_effective_enabled('public_search')) {
         return false;
     }
     return app_setting(PUBLIC_HOME_SEARCH_SETTING, '0') === '1';
@@ -191,6 +191,22 @@ function public_search_like_pattern(string $query): string
 }
 
 /**
+ * Return whether local AI metadata may participate in public search.
+ *
+ * The capability master is checked before schema inspection so disabling local
+ * AI metadata preserves stored rows without continuing to query or rank by them.
+ *
+ * @return bool True when AI-backed search enrichment is available.
+ */
+function public_search_ai_metadata_ready(): bool
+{
+    if (function_exists(__NAMESPACE__ . '\\feature_capability_effective_enabled') && !feature_capability_effective_enabled('ai_image_metadata')) {
+        return false;
+    }
+    return function_exists(__NAMESPACE__ . '\\ai_image_analysis_schema_ready') && ai_image_analysis_schema_ready();
+}
+
+/**
  * Return gallery matches for the public search endpoint.
  *
  * @param string $query Query value.
@@ -203,7 +219,7 @@ function public_search_gallery_results(string $query, int $limit, ?array $contex
     $listingCondition = public_search_context_listing_sql_fragment('g', $contextGallery);
     $contextParams = public_search_context_params($contextGallery);
     $like = public_search_like_pattern($query);
-    $aiSearchReady = function_exists('Gallery\\Services\\ai_image_analysis_schema_ready') && ai_image_analysis_schema_ready();
+    $aiSearchReady = public_search_ai_metadata_ready();
     $aiJoin = $aiSearchReady ? 'LEFT JOIN image_ai_metadata public_image_ai ON public_image_ai.image_id = public_image.id' : '';
     $aiScoreSql = $aiSearchReady ? ', MAX(CASE WHEN public_image_ai.searchable_text LIKE ? THEN 10 ELSE 0 END) AS ai_score' : ', 0 AS ai_score';
     $aiWhereSql = $aiSearchReady ? ' OR public_image_ai.searchable_text LIKE ?' : '';
@@ -287,12 +303,14 @@ function public_search_image_results(string $query, int $limit, ?array $contextG
     $listingCondition = public_search_context_listing_sql_fragment('g', $contextGallery);
     $contextParams = public_search_context_params($contextGallery);
     $like = public_search_like_pattern($query);
-    $aiSearchReady = function_exists('Gallery\\Services\\ai_image_analysis_schema_ready') && ai_image_analysis_schema_ready();
+    $aiSearchReady = public_search_ai_metadata_ready();
     $aiJoin = $aiSearchReady ? 'LEFT JOIN image_ai_metadata image_ai ON image_ai.image_id = i.id' : '';
     $aiScoreSql = $aiSearchReady ? ', MAX(CASE WHEN image_ai.searchable_text LIKE ? THEN 14 ELSE 0 END) AS ai_score' : ', 0 AS ai_score';
     $aiWhereSql = $aiSearchReady ? ' OR image_ai.searchable_text LIKE ?' : '';
     $contentLanguage = translation_active_language();
-    $localizedSearchReady = content_localization_schema_ready('image') && content_localization_schema_ready('gallery');
+    $localizedSearchReady = content_localization_enabled()
+        && content_localization_schema_ready('image')
+        && content_localization_schema_ready('gallery');
     $localizedWhereSql = $localizedSearchReady ? ' OR EXISTS (SELECT 1 FROM image_translations content_image_translation WHERE content_image_translation.image_id = i.id AND content_image_translation.language_code = ? AND (content_image_translation.title LIKE ? OR content_image_translation.description LIKE ?)) OR EXISTS (SELECT 1 FROM gallery_translations content_gallery_translation WHERE content_gallery_translation.gallery_id = g.id AND content_gallery_translation.language_code = ? AND (content_gallery_translation.title LIKE ? OR content_gallery_translation.description LIKE ?))' : '';
     $sql = "SELECT i.*, g.id AS matched_gallery_id, g.parent_id AS matched_gallery_parent_id,
             g.folder_path AS matched_gallery_folder_path, g.folder_path_hash AS matched_gallery_folder_path_hash,

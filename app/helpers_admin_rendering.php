@@ -47,6 +47,7 @@ use function Gallery\Services\custom_css_url;
 use function Gallery\Services\dev_mode_enabled;
 use function Gallery\Services\dng_conversion_supported;
 use function Gallery\Services\favicon_asset_url;
+use function Gallery\Services\feature_capability_effective_enabled;
 use function Gallery\Services\feature_flag_enabled;
 use function Gallery\Services\find_gallery;
 use function Gallery\Services\gallery_branding_asset_url;
@@ -139,7 +140,7 @@ function admin_menu_structure(): array
             'items' => [
                 ['label' => t('admin.menu.logs', 'Logs'), 'page' => 'admin_logs', 'url' => url_for('admin_logs')],
                 ['label' => t('admin.menu.telemetry', 'Telemetry'), 'page' => 'admin_telemetry', 'url' => url_for('admin_telemetry'), 'feature' => 'telemetry'],
-                ['label' => t('admin.menu.gallery_report', 'Complete report'), 'page' => 'admin_gallery_report', 'url' => url_for('admin_gallery_report')],
+                ['label' => t('admin.menu.gallery_report', 'Complete report'), 'page' => 'admin_gallery_report', 'url' => url_for('admin_gallery_report'), 'feature' => 'complete_gallery_report'],
                 ['label' => t('admin.menu.integrity', 'Integrity'), 'page' => 'admin_integrity', 'url' => url_for('admin_integrity')],
                 ['label' => $updateLabel, 'page' => 'admin_update', 'url' => url_for('admin_update'), 'highlight' => $updatePending],
             ],
@@ -360,7 +361,11 @@ function render_admin_sidebar(string $currentPage): void
         foreach ((array) $group['items'] as $item) {
             // $featureKey stores the optional feature gate assigned to this menu item.
             $featureKey = (string) ($item['feature'] ?? '');
-            if ($featureKey !== '' && function_exists('Gallery\\Services\\feature_flag_enabled') && !feature_flag_enabled($featureKey)) {
+            $featureEnabled = $featureKey === ''
+                || (function_exists('Gallery\\Services\\feature_capability_effective_enabled')
+                    ? feature_capability_effective_enabled($featureKey)
+                    : (!function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled($featureKey)));
+            if (!$featureEnabled) {
                 continue;
             }
             // $activeClass stores an intermediate value used by the surrounding gallery workflow.
@@ -397,4 +402,3 @@ function render_missing_admin_email_notice(?array $user, string $currentPage): v
     echo ' <a href="' . e(url_for('admin_account')) . '">' . e(t('admin.account.open_account_settings', 'Open account settings')) . '</a>';
     echo '</div>';
 }
-

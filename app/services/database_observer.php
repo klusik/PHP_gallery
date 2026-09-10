@@ -112,6 +112,9 @@ function telemetry_sql_fingerprint(string $sql): string
  */
 function telemetry_record_db_query(string $sql, float $latencyMs, int $rowsReturned = 0, int $rowsAffected = 0, bool $failed = false): void
 {
+    if (function_exists(__NAMESPACE__ . '\\feature_capability_effective_enabled') && !feature_capability_effective_enabled('telemetry')) {
+        return;
+    }
     if (!telemetry_setting_enabled('telemetry_database_enabled', '1') || !telemetry_settings_schema_ready()) {
         return;
     }

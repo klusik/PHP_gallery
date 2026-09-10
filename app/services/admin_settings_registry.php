@@ -226,7 +226,7 @@ function admin_settings_specialized_catalog(): array
                 feature_flag_setting_key((string) $featureKey),
                 'summary',
                 '1',
-                feature_flag_enabled((string) $featureKey) ? '1' : '0',
+                feature_capability_configured_enabled((string) $featureKey) ? '1' : '0',
                 'admin_features'
             );
             $entries[$id]['discovery_only'] = true;
@@ -354,7 +354,7 @@ function admin_settings_registry(): array
         'public_language_selector_languages' => admin_settings_entry('public_language_selector_languages', 'general', 'Viewer languages', 'Languages offered for each public viewer\'s browser-only preference; Admin and site-wide language settings are unchanged.', 'public_language_selector_languages', 'language-multicheckbox', CMS_SELECTABLE_LANGUAGES, translation_public_language_selector_languages(), 'admin_theme', [], 'admin-theme-tab-language', true, 'normal', ['allowed' => translation_supported_languages()]),
         'public_language_selector_design' => admin_settings_entry('public_language_selector_design', 'general', 'Viewer selector design', 'Choose five live-preview presets; configure flags, names, codes, colors, padding, margins, borders, sizing, layout, and reset controls.', CMS_PUBLIC_LANGUAGE_SELECTOR_DESIGN_KEY, 'language-selector-design', translation_public_language_selector_design_defaults(), translation_public_language_selector_design(), 'admin_theme', [], 'admin-theme-tab-language', true),
         'url_rewrite_enabled' => admin_settings_entry('url_rewrite_enabled', 'general', 'Clean public URLs', 'Controls whether generated public links prefer URL rewriting.', 'url_rewrite_enabled', 'checkbox', '1', url_rewrite_enabled() ? '1' : '0', 'admin', [], 'admin-tab-maintenance', true),
-        'public_home_search_enabled' => admin_settings_entry('public_home_search_enabled', 'general', 'Public search', 'Shows the public search interface when the feature is enabled.', 'public_home_search_enabled', 'checkbox', '0', public_home_search_enabled() ? '1' : '0', 'admin', [], 'admin-tab-maintenance', (!function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('public_search'))),
+        'public_home_search_enabled' => admin_settings_entry('public_home_search_enabled', 'general', 'Public search', 'Shows the public search interface when the feature is enabled.', 'public_home_search_enabled', 'checkbox', '0', public_home_search_enabled() ? '1' : '0', 'admin', [], 'admin-tab-maintenance', (!function_exists('Gallery\\Services\\feature_capability_effective_enabled') || feature_capability_effective_enabled('public_search'))),
 
         'theme_page_width' => admin_settings_entry('theme_page_width', 'appearance', 'Page width', 'Global public page width mode.', 'theme_page_width', 'summary', 'default', (string) ($theme['page_width'] ?? 'default'), 'admin_theme', [], 'admin-theme-tab-appearance'),
         'theme_gallery_description_layout' => admin_settings_entry('theme_gallery_description_layout', 'appearance', 'Gallery card layout', 'Global gallery-card description layout used unless a more specific override applies.', 'theme_gallery_description_layout', 'summary', 'vertical', theme_gallery_description_layout(), 'admin_theme', [], 'admin-theme-tab-layout'),
@@ -374,6 +374,7 @@ function admin_settings_registry(): array
         'public_thumbnail_rendering_mode' => admin_settings_entry('public_thumbnail_rendering_mode', 'media', 'Public thumbnail renderer', 'Permanent rendering pipeline for selected-gallery photo cards.', PUBLIC_THUMBNAIL_RENDERING_SETTING_KEY, 'select', PUBLIC_THUMBNAIL_RENDERING_DEFAULT, public_thumbnail_rendering_mode(), 'admin_theme', [], 'admin-theme-tab-layout', true, 'normal', ['allowed' => public_thumbnail_rendering_modes()]),
         'theme_lightbox_browsing_mode' => admin_settings_entry('theme_lightbox_browsing_mode', 'media', 'Lightbox default mode', 'Global fallback for galleries without a lightbox browsing override.', 'theme_lightbox_browsing_mode', 'summary', 'single', theme_lightbox_browsing_mode(), 'admin_theme', [], 'admin-theme-tab-layout'),
         'exif_gps_maps_default_enabled' => admin_settings_entry('exif_gps_maps_default_enabled', 'media', 'EXIF / GPS public display', 'Global fallback used by galleries without an explicit GPS display override.', exif_gps_default_enabled_setting_key(), 'checkbox', '1', exif_gps_default_enabled() ? '1' : '0', 'admin', [], 'admin-tab-maintenance', exif_gps_override_schema_ready(), 'normal', [], !exif_gps_override_schema_ready()),
+        'thumbnail_background_warmup_enabled' => admin_settings_entry('thumbnail_background_warmup_enabled', 'media', 'Public thumbnail self-healing', 'Allows guarded public requests to request background repair of missing thumbnails. Existing installations retain the historical enabled fallback.', 'thumbnail_background_warmup_enabled', 'summary', '1', function_exists('Gallery\Services\thumbnail_warmup_enabled') && thumbnail_warmup_enabled() ? '1' : '0', 'admin', ['maintenance_tab' => 'media'], 'admin-tab-maintenance', false, 'operational'),
 
         'admin_upload_client_format_mode' => admin_settings_entry('admin_upload_client_format_mode', 'uploads', 'Upload source format policy', 'Controls which image formats the Admin upload picker accepts for client preparation.', 'admin_upload_client_format_mode', 'summary', 'server_supported', function_exists('Gallery\\Services\\admin_upload_client_format_mode') ? admin_upload_client_format_mode() : 'server_supported', 'admin_upload_settings', ['tab' => 'general']),
         'admin_upload_auto_rename_enabled' => admin_settings_entry('admin_upload_auto_rename_enabled', 'uploads', 'Automatic upload rename', 'Controls whether imported uploads are automatically renamed by the existing upload pipeline.', 'admin_upload_auto_rename_enabled', 'summary', '1', function_exists('Gallery\\Services\\admin_upload_auto_rename_enabled') && admin_upload_auto_rename_enabled() ? '1' : '0', 'admin_upload_settings', ['tab' => 'general']),
@@ -387,6 +388,12 @@ function admin_settings_registry(): array
         'seo_request_guard_enabled' => admin_settings_entry('seo_request_guard_enabled', 'privacy', 'SEO request guard', 'Rejects known junk or exploit-oriented public query patterns.', 'seo_request_guard_enabled', 'summary', '1', seo_request_guard_enabled() ? '1' : '0', 'admin', [], 'admin-tab-maintenance', false, 'security'),
         'seo_request_guard_logging_enabled' => admin_settings_entry('seo_request_guard_logging_enabled', 'privacy', 'SEO guard logging', 'Controls operational logging for rejected SEO-guard requests.', 'seo_request_guard_logging_enabled', 'summary', '1', seo_request_guard_logging_enabled() ? '1' : '0', 'admin', [], 'admin-tab-maintenance', false, 'security'),
         'dev_mode_enabled' => admin_settings_entry('dev_mode_enabled', 'privacy', 'Development diagnostics', 'Admin-only browser diagnostics and extra instrumentation.', 'dev_mode_enabled', 'checkbox', '0', dev_mode_enabled() ? '1' : '0', 'admin', [], 'admin-tab-maintenance', true, 'diagnostic'),
+        'remote_favicon_discovery_enabled' => admin_settings_entry('remote_favicon_discovery_enabled', 'privacy', 'Remote favicon discovery', 'Allow bounded outbound favicon discovery for unknown links after Admin gallery saves. Built-in and cached local favicons remain available.', 'remote_favicon_discovery_enabled', 'checkbox', '1', app_setting('remote_favicon_discovery_enabled', '1') !== '0' ? '1' : '0', 'admin_features', [], '', true, 'network'),
+        'gallery_trash_enabled' => admin_settings_entry('gallery_trash_enabled', 'privacy', 'Gallery Trash', 'Master switch for recoverable gallery deletion. Disabling it preserves existing Trash entries and subordinate purge settings.', 'gallery_trash_enabled', 'summary', '1', function_exists('Gallery\Services\gallery_trash_enabled') && gallery_trash_enabled() ? '1' : '0', 'admin_trash', [], '', false, 'operational'),
+        'gallery_trash_auto_purge_enabled' => admin_settings_entry('gallery_trash_auto_purge_enabled', 'privacy', 'Gallery Trash automatic purge', 'Independent preference for automatic expiry cleanup. It remains stored while the Trash master is disabled.', 'gallery_trash_auto_purge_enabled', 'summary', '0', function_exists('Gallery\Services\gallery_trash_auto_purge_enabled') && gallery_trash_auto_purge_enabled() ? '1' : '0', 'admin_trash', [], '', false, 'destructive'),
+        'gallery_trash_retention_days' => admin_settings_entry('gallery_trash_retention_days', 'privacy', 'Gallery Trash retention', 'Number of days retained when automatic purge is enabled.', 'gallery_trash_retention_days', 'summary', '30', function_exists('Gallery\Services\gallery_trash_retention_days') ? (string) gallery_trash_retention_days() : '30', 'admin_trash', [], '', false, 'destructive'),
+        'gallery_trash_purge_batch' => admin_settings_entry('gallery_trash_purge_batch', 'privacy', 'Gallery Trash purge batch', 'Maximum number of expired Trash entries removed by one automatic purge batch.', 'gallery_trash_purge_batch', 'summary', '5', function_exists('Gallery\Services\gallery_trash_purge_batch_size') ? (string) gallery_trash_purge_batch_size() : '5', 'admin_trash', [], '', false, 'destructive'),
+        'application_autoupdate_enabled' => admin_settings_entry('application_autoupdate_enabled', 'privacy', 'Automatic stable updates', 'Master preference for request-time automatic stable update checks and installation.', 'application_autoupdate_enabled', 'summary', '1', function_exists('Gallery\Services\application_autoupdate_enabled') && application_autoupdate_enabled() ? '1' : '0', 'admin_update', [], '', false, 'outbound-network'),
         'site_maintenance_enabled' => admin_settings_entry('site_maintenance_enabled', 'privacy', 'Scheduled site maintenance', 'Non-destructive schedule status for bounded background repair work. Execution and token controls remain specialized.', 'site_maintenance_enabled', 'summary', '1', function_exists('Gallery\\Services\\site_maintenance_enabled') && site_maintenance_enabled() ? '1' : '0', 'admin', [], 'admin-tab-maintenance', false, 'operational'),
 
         'password_reset_smtp_password' => admin_settings_entry('password_reset_smtp_password', 'advanced', 'SMTP password', 'Credential is managed only from Account settings.', 'password_reset_smtp_password', 'secret-status', '', admin_settings_sensitive_status('password_reset_smtp_password'), 'admin_account', [], '', false, 'secret'),
@@ -411,7 +418,7 @@ function admin_settings_registry(): array
  */
 function admin_settings_owner_for_id(string $id): string
 {
-    if (in_array($id, ['site_name', 'url_rewrite_enabled', 'dev_mode_enabled'], true)) {
+    if (in_array($id, ['site_name', 'url_rewrite_enabled', 'dev_mode_enabled', 'remote_favicon_discovery_enabled'], true)) {
         return 'app_settings';
     }
     if ($id === 'public_language' || str_starts_with($id, 'public_language_selector_')) {
@@ -564,7 +571,7 @@ function admin_settings_normalize_editable_value(array $entry, mixed $value): mi
     if ($id === 'public_thumbnail_rendering_mode') {
         return public_thumbnail_rendering_mode_normalize($value);
     }
-    if (in_array($id, ['url_rewrite_enabled', 'public_home_search_enabled', 'exif_gps_maps_default_enabled', 'dev_mode_enabled'], true)) {
+    if (in_array($id, ['url_rewrite_enabled', 'public_home_search_enabled', 'exif_gps_maps_default_enabled', 'dev_mode_enabled', 'remote_favicon_discovery_enabled'], true)) {
         return !empty($value) ? '1' : '0';
     }
 
@@ -579,7 +586,7 @@ function admin_settings_normalize_editable_value(array $entry, mixed $value): mi
  */
 function admin_settings_save_editable_value(string $id, mixed $value): void
 {
-    if ($id === 'public_home_search_enabled' && function_exists('Gallery\\Services\\feature_flag_enabled') && !feature_flag_enabled('public_search')) {
+    if ($id === 'public_home_search_enabled' && function_exists('Gallery\\Services\\feature_capability_effective_enabled') && !feature_capability_effective_enabled('public_search')) {
         throw new InvalidArgumentException('Public search is not available.');
     }
     if ($id === 'exif_gps_maps_default_enabled' && !exif_gps_override_schema_ready()) {
@@ -597,6 +604,7 @@ function admin_settings_save_editable_value(string $id, mixed $value): void
         'public_thumbnail_rendering_mode' => public_thumbnail_rendering_mode_save_with_revision((string) $value),
         'exif_gps_maps_default_enabled' => set_exif_gps_default_enabled((string) $value === '1'),
         'dev_mode_enabled' => set_dev_mode_enabled((string) $value === '1'),
+        'remote_favicon_discovery_enabled' => set_app_setting('remote_favicon_discovery_enabled', (string) $value === '1' ? '1' : '0'),
         default => throw new InvalidArgumentException('Unknown or non-editable central setting.'),
     };
 }

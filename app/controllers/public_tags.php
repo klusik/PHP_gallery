@@ -43,6 +43,7 @@ use function Gallery\Core\e;
 use function Gallery\Core\render_footer;
 use function Gallery\Core\render_header;
 use function Gallery\Core\url_for;
+use function Gallery\Services\feature_capability_effective_enabled;
 use function Gallery\Services\find_tag_by_slug;
 use function Gallery\Services\pagination_current_page;
 use function Gallery\Services\pagination_grid_columns_class;
@@ -181,8 +182,13 @@ function render_tag_list(array $tags, ?string $label = null): void
     if ($label !== null) {
         echo '<span class="tag-list-label">' . e($label) . '</span>';
     }
+    $publicTagBrowsingEnabled = feature_capability_effective_enabled('public_tag_browsing');
     foreach ($tags as $tag) {
-        echo '<a class="tag" href="' . e(url_for('tag', ['slug' => $tag['slug']])) . '">' . e($tag['name']) . '</a>';
+        if ($publicTagBrowsingEnabled) {
+            echo '<a class="tag" href="' . e(url_for('tag', ['slug' => $tag['slug']])) . '">' . e($tag['name']) . '</a>';
+        } else {
+            echo '<span class="tag">' . e($tag['name']) . '</span>';
+        }
     }
     echo '</p>';
 }
@@ -209,8 +215,13 @@ function render_compact_tag_list(array $tags, int $visibleLimit = 3): void
     $hiddenCount = max(0, count($tags) - count($visibleTags));
 
     echo '<p class="tag-list tag-list-compact">';
+    $publicTagBrowsingEnabled = feature_capability_effective_enabled('public_tag_browsing');
     foreach ($visibleTags as $tag) {
-        echo '<a class="tag" href="' . e(url_for('tag', ['slug' => $tag['slug']])) . '">' . e($tag['name']) . '</a>';
+        if ($publicTagBrowsingEnabled) {
+            echo '<a class="tag" href="' . e(url_for('tag', ['slug' => $tag['slug']])) . '">' . e($tag['name']) . '</a>';
+        } else {
+            echo '<span class="tag">' . e($tag['name']) . '</span>';
+        }
     }
     if ($hiddenCount > 0) {
         echo '<span class="tag tag-more" title="' . e(t('gallery.more_tags', '{count} more tags', ['count' => $hiddenCount])) . '" aria-label="' . e(t('gallery.more_tags', '{count} more tags', ['count' => $hiddenCount])) . '">...</span>';

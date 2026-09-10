@@ -184,10 +184,13 @@ function viewer_accounts_config(): array
  */
 function viewer_accounts_master_feature_enabled(): bool
 {
-    if (!function_exists(__NAMESPACE__ . '\\feature_flag_enabled')) {
-        return true;
+    if (function_exists(__NAMESPACE__ . '\\feature_capability_effective_enabled')) {
+        return feature_capability_effective_enabled('viewer_accounts');
     }
-    return feature_flag_enabled('viewer_accounts');
+    if (function_exists(__NAMESPACE__ . '\\feature_flag_enabled')) {
+        return feature_flag_enabled('viewer_accounts');
+    }
+    return true;
 }
 
 /**

@@ -46,10 +46,11 @@ use function Gallery\Core\admin_mutation_success_envelope;
 use function Gallery\Core\flash_message;
 use function Gallery\Core\gallery_public_url;
 use function Gallery\Core\redirect_to;
+use function Gallery\Core\url_for;
 use function Gallery\Core\verify_csrf;
 use function Gallery\Services\ai_image_analysis_force_gallery_reprocess;
 use function Gallery\Services\ai_image_analysis_schema_ready;
-use function Gallery\Services\feature_flag_enabled;
+use function Gallery\Services\feature_capability_effective_enabled;
 use function Gallery\Services\find_gallery;
 use function Gallery\Services\gallery_lightbox_state_summary;
 use function Gallery\Services\media_renamer_execute_gallery;
@@ -84,14 +85,27 @@ function admin_edit_gallery_handle_post(array $gallery, array $capabilities): vo
     // $returnTab stores the tab fragment used after saving the gallery editor form.
     $returnTab = admin_return_tab_from_post('admin-edit-identity');
     if ((string) ($_POST['action'] ?? '') === 'apply_exif_date_suggestion') {
+        if (!feature_capability_effective_enabled('exif_gallery_date_suggestions')) {
+            flash_message('admin_notice', t('admin.features.disabled_route_message', 'This feature is disabled in Admin > Features: {feature}', [
+                'feature' => t('admin.features.exif_gallery_date_suggestions.label', 'EXIF Gallery Date Suggestions'),
+            ]));
+            redirect_to(url_for('admin_edit_gallery', ['id' => (int) $gallery['id']]));
+        }
         admin_apply_gallery_date_exif_suggestion($gallery);
         return;
     }
-    if ((string) ($_POST['action'] ?? '') === 'apply_metadata_organizer_date_plan_batch') {
-        admin_apply_gallery_metadata_organizer_date_plan_batch($gallery);
-        return;
-    }
-    if ((string) ($_POST['action'] ?? '') === 'apply_metadata_organizer_date_plan') {
+    if ((string) ($_POST['action'] ?? '') === 'apply_metadata_organizer_date_plan_batch'
+        || (string) ($_POST['action'] ?? '') === 'apply_metadata_organizer_date_plan') {
+        if (!feature_capability_effective_enabled('metadata_organizer')) {
+            flash_message('admin_notice', t('admin.features.disabled_route_message', 'This feature is disabled in Admin > Features: {feature}', [
+                'feature' => t('admin.features.metadata_organizer.label', 'Metadata Organizer'),
+            ]));
+            redirect_to(url_for('admin_edit_gallery', ['id' => (int) $gallery['id']]));
+        }
+        if ((string) $_POST['action'] === 'apply_metadata_organizer_date_plan_batch') {
+            admin_apply_gallery_metadata_organizer_date_plan_batch($gallery);
+            return;
+        }
         admin_apply_gallery_metadata_organizer_date_plan($gallery, $returnTab);
         return;
     }
@@ -121,7 +135,7 @@ function admin_edit_gallery_handle_post(array $gallery, array $capabilities): vo
 function admin_edit_gallery_handle_ai_reprocess(array $gallery): void
 {
     $aiEditUrl = admin_edit_gallery_tab_url((int) $gallery['id'], 'admin-edit-api');
-    if (function_exists('Gallery\\Services\\feature_flag_enabled') && !feature_flag_enabled('ai_image_metadata')) {
+    if (function_exists('Gallery\\Services\\feature_capability_effective_enabled') && !feature_capability_effective_enabled('ai_image_metadata')) {
         $message = t('admin.gallery_editor.ai_reprocess_disabled', 'AI metadata is disabled in Admin > Features.');
         if (admin_wants_json()) {
             header('Content-Type: application/json; charset=utf-8');
@@ -309,15 +323,17 @@ function admin_edit_gallery_handle_save(array $gallery, string $returnTab): void
 {
     try {
         // Preflight Smart Gallery attachment schema and graph validation before any gallery mutation.
+        $smartGalleriesEnabled = !function_exists('Gallery\Services\feature_capability_effective_enabled')
+            || feature_capability_effective_enabled('smart_galleries');
         $smartGalleryChildrenInput = (array) ($_POST['smart_gallery_children'] ?? []);
-        if (isset($_POST['smart_gallery_children_present'])) {
+        if ($smartGalleriesEnabled && isset($_POST['smart_gallery_children_present'])) {
             $proposedSmartGalleryParentId = (int) ($_POST['parent_id'] ?? 0);
             if ($proposedSmartGalleryParentId > 0 && !find_gallery($proposedSmartGalleryParentId)) $proposedSmartGalleryParentId = 0;
             smart_gallery_validate_children_assignment((int) $gallery['id'], $smartGalleryChildrenInput, $proposedSmartGalleryParentId > 0 ? $proposedSmartGalleryParentId : null, true);
         }
         // $saveResult stores the shared gallery save outcome used by both page and panel workflows.
         $saveResult = admin_save_gallery_from_input($gallery, $_POST, $_FILES, $returnTab, true);
-        if (isset($_POST['smart_gallery_children_present'])) {
+        if ($smartGalleriesEnabled && isset($_POST['smart_gallery_children_present'])) {
             smart_gallery_assign_children_to_gallery((int) $gallery['id'], $smartGalleryChildrenInput);
         }
     } catch (Throwable $exception) {

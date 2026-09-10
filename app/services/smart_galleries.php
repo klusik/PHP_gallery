@@ -40,8 +40,12 @@ function smart_gallery_presentation_schema_ready(): bool
 function smart_gallery_presentation_defaults(): array
 {
     $pagination = pagination_global_settings(['listing' => 'smart_gallery']);
-    $lightboxFeatureEnabled = !function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('lightbox_modes');
-    $downloadFeatureEnabled = !function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('downloads');
+    $lightboxFeatureEnabled = function_exists('Gallery\\Services\\feature_capability_effective_enabled')
+        ? feature_capability_effective_enabled('lightbox_modes')
+        : (!function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('lightbox_modes'));
+    $downloadFeatureEnabled = function_exists('Gallery\\Services\\feature_capability_effective_enabled')
+        ? feature_capability_effective_enabled('downloads')
+        : (!function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('downloads'));
 
     return [
         'grid_columns' => (int) $pagination['columns'],
@@ -127,6 +131,23 @@ function smart_gallery_effective_presentation(array $gallery): array
     $effective['grid_columns_enabled'] = true;
     $effective['grid_source'] = $overrides === [] ? 'theme' : 'smart_gallery';
     $effective['source'] = $effective['grid_source'];
+
+    // Global capability masters are applied after local Smart Gallery overrides.
+    // Stored local preferences remain untouched and become effective again when the master is re-enabled.
+    $lightboxMasterEnabled = function_exists('Gallery\\Services\\feature_capability_effective_enabled')
+        ? feature_capability_effective_enabled('lightbox_modes')
+        : (!function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('lightbox_modes'));
+    $downloadMasterEnabled = function_exists('Gallery\\Services\\feature_capability_effective_enabled')
+        ? feature_capability_effective_enabled('downloads')
+        : (!function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('downloads'));
+    $votingMasterEnabled = function_exists('Gallery\\Services\\feature_capability_effective_enabled')
+        ? feature_capability_effective_enabled('image_voting')
+        : (!function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('image_voting'));
+    $effective['lightbox_enabled'] = !empty($effective['lightbox_enabled']) && $lightboxMasterEnabled;
+    $effective['slideshow_enabled'] = !empty($effective['slideshow_enabled']) && $effective['lightbox_enabled'];
+    $effective['download_enabled'] = !empty($effective['download_enabled']) && $downloadMasterEnabled;
+    $effective['voting_enabled'] = !empty($effective['voting_enabled']) && $votingMasterEnabled;
+
     return $effective;
 }
 
@@ -977,6 +998,10 @@ function smart_gallery_find(int $id): ?array
 /** Find one enabled published definition by slug. */
 function smart_gallery_find_public(string $slug): ?array
 {
+    if (function_exists('Gallery\Services\feature_capability_effective_enabled')
+        && !feature_capability_effective_enabled('smart_galleries')) {
+        return null;
+    }
     if (!smart_gallery_schema_ready()) return null;
     $stmt = db()->prepare("SELECT * FROM smart_galleries WHERE slug = ? AND enabled = 1 AND visibility = 'public' LIMIT 1");
     $stmt->execute([$slug]);
@@ -987,6 +1012,10 @@ function smart_gallery_find_public(string $slug): ?array
 /** Find one enabled published definition by trusted database id. */
 function smart_gallery_find_public_by_id(int $id): ?array
 {
+    if (function_exists('Gallery\Services\feature_capability_effective_enabled')
+        && !feature_capability_effective_enabled('smart_galleries')) {
+        return null;
+    }
     if ($id <= 0 || !smart_gallery_schema_ready()) return null;
     $stmt = db()->prepare("SELECT * FROM smart_galleries WHERE id = ? AND enabled = 1 AND visibility = 'public' LIMIT 1");
     $stmt->execute([$id]);
@@ -1092,6 +1121,10 @@ function smart_gallery_attachment_rows_for_gallery(int $galleryId): array
 /** Return published Smart Galleries assigned to the public root or one physical parent gallery. */
 function smart_galleries_for_placement(?int $parentGalleryId, bool $publicOnly): array
 {
+    if (function_exists('Gallery\Services\feature_capability_effective_enabled')
+        && !feature_capability_effective_enabled('smart_galleries')) {
+        return [];
+    }
     if (!smart_gallery_schema_ready()) return [];
     $join = '';
     $where = "sg.placement_mode = 'root'";

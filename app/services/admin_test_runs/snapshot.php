@@ -320,7 +320,7 @@ function admin_test_run_subsystem_snapshot(): array
         if (function_exists(__NAMESPACE__ . '\\feature_flag_definitions')) {
             foreach (feature_flag_definitions() as $key => $definition) {
                 $snapshot['features'][(string) $key] = [
-                    'enabled' => feature_flag_enabled((string) $key),
+                    'enabled' => feature_capability_configured_enabled((string) $key),
                     'default_enabled' => feature_flag_default_enabled((string) $key),
                     'group' => (string) ($definition['group'] ?? ''),
                 ];

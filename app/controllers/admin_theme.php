@@ -39,7 +39,7 @@ namespace Gallery\Controllers;
 
 use function Gallery\Core\request_method;
 use function Gallery\Core\require_admin;
-use function Gallery\Services\feature_flag_enabled;
+use function Gallery\Services\feature_capability_effective_enabled;
 
 require_once __DIR__ . '/admin_theme_actions.php';
 require_once __DIR__ . '/admin_theme_appearance.php';
@@ -56,9 +56,9 @@ function cms_admin_theme(): void
 {
     require_admin();
     // $gpsMapsFeatureEnabled stores whether GPS-related theme controls should be visible and saved.
-    $gpsMapsFeatureEnabled = !function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('gallery_maps');
+    $gpsMapsFeatureEnabled = !function_exists('Gallery\\Services\\feature_capability_effective_enabled') || feature_capability_effective_enabled('gallery_maps');
     // $lightboxModesFeatureEnabled stores whether lightbox browsing-mode theme controls should be visible and saved.
-    $lightboxModesFeatureEnabled = !function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('lightbox_modes');
+    $lightboxModesFeatureEnabled = !function_exists('Gallery\\Services\\feature_capability_effective_enabled') || feature_capability_effective_enabled('lightbox_modes');
 
     if (isset($_GET['download_language_pack'])) {
         admin_theme_download_language_pack();

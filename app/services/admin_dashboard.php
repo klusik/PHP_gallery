@@ -161,14 +161,20 @@ function admin_dashboard_view_model(bool $includeMaintenance = false): array
     $presentationSchemaStatuses = admin_presentation_schema_health_statuses();
     // $nsfwSchemaStatus retains the established key for compatibility with existing view/tests.
     $nsfwSchemaStatus = $securitySchemaStatuses['nsfw_guard'];
+    // $pictureGameEnabled short-circuits optional schema inspection while the effective capability is unavailable.
+    $pictureGameEnabled = !function_exists('Gallery\\Services\\feature_capability_effective_enabled') || feature_capability_effective_enabled('picture_game');
     // Variable $pictureGameReady stores this steps working value.
-    $pictureGameReady = admin_render_profile_schema('schema_picture_game', static fn (): bool => picture_game_schema_ready()) && (!function_exists('Gallery\\Services\\feature_flag_enabled') || (feature_flag_enabled('picture_game') && feature_flag_enabled('image_voting')));
+    $pictureGameReady = $pictureGameEnabled && admin_render_profile_schema('schema_picture_game', static fn (): bool => picture_game_schema_ready());
+    // $gpsMapEnabled short-circuits optional schema inspection while the effective capability is unavailable.
+    $gpsMapEnabled = !function_exists('Gallery\\Services\\feature_capability_effective_enabled') || feature_capability_effective_enabled('gallery_maps');
     // Variable $gpsMapReady stores this steps working value.
-    $gpsMapReady = admin_render_profile_schema('schema_exif_gps', static fn (): bool => exif_gps_schema_ready()) && (!function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('gallery_maps'));
+    $gpsMapReady = $gpsMapEnabled && admin_render_profile_schema('schema_exif_gps', static fn (): bool => exif_gps_schema_ready());
     // $gpsMapOverrideReady stores whether EXIF/GPS display supports inherited per-gallery overrides.
     $gpsMapOverrideReady = $includeMaintenance && $gpsMapReady && admin_render_profile_schema('schema_exif_gps_overrides', static fn (): bool => exif_gps_override_schema_ready());
+    // $votingEnabled short-circuits optional schema inspection while the effective capability is unavailable.
+    $votingEnabled = !function_exists('Gallery\\Services\\feature_capability_effective_enabled') || feature_capability_effective_enabled('image_voting');
     // Variable $votingReady stores this steps working value.
-    $votingReady = admin_render_profile_schema('schema_gallery_voting', static fn (): bool => gallery_voting_schema_ready()) && (!function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('image_voting'));
+    $votingReady = $votingEnabled && admin_render_profile_schema('schema_gallery_voting', static fn (): bool => gallery_voting_schema_ready());
     // Variable $filenameDisplayReady stores this steps working value.
     $filenameDisplayReady = admin_render_profile_schema('schema_filename_display', static fn (): bool => gallery_filename_display_schema_ready());
     // $galleryDateRangeReady stores whether gallery rows can store range end dates.
@@ -183,8 +189,10 @@ function admin_dashboard_view_model(bool $includeMaintenance = false): array
     $publicPathReady = admin_render_profile_schema('schema_public_paths', static fn (): bool => public_path_schema_ready());
     // $coverAssetReady stores whether uploaded gallery cover assets can be shown in the admin gallery list.
     $coverAssetReady = admin_render_profile_schema('schema_cover_asset', static fn (): bool => gallery_cover_asset_schema_ready());
+    // $flightNavdataEnabled short-circuits optional schema inspection while the effective capability is unavailable.
+    $flightNavdataEnabled = !function_exists('Gallery\\Services\\feature_capability_effective_enabled') || feature_capability_effective_enabled('navigation_data');
     // $flightNavdataReady stores whether route lookup data can be imported and read from the DB.
-    $flightNavdataReady = $includeMaintenance && admin_render_profile_schema('schema_flight_navdata', static fn (): bool => flight_map_navdata_schema_ready()) && (!function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('navigation_data'));
+    $flightNavdataReady = $includeMaintenance && $flightNavdataEnabled && admin_render_profile_schema('schema_flight_navdata', static fn (): bool => flight_map_navdata_schema_ready());
     // $flightNavdataStatus stores maintenance information for the admin navdata card.
     $flightNavdataStatus = $flightNavdataReady ? admin_render_profile_db('flight_navdata_status', static fn (): array => flight_map_navdata_status()) : [];
     // $exifGpsDefaultEnabled stores the global display default for galleries without explicit overrides.
@@ -451,21 +459,32 @@ function admin_mutation_schema_health_statuses(): array
 {
     $requestId = function_exists('Gallery\Services\telemetry_request_id') ? telemetry_request_id() : '';
     $definitions = [
-        'mutation_gallery_delete' => gallery_deletion_schema_status(),
-        'mutation_gallery_trash' => gallery_trash_schema_status(),
-        'mutation_gallery_move' => gallery_move_schema_status(),
-        'mutation_duplicate_photo_ledger' => duplicate_photo_ledger_schema_status(),
-        'mutation_upload_ingestion' => upload_ingestion_schema_status(),
-        'mutation_upload_automation' => upload_automation_schema_status(),
-        'mutation_gallery_migration' => gallery_migration_schema_status(),
-        'mutation_mobile_webdav' => mobile_webdav_schema_status(),
-        'mutation_thumbnail_metadata' => thumbnail_metadata_mutation_schema_status(),
-        'mutation_database_maintenance' => database_maintenance_mutation_schema_status(),
-        'mutation_application_update' => application_update_activation_schema_status(),
+        'mutation_gallery_delete' => ['resolver' => static fn (): array => gallery_deletion_schema_status(), 'flag' => ''],
+        // Trash recovery remains intentionally available while the soft-delete master is OFF.
+        'mutation_gallery_trash' => ['resolver' => static fn (): array => gallery_trash_schema_status(), 'flag' => ''],
+        'mutation_gallery_move' => ['resolver' => static fn (): array => gallery_move_schema_status(), 'flag' => ''],
+        'mutation_duplicate_photo_ledger' => ['resolver' => static fn (): array => duplicate_photo_ledger_schema_status(), 'flag' => 'duplicate_photo_detector'],
+        'mutation_upload_ingestion' => ['resolver' => static fn (): array => upload_ingestion_schema_status(), 'flag' => ''],
+        'mutation_upload_automation' => ['resolver' => static fn (): array => upload_automation_schema_status(), 'flag' => 'upload_api'],
+        'mutation_gallery_migration' => ['resolver' => static fn (): array => gallery_migration_schema_status(), 'flag' => 'gallery_migration'],
+        'mutation_mobile_webdav' => ['resolver' => static fn (): array => mobile_webdav_schema_status(), 'flag' => 'mobile_webdav'],
+        'mutation_thumbnail_metadata' => ['resolver' => static fn (): array => thumbnail_metadata_mutation_schema_status(), 'flag' => ''],
+        'mutation_database_maintenance' => ['resolver' => static fn (): array => database_maintenance_mutation_schema_status(), 'flag' => 'advanced_database_maintenance'],
+        'mutation_application_update' => ['resolver' => static fn (): array => application_update_activation_schema_status(), 'flag' => 'built_in_update_installer'],
     ];
 
     $statuses = [];
-    foreach ($definitions as $feature => $schemaStatus) {
+    foreach ($definitions as $feature => $definition) {
+        $flag = trim((string) ($definition['flag'] ?? ''));
+        $enabled = $flag === ''
+            || !function_exists('Gallery\Services\feature_capability_effective_enabled')
+            || feature_capability_effective_enabled($flag);
+        if (!$enabled) {
+            $statuses[$feature] = admin_schema_health_model([], $feature, false);
+            continue;
+        }
+        $resolver = $definition['resolver'] ?? null;
+        $schemaStatus = is_callable($resolver) ? $resolver() : ['state' => 'unknown'];
         $statuses[$feature] = admin_schema_health_model(
             $schemaStatus,
             $feature,
@@ -492,7 +511,9 @@ function admin_presentation_schema_health_statuses(): array
     $statuses = [];
     foreach (presentation_schema_health_definitions() as $feature => $definition) {
         $flag = trim((string) ($definition['flag'] ?? ''));
-        $enabled = $flag === '' || !function_exists('Gallery\Services\feature_flag_enabled') || feature_flag_enabled($flag);
+        $enabled = $flag === ''
+            || !function_exists('Gallery\Services\feature_capability_effective_enabled')
+            || feature_capability_effective_enabled($flag);
         if (!$enabled) {
             // Disabled optional features do not need metadata inspection. This keeps
             // System Health explicit while avoiding queries for schema that cannot

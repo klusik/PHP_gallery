@@ -247,6 +247,7 @@ function set_application_autoupdate_enabled(bool $enabled): void
  */
 function application_autoupdate_status(): array
 {
+    $installerEnabled = !function_exists(__NAMESPACE__ . '\feature_capability_effective_enabled') || feature_capability_effective_enabled('built_in_update_installer');
     // $lastCheckedAt stores the last request-time automatic update check timestamp.
     $lastCheckedAt = (int) app_setting('application_autoupdate_last_checked_at', '0');
     // $lastResult stores the latest readable automatic update result.
@@ -262,7 +263,8 @@ function application_autoupdate_status(): array
 
     return [
         'enabled' => $enabled,
-        'effective' => $enabled && !$betaActive,
+        'effective' => $enabled && !$betaActive && $installerEnabled,
+        'installer_enabled' => $installerEnabled,
         'beta_active' => $betaActive,
         'last_checked_at' => $lastCheckedAt,
         'last_checked_label' => $lastCheckedLabel,
@@ -332,6 +334,10 @@ function application_autoupdate_relative_time_label(int $lastCheckedAt): string
  */
 function application_autoupdate_maybe_run(int $ttlSeconds = 3600): void
 {
+    if (function_exists(__NAMESPACE__ . '\feature_capability_effective_enabled') && !feature_capability_effective_enabled('built_in_update_installer')) {
+        return;
+    }
+
     // Finish a previously started background job before considering a new remote check.
     $activeJob = application_update_active_job();
     if ($activeJob !== null) {
@@ -471,6 +477,9 @@ function application_autoupdate_dry_run_result_label(array $status): string
  */
 function application_autoupdate_run_installing_check(bool $force = false, ?int $checkedAt = null): array
 {
+    if (function_exists(__NAMESPACE__ . '\feature_capability_effective_enabled') && !feature_capability_effective_enabled('built_in_update_installer')) {
+        return application_autoupdate_status();
+    }
     $now = $checkedAt ?? time();
     $lockUntil = (int) app_setting('application_autoupdate_lock_until', '0');
     if (!$force && $lockUntil > $now) {

@@ -421,7 +421,7 @@ function openai_text_assist_save_user_settings(int $userId, array $input): array
  */
 function openai_text_assist_available(int $userId): bool
 {
-    if (function_exists('Gallery\\Services\\feature_flag_enabled') && !feature_flag_enabled('openai_text_assist')) {
+    if (function_exists('Gallery\\Services\\feature_capability_effective_enabled') && !feature_capability_effective_enabled('openai_text_assist')) {
         return false;
     }
     if ($userId <= 0 || !openai_text_assist_schema_ready()) {
@@ -504,7 +504,9 @@ function openai_text_assist_image_context(int $imageId): array
     $galleryTags = $gallery && function_exists('Gallery\\Services\\tag_names_for_entity') ? (string) tag_names_for_entity('gallery', (int) ($gallery['id'] ?? 0)) : '';
 
     $metadataSummary = [];
-    if (function_exists('Gallery\\Services\\ai_image_analysis_latest_metadata_for_image')) {
+    $localAiMetadataEnabled = !function_exists(__NAMESPACE__ . '\\feature_capability_effective_enabled')
+        || feature_capability_effective_enabled('ai_image_metadata');
+    if ($localAiMetadataEnabled && function_exists('Gallery\\Services\\ai_image_analysis_latest_metadata_for_image')) {
         $metadata = ai_image_analysis_latest_metadata_for_image($imageId);
         if (is_array($metadata)) {
             $metadataSummary = [

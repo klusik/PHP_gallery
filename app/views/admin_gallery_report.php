@@ -41,6 +41,7 @@ use function Gallery\Core\e;
 use function Gallery\Core\render_footer;
 use function Gallery\Core\render_header;
 use function Gallery\Core\url_for;
+use function Gallery\Services\feature_capability_effective_enabled;
 use function Gallery\Services\t;
 
 /**
@@ -50,6 +51,7 @@ use function Gallery\Services\t;
  */
 function view_render_admin_gallery_report_page(string $notice = ''): void
 {
+    $telemetryEnabled = feature_capability_effective_enabled('telemetry');
     render_header(t('admin.gallery_report.page_title', 'Complete gallery overview'));
 
     echo '<section class="hero admin-dashboard-hero admin-gallery-report-hero"><div><p class="admin-kicker">' . e(t('admin.gallery_report.kicker', 'Maintenance report')) . '</p><h1>' . e(t('admin.gallery_report.page_title', 'Complete gallery overview')) . '</h1><p class="muted">' . e(t('admin.gallery_report.page_description', 'Generate one self-contained HTML report with storage, database, gallery, EXIF, GPS, telemetry, logs, feature, and runtime diagnostics. The finished report is returned to the browser only and is not saved on the server.')) . '</p></div>';
@@ -71,7 +73,9 @@ function view_render_admin_gallery_report_page(string $notice = ''): void
     echo '</div>';
 
     echo '<div class="admin-gallery-report-controls">';
-    echo '<label><span>' . e(t('admin.gallery_report.telemetry_days', 'Telemetry window')) . '</span><select data-admin-gallery-report-telemetry-days><option value="7">7 ' . e(t('admin.gallery_report.days', 'days')) . '</option><option value="30" selected>30 ' . e(t('admin.gallery_report.days', 'days')) . '</option><option value="90">90 ' . e(t('admin.gallery_report.days', 'days')) . '</option><option value="365">365 ' . e(t('admin.gallery_report.days', 'days')) . '</option><option value="3650">10 ' . e(t('admin.gallery_report.years', 'years')) . '</option></select></label>';
+    if ($telemetryEnabled) {
+        echo '<label><span>' . e(t('admin.gallery_report.telemetry_days', 'Telemetry window')) . '</span><select data-admin-gallery-report-telemetry-days><option value="7">7 ' . e(t('admin.gallery_report.days', 'days')) . '</option><option value="30" selected>30 ' . e(t('admin.gallery_report.days', 'days')) . '</option><option value="90">90 ' . e(t('admin.gallery_report.days', 'days')) . '</option><option value="365">365 ' . e(t('admin.gallery_report.days', 'days')) . '</option><option value="3650">10 ' . e(t('admin.gallery_report.years', 'years')) . '</option></select></label>';
+    }
     echo '<button type="button" class="button" data-admin-gallery-report-button>' . e(t('admin.gallery_report.generate_button', 'Generate complete report')) . '</button>';
     echo '<span class="muted" data-admin-gallery-report-status aria-live="polite">' . e(t('admin.gallery_report.idle_status', 'Ready to generate.')) . '</span>';
     echo '</div>';

@@ -53,6 +53,16 @@ function thumbnail_warmup_enabled(): bool
 }
 
 /**
+ * Persist whether public requests may trigger guarded background thumbnail repair.
+ *
+ * @param bool $enabled Enabled flag.
+ */
+function set_thumbnail_warmup_enabled(bool $enabled): void
+{
+    set_app_setting('thumbnail_background_warmup_enabled', $enabled ? '1' : '0');
+}
+
+/**
  * Return the writable directory used for lightweight warmup locks and cooldown files.
  *
  * @return string Text result for the caller.

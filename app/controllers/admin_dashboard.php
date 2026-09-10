@@ -64,7 +64,7 @@ use function Gallery\Services\presentation_schema_log_degraded;
 use function Gallery\Services\schema_inspection_is_unknown;
 use function Gallery\Services\schema_inspection_is_available;
 use function Gallery\Services\presentation_gps_override_schema_status;
-use function Gallery\Services\feature_flag_enabled;
+use function Gallery\Services\feature_capability_effective_enabled;
 use function Gallery\Services\flight_map_update_navdata_from_ourairports;
 use function Gallery\Services\public_home_search_enabled;
 use function Gallery\Services\reset_all_gallery_gps_map_overrides;
@@ -354,7 +354,7 @@ function cms_admin_public_search_settings(): void
         return;
     }
     verify_csrf();
-    if (function_exists('Gallery\\Services\\feature_flag_enabled') && !feature_flag_enabled('public_search')) {
+    if (function_exists('Gallery\\Services\\feature_capability_effective_enabled') && !feature_capability_effective_enabled('public_search')) {
         flash_message('admin_notice', t('admin.dashboard.notice_public_search_disabled', 'Public search is disabled in Admin > Features.'));
         redirect_to(url_for('admin'));
     }

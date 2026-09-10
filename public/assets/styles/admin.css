@@ -5316,7 +5316,6 @@ button.gallery-row-action.secondary {
     border: 1px solid var(--line);
     border-radius: var(--radius);
     background: rgba(255, 255, 255, 0.7);
-    cursor: pointer;
 }
 
 .admin-feature-card input[type="checkbox"] {
@@ -5356,6 +5355,47 @@ button.gallery-row-action.secondary {
 
 .admin-feature-card.is-disabled .admin-feature-state {
     background: rgba(180, 35, 24, 0.12);
+}
+
+.admin-feature-card.is-ineffective {
+    border-style: dashed;
+}
+
+.admin-feature-card.is-read-only input[type="checkbox"] {
+    cursor: not-allowed;
+}
+
+.admin-feature-badges,
+.admin-feature-policy-state {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+}
+
+.admin-feature-badge,
+.admin-feature-policy-state span {
+    display: inline-flex;
+    align-items: center;
+    width: fit-content;
+    padding: 0.12rem 0.42rem;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.055);
+    font-size: 0.74rem;
+    line-height: 1.25;
+}
+
+.admin-feature-card.is-ineffective .admin-feature-policy-state span:last-child {
+    background: rgba(180, 35, 24, 0.12);
+}
+
+.admin-feature-blocker {
+    font-weight: 650;
+}
+
+.admin-feature-settings-link {
+    justify-self: start;
+    font-size: 0.82rem;
+    font-weight: 650;
 }
 
 .admin-sticky-actions {

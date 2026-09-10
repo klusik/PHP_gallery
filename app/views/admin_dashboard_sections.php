@@ -42,6 +42,7 @@ use function Gallery\Core\e;
 use function Gallery\Core\url_for;
 use function Gallery\Services\admin_settings_url;
 use function Gallery\Services\browser_thumbnail_rebuild_browser_config;
+use function Gallery\Services\feature_capability_effective_enabled;
 use function Gallery\Services\feature_flag_enabled;
 use function Gallery\Services\public_home_search_enabled;
 use function Gallery\Services\seo_request_guard_status;
@@ -57,7 +58,9 @@ use function Gallery\Services\thumbnail_maintenance_last_check;
  */
 function view_admin_dashboard_feature_enabled(string $featureKey): bool
 {
-    return !function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled($featureKey);
+    return function_exists('Gallery\\Services\\feature_capability_effective_enabled')
+        ? feature_capability_effective_enabled($featureKey)
+        : (!function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled($featureKey));
 }
 
 /**
@@ -90,7 +93,7 @@ function view_admin_dashboard_int(array $model, string $key, int $fallback = 0):
  *
  * @param array $model Model value.
  * @param string $key Lookup key.
- * @return array<string mixed>.
+ * @return array<string,mixed> Model value or an empty array.
  */
 function view_admin_dashboard_array(array $model, string $key): array
 {
@@ -407,6 +410,9 @@ function view_render_admin_dashboard_navigation_tools(array $model): void
  */
 function view_render_admin_gallery_report_maintenance_card(string $className = 'admin-maintenance-card'): void
 {
+    if (!view_admin_dashboard_feature_enabled('complete_gallery_report')) {
+        return;
+    }
     echo '<article class="' . e($className) . '"><strong>' . e(t('admin.dashboard.gallery_report', 'Complete gallery report')) . '</strong><span>' . e(t('admin.dashboard.gallery_report_hint', 'Generate one detailed downloadable HTML report with storage, database, telemetry, EXIF, GPS, galleries, and runtime diagnostics.')) . '</span><a class="button secondary" href="' . e(url_for('admin_gallery_report')) . '">' . e(t('admin.dashboard.open_gallery_report', 'Open report generator')) . '</a></article>';
 }
 

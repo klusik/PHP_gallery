@@ -65,6 +65,7 @@ use function Gallery\Services\contained_tags_for_gallery;
 use function Gallery\Services\current_user_is_known_under_18;
 use function Gallery\Services\current_votes_for_images;
 use function Gallery\Services\feature_flag_enabled;
+use function Gallery\Services\feature_capability_effective_enabled;
 use function Gallery\Services\find_gallery;
 use function Gallery\Services\find_gallery_by_folder_path;
 use function Gallery\Services\find_gallery_by_slug;
@@ -254,7 +255,7 @@ function public_subgallery_date_sort_url(array $gallery, string $mode): string
  */
 function render_public_subgallery_date_sort_toolbar(array $gallery, string $activeMode, int $datedCount, int $totalCount): void
 {
-    if (!current_user() || admin_anonymous_preview_active() || $datedCount < 2 || $totalCount < 2) {
+    if (!current_user() || admin_anonymous_preview_active() || !feature_capability_effective_enabled('inline_administration') || $datedCount < 2 || $totalCount < 2) {
         return;
     }
 
@@ -304,7 +305,7 @@ function render_public_subgallery_date_sort_toolbar(array $gallery, string $acti
  */
 function render_public_page_reorder_toolbar(string $kind, array $gallery, array $pagination, int $visibleCount, int $totalCount): void
 {
-    if (!current_user() || admin_anonymous_preview_active() || $visibleCount < 2) {
+    if (!current_user() || admin_anonymous_preview_active() || !feature_capability_effective_enabled('inline_administration') || $visibleCount < 2) {
         return;
     }
 
