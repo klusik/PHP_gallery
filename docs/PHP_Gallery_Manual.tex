@@ -49,8 +49,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.98}
-\newcommand{\manualdate}{10 September 2026}
+\newcommand{\version}{0.99}
+\newcommand{\manualdate}{12 September 2026}
 
 \hypersetup{
   colorlinks=true,
@@ -1804,7 +1804,7 @@ Branding and~browser identity & Site header banner, separator dimensions/stretch
 Localization & English canonical fallback plus maintained selectable Czech, German, and~Swedish UI packs, per-viewer browser preference, flag/native-name selector designs, shared browser/server catalogs, pack diagnostics/editor/import/export, and~per-gallery/photo maintained-language content.\\
 Feature switches & Global route-aware switches for~public search, lightbox modes, Picture Manager, image voting, Picture Game, downloads, viewer accounts and~private collections, gallery maps, flight maps, navigation data, SimBrief, OpenAI, local AI metadata, upload API, mobile WebDAV, gallery migration, Media Renamer, and~telemetry.\\
 Central Settings & Searchable categorized registry, keyboard-driven Spotlight navigation, canonical save delegation for~approved global values, specialist deep links, inheritance-aware ownership, default/source labels, and~secret redaction.\\
-Admin gallery workspace & Visibility filter with hidden-row deselection, persistent per-branch collapse state, Collapse/Expand all, hierarchy reordering, visible-page public reorder tools, side-panel editors, and~contextual public-page edit/remove controls for~signed-in administrators.\\
+Admin gallery workspace & Visibility filter with hidden-row deselection, persistent per-branch collapse state, Collapse/Expand all, hierarchy reordering, visible-page public reorder tools, side-panel editors, and~contextual public-page edit/remove/visibility controls for~signed-in administrators.\\
 Administrator authentication & Username-or-recovery-email login, CSRF/session protection, hashed rate-limit subjects, optional durable login token, password reset by~PHP mail/SMTP, account/profile changes protected by~current-password checks, and~optional Google sign-in that must first be~linked from~an~authenticated password session and~requires the~current password to~disconnect.\\
 Viewer accounts, lifecycle, favourites, private collections, and~unlisted sharing & Administrator direct viewer creation/deletion plus invite-only registration, Admin suspend/restore/sign-out-everywhere controls with~central viewer-authority revocation, forced replacement of~Admin-provisioned temporary passwords before normal viewer authority, scanner-safe email verification and~activation, separate viewer login/logout, dedicated rotating remember-me credential, generic scanner-safe password reset, recent password reauthentication for~sensitive account actions, password/email change, viewer self-deletion, private no-store account/favourite/collection/lifecycle responses, favourite controls on~authorized cards/lightbox images, viewer-owned ordered collections with~live source authorization, one revocable 30-day unlisted read-only collection link with~show-once secret and~clean redirect, recipient-context source ACL intersection without Admin bypass, and~strict separation from~gallery authorization; no~open signup, public collection discovery/profiles, recipient collaboration, comments, or~uploads.\\
 Database readiness/System Health & Tri-state schema inspection separating Available, Missing, Unknown, and~Disabled where applicable; distinct security/authentication, mutation-sensitive, and~optional presentation/report capability panels; writes fail closed on~unknown required schema.\\

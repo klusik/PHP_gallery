@@ -2,7 +2,7 @@
 
 A modern PHP 8.1+ gallery CMS designed for ordinary shared hosting. The application uses the filesystem as the authoritative source for gallery structure, while storing all metadata, access rules, votes, user accounts, and audit logs in MySQL or MariaDB.
 
-**Current Version:** 0.98
+**Current Version:** 0.99
 
 **Key Benefit:** Deploy in minutes on shared hosting. No npm, no Composer, no framework overhead. Just PHP + MySQL.
 
@@ -198,7 +198,7 @@ Deployment-tunable download limits are centralized in `app/configuration_default
 - Bulk rename, delete, move galleries
 - Recoverable gallery trash bin: gallery subtree deletes move out of the live gallery root, can be restored from Admin > Maintenance > Trash, and remain indefinitely by default unless manually purged; optional retention-based auto-purge is disabled by default
 - Reorder galleries within parent hierarchy
-- Inline gallery editing with side panel
+- Inline gallery editing with side panel and public-card visibility eye controls
 - Cover image selection and upload
 - Manual gallery date ranges with From and To fields
 - EXIF-derived date range suggestions that can be applied directly from a gallery editor without a full page reload, or reviewed, edited and ignored per gallery branch
@@ -207,7 +207,7 @@ Deployment-tunable download limits are centralized in `app/configuration_default
 #### Image Management
 - Per-gallery image grid
 - Bulk image tagging and visibility changes
-- Inline image editing with side panel
+- Inline image editing with side panel and public-card visibility eye controls
 - Drag-and-drop image reordering
 - Image caption and metadata editing
 - EXIF preview and GPS display
@@ -419,7 +419,7 @@ Deep links use stable identifiers such as `?page=admin_settings&section=appearan
 
 1. Select a gallery to see its images
 2. Click **image thumbnail** to open the side panel editor
-3. Edit title, caption, tags, visibility, or sort order
+3. Edit title, caption, tags, visibility, or sort order, or use the public-card eye menu to switch visibility directly from the public gallery view
 4. Or **bulk edit** multiple images at once
 
 #### Managing Tags

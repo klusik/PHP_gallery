@@ -221,7 +221,7 @@ Disabling Trash affects future deletes only; existing trash entries remain visib
 | Scan images from filesystem | `app/controllers/admin_galleries_edit.php`, `app/services/image_scanning.php` |
 | Bulk image actions | `app/controllers/admin_images_bulk.php` |
 | Reorder images | `app/controllers/admin_images_reorder.php` |
-| Edit image metadata | `app/controllers/admin_public_inline.php`, handler `cms_admin_edit_image` |
+| Edit image metadata and public-card visibility | `app/controllers/admin_public_inline.php`, handler `cms_admin_edit_image`; card controls in `app/controllers/public_gallery_cards.php`, `app/controllers/public_gallery_page.php`, `public/assets/gallery-modules/admin-side-panel.js`, and `public/assets/styles/public.css` |
 | Copy/move/share selected public-view images | `app/controllers/picture_manager.php`, `app/controllers/downloads.php`, `app/services/picture_manager.php`, `app/services/downloads.php`, `public/assets/gallery-modules/picture-manager.js` |
 | DNG support | `app/services/dng_derivatives.php`, `app/services/uploads.php` |
 | EXIF extraction and GPS display policy | `app/services/exif.php`, `app/controllers/exif.php`, `app/controllers/admin_dashboard.php`, `app/controllers/admin_galleries_edit.php` | Default-enabled public GPS display with nullable per-gallery inherit, force on and force off overrides. |
