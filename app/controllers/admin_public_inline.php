@@ -192,6 +192,7 @@ function cms_admin_public_update_gallery(): void
     }
     // Variable $action stores this steps working value.
     $action = (string) ($_POST['action'] ?? 'save');
+    $isVisibilityAction = in_array($action, gallery_visibility_values(), true);
     if ($action === 'delete') {
         // $trashEnabled freezes the delete policy for this request so a concurrent settings change
         // cannot make the mutation result, logging, and user-facing message disagree.
@@ -307,14 +308,55 @@ function cms_admin_public_update_gallery(): void
         // $visibility stores an intermediate value used by the surrounding gallery workflow.
         $visibility = 'unpublished';
     }
-    if (in_array($action, gallery_visibility_values(), true)) {
-        // $visibility stores an intermediate value used by the surrounding gallery workflow.
-        $visibility = gallery_visibility_storage_value($action);
+    if ($isVisibilityAction) {
+        try {
+            $visibility = gallery_visibility_storage_value($action);
+        } catch (Throwable $exception) {
+            if ($wantsJson) {
+                admin_public_inline_json_response(admin_mutation_error_envelope(
+                    $exception->getMessage(),
+                    'gallery_visibility_failed',
+                    admin_mutation_descriptor('gallery.visibility', 'gallery', 'update', [(int) $gallery['id']])
+                ), 422);
+                return;
+            }
+            flash_message('admin_notice', $exception->getMessage());
+            redirect_to((string) ($_SERVER['HTTP_REFERER'] ?? gallery_public_url($gallery)));
+        }
     }
     $input['visibility'] = $visibility;
     try {
         admin_save_gallery_from_input($gallery, $input, $_FILES, 'admin-edit-identity', false);
+        if ($wantsJson && $isVisibilityAction) {
+            $updatedGallery = find_gallery((int) $gallery['id'], true) ?: find_gallery((int) $gallery['id']) ?: $gallery;
+            $parentGalleryId = max(0, (int) ($updatedGallery['parent_id'] ?? 0));
+            $contextUrl = url_for('home');
+            if ($parentGalleryId > 0) {
+                $parentGallery = find_gallery($parentGalleryId, true) ?: find_gallery($parentGalleryId);
+                if ($parentGallery) $contextUrl = gallery_public_url($parentGallery);
+            }
+            $isRendered = admin_mutation_gallery_is_rendered_in_context($updatedGallery, $parentGalleryId);
+            $postcondition = $isRendered
+                ? admin_mutation_postcondition('gallery_visibility', ['gallery_id' => (int) $gallery['id'], 'visibility' => $action])
+                : admin_mutation_gallery_membership_postcondition((int) $gallery['id'], $parentGalleryId, false);
+            admin_public_inline_json_response(admin_mutation_success_envelope(
+                t('gallery.visibility.updated', 'Visibility updated.'),
+                admin_mutation_descriptor('gallery.visibility', 'gallery', 'update', [(int) $gallery['id']]),
+                null,
+                [admin_mutation_public_gallery_context($parentGalleryId, $contextUrl, $postcondition)],
+                ['redirect_url' => $contextUrl]
+            ));
+            return;
+        }
     } catch (Throwable $exception) {
+        if ($wantsJson && $isVisibilityAction) {
+            admin_public_inline_json_response(admin_mutation_error_envelope(
+                $exception->getMessage(),
+                'gallery_visibility_failed',
+                admin_mutation_descriptor('gallery.visibility', 'gallery', 'update', [(int) $gallery['id']])
+            ), 422);
+            return;
+        }
         flash_message('admin_notice', $exception->getMessage());
     }
     redirect_to((string) ($_SERVER['HTTP_REFERER'] ?? gallery_public_url($gallery)));
@@ -325,6 +367,7 @@ function cms_admin_public_update_gallery(): void
  */
 function cms_admin_public_update_image(): void
 {
+    $wantsJson = (bool) call_user_func('Gallery' . chr(92) . 'Core' . chr(92) . 'admin_wants_json');
     require_admin();
     if (request_method() !== 'POST') {
         cms_not_found();
@@ -410,14 +453,18 @@ function cms_admin_public_update_image(): void
         // $visibility stores an intermediate value used by the surrounding gallery workflow.
         $visibility = 'private';
     }
+    $isVisibilityAction = in_array($action, ['public', 'unpublished', 'private'], true);
+    if ($isVisibilityAction) {
+        $visibility = $action === 'unpublished' ? 'draft' : $action;
+    }
     // Variable $fields stores this steps working value.
     if (!empty($_POST['nsfw_field_present']) && !nsfw_guard_schema_ready()) {
         flash_message('admin_notice', admin_nsfw_guard_mutation_error());
         redirect_to((string) ($_SERVER['HTTP_REFERER'] ?? url_for('home')));
     }
     $fields = [
-        'title = ?' => trim((string) ($_POST['title'] ?? '')),
-        'description = ?' => (string) ($_POST['description'] ?? ''),
+        'title = ?' => trim((string) ($_POST['title'] ?? $image['title'] ?? '')),
+        'description = ?' => (string) ($_POST['description'] ?? $image['description'] ?? ''),
         'visibility = ?' => $visibility,
     ];
     if (nsfw_guard_schema_ready()) {
@@ -429,6 +476,23 @@ function cms_admin_public_update_image(): void
     $stmt->execute(array_merge(array_values($fields), [(int) $image['id']]));
     if (public_path_schema_ready()) {
         regenerate_public_paths();
+    }
+    if ($wantsJson && $isVisibilityAction) {
+        $galleryId = (int) ($image['gallery_id'] ?? 0);
+        $gallery = $galleryId > 0 ? (find_gallery($galleryId, true) ?: find_gallery($galleryId)) : null;
+        $contextUrl = $gallery ? gallery_public_url($gallery) : url_for('home');
+        admin_public_inline_json_response(admin_mutation_success_envelope(
+            t('gallery.visibility.updated', 'Visibility updated.'),
+            admin_mutation_descriptor('image.visibility', 'image', 'update', [(int) $image['id']]),
+            null,
+            [admin_mutation_public_gallery_context(
+                $galleryId,
+                $contextUrl,
+                admin_mutation_postcondition('image_visibility', ['image_ids' => [(int) $image['id']], 'visibility' => $visibility])
+            )],
+            ['redirect_url' => $contextUrl]
+        ));
+        return;
     }
     redirect_to((string) ($_SERVER['HTTP_REFERER'] ?? url_for('home')));
 }

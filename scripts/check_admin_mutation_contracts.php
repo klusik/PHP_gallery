@@ -220,7 +220,7 @@ contract_forbid($sidePanel, 'replaceAdminEditorMainFromParsedDocument', 'Obsolet
 contract_require($sidePanel, 'runAdminSidePanelSuccessTask', 'Side-panel async success reflections no longer have a rejection boundary.', $failures, $checks);
 contract_require($sidePanel, "console.error('PHP Gallery side-panel success reflection failed after persistence.'", 'Side-panel post-persistence reflection failures are no longer surfaced for diagnostics.', $failures, $checks);
 contract_require($sidePanel, 'function renderedFormActionRequestUrl(form)', 'Server-rendered mutation forms can regress to absolute-host fetches that lose the active Admin session.', $failures, $checks);
-contract_count($sidePanel, 'fetch(renderedFormActionRequestUrl(form), {', 4, 'Expected current-origin normalization is missing from one or more side-panel form mutation fetches.', $failures, $checks);
+contract_count($sidePanel, 'fetch(renderedFormActionRequestUrl(form), {', 5, 'Expected current-origin normalization is missing from one or more side-panel form mutation fetches.', $failures, $checks);
 
 // Unrelated gallery edits must not trigger remote favicon discovery after persistence.
 // Visibility-only saves are the canonical regression case: the database row can be

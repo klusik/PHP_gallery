@@ -101,7 +101,7 @@ import {
     setupAdminMediaRenamer,
     setupAdminMetadataOrganizer,
     setupAdminTrashActions,
-} from './gallery-modules/admin-operations.js?v=20260907-gallery-trash-v1';
+} from './gallery-modules/admin-operations.js?v=20260912-card-visibility-eye-v1';
 
 /**
  * Runs a setup callback after the DOM is ready.

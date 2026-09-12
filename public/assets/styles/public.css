@@ -818,6 +818,112 @@ td {
     left: 3rem;
 }
 
+.public-admin-visibility-menu-card {
+    position: absolute;
+    top: 0.55rem;
+    left: 5.45rem;
+    z-index: 16;
+}
+
+.public-admin-visibility-menu summary {
+    list-style: none;
+}
+
+.public-admin-visibility-menu summary::-webkit-details-marker {
+    display: none;
+}
+
+.public-admin-visibility-options {
+    position: absolute;
+    top: calc(100% + 0.35rem);
+    left: 0;
+    display: none;
+    gap: 0.3rem;
+    padding: 0.35rem;
+    border: 1px solid color-mix(in srgb, var(--panel) 44%, transparent);
+    border-radius: var(--radius, 16px);
+    background: color-mix(in srgb, var(--ink) 82%, transparent);
+    box-shadow: 0 14px 30px rgba(15, 23, 42, 0.24);
+    backdrop-filter: blur(14px);
+}
+
+.public-admin-visibility-menu[open] .public-admin-visibility-options,
+.public-admin-visibility-menu:hover .public-admin-visibility-options,
+.public-admin-visibility-menu:focus-within .public-admin-visibility-options {
+    display: flex;
+}
+
+.public-admin-visibility-options form {
+    margin: 0;
+}
+
+.public-admin-visibility-option {
+    display: inline-grid;
+    place-items: center;
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--panel);
+    cursor: pointer;
+}
+
+.public-admin-visibility-option:hover,
+.public-admin-visibility-option:focus-visible,
+.public-admin-visibility-option.is-current {
+    border-color: color-mix(in srgb, var(--panel) 62%, transparent);
+    background: color-mix(in srgb, var(--accent) 72%, transparent);
+    outline: none;
+}
+
+.public-admin-visibility-icon {
+    position: relative;
+    display: inline-grid;
+    place-items: center;
+    width: 1.18rem;
+    height: 1.18rem;
+    line-height: 1;
+}
+
+.public-admin-visibility-eye {
+    display: block;
+    font-size: 1rem;
+    line-height: 1;
+    transform: translateY(-0.01rem);
+}
+
+.public-admin-visibility-icon-unpublished::after {
+    content: "";
+    position: absolute;
+    left: 0.12rem;
+    right: 0.12rem;
+    top: 50%;
+    height: 0.14rem;
+    border-radius: 999px;
+    background: currentColor;
+    transform: translateY(-50%) rotate(-38deg);
+    transform-origin: center;
+}
+
+.public-admin-visibility-icon-private::after {
+    content: "\1F512";
+    position: absolute;
+    right: -0.22rem;
+    bottom: -0.16rem;
+    display: grid;
+    place-items: center;
+    width: 0.72rem;
+    height: 0.72rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--ink) 84%, transparent);
+    color: var(--panel);
+    font-size: 0.52rem;
+    line-height: 1;
+}
+
+
 .public-admin-delete-form {
     margin: 0;
 }
@@ -859,16 +965,20 @@ td {
 
 .public-page .gallery-card .public-admin-edit-button-card,
 .public-page .gallery-card .public-admin-delete-form-card,
+.public-page .gallery-card .public-admin-visibility-menu-card,
 .public-page .image-card .public-admin-edit-button-card,
-.public-page .image-card .public-admin-delete-form-card {
+.public-page .image-card .public-admin-delete-form-card,
+.public-page .image-card .public-admin-visibility-menu-card {
     opacity: 0.96;
 }
 
 @media (hover: hover) {
     .public-page .gallery-card:not(:hover):not(:focus-within) .public-admin-edit-button-card,
     .public-page .gallery-card:not(:hover):not(:focus-within) .public-admin-delete-form-card,
+    .public-page .gallery-card:not(:hover):not(:focus-within) .public-admin-visibility-menu-card,
     .public-page .image-card:not(:hover):not(:focus-within) .public-admin-edit-button-card,
-    .public-page .image-card:not(:hover):not(:focus-within) .public-admin-delete-form-card {
+    .public-page .image-card:not(:hover):not(:focus-within) .public-admin-delete-form-card,
+    .public-page .image-card:not(:hover):not(:focus-within) .public-admin-visibility-menu-card {
         opacity: 0.76;
     }
 }
@@ -899,7 +1009,9 @@ td {
 }
 
 .public-page .gallery-card.has-public-reorder-handle .public-admin-edit-button-card,
-.public-page .image-card.has-public-reorder-handle .public-admin-edit-button-card {
+.public-page .image-card.has-public-reorder-handle .public-admin-edit-button-card,
+.public-page .gallery-card.has-public-reorder-handle .public-admin-visibility-menu-card,
+.public-page .image-card.has-public-reorder-handle .public-admin-visibility-menu-card {
     top: 3.05rem;
 }
 
@@ -907,7 +1019,9 @@ td {
     .public-page .gallery-card.has-public-reorder-handle .public-admin-delete-form-card,
     .public-page .image-card.has-public-reorder-handle .public-admin-delete-form-card,
     .public-page .gallery-card.has-public-reorder-handle .public-admin-edit-button-card,
-    .public-page .image-card.has-public-reorder-handle .public-admin-edit-button-card {
+    .public-page .image-card.has-public-reorder-handle .public-admin-edit-button-card,
+    .public-page .gallery-card.has-public-reorder-handle .public-admin-visibility-menu-card,
+    .public-page .image-card.has-public-reorder-handle .public-admin-visibility-menu-card {
         top: 3.25rem;
     }
 }
@@ -1232,7 +1346,8 @@ td {
 }
 
 .public-page .image-card.has-picture-manager-select .public-admin-delete-form-card,
-.public-page .image-card.has-picture-manager-select .public-admin-edit-button-card {
+.public-page .image-card.has-picture-manager-select .public-admin-edit-button-card,
+.public-page .image-card.has-picture-manager-select .public-admin-visibility-menu-card {
     top: 2.65rem;
 }
 
