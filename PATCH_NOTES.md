@@ -1,5 +1,57 @@
 # Patch notes
 
+## Version 0.99
+
+Version 0.99 adds compact public-page visibility controls for administrators. Gallery, subgallery, and picture cards now expose a small eye menu beside the existing edit and trash shortcuts, letting administrators switch published, unpublished, and private state directly from the public gallery view while preserving the existing side-panel and no-JavaScript fallbacks.
+
+### Highlights
+
+#### Public card visibility controls
+
+- Added an admin-only eye menu to public gallery, subgallery, and picture cards for changing visibility without opening the full editor.
+- Exposed published, unpublished, and private choices with accessible labels and fixed icon geometry so the menu stays aligned across all three states.
+- Kept the existing edit and trash actions in place and prevented picture-card visibility clicks from opening the public lightbox.
+
+#### In-place administrator workflow
+
+- Submitted visibility changes through the existing public inline Admin AJAX path when JavaScript is available.
+- Preserved direct POST behavior for browsers without JavaScript or direct route use.
+- Closed open visibility menus on Escape and outside clicks, including after dynamically refreshed card markup.
+
+### Technical Details
+
+#### Backend
+
+- Updated `app/controllers/public_gallery_cards.php` and `app/controllers/public_gallery_page.php` to render shared visibility-menu markup for galleries and images.
+- Updated `app/controllers/admin_public_inline.php` so gallery and image visibility changes return canonical mutation envelopes with typed `gallery.visibility` and `image.visibility` metadata.
+- Preserved legacy image storage compatibility by mapping the canonical unpublished state to the existing `draft` image visibility value.
+- Added no database migrations and made no schema changes in Version 0.99.
+
+#### Frontend
+
+- Updated `public/assets/gallery-modules/admin-side-panel.js` to intercept delegated public-card visibility forms, submit them through `fetch`, and hand the canonical response to the shared mutation completion coordinator.
+- Refreshed the relevant `public/assets/gallery.js` and `public/assets/gallery-modules/admin-operations.js` cache-busting imports so deployed browsers load the new handler.
+- Updated `public/assets/styles/public.css` for the card placement, submenu presentation, and aligned published/unpublished/private eye variants.
+- Updated maintained language catalogs in `app/lang/en.json`, `app/lang/cs.json`, `app/lang/de.json`, and `app/lang/sv.json` for the new visibility action text.
+
+#### Tests
+
+- Added `tests/public_card_visibility_eye_test.php` to protect rendering, POST fallbacks, delegated browser handling, shared mutation completion, lightbox exclusion, and aligned icon markup.
+- Extended Admin side-panel refresh, Smart Gallery hardening, Stage 4 mutation hardening, and mutation-contract checks for the new visibility path and updated cache keys.
+- Refreshed `app/core-manifest.json` for the changed updater-managed files.
+
+### User Impact
+
+#### For visitors
+
+- Visitor behavior is unchanged. The controls render only for signed-in administrators with inline administration enabled.
+- Public lightbox behavior remains unchanged for normal picture-card clicks.
+
+#### For administrators
+
+- Administrators can publish, unpublish, or privatize galleries, subgalleries, and pictures directly from public gallery cards.
+- Visibility updates complete in place when JavaScript is enabled and remain available through normal POST fallbacks otherwise.
+
 ## Version 0.98
 
 Version 0.98 establishes a single, dependency-aware capability policy for optional PHP Gallery features. It aligns feature availability, route protection, Admin navigation, settings discovery, health reporting, and caller behavior around registered capability definitions while preserving existing setting owners and stored data.

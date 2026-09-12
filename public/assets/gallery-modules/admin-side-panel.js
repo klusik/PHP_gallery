@@ -328,6 +328,24 @@ export function setupAdminGallerySidePanel() {
         await submitPublicImageCardDelete(form);
     }, true);
 
+    document.addEventListener('submit', async (event) => {
+        const form = event.target;
+        if (!(form instanceof HTMLFormElement)
+            || !form.matches('[data-public-admin-visibility-form]')
+            || event.defaultPrevented) {
+            return;
+        }
+        if (!window.fetch || !window.DOMParser) {
+            return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        if (typeof event.stopImmediatePropagation === 'function') {
+            event.stopImmediatePropagation();
+        }
+        await submitPublicCardVisibility(form);
+    }, true);
+
     document.addEventListener('click', (event) => {
         if (!(event.target instanceof Element)) {
             return;
@@ -346,10 +364,22 @@ export function setupAdminGallerySidePanel() {
         if (event.key !== 'Escape') {
             return;
         }
+        document.querySelectorAll('[data-public-admin-visibility-menu][open]').forEach((menu) => {
+            menu.removeAttribute('open');
+        });
         const panel = document.querySelector('[data-admin-side-panel]:not([hidden])');
         if (panel instanceof HTMLElement) {
             closeAdminGallerySidePanel(panel);
         }
+    });
+
+    document.addEventListener('click', (event) => {
+        if (event.target instanceof Element && event.target.closest('[data-public-admin-visibility-menu]')) {
+            return;
+        }
+        document.querySelectorAll('[data-public-admin-visibility-menu][open]').forEach((menu) => {
+            menu.removeAttribute('open');
+        });
     });
 
     document.addEventListener('submit', async (event) => {
@@ -1788,6 +1818,47 @@ async function submitPublicImageCardDelete(form) {
         if (submitButton instanceof HTMLButtonElement || submitButton instanceof HTMLInputElement) {
             submitButton.disabled = false;
         }
+    }
+}
+
+/**
+ * Change one gallery or image card visibility through the canonical coordinator.
+ *
+ * @param {HTMLFormElement} form Visibility option form.
+ * @return {Promise<void>} Resolves after the current public context is refreshed.
+ */
+async function submitPublicCardVisibility(form) {
+    const submitButton = form.querySelector('button[type="submit"]');
+    if (submitButton instanceof HTMLButtonElement) submitButton.disabled = true;
+    try {
+        const body = new FormData(form);
+        body.set('ajax', '1');
+        const response = await fetch(renderedFormActionRequestUrl(form), {
+            method: 'POST',
+            body,
+            credentials: 'same-origin',
+            headers: {'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest'},
+        });
+        const result = await readJsonResponseSafely(response, i18n('gallery.visibility.update_failed', 'Visibility update failed.'));
+        if (!response.ok || !result.ok) {
+            throw new Error(result.error || result.message || i18n('gallery.visibility.update_failed', 'Visibility update failed.'));
+        }
+        const syncResult = await completeCoreGalleryMutationInCurrentView(result);
+        if (!syncResult.synchronized) {
+            showAdminGallerySidePanelResultNotice(
+                i18n('admin.side_panel.sync_failed_after_success', 'The gallery was saved, but the refreshed public view could not be verified. The server change was kept; continue working or reopen the page later.'),
+                String(result.fallback?.redirect_url || '')
+            );
+            return;
+        }
+        showAdminGallerySidePanelResultNotice(String(result.message || i18n('gallery.visibility.updated', 'Visibility updated.')), '');
+    } catch (error) {
+        showAdminGallerySidePanelResultNotice(
+            error instanceof Error ? error.message : i18n('gallery.visibility.update_failed', 'Visibility update failed.'),
+            ''
+        );
+    } finally {
+        if (submitButton instanceof HTMLButtonElement && submitButton.isConnected) submitButton.disabled = false;
     }
 }
 

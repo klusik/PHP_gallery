@@ -356,6 +356,7 @@ function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicR
         }
     }
     echo '</div>';
+    render_public_gallery_admin_visibility_menu($gallery);
     render_public_gallery_admin_edit_link($gallery, 'card');
     render_public_gallery_admin_delete_form($gallery, 'card');
     echo '</article>';
@@ -473,6 +474,16 @@ function render_public_gallery_admin_delete_form(array $gallery, string $placeme
     echo '</form>';
 }
 
+/** Render the compact three-state visibility menu for one public gallery card. */
+function render_public_gallery_admin_visibility_menu(array $gallery): void
+{
+    if (!current_user() || admin_anonymous_preview_active() || !feature_capability_effective_enabled('inline_administration')) {
+        return;
+    }
+    $name = trim((string) ($gallery['title'] ?? 'gallery'));
+    render_public_admin_visibility_menu('gallery', (int) ($gallery['id'] ?? 0), $name, gallery_effective_visibility($gallery), url_for('admin_public_update_gallery'));
+}
+
 /**
  * Render the compact public-page photo edit entry point for logged-in admins.
  *
@@ -516,4 +527,39 @@ function render_public_image_admin_delete_form(array $image): void
     echo '<input type="hidden" name="action" value="delete">';
     echo '<button type="submit" class="public-admin-card-action-button public-admin-delete-button" aria-label="' . e($label) . '" title="' . e($label) . '"><span aria-hidden="true">&#128465;</span><span class="visually-hidden">' . e($label) . '</span></button>';
     echo '</form>';
+}
+
+/** Render the compact three-state visibility menu for one public image card. */
+function render_public_image_admin_visibility_menu(array $image): void
+{
+    if (!current_user() || admin_anonymous_preview_active() || !feature_capability_effective_enabled('inline_administration')) {
+        return;
+    }
+    $title = trim((string) ($image['title'] ?? ''));
+    $name = $title !== '' ? $title : (string) ($image['relative_path'] ?? 'photo');
+    $visibility = (string) ($image['visibility'] ?? 'draft');
+    render_public_admin_visibility_menu('image', (int) ($image['id'] ?? 0), $name, $visibility === 'draft' ? 'unpublished' : $visibility, url_for('admin_public_update_image'));
+}
+
+/** Render shared accessible visibility-menu markup for a gallery or image card. */
+function render_public_admin_visibility_menu(string $kind, int $entityId, string $name, string $visibility, string $actionUrl): void
+{
+    if ($entityId <= 0) return;
+    $visibility = in_array($visibility, ['public', 'unpublished', 'private'], true) ? $visibility : 'unpublished';
+    $idField = $kind === 'gallery' ? 'gallery_id' : 'image_id';
+    $label = t('gallery.visibility.change_named', 'Change visibility for {name}', ['name' => $name]);
+    $options = [
+        'public' => ['public-admin-visibility-icon-public', t('gallery.visibility.public', 'Published')],
+        'unpublished' => ['public-admin-visibility-icon-unpublished', t('gallery.visibility.unpublished', 'Unpublished')],
+        'private' => ['public-admin-visibility-icon-private', t('gallery.visibility.private', 'Private')],
+    ];
+    echo '<details class="public-admin-visibility-menu public-admin-visibility-menu-card" data-public-admin-card-action data-public-admin-visibility-menu>';
+    echo '<summary class="public-admin-card-action-button public-admin-visibility-trigger" aria-label="' . e($label) . '" title="' . e($label) . '"><span class="public-admin-visibility-icon ' . e($options[$visibility][0]) . '" aria-hidden="true"><span class="public-admin-visibility-eye">&#128065;</span></span><span class="visually-hidden">' . e($label) . '</span></summary>';
+    echo '<div class="public-admin-visibility-options" role="group" aria-label="' . e($label) . '">';
+    foreach ($options as $value => $option) {
+        echo '<form method="post" action="' . e($actionUrl) . '" data-public-admin-visibility-form data-public-admin-visibility-kind="' . e($kind) . '">' . csrf_field();
+        echo '<input type="hidden" name="' . e($idField) . '" value="' . $entityId . '"><input type="hidden" name="action" value="' . e($value) . '">';
+        echo '<button type="submit" class="public-admin-visibility-option' . ($visibility === $value ? ' is-current' : '') . '" aria-pressed="' . ($visibility === $value ? 'true' : 'false') . '" title="' . e($option[1]) . '"><span class="public-admin-visibility-icon ' . e($option[0]) . '" aria-hidden="true"><span class="public-admin-visibility-eye">&#128065;</span></span><span class="visually-hidden">' . e($option[1]) . '</span></button></form>';
+    }
+    echo '</div></details>';
 }

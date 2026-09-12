@@ -546,6 +546,7 @@ function cms_gallery(): void
         if ($imageNeedsNsfwGate) {
             echo '<article class="image-card nsfw-card" data-public-photo-order-item data-public-order-id="' . (int) $image['id'] . '" data-public-image-visibility="' . e((string) ($image['visibility'] ?? '')) . '" data-public-image-nsfw="' . ((int) ($image['nsfw_enabled'] ?? 0) === 1 ? '1' : '0') . '" data-public-image-updated-at="' . e((string) ($image['updated_at'] ?? '')) . '"><div class="image-stage nsfw-stage"><a class="nsfw-placeholder" href="' . e(image_public_url($image, $gallery)) . '"><strong>' . e(t('public.nsfw_photo_title', '18+ photo')) . '</strong><span>' . e(t('public.nsfw_photo_message', 'Confirm your age to view this restricted photo.')) . '</span></a></div>';
             render_public_image_admin_edit_link($image);
+            render_public_image_admin_visibility_menu($image);
             render_public_image_admin_delete_form($image);
             echo '</article>';
             continue;
@@ -628,6 +629,7 @@ function cms_gallery(): void
         }
         echo '</div>';
         render_public_image_admin_edit_link($image);
+        render_public_image_admin_visibility_menu($image);
         render_public_image_admin_delete_form($image);
         echo '</article>';
     }
