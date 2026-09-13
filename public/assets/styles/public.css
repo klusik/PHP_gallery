@@ -878,6 +878,52 @@ td {
     outline: none;
 }
 
+/* Gives inline visibility changes immediate feedback while the canonical public context refreshes. */
+.public-page .gallery-card.is-visibility-updating,
+.public-page .image-card.is-visibility-updating {
+    opacity: 0.72;
+    transition: opacity 160ms ease;
+}
+
+.public-page .is-visibility-updating .public-admin-visibility-trigger {
+    animation: public-admin-visibility-saving 520ms ease-in-out infinite alternate;
+}
+
+/* The refreshed server-rendered card gets one short confirmation pulse after verification. */
+.public-page .gallery-card.is-visibility-updated,
+.public-page .image-card.is-visibility-updated {
+    animation: public-admin-visibility-updated 680ms ease-out;
+}
+
+@keyframes public-admin-visibility-saving {
+    from {
+        opacity: 0.58;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes public-admin-visibility-updated {
+    0% {
+        box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 58%, transparent);
+    }
+    55% {
+        box-shadow: 0 0 0 0.45rem color-mix(in srgb, var(--accent) 18%, transparent);
+    }
+    100% {
+        box-shadow: 0 0 0 0.65rem transparent;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .public-page .is-visibility-updating .public-admin-visibility-trigger,
+    .public-page .gallery-card.is-visibility-updated,
+    .public-page .image-card.is-visibility-updated {
+        animation: none;
+    }
+}
+
 .public-admin-visibility-icon {
     position: relative;
     display: inline-grid;

@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-09-02
+ *   2026-09-13
  */
 
 declare(strict_types=1);
@@ -834,6 +834,10 @@ function admin_save_gallery_from_input(array $gallery, array $input, array $file
     }
     // $slug stores the submitted or preserved public slug.
     $slug = trim((string) ($input['slug'] ?? $gallery['slug'] ?? $title));
+    // $visibilityInputPresent records whether this request explicitly owns the public listing state.
+    // Inline visibility controls submit only this field and must synchronize access_listing without
+    // opting into the rest of the access-control form, which could otherwise alter passwords/tokens.
+    $visibilityInputPresent = array_key_exists('visibility', $input);
     // $visibility stores the normalized gallery visibility value.
     $visibility = gallery_visibility_storage_value((string) ($input['visibility'] ?? $gallery['visibility'] ?? 'unpublished'));
     // $galleryDateRange stores the optional manual date range selected by an admin.
@@ -1028,9 +1032,14 @@ function admin_save_gallery_from_input(array $gallery, array $input, array $file
     $thumbnailBounds = thumbnail_bounds_schema_ready() && $shouldUpdateThumbnailBounds ? thumbnail_bound_pair_from_post('gallery_thumbnail') : [($gallery['thumbnail_min_size'] ?? null), ($gallery['thumbnail_max_size'] ?? null)];
     // $thumbnailBoundsRecursive stores whether descendants should receive the same saved thumbnail bounds.
     $thumbnailBoundsRecursive = thumbnail_bounds_schema_ready() && !empty($input['gallery_thumbnail_bounds_recursive']);
-    // $shouldUpdateAccess stores whether access controls are part of this request.
+    // $shouldUpdateAccess stores whether password/share access controls are part of this request.
     $accessInputPresent = admin_gallery_input_has_any_key($input, ['access_action', 'access_type', 'clear_access_password', 'access_password', 'access_token_expires_at']);
     $shouldUpdateAccess = $accessInputPresent || ($completeForm && $accessReady);
+    // $shouldUpdateAccessListing keeps the legacy access_listing compatibility flag in lockstep
+    // with an explicitly submitted visibility value. This is intentionally separate from
+    // $shouldUpdateAccess so an inline Published/Unpublished/Private change cannot clear a
+    // password, revoke a token, or otherwise mutate access controls that were not submitted.
+    $shouldUpdateAccessListing = $accessReady && ($completeForm || $visibilityInputPresent);
     if (!$accessReady && !$accessLegacy && ($completeForm || $accessInputPresent)) {
         throw new RuntimeException(t('admin.gallery_editor.access_schema_save_refused', 'Gallery save was refused because password/access schema is incomplete or could not be inspected. Check System Health before changing gallery visibility or protection.'));
     }
@@ -1123,9 +1132,11 @@ function admin_save_gallery_from_input(array $gallery, array $input, array $file
         $fields['thumbnail_min_size = ?'] = $thumbnailBounds[0];
         $fields['thumbnail_max_size = ?'] = $thumbnailBounds[1];
     }
+    if ($shouldUpdateAccessListing) {
+        $fields['access_listing = ?'] = $accessListing;
+    }
     if ($accessReady && $shouldUpdateAccess) {
         $fields['access_mode = ?'] = $accessMode;
-        $fields['access_listing = ?'] = $accessListing;
         $fields['access_password_hash = ?'] = $accessMode === 'password' ? $accessPasswordHash : null;
         if ($accessMode !== 'password') {
             if (gallery_access_share_token_schema_ready()) {
