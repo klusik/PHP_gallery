@@ -27,8 +27,8 @@ const CMS_UPDATE_BRANCHES = ['main', 'master'];
 2. **Filesystem-backed gallery content**
    Gallery folders and image files live on disk. The database stores metadata, visibility, tags, generated slugs, access rules, voting state, AI metadata, telemetry, and operational state.
 
-3. **Controllers handle HTTP, services handle behavior**
-   Controller files under `app/controllers/` read requests, validate permissions, process forms or JSON actions, and render or redirect. Service files under `app/services/` contain reusable business logic.
+3. **MVC boundaries are explicit for new/refactored features**
+   Model files under `app/models/` own SQL/data access. Service files under `app/services/` own reusable domain orchestration, policy, ranking, localization, and result shaping. Controller files under `app/controllers/` read requests, validate permissions, and return responses. View files under `app/views/` own HTML presentation. Older modules may still combine model/service concerns and are migrated incrementally when touched.
 
 4. **Database migrations are append-only and prevalidated**
    Schema changes are stored as sequential PHP migration files in `database/migrations/`. Migrations are prevalidated as a complete pending set, applied in filename order, and recorded in `schema_migrations` only after SQL statements and optional repair callbacks succeed.
@@ -340,6 +340,8 @@ The complete source audit and setting inventory is maintained in `docs/ADMIN_SET
     controllers.php
     integrity.php
     lang/
+    models.php
+    models/
     views/
     services/
     controllers/
@@ -354,6 +356,26 @@ The complete source audit and setting inventory is maintained in `docs/ADMIN_SET
   tests/
   winapp/
 ```
+
+## Model Layer
+
+Models are loaded through `app/models.php` before service-layer orchestration. The model layer is intentionally small and is introduced incrementally when an existing subsystem is materially refactored.
+
+Model conventions:
+
+1. Models own PDO/SQL query construction and return raw rows or bounded data-access records.
+2. Models may depend on `Gallery\Core` database/helpers but must not depend upward on controllers or views.
+3. Models do not read `$_GET`, `$_POST`, session/UI state, or render HTML.
+4. Services remain responsible for domain policy, capability/schema decisions, localization, relevance/ranking, URLs, and user-facing result models.
+5. A model module may be split into a sibling part directory using the same entry-point rule as split services.
+
+Current model modules:
+
+| File | Main responsibility |
+| --- | --- |
+| `app/models/public_search.php` | Legacy/no-phase compatibility search SQL and schema-sensitive joined row retrieval. |
+| `app/models/public_search_progressive.php` | Primary/media public-search candidate and bounded hydration SQL. |
+| `app/models/public_search_progressive/deferred.php` | Descriptive/deep gallery, translation, tag-description, and AI candidate SQL. |
 
 ## Controller Layer
 
@@ -371,7 +393,9 @@ Important controller files:
 
 | File | Main responsibility |
 | --- | --- |
-| `app/controllers/public_gallery.php` | Public home, gallery rendering, public search UI, breadcrumbs, gallery cards, admin preview controls. |
+| `app/controllers/public_gallery.php` | Public home/gallery rendering, breadcrumbs, gallery cards, and admin preview controls. |
+| `app/controllers/public_search.php` | Public-search JSON request validation, context resolution, and service dispatch. |
+| `app/controllers/admin_search_diagnostics.php` | Admin-only progressive-search benchmark/report workflow with session-owned JSON export. |
 | `app/controllers/public_media.php` | Original media, thumbnail, sitemap, robots and gallery asset streaming. |
 | `app/controllers/gallery_lightbox.php` | JSON lightbox payloads. |
 | `app/controllers/exif.php` | Map data endpoint. |
@@ -410,7 +434,7 @@ Key service families:
 | Thumbnails | `thumbnails.php`, `thumbnail_sources.php`, `thumbnail_generation.php`, `thumbnail_bundles.php`, `thumbnail_formats.php`, `thumbnail_html.php`, `thumbnail_bounds.php`, `thumbnail_maintenance.php`, `public_thumbnail_rendering.php` | Thumbnail pathing, static serving, generation, quality bounds, responsive/progressive server markup, and selected-gallery renderer policy. |
 | Access | `gallery_access.php`, `auth_persistence.php`, `auth_throttle.php`, `google_auth.php`, `download_signatures.php` | Protected gallery access, admin sessions, durable login, Google linking, download signatures. |
 | Tags | `tags.php`, `tag_metadata.php` | Tag CRUD, slugs, entity linking and weighted suggestions. |
-| Search | `public_search.php`, `lightbox_metadata.php` | Public search across galleries, images, tags and AI metadata. |
+| Search | `public_search.php`, `public_search_progressive.php`, `public_search_progressive/deferred.php`, `public_search_diagnostics.php`, models under `app/models/public_search*` | Public search policy/orchestration, ranking, localization and result shaping; SQL/data access, request-local profiling, EXPLAIN, and index/table inspection live in the model layer. |
 | Maps and aviation | `exif.php`, `flight_maps.php`, `navigation_data.php`, `simbrief_descriptions.php` | EXIF GPS, default-enabled EXIF/GPS display policy with per-gallery overrides, flight route maps, waypoint lookup and SimBrief OFP processing. |
 | AI | `ai_image_analysis.php`, `openai_text_assist.php` | Local AI metadata queue, OpenAI text/image-description integration. |
 | Telemetry | `telemetry.php`, `telemetry_privacy.php`, `telemetry_settings.php`, `telemetry_rollup.php`, `database_observer.php` | Anonymous usage events, media serving metrics, privacy bucketing and rollups. |
@@ -433,6 +457,8 @@ contract and load order are preserved.
 | `app/services/admin_test_run_analysis.php` | `app/services/admin_test_run_analysis/` | `sql_analysis.php`, `sanitization.php`, `browser.php`, `cache_analysis.php`, `maintenance_analysis.php`, `request_analysis.php`, `flags.php` |
 | `app/services/browser_uploads.php` | `app/services/browser_uploads/` | `exception.php`, `settings.php`, `zip_parsing.php`, `batch_state.php`, `payload_validation.php`, `manifest.php`, `pipeline.php` |
 | `app/services/gallery_migration.php` | `app/services/gallery_migration/` | `versions.php`, `jobs.php`, `metadata.php`, `assets.php`, `manifest.php`, `packages.php`, `target_setup.php`, `install.php`, `recovery.php`, `http.php` |
+| `app/models/public_search_progressive.php` | `app/models/public_search_progressive/` | `deferred.php` |
+| `app/services/public_search_progressive.php` | `app/services/public_search_progressive/` | `deferred.php` |
 | `app/services/feature_flags.php` | `app/services/feature_flags/` | `registry.php`, `adapters.php`, `policy.php`, `admin.php`, `routes.php` |
 | `app/services/updates_jobs.php` | `app/services/updates_jobs/` | `budget.php`, `errors.php`, `state.php`, `lifecycle.php`, `download.php`, `plan.php`, `activation.php`, `cleanup.php` |
 | `app/controllers/admin_galleries_edit_page.php` | `app/controllers/admin_galleries_edit_page/` | `capabilities.php`, `post_actions.php`, `overview.php`, `tab_identity.php`, `tab_access.php`, `tab_display.php`, `tab_media.php`, `tab_images.php`, `tab_tools.php`, `controller.php` |
@@ -1189,13 +1215,22 @@ Use `app/services/gallery_access.php` for checks rather than repeating access lo
 
 ## Public Search
 
-Public search is implemented by:
+Public search now follows the explicit MVC boundary:
 
 ```text
-app/controllers/public_gallery.php
+app/models/public_search_progressive.php
+app/models/public_search_progressive/deferred.php
 app/services/public_search.php
-public/assets/gallery.js
+app/services/public_search_progressive.php
+app/services/public_search_progressive/deferred.php
+app/controllers/public_search.php
+app/views/public_search.php
+public/assets/gallery-modules/public-home-search.js
 ```
+
+The normal browser path uses progressive `primary`, `media`, `descriptive`, and `deep` phases. Models own phase SQL and bounded hydration queries; services own relevance, capability/schema readiness, localization, URL/result shaping, and cross-source candidate merging; the dedicated controller owns JSON request/response behavior; the dedicated view owns search-bar markup. The historical no-phase compatibility path follows the same boundary: `app/models/public_search.php` owns SQL while `app/services/public_search.php` owns policy/localization/result shaping, and the browser does not schedule that compatibility path during normal live search.
+
+Admin-only production measurement is provided by `app/controllers/admin_search_diagnostics.php`, `app/services/public_search_diagnostics.php`, `app/models/public_search_diagnostics.php`, and `app/views/admin_search_diagnostics.php`. Progressive model queries pass through a request-local profiling wrapper that is inert during ordinary search. An explicit Admin run can repeat all four phases, capture per-query timing/row counts, request `EXPLAIN FORMAT=JSON` with classic `EXPLAIN` fallback, inspect search-table sizes/indexes, and export one portable JSON report. The diagnostics service/controller/view do not own SQL.
 
 Search supports minimum query length handling, context-limited search inside the current gallery branch, gallery matches, image matches, tags and compact text. AI-generated searchable text can participate through the metadata tables where available.
 

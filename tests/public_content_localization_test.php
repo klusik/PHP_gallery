@@ -11,7 +11,9 @@ $galleryPage = (string) file_get_contents($root . '/app/controllers/public_galle
 $lightbox = (string) file_get_contents($root . '/app/controllers/gallery_lightbox.php');
 $service = (string) file_get_contents($root . '/app/services/content_localization.php');
 $sidecars = (string) file_get_contents($root . '/app/services/gallery_sidecars.php');
-$search = (string) file_get_contents($root . '/app/services/public_search.php');
+$search = (string) file_get_contents($root . '/app/services/public_search.php') . "\n"
+    . (string) file_get_contents($root . '/app/models/public_search.php') . "\n"
+    . (string) file_get_contents($root . '/app/models/public_search_progressive/deferred.php');
 // The gallery migration service is split into part files; assert against the whole module.
 $migration = module_source($root . '/app/services/gallery_migration.php');
 

@@ -61,10 +61,13 @@ This file maps features to source files. It is optimized for fast maintenance an
 | Task | Files |
 | --- | --- |
 | Search settings | `app/services/public_search.php`, `app/controllers/admin_dashboard.php`, `app/controllers/admin_theme.php` |
-| Search bar rendering | `app/controllers/public_gallery.php` |
-| Search endpoint | `app/controllers/public_gallery.php`, handler `cms_public_search` |
-| Search model | `app/services/public_search.php` |
-| Browser-side search behavior | `public/assets/gallery.js` |
+| Search bar rendering | `app/views/public_search.php` |
+| Search endpoint | `app/controllers/public_search.php`, handler `cms_public_search` |
+| Search model/data access | `app/models/public_search.php`, `app/models/public_search_progressive.php`, `app/models/public_search_progressive/deferred.php` |
+| Search service/orchestration | `app/services/public_search.php`, `app/services/public_search_progressive.php`, `app/services/public_search_progressive/deferred.php` |
+| Browser-side search behavior | `public/assets/gallery-modules/public-home-search.js`, loaded by `public/assets/gallery.js` / `public/assets/public-gallery.js` |
+| Admin search diagnostics | `app/controllers/admin_search_diagnostics.php`, `app/services/public_search_diagnostics.php`, `app/models/public_search_diagnostics.php`, `app/views/admin_search_diagnostics.php` | Explicit Admin-only phase/query timing, EXPLAIN, table/index inventory, and portable JSON report. |
+| Search diagnostics browser helper | `public/assets/gallery-modules/admin-search-diagnostics.js` | Clipboard support for the generated JSON report; normal search instrumentation remains disabled unless the Admin diagnostic run explicitly activates it. |
 
 ## Media, Thumbnails and Assets
 
@@ -385,7 +388,7 @@ English is the canonical default and fallback. English, Czech, German, and Swedi
 
 | Multilingual content model | `app/services/content_localization.php`, `database/migrations/202608150001_multilingual_content.php` |
 | Multilingual Admin editor | `app/views/admin_gallery_forms.php`, `app/controllers/admin_galleries_edit_actions.php`, `app/controllers/admin_public_inline.php`, `public/assets/styles/side-panel.css` |
-| Localized public rendering/search | `app/controllers/public_gallery_page.php`, `app/controllers/gallery_lightbox.php`, `app/services/public_search.php`, `app/views/seo.php` |
+| Localized public rendering/search | `app/controllers/public_gallery_page.php`, `app/controllers/public_search.php`, `app/controllers/gallery_lightbox.php`, `app/models/public_search_progressive.php`, `app/services/public_search.php`, `app/services/public_search_progressive.php`, `app/views/public_search.php`, `app/views/seo.php` |
 | Optional translation drafts | `app/services/openai_text_assist.php`, `public/assets/gallery-modules/admin-openai-text-assist.js` |
 | Multilingual tests | `tests/content_localization_model_test.php`, `tests/admin_content_localization_test.php`, `tests/public_content_localization_test.php` |
 
@@ -545,7 +548,7 @@ dynamically, not test one known table identity.
 1. Add DB migration if persistent fields are required.
 2. Add scan or generation logic in a service.
 3. Add admin rendering in image edit or relevant panel.
-4. Add search integration only through `public_search.php`.
+4. Add public search integration through the MVC search boundary: SQL/data access in `app/models/public_search*`, ranking/orchestration in `app/services/public_search*`, HTTP handling in `app/controllers/public_search.php`, and markup in `app/views/public_search.php`.
 5. Avoid modifying original source files unless explicitly required.
 
 ### Add theme UI

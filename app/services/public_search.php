@@ -12,7 +12,7 @@
  *
  * Responsibilities:
  *   - Read the global public search setting
- *   - Query public gallery and image metadata safely
+ *   - Orchestrate compatibility public-search policy and result shaping
  *   - Return compact result models for the browser search UI
  *
  * Author:
@@ -27,19 +27,21 @@
  * Notes:
  *   - Keep comments and docstrings intact when modifying this file.
  *   - Prefer small, readable changes over broad rewrites.
+ *   - SQL/PDO access belongs in app/models/public_search.php.
  *
  * Last Updated:
- *   2026-05-28
+ *   2026-09-13
  */
 
 declare(strict_types=1);
 
 namespace Gallery\Services;
 
-use function Gallery\Core\db;
 use function Gallery\Core\gallery_public_url;
 use function Gallery\Core\image_public_url;
 use function Gallery\Core\normalize_relative_path;
+use function Gallery\Models\public_search_model_compatibility_gallery_rows;
+use function Gallery\Models\public_search_model_compatibility_image_rows;
 
 const PUBLIC_HOME_SEARCH_SETTING = 'public_home_search_enabled';
 
@@ -119,6 +121,7 @@ function public_search_results(string $query, int $limit = 12, ?array $contextGa
     });
 
     return array_slice(array_map(static function (array $result): array {
+        $result['rank'] = (int) ($result['score'] ?? 0);
         unset($result['score']);
         return $result;
     }, $merged), 0, $limit);
@@ -220,49 +223,25 @@ function public_search_gallery_results(string $query, int $limit, ?array $contex
     $contextParams = public_search_context_params($contextGallery);
     $like = public_search_like_pattern($query);
     $aiSearchReady = public_search_ai_metadata_ready();
-    $aiJoin = $aiSearchReady ? 'LEFT JOIN image_ai_metadata public_image_ai ON public_image_ai.image_id = public_image.id' : '';
-    $aiScoreSql = $aiSearchReady ? ', MAX(CASE WHEN public_image_ai.searchable_text LIKE ? THEN 10 ELSE 0 END) AS ai_score' : ', 0 AS ai_score';
-    $aiWhereSql = $aiSearchReady ? ' OR public_image_ai.searchable_text LIKE ?' : '';
-    $sql = "SELECT g.*, COUNT(DISTINCT public_image.id) AS image_count,
-            GROUP_CONCAT(DISTINCT gallery_tag.name ORDER BY gallery_tag.name SEPARATOR ', ') AS gallery_tag_names,
-            GROUP_CONCAT(DISTINCT image_tag.name ORDER BY image_tag.name SEPARATOR ', ') AS image_tag_names,
-            MAX(CASE WHEN LOWER(g.title) = LOWER(?) THEN 80 ELSE 0 END) AS exact_title_score,
-            MAX(CASE WHEN g.title LIKE ? THEN 40 ELSE 0 END) AS title_score,
-            MAX(CASE WHEN gallery_tag.name LIKE ? THEN 24 ELSE 0 END) AS gallery_tag_score,
-            MAX(CASE WHEN public_image.filename LIKE ? OR public_image.title LIKE ? THEN 16 ELSE 0 END) AS image_name_score
-            $aiScoreSql
-        FROM galleries g
-        LEFT JOIN images public_image ON public_image.gallery_id = g.id AND public_image.visibility = 'public'
-        $aiJoin
-        LEFT JOIN gallery_tags gt ON gt.gallery_id = g.id
-        LEFT JOIN tags gallery_tag ON gallery_tag.id = gt.tag_id
-        LEFT JOIN image_tags it ON it.image_id = public_image.id
-        LEFT JOIN tags image_tag ON image_tag.id = it.tag_id
-        WHERE $listingCondition
-          AND (
-              g.title LIKE ? OR g.description LIKE ?
-              OR gallery_tag.name LIKE ? OR gallery_tag.description LIKE ?
-              OR public_image.filename LIKE ? OR public_image.title LIKE ? OR public_image.description LIKE ?
-              OR image_tag.name LIKE ? OR image_tag.description LIKE ?
-              $aiWhereSql
-          )
-        GROUP BY g.id
-        ORDER BY exact_title_score DESC, title_score DESC, gallery_tag_score DESC, image_name_score DESC, ai_score DESC, g.title ASC
-        LIMIT " . (int) $limit;
-    $scoreParams = [$query, $like, $like, $like, $like];
-    if ($aiSearchReady) {
-        $scoreParams[] = $like;
+    $contentLanguage = translation_active_language();
+    $localizedGallerySearchReady = content_localization_enabled() && content_localization_schema_ready('gallery');
+
+    $galleryRows = public_search_model_compatibility_gallery_rows(
+        $query,
+        $like,
+        $listingCondition,
+        $contextParams,
+        $aiSearchReady,
+        $localizedGallerySearchReady,
+        $contentLanguage,
+        $limit
+    );
+    if ($localizedGallerySearchReady) {
+        $galleryRows = content_localize_entities('gallery', $galleryRows, $contentLanguage);
     }
-    $whereParams = [$like, $like, $like, $like, $like, $like, $like, $like, $like];
-    if ($aiSearchReady) {
-        $whereParams[] = $like;
-    }
-    $params = array_merge($scoreParams, $contextParams, $whereParams);
-    $stmt = db()->prepare($sql);
-    $stmt->execute($params);
 
     $results = [];
-    foreach ($stmt->fetchAll() as $gallery) {
+    foreach ($galleryRows as $gallery) {
         $tagNames = trim((string) ($gallery['gallery_tag_names'] ?? ''));
         $containedTags = trim((string) ($gallery['image_tag_names'] ?? ''));
         $details = [];
@@ -278,6 +257,7 @@ function public_search_gallery_results(string $query, int $limit, ?array $contex
         }
         $score = (int) ($gallery['exact_title_score'] ?? 0) + (int) ($gallery['title_score'] ?? 0) + (int) ($gallery['gallery_tag_score'] ?? 0) + (int) ($gallery['image_name_score'] ?? 0) + (int) ($gallery['ai_score'] ?? 0);
         $results[] = [
+            'key' => 'gallery:' . (int) ($gallery['id'] ?? 0),
             'type' => 'gallery',
             'label' => t('search.type_gallery', 'Gallery'),
             'title' => (string) $gallery['title'],
@@ -304,68 +284,20 @@ function public_search_image_results(string $query, int $limit, ?array $contextG
     $contextParams = public_search_context_params($contextGallery);
     $like = public_search_like_pattern($query);
     $aiSearchReady = public_search_ai_metadata_ready();
-    $aiJoin = $aiSearchReady ? 'LEFT JOIN image_ai_metadata image_ai ON image_ai.image_id = i.id' : '';
-    $aiScoreSql = $aiSearchReady ? ', MAX(CASE WHEN image_ai.searchable_text LIKE ? THEN 14 ELSE 0 END) AS ai_score' : ', 0 AS ai_score';
-    $aiWhereSql = $aiSearchReady ? ' OR image_ai.searchable_text LIKE ?' : '';
     $contentLanguage = translation_active_language();
     $localizedSearchReady = content_localization_enabled()
-        && content_localization_schema_ready('image')
-        && content_localization_schema_ready('gallery');
-    $localizedWhereSql = $localizedSearchReady ? ' OR EXISTS (SELECT 1 FROM image_translations content_image_translation WHERE content_image_translation.image_id = i.id AND content_image_translation.language_code = ? AND (content_image_translation.title LIKE ? OR content_image_translation.description LIKE ?)) OR EXISTS (SELECT 1 FROM gallery_translations content_gallery_translation WHERE content_gallery_translation.gallery_id = g.id AND content_gallery_translation.language_code = ? AND (content_gallery_translation.title LIKE ? OR content_gallery_translation.description LIKE ?))' : '';
-    $sql = "SELECT i.*, g.id AS matched_gallery_id, g.parent_id AS matched_gallery_parent_id,
-            g.folder_path AS matched_gallery_folder_path, g.folder_path_hash AS matched_gallery_folder_path_hash,
-            g.slug AS matched_gallery_slug, g.title AS matched_gallery_title, g.description AS matched_gallery_description,
-            g.cover_image_id AS matched_gallery_cover_image_id, g.sort_order AS matched_gallery_sort_order,
-            g.visibility AS matched_gallery_visibility, g.voting_enabled AS matched_gallery_voting_enabled,
-            g.show_filenames AS matched_gallery_show_filenames, g.access_mode AS matched_gallery_access_mode,
-            g.access_listing AS matched_gallery_access_listing, g.access_password_hash AS matched_gallery_access_password_hash,
-            g.access_share_token AS matched_gallery_access_share_token, g.access_token_hash AS matched_gallery_access_token_hash,
-            g.access_token_expires_at AS matched_gallery_access_token_expires_at, g.created_at AS matched_gallery_created_at,
-            g.updated_at AS matched_gallery_updated_at,
-            " . (db_column_exists('galleries', 'url_slug') ? 'g.url_slug AS matched_gallery_url_slug,' : "'' AS matched_gallery_url_slug,") . "
-            " . (db_column_exists('galleries', 'url_path') ? 'g.url_path AS matched_gallery_url_path,' : "'' AS matched_gallery_url_path,") . "
-            GROUP_CONCAT(DISTINCT image_tag.name ORDER BY image_tag.name SEPARATOR ', ') AS image_tag_names,
-            MAX(CASE WHEN LOWER(i.filename) = LOWER(?) OR LOWER(i.title) = LOWER(?) THEN 70 ELSE 0 END) AS exact_name_score,
-            MAX(CASE WHEN i.filename LIKE ? OR i.title LIKE ? THEN 36 ELSE 0 END) AS name_score,
-            MAX(CASE WHEN image_tag.name LIKE ? THEN 24 ELSE 0 END) AS tag_score,
-            MAX(CASE WHEN g.title LIKE ? THEN 12 ELSE 0 END) AS gallery_score
-            $aiScoreSql
-        FROM images i
-        INNER JOIN galleries g ON g.id = i.gallery_id
-        $aiJoin
-        LEFT JOIN image_tags it ON it.image_id = i.id
-        LEFT JOIN tags image_tag ON image_tag.id = it.tag_id
-        LEFT JOIN gallery_tags gt ON gt.gallery_id = g.id
-        LEFT JOIN tags gallery_tag ON gallery_tag.id = gt.tag_id
-        WHERE i.visibility = 'public'
-          AND $listingCondition
-          AND (
-              i.filename LIKE ? OR i.title LIKE ? OR i.description LIKE ?
-              OR image_tag.name LIKE ? OR image_tag.description LIKE ?
-              OR g.title LIKE ? OR g.description LIKE ?
-              OR gallery_tag.name LIKE ? OR gallery_tag.description LIKE ?
-              $aiWhereSql
-              $localizedWhereSql
-          )
-        GROUP BY i.id
-        ORDER BY exact_name_score DESC, name_score DESC, tag_score DESC, gallery_score DESC, ai_score DESC, i.filename ASC
-        LIMIT " . (int) $limit;
-    $scoreParams = [$query, $query, $like, $like, $like, $like];
-    if ($aiSearchReady) {
-        $scoreParams[] = $like;
-    }
-    $whereParams = [$like, $like, $like, $like, $like, $like, $like, $like, $like];
-    if ($aiSearchReady) {
-        $whereParams[] = $like;
-    }
-    if ($localizedSearchReady) {
-        array_push($whereParams, $contentLanguage, $like, $like, $contentLanguage, $like, $like);
-    }
-    $params = array_merge($scoreParams, $contextParams, $whereParams);
-    $stmt = db()->prepare($sql);
-    $stmt->execute($params);
+        && content_localization_schema_ready('image');
 
-    $rows = $stmt->fetchAll();
+    $rows = public_search_model_compatibility_image_rows(
+        $query,
+        $like,
+        $listingCondition,
+        $contextParams,
+        $aiSearchReady,
+        $localizedSearchReady,
+        $contentLanguage,
+        $limit
+    );
     $rows = content_localize_entities('image', $rows, $contentLanguage);
     $galleries = [];
     foreach ($rows as $row) {
@@ -395,8 +327,9 @@ function public_search_image_results(string $query, int $limit, ?array $contextG
         if ($description !== '') {
             $details[] = $description;
         }
-        $score = (int) ($row['exact_name_score'] ?? 0) + (int) ($row['name_score'] ?? 0) + (int) ($row['tag_score'] ?? 0) + (int) ($row['gallery_score'] ?? 0) + (int) ($row['ai_score'] ?? 0);
+        $score = (int) ($row['exact_name_score'] ?? 0) + (int) ($row['name_score'] ?? 0) + (int) ($row['tag_score'] ?? 0) + (int) ($row['ai_score'] ?? 0);
         $results[] = [
+            'key' => 'photo:' . (int) ($row['id'] ?? 0),
             'type' => 'photo',
             'label' => t('search.type_photo', 'Photo'),
             'title' => $title,

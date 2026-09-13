@@ -1876,6 +1876,16 @@ button:disabled,
     text-decoration: none;
 }
 
+
+.public-home-search-result {
+    transition: opacity 160ms ease, transform 160ms ease, background-color 160ms ease;
+}
+
+.public-home-search-result.is-new {
+    opacity: 0;
+    transform: translateY(-0.22rem);
+}
+
 .public-home-search-result:hover,
 .public-home-search-result:focus-visible {
     background: color-mix(in srgb, var(--accent, #3b82f6) 12%, transparent);
@@ -1958,6 +1968,17 @@ button:disabled,
     .public-home-search-result-kind {
         width: fit-content;
         min-width: 0;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .public-home-search-result {
+        transition: none;
+    }
+
+    .public-home-search-result.is-new {
+        opacity: 1;
+        transform: none;
     }
 }
 
