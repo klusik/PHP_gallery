@@ -141,6 +141,7 @@ function cms_dispatch_page(string $page): void
         'admin_viewer_invitations' => '\\Gallery\\Controllers\\cms_admin_viewer_invitations',
         'admin_update' => '\\Gallery\\Controllers\\cms_admin_update',
         'admin_diagnostics' => '\\Gallery\\Controllers\\cms_admin_diagnostics',
+        'admin_search_diagnostics' => '\Gallery\Controllers\cms_admin_search_diagnostics',
         'admin_features' => '\\Gallery\\Controllers\\cms_admin_features',
         'admin_reset' => '\\Gallery\\Controllers\\cms_admin_reset',
         'admin_devmode' => '\\Gallery\\Controllers\\cms_admin_devmode',

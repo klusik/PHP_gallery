@@ -139,9 +139,6 @@ use function Gallery\Services\public_render_profile_span;
 use function Gallery\Services\public_render_profile_snapshot;
 use function Gallery\Services\public_render_profile_start;
 use function Gallery\Services\public_render_profile_with_thumbnail_purpose;
-use function Gallery\Services\public_search_normalize_query;
-use function Gallery\Services\public_search_query_length;
-use function Gallery\Services\public_search_results;
 use function Gallery\Services\render_gallery_date;
 use function Gallery\Services\render_pagination_controls;
 use function Gallery\Services\render_public_render_profile_panel;
@@ -177,6 +174,7 @@ use function Gallery\Views\view_gallery_description_markdown_excerpt;
 use function Gallery\Views\view_gallery_description_markdown_html;
 use function Gallery\Views\view_render_gallery_json_ld;
 use function Gallery\Views\view_render_public_seo_tags;
+use function Gallery\Views\view_render_public_search_bar;
 use function Gallery\Services\admin_log_event;
 
 /** Render one ordered Smart Gallery attachment area around the physical gallery content. */
@@ -467,7 +465,7 @@ function cms_gallery(): void
     echo '</section>';
     render_public_gallery_branding_separator($gallery, $publicOnly);
     render_public_gallery_preview_toolbar($gallery);
-    render_public_search_bar($gallery);
+    view_render_public_search_bar($gallery);
     // Variable $publicPageReorderEnabled stores whether the logged-in admin can reorder visible public-page cards.
     $publicPageReorderEnabled = current_user() && !admin_anonymous_preview_active() && feature_capability_effective_enabled('inline_administration');
     // $publicSubgalleryReorderEnabled stores whether subgallery cards can expose drag ordering handles.

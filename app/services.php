@@ -37,6 +37,8 @@ declare(strict_types=1);
 namespace Gallery\Core;
 
 
+// Load database-facing MVC models before service-layer orchestration.
+require_once __DIR__ . '/models.php';
 // Load DB-backed application settings before any feature module reads app_setting().
 require_once __DIR__ . '/services/app_settings.php';
 // Load translation helpers early so controllers can use t() for visible text.
@@ -204,6 +206,10 @@ require_once __DIR__ . '/services/navigation_data.php';
 require_once __DIR__ . '/services/picture_game.php';
 require_once __DIR__ . '/services/tags.php';
 require_once __DIR__ . '/services/public_search.php';
+// Load staged public-search contracts after the legacy compatibility search helpers.
+require_once __DIR__ . '/services/public_search_progressive.php';
+// Load Admin-only progressive-search diagnostics after the search phase orchestration.
+require_once __DIR__ . '/services/public_search_diagnostics.php';
 // Load versioned Smart Gallery rules after tags, search, and gallery access helpers.
 require_once __DIR__ . '/services/smart_galleries.php';
 require_once __DIR__ . '/services/flight_maps.php';

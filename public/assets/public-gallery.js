@@ -35,7 +35,7 @@ import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lig
 const optionalPublicModules = {
     votes: './gallery-modules/votes.js?v=20260512-lightbox-vote-clone-widget-v6',
     backToTop: './gallery-modules/back-to-top.js?v=20260510-lifecycle-v3',
-    publicHomeSearch: './gallery-modules/public-home-search.js?v=20260528-public-search-context-v1',
+    publicHomeSearch: './gallery-modules/public-home-search.js?v=20260913-progressive-search-v4',
     responsiveThumbnails: './gallery-modules/responsive-thumbnails.js?v=20260510-lazy-map-v1',
     progressiveThumbnailRenderer: './gallery-modules/progressive-thumbnail-renderer.js?v=20260824-aspect-aware-thumbnail-selection',
     thumbnailRenderDiagnostics: './gallery-modules/public-thumbnail-render-diagnostics.js?v=20260809-thumbnail-render-diagnostics-v1',

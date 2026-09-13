@@ -104,5 +104,6 @@ return [
         'lightbox_map_navigation_test.mjs' => [],
         'lightbox_zoom_model_test.mjs' => [],
         'progressive_thumbnail_renderer_test.mjs' => [],
+        'public_search_progressive_test.mjs' => [],
     ],
 ];

@@ -64,7 +64,7 @@ import { setupAdminDatePickers } from './gallery-modules/admin-date-picker.js?v=
 import { setupSimbriefDescriptionGenerator } from './gallery-modules/admin-simbrief-description.js?v=20260527-simbrief-ofp-route-v1';
 import { setupAdminNavigationDataPanel } from './gallery-modules/admin-navdata-panel.js?v=20260527-navdata-panel-v1';
 import { setupOpenAITextAssist } from './gallery-modules/admin-openai-text-assist.js?v=20260815-content-translation-v1';
-import { setupPublicHomeSearch } from './gallery-modules/public-home-search.js?v=20260528-public-search-context-v1';
+import { setupPublicHomeSearch } from './gallery-modules/public-home-search.js?v=20260913-progressive-search-v4';
 import { setupAdminSettingsSearch } from './gallery-modules/admin-settings-search.js?v=20260812-settings-spotlight-v1';
 import { setupAdminLanguageSelectorDesign } from './gallery-modules/admin-language-selector-design.js?v=20260814-language-selector-design-v1';
 import { setupAdminSmartGalleries } from './gallery-modules/admin-smart-galleries.js?v=20260817-smart-gallery-cycle-placement-v2';
@@ -75,6 +75,7 @@ import { setupAdminDuplicatePhotoDetector } from './gallery-modules/admin-duplic
 import { setupAdminStorageStatistics } from './gallery-modules/admin-storage-statistics.js?v=20260608-storage-statistics-v1';
 import { setupAdminGalleryReport } from './gallery-modules/admin-gallery-report.js?v=20260615-admin-gallery-report-v1';
 import { setupAdminGalleryBenchmark } from './gallery-modules/admin-gallery-benchmark.js?v=20260820-benchmark-diagnostics-v4.2';
+import { setupAdminSearchDiagnostics } from './gallery-modules/admin-search-diagnostics.js?v=20260913-search-diagnostics-v1';
 import { setupAdminTestRun } from './gallery-modules/admin-test-run.js?v=20260821-admin-test-run-v1.1.3';
 import { setupPublicThumbnailRenderDiagnostics } from './gallery-modules/public-thumbnail-render-diagnostics.js?v=20260809-thumbnail-render-diagnostics-v1';
 import { setupVoteForms } from './gallery-modules/votes.js?v=20260512-lightbox-vote-clone-widget-v6';
@@ -149,6 +150,7 @@ function bootGalleryBrowserFeatures() {
     setupAdminStorageStatistics();
     setupAdminGalleryReport();
     setupAdminGalleryBenchmark();
+    setupAdminSearchDiagnostics();
     setupAdminTestRun();
     setupPublicThumbnailRenderDiagnostics();
     setupGalleryBulkDeleteConfirmation();

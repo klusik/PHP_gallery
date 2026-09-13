@@ -1,5 +1,67 @@
 # Patch notes
 
+## Version 0.100
+
+Version 0.100 is a feature release introducing progressive public search. The new staged, relevance-aware search experience returns useful results early, defers expensive work, and preserves the gallery’s existing access, visibility, localization, and routing boundaries. It also adds bounded Admin diagnostics and dedicated regression coverage for the complete search pipeline.
+
+### Highlights
+
+#### Progressive public search
+
+- Added a public search workflow that progressively evaluates search stages and presents available results without waiting for every deferred operation to finish.
+- Added relevance-aware matching, deterministic ranking, pagination, and safe handling of partial or deferred result sets.
+- Preserved existing gallery visibility, media authorization, and SEO request-guard behavior throughout public search requests.
+
+#### Admin search diagnostics
+
+- Added an Admin diagnostics view for inspecting bounded search behavior and stage results.
+- Integrated search diagnostics with the existing Admin diagnostics surface without exposing raw SQL, database exceptions, private paths, or protected content.
+
+### Technical Details
+
+#### Backend
+
+- Added `app/models/public_search.php`, `app/models/public_search_diagnostics.php`, and `app/models/public_search_progressive.php` for search result modeling, diagnostics, staged matching, ranking, and deferred processing.
+- Added `app/services/public_search_diagnostics.php`, `app/services/public_search_progressive.php`, and their deferred-processing part for bounded orchestration and diagnostic reporting.
+- Added `app/controllers/public_search.php` and `app/controllers/admin_search_diagnostics.php`, plus `app/views/public_search.php` and `app/views/admin_search_diagnostics.php`.
+- Registered the public search route and service/model/view dependencies through the existing bootstrap registries.
+
+#### Database
+
+- Added no migration, table, column, index, or data rewrite. Search uses the existing application data and preserves current schema compatibility behavior.
+
+#### Frontend and localization
+
+- Updated `public/assets/gallery-modules/public-home-search.js` for progressive request handling, deferred results, ranking/pagination presentation, and safe browser updates.
+- Added `public/assets/gallery-modules/admin-search-diagnostics.js` for the Admin diagnostics workflow.
+- Updated `public/assets/gallery.js`, `public/assets/public-gallery.js`, and `public/assets/styles/public.css` with the required cache-busting and search presentation changes.
+- Updated the maintained English, Czech, German, and Swedish catalogs with public-search and diagnostics strings.
+
+#### Compatibility and documentation
+
+- Preserved the existing public gallery entry points and MVC boundaries while adding search-specific controllers and views.
+- Documented the permanent progressive-search architecture and audit coverage in `AGENTS.md`, `ARCHITECTURE.md`, and `CODEMAP.md`.
+- Regenerated `app/core-manifest.json` for all updater-managed changes.
+
+### Tests
+
+- Added `tests/public_search_diagnostics_stage0a_test.php`, `tests/public_search_mvc_boundaries_test.php`, `tests/public_search_progressive_stage2_test.php`, `tests/public_search_progressive_stage4_test.php`, `tests/public_search_progressive_stage5_test.php`, and `tests/public_search_progressive_stage7_test.php`.
+- Added `tests/public_search_progressive_test.mjs` for browser-side progressive search behavior.
+- Extended localization coverage and registered the new JavaScript regression suite in `scripts/audit_registry.php`.
+- Covered staged matching, deferred work, result ordering, diagnostics boundaries, MVC separation, localization, and protected-data handling.
+
+### User Impact
+
+#### For visitors
+
+- Public search returns useful matching results progressively, with relevance-aware ordering and pagination once the available stages complete.
+- Existing gallery visibility, access restrictions, localization, and no-JavaScript-safe routing remain enforced.
+
+#### For administrators
+
+- Administrators can inspect bounded public-search diagnostics from the Admin diagnostics area.
+- No database upgrade or configuration change is required.
+
 ## Version 0.99.1
 
 Version 0.99.1 is a focused maintenance patch for the Version 0.99 public-card visibility workflow. It keeps gallery, subgallery, and picture visibility changes in place after Admin mutations, ensures newly created galleries receive the correct refresh treatment, and improves the visual presentation of the public visibility indicator without changing the database schema or public visitor permissions.

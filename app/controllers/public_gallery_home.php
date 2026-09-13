@@ -37,7 +37,6 @@ declare(strict_types=1);
 namespace Gallery\Controllers;
 
 use RuntimeException;
-use Throwable;
 use function Gallery\Core\admin_anonymous_preview_active;
 use function Gallery\Core\anonymous_preview_url;
 use function Gallery\Core\append_cms_footer_script;
@@ -134,9 +133,6 @@ use function Gallery\Services\public_render_profile_span;
 use function Gallery\Services\public_render_profile_snapshot;
 use function Gallery\Services\public_render_profile_start;
 use function Gallery\Services\public_render_profile_with_thumbnail_purpose;
-use function Gallery\Services\public_search_normalize_query;
-use function Gallery\Services\public_search_query_length;
-use function Gallery\Services\public_search_results;
 use function Gallery\Services\render_gallery_date;
 use function Gallery\Services\render_pagination_controls;
 use function Gallery\Services\render_public_render_profile_panel;
@@ -164,6 +160,7 @@ use function Gallery\Views\view_gallery_description_markdown_excerpt;
 use function Gallery\Views\view_gallery_description_markdown_html;
 use function Gallery\Views\view_render_gallery_json_ld;
 use function Gallery\Views\view_render_public_seo_tags;
+use function Gallery\Views\view_render_public_search_bar;
 use function Gallery\Services\admin_log_event;
 
 /**
@@ -233,7 +230,7 @@ function cms_home(): void
     render_header(site_name());
     // The stable root-context marker lets Admin mutation completion preserve clean/query pagination URLs without confusing home with other non-gallery public routes.
     echo '<div data-public-gallery-index data-public-root-gallery-count="' . (int) $homePhysicalGalleryCount . '" data-public-root-gallery-revision="' . e($homePhysicalGalleryRevision) . '" data-public-root-smart-gallery-count="' . (int) $homeSmartGalleryCount . '" data-admin-mutation-canonical-url="' . e(url_for('home')) . '" hidden></div>';
-    render_public_search_bar();
+    view_render_public_search_bar();
     if ($homeGalleryCount > 0) {
         echo '<div class="gallery-list-frame" data-back-to-top-scope>';
         echo '<div class="gallery-list-content" data-back-to-top-list>';
@@ -265,91 +262,4 @@ function cms_home(): void
         'page_kind' => 'home',
     ]);
     render_footer();
-}
-
-
-/**
- * Return JSON results for the optional public live search.
- */
-function cms_public_search(): void
-{
-    header('Content-Type: application/json; charset=utf-8');
-    if (!public_home_search_enabled()) {
-        http_response_code(404);
-        echo json_encode(['ok' => false, 'error' => 'disabled']);
-        return;
-    }
-
-    $query = public_search_normalize_query((string) ($_GET['q'] ?? ''));
-    if (public_search_query_length($query) < 2) {
-        echo json_encode(['ok' => true, 'query' => $query, 'results' => []]);
-        return;
-    }
-
-    try {
-        echo json_encode([
-            'ok' => true,
-            'query' => $query,
-            'results' => public_search_results($query, 14, public_search_context_from_request()),
-            'save_smart_gallery_url' => current_user() && feature_capability_effective_enabled('smart_galleries') ? url_for('admin_smart_galleries', ['from_search' => $query]) : null,
-            'save_smart_gallery_label' => current_user() && feature_capability_effective_enabled('smart_galleries') ? t('smart_gallery.save_search', 'Save search as Smart Gallery') : null,
-        ]);
-    } catch (Throwable $exception) {
-        admin_log_event('warning', 'public_search.failed', 'Public search request failed.', [
-            'exception' => $exception->getMessage(),
-        ]);
-        http_response_code(500);
-        echo json_encode(['ok' => false, 'error' => 'search_failed']);
-    }
-}
-
-/**
- * Return a public search context model from the current request.
- *
- * @return ?array Structured result data for the caller.
- */
-function public_search_context_from_request(): ?array
-{
-    $contextOnly = (string) ($_GET['context_only'] ?? '') === '1';
-    $galleryId = (int) ($_GET['gallery_id'] ?? 0);
-    if (!$contextOnly || $galleryId <= 0) {
-        return null;
-    }
-
-    $gallery = find_gallery($galleryId, true);
-    if (!$gallery || !gallery_allows_direct_public_request($gallery)) {
-        return null;
-    }
-
-    return $gallery;
-}
-
-/**
- * Render the optional thin public search bar above public gallery content.
- *
- * @param ?array $gallery Gallery row or gallery data.
- */
-function render_public_search_bar(?array $gallery = null): void
-{
-    if (!public_home_search_enabled()) {
-        return;
-    }
-
-    $searchId = $gallery ? 'public-gallery-search-input-' . (int) $gallery['id'] : 'public-home-search-input';
-    $contextId = $gallery ? 'public-gallery-search-context-' . (int) $gallery['id'] : '';
-    $ariaLabel = $gallery ? t('search.gallery_label', 'Search this gallery and all galleries') : t('search.home_label', 'Search galleries and photos');
-    $placeholder = $gallery ? t('search.gallery_placeholder', 'Search this gallery, subgalleries, tags, photos...') : t('search.placeholder', 'Search galleries, tags, photos...');
-
-    echo '<section class="public-home-search" data-public-home-search data-search-url="' . e(url_for('public_search')) . '" data-min-length="2" data-delay-ms="200" data-loading-label="' . e(t('search.loading', 'Searching...')) . '" data-empty-label="' . e(t('search.empty', 'No matches found.')) . '" data-error-label="' . e(t('search.error', 'Search is temporarily unavailable.')) . '"' . ($gallery ? ' data-gallery-id="' . (int) $gallery['id'] . '"' : '') . ' aria-label="' . e($ariaLabel) . '">';
-    echo '<label class="visually-hidden" for="' . e($searchId) . '">' . e($ariaLabel) . '</label>';
-    echo '<div class="public-home-search-shell">';
-    echo '<span class="public-home-search-icon" aria-hidden="true">&#128269;</span>';
-    echo '<input id="' . e($searchId) . '" class="public-home-search-input" type="search" autocomplete="off" spellcheck="false" placeholder="' . e($placeholder) . '" data-public-home-search-input>';
-    if ($gallery) {
-        echo '<label class="public-home-search-context" for="' . e($contextId) . '"><input id="' . e($contextId) . '" type="checkbox" checked data-public-home-search-context> <span>' . e(t('search.context_current_gallery', 'Search only this gallery and its subgalleries')) . '</span></label>';
-    }
-    echo '<button type="button" class="public-home-search-clear" data-public-home-search-clear aria-label="' . e(t('search.clear', 'Clear search')) . '" hidden>&times;</button>';
-    echo '</div>';
-    echo '<div class="public-home-search-results" data-public-home-search-results hidden></div>';
-    echo '</section>';
 }
