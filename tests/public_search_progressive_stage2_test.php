@@ -31,6 +31,7 @@ function public_search_progressive_assert(bool $condition, string $label): void
 }
 
 $root = dirname(__DIR__);
+$architectureSource = (string) file_get_contents($root . '/ARCHITECTURE.md');
 $progressiveSource = (string) file_get_contents($root . '/app/services/public_search_progressive.php');
 $modelSource = (string) file_get_contents($root . '/app/models/public_search_progressive.php');
 $controllerSource = (string) file_get_contents($root . '/app/controllers/public_search.php');
@@ -105,7 +106,7 @@ public_search_progressive_assert(str_contains($seoGuardSource, "'public_search' 
 public_search_progressive_assert(strpos($servicesSource, "'/models.php'") < strpos($servicesSource, "'/services/public_search.php'"), 'MVC model loader must run before public-search services.');
 public_search_progressive_assert(strpos($servicesSource, "'/services/public_search.php'") < strpos($servicesSource, "'/services/public_search_progressive.php'"), 'Progressive search service must load after legacy search helpers.');
 
-$specPath = $root . '/TEMP_PROGRESSIVE_PUBLIC_SEARCH_SPEC.md';
-public_search_progressive_assert(is_file($specPath), 'Progressive-search TEMP implementation specification must remain in the project during staged work.');
+public_search_progressive_assert(str_contains($architectureSource, '`public_search_progressive.php`'), 'Permanent progressive-search architecture documentation must remain available after staged work is complete.');
+public_search_progressive_assert(!is_file($root . '/TEMP_PROGRESSIVE_PUBLIC_SEARCH_SPEC.md'), 'Temporary progressive-search implementation specifications must not ship in a release.');
 
 fwrite(STDOUT, "Progressive public-search Stage 1/2 checks passed.\n");
