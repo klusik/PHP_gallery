@@ -27,7 +27,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-09-02
+ *   2026-09-13
  */
 
 import { setupImageBulkMoveFields } from './admin-bulk-actions.js?v=20260519-gallery-picker-v1';
@@ -1822,14 +1822,79 @@ async function submitPublicImageCardDelete(form) {
 }
 
 /**
+ * Resolve the card and canonical target metadata for one visibility form.
+ *
+ * The card can be replaced by the mutation coordinator after the request, so the
+ * stable kind/id pair is captured before submission and used to find the fresh
+ * server-rendered card for the completion animation.
+ *
+ * @param {HTMLFormElement} form Visibility option form.
+ * @return {{kind:string,id:number,card:HTMLElement|null}} Target metadata.
+ */
+function publicCardVisibilityMutationTarget(form) {
+    const kind = form.dataset.publicAdminVisibilityKind === 'image' ? 'image' : 'gallery';
+    const idField = kind === 'image' ? 'image_id' : 'gallery_id';
+    const id = Math.max(0, Number(form.querySelector(`input[name="${idField}"]`)?.value || 0));
+    const card = form.closest('.gallery-card, .image-card');
+    return {
+        kind,
+        id: Number.isInteger(id) ? id : 0,
+        card: card instanceof HTMLElement ? card : null,
+    };
+}
+
+/** Find the fresh server-rendered card for one completed visibility mutation. */
+function publicCardForVisibilityTarget(target) {
+    if (!target || target.id <= 0) return null;
+    const selector = target.kind === 'image'
+        ? `.image-card[data-public-order-id="${target.id}"]`
+        : `.gallery-card[data-gallery-id="${target.id}"]`;
+    const card = document.querySelector(selector);
+    return card instanceof HTMLElement ? card : null;
+}
+
+/** Mark one card as actively saving a visibility change. */
+function beginPublicCardVisibilityFeedback(target) {
+    const card = target?.card;
+    if (!(card instanceof HTMLElement)) return;
+    card.classList.remove('is-visibility-updated');
+    card.classList.add('is-visibility-updating');
+    card.setAttribute('aria-busy', 'true');
+}
+
+/** Clear pending feedback from the original card after a failed or unsynchronized request. */
+function cancelPublicCardVisibilityFeedback(target) {
+    const card = target?.card;
+    if (!(card instanceof HTMLElement) || !card.isConnected) return;
+    card.classList.remove('is-visibility-updating');
+    card.removeAttribute('aria-busy');
+}
+
+/** Pulse the fresh card after the server-rendered visibility state was verified. */
+function completePublicCardVisibilityFeedback(target) {
+    const card = publicCardForVisibilityTarget(target);
+    if (!(card instanceof HTMLElement)) return;
+    card.classList.remove('is-visibility-updating', 'is-visibility-updated');
+    card.removeAttribute('aria-busy');
+    // Force a style boundary so repeated changes on the same card replay the confirmation animation.
+    void card.offsetWidth;
+    card.classList.add('is-visibility-updated');
+    window.setTimeout(() => {
+        if (card.isConnected) card.classList.remove('is-visibility-updated');
+    }, 700);
+}
+
+/**
  * Change one gallery or image card visibility through the canonical coordinator.
  *
  * @param {HTMLFormElement} form Visibility option form.
  * @return {Promise<void>} Resolves after the current public context is refreshed.
  */
 async function submitPublicCardVisibility(form) {
+    const target = publicCardVisibilityMutationTarget(form);
     const submitButton = form.querySelector('button[type="submit"]');
     if (submitButton instanceof HTMLButtonElement) submitButton.disabled = true;
+    beginPublicCardVisibilityFeedback(target);
     try {
         const body = new FormData(form);
         body.set('ajax', '1');
@@ -1845,14 +1910,17 @@ async function submitPublicCardVisibility(form) {
         }
         const syncResult = await completeCoreGalleryMutationInCurrentView(result);
         if (!syncResult.synchronized) {
+            cancelPublicCardVisibilityFeedback(target);
             showAdminGallerySidePanelResultNotice(
                 i18n('admin.side_panel.sync_failed_after_success', 'The gallery was saved, but the refreshed public view could not be verified. The server change was kept; continue working or reopen the page later.'),
                 String(result.fallback?.redirect_url || '')
             );
             return;
         }
+        completePublicCardVisibilityFeedback(target);
         showAdminGallerySidePanelResultNotice(String(result.message || i18n('gallery.visibility.updated', 'Visibility updated.')), '');
     } catch (error) {
+        cancelPublicCardVisibilityFeedback(target);
         showAdminGallerySidePanelResultNotice(
             error instanceof Error ? error.message : i18n('gallery.visibility.update_failed', 'Visibility update failed.'),
             ''
