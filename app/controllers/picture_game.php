@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-04
+ *   2026-09-13
  */
 
 declare(strict_types=1);
@@ -38,8 +38,6 @@ namespace Gallery\Controllers;
 
 use RuntimeException;
 use Gallery\Services\PresentationSchemaUnavailableException;
-use function Gallery\Core\csrf_field;
-use function Gallery\Core\e;
 use function Gallery\Core\gallery_public_url;
 use function Gallery\Core\redirect_to;
 use function Gallery\Core\render_footer;
@@ -61,6 +59,10 @@ use function Gallery\Services\thumbnail_srcset;
 use function Gallery\Services\thumbnail_url;
 use function Gallery\Services\visitor_can_access_gallery;
 use function Gallery\Services\admin_log_event;
+use function Gallery\Views\view_render_picture_game_choice;
+use function Gallery\Views\view_render_picture_game_page;
+use function Gallery\Views\view_render_picture_game_stats;
+use function Gallery\Views\view_render_picture_game_unavailable;
 
 /**
  * Public picture-game controller layer.
@@ -89,8 +91,12 @@ function cms_picture_game(): void
         }
         presentation_schema_log_degraded($schemaStatus, 'picture_game_route');
         http_response_code(503);
-        render_header(t('public.service_unavailable_title', 'Temporarily unavailable'));
-        echo '<section class="panel"><h1>' . e(t('public.service_unavailable_title', 'Temporarily unavailable')) . '</h1><p>' . e(t('public.presentation_schema_unavailable', 'This optional gallery feature is temporarily unavailable because its database schema could not be verified. The main gallery remains available.')) . '</p></section>';
+        $title = t('public.service_unavailable_title', 'Temporarily unavailable');
+        render_header($title);
+        view_render_picture_game_unavailable([
+            'title' => $title,
+            'message' => t('public.presentation_schema_unavailable', 'This optional gallery feature is temporarily unavailable because its database schema could not be verified. The main gallery remains available.'),
+        ]);
         render_footer();
         return;
     }
@@ -105,8 +111,9 @@ function cms_picture_game(): void
             );
         } catch (PresentationSchemaUnavailableException $exception) {
             http_response_code(503);
-            render_header(t('public.service_unavailable_title', 'Temporarily unavailable'));
-            echo '<section class="panel"><h1>' . e(t('public.service_unavailable_title', 'Temporarily unavailable')) . '</h1><p>' . e($exception->getMessage()) . '</p></section>';
+            $title = t('public.service_unavailable_title', 'Temporarily unavailable');
+            render_header($title);
+            view_render_picture_game_unavailable(['title' => $title, 'message' => $exception->getMessage()]);
             render_footer();
             return;
         } catch (RuntimeException) {
@@ -120,29 +127,66 @@ function cms_picture_game(): void
     $pair = next_picture_game_pair($gallery);
     // Variable $topImages stores this steps working value.
     $topImages = picture_game_top_images($gallery);
-    render_header(t('picture_game.page_title', ['title' => (string) $gallery['title']]));
+
+    ob_start();
     render_breadcrumbs($gallery);
-    echo '<section class="hero"><h1>' . e(t('picture_game.title')) . '</h1><p>' . e(t('picture_game.description')) . '</p></section>';
-    if (!$pair) {
-        echo '<section class="panel"><h2>' . e(t('picture_game.complete_title')) . '</h2><p>' . e(t('picture_game.complete_description')) . '</p><p><a class="button" href="' . e(gallery_public_url($gallery)) . '">' . e(t('picture_game.back_to_gallery')) . '</a></p></section>';
-        render_picture_game_stats($topImages);
-        render_footer();
-        return;
-    }
-    echo '<section class="picture-game" data-picture-game>';
-    echo '<form method="post" action="' . e(url_for('picture_game')) . '">' . csrf_field();
-    echo '<input type="hidden" name="gallery_id" value="' . (int) $gallery['id'] . '">';
-    echo '<input type="hidden" name="left_image_id" value="' . (int) $pair['left']['id'] . '">';
-    echo '<input type="hidden" name="right_image_id" value="' . (int) $pair['right']['id'] . '">';
-    echo '<div class="picture-game-pair">';
-    render_picture_game_choice($pair['left'], 'left');
-    render_picture_game_choice($pair['right'], 'right');
-    echo '</div>';
-    echo '</form>';
-    echo '<p class="muted">' . e(t('picture_game.remaining_comparisons', ['remaining' => (string) max(0, (int) $pair['remaining_pairs'] - 1), 'total' => (string) (int) $pair['total_pairs']])) . '</p>';
-    echo '</section>';
-    render_picture_game_stats($topImages);
+    $breadcrumbsHtml = (string) ob_get_clean();
+
+    $viewModel = [
+        'breadcrumbs_html' => $breadcrumbsHtml,
+        'hero_title' => t('picture_game.title'),
+        'description' => t('picture_game.description'),
+        'complete_title' => t('picture_game.complete_title'),
+        'complete_description' => t('picture_game.complete_description'),
+        'back_url' => gallery_public_url($gallery),
+        'back_label' => t('picture_game.back_to_gallery'),
+        'action_url' => url_for('picture_game'),
+        'gallery_id' => (int) $gallery['id'],
+        'pair' => $pair ? [
+            'left' => picture_game_choice_view_model((array) $pair['left'], 'left'),
+            'right' => picture_game_choice_view_model((array) $pair['right'], 'right'),
+        ] : null,
+        'remaining_label' => $pair ? t('picture_game.remaining_comparisons', [
+            'remaining' => (string) max(0, (int) $pair['remaining_pairs'] - 1),
+            'total' => (string) (int) $pair['total_pairs'],
+        ]) : '',
+        'top_images' => array_map('Gallery\\Controllers\\picture_game_stats_item_view_model', $topImages),
+        'top_pictures_label' => t('picture_game.top_pictures'),
+    ];
+
+    render_header(t('picture_game.page_title', ['title' => (string) $gallery['title']]));
+    view_render_picture_game_page($viewModel);
     render_footer();
+}
+
+/**
+ * Prepare one selectable picture-game choice.
+ *
+ * @param array $image Image row or image data.
+ * @param string $side Side value.
+ * @return array<string, mixed> Prepared image-choice presentation model.
+ */
+function picture_game_choice_view_model(array $image, string $side): array
+{
+    // Variable $label stores this steps working value.
+    $label = $side === 'left' ? t('picture_game.choose_left') : t('picture_game.choose_right');
+    // Variable $imageGallery stores this steps working value.
+    $imageGallery = ['show_filenames' => (int) ($image['gallery_show_filenames'] ?? 0)];
+    // Variable $displayTitle stores this steps working value.
+    $displayTitle = public_image_display_title($image, $imageGallery);
+    // Variable $altText stores this steps working value.
+    $altText = $displayTitle !== '' ? $displayTitle : t('picture_game.picture_alt');
+
+    return [
+        'id' => (int) ($image['id'] ?? 0),
+        'side' => $side,
+        'label' => $label,
+        'src' => thumbnail_url($image, 300),
+        'srcset' => thumbnail_srcset($image, [300, 600, 800]),
+        'alt' => $altText,
+        'display_title' => $displayTitle,
+        'gallery_title' => (string) ($image['gallery_title'] ?? ''),
+    ];
 }
 
 /**
@@ -153,22 +197,34 @@ function cms_picture_game(): void
  */
 function render_picture_game_choice(array $image, string $side): void
 {
-    // Variable $label stores this steps working value.
-    $label = $side === 'left' ? t('picture_game.choose_left') : t('picture_game.choose_right');
+    view_render_picture_game_choice(picture_game_choice_view_model($image, $side));
+}
+
+/**
+ * Prepare one top-image card for the picture-game stats view.
+ *
+ * @param array $image Image row or image data.
+ * @return array<string, mixed> Prepared stats-card presentation model.
+ */
+function picture_game_stats_item_view_model(array $image): array
+{
     // Variable $imageGallery stores this steps working value.
     $imageGallery = ['show_filenames' => (int) ($image['gallery_show_filenames'] ?? 0)];
     // Variable $displayTitle stores this steps working value.
     $displayTitle = public_image_display_title($image, $imageGallery);
     // Variable $altText stores this steps working value.
     $altText = $displayTitle !== '' ? $displayTitle : t('picture_game.picture_alt');
-    echo '<button class="picture-game-choice" type="submit" name="winner_image_id" value="' . (int) $image['id'] . '" data-picture-game-choice="' . e($side) . '" aria-label="' . e($label) . '">';
-    echo '<img decoding="async" loading="lazy" src="' . e(thumbnail_url($image, 300)) . '" srcset="' . e(thumbnail_srcset($image, [300, 600, 800])) . '" sizes="(min-width: 60rem) 30vw, 80vw" alt="' . e($altText) . '">';
-    echo '<span>';
-    if ($displayTitle !== '') {
-        echo '<strong>' . e($displayTitle) . '</strong>';
-    }
-    echo '<small>' . e((string) ($image['gallery_title'] ?? '')) . '</small></span>';
-    echo '</button>';
+
+    return [
+        'src' => thumbnail_url($image, 300),
+        'srcset' => thumbnail_srcset($image, [300, 600, 800]),
+        'alt' => $altText,
+        'display_title' => $displayTitle,
+        'score_label' => t('picture_game.score_line', [
+            'wins' => (string) (int) ($image['game_wins'] ?? 0),
+            'score' => (string) (int) ($image['score'] ?? 0),
+        ]),
+    ];
 }
 
 /**
@@ -178,23 +234,6 @@ function render_picture_game_choice(array $image, string $side): void
  */
 function render_picture_game_stats(array $topImages): void
 {
-    if (!$topImages) {
-        return;
-    }
-    echo '<section class="panel"><h2>' . e(t('picture_game.top_pictures')) . '</h2><div class="grid">';
-    foreach ($topImages as $image) {
-        // Variable $imageGallery stores this steps working value.
-        $imageGallery = ['show_filenames' => (int) ($image['gallery_show_filenames'] ?? 0)];
-        // Variable $displayTitle stores this steps working value.
-        $displayTitle = public_image_display_title($image, $imageGallery);
-        // Variable $altText stores this steps working value.
-        $altText = $displayTitle !== '' ? $displayTitle : t('picture_game.picture_alt');
-        echo '<article class="image-card"><img decoding="async" loading="lazy" src="' . e(thumbnail_url($image, 300)) . '" srcset="' . e(thumbnail_srcset($image, [300, 600, 800])) . '" sizes="(min-width: 60rem) 30vw, 80vw" alt="' . e($altText) . '">';
-        echo '<div class="image-meta">';
-        if ($displayTitle !== '') {
-            echo '<h2>' . e($displayTitle) . '</h2>';
-        }
-        echo '<p class="muted">' . e(t('picture_game.score_line', ['wins' => (string) (int) $image['game_wins'], 'score' => (string) (int) $image['score']])) . '</p></div></article>';
-    }
-    echo '</div></section>';
+    $items = array_map('Gallery\\Controllers\\picture_game_stats_item_view_model', $topImages);
+    view_render_picture_game_stats($items, t('picture_game.top_pictures'));
 }

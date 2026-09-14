@@ -334,6 +334,9 @@ namespace {
     ];
     $GLOBALS['viewer_phase40_pdo'] = new RegistrationPolicyPdo();
 
+    require_once $root . '/app/bootstrap/viewer_identity_context.php';
+    require_once $root . '/app/models/viewer_accounts.php';
+    require_once $root . '/app/models/viewer_registration.php';
     require_once $root . '/app/services/viewer_accounts.php';
     require_once $root . '/app/services/viewer_registration.php';
 
@@ -448,9 +451,9 @@ namespace {
     viewer_phase40_assert(str_contains($validateSource, 'viewer_registration_request_allowed_by_current_mode($row)'), 'Verification validation must re-check the current registration policy.');
     viewer_phase40_assert(str_contains($confirmSource, 'viewer_registration_request_allowed_by_current_mode($row)'), 'Verification confirmation must re-check the current registration policy.');
     viewer_phase40_assert(str_contains($activateSource, 'viewer_registration_request_allowed_by_current_mode($request)'), 'Final activation must re-check the current registration policy.');
-    viewer_phase40_assert(strpos($activateSource, 'viewer_registration_request_allowed_by_current_mode($request)') < strpos($activateSource, 'INSERT INTO viewer_accounts'), 'Final current-mode authorization must run before durable viewer account creation.');
+    viewer_phase40_assert(strpos($activateSource, 'viewer_registration_request_allowed_by_current_mode($request)') < strpos($activateSource, 'viewer_registration_model_activate_account('), 'Final current-mode authorization must run before durable viewer account creation.');
     viewer_phase40_assert(str_contains($beginSource, '$mode = viewer_registration_mode();') && substr_count($beginSource, '$mode = viewer_registration_mode();') >= 2, 'Staged request creation must re-read current policy after entering its serialized transaction boundary.');
-    viewer_phase40_assert(str_contains($cancelSource, 'viewer_invitation_id IS NULL') && !str_contains($cancelSource, 'DELETE FROM viewer_accounts'), 'Mode cleanup must target only open-origin staging and never durable viewer accounts.');
+    viewer_phase40_assert(str_contains($cancelSource, 'viewer_registration_model_cancel_open_origin(') && !str_contains($cancelSource, 'viewer_accounts'), 'Mode cleanup must delegate only open-origin staging cancellation and never durable viewer accounts.');
     $openTransitionStart = strpos($modeSetSource, "if (\$normalized === 'open')");
     $restrictiveTransitionStart = strpos($modeSetSource, '// Serialize the restrictive policy write');
     viewer_phase40_assert($openTransitionStart !== false && $restrictiveTransitionStart !== false, 'Backend mode storage must contain explicit open and restrictive transition branches.');

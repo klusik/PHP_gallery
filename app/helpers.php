@@ -37,10 +37,12 @@ declare(strict_types=1);
 namespace Gallery\Core;
 
 
+require_once __DIR__ . '/request_data.php';
 require_once __DIR__ . '/helpers_request.php';
 require_once __DIR__ . '/helpers_mutation.php';
 require_once __DIR__ . '/helpers_public_urls.php';
 require_once __DIR__ . '/helpers_runtime.php';
+require_once __DIR__ . '/helpers_formatting.php';
 require_once __DIR__ . '/helpers_admin_rendering.php';
 require_once __DIR__ . '/helpers_page_rendering.php';
 require_once __DIR__ . '/helpers_files.php';

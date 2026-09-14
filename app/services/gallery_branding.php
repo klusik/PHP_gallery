@@ -39,11 +39,11 @@ namespace Gallery\Services;
 use InvalidArgumentException;
 use RuntimeException;
 use Throwable;
-use function Gallery\Core\db;
 use function Gallery\Core\normalize_relative_path;
 use function Gallery\Core\now_sql;
 use function Gallery\Core\path_inside;
 use function Gallery\Core\url_for;
+use function Gallery\Models\gallery_model_update_fields;
 
 /**
  * Gallery branding asset helpers.
@@ -248,9 +248,7 @@ function set_gallery_branding_asset_path(int $galleryId, string $kind, ?string $
     $column = gallery_branding_asset_column($kind);
     // $value stores an intermediate value used by the surrounding gallery workflow.
     $value = $relativePath !== null && trim($relativePath) !== '' ? normalize_relative_path($relativePath) : null;
-    // $stmt stores an intermediate value used by the surrounding gallery workflow.
-    $stmt = db()->prepare('UPDATE galleries SET ' . $column . ' = ?, updated_at = ? WHERE id = ?');
-    $stmt->execute([$value, now_sql(), $galleryId]);
+    gallery_model_update_fields($galleryId, [$column => $value], now_sql());
 }
 
 /**

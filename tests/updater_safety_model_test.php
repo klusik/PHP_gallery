@@ -31,7 +31,8 @@ declare(strict_types=1);
 require_once __DIR__ . '/../app/services/updates.php';
 
 $updatesController = (string) file_get_contents(__DIR__ . '/../app/controllers/updates.php');
-if (!str_contains($updatesController, 'value="cleanup_malformed_root_files"')) {
+$updatesView = (string) file_get_contents(__DIR__ . '/../app/views/admin_updates.php');
+if (!str_contains($updatesController, "$action === 'cleanup_malformed_root_files'") || !str_contains($updatesView, 'value="cleanup_malformed_root_files"')) {
     throw new RuntimeException('Advanced updater tools no longer expose malformed root-file cleanup.');
 }
 

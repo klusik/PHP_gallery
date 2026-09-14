@@ -1,5 +1,20 @@
 <?php
 
+/**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ *
+ * File: tests/smart_gallery_cycle_placement_test.php
+ *
+ * Author:
+ *   Rudolf Klusal
+ *
+ * License:
+ *   MIT License (see LICENSE file in repository)
+ *
+ * Notes:
+ *   - Keep comments and docstrings intact when modifying this file.
+ */
 /** Regression tests for Smart Gallery relationship-cycle safety and per-parent placement ordering. */
 
 declare(strict_types=1);
@@ -122,8 +137,9 @@ namespace Gallery\Services {
     smart_gallery_cycle_test_assert(str_contains((string) $migration, 'placement_order INT NOT NULL DEFAULT 0'), 'The attachment migration adds a per-parent deterministic order value.');
 
     $serviceSource = file_get_contents(dirname(__DIR__) . '/app/services/smart_galleries.php');
-    smart_gallery_cycle_test_assert(str_contains((string) $serviceSource, "CASE sgp.placement WHEN 'top' THEN 0 ELSE 1 END, sgp.placement_order, sg.id"), 'Public attachment loading uses placement, configured order, then Smart Gallery ID as the stable tie-breaker.');
-    smart_gallery_cycle_test_assert(str_contains((string) $serviceSource, 'WHERE smart_gallery_id = ? AND gallery_id = ?'), 'Per-parent placement updates address the composite relationship rather than globally changing a Smart Gallery.');
+    $modelSource = file_get_contents(dirname(__DIR__) . '/app/models/smart_galleries.php');
+    smart_gallery_cycle_test_assert(str_contains((string) $modelSource, "CASE sgp.placement WHEN 'top' THEN 0 ELSE 1 END, sgp.placement_order, sg.id"), 'Public attachment loading uses model-owned placement, configured order, then Smart Gallery ID as the stable tie-breaker.');
+    smart_gallery_cycle_test_assert(str_contains((string) $modelSource, 'WHERE smart_gallery_id = ? AND gallery_id = ?'), 'Per-parent placement updates address the composite relationship in the model rather than globally changing a Smart Gallery.');
     $updatePlacementStart = strpos((string) $serviceSource, 'function smart_gallery_update_placement');
     $updatePlacementEnd = strpos((string) $serviceSource, '/** Remove one physical placement', $updatePlacementStart === false ? 0 : $updatePlacementStart);
     $updatePlacementSource = $updatePlacementStart !== false && $updatePlacementEnd !== false ? substr((string) $serviceSource, $updatePlacementStart, $updatePlacementEnd - $updatePlacementStart) : '';
@@ -134,9 +150,12 @@ namespace Gallery\Services {
     smart_gallery_cycle_test_assert(is_string($multiplePlacementMigration) && str_contains($multiplePlacementMigration, 'PRIMARY KEY (smart_gallery_id, gallery_id)'), 'The existing composite key prevents duplicate instances under the same physical parent while allowing multiple parents.');
 
     $publicSource = file_get_contents(dirname(__DIR__) . '/app/controllers/public_gallery_page.php');
-    $topPosition = strpos((string) $publicSource, "render_public_smart_gallery_attachment_group(\$topSmartChildren, 'top'");
-    $normalPosition = strpos((string) $publicSource, 'if ($children) {', $topPosition === false ? 0 : $topPosition);
-    $bottomPosition = strpos((string) $publicSource, "render_public_smart_gallery_attachment_group(\$bottomSmartChildren, 'bottom'");
+    $publicViewSource = file_get_contents(dirname(__DIR__) . '/app/views/public_gallery_pages.php');
+    $detailStart = strpos((string) $publicViewSource, 'function view_render_public_gallery_detail');
+    $detailSource = $detailStart === false ? '' : substr((string) $publicViewSource, $detailStart);
+    $topPosition = strpos($detailSource, "['top_smart_group_html']");
+    $normalPosition = strpos($detailSource, 'view_render_public_subgallery_section', $topPosition === false ? 0 : $topPosition);
+    $bottomPosition = strpos($detailSource, "['bottom_smart_group_html']");
     smart_gallery_cycle_test_assert($topPosition !== false && $normalPosition !== false && $bottomPosition !== false && $topPosition < $normalPosition && $normalPosition < $bottomPosition, 'Public rendering places ordered top Smart Galleries before normal content and bottom Smart Galleries after it.');
     smart_gallery_cycle_test_assert(str_contains((string) $publicSource, 'if ($smartGalleries === []) return;'), 'Filtered or unavailable attachment groups leave no empty public layout block.');
 
@@ -146,10 +165,13 @@ namespace Gallery\Services {
     smart_gallery_cycle_test_assert(str_contains((string) $reorderSource, 'smart_gallery_validate_gallery_parent_map($submittedParentById);'), 'Admin drag-and-drop hierarchy moves validate the complete resulting relationship graph before the first filesystem move.');
 
     $adminGallerySource = module_source(dirname(__DIR__) . '/app/controllers/admin_galleries_edit_page.php');
+    $adminGalleryViewSource = file_get_contents(dirname(__DIR__) . '/app/views/admin_gallery_edit_tabs.php');
+    $adminGalleryRenderSource = (string) $adminGallerySource . "\n" . (string) $adminGalleryViewSource;
     $adminSmartSource = file_get_contents(dirname(__DIR__) . '/app/controllers/smart_galleries.php');
+    $adminSmartViewSource = file_get_contents(dirname(__DIR__) . '/app/views/smart_galleries.php');
     $sidePanelSource = file_get_contents(dirname(__DIR__) . '/public/assets/gallery-modules/admin-side-panel.js');
-    smart_gallery_cycle_test_assert(str_contains((string) $adminGallerySource, 'smart_gallery_children_present') && str_contains((string) $adminGallerySource, '[placement]') && str_contains((string) $adminGallerySource, '[placement_order]'), 'Physical gallery Admin editing exposes no-JavaScript attachment, placement, and order form fields.');
-    smart_gallery_cycle_test_assert(str_contains((string) $adminSmartSource, 'value="update_placement"') && str_contains((string) $adminSmartSource, 'value="remove_placement"') && str_contains((string) $adminSmartSource, 'data-smart-gallery-panel-form'), 'Smart Gallery Admin editing exposes in-place update and detach forms with normal POST fallback.');
+    smart_gallery_cycle_test_assert(str_contains($adminGalleryRenderSource, 'smart_gallery_children_present') && str_contains($adminGalleryRenderSource, '[placement]') && str_contains($adminGalleryRenderSource, '[placement_order]'), 'Physical gallery Admin editing exposes no-JavaScript attachment, placement, and order form fields across the controller/view boundary.');
+    smart_gallery_cycle_test_assert(str_contains((string) $adminSmartViewSource, 'value="update_placement"') && str_contains((string) $adminSmartViewSource, 'value="remove_placement"') && str_contains((string) $adminSmartViewSource, 'data-smart-gallery-panel-form') && str_contains((string) $adminSmartSource, 'smart_gallery_admin_editor_view_model'), 'Smart Gallery Admin editing exposes in-place update and detach forms through the MVC view contract with normal POST fallback.');
     smart_gallery_cycle_test_assert(str_contains((string) $sidePanelSource, "form.matches('[data-smart-gallery-panel-form]')") && str_contains((string) $sidePanelSource, 'submitAdminSmartGalleryPanelForm'), 'Existing delegated side-panel JavaScript remains the primary pipeline for dynamically injected Smart Gallery attachment actions.');
 
     foreach (['en', 'cs', 'de', 'sv'] as $language) {

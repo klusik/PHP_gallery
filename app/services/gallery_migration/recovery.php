@@ -42,15 +42,14 @@ use RuntimeException;
 use Throwable;
 use ZipArchive;
 use const Gallery\Core\CMS_VERSION;
-use function Gallery\Controllers\admin_edit_gallery_tab_url;
 use function Gallery\Core\cms_config;
 use function Gallery\Core\cms_current_version;
-use function Gallery\Core\db;
 use function Gallery\Core\gallery_public_url;
 use function Gallery\Core\is_supported_image_path;
 use function Gallery\Core\normalize_relative_path;
 use function Gallery\Core\now_sql;
 use function Gallery\Core\path_inside;
+use function Gallery\Models\gallery_model_update_fields;
 use function Gallery\Core\unique_slug;
 
 /**
@@ -137,7 +136,7 @@ function gallery_migration_recover_existing_gallery_asset(int $targetGalleryId, 
     $column = (string) ($asset['kind'] ?? '');
     if (in_array($column, ['cover_image_path', 'banner_image_path', 'logo_image_path', 'separator_image_path'], true)
         && mutation_schema_optional_column_available('mutation.gallery_migration_gallery_asset', 'galleries', $column, 'gallery_migration.recover_gallery_asset')) {
-        db()->prepare('UPDATE galleries SET ' . $column . ' = ?, updated_at = ? WHERE id = ?')->execute([$relativePath, now_sql(), $targetGalleryId]);
+        gallery_model_update_fields($targetGalleryId, [$column => $relativePath], now_sql());
         $updated = find_gallery($targetGalleryId, true) ?: $gallery;
         write_gallery_sidecar($updated);
     }

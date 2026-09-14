@@ -8,14 +8,14 @@
  * Module Type: Service
  *
  * Purpose:
- *   Owns capability route ownership, effective route gating, and disabled-route responses.
+ *   Owns capability route ownership, effective route gating, and disabled-route response decisions.
  *
  * Responsibilities:
  *   - Derive explicit route ownership from canonical capability metadata
  *   - Resolve prefix-owned route families without duplicating route maps
  *   - Support single, all-of, and any-of route requirements
  *   - Gate routes through dependency-aware effective capability state
- *   - Render consistent non-advertising public or informative Admin disabled responses
+ *   - Build consistent non-advertising public or informative Admin disabled-route decisions
  *
  * Author:
  *   Rudolf Klusal
@@ -36,11 +36,6 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
-use function Gallery\Core\current_user;
-use function Gallery\Core\e;
-use function Gallery\Core\render_footer;
-use function Gallery\Core\render_header;
-use function Gallery\Core\url_for;
 
 /**
  * Return centralized multi-capability route requirements.
@@ -256,72 +251,53 @@ function feature_capability_route_requirement_label(array $requirement): string
 }
 
 /**
- * Return true when the current request expects a JSON response.
+ * Build the disabled-route response decision for the HTTP dispatch boundary.
  *
- * @return bool True when the condition matches.
+ * Anonymous and non-Admin callers receive a non-advertising not-found decision.
+ * Authenticated administrators receive an actionable disabled-capability decision.
+ * No headers, status codes, request globals, or presentation output are owned here.
+ *
+ * @param string $page Route identifier.
+ * @param bool $wantsJson Whether the HTTP boundary selected JSON representation.
+ * @param bool $isAdmin Whether the current authenticated principal is an administrator.
+ * @return array{status:int,representation:string,headers:array<string,string>,payload:array<string,mixed>,title:string,message:string,admin:bool}
  */
-function feature_flag_request_wants_json(): bool
-{
-    $accept = strtolower((string) ($_SERVER['HTTP_ACCEPT'] ?? ''));
-    $contentType = strtolower((string) ($_SERVER['CONTENT_TYPE'] ?? ''));
-    return str_contains($accept, 'application/json')
-        || str_contains($contentType, 'application/json')
-        || (string) ($_GET['ajax'] ?? $_POST['ajax'] ?? '') !== '';
-}
-
-/**
- * Render a consistent disabled-feature response and stop route dispatch.
- *
- * Anonymous and non-Admin callers receive a non-advertising not-found response.
- * Authenticated administrators receive an actionable disabled-capability response.
- *
- * @param string $page Page number or page data.
- */
-function feature_flag_render_disabled_route(string $page): void
+function feature_flag_disabled_route_decision(string $page, bool $wantsJson, bool $isAdmin): array
 {
     $requirement = feature_capability_route_requirement($page);
     $requirement ??= ['type' => 'single', 'capabilities' => []];
-    $label = feature_capability_route_requirement_label($requirement);
-    $message = t('admin.features.disabled_route_message', 'This feature is disabled in Admin > Features: {feature}', ['feature' => $label]);
-    $admin = current_user();
-    $isAdmin = is_array($admin) && (string) ($admin['role'] ?? '') === 'admin';
+    $headers = [
+        'X-Robots-Tag' => 'noindex, nofollow',
+        'Cache-Control' => 'private, no-store, max-age=0',
+    ];
 
     if (!$isAdmin) {
-        http_response_code(404);
-        if (!headers_sent()) {
-            header('X-Robots-Tag: noindex, nofollow');
-            header('Cache-Control: private, no-store, max-age=0');
-        }
-        if (feature_flag_request_wants_json()) {
-            header('Content-Type: application/json; charset=utf-8');
-            echo json_encode(['ok' => false, 'error' => 'not_found'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-            return;
-        }
-        render_header(t('public.not_found_title', 'Not found'));
-        echo '<section class="panel"><h1>' . e(t('public.not_found_title', 'Not found')) . '</h1><p>' . e(t('public.not_found_message', 'The requested page was not found.')) . '</p></section>';
-        render_footer();
-        return;
+        return [
+            'status' => 404,
+            'representation' => $wantsJson ? 'json' : 'html',
+            'headers' => $headers,
+            'payload' => ['ok' => false, 'error' => 'not_found'],
+            'title' => t('public.not_found_title', 'Not found'),
+            'message' => t('public.not_found_message', 'The requested page was not found.'),
+            'admin' => false,
+        ];
     }
 
-    http_response_code(403);
-    if (!headers_sent()) {
-        header('X-Robots-Tag: noindex, nofollow');
-        header('Cache-Control: private, no-store, max-age=0');
-    }
-    if (feature_flag_request_wants_json()) {
-        header('Content-Type: application/json; charset=utf-8');
-        echo json_encode([
+    $label = feature_capability_route_requirement_label($requirement);
+    $message = t('admin.features.disabled_route_message', 'This feature is disabled in Admin > Features: {feature}', ['feature' => $label]);
+    return [
+        'status' => 403,
+        'representation' => $wantsJson ? 'json' : 'html',
+        'headers' => $headers,
+        'payload' => [
             'ok' => false,
             'error' => 'feature_disabled',
             'features' => $requirement['capabilities'],
             'requirement' => $requirement['type'],
             'message' => $message,
-        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        return;
-    }
-
-    render_header(t('admin.features.disabled_title', 'Feature disabled'));
-    echo '<section class="hero"><h1>' . e(t('admin.features.disabled_title', 'Feature disabled')) . '</h1><p class="muted">' . e($message) . '</p></section>';
-    echo '<section class="panel"><p><a class="button" href="' . e(url_for('admin_features')) . '">' . e(t('admin.features.open_settings', 'Open feature settings')) . '</a></p></section>';
-    render_footer();
+        ],
+        'title' => t('admin.features.disabled_title', 'Feature disabled'),
+        'message' => $message,
+        'admin' => true,
+    ];
 }

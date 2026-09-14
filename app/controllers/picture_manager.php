@@ -41,7 +41,6 @@ use RuntimeException;
 use Throwable;
 use function Gallery\Core\admin_anonymous_preview_active;
 use function Gallery\Core\current_user;
-use function Gallery\Core\db;
 use function Gallery\Core\gallery_public_url;
 use function Gallery\Core\verify_csrf;
 use function Gallery\Services\copy_gallery_images;
@@ -49,6 +48,7 @@ use function Gallery\Services\create_empty_gallery;
 use function Gallery\Services\delete_gallery_subtrees;
 use function Gallery\Services\find_gallery;
 use function Gallery\Services\gallery_count_badge_storage_value;
+use function Gallery\Services\gallery_direct_image_count;
 use function Gallery\Services\gallery_shows_filenames;
 use function Gallery\Services\gallery_visibility_storage_value;
 use function Gallery\Services\move_gallery_images;
@@ -373,9 +373,8 @@ function cms_picture_manager_create_gallery(): void
         if ($createdGalleryId > 0) {
             try {
                 // $createdGalleryImageCount keeps a successfully populated gallery from being deleted after a late reporting failure.
-                $createdGalleryImageCountStmt = db()->prepare('SELECT COUNT(*) FROM images WHERE gallery_id = ?');
-                $createdGalleryImageCountStmt->execute([$createdGalleryId]);
-                if ((int) $createdGalleryImageCountStmt->fetchColumn() === 0) {
+                $createdGalleryImageCount = gallery_direct_image_count($createdGalleryId);
+                if ($createdGalleryImageCount === 0) {
                     // Rollback of a gallery this failed operation just created. It never held
             // administrator content, so it is destroyed instead of entering the trash bin.
             delete_gallery_subtrees([$createdGalleryId]);

@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-09-03
+ *   2026-09-14
  */
 
 declare(strict_types=1);
@@ -48,41 +48,7 @@ use function Gallery\Core\csrf_token;
 use function Gallery\Core\e;
 use function Gallery\Core\theme_cache_key;
 use function Gallery\Core\url_for;
-use function Gallery\Services\app_setting;
-use function Gallery\Services\application_update_nav_label;
-use function Gallery\Services\application_update_pending;
-use function Gallery\Services\cms_github_project_url;
-use function Gallery\Services\current_viewer;
-use function Gallery\Services\custom_css_path;
-use function Gallery\Services\custom_css_url;
-use function Gallery\Services\dev_mode_enabled;
-use function Gallery\Services\favicon_asset_url;
-use function Gallery\Services\admin_test_run_active;
-use function Gallery\Services\feature_capability_effective_enabled;
-use function Gallery\Services\render_admin_test_run_panel;
-use function Gallery\Services\gallery_branding_asset_url;
-use function Gallery\Services\gallery_branding_schema_ready;
-use function Gallery\Services\seo_request_guard_canonical_head_html;
-use function Gallery\Services\site_name;
 use function Gallery\Services\t;
-use function Gallery\Services\theme_branding_asset_url;
-use function Gallery\Services\theme_favorite_gallery_navigation_items;
-use function Gallery\Services\theme_page_width_mode;
-use function Gallery\Services\theme_settings;
-use function Gallery\Services\translation_active_language;
-use function Gallery\Services\translation_default_language;
-use function Gallery\Services\translation_language_allowed;
-use function Gallery\Services\translation_language_dir;
-use function Gallery\Services\translation_language_presentation;
-use function Gallery\Services\translation_load_language;
-use function Gallery\Services\translation_normalize_language_code;
-use function Gallery\Services\translation_public_language_url;
-use function Gallery\Services\translation_public_language_selector_enabled;
-use function Gallery\Services\translation_public_language_selector_languages;
-use function Gallery\Services\translation_public_language_selector_design;
-use function Gallery\Services\translation_public_language_selector_design_style;
-use function Gallery\Services\viewer_accounts_enabled;
-use function Gallery\Services\viewer_http_open_registration_available;
 
 /**
  * Render the public visitor language selector in the shared header.
@@ -90,36 +56,32 @@ use function Gallery\Services\viewer_http_open_registration_available;
  * The compact links work without JavaScript. Each language keeps the current
  * public route and query state; the following request stores the choice.
  */
-function view_render_public_language_selector(): void
+function view_render_public_language_selector(array $model = []): void
 {
-    if (!translation_public_language_selector_enabled()) {
+    if (empty($model['enabled'])) {
         return;
     }
-    $activeLanguage = translation_active_language();
-    $presentations = translation_language_presentation();
     $label = t('public.language.selector_label', 'Language');
-    $design = translation_public_language_selector_design();
-    $preset = (string) $design['preset'];
-    $classes = 'public-language-switcher language-preset-' . $preset
-        . ' language-orientation-' . $design['orientation']
-        . ' language-density-' . $design['density']
-        . ' language-align-' . $design['alignment']
-        . ' language-active-' . $design['active_style'];
+    $classes = trim((string) ($model['classes'] ?? 'public-language-switcher'));
+    $style = trim((string) ($model['style'] ?? ''));
 
-    echo '<div class="' . e($classes) . '" role="group" aria-label="' . e($label) . '" style="' . e(translation_public_language_selector_design_style($design)) . '">';
-    foreach (translation_public_language_selector_languages() as $language) {
-        $presentation = $presentations[$language] ?? ['name' => strtoupper($language), 'flag_asset' => ''];
-        $isActive = $language === $activeLanguage;
-        $languageName = trim((string) ($presentation['name'] ?? strtoupper($language)));
-        $flagAsset = trim((string) ($presentation['flag_asset'] ?? ''));
-        echo '<a class="public-language-button' . ($isActive ? ' is-active' : '') . '" href="' . e(translation_public_language_url($language)) . '" hreflang="' . e($language) . '" lang="' . e($language) . '" aria-label="' . e($languageName) . '" title="' . e($languageName) . '"' . ($isActive ? ' aria-current="true"' : '') . '>';
-        if (!empty($design['show_codes'])) {
+    echo '<div class="' . e($classes) . '" role="group" aria-label="' . e($label) . '"' . ($style !== '' ? ' style="' . e($style) . '"' : '') . '>';
+    foreach ((array) ($model['items'] ?? []) as $item) {
+        $language = trim((string) ($item['code'] ?? ''));
+        if ($language === '') {
+            continue;
+        }
+        $languageName = trim((string) ($item['name'] ?? strtoupper($language)));
+        $flagAsset = trim((string) ($item['flag_asset'] ?? ''));
+        $isActive = !empty($item['active']);
+        echo '<a class="public-language-button' . ($isActive ? ' is-active' : '') . '" href="' . e((string) ($item['url'] ?? '#')) . '" hreflang="' . e($language) . '" lang="' . e($language) . '" aria-label="' . e($languageName) . '" title="' . e($languageName) . '"' . ($isActive ? ' aria-current="true"' : '') . '>';
+        if (!empty($model['show_codes'])) {
             echo '<span class="public-language-code" aria-hidden="true">' . e(strtoupper($language)) . '</span>';
         }
-        if (!empty($design['show_names'])) {
+        if (!empty($model['show_names'])) {
             echo '<span class="public-language-name" aria-hidden="true">' . e($languageName) . '</span>';
         }
-        if (!empty($design['show_flags']) && $flagAsset !== '') {
+        if (!empty($model['show_flags']) && $flagAsset !== '') {
             echo '<img class="public-language-flag" src="' . e(asset_url($flagAsset)) . '" alt="" aria-hidden="true" width="20" height="15" decoding="async">';
         }
         echo '</a>';
@@ -138,28 +100,13 @@ function view_render_public_language_selector(): void
  * @param string $bodyClass Body class value.
  * @return array Structured result data for the caller.
  */
-function view_public_header_branding_model(string $siteName, ?array $currentGallery = null, bool $publicOnly = true, string $bodyClass = 'public-page'): array
+function view_public_header_branding_model(array $model = []): array
 {
-    $model = [
-        'banner_url' => '',
-        'logo_url' => '',
-        'separator_url' => '',
+    return [
+        'banner_url' => trim((string) ($model['banner_url'] ?? '')),
+        'logo_url' => trim((string) ($model['logo_url'] ?? '')),
+        'separator_url' => trim((string) ($model['separator_url'] ?? '')),
     ];
-    if ($bodyClass !== 'public-page') {
-        return $model;
-    }
-    if ($currentGallery !== null && function_exists('Gallery\\Services\\gallery_branding_schema_ready') && gallery_branding_schema_ready()) {
-        $model['banner_url'] = gallery_branding_asset_url($currentGallery, 'banner', $publicOnly);
-        $model['logo_url'] = gallery_branding_asset_url($currentGallery, 'logo', $publicOnly);
-        $model['separator_url'] = gallery_branding_asset_url($currentGallery, 'separator', $publicOnly);
-    }
-    if ($model['banner_url'] === '' && function_exists('Gallery\\Services\\theme_branding_asset_url')) {
-        $model['banner_url'] = theme_branding_asset_url('banner');
-    }
-    if ($model['separator_url'] === '' && function_exists('Gallery\\Services\\theme_branding_asset_url')) {
-        $model['separator_url'] = theme_branding_asset_url('separator');
-    }
-    return $model;
 }
 
 
@@ -288,21 +235,26 @@ function view_script_asset_for_context(bool $isAdminPage, ?array $user, bool $an
  * @param ?array $currentGallery Current gallery value.
  * @param bool $publicOnly Public only value.
  */
-function view_render_header(string $title, ?array $currentGallery = null, bool $publicOnly = true): void
+function view_render_header(
+    string $title,
+    array $model = [],
+    string $requestUri = '',
+    string $page = 'home'
+): void
 {
-    $user = current_user();
-    $anonymousPreview = admin_anonymous_preview_active();
-    $siteName = site_name();
-    $theme = theme_settings();
-    $page = (string) ($_GET['page'] ?? 'home');
-    $bodyClass = str_starts_with($page, 'admin') || $page === 'setup' ? 'admin-page' : 'public-page';
-    $pageWidthClass = $bodyClass === 'public-page' ? ' page-width-' . theme_page_width_mode((string) ($theme['page_width'] ?? 'default')) : '';
-    echo '<!doctype html><html lang="' . e(function_exists('Gallery\\Services\\translation_active_language') ? translation_active_language() : 'en') . '" translate="no"><head><meta charset="utf-8">';
+    $user = is_array($model['user'] ?? null) ? $model['user'] : null;
+    $anonymousPreview = !empty($model['anonymous_preview']);
+    $siteName = (string) ($model['site_name'] ?? 'PHP Gallery');
+    $theme = is_array($model['theme'] ?? null) ? $model['theme'] : [];
+    $bodyClass = (string) ($model['body_class'] ?? (str_starts_with($page, 'admin') || $page === 'setup' ? 'admin-page' : 'public-page'));
+    $pageWidthClass = (string) ($model['page_width_class'] ?? '');
+    $activeLanguage = trim((string) ($model['active_language'] ?? 'en')) ?: 'en';
+    echo '<!doctype html><html lang="' . e($activeLanguage) . '" translate="no"><head><meta charset="utf-8">';
     echo '<meta name="viewport" content="width=device-width, initial-scale=1">';
     echo '<title>' . e($title === $siteName ? $siteName : $title . ' - ' . $siteName) . '</title>';
-    $faviconUrl = favicon_asset_url();
+    $faviconUrl = trim((string) ($model['favicon_url'] ?? ''));
     if ($faviconUrl !== '') {
-        $faviconVersion = (string) app_setting('favicon_version', '1');
+        $faviconVersion = (string) ($model['favicon_version'] ?? '1');
         echo '<link rel="icon" type="image/png" sizes="32x32" href="' . e($faviconUrl) . '&s=32&v=' . e($faviconVersion) . '">';
         echo '<link rel="icon" type="image/png" sizes="48x48" href="' . e($faviconUrl) . '&s=48&v=' . e($faviconVersion) . '">';
         echo '<link rel="apple-touch-icon" sizes="180x180" href="' . e($faviconUrl) . '&s=180&v=' . e($faviconVersion) . '">';
@@ -310,7 +262,7 @@ function view_render_header(string $title, ?array $currentGallery = null, bool $
     if ($bodyClass === 'admin-page') {
         echo '<meta name="robots" content="noindex,nofollow">';
     }
-    $styleFiles = view_stylesheet_files_for_context($bodyClass, is_array($user) ? $user : null, $anonymousPreview);
+    $styleFiles = view_stylesheet_files_for_context($bodyClass, $user, $anonymousPreview);
     foreach ($styleFiles as $styleFile) {
         $stylePath = dirname(__DIR__, 2) . '/public/' . $styleFile;
         if (!is_file($stylePath)) {
@@ -318,9 +270,9 @@ function view_render_header(string $title, ?array $currentGallery = null, bool $
         }
         echo '<link rel="stylesheet" href="' . e(asset_url($styleFile)) . '?v=' . filemtime($stylePath) . '">';
     }
-    $customCss = custom_css_url();
-    if ($customCss) {
-        echo '<link rel="stylesheet" href="' . e($customCss) . '?v=' . filemtime(custom_css_path()) . '">';
+    $customCss = trim((string) ($model['custom_css_url'] ?? ''));
+    if ($customCss !== '') {
+        echo '<link rel="stylesheet" href="' . e($customCss) . '?v=' . e((string) ($model['custom_css_version'] ?? 0)) . '">';
     }
     echo '<link rel="stylesheet" href="' . e(url_for('theme_css')) . '&v=' . rawurlencode((string) theme_cache_key($theme)) . '">';
     $mobileGalleryStyle = 'assets/styles/mobile-gallery.css';
@@ -328,20 +280,19 @@ function view_render_header(string $title, ?array $currentGallery = null, bool $
     if (is_file($mobileGalleryStylePath)) {
         echo '<link rel="stylesheet" href="' . e(asset_url($mobileGalleryStyle)) . '?v=' . filemtime($mobileGalleryStylePath) . '">';
     }
-    $headExtras = cms_head_extras_html();
-    if ($bodyClass === 'public-page' && function_exists('Gallery\\Services\\seo_request_guard_canonical_head_html')) {
-        echo seo_request_guard_canonical_head_html($page, $currentGallery, $headExtras);
+    $canonicalUrl = trim((string) ($model['canonical_url'] ?? ''));
+    if ($canonicalUrl !== '') {
+        echo '<link rel="canonical" href="' . e($canonicalUrl) . '">' . "\n";
     }
-    echo $headExtras;
-    $devModeActive = $user && dev_mode_enabled();
-    echo '</head><body class="' . e($bodyClass . $pageWidthClass) . '"' . ($devModeActive ? ' data-dev-mode="1"' : '') . '>';
+    echo (string) ($model['head_extras'] ?? '');
+    echo '</head><body class="' . e($bodyClass . $pageWidthClass) . '"' . (!empty($model['dev_mode_active']) ? ' data-dev-mode="1"' : '') . '>';
     if ($bodyClass === 'public-page') {
         echo '<div class="theme-background-shell" aria-hidden="true">';
         echo '<div class="theme-background-base"></div>';
         echo '<div class="theme-background-image"></div>';
         echo '</div>';
     }
-    $headerBranding = view_public_header_branding_model($siteName, $currentGallery, $publicOnly, $bodyClass);
+    $headerBranding = view_public_header_branding_model(is_array($model['branding'] ?? null) ? $model['branding'] : []);
     echo '<header class="site-header">';
     echo '<a class="brand' . ($headerBranding['banner_url'] !== '' ? ' brand-with-banner' : '') . '" href="' . e(url_for('home')) . '">';
     if ($headerBranding['logo_url'] !== '') {
@@ -354,38 +305,32 @@ function view_render_header(string $title, ?array $currentGallery = null, bool $
     }
     echo '</a><nav class="nav">';
     if ($bodyClass === 'public-page') {
-        view_render_public_language_selector();
+        view_render_public_language_selector(is_array($model['language_selector'] ?? null) ? $model['language_selector'] : []);
     }
-    // $favoritePublicOnly stores whether shortcuts should be restricted to public listed galleries.
-    $favoritePublicOnly = !$user || $anonymousPreview;
-    // $favoriteGalleryItems stores resolved gallery shortcuts for the top navigation.
-    $favoriteGalleryItems = function_exists('Gallery\\Services\\theme_favorite_gallery_navigation_items') ? theme_favorite_gallery_navigation_items($favoritePublicOnly) : [];
-    echo view_favorite_gallery_nav_html($favoriteGalleryItems);
-    if ($bodyClass === 'public-page' && viewer_accounts_enabled()) {
-        // Viewer identity remains independent of administrator identity and gallery authorization.
-        $viewer = current_viewer();
-        if ($viewer !== null) {
+    echo view_favorite_gallery_nav_html((array) ($model['favorite_gallery_items'] ?? []));
+    if ($bodyClass === 'public-page' && !empty($model['viewer_accounts_enabled'])) {
+        if (!empty($model['viewer_logged_in'])) {
             echo '<a href="' . e(url_for('viewer_account')) . '">' . e(t('viewer.nav.account', 'Account')) . '</a>';
         } else {
             echo '<a href="' . e(url_for('viewer_login')) . '">' . e(t('viewer.nav.login', 'Login')) . '</a>';
-            if (viewer_http_open_registration_available()) {
+            if (!empty($model['viewer_open_registration'])) {
                 echo '<a href="' . e(url_for('viewer_register')) . '">' . e(t('viewer.nav.register', 'Register')) . '</a>';
             }
         }
     }
     if ($user && !$anonymousPreview) {
         if ($bodyClass === 'public-page') {
-            $updatePending = application_update_pending();
+            $updatePending = !empty($model['update_pending']);
             $updateClass = $updatePending ? ' class="is-update-pending"' : '';
-            $updateLabel = application_update_nav_label($updatePending);
+            $updateLabel = trim((string) ($model['update_label'] ?? '')) ?: t('admin.menu.updates', 'Updates');
             echo '<a href="' . e(url_for('admin')) . '">' . e(t('nav.admin', 'Admin')) . '</a>';
-            if (in_array($page, ['gallery', 'smart_gallery'], true) && feature_capability_effective_enabled('admin_test_runs')) {
-                if (admin_test_run_active()) {
+            if (!empty($model['admin_test_runs_enabled'])) {
+                if (!empty($model['admin_test_run_active'])) {
                     echo '<span class="button secondary is-disabled" aria-disabled="true">' . e(t('admin.test_run.running_button', 'Test run running')) . '</span>';
                 } else {
                     echo '<form method="post" action="' . e(url_for('admin_test_run_start')) . '" class="nav-inline-form">';
                     echo '<input type="hidden" name="csrf_token" value="' . e(csrf_token()) . '">';
-                    echo '<input type="hidden" name="target" value="' . e((string) ($_SERVER['REQUEST_URI'] ?? '/')) . '">';
+                    echo '<input type="hidden" name="target" value="' . e($requestUri !== '' ? $requestUri : '/') . '">';
                     echo '<input type="hidden" name="target_page" value="' . e($page) . '">';
                     echo '<button type="submit" class="button secondary">' . e(t('admin.test_run.button', 'Test run')) . '</button>';
                     echo '</form>';
@@ -395,8 +340,8 @@ function view_render_header(string $title, ?array $currentGallery = null, bool $
         }
         echo '<a href="' . e(url_for('admin_logout')) . '">' . e(t('nav.logout', 'Logout')) . '</a>';
     } else {
-        // Secret-bearing viewer routes must not be copied into the administrator login return parameter.
-        $adminLoginParams = str_starts_with($page, 'viewer_') ? [] : ['return' => current_login_return_target()];
+        $returnTarget = trim((string) ($model['admin_login_return'] ?? ''));
+        $adminLoginParams = $returnTarget !== '' ? ['return' => $returnTarget] : [];
         echo '<a href="' . e(url_for('admin_login', $adminLoginParams)) . '">' . e(t('nav.admin_login', 'Admin login')) . '</a>';
     }
     echo '</nav></header>';
@@ -405,7 +350,7 @@ function view_render_header(string $title, ?array $currentGallery = null, bool $
     }
     if ($bodyClass === 'admin-page' && $user) {
         echo '<div class="admin-shell">';
-        view_render_admin_sidebar($page);
+        view_render_admin_sidebar($page, is_array($model['admin_chrome'] ?? null) ? $model['admin_chrome'] : []);
         echo '<main class="site-main admin-content">';
         view_render_missing_admin_email_notice($user, $page);
     } else {
@@ -419,13 +364,14 @@ function view_render_header(string $title, ?array $currentGallery = null, bool $
  * @param ?string $language Requested language code.
  * @return string Safe active language code.
  */
-function view_browser_i18n_language(?string $language = null): string
+function view_browser_i18n_language(?string $language = null, string $activeLanguage = 'en', array $allowedLanguages = []): string
 {
-    $candidate = translation_normalize_language_code((string) ($language ?? ''));
-    if ($candidate !== '' && translation_language_allowed($candidate)) {
+    $candidate = strtolower(trim((string) ($language ?? '')));
+    $candidate = str_replace('_', '-', $candidate);
+    if ($candidate !== '' && ($allowedLanguages === [] || in_array($candidate, $allowedLanguages, true))) {
         return $candidate;
     }
-    return translation_active_language();
+    return $activeLanguage !== '' ? $activeLanguage : 'en';
 }
 
 /**
@@ -448,23 +394,11 @@ function view_browser_i18n_string(array $strings, string $key, string $fallback)
  * @param ?string $language Requested language code.
  * @return string Stable cache key for the selected dictionaries.
  */
-function view_browser_i18n_cache_key(?string $language = null): string
+function view_browser_i18n_cache_key(string $language = 'en', array $paths = []): string
 {
-    $language = view_browser_i18n_language($language);
-    $default = translation_default_language();
-    $paths = [__FILE__];
-    foreach (array_unique([$default, $language]) as $code) {
-        foreach (['json', 'php'] as $extension) {
-            $path = translation_language_dir() . '/' . $code . '.' . $extension;
-            if (is_file($path)) {
-                $paths[] = $path;
-            }
-        }
-    }
-
     $latest = 0;
     foreach ($paths as $path) {
-        if (is_file($path)) {
+        if (is_string($path) && is_file($path)) {
             $latest = max($latest, (int) filemtime($path));
         }
     }
@@ -477,12 +411,11 @@ function view_browser_i18n_cache_key(?string $language = null): string
  * @param ?string $language Requested language code.
  * @return string JavaScript asset content.
  */
-function view_browser_i18n_javascript(?string $language = null): string
+function view_browser_i18n_javascript(string $language = 'en', array $strings = []): string
 {
-    $language = view_browser_i18n_language($language);
     $payload = [
-        'language' => $language,
-        'strings' => view_cms_browser_i18n_strings($language),
+        'language' => $language !== '' ? $language : 'en',
+        'strings' => view_cms_browser_i18n_strings($strings),
     ];
     $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     if (!is_string($json)) {
@@ -498,13 +431,12 @@ function view_browser_i18n_javascript(?string $language = null): string
  * @param ?string $language Requested language code.
  * @return string URL for the cacheable translation asset.
  */
-function view_browser_i18n_asset_url(bool $isAdminPage, ?string $language = null): string
+function view_browser_i18n_asset_url(bool $isAdminPage, string $language = 'en', string $version = ''): string
 {
-    $language = view_browser_i18n_language($language);
     return url_for($isAdminPage ? 'admin_browser_i18n' : 'browser_i18n', [
         'scope' => $isAdminPage ? 'admin' : 'public',
-        'lang' => $language,
-        'v' => view_browser_i18n_cache_key($language),
+        'lang' => $language !== '' ? $language : 'en',
+        'v' => $version,
     ]);
 }
 
@@ -515,12 +447,8 @@ function view_browser_i18n_asset_url(bool $isAdminPage, ?string $language = null
  *
  * @return array Structured result data for the caller.
  */
-function view_cms_browser_i18n_strings(?string $language = null): array
+function view_cms_browser_i18n_strings(array $strings = []): array
 {
-    $language = view_browser_i18n_language($language);
-    $activeStrings = translation_load_language($language);
-    $defaultStrings = translation_load_language(translation_default_language());
-    $strings = array_merge($defaultStrings, $activeStrings);
 
     return array_merge($strings, [
         'admin.bulk.select_gallery_delete' => view_browser_i18n_string($strings, 'js.admin.bulk.select_gallery_delete', 'Select at least one gallery to delete.'),
@@ -613,11 +541,12 @@ function view_cms_browser_i18n_strings(?string $language = null): array
  *
  * Used by server-rendered view helpers.
  */
-function view_render_browser_i18n_script(): void
+function view_render_browser_i18n_script(string $assetUrl): void
 {
-    $page = (string) ($_GET['page'] ?? 'home');
-    $isAdminPage = str_starts_with($page, 'admin') || $page === 'setup';
-    echo '<script src="' . e(view_browser_i18n_asset_url($isAdminPage, translation_active_language())) . '"></script>';
+    if ($assetUrl === '') {
+        return;
+    }
+    echo '<script src="' . e($assetUrl) . '"></script>';
 }
 
 /**
@@ -625,26 +554,31 @@ function view_render_browser_i18n_script(): void
  *
  * Used by server-rendered view helpers.
  */
-function view_render_footer(): void
+function view_render_footer(string $page = 'home', array $model = []): void
 {
-    $page = (string) ($_GET['page'] ?? 'home');
-    $hasAdminShell = (str_starts_with($page, 'admin') || $page === 'setup') && current_user();
-    if (!$hasAdminShell && function_exists('Gallery\\Services\\render_admin_test_run_panel')) {
-        render_admin_test_run_panel();
+    $hasAdminShell = !empty($model['has_admin_shell']);
+    $adminTestRunPanel = is_array($model['admin_test_run_panel'] ?? null) ? $model['admin_test_run_panel'] : null;
+    if (!$hasAdminShell) {
+        view_render_admin_test_run_panel($adminTestRunPanel);
     }
     echo '</main>' . ($hasAdminShell ? '</div>' : '') . '<footer class="site-footer muted">';
-    echo '<a class="site-footer-link" href="' . e(cms_github_project_url()) . '" target="_blank" rel="noopener noreferrer">PHP Gallery (' . e(cms_current_version()) . ')</a>';
+    $githubProjectUrl = trim((string) ($model['github_project_url'] ?? ''));
+    if ($githubProjectUrl !== '') {
+        echo '<a class="site-footer-link" href="' . e($githubProjectUrl) . '" target="_blank" rel="noopener noreferrer">PHP Gallery (' . e(cms_current_version()) . ')</a>';
+    } else {
+        echo 'PHP Gallery (' . e(cms_current_version()) . ')';
+    }
     echo '</footer>';
-    $page = (string) ($_GET['page'] ?? 'home');
-    $isAdminPage = str_starts_with($page, 'admin') || $page === 'setup';
-    $user = current_user();
-    $anonymousPreview = admin_anonymous_preview_active();
-    $scriptAsset = view_script_asset_for_context($isAdminPage, is_array($user) ? $user : null, $anonymousPreview);
+    $isAdminPage = !empty($model['is_admin_page']);
+    $user = is_array($model['user'] ?? null) ? $model['user'] : null;
+    $anonymousPreview = !empty($model['anonymous_preview']);
+    $scriptAsset = view_script_asset_for_context($isAdminPage, $user, $anonymousPreview);
     $scriptPath = dirname(__DIR__, 2) . '/public/' . $scriptAsset;
     $scriptVersionPaths = $scriptAsset === 'assets/public-gallery.js' ? [
         $scriptPath,
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/lightbox-deferred.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/lightbox.js',
+        dirname(__DIR__, 2) . '/public/assets/gallery-modules/lightbox-zoom-model.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-core.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/votes.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/viewer-favourites.js',
@@ -663,6 +597,7 @@ function view_render_footer(): void
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/progressive-thumbnail-upgrade.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/public-thumbnail-render-diagnostics.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/lightbox.js',
+        dirname(__DIR__, 2) . '/public/assets/gallery-modules/lightbox-zoom-model.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/lightbox-votes.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/tag-suggestions.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/votes.js',
@@ -683,7 +618,7 @@ function view_render_footer(): void
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/zip-stream-writer.js',
     ];
     $resolvedScriptVersion = asset_dependency_revision($scriptVersionPaths);
-    view_render_browser_i18n_script();
+    view_render_browser_i18n_script((string) ($model['browser_i18n_asset_url'] ?? ''));
     echo '<script type="module" data-gallery-asset-revision="' . e((string) $resolvedScriptVersion) . '" src="' . e(asset_url($scriptAsset)) . '?v=' . $resolvedScriptVersion . '"></script>';
     echo cms_footer_scripts_html();
     echo '</body></html>';

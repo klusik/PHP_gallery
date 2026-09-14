@@ -17,6 +17,9 @@
  *   - Keep collection titles plain text and escaped in every HTML context
  *   - Keep collection sharing, anonymous collection routes, and public viewer identity out of Phase 2.0
  *
+ * Author:
+ *   Rudolf Klusal
+ *
  * Notes:
  *   - Keep comments and docstrings intact when modifying this file.
  *   - Viewer authentication is not gallery authorization.
@@ -148,10 +151,10 @@ function viewer_collection_render_error(string $message, int $status = 400): voi
 {
     viewer_http_no_store();
     http_response_code($status);
-    render_header(t('viewer.collections.title', 'Collections'));
-    echo '<section class="panel"><h1>' . e(t('viewer.collections.title', 'Collections')) . '</h1><p>' . e($message) . '</p>';
-    echo '<p><a class="button secondary" href="' . e(url_for('viewer_collections')) . '">' . e(t('viewer.collections.back', 'Back to collections')) . '</a></p></section>';
-    render_footer();
+    \Gallery\Views\view_render_viewer_collection_error([
+        'message' => $message,
+        'back_url' => url_for('viewer_collections'),
+    ]);
 }
 
 /**
@@ -171,30 +174,26 @@ function render_viewer_collection_add_control_html(int $imageId, array $collecti
         return '';
     }
 
-    $classes = trim('viewer-collection-add ' . $className);
-    $html = '<details class="' . e($classes) . '"><summary class="viewer-collection-add-button" title="' . e(t('viewer.collections.add', 'Add to collection')) . '">';
-    $html .= '<span aria-hidden="true">+</span><span class="visually-hidden">' . e(t('viewer.collections.add', 'Add to collection')) . '</span></summary>';
-    $html .= '<div class="viewer-collection-add-menu"><strong>' . e(t('viewer.collections.add', 'Add to collection')) . '</strong>';
-    if ($collections === []) {
-        $html .= '<p>' . e(t('viewer.collections.create_first', 'Create a collection first.')) . '</p>';
-        $html .= '<a class="button secondary" href="' . e(url_for('viewer_collections')) . '">' . e(t('viewer.collections.open', 'Open collections')) . '</a>';
-    } else {
-        $html .= '<form method="post" action="' . e(url_for('viewer_collection_item_add')) . '">';
-        $html .= '<input type="hidden" name="viewer_csrf_token" value="' . e(viewer_csrf_token()) . '">';
-        $html .= '<input type="hidden" name="image_id" value="' . $imageId . '">';
-        $html .= '<label class="visually-hidden" for="viewer-collection-image-' . $imageId . '">' . e(t('viewer.collections.title', 'Collections')) . '</label>';
-        $html .= '<select id="viewer-collection-image-' . $imageId . '" name="collection_id" required>';
-        foreach ($collections as $collection) {
-            $collectionId = (int) ($collection['id'] ?? 0);
-            if ($collectionId <= 0) {
-                continue;
-            }
-            $html .= '<option value="' . $collectionId . '">' . e((string) ($collection['title'] ?? '')) . '</option>';
+    $options = [];
+    foreach ($collections as $collection) {
+        $collectionId = (int) ($collection['id'] ?? 0);
+        if ($collectionId <= 0) {
+            continue;
         }
-        $html .= '</select><button type="submit" class="button secondary">' . e(t('viewer.collections.add_submit', 'Add')) . '</button></form>';
+        $options[] = [
+            'id' => $collectionId,
+            'title' => (string) ($collection['title'] ?? ''),
+        ];
     }
-    $html .= '</div></details>';
-    return $html;
+
+    return \Gallery\Views\view_render_viewer_collection_add_control_html([
+        'image_id' => $imageId,
+        'classes' => trim('viewer-collection-add ' . $className),
+        'collections' => $options,
+        'collections_url' => url_for('viewer_collections'),
+        'add_url' => url_for('viewer_collection_item_add'),
+        'csrf_token' => viewer_csrf_token(),
+    ]);
 }
 /**
  * Resolve one owned collection's current renderable item state without exposing denied metadata.
@@ -234,11 +233,38 @@ function viewer_collection_visible_state(int $viewerAccountId, int $collectionId
  */
 function viewer_collection_render_reorder_form(int $collectionId, int $imageId, string $direction, string $label, string $className): void
 {
-    echo '<form class="' . e($className) . '" method="post" action="' . e(url_for('viewer_collection_reorder', ['collection_id' => $collectionId])) . '">';
-    echo '<input type="hidden" name="viewer_csrf_token" value="' . e(viewer_csrf_token()) . '">';
-    echo '<input type="hidden" name="move_image_id" value="' . $imageId . '">';
-    echo '<input type="hidden" name="move_direction" value="' . e($direction) . '">';
-    echo '<button type="submit" class="button secondary small">' . e($label) . '</button></form>';
+    \Gallery\Views\view_render_viewer_collection_reorder_form(
+        viewer_collection_reorder_view_model($collectionId, $imageId, $direction, $label, $className)
+    );
+}
+
+/**
+ * Build one bounded move-up/down form view model.
+ *
+ * @return array<string,mixed> Controller-prepared reorder form state.
+ */
+function viewer_collection_reorder_view_model(int $collectionId, int $imageId, string $direction, string $label, string $className): array
+{
+    return [
+        'class_name' => $className,
+        'action_url' => url_for('viewer_collection_reorder', ['collection_id' => $collectionId]),
+        'csrf_token' => viewer_csrf_token(),
+        'image_id' => $imageId,
+        'direction' => $direction,
+        'label' => $label,
+    ];
+}
+
+/**
+ * Capture one optional collection presentation helper as trusted HTML.
+ *
+ * @param callable():void $renderer Presentation callback.
+ */
+function viewer_collection_capture_html(callable $renderer): string
+{
+    ob_start();
+    $renderer();
+    return (string) ob_get_clean();
 }
 
 /**
@@ -282,46 +308,31 @@ function cms_viewer_collections(): void
     $quota = viewer_content_quota_config();
     $nonce = viewer_collection_create_nonce_issue();
 
-    render_header(t('viewer.collections.title', 'Collections'));
-    echo '<section class="hero panel"><div class="hero-content"><div><p class="eyebrow">' . e(t('viewer.collections.private_label', 'Private viewer content')) . '</p><h1>' . e(t('viewer.collections.title', 'Collections')) . '</h1>';
-    echo '<p>' . e(t('viewer.collections.help', 'Collections are private ordered lists of photo references. They never grant access to source galleries.')) . '</p></div>';
-    echo '<div class="hero-meta"><div class="hero-actions"><a class="button secondary" href="' . e(url_for('viewer_account')) . '">' . e(t('viewer.collections.back_to_account', 'Account')) . '</a></div></div></div></section>';
-
-    if ($message !== '') {
-        echo '<section class="panel"><p>' . e($message) . '</p></section>';
+    $csrfToken = viewer_csrf_token();
+    $collectionRows = [];
+    foreach ($collections as $collection) {
+        $collectionId = (int) $collection['id'];
+        $collectionRows[] = [
+            'id' => $collectionId,
+            'title' => (string) $collection['title'],
+            'item_count' => (int) $collection['item_count'],
+            'open_url' => url_for('viewer_collection', ['collection_id' => $collectionId]),
+            'rename_url' => url_for('viewer_collection_rename', ['collection_id' => $collectionId]),
+            'delete_url' => url_for('viewer_collection_delete', ['collection_id' => $collectionId]),
+        ];
     }
-    if ($error !== '') {
-        echo '<section class="panel"><p class="error">' . e($error) . '</p></section>';
-    }
 
-    echo '<section class="panel viewer-collection-create"><h2>' . e(t('viewer.collections.create_title', 'Create collection')) . '</h2>';
-    echo '<form method="post" action="' . e(url_for('viewer_collections')) . '" class="form-stack">';
-    echo '<input type="hidden" name="viewer_csrf_token" value="' . e(viewer_csrf_token()) . '">';
-    echo '<input type="hidden" name="collection_form_nonce" value="' . e($nonce) . '">';
-    echo '<label>' . e(t('viewer.collections.title_label', 'Title')) . '<input type="text" name="title" required maxlength="120" autocomplete="off"></label>';
-    echo '<button type="submit" class="button">' . e(t('viewer.collections.create', 'Create collection')) . '</button></form>';
-    echo '<p class="muted">' . e(t('viewer.collections.quota_status', '{count} of {limit} collections used.', [
-        'count' => count($collections),
-        'limit' => (int) $quota['max_viewer_collections_per_account'],
-    ])) . '</p></section>';
-
-    echo '<section class="panel"><h2>' . e(t('viewer.collections.yours', 'Your collections')) . '</h2>';
-    if ($collections === []) {
-        echo '<p>' . e(t('viewer.collections.empty', 'You have not created any collections yet.')) . '</p>';
-    } else {
-        echo '<div class="viewer-collection-list">';
-        foreach ($collections as $collection) {
-            $collectionId = (int) $collection['id'];
-            echo '<article class="viewer-collection-list-item"><div class="viewer-collection-list-main"><h3><a href="' . e(url_for('viewer_collection', ['collection_id' => $collectionId])) . '">' . e((string) $collection['title']) . '</a></h3>';
-            echo '<p class="muted">' . e(t('viewer.collections.item_count', '{count} items', ['count' => (int) $collection['item_count']])) . '</p></div>';
-            echo '<div class="viewer-collection-list-actions"><a class="button secondary" href="' . e(url_for('viewer_collection', ['collection_id' => $collectionId])) . '">' . e(t('viewer.collections.open_one', 'Open')) . '</a>';
-            echo '<form method="post" action="' . e(url_for('viewer_collection_rename', ['collection_id' => $collectionId])) . '" class="viewer-collection-inline-form"><input type="hidden" name="viewer_csrf_token" value="' . e(viewer_csrf_token()) . '"><label class="visually-hidden" for="collection-title-' . $collectionId . '">' . e(t('viewer.collections.rename_title', 'New title')) . '</label><input id="collection-title-' . $collectionId . '" type="text" name="title" value="' . e((string) $collection['title']) . '" required maxlength="120"><button type="submit" class="button secondary">' . e(t('viewer.collections.rename', 'Rename')) . '</button></form>';
-            echo '<form method="post" action="' . e(url_for('viewer_collection_delete', ['collection_id' => $collectionId])) . '" class="viewer-collection-delete-form" onsubmit="return confirm(this.dataset.confirm)" data-confirm="' . e(t('viewer.collections.delete_confirm', 'Delete this collection? The photographs themselves will not be deleted.')) . '"><input type="hidden" name="viewer_csrf_token" value="' . e(viewer_csrf_token()) . '"><input type="hidden" name="confirm_delete_collection" value="1"><button type="submit" class="button danger">' . e(t('viewer.collections.delete', 'Delete')) . '</button></form></div></article>';
-        }
-        echo '</div>';
-    }
-    echo '</section>';
-    render_footer();
+    \Gallery\Views\view_render_viewer_collections_index([
+        'account_url' => url_for('viewer_account'),
+        'message' => $message,
+        'error' => $error,
+        'create_url' => url_for('viewer_collections'),
+        'csrf_token' => $csrfToken,
+        'nonce' => $nonce,
+        'collection_count' => count($collections),
+        'collection_limit' => (int) $quota['max_viewer_collections_per_account'],
+        'collections' => $collectionRows,
+    ]);
 }
 
 /**
@@ -354,54 +365,60 @@ function cms_viewer_collection(): void
     $visibleIds = $state['visible_ids'];
     $hiddenCount = (int) $state['hidden_count'];
 
-    render_header((string) $collection['title']);
-    echo '<section class="hero panel"><div class="hero-content"><div><p class="eyebrow">' . e(t('viewer.collections.private_label', 'Private viewer content')) . '</p><h1>' . e((string) $collection['title']) . '</h1>';
-    echo '<p>' . e(t('viewer.collections.detail_help', 'Only photos currently authorized by their source galleries are shown.')) . '</p></div><div class="hero-meta"><div class="hero-actions"><a class="button secondary" href="' . e(url_for('viewer_collections')) . '">' . e(t('viewer.collections.back', 'Back to collections')) . '</a></div></div></div></section>';
-
-    echo '<section class="panel viewer-collection-manage"><div class="viewer-collection-manage-row"><form method="post" action="' . e(url_for('viewer_collection_rename', ['collection_id' => $collectionId])) . '" class="viewer-collection-inline-form"><input type="hidden" name="viewer_csrf_token" value="' . e(viewer_csrf_token()) . '"><label>' . e(t('viewer.collections.rename_title', 'New title')) . '<input type="text" name="title" value="' . e((string) $collection['title']) . '" required maxlength="120"></label><button type="submit" class="button secondary">' . e(t('viewer.collections.rename', 'Rename')) . '</button></form>';
-    echo '<form method="post" action="' . e(url_for('viewer_collection_delete', ['collection_id' => $collectionId])) . '" class="viewer-collection-delete-form" onsubmit="return confirm(this.dataset.confirm)" data-confirm="' . e(t('viewer.collections.delete_confirm', 'Delete this collection? The photographs themselves will not be deleted.')) . '"><input type="hidden" name="viewer_csrf_token" value="' . e(viewer_csrf_token()) . '"><input type="hidden" name="confirm_delete_collection" value="1"><button type="submit" class="button danger">' . e(t('viewer.collections.delete', 'Delete')) . '</button></form></div></section>';
-
+    $csrfToken = viewer_csrf_token();
+    $shareOwnerHtml = '';
     if (function_exists(__NAMESPACE__ . '\\render_viewer_collection_share_owner_section')) {
-        render_viewer_collection_share_owner_section($viewer, $collectionId);
+        $shareOwnerHtml = viewer_collection_capture_html(static function () use ($viewer, $collectionId): void {
+            render_viewer_collection_share_owner_section($viewer, $collectionId);
+        });
     }
 
-    if ($visible === []) {
-        echo '<section class="panel"><p>' . e(count($references) > 0
+    $candidateSizes = array_values(array_filter(thumbnail_sizes(), static fn (int $size): bool => $size <= 960));
+    if ($candidateSizes === []) {
+        $candidateSizes = [300];
+    }
+    $cards = [];
+    foreach ($visible as $index => $resolved) {
+        $image = $resolved['image'];
+        $gallery = $resolved['gallery'];
+        $imageId = (int) $image['id'];
+        $bundle = thumbnail_bundle($image);
+        $cards[] = [
+            'image_id' => $imageId,
+            'image_url' => image_public_url($image, $gallery),
+            'thumbnail_html' => public_thumbnail_render_picture_html(
+                $image,
+                300,
+                $candidateSizes,
+                '(min-width: 1100px) 25vw, (min-width: 700px) 33vw, 50vw',
+                image_alt_text($image, $gallery, $index + 1),
+                $index,
+                $bundle
+            ),
+            'title' => public_image_display_title($image, $gallery),
+            'move_up' => $index > 0
+                ? viewer_collection_reorder_view_model($collectionId, $imageId, 'up', t('viewer.collections.move_up', 'Move up'), 'viewer-collection-order-form')
+                : null,
+            'move_down' => $index < count($visibleIds) - 1
+                ? viewer_collection_reorder_view_model($collectionId, $imageId, 'down', t('viewer.collections.move_down', 'Move down'), 'viewer-collection-order-form')
+                : null,
+        ];
+    }
+
+    \Gallery\Views\view_render_viewer_collection_detail([
+        'title' => (string) $collection['title'],
+        'back_url' => url_for('viewer_collections'),
+        'rename_url' => url_for('viewer_collection_rename', ['collection_id' => $collectionId]),
+        'delete_url' => url_for('viewer_collection_delete', ['collection_id' => $collectionId]),
+        'remove_url' => url_for('viewer_collection_item_remove', ['collection_id' => $collectionId]),
+        'csrf_token' => $csrfToken,
+        'share_owner_html' => $shareOwnerHtml,
+        'cards' => $cards,
+        'empty_message' => count($references) > 0
             ? t('viewer.collections.none_accessible', 'No items in this collection are currently accessible.')
-            : t('viewer.collections.no_items', 'This collection is empty.')) . '</p></section>';
-    } else {
-        echo '<section class="grid gallery-image-grid viewer-collection-grid">';
-        foreach ($visible as $index => $resolved) {
-            $image = $resolved['image'];
-            $gallery = $resolved['gallery'];
-            $imageId = (int) $image['id'];
-            $bundle = thumbnail_bundle($image);
-            $candidateSizes = array_values(array_filter(thumbnail_sizes(), static fn (int $size): bool => $size <= 960));
-            if ($candidateSizes === []) {
-                $candidateSizes = [300];
-            }
-            $title = public_image_display_title($image, $gallery);
-            $imageUrl = image_public_url($image, $gallery);
-            echo '<article class="image-card viewer-collection-item" data-image-id="' . $imageId . '"><div class="image-stage"><a class="image-preview-link" href="' . e($imageUrl) . '">' . public_thumbnail_render_picture_html($image, 300, $candidateSizes, '(min-width: 1100px) 25vw, (min-width: 700px) 33vw, 50vw', image_alt_text($image, $gallery, $index + 1), $index, $bundle) . '</a>';
-            if ($title !== '') {
-                echo '<div class="image-meta image-meta-overlay"><h2>' . e($title) . '</h2></div>';
-            }
-            echo '</div><div class="viewer-collection-item-actions">';
-            echo '<form method="post" action="' . e(url_for('viewer_collection_item_remove', ['collection_id' => $collectionId])) . '"><input type="hidden" name="viewer_csrf_token" value="' . e(viewer_csrf_token()) . '"><input type="hidden" name="image_id" value="' . $imageId . '"><button type="submit" class="button secondary small">' . e(t('viewer.collections.remove', 'Remove')) . '</button></form>';
-            if ($index > 0) {
-                viewer_collection_render_reorder_form($collectionId, $imageId, 'up', t('viewer.collections.move_up', 'Move up'), 'viewer-collection-order-form');
-            }
-            if ($index < count($visibleIds) - 1) {
-                viewer_collection_render_reorder_form($collectionId, $imageId, 'down', t('viewer.collections.move_down', 'Move down'), 'viewer-collection-order-form');
-            }
-            echo '</div></article>';
-        }
-        echo '</section>';
-    }
-    if ($hiddenCount > 0) {
-        echo '<p class="muted">' . e(t('viewer.collections.hidden_unavailable', 'Some saved collection items are currently unavailable.')) . '</p>';
-    }
-    render_footer();
+            : t('viewer.collections.no_items', 'This collection is empty.'),
+        'hidden_count' => $hiddenCount,
+    ]);
 }
 
 /**

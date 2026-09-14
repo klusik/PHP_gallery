@@ -140,9 +140,9 @@ use function Gallery\Services\public_render_profile_with_thumbnail_purpose;
 use function Gallery\Services\public_search_normalize_query;
 use function Gallery\Services\public_search_query_length;
 use function Gallery\Services\public_search_results;
-use function Gallery\Services\render_gallery_date;
-use function Gallery\Services\render_pagination_controls;
-use function Gallery\Services\render_public_render_profile_panel;
+use function Gallery\Services\gallery_date_view_model;
+use function Gallery\Views\view_render_gallery_date;
+use function Gallery\Views\view_render_pagination_controls;
 use function Gallery\Services\resolve_public_gallery_path;
 use function Gallery\Services\site_name;
 use function Gallery\Services\t;
@@ -273,13 +273,13 @@ function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicR
     $descriptionLayout = array_key_exists('description_layout', $cardContext)
         ? gallery_description_layout_normalize($cardContext['description_layout'], gallery_effective_description_layout($gallery))
         : gallery_effective_description_layout($gallery);
-    // Variable $cover stores this steps working value.
+    // $coverAsset stores an optional branding/cover asset resolved before rendering.
     $coverAsset = $isProtectedPublicCard ? '' : (array_key_exists('cover_asset', $cardContext) ? (string) $cardContext['cover_asset'] : public_render_profile_span('gallery_cover_asset_lookup', static fn (): string => gallery_cover_asset_url($gallery, $publicOnly)));
-    // $cover stores an intermediate value used by the surrounding gallery workflow.
+    // $cover stores the selected real image when no explicit asset is available.
     $cover = $isProtectedPublicCard || $coverAsset !== '' ? null : (array_key_exists('cover', $cardContext) ? $cardContext['cover'] : public_render_profile_span('gallery_cover_image_lookup', static fn (): ?array => gallery_cover_image((int) $gallery['id'], $publicOnly)));
     // $showCountBadge stores whether this card should show the contained-picture badge.
     $showCountBadge = !$isProtectedPublicCard && $showSubgalleryBadge && gallery_effective_count_badge_enabled($gallery);
-    // Variable $branchImageCount stores this steps working value.
+    // $branchImageCount stores this steps working value.
     $branchImageCount = $showCountBadge ? (array_key_exists('branch_image_count', $cardContext) ? (int) $cardContext['branch_image_count'] : public_render_profile_span('gallery_branch_image_count', static fn (): int => gallery_branch_image_count((int) $gallery['id'], $publicOnly))) : 0;
     // $galleryCardTags stores the tags shown in the card body. Own gallery tags win, then contained tags keep the old fallback useful.
     $galleryCardTags = $isProtectedPublicCard ? [] : public_render_profile_span('gallery_card_tag_lookup', static function () use ($gallery, $publicOnly): array {
@@ -290,76 +290,83 @@ function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicR
         }
         return contained_tags_for_gallery($gallery, $publicOnly);
     });
-    // $descriptionPreview stores the card-length Markdown source. Full text remains visible in the opened gallery hero.
-    $descriptionPreview = view_gallery_description_markdown_excerpt((string) ($gallery['description'] ?? ''));
-    // $descriptionHtml stores the safe rendered card description.
-    $descriptionHtml = view_gallery_description_markdown_html($descriptionPreview);
     // $effectiveVisibility stores the normalized card visibility used for admin-only visual state markers.
     $effectiveVisibility = gallery_effective_visibility($gallery);
     // $showAdminUnpublishedMarker keeps unpublished galleries visible to admins while making their non-public state obvious.
     $showAdminUnpublishedMarker = current_user() && !admin_anonymous_preview_active() && $effectiveVisibility === 'unpublished';
-    $galleryCardClass = 'gallery-card is-gallery-description-' . $descriptionLayout . ($isProtectedPublicCard ? ' is-protected-gallery' : '') . ($showPublicReorderHandle ? ' has-public-reorder-handle' : '') . ($showAdminUnpublishedMarker ? ' is-admin-unpublished-gallery' : '');
-    echo '<article class="' . e($galleryCardClass) . '" data-gallery-id="' . (int) $gallery['id'] . '" data-gallery-visibility="' . e($effectiveVisibility) . '" data-gallery-updated-at="' . e((string) ($gallery['updated_at'] ?? '')) . '" data-public-gallery-order-item data-public-order-id="' . (int) $gallery['id'] . '">';
-    if ($showAdminUnpublishedMarker) {
-        echo '<span class="admin-gallery-visibility-marker" title="' . e(t('gallery.card.unpublished_admin_hint', 'Only logged-in admins can see this gallery in listings.')) . '">' . e(t('gallery.visibility.unpublished', 'unpublished')) . '</span>';
-    }
-    if ($showPublicReorderHandle) {
-        echo '<button type="button" class="public-reorder-handle public-gallery-reorder-handle" data-public-reorder-handle aria-label="' . e(t('gallery.reorder.drag_subgallery_aria', 'Drag subgallery to reorder visible subgalleries')) . '" title="' . e(t('gallery.reorder.drag_subgallery_title', 'Drag to reorder this visible subgallery')) . '"><span aria-hidden="true">↕</span><span>' . e(t('gallery.reorder.move_gallery', 'Move gallery')) . '</span></button>';
-    }
-    echo '<a class="gallery-card-media" href="' . e(gallery_public_url($gallery)) . '" aria-label="' . e(t('gallery.card.open_gallery', 'Open gallery {title}', ['title' => (string) $gallery['title']])) . '">';
-    if ($showCountBadge) {
-        echo '<span class="subgallery-stack-badge" aria-label="' . e(t('gallery.card.subgallery_image_count', 'Subgallery containing {count} images', ['count' => (int) $branchImageCount])) . '"><span class="subgallery-stack-icon" aria-hidden="true"><span></span><span></span><span></span></span><span class="subgallery-stack-count">' . (int) $branchImageCount . '</span></span>';
-    }
     // $coverLoadingAttributes keeps above-the-fold gallery cards eager without forcing later rows to compete for bandwidth.
     $coverLoadingAttributes = public_thumbnail_loading_attributes($cardIndex);
-    if ($isProtectedPublicCard) {
-        echo '<span class="gallery-collage gallery-locked-preview" aria-hidden="true">' . e(t('gallery.card.protected', 'Protected')) . '</span>';
-    } elseif ($coverAsset !== '') {
-        echo '<img decoding="async" ' . $coverLoadingAttributes . ' src="' . e($coverAsset) . '" alt="">';
-    } elseif ($cover) {
+    // $coverPictureHtml stores a stable existing thumbnail renderer result for the selected cover image.
+    $coverPictureHtml = '';
+    // $collagePictureHtml stores stable thumbnail renderer results for fallback collage images.
+    $collagePictureHtml = [];
+    if (!$isProtectedPublicCard && $coverAsset === '' && is_array($cover)) {
         $coverThumbnailBundle = public_render_profile_span('subgallery_cover_thumbnail_bundle', static fn (): array => thumbnail_bundle($cover));
-        echo public_render_profile_with_thumbnail_purpose('subgallery cover stable picture', static fn (): string => thumbnail_picture_html($cover, 300, [300, 600, 800, 960], '(max-width: 299px) 300px, 800px', '', $coverLoadingAttributes, $coverThumbnailBundle));
-    } else {
-        // Variable $collage stores this steps working value.
+        $coverPictureHtml = public_render_profile_with_thumbnail_purpose('subgallery cover stable picture', static fn (): string => thumbnail_picture_html($cover, 300, [300, 600, 800, 960], '(max-width: 299px) 300px, 800px', '', $coverLoadingAttributes, $coverThumbnailBundle));
+    } elseif (!$isProtectedPublicCard && $coverAsset === '') {
+        // $collage stores this steps working value.
         $collage = array_key_exists('collage', $cardContext) ? (array) $cardContext['collage'] : public_render_profile_span('gallery_cover_collage_lookup', static fn (): array => gallery_cover_collage_images((int) $gallery['id'], $publicOnly));
-        if ($collage) {
-            echo '<span class="gallery-collage collage-count-' . count($collage) . '">';
-            foreach ($collage as $image) {
-                // Collage images must not use progressive replacement. A metagallery card contains several child covers, and independent delayed srcset upgrades make the card repaint in visible waves. Render a stable srcset immediately and let the browser choose the best candidate once.
-                $collageThumbnailBundle = public_render_profile_span('subgallery_collage_thumbnail_bundle', static fn (): array => thumbnail_bundle($image));
-                echo public_render_profile_with_thumbnail_purpose('subgallery collage stable picture', static fn (): string => thumbnail_picture_html($image, 300, [300, 600, 800], '(max-width: 520px) 300px, 420px', '', $coverLoadingAttributes, $collageThumbnailBundle));
-            }
-            echo '</span>';
+        foreach ($collage as $image) {
+            // Collage images must not use progressive replacement. A metagallery card contains several child covers, and independent delayed srcset upgrades make the card repaint in visible waves. Render a stable srcset immediately and let the browser choose the best candidate once.
+            $collageThumbnailBundle = public_render_profile_span('subgallery_collage_thumbnail_bundle', static fn (): array => thumbnail_bundle($image));
+            $collagePictureHtml[] = public_render_profile_with_thumbnail_purpose('subgallery collage stable picture', static fn (): string => thumbnail_picture_html($image, 300, [300, 600, 800], '(max-width: 520px) 300px, 420px', '', $coverLoadingAttributes, $collageThumbnailBundle));
         }
     }
-    echo '</a>';
-    echo '<div class="gallery-card-body"><h2><a class="gallery-card-title-link" href="' . e(gallery_public_url($gallery)) . '">' . e($gallery['title']) . '</a></h2>';
-    if ($descriptionLayout === 'horizontal' && !$isProtectedPublicCard && ($galleryCardTags || gallery_date_range_display_value($gallery['gallery_date'] ?? null, $gallery['gallery_date_end'] ?? null) !== '')) {
-        echo '<div class="gallery-card-meta-row">';
-        render_gallery_date($gallery, 'gallery-card-date');
+
+    // $hasHorizontalMeta keeps the exact legacy condition for showing the combined date/tag row.
+    $hasHorizontalMeta = $descriptionLayout === 'horizontal'
+        && !$isProtectedPublicCard
+        && ($galleryCardTags || gallery_date_range_display_value($gallery['gallery_date'] ?? null, $gallery['gallery_date_end'] ?? null) !== '');
+    // $horizontalMetaHtml, $dateHtml, and $tagListHtml reuse established presentation helpers as trusted fragments.
+    $horizontalMetaHtml = '';
+    $dateHtml = '';
+    $tagListHtml = '';
+    if ($hasHorizontalMeta) {
+        ob_start();
+        view_render_gallery_date(gallery_date_view_model($gallery), 'gallery-card-date');
         render_compact_tag_list($galleryCardTags);
-        echo '</div>';
+        $horizontalMetaHtml = (string) ob_get_clean();
     } elseif (!$isProtectedPublicCard) {
-        render_gallery_date($gallery, 'gallery-card-date');
+        ob_start();
+        view_render_gallery_date(gallery_date_view_model($gallery), 'gallery-card-date');
+        $dateHtml = (string) ob_get_clean();
     }
-    if ($descriptionHtml !== '') {
-        echo '<div class="gallery-card-description gallery-card-description-rich">' . $descriptionHtml . '</div>';
+    if (!$isProtectedPublicCard && $descriptionLayout !== 'horizontal') {
+        ob_start();
+        render_tag_list($galleryCardTags, t('gallery.containing_tags', 'Containing tags'));
+        $tagListHtml = (string) ob_get_clean();
     }
-    if ($isProtectedPublicCard) {
-        echo '<p class="muted gallery-card-count">' . e(t('gallery.card.protected_gallery', 'Protected gallery')) . '</p>';
-    } else {
-        if ($showCountBadge) {
-            echo '<p class="muted gallery-card-count gallery-card-count-visual-hidden">' . e(t('gallery.image_count', '{count} images', ['count' => (int) $branchImageCount])) . '</p>';
-        }
-        if ($descriptionLayout !== 'horizontal') {
-            render_tag_list($galleryCardTags, t('gallery.containing_tags', 'Containing tags'));
-        }
-    }
-    echo '</div>';
+
+    // $adminControlsHtml keeps card controls inside the card while each compatibility wrapper owns policy preparation.
+    ob_start();
     render_public_gallery_admin_visibility_menu($gallery);
     render_public_gallery_admin_edit_link($gallery, 'card');
     render_public_gallery_admin_delete_form($gallery, 'card');
-    echo '</article>';
+    $adminControlsHtml = (string) ob_get_clean();
+
+    \Gallery\Views\view_render_public_gallery_card([
+        'gallery_id' => (int) $gallery['id'],
+        'title' => (string) ($gallery['title'] ?? ''),
+        'url' => gallery_public_url($gallery),
+        'visibility' => $effectiveVisibility,
+        'updated_at' => (string) ($gallery['updated_at'] ?? ''),
+        'description_layout' => $descriptionLayout,
+        'description' => (string) ($gallery['description'] ?? ''),
+        'description_links' => public_gallery_description_link_models((string) ($gallery['description'] ?? '')),
+        'is_protected' => $isProtectedPublicCard,
+        'show_reorder_handle' => $showPublicReorderHandle,
+        'show_unpublished_marker' => $showAdminUnpublishedMarker,
+        'show_count_badge' => $showCountBadge,
+        'branch_image_count' => $branchImageCount,
+        'cover_asset' => $coverAsset,
+        'cover_loading_attributes' => $coverLoadingAttributes,
+        'cover_picture_html' => $coverPictureHtml,
+        'collage_picture_html' => $collagePictureHtml,
+        'horizontal_meta_html' => $horizontalMetaHtml,
+        'date_html' => $dateHtml,
+        'tag_list_html' => $tagListHtml,
+        'admin_controls_html' => $adminControlsHtml,
+    ]);
 }
 
 /** Render a placed Smart Gallery with the established public gallery-card structure. */
@@ -378,30 +385,28 @@ function render_smart_gallery_card(array $smartGallery, int $cardIndex = 0, arra
     $cover = isset($cardContext['cover']) && is_array($cardContext['cover']) ? $cardContext['cover'] : null;
     $sourceGallery = isset($cardContext['source_gallery']) && is_array($cardContext['source_gallery']) ? $cardContext['source_gallery'] : [];
     $presentation = smart_gallery_effective_presentation($smartGallery);
-    $url = url_for('smart_gallery', ['slug' => (string) $smartGallery['slug']]);
-    // $placementAttributes expose physical attachment ordering for Stage 4 mutation verification.
-    $placementAttributes = '';
-    if (array_key_exists('placement', $smartGallery)) {
-        $placementAttributes .= ' data-smart-gallery-placement="' . e((string) $smartGallery['placement']) . '"';
-        $placementAttributes .= ' data-smart-gallery-placement-order="' . max(0, (int) ($smartGallery['placement_order'] ?? 0)) . '"';
-    }
-    echo '<article class="gallery-card smart-gallery-card is-gallery-description-' . e((string) $presentation['card_layout']) . '" data-smart-gallery-id="' . (int) $smartGallery['id'] . '"' . $placementAttributes . '>';
-    echo '<a class="gallery-card-media" href="' . e($url) . '" aria-label="' . e(t('smart_gallery.open_named', 'Open Smart Gallery {title}', ['title' => (string) $smartGallery['title']])) . '">';
-    echo '<span class="subgallery-stack-badge" aria-label="' . e(t('gallery.card.subgallery_image_count', 'Subgallery containing {count} images', ['count' => $count])) . '"><span class="subgallery-stack-icon" aria-hidden="true"><span></span><span></span><span></span></span><span class="subgallery-stack-count">' . $count . '</span></span>';
+    // $coverPictureHtml stores the existing responsive Smart Gallery thumbnail output.
+    $coverPictureHtml = '';
     if (is_array($cover)) {
         $bundle = thumbnail_bundle($cover);
         $candidateSizes = $sourceGallery !== [] ? smart_gallery_thumbnail_sizes($presentation, $cover, $sourceGallery, [300, 600, 800, 960]) : [300, 600, 800];
         $fallbackSize = (int) ($candidateSizes[0] ?? 300);
-        echo public_thumbnail_render_picture_html($cover, $fallbackSize, $candidateSizes, '(max-width: 520px) 300px, 420px', '', $cardIndex, $bundle, (string) $presentation['thumbnail_rendering_mode']);
-    } else {
-        echo '<span class="gallery-collage gallery-empty-preview" aria-hidden="true">' . e(t('smart_gallery.empty_card', 'Smart Gallery')) . '</span>';
+        $coverPictureHtml = public_thumbnail_render_picture_html($cover, $fallbackSize, $candidateSizes, '(max-width: 520px) 300px, 420px', '', $cardIndex, $bundle, (string) $presentation['thumbnail_rendering_mode']);
     }
-    echo '</a><div class="gallery-card-body"><p class="admin-kicker">' . e(t('smart_gallery.public_kicker', 'Smart Gallery')) . '</p><h2><a class="gallery-card-title-link" href="' . e($url) . '">' . e((string) $smartGallery['title']) . '</a></h2>';
-    if (trim((string) ($smartGallery['description'] ?? '')) !== '') echo '<p class="gallery-card-description">' . e((string) $smartGallery['description']) . '</p>';
-    echo '<p class="muted gallery-card-count">' . e(t('gallery.image_count', '{count} images', ['count' => $count])) . '</p></div></article>';
+
+    \Gallery\Views\view_render_public_smart_gallery_card([
+        'gallery_id' => $smartGalleryId,
+        'title' => (string) ($smartGallery['title'] ?? ''),
+        'description' => (string) ($smartGallery['description'] ?? ''),
+        'url' => url_for('smart_gallery', ['slug' => (string) $smartGallery['slug']]),
+        'count' => $count,
+        'card_layout' => (string) ($presentation['card_layout'] ?? 'vertical'),
+        'cover_picture_html' => $coverPictureHtml,
+        'has_placement' => array_key_exists('placement', $smartGallery),
+        'placement' => (string) ($smartGallery['placement'] ?? ''),
+        'placement_order' => max(0, (int) ($smartGallery['placement_order'] ?? 0)),
+    ]);
 }
-
-
 
 /**
  * Render the compact public-page child-gallery creation entry point for logged-in admins.
@@ -417,11 +422,12 @@ function render_public_gallery_admin_add_child_link(array $gallery, string $plac
     if (!current_user() || admin_anonymous_preview_active() || !feature_capability_effective_enabled('inline_administration')) {
         return;
     }
-    $label = $placement === 'hero' ? t('gallery.add_here', 'Add gallery here') : t('gallery.add_inside', 'Add gallery inside {title}', ['title' => (string) $gallery['title']]);
-    $class = $placement === 'hero' ? 'public-admin-add-gallery-button public-admin-add-gallery-button-hero hero-icon-button' : 'public-admin-add-gallery-button public-admin-add-gallery-button-card';
-    $url = url_for('admin_upload', ['upload_mode' => 'new', 'parent_id' => $gallery['id']]);
-    $panelUrl = url_for('admin_upload', ['upload_mode' => 'new', 'parent_id' => $gallery['id'], 'panel' => 1]);
-    echo '<a class="' . e($class) . '" href="' . e($url) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="upload" data-admin-side-panel-kicker="' . e(t('gallery.workflow', 'Gallery workflow')) . '" data-admin-side-panel-title="' . e(t('gallery.add_here', 'Add gallery here')) . '" data-gallery-side-panel-url="' . e($panelUrl) . '" aria-label="' . e($label) . '" title="' . e($label) . '"><span aria-hidden="true">+</span><span class="visually-hidden">' . e($label) . '</span></a>';
+    \Gallery\Views\view_render_public_gallery_admin_add_child_link([
+        'placement' => $placement,
+        'title' => (string) ($gallery['title'] ?? ''),
+        'url' => url_for('admin_upload', ['upload_mode' => 'new', 'parent_id' => $gallery['id']]),
+        'panel_url' => url_for('admin_upload', ['upload_mode' => 'new', 'parent_id' => $gallery['id'], 'panel' => 1]),
+    ]);
 }
 
 /**
@@ -438,11 +444,13 @@ function render_public_gallery_admin_edit_link(array $gallery, string $placement
     if (!current_user() || admin_anonymous_preview_active() || !feature_capability_effective_enabled('inline_administration')) {
         return;
     }
-    $label = $placement === 'hero' ? t('gallery.edit_current', 'Edit current gallery') : t('gallery.edit_named', 'Edit gallery {title}', ['title' => (string) $gallery['title']]);
-    $class = $placement === 'hero' ? 'public-admin-edit-button public-admin-edit-button-hero' : 'public-admin-edit-button public-admin-edit-button-card';
-    echo '<a class="' . e($class) . '" href="' . e(url_for('admin_edit_gallery', ['id' => $gallery['id']])) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="gallery-edit" data-admin-side-panel-kicker="' . e(t('gallery.editor', 'Gallery editor')) . '" data-admin-side-panel-title="' . e(t('gallery.edit', 'Edit gallery')) . '" data-gallery-side-panel-url="' . e(url_for('admin_edit_gallery', ['id' => $gallery['id'], 'panel' => 1])) . '" aria-label="' . e($label) . '" title="' . e($label) . '"><span aria-hidden="true">&#9998;</span><span class="visually-hidden">' . e($label) . '</span></a>';
+    \Gallery\Views\view_render_public_gallery_admin_edit_link([
+        'placement' => $placement,
+        'title' => (string) ($gallery['title'] ?? ''),
+        'url' => url_for('admin_edit_gallery', ['id' => $gallery['id']]),
+        'panel_url' => url_for('admin_edit_gallery', ['id' => $gallery['id'], 'panel' => 1]),
+    ]);
 }
-
 
 /**
  * Render the compact public-page gallery delete entry point for logged-in admins.
@@ -459,19 +467,16 @@ function render_public_gallery_admin_delete_form(array $gallery, string $placeme
     if (!current_user() || admin_anonymous_preview_active() || !feature_capability_effective_enabled('inline_administration')) {
         return;
     }
-    $name = trim((string) ($gallery['title'] ?? 'gallery'));
-    $trashEnabled = gallery_trash_enabled();
-    $trashAutoPurgeEnabled = gallery_trash_auto_purge_enabled();
-    $label = $trashEnabled
-        ? ($placement === 'hero' ? t('gallery.trash_current', 'Move current gallery to trash') : t('gallery.trash_named', 'Move gallery {name} to trash', ['name' => $name]))
-        : ($placement === 'hero' ? t('gallery.remove_current', 'Remove current gallery from CMS') : t('gallery.remove_named', 'Remove gallery {name} from CMS', ['name' => $name]));
-    $class = $placement === 'hero' ? 'public-admin-delete-form public-admin-delete-form-hero' : 'public-admin-delete-form public-admin-delete-form-card';
-    echo '<form class="' . e($class) . '" method="post" action="' . e(url_for('admin_public_update_gallery')) . '" data-public-admin-card-action data-public-admin-delete-form data-public-admin-delete-name="' . e($name) . '" data-public-admin-delete-kind="gallery" data-public-admin-delete-mode="' . ($trashEnabled ? 'trash' : 'permanent') . '" data-public-admin-delete-auto-purge-enabled="' . ($trashAutoPurgeEnabled ? '1' : '0') . '" data-public-admin-delete-retention-days="' . (int) gallery_trash_retention_days() . '">';
-    echo csrf_field();
-    echo '<input type="hidden" name="gallery_id" value="' . (int) $gallery['id'] . '">';
-    echo '<input type="hidden" name="action" value="delete">';
-    echo '<button type="submit" class="public-admin-card-action-button public-admin-delete-button" aria-label="' . e($label) . '" title="' . e($label) . '"><span aria-hidden="true">&#128465;</span><span class="visually-hidden">' . e($label) . '</span></button>';
-    echo '</form>';
+    \Gallery\Views\view_render_public_gallery_admin_delete_form([
+        'placement' => $placement,
+        'name' => trim((string) ($gallery['title'] ?? 'gallery')),
+        'gallery_id' => (int) $gallery['id'],
+        'action_url' => url_for('admin_public_update_gallery'),
+        'csrf_html' => csrf_field(),
+        'trash_enabled' => gallery_trash_enabled(),
+        'auto_purge_enabled' => gallery_trash_auto_purge_enabled(),
+        'retention_days' => gallery_trash_retention_days(),
+    ]);
 }
 
 /** Render the compact three-state visibility menu for one public gallery card. */
@@ -499,10 +504,12 @@ function render_public_image_admin_edit_link(array $image): void
     }
     $title = trim((string) ($image['title'] ?? ''));
     $name = $title !== '' ? $title : (string) ($image['relative_path'] ?? 'photo');
-    $label = t('gallery.edit_photo_named', 'Edit photo {name}', ['name' => $name]);
-    echo '<a class="public-admin-edit-button public-admin-edit-button-card public-admin-edit-button-photo" href="' . e(url_for('admin_edit_image', ['id' => $image['id']])) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="image-edit" data-admin-side-panel-kicker="' . e(t('gallery.photo_editor', 'Photo editor')) . '" data-admin-side-panel-title="' . e(t('gallery.edit_photo', 'Edit photo')) . '" data-gallery-side-panel-url="' . e(url_for('admin_edit_image', ['id' => $image['id'], 'panel' => 1])) . '" aria-label="' . e($label) . '" title="' . e($label) . '"><span aria-hidden="true">&#9998;</span><span class="visually-hidden">' . e($label) . '</span></a>';
+    \Gallery\Views\view_render_public_image_admin_edit_link([
+        'name' => $name,
+        'url' => url_for('admin_edit_image', ['id' => $image['id']]),
+        'panel_url' => url_for('admin_edit_image', ['id' => $image['id'], 'panel' => 1]),
+    ]);
 }
-
 
 /**
  * Render the compact public-page photo delete entry point for logged-in admins.
@@ -520,13 +527,12 @@ function render_public_image_admin_delete_form(array $image): void
     }
     $title = trim((string) ($image['title'] ?? ''));
     $name = $title !== '' ? $title : (string) ($image['relative_path'] ?? 'photo');
-    $label = t('gallery.remove_photo_named', 'Remove photo {name} from CMS', ['name' => $name]);
-    echo '<form class="public-admin-delete-form public-admin-delete-form-card public-admin-delete-form-photo" method="post" action="' . e(url_for('admin_public_update_image')) . '" data-public-admin-card-action data-public-admin-delete-form data-public-admin-delete-name="' . e($name) . '" data-public-admin-delete-kind="photo">';
-    echo csrf_field();
-    echo '<input type="hidden" name="image_id" value="' . (int) $image['id'] . '">';
-    echo '<input type="hidden" name="action" value="delete">';
-    echo '<button type="submit" class="public-admin-card-action-button public-admin-delete-button" aria-label="' . e($label) . '" title="' . e($label) . '"><span aria-hidden="true">&#128465;</span><span class="visually-hidden">' . e($label) . '</span></button>';
-    echo '</form>';
+    \Gallery\Views\view_render_public_image_admin_delete_form([
+        'name' => $name,
+        'image_id' => (int) $image['id'],
+        'action_url' => url_for('admin_public_update_image'),
+        'csrf_html' => csrf_field(),
+    ]);
 }
 
 /** Render the compact three-state visibility menu for one public image card. */
@@ -545,21 +551,13 @@ function render_public_image_admin_visibility_menu(array $image): void
 function render_public_admin_visibility_menu(string $kind, int $entityId, string $name, string $visibility, string $actionUrl): void
 {
     if ($entityId <= 0) return;
-    $visibility = in_array($visibility, ['public', 'unpublished', 'private'], true) ? $visibility : 'unpublished';
-    $idField = $kind === 'gallery' ? 'gallery_id' : 'image_id';
-    $label = t('gallery.visibility.change_named', 'Change visibility for {name}', ['name' => $name]);
-    $options = [
-        'public' => ['public-admin-visibility-icon-public', t('gallery.visibility.public', 'Published')],
-        'unpublished' => ['public-admin-visibility-icon-unpublished', t('gallery.visibility.unpublished', 'Unpublished')],
-        'private' => ['public-admin-visibility-icon-private', t('gallery.visibility.private', 'Private')],
-    ];
-    echo '<details class="public-admin-visibility-menu public-admin-visibility-menu-card" data-public-admin-card-action data-public-admin-visibility-menu>';
-    echo '<summary class="public-admin-card-action-button public-admin-visibility-trigger" aria-label="' . e($label) . '" title="' . e($label) . '"><span class="public-admin-visibility-icon ' . e($options[$visibility][0]) . '" aria-hidden="true"><span class="public-admin-visibility-eye">&#128065;</span></span><span class="visually-hidden">' . e($label) . '</span></summary>';
-    echo '<div class="public-admin-visibility-options" role="group" aria-label="' . e($label) . '">';
-    foreach ($options as $value => $option) {
-        echo '<form method="post" action="' . e($actionUrl) . '" data-public-admin-visibility-form data-public-admin-visibility-kind="' . e($kind) . '">' . csrf_field();
-        echo '<input type="hidden" name="' . e($idField) . '" value="' . $entityId . '"><input type="hidden" name="action" value="' . e($value) . '">';
-        echo '<button type="submit" class="public-admin-visibility-option' . ($visibility === $value ? ' is-current' : '') . '" aria-pressed="' . ($visibility === $value ? 'true' : 'false') . '" title="' . e($option[1]) . '"><span class="public-admin-visibility-icon ' . e($option[0]) . '" aria-hidden="true"><span class="public-admin-visibility-eye">&#128065;</span></span><span class="visually-hidden">' . e($option[1]) . '</span></button></form>';
-    }
-    echo '</div></details>';
+    \Gallery\Views\view_render_public_admin_visibility_menu([
+        'kind' => $kind,
+        'entity_id' => $entityId,
+        'name' => $name,
+        'visibility' => $visibility,
+        'action_url' => $actionUrl,
+        'csrf_html' => csrf_field(),
+    ]);
 }
+

@@ -39,12 +39,13 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+use function Gallery\Core\request_data;
+
 use CURLFile;
 use RuntimeException;
 use Throwable;
 use ZipArchive;
 use const Gallery\Core\CMS_VERSION;
-use function Gallery\Controllers\admin_edit_gallery_tab_url;
 use function Gallery\Core\cms_config;
 use function Gallery\Core\cms_current_version;
 use function Gallery\Core\db;
@@ -147,7 +148,7 @@ function gallery_migration_timeout_seconds(?int $seconds = null): int
  */
 function gallery_migration_request_timeout_seconds(): int
 {
-    return gallery_migration_timeout_seconds((int) ($_POST['reconnect_seconds'] ?? GALLERY_MIGRATION_RECONNECT_SECONDS));
+    return gallery_migration_timeout_seconds((int) (request_data('post')['reconnect_seconds'] ?? GALLERY_MIGRATION_RECONNECT_SECONDS));
 }
 
 /**

@@ -1,5 +1,20 @@
 <?php
 
+/**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ *
+ * File: tests/admin_content_localization_test.php
+ *
+ * Author:
+ *   Rudolf Klusal
+ *
+ * License:
+ *   MIT License (see LICENSE file in repository)
+ *
+ * Notes:
+ *   - Keep comments and docstrings intact when modifying this file.
+ */
 /** Protect Admin multilingual form and side-panel ownership contracts. */
 
 declare(strict_types=1);
@@ -12,6 +27,7 @@ $view = (string) file_get_contents($root . '/app/views/admin_gallery_forms.php')
 $galleryPage = module_source($root . '/app/controllers/admin_galleries_edit_page.php');
 $gallerySave = (string) file_get_contents($root . '/app/controllers/admin_galleries_edit_actions.php');
 $imageEdit = (string) file_get_contents($root . '/app/controllers/admin_public_inline.php');
+$imageEditView = (string) file_get_contents($root . '/app/views/admin_public_inline.php');
 $sidePanel = (string) file_get_contents($root . '/public/assets/gallery-modules/admin-side-panel.js');
 $openaiService = (string) file_get_contents($root . '/app/services/openai_text_assist.php');
 $openaiBrowser = (string) file_get_contents($root . '/public/assets/gallery-modules/admin-openai-text-assist.js');
@@ -34,7 +50,7 @@ admin_content_assert(str_contains($view, 'name="content_language"'), 'Source-lan
 admin_content_assert(str_contains($view, 'translations['), 'Nested translated fields missing.');
 admin_content_assert(str_contains($view, '<details class="admin-content-translations"'), 'Optional translations are not hidden behind a disclosure control.');
 admin_content_assert(str_contains($galleryPage, "view_render_content_localization_fields('gallery'"), 'Gallery editor does not render localization controls.');
-admin_content_assert(str_contains($imageEdit, "view_render_content_localization_fields('image'"), 'Image editor does not render localization controls.');
+admin_content_assert(str_contains($imageEditView, "view_render_content_localization_fields('image'"), 'Image editor does not render localization controls.');
 admin_content_assert(str_contains($gallerySave, "content_save_localizations('gallery'"), 'Gallery save does not persist localizations.');
 admin_content_assert(str_contains($imageEdit, "content_save_localizations('image'"), 'Image save does not persist localizations.');
 admin_content_assert(str_contains($sidePanel, "body.set('ajax', '1')") && str_contains($sidePanel, 'new FormData(form)'), 'Side-panel edit forms do not retain AJAX FormData submission.');

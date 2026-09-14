@@ -41,7 +41,7 @@ use function Gallery\Core\e;
 use function Gallery\Core\render_footer;
 use function Gallery\Core\render_header;
 use function Gallery\Core\url_for;
-use function Gallery\Services\admin_dashboard_format_bytes;
+use function Gallery\Core\format_bytes;
 use function Gallery\Services\t;
 
 /**
@@ -76,7 +76,8 @@ function view_render_admin_storage_statistics_page(?array $statistics, ?array $d
             view_render_admin_database_maintenance_panel(
                 is_array($databaseMaintenance['report'] ?? null) ? $databaseMaintenance['report'] : null,
                 is_array($databaseMaintenance['cleanup_state'] ?? null) ? $databaseMaintenance['cleanup_state'] : [],
-                is_array($databaseMaintenance['repair_readiness'] ?? null) ? $databaseMaintenance['repair_readiness'] : []
+                is_array($databaseMaintenance['repair_readiness'] ?? null) ? $databaseMaintenance['repair_readiness'] : [],
+                !empty($databaseMaintenance['mutations_enabled'])
             );
         }
         render_footer();
@@ -222,15 +223,15 @@ function view_render_admin_storage_statistics_panel(array $statistics): void
     echo '<div class="admin-panel-heading admin-storage-heading"><div><p class="admin-kicker">' . e(t('admin.storage.kicker', 'Storage')) . '</p><h2>' . e(t('admin.storage.title', 'Media storage details')) . '</h2></div><p class="muted">' . e(t('admin.storage.description', 'Source photos are counted from the database. Generated thumbnails and DNG display masters are counted from expected derivative files.')) . '</p></div>';
 
     echo '<div class="admin-storage-summary-grid">';
-    view_render_admin_storage_summary_card(t('admin.storage.source_only', 'Source photos only'), admin_dashboard_format_bytes($originalBytes), t('admin.storage.source_only_hint', '{count} indexed image(s), excluding generated thumbnails.', ['count' => (string) $imageCount]));
-    view_render_admin_storage_summary_card(t('admin.storage.generated_thumbnails', 'Generated thumbnails'), admin_dashboard_format_bytes($thumbnailBytes), t('admin.storage.generated_thumbnails_hint', '{count} generated JPG/WebP thumbnail file(s).', ['count' => (string) $thumbnailCount]));
-    view_render_admin_storage_summary_card(t('admin.storage.display_masters', 'Display masters'), admin_dashboard_format_bytes($displayMasterBytes), t('admin.storage.display_masters_hint', '{count} generated DNG browser-display master file(s).', ['count' => (string) $displayMasterCount]));
-    view_render_admin_storage_summary_card(t('admin.storage.total_with_generated', 'All picture storage'), admin_dashboard_format_bytes($totalPictureBytes), t('admin.storage.total_with_generated_hint', 'Source photos plus generated picture derivatives. Generated media is {percent}% of source size.', ['percent' => number_format($generatedPercent, 1)]));
+    view_render_admin_storage_summary_card(t('admin.storage.source_only', 'Source photos only'), format_bytes($originalBytes), t('admin.storage.source_only_hint', '{count} indexed image(s), excluding generated thumbnails.', ['count' => (string) $imageCount]));
+    view_render_admin_storage_summary_card(t('admin.storage.generated_thumbnails', 'Generated thumbnails'), format_bytes($thumbnailBytes), t('admin.storage.generated_thumbnails_hint', '{count} generated JPG/WebP thumbnail file(s).', ['count' => (string) $thumbnailCount]));
+    view_render_admin_storage_summary_card(t('admin.storage.display_masters', 'Display masters'), format_bytes($displayMasterBytes), t('admin.storage.display_masters_hint', '{count} generated DNG browser-display master file(s).', ['count' => (string) $displayMasterCount]));
+    view_render_admin_storage_summary_card(t('admin.storage.total_with_generated', 'All picture storage'), format_bytes($totalPictureBytes), t('admin.storage.total_with_generated_hint', 'Source photos plus generated picture derivatives. Generated media is {percent}% of source size.', ['percent' => number_format($generatedPercent, 1)]));
     echo '</div>';
 
     echo '<div class="admin-storage-facts">';
-    echo '<span><strong>' . e(t('admin.storage.average_source_size', 'Average source size')) . '</strong> ' . e(admin_dashboard_format_bytes($averageOriginalBytes)) . '</span>';
-    echo '<span><strong>' . e(t('admin.storage.largest_source', 'Largest source')) . '</strong> ' . e(admin_dashboard_format_bytes($largestOriginalBytes)) . ($largestOriginalName !== '' ? ' <em>' . e($largestOriginalName) . '</em>' : '') . '</span>';
+    echo '<span><strong>' . e(t('admin.storage.average_source_size', 'Average source size')) . '</strong> ' . e(format_bytes($averageOriginalBytes)) . '</span>';
+    echo '<span><strong>' . e(t('admin.storage.largest_source', 'Largest source')) . '</strong> ' . e(format_bytes($largestOriginalBytes)) . ($largestOriginalName !== '' ? ' <em>' . e($largestOriginalName) . '</em>' : '') . '</span>';
     if ($unknownSourceSizeCount > 0) {
         echo '<span><strong>' . e(t('admin.storage.unknown_source_sizes', 'Unknown source sizes')) . '</strong> ' . (int) $unknownSourceSizeCount . '</span>';
     }
@@ -291,7 +292,7 @@ function view_render_admin_storage_bar_chart(string $title, string $hint, array 
         $percent = min(100.0, max(0.0, (float) ($row['percent'] ?? 0.0)));
         $path = trim((string) ($row['folder_path'] ?? ''));
         $details = t('admin.storage.chart_row_details', '{size}, {count} file(s)', [
-            'size' => admin_dashboard_format_bytes($bytes),
+            'size' => format_bytes($bytes),
             'count' => (string) $count,
         ]);
         if ($path !== '') {

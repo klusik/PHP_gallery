@@ -39,10 +39,12 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
-use Throwable;
+use function Gallery\Core\request_data;
+
+use function Gallery\Models\admin_gallery_report_model_mysql_version;
+
 use function Gallery\Core\cms_config;
 use function Gallery\Core\cms_current_version;
-use function Gallery\Core\db;
 
 /**
  * Build a storage snapshot from report accumulators.
@@ -99,8 +101,8 @@ function admin_gallery_report_runtime_summary(): array
         'php_sapi' => PHP_SAPI,
         'os' => PHP_OS_FAMILY . ' / ' . PHP_OS,
         'uname' => php_uname(),
-        'server_software' => (string) ($_SERVER['SERVER_SOFTWARE'] ?? ''),
-        'document_root' => (string) ($_SERVER['DOCUMENT_ROOT'] ?? ''),
+        'server_software' => (string) (request_data('server')['SERVER_SOFTWARE'] ?? ''),
+        'document_root' => (string) (request_data('server')['DOCUMENT_ROOT'] ?? ''),
         'memory_limit' => (string) ini_get('memory_limit'),
         'max_execution_time' => (string) ini_get('max_execution_time'),
         'max_input_vars' => (string) ini_get('max_input_vars'),
@@ -168,11 +170,7 @@ function admin_gallery_report_server_memory_summary(): array
  */
 function admin_gallery_report_mysql_version(): string
 {
-    try {
-        return (string) (db()->query('SELECT VERSION()')->fetchColumn() ?: '');
-    } catch (Throwable) {
-        return '';
-    }
+    return admin_gallery_report_model_mysql_version();
 }
 
 /**

@@ -38,9 +38,6 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 use function Gallery\Core\e;
-use function Gallery\Views\view_gallery_description_markdown_excerpt;
-use function Gallery\Views\view_gallery_description_markdown_html;
-use function Gallery\Views\view_gallery_description_utf8_excerpt;
 
 /**
  * Return the public gallery-card description layouts supported by the renderer.
@@ -176,9 +173,6 @@ function gallery_description_layout_source_label(array $gallery): string
  */
 function gallery_description_utf8_excerpt(string $text, int $limit): string
 {
-    if (function_exists('Gallery\\Views\\view_gallery_description_utf8_excerpt')) {
-        return view_gallery_description_utf8_excerpt($text, $limit);
-    }
     if ($limit <= 0) {
         return '';
     }
@@ -203,9 +197,6 @@ function gallery_description_utf8_excerpt(string $text, int $limit): string
  */
 function gallery_description_markdown_excerpt(string $markdown, int $limit = 360): string
 {
-    if (function_exists('Gallery\\Views\\view_gallery_description_markdown_excerpt')) {
-        return view_gallery_description_markdown_excerpt($markdown, $limit);
-    }
     // $normalized stores the description with predictable line endings so user-entered newlines survive in cards.
     $normalized = trim(str_replace(["\r\n", "\r"], "\n", $markdown));
     if ($normalized === '') {
@@ -233,9 +224,6 @@ function gallery_description_markdown_excerpt(string $markdown, int $limit = 360
  */
 function gallery_description_markdown_html(string $markdown): string
 {
-    if (function_exists('Gallery\\Views\\view_gallery_description_markdown_html')) {
-        return view_gallery_description_markdown_html($markdown);
-    }
     // $normalized stores line endings in one form before paragraph handling.
     $normalized = trim(str_replace(["\r\n", "\r"], "\n", $markdown));
     if ($normalized === '') {

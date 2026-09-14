@@ -16,6 +16,9 @@
  *   - Bind each request to the account security version and bounded expiry
  *   - Retire all staged requests automatically when the viewer account is deleted
  *
+ * Author:
+ *   Rudolf Klusal
+ *
  * Notes:
  *   - Keep comments and docstrings intact when modifying this file.
  *   - This migration adds no route, UI, or mail transport.

@@ -37,13 +37,19 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 use DirectoryIterator;
-use PDO;
 use Throwable;
-use function Gallery\Core\db;
 use function Gallery\Core\is_dng_image_path;
 use function Gallery\Core\is_supported_image_path;
 use function Gallery\Core\normalize_relative_path;
 use function Gallery\Core\now_sql;
+use function Gallery\Models\gallery_model_ids_by_folder_path;
+use function Gallery\Models\image_model_delete_thumbnail_variants;
+use function Gallery\Models\image_model_find_by_path_hash;
+use function Gallery\Models\image_model_increment_thumbnail_derivative_version;
+use function Gallery\Models\image_model_insert_scan_row;
+use function Gallery\Models\image_model_next_sort_order;
+use function Gallery\Models\image_model_update_scan_display_metadata;
+use function Gallery\Models\image_model_update_scan_row;
 
 /**
  * Image scanning model.
@@ -109,21 +115,18 @@ function scan_image_sync_master_display_metadata(int $imageId, array $metadata):
         'thumbnail_metadata_refreshed_at' => now_sql(),
     ];
 
-    $assignments = [];
-    $params = [];
+    $availableFields = [];
     foreach ($fields as $column => $value) {
         if (!db_column_exists('images', $column)) {
             continue;
         }
-        $assignments[] = '`' . $column . '` = ?';
-        $params[] = $value;
+        $availableFields[$column] = $value;
     }
-    if (!$assignments) {
+    if (!$availableFields) {
         return;
     }
 
-    $params[] = $imageId;
-    db()->prepare('UPDATE images SET ' . implode(', ', $assignments) . ' WHERE id = ?')->execute($params);
+    image_model_update_scan_display_metadata($imageId, $availableFields);
 }
 
 /**
@@ -138,12 +141,12 @@ function scan_image_invalidate_thumbnail_derivatives(int $imageId): void
     }
 
     if (function_exists('Gallery\\Services\\db_column_exists') && db_column_exists('images', 'thumbnail_derivative_version')) {
-        db()->prepare('UPDATE images SET thumbnail_derivative_version = thumbnail_derivative_version + 1 WHERE id = ?')->execute([$imageId]);
+        image_model_increment_thumbnail_derivative_version($imageId);
     }
     if (function_exists('Gallery\\Services\\thumbnail_metadata_delete_image_variants')) {
         thumbnail_metadata_delete_image_variants($imageId);
     } elseif (function_exists('Gallery\\Services\\db_table_exists') && db_table_exists('image_thumbnail_variants')) {
-        db()->prepare('DELETE FROM image_thumbnail_variants WHERE image_id = ?')->execute([$imageId]);
+        image_model_delete_thumbnail_variants($imageId);
     }
 }
 
@@ -450,11 +453,8 @@ function scan_gallery_image_row_by_path(int $galleryId, string $relativePath): ?
         return null;
     }
 
-    // $stmt performs an uncached lookup so newly written files are reconciled accurately.
-    $stmt = db()->prepare('SELECT * FROM images WHERE gallery_id = ? AND relative_path_hash = ? LIMIT 1');
-    $stmt->execute([$galleryId, hash('sha256', $normalizedPath)]);
-    $row = $stmt->fetch();
-    return is_array($row) ? $row : null;
+    // The model performs an uncached lookup so newly written files are reconciled accurately.
+    return image_model_find_by_path_hash($galleryId, hash('sha256', $normalizedPath));
 }
 
 /**
@@ -464,13 +464,12 @@ function scan_gallery_image_row_by_path(int $galleryId, string $relativePath): ?
  * @param string $root Absolute gallery root path.
  * @param string $filePath Absolute image file path.
  * @param string $filename Basename used for display and file type checks.
- * @param PDO $pdo Database connection used for insert or update operations.
  * @param bool $exifSchemaReady Whether EXIF and GPS columns are available.
  * @param int $nextSortOrder Next append sort order for newly inserted images.
  * @param array $options Scanner options; upload_fast_path skips expensive metadata reads.
  * @return int Number of changed image rows.
  */
-function scan_gallery_image_file_entry(array $gallery, string $root, string $filePath, string $filename, PDO $pdo, bool $exifSchemaReady, int &$nextSortOrder, array $options = []): int
+function scan_gallery_image_file_entry(array $gallery, string $root, string $filePath, string $filename, bool $exifSchemaReady, int &$nextSortOrder, array $options = []): int
 {
     $galleryId = (int) ($gallery['id'] ?? 0);
     if ($galleryId <= 0 || !is_file($filePath) || !is_supported_image_path($filename)) {
@@ -511,61 +510,43 @@ function scan_gallery_image_file_entry(array $gallery, string $root, string $fil
     // $checksum stores the source hash when the caller requested a full scanner pass.
     $checksum = $fastUploadPath ? ($existing['checksum_sha256'] ?? null) : (hash_file('sha256', $filePath) ?: null);
     if (!$existing) {
+        $createdAt = now_sql();
+        $updatedAt = now_sql();
+        $fields = [
+            'gallery_id' => $galleryId,
+            'relative_path' => $relative,
+            'relative_path_hash' => hash('sha256', $relative),
+            'filename' => $filename,
+            'title' => pathinfo($filename, PATHINFO_FILENAME),
+            'width' => (int) $info['width'],
+            'height' => (int) $info['height'],
+            'mime_type' => (string) $info['mime'],
+            'file_size' => (int) (filesize($filePath) ?: 0),
+            'modified_at' => $modifiedAt,
+            'checksum_sha256' => $checksum,
+            'sort_order' => $nextSortOrder,
+            'created_at' => $createdAt,
+            'updated_at' => $updatedAt,
+        ];
         if ($exifSchemaReady) {
-            // $stmt inserts a full metadata row including optional EXIF and GPS columns.
-            $stmt = $pdo->prepare('INSERT INTO images (gallery_id, relative_path, relative_path_hash, filename, title, width, height, mime_type, file_size, modified_at, exif_taken_at, exif_camera_make, exif_camera_model, exif_lens_model, exif_focal_length, exif_aperture, exif_exposure_time, exif_iso, gps_lat, gps_lng, gps_altitude, gps_extracted_at, checksum_sha256, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-            $stmt->execute([
-                $galleryId,
-                $relative,
-                hash('sha256', $relative),
-                $filename,
-                pathinfo($filename, PATHINFO_FILENAME),
-                (int) $info['width'],
-                (int) $info['height'],
-                (string) $info['mime'],
-                (int) (filesize($filePath) ?: 0),
-                $modifiedAt,
-                $exifMetadata['exif_taken_at'] ?? null,
-                $exifMetadata['exif_camera_make'] ?? null,
-                $exifMetadata['exif_camera_model'] ?? null,
-                $exifMetadata['exif_lens_model'] ?? null,
-                $exifMetadata['exif_focal_length'] ?? null,
-                $exifMetadata['exif_aperture'] ?? null,
-                $exifMetadata['exif_exposure_time'] ?? null,
-                $exifMetadata['exif_iso'] ?? null,
-                $exifMetadata['gps_lat'] ?? null,
-                $exifMetadata['gps_lng'] ?? null,
-                $exifMetadata['gps_altitude'] ?? null,
-                $exifMetadata['gps_extracted_at'] ?? null,
-                $checksum,
-                $nextSortOrder,
-                now_sql(),
-                now_sql(),
-            ]);
-            scan_image_sync_master_display_metadata((int) $pdo->lastInsertId(), $info);
-            $nextSortOrder += 10;
-        } else {
-            // $stmt inserts the compact image metadata row when EXIF columns are unavailable.
-            $stmt = $pdo->prepare('INSERT INTO images (gallery_id, relative_path, relative_path_hash, filename, title, width, height, mime_type, file_size, modified_at, checksum_sha256, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-            $stmt->execute([
-                $galleryId,
-                $relative,
-                hash('sha256', $relative),
-                $filename,
-                pathinfo($filename, PATHINFO_FILENAME),
-                (int) $info['width'],
-                (int) $info['height'],
-                (string) $info['mime'],
-                (int) (filesize($filePath) ?: 0),
-                $modifiedAt,
-                $checksum,
-                $nextSortOrder,
-                now_sql(),
-                now_sql(),
-            ]);
-            scan_image_sync_master_display_metadata((int) $pdo->lastInsertId(), $info);
-            $nextSortOrder += 10;
+            $fields += [
+                'exif_taken_at' => $exifMetadata['exif_taken_at'] ?? null,
+                'exif_camera_make' => $exifMetadata['exif_camera_make'] ?? null,
+                'exif_camera_model' => $exifMetadata['exif_camera_model'] ?? null,
+                'exif_lens_model' => $exifMetadata['exif_lens_model'] ?? null,
+                'exif_focal_length' => $exifMetadata['exif_focal_length'] ?? null,
+                'exif_aperture' => $exifMetadata['exif_aperture'] ?? null,
+                'exif_exposure_time' => $exifMetadata['exif_exposure_time'] ?? null,
+                'exif_iso' => $exifMetadata['exif_iso'] ?? null,
+                'gps_lat' => $exifMetadata['gps_lat'] ?? null,
+                'gps_lng' => $exifMetadata['gps_lng'] ?? null,
+                'gps_altitude' => $exifMetadata['gps_altitude'] ?? null,
+                'gps_extracted_at' => $exifMetadata['gps_extracted_at'] ?? null,
+            ];
         }
+        $createdImageId = image_model_insert_scan_row($fields);
+        scan_image_sync_master_display_metadata($createdImageId, $info);
+        $nextSortOrder += 10;
         return 1;
     }
 
@@ -575,47 +556,32 @@ function scan_gallery_image_file_entry(array $gallery, string $root, string $fil
         return 0;
     }
 
+    $fields = [
+        'filename' => $filename,
+        'width' => (int) $info['width'],
+        'height' => (int) $info['height'],
+        'mime_type' => (string) $info['mime'],
+        'file_size' => $fileSize,
+        'modified_at' => $modifiedAt,
+        'checksum_sha256' => $checksum,
+    ];
     if ($exifSchemaReady) {
-        // $stmt updates source metadata and optional EXIF columns for an existing image row.
-        $stmt = $pdo->prepare('UPDATE images SET filename = ?, width = ?, height = ?, mime_type = ?, file_size = ?, modified_at = ?, exif_taken_at = ?, exif_camera_make = ?, exif_camera_model = ?, exif_lens_model = ?, exif_focal_length = ?, exif_aperture = ?, exif_exposure_time = ?, exif_iso = ?, gps_lat = ?, gps_lng = ?, gps_altitude = ?, gps_extracted_at = ?, checksum_sha256 = ?, updated_at = ? WHERE id = ?');
-        $stmt->execute([
-            $filename,
-            (int) $info['width'],
-            (int) $info['height'],
-            (string) $info['mime'],
-            $fileSize,
-            $modifiedAt,
-            $fastUploadPath ? ($exifMetadata['exif_taken_at'] ?? $existing['exif_taken_at'] ?? null) : ($exifMetadata['exif_taken_at'] ?? null),
-            $fastUploadPath ? ($exifMetadata['exif_camera_make'] ?? $existing['exif_camera_make'] ?? null) : ($exifMetadata['exif_camera_make'] ?? null),
-            $fastUploadPath ? ($exifMetadata['exif_camera_model'] ?? $existing['exif_camera_model'] ?? null) : ($exifMetadata['exif_camera_model'] ?? null),
-            $fastUploadPath ? ($exifMetadata['exif_lens_model'] ?? $existing['exif_lens_model'] ?? null) : ($exifMetadata['exif_lens_model'] ?? null),
-            $fastUploadPath ? ($exifMetadata['exif_focal_length'] ?? $existing['exif_focal_length'] ?? null) : ($exifMetadata['exif_focal_length'] ?? null),
-            $fastUploadPath ? ($exifMetadata['exif_aperture'] ?? $existing['exif_aperture'] ?? null) : ($exifMetadata['exif_aperture'] ?? null),
-            $fastUploadPath ? ($exifMetadata['exif_exposure_time'] ?? $existing['exif_exposure_time'] ?? null) : ($exifMetadata['exif_exposure_time'] ?? null),
-            $fastUploadPath ? ($exifMetadata['exif_iso'] ?? $existing['exif_iso'] ?? null) : ($exifMetadata['exif_iso'] ?? null),
-            $fastUploadPath ? ($exifMetadata['gps_lat'] ?? $existing['gps_lat'] ?? null) : ($exifMetadata['gps_lat'] ?? null),
-            $fastUploadPath ? ($exifMetadata['gps_lng'] ?? $existing['gps_lng'] ?? null) : ($exifMetadata['gps_lng'] ?? null),
-            $fastUploadPath ? ($exifMetadata['gps_altitude'] ?? $existing['gps_altitude'] ?? null) : ($exifMetadata['gps_altitude'] ?? null),
-            $fastUploadPath ? ($exifMetadata['gps_extracted_at'] ?? $existing['gps_extracted_at'] ?? null) : ($exifMetadata['gps_extracted_at'] ?? null),
-            $checksum,
-            now_sql(),
-            (int) $existing['id'],
-        ]);
-    } else {
-        // $stmt updates source metadata for an existing image row.
-        $stmt = $pdo->prepare('UPDATE images SET filename = ?, width = ?, height = ?, mime_type = ?, file_size = ?, modified_at = ?, checksum_sha256 = ?, updated_at = ? WHERE id = ?');
-        $stmt->execute([
-            $filename,
-            (int) $info['width'],
-            (int) $info['height'],
-            (string) $info['mime'],
-            $fileSize,
-            $modifiedAt,
-            $checksum,
-            now_sql(),
-            (int) $existing['id'],
-        ]);
+        $fields += [
+            'exif_taken_at' => $fastUploadPath ? ($exifMetadata['exif_taken_at'] ?? $existing['exif_taken_at'] ?? null) : ($exifMetadata['exif_taken_at'] ?? null),
+            'exif_camera_make' => $fastUploadPath ? ($exifMetadata['exif_camera_make'] ?? $existing['exif_camera_make'] ?? null) : ($exifMetadata['exif_camera_make'] ?? null),
+            'exif_camera_model' => $fastUploadPath ? ($exifMetadata['exif_camera_model'] ?? $existing['exif_camera_model'] ?? null) : ($exifMetadata['exif_camera_model'] ?? null),
+            'exif_lens_model' => $fastUploadPath ? ($exifMetadata['exif_lens_model'] ?? $existing['exif_lens_model'] ?? null) : ($exifMetadata['exif_lens_model'] ?? null),
+            'exif_focal_length' => $fastUploadPath ? ($exifMetadata['exif_focal_length'] ?? $existing['exif_focal_length'] ?? null) : ($exifMetadata['exif_focal_length'] ?? null),
+            'exif_aperture' => $fastUploadPath ? ($exifMetadata['exif_aperture'] ?? $existing['exif_aperture'] ?? null) : ($exifMetadata['exif_aperture'] ?? null),
+            'exif_exposure_time' => $fastUploadPath ? ($exifMetadata['exif_exposure_time'] ?? $existing['exif_exposure_time'] ?? null) : ($exifMetadata['exif_exposure_time'] ?? null),
+            'exif_iso' => $fastUploadPath ? ($exifMetadata['exif_iso'] ?? $existing['exif_iso'] ?? null) : ($exifMetadata['exif_iso'] ?? null),
+            'gps_lat' => $fastUploadPath ? ($exifMetadata['gps_lat'] ?? $existing['gps_lat'] ?? null) : ($exifMetadata['gps_lat'] ?? null),
+            'gps_lng' => $fastUploadPath ? ($exifMetadata['gps_lng'] ?? $existing['gps_lng'] ?? null) : ($exifMetadata['gps_lng'] ?? null),
+            'gps_altitude' => $fastUploadPath ? ($exifMetadata['gps_altitude'] ?? $existing['gps_altitude'] ?? null) : ($exifMetadata['gps_altitude'] ?? null),
+            'gps_extracted_at' => $fastUploadPath ? ($exifMetadata['gps_extracted_at'] ?? $existing['gps_extracted_at'] ?? null) : ($exifMetadata['gps_extracted_at'] ?? null),
+        ];
     }
+    image_model_update_scan_row((int) $existing['id'], $fields, now_sql());
     scan_image_sync_master_display_metadata((int) $existing['id'], $info);
     if ($sourceChanged) {
         scan_image_invalidate_thumbnail_derivatives((int) $existing['id']);
@@ -666,8 +632,6 @@ function scan_gallery_images(int $galleryId): int
         return 0;
     }
 
-    // Variable $pdo stores this steps working value.
-    $pdo = db();
     // Variable $count stores this steps working value.
     $count = 0;
     // Variable $exifSchemaReady stores this steps working value.
@@ -681,7 +645,7 @@ function scan_gallery_images(int $galleryId): int
         if (!$file->isFile() || !is_supported_image_path($file->getFilename())) {
             continue;
         }
-        $count += scan_gallery_image_file_entry($gallery, $root, $file->getPathname(), $file->getFilename(), $pdo, $exifSchemaReady, $nextSortOrder);
+        $count += scan_gallery_image_file_entry($gallery, $root, $file->getPathname(), $file->getFilename(), $exifSchemaReady, $nextSortOrder);
     }
     scan_gallery_refresh_after_changes($gallery, $count);
     return $count;
@@ -710,7 +674,6 @@ function scan_gallery_selected_images(int $galleryId, array $relativePaths): int
         return 0;
     }
 
-    $pdo = db();
     $count = 0;
     $exifSchemaReady = exif_gps_schema_ready();
     $nextSortOrder = next_gallery_image_sort_order($galleryId);
@@ -733,7 +696,7 @@ function scan_gallery_selected_images(int $galleryId, array $relativePaths): int
         if ($realPath !== $realRoot && !str_starts_with($realPath, $realRoot . DIRECTORY_SEPARATOR)) {
             continue;
         }
-        $count += scan_gallery_image_file_entry($gallery, $realRoot, $realPath, basename($relative), $pdo, $exifSchemaReady, $nextSortOrder);
+        $count += scan_gallery_image_file_entry($gallery, $realRoot, $realPath, basename($relative), $exifSchemaReady, $nextSortOrder);
     }
 
     scan_gallery_refresh_after_changes($gallery, $count, ['public_path_scope' => 'gallery_images']);
@@ -764,7 +727,6 @@ function scan_gallery_selected_uploaded_images(int $galleryId, array $relativePa
         return 0;
     }
 
-    $pdo = db();
     $count = 0;
     $exifSchemaReady = exif_gps_schema_ready();
     $nextSortOrder = next_gallery_image_sort_order($galleryId);
@@ -788,7 +750,7 @@ function scan_gallery_selected_uploaded_images(int $galleryId, array $relativePa
             continue;
         }
         $metadata = is_array($metadataByRelativePath[$relative] ?? null) ? $metadataByRelativePath[$relative] : null;
-        $count += scan_gallery_image_file_entry($gallery, $realRoot, $realPath, basename($relative), $pdo, $exifSchemaReady, $nextSortOrder, [
+        $count += scan_gallery_image_file_entry($gallery, $realRoot, $realPath, basename($relative), $exifSchemaReady, $nextSortOrder, [
             'upload_fast_path' => true,
             'metadata' => $metadata,
         ]);
@@ -816,12 +778,7 @@ function scan_gallery_selected_uploaded_images(int $galleryId, array $relativePa
  */
 function next_gallery_image_sort_order(int $galleryId): int
 {
-    // Variable $stmt stores the query used to inspect the current largest sort_order value.
-    $stmt = db()->prepare('SELECT COALESCE(MAX(sort_order), 0) FROM images WHERE gallery_id = ?');
-    $stmt->execute([$galleryId]);
-    // Variable $maxSortOrder stores the current tail of the gallery image order.
-    $maxSortOrder = (int) $stmt->fetchColumn();
-    return $maxSortOrder + 10;
+    return image_model_next_sort_order($galleryId);
 }
 
 /**
@@ -838,9 +795,7 @@ function scan_all_imported_gallery_images(): array
     // $changed stores an intermediate value used by the surrounding gallery workflow.
     $changed = 0;
     // $galleryIds stores an intermediate value used by the surrounding gallery workflow.
-    $stmt = db()->prepare('SELECT id FROM galleries ORDER BY folder_path');
-    $stmt->execute();
-    $galleryIds = $stmt->fetchAll(PDO::FETCH_COLUMN);
+    $galleryIds = gallery_model_ids_by_folder_path();
     foreach ($galleryIds as $galleryId) {
         // $current stores an intermediate value used by the surrounding gallery workflow.
         $current = scan_gallery_images((int) $galleryId);

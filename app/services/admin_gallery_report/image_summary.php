@@ -37,10 +37,9 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
-use Throwable;
-use function Gallery\Core\cms_config;
-use function Gallery\Core\cms_current_version;
-use function Gallery\Core\db;
+use function Gallery\Models\admin_gallery_report_model_image_count;
+use function Gallery\Models\admin_gallery_report_model_image_rows_after_id;
+
 
 /**
  * Return total image count.
@@ -49,11 +48,7 @@ use function Gallery\Core\db;
  */
 function admin_gallery_report_image_count(): int
 {
-    try {
-        return (int) (db()->query('SELECT COUNT(*) FROM images')->fetchColumn() ?: 0);
-    } catch (Throwable) {
-        return 0;
-    }
+    return admin_gallery_report_model_image_count();
 }
 
 /**
@@ -65,49 +60,17 @@ function admin_gallery_report_image_count(): int
  */
 function admin_gallery_report_image_rows_after_id(int $lastImageId, int $limit): array
 {
-    $lastImageId = max(0, $lastImageId);
-    $limit = max(1, min(ADMIN_GALLERY_REPORT_MAX_BATCH_SIZE, $limit));
-    $derivativeVersionSelect = function_exists('Gallery\\Services\\admin_storage_statistics_image_derivative_version_select') ? admin_storage_statistics_image_derivative_version_select() : '1';
     $columns = [
-        'i.id AS image_id',
-        'i.gallery_id AS image_gallery_id',
-        'i.relative_path',
-        'i.filename',
-        'i.mime_type',
-        'COALESCE(i.file_size, 0) AS file_size',
-        'i.width',
-        'i.height',
-        'i.visibility AS image_visibility',
-        'i.modified_at',
-        'i.created_at AS image_created_at',
-        'i.updated_at AS image_updated_at',
-        $derivativeVersionSelect . ' AS thumbnail_derivative_version',
-        'g.id AS gallery_id',
-        'g.title AS gallery_title',
-        'g.folder_path AS gallery_folder_path',
-        'g.visibility AS gallery_visibility',
-        admin_gallery_report_column_select('images', 'exif_taken_at', 'i', 'NULL', 'exif_taken_at'),
-        admin_gallery_report_column_select('images', 'exif_camera_make', 'i', 'NULL', 'exif_camera_make'),
-        admin_gallery_report_column_select('images', 'exif_camera_model', 'i', 'NULL', 'exif_camera_model'),
-        admin_gallery_report_column_select('images', 'exif_lens_model', 'i', 'NULL', 'exif_lens_model'),
-        admin_gallery_report_column_select('images', 'exif_focal_length', 'i', 'NULL', 'exif_focal_length'),
-        admin_gallery_report_column_select('images', 'exif_aperture', 'i', 'NULL', 'exif_aperture'),
-        admin_gallery_report_column_select('images', 'exif_exposure_time', 'i', 'NULL', 'exif_exposure_time'),
-        admin_gallery_report_column_select('images', 'exif_iso', 'i', 'NULL', 'exif_iso'),
-        admin_gallery_report_column_select('images', 'gps_lat', 'i', 'NULL', 'gps_lat'),
-        admin_gallery_report_column_select('images', 'gps_lng', 'i', 'NULL', 'gps_lng'),
-        admin_gallery_report_column_select('images', 'gps_altitude', 'i', 'NULL', 'gps_altitude'),
-        admin_gallery_report_column_select('images', 'gps_extracted_at', 'i', 'NULL', 'gps_extracted_at'),
-        admin_gallery_report_column_select('images', 'exif_orientation', 'i', 'NULL', 'exif_orientation'),
+        'exif_taken_at', 'exif_camera_make', 'exif_camera_model', 'exif_lens_model',
+        'exif_focal_length', 'exif_aperture', 'exif_exposure_time', 'exif_iso',
+        'gps_lat', 'gps_lng', 'gps_altitude', 'gps_extracted_at', 'exif_orientation',
+        'thumbnail_derivative_version',
     ];
-
-    try {
-        $stmt = db()->prepare('SELECT ' . implode(', ', $columns) . ' FROM images i INNER JOIN galleries g ON g.id = i.gallery_id WHERE i.id > ? ORDER BY i.id LIMIT ' . $limit);
-        $stmt->execute([$lastImageId]);
-        return $stmt->fetchAll();
-    } catch (Throwable) {
-        return [];
+    $capabilities = [];
+    foreach ($columns as $column) {
+        $capabilities[$column] = admin_gallery_report_column_exists('images', $column);
     }
+    return admin_gallery_report_model_image_rows_after_id($lastImageId, $limit, $capabilities);
 }
 
 /**

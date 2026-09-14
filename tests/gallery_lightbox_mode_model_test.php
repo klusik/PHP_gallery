@@ -43,6 +43,7 @@ use function Gallery\Services\theme_lightbox_browsing_mode;
 use function Gallery\Services\schema_inspection_reset_request_cache;
 use function Gallery\Services\schema_inspection_set_query_executor_for_tests;
 
+require_once __DIR__ . '/../app/models/app_settings.php';
 require_once __DIR__ . '/../app/services/app_settings.php';
 
 if (!function_exists('t')) {

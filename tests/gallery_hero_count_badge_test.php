@@ -50,8 +50,9 @@ function assert_gallery_hero_count_contains(string $source, string $needle, stri
 }
 
 $controller = file_get_contents(__DIR__ . '/../app/controllers/public_gallery_page.php');
+$view = file_get_contents(__DIR__ . '/../app/views/public_gallery_pages.php');
 $styles = file_get_contents(__DIR__ . '/../public/assets/styles/utilities.css');
-if (!is_string($controller) || !is_string($styles)) {
+if (!is_string($controller) || !is_string($view) || !is_string($styles)) {
     throw new RuntimeException('Unable to read gallery hero count badge sources.');
 }
 
@@ -61,11 +62,12 @@ if (!str_contains($controller, '$heroBranchImageCount = $showHeroCountBadge')
     throw new RuntimeException('disabled-state query guard and profile span contract is missing.');
 }
 assert_gallery_hero_count_contains($controller, 'gallery_branch_image_count((int) $gallery[\'id\'], true)', 'canonical public-only branch counter');
-assert_gallery_hero_count_contains($controller, 'if ($showHeroCountBadge) {', 'conditional hero rendering');
-assert_gallery_hero_count_contains($controller, 'gallery.hero.branch_image_count_aria', 'translated accessible label');
-assert_gallery_hero_count_contains($controller, 'gallery.hero.branch_image_count_hint', 'translated explanatory title');
-assert_gallery_hero_count_contains($controller, 'gallery-hero-count-badge', 'hero count badge markup');
-assert_gallery_hero_count_contains($controller, 'subgallery-stack-icon', 'shared stacked-picture icon');
+assert_gallery_hero_count_contains($controller, "'show_count_badge' => \$showHeroCountBadge", 'controller-prepared count-badge state');
+assert_gallery_hero_count_contains($view, "if (!empty(\$viewModel['show_count_badge'])) {", 'conditional hero rendering');
+assert_gallery_hero_count_contains($view, 'gallery.hero.branch_image_count_aria', 'translated accessible label');
+assert_gallery_hero_count_contains($view, 'gallery.hero.branch_image_count_hint', 'translated explanatory title');
+assert_gallery_hero_count_contains($view, 'gallery-hero-count-badge', 'hero count badge markup');
+assert_gallery_hero_count_contains($view, 'subgallery-stack-icon', 'shared stacked-picture icon');
 
 assert_gallery_hero_count_contains($styles, '.public-page .gallery-hero-count-badge', 'hero badge styling');
 assert_gallery_hero_count_contains($styles, 'display: inline-flex;', 'in-flow hero badge layout');

@@ -41,15 +41,39 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 use FilesystemIterator;
-use PDO;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use RuntimeException;
 use Throwable;
-use function Gallery\Core\db;
 use function Gallery\Core\normalize_relative_path;
 use function Gallery\Core\now_sql;
 use function Gallery\Core\path_inside;
+use Gallery\Models\GalleryTrashCommitOutcomeUnknownException;
+use function Gallery\Models\gallery_trash_model_active_entry_for_path;
+use function Gallery\Models\gallery_trash_model_claim;
+use function Gallery\Models\gallery_trash_model_count_by_status;
+use function Gallery\Models\gallery_trash_model_delete_preparing;
+use function Gallery\Models\gallery_trash_model_entries;
+use function Gallery\Models\gallery_trash_model_entry;
+use function Gallery\Models\gallery_trash_model_expired_tokens;
+use function Gallery\Models\gallery_trash_model_finalize_preparing_delete;
+use function Gallery\Models\gallery_trash_model_folder_path_by_slug;
+use function Gallery\Models\gallery_trash_model_image_relative_path;
+use function Gallery\Models\gallery_trash_model_image_rows;
+use function Gallery\Models\gallery_trash_model_insert_preparing;
+use function Gallery\Models\gallery_trash_model_live_row_ids_for_path;
+use function Gallery\Models\gallery_trash_model_rearm_retention_deadlines;
+use function Gallery\Models\gallery_trash_model_release_claim;
+use function Gallery\Models\gallery_trash_model_set_cover_image;
+use function Gallery\Models\gallery_trash_model_set_purge_error;
+use function Gallery\Models\gallery_trash_model_stale_transitional_entries;
+use function Gallery\Models\gallery_trash_model_summary;
+use function Gallery\Models\gallery_trash_model_tokens_by_status;
+use function Gallery\Models\gallery_trash_model_transition;
+use function Gallery\Models\gallery_trash_model_transition_commit_aware;
+use function Gallery\Models\gallery_trash_model_transition_in_transaction;
+use function Gallery\Models\gallery_trash_model_update_gallery_metadata;
+use function Gallery\Models\gallery_trash_model_update_image_metadata;
 
 /** Default number of days a trashed gallery stays recoverable. */
 const GALLERY_TRASH_DEFAULT_RETENTION_DAYS = 30;
@@ -236,13 +260,7 @@ function gallery_trash_rearm_retention_deadlines(int $retentionDays): void
         throw new RuntimeException('Could not calculate the gallery trash retention deadline.');
     }
     $deadline = date('Y-m-d H:i:s', $deadlineTimestamp);
-    // $stmt updates only entries that could later return to the normal TRASHED state.
-    $stmt = db()->prepare(
-        "UPDATE gallery_trash_entries
-            SET purge_after = ?, updated_at = ?
-          WHERE status IN ('trashed','preparing','restoring')"
-    );
-    $stmt->execute([$deadline, $now]);
+    gallery_trash_model_rearm_retention_deadlines($deadline, $now);
 }
 
 /**
@@ -894,10 +912,7 @@ function gallery_trash_snapshot_upgrade(array $snapshot): array
  */
 function gallery_trash_image_rows(int $galleryId): array
 {
-    // $stmt stores the ordered image lookup for one gallery.
-    $stmt = db()->prepare('SELECT * FROM images WHERE gallery_id = ? ORDER BY sort_order, filename, id');
-    $stmt->execute([$galleryId]);
-    return $stmt->fetchAll();
+    return gallery_trash_model_image_rows($galleryId);
 }
 
 /**
@@ -916,13 +931,7 @@ function gallery_trash_cover_relative_path(array $gallery): ?string
     if ($coverImageId <= 0) {
         return null;
     }
-
-    // $stmt stores the single-row lookup for the configured title picture.
-    $stmt = db()->prepare('SELECT relative_path FROM images WHERE id = ?');
-    $stmt->execute([$coverImageId]);
-    // $relativePath stores the stored path of the title picture, when it still exists.
-    $relativePath = $stmt->fetchColumn();
-    return is_string($relativePath) && $relativePath !== '' ? $relativePath : null;
+    return gallery_trash_model_image_relative_path($coverImageId);
 }
 
 /**
@@ -1024,33 +1033,17 @@ function move_gallery_subtrees_to_trash(array $galleryIds, array $options = []):
             gallery_trash_write_manifest($trashToken, $snapshot, $entryTiming, $byteSize);
 
             // Live-row removal and PREPARING -> TRASHED become one atomic database commit.
-            $pdo = db();
-            $pdo->beginTransaction();
             try {
-                $deletedRows = $subtreeIds ? gallery_delete_database_subtree_rows_in_transaction($subtreeIds) : 0;
-                gallery_trash_transition_status_in_transaction($trashToken, 'preparing', 'trashed');
-            } catch (Throwable $exception) {
-                if ($pdo->inTransaction()) {
-                    $pdo->rollBack();
-                }
-                throw $exception;
-            }
-            try {
-                $pdo->commit();
-            } catch (Throwable $exception) {
+                $deletedRows = gallery_trash_model_finalize_preparing_delete(
+                    $trashToken,
+                    $subtreeIds,
+                    gallery_mutation_delete_dependency_availability(),
+                    now_sql()
+                );
+            } catch (GalleryTrashCommitOutcomeUnknownException $exception) {
                 // A transport failure during COMMIT can leave the client unable to prove whether
-                // the server committed or rolled back. Only a confirmed rollback permits the
-                // outer handler to move files back into the live gallery tree.
-                $rollbackConfirmed = false;
-                if ($pdo->inTransaction()) {
-                    try {
-                        $pdo->rollBack();
-                        $rollbackConfirmed = true;
-                    } catch (Throwable) {
-                        $rollbackConfirmed = false;
-                    }
-                }
-                $databaseOutcomeUnknown = !$rollbackConfirmed;
+                // the server committed or rolled back. Preserve the isolated payload for reconciliation.
+                $databaseOutcomeUnknown = true;
                 throw $exception;
             }
 
@@ -1257,33 +1250,24 @@ function gallery_trash_insert_preparing_entry(string $trashToken, array $rootGal
         throw new RuntimeException('Could not encode the gallery restore snapshot.');
     }
 
-    // $stmt stores the PREPARING insert that makes subsequent filesystem work crash-recoverable.
-    $stmt = db()->prepare(
-        'INSERT INTO gallery_trash_entries
-            (trash_token, status, original_folder_path, original_parent_folder_path,
-             title, subtree_gallery_count, image_count, byte_size, snapshot_version, snapshot_json, trash_relative_path,
-             deleted_by_user_id, deleted_from, deleted_at, purge_after, operation_started_at, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    );
-    $stmt->execute([
-        $trashToken,
-        'preparing',
-        $folderPath,
-        ($parentPath === '' || $parentPath === '/') ? null : $parentPath,
-        (string) ($rootGallery['title'] ?? basename($folderPath)),
-        (int) ($snapshot['gallery_count'] ?? 0),
-        (int) ($snapshot['image_count'] ?? 0),
-        max(0, $byteSize),
-        (int) ($snapshot['version'] ?? GALLERY_TRASH_SNAPSHOT_VERSION),
-        $snapshotJson,
-        gallery_trash_relative_path($trashToken),
-        $userId,
-        $deletedFrom,
-        $deletedAt,
-        $purgeAfter,
-        $deletedAt,
-        $deletedAt,
-        $deletedAt,
+    gallery_trash_model_insert_preparing([
+        'trash_token' => $trashToken,
+        'original_folder_path' => $folderPath,
+        'original_parent_folder_path' => ($parentPath === '' || $parentPath === '/') ? null : $parentPath,
+        'title' => (string) ($rootGallery['title'] ?? basename($folderPath)),
+        'subtree_gallery_count' => (int) ($snapshot['gallery_count'] ?? 0),
+        'image_count' => (int) ($snapshot['image_count'] ?? 0),
+        'byte_size' => max(0, $byteSize),
+        'snapshot_version' => (int) ($snapshot['version'] ?? GALLERY_TRASH_SNAPSHOT_VERSION),
+        'snapshot_json' => $snapshotJson,
+        'trash_relative_path' => gallery_trash_relative_path($trashToken),
+        'deleted_by_user_id' => $userId,
+        'deleted_from' => $deletedFrom,
+        'deleted_at' => $deletedAt,
+        'purge_after' => $purgeAfter,
+        'operation_started_at' => $deletedAt,
+        'created_at' => $deletedAt,
+        'updated_at' => $deletedAt,
     ]);
 
     return ['deleted_at' => $deletedAt, 'purge_after' => $purgeAfter];
@@ -1297,8 +1281,7 @@ function gallery_trash_insert_preparing_entry(string $trashToken, array $rootGal
 function gallery_trash_delete_preparing_entry(string $trashToken): void
 {
     gallery_trash_assert_token($trashToken);
-    $stmt = db()->prepare("DELETE FROM gallery_trash_entries WHERE trash_token = ? AND status = 'preparing'");
-    $stmt->execute([$trashToken]);
+    gallery_trash_model_delete_preparing($trashToken);
 }
 
 /**
@@ -1313,38 +1296,14 @@ function gallery_trash_delete_preparing_entry(string $trashToken): void
 function gallery_trash_transition_status_in_transaction(string $trashToken, string $fromStatus, string $toStatus, bool $clearSnapshot = false, ?string $errorCode = null): void
 {
     gallery_trash_assert_token($trashToken);
-    if (!db()->inTransaction()) {
-        throw new RuntimeException('Trash lifecycle transition requires an active database transaction.');
-    }
-    // $timestamp stores the shared transition time.
-    $timestamp = now_sql();
-    // $stmt stores a compare-and-swap transition so concurrent mutations cannot steal the entry.
-    $stmt = db()->prepare(
-        'UPDATE gallery_trash_entries
-            SET status = ?,
-                operation_started_at = NULL,
-                restored_at = CASE WHEN ? = \'restored\' THEN ? ELSE restored_at END,
-                purged_at = CASE WHEN ? = \'purged\' THEN ? ELSE purged_at END,
-                snapshot_json = CASE WHEN ? = 1 THEN NULL ELSE snapshot_json END,
-                last_error_code = ?,
-                updated_at = ?
-          WHERE trash_token = ? AND status = ?'
-    );
-    $stmt->execute([
-        $toStatus,
-        $toStatus,
-        $timestamp,
-        $toStatus,
-        $timestamp,
-        $clearSnapshot ? 1 : 0,
-        $errorCode,
-        $timestamp,
+    gallery_trash_model_transition_in_transaction(
         $trashToken,
         $fromStatus,
-    ]);
-    if ($stmt->rowCount() !== 1) {
-        throw new RuntimeException('The trash entry lifecycle changed concurrently.');
-    }
+        $toStatus,
+        $clearSnapshot,
+        $errorCode,
+        now_sql()
+    );
 }
 
 /**
@@ -1364,13 +1323,7 @@ function gallery_trash_claim_entry(string $trashToken, string $targetStatus, str
     }
     // $timestamp stores when reconciliation may begin aging this operation.
     $timestamp = now_sql();
-    $stmt = db()->prepare(
-        "UPDATE gallery_trash_entries
-            SET status = ?, operation_started_at = ?, last_error_code = NULL, updated_at = ?
-          WHERE trash_token = ? AND status = ?"
-    );
-    $stmt->execute([$targetStatus, $timestamp, $timestamp, $trashToken, $fromStatus]);
-    return $stmt->rowCount() === 1;
+    return gallery_trash_model_claim($trashToken, $targetStatus, $fromStatus, $timestamp);
 }
 
 /**
@@ -1389,13 +1342,7 @@ function gallery_trash_release_claim(string $trashToken, string $claimedStatus, 
         || !in_array($returnStatus, ['trashed', 'broken'], true)) {
         return false;
     }
-    $stmt = db()->prepare(
-        "UPDATE gallery_trash_entries
-            SET status = ?, operation_started_at = NULL, last_error_code = ?, updated_at = ?
-          WHERE trash_token = ? AND status = ?"
-    );
-    $stmt->execute([$returnStatus, $errorCode, now_sql(), $trashToken, $claimedStatus]);
-    return $stmt->rowCount() === 1;
+    return gallery_trash_model_release_claim($trashToken, $claimedStatus, $errorCode, $returnStatus, now_sql());
 }
 
 /**
@@ -1407,17 +1354,14 @@ function gallery_trash_release_claim(string $trashToken, string $claimedStatus, 
  */
 function gallery_trash_mark_broken(string $trashToken, string $fromStatus, string $errorCode): void
 {
-    $pdo = db();
-    $pdo->beginTransaction();
-    try {
-        gallery_trash_transition_status_in_transaction($trashToken, $fromStatus, 'broken', false, substr($errorCode, 0, 64));
-        $pdo->commit();
-    } catch (Throwable $exception) {
-        if ($pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
-        throw $exception;
-    }
+    gallery_trash_model_transition(
+        $trashToken,
+        $fromStatus,
+        'broken',
+        false,
+        substr($errorCode, 0, 64),
+        now_sql()
+    );
 }
 
 /**
@@ -1611,34 +1555,18 @@ function restore_gallery_trash_entry(string $trashToken, array $options = []): a
         }
 
         // Finalized rows no longer need the potentially large restore JSON.
-        $pdo = db();
-        $pdo->beginTransaction();
         try {
-            gallery_trash_transition_status_in_transaction($trashToken, 'restoring', 'restored', true);
-        } catch (Throwable $exception) {
-            if ($pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
-            throw $exception;
-        }
-        try {
-            $pdo->commit();
-        } catch (Throwable $exception) {
-            // As with trash creation, a connection failure during COMMIT can make the
-            // server outcome unknowable to this request. Never compensate by deleting
-            // the newly restored live tree in that case. If the commit rolled back, the
-            // stale RESTORING marker is reconciled later; if it committed, the live tree
-            // is already authoritative and the RESTORED row needs no compensation.
-            $rollbackConfirmed = false;
-            if ($pdo->inTransaction()) {
-                try {
-                    $pdo->rollBack();
-                    $rollbackConfirmed = true;
-                } catch (Throwable) {
-                    $rollbackConfirmed = false;
-                }
-            }
-            $finalizeOutcomeUnknown = !$rollbackConfirmed;
+            gallery_trash_model_transition_commit_aware(
+                $trashToken,
+                'restoring',
+                'restored',
+                true,
+                null,
+                now_sql()
+            );
+        } catch (GalleryTrashCommitOutcomeUnknownException $exception) {
+            // Never compensate a restore whose final COMMIT may already have succeeded.
+            $finalizeOutcomeUnknown = true;
             throw $exception;
         }
         // The restore is already durably finalized. Failure to remove an empty manifest
@@ -1766,10 +1694,8 @@ function gallery_trash_restore_collision(string $trashToken, string $folderPath,
         // Preserve stable public slugs instead of silently accepting a new unique_slug() value.
         $slug = trim((string) ($record['slug'] ?? ''));
         if ($slug !== '' && schema_inspection_is_available(schema_inspection_column('galleries', 'slug'))) {
-            $stmt = db()->prepare('SELECT folder_path FROM galleries WHERE slug = ? LIMIT 1');
-            $stmt->execute([$slug]);
-            $takenPath = $stmt->fetchColumn();
-            if (is_string($takenPath) && $takenPath !== '') {
+            $takenPath = gallery_trash_model_folder_path_by_slug($slug);
+            if ($takenPath !== null) {
                 return 'The gallery URL slug "' . $slug . '" is already used by ' . $takenPath . '.';
             }
         }
@@ -1792,17 +1718,8 @@ function gallery_trash_active_ancestor_entry(string $folderPath, string $exclude
     array_pop($segments);
     while ($segments) {
         $ancestorPath = implode('/', $segments);
-        $stmt = db()->prepare(
-            "SELECT trash_token, title, original_folder_path, status
-               FROM gallery_trash_entries
-              WHERE original_folder_path = ?
-                AND trash_token <> ?
-                AND status IN ('preparing','trashed','restoring','purging','broken')
-              ORDER BY id DESC LIMIT 1"
-        );
-        $stmt->execute([$ancestorPath, $excludeToken]);
-        $entry = $stmt->fetch();
-        if (is_array($entry)) {
+        $entry = gallery_trash_model_active_entry_for_path($ancestorPath, $excludeToken);
+        if ($entry !== null) {
             return $entry;
         }
         array_pop($segments);
@@ -1819,16 +1736,7 @@ function gallery_trash_active_ancestor_entry(string $folderPath, string $exclude
 function gallery_trash_live_row_ids_for_path(string $folderPath): array
 {
     $folderPath = normalize_relative_path($folderPath);
-    // Use an exact prefix comparison instead of LIKE so '%' and '_' in legitimate
-    // folder names can never widen rollback/reconciliation to a sibling gallery.
-    $prefix = $folderPath . '/';
-    $stmt = db()->prepare(
-        'SELECT id FROM galleries
-          WHERE folder_path = ? OR LEFT(folder_path, CHAR_LENGTH(?)) = ?
-          ORDER BY LENGTH(folder_path) DESC, id DESC'
-    );
-    $stmt->execute([$folderPath, $prefix, $prefix]);
-    return array_values(array_unique(array_filter(array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN)), static fn (int $id): bool => $id > 0)));
+    return gallery_trash_model_live_row_ids_for_path($folderPath);
 }
 
 /**
@@ -1888,24 +1796,7 @@ function gallery_trash_apply_gallery_snapshot(int $galleryId, array $record): vo
 {
     // $columns stores the restorable columns this database really provides.
     $columns = gallery_trash_existing_columns('galleries', gallery_trash_restorable_gallery_columns());
-    // $assignments stores the SQL SET fragments for confirmed columns.
-    $assignments = [];
-    // $values stores the bound values matching the assignments.
-    $values = [];
-    foreach ($columns as $column) {
-        if (!array_key_exists($column, $record)) {
-            continue;
-        }
-        $assignments[] = '`' . $column . '` = ?';
-        $values[] = $record[$column];
-    }
-
-    if ($assignments) {
-        $assignments[] = '`updated_at` = ?';
-        $values[] = now_sql();
-        $values[] = $galleryId;
-        db()->prepare('UPDATE galleries SET ' . implode(', ', $assignments) . ' WHERE id = ?')->execute($values);
-    }
+    gallery_trash_model_update_gallery_metadata($galleryId, $record, $columns, now_sql());
 
     if (isset($record['tags']) && is_string($record['tags'])) {
         sync_entity_tags('gallery', $galleryId, $record['tags']);
@@ -1916,7 +1807,7 @@ function gallery_trash_apply_gallery_snapshot(int $galleryId, array $record): vo
     }
     if (isset($record['flight_map'])
         && is_array($record['flight_map'])
-        && function_exists('Gallery\\Services\\gallery_migration_apply_flight_map')) {
+        && function_exists('Gallery\Services\gallery_migration_apply_flight_map')) {
         gallery_migration_apply_flight_map($galleryId, ['flight_map' => $record['flight_map']]);
     }
 }
@@ -1960,22 +1851,10 @@ function gallery_trash_apply_image_snapshot(array $galleryIdsByPath, array $imag
             continue;
         }
 
-        // $assignments stores the SQL SET fragments for confirmed columns.
-        $assignments = [];
-        // $values stores the bound values matching the assignments.
-        $values = [];
-        foreach ($columns as $column) {
-            if (!array_key_exists($column, $record)) {
-                continue;
-            }
-            $assignments[] = '`' . $column . '` = ?';
-            $values[] = $record[$column];
-        }
-        if ($assignments) {
-            $assignments[] = '`updated_at` = ?';
-            $values[] = now_sql();
-            $values[] = (int) $image['id'];
-            db()->prepare('UPDATE images SET ' . implode(', ', $assignments) . ' WHERE id = ?')->execute($values);
+        // $metadataValues stores only snapshot fields that map to confirmed restorable columns.
+        $metadataValues = array_intersect_key($record, array_fill_keys($columns, true));
+        if ($metadataValues) {
+            gallery_trash_model_update_image_metadata((int) $image['id'], $record, $columns, now_sql());
             $updated++;
         }
 
@@ -2015,8 +1894,7 @@ function gallery_trash_apply_cover_images(array $galleryIdsByPath, array $galler
         if (!$image) {
             continue;
         }
-        db()->prepare('UPDATE galleries SET cover_image_id = ?, updated_at = ? WHERE id = ?')
-            ->execute([(int) $image['id'], now_sql(), $galleryId]);
+        gallery_trash_model_set_cover_image($galleryId, (int) $image['id'], now_sql());
     }
 }
 
@@ -2055,24 +1933,13 @@ function purge_gallery_trash_entry(string $trashToken): array
         // Permanent deletion is irreversible after the claim. A recursive filesystem delete
         // may already have removed part of the payload before throwing, so never advertise the
         // entry as safely restorable again. Keep PURGING for bounded maintenance reconciliation.
-        db()->prepare("UPDATE gallery_trash_entries SET last_error_code = ?, updated_at = ? WHERE trash_token = ? AND status = 'purging'")
-            ->execute(['purge_files_failed', now_sql(), $trashToken]);
+        gallery_trash_model_set_purge_error($trashToken, 'purge_files_failed', now_sql());
         throw $exception;
     }
 
     // Files are already gone at this point. If this final DB transition fails, keep PURGING so
     // reconciliation completes it instead of falsely presenting the entry as restorable.
-    $pdo = db();
-    $pdo->beginTransaction();
-    try {
-        gallery_trash_transition_status_in_transaction($trashToken, 'purging', 'purged', true);
-        $pdo->commit();
-    } catch (Throwable $exception) {
-        if ($pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
-        throw $exception;
-    }
+    gallery_trash_model_transition($trashToken, 'purging', 'purged', true, null, now_sql());
 
     return ['purged' => true, 'title' => (string) $entry['title']];
 }
@@ -2094,14 +1961,13 @@ function empty_gallery_trash(array $options = []): array
     $limit = gallery_trash_normalize_purge_batch_size((int) ($options['limit'] ?? gallery_trash_purge_batch_size()));
     // Empty Trash handles only normal recoverable entries. BROKEN rows require explicit
     // per-entry handling because some can overlap a partially restored live gallery.
-    $stmt = db()->prepare("SELECT trash_token FROM gallery_trash_entries WHERE status = 'trashed' ORDER BY deleted_at LIMIT " . $limit);
-    $stmt->execute();
+    $tokens = gallery_trash_model_tokens_by_status('trashed', $limit);
 
     // $purged stores how many entries were destroyed.
     $purged = 0;
     // $failed stores entries that could not be destroyed in this invocation.
     $failed = 0;
-    foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $token) {
+    foreach ($tokens as $token) {
         try {
             if (purge_gallery_trash_entry((string) $token)['purged']) {
                 $purged++;
@@ -2111,9 +1977,7 @@ function empty_gallery_trash(array $options = []): array
         }
     }
 
-    // $remainingStmt stores the normal recoverable entries still eligible for a follow-up batch.
-    $remainingStmt = db()->query("SELECT COUNT(*) FROM gallery_trash_entries WHERE status = 'trashed'");
-    $remaining = $remainingStmt === false ? 0 : (int) $remainingStmt->fetchColumn();
+    $remaining = gallery_trash_model_count_by_status('trashed');
     return ['purged' => $purged, 'failed' => $failed, 'remaining' => $remaining];
 }
 
@@ -2137,15 +2001,14 @@ function purge_expired_gallery_trash(?int $limit = null): array
 
     // $batchSize stores the bounded number of entries this slice may destroy.
     $batchSize = gallery_trash_normalize_purge_batch_size($limit ?? gallery_trash_purge_batch_size());
-    // $stmt stores the lookup of entries whose retention window has elapsed.
-    $stmt = db()->prepare("SELECT trash_token FROM gallery_trash_entries WHERE status = 'trashed' AND purge_after <= ? ORDER BY purge_after LIMIT " . $batchSize);
-    $stmt->execute([now_sql()]);
+    // $tokens stores entries whose retention window has elapsed.
+    $tokens = gallery_trash_model_expired_tokens(now_sql(), $batchSize);
 
     // $purged stores how many expired entries were destroyed.
     $purged = 0;
     // $failed stores expired entries that could not be destroyed yet.
     $failed = 0;
-    foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $token) {
+    foreach ($tokens as $token) {
         try {
             // $purgeResult retains the title long enough to record the irreversible maintenance action.
             $purgeResult = purge_gallery_trash_entry((string) $token);
@@ -2206,18 +2069,10 @@ function reconcile_gallery_trash_transitional_entries(int $limit = 10): array
     $limit = max(1, min(100, $limit));
     // $cutoff stores the oldest operation timestamp still considered active.
     $cutoff = date('Y-m-d H:i:s', time() - GALLERY_TRASH_STALE_OPERATION_SECONDS);
-    $stmt = db()->prepare(
-        "SELECT * FROM gallery_trash_entries
-          WHERE status IN ('preparing','restoring','purging')
-            AND operation_started_at IS NOT NULL
-            AND operation_started_at <= ?
-          ORDER BY operation_started_at, id
-          LIMIT " . $limit
-    );
-    $stmt->execute([$cutoff]);
+    $entries = gallery_trash_model_stale_transitional_entries($cutoff, $limit);
 
     $result = ['recovered' => 0, 'finalized' => 0, 'broken' => 0, 'failed' => 0, 'skipped' => false];
-    foreach ($stmt->fetchAll() as $entry) {
+    foreach ($entries as $entry) {
         try {
             $outcome = gallery_trash_reconcile_entry($entry);
             if (isset($result[$outcome])) {
@@ -2256,17 +2111,7 @@ function gallery_trash_reconcile_entry(array $entry): string
     if ($status === 'purging') {
         // Purge intent is irreversible. Once claimed, reconciliation finishes deletion rather than reviving it.
         gallery_trash_remove_entry_directory($token);
-        $pdo = db();
-        $pdo->beginTransaction();
-        try {
-            gallery_trash_transition_status_in_transaction($token, 'purging', 'purged', true);
-            $pdo->commit();
-        } catch (Throwable $exception) {
-            if ($pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
-            throw $exception;
-        }
+        gallery_trash_model_transition($token, 'purging', 'purged', true, null, now_sql());
         return 'finalized';
     }
 
@@ -2295,32 +2140,12 @@ function gallery_trash_reconcile_entry(array $entry): string
                 return 'recovered';
             }
             // Files are already out of live root and rows are gone. Effective trash succeeded; finalize its state.
-            $pdo = db();
-            $pdo->beginTransaction();
-            try {
-                gallery_trash_transition_status_in_transaction($token, 'preparing', 'trashed');
-                $pdo->commit();
-            } catch (Throwable $exception) {
-                if ($pdo->inTransaction()) {
-                    $pdo->rollBack();
-                }
-                throw $exception;
-            }
+            gallery_trash_model_transition($token, 'preparing', 'trashed', false, null, now_sql());
             return 'finalized';
         }
         if (!$payloadExpected && !$liveExists && !$payloadExists && !$liveRows) {
             // Metadata-only deletion reached the effective trashed state before its status update committed.
-            $pdo = db();
-            $pdo->beginTransaction();
-            try {
-                gallery_trash_transition_status_in_transaction($token, 'preparing', 'trashed');
-                $pdo->commit();
-            } catch (Throwable $exception) {
-                if ($pdo->inTransaction()) {
-                    $pdo->rollBack();
-                }
-                throw $exception;
-            }
+            gallery_trash_model_transition($token, 'preparing', 'trashed', false, null, now_sql());
             return 'finalized';
         }
         if (!$payloadExpected && !$liveExists && !$payloadExists && $liveRows) {
@@ -2366,13 +2191,7 @@ function gallery_trash_reconcile_entry(array $entry): string
 function gallery_trash_entry(string $trashToken): ?array
 {
     gallery_trash_assert_token($trashToken);
-
-    // $stmt stores the single-row trash entry lookup.
-    $stmt = db()->prepare('SELECT * FROM gallery_trash_entries WHERE trash_token = ?');
-    $stmt->execute([$trashToken]);
-    // $entry stores the resolved trash entry row.
-    $entry = $stmt->fetch();
-    return $entry ?: null;
+    return gallery_trash_model_entry($trashToken);
 }
 
 /**
@@ -2394,26 +2213,7 @@ function gallery_trash_entries(array $filters = []): array
     }
     // $limit stores the bounded number of rows returned to the view.
     $limit = max(1, min(500, (int) ($filters['limit'] ?? 200)));
-    // $select keeps the deleted-admin username optional through the existing nullable FK.
-    $select = 'SELECT e.*, u.username AS deleted_by_username FROM gallery_trash_entries e LEFT JOIN users u ON u.id = e.deleted_by_user_id';
-
-    if ($status === 'all') {
-        // $stmt stores the unfiltered listing query.
-        $stmt = db()->prepare($select . ' ORDER BY e.deleted_at DESC LIMIT ' . $limit);
-        $stmt->execute();
-        return $stmt->fetchAll();
-    }
-    if ($status === 'active') {
-        // Active includes recoverable rows plus transitional/problem rows that must stay visible to administrators.
-        $stmt = db()->prepare($select . " WHERE e.status IN ('trashed','broken','preparing','restoring','purging') ORDER BY e.deleted_at DESC LIMIT " . $limit);
-        $stmt->execute();
-        return $stmt->fetchAll();
-    }
-
-    // $stmt stores the status-filtered listing query.
-    $stmt = db()->prepare($select . ' WHERE e.status = ? ORDER BY e.deleted_at DESC LIMIT ' . $limit);
-    $stmt->execute([$status]);
-    return $stmt->fetchAll();
+    return gallery_trash_model_entries($status, $limit);
 }
 
 /**
@@ -2440,25 +2240,8 @@ function gallery_trash_summary(): array
     }
 
     try {
-        // $stmt stores one aggregate across visible active states. Retention counters intentionally
-        // consider only TRASHED because transitional/BROKEN entries are never auto-purged.
-        $stmt = db()->prepare(
-            "SELECT
-                    SUM(CASE WHEN status = 'trashed' THEN 1 ELSE 0 END) AS trashed_count,
-                    SUM(CASE WHEN status = 'broken' THEN 1 ELSE 0 END) AS broken_count,
-                    SUM(CASE WHEN status IN ('preparing','restoring','purging') THEN 1 ELSE 0 END) AS transitional_count,
-                    SUM(CASE WHEN status IN ('broken','preparing','restoring','purging') THEN 1 ELSE 0 END) AS problem_count,
-                    SUM(CASE WHEN status = 'trashed' THEN 1 ELSE 0 END) AS purgeable_count,
-                    COUNT(*) AS active_count,
-                    COALESCE(SUM(byte_size), 0) AS total_bytes,
-                    COALESCE(MIN(CASE WHEN status = 'trashed' THEN purge_after ELSE NULL END), '') AS next_purge_at,
-                    SUM(CASE WHEN status = 'trashed' AND purge_after <= ? THEN 1 ELSE 0 END) AS expired_count
-               FROM gallery_trash_entries
-              WHERE status IN ('trashed','broken','preparing','restoring','purging')"
-        );
-        $stmt->execute([now_sql()]);
         // $row stores the aggregate result for the trash header.
-        $row = $stmt->fetch() ?: [];
+        $row = gallery_trash_model_summary(now_sql());
     } catch (Throwable) {
         return [
             'available' => false,

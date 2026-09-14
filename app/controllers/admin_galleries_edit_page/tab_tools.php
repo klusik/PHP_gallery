@@ -37,12 +37,12 @@ declare(strict_types=1);
 
 namespace Gallery\Controllers;
 
-use function Gallery\Core\e;
 use function Gallery\Core\render_admin_tab_panel;
 use function Gallery\Core\url_for;
 use function Gallery\Services\feature_capability_effective_enabled;
 use function Gallery\Services\t;
 use function Gallery\Views\view_render_admin_tab_intro;
+use function Gallery\Views\view_render_admin_upload_automation_manager_action;
 
 /**
  * Render the metadata Organizer tab panel.
@@ -102,7 +102,10 @@ function admin_edit_gallery_render_api_tab(array $gallery, string $activeEditTab
         render_admin_gallery_migration_panel($gallery);
     }
     if ($capabilities['upload_api_feature_enabled']) {
-        echo '<div class="admin-upload-automation-actions"><a class="button secondary" href="' . e(url_for('admin_api_manager')) . '">' . e(t('admin.upload_automation.open_manager', 'Open API manager')) . '</a></div>';
+        view_render_admin_upload_automation_manager_action([
+            'href' => url_for('admin_api_manager'),
+            'label' => t('admin.upload_automation.open_manager', 'Open API manager'),
+        ]);
     }
     render_admin_tab_panel('admin-edit-api', (string) ob_get_clean(), $activeEditTab === 'admin-edit-api');
 }

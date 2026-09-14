@@ -50,8 +50,40 @@ use function Gallery\Core\url_for;
  */
 function admin_test_run_cookie_token(): string
 {
-    $token = strtolower(trim((string) ($_COOKIE[ADMIN_TEST_RUN_COOKIE] ?? '')));
+    $token = strtolower(trim((string) ($GLOBALS['admin_test_run_request_transport']['cookie_token'] ?? '')));
     return admin_test_run_token_valid($token) ? $token : '';
+}
+
+/**
+ * Bind request transport metadata prepared by the Core bootstrap boundary.
+ *
+ * @param array<string,mixed> $context Bounded request transport context.
+ */
+function admin_test_run_bind_request_transport_context(array $context): void
+{
+    $GLOBALS['admin_test_run_request_transport'] = [
+        'cookie_token' => substr((string) ($context['cookie_token'] ?? ''), 0, 160),
+        'request_time_float' => is_numeric($context['request_time_float'] ?? null) ? (float) $context['request_time_float'] : null,
+        'request_uri' => substr((string) ($context['request_uri'] ?? ''), 0, 1200),
+        'request_method' => substr((string) ($context['request_method'] ?? ''), 0, 16),
+        'script_name' => substr((string) ($context['script_name'] ?? ''), 0, 500),
+        'protocol' => substr((string) ($context['protocol'] ?? ''), 0, 40),
+        'https' => !empty($context['https']),
+        'query_keys' => array_values(array_slice(array_map('strval', is_array($context['query_keys'] ?? null) ? $context['query_keys'] : []), 0, 100)),
+        'cookie_names' => array_values(array_slice(array_map('strval', is_array($context['cookie_names'] ?? null) ? $context['cookie_names'] : []), 0, 100)),
+    ];
+}
+
+/**
+ * Return the Core-prepared request transport metadata for test-run diagnostics.
+ *
+ * @return array<string,mixed>
+ */
+function admin_test_run_request_transport_context(): array
+{
+    return is_array($GLOBALS['admin_test_run_request_transport'] ?? null)
+        ? $GLOBALS['admin_test_run_request_transport']
+        : [];
 }
 
 /**
@@ -170,29 +202,29 @@ function admin_test_run_set_starter_request_id(string $token, string $requestId)
 /**
  * Set the short-lived HttpOnly cookie that makes same-origin PHP subrequests join one run.
  */
-function admin_test_run_set_cookie(string $token): void
+function admin_test_run_set_cookie(string $token): array
 {
-    setcookie(ADMIN_TEST_RUN_COOKIE, $token, [
+    return [[
+        'name' => ADMIN_TEST_RUN_COOKIE,
+        'value' => $token,
         'expires' => time() + ADMIN_TEST_RUN_TTL_SECONDS,
         'path' => '/',
-        'secure' => !empty($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTPS']) !== 'off',
         'httponly' => true,
         'samesite' => 'Lax',
-    ]);
-    $_COOKIE[ADMIN_TEST_RUN_COOKIE] = $token;
+    ]];
 }
 
 /**
  * Expire the active diagnostic context cookie.
  */
-function admin_test_run_clear_cookie(): void
+function admin_test_run_clear_cookie(): array
 {
-    setcookie(ADMIN_TEST_RUN_COOKIE, '', [
+    return [[
+        'name' => ADMIN_TEST_RUN_COOKIE,
+        'value' => '',
         'expires' => time() - 3600,
         'path' => '/',
-        'secure' => !empty($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTPS']) !== 'off',
         'httponly' => true,
         'samesite' => 'Lax',
-    ]);
-    unset($_COOKIE[ADMIN_TEST_RUN_COOKIE]);
+    ]];
 }

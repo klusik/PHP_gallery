@@ -1,5 +1,20 @@
 <?php
 
+/**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ *
+ * File: tests/public_media_session_release_test.php
+ *
+ * Author:
+ *   Rudolf Klusal
+ *
+ * License:
+ *   MIT License (see LICENSE file in repository)
+ *
+ * Notes:
+ *   - Keep comments and docstrings intact when modifying this file.
+ */
 declare(strict_types=1);
 
 /**
@@ -62,7 +77,7 @@ media_session_assert(
     'Early media session release must preserve durable admin-login restoration before closing the writable session.'
 );
 $maintenanceSkip = strpos($maintenanceSource, 'cms_route_is_read_only_media_asset($page)');
-$autoupdate = strpos($maintenanceSource, 'application_autoupdate_maybe_run();');
+$autoupdate = strpos($maintenanceSource, 'application_autoupdate_maybe_run(3600, request_method());');
 media_session_assert(
     $maintenanceSkip !== false && $autoupdate !== false && $maintenanceSkip < $autoupdate,
     'Read-only media requests must skip request-triggered updater/maintenance work before it begins.'

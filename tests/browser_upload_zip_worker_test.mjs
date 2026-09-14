@@ -1,3 +1,18 @@
+/**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ *
+ * File: tests/browser_upload_zip_worker_test.mjs
+ *
+ * Author:
+ *   Rudolf Klusal
+ *
+ * License:
+ *   MIT License (see LICENSE file in repository)
+ *
+ * Notes:
+ *   - Keep comments and docstrings intact when modifying this file.
+ */
 /** Integration test for browser-worker extraction of stored and Deflate user ZIPs. */
 
 import assert from 'node:assert/strict';

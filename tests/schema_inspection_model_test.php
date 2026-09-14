@@ -39,6 +39,7 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/../app/models/schema_inspection.php';
 require_once __DIR__ . '/../app/services/schema_inspection.php';
 
 use const Gallery\Services\SCHEMA_INSPECTION_AVAILABLE;

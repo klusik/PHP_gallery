@@ -10,6 +10,30 @@ This file maps features to source files. It is optimized for fast maintenance an
 4. Open the listed migration only to understand schema history. Add a new migration for changes.
 5. Open public assets only for browser-side behavior or styling.
 
+## Canonical MVC Flow
+
+Use this dependency direction when locating or adding application behavior:
+
+```text
+Bootstrap / Router
+       |
+       v
+   Controller -------> View
+       |
+       v
+    Service
+       |
+       v
+     Model
+       |
+       v
+ Core DB / filesystem primitives
+```
+
+Layer roots are `app/controllers/`, `app/services/`, `app/models/`, and `app/views/`. SQL/data access belongs in models. Domain orchestration belongs in services. HTTP request/response behavior belongs in controllers. HTML belongs in views and should consume prepared view-model arrays rather than request globals or domain-policy calls.
+
+Repository enforcement lives in `scripts/check_mvc_boundaries.php`, with `scripts/mvc_boundary_baseline.json` retained at zero occurrences and focused regression coverage in `tests/mvc_layer_contract_test.php` plus the staged MVC boundary tests. All central audit profiles run this check, so any new cross-layer leakage is immediately release-blocking.
+
 ## Core Runtime
 
 | Area | Files |

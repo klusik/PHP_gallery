@@ -38,8 +38,10 @@ namespace Gallery\Services;
 
 use Throwable;
 use RuntimeException;
-use function Gallery\Core\db;
 use function Gallery\Core\now_sql;
+use function Gallery\Models\telemetry_model_all_settings;
+use function Gallery\Models\telemetry_model_set_setting;
+use function Gallery\Models\telemetry_model_setting;
 
 /**
  * Telemetry settings service.
@@ -73,11 +75,8 @@ function telemetry_setting(string $key, ?string $default = null): ?string
         return $default;
     }
     try {
-        // $stmt stores the prepared read query for the requested setting key.
-        $stmt = db()->prepare('SELECT setting_value FROM telemetry_settings WHERE setting_key = ?');
-        $stmt->execute([$key]);
-        // $value stores the scalar database value returned by PDO.
-        $value = $stmt->fetchColumn();
+        // $value stores the scalar database value returned by the telemetry model.
+        $value = telemetry_model_setting($key);
         return $value === false ? $default : (string) $value;
     } catch (Throwable) {
         return $default;
@@ -98,9 +97,7 @@ function telemetry_set_setting(string $key, string $value): void
         'Telemetry settings schema is not ready. Run migrations first.',
         'Telemetry settings schema could not be verified. No telemetry setting was changed.'
     );
-    // $stmt stores the upsert query for the setting value.
-    $stmt = db()->prepare('INSERT INTO telemetry_settings (setting_key, setting_value, updated_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), updated_at = VALUES(updated_at)');
-    $stmt->execute([$key, $value, now_sql()]);
+    telemetry_model_set_setting($key, $value, now_sql());
 }
 
 /**
@@ -113,11 +110,9 @@ function telemetry_all_settings(): array
     if (!telemetry_settings_schema_ready()) {
         return [];
     }
-    // $stmt stores the read query for every telemetry setting row.
-    $stmt = db()->query('SELECT setting_key, setting_value FROM telemetry_settings ORDER BY setting_key');
     // $settings stores the normalized key-value setting map.
     $settings = [];
-    foreach ($stmt->fetchAll() as $row) {
+    foreach (telemetry_model_all_settings() as $row) {
         $settings[(string) $row['setting_key']] = (string) ($row['setting_value'] ?? '');
     }
     return $settings;

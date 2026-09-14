@@ -39,9 +39,11 @@ namespace Gallery\Services;
 
 use RuntimeException;
 use Throwable;
-use function Gallery\Core\db;
 use function Gallery\Core\normalize_relative_path;
 use function Gallery\Core\now_sql;
+use function Gallery\Models\gallery_mutation_model_max_image_sort_order;
+use function Gallery\Models\picture_manager_model_copy_rows;
+use function Gallery\Models\picture_manager_model_image_table_columns;
 
 /**
  * Normalize submitted image IDs into unique positive integers while preserving order.
@@ -295,50 +297,37 @@ function copy_gallery_images(int $sourceGalleryId, int $destinationGalleryId, ar
         throw $exception;
     }
 
-    // $createdImageIds stores a source-image-id to destination-image-id lookup for tag copying and JSON responses.
-    $createdImageIds = [];
     // $destinationSortOrders stores append-style order values assigned in the destination gallery.
     $destinationSortOrders = picture_manager_destination_copy_sort_orders($destinationGalleryId, $copyableImages);
-    // $pdo stores the active database connection used for row copies and tag copies.
-    $pdo = db();
-    $pdo->beginTransaction();
+    // $rowsBySourceImageId stores INSERT-ready rows while filesystem rollback remains service-owned.
+    $rowsBySourceImageId = [];
+    foreach ($copyableImages as $image) {
+        $sourceImageId = (int) $image['id'];
+        $rowsBySourceImageId[$sourceImageId] = picture_manager_image_copy_row(
+            $image,
+            $destinationGalleryId,
+            $destinationSortOrders[$sourceImageId] ?? next_gallery_image_sort_order($destinationGalleryId)
+        );
+    }
+    $copyTags = mutation_schema_optional_table_columns_available(
+        'mutation.picture_copy_tags',
+        'image_tags',
+        ['image_id', 'tag_id'],
+        'picture_manager.copy_tags'
+    );
+    $destinationBranchIds = gallery_subtree_ids($destinationGalleryId);
+
     try {
-        foreach ($copyableImages as $image) {
-            // $sourceImageId stores the row being cloned.
-            $sourceImageId = (int) $image['id'];
-            // $row stores an INSERT-ready image row for the destination gallery.
-            $row = picture_manager_image_copy_row($image, $destinationGalleryId, $destinationSortOrders[$sourceImageId] ?? next_gallery_image_sort_order($destinationGalleryId));
-            // $columns stores the column names written to the image copy row.
-            $columns = array_keys($row);
-            // $placeholders stores a placeholder for each INSERT value.
-            $placeholders = implode(', ', array_fill(0, count($columns), '?'));
-            // $columnSql stores backtick-quoted column names.
-            $columnSql = implode(', ', array_map(static fn (string $column): string => '`' . $column . '`', $columns));
-            // $stmt stores the insert command for one copied image row.
-            $stmt = $pdo->prepare('INSERT INTO images (' . $columnSql . ') VALUES (' . $placeholders . ')');
-            $stmt->execute(array_values($row));
-            $createdImageIds[$sourceImageId] = (int) $pdo->lastInsertId();
-        }
-
-        if (mutation_schema_optional_table_columns_available('mutation.picture_copy_tags', 'image_tags', ['image_id', 'tag_id'], 'picture_manager.copy_tags') && $createdImageIds) {
-            // $tagStmt copies tag assignments without copying votes or visitor interaction data.
-            $tagStmt = $pdo->prepare('INSERT IGNORE INTO image_tags (image_id, tag_id) SELECT ?, tag_id FROM image_tags WHERE image_id = ?');
-            foreach ($createdImageIds as $sourceImageId => $destinationImageId) {
-                $tagStmt->execute([(int) $destinationImageId, (int) $sourceImageId]);
-            }
-        }
-
-        // $destinationCoverImageId stores the title picture after copied images exist in the destination.
-        $destinationCoverImageId = gallery_cover_id_after_destination_move($destinationGalleryId);
-        // $coverStmt updates only the destination gallery title-picture field.
-        $coverStmt = $pdo->prepare('UPDATE galleries SET cover_image_id = ?, updated_at = ? WHERE id = ?');
-        $coverStmt->execute([$destinationCoverImageId, now_sql(), $destinationGalleryId]);
-
-        $pdo->commit();
+        $persistenceResult = picture_manager_model_copy_rows(
+            $destinationGalleryId,
+            $rowsBySourceImageId,
+            $copyTags,
+            $destinationBranchIds,
+            now_sql()
+        );
+        $createdImageIds = $persistenceResult['created_image_ids'];
+        $destinationCoverImageId = $persistenceResult['destination_cover_image_id'];
     } catch (Throwable $exception) {
-        if ($pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
         picture_manager_remove_copied_files($copiedFiles);
         throw $exception;
     }
@@ -396,11 +385,8 @@ function picture_manager_remove_copied_files(array $copiedFiles): void
  */
 function picture_manager_destination_copy_sort_orders(int $destinationGalleryId, array $images): array
 {
-    // $stmt stores the current destination tail value.
-    $stmt = db()->prepare('SELECT COALESCE(MAX(sort_order), 0) FROM images WHERE gallery_id = ?');
-    $stmt->execute([$destinationGalleryId]);
     // $nextSortOrder stores the first appended order number.
-    $nextSortOrder = (int) $stmt->fetchColumn() + 10;
+    $nextSortOrder = gallery_mutation_model_max_image_sort_order($destinationGalleryId) + 10;
     // $orders stores sort values keyed by source image ID.
     $orders = [];
     foreach ($images as $image) {
@@ -422,16 +408,7 @@ function picture_manager_image_table_columns(): array
         return $columns;
     }
 
-    // $rows stores SHOW COLUMNS metadata returned by the active database.
-    $rows = db()->query('SHOW COLUMNS FROM images')->fetchAll();
-    $columns = [];
-    foreach ($rows as $row) {
-        // $field stores one database column name.
-        $field = (string) ($row['Field'] ?? '');
-        if ($field !== '') {
-            $columns[] = $field;
-        }
-    }
+    $columns = picture_manager_model_image_table_columns();
     return $columns;
 }
 

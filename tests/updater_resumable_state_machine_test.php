@@ -321,6 +321,7 @@ $root = dirname(__DIR__);
 $jobsSource = module_source($root . '/app/services/updates_jobs.php');
 $installSource = (string) file_get_contents($root . '/app/services/updates_install.php');
 $controllerSource = (string) file_get_contents($root . '/app/controllers/updates.php');
+$viewSource = (string) file_get_contents($root . '/app/views/admin_updates.php');
 $adminAuthSource = (string) file_get_contents($root . '/app/controllers/admin_auth.php');
 $browserSource = (string) file_get_contents($root . '/public/assets/gallery-modules/admin-update-jobs.js');
 $migrationSource = (string) file_get_contents($root . '/app/migrations.php');
@@ -363,8 +364,8 @@ assert_updater_resumable(str_contains($jobsSource, "version_compare(\$validatedV
 assert_updater_resumable(str_contains($jobsSource, 'function application_update_cancel_job') && str_contains($jobsSource, 'Update cannot be cancelled after activation has begun.'), 'Pre-activation cancellation boundary disappeared.');
 assert_updater_resumable(str_contains($jobsSource, 'Caught failures require application_update_retry_job()') && str_contains($jobsSource, "if (in_array(\$stage, ['download', 'archive_validate', 'extract', 'package_validate'], true))"), 'Failed package jobs can bypass retry cleanup and resume untrusted artifacts directly.');
 assert_updater_resumable(str_contains($jobsSource, "application_update_acquire_lock(application_update_jobs_root() . '/start.lock', 15)") && str_contains($jobsSource, 'Another application update job is active.'), 'Retry/cancel paths lost global start-lock serialization.');
-assert_updater_resumable(str_contains($controllerSource, 'data-update-job-form') && str_contains($controllerSource, 'job_continue') && str_contains($controllerSource, 'job_retry') && str_contains($controllerSource, 'job_cancel'), 'Admin update controls no longer expose resumable continuation/cancellation actions.');
-assert_updater_resumable(substr_count($controllerSource, 'cms_render_update_job_card($activeUpdateJob') >= 2 && str_contains($controllerSource, 'admin.updates.advanced_progress_hint'), 'Advanced tools no longer renders discoverable update-job progress.');
+assert_updater_resumable(str_contains($viewSource, 'data-update-job-form') && str_contains($viewSource, 'job_continue') && str_contains($viewSource, 'job_retry') && str_contains($viewSource, 'job_cancel'), 'Admin update controls no longer expose resumable continuation/cancellation actions.');
+assert_updater_resumable(substr_count($viewSource, 'view_render_update_job_card($activeUpdateJob') >= 2 && str_contains($viewSource, 'admin.updates.advanced_progress_hint'), 'Advanced tools no longer renders discoverable update-job progress.');
 assert_updater_resumable(str_contains($controllerSource, "feature_capability_effective_enabled('built_in_update_installer')") && str_contains($jobsSource, "feature_capability_effective_enabled('built_in_update_installer')"), 'Built-in Update Installer policy no longer guards both Admin actions and durable update-job service boundaries.');
 $resetStart = strpos($adminAuthSource, 'function cms_admin_reset(): void');
 $resetSource = substr($adminAuthSource, (int) $resetStart);

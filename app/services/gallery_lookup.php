@@ -36,9 +36,18 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
-use PDO;
-use function Gallery\Core\db;
 use function Gallery\Core\normalize_relative_path;
+use function Gallery\Models\gallery_model_public_root_rows;
+use function Gallery\Models\gallery_model_branch_descendant_rows;
+use function Gallery\Models\gallery_model_child_rows_for_parents;
+use function Gallery\Models\gallery_model_descendant_rows_for_roots;
+use function Gallery\Models\gallery_model_find_by_folder_path_hash;
+use function Gallery\Models\gallery_model_find_by_id;
+use function Gallery\Models\gallery_model_find_by_slug;
+use function Gallery\Models\image_model_counts_for_galleries;
+use function Gallery\Models\image_model_find_by_id;
+use function Gallery\Models\image_model_find_by_path_hash;
+use function Gallery\Models\image_model_rows_for_gallery;
 
 /**
 Read-oriented gallery and image lookup helpers.
@@ -47,6 +56,22 @@ Read-oriented gallery and image lookup helpers.
  * The functions preserve their original SQL and return shapes so templates and
  * controllers can continue using the same global function names.
  */
+
+/**
+ * Resolve public listing schema policy before model-owned gallery queries.
+ *
+ * @param bool $publicOnly Whether the caller is loading public-only rows.
+ * @return bool True when public queries must require access_listing = listed.
+ */
+function gallery_lookup_require_listed_access(bool $publicOnly): bool
+{
+    if (!$publicOnly) {
+        return false;
+    }
+    gallery_visibility_assert_public_policy_available();
+    gallery_access_assert_public_policy_available();
+    return gallery_access_schema_ready();
+}
 
 /**
  * Return the request-local cache used for direct child gallery lookups.
@@ -126,38 +151,23 @@ function child_galleries_preload(array $parentIds, bool $publicOnly): array
         return $childrenByParent;
     }
 
-    // $placeholders stores placeholders for the batched parent list.
-    $placeholders = implode(',', array_fill(0, count($missingParentIds), '?'));
-    // Variable $sql stores this steps working value.
-    $sql = "SELECT g.*, COUNT(i.id) AS image_count
-        FROM galleries g
-        LEFT JOIN images i ON i.gallery_id = g.id AND i.visibility = 'public' AND i.relative_path NOT LIKE '%/%'
-        WHERE g.parent_id IN (" . $placeholders . ')';
-    // Variable $params stores this steps working value.
-    $params = $missingParentIds;
-    if ($publicOnly) {
-        $sql .= ' AND ' . public_gallery_listing_sql_fragment('g');
+    $requireListedAccess = gallery_lookup_require_listed_access($publicOnly);
+    $rows = public_render_profile_db(
+        'child_galleries_batch_db',
+        static fn (): array => gallery_model_child_rows_for_parents($missingParentIds, $publicOnly, $requireListedAccess)
+    );
+    foreach ($rows as $child) {
+        // $parentId stores the direct parent for the fetched child row.
+        $parentId = (int) ($child['parent_id'] ?? 0);
+        if (!in_array($parentId, $missingParentIds, true)) {
+            continue;
+        }
+        $childrenByParent[$parentId][] = $child;
     }
-    $sql .= ' GROUP BY g.id ORDER BY g.parent_id, g.sort_order, g.title';
 
-    public_render_profile_db('child_galleries_batch_db', static function () use ($sql, $params, $missingParentIds, $publicOnly, &$childrenByParent): void {
-        // $stmt stores the prepared child gallery query.
-        $stmt = db()->prepare($sql);
-        $stmt->execute($params);
-        foreach ($stmt->fetchAll() as $child) {
-            // $parentId stores the direct parent for the fetched child row.
-            $parentId = (int) ($child['parent_id'] ?? 0);
-            if (!in_array($parentId, $missingParentIds, true)) {
-                continue;
-            }
-            $childrenByParent[$parentId][] = $child;
-        }
-
-        foreach ($missingParentIds as $parentId) {
-            child_galleries_cache_store($parentId, $publicOnly, $childrenByParent[$parentId] ?? []);
-        }
-    });
-
+    foreach ($missingParentIds as $parentId) {
+        child_galleries_cache_store($parentId, $publicOnly, $childrenByParent[$parentId] ?? []);
+    }
     return $childrenByParent;
 }
 
@@ -192,51 +202,36 @@ function child_galleries_tree_preload(array $rootIds, bool $publicOnly): void
         return;
     }
 
-    // $rootPlaceholders stores placeholders for the requested roots.
-    $rootPlaceholders = implode(',', array_fill(0, count($missingRootIds), '?'));
-    // $sql stores the descendant-gallery lookup for all requested roots.
-    $sql = "SELECT g.*, COUNT(DISTINCT i.id) AS image_count
-        FROM galleries root
-        JOIN galleries g ON g.folder_path LIKE CONCAT(root.folder_path, '/%')
-        LEFT JOIN images i ON i.gallery_id = g.id AND i.visibility = 'public' AND i.relative_path NOT LIKE '%/%'
-        WHERE root.id IN (" . $rootPlaceholders . ')';
-    // $params stores bound root gallery identifiers.
-    $params = $missingRootIds;
-    if ($publicOnly) {
-        $sql .= ' AND ' . public_gallery_listing_sql_fragment('g');
+    $requireListedAccess = gallery_lookup_require_listed_access($publicOnly);
+    $rows = public_render_profile_db(
+        'child_galleries_tree_batch_db',
+        static fn (): array => gallery_model_descendant_rows_for_roots($missingRootIds, $publicOnly, $requireListedAccess)
+    );
+
+    // $childrenByParent stores direct child rows keyed by parent id for the preloaded tree.
+    $childrenByParent = [];
+    foreach ($missingRootIds as $rootId) {
+        $childrenByParent[$rootId] = [];
     }
-    $sql .= ' GROUP BY g.id ORDER BY g.parent_id, g.sort_order, g.title';
-
-    public_render_profile_db('child_galleries_tree_batch_db', static function () use ($sql, $params, $missingRootIds, $publicOnly): void {
-        // $childrenByParent stores direct child rows keyed by parent id for the preloaded tree.
-        $childrenByParent = [];
-        foreach ($missingRootIds as $rootId) {
-            $childrenByParent[$rootId] = [];
+    foreach ($rows as $gallery) {
+        if ($publicOnly && !visitor_can_access_gallery($gallery)) {
+            continue;
         }
-
-        // $stmt stores the prepared descendant gallery query.
-        $stmt = db()->prepare($sql);
-        $stmt->execute($params);
-        foreach ($stmt->fetchAll() as $gallery) {
-            if ($publicOnly && !visitor_can_access_gallery($gallery)) {
-                continue;
-            }
-            // $galleryId stores the descendant gallery id.
-            $galleryId = (int) ($gallery['id'] ?? 0);
-            // $parentId stores the direct parent id for this descendant.
-            $parentId = (int) ($gallery['parent_id'] ?? 0);
-            if ($galleryId <= 0 || $parentId <= 0) {
-                continue;
-            }
-            $childrenByParent[$galleryId] ??= [];
-            $childrenByParent[$parentId] ??= [];
-            $childrenByParent[$parentId][] = $gallery;
+        // $galleryId stores the descendant gallery id.
+        $galleryId = (int) ($gallery['id'] ?? 0);
+        // $parentId stores the direct parent id for this descendant.
+        $parentId = (int) ($gallery['parent_id'] ?? 0);
+        if ($galleryId <= 0 || $parentId <= 0) {
+            continue;
         }
+        $childrenByParent[$galleryId] ??= [];
+        $childrenByParent[$parentId] ??= [];
+        $childrenByParent[$parentId][] = $gallery;
+    }
 
-        foreach ($childrenByParent as $parentId => $children) {
-            child_galleries_cache_store((int) $parentId, $publicOnly, $children);
-        }
-    });
+    foreach ($childrenByParent as $parentId => $children) {
+        child_galleries_cache_store((int) $parentId, $publicOnly, $children);
+    }
 }
 
 /**
@@ -367,27 +362,12 @@ function gallery_branch_image_counts(array $galleryIds, bool $publicOnly): array
         return $counts;
     }
 
-    // $rootPlaceholders stores placeholders for the requested root galleries.
-    $rootPlaceholders = implode(',', array_fill(0, count($missingIds), '?'));
-    // $gallerySql stores the descendant-gallery lookup for all requested roots.
-    $gallerySql = "SELECT root.id AS root_id, g.*
-        FROM galleries root
-        JOIN galleries g ON g.folder_path = root.folder_path OR g.folder_path LIKE CONCAT(root.folder_path, '/%')
-        WHERE root.id IN (" . $rootPlaceholders . ')';
-    // $galleryParams stores bound root gallery identifiers.
-    $galleryParams = $missingIds;
-    if ($publicOnly) {
-        $gallerySql .= ' AND ' . public_gallery_listing_sql_fragment('g');
-    }
-    // $stmt stores the batched descendant-gallery query.
-    $stmt = db()->prepare($gallerySql);
-    $stmt->execute($galleryParams);
+    $requireListedAccess = gallery_lookup_require_listed_access($publicOnly);
+    $descendantRows = gallery_model_branch_descendant_rows($missingIds, $publicOnly, $requireListedAccess);
 
-    // $galleryIdsByRoot stores accessible descendant gallery ids keyed by requested root id.
-    $galleryIdsByRoot = [];
     // $rootIdsByGallery stores reverse membership so one image count can serve every requested root.
     $rootIdsByGallery = [];
-    foreach ($stmt->fetchAll() as $row) {
+    foreach ($descendantRows as $row) {
         // $rootId stores the requested root gallery id for this descendant row.
         $rootId = (int) ($row['root_id'] ?? 0);
         // $descendantId stores the descendant gallery id that can contain images.
@@ -398,35 +378,15 @@ function gallery_branch_image_counts(array $galleryIds, bool $publicOnly): array
         if ($publicOnly && !visitor_can_access_gallery($row)) {
             continue;
         }
-        $galleryIdsByRoot[$rootId][$descendantId] = $descendantId;
         $rootIdsByGallery[$descendantId][$rootId] = $rootId;
     }
 
     // $countableGalleryIds stores every descendant gallery that needs one grouped image count.
     $countableGalleryIds = array_keys($rootIdsByGallery);
-    if ($countableGalleryIds) {
-        // $imagePlaceholders stores placeholders for the descendant image-count query.
-        $imagePlaceholders = implode(',', array_fill(0, count($countableGalleryIds), '?'));
-        // $imageSql stores the grouped image count query for all reachable descendants.
-        $imageSql = 'SELECT gallery_id, COUNT(*) AS image_count FROM images WHERE gallery_id IN (' . $imagePlaceholders . ')';
-        // $imageParams stores descendant gallery identifiers and optional visibility filter values.
-        $imageParams = $countableGalleryIds;
-        if ($publicOnly) {
-            $imageSql .= ' AND visibility = ?';
-            $imageParams[] = 'public';
-        }
-        $imageSql .= ' GROUP BY gallery_id';
-        // $imageStmt stores the grouped image-count query.
-        $imageStmt = db()->prepare($imageSql);
-        $imageStmt->execute($imageParams);
-        foreach ($imageStmt->fetchAll() as $row) {
-            // $descendantId stores the gallery id returned by the grouped image-count query.
-            $descendantId = (int) ($row['gallery_id'] ?? 0);
-            // $imageCount stores the direct image count for that descendant gallery.
-            $imageCount = (int) ($row['image_count'] ?? 0);
-            foreach (($rootIdsByGallery[$descendantId] ?? []) as $rootId) {
-                $counts[$rootId] = (int) ($counts[$rootId] ?? 0) + $imageCount;
-            }
+    $directCounts = image_model_counts_for_galleries($countableGalleryIds, $publicOnly);
+    foreach ($directCounts as $descendantId => $imageCount) {
+        foreach (($rootIdsByGallery[(int) $descendantId] ?? []) as $rootId) {
+            $counts[$rootId] = (int) ($counts[$rootId] ?? 0) + (int) $imageCount;
         }
     }
 
@@ -455,13 +415,7 @@ function find_gallery(int $id, bool $fresh = false): ?array
         return $cache[$id];
     }
 
-    // Variable $stmt stores this steps working value.
-    $stmt = db()->prepare('SELECT * FROM galleries WHERE id = ?');
-    $stmt->execute([$id]);
-    // Variable $gallery stores this steps working value.
-    $gallery = $stmt->fetch();
-    $cache[$id] = $gallery ?: null;
-    return $cache[$id];
+    return $cache[$id] = gallery_model_find_by_id($id);
 }
 
 /**
@@ -478,13 +432,7 @@ function find_gallery_by_slug(string $slug): ?array
         return $cache[$slug];
     }
 
-    // Variable $stmt stores this steps working value.
-    $stmt = db()->prepare('SELECT * FROM galleries WHERE slug = ?');
-    $stmt->execute([$slug]);
-    // Variable $gallery stores this steps working value.
-    $gallery = $stmt->fetch();
-    $cache[$slug] = $gallery ?: null;
-    return $cache[$slug];
+    return $cache[$slug] = gallery_model_find_by_slug($slug);
 }
 
 /**
@@ -504,13 +452,7 @@ function find_gallery_by_folder_path(string $folderPath, bool $fresh = false): ?
         return $cache[$normalizedPath];
     }
 
-    // Variable $stmt stores this steps working value.
-    $stmt = db()->prepare('SELECT * FROM galleries WHERE folder_path_hash = ?');
-    $stmt->execute([hash('sha256', $normalizedPath)]);
-    // Variable $gallery stores this steps working value.
-    $gallery = $stmt->fetch();
-    $cache[$normalizedPath] = $gallery ?: null;
-    return $cache[$normalizedPath];
+    return $cache[$normalizedPath] = gallery_model_find_by_folder_path_hash(hash('sha256', $normalizedPath));
 }
 
 /**
@@ -548,13 +490,7 @@ function find_image(int $id): ?array
         return $cache[$id];
     }
 
-    // Variable $stmt stores this steps working value.
-    $stmt = db()->prepare('SELECT * FROM images WHERE id = ?');
-    $stmt->execute([$id]);
-    // Variable $image stores this steps working value.
-    $image = $stmt->fetch();
-    $cache[$id] = $image ?: null;
-    return $cache[$id];
+    return $cache[$id] = image_model_find_by_id($id);
 }
 
 /**
@@ -576,12 +512,8 @@ function find_image_by_path(int $galleryId, string $relativePath): ?array
         return $cache[$cacheKey];
     }
 
-    // Variable $stmt stores this steps working value.
-    $stmt = db()->prepare('SELECT * FROM images WHERE gallery_id = ? AND relative_path_hash = ?');
-    $stmt->execute([$galleryId, hash('sha256', $normalizedPath)]);
-    // Variable $image stores this steps working value.
-    $image = $stmt->fetch();
-    if (is_array($image)) {
+    $image = image_model_find_by_path_hash($galleryId, hash('sha256', $normalizedPath));
+    if ($image !== null) {
         $cache[$cacheKey] = $image;
         return $cache[$cacheKey];
     }
@@ -597,14 +529,17 @@ function find_image_by_path(int $galleryId, string $relativePath): ?array
  */
 function gallery_images(int $galleryId, bool $publicOnly): array
 {
-    // Variable $sql stores this steps working value.
-    $sql = "SELECT * FROM images WHERE gallery_id = ? AND relative_path NOT LIKE '%/%'";
-    if ($publicOnly) {
-        $sql .= " AND visibility = 'public'";
-    }
-    $sql .= ' ORDER BY sort_order, filename';
-    // Variable $stmt stores this steps working value.
-    $stmt = db()->prepare($sql);
-    $stmt->execute([$galleryId]);
-    return $stmt->fetchAll();
+    return image_model_rows_for_gallery($galleryId, $publicOnly);
+}
+
+/**
+ * Return public physical root galleries for the home page.
+ *
+ * @return array<int,array<string,mixed>> Public root gallery rows with direct public image counts.
+ */
+function public_home_physical_galleries(): array
+{
+    gallery_visibility_assert_public_policy_available();
+    gallery_access_assert_public_policy_available();
+    return gallery_model_public_root_rows(gallery_access_schema_ready());
 }

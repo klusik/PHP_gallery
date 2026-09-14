@@ -42,8 +42,10 @@ use RuntimeException;
 use Throwable;
 use function Gallery\Core\cms_config;
 use function Gallery\Core\cms_current_version;
-use function Gallery\Core\db;
 use function Gallery\Core\now_sql;
+use function Gallery\Models\openai_text_assist_model_save_image_description;
+use function Gallery\Models\openai_text_assist_model_save_settings;
+use function Gallery\Models\openai_text_assist_model_user_settings;
 
 const OPENAI_TEXT_ASSIST_ENDPOINT = 'https://api.openai.com/v1/responses';
 const OPENAI_TEXT_ASSIST_TIMEOUT_SECONDS = 35;
@@ -114,14 +116,8 @@ function openai_text_assist_user_settings(int $userId): array
         return $settings;
     }
 
-    $stmt = db()->prepare('SELECT * FROM user_openai_text_settings WHERE user_id = ? LIMIT 1');
-    $stmt->execute([$userId]);
-    $row = $stmt->fetch();
-    if (!$row) {
-        return $settings;
-    }
-
-    return array_merge($settings, $row);
+    $row = openai_text_assist_model_user_settings($userId);
+    return $row === null ? $settings : array_merge($settings, $row);
 }
 
 /**
@@ -378,30 +374,13 @@ function openai_text_assist_save_user_settings(int $userId, array $input): array
     }
 
     $now = function_exists('Gallery\\Core\\now_sql') ? now_sql() : date('Y-m-d H:i:s');
-    if (schema_inspection_is_available($imageInputSchemaStatus)) {
-        $stmt = db()->prepare('INSERT INTO user_openai_text_settings (user_id, enabled, api_key_cipher, api_key_hint, model, allow_image_input, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE enabled = VALUES(enabled), api_key_cipher = VALUES(api_key_cipher), api_key_hint = VALUES(api_key_hint), model = VALUES(model), allow_image_input = VALUES(allow_image_input), updated_at = VALUES(updated_at)');
-        $stmt->execute([
-            $userId,
-            $enabled ? 1 : 0,
-            $cipher === '' ? null : $cipher,
-            $hint === '' ? null : $hint,
-            $model,
-            $allowImageInput ? 1 : 0,
-            $now,
-            $now,
-        ]);
-    } else {
-        $stmt = db()->prepare('INSERT INTO user_openai_text_settings (user_id, enabled, api_key_cipher, api_key_hint, model, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE enabled = VALUES(enabled), api_key_cipher = VALUES(api_key_cipher), api_key_hint = VALUES(api_key_hint), model = VALUES(model), updated_at = VALUES(updated_at)');
-        $stmt->execute([
-            $userId,
-            $enabled ? 1 : 0,
-            $cipher === '' ? null : $cipher,
-            $hint === '' ? null : $hint,
-            $model,
-            $now,
-            $now,
-        ]);
-    }
+    openai_text_assist_model_save_settings($userId, [
+        'enabled' => $enabled ? 1 : 0,
+        'api_key_cipher' => $cipher === '' ? null : $cipher,
+        'api_key_hint' => $hint === '' ? null : $hint,
+        'model' => $model,
+        'allow_image_input' => $allowImageInput ? 1 : 0,
+    ], $now, schema_inspection_is_available($imageInputSchemaStatus));
 
     return [
         'ok' => true,
@@ -830,19 +809,18 @@ function openai_text_assist_gallery_bulk_image_candidates(int $galleryId): array
  */
 function openai_text_assist_save_image_description(int $imageId, string $description): array
 {
-    $image = function_exists('Gallery\\Services\\find_image') ? find_image($imageId) : null;
+    $image = function_exists('Gallery\Services\find_image') ? find_image($imageId) : null;
     if (!$image) {
         throw new RuntimeException(openai_text_assist_t('admin.openai.error_image_missing', 'The photo could not be found. Reload the editor and try again.'));
     }
 
     $description = openai_text_assist_text_limit($description, 8000);
-    $stmt = db()->prepare('UPDATE images SET description = ?, updated_at = ? WHERE id = ?');
-    $stmt->execute([$description, function_exists('Gallery\\Core\\now_sql') ? now_sql() : date('Y-m-d H:i:s'), $imageId]);
-
-    $stmt = db()->prepare('SELECT * FROM images WHERE id = ? LIMIT 1');
-    $stmt->execute([$imageId]);
-    $updated = $stmt->fetch();
-    return is_array($updated) ? $updated : array_merge($image, ['description' => $description]);
+    $updated = openai_text_assist_model_save_image_description(
+        $imageId,
+        $description,
+        function_exists('Gallery\Core\now_sql') ? now_sql() : date('Y-m-d H:i:s')
+    );
+    return $updated ?? array_merge($image, ['description' => $description]);
 }
 
 /**

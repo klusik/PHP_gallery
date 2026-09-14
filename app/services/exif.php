@@ -38,11 +38,16 @@ namespace Gallery\Services;
 
 use PDOException;
 use Throwable;
-use function Gallery\Core\db;
 use function Gallery\Core\normalize_relative_path;
 use function Gallery\Core\now_sql;
 use function Gallery\Core\image_public_url;
 use function Gallery\Core\url_for;
+use function Gallery\Models\exif_model_gallery_gps_override_count;
+use function Gallery\Models\exif_model_gallery_gps_override_rows;
+use function Gallery\Models\exif_model_has_map_points;
+use function Gallery\Models\exif_model_map_fingerprint_row;
+use function Gallery\Models\exif_model_map_point_rows;
+use function Gallery\Models\exif_model_reset_gallery_gps_overrides;
 
 /**
  * EXIF and GPS metadata service module.
@@ -228,7 +233,7 @@ function exif_gps_gallery_override_count(): int
     }
 
     try {
-        return (int) db()->query('SELECT COUNT(*) FROM galleries WHERE gps_map_enabled IS NOT NULL')->fetchColumn();
+        return exif_model_gallery_gps_override_count();
     } catch (PDOException) {
         return 0;
     }
@@ -246,21 +251,20 @@ function reset_all_gallery_gps_map_overrides(): int
     }
 
     // $rows stores galleries that need their sidecars refreshed after the reset.
-    $rows = db()->query('SELECT * FROM galleries WHERE gps_map_enabled IS NOT NULL ORDER BY folder_path')->fetchAll();
+    $rows = exif_model_gallery_gps_override_rows();
     if (!$rows) {
         return 0;
     }
 
-    db()->exec('UPDATE galleries SET gps_map_enabled = NULL, updated_at = ' . db()->quote(now_sql()) . ' WHERE gps_map_enabled IS NOT NULL');
-
+    $now = now_sql();
+    exif_model_reset_gallery_gps_overrides($now);
     foreach ($rows as $gallery) {
         $gallery['gps_map_enabled'] = null;
-        $gallery['updated_at'] = now_sql();
-        if (function_exists('Gallery\\Services\\write_gallery_sidecar')) {
+        $gallery['updated_at'] = $now;
+        if (function_exists('Gallery\Services\write_gallery_sidecar')) {
             write_gallery_sidecar($gallery);
         }
     }
-
     return count($rows);
 }
 
@@ -668,25 +672,17 @@ function gallery_map_cache_dir(): string
  */
 function gallery_map_query_parts(array $gallery, bool $publicOnly, bool $recursive): array
 {
-    // $folderPath stores the normalized branch root used by recursive map queries.
-    $folderPath = normalize_relative_path((string) $gallery['folder_path']);
-    // $conditions stores the SQL filters for images that can produce map markers.
-    $conditions = ["i.gps_lat IS NOT NULL", "i.gps_lng IS NOT NULL"];
-    // $params stores positional query parameters matching the generated conditions.
-    $params = [];
-    if ($recursive) {
-        $conditions[] = '(g.folder_path = ? OR g.folder_path LIKE ?)';
-        $params[] = $folderPath;
-        $params[] = $folderPath . '/%';
-    } else {
-        $conditions[] = 'g.id = ?';
-        $params[] = (int) $gallery['id'];
-    }
     if ($publicOnly) {
-        $conditions[] = public_gallery_listing_sql_fragment('g');
-        $conditions[] = "i.visibility = 'public'";
+        gallery_visibility_assert_public_policy_available();
+        gallery_access_assert_public_policy_available();
     }
-    return ['conditions' => $conditions, 'params' => $params];
+    return [
+        'gallery_id' => (int) $gallery['id'],
+        'folder_path' => normalize_relative_path((string) $gallery['folder_path']),
+        'public_only' => $publicOnly,
+        'recursive' => $recursive,
+        'require_listed_access' => $publicOnly && gallery_access_schema_ready(),
+    ];
 }
 
 /**
@@ -706,12 +702,15 @@ function gallery_map_cache_fingerprint(array $gallery, bool $publicOnly, bool $r
     if (!gallery_allows_gps_maps($gallery)) {
         return 'disabled';
     }
-    $parts = gallery_map_query_parts($gallery, $publicOnly, $recursive);
-    $sql = 'SELECT COUNT(*) AS point_count, MAX(i.updated_at) AS image_updated_at, MAX(i.gps_extracted_at) AS gps_extracted_at, MAX(g.updated_at) AS gallery_updated_at FROM images i JOIN galleries g ON g.id = i.gallery_id WHERE ' . implode(' AND ', $parts['conditions']);
-    $row = public_render_profile_db('gallery_map_fingerprint', static function () use ($sql, $parts): array {
-        $stmt = db()->prepare($sql);
-        $stmt->execute($parts['params']);
-        return $stmt->fetch() ?: [];
+    $scope = gallery_map_query_parts($gallery, $publicOnly, $recursive);
+    $row = public_render_profile_db('gallery_map_fingerprint', static function () use ($scope): array {
+        return exif_model_map_fingerprint_row(
+            $scope['gallery_id'],
+            $scope['folder_path'],
+            $scope['public_only'],
+            $scope['recursive'],
+            $scope['require_listed_access']
+        );
     });
     return hash('sha256', json_encode([
         'gallery_id' => (int) $gallery['id'],
@@ -792,12 +791,15 @@ function gallery_has_map_points(array $gallery, bool $publicOnly, bool $recursiv
         return false;
     }
     return public_render_profile_span('gallery_map_availability', static function () use ($gallery, $publicOnly, $recursive): bool {
-        $parts = gallery_map_query_parts($gallery, $publicOnly, $recursive);
-        $sql = 'SELECT 1 FROM images i JOIN galleries g ON g.id = i.gallery_id WHERE ' . implode(' AND ', $parts['conditions']) . ' LIMIT 1';
-        return public_render_profile_db('gallery_map_availability_db', static function () use ($sql, $parts): bool {
-            $stmt = db()->prepare($sql);
-            $stmt->execute($parts['params']);
-            return (bool) $stmt->fetchColumn();
+        $scope = gallery_map_query_parts($gallery, $publicOnly, $recursive);
+        return public_render_profile_db('gallery_map_availability_db', static function () use ($scope): bool {
+            return exif_model_has_map_points(
+                $scope['gallery_id'],
+                $scope['folder_path'],
+                $scope['public_only'],
+                $scope['recursive'],
+                $scope['require_listed_access']
+            );
         });
     });
 }
@@ -889,12 +891,15 @@ function gallery_map_points(array $gallery, bool $publicOnly, bool $recursive = 
         }
 
         public_render_profile_count('gallery_map_cache_misses');
-        $parts = gallery_map_query_parts($gallery, $publicOnly, $recursive);
-        $sql = 'SELECT i.*, g.title AS gallery_title, g.id AS gallery_id, g.folder_path AS gallery_folder_path FROM images i JOIN galleries g ON g.id = i.gallery_id WHERE ' . implode(' AND ', $parts['conditions']) . ' ORDER BY g.folder_path, i.sort_order, i.filename';
-        $rows = public_render_profile_db('gallery_map_points_db', static function () use ($sql, $parts): array {
-            $stmt = db()->prepare($sql);
-            $stmt->execute($parts['params']);
-            return $stmt->fetchAll();
+        $scope = gallery_map_query_parts($gallery, $publicOnly, $recursive);
+        $rows = public_render_profile_db('gallery_map_points_db', static function () use ($scope): array {
+            return exif_model_map_point_rows(
+                $scope['gallery_id'],
+                $scope['folder_path'],
+                $scope['public_only'],
+                $scope['recursive'],
+                $scope['require_listed_access']
+            );
         });
 
         // $galleryCache stores looked-up gallery records while building this map payload.

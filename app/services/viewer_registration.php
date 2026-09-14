@@ -45,8 +45,54 @@ namespace Gallery\Services;
 use InvalidArgumentException;
 use RuntimeException;
 use Throwable;
-use function Gallery\Core\db;
 use function Gallery\Core\now_sql;
+use function Gallery\Core\viewer_identity_session_get;
+use function Gallery\Core\viewer_identity_session_regenerate;
+use function Gallery\Core\viewer_identity_session_set;
+use function Gallery\Core\viewer_identity_session_unset;
+use function Gallery\Models\viewer_registration_model_abort;
+use function Gallery\Models\viewer_registration_model_account_capacity_set;
+use function Gallery\Models\viewer_registration_model_account_exists;
+use function Gallery\Models\viewer_registration_model_activate_account;
+use function Gallery\Models\viewer_registration_model_admin_exists;
+use function Gallery\Models\viewer_registration_model_cancel_for_invitation;
+use function Gallery\Models\viewer_registration_model_cancel_open_origin;
+use function Gallery\Models\viewer_registration_model_capacity_increment;
+use function Gallery\Models\viewer_registration_model_capacity_lock;
+use function Gallery\Models\viewer_registration_model_capacity_recount_locked;
+use function Gallery\Models\viewer_registration_model_capacity_set;
+use function Gallery\Models\viewer_registration_model_cleanup_requests_locked;
+use function Gallery\Models\viewer_registration_model_confirm_request;
+use function Gallery\Models\viewer_registration_model_independent_transaction;
+use function Gallery\Models\viewer_registration_model_invitation_by_hash;
+use function Gallery\Models\viewer_registration_model_invitation_claim;
+use function Gallery\Models\viewer_registration_model_invitation_delete;
+use function Gallery\Models\viewer_registration_model_invitation_insert;
+use function Gallery\Models\viewer_registration_model_invitation_inspect;
+use function Gallery\Models\viewer_registration_model_invitation_list;
+use function Gallery\Models\viewer_registration_model_invitation_lock;
+use function Gallery\Models\viewer_registration_model_invitation_lock_by_hash;
+use function Gallery\Models\viewer_registration_model_invitation_preflight;
+use function Gallery\Models\viewer_registration_model_invitation_revoke;
+use function Gallery\Models\viewer_registration_model_maintenance_delete_invitations;
+use function Gallery\Models\viewer_registration_model_maintenance_delete_verification;
+use function Gallery\Models\viewer_registration_model_request_count;
+use function Gallery\Models\viewer_registration_model_request_delete;
+use function Gallery\Models\viewer_registration_model_request_insert_pending;
+use function Gallery\Models\viewer_registration_model_request_lock;
+use function Gallery\Models\viewer_registration_model_request_lock_by_normalized_email;
+use function Gallery\Models\viewer_registration_model_request_mark_verification_sent;
+use function Gallery\Models\viewer_registration_model_request_update_pending;
+use function Gallery\Models\viewer_registration_model_resend_cleanup;
+use function Gallery\Models\viewer_registration_model_resend_count;
+use function Gallery\Models\viewer_registration_model_resend_delete_unsent;
+use function Gallery\Models\viewer_registration_model_resend_insert;
+use function Gallery\Models\viewer_registration_model_resend_lock;
+use function Gallery\Models\viewer_registration_model_resend_mark_sent;
+use function Gallery\Models\viewer_registration_model_transaction;
+use function Gallery\Models\viewer_registration_model_verification_delete_for_request;
+use function Gallery\Models\viewer_registration_model_verification_primary;
+use function Gallery\Models\viewer_registration_model_verification_resend;
 
 const VIEWER_REGISTRATION_STATUS_PENDING = 'pending_verification';
 const VIEWER_REGISTRATION_STATUS_EMAIL_VERIFIED = 'email_verified';
@@ -208,7 +254,7 @@ function viewer_registration_activation_context(int $requestId, string $verified
  */
 function viewer_registration_activation_clear(): void
 {
-    unset($_SESSION[viewer_registration_activation_namespace_key()]);
+    viewer_identity_session_unset(viewer_registration_activation_namespace_key());
 }
 
 /**
@@ -228,14 +274,14 @@ function viewer_registration_activation_establish(array $row): void
     }
 
     $expiresAt = min($rowExpiry, time() + viewer_registration_activation_lifetime_seconds());
-    if (session_status() === PHP_SESSION_ACTIVE && !session_regenerate_id(true)) {
+    if (!viewer_identity_session_regenerate()) {
         throw new RuntimeException('Viewer registration activation session rotation failed.');
     }
-    $_SESSION[viewer_registration_activation_namespace_key()] = [
+    viewer_identity_session_set(viewer_registration_activation_namespace_key(), [
         'request_id' => $requestId,
         'expires_at' => $expiresAt,
         'context' => $context,
-    ];
+    ]);
 }
 
 /**
@@ -245,7 +291,7 @@ function viewer_registration_activation_establish(array $row): void
  */
 function viewer_registration_activation_state(): ?array
 {
-    $state = $_SESSION[viewer_registration_activation_namespace_key()] ?? null;
+    $state = viewer_identity_session_get(viewer_registration_activation_namespace_key());
     if (!is_array($state)) {
         return null;
     }
@@ -443,15 +489,7 @@ function viewer_invitation_inspect(string $token): ?array
         return null;
     }
 
-    $stmt = db()->prepare(
-        'SELECT vi.id, vi.target_email_fingerprint, vi.expires_at, vi.claimed_at, vi.revoked_at, '
-        . 'vrr.status AS registration_status, vrr.expires_at AS registration_expires_at '
-        . 'FROM viewer_invitations vi '
-        . 'LEFT JOIN viewer_registration_requests vrr ON vrr.viewer_invitation_id = vi.id '
-        . 'WHERE vi.token_hash = ? LIMIT 1'
-    );
-    $stmt->execute([security_authority_token_hash($token)]);
-    $row = $stmt->fetch();
+    $row = viewer_registration_model_invitation_inspect(security_authority_token_hash($token));
     if (!$row || !empty($row['revoked_at'])) {
         return null;
     }
@@ -490,15 +528,7 @@ function viewer_invitation_list_for_admin(int $limit = 100): array
         return [];
     }
 
-    $stmt = db()->query(
-        'SELECT vi.id, vi.target_email, vi.created_by_admin_user_id, vi.created_at, vi.expires_at, vi.claimed_at, vi.revoked_at, '
-        . 'CASE WHEN vi.target_email_fingerprint IS NULL OR vi.target_email_fingerprint = \'\' THEN 0 ELSE 1 END AS email_bound, '
-        . 'vrr.status AS registration_status, vrr.email AS registration_email '
-        . 'FROM viewer_invitations vi '
-        . 'LEFT JOIN viewer_registration_requests vrr ON vrr.viewer_invitation_id = vi.id '
-        . 'ORDER BY vi.created_at DESC, vi.id DESC LIMIT ' . (int) $limit
-    );
-    $rows = $stmt ? $stmt->fetchAll() : [];
+    $rows = viewer_registration_model_invitation_list($limit);
     $now = time();
     foreach ($rows as &$row) {
         if (!empty($row['revoked_at'])) {
@@ -560,31 +590,22 @@ function viewer_invitation_issue(int $adminUserId, ?string $targetEmail = null, 
     if ($lifetimeSeconds < 300 || $lifetimeSeconds > 31536000) {
         throw new InvalidArgumentException('Viewer invitation lifetime is outside safe bounds.');
     }
-
-    $adminStmt = db()->prepare('SELECT id FROM users WHERE id = ? LIMIT 1');
-    $adminStmt->execute([$adminUserId]);
-    if ((int) $adminStmt->fetchColumn() !== $adminUserId) {
+    if (!viewer_registration_model_admin_exists($adminUserId)) {
         throw new InvalidArgumentException('Viewer invitation creator must be an existing administrator.');
     }
 
     $token = security_opaque_token_generate(32);
     $createdAt = now_sql();
     $expiresAt = date('Y-m-d H:i:s', time() + $lifetimeSeconds);
-    $stmt = db()->prepare(
-        'INSERT INTO viewer_invitations '
-        . '(token_hash, target_email, target_email_fingerprint, created_by_admin_user_id, created_at, expires_at) '
-        . 'VALUES (?, ?, ?, ?, ?, ?)'
-    );
-    $stmt->execute([
+    $id = viewer_registration_model_invitation_insert(
         security_authority_token_hash($token),
         $targetAddress,
         $targetFingerprint,
         $adminUserId,
         $createdAt,
-        $expiresAt,
-    ]);
-
-    return ['id' => (int) db()->lastInsertId(), 'token' => $token, 'expires_at' => $expiresAt];
+        $expiresAt
+    );
+    return ['id' => $id, 'token' => $token, 'expires_at' => $expiresAt];
 }
 
 /**
@@ -602,10 +623,7 @@ function viewer_invitation_validate(string $token, string $email): ?array
     if (!viewer_registration_requests_enabled() || $token === '' || !viewer_registration_storage_available()) {
         return null;
     }
-
-    $stmt = db()->prepare('SELECT * FROM viewer_invitations WHERE token_hash = ? LIMIT 1');
-    $stmt->execute([security_authority_token_hash($token)]);
-    $row = $stmt->fetch();
+    $row = viewer_registration_model_invitation_by_hash(security_authority_token_hash($token));
     return $row && viewer_invitation_row_is_usable($row, $email) ? $row : null;
 }
 
@@ -632,33 +650,21 @@ function viewer_invitation_registration_preflight(string $token, string $email):
         return null;
     }
 
-    $stmt = db()->prepare(
-        'SELECT vi.*, vrr.normalized_email AS registration_normalized_email, '
-        . 'vrr.status AS registration_status, vrr.expires_at AS registration_expires_at '
-        . 'FROM viewer_invitations vi '
-        . 'LEFT JOIN viewer_registration_requests vrr ON vrr.viewer_invitation_id = vi.id '
-        . 'WHERE vi.token_hash = ? LIMIT 1'
-    );
-    $stmt->execute([security_authority_token_hash($token)]);
-    $row = $stmt->fetch();
+    $row = viewer_registration_model_invitation_preflight(security_authority_token_hash($token));
     if (!$row || !empty($row['revoked_at'])) {
         return null;
     }
-
     $expiresAt = strtotime((string) ($row['expires_at'] ?? ''));
     if ($expiresAt === false || $expiresAt < time()) {
         return null;
     }
-
     $expectedFingerprint = trim((string) ($row['target_email_fingerprint'] ?? ''));
     if ($expectedFingerprint !== '' && !hash_equals($expectedFingerprint, viewer_email_fingerprint($normalized))) {
         return null;
     }
-
     if (empty($row['claimed_at'])) {
         return $row;
     }
-
     $requestExpiresAt = strtotime((string) ($row['registration_expires_at'] ?? ''));
     if ((string) ($row['registration_normalized_email'] ?? '') !== $normalized
         || !in_array((string) ($row['registration_status'] ?? ''), [VIEWER_REGISTRATION_STATUS_PENDING, VIEWER_REGISTRATION_STATUS_EMAIL_VERIFIED], true)
@@ -666,7 +672,6 @@ function viewer_invitation_registration_preflight(string $token, string $email):
         || $requestExpiresAt < time()) {
         return null;
     }
-
     return $row;
 }
 
@@ -758,23 +763,7 @@ function viewer_registration_request_authorize_identity(string $email): array
  */
 function viewer_registration_capacity_lock(): int
 {
-    $now = now_sql();
-    $pdo = db();
-    $pdo->prepare(
-        'INSERT INTO viewer_registration_state (state_key, active_request_count, updated_at) '
-        . 'VALUES (?, 0, ?) ON DUPLICATE KEY UPDATE updated_at = updated_at'
-    )->execute([VIEWER_REGISTRATION_STATE_KEY, $now]);
-
-    $stmt = $pdo->prepare(
-        'SELECT active_request_count FROM viewer_registration_state '
-        . 'WHERE state_key = ? LIMIT 1 FOR UPDATE'
-    );
-    $stmt->execute([VIEWER_REGISTRATION_STATE_KEY]);
-    $count = $stmt->fetchColumn();
-    if ($count === false) {
-        throw new RuntimeException('Viewer registration capacity state could not be locked.');
-    }
-    return (int) $count;
+    return viewer_registration_model_capacity_lock(VIEWER_REGISTRATION_STATE_KEY, now_sql());
 }
 
 /**
@@ -784,11 +773,7 @@ function viewer_registration_capacity_lock(): int
  */
 function viewer_registration_capacity_recount_locked(): int
 {
-    $count = (int) db()->query('SELECT COUNT(*) FROM viewer_registration_requests')->fetchColumn();
-    db()->prepare(
-        'UPDATE viewer_registration_state SET active_request_count = ?, updated_at = ? WHERE state_key = ?'
-    )->execute([$count, now_sql(), VIEWER_REGISTRATION_STATE_KEY]);
-    return $count;
+    return viewer_registration_model_capacity_recount_locked(VIEWER_REGISTRATION_STATE_KEY, now_sql());
 }
 
 /**
@@ -801,12 +786,7 @@ function viewer_registration_capacity_recount_locked(): int
  */
 function viewer_registration_cleanup_requests_locked(int $limit = 1000): int
 {
-    $limit = max(1, min(1000, $limit));
-    $stmt = db()->prepare(
-        'DELETE FROM viewer_registration_requests WHERE expires_at < ? LIMIT ' . $limit
-    );
-    $stmt->execute([now_sql()]);
-    return viewer_registration_capacity_recount_locked();
+    return viewer_registration_model_cleanup_requests_locked(VIEWER_REGISTRATION_STATE_KEY, now_sql(), $limit);
 }
 
 /**
@@ -824,39 +804,15 @@ function viewer_registration_cancel_open_origin_staging(): int
     if (!viewer_registration_storage_available()) {
         throw new RuntimeException('Viewer registration storage is unavailable.');
     }
-
-    $pdo = db();
-    $ownsTransaction = !$pdo->inTransaction();
-    if ($ownsTransaction) {
-        $pdo->beginTransaction();
-    }
-
-    try {
+    return viewer_registration_model_transaction(static function (): int {
         viewer_registration_capacity_lock();
-        $now = now_sql();
-        $stmt = $pdo->prepare(
-            'UPDATE viewer_registration_requests SET status = ?, cancelled_at = ?, updated_at = ? '
-            . 'WHERE viewer_invitation_id IS NULL AND status IN (?, ?) AND cancelled_at IS NULL'
-        );
-        $stmt->execute([
+        return viewer_registration_model_cancel_open_origin(
             VIEWER_REGISTRATION_STATUS_CANCELLED,
-            $now,
-            $now,
             VIEWER_REGISTRATION_STATUS_PENDING,
             VIEWER_REGISTRATION_STATUS_EMAIL_VERIFIED,
-        ]);
-        $cancelled = $stmt->rowCount();
-
-        if ($ownsTransaction) {
-            $pdo->commit();
-        }
-        return $cancelled;
-    } catch (Throwable $exception) {
-        if ($ownsTransaction && $pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
-        throw $exception;
-    }
+            now_sql()
+        );
+    });
 }
 
 /**
@@ -977,13 +933,7 @@ function viewer_registration_request_begin(string $email, ?string $invitationTok
         ];
     }
 
-    $pdo = db();
-    $ownsTransaction = !$pdo->inTransaction();
-    if ($ownsTransaction) {
-        $pdo->beginTransaction();
-    }
-
-    try {
+    return viewer_registration_model_transaction(static function () use ($email, $normalized, $invitationToken, $resolvedIp, $publicResult): array {
         $rowCount = viewer_registration_capacity_lock();
 
         // Re-read policy after taking the staging admission lock. This closes the race
@@ -991,10 +941,7 @@ function viewer_registration_request_begin(string $email, ?string $invitationTok
         // registration and would otherwise create fresh staging after cleanup completed.
         $mode = viewer_registration_mode();
         if ($mode === 'disabled' || ($mode === 'invite_only' && trim((string) $invitationToken) === '')) {
-            if ($ownsTransaction) {
-                $pdo->rollBack();
-            }
-            return [
+            return viewer_registration_model_abort([
                 'accepted' => false,
                 'mail_eligible' => false,
                 'reason' => $mode === 'disabled' ? 'registration_disabled' : 'invitation_required',
@@ -1002,15 +949,10 @@ function viewer_registration_request_begin(string $email, ?string $invitationTok
                 'request_id' => null,
                 'verification_token' => null,
                 'expires_at' => null,
-            ];
+            ]);
         }
 
-        $accountStmt = $pdo->prepare('SELECT id FROM viewer_accounts WHERE normalized_email = ? LIMIT 1');
-        $accountStmt->execute([$normalized]);
-        if ($accountStmt->fetchColumn() !== false) {
-            if ($ownsTransaction) {
-                $pdo->commit();
-            }
+        if (viewer_registration_model_account_exists($normalized)) {
             return [
                 'accepted' => false,
                 'mail_eligible' => false,
@@ -1022,24 +964,14 @@ function viewer_registration_request_begin(string $email, ?string $invitationTok
             ];
         }
 
-        $existingStmt = $pdo->prepare(
-            'SELECT * FROM viewer_registration_requests WHERE normalized_email = ? LIMIT 1 FOR UPDATE'
-        );
-        $existingStmt->execute([$normalized]);
-        $existing = $existingStmt->fetch();
-
+        $existing = viewer_registration_model_request_lock_by_normalized_email($normalized);
         $invitation = null;
         if (trim((string) $invitationToken) !== '') {
-            $inviteStmt = $pdo->prepare(
-                'SELECT * FROM viewer_invitations WHERE token_hash = ? LIMIT 1 FOR UPDATE'
+            $invitation = viewer_registration_model_invitation_lock_by_hash(
+                security_authority_token_hash((string) $invitationToken)
             );
-            $inviteStmt->execute([security_authority_token_hash((string) $invitationToken)]);
-            $invitation = $inviteStmt->fetch();
             if (!$invitation) {
-                if ($ownsTransaction) {
-                    $pdo->rollBack();
-                }
-                return [
+                return viewer_registration_model_abort([
                     'accepted' => false,
                     'mail_eligible' => false,
                     'reason' => 'invalid_invitation',
@@ -1047,7 +979,7 @@ function viewer_registration_request_begin(string $email, ?string $invitationTok
                     'request_id' => null,
                     'verification_token' => null,
                     'expires_at' => null,
-                ];
+                ]);
             }
 
             $sameClaim = $existing
@@ -1063,10 +995,7 @@ function viewer_registration_request_begin(string $email, ?string $invitationTok
             // Re-check authority while holding the invitation row lock. The earlier preflight is
             // only an abuse-budget optimization and must never become the authorization decision.
             if (!$invitationStateValid || (!$sameClaim && !empty($invitation['claimed_at']))) {
-                if ($ownsTransaction) {
-                    $pdo->rollBack();
-                }
-                return [
+                return viewer_registration_model_abort([
                     'accepted' => false,
                     'mail_eligible' => false,
                     'reason' => 'invalid_invitation',
@@ -1074,13 +1003,10 @@ function viewer_registration_request_begin(string $email, ?string $invitationTok
                     'request_id' => null,
                     'verification_token' => null,
                     'expires_at' => null,
-                ];
+                ]);
             }
         } elseif ($mode === 'invite_only') {
-            if ($ownsTransaction) {
-                $pdo->rollBack();
-            }
-            return [
+            return viewer_registration_model_abort([
                 'accepted' => false,
                 'mail_eligible' => false,
                 'reason' => 'invitation_required',
@@ -1088,13 +1014,10 @@ function viewer_registration_request_begin(string $email, ?string $invitationTok
                 'request_id' => null,
                 'verification_token' => null,
                 'expires_at' => null,
-            ];
+            ]);
         }
 
         if ($existing && viewer_registration_pending_has_sent_valid_verification_authority($existing)) {
-            if ($ownsTransaction) {
-                $pdo->commit();
-            }
             return [
                 'accepted' => true,
                 'mail_eligible' => false,
@@ -1109,9 +1032,6 @@ function viewer_registration_request_begin(string $email, ?string $invitationTok
         if ($existing
             && (string) ($existing['status'] ?? '') === VIEWER_REGISTRATION_STATUS_EMAIL_VERIFIED
             && strtotime((string) ($existing['expires_at'] ?? '')) >= time()) {
-            if ($ownsTransaction) {
-                $pdo->commit();
-            }
             return [
                 'accepted' => true,
                 'mail_eligible' => false,
@@ -1126,9 +1046,6 @@ function viewer_registration_request_begin(string $email, ?string $invitationTok
         if (!$existing && $rowCount >= viewer_registration_request_cap()) {
             $rowCount = viewer_registration_cleanup_requests_locked();
             if ($rowCount >= viewer_registration_request_cap()) {
-                if ($ownsTransaction) {
-                    $pdo->commit();
-                }
                 return [
                     'accepted' => false,
                     'mail_eligible' => false,
@@ -1147,70 +1064,44 @@ function viewer_registration_request_begin(string $email, ?string $invitationTok
         $requestExpiresAt = date('Y-m-d H:i:s', time() + viewer_registration_request_lifetime_seconds());
         $ipHash = $resolvedIp === '' ? null : viewer_security_fingerprint('viewer-registration-ip', $resolvedIp);
         $invitationId = $invitation ? (int) $invitation['id'] : null;
+        $emailFingerprint = viewer_email_fingerprint($normalized);
+        $tokenHash = security_authority_token_hash($token);
 
         if ($existing) {
             $requestId = (int) $existing['id'];
-            $update = $pdo->prepare(
-                'UPDATE viewer_registration_requests SET '
-                . 'email = ?, normalized_email = ?, email_fingerprint = ?, viewer_invitation_id = ?, '
-                . 'status = ?, request_ip_hash = ?, verification_token_hash = ?, '
-                . 'verification_token_expires_at = ?, verification_token_consumed_at = NULL, '
-                . 'expires_at = ?, verified_at = NULL, cancelled_at = NULL, updated_at = ? '
-                . 'WHERE id = ?'
-            );
-            $update->execute([
-                trim($email),
-                $normalized,
-                viewer_email_fingerprint($normalized),
-                $invitationId,
-                VIEWER_REGISTRATION_STATUS_PENDING,
-                $ipHash,
-                security_authority_token_hash($token),
-                $tokenExpiresAt,
-                $requestExpiresAt,
-                $now,
+            viewer_registration_model_request_update_pending(
                 $requestId,
-            ]);
-        } else {
-            $insert = $pdo->prepare(
-                'INSERT INTO viewer_registration_requests '
-                . '(email, normalized_email, email_fingerprint, viewer_invitation_id, status, request_ip_hash, '
-                . 'verification_token_hash, verification_token_expires_at, expires_at, created_at, updated_at) '
-                . 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-            );
-            $insert->execute([
                 trim($email),
                 $normalized,
-                viewer_email_fingerprint($normalized),
+                $emailFingerprint,
                 $invitationId,
                 VIEWER_REGISTRATION_STATUS_PENDING,
                 $ipHash,
-                security_authority_token_hash($token),
+                $tokenHash,
                 $tokenExpiresAt,
                 $requestExpiresAt,
-                $now,
-                $now,
-            ]);
-            $requestId = (int) $pdo->lastInsertId();
-            $pdo->prepare(
-                'UPDATE viewer_registration_state SET active_request_count = active_request_count + 1, updated_at = ? '
-                . 'WHERE state_key = ?'
-            )->execute([$now, VIEWER_REGISTRATION_STATE_KEY]);
+                $now
+            );
+        } else {
+            $requestId = viewer_registration_model_request_insert_pending(
+                trim($email),
+                $normalized,
+                $emailFingerprint,
+                $invitationId,
+                VIEWER_REGISTRATION_STATUS_PENDING,
+                $ipHash,
+                $tokenHash,
+                $tokenExpiresAt,
+                $requestExpiresAt,
+                $now
+            );
+            viewer_registration_model_capacity_increment(VIEWER_REGISTRATION_STATE_KEY, $now);
         }
 
         if ($invitation && empty($invitation['claimed_at'])) {
-            $claim = $pdo->prepare(
-                'UPDATE viewer_invitations SET claimed_at = ? '
-                . 'WHERE id = ? AND claimed_at IS NULL AND revoked_at IS NULL AND expires_at >= ?'
-            );
-            $claim->execute([$now, (int) $invitation['id'], $now]);
-            if ($claim->rowCount() !== 1) {
+            if (!viewer_registration_model_invitation_claim((int) $invitation['id'], $now)) {
                 throw new RuntimeException('Viewer invitation claim lost a concurrent race.');
             }
-        }
-
-        if ($ownsTransaction) {
-            $pdo->commit();
         }
 
         return [
@@ -1222,12 +1113,7 @@ function viewer_registration_request_begin(string $email, ?string $invitationTok
             'verification_token' => $token,
             'expires_at' => $requestExpiresAt,
         ];
-    } catch (Throwable $exception) {
-        if ($ownsTransaction && $pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
-        throw $exception;
-    }
+    });
 }
 
 /**
@@ -1283,24 +1169,18 @@ function viewer_registration_request_invitation_resend_allowed_locked(array $row
     if ($invitationId <= 0) {
         return true;
     }
-
-    $stmt = db()->prepare('SELECT * FROM viewer_invitations WHERE id = ? LIMIT 1 FOR UPDATE');
-    $stmt->execute([$invitationId]);
-    $invitation = $stmt->fetch();
+    $invitation = viewer_registration_model_invitation_lock($invitationId);
     if (!$invitation || !empty($invitation['revoked_at']) || empty($invitation['claimed_at'])) {
         return false;
     }
-
     $expiresAt = strtotime((string) ($invitation['expires_at'] ?? ''));
     if ($expiresAt === false || $expiresAt < time()) {
         return false;
     }
-
     $expectedFingerprint = trim((string) ($invitation['target_email_fingerprint'] ?? ''));
     if ($expectedFingerprint === '') {
         return true;
     }
-
     $requestFingerprint = viewer_email_fingerprint((string) ($row['normalized_email'] ?? ''));
     return $requestFingerprint !== '' && hash_equals($expectedFingerprint, $requestFingerprint);
 }
@@ -1351,105 +1231,46 @@ function viewer_registration_verification_resend_prepare(string $email): array
         return $empty((string) ($resendDecision['reason'] ?? 'rate_limited'));
     }
 
-    $pdo = db();
-    $ownsTransaction = !$pdo->inTransaction();
-    if ($ownsTransaction) {
-        $pdo->beginTransaction();
-    }
-
-    try {
-        // Use the same singleton lock as registration-mode transitions so policy is
-        // re-read from authoritative state before new resend authority is minted.
+    return viewer_registration_model_transaction(static function () use ($normalized, $empty, $publicResult): array {
         viewer_registration_capacity_lock();
-
-        $requestStmt = $pdo->prepare(
-            'SELECT * FROM viewer_registration_requests WHERE normalized_email = ? LIMIT 1 FOR UPDATE'
-        );
-        $requestStmt->execute([$normalized]);
-        $request = $requestStmt->fetch();
+        $request = viewer_registration_model_request_lock_by_normalized_email($normalized);
         if (!$request || !viewer_registration_request_row_is_pending_active($request)) {
-            if ($ownsTransaction) {
-                $pdo->commit();
-            }
             return $empty($request ? 'request_ineligible' : 'not_found');
         }
-
         if (!viewer_registration_request_allowed_by_current_mode($request)) {
-            if ($ownsTransaction) {
-                $pdo->commit();
-            }
             return $empty('registration_mode_restricted');
         }
         if (!viewer_registration_request_invitation_resend_allowed_locked($request)) {
-            if ($ownsTransaction) {
-                $pdo->commit();
-            }
             return $empty('invitation_invalid');
         }
-
-        $accountStmt = $pdo->prepare('SELECT id FROM viewer_accounts WHERE normalized_email = ? LIMIT 1');
-        $accountStmt->execute([(string) $request['normalized_email']]);
-        if ($accountStmt->fetchColumn() !== false) {
-            if ($ownsTransaction) {
-                $pdo->commit();
-            }
+        if (viewer_registration_model_account_exists((string) $request['normalized_email'])) {
             return $empty('existing_account');
         }
 
         $now = now_sql();
-        $pdo->prepare(
-            'DELETE FROM viewer_registration_verification_tokens '
-            . 'WHERE viewer_registration_request_id = ? AND expires_at < ?'
-        )->execute([(int) $request['id'], $now]);
-
-        $countStmt = $pdo->prepare(
-            'SELECT COUNT(*) FROM viewer_registration_verification_tokens '
-            . 'WHERE viewer_registration_request_id = ?'
-        );
-        $countStmt->execute([(int) $request['id']]);
-        if ((int) $countStmt->fetchColumn() >= viewer_registration_resend_token_cap()) {
-            if ($ownsTransaction) {
-                $pdo->commit();
-            }
+        viewer_registration_model_resend_cleanup((int) $request['id'], $now);
+        if (viewer_registration_model_resend_count((int) $request['id']) >= viewer_registration_resend_token_cap()) {
             return $empty('authority_cap');
         }
 
         $requestExpiry = strtotime((string) ($request['expires_at'] ?? ''));
         if ($requestExpiry === false || $requestExpiry < time()) {
-            if ($ownsTransaction) {
-                $pdo->commit();
-            }
             return $empty('request_expired');
         }
-
         $token = security_opaque_token_generate(32);
         $tokenExpiry = min($requestExpiry, time() + viewer_registration_verification_lifetime_seconds());
         if ($tokenExpiry < time()) {
-            if ($ownsTransaction) {
-                $pdo->commit();
-            }
             return $empty('request_expired');
         }
         $tokenExpiresAt = date('Y-m-d H:i:s', $tokenExpiry);
-
-        $insert = $pdo->prepare(
-            'INSERT INTO viewer_registration_verification_tokens '
-            . '(viewer_registration_request_id, token_hash, expires_at, created_at, sent_at) '
-            . 'VALUES (?, ?, ?, ?, NULL)'
-        );
-        $insert->execute([
+        $authorityId = viewer_registration_model_resend_insert(
             (int) $request['id'],
             security_authority_token_hash($token),
             $tokenExpiresAt,
-            $now,
-        ]);
-        $authorityId = (int) $pdo->lastInsertId();
+            $now
+        );
         if ($authorityId <= 0) {
             throw new RuntimeException('Viewer verification resend authority was not created.');
-        }
-
-        if ($ownsTransaction) {
-            $pdo->commit();
         }
         return [
             'accepted' => true,
@@ -1463,12 +1284,7 @@ function viewer_registration_verification_resend_prepare(string $email): array
             'invitation_backed' => viewer_registration_request_is_invitation_backed($request),
             'expires_at' => $tokenExpiresAt,
         ];
-    } catch (Throwable $exception) {
-        if ($ownsTransaction && $pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
-        throw $exception;
-    }
+    });
 }
 
 /**
@@ -1486,13 +1302,7 @@ function viewer_registration_verification_resend_discard(int $requestId, int $au
     if ($requestId <= 0 || $authorityId <= 0 || !viewer_registration_storage_available()) {
         return false;
     }
-
-    $stmt = db()->prepare(
-        'DELETE FROM viewer_registration_verification_tokens '
-        . 'WHERE id = ? AND viewer_registration_request_id = ? AND sent_at IS NULL'
-    );
-    $stmt->execute([$authorityId, $requestId]);
-    return $stmt->rowCount() === 1;
+    return viewer_registration_model_resend_delete_unsent($requestId, $authorityId);
 }
 
 /**
@@ -1515,23 +1325,9 @@ function viewer_registration_verification_resend_deliver_locked(int $requestId, 
         return ['sent' => false, 'reason' => 'storage_unavailable', 'delivery' => []];
     }
 
-    $pdo = db();
-    if ($pdo->inTransaction()) {
-        throw new RuntimeException('Verification resend delivery requires an independent transaction boundary.');
-    }
-
-    $pdo->beginTransaction();
-    try {
+    return viewer_registration_model_independent_transaction(static function () use ($requestId, $authorityId, $deliver): array {
         viewer_registration_capacity_lock();
-        $stmt = $pdo->prepare(
-            'SELECT vrr.*, vrvt.id AS resend_token_id, vrvt.expires_at AS resend_token_expires_at, '
-            . 'vrvt.sent_at AS resend_token_sent_at '
-            . 'FROM viewer_registration_verification_tokens vrvt '
-            . 'INNER JOIN viewer_registration_requests vrr ON vrr.id = vrvt.viewer_registration_request_id '
-            . 'WHERE vrr.id = ? AND vrvt.id = ? LIMIT 1 FOR UPDATE'
-        );
-        $stmt->execute([$requestId, $authorityId]);
-        $row = $stmt->fetch();
+        $row = viewer_registration_model_resend_lock($requestId, $authorityId);
         $authorityExpiry = $row ? strtotime((string) ($row['resend_token_expires_at'] ?? '')) : false;
         $eligible = $row
             && empty($row['resend_token_sent_at'])
@@ -1542,19 +1338,11 @@ function viewer_registration_verification_resend_deliver_locked(int $requestId, 
             && viewer_registration_request_invitation_resend_allowed_locked($row)
             && viewer_security_transport_allowed()
             && viewer_auth_storage_available();
-
         if ($eligible) {
-            $accountStmt = $pdo->prepare('SELECT id FROM viewer_accounts WHERE normalized_email = ? LIMIT 1');
-            $accountStmt->execute([(string) $row['normalized_email']]);
-            $eligible = $accountStmt->fetchColumn() === false;
+            $eligible = !viewer_registration_model_account_exists((string) $row['normalized_email']);
         }
-
         if (!$eligible) {
-            $pdo->prepare(
-                'DELETE FROM viewer_registration_verification_tokens '
-                . 'WHERE id = ? AND viewer_registration_request_id = ? AND sent_at IS NULL'
-            )->execute([$authorityId, $requestId]);
-            $pdo->commit();
+            viewer_registration_model_resend_delete_unsent($requestId, $authorityId);
             return ['sent' => false, 'reason' => 'request_ineligible', 'delivery' => []];
         }
 
@@ -1563,48 +1351,19 @@ function viewer_registration_verification_resend_deliver_locked(int $requestId, 
             $delivery = [];
         }
         if (empty($delivery['sent'])) {
-            $pdo->prepare(
-                'DELETE FROM viewer_registration_verification_tokens '
-                . 'WHERE id = ? AND viewer_registration_request_id = ? AND sent_at IS NULL'
-            )->execute([$authorityId, $requestId]);
-            $pdo->commit();
+            viewer_registration_model_resend_delete_unsent($requestId, $authorityId);
             return ['sent' => false, 'reason' => 'mail_delivery_failed', 'delivery' => $delivery];
         }
 
         $now = now_sql();
-        $mark = $pdo->prepare(
-            'UPDATE viewer_registration_verification_tokens SET sent_at = ? '
-            . 'WHERE id = ? AND viewer_registration_request_id = ? AND sent_at IS NULL AND expires_at >= ?'
-        );
-        $mark->execute([$now, $authorityId, $requestId, $now]);
-        if ($mark->rowCount() !== 1) {
+        if (!viewer_registration_model_resend_mark_sent($requestId, $authorityId, $now)) {
             throw new RuntimeException('Verification resend handoff state could not be recorded.');
         }
-
-        $requestUpdate = $pdo->prepare(
-            'UPDATE viewer_registration_requests '
-            . 'SET verification_send_count = verification_send_count + 1, verification_last_sent_at = ?, updated_at = ? '
-            . 'WHERE id = ? AND status = ? AND cancelled_at IS NULL AND expires_at >= ?'
-        );
-        $requestUpdate->execute([
-            $now,
-            $now,
-            $requestId,
-            VIEWER_REGISTRATION_STATUS_PENDING,
-            $now,
-        ]);
-        if ($requestUpdate->rowCount() !== 1) {
+        if (!viewer_registration_model_request_mark_verification_sent($requestId, VIEWER_REGISTRATION_STATUS_PENDING, $now)) {
             throw new RuntimeException('Verification resend request handoff state could not be recorded.');
         }
-
-        $pdo->commit();
         return ['sent' => true, 'reason' => 'sent', 'delivery' => $delivery];
-    } catch (Throwable $exception) {
-        if ($pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
-        throw $exception;
-    }
+    });
 }
 
 /**
@@ -1621,15 +1380,11 @@ function viewer_registration_mark_verification_sent(int $requestId): bool
     if (!viewer_registration_requests_enabled() || $requestId <= 0 || !viewer_registration_storage_available()) {
         return false;
     }
-
-    $stmt = db()->prepare(
-        'UPDATE viewer_registration_requests '
-        . 'SET verification_send_count = verification_send_count + 1, verification_last_sent_at = ?, updated_at = ? '
-        . 'WHERE id = ? AND status = ? AND expires_at >= ?'
+    return viewer_registration_model_request_mark_verification_sent(
+        $requestId,
+        VIEWER_REGISTRATION_STATUS_PENDING,
+        now_sql()
     );
-    $now = now_sql();
-    $stmt->execute([$now, $now, $requestId, VIEWER_REGISTRATION_STATUS_PENDING, $now]);
-    return $stmt->rowCount() === 1;
 }
 
 /**
@@ -1648,39 +1403,21 @@ function viewer_registration_verification_lookup(string $token, bool $forUpdate 
     if ($token === '' || strlen($token) > 512) {
         return null;
     }
-
     $hash = security_authority_token_hash($token);
-    $lock = $forUpdate ? ' FOR UPDATE' : '';
-
-    $primaryStmt = db()->prepare(
-        'SELECT * FROM viewer_registration_requests WHERE verification_token_hash = ? LIMIT 1' . $lock
-    );
-    $primaryStmt->execute([$hash]);
-    $primary = $primaryStmt->fetch();
+    $primary = viewer_registration_model_verification_primary($hash, $forUpdate);
     if ($primary && viewer_registration_request_row_is_verifiable($primary)) {
         $primary['_verification_authority_kind'] = 'primary';
         $primary['_verification_authority_id'] = null;
         return $primary;
     }
-
-    $childStmt = db()->prepare(
-        'SELECT vrr.*, vrvt.id AS resend_token_id, vrvt.expires_at AS resend_token_expires_at, '
-        . 'vrvt.sent_at AS resend_token_sent_at '
-        . 'FROM viewer_registration_verification_tokens vrvt '
-        . 'INNER JOIN viewer_registration_requests vrr ON vrr.id = vrvt.viewer_registration_request_id '
-        . 'WHERE vrvt.token_hash = ? LIMIT 1' . $lock
-    );
-    $childStmt->execute([$hash]);
-    $child = $childStmt->fetch();
+    $child = viewer_registration_model_verification_resend($hash, $forUpdate);
     if (!$child || !viewer_registration_request_row_is_pending_active($child) || empty($child['resend_token_sent_at'])) {
         return null;
     }
-
     $childExpiry = strtotime((string) ($child['resend_token_expires_at'] ?? ''));
     if ($childExpiry === false || $childExpiry < time()) {
         return null;
     }
-
     $child['_verification_authority_kind'] = 'resend';
     $child['_verification_authority_id'] = (int) $child['resend_token_id'];
     return $child;
@@ -1723,67 +1460,35 @@ function viewer_registration_verification_confirm(string $token): ?array
         return null;
     }
 
-    $pdo = db();
-    $ownsTransaction = !$pdo->inTransaction();
-    if ($ownsTransaction) {
-        $pdo->beginTransaction();
-    }
-
     try {
-        $row = viewer_registration_verification_lookup($token, true);
-        if (!$row || !viewer_registration_request_allowed_by_current_mode($row)) {
-            if ($ownsTransaction) {
-                $pdo->commit();
+        return viewer_registration_model_transaction(static function () use ($token): ?array {
+            $row = viewer_registration_verification_lookup($token, true);
+            if (!$row || !viewer_registration_request_allowed_by_current_mode($row)) {
+                return null;
             }
-            return null;
-        }
-
-        $now = now_sql();
-        $verifiedExpiry = date('Y-m-d H:i:s', time() + viewer_registration_verified_lifetime_seconds());
-        $update = $pdo->prepare(
-            'UPDATE viewer_registration_requests SET status = ?, verification_token_consumed_at = ?, '
-            . 'verified_at = ?, expires_at = ?, updated_at = ? '
-            . 'WHERE id = ? AND status = ? AND verification_token_consumed_at IS NULL '
-            . 'AND cancelled_at IS NULL AND expires_at >= ?'
-        );
-        $update->execute([
-            VIEWER_REGISTRATION_STATUS_EMAIL_VERIFIED,
-            $now,
-            $now,
-            $verifiedExpiry,
-            $now,
-            (int) $row['id'],
-            VIEWER_REGISTRATION_STATUS_PENDING,
-            $now,
-        ]);
-        if ($update->rowCount() !== 1) {
-            if ($ownsTransaction) {
-                $pdo->rollBack();
+            $now = now_sql();
+            $verifiedExpiry = date('Y-m-d H:i:s', time() + viewer_registration_verified_lifetime_seconds());
+            if (!viewer_registration_model_confirm_request(
+                (int) $row['id'],
+                VIEWER_REGISTRATION_STATUS_PENDING,
+                VIEWER_REGISTRATION_STATUS_EMAIL_VERIFIED,
+                $verifiedExpiry,
+                $now
+            )) {
+                return viewer_registration_model_abort(null);
             }
-            return null;
-        }
-
-        // The request transition is authoritative; deleting children additionally removes
-        // sibling lookup rows immediately instead of waiting for scheduled cleanup.
-        $pdo->prepare(
-            'DELETE FROM viewer_registration_verification_tokens WHERE viewer_registration_request_id = ?'
-        )->execute([(int) $row['id']]);
-
-        $row['status'] = VIEWER_REGISTRATION_STATUS_EMAIL_VERIFIED;
-        $row['verification_token_consumed_at'] = $now;
-        $row['verified_at'] = $now;
-        $row['expires_at'] = $verifiedExpiry;
-        viewer_registration_activation_establish($row);
-
-        if ($ownsTransaction) {
-            $pdo->commit();
-        }
-        return $row;
+            // The request transition is authoritative; deleting children additionally removes
+            // sibling lookup rows immediately instead of waiting for scheduled cleanup.
+            viewer_registration_model_verification_delete_for_request((int) $row['id']);
+            $row['status'] = VIEWER_REGISTRATION_STATUS_EMAIL_VERIFIED;
+            $row['verification_token_consumed_at'] = $now;
+            $row['verified_at'] = $now;
+            $row['expires_at'] = $verifiedExpiry;
+            viewer_registration_activation_establish($row);
+            return $row;
+        });
     } catch (Throwable $exception) {
         viewer_registration_activation_clear();
-        if ($ownsTransaction && $pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
         throw $exception;
     }
 }
@@ -1802,48 +1507,20 @@ function viewer_invitation_revoke(int $invitationId): bool
     if ($invitationId <= 0 || !viewer_registration_storage_available()) {
         return false;
     }
-
-    $pdo = db();
-    $ownsTransaction = !$pdo->inTransaction();
-    if ($ownsTransaction) {
-        $pdo->beginTransaction();
-    }
-
-    try {
+    return viewer_registration_model_transaction(static function () use ($invitationId): bool {
         $now = now_sql();
-        $stmt = $pdo->prepare(
-            'UPDATE viewer_invitations SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL'
-        );
-        $stmt->execute([$now, $invitationId]);
-        if ($stmt->rowCount() !== 1) {
-            if ($ownsTransaction) {
-                $pdo->commit();
-            }
+        if (!viewer_registration_model_invitation_revoke($invitationId, $now)) {
             return false;
         }
-
-        $pdo->prepare(
-            'UPDATE viewer_registration_requests SET status = ?, cancelled_at = ?, updated_at = ? '
-            . 'WHERE viewer_invitation_id = ? AND status IN (?, ?)'
-        )->execute([
-            VIEWER_REGISTRATION_STATUS_CANCELLED,
-            $now,
-            $now,
+        viewer_registration_model_cancel_for_invitation(
             $invitationId,
+            VIEWER_REGISTRATION_STATUS_CANCELLED,
             VIEWER_REGISTRATION_STATUS_PENDING,
             VIEWER_REGISTRATION_STATUS_EMAIL_VERIFIED,
-        ]);
-
-        if ($ownsTransaction) {
-            $pdo->commit();
-        }
+            $now
+        );
         return true;
-    } catch (Throwable $exception) {
-        if ($ownsTransaction && $pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
-        throw $exception;
-    }
+    });
 }
 
 /**
@@ -1861,14 +1538,10 @@ function viewer_invitation_delete(int $invitationId): bool
     if ($invitationId <= 0 || !viewer_registration_storage_available()) {
         return false;
     }
-
     // Invalidate first. viewer_invitation_revoke() also cancels a pending or email-verified
     // registration request. A previously revoked invitation may still be deleted below.
     viewer_invitation_revoke($invitationId);
-
-    $stmt = db()->prepare('DELETE FROM viewer_invitations WHERE id = ?');
-    $stmt->execute([$invitationId]);
-    return $stmt->rowCount() === 1;
+    return viewer_registration_model_invitation_delete($invitationId);
 }
 /**
  * Run bounded cleanup for pending registrations and invitation capabilities.
@@ -1882,48 +1555,21 @@ function viewer_registration_maintenance_cleanup(): array
     if (!viewer_registration_storage_available()) {
         return ['storage' => 'unavailable'];
     }
-
-    $pdo = db();
-    $ownsTransaction = !$pdo->inTransaction();
-    if ($ownsTransaction) {
-        $pdo->beginTransaction();
-    }
-
-    try {
+    return viewer_registration_model_transaction(static function (): array {
         viewer_registration_capacity_lock();
         $now = now_sql();
-        $verificationDelete = $pdo->prepare(
-            'DELETE FROM viewer_registration_verification_tokens WHERE expires_at < ? LIMIT 1000'
-        );
-        $verificationDelete->execute([$now]);
-        $verificationTokensDeleted = $verificationDelete->rowCount();
-
-        $before = (int) $pdo->query('SELECT COUNT(*) FROM viewer_registration_requests')->fetchColumn();
+        $verificationTokensDeleted = viewer_registration_model_maintenance_delete_verification($now);
+        $before = viewer_registration_model_request_count();
         $remaining = viewer_registration_cleanup_requests_locked();
         $requestsDeleted = max(0, $before - $remaining);
-
         $oldInvitationCutoff = date('Y-m-d H:i:s', time() - 604800);
-        $inviteDelete = $pdo->prepare(
-            'DELETE FROM viewer_invitations WHERE expires_at < ? '
-            . 'OR revoked_at < ? OR claimed_at < ? LIMIT 1000'
-        );
-        $inviteDelete->execute([now_sql(), $oldInvitationCutoff, $oldInvitationCutoff]);
-        $invitationsDeleted = $inviteDelete->rowCount();
-
-        if ($ownsTransaction) {
-            $pdo->commit();
-        }
+        $invitationsDeleted = viewer_registration_model_maintenance_delete_invitations($now, $oldInvitationCutoff);
         return [
             'registration_requests' => $requestsDeleted,
             'verification_tokens' => $verificationTokensDeleted,
             'invitations' => $invitationsDeleted,
         ];
-    } catch (Throwable $exception) {
-        if ($ownsTransaction && $pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
-        throw $exception;
-    }
+    });
 }
 
 /**
@@ -1953,21 +1599,10 @@ function viewer_registration_activate_verified(string $password): array
         return ['activated' => false, 'reason' => 'activation_state_invalid', 'account_id' => null];
     }
 
-    $pdo = db();
-    $ownsTransaction = !$pdo->inTransaction();
-    if ($ownsTransaction) {
-        $pdo->beginTransaction();
-    }
-
-    try {
+    return viewer_registration_model_transaction(static function () use ($activation, $password): array {
         $registrationCount = viewer_registration_capacity_lock();
         $registrationCount = viewer_registration_capacity_recount_locked();
-
-        $requestStmt = $pdo->prepare(
-            'SELECT * FROM viewer_registration_requests WHERE id = ? LIMIT 1 FOR UPDATE'
-        );
-        $requestStmt->execute([$activation['request_id']]);
-        $request = $requestStmt->fetch();
+        $request = viewer_registration_model_request_lock($activation['request_id']);
         $requestExpiry = $request ? strtotime((string) ($request['expires_at'] ?? '')) : false;
         $verifiedAt = $request ? strtotime((string) ($request['verified_at'] ?? '')) : false;
         if (!$request
@@ -1977,26 +1612,17 @@ function viewer_registration_activate_verified(string $password): array
             || $requestExpiry < time()
             || $verifiedAt === false
             || !viewer_registration_activation_matches_row($activation, $request)) {
-            if ($ownsTransaction) {
-                $pdo->commit();
-            }
             viewer_registration_activation_clear();
             return ['activated' => false, 'reason' => 'activation_state_invalid', 'account_id' => null];
         }
-
         if (!viewer_registration_request_allowed_by_current_mode($request)) {
-            if ($ownsTransaction) {
-                $pdo->commit();
-            }
             viewer_registration_activation_clear();
             return ['activated' => false, 'reason' => 'registration_mode_restricted', 'account_id' => null];
         }
 
         $invitationId = (int) ($request['viewer_invitation_id'] ?? 0);
         if ($invitationId > 0) {
-            $inviteStmt = $pdo->prepare('SELECT * FROM viewer_invitations WHERE id = ? LIMIT 1 FOR UPDATE');
-            $inviteStmt->execute([$invitationId]);
-            $invitation = $inviteStmt->fetch();
+            $invitation = viewer_registration_model_invitation_lock($invitationId);
             $inviteExpiry = $invitation ? strtotime((string) ($invitation['expires_at'] ?? '')) : false;
             $expectedFingerprint = trim((string) ($invitation['target_email_fingerprint'] ?? ''));
             $requestFingerprint = viewer_email_fingerprint((string) ($request['normalized_email'] ?? ''));
@@ -2006,20 +1632,12 @@ function viewer_registration_activate_verified(string $password): array
                 || $inviteExpiry === false
                 || $inviteExpiry < time()
                 || ($expectedFingerprint !== '' && ($requestFingerprint === '' || !hash_equals($expectedFingerprint, $requestFingerprint)))) {
-                if ($ownsTransaction) {
-                    $pdo->commit();
-                }
                 viewer_registration_activation_clear();
                 return ['activated' => false, 'reason' => 'invitation_invalid', 'account_id' => null];
             }
         }
 
-        $existingStmt = $pdo->prepare('SELECT id FROM viewer_accounts WHERE normalized_email = ? LIMIT 1');
-        $existingStmt->execute([(string) $request['normalized_email']]);
-        if ($existingStmt->fetchColumn() !== false) {
-            if ($ownsTransaction) {
-                $pdo->commit();
-            }
+        if (viewer_registration_model_account_exists((string) $request['normalized_email'])) {
             viewer_registration_activation_clear();
             return ['activated' => false, 'reason' => 'account_exists', 'account_id' => null];
         }
@@ -2027,70 +1645,38 @@ function viewer_registration_activate_verified(string $password): array
         viewer_account_capacity_lock();
         $accountCount = viewer_account_capacity_recount_locked();
         if ($accountCount >= viewer_account_cap()) {
-            if ($ownsTransaction) {
-                $pdo->commit();
-            }
             return ['activated' => false, 'reason' => 'account_capacity', 'account_id' => null];
         }
-
         if (!viewer_password_input_is_acceptable($password)) {
-            if ($ownsTransaction) {
-                $pdo->commit();
-            }
             return ['activated' => false, 'reason' => 'password_policy', 'account_id' => null];
         }
 
         $passwordHash = viewer_password_hash($password);
         $now = now_sql();
-        $insert = $pdo->prepare(
-            'INSERT INTO viewer_accounts '
-            . '(email, normalized_email, password_hash, status, security_version, email_verified_at, password_changed_at, created_at, updated_at) '
-            . 'VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?)'
-        );
-        $insert->execute([
+        $accountId = viewer_registration_model_activate_account(
             (string) $request['email'],
             (string) $request['normalized_email'],
             $passwordHash,
             VIEWER_ACCOUNT_STATUS_ACTIVE,
             (string) $request['verified_at'],
-            $now,
-            $now,
-            $now,
-        ]);
-        $accountId = (int) $pdo->lastInsertId();
+            $now
+        );
         if ($accountId <= 0) {
             throw new RuntimeException('Viewer account activation did not create a durable account.');
         }
-
-        $pdo->prepare(
-            'UPDATE viewer_account_state SET account_count = ?, updated_at = ? WHERE state_key = ?'
-        )->execute([$accountCount + 1, $now, VIEWER_ACCOUNT_CAPACITY_STATE_KEY]);
-
-        $delete = $pdo->prepare('DELETE FROM viewer_registration_requests WHERE id = ?');
-        $delete->execute([(int) $request['id']]);
-        if ($delete->rowCount() !== 1) {
+        viewer_registration_model_account_capacity_set(VIEWER_ACCOUNT_CAPACITY_STATE_KEY, $accountCount + 1, $now);
+        if (!viewer_registration_model_request_delete((int) $request['id'])) {
             throw new RuntimeException('Viewer activation could not retire the staging registration.');
         }
-        $pdo->prepare(
-            'UPDATE viewer_registration_state SET active_request_count = ?, updated_at = ? WHERE state_key = ?'
-        )->execute([max(0, $registrationCount - 1), $now, VIEWER_REGISTRATION_STATE_KEY]);
+        viewer_registration_model_capacity_set(VIEWER_REGISTRATION_STATE_KEY, max(0, $registrationCount - 1), $now);
 
-        if (function_exists(__NAMESPACE__ . '\\viewer_security_event_record')) {
+        if (function_exists(__NAMESPACE__ . '\viewer_security_event_record')) {
             viewer_security_event_record('viewer.account_activated', $accountId, 'success', [
                 'account_state' => VIEWER_ACCOUNT_STATUS_ACTIVE,
                 'security_version' => 1,
             ]);
         }
-
-        if ($ownsTransaction) {
-            $pdo->commit();
-        }
         viewer_registration_activation_clear();
         return ['activated' => true, 'reason' => 'activated', 'account_id' => $accountId];
-    } catch (Throwable $exception) {
-        if ($ownsTransaction && $pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
-        throw $exception;
-    }
+    });
 }

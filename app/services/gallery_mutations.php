@@ -37,15 +37,28 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 use FilesystemIterator;
-use PDO;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use RuntimeException;
 use Throwable;
-use function Gallery\Core\db;
 use function Gallery\Core\normalize_relative_path;
 use function Gallery\Core\now_sql;
 use function Gallery\Core\path_inside;
+use function Gallery\Models\gallery_mutation_model_delete_dependency;
+use function Gallery\Models\gallery_mutation_model_delete_images;
+use function Gallery\Models\gallery_mutation_model_delete_subtree;
+use function Gallery\Models\gallery_mutation_model_delete_subtree_in_transaction;
+use function Gallery\Models\gallery_mutation_model_first_cover_candidate;
+use function Gallery\Models\gallery_mutation_model_hierarchy_rows;
+use function Gallery\Models\gallery_mutation_model_image_belongs_to_galleries;
+use function Gallery\Models\gallery_mutation_model_image_ids_for_galleries;
+use function Gallery\Models\gallery_mutation_model_max_image_sort_order;
+use function Gallery\Models\gallery_mutation_model_move_images;
+use function Gallery\Models\gallery_mutation_model_null_dependency;
+use function Gallery\Models\gallery_mutation_model_subtree_ids;
+use function Gallery\Models\gallery_mutation_model_subtree_rows;
+use function Gallery\Models\gallery_mutation_model_sync_parent_map;
+use function Gallery\Models\gallery_mutation_model_update_gallery_paths;
 
 /**
  * Build a literal folder-path descendant pattern for SQL LIKE predicates.
@@ -83,10 +96,7 @@ function gallery_subtree_rows(int $galleryId): array
     }
     // $folderPath stores an intermediate value used by the surrounding gallery workflow.
     $folderPath = normalize_relative_path((string) $gallery['folder_path']);
-    // $stmt stores an intermediate value used by the surrounding gallery workflow.
-    $stmt = db()->prepare("SELECT * FROM galleries WHERE folder_path = ? OR folder_path LIKE ? ESCAPE '=' ORDER BY folder_path");
-    $stmt->execute([$folderPath, gallery_folder_path_descendant_like_pattern($folderPath)]);
-    return $stmt->fetchAll();
+    return gallery_mutation_model_subtree_rows($folderPath, gallery_folder_path_descendant_like_pattern($folderPath));
 }
 
 /**
@@ -205,7 +215,7 @@ function delete_gallery_subtrees(array $galleryIds): array
  */
 function gallery_delete_database_subtree_rows(array $galleryIds): int
 {
-    // $galleryIds stores unique positive gallery ids accepted by SQL cleanup.
+    // $galleryIds stores unique positive gallery ids accepted by cleanup.
     $galleryIds = array_values(array_unique(array_filter(array_map('intval', $galleryIds), static fn (int $galleryId): bool => $galleryId > 0)));
     if (!$galleryIds) {
         return 0;
@@ -218,20 +228,7 @@ function gallery_delete_database_subtree_rows(array $galleryIds): int
         'Gallery deletion is temporarily unavailable because the required database schema could not be verified.'
     );
 
-    // $pdo stores the active connection for the atomic database cleanup.
-    $pdo = db();
-    $pdo->beginTransaction();
-    try {
-        // $deletedRows stores the actual number of galleries removed.
-        $deletedRows = gallery_delete_database_subtree_rows_in_transaction($galleryIds);
-        $pdo->commit();
-        return $deletedRows;
-    } catch (Throwable $exception) {
-        if ($pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
-        throw $exception;
-    }
+    return gallery_mutation_model_delete_subtree($galleryIds, gallery_mutation_delete_dependency_availability());
 }
 
 /**
@@ -247,54 +244,13 @@ function gallery_delete_database_subtree_rows(array $galleryIds): int
  */
 function gallery_delete_database_subtree_rows_in_transaction(array $galleryIds): int
 {
-    // $galleryIds stores unique positive gallery ids accepted by SQL cleanup.
+    // $galleryIds stores unique positive gallery ids accepted by cleanup.
     $galleryIds = array_values(array_unique(array_filter(array_map('intval', $galleryIds), static fn (int $galleryId): bool => $galleryId > 0)));
     if (!$galleryIds) {
         return 0;
     }
 
-    // $pdo stores the shared transaction-owning connection.
-    $pdo = db();
-    if (!$pdo->inTransaction()) {
-        throw new RuntimeException('Gallery database subtree cleanup requires an active transaction.');
-    }
-
-    // $imageIds stores all images that belong to the removed gallery rows.
-    $imageIds = gallery_image_ids_for_gallery_ids($galleryIds);
-    if ($imageIds) {
-        gallery_null_rows_by_ids('galleries', 'cover_image_id', $imageIds);
-        gallery_null_rows_by_ids('telemetry_sessions', 'first_image_id', $imageIds);
-        gallery_null_rows_by_ids('telemetry_sessions', 'last_image_id', $imageIds);
-        gallery_null_rows_by_ids('telemetry_events', 'image_id', $imageIds);
-        gallery_null_rows_by_ids('telemetry_job_runs', 'image_id', $imageIds);
-
-        gallery_delete_rows_by_ids('image_thumbnail_variants', 'image_id', $imageIds);
-        gallery_delete_rows_by_ids('image_ai_analysis_jobs', 'image_id', $imageIds);
-        gallery_delete_rows_by_ids('image_ai_metadata', 'image_id', $imageIds);
-        gallery_delete_rows_by_ids('picture_game_votes', 'image_a_id', $imageIds);
-        gallery_delete_rows_by_ids('picture_game_votes', 'image_b_id', $imageIds);
-        gallery_delete_rows_by_ids('picture_game_votes', 'winner_image_id', $imageIds);
-        gallery_delete_rows_by_ids('image_tags', 'image_id', $imageIds);
-        gallery_delete_rows_by_ids('image_votes', 'image_id', $imageIds);
-    }
-
-    gallery_null_rows_by_ids('telemetry_sessions', 'first_gallery_id', $galleryIds);
-    gallery_null_rows_by_ids('telemetry_sessions', 'last_gallery_id', $galleryIds);
-    gallery_null_rows_by_ids('telemetry_events', 'gallery_id', $galleryIds);
-    gallery_null_rows_by_ids('telemetry_job_runs', 'gallery_id', $galleryIds);
-    gallery_null_rows_by_ids('galleries', 'parent_id', $galleryIds);
-
-    gallery_delete_rows_by_ids('gallery_flight_maps', 'gallery_id', $galleryIds);
-    gallery_delete_rows_by_ids('gallery_upload_tokens', 'gallery_id', $galleryIds);
-    gallery_delete_rows_by_ids('mobile_webdav_upload_tokens', 'gallery_id', $galleryIds);
-    gallery_delete_rows_by_ids('image_thumbnail_variants', 'gallery_id', $galleryIds);
-    gallery_delete_rows_by_ids('image_ai_analysis_jobs', 'gallery_id', $galleryIds);
-    gallery_delete_rows_by_ids('picture_game_votes', 'gallery_id', $galleryIds);
-    gallery_delete_rows_by_ids('gallery_tags', 'gallery_id', $galleryIds);
-    gallery_delete_rows_by_ids('zip_archives', 'gallery_id', $galleryIds);
-    gallery_delete_rows_by_ids('images', 'gallery_id', $galleryIds);
-
-    return gallery_delete_rows_by_ids('galleries', 'id', $galleryIds);
+    return gallery_mutation_model_delete_subtree_in_transaction($galleryIds, gallery_mutation_delete_dependency_availability());
 }
 
 /**
@@ -311,11 +267,8 @@ function delete_missing_gallery_database_subtree_by_folder_path(string $folderPa
         return 0;
     }
 
-    // $stmt stores the lookup for stale exact and descendant gallery rows.
-    $stmt = db()->prepare("SELECT id FROM galleries WHERE folder_path = ? OR folder_path LIKE ? ESCAPE '=' ORDER BY folder_path DESC");
-    $stmt->execute([$folderPath, gallery_folder_path_descendant_like_pattern($folderPath)]);
     // $ids stores stale gallery ids that can no longer be reached on disk.
-    $ids = array_values(array_unique(array_filter(array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN)), static fn (int $galleryId): bool => $galleryId > 0)));
+    $ids = gallery_mutation_model_subtree_ids($folderPath, gallery_folder_path_descendant_like_pattern($folderPath), true);
     if (!$ids) {
         return 0;
     }
@@ -343,19 +296,7 @@ function gallery_image_ids_for_gallery_ids(array $galleryIds): array
         'Gallery image ownership schema could not be verified. The deletion was not started.'
     );
 
-    // $imageIds stores the merged image ids from chunked SELECT queries.
-    $imageIds = [];
-    foreach (array_chunk($galleryIds, 500) as $chunk) {
-        // $placeholders stores SQL placeholders for this chunk.
-        $placeholders = implode(',', array_fill(0, count($chunk), '?'));
-        // $stmt stores the prepared image-id lookup for this chunk.
-        $stmt = db()->prepare('SELECT id FROM images WHERE gallery_id IN (' . $placeholders . ')');
-        $stmt->execute($chunk);
-        foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $imageId) {
-            $imageIds[(int) $imageId] = (int) $imageId;
-        }
-    }
-    return array_values($imageIds);
+    return gallery_mutation_model_image_ids_for_galleries($galleryIds);
 }
 
 /**
@@ -368,7 +309,7 @@ function gallery_image_ids_for_gallery_ids(array $galleryIds): array
  */
 function gallery_delete_rows_by_ids(string $table, string $column, array $ids): int
 {
-    // $ids stores unique positive ids accepted by this SQL mutation.
+    // $ids stores unique positive ids accepted by this mutation.
     $ids = array_values(array_unique(array_filter(array_map('intval', $ids), static fn (int $id): bool => $id > 0)));
     if (!$ids) {
         return 0;
@@ -376,22 +317,7 @@ function gallery_delete_rows_by_ids(string $table, string $column, array $ids): 
     if (!mutation_schema_optional_table_column_available('mutation.gallery_delete_dependency', $table, $column, 'gallery.delete_dependency_rows')) {
         return 0;
     }
-
-    // $safeTable stores a validated SQL identifier.
-    $safeTable = gallery_mutation_sql_identifier($table);
-    // $safeColumn stores a validated SQL identifier.
-    $safeColumn = gallery_mutation_sql_identifier($column);
-    // $deletedRows stores rows affected across chunks.
-    $deletedRows = 0;
-    foreach (array_chunk($ids, 500) as $chunk) {
-        // $placeholders stores SQL placeholders for this chunk.
-        $placeholders = implode(',', array_fill(0, count($chunk), '?'));
-        // $stmt stores the prepared delete for this chunk.
-        $stmt = db()->prepare('DELETE FROM `' . $safeTable . '` WHERE `' . $safeColumn . '` IN (' . $placeholders . ')');
-        $stmt->execute($chunk);
-        $deletedRows += $stmt->rowCount();
-    }
-    return $deletedRows;
+    return gallery_mutation_model_delete_dependency($table . '.' . $column, $ids);
 }
 
 /**
@@ -404,7 +330,7 @@ function gallery_delete_rows_by_ids(string $table, string $column, array $ids): 
  */
 function gallery_null_rows_by_ids(string $table, string $column, array $ids): int
 {
-    // $ids stores unique positive ids accepted by this SQL mutation.
+    // $ids stores unique positive ids accepted by this mutation.
     $ids = array_values(array_unique(array_filter(array_map('intval', $ids), static fn (int $id): bool => $id > 0)));
     if (!$ids) {
         return 0;
@@ -412,22 +338,49 @@ function gallery_null_rows_by_ids(string $table, string $column, array $ids): in
     if (!mutation_schema_optional_table_column_available('mutation.gallery_delete_dependency', $table, $column, 'gallery.null_dependency_rows')) {
         return 0;
     }
+    return gallery_mutation_model_null_dependency($table . '.' . $column, $ids);
+}
 
-    // $safeTable stores a validated SQL identifier.
-    $safeTable = gallery_mutation_sql_identifier($table);
-    // $safeColumn stores a validated SQL identifier.
-    $safeColumn = gallery_mutation_sql_identifier($column);
-    // $updatedRows stores rows affected across chunks.
-    $updatedRows = 0;
-    foreach (array_chunk($ids, 500) as $chunk) {
-        // $placeholders stores SQL placeholders for this chunk.
-        $placeholders = implode(',', array_fill(0, count($chunk), '?'));
-        // $stmt stores the prepared update for this chunk.
-        $stmt = db()->prepare('UPDATE `' . $safeTable . '` SET `' . $safeColumn . '` = NULL WHERE `' . $safeColumn . '` IN (' . $placeholders . ')');
-        $stmt->execute($chunk);
-        $updatedRows += $stmt->rowCount();
+/**
+ * Resolve optional historical dependency availability for gallery cleanup models.
+ *
+ * Core gallery/image ownership columns are validated separately by the mutation
+ * schema gate. Optional dependencies may be absent on older installations, so
+ * the service owns capability policy while the model owns the fixed SQL targets.
+ *
+ * @return array<string,bool> Availability keyed by fixed model dependency name.
+ */
+function gallery_mutation_delete_dependency_availability(): array
+{
+    $dependencies = [
+        'galleries.cover_image_id', 'galleries.parent_id',
+        'telemetry_sessions.first_image_id', 'telemetry_sessions.last_image_id',
+        'telemetry_events.image_id', 'telemetry_job_runs.image_id',
+        'telemetry_sessions.first_gallery_id', 'telemetry_sessions.last_gallery_id',
+        'telemetry_events.gallery_id', 'telemetry_job_runs.gallery_id',
+        'image_thumbnail_variants.image_id', 'image_thumbnail_variants.gallery_id',
+        'image_ai_analysis_jobs.image_id', 'image_ai_analysis_jobs.gallery_id',
+        'image_ai_metadata.image_id',
+        'picture_game_votes.image_a_id', 'picture_game_votes.image_b_id',
+        'picture_game_votes.winner_image_id', 'picture_game_votes.gallery_id',
+        'image_tags.image_id', 'image_votes.image_id', 'image_translations.image_id',
+        'viewer_favourites.image_id', 'viewer_collection_items.image_id',
+        'duplicate_photo_ledger_pairs.image_id_low', 'duplicate_photo_ledger_pairs.image_id_high',
+        'gallery_flight_maps.gallery_id', 'gallery_upload_tokens.gallery_id',
+        'mobile_webdav_upload_tokens.gallery_id', 'gallery_tags.gallery_id',
+        'zip_archives.gallery_id', 'images.gallery_id',
+    ];
+    $availability = [];
+    foreach ($dependencies as $dependency) {
+        [$table, $column] = explode('.', $dependency, 2);
+        $availability[$dependency] = mutation_schema_optional_table_column_available(
+            'mutation.gallery_delete_dependency',
+            $table,
+            $column,
+            'gallery.delete_dependency_rows'
+        );
     }
-    return $updatedRows;
+    return $availability;
 }
 
 /**
@@ -759,49 +712,14 @@ function delete_gallery_images(int $galleryId, array $imageIds): array
 
     // $imageIdsToDelete stores the actual database rows that will be removed.
     $imageIdsToDelete = array_map(static fn (array $image): int => (int) $image['id'], $images);
-    // $placeholders stores SQL placeholders for the selected image ids.
-    $placeholders = implode(',', array_fill(0, count($imageIdsToDelete), '?'));
-    // $pdo stores the active database connection used for the image row deletion.
-    $pdo = db();
-    $pdo->beginTransaction();
     try {
-        // Clear nullable references explicitly so older shared-hosting databases
-        // remain deterministic even if one historical foreign key is missing.
-        gallery_null_rows_by_ids('galleries', 'cover_image_id', $imageIdsToDelete);
-        gallery_null_rows_by_ids('telemetry_sessions', 'first_image_id', $imageIdsToDelete);
-        gallery_null_rows_by_ids('telemetry_sessions', 'last_image_id', $imageIdsToDelete);
-        gallery_null_rows_by_ids('telemetry_events', 'image_id', $imageIdsToDelete);
-        gallery_null_rows_by_ids('telemetry_job_runs', 'image_id', $imageIdsToDelete);
-
-        // Remove known dependent rows explicitly. Existing ON DELETE CASCADE keys
-        // still work, but this mirrors subtree deletion safety on older installs.
-        gallery_delete_rows_by_ids('image_thumbnail_variants', 'image_id', $imageIdsToDelete);
-        gallery_delete_rows_by_ids('image_ai_analysis_jobs', 'image_id', $imageIdsToDelete);
-        gallery_delete_rows_by_ids('image_ai_metadata', 'image_id', $imageIdsToDelete);
-        gallery_delete_rows_by_ids('picture_game_votes', 'image_a_id', $imageIdsToDelete);
-        gallery_delete_rows_by_ids('picture_game_votes', 'image_b_id', $imageIdsToDelete);
-        gallery_delete_rows_by_ids('picture_game_votes', 'winner_image_id', $imageIdsToDelete);
-        gallery_delete_rows_by_ids('image_tags', 'image_id', $imageIdsToDelete);
-        gallery_delete_rows_by_ids('image_votes', 'image_id', $imageIdsToDelete);
-        gallery_delete_rows_by_ids('image_translations', 'image_id', $imageIdsToDelete);
-        gallery_delete_rows_by_ids('viewer_favourites', 'image_id', $imageIdsToDelete);
-        gallery_delete_rows_by_ids('viewer_collection_items', 'image_id', $imageIdsToDelete);
-        gallery_delete_rows_by_ids('duplicate_photo_ledger_pairs', 'image_id_low', $imageIdsToDelete);
-        gallery_delete_rows_by_ids('duplicate_photo_ledger_pairs', 'image_id_high', $imageIdsToDelete);
-
-        // $deleteStmt removes the selected image rows after dependencies are safe.
-        $deleteStmt = $pdo->prepare('DELETE FROM images WHERE gallery_id = ? AND id IN (' . $placeholders . ')');
-        $deleteStmt->execute(array_merge([$galleryId], $imageIdsToDelete));
-        // $deletedRows stores the number of rows removed from images.
-        $deletedRows = $deleteStmt->rowCount();
-        if ($deletedRows !== count($imageIdsToDelete)) {
-            throw new RuntimeException('Image deletion changed fewer database rows than expected.');
-        }
-        $pdo->commit();
+        // $deletedRows stores the number of rows removed from images after dependency cleanup.
+        $deletedRows = gallery_mutation_model_delete_images(
+            $galleryId,
+            $imageIdsToDelete,
+            gallery_mutation_delete_dependency_availability()
+        );
     } catch (Throwable $exception) {
-        if ($pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
         gallery_restore_staged_deletion_files($stagedFiles);
         throw $exception;
     }
@@ -1028,48 +946,20 @@ function move_gallery_images(int $sourceGalleryId, int $destinationGalleryId, ar
     $imageIdsToMove = array_map(static fn (array $image): int => (int) $image['id'], $images);
     // $destinationSortOrders stores append-style order values assigned in the destination gallery.
     $destinationSortOrders = gallery_destination_sort_orders($destinationGalleryId, $imageIdsToMove);
-    // $placeholders stores SQL placeholders for selected image ids.
-    $placeholders = implode(',', array_fill(0, count($imageIdsToMove), '?'));
-    // $pdo stores the active database connection used for ownership and cover updates.
-    $pdo = db();
-    $pdo->beginTransaction();
     try {
-        // $sourceCoverImageId stores the title picture after selected images leave the source gallery.
-        $sourceCoverImageId = gallery_cover_id_after_source_move($sourceGalleryId, $imageIdsToMove);
-        // $sourceCoverStmt keeps the source title-picture field valid before rows change owners.
-        $sourceCoverStmt = $pdo->prepare('UPDATE galleries SET cover_image_id = ?, updated_at = ? WHERE id = ? AND cover_image_id IN (' . $placeholders . ')');
-        $sourceCoverStmt->execute(array_merge([$sourceCoverImageId, now_sql(), $sourceGalleryId], $imageIdsToMove));
-
-        // $updatedRows counts how many database image rows were transferred.
-        $updatedRows = 0;
-        foreach ($imageIdsToMove as $imageId) {
-            // $updateStmt transfers one image so its destination sort_order can be preserved predictably.
-            $updateStmt = $pdo->prepare('UPDATE images SET gallery_id = ?, sort_order = ?, updated_at = ? WHERE gallery_id = ? AND id = ?');
-            $updateStmt->execute([
-                $destinationGalleryId,
-                $destinationSortOrders[$imageId] ?? next_gallery_image_sort_order($destinationGalleryId),
-                now_sql(),
-                $sourceGalleryId,
-                $imageId,
-            ]);
-            $updatedRows += $updateStmt->rowCount();
-        }
-
-        if ((int) $updatedRows !== count($imageIdsToMove)) {
-            throw new RuntimeException('Only ' . (int) $updatedRows . ' of ' . count($imageIdsToMove) . ' image records moved.');
-        }
-
-        // $destinationCoverImageId stores the title picture after the destination receives the moved images.
-        $destinationCoverImageId = gallery_cover_id_after_destination_move($destinationGalleryId);
-        // $destinationCoverStmt updates only missing or invalid destination title-picture references.
-        $destinationCoverStmt = $pdo->prepare('UPDATE galleries SET cover_image_id = ?, updated_at = ? WHERE id = ?');
-        $destinationCoverStmt->execute([$destinationCoverImageId, now_sql(), $destinationGalleryId]);
-
-        $pdo->commit();
+        // $moveResult stores the atomic ownership and title-picture update result.
+        $moveResult = gallery_mutation_model_move_images(
+            $sourceGalleryId,
+            $destinationGalleryId,
+            $imageIdsToMove,
+            $destinationSortOrders,
+            gallery_subtree_ids($destinationGalleryId),
+            now_sql()
+        );
+        $updatedRows = (int) $moveResult['moved'];
+        $sourceCoverImageId = $moveResult['source_cover_image_id'];
+        $destinationCoverImageId = $moveResult['destination_cover_image_id'];
     } catch (Throwable $exception) {
-        if ($pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
         gallery_rollback_image_file_moves($movedFiles);
         throw $exception;
     }
@@ -1237,11 +1127,8 @@ function gallery_rollback_image_file_moves(array $movedFiles): void
  */
 function gallery_destination_sort_orders(int $destinationGalleryId, array $imageIdsToMove): array
 {
-    // $stmt stores the current destination tail value.
-    $stmt = db()->prepare('SELECT COALESCE(MAX(sort_order), 0) FROM images WHERE gallery_id = ?');
-    $stmt->execute([$destinationGalleryId]);
     // $nextSortOrder stores the first appended order number.
-    $nextSortOrder = (int) $stmt->fetchColumn() + 10;
+    $nextSortOrder = gallery_mutation_model_max_image_sort_order($destinationGalleryId) + 10;
     // $orders stores a sort_order value for each moved image id.
     $orders = [];
     foreach ($imageIdsToMove as $imageId) {
@@ -1301,23 +1188,7 @@ function gallery_cover_id_after_destination_move(int $destinationGalleryId): ?in
  */
 function gallery_first_cover_candidate_excluding(int $galleryId, array $excludedImageIds): ?int
 {
-    // $params stores query parameters for the cover candidate lookup.
-    $params = [$galleryId];
-    // $sql stores the direct-image candidate lookup.
-    $sql = "SELECT id FROM images WHERE gallery_id = ? AND relative_path NOT LIKE '%/%'";
-    if ($excludedImageIds) {
-        // $placeholders stores placeholders for images that are leaving the gallery.
-        $placeholders = implode(',', array_fill(0, count($excludedImageIds), '?'));
-        $sql .= ' AND id NOT IN (' . $placeholders . ')';
-        $params = array_merge($params, $excludedImageIds);
-    }
-    $sql .= " ORDER BY CASE WHEN visibility = 'public' THEN 0 ELSE 1 END, sort_order, filename, id LIMIT 1";
-    // $stmt stores the candidate query.
-    $stmt = db()->prepare($sql);
-    $stmt->execute($params);
-    // $candidateId stores the selected replacement or false when the gallery is empty.
-    $candidateId = $stmt->fetchColumn();
-    return $candidateId ? (int) $candidateId : null;
+    return gallery_mutation_model_first_cover_candidate($galleryId, $excludedImageIds);
 }
 
 /**
@@ -1331,15 +1202,7 @@ function gallery_image_belongs_to_gallery_branch(int $imageId, int $galleryId): 
 {
     // $galleryIds stores the receiving gallery and all descendant galleries accepted by title-picture selection.
     $galleryIds = gallery_subtree_ids($galleryId);
-    if (!$galleryIds) {
-        return false;
-    }
-    // $placeholders stores placeholders for the eligible gallery branch.
-    $placeholders = implode(',', array_fill(0, count($galleryIds), '?'));
-    // $stmt stores the ownership query.
-    $stmt = db()->prepare('SELECT COUNT(*) FROM images WHERE id = ? AND gallery_id IN (' . $placeholders . ')');
-    $stmt->execute(array_merge([$imageId], $galleryIds));
-    return (int) $stmt->fetchColumn() > 0;
+    return gallery_mutation_model_image_belongs_to_galleries($imageId, $galleryIds);
 }
 
 /**
@@ -1428,38 +1291,43 @@ function move_gallery_folder_to_parent(int $galleryId, ?int $parentId, ?string $
         $pathMap[(int) $row['id']] = $suffix === '' ? $newPath : normalize_relative_path($newPath . '/' . $suffix);
     }
 
-    // $pdo stores an intermediate value used by the surrounding gallery workflow.
-    $pdo = db();
-    // $moved stores an intermediate value used by the surrounding gallery workflow.
+    // $updates stores the complete path and parent map persisted after the filesystem rename.
+    $idsByNewPath = [];
+    foreach ($pathMap as $id => $path) {
+        $idsByNewPath[$path] = (int) $id;
+    }
+    $updates = [];
+    foreach ($pathMap as $id => $path) {
+        if ((int) $id === $galleryId) {
+            $rowParentId = $parent ? (int) $parent['id'] : null;
+        } else {
+            $parentPath = normalize_relative_path(str_replace('\\', '/', dirname($path)));
+            $rowParentId = ($parentPath === '' || $parentPath === '.') ? null : ($idsByNewPath[$parentPath] ?? null);
+            if ($rowParentId === null && $parentPath !== '' && $parentPath !== '.') {
+                $rowParent = find_parent_gallery_for_path($path);
+                $rowParentId = $rowParent ? (int) $rowParent['id'] : null;
+            }
+        }
+        $updates[] = [
+            'id' => (int) $id,
+            'folder_path' => $path,
+            'folder_path_hash' => hash('sha256', $path),
+            'parent_id' => $rowParentId,
+        ];
+    }
+
+    // $moved stores whether the filesystem rename must be rolled back after a persistence failure.
     $moved = false;
     try {
-        $pdo->beginTransaction();
         if (!rename($oldAbs, $newAbs)) {
             throw new RuntimeException('Could not move gallery folder on disk.');
         }
-        // $moved stores an intermediate value used by the surrounding gallery workflow.
         $moved = true;
-        // $stmt stores an intermediate value used by the surrounding gallery workflow.
-        $stmt = $pdo->prepare('UPDATE galleries SET folder_path = ?, folder_path_hash = ?, parent_id = ?, updated_at = ? WHERE id = ?');
-        foreach ($pathMap as $id => $path) {
-            // $rowParentId stores an intermediate value used by the surrounding gallery workflow.
-            $rowParentId = $id === $galleryId ? ($parent ? (int) $parent['id'] : null) : null;
-            if ($id !== $galleryId) {
-                // $rowParent stores an intermediate value used by the surrounding gallery workflow.
-                $rowParent = find_parent_gallery_for_path($path);
-                // $rowParentId stores an intermediate value used by the surrounding gallery workflow.
-                $rowParentId = $rowParent ? (int) $rowParent['id'] : null;
-            }
-            $stmt->execute([$path, hash('sha256', $path), $rowParentId, now_sql(), $id]);
-        }
-        $pdo->commit();
+        gallery_mutation_model_update_gallery_paths($updates, now_sql());
         if (function_exists(__NAMESPACE__ . '\smart_gallery_graph_cache_clear')) {
             smart_gallery_graph_cache_clear();
         }
     } catch (Throwable $exception) {
-        if ($pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
         if ($moved && is_dir($newAbs) && !is_dir($oldAbs)) {
             @rename($newAbs, $oldAbs);
         }
@@ -1617,10 +1485,8 @@ function sync_gallery_parent_ids(bool $smartGalleryGraphPrevalidated = false): v
 {
     // $hierarchyChanged tracks repairs that require clean public paths to be rebuilt.
     $hierarchyChanged = false;
-    // Variable $galleries stores this steps working value.
-    $stmt = db()->prepare('SELECT id, folder_path, parent_id FROM galleries ORDER BY folder_path');
-    $stmt->execute();
-    $galleries = $stmt->fetchAll();
+    // $galleries stores the current hierarchy rows before missing ancestors are repaired.
+    $galleries = gallery_mutation_model_hierarchy_rows();
     foreach ($galleries as $gallery) {
         // Missing intermediate gallery rows are repaired before parent lookup.
         // This fixes older imports where a deep folder was imported without its
@@ -1631,9 +1497,7 @@ function sync_gallery_parent_ids(bool $smartGalleryGraphPrevalidated = false): v
     }
 
     // New ancestor rows may have been inserted above, so read the final hierarchy once.
-    $stmt = db()->prepare('SELECT id, folder_path, parent_id FROM galleries ORDER BY folder_path');
-    $stmt->execute();
-    $galleries = $stmt->fetchAll();
+    $galleries = gallery_mutation_model_hierarchy_rows();
     // $galleryIdsByPath stores gallery ids by normalized folder path for O(1) parent lookup.
     $galleryIdsByPath = [];
     foreach ($galleries as $gallery) {
@@ -1654,25 +1518,7 @@ function sync_gallery_parent_ids(bool $smartGalleryGraphPrevalidated = false): v
         smart_gallery_validate_gallery_parent_map($desiredParentById);
     }
 
-    // $clearParent stores the reusable statement for root rows that have stale parent ids.
-    $clearParent = db()->prepare('UPDATE galleries SET parent_id = NULL, updated_at = ? WHERE id = ? AND parent_id IS NOT NULL');
-    // $setParent stores the reusable statement for rows whose filesystem parent changed.
-    $setParent = db()->prepare('UPDATE galleries SET parent_id = ?, updated_at = ? WHERE id = ? AND (parent_id IS NULL OR parent_id <> ?)');
-    foreach ($galleries as $gallery) {
-        $galleryId = (int) $gallery['id'];
-        $currentParentId = $gallery['parent_id'] === null ? 0 : (int) $gallery['parent_id'];
-        $desiredParentId = (int) ($desiredParentById[$galleryId] ?? 0);
-        if ($currentParentId === $desiredParentId) {
-            continue;
-        }
-        if ($desiredParentId <= 0) {
-            $clearParent->execute([now_sql(), $galleryId]);
-            $hierarchyChanged = $hierarchyChanged || $clearParent->rowCount() > 0;
-            continue;
-        }
-        $setParent->execute([$desiredParentId, now_sql(), $galleryId, $desiredParentId]);
-        $hierarchyChanged = $hierarchyChanged || $setParent->rowCount() > 0;
-    }
+    $hierarchyChanged = gallery_mutation_model_sync_parent_map($galleries, $desiredParentById, now_sql()) || $hierarchyChanged;
 
     if ($hierarchyChanged && function_exists(__NAMESPACE__ . '\smart_gallery_graph_cache_clear')) {
         smart_gallery_graph_cache_clear();
@@ -1690,16 +1536,13 @@ function sync_gallery_parent_ids(bool $smartGalleryGraphPrevalidated = false): v
  */
 function gallery_subtree_ids(int $galleryId): array
 {
-    // Variable $gallery stores this steps working value.
+    // $gallery stores this steps working value.
     $gallery = find_gallery($galleryId);
     if (!$gallery) {
         return [];
     }
-    // Variable $folderPath stores this steps working value.
+    // $folderPath stores this steps working value.
     $folderPath = normalize_relative_path((string) $gallery['folder_path']);
-    // Variable $stmt stores this steps working value.
-    $stmt = db()->prepare("SELECT id FROM galleries WHERE folder_path = ? OR folder_path LIKE ? ESCAPE '=' ORDER BY folder_path");
-    $stmt->execute([$folderPath, gallery_folder_path_descendant_like_pattern($folderPath)]);
-    return array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+    return gallery_mutation_model_subtree_ids($folderPath, gallery_folder_path_descendant_like_pattern($folderPath));
 }
 

@@ -32,7 +32,8 @@ $root = dirname(__DIR__);
 $service = file_get_contents($root . '/app/services/gallery_benchmark.php');
 $mediaController = file_get_contents($root . '/app/controllers/public_media.php');
 $adminController = file_get_contents($root . '/app/controllers/admin_gallery_benchmark.php');
-$profiler = file_get_contents($root . '/app/services/public_render_profiler.php');
+$profiler = (string) file_get_contents($root . '/app/services/public_render_profiler.php')
+    . (string) file_get_contents($root . '/app/views/public_render_profiler.php');
 $dispatch = file_get_contents($root . '/app/bootstrap/dispatch.php');
 $adminJs = file_get_contents($root . '/public/assets/gallery-modules/admin-gallery-benchmark.js');
 $lightboxJs = file_get_contents($root . '/public/assets/gallery-modules/lightbox.js');

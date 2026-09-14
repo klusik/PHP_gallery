@@ -37,6 +37,8 @@ declare(strict_types=1);
 namespace Gallery\Core;
 
 
+// Load the dependency-free Core request adapter for isolated service consumers.
+require_once __DIR__ . '/request_data.php';
 // Load database-facing MVC models before service-layer orchestration.
 require_once __DIR__ . '/models.php';
 // Load DB-backed application settings before any feature module reads app_setting().
@@ -93,9 +95,13 @@ require_once __DIR__ . '/services/favorite_galleries.php';
 require_once __DIR__ . '/services/gallery_picker.php';
 // Load separated service modules. These require_once calls preserve the legacy app/services.php include contract.
 require_once __DIR__ . '/services/gallery_mutations.php';
+require_once __DIR__ . '/services/image_bulk_mutations.php';
+require_once __DIR__ . '/services/image_editor_mutations.php';
 require_once __DIR__ . '/services/gallery_metadata_organizer.php';
 require_once __DIR__ . '/services/picture_manager.php';
 require_once __DIR__ . '/services/image_scanning.php';
+// Load image-order orchestration after gallery mutation helpers and before admin reorder controllers.
+require_once __DIR__ . '/services/image_order.php';
 // Load persistent duplicate-review ledger helpers before the detector renders filtered findings.
 require_once __DIR__ . '/services/duplicate_photo_ledger.php';
 require_once __DIR__ . '/services/duplicate_photo_detector.php';
@@ -121,6 +127,8 @@ require_once __DIR__ . '/services/gallery_lookup.php';
 // Load lightbox browsing-mode helpers before sidecar import/export reads gallery.json overrides.
 require_once __DIR__ . '/services/gallery_lightbox_mode.php';
 require_once __DIR__ . '/services/gallery_sidecars.php';
+require_once __DIR__ . '/services/gallery_bulk_mutations.php';
+require_once __DIR__ . '/services/gallery_editor_mutations.php';
 require_once __DIR__ . '/services/gallery_paths.php';
 // Load the recoverable gallery trash bin after gallery paths, sidecars, and mutation helpers exist.
 require_once __DIR__ . '/services/gallery_trash.php';
@@ -143,6 +151,7 @@ require_once __DIR__ . '/services/download_artifact_cache.php';
 // Load media renaming after downloads so stale ZIP archives can be invalidated.
 require_once __DIR__ . '/services/media_renamer.php';
 require_once __DIR__ . '/services/logs.php';
+require_once __DIR__ . '/services/admin_diagnostic_logs.php';
 // Load filesystem-backed Admin log archiving after log export helpers are available.
 require_once __DIR__ . '/services/admin_log_archives.php';
 // Load gallery benchmark helpers after logs so benchmark runs can be recorded as support artifacts.
@@ -154,6 +163,7 @@ require_once __DIR__ . '/services/admin_test_run_analysis.php';
 require_once __DIR__ . '/services/site_maintenance.php';
 // Load durable login helpers before authentication controllers restore expired PHP sessions.
 require_once __DIR__ . '/services/auth_persistence.php';
+require_once __DIR__ . '/services/auth_accounts.php';
 // Load Google login helpers after logs and before auth controllers render account linking controls.
 require_once __DIR__ . '/services/google_auth.php';
 // Load authentication throttling after logs so rate-limit events can be recorded safely.

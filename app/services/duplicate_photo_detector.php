@@ -36,8 +36,10 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 use InvalidArgumentException;
-use PDO;
-use function Gallery\Core\db;
+use function Gallery\Models\duplicate_photo_model_fetch_batch;
+use function Gallery\Models\duplicate_photo_model_gallery_branch_ids;
+use function Gallery\Models\duplicate_photo_model_images_by_ids;
+use function Gallery\Models\duplicate_photo_model_scope_snapshot;
 
 const DUPLICATE_PHOTO_DETECTOR_DEFAULT_BATCH_SIZE = 200;
 const DUPLICATE_PHOTO_DETECTOR_MAX_BATCH_SIZE = 300;
@@ -90,22 +92,10 @@ function duplicate_photo_detector_gallery_branch_ids(int $galleryId): array
         return [];
     }
 
-    $stmt = db()->prepare(
-        "SELECT child.id
-         FROM galleries root
-         INNER JOIN galleries child
-             ON child.folder_path = root.folder_path
-             OR child.folder_path LIKE CONCAT(root.folder_path, '/%')
-         WHERE root.id = ?
-         ORDER BY CHAR_LENGTH(child.folder_path), child.folder_path, child.id"
-    );
-    $stmt->execute([$galleryId]);
-
     $galleryIds = array_values(array_unique(array_filter(
-        array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN) ?: []),
-        'Gallery\\Services\\duplicate_photo_detector_positive_id'
+        duplicate_photo_model_gallery_branch_ids($galleryId),
+        'Gallery\Services\duplicate_photo_detector_positive_id'
     )));
-
     return $galleryIds !== [] ? $galleryIds : [$galleryId];
 }
 
@@ -743,28 +733,18 @@ function duplicate_photo_detector_group_key_compare(string $left, string $right)
  */
 function duplicate_photo_detector_scope_snapshot(array $scope, array $galleryIds = []): array
 {
-    if ($scope['search_all']) {
-        $stmt = db()->prepare('SELECT COUNT(*) AS total, COALESCE(MAX(id), 0) AS max_image_id FROM images');
-        $stmt->execute();
-    } else {
-        $galleryIds = array_values(array_unique(array_filter(
-            array_map('intval', $galleryIds),
-            'Gallery\\Services\\duplicate_photo_detector_positive_id'
-        )));
-        if ($galleryIds === []) {
-            $galleryIds = [(int) $scope['gallery_id']];
-        }
-
-        $placeholders = implode(',', array_fill(0, count($galleryIds), '?'));
-        $stmt = db()->prepare("SELECT COUNT(*) AS total, COALESCE(MAX(id), 0) AS max_image_id FROM images WHERE gallery_id IN ($placeholders)");
-        $stmt->execute($galleryIds);
+    if (!empty($scope['search_all'])) {
+        return duplicate_photo_model_scope_snapshot([]);
     }
 
-    $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
-    return [
-        'total' => max(0, (int) ($row['total'] ?? 0)),
-        'max_image_id' => max(0, (int) ($row['max_image_id'] ?? 0)),
-    ];
+    $galleryIds = array_values(array_unique(array_filter(
+        array_map('intval', $galleryIds),
+        'Gallery\Services\duplicate_photo_detector_positive_id'
+    )));
+    if ($galleryIds === []) {
+        $galleryIds = [(int) $scope['gallery_id']];
+    }
+    return duplicate_photo_model_scope_snapshot($galleryIds);
 }
 
 /**
@@ -857,35 +837,18 @@ function duplicate_photo_detector_process_job(string $token, int $batchSize = DU
  */
 function duplicate_photo_detector_fetch_batch(array $job, int $batchSize): array
 {
-    $columns = 'id, gallery_id, checksum_sha256, file_size, width, height, mime_type, exif_taken_at, exif_camera_make, exif_camera_model, exif_lens_model, exif_focal_length, exif_aperture, exif_exposure_time, exif_iso, gps_lat, gps_lng';
     $cursor = max(0, (int) ($job['cursor'] ?? 0));
     $maxImageId = max(0, (int) ($job['max_image_id'] ?? 0));
     $batchSize = max(1, min(DUPLICATE_PHOTO_DETECTOR_MAX_BATCH_SIZE, $batchSize));
 
-    if (!empty($job['search_all'])) {
-        $stmt = db()->prepare("SELECT $columns FROM images WHERE id > ? AND id <= ? ORDER BY id ASC LIMIT ?");
-        $stmt->bindValue(1, $cursor, PDO::PARAM_INT);
-        $stmt->bindValue(2, $maxImageId, PDO::PARAM_INT);
-        $stmt->bindValue(3, $batchSize, PDO::PARAM_INT);
-    } else {
+    $galleryIds = [];
+    if (empty($job['search_all'])) {
         $galleryIds = duplicate_photo_detector_job_gallery_ids($job);
         if ($galleryIds === []) {
             return [];
         }
-
-        $placeholders = implode(',', array_fill(0, count($galleryIds), '?'));
-        $stmt = db()->prepare("SELECT $columns FROM images WHERE gallery_id IN ($placeholders) AND id > ? AND id <= ? ORDER BY id ASC LIMIT ?");
-        $parameter = 1;
-        foreach ($galleryIds as $galleryId) {
-            $stmt->bindValue($parameter++, $galleryId, PDO::PARAM_INT);
-        }
-        $stmt->bindValue($parameter++, $cursor, PDO::PARAM_INT);
-        $stmt->bindValue($parameter++, $maxImageId, PDO::PARAM_INT);
-        $stmt->bindValue($parameter, $batchSize, PDO::PARAM_INT);
     }
-
-    $stmt->execute();
-    return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    return duplicate_photo_model_fetch_batch($galleryIds, $cursor, $maxImageId, $batchSize);
 }
 
 /**
@@ -1080,26 +1043,14 @@ function duplicate_photo_detector_group_reference_compare(array $left, array $ri
  */
 function duplicate_photo_detector_fetch_images_by_ids(array $imageIds): array
 {
-    $imageIds = array_values(array_unique(array_filter(array_map('intval', $imageIds), 'Gallery\\Services\\duplicate_photo_detector_positive_id')));
+    $imageIds = array_values(array_unique(array_filter(array_map('intval', $imageIds), 'Gallery\Services\duplicate_photo_detector_positive_id')));
     if ($imageIds === []) {
         return [];
     }
     if (count($imageIds) > DUPLICATE_PHOTO_DETECTOR_GROUPS_PER_PAGE * DUPLICATE_PHOTO_DETECTOR_MAX_GROUP_MEMBERS) {
         $imageIds = array_slice($imageIds, 0, DUPLICATE_PHOTO_DETECTOR_GROUPS_PER_PAGE * DUPLICATE_PHOTO_DETECTOR_MAX_GROUP_MEMBERS);
     }
-
-    $placeholders = implode(',', array_fill(0, count($imageIds), '?'));
-    $stmt = db()->prepare("SELECT i.id, i.gallery_id, i.relative_path, i.filename, i.url_slug, i.width, i.height, i.mime_type, i.file_size, i.checksum_sha256, i.exif_taken_at, i.exif_camera_make, i.exif_camera_model, i.exif_lens_model, i.exif_focal_length, i.exif_aperture, i.exif_exposure_time, i.exif_iso, i.gps_lat, i.gps_lng, i.visibility, g.title AS gallery_title, g.folder_path AS gallery_folder_path, g.slug AS gallery_slug, g.url_path AS gallery_url_path FROM images i INNER JOIN galleries g ON g.id = i.gallery_id WHERE i.id IN ($placeholders)");
-    foreach ($imageIds as $index => $imageId) {
-        $stmt->bindValue($index + 1, $imageId, PDO::PARAM_INT);
-    }
-    $stmt->execute();
-
-    $rows = [];
-    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) ?: [] as $row) {
-        $rows[(int) ($row['id'] ?? 0)] = $row;
-    }
-    return $rows;
+    return duplicate_photo_model_images_by_ids($imageIds);
 }
 
 /**

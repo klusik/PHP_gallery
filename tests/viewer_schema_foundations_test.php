@@ -15,7 +15,10 @@
  *   - Protect identity separation, token hashing, canonical image references, and deletion semantics
  *   - Protect database constraints for favourites, collections, share capabilities, sessions, and throttling
  *   - Confirm the feature remains disabled and unrouted after migration
- */
+  *
+ * Author:
+ *   Rudolf Klusal
+*/
 
 declare(strict_types=1);
 

@@ -60,7 +60,10 @@ function assert_admin_log_archive_maintenance(bool $condition, string $label): v
 }
 
 $archiveServiceSource = (string) file_get_contents(__DIR__ . '/../app/services/admin_log_archives.php');
+$archiveModelSource = (string) file_get_contents(__DIR__ . '/../app/models/admin_log_archives.php');
 $controllerSource = (string) file_get_contents(__DIR__ . '/../app/controllers/admin_logs.php');
+$viewSource = (string) file_get_contents(__DIR__ . '/../app/views/admin_logs.php');
+$presentationSource = $controllerSource . "\n" . $viewSource;
 $bootstrapSource = (string) file_get_contents(__DIR__ . '/../app/bootstrap.php')
     . (string) file_get_contents(__DIR__ . '/../app/bootstrap/maintenance.php')
     . (string) file_get_contents(__DIR__ . '/../app/bootstrap/dispatch.php');
@@ -113,8 +116,9 @@ assert_admin_log_archive_maintenance(
     'Archive maintenance must verify and atomically publish the ZIP before deleting represented DB rows.'
 );
 assert_admin_log_archive_maintenance(
-    str_contains($archiveServiceSource, 'DELETE FROM admin_logs WHERE created_at >= ? AND created_at < ? AND id >= ? AND id <= ?')
-        && str_contains($archiveServiceSource, 'ADMIN_LOG_ARCHIVE_DELETE_BATCH_SIZE'),
+    str_contains($archiveModelSource, 'DELETE FROM admin_logs WHERE created_at >= ? AND created_at < ? AND id >= ? AND id <= ?')
+        && str_contains($archiveServiceSource, 'ADMIN_LOG_ARCHIVE_DELETE_BATCH_SIZE')
+        && str_contains($archiveServiceSource, 'admin_log_archive_model_delete_verified_batch($manifest, ADMIN_LOG_ARCHIVE_DELETE_BATCH_SIZE)'),
     'Post-archive database cleanup must be bounded and limited to the verified day/id range.'
 );
 assert_admin_log_archive_maintenance(
@@ -141,12 +145,12 @@ assert_admin_log_archive_maintenance(
     'Admin archive maintenance, view, and ZIP download endpoints must be routed.'
 );
 assert_admin_log_archive_maintenance(
-    str_contains($controllerSource, 'Run maintenance cycle now')
-        && str_contains($controllerSource, 'Keep live logs')
-        && str_contains($controllerSource, 'View HTML')
-        && str_contains($controllerSource, 'View JSON')
-        && str_contains($controllerSource, 'Download ZIP')
-        && str_contains($controllerSource, "name=\"action\" value=\"delete_archive\""),
+    str_contains($presentationSource, 'Run maintenance cycle now')
+        && str_contains($presentationSource, 'Keep live logs')
+        && str_contains($presentationSource, 'View HTML')
+        && str_contains($presentationSource, 'View JSON')
+        && str_contains($presentationSource, 'Download ZIP')
+        && str_contains($presentationSource, "name=\"action\" value=\"delete_archive\""),
     'Admin Logs must expose retention, force-run, view, download, and manual archive deletion controls.'
 );
 assert_admin_log_archive_maintenance(

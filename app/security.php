@@ -36,6 +36,8 @@ declare(strict_types=1);
 
 namespace Gallery\Core;
 
+require_once __DIR__ . '/bootstrap/viewer_identity_context.php';
+
 use Throwable;
 use function Gallery\Services\app_setting;
 use function Gallery\Services\auth_restore_persistent_login;
@@ -115,6 +117,161 @@ function security_request_wants_json(): bool
 }
 
 /**
+ * Return the raw administrator remember-cookie value for the current request.
+ *
+ * @return string Raw cookie value, or an empty string when absent.
+ */
+function admin_auth_remember_cookie_value(): string
+{
+    if (!function_exists('Gallery\\Services\\auth_remember_cookie_name')) {
+        return '';
+    }
+    $name = \Gallery\Services\auth_remember_cookie_name();
+    return (string) ($_COOKIE[$name] ?? '');
+}
+
+/**
+ * Apply one administrator remember-cookie instruction returned by the auth service.
+ *
+ * Cookie emission and request-local cookie mirroring belong to the HTTP/session adapter,
+ * not the credential service. Invalid instructions fail closed without emitting a header.
+ *
+ * @param array{name?:string,value?:string,expires_at?:int,path?:string,httponly?:bool,samesite?:string} $instruction
+ * @return bool True when the cookie header was emitted.
+ */
+function admin_auth_apply_remember_cookie_instruction(array $instruction): bool
+{
+    if (headers_sent()) {
+        return false;
+    }
+
+    $name = (string) ($instruction['name'] ?? '');
+    $expiresAt = (int) ($instruction['expires_at'] ?? 0);
+    if ($name === '' || preg_match('/^[A-Za-z0-9_]+$/D', $name) !== 1 || $expiresAt <= 0) {
+        return false;
+    }
+
+    $value = (string) ($instruction['value'] ?? '');
+    $ok = setcookie($name, $value, [
+        'expires' => $expiresAt,
+        'path' => (string) ($instruction['path'] ?? '/'),
+        'secure' => request_is_https(),
+        'httponly' => (bool) ($instruction['httponly'] ?? true),
+        'samesite' => (string) ($instruction['samesite'] ?? 'Lax'),
+    ]);
+
+    if ($ok) {
+        if ($expiresAt <= time() || $value === '') {
+            unset($_COOKIE[$name]);
+        } else {
+            $_COOKIE[$name] = $value;
+        }
+    }
+    return $ok;
+}
+
+/**
+ * Clear the administrator remember cookie for the current browser.
+ */
+function admin_auth_clear_remember_cookie(): void
+{
+    if (!function_exists('Gallery\\Services\\auth_remember_cookie_instruction')) {
+        return;
+    }
+    admin_auth_apply_remember_cookie_instruction(
+        \Gallery\Services\auth_remember_cookie_instruction('', time() - 3600)
+    );
+}
+
+/**
+ * Issue persistent administrator authority for the current HTTP request.
+ *
+ * @param int $userId Authenticated administrator identifier.
+ */
+function admin_auth_issue_persistent_login_for_request(int $userId): void
+{
+    if (!function_exists('Gallery\\Services\\auth_issue_persistent_login')) {
+        return;
+    }
+    $instruction = \Gallery\Services\auth_issue_persistent_login(
+        $userId,
+        (string) ($_SERVER['HTTP_USER_AGENT'] ?? '')
+    );
+    if (is_array($instruction)) {
+        admin_auth_apply_remember_cookie_instruction($instruction);
+    }
+}
+
+/**
+ * Restore administrator identity from the current request remember cookie.
+ *
+ * @return ?array Restored administrator identity, or null when unavailable/invalid.
+ */
+function admin_auth_restore_persistent_login_from_request(): ?array
+{
+    if (session_status() !== PHP_SESSION_ACTIVE
+        || !function_exists('Gallery\\Services\\auth_restore_persistent_login')) {
+        return null;
+    }
+
+    $result = \Gallery\Services\auth_restore_persistent_login(admin_auth_remember_cookie_value());
+    if (!empty($result['clear_cookie'])) {
+        admin_auth_clear_remember_cookie();
+    }
+    $user = is_array($result['user'] ?? null) ? $result['user'] : null;
+    if ($user === null) {
+        return null;
+    }
+
+    session_regenerate_id(true);
+    $_SESSION['user_id'] = (int) ($user['id'] ?? 0);
+    return $user;
+}
+
+/**
+ * Revoke the current browser's administrator remember credential and clear the cookie.
+ */
+function admin_auth_revoke_current_persistent_login_for_request(): void
+{
+    try {
+        if (function_exists('Gallery\\Services\\auth_revoke_current_persistent_login')) {
+            \Gallery\Services\auth_revoke_current_persistent_login(admin_auth_remember_cookie_value());
+        }
+    } finally {
+        admin_auth_clear_remember_cookie();
+    }
+}
+
+/**
+ * Revoke all persistent administrator credentials for one user and clear this browser's cookie.
+ *
+ * @param int $userId Administrator identifier.
+ */
+function admin_auth_revoke_user_persistent_logins_for_request(int $userId): void
+{
+    try {
+        if (function_exists('Gallery\\Services\\auth_revoke_user_persistent_logins')) {
+            \Gallery\Services\auth_revoke_user_persistent_logins($userId);
+        }
+    } finally {
+        admin_auth_clear_remember_cookie();
+    }
+}
+
+/**
+ * Resolve the current request's privacy-safe administrator throttle subject.
+ *
+ * @return string Privacy-safe throttle subject.
+ */
+function admin_auth_throttle_visitor_subject_for_request(): string
+{
+    if (!function_exists('Gallery\\Services\\auth_throttle_visitor_subject')) {
+        return '';
+    }
+    return \Gallery\Services\auth_throttle_visitor_subject((string) ($_SERVER['REMOTE_ADDR'] ?? ''));
+}
+
+/**
  * Return the logged-in admin user, or null for anonymous visitors.
  *
  * @return ?array Structured result data for the caller.
@@ -128,7 +285,7 @@ function current_user(): ?array
     }
     if (empty($_SESSION['user_id'])) {
         // $restoredUser stores a durable login restored from a hashed database token when PHP session storage expired.
-        $restoredUser = function_exists('Gallery\Services\auth_restore_persistent_login') ? auth_restore_persistent_login() : null;
+        $restoredUser = admin_auth_restore_persistent_login_from_request();
         if (!$restoredUser) {
             // $cache stores an intermediate value used by the surrounding gallery workflow.
             $cache = true;

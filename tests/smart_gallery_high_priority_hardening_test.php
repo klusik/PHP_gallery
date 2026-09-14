@@ -1,6 +1,21 @@
 <?php
 
 /**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ *
+ * File: tests/smart_gallery_high_priority_hardening_test.php
+ *
+ * Author:
+ *   Rudolf Klusal
+ *
+ * License:
+ *   MIT License (see LICENSE file in repository)
+ *
+ * Notes:
+ *   - Keep comments and docstrings intact when modifying this file.
+ */
+/**
  * Regression contracts for Smart Gallery release hardening.
  *
  * These checks protect the three release-readiness items that previously
@@ -21,6 +36,7 @@ function smart_gallery_high_priority_assert(bool $condition, string $message): v
 
 $root = dirname(__DIR__);
 $service = (string) file_get_contents($root . '/app/services/smart_galleries.php');
+$model = (string) file_get_contents($root . '/app/models/smart_galleries.php');
 $cards = (string) file_get_contents($root . '/app/controllers/public_gallery_cards.php');
 $home = (string) file_get_contents($root . '/app/controllers/public_gallery_home.php');
 $page = (string) file_get_contents($root . '/app/controllers/public_gallery_page.php');
@@ -42,17 +58,18 @@ smart_gallery_high_priority_assert(
 );
 
 smart_gallery_high_priority_assert(
-    str_contains($service, 'function smart_gallery_graph_bounded_rows')
-    && str_contains($service, '$limit = SMART_GALLERY_GRAPH_MAX_SOURCE_ROWS + 1;')
-    && str_contains($service, "db()->query(\$sql . ' LIMIT ' . \$limit)->fetchAll()"),
-    'Relationship graph source queries impose LIMIT ceiling+1 before PDO materializes rows.'
+    str_contains($model, 'function smart_gallery_model_bounded_rows')
+    && str_contains($model, '$limit = max(1, $maxRows) + 1;')
+    && str_contains($model, "db()->query(\$sql . ' LIMIT ' . \$limit)->fetchAll()"),
+    'Relationship graph source queries impose LIMIT ceiling+1 in the model before PDO materializes rows.'
 );
 smart_gallery_high_priority_assert(
-    substr_count($service, 'smart_gallery_graph_bounded_rows(') >= 4
-    && str_contains($service, "'SELECT id, parent_id FROM galleries ORDER BY id'")
-    && str_contains($service, "'SELECT id, rules_json FROM smart_galleries ORDER BY id'")
-    && str_contains($service, "'SELECT ' . \$placementColumns . ' FROM smart_gallery_placements ORDER BY gallery_id, smart_gallery_id'"),
-    'Physical hierarchy, Smart Gallery definitions, and placement rows all use the pre-allocation graph bound.'
+    str_contains($service, 'smart_gallery_model_graph_gallery_rows(SMART_GALLERY_GRAPH_MAX_SOURCE_ROWS)')
+    && str_contains($service, 'smart_gallery_model_graph_definition_rows(SMART_GALLERY_GRAPH_MAX_SOURCE_ROWS)')
+    && str_contains($service, 'smart_gallery_model_graph_placement_rows(')
+    && str_contains($model, "'SELECT id, parent_id FROM galleries ORDER BY id'")
+    && str_contains($model, "'SELECT id, rules_json FROM smart_galleries ORDER BY id'"),
+    'Physical hierarchy, Smart Gallery definitions, and placement rows all use model-owned pre-allocation graph bounds.'
 );
 
 smart_gallery_high_priority_assert(
@@ -65,8 +82,8 @@ smart_gallery_high_priority_assert(
     str_contains($service, 'const SMART_GALLERY_CARD_SUMMARY_BATCH_SIZE = 20;')
     && str_contains($service, 'function smart_gallery_card_summaries')
     && str_contains($service, 'array_chunk($missing, SMART_GALLERY_CARD_SUMMARY_BATCH_SIZE, true)')
-    && str_contains($service, "implode(' UNION ALL ', \$selects)"),
-    'Placed Smart Gallery card counts and covers are fetched in bounded SQL batches rather than once per card.'
+    && str_contains($model, "implode(' UNION ALL ', \$selects)"),
+    'Placed Smart Gallery card counts and covers are fetched in bounded model-owned SQL batches rather than once per card.'
 );
 smart_gallery_high_priority_assert(
     str_contains($home, 'home_smart_gallery_card_context_preload')

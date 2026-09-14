@@ -48,7 +48,7 @@ $controllerSource = (string) file_get_contents(__DIR__ . '/../app/controllers/up
 $dispatchSource = (string) file_get_contents(__DIR__ . '/../app/bootstrap/dispatch.php');
 
 assert_autoupdate_request_latency_safety(
-    str_contains($bootstrapSource, 'application_autoupdate_maybe_run();'),
+    str_contains($bootstrapSource, 'application_autoupdate_maybe_run(3600, request_method());'),
     'Request maintenance must use the established automatic-update entry point.'
 );
 
@@ -60,7 +60,7 @@ assert_autoupdate_request_latency_safety(
 );
 
 assert_autoupdate_request_latency_safety(
-    str_contains($serviceSource, 'function application_autoupdate_maybe_run(int $ttlSeconds = 3600): void')
+    str_contains($serviceSource, "function application_autoupdate_maybe_run(int \$ttlSeconds = 3600, string \$requestMethod = 'GET'): void")
         && str_contains($serviceSource, 'application_update_continue_background_job(3.0);')
         && str_contains($serviceSource, '$ttlSeconds = max(3600, $ttlSeconds);')
         && str_contains($serviceSource, 'application_autoupdate_run_installing_check(false, $now);'),

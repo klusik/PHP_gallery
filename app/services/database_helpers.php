@@ -36,8 +36,9 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+use function Gallery\Models\database_helpers_model_column_exists;
+use function Gallery\Models\database_helpers_model_table_exists;
 use Throwable;
-use function Gallery\Core\db;
 
 /**
  * Database schema helper service.
@@ -98,9 +99,7 @@ function db_column_exists(string $table, string $column): bool
     }
 
     try {
-        // $stmt stores an intermediate value used by the surrounding gallery workflow.
-        $stmt = db()->query("SHOW COLUMNS FROM `{$safeTable}` LIKE '{$safeColumn}'");
-        return $cache[$cacheKey] = (bool) ($stmt && $stmt->fetch());
+        return $cache[$cacheKey] = database_helpers_model_column_exists($safeTable, $safeColumn);
     } catch (Throwable) {
         return $cache[$cacheKey] = false;
     }
@@ -134,9 +133,7 @@ function db_table_exists(string $table): bool
     }
 
     try {
-        // $stmt stores an intermediate value used by the surrounding gallery workflow.
-        $stmt = db()->query("SHOW TABLES LIKE " . db()->quote($safeTable));
-        return $cache[$cacheKey] = (bool) $stmt->fetchColumn();
+        return $cache[$cacheKey] = database_helpers_model_table_exists($safeTable);
     } catch (Throwable) {
         return $cache[$cacheKey] = false;
     }

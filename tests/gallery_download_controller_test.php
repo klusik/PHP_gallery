@@ -1,5 +1,20 @@
 <?php
 
+/**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ *
+ * File: tests/gallery_download_controller_test.php
+ *
+ * Author:
+ *   Rudolf Klusal
+ *
+ * License:
+ *   MIT License (see LICENSE file in repository)
+ *
+ * Notes:
+ *   - Keep comments and docstrings intact when modifying this file.
+ */
 declare(strict_types=1);
 
 namespace Gallery\Services {
@@ -58,11 +73,24 @@ namespace Gallery\Services {
         return '/tmp/unused.zip';
     }
 
-/** Test double for send_legacy_download_artifact(). */
-    function send_legacy_download_artifact(string $filePath, string $downloadName): void
+/** Test double for legacy_download_artifact_stream_descriptor(). */
+    function legacy_download_artifact_stream_descriptor(string $filePath, string $downloadName): array
     {
         $GLOBALS['gallery_download_controller_send_calls']++;
+        return [
+            'status' => 200,
+            'path' => $filePath,
+            'filename' => $downloadName,
+            'mime' => 'application/zip',
+            'length' => 1,
+            'cache_control' => 'private, no-store',
+            'retry_after' => 0,
+            'message' => '',
+            'lease_handle' => null,
+        ];
     }
+/** Test double for legacy_download_artifact_stream_release(). */
+    function legacy_download_artifact_stream_release(mixed $leaseHandle): void {}
 
 /** Test double for t(). */
     function t(string $key, string $fallback, array $replace = []): string
@@ -87,7 +115,7 @@ namespace Gallery\Services {
 /** Keep manifest profiling outside this controller-only fixture. */
     function download_manifest_profile_finish(): void {}
 /** Keep manifest profiling outside this controller-only fixture. */
-    function download_manifest_profile_emit_headers(): void {}
+    function download_manifest_profile_response_headers(): array { return []; }
 /** Keep manifest-cache invalidation observable only in dedicated cache tests. */
     function download_manifest_cache_invalidate_source_mismatch(string $resourceType, int $resourceId, string $revision, int $imageId, string $version, int $expectedSize, int $actualSize): bool { return false; }
 /** Return a stable generic archive diagnostic for this isolated controller fixture. */

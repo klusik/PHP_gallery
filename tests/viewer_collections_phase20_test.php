@@ -18,6 +18,9 @@
  *   - Verify private collection UI stays out of anonymous HTML and Phase 2 ownership logic remains separate from later sharing/public-profile surfaces
  *   - Verify new PHP imports resolve to real symbols so lint-only namespace failures are caught
  *
+ * Author:
+ *   Rudolf Klusal
+ *
  * Last Updated:
  *   2026-08-18
  */
@@ -76,8 +79,11 @@ function viewer_phase20_assert_function_imports_resolve(string $root, string $mo
 
 $root = dirname(__DIR__);
 $service = (string) file_get_contents($root . '/app/services/viewer_collections.php');
+$model = (string) file_get_contents($root . '/app/models/viewer_collections.php');
 $content = (string) file_get_contents($root . '/app/services/viewer_content_foundations.php');
+$imagesModel = (string) file_get_contents($root . '/app/models/images.php');
 $controller = (string) file_get_contents($root . '/app/controllers/viewer_collections.php');
+$collectionView = (string) file_get_contents($root . '/app/views/viewer_collections.php');
 $accountsController = (string) file_get_contents($root . '/app/controllers/viewer_accounts.php');
 $favouritesController = (string) file_get_contents($root . '/app/controllers/viewer_favourites.php');
 $publicGallery = (string) file_get_contents($root . '/app/controllers/public_gallery_page.php');
@@ -107,10 +113,10 @@ viewer_phase20_assert(!str_contains($service, 'CREATE TABLE') && !str_contains($
 viewer_phase20_assert(!is_file($root . '/database/migrations/202608180005_viewer_collections_phase20.php'), 'Phase 2.0 must not add a redundant collection migration.');
 
 // Ownership: every collection object is keyed by collection id + authenticated viewer id.
-viewer_phase20_assert(str_contains($service, 'WHERE vc.id = ? AND vc.viewer_account_id = ?'), 'Collection reads must be owner-scoped.');
-viewer_phase20_assert(str_contains($service, 'WHERE id = ? AND viewer_account_id = ? LIMIT 1 FOR UPDATE'), 'Collection mutation lock must be owner-scoped.');
-viewer_phase20_assert(str_contains($service, 'UPDATE viewer_collections SET title = ?, updated_at = ? WHERE id = ? AND viewer_account_id = ?'), 'Rename must keep owner in the write predicate.');
-viewer_phase20_assert(str_contains($service, 'DELETE FROM viewer_collections WHERE id = ? AND viewer_account_id = ?'), 'Delete must keep owner in the write predicate.');
+viewer_phase20_assert(str_contains($service, 'viewer_collection_model_owned_get(') && str_contains($model, 'WHERE vc.id = ? AND vc.viewer_account_id = ?'), 'Collection reads must delegate to an owner-scoped model query.');
+viewer_phase20_assert(str_contains($service, 'viewer_collection_model_owned_lock(') && str_contains($model, 'WHERE id = ? AND viewer_account_id = ? LIMIT 1 FOR UPDATE'), 'Collection mutation lock must be owner-scoped in the model.');
+viewer_phase20_assert(str_contains($service, 'viewer_collection_model_rename(') && str_contains($model, 'UPDATE viewer_collections SET title = ?, updated_at = ? WHERE id = ? AND viewer_account_id = ?'), 'Rename must keep owner in the model write predicate.');
+viewer_phase20_assert(str_contains($service, 'viewer_collection_model_delete(') && str_contains($model, 'DELETE FROM viewer_collections WHERE id = ? AND viewer_account_id = ?'), 'Delete must keep owner in the model write predicate.');
 viewer_phase20_assert(!str_contains($controller, 'owner_viewer_id') && !str_contains($controller, 'owner_id'), 'Controller must not accept client-supplied ownership.');
 viewer_phase20_assert(!str_contains($service, 'current_user(') && !str_contains($controller, 'current_user('), 'Admin principal must not become collection ownership authority.');
 viewer_phase20_assert(str_contains($controller, 'current_viewer()'), 'Collection routes must require the viewer principal.');
@@ -132,7 +138,7 @@ viewer_phase20_assert(str_contains($controller, "viewer_collection_positive_id")
 // Plain-text/XSS policy stays centralized and output is escaped.
 viewer_phase20_assert(str_contains($service, 'viewer_collection_title_validate($title)'), 'Create/rename must use canonical title validation.');
 viewer_phase20_assert(str_contains($content, "'max_characters' => 120") && str_contains($content, "preg_match('//u'") && str_contains($content, 'ascii_control'), 'Existing title length/UTF-8/control policy must remain authoritative.');
-viewer_phase20_assert(str_contains($controller, 'e((string) $collection[\'title\'])') && !str_contains($controller, 'innerHTML'), 'Collection titles must render through HTML escaping and never innerHTML.');
+viewer_phase20_assert(str_contains($collectionView, "e((string) (\$collection['title'] ?? ''))") && !str_contains($collectionView, 'innerHTML'), 'Collection titles must render through HTML escaping in the view and never innerHTML.');
 require_once $root . '/app/bootstrap.php';
 foreach ([
     '<script>alert(1)</script>',
@@ -151,17 +157,17 @@ viewer_phase20_assert(empty(\Gallery\Services\viewer_collection_title_prepare("b
 viewer_phase20_assert(empty(\Gallery\Services\viewer_collection_title_prepare("bad\xC3\x28")['valid']), 'Malformed UTF-8 must be rejected in collection titles.');
 
 // Quotas/races: account row serializes collection count, collection row serializes item count, unique PK backs duplicates.
-viewer_phase20_assert(str_contains($service, 'FROM viewer_accounts WHERE id = ? LIMIT 1 FOR UPDATE'), 'Collection creation quota must lock the viewer account row.');
-viewer_phase20_assert(str_contains($service, 'FROM viewer_collections WHERE id = ? AND viewer_account_id = ? LIMIT 1 FOR UPDATE'), 'Item quota/reorder must lock the owned collection row.');
+viewer_phase20_assert(str_contains($service, 'viewer_collection_model_account_lock(') && str_contains($model, 'FROM viewer_accounts WHERE id = ? LIMIT 1 FOR UPDATE'), 'Collection creation quota must lock the viewer account row in the model.');
+viewer_phase20_assert(str_contains($service, 'viewer_collection_model_owned_lock(') && str_contains($model, 'FROM viewer_collections WHERE id = ? AND viewer_account_id = ? LIMIT 1 FOR UPDATE'), 'Item quota/reorder must lock the owned collection row in the model.');
 viewer_phase20_assert(str_contains($service, 'max_viewer_collections_per_account') && str_contains($service, 'max_viewer_items_per_collection'), 'Configured collection/item quotas must be enforced.');
 viewer_phase20_assert(str_contains($rateLimits, "'viewer_collection_create_account' => ['max_attempts' => 10"), 'Collection creation must use the dedicated 10/hour account limiter.');
 viewer_phase20_assert(str_contains($service, "'reason' => 'already_present'"), 'Repeated image add must be idempotent.');
-viewer_phase20_assert(str_contains($service, 'function viewer_collection_normalize_positions') && str_contains($service, 'viewer_collection_normalize_positions($pdo, $collectionId)'), 'Collection item positions must be kept dense so remove/add churn cannot grow ordering keys without bound.');
+viewer_phase20_assert(str_contains($service, 'function viewer_collection_normalize_positions') && str_contains($service, 'viewer_collection_model_normalize_positions(') && str_contains($model, 'function viewer_collection_model_normalize_positions'), 'Collection item positions must be kept dense through the model so remove/add churn cannot grow ordering keys without bound.');
 
 // Add stores intent/reference only and rechecks authoritative source authorization before insertion.
 $add = viewer_phase20_function_source($service, 'viewer_collection_item_add');
-viewer_phase20_assert(strpos($add, 'viewer_source_image_can_reference($imageId)') < strpos($add, 'INSERT INTO viewer_collection_items'), 'Source authorization must happen before a collection-item insert.');
-viewer_phase20_assert(str_contains($add, 'INSERT INTO viewer_collection_items (viewer_collection_id, image_id, position, created_at)'), 'Items must store canonical image references plus ordering only.');
+viewer_phase20_assert(strpos($add, 'viewer_source_image_can_reference($imageId)') < strpos($add, 'viewer_collection_model_transaction(') && str_contains($model, 'INSERT INTO viewer_collection_items'), 'Source authorization must happen before entering the collection-item persistence transaction.');
+viewer_phase20_assert(str_contains($add, 'viewer_collection_model_item_insert(') && str_contains($model, 'INSERT INTO viewer_collection_items (viewer_collection_id, image_id, position, created_at)'), 'Items must store canonical image references plus ordering only in the model.');
 viewer_phase20_assert(!str_contains($add, 'viewer_favourites'), 'Adding a collection item must not modify favourite state.');
 foreach (['relative_path','thumbnail_path','gallery_password','share_token','authorization_state','cached_access'] as $forbidden) {
     viewer_phase20_assert(!str_contains($add, $forbidden), 'Collection add must not store source authority/path data: ' . $forbidden);
@@ -173,10 +179,10 @@ $visibleState = viewer_phase20_function_source($controller, 'viewer_collection_v
 viewer_phase20_assert(str_contains($detail, 'viewer_collection_visible_state(') && str_contains($visibleState, 'viewer_collection_item_references(') && str_contains($visibleState, 'viewer_source_images_resolve_authorized('), 'Collection detail must reauthorize stored references on every render.');
 $batch = viewer_phase20_function_source($content, 'viewer_source_images_resolve_authorized');
 viewer_phase20_assert(str_contains($batch, 'visitor_can_access_gallery_without_admin_bypass($gallery)') && str_contains($batch, 'visitor_can_access_nsfw_content_without_admin_bypass()'), 'Batch render authorization must explicitly ignore Admin bypass.');
-viewer_phase20_assert(str_contains($batch, "visibility = ?") && str_contains($batch, "['public']"), 'Only current public image rows may be returned by collection rendering.');
+viewer_phase20_assert(str_contains($batch, 'image_model_public_rows_by_ids(') && str_contains($imagesModel, 'AND visibility = ?') && str_contains($imagesModel, "['public']"), 'Only current public image rows may be returned by collection rendering.');
 viewer_phase20_assert(!str_contains($batch, 'current_user()'), 'Live source authorization must not consult the Admin principal.');
-viewer_phase20_assert(str_contains($detail, '$hiddenCount') && str_contains($controller, 'hidden_unavailable'), 'Inaccessible references must be omitted with generic feedback only.');
-viewer_phase20_assert(str_contains($controller, 'Some saved collection items are currently unavailable.') && !str_contains($controller, 'hidden because their source gallery'), 'Inaccessible-item feedback must not disclose a source-gallery denial reason.');
+viewer_phase20_assert(str_contains($detail, '$hiddenCount') && str_contains($collectionView, 'hidden_unavailable'), 'Inaccessible references must be omitted with generic feedback only across the controller/view boundary.');
+viewer_phase20_assert(str_contains($collectionView, 'Some saved collection items are currently unavailable.') && !str_contains($collectionView, 'hidden because their source gallery'), 'Inaccessible-item feedback must not disclose a source-gallery denial reason.');
 viewer_phase20_assert(!str_contains($controller, 'relative_path') && !str_contains($controller, 'filename') && !str_contains($controller, 'EXIF'), 'Collection controller must not render inaccessible source metadata fields.');
 viewer_phase20_assert(!str_contains($galleryAccess, 'viewer_collection'), 'Canonical gallery access must remain independent from collection membership.');
 viewer_phase20_assert(!str_contains($publicMedia, 'viewer_collection'), 'Direct media authorization must remain independent from collection membership.');
@@ -186,15 +192,15 @@ $reorder = viewer_phase20_function_source($service, 'viewer_collection_reorder')
 foreach (['oversized','duplicate_item','foreign_item','invalid_order'] as $reason) {
     viewer_phase20_assert(str_contains($reorder, "'reason' => '{$reason}'"), 'Reorder must reject ' . $reason . '.');
 }
-viewer_phase20_assert(str_contains($reorder, 'FOR UPDATE') && str_contains($reorder, 'beginTransaction()') && str_contains($reorder, 'rollBack()') && str_contains($reorder, 'commit()'), 'Reorder must be transactional and row-locked.');
-viewer_phase20_assert(str_contains($reorder, 'WHERE viewer_collection_id = ? AND image_id = ?'), 'Reorder updates must remain collection-scoped.');
-viewer_phase20_assert(str_contains(viewer_phase20_function_source($controller, 'viewer_collection_render_reorder_form'), 'move_image_id') && !str_contains(viewer_phase20_function_source($controller, 'viewer_collection_render_reorder_form'), 'image_ids[]'), 'Move controls must submit constant-size forms instead of serializing the full collection into every image card.');
+viewer_phase20_assert(str_contains($reorder, 'viewer_collection_model_transaction(') && str_contains($reorder, 'viewer_collection_model_items_lock(') && str_contains($model, 'FOR UPDATE') && str_contains($model, 'beginTransaction()') && str_contains($model, 'rollBack()') && str_contains($model, 'commit()'), 'Reorder must delegate to a transactional, row-locked model operation.');
+viewer_phase20_assert(str_contains($reorder, 'viewer_collection_model_update_positions(') && str_contains($model, 'WHERE viewer_collection_id = ? AND image_id = ?'), 'Reorder model updates must remain collection-scoped.');
+viewer_phase20_assert(str_contains(viewer_phase20_function_source($collectionView, 'view_render_viewer_collection_reorder_form'), 'move_image_id') && !str_contains(viewer_phase20_function_source($collectionView, 'view_render_viewer_collection_reorder_form'), 'image_ids[]') && str_contains(viewer_phase20_function_source($controller, 'viewer_collection_render_reorder_form'), 'viewer_collection_reorder_view_model'), 'Move controls must submit constant-size forms through the MVC view instead of serializing the full collection into every image card.');
 
 // Delete/remove are reference-only operations and leave source objects/favourites untouched.
 $delete = viewer_phase20_function_source($service, 'viewer_collection_delete');
-viewer_phase20_assert(str_contains($delete, 'DELETE FROM viewer_collections') && !preg_match('/DELETE\s+FROM\s+(images|galleries|viewer_favourites|gallery_share)/i', $delete), 'Collection delete must touch only the owned collection row.');
+viewer_phase20_assert(str_contains($delete, 'viewer_collection_model_delete(') && str_contains($model, 'DELETE FROM viewer_collections') && !preg_match('/DELETE\s+FROM\s+(images|galleries|viewer_favourites|gallery_share)/i', $model), 'Collection delete must delegate only the owned collection row deletion to the model.');
 $remove = viewer_phase20_function_source($service, 'viewer_collection_item_remove');
-viewer_phase20_assert(str_contains($remove, 'DELETE FROM viewer_collection_items') && !str_contains($remove, 'DELETE FROM images') && !str_contains($remove, 'viewer_favourites'), 'Item removal must not touch source media/favourites.');
+viewer_phase20_assert(str_contains($remove, 'viewer_collection_model_item_delete(') && str_contains($model, 'DELETE FROM viewer_collection_items') && !str_contains($model, 'DELETE FROM images') && !str_contains($remove, 'viewer_favourites'), 'Item removal must delegate reference deletion only and must not touch source media/favourites.');
 
 // Personalized UI is viewer-gated and the feature switch/schema status fail closed without coupling public authorization.
 viewer_phase20_assert(str_contains(viewer_phase20_function_source($service, 'viewer_collections_storage_available'), 'viewer_accounts_enabled()'), 'Collection storage must respect the existing viewer account feature switch.');

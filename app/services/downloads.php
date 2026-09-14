@@ -42,13 +42,20 @@ use DirectoryIterator;
 use ZipArchive;
 use function Gallery\Core\cms_config;
 use function Gallery\Core\cms_runtime_limit;
-use function Gallery\Core\db;
 use function Gallery\Core\normalize_relative_path;
 use function Gallery\Core\now_sql;
 use function Gallery\Core\path_inside;
 use function Gallery\Core\slugify;
 use function Gallery\Core\image_public_asset_version;
 use function Gallery\Core\url_for;
+use function Gallery\Models\downloads_model_all_galleries;
+use function Gallery\Models\downloads_model_all_signature_rows;
+use function Gallery\Models\downloads_model_delete_zip_archive;
+use function Gallery\Models\downloads_model_find_zip_archive;
+use function Gallery\Models\downloads_model_gallery_subtree;
+use function Gallery\Models\downloads_model_images_for_galleries;
+use function Gallery\Models\downloads_model_insert_zip_archive;
+use function Gallery\Models\downloads_model_zip_archives;
 use function Gallery\Services\find_gallery;
 use function Gallery\Services\gallery_zip_signature;
 use function Gallery\Services\image_abs_path;
@@ -255,9 +262,7 @@ function gallery_download_gallery_rows(array $gallery): array
 
     $manifestGalleryLimit = max(1, (int) cms_runtime_limit('download.manifest_max_galleries'));
     $limit = $manifestGalleryLimit + 1;
-    $stmt = db()->prepare('SELECT * FROM galleries WHERE folder_path = ? OR folder_path LIKE ? ORDER BY CHAR_LENGTH(folder_path), folder_path, id LIMIT ' . $limit);
-    $stmt->execute([$folderPath, $folderPath . '/%']);
-    $candidates = $stmt->fetchAll();
+    $candidates = downloads_model_gallery_subtree($folderPath, $limit);
     download_manifest_profile_count('gallery_rows', count($candidates));
     if (count($candidates) > $manifestGalleryLimit) {
         throw new GalleryDownloadManifestException(t('download.progress.manifest_too_large', 'This gallery contains too many files for one browser download.'), 'manifest_too_large');
@@ -289,12 +294,9 @@ function gallery_download_manifest_authorized_items(array $galleries): array
         return [];
     }
 
-    $placeholders = implode(',', array_fill(0, count($galleryIds), '?'));
     $manifestFileLimit = max(1, (int) cms_runtime_limit('download.manifest_max_files'));
     $limit = $manifestFileLimit + 1;
-    $stmt = db()->prepare("SELECT * FROM images WHERE gallery_id IN ($placeholders) AND visibility = 'public' ORDER BY gallery_id, sort_order, filename, relative_path, id LIMIT $limit");
-    $stmt->execute($galleryIds);
-    $candidateImages = $stmt->fetchAll();
+    $candidateImages = downloads_model_images_for_galleries($galleryIds, true, $limit);
     download_manifest_profile_count('image_rows', count($candidateImages));
     if (count($candidateImages) > $manifestFileLimit) {
         throw new GalleryDownloadManifestException(t('download.progress.manifest_too_large', 'This gallery contains too many files for one browser download.'), 'manifest_too_large');
@@ -703,20 +705,12 @@ function smart_gallery_download_authorized_source(int $smartGalleryId, int $imag
         return null;
     }
 
-    $query = smart_gallery_result_query_for_accessible_ids(
+    if (!smart_gallery_contains_image_for_accessible_ids(
         $smartGallery,
         true,
-        [(int) $sourceGallery['id']]
-    );
-    $params = $query['params'];
-    $params[] = $imageId;
-    $stmt = db()->prepare(
-        'SELECT 1 FROM images i INNER JOIN galleries g ON g.id=i.gallery_id WHERE '
-        . $query['where']
-        . ' AND i.id = ? LIMIT 1'
-    );
-    $stmt->execute($params);
-    if (!$stmt->fetchColumn()) {
+        [(int) $sourceGallery['id']],
+        $imageId
+    )) {
         return null;
     }
 
@@ -1082,9 +1076,7 @@ function cleanup_expired_zip_cache(?int $now = null): array
     $deletedRows = 0;
 
     // Variable $stmt stores this steps working value.
-    $stmt = db()->prepare('SELECT id, file_path FROM zip_archives');
-    $stmt->execute();
-    foreach ($stmt->fetchAll() as $archive) {
+    foreach (downloads_model_zip_archives() as $archive) {
         // Variable $filePath stores this steps working value.
         $filePath = (string) $archive['file_path'];
         // Variable $removeRow stores this steps working value.
@@ -1108,9 +1100,7 @@ function cleanup_expired_zip_cache(?int $now = null): array
         }
         if ($removeRow) {
             // Variable $delete stores this steps working value.
-            $delete = db()->prepare('DELETE FROM zip_archives WHERE id = ?');
-            $delete->execute([(int) $archive['id']]);
-            $deletedRows += $delete->rowCount();
+            $deletedRows += downloads_model_delete_zip_archive((int) $archive['id']);
         }
     }
 
@@ -1145,13 +1135,9 @@ function gallery_zip_gallery_rows(array $gallery, bool $publicOnly): array
         return [];
     }
 
-    // Variable $stmt stores this steps working value.
-    $stmt = db()->prepare('SELECT * FROM galleries WHERE folder_path = ? OR folder_path LIKE ? ORDER BY CHAR_LENGTH(folder_path), folder_path, id');
-    $stmt->execute([$folderPath, $folderPath . '/%']);
-
     // Variable $rows stores this steps working value.
     $rows = [];
-    foreach ($stmt->fetchAll() as $candidate) {
+    foreach (downloads_model_gallery_subtree($folderPath) as $candidate) {
         if ($publicOnly && !visitor_can_access_gallery($candidate)) {
             continue;
         }
@@ -1184,10 +1170,7 @@ function gallery_zip_gallery_ids(array $galleries): array
 function all_zip_signature(): string
 {
     // Variable $rows stores this steps working value.
-    $rows = db()->query("SELECT g.folder_path, g.updated_at AS gallery_updated_at, i.relative_path, i.file_size, i.modified_at, i.visibility
-        FROM galleries g
-        LEFT JOIN images i ON i.gallery_id = g.id
-        ORDER BY g.folder_path, i.relative_path")->fetchAll();
+    $rows = downloads_model_all_signature_rows();
     return hash('sha256', json_encode($rows, JSON_UNESCAPED_SLASHES));
 }
 
@@ -1255,11 +1238,8 @@ function build_gallery_zip(int $galleryId, bool $publicOnly, ?string $contentSig
         return $filePath;
     }
 
-    // Variable $stmt stores this steps working value.
-    $stmt = db()->prepare('SELECT * FROM zip_archives WHERE scope = ? AND gallery_id = ? AND content_signature = ? ORDER BY id DESC LIMIT 1');
-    $stmt->execute([$scope, $galleryId, $signature]);
     // Variable $cached stores this steps working value.
-    $cached = $stmt->fetch();
+    $cached = downloads_model_find_zip_archive($scope, $galleryId, $signature);
     if ($cached && zip_cache_file_is_fresh((string) $cached['file_path'])) {
         return (string) $cached['file_path'];
     }
@@ -1269,15 +1249,12 @@ function build_gallery_zip(int $galleryId, bool $publicOnly, ?string $contentSig
         if (path_inside(zip_cache_dir(), $cachedPath) && is_file($cachedPath)) {
             @unlink($cachedPath);
         }
-        // Variable $delete stores this steps working value.
-        $delete = db()->prepare('DELETE FROM zip_archives WHERE id = ?');
-        $delete->execute([(int) $cached['id']]);
+        downloads_model_delete_zip_archive((int) $cached['id']);
     }
 
     gallery_zip_create_atomically($filePath, gallery_zip_entries($gallery, $publicOnly));
-    // Variable $insert stores this steps working value.
-    $insert = db()->prepare('INSERT INTO zip_archives (scope, gallery_id, file_path, content_signature, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)');
-    $insert->execute([$scope, $galleryId, $filePath, $signature, now_sql(), now_sql()]);
+    $now = now_sql();
+    downloads_model_insert_zip_archive($scope, $galleryId, $filePath, $signature, $now);
     return $filePath;
 }
 
@@ -1862,11 +1839,8 @@ function build_all_zip(): string
     cleanup_expired_zip_cache();
     // Variable $signature stores this steps working value.
     $signature = all_zip_signature();
-    // Variable $stmt stores this steps working value.
-    $stmt = db()->prepare('SELECT * FROM zip_archives WHERE scope = ? AND gallery_id IS NULL AND content_signature = ? ORDER BY id DESC LIMIT 1');
-    $stmt->execute(['all', $signature]);
     // Variable $cached stores this steps working value.
-    $cached = $stmt->fetch();
+    $cached = downloads_model_find_zip_archive('all', null, $signature);
     if ($cached && zip_cache_file_is_fresh((string) $cached['file_path'])) {
         return (string) $cached['file_path'];
     }
@@ -1876,23 +1850,18 @@ function build_all_zip(): string
         if (path_inside(zip_cache_dir(), $cachedPath) && is_file($cachedPath)) {
             @unlink($cachedPath);
         }
-        // Variable $delete stores this steps working value.
-        $delete = db()->prepare('DELETE FROM zip_archives WHERE id = ?');
-        $delete->execute([(int) $cached['id']]);
+        downloads_model_delete_zip_archive((int) $cached['id']);
     }
 
     // Variable $galleries stores this steps working value.
-    $stmt = db()->prepare('SELECT * FROM galleries ORDER BY CHAR_LENGTH(folder_path), folder_path, id');
-    $stmt->execute();
-    $galleries = $stmt->fetchAll();
+    $galleries = downloads_model_all_galleries();
     // Variable $entries stores this steps working value.
     $entries = gallery_zip_entries_from_galleries($galleries, false);
     // Variable $filePath stores this steps working value.
     $filePath = zip_cache_dir() . DIRECTORY_SEPARATOR . 'all-' . $signature . '.zip';
     create_zip($filePath, $entries);
-    // Variable $insert stores this steps working value.
-    $insert = db()->prepare('INSERT INTO zip_archives (scope, gallery_id, file_path, content_signature, created_at, updated_at) VALUES (?, NULL, ?, ?, ?, ?)');
-    $insert->execute(['all', $filePath, $signature, now_sql(), now_sql()]);
+    $now = now_sql();
+    downloads_model_insert_zip_archive('all', null, $filePath, $signature, $now);
     return $filePath;
 }
 
@@ -1937,14 +1906,7 @@ function gallery_zip_entries_from_galleries(array $galleries, bool $publicOnly):
     // Variable $galleryIds stores this steps working value.
     $galleryIds = gallery_zip_gallery_ids($galleries);
     if ($galleryIds) {
-        // Variable $placeholders stores this steps working value.
-        $placeholders = implode(',', array_fill(0, count($galleryIds), '?'));
-        // Variable $imageVisibilitySql stores this steps working value.
-        $imageVisibilitySql = $publicOnly ? " AND visibility = 'public'" : '';
-        // Variable $stmt stores this steps working value.
-        $stmt = db()->prepare("SELECT * FROM images WHERE gallery_id IN ($placeholders)" . $imageVisibilitySql . ' ORDER BY gallery_id, sort_order, filename, relative_path');
-        $stmt->execute($galleryIds);
-        foreach ($stmt->fetchAll() as $image) {
+        foreach (downloads_model_images_for_galleries($galleryIds, $publicOnly) as $image) {
             // Variable $imageGallery stores this steps working value.
             $imageGallery = $galleryById[(int) $image['gallery_id']] ?? null;
             if (!$imageGallery) {
@@ -2065,20 +2027,31 @@ function create_zip(string $filePath, array $entries): void
 }
 
 /**
- * Stream a ZIP file to the browser and stop processing.
+ * Return a validated ZIP stream descriptor for controller-owned HTTP output.
  *
- * @param string $filePath File path filesystem path.
- * @param string $downloadName Download name value.
+ * @param string $filePath ZIP filesystem path.
+ * @param string $downloadName Download filename.
+ * @return array{status:int,path:string,filename:string,mime:string,length:int,message:string} Stream descriptor.
  */
-function send_download(string $filePath, string $downloadName): never
+function download_stream_descriptor(string $filePath, string $downloadName): array
 {
     if (!is_file($filePath) || !path_inside(zip_cache_dir(), $filePath)) {
-        http_response_code(404);
-        exit(t('download.error.not_found', 'Download not found.'));
+        return [
+            'status' => 404,
+            'path' => '',
+            'filename' => '',
+            'mime' => 'text/plain; charset=utf-8',
+            'length' => 0,
+            'message' => t('download.error.not_found', 'Download not found.'),
+        ];
     }
-    header('Content-Type: application/zip');
-    header('Content-Disposition: attachment; filename="' . str_replace('"', '', $downloadName) . '"');
-    header('Content-Length: ' . filesize($filePath));
-    readfile($filePath);
-    exit;
+    return [
+        'status' => 200,
+        'path' => $filePath,
+        'filename' => str_replace('"', '', $downloadName),
+        'mime' => 'application/zip',
+        'length' => max(0, (int) (filesize($filePath) ?: 0)),
+        'message' => '',
+    ];
 }
+

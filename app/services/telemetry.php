@@ -36,15 +36,39 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+use function Gallery\Core\request_data;
+
 use Throwable;
 use function Gallery\Core\append_cms_footer_html;
 use function Gallery\Core\append_cms_footer_script;
 use function Gallery\Core\asset_url;
 use function Gallery\Core\current_user;
-use function Gallery\Core\db;
 use function Gallery\Core\e;
 use function Gallery\Core\now_sql;
 use function Gallery\Core\url_for;
+use function Gallery\Models\telemetry_model_browser_mix;
+use function Gallery\Models\telemetry_model_cache_mix;
+use function Gallery\Models\telemetry_model_insert_event;
+use function Gallery\Models\telemetry_model_longest_viewed_photos;
+use function Gallery\Models\telemetry_model_metric_events;
+use function Gallery\Models\telemetry_model_metric_sum;
+use function Gallery\Models\telemetry_model_report_client_errors;
+use function Gallery\Models\telemetry_model_report_daily_trends;
+use function Gallery\Models\telemetry_model_report_database_fingerprints;
+use function Gallery\Models\telemetry_model_report_database_summary;
+use function Gallery\Models\telemetry_model_report_database_totals;
+use function Gallery\Models\telemetry_model_report_job_runs;
+use function Gallery\Models\telemetry_model_report_metric_distribution;
+use function Gallery\Models\telemetry_model_report_performance_metrics;
+use function Gallery\Models\telemetry_model_report_recent_events;
+use function Gallery\Models\telemetry_model_report_session_distribution;
+use function Gallery\Models\telemetry_model_report_session_summary;
+use function Gallery\Models\telemetry_model_report_table_count;
+use function Gallery\Models\telemetry_model_report_top_galleries;
+use function Gallery\Models\telemetry_model_report_top_routes;
+use function Gallery\Models\telemetry_model_top_photos;
+use function Gallery\Models\telemetry_model_upsert_hourly_metric;
+use function Gallery\Models\telemetry_model_upsert_session;
 
 /**
  * Anonymous telemetry service.
@@ -89,7 +113,7 @@ function telemetry_request_excluded(): bool
     if (!telemetry_public_usage_enabled() || !telemetry_schema_ready()) {
         return true;
     }
-    if (telemetry_setting_enabled('telemetry_respect_dnt', '1') && (string) ($_SERVER['HTTP_DNT'] ?? '') === '1') {
+    if (telemetry_setting_enabled('telemetry_respect_dnt', '1') && (string) (request_data('server')['HTTP_DNT'] ?? '') === '1') {
         return true;
     }
     if (telemetry_setting_enabled('telemetry_admin_excluded', '1') && current_user()) {
@@ -209,24 +233,17 @@ function telemetry_record_event(array $event): void
     // $imageId stores a nullable local image identifier.
     $imageId = telemetry_nullable_positive_int($event['image_id'] ?? null);
     // $referrerCategory stores a normalized referrer category.
-    $referrerCategory = telemetry_enum($event['referrer_category'] ?? telemetry_referrer_category($_SERVER['HTTP_REFERER'] ?? null), ['direct', 'internal', 'search', 'social', 'external', 'unknown'], 'unknown');
+    $referrerCategory = telemetry_enum($event['referrer_category'] ?? telemetry_referrer_category(request_data('server')['HTTP_REFERER'] ?? null), ['direct', 'internal', 'search', 'social', 'external', 'unknown'], 'unknown');
 
     try {
-        // $stmt stores the raw short-retention event insert query.
-        $stmt = db()->prepare('INSERT INTO telemetry_events (
-            occurred_at, received_at, event_name, source, session_hash, request_id, route_name, page_kind,
-            gallery_id, image_id, referrer_category, browser_family, browser_major_bucket, os_family, device_type,
-            viewport_class, locale_bucket, country_code, duration_ms_capped, value_count, value_bytes, value_ms,
-            value_bucket, cache_result, media_variant, http_status, error_kind, sampled_rate, context_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-        $stmt->execute([
+        telemetry_model_insert_event([
             telemetry_datetime_from_event($event['occurred_at'] ?? null),
             now_sql(),
             $eventName,
             telemetry_enum($event['source'] ?? 'client', ['client', 'server', 'job'], 'client'),
             $sessionHash,
             telemetry_request_id(),
-            telemetry_short_identifier($event['route_name'] ?? ($_GET['page'] ?? 'unknown'), 80),
+            telemetry_short_identifier($event['route_name'] ?? (request_data('query')['page'] ?? 'unknown'), 80),
             telemetry_enum($event['page_kind'] ?? 'unknown', ['home', 'gallery', 'subgallery', 'photo', 'media', 'admin', 'download', 'api', 'other', 'unknown'], 'unknown'),
             $galleryId,
             $imageId,
@@ -284,35 +301,18 @@ function telemetry_touch_session(?string $sessionHash, string $eventName, array 
         return;
     }
     // $routeName stores the normalized current route.
-    $routeName = telemetry_short_identifier($event['route_name'] ?? ($_GET['page'] ?? 'unknown'), 80);
+    $routeName = telemetry_short_identifier($event['route_name'] ?? (request_data('query')['page'] ?? 'unknown'), 80);
     // $pageIncrement stores whether this event should count as a page view.
     $pageIncrement = in_array($eventName, ['public.session.started', 'public.page.viewed', 'public.gallery.viewed'], true) ? 1 : 0;
     // $photoIncrement stores whether this event should count as a photo view.
     $photoIncrement = $eventName === 'public.photo.opened' ? 1 : 0;
     // $durationSeconds stores capped visible seconds for session totals.
     $durationSeconds = $eventName === 'public.photo.visible_time' ? (int) floor(min(max(0, (int) ($event['duration_ms'] ?? 0)), telemetry_max_photo_view_ms()) / 1000) : 0;
-    // $stmt stores the anonymous session upsert query.
-    $stmt = db()->prepare('INSERT INTO telemetry_sessions (
-        session_hash, started_at, last_seen_at, first_route_name, last_route_name, first_gallery_id, last_gallery_id,
-        first_image_id, last_image_id, entry_referrer_category, browser_family, browser_major_bucket, os_family,
-        device_type, viewport_class, locale_bucket, country_code, page_view_count, photo_view_count,
-        duration_seconds_capped, bounced, exit_route_name, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON DUPLICATE KEY UPDATE
-        last_seen_at = VALUES(last_seen_at),
-        last_route_name = VALUES(last_route_name),
-        last_gallery_id = COALESCE(VALUES(last_gallery_id), last_gallery_id),
-        last_image_id = COALESCE(VALUES(last_image_id), last_image_id),
-        page_view_count = page_view_count + VALUES(page_view_count),
-        photo_view_count = photo_view_count + VALUES(photo_view_count),
-        duration_seconds_capped = duration_seconds_capped + VALUES(duration_seconds_capped),
-        bounced = IF(page_view_count + VALUES(page_view_count) <= 1, 1, 0),
-        exit_route_name = VALUES(exit_route_name),
-        updated_at = VALUES(updated_at)');
-    $stmt->execute([
+    $now = now_sql();
+    telemetry_model_upsert_session([
         $sessionHash,
-        now_sql(),
-        now_sql(),
+        $now,
+        $now,
         $routeName,
         $routeName,
         $galleryId,
@@ -332,8 +332,8 @@ function telemetry_touch_session(?string $sessionHash, string $eventName, array 
         $durationSeconds,
         1,
         $routeName,
-        now_sql(),
-        now_sql(),
+        $now,
+        $now,
     ]);
 }
 
@@ -369,23 +369,10 @@ function telemetry_record_hourly_metric(string $eventName, array $event, ?int $g
     }
     // $bucketStart stores the current hour boundary for aggregate writes.
     $bucketStart = date('Y-m-d H:00:00');
-    // $stmt stores the aggregate metric upsert query.
-    $stmt = db()->prepare('INSERT INTO telemetry_hourly_metrics (
-        bucket_start, metric_name, route_name, page_kind, gallery_id, image_id, browser_family, os_family,
-        device_type, viewport_class, country_code, referrer_category, media_variant, cache_result,
-        sample_count, event_count, value_sum, value_min, value_max, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON DUPLICATE KEY UPDATE
-        sample_count = sample_count + VALUES(sample_count),
-        event_count = event_count + VALUES(event_count),
-        value_sum = value_sum + VALUES(value_sum),
-        value_min = IF(value_min IS NULL, VALUES(value_min), LEAST(value_min, VALUES(value_min))),
-        value_max = IF(value_max IS NULL, VALUES(value_max), GREATEST(value_max, VALUES(value_max))),
-        updated_at = VALUES(updated_at)');
-    $stmt->execute([
+    telemetry_model_upsert_hourly_metric([
         $bucketStart,
         $metricName,
-        telemetry_short_identifier($event['route_name'] ?? ($_GET['page'] ?? ''), 80) ?? '',
+        telemetry_short_identifier($event['route_name'] ?? (request_data('query')['page'] ?? ''), 80) ?? '',
         telemetry_enum($event['page_kind'] ?? 'unknown', ['home', 'gallery', 'subgallery', 'photo', 'media', 'admin', 'download', 'api', 'other', 'unknown'], 'unknown'),
         $galleryId ?? 0,
         $imageId ?? 0,
@@ -417,7 +404,17 @@ function telemetry_record_hourly_metric(string $eventName, array $event, ?int $g
  * @param string $mediaVariant Media variant value.
  * @param string $cacheResult Cache result value.
  */
-function telemetry_record_media_served_event(array $image, array $gallery, string $eventName, int $bytes, string $mediaVariant, string $cacheResult = 'miss'): void
+function telemetry_record_media_served_event(
+    array $image,
+    array $gallery,
+    string $eventName,
+    int $bytes,
+    string $mediaVariant,
+    string $cacheResult = 'miss',
+    string $routeName = 'media',
+    ?string $referrer = null,
+    int $httpStatus = 200
+): void
 {
     if ($bytes <= 0 || telemetry_request_excluded()) {
         return;
@@ -426,15 +423,15 @@ function telemetry_record_media_served_event(array $image, array $gallery, strin
         'event_name' => $eventName,
         'source' => 'server',
         'occurred_at' => gmdate('c'),
-        'route_name' => $_GET['page'] ?? 'media',
+        'route_name' => $routeName !== '' ? $routeName : 'media',
         'page_kind' => 'media',
         'gallery_id' => (int) $gallery['id'],
         'image_id' => (int) $image['id'],
-        'referrer_category' => telemetry_referrer_category($_SERVER['HTTP_REFERER'] ?? null),
+        'referrer_category' => telemetry_referrer_category($referrer),
         'value_bytes' => $bytes,
         'media_variant' => $mediaVariant,
         'cache_result' => $cacheResult,
-        'http_status' => http_response_code() ?: 200,
+        'http_status' => max(100, min(599, $httpStatus)),
     ]);
 }
 
@@ -450,17 +447,7 @@ function telemetry_record_media_served_event(array $image, array $gallery, strin
  */
 function telemetry_format_bytes(int|float $bytes, int $precision = 1): string
 {
-    $bytes = (float) $bytes;
-    $units = ['B', 'kB', 'MB', 'GB', 'TB', 'PB', 'EB'];
-    $index = 0;
-    while ($bytes >= 1024 && $index < count($units) - 1) {
-        $bytes /= 1024;
-        $index++;
-    }
-    if ($index === 0) {
-        return number_format($bytes, 0) . ' ' . $units[$index];
-    }
-    return number_format($bytes, $precision) . ' ' . $units[$index];
+    return \Gallery\Core\format_bytes($bytes, $precision);
 }
 
 /**
@@ -481,11 +468,11 @@ function telemetry_public_config(array $context = []): array
         'performanceSampleRate' => (float) telemetry_setting('telemetry_performance_sample_rate', '0.25'),
         'maxPhotoViewSeconds' => (int) telemetry_setting('telemetry_max_photo_view_seconds', '900'),
         'respectDnt' => telemetry_setting_enabled('telemetry_respect_dnt', '1'),
-        'routeName' => telemetry_short_identifier($context['route_name'] ?? ($_GET['page'] ?? 'unknown'), 80) ?? 'unknown',
+        'routeName' => telemetry_short_identifier($context['route_name'] ?? (request_data('query')['page'] ?? 'unknown'), 80) ?? 'unknown',
         'pageKind' => telemetry_enum($context['page_kind'] ?? 'unknown', ['home', 'gallery', 'subgallery', 'photo', 'media', 'admin', 'download', 'api', 'other', 'unknown'], 'unknown'),
         'galleryId' => telemetry_nullable_positive_int($context['gallery_id'] ?? null),
         'imageId' => telemetry_nullable_positive_int($context['image_id'] ?? null),
-        'referrerCategory' => telemetry_referrer_category($_SERVER['HTTP_REFERER'] ?? null),
+        'referrerCategory' => telemetry_referrer_category(request_data('server')['HTTP_REFERER'] ?? null),
     ];
 }
 
@@ -526,10 +513,7 @@ function telemetry_metric_sum(string $metricName, int $days = 30): float
     if (!telemetry_schema_ready()) {
         return 0.0;
     }
-    // $stmt stores the aggregate read query for one metric name.
-    $stmt = db()->prepare('SELECT COALESCE(SUM(value_sum), 0) FROM telemetry_hourly_metrics WHERE metric_name = ? AND bucket_start >= DATE_SUB(NOW(), INTERVAL ? DAY)');
-    $stmt->execute([$metricName, $days]);
-    return (float) $stmt->fetchColumn();
+    return telemetry_model_metric_sum($metricName, $days);
 }
 
 /**
@@ -544,10 +528,7 @@ function telemetry_metric_events(string $metricName, int $days = 30): int
     if (!telemetry_schema_ready()) {
         return 0;
     }
-    // $stmt stores the aggregate count query for one metric name.
-    $stmt = db()->prepare('SELECT COALESCE(SUM(event_count), 0) FROM telemetry_hourly_metrics WHERE metric_name = ? AND bucket_start >= DATE_SUB(NOW(), INTERVAL ? DAY)');
-    $stmt->execute([$metricName, $days]);
-    return (int) $stmt->fetchColumn();
+    return telemetry_model_metric_events($metricName, $days);
 }
 
 /**
@@ -562,17 +543,7 @@ function telemetry_top_photos(int $days = 30, int $limit = 15): array
     if (!telemetry_schema_ready()) {
         return [];
     }
-    // $stmt stores the top photo view query.
-    $stmt = db()->prepare('SELECT i.id, i.filename, g.title AS gallery_title, SUM(m.event_count) AS photo_views
-        FROM telemetry_hourly_metrics m
-        JOIN images i ON i.id = m.image_id
-        JOIN galleries g ON g.id = i.gallery_id
-        WHERE m.metric_name = ? AND m.bucket_start >= DATE_SUB(NOW(), INTERVAL ? DAY) AND m.image_id > 0
-        GROUP BY i.id, i.filename, g.title
-        ORDER BY photo_views DESC
-        LIMIT ' . max(1, min(50, $limit)));
-    $stmt->execute(['photo.views', $days]);
-    return $stmt->fetchAll();
+    return telemetry_model_top_photos($days, $limit);
 }
 
 /**
@@ -587,18 +558,7 @@ function telemetry_longest_viewed_photos(int $days = 30, int $limit = 15): array
     if (!telemetry_schema_ready()) {
         return [];
     }
-    // $stmt stores the average capped view-time query.
-    $stmt = db()->prepare('SELECT i.id, i.filename, g.title AS gallery_title, SUM(m.value_sum) / NULLIF(SUM(m.event_count), 0) AS avg_view_seconds, SUM(m.event_count) AS view_count
-        FROM telemetry_hourly_metrics m
-        JOIN images i ON i.id = m.image_id
-        JOIN galleries g ON g.id = i.gallery_id
-        WHERE m.metric_name = ? AND m.bucket_start >= DATE_SUB(NOW(), INTERVAL ? DAY) AND m.image_id > 0
-        GROUP BY i.id, i.filename, g.title
-        HAVING view_count > 0
-        ORDER BY avg_view_seconds DESC
-        LIMIT ' . max(1, min(50, $limit)));
-    $stmt->execute(['photo.view_seconds', $days]);
-    return $stmt->fetchAll();
+    return telemetry_model_longest_viewed_photos($days, $limit);
 }
 
 /**
@@ -612,10 +572,7 @@ function telemetry_browser_mix(int $days = 30): array
     if (!telemetry_schema_ready()) {
         return [];
     }
-    // $stmt stores the browser mix query.
-    $stmt = db()->prepare('SELECT browser_family, COUNT(*) AS sessions FROM telemetry_sessions WHERE started_at >= DATE_SUB(NOW(), INTERVAL ? DAY) GROUP BY browser_family ORDER BY sessions DESC');
-    $stmt->execute([$days]);
-    return $stmt->fetchAll();
+    return telemetry_model_browser_mix($days);
 }
 
 /**
@@ -629,10 +586,7 @@ function telemetry_cache_mix(int $days = 30): array
     if (!telemetry_schema_ready()) {
         return [];
     }
-    // $stmt stores the cache mix query.
-    $stmt = db()->prepare('SELECT cache_result, SUM(event_count) AS events FROM telemetry_hourly_metrics WHERE metric_name LIKE ? AND bucket_start >= DATE_SUB(NOW(), INTERVAL ? DAY) GROUP BY cache_result ORDER BY events DESC');
-    $stmt->execute(['cache.%', $days]);
-    return $stmt->fetchAll();
+    return telemetry_model_cache_mix($days);
 }
 
 /**
@@ -656,58 +610,10 @@ function telemetry_report_bound_int(int $value, int $min, int $max): int
  */
 function telemetry_report_table_count(string $tableName): int
 {
-    $allowedTables = [
-        'telemetry_events',
-        'telemetry_sessions',
-        'telemetry_hourly_metrics',
-        'telemetry_daily_metrics',
-        'telemetry_db_query_metrics',
-        'telemetry_job_runs',
-    ];
-    if (!in_array($tableName, $allowedTables, true)) {
-        return 0;
-    }
     try {
-        $stmt = db()->query('SELECT COUNT(*) FROM ' . $tableName);
-        return (int) $stmt->fetchColumn();
+        return telemetry_model_report_table_count($tableName);
     } catch (Throwable) {
         return 0;
-    }
-}
-
-/**
- * Return a single scalar value from a parameterized telemetry report query.
- *
- * @param string $sql Sql value.
- * @param array $params Params value.
- * @return float Numeric result for the caller.
- */
-function telemetry_report_scalar(string $sql, array $params = []): float
-{
-    try {
-        $stmt = db()->prepare($sql);
-        $stmt->execute($params);
-        return (float) $stmt->fetchColumn();
-    } catch (Throwable) {
-        return 0.0;
-    }
-}
-
-/**
- * Return rows from a parameterized telemetry report query.
- *
- * @param string $sql Sql value.
- * @param array $params Params value.
- * @return array Structured result data for the caller.
- */
-function telemetry_report_rows(string $sql, array $params = []): array
-{
-    try {
-        $stmt = db()->prepare($sql);
-        $stmt->execute($params);
-        return $stmt->fetchAll();
-    } catch (Throwable) {
-        return [];
     }
 }
 
@@ -719,19 +625,11 @@ function telemetry_report_rows(string $sql, array $params = []): array
  */
 function telemetry_report_session_summary(int $days): array
 {
-    return telemetry_report_rows('SELECT
-        COUNT(*) AS sessions,
-        COALESCE(SUM(page_view_count), 0) AS page_views,
-        COALESCE(SUM(photo_view_count), 0) AS photo_views,
-        COALESCE(SUM(duration_seconds_capped), 0) AS duration_seconds,
-        COALESCE(AVG(page_view_count), 0) AS avg_pages_per_session,
-        COALESCE(AVG(photo_view_count), 0) AS avg_photos_per_session,
-        COALESCE(AVG(duration_seconds_capped), 0) AS avg_duration_seconds,
-        COALESCE(SUM(CASE WHEN page_view_count <= 1 THEN 1 ELSE 0 END), 0) AS bounced_sessions,
-        COALESCE(SUM(CASE WHEN started_at < DATE_SUB(NOW(), INTERVAL 7 DAY) THEN 1 ELSE 0 END), 0) AS previous_sessions,
-        COALESCE(SUM(CASE WHEN started_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) THEN 1 ELSE 0 END), 0) AS recent_sessions
-        FROM telemetry_sessions
-        WHERE started_at >= DATE_SUB(NOW(), INTERVAL ? DAY)', [$days])[0] ?? [];
+    try {
+        return telemetry_model_report_session_summary($days);
+    } catch (Throwable) {
+        return [];
+    }
 }
 
 /**
@@ -742,17 +640,11 @@ function telemetry_report_session_summary(int $days): array
  */
 function telemetry_report_daily_trends(int $days): array
 {
-    return telemetry_report_rows('SELECT DATE(bucket_start) AS report_date,
-        SUM(CASE WHEN metric_name = \'public.sessions\' THEN event_count ELSE 0 END) AS sessions,
-        SUM(CASE WHEN metric_name = \'public.page_views\' THEN event_count ELSE 0 END) AS page_views,
-        SUM(CASE WHEN metric_name = \'photo.views\' THEN event_count ELSE 0 END) AS photo_views,
-        SUM(CASE WHEN metric_name = \'photo.view_seconds\' THEN value_sum ELSE 0 END) AS photo_seconds,
-        SUM(CASE WHEN metric_name = \'client.errors\' THEN event_count ELSE 0 END) AS client_errors,
-        SUM(CASE WHEN metric_name IN (\'media.image.bytes\', \'media.thumbnail.bytes\', \'media.download.bytes\') THEN value_sum ELSE 0 END) AS media_bytes
-        FROM telemetry_hourly_metrics
-        WHERE bucket_start >= DATE_SUB(NOW(), INTERVAL ? DAY)
-        GROUP BY DATE(bucket_start)
-        ORDER BY report_date ASC', [$days]);
+    try {
+        return telemetry_model_report_daily_trends($days);
+    } catch (Throwable) {
+        return [];
+    }
 }
 
 /**
@@ -765,17 +657,11 @@ function telemetry_report_daily_trends(int $days): array
 function telemetry_report_top_galleries(int $days, int $limit = 25): array
 {
     $limit = telemetry_report_bound_int($limit, 1, 100);
-    return telemetry_report_rows('SELECT g.id, g.title, g.slug,
-        SUM(CASE WHEN m.metric_name = \'public.page_views\' THEN m.event_count ELSE 0 END) AS page_views,
-        SUM(CASE WHEN m.metric_name = \'photo.views\' THEN m.event_count ELSE 0 END) AS photo_views,
-        SUM(CASE WHEN m.metric_name = \'photo.view_seconds\' THEN m.value_sum ELSE 0 END) AS photo_seconds,
-        SUM(CASE WHEN m.metric_name IN (\'media.image.bytes\', \'media.thumbnail.bytes\', \'media.download.bytes\') THEN m.value_sum ELSE 0 END) AS media_bytes
-        FROM telemetry_hourly_metrics m
-        JOIN galleries g ON g.id = m.gallery_id
-        WHERE m.bucket_start >= DATE_SUB(NOW(), INTERVAL ? DAY) AND m.gallery_id > 0
-        GROUP BY g.id, g.title, g.slug
-        ORDER BY page_views DESC, photo_views DESC, media_bytes DESC
-        LIMIT ' . $limit, [$days]);
+    try {
+        return telemetry_model_report_top_galleries($days, $limit);
+    } catch (Throwable) {
+        return [];
+    }
 }
 
 /**
@@ -788,16 +674,11 @@ function telemetry_report_top_galleries(int $days, int $limit = 25): array
 function telemetry_report_top_routes(int $days, int $limit = 25): array
 {
     $limit = telemetry_report_bound_int($limit, 1, 100);
-    return telemetry_report_rows('SELECT route_name,
-        SUM(CASE WHEN metric_name = \'public.page_views\' THEN event_count ELSE 0 END) AS page_views,
-        SUM(CASE WHEN metric_name = \'photo.views\' THEN event_count ELSE 0 END) AS photo_views,
-        SUM(CASE WHEN metric_name = \'client.errors\' THEN event_count ELSE 0 END) AS client_errors,
-        SUM(CASE WHEN metric_name IN (\'media.image.bytes\', \'media.thumbnail.bytes\', \'media.download.bytes\') THEN value_sum ELSE 0 END) AS media_bytes
-        FROM telemetry_hourly_metrics
-        WHERE bucket_start >= DATE_SUB(NOW(), INTERVAL ? DAY) AND route_name <> \'\'
-        GROUP BY route_name
-        ORDER BY page_views DESC, photo_views DESC, client_errors DESC
-        LIMIT ' . $limit, [$days]);
+    try {
+        return telemetry_model_report_top_routes($days, $limit);
+    } catch (Throwable) {
+        return [];
+    }
 }
 
 /**
@@ -816,12 +697,11 @@ function telemetry_report_metric_distribution(string $dimension, int $days, stri
         return [];
     }
     $limit = telemetry_report_bound_int($limit, 1, 100);
-    return telemetry_report_rows('SELECT ' . $dimension . ' AS label, SUM(event_count) AS events, SUM(value_sum) AS value_sum
-        FROM telemetry_hourly_metrics
-        WHERE bucket_start >= DATE_SUB(NOW(), INTERVAL ? DAY) AND metric_name = ?
-        GROUP BY ' . $dimension . '
-        ORDER BY events DESC, value_sum DESC
-        LIMIT ' . $limit, [$days, $metricName]);
+    try {
+        return telemetry_model_report_metric_distribution($dimension, $days, $metricName, $limit);
+    } catch (Throwable) {
+        return [];
+    }
 }
 
 /**
@@ -839,16 +719,11 @@ function telemetry_report_session_distribution(string $dimension, int $days, int
         return [];
     }
     $limit = telemetry_report_bound_int($limit, 1, 100);
-    return telemetry_report_rows('SELECT COALESCE(NULLIF(' . $dimension . ', \'\'), \'unknown\') AS label,
-        COUNT(*) AS sessions,
-        COALESCE(SUM(page_view_count), 0) AS page_views,
-        COALESCE(SUM(photo_view_count), 0) AS photo_views,
-        COALESCE(AVG(duration_seconds_capped), 0) AS avg_duration_seconds
-        FROM telemetry_sessions
-        WHERE started_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
-        GROUP BY COALESCE(NULLIF(' . $dimension . ', \'\'), \'unknown\')
-        ORDER BY sessions DESC
-        LIMIT ' . $limit, [$days]);
+    try {
+        return telemetry_model_report_session_distribution($dimension, $days, $limit);
+    } catch (Throwable) {
+        return [];
+    }
 }
 
 /**
@@ -859,16 +734,11 @@ function telemetry_report_session_distribution(string $dimension, int $days, int
  */
 function telemetry_report_performance_metrics(int $days): array
 {
-    return telemetry_report_rows('SELECT metric_name,
-        SUM(event_count) AS samples,
-        SUM(value_sum) / NULLIF(SUM(event_count), 0) AS avg_value,
-        MIN(value_min) AS min_value,
-        MAX(value_max) AS max_value
-        FROM telemetry_hourly_metrics
-        WHERE bucket_start >= DATE_SUB(NOW(), INTERVAL ? DAY)
-          AND (metric_name LIKE \'web_vital.%\' OR metric_name IN (\'client.image_decode_ms\', \'client.image_display_ms\'))
-        GROUP BY metric_name
-        ORDER BY metric_name ASC', [$days]);
+    try {
+        return telemetry_model_report_performance_metrics($days);
+    } catch (Throwable) {
+        return [];
+    }
 }
 
 /**
@@ -881,15 +751,11 @@ function telemetry_report_performance_metrics(int $days): array
 function telemetry_report_client_errors(int $days, int $limit = 25): array
 {
     $limit = telemetry_report_bound_int($limit, 1, 100);
-    return telemetry_report_rows('SELECT COALESCE(NULLIF(error_kind, \'\'), \'unknown\') AS error_kind,
-        COALESCE(NULLIF(route_name, \'\'), \'unknown\') AS route_name,
-        COUNT(*) AS events,
-        MAX(occurred_at) AS last_seen
-        FROM telemetry_events
-        WHERE occurred_at >= DATE_SUB(NOW(), INTERVAL ? DAY) AND event_name = \'client.error.javascript\'
-        GROUP BY COALESCE(NULLIF(error_kind, \'\'), \'unknown\'), COALESCE(NULLIF(route_name, \'\'), \'unknown\')
-        ORDER BY events DESC, last_seen DESC
-        LIMIT ' . $limit, [$days]);
+    try {
+        return telemetry_model_report_client_errors($days, $limit);
+    } catch (Throwable) {
+        return [];
+    }
 }
 
 /**
@@ -902,13 +768,11 @@ function telemetry_report_client_errors(int $days, int $limit = 25): array
 function telemetry_report_recent_events(int $days, int $limit = 80): array
 {
     $limit = telemetry_report_bound_int($limit, 1, 200);
-    return telemetry_report_rows('SELECT occurred_at, event_name, source, route_name, page_kind, gallery_id, image_id,
-        referrer_category, browser_family, os_family, device_type, viewport_class, media_variant,
-        cache_result, http_status, error_kind, value_bytes, value_ms, duration_ms_capped
-        FROM telemetry_events
-        WHERE occurred_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
-        ORDER BY occurred_at DESC
-        LIMIT ' . $limit, [$days]);
+    try {
+        return telemetry_model_report_recent_events($days, $limit);
+    } catch (Throwable) {
+        return [];
+    }
 }
 
 /**
@@ -921,19 +785,11 @@ function telemetry_report_recent_events(int $days, int $limit = 80): array
 function telemetry_report_database_summary(int $days, int $limit = 40): array
 {
     $limit = telemetry_report_bound_int($limit, 1, 100);
-    return telemetry_report_rows('SELECT route_name, operation, table_name,
-        SUM(query_count) AS query_count,
-        SUM(failed_count) AS failed_count,
-        SUM(slow_count) AS slow_count,
-        SUM(latency_ms_sum) AS latency_ms_sum,
-        MAX(latency_ms_max) AS latency_ms_max,
-        SUM(rows_returned_sum) AS rows_returned_sum,
-        SUM(rows_affected_sum) AS rows_affected_sum
-        FROM telemetry_db_query_metrics
-        WHERE bucket_start >= DATE_SUB(NOW(), INTERVAL ? DAY)
-        GROUP BY route_name, operation, table_name
-        ORDER BY latency_ms_sum DESC, query_count DESC
-        LIMIT ' . $limit, [$days]);
+    try {
+        return telemetry_model_report_database_summary($days, $limit);
+    } catch (Throwable) {
+        return [];
+    }
 }
 
 
@@ -945,11 +801,11 @@ function telemetry_report_database_summary(int $days, int $limit = 40): array
  */
 function telemetry_report_database_totals(int $days): array
 {
-    return [
-        'query_count' => telemetry_report_scalar('SELECT COALESCE(SUM(query_count), 0) FROM telemetry_db_query_metrics WHERE bucket_start >= DATE_SUB(NOW(), INTERVAL ? DAY)', [$days]),
-        'slow_count' => telemetry_report_scalar('SELECT COALESCE(SUM(slow_count), 0) FROM telemetry_db_query_metrics WHERE bucket_start >= DATE_SUB(NOW(), INTERVAL ? DAY)', [$days]),
-        'failed_count' => telemetry_report_scalar('SELECT COALESCE(SUM(failed_count), 0) FROM telemetry_db_query_metrics WHERE bucket_start >= DATE_SUB(NOW(), INTERVAL ? DAY)', [$days]),
-    ];
+    try {
+        return telemetry_model_report_database_totals($days);
+    } catch (Throwable) {
+        return ['query_count' => 0.0, 'slow_count' => 0.0, 'failed_count' => 0.0];
+    }
 }
 
 /**
@@ -962,17 +818,11 @@ function telemetry_report_database_totals(int $days): array
 function telemetry_report_database_fingerprints(int $days, int $limit = 30): array
 {
     $limit = telemetry_report_bound_int($limit, 1, 100);
-    return telemetry_report_rows('SELECT query_fingerprint, route_name, operation, table_name,
-        SUM(query_count) AS query_count,
-        SUM(failed_count) AS failed_count,
-        SUM(slow_count) AS slow_count,
-        SUM(latency_ms_sum) / NULLIF(SUM(query_count), 0) AS avg_latency_ms,
-        MAX(latency_ms_max) AS max_latency_ms
-        FROM telemetry_db_query_metrics
-        WHERE bucket_start >= DATE_SUB(NOW(), INTERVAL ? DAY)
-        GROUP BY query_fingerprint, route_name, operation, table_name
-        ORDER BY slow_count DESC, avg_latency_ms DESC, query_count DESC
-        LIMIT ' . $limit, [$days]);
+    try {
+        return telemetry_model_report_database_fingerprints($days, $limit);
+    } catch (Throwable) {
+        return [];
+    }
 }
 
 /**
@@ -985,9 +835,9 @@ function telemetry_report_database_fingerprints(int $days, int $limit = 30): arr
 function telemetry_report_job_runs(int $days, int $limit = 40): array
 {
     $limit = telemetry_report_bound_int($limit, 1, 100);
-    return telemetry_report_rows('SELECT job_name, status, started_at, finished_at, duration_ms, gallery_id, image_id, item_count, retry_count, error_kind
-        FROM telemetry_job_runs
-        WHERE started_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
-        ORDER BY started_at DESC
-        LIMIT ' . $limit, [$days]);
+    try {
+        return telemetry_model_report_job_runs($days, $limit);
+    } catch (Throwable) {
+        return [];
+    }
 }

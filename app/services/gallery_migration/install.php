@@ -42,16 +42,15 @@ use RuntimeException;
 use Throwable;
 use ZipArchive;
 use const Gallery\Core\CMS_VERSION;
-use function Gallery\Controllers\admin_edit_gallery_tab_url;
 use function Gallery\Core\cms_config;
 use function Gallery\Core\cms_current_version;
-use function Gallery\Core\db;
 use function Gallery\Core\gallery_public_url;
 use function Gallery\Core\is_supported_image_path;
 use function Gallery\Core\normalize_relative_path;
 use function Gallery\Core\now_sql;
 use function Gallery\Core\path_inside;
-use function Gallery\Core\unique_slug;
+use function Gallery\Models\gallery_model_update_fields;
+use function Gallery\Models\image_model_migration_upsert;
 
 /**
  * Install one received or pulled asset into its mapped target gallery.
@@ -209,8 +208,7 @@ function gallery_migration_install_gallery_asset(int $targetGalleryId, array $as
     }
     gallery_migration_copy_if_same_or_missing($sourcePath, $targetPath, (string) ($asset['checksum_sha256'] ?? ''));
 
-    $stmt = db()->prepare('UPDATE galleries SET ' . $column . ' = ?, updated_at = ? WHERE id = ?');
-    $stmt->execute([$relativePath, now_sql(), $targetGalleryId]);
+    gallery_model_update_fields($targetGalleryId, [$column => $relativePath], now_sql());
     $updated = find_gallery($targetGalleryId, true) ?: $gallery;
     write_gallery_sidecar($updated);
 
@@ -378,30 +376,12 @@ function gallery_migration_upsert_image_metadata(int $targetGalleryId, array $im
         }
     }
 
-    if ($existing) {
-        $assignments = [];
-        $values = [];
-        foreach ($columns as $column => $value) {
-            if (in_array($column, ['relative_path', 'relative_path_hash'], true)) {
-                continue;
-            }
-            $assignments[] = $column . ' = ?';
-            $values[] = $value;
-        }
-        $assignments[] = 'updated_at = ?';
-        $values[] = now_sql();
-        $values[] = (int) $existing['id'];
-        db()->prepare('UPDATE images SET ' . implode(', ', $assignments) . ' WHERE id = ?')->execute($values);
-        $imageId = (int) $existing['id'];
-    } else {
-        $columns['gallery_id'] = $targetGalleryId;
-        $columns['created_at'] = now_sql();
-        $columns['updated_at'] = now_sql();
-        $names = array_keys($columns);
-        $stmt = db()->prepare('INSERT INTO images (' . implode(', ', $names) . ') VALUES (' . implode(', ', array_fill(0, count($names), '?')) . ')');
-        $stmt->execute(array_values($columns));
-        $imageId = (int) db()->lastInsertId();
-    }
+    $imageId = image_model_migration_upsert(
+        $targetGalleryId,
+        $existing ? (int) $existing['id'] : null,
+        $columns,
+        now_sql()
+    );
 
     if (function_exists('Gallery\\Services\\sync_entity_tags')) {
         sync_entity_tags('image', $imageId, (string) ($imageManifest['tags'] ?? ''));

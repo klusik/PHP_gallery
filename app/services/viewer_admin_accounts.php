@@ -43,8 +43,10 @@ namespace Gallery\Services;
 use InvalidArgumentException;
 use RuntimeException;
 use Throwable;
-use function Gallery\Core\db;
 use function Gallery\Core\now_sql;
+use function Gallery\Models\viewer_account_model_admin_list;
+use function Gallery\Models\viewer_account_model_admin_create;
+use function Gallery\Models\viewer_account_model_admin_delete;
 
 /**
  * Return the schema capability required for direct administrator viewer provisioning/listing.
@@ -116,12 +118,7 @@ function viewer_admin_account_list(int $limit = 250): array
     if (!viewer_admin_account_storage_available()) {
         throw new RuntimeException('Viewer account management storage is unavailable.');
     }
-    $limit = max(1, min(1000, $limit));
-    $stmt = db()->query(
-        'SELECT id, email, status, must_change_password, created_at, last_login_at, password_changed_at '
-        . 'FROM viewer_accounts ORDER BY created_at DESC, id DESC LIMIT ' . $limit
-    );
-    return $stmt->fetchAll() ?: [];
+    return viewer_account_model_admin_list($limit);
 }
 
 /**
@@ -180,96 +177,48 @@ function viewer_admin_account_create(int $adminUserId, string $email, ?string $t
         ];
     }
 
-    $pdo = db();
-    $ownsTransaction = !$pdo->inTransaction();
-    if ($ownsTransaction) {
-        $pdo->beginTransaction();
-    }
     try {
-        viewer_account_capacity_lock();
-        $accountCount = viewer_account_capacity_recount_locked();
-        if ($accountCount >= viewer_account_cap()) {
-            if ($ownsTransaction) {
-                $pdo->commit();
-            }
-            return [
-                'created' => false,
-                'reason' => 'account_capacity',
-                'account_id' => null,
-                'email' => $submittedEmail,
-                'temporary_password' => null,
-                'password_generated' => $passwordGenerated,
-            ];
-        }
-
-        $existing = $pdo->prepare('SELECT id FROM viewer_accounts WHERE normalized_email = ? LIMIT 1 FOR UPDATE');
-        $existing->execute([$normalizedEmail]);
-        if ($existing->fetchColumn() !== false) {
-            if ($ownsTransaction) {
-                $pdo->commit();
-            }
-            return [
-                'created' => false,
-                'reason' => 'account_exists',
-                'account_id' => null,
-                'email' => $submittedEmail,
-                'temporary_password' => null,
-                'password_generated' => $passwordGenerated,
-            ];
-        }
-
-        $now = now_sql();
-        $insert = $pdo->prepare(
-            'INSERT INTO viewer_accounts '
-            . '(email, normalized_email, password_hash, must_change_password, status, security_version, email_verified_at, password_changed_at, created_at, updated_at) '
-            . 'VALUES (?, ?, ?, 1, ?, 1, ?, NULL, ?, ?)'
-        );
-        $insert->execute([
+        $result = viewer_account_model_admin_create(
             $submittedEmail,
             $normalizedEmail,
             viewer_password_hash($password),
             VIEWER_ACCOUNT_STATUS_ACTIVE,
-            $now,
-            $now,
-            $now,
-        ]);
-        $accountId = (int) $pdo->lastInsertId();
-        if ($accountId <= 0) {
-            throw new RuntimeException('Administrator-provisioned viewer account did not receive an id.');
+            viewer_account_cap(),
+            VIEWER_ACCOUNT_CAPACITY_STATE_KEY,
+            now_sql()
+        );
+    } catch (Throwable $exception) {
+        if ((string) $exception->getCode() === '23000') {
+            $result = ['created' => false, 'reason' => 'account_exists', 'account_id' => null];
+        } else {
+            throw $exception;
         }
-        viewer_account_capacity_recount_locked();
+    }
 
-        if ($ownsTransaction) {
-            $pdo->commit();
-        }
-        viewer_security_event_record_best_effort('viewer.account_admin_created', $accountId, 'success', [
-            'admin_user_id' => $adminUserId,
-            'must_change_password' => true,
-        ]);
+    if (empty($result['created'])) {
         return [
-            'created' => true,
-            'reason' => 'created',
-            'account_id' => $accountId,
+            'created' => false,
+            'reason' => (string) ($result['reason'] ?? 'storage_unavailable'),
+            'account_id' => null,
             'email' => $submittedEmail,
-            'temporary_password' => $password,
+            'temporary_password' => null,
             'password_generated' => $passwordGenerated,
         ];
-    } catch (Throwable $exception) {
-        if ($ownsTransaction && $pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
-        if ((string) $exception->getCode() === '23000') {
-            return [
-                'created' => false,
-                'reason' => 'account_exists',
-                'account_id' => null,
-                'email' => $submittedEmail,
-                'temporary_password' => null,
-                'password_generated' => $passwordGenerated,
-            ];
-        }
-        throw $exception;
     }
+
+    $accountId = (int) ($result['account_id'] ?? 0);
+    viewer_security_event_record_best_effort('viewer.account_admin_created', $accountId, 'success', [
+        'admin_user_id' => $adminUserId,
+        'must_change_password' => true,
+    ]);
+    return [
+        'created' => true,
+        'reason' => 'created',
+        'account_id' => $accountId,
+        'email' => $submittedEmail,
+        'temporary_password' => $password,
+        'password_generated' => $passwordGenerated,
+    ];
 }
 
 /**
@@ -292,65 +241,19 @@ function viewer_admin_account_delete(int $adminUserId, int $viewerAccountId): ar
         return ['deleted' => false, 'reason' => 'storage_unavailable'];
     }
 
-    $pdo = db();
-    $ownsTransaction = !$pdo->inTransaction();
-    if ($ownsTransaction) {
-        $pdo->beginTransaction();
+    $result = viewer_account_model_admin_delete(
+        $viewerAccountId,
+        VIEWER_ACCOUNT_CAPACITY_STATE_KEY,
+        now_sql()
+    );
+    if (empty($result['deleted'])) {
+        return ['deleted' => false, 'reason' => (string) ($result['reason'] ?? 'not_found')];
     }
-    try {
-        $accountStmt = $pdo->prepare('SELECT * FROM viewer_accounts WHERE id = ? LIMIT 1 FOR UPDATE');
-        $accountStmt->execute([$viewerAccountId]);
-        $account = $accountStmt->fetch();
-        if (!$account) {
-            if ($ownsTransaction) {
-                $pdo->commit();
-            }
-            return ['deleted' => false, 'reason' => 'not_found'];
-        }
 
-        viewer_account_capacity_lock();
-        viewer_account_capacity_recount_locked();
-
-        $now = now_sql();
-        $invalidatedSecurityVersion = (int) ($account['security_version'] ?? 0) + 1;
-        $invalidate = $pdo->prepare(
-            'UPDATE viewer_accounts SET security_version = ?, updated_at = ? WHERE id = ? AND security_version = ?'
-        );
-        $invalidate->execute([
-            $invalidatedSecurityVersion,
-            $now,
-            $viewerAccountId,
-            (int) ($account['security_version'] ?? 0),
-        ]);
-        if ($invalidate->rowCount() !== 1) {
-            throw new RuntimeException('Administrator viewer deletion lost the account security-version race.');
-        }
-
-        $pdo->prepare(
-            'UPDATE viewer_collection_share_tokens SET revoked_at = ? '
-            . 'WHERE created_by_viewer_account_id = ? AND revoked_at IS NULL'
-        )->execute([$now, $viewerAccountId]);
-
-        $delete = $pdo->prepare('DELETE FROM viewer_accounts WHERE id = ?');
-        $delete->execute([$viewerAccountId]);
-        if ($delete->rowCount() !== 1) {
-            throw new RuntimeException('Administrator viewer deletion did not remove the locked account.');
-        }
-
-        viewer_account_capacity_recount_locked();
-        if ($ownsTransaction) {
-            $pdo->commit();
-        }
-        viewer_security_event_record_best_effort('viewer.account_admin_deleted', null, 'success', [
-            'admin_user_id' => $adminUserId,
-            'deleted_viewer_account_id' => $viewerAccountId,
-            'security_version' => $invalidatedSecurityVersion,
-        ]);
-        return ['deleted' => true, 'reason' => 'account_deleted'];
-    } catch (Throwable $exception) {
-        if ($ownsTransaction && $pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
-        throw $exception;
-    }
+    viewer_security_event_record_best_effort('viewer.account_admin_deleted', null, 'success', [
+        'admin_user_id' => $adminUserId,
+        'deleted_viewer_account_id' => $viewerAccountId,
+        'security_version' => (int) ($result['security_version'] ?? 0),
+    ]);
+    return ['deleted' => true, 'reason' => 'account_deleted'];
 }

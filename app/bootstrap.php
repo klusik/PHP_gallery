@@ -88,7 +88,7 @@ function cms_run(): void
     cms_dispatch_page($page);
     cms_request_trace_mark('dispatch_end', ['page' => $page]);
     if (function_exists('Gallery\Services\admin_test_run_response_logical_finish')) {
-        \Gallery\Services\admin_test_run_response_logical_finish('cms_dispatch_returned');
+        apply_response_header_intents(\Gallery\Services\admin_test_run_response_logical_finish('cms_dispatch_returned', http_response_code() ?: 200));
     }
     if (function_exists('Gallery\\Services\\gallery_benchmark_record_request_completion')) {
         \Gallery\Services\gallery_benchmark_record_request_completion($page);

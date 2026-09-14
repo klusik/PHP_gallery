@@ -17,6 +17,9 @@
  *   - Verify public telemetry, third-party security services, and new persistence are not introduced
  *   - Protect Phase 4.0 through Phase 4.3 registration, token, anti-automation, and identity boundaries
  *
+ * Author:
+ *   Rudolf Klusal
+ *
  * Notes:
  *   - Keep comments and docstrings intact when modifying this file.
  *   - This focused fixture uses deterministic aggregate database responses and requires no live database.
@@ -317,7 +320,9 @@ namespace {
         ],
     ];
 
+    require_once $root . '/app/models/viewer_security_operations.php';
     require_once $root . '/app/services/viewer_security_operations.php';
+    require_once $root . '/app/views/viewer_accounts.php';
     require_once $root . '/app/controllers/viewer_accounts.php';
 
     /** Fail the focused Phase 4.4 test with one explicit message. */
@@ -394,7 +399,7 @@ namespace {
     viewer_phase44_assert($rate['buckets']['viewer_register_ip']['locked_subjects'] === 1, 'Currently locked registration subjects must be aggregate-only.');
     viewer_phase44_assert($rate['global_budgets']['viewer_register_global_day']['current_attempts'] === 23, 'Current global registration budget usage must be derived from the active window.');
     viewer_phase44_assert($rate['global_budgets']['viewer_verify_mail_global_day']['current_attempts'] === 41, 'Current global verification-mail budget usage must be derived from the active window.');
-    $rateSql = \Gallery\Services\viewer_security_operations_rate_limit_query(\Gallery\Services\viewer_security_operations_rate_limit_policies(), $now);
+    $rateSql = \Gallery\Models\viewer_security_operations_model_rate_limit_query(\Gallery\Services\viewer_security_operations_rate_limit_policies(), $now);
     viewer_phase44_assert(str_contains($rateSql, "WHEN 'viewer_automation_ip' THEN '2026-08-20 11:50:00'"), 'Automation active-subject cutoff must follow its 600-second policy window.');
     viewer_phase44_assert(str_contains($rateSql, "WHEN 'viewer_register_ip' THEN '2026-08-20 11:00:00'"), 'Registration active-subject cutoff must follow its one-hour policy window.');
     viewer_phase44_assert(str_contains($rateSql, "WHEN 'viewer_register_global_day' THEN '2026-08-19 12:00:00'"), 'Global registration usage must use the current 24-hour policy window.');
@@ -446,6 +451,7 @@ namespace {
     viewer_phase44_assert($_SESSION['viewer_anti_automation'] === $antiAutomationSessionBefore, 'Admin operations viewing must not create, consume, or modify Phase 4.3 anti-automation session authority.');
 
     $operationsService = (string) file_get_contents($root . '/app/services/viewer_security_operations.php');
+    $operationsModel = (string) file_get_contents($root . '/app/models/viewer_security_operations.php');
     $viewerController = (string) file_get_contents($root . '/app/controllers/viewer_accounts.php');
     $servicesBootstrap = (string) file_get_contents($root . '/app/services.php');
     $dispatch = (string) file_get_contents($root . '/app/bootstrap/dispatch.php');
@@ -459,9 +465,10 @@ namespace {
     viewer_phase44_assert(str_contains($servicesBootstrap, 'viewer_security_operations.php'), 'The focused operations service must load through the shared service bootstrap.');
 
     foreach (['viewer_security_events', 'viewer_rate_limit_buckets', 'viewer_rate_limits', 'viewer_registration_requests', 'viewer_registration_state', 'viewer_account_state', 'viewer_accounts'] as $existingStore) {
-        viewer_phase44_assert(str_contains($operationsService, $existingStore), 'Phase 4.4 must reuse existing storage: ' . $existingStore . '.');
+        viewer_phase44_assert(str_contains($operationsService . "\n" . $operationsModel, $existingStore), 'Phase 4.4 must reuse existing storage through the service/model boundary: ' . $existingStore . '.');
     }
-    viewer_phase44_assert(!preg_match('/\b(?:INSERT|UPDATE|DELETE|REPLACE)\s+/i', $operationsService), 'The Phase 4.4 operations service must contain no database mutation query.');
+    viewer_phase44_assert(!preg_match('/\b(?:SELECT|INSERT|UPDATE|DELETE|REPLACE)\s+/i', $operationsService), 'The Phase 4.4 operations service must contain no database query.');
+    viewer_phase44_assert(!preg_match('/\b(?:INSERT|UPDATE|DELETE|REPLACE)\s+/i', $operationsModel), 'The Phase 4.4 operations model must remain read-only.');
     viewer_phase44_assert(substr_count($operationsService, 'viewer_rate_limit_consume(') === 1, 'Displaying limiter pressure must never call viewer_rate_limit_consume(); the only occurrence may be the explicit read-only warning in the file docblock.');
     viewer_phase44_assert(!str_contains($operationsService, 'viewer_anti_automation_form_issue(') && !str_contains($operationsService, 'viewer_anti_automation_challenge_issue('), 'Admin operations viewing must not issue anti-automation authority.');
     foreach (['viewer_registration_verification_confirm(', 'viewer_registration_verification_resend_prepare(', 'viewer_registration_verification_resend_discard(', 'viewer_invitation_issue(', 'viewer_invitation_revoke(', 'viewer_invitation_delete('] as $authorityMutation) {
@@ -469,14 +476,14 @@ namespace {
     }
     viewer_phase44_assert(!str_contains($operationsService, 'telemetry_') && !str_contains($operationsService, 'telemetry.php'), 'Viewer security operations must remain independent of public telemetry.');
     viewer_phase44_assert(!str_contains($operationsService, 'viewer_security_event_record'), 'Viewing operations must not add an Admin page-view or request-attempt security event.');
-    viewer_phase44_assert(!str_contains($operationsService, 'SELECT *'), 'Operations queries must remain aggregate/bounded rather than hydrating full rows.');
+    viewer_phase44_assert(!str_contains($operationsModel, 'SELECT *'), 'Operations model queries must remain aggregate/bounded rather than hydrating full rows.');
 
     $migrationFiles = glob($root . '/database/migrations/*.php') ?: [];
     foreach ($migrationFiles as $migrationFile) {
         viewer_phase44_assert(!str_contains(basename($migrationFile), 'phase44') && !str_contains(basename($migrationFile), 'security_operations'), 'Phase 4.4 must not add a persistence migration.');
     }
     foreach (['viewer_metrics', 'viewer_security_metrics', 'viewer_daily_metrics', 'viewer_registration_statistics', 'viewer_analytics'] as $forbiddenTable) {
-        viewer_phase44_assert(stripos($operationsService, $forbiddenTable) === false, 'Phase 4.4 must not introduce a new metrics persistence table.');
+        viewer_phase44_assert(stripos($operationsService . "\n" . $operationsModel, $forbiddenTable) === false, 'Phase 4.4 must not introduce a new metrics persistence table.');
     }
 
     $combinedChangedRuntime = $operationsService . "\n" . $viewerController . "\n" . $servicesBootstrap;

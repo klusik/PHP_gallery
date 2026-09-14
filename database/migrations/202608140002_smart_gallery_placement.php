@@ -1,5 +1,20 @@
 <?php
 
+/**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ *
+ * File: database/migrations/202608140002_smart_gallery_placement.php
+ *
+ * Author:
+ *   Rudolf Klusal
+ *
+ * License:
+ *   MIT License (see LICENSE file in repository)
+ *
+ * Notes:
+ *   - Keep comments and docstrings intact when modifying this file.
+ */
 /** Add explicit root, physical-gallery child, and unlisted Smart Gallery placement. */
 
 declare(strict_types=1);

@@ -165,9 +165,13 @@ namespace {
             feature_policy_stage13_assert(array_key_exists((string) $navigationFeature, feature_capability_definitions()), 'Admin navigation references unknown capability ' . $navigationFeature . '.');
         }
     }
+    $sharedLayoutController = (string) file_get_contents($root . '/app/controllers/shared_layout.php');
     feature_policy_stage13_assert(
-        str_contains($adminChrome, 'feature_capability_effective_enabled($featureKey)'),
-        'Admin sidebar rendering must hide items whose declared capability is not effectively available.'
+        str_contains($sharedLayoutController, '$featureEnabled[$featureKey] = feature_capability_effective_enabled($featureKey);')
+            && str_contains($adminChrome, '$featureStates = is_array($model[\'feature_enabled\'] ?? null) ? $model[\'feature_enabled\'] : [];')
+            && str_contains($adminChrome, '$featureEnabled = $featureKey === \'\' || !empty($featureStates[$featureKey]);')
+            && !str_contains($adminChrome, 'feature_capability_effective_enabled($featureKey)'),
+        'Admin sidebar rendering must consume controller-prepared effective capability state without calling the Service layer from the View.'
     );
 
     // Expensive optional work must retain an early capability boundary.
@@ -214,8 +218,9 @@ namespace {
     );
 
     $galleryReportContentSource = (string) file_get_contents($root . '/app/services/admin_gallery_report/content_summary.php');
-    $galleryReportRenderSource = (string) file_get_contents($root . '/app/services/admin_gallery_report/render.php');
-    $galleryReportViewSource = (string) file_get_contents($root . '/app/views/admin_gallery_report.php');
+    $galleryReportExportViewSource = (string) file_get_contents($root . '/app/views/admin_gallery_report_export.php');
+    $galleryReportViewSource = (string) file_get_contents($root . '/app/controllers/admin_gallery_report.php')
+        . (string) file_get_contents($root . '/app/views/admin_gallery_report.php');
     feature_policy_stage13_assert(str_contains($localizationSource, 'content_localization_enabled() ? content_translation_rows'), 'Multilingual OFF must skip translation-row loaders.');
     feature_policy_stage13_assert(substr_count($smartSource, "feature_capability_effective_enabled('smart_galleries')") >= 3, 'Smart Gallery public discovery must short-circuit while its master is OFF.');
     feature_policy_stage13_assert(substr_count($benchmarkSource, "feature_capability_effective_enabled('development_diagnostics')") >= 5, 'Development Diagnostics OFF must skip profiler and benchmark work.');
@@ -237,7 +242,7 @@ namespace {
         'Complete Gallery Report must not execute an unused Telemetry settings query.'
     );
     feature_policy_stage13_assert(
-        str_contains($galleryReportRenderSource, "if (!empty(\$telemetry['disabled']))")
+        str_contains($galleryReportExportViewSource, "if (!empty(\$telemetry['disabled']))")
             && str_contains($galleryReportViewSource, "feature_capability_effective_enabled('telemetry')")
             && str_contains($galleryReportViewSource, 'if ($telemetryEnabled)'),
         'Complete Gallery Report must omit Telemetry-only output controls and sections while Telemetry is effectively disabled.'
@@ -289,9 +294,11 @@ namespace {
     );
 
     $adminLogsSource = (string) file_get_contents($root . '/app/controllers/admin_logs.php');
+    $adminLogsViewSource = (string) file_get_contents($root . '/app/views/admin_logs.php');
     feature_policy_stage13_assert(
-        str_contains($adminLogsSource, "if (feature_capability_effective_enabled('telemetry'))")
-            && str_contains($adminLogsSource, "url_for('admin_telemetry')"),
+        str_contains($adminLogsSource, "'telemetry_enabled' => feature_capability_effective_enabled('telemetry')")
+            && str_contains($adminLogsSource, "'telemetry' => url_for('admin_telemetry')")
+            && str_contains($adminLogsViewSource, "if (!empty(\$viewModel['telemetry_enabled']))"),
         'Admin Logs must not advertise the Telemetry route while Telemetry is effectively disabled.'
     );
 

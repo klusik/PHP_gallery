@@ -37,10 +37,6 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
-use Throwable;
-use function Gallery\Core\cms_config;
-use function Gallery\Core\cms_current_version;
-use function Gallery\Core\db;
 
 /**
  * Build a safe optional SQL column expression.
@@ -54,10 +50,7 @@ use function Gallery\Core\db;
  */
 function admin_gallery_report_column_select(string $table, string $column, string $alias, string $fallback, string $outputAlias): string
 {
-    if (admin_gallery_report_column_exists($table, $column)) {
-        return $alias . '.' . $column . ' AS ' . $outputAlias;
-    }
-    return $fallback . ' AS ' . $outputAlias;
+    throw new \LogicException('Raw report SQL expressions are model-owned. Pass semantic schema capabilities to the report model instead.');
 }
 
 /**
@@ -102,13 +95,7 @@ function admin_gallery_report_column_exists(string $table, string $column): bool
  */
 function admin_gallery_report_rows(string $sql, array $params = []): array
 {
-    try {
-        $stmt = db()->prepare($sql);
-        $stmt->execute($params);
-        return $stmt->fetchAll();
-    } catch (Throwable) {
-        return [];
-    }
+    throw new \LogicException('Raw report SQL execution is no longer available in the service layer.');
 }
 
 /**
@@ -121,16 +108,7 @@ function admin_gallery_report_rows(string $sql, array $params = []): array
  */
 function admin_gallery_report_scalar_int(string $sql, array $params = [], bool $countRows = false): int
 {
-    try {
-        $stmt = db()->prepare($sql);
-        $stmt->execute($params);
-        if ($countRows) {
-            return count($stmt->fetchAll());
-        }
-        return (int) ($stmt->fetchColumn() ?: 0);
-    } catch (Throwable) {
-        return 0;
-    }
+    throw new \LogicException('Raw report SQL execution is no longer available in the service layer.');
 }
 
 /**
@@ -142,8 +120,22 @@ function admin_gallery_report_scalar_int(string $sql, array $params = [], bool $
  */
 function admin_gallery_report_group_query(string $sql, array $params = []): array
 {
-    $rows = admin_gallery_report_rows($sql, $params);
+    throw new \LogicException('Raw report SQL execution is no longer available in the service layer.');
+}
+
+/**
+ * Normalize grouped report rows returned by model-owned queries.
+ *
+ * @param array $rows Group rows.
+ * @return array<int, array<string, mixed>> Normalized group rows.
+ */
+function admin_gallery_report_normalize_group_rows(array $rows): array
+{
     foreach ($rows as &$row) {
+        if (!is_array($row)) {
+            $row = [];
+            continue;
+        }
         $row['label'] = (string) ($row['label'] ?? 'unknown');
         $row['count'] = (int) ($row['count'] ?? 0);
     }

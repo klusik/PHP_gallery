@@ -47,14 +47,10 @@ use function Gallery\Core\csrf_token;
 use function Gallery\Core\flash_message;
 use function Gallery\Core\css_value;
 use function Gallery\Core\current_user;
-use function Gallery\Core\db;
-use function Gallery\Core\e;
 use function Gallery\Core\gallery_public_url;
 use function Gallery\Core\image_alt_text;
 use function Gallery\Core\image_public_url;
 use function Gallery\Core\redirect_to;
-use function Gallery\Core\render_footer;
-use function Gallery\Core\render_header;
 use function Gallery\Core\request_method;
 use function Gallery\Core\slugify;
 use function Gallery\Core\url_for;
@@ -67,6 +63,7 @@ use function Gallery\Services\current_votes_for_images;
 use function Gallery\Services\feature_flag_enabled;
 use function Gallery\Services\feature_capability_effective_enabled;
 use function Gallery\Services\find_gallery;
+use function Gallery\Services\gallery_access_find_by_token;
 use function Gallery\Services\find_gallery_by_folder_path;
 use function Gallery\Services\find_gallery_by_slug;
 use function Gallery\Services\find_image;
@@ -123,7 +120,6 @@ use function Gallery\Services\pagination_photo_thumbnail_sizes_attribute;
 use function Gallery\Services\pagination_slice_items;
 use function Gallery\Services\picture_game_available;
 use function Gallery\Services\public_gallery_media_manifest;
-use function Gallery\Services\public_gallery_listing_sql_fragment;
 use function Gallery\Services\public_gallery_metadata;
 use function Gallery\Services\public_home_search_enabled;
 use function Gallery\Services\public_image_display_title;
@@ -141,9 +137,9 @@ use function Gallery\Services\public_render_profile_with_thumbnail_purpose;
 use function Gallery\Services\public_search_normalize_query;
 use function Gallery\Services\public_search_query_length;
 use function Gallery\Services\public_search_results;
-use function Gallery\Services\render_gallery_date;
-use function Gallery\Services\render_pagination_controls;
-use function Gallery\Services\render_public_render_profile_panel;
+use function Gallery\Services\gallery_date_view_model;
+use function Gallery\Views\view_render_gallery_date;
+use function Gallery\Views\view_render_pagination_controls;
 use function Gallery\Services\resolve_public_gallery_path;
 use function Gallery\Services\site_name;
 use function Gallery\Services\t;
@@ -162,8 +158,6 @@ use function Gallery\Services\thumbnail_bundles_preload;
 use function Gallery\Services\thumbnail_picture_html;
 use function Gallery\Services\visitor_can_access_gallery;
 use function Gallery\Services\visitor_can_access_nsfw_content;
-use function Gallery\Views\view_gallery_description_markdown_excerpt;
-use function Gallery\Views\view_gallery_description_markdown_html;
 use function Gallery\Views\view_render_gallery_json_ld;
 use function Gallery\Views\view_render_public_seo_tags;
 use function Gallery\Services\admin_log_event;
@@ -259,34 +253,17 @@ function render_public_subgallery_date_sort_toolbar(array $gallery, string $acti
         return;
     }
 
-    // $defaultClass stores the visual state for the default order button.
-    $defaultClass = 'button secondary public-subgallery-sort-button' . ($activeMode === '' ? ' is-active' : '');
-    // $ascClass stores the visual state for the ascending date button.
-    $ascClass = 'button secondary public-subgallery-sort-button' . ($activeMode === 'asc' ? ' is-active' : '');
-    // $descClass stores the visual state for the descending date button.
-    $descClass = 'button secondary public-subgallery-sort-button' . ($activeMode === 'desc' ? ' is-active' : '');
-    // $defaultCurrent stores the accessible current marker for default order.
-    $defaultCurrent = $activeMode === '' ? ' aria-current="true"' : '';
-    // $ascCurrent stores the accessible current marker for ascending order.
-    $ascCurrent = $activeMode === 'asc' ? ' aria-current="true"' : '';
-    // $descCurrent stores the accessible current marker for descending order.
-    $descCurrent = $activeMode === 'desc' ? ' aria-current="true"' : '';
-
-    echo '<div class="public-subgallery-sort-toolbar" aria-label="' . e(t('public.subgallery_sort.label', 'Subgallery sort')) . '">';
-    echo '<div><strong>' . e(t('public.subgallery_sort.title', 'Sort subgalleries by date')) . '</strong><p>' . e(t('public.subgallery_sort.help', 'Only subgalleries with a From date participate. Undated cards keep their current positions. Preview the date order, then save it to update the real order for everyone.')) . '</p></div>';
-    echo '<div class="public-subgallery-sort-actions">';
-    echo '<a class="' . e($defaultClass) . '" href="' . e(public_subgallery_date_sort_url($gallery, '')) . '"' . $defaultCurrent . '>' . e(t('public.subgallery_sort.default', 'Default order')) . '</a>';
-    echo '<a class="' . e($ascClass) . '" href="' . e(public_subgallery_date_sort_url($gallery, 'asc')) . '"' . $ascCurrent . '>' . e(t('public.subgallery_sort.asc', 'Oldest first')) . '</a>';
-    echo '<a class="' . e($descClass) . '" href="' . e(public_subgallery_date_sort_url($gallery, 'desc')) . '"' . $descCurrent . '>' . e(t('public.subgallery_sort.desc', 'Newest first')) . '</a>';
-    if (in_array($activeMode, ['asc', 'desc'], true)) {
-        echo '<form class="public-subgallery-sort-save-form" method="post" action="' . e(url_for('admin_sort_public_subgalleries_by_date')) . '">' . csrf_field();
-        echo '<input type="hidden" name="gallery_id" value="' . (int) $gallery['id'] . '">';
-        echo '<input type="hidden" name="sort_mode" value="' . e($activeMode) . '">';
-        echo '<button class="button public-subgallery-sort-save-button" type="submit">' . e(t('public.subgallery_sort.save_active', 'Save this order')) . '</button>';
-        echo '</form>';
-    }
-    echo '</div>';
-    echo '</div>';
+    \Gallery\Views\view_render_public_subgallery_date_sort_toolbar([
+        'gallery_id' => (int) $gallery['id'],
+        'active_mode' => $activeMode,
+        'urls' => [
+            'default' => public_subgallery_date_sort_url($gallery, ''),
+            'asc' => public_subgallery_date_sort_url($gallery, 'asc'),
+            'desc' => public_subgallery_date_sort_url($gallery, 'desc'),
+        ],
+        'save_url' => url_for('admin_sort_public_subgalleries_by_date'),
+        'csrf_html' => csrf_field(),
+    ]);
 }
 
 /**
@@ -309,17 +286,15 @@ function render_public_page_reorder_toolbar(string $kind, array $gallery, array 
         return;
     }
 
-    // $offset stores the first zero-based position represented by this visible page.
-    $offset = (int) ($pagination['offset'] ?? 0);
-    // $label stores the item type shown in the compact admin-only toolbar.
-    $label = $kind === 'gallery' ? t('public.reorder.subgalleries', 'subgalleries') : t('public.reorder.photos', 'photos');
-    // $endpoint stores the existing backend route or a small public-page wrapper around it.
-    $endpoint = $kind === 'gallery' ? url_for('admin_reorder_public_galleries') : url_for('admin_reorder_images');
-
-    echo '<div class="public-reorder-toolbar" data-public-reorder-toolbar data-reorder-kind="' . e($kind) . '" data-reorder-url="' . e($endpoint) . '" data-gallery-id="' . (int) $gallery['id'] . '" data-visible-offset="' . $offset . '" data-visible-count="' . $visibleCount . '" data-total-count="' . $totalCount . '" data-csrf-token="' . e(csrf_token()) . '">';
-    echo '<div><strong>' . e(t('public.reorder.move_visible_items', 'Move visible {items}', ['items' => $label])) . '</strong><p>' . e(t('public.reorder.visible_page_help', 'Drag only the cards shown on this page. Other pagination pages are not touched.')) . '</p></div>';
-    echo '<span class="public-reorder-status" data-public-reorder-status aria-live="polite">' . e(t('public.reorder.ready', 'Ready.')) . '</span>';
-    echo '</div>';
+    \Gallery\Views\view_render_public_page_reorder_toolbar([
+        'kind' => $kind,
+        'endpoint' => $kind === 'gallery' ? url_for('admin_reorder_public_galleries') : url_for('admin_reorder_images'),
+        'gallery_id' => (int) $gallery['id'],
+        'offset' => (int) ($pagination['offset'] ?? 0),
+        'visible_count' => $visibleCount,
+        'total_count' => $totalCount,
+        'csrf_token' => csrf_token(),
+    ]);
 }
 
 /**
@@ -342,60 +317,24 @@ function render_picture_manager_toolbar(array $gallery, bool $hasVisibleDropTarg
     $galleryId = (int) $gallery['id'];
     // $suggestedDestinationId stores the most likely child gallery destination for typeahead prefill.
     $suggestedDestinationId = function_exists('Gallery\\Services\\likely_gallery_destination_id') ? likely_gallery_destination_id($galleryId) : 0;
-    // $dropHelp stores the drag-and-drop hint appropriate for the current visible page.
-    $dropHelp = $hasVisibleDropTargets
-        ? t('picture_manager.drop_help_visible', 'Drag selected photos onto a visible subgallery, or use the destination list below.')
-        : t('picture_manager.drop_help_hidden', 'No subgallery target is visible on this page. Use the destination list below.');
-
-    echo '<section class="picture-manager-toolbar is-picture-manager-collapsed" data-picture-manager data-source-gallery-id="' . $galleryId . '" data-csrf-token="' . e(csrf_token()) . '" data-move-url="' . e(url_for('picture_manager_move')) . '" data-copy-url="' . e(url_for('picture_manager_copy')) . '" data-create-url="' . e(url_for('picture_manager_create_gallery')) . '" data-download-url="' . e(url_for('picture_manager_download_selection')) . '">';
-    echo '<div class="picture-manager-summary">';
-    echo '<button type="button" class="picture-manager-toggle" data-picture-manager-toggle aria-expanded="false">';
-    echo '<span class="picture-manager-toggle-icon" aria-hidden="true">▸</span>';
-    echo '<span><strong>' . e(t('picture_manager.title', 'Picture manager')) . '</strong><small>' . e(t('picture_manager.collapsed_help', 'Select, move, copy, or create galleries from visible photos.')) . '</small></span>';
-    echo '</button>';
-    echo '<span class="picture-manager-count" data-picture-manager-count aria-live="polite">' . e(t('picture_manager.none_selected', 'No photos selected.')) . '</span>';
-    echo '</div>';
-
-    echo '<div class="picture-manager-panel" data-picture-manager-panel>';
-    echo '<div class="picture-manager-heading">';
-    echo '<div class="picture-manager-hints"><p>' . e(t('picture_manager.help', 'Select photos with the checkmarks. Shift-click selects a range. Ctrl-click or Cmd-click toggles one photo.')) . '</p><p>' . e($dropHelp) . '</p></div>';
-    echo '<div class="picture-manager-actions" aria-label="' . e(t('picture_manager.selection_actions', 'Selection actions')) . '">';
-    echo '<button type="button" class="button secondary picture-manager-icon-button" data-picture-manager-select-all title="' . e(t('picture_manager.select_all', 'Select all')) . '" aria-label="' . e(t('picture_manager.select_all', 'Select all')) . '"><span class="picture-manager-button-icon" aria-hidden="true">☑</span><span class="picture-manager-button-label">' . e(t('picture_manager.select_all_short', 'All')) . '</span></button>';
-    echo '<button type="button" class="button secondary picture-manager-icon-button" data-picture-manager-clear title="' . e(t('picture_manager.clear_selection', 'Clear selection')) . '" aria-label="' . e(t('picture_manager.clear_selection', 'Clear selection')) . '" disabled><span class="picture-manager-button-icon" aria-hidden="true">×</span><span class="picture-manager-button-label">' . e(t('picture_manager.clear_selection_short', 'Clear')) . '</span></button>';
-    echo '<button type="button" class="button secondary picture-manager-icon-button picture-manager-share-button" data-picture-manager-share title="' . e(t('picture_manager.share_selected', 'Share selected')) . '" aria-label="' . e(t('picture_manager.share_selected', 'Share selected')) . '" disabled><span class="picture-manager-button-icon" aria-hidden="true">↗</span><span class="picture-manager-button-label">' . e(t('picture_manager.share_short', 'Share')) . '</span></button>';
-    echo '</div>';
-    echo '</div>';
-
-    echo '<div class="picture-manager-action-grid">';
-    echo '<div class="picture-manager-action-card">';
-    echo '<label for="picture-manager-destination-' . $galleryId . '">' . e(t('picture_manager.move_or_copy_to', 'Move or copy selected to gallery')) . '</label>';
-    echo '<div class="picture-manager-inline-fields">';
-    echo render_gallery_search_picker('', 0, $galleryId, [
+    // $destinationPickerHtml reuses the established gallery picker rather than duplicating its data/presentation contract.
+    $destinationPickerHtml = render_gallery_search_picker('', 0, $galleryId, [
         'id' => 'picture-manager-destination-' . $galleryId,
         'placeholder' => t('picture_manager.search_destination', 'Search target gallery'),
         'prefill_gallery_id' => $suggestedDestinationId,
         'hidden_attributes' => ['data-picture-manager-destination' => ''],
     ]);
-    echo '<button type="button" class="button picture-manager-icon-button is-primary-action" data-picture-manager-move title="' . e(t('picture_manager.move_selected', 'Move selected')) . '" aria-label="' . e(t('picture_manager.move_selected', 'Move selected')) . '" disabled><span class="picture-manager-button-icon" aria-hidden="true">↪</span><span class="picture-manager-button-label">' . e(t('picture_manager.move_short', 'Move')) . '</span></button>';
-    echo '<button type="button" class="button secondary picture-manager-icon-button" data-picture-manager-copy title="' . e(t('picture_manager.copy_selected', 'Copy selected')) . '" aria-label="' . e(t('picture_manager.copy_selected', 'Copy selected')) . '" disabled><span class="picture-manager-button-icon" aria-hidden="true">⧉</span><span class="picture-manager-button-label">' . e(t('picture_manager.copy_short', 'Copy')) . '</span></button>';
-    echo '</div>';
-    echo '<p>' . e(t('picture_manager.move_copy_warning', 'Move removes photos from this gallery. Copy keeps the originals here and creates real file copies in the selected gallery.')) . '</p>';
-    echo '</div>';
 
-    echo '<div class="picture-manager-action-card">';
-    echo '<label for="picture-manager-new-title-' . $galleryId . '">' . e(t('picture_manager.create_from_selection', 'Create gallery from selected photos')) . '</label>';
-    echo '<div class="picture-manager-inline-fields">';
-    echo '<input id="picture-manager-new-title-' . $galleryId . '" type="text" data-picture-manager-new-title placeholder="' . e(t('picture_manager.new_gallery_title', 'New gallery title')) . '">';
-    echo '<input type="text" data-picture-manager-new-folder placeholder="' . e(t('picture_manager.optional_folder_name', 'Optional folder name')) . '">';
-    echo '<button type="button" class="button picture-manager-icon-button is-primary-action" data-picture-manager-create title="' . e(t('picture_manager.create_gallery', 'Create gallery')) . '" aria-label="' . e(t('picture_manager.create_gallery', 'Create gallery')) . '" disabled><span class="picture-manager-button-icon" aria-hidden="true">＋</span><span class="picture-manager-button-label">' . e(t('picture_manager.create_short', 'Create')) . '</span></button>';
-    echo '</div>';
-    echo '<p>' . e(t('picture_manager.copy_warning', 'This copies selected photos into the new child gallery. Originals stay here.')) . '</p>';
-    echo '</div>';
-    echo '</div>';
-
-    echo '<p class="picture-manager-status" data-picture-manager-status aria-live="polite">' . e(t('picture_manager.ready', 'Ready.')) . '</p>';
-    echo '</div>';
-    echo '</section>';
+    \Gallery\Views\view_render_picture_manager_toolbar([
+        'gallery_id' => $galleryId,
+        'has_visible_drop_targets' => $hasVisibleDropTargets,
+        'csrf_token' => csrf_token(),
+        'move_url' => url_for('picture_manager_move'),
+        'copy_url' => url_for('picture_manager_copy'),
+        'create_url' => url_for('picture_manager_create_gallery'),
+        'download_url' => url_for('picture_manager_download_selection'),
+        'destination_picker_html' => $destinationPickerHtml,
+    ]);
 }
 
 /**
@@ -442,18 +381,11 @@ function render_public_gallery_preview_toolbar(array $gallery): void
     $isPreview = admin_anonymous_preview_active();
     // $baseUrl stores the clean gallery URL used to avoid carrying image or pagination state unexpectedly.
     $baseUrl = gallery_public_url($gallery);
-    // $targetUrl stores the destination for entering or leaving preview mode.
-    $targetUrl = anonymous_preview_url($baseUrl, !$isPreview);
 
-    echo '<div class="anonymous-preview-toolbar" role="status">';
-    if ($isPreview) {
-        echo '<span><strong>' . e(t('public.preview.active_title', 'Anonymous preview active.')) . '</strong> ' . e(t('public.preview.active_message', 'Admin controls are hidden and visitor visibility rules are being applied.')) . '</span>';
-        echo '<a class="button" href="' . e($targetUrl) . '">' . e(t('public.preview.exit', 'Exit preview')) . '</a>';
-    } else {
-        echo '<span>' . e(t('public.preview.help', 'Review this gallery without inline admin controls, admin navigation, hidden photos, or admin-only visibility.')) . '</span>';
-        echo '<a class="button secondary" href="' . e($targetUrl) . '">' . e(t('public.preview.view_as_anonymous', 'View as anonymous')) . '</a>';
-    }
-    echo '</div>';
+    \Gallery\Views\view_render_public_gallery_preview_toolbar([
+        'is_preview' => $isPreview,
+        'target_url' => anonymous_preview_url($baseUrl, !$isPreview),
+    ]);
 }
 
 /**
@@ -469,31 +401,21 @@ function render_public_gallery_preview_toolbar(array $gallery): void
  */
 function render_public_gallery_branding_header(array $gallery, array $seo, bool $publicOnly): void
 {
-    // $title stores the accessible gallery title used by the current page.
-    $title = (string) ($seo['title'] ?? $gallery['title'] ?? 'Gallery');
-    // $description stores the public gallery description without SEO fallback text.
-    $description = (string) ($gallery['description'] ?? '');
-    // $bannerUrl stores only the per-gallery title-replacement image. Theme fallback banners belong to the shared site header.
-    $bannerUrl = gallery_branding_schema_ready() ? gallery_branding_asset_url($gallery, 'banner', $publicOnly) : '';
-    // $logoUrl stores the optional supplementary logo image.
-    $logoUrl = gallery_branding_schema_ready() ? gallery_branding_asset_url($gallery, 'logo', $publicOnly) : '';
-    // $titleBarClasses stores layout flags for tight and wide gallery headers.
-    $titleBarClasses = 'gallery-title-bar' . ($bannerUrl !== '' ? ' has-gallery-banner' : '') . ($logoUrl !== '' ? ' has-gallery-logo' : '');
+    // $brandingSchemaReady avoids repeated schema-policy inspection for the optional assets.
+    $brandingSchemaReady = gallery_branding_schema_ready();
+    // $dateHtml preserves the established gallery-date renderer while moving page markup into the view layer.
+    ob_start();
+    view_render_gallery_date(gallery_date_view_model($gallery), 'hero-gallery-date');
+    $dateHtml = (string) ob_get_clean();
 
-    echo '<div class="' . e($titleBarClasses) . '">';
-    if ($logoUrl !== '') {
-        echo '<img class="gallery-branding-logo" src="' . e($logoUrl) . '" alt="" aria-hidden="true" decoding="async">';
-    }
-    if ($bannerUrl !== '') {
-        echo '<h1 class="gallery-title gallery-title-with-banner"><span class="visually-hidden">' . e($title) . '</span><img class="gallery-branding-banner" src="' . e($bannerUrl) . '" alt="" aria-hidden="true" decoding="async"></h1>';
-    } else {
-        echo '<h1 class="gallery-title">' . e($title) . '</h1>';
-    }
-    echo '</div>';
-    render_gallery_date($gallery, 'hero-gallery-date');
-    if (trim($description) !== '') {
-        echo '<div class="hero-description gallery-description-rich">' . view_gallery_description_markdown_html($description) . '</div>';
-    }
+    \Gallery\Views\view_render_public_gallery_branding_header([
+        'title' => (string) ($seo['title'] ?? $gallery['title'] ?? 'Gallery'),
+        'description' => (string) ($gallery['description'] ?? ''),
+        'description_links' => public_gallery_description_link_models((string) ($gallery['description'] ?? '')),
+        'banner_url' => $brandingSchemaReady ? gallery_branding_asset_url($gallery, 'banner', $publicOnly) : '',
+        'logo_url' => $brandingSchemaReady ? gallery_branding_asset_url($gallery, 'logo', $publicOnly) : '',
+        'date_html' => $dateHtml,
+    ]);
 }
 
 /**
@@ -508,13 +430,40 @@ function render_public_gallery_branding_separator(array $gallery, bool $publicOn
         return;
     }
     // $separatorUrl stores only the per-gallery divider image. Theme fallback separators belong to the shared site header.
-    $separatorUrl = gallery_branding_schema_ready() ? gallery_branding_asset_url($gallery, 'separator', $publicOnly) : '';
+    $separatorUrl = gallery_branding_asset_url($gallery, 'separator', $publicOnly);
     if ($separatorUrl === '') {
         return;
     }
-    echo '<div class="gallery-branding-separator" aria-hidden="true"><img src="' . e($separatorUrl) . '" alt="" decoding="async"></div>';
+
+    \Gallery\Views\view_render_public_gallery_branding_separator([
+        'separator_url' => $separatorUrl,
+    ]);
 }
 
+/**
+ * Build the presentation-only breadcrumb model for a public gallery context.
+ *
+ * @param ?array $gallery Current gallery or null for the root gallery index.
+ * @return array<string,mixed> Breadcrumb presentation state.
+ */
+function public_gallery_breadcrumbs_view_model(?array $gallery = null): array
+{
+    $ancestors = [];
+    if ($gallery) {
+        foreach (gallery_breadcrumb_ancestors($gallery) as $ancestor) {
+            $ancestors[] = [
+                'title' => (string) ($ancestor['title'] ?? ''),
+                'url' => gallery_public_url($ancestor),
+            ];
+        }
+    }
+
+    return [
+        'home_url' => url_for('home'),
+        'ancestors' => $ancestors,
+        'current_title' => $gallery ? (string) ($gallery['title'] ?? '') : '',
+    ];
+}
 
 /**
  * Handles render breadcrumbs logic for the gallery application.
@@ -523,15 +472,7 @@ function render_public_gallery_branding_separator(array $gallery, bool $publicOn
  */
 function render_breadcrumbs(?array $gallery = null): void
 {
-    echo '<nav class="breadcrumbs" aria-label="' . e(t('public.breadcrumbs', 'Breadcrumbs')) . '">';
-    echo '<a href="' . e(url_for('home')) . '">' . e(t('public.galleries', 'Galleries')) . '</a>';
-    if ($gallery) {
-        foreach (gallery_breadcrumb_ancestors($gallery) as $ancestor) {
-            echo '<span aria-hidden="true">/</span><a href="' . e(gallery_public_url($ancestor)) . '">' . e($ancestor['title']) . '</a>';
-        }
-        echo '<span aria-hidden="true">/</span><span>' . e($gallery['title']) . '</span>';
-    }
-    echo '</nav>';
+    \Gallery\Views\view_render_public_gallery_breadcrumbs(public_gallery_breadcrumbs_view_model($gallery));
 }
 
 /**
@@ -547,34 +488,26 @@ function render_gallery_access_gate(array $gallery, string $error = '', ?array $
     $requirement = gallery_access_requirement($gallery) ?: $gallery;
     // $nsfwRequirement stores the inherited NSFW source, or the current gallery for per-image NSFW.
     $nsfwRequirement = gallery_nsfw_requirement($gallery) ?: ($image !== null && image_nsfw_restricted($image, $gallery) ? $gallery : null);
-    render_header((string) $gallery['title']);
-    render_breadcrumbs($gallery);
-    echo '<section class="panel"><h1>' . e($gallery['title']) . '</h1>';
-    if ($error !== '') {
-        echo '<div class="notice">' . e($error) . '</div>';
-    }
+    // $state selects one presentation branch after all access-policy checks have been resolved in the controller.
+    $state = 'share_only';
     if ($nsfwRequirement !== null && !visitor_can_access_nsfw_content()) {
-        echo '<p>' . e(t('gallery.access.nsfw_gate_intro', 'This gallery or photo is marked as restricted 18+ content. Anonymous visitors must confirm they are at least 18 before access is granted for this browser session. If you are an administrator planning to publish NSFW content, please verify that your hosting provider or web hosting terms allow it before enabling access.')) . '</p>';
-        echo '<form method="post" action="' . e(url_for('gallery_access')) . '" class="form-grid">' . csrf_field();
-        echo '<input type="hidden" name="gallery_id" value="' . (int) $gallery['id'] . '">';
-        if ($image !== null) {
-            echo '<input type="hidden" name="image_id" value="' . (int) $image['id'] . '">';
-        }
-        echo '<input type="hidden" name="access_action" value="confirm_nsfw_age">';
-        echo '<label><input type="checkbox" name="adult_confirmed" value="1" required> ' . e(t('gallery.access.nsfw_confirm_label', 'I confirm that I am at least 18 years old.')) . '</label>';
-        echo '<button type="submit">' . e(t('common.continue', 'Continue')) . '</button></form>';
-    } elseif (empty($requirement['access_password_hash'])) {
-        echo '<p>' . e(t('gallery.access.share_link_only', 'This gallery is available only through its share link.')) . '</p>';
-    } else {
-        echo '<p>' . e(t('gallery.access.password_protected_duration', 'This gallery is password protected. Access closes after {minutes} minutes of session time.', ['minutes' => (string) (int) (gallery_access_lifetime_seconds() / 60)])) . '</p>';
-        echo '<form method="post" action="' . e(url_for('gallery_access')) . '" class="form-grid">' . csrf_field();
-        echo '<input type="hidden" name="gallery_id" value="' . (int) $gallery['id'] . '">';
-        echo '<input type="hidden" name="requirement_id" value="' . (int) $requirement['id'] . '">';
-        echo '<label>' . e(t('common.password', 'Password')) . '<input name="gallery_password" type="password" required autocomplete="current-password"></label>';
-        echo '<button type="submit">' . e(t('gallery.access.open_gallery', 'Open gallery')) . '</button></form>';
+        $state = 'nsfw';
+    } elseif (!empty($requirement['access_password_hash'])) {
+        $state = 'password';
     }
-    echo '</section>';
-    render_footer();
+
+    \Gallery\Views\view_render_gallery_access_gate([
+        'title' => (string) $gallery['title'],
+        'breadcrumbs' => public_gallery_breadcrumbs_view_model($gallery),
+        'error' => $error,
+        'state' => $state,
+        'access_url' => url_for('gallery_access'),
+        'csrf_html' => csrf_field(),
+        'gallery_id' => (int) $gallery['id'],
+        'image_id' => $image !== null ? (int) $image['id'] : 0,
+        'requirement_id' => (int) ($requirement['id'] ?? 0),
+        'lifetime_minutes' => (int) (gallery_access_lifetime_seconds() / 60),
+    ]);
 }
 
 /**
@@ -650,17 +583,8 @@ function cms_share(): void
     }
     // $galleryId stores an intermediate value used by the surrounding gallery workflow.
     $galleryId = (int) ($_GET['id'] ?? 0);
-    if ($galleryId > 0) {
-        // $stmt stores an intermediate value used by the surrounding gallery workflow.
-        $stmt = db()->prepare("SELECT * FROM galleries WHERE id = ? AND access_token_hash = ? LIMIT 1");
-        $stmt->execute([$galleryId, hash('sha256', $token)]);
-    } else {
-        // $stmt stores an intermediate value used by the surrounding gallery workflow.
-        $stmt = db()->prepare("SELECT * FROM galleries WHERE access_token_hash = ? ORDER BY updated_at DESC, id DESC LIMIT 1");
-        $stmt->execute([hash('sha256', $token)]);
-    }
-    // $gallery stores an intermediate value used by the surrounding gallery workflow.
-    $gallery = $stmt->fetch();
+    // $gallery stores the gallery resolved through the access-token persistence boundary.
+    $gallery = gallery_access_find_by_token($token, $galleryId);
     if (!$gallery || (!empty($gallery['access_token_expires_at']) && strtotime((string) $gallery['access_token_expires_at']) < time())) {
         cms_not_found();
         return;

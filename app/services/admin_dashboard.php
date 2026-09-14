@@ -36,8 +36,10 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+use function Gallery\Models\admin_dashboard_model_gallery_rows;
+use function Gallery\Models\admin_dashboard_model_original_storage_bytes;
+use function Gallery\Models\admin_dashboard_model_parent_sync_fingerprint_row;
 use Throwable;
-use function Gallery\Core\db;
 use function Gallery\Core\pending_migrations_exist;
 
 /**
@@ -52,15 +54,7 @@ use function Gallery\Core\pending_migrations_exist;
  */
 function admin_dashboard_original_storage_bytes(): int
 {
-    try {
-        // $row stores the aggregate as a scalar-compatible result from the images table.
-        $stmt = db()->prepare('SELECT COALESCE(SUM(file_size), 0) AS original_bytes FROM images');
-        $stmt->execute();
-        $row = $stmt->fetch();
-        return max(0, (int) ($row['original_bytes'] ?? 0));
-    } catch (Throwable) {
-        return 0;
-    }
+    return admin_dashboard_model_original_storage_bytes();
 }
 
 /**
@@ -82,42 +76,16 @@ function admin_dashboard_original_storage_bytes(): int
  */
 function admin_dashboard_gallery_rows(bool $accessReady, bool $gpsMapReady, bool $backgroundSourceReady, bool $filenameDisplayReady, bool $votingReady, bool $pictureGameReady, bool $publicPathReady, bool $coverAssetReady): array
 {
-    // $selects stores the explicit gallery columns required by dashboard rendering.
-    $selects = [
-        'g.id',
-        'g.parent_id',
-        'g.folder_path',
-        'g.slug',
-        'g.title',
-        'g.sort_order',
-        'g.visibility',
-        'parent.title AS parent_title',
-        'COALESCE(image_counts.image_count, 0) AS image_count',
-    ];
-
-    $selects[] = $publicPathReady ? 'g.url_path' : "'' AS url_path";
-    $selects[] = $accessReady ? 'g.access_mode' : "'normal' AS access_mode";
-    $selects[] = $accessReady ? 'g.access_listing' : "'listed' AS access_listing";
-    $selects[] = $gpsMapReady ? 'g.gps_map_enabled' : '0 AS gps_map_enabled';
-    $selects[] = $backgroundSourceReady ? 'g.background_source' : 'NULL AS background_source';
-    $selects[] = $filenameDisplayReady ? 'g.show_filenames' : '0 AS show_filenames';
-    $selects[] = $votingReady ? 'g.voting_enabled' : '0 AS voting_enabled';
-    $selects[] = $pictureGameReady ? 'g.picture_game_enabled' : '0 AS picture_game_enabled';
-    $selects[] = $coverAssetReady ? 'g.cover_image_path' : 'NULL AS cover_image_path';
-
-    // $sql stores a one-pass gallery query with image counts pre-aggregated by gallery.
-    $sql = 'SELECT ' . implode(', ', $selects) . "
-        FROM galleries g
-        LEFT JOIN galleries parent ON parent.id = g.parent_id
-        LEFT JOIN (
-            SELECT gallery_id, COUNT(id) AS image_count
-            FROM images
-            WHERE relative_path NOT LIKE '%/%'
-            GROUP BY gallery_id
-        ) image_counts ON image_counts.gallery_id = g.id
-        ORDER BY COALESCE(g.parent_id, 0), g.sort_order, g.title";
-
-    return db()->query($sql)->fetchAll();
+    return admin_dashboard_model_gallery_rows([
+        'access' => $accessReady,
+        'gps_map' => $gpsMapReady,
+        'background_source' => $backgroundSourceReady,
+        'filename_display' => $filenameDisplayReady,
+        'voting' => $votingReady,
+        'picture_game' => $pictureGameReady,
+        'public_path' => $publicPathReady,
+        'cover_asset' => $coverAssetReady,
+    ]);
 }
 
 /**
@@ -128,16 +96,10 @@ function admin_dashboard_gallery_rows(bool $accessReady, bool $gpsMapReady, bool
 function admin_dashboard_parent_sync_fingerprint(): string
 {
     try {
-        // $row stores aggregate gallery data that changes when indexed gallery rows change.
-        $row = admin_render_profile_db('parent_sync_fingerprint_query', static function (): array {
-            $stmt = db()->prepare("SELECT COUNT(*) AS gallery_count, COALESCE(MAX(id), 0) AS newest_id, COALESCE(MAX(updated_at), '') AS newest_updated_at, COALESCE(SUM(CHAR_LENGTH(folder_path)), 0) AS path_length_sum FROM galleries");
-            $stmt->execute();
-            return $stmt->fetch() ?: [];
-        });
+        $row = admin_render_profile_db('parent_sync_fingerprint_query', static fn (): array => admin_dashboard_model_parent_sync_fingerprint_row());
     } catch (Throwable) {
         return '';
     }
-
     return hash('sha256', implode('|', [
         (string) ($row['gallery_count'] ?? '0'),
         (string) ($row['newest_id'] ?? '0'),
@@ -222,6 +184,11 @@ function admin_dashboard_view_model(bool $includeMaintenance = false): array
     // Preview URLs may hit cover lookup helpers, so resolve them before handing rows to the view.
     foreach ($galleries as $index => $gallery) {
         $galleries[$index]['preview_url'] = admin_gallery_preview_url($gallery);
+        // Presentation-ready domain state keeps policy lookups out of the View layer.
+        $galleries[$index]['view_visibility'] = gallery_effective_visibility($gallery);
+        $galleries[$index]['view_visibility_label'] = gallery_visibility_label($galleries[$index]['view_visibility']);
+        $galleries[$index]['view_gps_map_enabled'] = $gpsMapReady && gallery_effective_gps_map_enabled($gallery);
+        $galleries[$index]['view_background_source_set'] = $backgroundSourceReady && gallery_background_source($gallery) !== null;
     }
 
     // $updatePending stores an intermediate value used by the surrounding gallery workflow.
@@ -236,6 +203,8 @@ function admin_dashboard_view_model(bool $includeMaintenance = false): array
     $galleryTrashEnabled = function_exists('Gallery\Services\gallery_trash_enabled') && gallery_trash_enabled();
     $galleryTrashAutoPurgeEnabled = function_exists('Gallery\Services\gallery_trash_auto_purge_enabled') && gallery_trash_auto_purge_enabled();
     $galleryTrashRetentionDays = function_exists('Gallery\Services\gallery_trash_retention_days') ? gallery_trash_retention_days() : 30;
+    $galleryTrashPurgeBatchSize = function_exists('Gallery\Services\gallery_trash_purge_batch_size') ? gallery_trash_purge_batch_size() : 20;
+    $galleryTrashAutoPurgeActive = $galleryTrashEnabled && $galleryTrashAutoPurgeEnabled;
     // $galleryTrashSummary stores bounded counters for the Maintenance > Trash badge and panel.
     $galleryTrashSummary = $includeMaintenance && function_exists('Gallery\\Services\\gallery_trash_summary')
         ? admin_render_profile_db('gallery_trash_summary', static fn (): array => gallery_trash_summary())
@@ -297,6 +266,20 @@ function admin_dashboard_view_model(bool $includeMaintenance = false): array
     admin_render_profile_set_counter('thumbnail_missing_variants', $missingThumbnailVariants);
     admin_render_profile_set_counter('thumbnail_maintenance_deferred', !empty($thumbnailSummary['deferred']) ? 1 : 0);
 
+    // Controller/View-facing policy values are resolved once here so rendering remains request-independent.
+    $dashboardFeatureEnabled = [];
+    foreach (['public_search', 'downloads', 'media_renamer', 'navigation_data', 'complete_gallery_report', 'telemetry', 'exif_gallery_date_suggestions'] as $featureKey) {
+        $dashboardFeatureEnabled[$featureKey] = feature_capability_effective_enabled($featureKey);
+    }
+    $adminSettingsUrls = [
+        'default' => admin_settings_url(),
+        'general' => admin_settings_url('general'),
+        'media' => admin_settings_url('media'),
+        'privacy' => admin_settings_url('privacy'),
+    ];
+    $seoGuardStatus = $includeMaintenance ? seo_request_guard_status() : [];
+    $browserThumbnailRebuildConfig = $includeMaintenance ? browser_thumbnail_rebuild_browser_config() : ['enabled' => false];
+
     return [
         'picture_game_ready' => $pictureGameReady,
         'gps_map_ready' => $gpsMapReady,
@@ -326,6 +309,8 @@ function admin_dashboard_view_model(bool $includeMaintenance = false): array
         'gallery_trash_enabled' => $galleryTrashEnabled,
         'gallery_trash_auto_purge_enabled' => $galleryTrashAutoPurgeEnabled,
         'gallery_trash_retention_days' => $galleryTrashRetentionDays,
+        'gallery_trash_purge_batch_size' => $galleryTrashPurgeBatchSize,
+        'gallery_trash_auto_purge_active' => $galleryTrashAutoPurgeActive,
         'gallery_trash_summary' => $galleryTrashSummary,
         'gallery_trash_entries' => $galleryTrashEntries,
         'original_storage_label' => $originalStorageLabel,
@@ -337,6 +322,16 @@ function admin_dashboard_view_model(bool $includeMaintenance = false): array
         'unpublished_galleries' => $unpublishedGalleries,
         'private_galleries' => $privateGalleries,
         'missing_thumbnail_variants' => $missingThumbnailVariants,
+        'feature_enabled' => $dashboardFeatureEnabled,
+        'admin_settings_urls' => $adminSettingsUrls,
+        'public_home_search_enabled' => public_home_search_enabled(),
+        'seo_guard_status' => $seoGuardStatus,
+        'thumbnail_compatibility_mode' => thumbnail_compatibility_mode(),
+        'thumbnail_maintenance_last_check' => $lastThumbnailCheck,
+        'browser_thumbnail_rebuild_config' => $browserThumbnailRebuildConfig,
+        'dev_mode_enabled' => dev_mode_enabled(),
+        'url_rewrite_enabled' => url_rewrite_enabled(),
+        'url_rewrite_compatibility' => url_rewrite_compatibility(),
     ];
 }
 

@@ -36,13 +36,17 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
-use PDO;
 use RuntimeException;
 use Throwable;
 use function Gallery\Core\cms_config;
-use function Gallery\Core\db;
 use function Gallery\Core\now_sql;
-use function Gallery\Core\request_is_https;
+use function Gallery\Models\auth_persistence_model_prune;
+use function Gallery\Models\auth_persistence_model_issue_token;
+use function Gallery\Models\auth_persistence_model_find_active;
+use function Gallery\Models\auth_persistence_model_revoke_id;
+use function Gallery\Models\auth_persistence_model_touch;
+use function Gallery\Models\auth_persistence_model_revoke_selector;
+use function Gallery\Models\auth_persistence_model_revoke_user;
 
 /**
  * Raised when authentication policy cannot safely determine required schema state.
@@ -262,30 +266,22 @@ function auth_remember_cookie_name(): string
 }
 
 /**
- * Send or clear the persistent login cookie using admin-safe attributes.
+ * Build a persistent-login cookie instruction for the HTTP adapter.
  *
- * @param string $value Value to process.
- * @param int $expiresAt Expires at value.
+ * @param string $value Cookie value.
+ * @param int $expiresAt Unix expiry timestamp.
+ * @return array{name:string,value:string,expires_at:int,path:string,httponly:bool,samesite:string}
  */
-function auth_set_remember_cookie(string $value, int $expiresAt): void
+function auth_remember_cookie_instruction(string $value, int $expiresAt): array
 {
-    if (headers_sent()) {
-        return;
-    }
-
-    setcookie(auth_remember_cookie_name(), $value, [
-        'expires' => $expiresAt,
+    return [
+        'name' => auth_remember_cookie_name(),
+        'value' => $value,
+        'expires_at' => $expiresAt,
         'path' => '/',
-        'secure' => request_is_https(),
         'httponly' => true,
         'samesite' => 'Lax',
-    ]);
-
-    if ($expiresAt <= time()) {
-        unset($_COOKIE[auth_remember_cookie_name()]);
-    } else {
-        $_COOKIE[auth_remember_cookie_name()] = $value;
-    }
+    ];
 }
 
 /**
@@ -299,25 +295,20 @@ function auth_prune_persistent_tokens(?int $userId = null): void
         return;
     }
 
-    if ($userId !== null) {
-        // $stmt stores the scoped cleanup query for one account.
-        $stmt = db()->prepare('DELETE FROM admin_remember_tokens WHERE user_id = ? AND (expires_at < ? OR revoked_at IS NOT NULL)');
-        $stmt->execute([$userId, now_sql()]);
-        return;
-    }
-
-    db()->prepare('DELETE FROM admin_remember_tokens WHERE expires_at < ? OR revoked_at IS NOT NULL')->execute([now_sql()]);
+    auth_persistence_model_prune($userId, now_sql());
 }
 
 /**
  * Issue a new persistent login token and store only its hash in the database.
  *
  * @param int $userId User id identifier.
+ * @param string $userAgent Request user-agent value supplied by the HTTP adapter.
+ * @return ?array Cookie instruction, or null when persistent login is unavailable.
  */
-function auth_issue_persistent_login(int $userId): void
+function auth_issue_persistent_login(int $userId, string $userAgent = ''): ?array
 {
     if (!auth_persistent_login_operation_available('issue')) {
-        return;
+        return null;
     }
 
     auth_prune_persistent_tokens($userId);
@@ -330,27 +321,15 @@ function auth_issue_persistent_login(int $userId): void
     // $expiresAt stores the database expiration timestamp.
     $expiresAt = date('Y-m-d H:i:s', time() + auth_remember_lifetime_seconds());
     // $userAgentHash stores a privacy-safe diagnostic for future troubleshooting.
-    $userAgentHash = hash('sha256', (string) ($_SERVER['HTTP_USER_AGENT'] ?? ''));
+    $userAgentHash = hash('sha256', $userAgent);
 
     // Limit old active tokens per admin account so forgotten browsers do not accumulate forever.
     // $oldTokenLimit stores the number of newest active tokens to keep before issuing this one.
     $oldTokenLimit = 10;
-    // $stmt stores active token ids older than the newest retained set.
-    $stmt = db()->prepare('SELECT id FROM admin_remember_tokens WHERE user_id = ? AND revoked_at IS NULL AND expires_at >= ? ORDER BY created_at DESC, id DESC LIMIT 100 OFFSET ' . $oldTokenLimit);
-    $stmt->execute([$userId, now_sql()]);
-    // $oldIds stores token ids that should be revoked before adding a new token.
-    $oldIds = array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
-    if ($oldIds !== []) {
-        // $placeholders stores a safe placeholder list for the old token ids.
-        $placeholders = implode(',', array_fill(0, count($oldIds), '?'));
-        db()->prepare('UPDATE admin_remember_tokens SET revoked_at = ? WHERE id IN (' . $placeholders . ')')->execute(array_merge([now_sql()], $oldIds));
-    }
+    // Persistence receives only the selector and one-way credential hashes, never the raw validator.
+    auth_persistence_model_issue_token($userId, $selector, $validatorHash, $userAgentHash, now_sql(), $expiresAt, $oldTokenLimit);
 
-    // $stmt stores the persistent token insert statement.
-    $stmt = db()->prepare('INSERT INTO admin_remember_tokens (user_id, selector, token_hash, user_agent_hash, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)');
-    $stmt->execute([$userId, $selector, $validatorHash, $userAgentHash, now_sql(), $expiresAt]);
-
-    auth_set_remember_cookie($selector . ':' . $validator, time() + auth_remember_lifetime_seconds());
+    return auth_remember_cookie_instruction($selector . ':' . $validator, time() + auth_remember_lifetime_seconds());
 }
 
 /**
@@ -358,10 +337,9 @@ function auth_issue_persistent_login(int $userId): void
  *
  * @return ?array Structured result data for the caller.
  */
-function auth_parse_remember_cookie(): ?array
+function auth_parse_remember_cookie(string $cookie): ?array
 {
-    // $cookie stores the raw browser cookie value.
-    $cookie = (string) ($_COOKIE[auth_remember_cookie_name()] ?? '');
+    // $cookie stores the raw browser cookie value supplied by the HTTP adapter.
     if ($cookie === '' || !str_contains($cookie, ':')) {
         return null;
     }
@@ -377,90 +355,74 @@ function auth_parse_remember_cookie(): ?array
 /**
  * Restore an admin session from a valid persistent login cookie.
  *
- * @return ?array Structured result data for the caller.
+ * @param string $cookieValue Raw remember-cookie value supplied by the HTTP adapter.
+ * @return array{user:?array,clear_cookie:bool} Authentication result for the HTTP adapter.
  */
-function auth_restore_persistent_login(): ?array
+function auth_restore_persistent_login(string $cookieValue): array
 {
-    if (session_status() !== PHP_SESSION_ACTIVE) {
-        return null;
-    }
     try {
         if (!auth_persistent_login_operation_available('restore')) {
-            return null;
+            return ['user' => null, 'clear_cookie' => false];
         }
     } catch (AuthenticationSchemaUnavailableException) {
-        auth_set_remember_cookie('', time() - 3600);
-        return null;
+        return ['user' => null, 'clear_cookie' => true];
     }
 
     // $cookie stores validated persistent cookie parts.
-    $cookie = auth_parse_remember_cookie();
+    $cookie = auth_parse_remember_cookie($cookieValue);
     if ($cookie === null) {
-        return null;
+        return ['user' => null, 'clear_cookie' => false];
     }
 
-    // $stmt stores the token lookup joined with the target admin user.
-    $stmt = db()->prepare('SELECT art.*, u.username, u.email, u.role FROM admin_remember_tokens art INNER JOIN users u ON u.id = art.user_id WHERE art.selector = ? AND art.revoked_at IS NULL AND art.expires_at >= ? LIMIT 1');
-    $stmt->execute([$cookie['selector'], now_sql()]);
-    // $row stores the matched remember token and user data.
-    $row = $stmt->fetch();
+    // $row stores the matched remember token and user data returned by the persistence model.
+    $row = auth_persistence_model_find_active((string) $cookie['selector'], now_sql());
     if (!$row) {
-        auth_set_remember_cookie('', time() - 3600);
-        return null;
+        return ['user' => null, 'clear_cookie' => true];
     }
 
     if (!hash_equals((string) $row['token_hash'], hash('sha256', (string) $cookie['validator']))) {
         // A selector with a bad validator is treated as a stolen or corrupted cookie.
-        // $stmt stores the targeted revocation query.
-        $stmt = db()->prepare('UPDATE admin_remember_tokens SET revoked_at = ? WHERE id = ?');
-        $stmt->execute([now_sql(), (int) $row['id']]);
-        auth_set_remember_cookie('', time() - 3600);
-        return null;
+        auth_persistence_model_revoke_id((int) $row['id'], now_sql());
+        return ['user' => null, 'clear_cookie' => true];
     }
 
     if ((string) $row['role'] !== 'admin') {
-        auth_set_remember_cookie('', time() - 3600);
-        return null;
+        return ['user' => null, 'clear_cookie' => true];
     }
 
-    session_regenerate_id(true);
-    $_SESSION['user_id'] = (int) $row['user_id'];
-    // $stmt stores the successful-use timestamp update.
-    $stmt = db()->prepare('UPDATE admin_remember_tokens SET last_used_at = ? WHERE id = ?');
-    $stmt->execute([now_sql(), (int) $row['id']]);
+    auth_persistence_model_touch((int) $row['id'], now_sql());
 
     return [
-        'id' => (int) $row['user_id'],
-        'username' => (string) $row['username'],
-        'email' => $row['email'] ?? null,
-        'role' => (string) $row['role'],
+        'user' => [
+            'id' => (int) $row['user_id'],
+            'username' => (string) $row['username'],
+            'email' => $row['email'] ?? null,
+            'role' => (string) $row['role'],
+        ],
+        'clear_cookie' => false,
     ];
 }
 
 /**
- * Revoke the current persistent login token if the browser has one.
+ * Revoke the current persistent login token when an explicit browser cookie is supplied.
+ *
+ * @param string $cookieValue Raw remember-cookie value supplied by the HTTP adapter.
  */
-function auth_revoke_current_persistent_login(): void
+function auth_revoke_current_persistent_login(string $cookieValue): void
 {
     try {
         if (!auth_persistent_login_operation_available('revoke_current')) {
-            auth_set_remember_cookie('', time() - 3600);
             return;
         }
     } catch (AuthenticationSchemaUnavailableException) {
-        auth_set_remember_cookie('', time() - 3600);
         return;
     }
 
     // $cookie stores validated persistent cookie parts.
-    $cookie = auth_parse_remember_cookie();
+    $cookie = auth_parse_remember_cookie($cookieValue);
     if ($cookie !== null) {
-        // $stmt stores the targeted revocation query for the current selector.
-        $stmt = db()->prepare('UPDATE admin_remember_tokens SET revoked_at = ? WHERE selector = ?');
-        $stmt->execute([now_sql(), $cookie['selector']]);
+        auth_persistence_model_revoke_selector((string) $cookie['selector'], now_sql());
     }
-
-    auth_set_remember_cookie('', time() - 3600);
 }
 
 /**
@@ -472,16 +434,11 @@ function auth_revoke_user_persistent_logins(int $userId): void
 {
     try {
         if (!auth_persistent_login_operation_available('revoke_user')) {
-            auth_set_remember_cookie('', time() - 3600);
             return;
         }
     } catch (AuthenticationSchemaUnavailableException) {
-        auth_set_remember_cookie('', time() - 3600);
         return;
     }
 
-    // $stmt stores the account-wide revocation query.
-    $stmt = db()->prepare('UPDATE admin_remember_tokens SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL');
-    $stmt->execute([now_sql(), $userId]);
-    auth_set_remember_cookie('', time() - 3600);
+    auth_persistence_model_revoke_user($userId, now_sql());
 }

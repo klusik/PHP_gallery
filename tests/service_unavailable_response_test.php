@@ -96,6 +96,7 @@ namespace Gallery\Services {
 }
 
 namespace {
+    require_once __DIR__ . '/../app/views/http.php';
     require_once __DIR__ . '/../app/controllers/http_helpers.php';
 
     use const Gallery\Controllers\NSFW_GUARD_SCHEMA_UNAVAILABLE_EVENT;

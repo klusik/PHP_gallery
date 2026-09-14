@@ -139,6 +139,7 @@ use function Gallery\Services\translation_set_active_language;
 use function Gallery\Services\translation_set_public_language;
 use function Gallery\Views\view_render_admin_hero;
 use function Gallery\Views\view_render_admin_tab_intro;
+use function Gallery\Views\view_render_admin_theme_custom_css_tab;
 
 /**
  * Admin theme controller.
@@ -259,41 +260,39 @@ use function Gallery\Views\view_render_admin_tab_intro;
  */
 function render_admin_theme_custom_css_tab(): void
 {
-    ob_start();
-    view_render_admin_tab_intro([
-        'kicker' => t('admin.theme.custom_css.kicker', 'Custom CSS'),
-        'title' => t('admin.theme.custom_css.title', 'Skins and manual CSS'),
-        'description' => t('admin.theme.custom_css.description', 'Use a preset skin or upload a stylesheet that loads after built-in CSS and saved theme controls.'),
-    ]);
     // Variable $selectedPreset stores this steps working value.
     $selectedPreset = (string) app_setting('custom_css_preset', '');
-    echo '<div class="admin-subtab-scope admin-theme-subtab-scope" data-admin-subtab-scope>';
-    render_admin_subtabs([
-        ['id' => 'admin-theme-css-subtab-source', 'label' => t('admin.theme.subtab_css_source', 'CSS source')],
-        ['id' => 'admin-theme-css-subtab-reset', 'label' => t('admin.theme.subtab_css_reset', 'Reset actions')],
-    ], 'admin-theme-css-subtab-source', t('admin.theme.custom_css.subtabs_label', 'Custom CSS subsections'));
-    ob_start();
-    echo '<div id="admin-custom-css"></div><fieldset class="form-grid"><legend>' . e(t('admin.theme.custom_css.legend', 'Custom CSS')) . '</legend><label>' . e(t('admin.theme.custom_css.skin_label', 'Custom CSS skin')) . '<select name="custom_css_preset"><option value="">' . e(t('admin.theme.custom_css.keep_current', 'Keep current custom CSS')) . '</option>';
+    // $presetOptions stores presentation-only preset rows for the Theme view.
+    $presetOptions = [];
     foreach (custom_css_presets() as $filename => $path) {
         // Variable $label stores this steps working value.
         $label = ucwords(str_replace(['-', '_'], ' ', pathinfo((string) $filename, PATHINFO_FILENAME)));
-        echo '<option value="' . e((string) $filename) . '"' . ($selectedPreset === $filename ? ' selected' : '') . '>' . e($label) . '</option>';
+        $presetOptions[] = [
+            'filename' => (string) $filename,
+            'label' => $label,
+            'selected' => $selectedPreset === (string) $filename,
+        ];
     }
-    echo '</select><span class="muted">' . e(t('admin.theme.custom_css.skin_hint', 'Selecting a skin copies it from custom_css/ into the active custom stylesheet.')) . '</span></label>';
-    echo '<label>' . e(t('admin.theme.custom_css.file_label', 'Custom CSS file')) . '<input type="file" name="custom_css" accept=".css,text/css"></label>';
-    echo '<p class="muted">' . e(t('admin.theme.custom_css.file_hint', 'Uploaded CSS is saved as public/assets/custom.css and loaded after the built-in stylesheet and theme controls.')) . '</p>';
-    echo '</fieldset>';
-    $customCssSourceHtml = ob_get_clean();
-    render_admin_subtab_panel('admin-theme-css-subtab-source', $customCssSourceHtml, true);
 
-    ob_start();
-    echo '<fieldset class="form-grid"><legend>' . e(t('admin.theme.custom_css.reset_legend', 'Reset actions')) . '</legend>';
-    echo '<p class="muted">' . e(t('admin.theme.custom_css.reset_hint', 'Reset saved color overrides or remove the uploaded custom stylesheet without changing other Theme form values.')) . '</p>';
-    echo '<div class="bulk-row"><button type="submit" class="secondary" name="reset_theme_overrides" value="1" formnovalidate>' . e(t('admin.theme.custom_css.reset_to_css', 'Reset to CSS')) . '</button><button type="submit" class="secondary" name="reset_custom_css" value="1" formnovalidate>' . e(t('admin.theme.custom_css.reset_custom_css', 'Reset custom CSS')) . '</button></div></fieldset>';
-    $customCssResetHtml = ob_get_clean();
-    render_admin_subtab_panel('admin-theme-css-subtab-reset', $customCssResetHtml, false);
-    echo '</div>';
-    $customCssHtml = ob_get_clean();
-    render_admin_tab_panel('admin-theme-tab-custom-css', $customCssHtml, false);
-
+    view_render_admin_theme_custom_css_tab([
+        'presets' => $presetOptions,
+        'labels' => [
+            'kicker' => t('admin.theme.custom_css.kicker', 'Custom CSS'),
+            'title' => t('admin.theme.custom_css.title', 'Skins and manual CSS'),
+            'description' => t('admin.theme.custom_css.description', 'Use a preset skin or upload a stylesheet that loads after built-in CSS and saved theme controls.'),
+            'subtab_source' => t('admin.theme.subtab_css_source', 'CSS source'),
+            'subtab_reset' => t('admin.theme.subtab_css_reset', 'Reset actions'),
+            'subtabs_label' => t('admin.theme.custom_css.subtabs_label', 'Custom CSS subsections'),
+            'legend' => t('admin.theme.custom_css.legend', 'Custom CSS'),
+            'skin_label' => t('admin.theme.custom_css.skin_label', 'Custom CSS skin'),
+            'keep_current' => t('admin.theme.custom_css.keep_current', 'Keep current custom CSS'),
+            'skin_hint' => t('admin.theme.custom_css.skin_hint', 'Selecting a skin copies it from custom_css/ into the active custom stylesheet.'),
+            'file_label' => t('admin.theme.custom_css.file_label', 'Custom CSS file'),
+            'file_hint' => t('admin.theme.custom_css.file_hint', 'Uploaded CSS is saved as public/assets/custom.css and loaded after the built-in stylesheet and theme controls.'),
+            'reset_legend' => t('admin.theme.custom_css.reset_legend', 'Reset actions'),
+            'reset_hint' => t('admin.theme.custom_css.reset_hint', 'Reset saved color overrides or remove the uploaded custom stylesheet without changing other Theme form values.'),
+            'reset_to_css' => t('admin.theme.custom_css.reset_to_css', 'Reset to CSS'),
+            'reset_custom_css' => t('admin.theme.custom_css.reset_custom_css', 'Reset custom CSS'),
+        ],
+    ]);
 }

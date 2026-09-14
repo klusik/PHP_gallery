@@ -1,5 +1,20 @@
 <?php
 
+/**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ *
+ * File: tests/content_localization_model_test.php
+ *
+ * Author:
+ *   Rudolf Klusal
+ *
+ * License:
+ *   MIT License (see LICENSE file in repository)
+ *
+ * Notes:
+ *   - Keep comments and docstrings intact when modifying this file.
+ */
 /** Verify multilingual content normalization, fallback, batching, and cache behavior. */
 
 declare(strict_types=1);
@@ -22,6 +37,7 @@ namespace Gallery\Services {
     }
 
     require_once dirname(__DIR__) . '/app/services/translations.php';
+    require_once dirname(__DIR__) . '/app/models/content_localization.php';
 
     /**
      * Return an available column-inspection fixture.

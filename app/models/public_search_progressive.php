@@ -27,7 +27,7 @@
  *
  * Notes:
  *   - Keep comments and docstrings intact when modifying this file.
- *   - SQL listing fragments passed into this model must be hardcoded policy fragments produced by the service layer and must never contain user-derived values.
+ *   - Search scope SQL and wildcard patterns are built inside the model from semantic service inputs.
  *   - This model intentionally does not call service-layer functions.
  *
  * Last Updated:
@@ -54,24 +54,23 @@ function public_search_model_placeholders(array $ids): string
  * Fetch gallery-title candidates for the primary search phase.
  *
  * @param string $query Normalized query.
- * @param string $prefix Escaped prefix LIKE pattern.
- * @param string $like Escaped substring LIKE pattern.
  * @param array<string, int> $scores Relevance scores used by SQL ordering.
- * @param string $listingCondition Hardcoded public-listing SQL condition.
- * @param array<int, mixed> $contextParams Bound branch-scope values.
+ * @param bool $listedOnly Whether public access policy requires listed galleries.
+ * @param ?array $contextGallery Optional gallery branch context.
  * @param int $limit Maximum rows returned.
  * @return array<int, array<string, mixed>> Raw candidate rows.
  */
 function public_search_model_primary_gallery_title_rows(
     string $query,
-    string $prefix,
-    string $like,
     array $scores,
-    string $listingCondition,
-    array $contextParams,
+    bool $listedOnly,
+    ?array $contextGallery,
     int $limit
 ): array {
     $limit = max(1, min(90, $limit));
+    $prefix = public_search_model_prefix_pattern($query);
+    $like = public_search_model_like_pattern($query);
+    [$listingCondition, $contextParams] = public_search_model_listing_scope('g', $listedOnly, $contextGallery);
     $titleExact = (int) ($scores['exact'] ?? 0);
     $titleNormalizedExact = (int) ($scores['normalized_exact'] ?? 0);
     $titlePrefix = (int) ($scores['prefix'] ?? 0);
@@ -103,24 +102,23 @@ function public_search_model_primary_gallery_title_rows(
  * Matching tags are reduced to one strongest score per gallery before result hydration.
  *
  * @param string $query Normalized query.
- * @param string $prefix Escaped prefix LIKE pattern.
- * @param string $like Escaped substring LIKE pattern.
  * @param array<string, int> $scores Relevance scores used by SQL ordering.
- * @param string $listingCondition Hardcoded public-listing SQL condition.
- * @param array<int, mixed> $contextParams Bound branch-scope values.
+ * @param bool $listedOnly Whether public access policy requires listed galleries.
+ * @param ?array $contextGallery Optional gallery branch context.
  * @param int $limit Maximum rows returned.
  * @return array<int, array<string, mixed>> Raw candidate rows.
  */
 function public_search_model_primary_gallery_tag_rows(
     string $query,
-    string $prefix,
-    string $like,
     array $scores,
-    string $listingCondition,
-    array $contextParams,
+    bool $listedOnly,
+    ?array $contextGallery,
     int $limit
 ): array {
     $limit = max(1, min(90, $limit));
+    $prefix = public_search_model_prefix_pattern($query);
+    $like = public_search_model_like_pattern($query);
+    [$listingCondition, $contextParams] = public_search_model_listing_scope('g', $listedOnly, $contextGallery);
     $tagExact = (int) ($scores['exact'] ?? 0);
     $tagPrefix = (int) ($scores['prefix'] ?? 0);
     $tagSubstring = (int) ($scores['substring'] ?? 0);
@@ -196,24 +194,23 @@ function public_search_model_gallery_tag_name_rows(array $ids): array
  * Fetch direct filename/title candidates for the media search phase.
  *
  * @param string $query Normalized query.
- * @param string $prefix Escaped prefix LIKE pattern.
- * @param string $like Escaped substring LIKE pattern.
  * @param array<string, int> $scores Relevance scores used by SQL ordering.
- * @param string $listingCondition Hardcoded public-listing SQL condition.
- * @param array<int, mixed> $contextParams Bound branch-scope values.
+ * @param bool $listedOnly Whether public access policy requires listed galleries.
+ * @param ?array $contextGallery Optional gallery branch context.
  * @param int $limit Maximum rows returned.
  * @return array<int, array<string, mixed>> Raw image candidate rows.
  */
 function public_search_model_media_image_name_rows(
     string $query,
-    string $prefix,
-    string $like,
     array $scores,
-    string $listingCondition,
-    array $contextParams,
+    bool $listedOnly,
+    ?array $contextGallery,
     int $limit
 ): array {
     $limit = max(1, min(90, $limit));
+    $prefix = public_search_model_prefix_pattern($query);
+    $like = public_search_model_like_pattern($query);
+    [$listingCondition, $contextParams] = public_search_model_listing_scope('g', $listedOnly, $contextGallery);
     $exactScore = (int) ($scores['exact'] ?? 0);
     $prefixScore = (int) ($scores['prefix'] ?? 0);
     $substringScore = (int) ($scores['substring'] ?? 0);
@@ -246,24 +243,23 @@ function public_search_model_media_image_name_rows(
  * avoiding a wider grouped result across image, gallery, and tag columns.
  *
  * @param string $query Normalized query.
- * @param string $prefix Escaped prefix LIKE pattern.
- * @param string $like Escaped substring LIKE pattern.
  * @param array<string, int> $scores Relevance scores used by SQL ordering.
- * @param string $listingCondition Hardcoded public-listing SQL condition.
- * @param array<int, mixed> $contextParams Bound branch-scope values.
+ * @param bool $listedOnly Whether public access policy requires listed galleries.
+ * @param ?array $contextGallery Optional gallery branch context.
  * @param int $limit Maximum rows returned.
  * @return array<int, array<string, mixed>> Raw image candidate rows.
  */
 function public_search_model_media_image_tag_rows(
     string $query,
-    string $prefix,
-    string $like,
     array $scores,
-    string $listingCondition,
-    array $contextParams,
+    bool $listedOnly,
+    ?array $contextGallery,
     int $limit
 ): array {
     $limit = max(1, min(90, $limit));
+    $prefix = public_search_model_prefix_pattern($query);
+    $like = public_search_model_like_pattern($query);
+    [$listingCondition, $contextParams] = public_search_model_listing_scope('g', $listedOnly, $contextGallery);
     $exactScore = (int) ($scores['exact'] ?? 0);
     $prefixScore = (int) ($scores['prefix'] ?? 0);
     $substringScore = (int) ($scores['substring'] ?? 0);
@@ -299,15 +295,16 @@ function public_search_model_media_image_tag_rows(
  * Fetch public image rows for an already-bounded identifier set.
  *
  * @param array<int, int> $ids Image identifiers.
- * @param string $listingCondition Hardcoded public-listing SQL condition.
- * @param array<int, mixed> $contextParams Bound branch-scope values.
+ * @param bool $listedOnly Whether public access policy requires listed galleries.
+ * @param ?array $contextGallery Optional gallery branch context.
  * @return array<int, array<string, mixed>> Image rows.
  */
-function public_search_model_media_image_rows_by_ids(array $ids, string $listingCondition, array $contextParams): array
+function public_search_model_media_image_rows_by_ids(array $ids, bool $listedOnly, ?array $contextGallery): array
 {
     if ($ids === []) {
         return [];
     }
+    [$listingCondition, $contextParams] = public_search_model_listing_scope('g', $listedOnly, $contextGallery);
     $placeholders = public_search_model_placeholders($ids);
     $sql = "SELECT i.*
         FROM images i

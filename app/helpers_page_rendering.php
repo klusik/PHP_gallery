@@ -38,7 +38,13 @@ namespace Gallery\Core;
 
 use PDO;
 use RuntimeException;
+use function Gallery\Controllers\shared_layout_branding_model;
+use function Gallery\Controllers\shared_layout_browser_i18n_asset_url;
+use function Gallery\Controllers\shared_layout_browser_i18n_model;
+use function Gallery\Controllers\shared_layout_footer_model;
+use function Gallery\Controllers\shared_layout_header_model;
 use function Gallery\Services\app_setting;
+use function Gallery\Services\admin_test_run_panel_model;
 use function Gallery\Services\application_update_nav_label;
 use function Gallery\Services\application_update_pending;
 use function Gallery\Services\cms_github_project_url;
@@ -109,8 +115,8 @@ use function Gallery\Views\view_render_public_seo_tags;
  */
 function public_header_branding_model(string $siteName, ?array $currentGallery = null, bool $publicOnly = true, string $bodyClass = 'public-page'): array
 {
-    if (function_exists('Gallery\\Views\\view_public_header_branding_model')) {
-        return view_public_header_branding_model($siteName, $currentGallery, $publicOnly, $bodyClass);
+    if (function_exists('Gallery\Controllers\shared_layout_branding_model')) {
+        return shared_layout_branding_model($currentGallery, $publicOnly, $bodyClass);
     }
     // $model stores URLs used by render_header without forcing callers to know the branding precedence.
     $model = [
@@ -164,182 +170,16 @@ function favorite_gallery_nav_html(array $items): string
  */
 function render_header(string $title, ?array $currentGallery = null, bool $publicOnly = true): void
 {
-    if (function_exists('Gallery\\Views\\view_render_header')) {
-        view_render_header($title, $currentGallery, $publicOnly);
-        return;
+    if (!function_exists('Gallery\Views\view_render_header')) {
+        throw new RuntimeException('Shared header view is unavailable. Ensure app/views.php is loaded before rendering.');
     }
-    // Variable $user stores this steps working value.
-    $user = current_user();
-    // Variable $anonymousPreview stores whether this public request should hide authenticated navigation.
-    $anonymousPreview = admin_anonymous_preview_active();
-    // Variable $siteName stores this steps working value.
-    $siteName = site_name();
-    // Variable $theme stores this steps working value.
-    $theme = theme_settings();
-    // Variable $page stores this steps working value.
+    $requestQuery = is_array($_GET) ? $_GET : [];
+    $requestUri = (string) ($_SERVER['REQUEST_URI'] ?? '');
+    $scriptName = (string) ($_SERVER['SCRIPT_NAME'] ?? '/index.php');
     $page = (string) ($_GET['page'] ?? 'home');
-    // Variable $bodyClass stores this steps working value.
-    $bodyClass = str_starts_with($page, 'admin') || $page === 'setup' ? 'admin-page' : 'public-page';
-    // $pageWidthClass stores a public layout class selected in Theme settings.
-    // Admin pages intentionally keep their own workspace width so dense tables remain practical.
-    $pageWidthClass = $bodyClass === 'public-page' ? ' page-width-' . theme_page_width_mode((string) ($theme['page_width'] ?? 'default')) : '';
-    echo '<!doctype html><html lang="' . e(function_exists('Gallery\\Services\\translation_active_language') ? translation_active_language() : 'en') . '" translate="no"><head><meta charset="utf-8">';
-    echo '<meta name="viewport" content="width=device-width, initial-scale=1">';
-    echo '<title>' . e($title === $siteName ? $siteName : $title . ' - ' . $siteName) . '</title>';
-    // Variable $faviconUrl stores this steps working value.
-    $faviconUrl = favicon_asset_url();
-    if ($faviconUrl !== '') {
-        // $faviconVersion stores an intermediate value used by the surrounding gallery workflow.
-        $faviconVersion = (string) app_setting('favicon_version', '1');
-        echo '<link rel="icon" type="image/png" sizes="32x32" href="' . e($faviconUrl) . '&s=32&v=' . e($faviconVersion) . '">';
-        echo '<link rel="icon" type="image/png" sizes="48x48" href="' . e($faviconUrl) . '&s=48&v=' . e($faviconVersion) . '">';
-        echo '<link rel="apple-touch-icon" sizes="180x180" href="' . e($faviconUrl) . '&s=180&v=' . e($faviconVersion) . '">';
-    }
-    if ($bodyClass === 'admin-page') {
-        echo '<meta name="robots" content="noindex,nofollow">';
-    }
-    // Built-in stylesheets are linked directly with per-file cache keys.
-    // This avoids stale browser caches for CSS files that were previously loaded through @import.
-    $adminStyleFiles = [
-        'assets/styles/base.css',
-        'assets/styles/public.css',
-        'assets/styles/lightbox.css',
-        'assets/styles/admin.css',
-        'assets/styles/admin-layout.css',
-        'assets/styles/admin-dashboard.css',
-        'assets/styles/admin-subtabs.css',
-        'assets/styles/admin-theme-preview.css',
-        'assets/styles/admin-reordering.css',
-        'assets/styles/admin-media-tools.css',
-        'assets/styles/admin-theme-editor.css',
-        'assets/styles/admin-gallery-list.css',
-        'assets/styles/admin-patch-notes.css',
-        'assets/styles/admin-update.css',
-        'assets/styles/admin-tags.css',
-        'assets/styles/side-panel.css',
-        'assets/styles/admin-duplicate-photo-detector.css',
-        'assets/styles/admin-cinematic.css',
-        'assets/styles/utilities.css',
-        'assets/styles.css',
-    ];
-    $publicStyleFiles = [
-        'assets/styles/base.css',
-        'assets/styles/public.css',
-        'assets/styles/lightbox.css',
-        'assets/styles/public-shared.css',
-        'assets/styles/utilities.css',
-        'assets/styles.css',
-    ];
-    $styleFiles = ($bodyClass === 'admin-page' || ($user && !$anonymousPreview)) ? $adminStyleFiles : $publicStyleFiles;
-    foreach ($styleFiles as $styleFile) {
-        $stylePath = dirname(__DIR__) . '/public/' . $styleFile;
-        if (!is_file($stylePath)) {
-            continue;
-        }
-        echo '<link rel="stylesheet" href="' . e(asset_url($styleFile)) . '?v=' . filemtime($stylePath) . '">';
-    }
-    // Variable $customCss stores this steps working value.
-    $customCss = custom_css_url();
-    if ($customCss) {
-        echo '<link rel="stylesheet" href="' . e($customCss) . '?v=' . filemtime(custom_css_path()) . '">';
-    }
-    echo '<link rel="stylesheet" href="' . e(url_for('theme_css')) . '&v=' . rawurlencode((string) theme_cache_key($theme)) . '">';
-    $mobileGalleryStyle = 'assets/styles/mobile-gallery.css';
-    $mobileGalleryStylePath = dirname(__DIR__) . '/public/' . $mobileGalleryStyle;
-    if (is_file($mobileGalleryStylePath)) {
-        echo '<link rel="stylesheet" href="' . e(asset_url($mobileGalleryStyle)) . '?v=' . filemtime($mobileGalleryStylePath) . '">';
-    }
-    echo cms_head_extras_html();
-    // $devModeActive stores an intermediate value used by the surrounding gallery workflow.
-    $devModeActive = $user && dev_mode_enabled();
-    echo '</head><body class="' . e($bodyClass . $pageWidthClass) . '"' . ($devModeActive ? ' data-dev-mode="1"' : '') . '>';
-    if ($bodyClass === 'public-page') {
-        echo '<div class="theme-background-shell" aria-hidden="true">';
-        echo '<div class="theme-background-base"></div>';
-        echo '<div class="theme-background-image"></div>';
-        echo '</div>';
-    }
-    // $headerBranding stores optional artwork that replaces the visible site title.
-    $headerBranding = public_header_branding_model($siteName, $currentGallery, $publicOnly, $bodyClass);
-    echo '<header class="site-header">';
-    echo '<a class="brand' . ($headerBranding['banner_url'] !== '' ? ' brand-with-banner' : '') . '" href="' . e(url_for('home')) . '">';
-    if ($headerBranding['logo_url'] !== '') {
-        echo '<img class="brand-logo" src="' . e($headerBranding['logo_url']) . '" alt="" aria-hidden="true" decoding="async">';
-    }
-    if ($headerBranding['banner_url'] !== '') {
-        echo '<span class="visually-hidden">' . e($siteName) . '</span><img class="brand-banner" src="' . e($headerBranding['banner_url']) . '" alt="" aria-hidden="true" decoding="async">';
-    } else {
-        echo e($siteName);
-    }
-    echo '</a><nav class="nav">';
-    if ($bodyClass === 'public-page') {
-        // Keep the compatibility renderer aligned when the canonical view layer
-        // is unavailable during partial upgrades or standalone helper loading.
-        $activeLanguage = translation_active_language();
-        $presentations = translation_language_presentation();
-        $selectorLabel = t('public.language.selector_label', 'Language');
-        $selectorDesign = translation_public_language_selector_design();
-        $selectorClasses = 'public-language-switcher language-preset-' . $selectorDesign['preset']
-            . ' language-orientation-' . $selectorDesign['orientation']
-            . ' language-density-' . $selectorDesign['density']
-            . ' language-align-' . $selectorDesign['alignment']
-            . ' language-active-' . $selectorDesign['active_style'];
-        if (translation_public_language_selector_enabled()) {
-            echo '<div class="' . e($selectorClasses) . '" role="group" aria-label="' . e($selectorLabel) . '" style="' . e(translation_public_language_selector_design_style($selectorDesign)) . '">';
-        }
-        foreach (translation_public_language_selector_enabled() ? translation_public_language_selector_languages() : [] as $language) {
-            $presentation = $presentations[$language] ?? ['name' => strtoupper($language), 'flag_asset' => ''];
-            $isActive = $language === $activeLanguage;
-            $languageName = trim((string) ($presentation['name'] ?? strtoupper($language)));
-            $flagAsset = trim((string) ($presentation['flag_asset'] ?? ''));
-            echo '<a class="public-language-button' . ($isActive ? ' is-active' : '') . '" href="' . e(translation_public_language_url($language)) . '" hreflang="' . e($language) . '" lang="' . e($language) . '" aria-label="' . e($languageName) . '" title="' . e($languageName) . '"' . ($isActive ? ' aria-current="true"' : '') . '>';
-            if (!empty($selectorDesign['show_codes'])) {
-                echo '<span class="public-language-code" aria-hidden="true">' . e(strtoupper($language)) . '</span>';
-            }
-            if (!empty($selectorDesign['show_names'])) {
-                echo '<span class="public-language-name" aria-hidden="true">' . e($languageName) . '</span>';
-            }
-            if (!empty($selectorDesign['show_flags']) && $flagAsset !== '') {
-                echo '<img class="public-language-flag" src="' . e(asset_url($flagAsset)) . '" alt="" aria-hidden="true" width="20" height="15" decoding="async">';
-            }
-            echo '</a>';
-        }
-        if (translation_public_language_selector_enabled()) {
-            echo '</div>';
-        }
-    }
-    // $favoritePublicOnly stores whether shortcuts should be restricted to public listed galleries.
-    $favoritePublicOnly = !$user || $anonymousPreview;
-    // $favoriteGalleryItems stores resolved gallery shortcuts for the top navigation.
-    $favoriteGalleryItems = function_exists('Gallery\\Services\\theme_favorite_gallery_navigation_items') ? theme_favorite_gallery_navigation_items($favoritePublicOnly) : [];
-    echo favorite_gallery_nav_html($favoriteGalleryItems);
-    if ($user && !$anonymousPreview) {
-        if ($bodyClass === 'public-page') {
-            // $updatePending stores an intermediate value used by the surrounding gallery workflow.
-            $updatePending = application_update_pending();
-            // $updateClass stores an intermediate value used by the surrounding gallery workflow.
-            $updateClass = $updatePending ? ' class="is-update-pending"' : '';
-            // $updateLabel stores an intermediate value used by the surrounding gallery workflow.
-            $updateLabel = application_update_nav_label($updatePending);
-            echo '<a href="' . e(url_for('admin')) . '">' . e(t('nav.admin', 'Admin')) . '</a>';
-            echo '<a' . $updateClass . ' href="' . e(url_for('admin_update')) . '">' . e($updateLabel) . '</a>';
-        }
-        echo '<a href="' . e(url_for('admin_logout')) . '">' . e(t('nav.logout', 'Logout')) . '</a>';
-    } else {
-        echo '<a href="' . e(url_for('admin_login', ['return' => current_login_return_target()])) . '">' . e(t('nav.admin_login', 'Admin login')) . '</a>';
-    }
-    echo '</nav></header>';
-    if ($headerBranding['separator_url'] !== '') {
-        echo '<div class="site-branding-separator" aria-hidden="true"><img src="' . e($headerBranding['separator_url']) . '" alt="" decoding="async"></div>';
-    }
-    if ($bodyClass === 'admin-page' && $user) {
-        echo '<div class="admin-shell">';
-        render_admin_sidebar($page);
-        echo '<main class="site-main admin-content">';
-        render_missing_admin_email_notice($user, $page);
-    } else {
-        echo '<main class="site-main">';
-    }
+    $headExtras = cms_head_extras_html();
+    $model = shared_layout_header_model($currentGallery, $publicOnly, $requestQuery, $requestUri, $scriptName, $page, $headExtras);
+    view_render_header($title, $model, $requestUri, $page);
 }
 
 /**
@@ -439,8 +279,9 @@ function cms_current_version(): string
  */
 function cms_browser_i18n_strings(): array
 {
-    if (function_exists('Gallery\\Views\\view_cms_browser_i18n_strings')) {
-        return view_cms_browser_i18n_strings();
+    if (function_exists('Gallery\\Views\\view_cms_browser_i18n_strings') && function_exists('Gallery\\Controllers\\shared_layout_browser_i18n_model')) {
+        $model = shared_layout_browser_i18n_model();
+        return view_cms_browser_i18n_strings((array) ($model['strings'] ?? []));
     }
 
     $activeStrings = translation_load_language(translation_active_language());
@@ -535,19 +376,12 @@ function cms_browser_i18n_strings(): array
  */
 function render_browser_i18n_script(): void
 {
-    if (function_exists('Gallery\\Views\\view_render_browser_i18n_script')) {
-        view_render_browser_i18n_script();
-        return;
+    if (!function_exists('Gallery\Views\view_render_browser_i18n_script')) {
+        throw new RuntimeException('Browser i18n view is unavailable. Ensure app/views.php is loaded before rendering.');
     }
-    $payload = [
-        'language' => translation_active_language(),
-        'strings' => cms_browser_i18n_strings(),
-    ];
-    $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-    if (!is_string($json)) {
-        $json = '{"language":"en","strings":{}}';
-    }
-    echo '<script>window.PHP_GALLERY_I18N = ' . $json . ';</script>';
+    $page = (string) ($_GET['page'] ?? 'home');
+    $isAdminPage = str_starts_with($page, 'admin') || $page === 'setup';
+    view_render_browser_i18n_script(shared_layout_browser_i18n_asset_url($isAdminPage));
 }
 
 /**
@@ -555,58 +389,9 @@ function render_browser_i18n_script(): void
  */
 function render_footer(): void
 {
-    if (function_exists('Gallery\\Views\\view_render_footer')) {
-        view_render_footer();
-        return;
+    if (!function_exists('Gallery\Views\view_render_footer')) {
+        throw new RuntimeException('Shared footer view is unavailable. Ensure app/views.php is loaded before rendering.');
     }
-    // $page stores an intermediate value used by the surrounding gallery workflow.
     $page = (string) ($_GET['page'] ?? 'home');
-    // $hasAdminShell stores an intermediate value used by the surrounding gallery workflow.
-    $hasAdminShell = (str_starts_with($page, 'admin') || $page === 'setup') && current_user();
-    echo '</main>' . ($hasAdminShell ? '</div>' : '') . '<footer class="site-footer muted">';
-    echo '<a class="site-footer-link" href="' . e(cms_github_project_url()) . '" target="_blank" rel="noopener noreferrer">PHP Gallery (' . e(cms_current_version()) . ')</a>';
-    echo '</footer>';
-    $isAdminPage = str_starts_with($page, 'admin') || $page === 'setup';
-    $user = current_user();
-    $anonymousPreview = admin_anonymous_preview_active();
-    $scriptAsset = (!$isAdminPage && (!$user || $anonymousPreview)) ? 'assets/public-gallery.js' : 'assets/gallery.js';
-    // Variable $scriptPath stores this steps working value.
-    $scriptPath = dirname(__DIR__) . '/public/' . $scriptAsset;
-    $scriptVersionPaths = $scriptAsset === 'assets/public-gallery.js' ? [
-        $scriptPath,
-        dirname(__DIR__) . '/public/assets/gallery-modules/lightbox-deferred.js',
-        dirname(__DIR__) . '/public/assets/gallery-modules/lightbox.js',
-        dirname(__DIR__) . '/public/assets/gallery-modules/lightbox-zoom-model.js',
-        dirname(__DIR__) . '/public/assets/gallery-modules/admin-core.js',
-        dirname(__DIR__) . '/public/assets/gallery-modules/votes.js',
-        dirname(__DIR__) . '/public/assets/gallery-modules/public-home-search.js',
-        dirname(__DIR__) . '/public/assets/gallery-modules/back-to-top.js',
-        dirname(__DIR__) . '/public/assets/gallery-modules/responsive-thumbnails.js',
-        dirname(__DIR__) . '/public/assets/gallery-modules/progressive-thumbnail-renderer.js',
-        dirname(__DIR__) . '/public/assets/gallery-modules/progressive-thumbnail-upgrade.js',
-        dirname(__DIR__) . '/public/assets/gallery-modules/thumbnail-warmup.js',
-    ] : [
-        $scriptPath,
-        dirname(__DIR__) . '/public/assets/gallery-modules/progressive-thumbnail-renderer.js',
-        dirname(__DIR__) . '/public/assets/gallery-modules/progressive-thumbnail-upgrade.js',
-        dirname(__DIR__) . '/public/assets/gallery-modules/lightbox.js',
-        dirname(__DIR__) . '/public/assets/gallery-modules/lightbox-zoom-model.js',
-        dirname(__DIR__) . '/public/assets/gallery-modules/lightbox-votes.js',
-        dirname(__DIR__) . '/public/assets/gallery-modules/tag-suggestions.js',
-        dirname(__DIR__) . '/public/assets/gallery-modules/votes.js',
-        dirname(__DIR__) . '/public/assets/gallery-modules/admin-operations.js',
-        dirname(__DIR__) . '/public/assets/gallery-modules/admin-core.js',
-        dirname(__DIR__) . '/public/assets/gallery-modules/admin-nested-tabs.js',
-        dirname(__DIR__) . '/public/assets/gallery-modules/admin-side-panel.js',
-        dirname(__DIR__) . '/public/assets/gallery-modules/admin-date-picker.js',
-        dirname(__DIR__) . '/public/assets/gallery-modules/admin-gallery-date-suggestion.js',
-        dirname(__DIR__) . '/public/assets/gallery-modules/admin-duplicate-photo-detector.js',
-        dirname(__DIR__) . '/public/assets/gallery-modules/admin-simbrief-description.js',
-        dirname(__DIR__) . '/public/assets/gallery-modules/admin-gallery-benchmark.js',
-    ];
-    $resolvedScriptVersion = asset_dependency_revision($scriptVersionPaths);
-    render_browser_i18n_script();
-    echo '<script type="module" data-gallery-asset-revision="' . e((string) $resolvedScriptVersion) . '" src="' . e(asset_url($scriptAsset)) . '?v=' . $resolvedScriptVersion . '"></script>';
-    echo cms_footer_scripts_html();
-    echo '</body></html>';
+    view_render_footer($page, shared_layout_footer_model($page));
 }

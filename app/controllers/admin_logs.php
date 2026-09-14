@@ -57,6 +57,16 @@ use function Gallery\Services\t;
 use function Gallery\Services\translation_interpolate;
 use function Gallery\Services\translation_load_language;
 use function Gallery\Views\view_render_admin_feature_flag;
+use function Gallery\Views\view_render_admin_log_empty;
+use function Gallery\Views\view_render_admin_log_page_heading;
+use function Gallery\Views\view_render_admin_log_section_tabs;
+use function Gallery\Views\view_render_admin_logs_live;
+use function Gallery\Views\view_render_admin_log_group_member_rows;
+use function Gallery\Views\view_render_admin_log_table_rows;
+use function Gallery\Views\view_render_admin_log_legacy_row;
+use function Gallery\Views\view_render_admin_log_pagination;
+use function Gallery\Views\view_render_admin_log_archive_pagination;
+use function Gallery\Views\view_render_admin_log_archive_panel;
 use function Gallery\Services\admin_log_archive_delete_file;
 use function Gallery\Services\admin_log_archive_file_name;
 use function Gallery\Services\admin_log_archive_list;
@@ -65,7 +75,7 @@ use function Gallery\Services\admin_log_archive_path;
 use function Gallery\Services\admin_log_archive_retention_options;
 use function Gallery\Services\admin_log_archive_set_retention_days;
 use function Gallery\Services\admin_log_archive_status;
-use function Gallery\Services\admin_log_archive_stream_member;
+use function Gallery\Services\admin_log_archive_member_chunks;
 use function Gallery\Services\admin_log_archive_stream_zip;
 use function Gallery\Services\admin_log_archive_valid_date;
 use function Gallery\Services\admin_dashboard_format_bytes;
@@ -86,7 +96,7 @@ use function Gallery\Services\admin_log_group_member_summary;
 use function Gallery\Services\admin_log_grouped_count;
 use function Gallery\Services\admin_log_grouped_list;
 use function Gallery\Services\admin_log_list;
-use function Gallery\Services\admin_log_send_export_zip;
+use function Gallery\Services\admin_log_export_zip_descriptor;
 use function Gallery\Services\admin_log_severity_options;
 use function Gallery\Services\admin_log_status_label;
 use function Gallery\Services\admin_log_status_options;
@@ -170,22 +180,15 @@ if (!function_exists('admin_log_english_t')) {
 function render_admin_log_row(array $entry, bool $withActions = false): string
 {
     unset($withActions);
-    // Variable $context stores this steps working value.
-    $context = [];
+    $contextJson = '';
     if (!empty($entry['context_json'])) {
-        // $decoded stores an intermediate value used by the surrounding gallery workflow.
         $decoded = json_decode((string) $entry['context_json'], true);
-        if (is_array($decoded)) {
-            // $context stores an intermediate value used by the surrounding gallery workflow.
-            $context = $decoded;
+        if (is_array($decoded) && $decoded !== []) {
+            $encoded = json_encode($decoded, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            $contextJson = $encoded === false ? '' : $encoded;
         }
     }
-    return '<tr>'
-        . '<td>' . e((string) $entry['created_at']) . '</td>'
-        . '<td>' . e((string) $entry['event_key']) . '</td>'
-        . '<td>' . e((string) $entry['message']) . ($context ? '<div class="muted">' . e(json_encode($context, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) . '</div>' : '') . '</td>'
-        . '<td>' . e((string) ($entry['username'] ?? '')) . '</td>'
-        . '</tr>';
+    return view_render_admin_log_legacy_row($entry, $contextJson);
 }
 
 /**
@@ -198,14 +201,7 @@ function render_admin_log_row(array $entry, bool $withActions = false): string
  */
 function render_admin_feature_flag(bool $enabled, string $symbol, string $label): string
 {
-    if (function_exists('Gallery\\Views\\view_render_admin_feature_flag')) {
-        return view_render_admin_feature_flag($enabled, e($symbol), $label);
-    }
-
-    if (!$enabled) {
-        return '';
-    }
-    return '<span class="admin-flag is-enabled" title="' . e($label) . '" aria-label="' . e($label) . '">' . e($symbol) . '</span>';
+    return view_render_admin_feature_flag($enabled, e($symbol), $label);
 }
 
 
@@ -455,38 +451,36 @@ function admin_log_page_range_text(int $page, int $perPage, int $total): string
  */
 function render_admin_log_pagination(int $page, int $totalPages, int $total, int $perPage): string
 {
-    // $html stores the rendered pagination control.
-    $html = '<nav class="pagination admin-log-pagination" data-admin-log-pagination aria-label="' . e(admin_log_english_t('pagination.label', 'Pagination')) . '">';
-    $html .= '<span class="pagination-status">' . e(admin_log_page_range_text($page, $perPage, $total)) . '</span>';
-    if ($totalPages > 1) {
-        // $previousPage stores the bounded previous page number.
-        $previousPage = max(1, $page - 1);
-        // $nextPage stores the bounded next page number.
-        $nextPage = min($totalPages, $page + 1);
-        $html .= '<a class="pagination-link' . ($page <= 1 ? ' is-disabled' : '') . '" href="' . e(admin_log_filter_url(['log_page' => $previousPage])) . '" data-admin-log-page-link="' . $previousPage . '">' . e(admin_log_english_t('pagination.previous', 'Previous')) . '</a>';
-
-        // $pages stores a compact page-number window around the current page.
-        $pages = [1, $page - 1, $page, $page + 1, $totalPages];
-        $pages = array_values(array_unique(array_filter($pages, static fn (int $candidate): bool => $candidate >= 1 && $candidate <= $totalPages)));
-        sort($pages);
-        $lastPage = 0;
-        foreach ($pages as $pageNumber) {
-            if ($lastPage > 0 && $pageNumber > $lastPage + 1) {
-                $html .= '<span class="pagination-gap">...</span>';
-            }
-            if ($pageNumber === $page) {
-                $html .= '<span class="pagination-link is-current" aria-current="page">' . e((string) $pageNumber) . '</span>';
-            } else {
-                $html .= '<a class="pagination-link" href="' . e(admin_log_filter_url(['log_page' => $pageNumber])) . '" data-admin-log-page-link="' . $pageNumber . '">' . e((string) $pageNumber) . '</a>';
-            }
-            $lastPage = $pageNumber;
-        }
-
-        $html .= '<a class="pagination-link' . ($page >= $totalPages ? ' is-disabled' : '') . '" href="' . e(admin_log_filter_url(['log_page' => $nextPage])) . '" data-admin-log-page-link="' . $nextPage . '">' . e(admin_log_english_t('pagination.next', 'Next')) . '</a>';
-        $html .= '<span class="pagination-status">' . e(admin_log_english_t('pagination.status', 'Page {current} of {total}', ['current' => $page, 'total' => $totalPages])) . '</span>';
+    $page = max(1, $page);
+    $totalPages = max(1, $totalPages);
+    $previousPage = max(1, $page - 1);
+    $nextPage = min($totalPages, $page + 1);
+    $pages = [1, $page - 1, $page, $page + 1, $totalPages];
+    $pages = array_values(array_unique(array_filter($pages, static fn (int $candidate): bool => $candidate >= 1 && $candidate <= $totalPages)));
+    sort($pages);
+    $links = [];
+    $lastPage = 0;
+    foreach ($pages as $pageNumber) {
+        $links[] = [
+            'page' => $pageNumber,
+            'current' => $pageNumber === $page,
+            'gap_before' => $lastPage > 0 && $pageNumber > $lastPage + 1,
+            'url' => $pageNumber === $page ? '' : admin_log_filter_url(['log_page' => $pageNumber]),
+        ];
+        $lastPage = $pageNumber;
     }
-    $html .= '</nav>';
-    return $html;
+    return view_render_admin_log_pagination([
+        'page' => $page,
+        'total_pages' => $totalPages,
+        'range_label' => admin_log_page_range_text($page, $perPage, $total),
+        'aria_label' => admin_log_english_t('pagination.label', 'Pagination'),
+        'previous_url' => admin_log_filter_url(['log_page' => $previousPage]),
+        'previous_label' => admin_log_english_t('pagination.previous', 'Previous'),
+        'next_url' => admin_log_filter_url(['log_page' => $nextPage]),
+        'next_label' => admin_log_english_t('pagination.next', 'Next'),
+        'status_label' => admin_log_english_t('pagination.status', 'Page {current} of {total}', ['current' => $page, 'total' => $totalPages]),
+        'links' => $links,
+    ]);
 }
 
 /**
@@ -529,6 +523,30 @@ function admin_log_filter_url(array $overrides = []): string
 }
 
 /**
+ * Prepare one bounded chunk of raw grouped Admin log instances for the view.
+ *
+ * @param array $members Group member rows.
+ * @param int $startIndex Zero-based index of the first rendered member.
+ * @return array<int, array<string, mixed>> Presentation-only member rows.
+ */
+function admin_log_group_member_view_models(array $members, int $startIndex = 0): array
+{
+    $viewModels = [];
+    foreach ($members as $index => $member) {
+        if (!is_array($member)) {
+            continue;
+        }
+        $context = admin_log_context_array($member);
+        $member['display_index'] = max(0, $startIndex) + $index + 1;
+        $member['context_compact_json'] = $context !== []
+            ? (string) json_encode($context, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+            : '';
+        $viewModels[] = $member;
+    }
+    return $viewModels;
+}
+
+/**
  * Render one bounded chunk of raw grouped admin log instances.
  *
  * @param array $members Group member rows.
@@ -537,40 +555,81 @@ function admin_log_filter_url(array $overrides = []): string
  */
 function render_admin_log_group_member_rows(array $members, int $startIndex = 0): string
 {
-    ob_start();
-    foreach ($members as $index => $member) {
-        // $displayIndex stores the stable one-based instance number across lazy pages.
-        $displayIndex = max(0, $startIndex) + $index + 1;
-        echo '<div class="admin-log-group-instance">';
-        echo '<strong>#' . e((string) $displayIndex) . '</strong> ';
-        echo e((string) ($member['created_at'] ?? ''));
-        echo ' | ID ' . e((string) ($member['id'] ?? '0'));
-        echo ' | ' . e((string) ($member['severity'] ?? $member['level'] ?? ''));
-        if (!empty($member['username'])) {
-            echo ' | ' . e((string) $member['username']);
+    return view_render_admin_log_group_member_rows(
+        admin_log_group_member_view_models($members, $startIndex),
+        admin_log_english_t('admin.logs.request_prefix', 'Request')
+    );
+}
+
+/**
+ * Return labels shared by Admin log table row rendering.
+ *
+ * @return array<string, string> Localized presentation labels.
+ */
+function admin_log_table_row_labels(): array
+{
+    return [
+        'group_count_one' => admin_log_english_t('admin.logs.group_count_one', 'entry'),
+        'group_count_many' => admin_log_english_t('admin.logs.group_count_many', 'entries'),
+        'save_details_txt' => admin_log_english_t('admin.logs.save_details_txt', 'Save details as TXT'),
+        'log_id' => admin_log_english_t('admin.logs.log_id', 'Log ID'),
+        'group_count' => admin_log_english_t('admin.logs.group_count', 'Grouped entries'),
+        'first_seen' => admin_log_english_t('admin.logs.first_seen', 'First seen'),
+        'latest_seen' => admin_log_english_t('admin.logs.latest_seen', 'Latest seen'),
+        'created_at' => admin_log_english_t('admin.logs.created_at', 'Created at'),
+        'level' => admin_log_english_t('admin.logs.level', 'Level'),
+        'severity' => admin_log_english_t('admin.logs.severity', 'Severity'),
+        'category' => admin_log_english_t('admin.logs.category', 'Category'),
+        'route' => admin_log_english_t('admin.logs.route', 'Route'),
+        'request_id' => admin_log_english_t('admin.logs.request_id', 'Request ID'),
+        'all_instances' => admin_log_english_t('admin.logs.all_instances', 'All grouped instances'),
+        'instances_lazy_hint' => admin_log_english_t('admin.logs.instances_lazy_hint', 'Open this section to load raw instances in small batches.'),
+        'load_more_instances' => admin_log_english_t('admin.logs.load_more_instances', 'Load more instances'),
+        'grouped_row_note' => admin_log_english_t('admin.logs.grouped_row_note', 'Grouped row; showing one representative entry.'),
+        'details' => admin_log_english_t('admin.logs.details', 'Details'),
+        'request_prefix' => admin_log_english_t('admin.logs.request_prefix', 'Request'),
+    ];
+}
+
+/**
+ * Prepare Admin log entries for presentation without leaking service calls into the view.
+ *
+ * @param array $logs Raw or grouped Admin log rows.
+ * @return array<int, array<string, mixed>> Presentation-only row models.
+ */
+function admin_log_table_row_view_models(array $logs): array
+{
+    $viewModels = [];
+    foreach ($logs as $entry) {
+        if (!is_array($entry)) {
+            continue;
         }
-        if (!empty($member['request_id'])) {
-            echo ' | ' . e(admin_log_english_t('admin.logs.request_prefix', 'Request')) . ' ' . e((string) $member['request_id']);
+        $context = [];
+        if (!empty($entry['context_json'])) {
+            $decoded = json_decode((string) $entry['context_json'], true);
+            $context = is_array($decoded) ? $decoded : [];
         }
-        if (!empty($member['route_name'])) {
-            echo ' | ' . e((string) $member['route_name']);
+        $groupCount = max(1, (int) ($entry['group_count'] ?? 1));
+        $entry['selection_value'] = $groupCount > 1 && !empty($entry['group_hash'])
+            ? 'group:' . (string) $entry['group_hash']
+            : (string) ((int) ($entry['id'] ?? 0));
+        $exportParams = ['id' => (int) ($entry['id'] ?? 0)];
+        if ($groupCount > 1 && !empty($entry['group_hash'])) {
+            $exportParams['group'] = (string) $entry['group_hash'];
         }
-        if (!empty($member['message'])) {
-            echo '<pre>' . e((string) $member['message']);
-            $memberContext = admin_log_context_array($member);
-            if ($memberContext !== []) {
-                echo "\n" . e(json_encode($memberContext, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
-            }
-            echo '</pre>';
-        } else {
-            $memberContext = admin_log_context_array($member);
-            if ($memberContext !== []) {
-                echo '<pre>' . e(json_encode($memberContext, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) . '</pre>';
-            }
-        }
-        echo '</div>';
+        $entry['export_url'] = url_for('admin_log_export', $exportParams);
+        $entry['members_url'] = $groupCount > 1 && !empty($entry['group_hash'])
+            ? url_for('admin_log_group_members', [
+                'id' => (int) ($entry['id'] ?? 0),
+                'group' => (string) $entry['group_hash'],
+            ])
+            : '';
+        $entry['context_pretty_json'] = $context !== []
+            ? (string) json_encode($context, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+            : '';
+        $viewModels[] = $entry;
     }
-    return (string) ob_get_clean();
+    return $viewModels;
 }
 
 /**
@@ -581,88 +640,7 @@ function render_admin_log_group_member_rows(array $members, int $startIndex = 0)
  */
 function render_admin_log_table_rows(array $logs): string
 {
-    ob_start();
-    foreach ($logs as $entry) {
-        // $context stores decoded structured context shown under the message.
-        $context = [];
-        if (!empty($entry['context_json'])) {
-            $decoded = json_decode((string) $entry['context_json'], true);
-            $context = is_array($decoded) ? $decoded : [];
-        }
-        // $groupCount stores how many raw log rows this visible row represents.
-        $groupCount = max(1, (int) ($entry['group_count'] ?? 1));
-        // $firstCreatedAt stores the first timestamp covered by this visible row.
-        $firstCreatedAt = (string) ($entry['first_created_at'] ?? $entry['created_at']);
-        // $latestCreatedAt stores the latest timestamp covered by this visible row.
-        $latestCreatedAt = (string) ($entry['latest_created_at'] ?? $entry['created_at']);
-        // $createdAtLabel stores the representative timestamp shown in the main table cell.
-        $createdAtLabel = (string) $entry['created_at'];
-        // $groupSelectionValue stores the submitted value used by bulk updates.
-        $groupSelectionValue = $groupCount > 1 && !empty($entry['group_hash'])
-            ? 'group:' . (string) $entry['group_hash']
-            : (string) ((int) $entry['id']);
-        echo '<tr data-admin-log-row>';
-        echo '<td><input type="checkbox" name="log_ids[]" value="' . e($groupSelectionValue) . '" form="admin-log-bulk-form"></td>';
-        echo '<td data-admin-log-created-at>' . e($createdAtLabel);
-        if ($groupCount > 1 && $firstCreatedAt !== $latestCreatedAt) {
-            echo '<div class="muted">' . e($firstCreatedAt) . ' - ' . e($latestCreatedAt) . '</div>';
-        }
-        echo '</td>';
-        echo '<td><strong>' . e((string) $groupCount) . '</strong><div class="muted">' . e($groupCount === 1 ? admin_log_english_t('admin.logs.group_count_one', 'entry') : admin_log_english_t('admin.logs.group_count_many', 'entries')) . '</div></td>';
-        echo '<td><span class="log-severity log-severity-' . e((string) ($entry['severity'] ?? $entry['level'] ?? 'info')) . '">' . e((string) ($entry['severity'] ?? $entry['level'] ?? 'info')) . '</span></td>';
-        echo '<td>' . e((string) ($entry['category'] ?? 'other')) . '</td>';
-        $exportParams = ['id' => (int) $entry['id']];
-        if ($groupCount > 1 && !empty($entry['group_hash'])) {
-            $exportParams['group'] = (string) $entry['group_hash'];
-        }
-        echo '<td><details class="log-entry-details"><summary><code>' . e((string) $entry['event_key']) . '</code></summary>';
-        echo '<div class="log-detail-actions"><a class="button secondary" href="' . e(url_for('admin_log_export', $exportParams)) . '">' . e(admin_log_english_t('admin.logs.save_details_txt', 'Save details as TXT')) . '</a></div>';
-        echo '<dl class="log-detail-list">';
-        echo '<dt>' . e(admin_log_english_t('admin.logs.log_id', 'Log ID')) . '</dt><dd>' . (int) $entry['id'] . '</dd>';
-        echo '<dt>' . e(admin_log_english_t('admin.logs.group_count', 'Grouped entries')) . '</dt><dd>' . e((string) $groupCount) . '</dd>';
-        if ($groupCount > 1) {
-            echo '<dt>' . e(admin_log_english_t('admin.logs.first_seen', 'First seen')) . '</dt><dd>' . e($firstCreatedAt) . '</dd>';
-            echo '<dt>' . e(admin_log_english_t('admin.logs.latest_seen', 'Latest seen')) . '</dt><dd>' . e($latestCreatedAt) . '</dd>';
-        }
-        echo '<dt>' . e(admin_log_english_t('admin.logs.created_at', 'Created at')) . '</dt><dd>' . e((string) $entry['created_at']) . '</dd>';
-        echo '<dt>' . e(admin_log_english_t('admin.logs.level', 'Level')) . '</dt><dd>' . e((string) ($entry['level'] ?? '')) . '</dd>';
-        echo '<dt>' . e(admin_log_english_t('admin.logs.severity', 'Severity')) . '</dt><dd>' . e((string) ($entry['severity'] ?? $entry['level'] ?? 'info')) . '</dd>';
-        echo '<dt>' . e(admin_log_english_t('admin.logs.category', 'Category')) . '</dt><dd>' . e((string) ($entry['category'] ?? 'other')) . '</dd>';
-        echo '<dt>' . e(admin_log_english_t('admin.logs.route', 'Route')) . '</dt><dd>' . e((string) ($entry['route_name'] ?? '')) . '</dd>';
-        echo '<dt>' . e(admin_log_english_t('admin.logs.request_id', 'Request ID')) . '</dt><dd>' . e((string) ($entry['request_id'] ?? '')) . '</dd>';
-        echo '</dl>';
-        if ($groupCount > 1 && !empty($entry['group_hash'])) {
-            // $membersUrl loads raw instances only when the administrator opens this group.
-            $membersUrl = url_for('admin_log_group_members', [
-                'id' => (int) $entry['id'],
-                'group' => (string) $entry['group_hash'],
-            ]);
-            echo '<details class="log-context admin-log-group-members" data-admin-log-group-members data-admin-log-group-members-url="' . e($membersUrl) . '" data-admin-log-group-total="' . e((string) $groupCount) . '">';
-            echo '<summary>' . e(admin_log_english_t('admin.logs.all_instances', 'All grouped instances')) . ' (' . e((string) $groupCount) . ')</summary>';
-            echo '<div data-admin-log-group-members-list><p class="muted">' . e(admin_log_english_t('admin.logs.instances_lazy_hint', 'Open this section to load raw instances in small batches.')) . '</p></div>';
-            echo '<div class="log-detail-actions"><button type="button" class="button secondary" data-admin-log-group-members-more hidden>' . e(admin_log_english_t('admin.logs.load_more_instances', 'Load more instances')) . '</button><span class="muted" data-admin-log-group-members-state aria-live="polite"></span></div>';
-            echo '</details>';
-        }
-        echo '<code>' . e((string) $entry['event_key']) . '</code>';
-        if (!empty($entry['subject_type']) || !empty($entry['subject_id'])) {
-            echo '<div class="muted">' . e((string) ($entry['subject_type'] ?? '')) . ' #' . e((string) ($entry['subject_id'] ?? '')) . '</div>';
-        }
-        echo '</details></td>';
-        echo '<td>' . e((string) $entry['message']);
-        if ($groupCount > 1) {
-            echo '<div class="muted">' . e(admin_log_english_t('admin.logs.grouped_row_note', 'Grouped row; showing one representative entry.')) . '</div>';
-        }
-        if ($context) {
-            echo '<details class="log-context"><summary>' . e(admin_log_english_t('admin.logs.details', 'Details')) . '</summary><pre>' . e(json_encode($context, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) . '</pre></details>';
-        }
-        if (!empty($entry['request_id'])) {
-            echo '<div class="muted">' . e(admin_log_english_t('admin.logs.request_prefix', 'Request')) . ' ' . e((string) $entry['request_id']) . '</div>';
-        }
-        echo '</td>';
-        echo '<td>' . e((string) ($entry['username'] ?? '')) . '</td>';
-        echo '</tr>';
-    }
-    return (string) ob_get_clean();
+    return view_render_admin_log_table_rows(admin_log_table_row_view_models($logs), admin_log_table_row_labels());
 }
 
 /**
@@ -692,39 +670,51 @@ function admin_log_archive_page_url(int $archivePage): string
 }
 
 /**
- * Render the compact filesystem archive pagination control.
+ * Build filesystem archive pagination presentation state.
  *
- * @param int $page Current page.
- * @param int $pages Total pages.
- * @return string HTML fragment.
+ * @param int $page Current archive page.
+ * @param int $pages Total archive pages.
+ * @return array<string, mixed> Presentation-only pagination model.
  */
-function render_admin_log_archive_pagination(int $page, int $pages): string
+function admin_log_archive_pagination_view_model(int $page, int $pages): array
 {
-    if ($pages <= 1) {
-        return '';
-    }
-    $html = '<nav class="pagination admin-log-archive-pagination" aria-label="' . e(admin_log_english_t('admin.logs.archive.pagination_aria', 'Archived log pages')) . '">';
-    if ($page > 1) {
-        $html .= '<a class="pagination-link" href="' . e(admin_log_archive_page_url($page - 1)) . '">' . e(admin_log_english_t('pagination.previous', 'Previous')) . '</a>';
-    }
-    $html .= '<span class="pagination-status">' . e(admin_log_english_t('pagination.page_of', 'Page {page} of {pages}', [
-        'page' => (string) $page,
-        'pages' => (string) $pages,
-    ])) . '</span>';
-    if ($page < $pages) {
-        $html .= '<a class="pagination-link" href="' . e(admin_log_archive_page_url($page + 1)) . '">' . e(admin_log_english_t('pagination.next', 'Next')) . '</a>';
-    }
-    $html .= '</nav>';
-    return $html;
+    $page = max(1, $page);
+    $pages = max(1, $pages);
+    return [
+        'visible' => $pages > 1,
+        'previous_url' => $page > 1 ? admin_log_archive_page_url($page - 1) : '',
+        'next_url' => $page < $pages ? admin_log_archive_page_url($page + 1) : '',
+        'aria_label' => admin_log_english_t('admin.logs.archive.pagination_aria', 'Archived log pages'),
+        'previous_label' => admin_log_english_t('pagination.previous', 'Previous'),
+        'next_label' => admin_log_english_t('pagination.next', 'Next'),
+        'status_label' => admin_log_english_t('pagination.page_of', 'Page {page} of {pages}', [
+            'page' => (string) $page,
+            'pages' => (string) $pages,
+        ]),
+    ];
 }
 
 /**
- * Render filesystem-backed Admin log archive controls and archive files.
+ * Render Admin log archive pagination.
+ *
+ * @param int $page Current archive page.
+ * @param int $pages Total archive pages.
+ * @return string Rendered pagination HTML.
+ */
+function render_admin_log_archive_pagination(int $page, int $pages): string
+{
+    return view_render_admin_log_archive_pagination(admin_log_archive_pagination_view_model($page, $pages));
+}
+
+/**
+ * Build filesystem-backed Admin log archive presentation state.
  *
  * @param array<string,mixed> $status Archive-maintenance status.
  * @param array<string,mixed> $archiveList Paginated archive listing.
+ * @param string $notice Optional controller flash notice.
+ * @return array<string, mixed> Presentation-only archive model.
  */
-function render_admin_log_archive_panel(array $status, array $archiveList): void
+function admin_log_archive_panel_view_model(array $status, array $archiveList, string $notice = ''): array
 {
     $retentionDays = max(0, (int) ($status['retention_days'] ?? 30));
     $inventory = is_array($status['inventory'] ?? null) ? $status['inventory'] : [];
@@ -734,32 +724,15 @@ function render_admin_log_archive_panel(array $status, array $archiveList): void
     $archivePages = max(1, (int) ($archiveList['pages'] ?? 1));
     $items = is_array($archiveList['items'] ?? null) ? $archiveList['items'] : [];
 
-    echo '<section class="panel admin-log-archive-panel">';
-    echo '<div class="admin-log-archive-heading"><div><h2>' . e(admin_log_english_t('admin.logs.archive.maintenance_title', 'Planned Admin log maintenance')) . '</h2><p class="muted">' . e(admin_log_english_t('admin.logs.archive.maintenance_intro', 'Recent logs stay live in MariaDB. Older completed days are archived as permanent daily ZIP files containing JSON, a fully expanded static HTML report, and a verification manifest. Database rows are deleted only after that ZIP has been verified.')) . '</p></div></div>';
-
-    if (empty($status['zip_available'])) {
-        echo '<div class="notice">' . e(admin_log_english_t('admin.logs.archive.zip_unavailable', 'PHP ZipArchive is not available. Automatic Admin log archival cannot run safely until the ZIP extension is enabled.')) . '</div>';
-    }
-
-    echo '<div class="admin-log-archive-controls">';
-    echo '<form method="post" action="' . e(url_for('admin_log_archive_maintenance')) . '" class="admin-log-archive-retention-form">' . csrf_field();
-    echo '<input type="hidden" name="action" value="save_retention">';
-    echo '<label><span>' . e(admin_log_english_t('admin.logs.archive.keep_live_logs', 'Keep live logs')) . '</span><select name="retention_days">';
+    $retentionOptions = [];
     foreach (admin_log_archive_retention_options() as $days) {
-        $label = $days === 0
-            ? admin_log_english_t('admin.logs.archive.retention_forever_option', 'Forever, disable automatic archiving')
-            : admin_log_english_t('common.days_count', '{count} days', ['count' => (string) $days]);
-        echo '<option value="' . (int) $days . '"' . ($retentionDays === $days ? ' selected' : '') . '>' . e($label) . '</option>';
+        $retentionOptions[] = [
+            'days' => (int) $days,
+            'label' => $days === 0
+                ? admin_log_english_t('admin.logs.archive.retention_forever_option', 'Forever, disable automatic archiving')
+                : admin_log_english_t('common.days_count', '{count} days', ['count' => (string) $days]),
+        ];
     }
-    echo '</select></label><button type="submit" class="secondary">' . e(admin_log_english_t('admin.logs.archive.save_retention', 'Save retention')) . '</button></form>';
-
-    echo '<form method="post" action="' . e(url_for('admin_log_archive_maintenance')) . '" class="admin-log-archive-run-form">' . csrf_field();
-    echo '<input type="hidden" name="action" value="run_now">';
-    echo '<button type="submit">' . e(admin_log_english_t('admin.logs.archive.run_now', 'Run maintenance cycle now')) . '</button>';
-    echo '</form>';
-    echo '</div>';
-
-    echo '<p class="muted admin-log-archive-policy">' . e(admin_log_english_t('admin.logs.archive.policy', 'The lightweight due counter is checked on normal gallery and Admin page loads. When due, one safe daily archive cycle runs after the visible response. A backlog is retried shortly; once caught up, the next normal check is approximately 24 hours later. Archived ZIP files are never deleted automatically.')) . '</p>';
 
     $retentionLabel = $retentionDays === 0
         ? admin_log_english_t('common.forever', 'Forever')
@@ -770,15 +743,7 @@ function render_admin_log_archive_panel(array $status, array $archiveList): void
         ? admin_log_english_t('common.disabled', 'disabled')
         : ($nextRunAt <= time() ? admin_log_english_t('admin.logs.archive.due_now', 'due now') : date('Y-m-d H:i:s', $nextRunAt));
 
-    echo '<dl class="admin-log-archive-metrics">';
-    echo '<div><dt>' . e(admin_log_english_t('admin.logs.archive.live_retention', 'Live retention')) . '</dt><dd>' . e($retentionLabel) . '</dd></div>';
-    echo '<div><dt>' . e(admin_log_english_t('admin.logs.archive.archived_zips', 'Archived ZIPs')) . '</dt><dd>' . e((string) max(0, (int) ($inventory['count'] ?? 0))) . '</dd></div>';
-    echo '<div><dt>' . e(admin_log_english_t('admin.logs.archive.storage', 'Archive storage')) . '</dt><dd>' . e(admin_dashboard_format_bytes(max(0, (int) ($inventory['total_bytes'] ?? 0)))) . '</dd></div>';
-    echo '<div><dt>' . e(admin_log_english_t('admin.logs.archive.oldest', 'Oldest archive')) . '</dt><dd>' . e($oldestDate) . '</dd></div>';
-    echo '<div><dt>' . e(admin_log_english_t('admin.logs.archive.newest', 'Newest archive')) . '</dt><dd>' . e($newestDate) . '</dd></div>';
-    echo '<div><dt>' . e(admin_log_english_t('admin.logs.archive.next_check', 'Next automatic check')) . '</dt><dd>' . e($nextRunLabel) . '</dd></div>';
-    echo '</dl>';
-
+    $lastSummary = '';
     if ($lastResult !== []) {
         $lastReason = (string) ($lastResult['reason'] ?? '');
         $lastDate = (string) ($lastResult['archive_date'] ?? '');
@@ -800,51 +765,94 @@ function render_admin_log_archive_panel(array $status, array $archiveList): void
         if (!empty($lastResult['error'])) {
             $lastSummary .= ' ' . admin_log_english_t('common.error_detail', 'Error: {error}', ['error' => (string) $lastResult['error']]);
         }
-        echo '<p class="muted admin-log-archive-last-result">' . e($lastSummary) . '</p>';
     }
 
-    echo '<div class="admin-log-archive-heading admin-log-archive-files-heading"><div><h3>' . e(admin_log_english_t('admin.logs.archive.files_title', 'Archived logs')) . '</h3><p class="muted">' . e(admin_log_english_t('admin.logs.archive.files_intro', 'These rows come directly from ZIP files on disk. View the frozen HTML/JSON through authenticated routes, download the original ZIP, or delete a selected archive manually.')) . '</p></div></div>';
-    echo render_admin_log_archive_pagination($archivePage, $archivePages);
-    if ($items === []) {
-        echo '<p class="muted">' . e(admin_log_english_t('admin.logs.archive.none_yet', 'No Admin log ZIP archives exist yet.')) . '</p>';
-    } else {
-        echo '<div class="admin-log-table-wrap"><table class="admin-log-archive-table"><thead><tr>';
-        echo '<th>' . e(admin_log_english_t('common.date', 'Date')) . '</th>';
-        echo '<th>' . e(admin_log_english_t('admin.logs.archive.records', 'Records')) . '</th>';
-        echo '<th>' . e(admin_log_english_t('admin.logs.archive.zip_size', 'ZIP size')) . '</th>';
-        echo '<th>' . e(admin_log_english_t('common.created', 'Created')) . '</th>';
-        echo '<th>' . e(admin_log_english_t('common.actions', 'Actions')) . '</th>';
-        echo '</tr></thead><tbody>';
-        foreach ($items as $item) {
-            $date = (string) ($item['date'] ?? '');
-            if (!admin_log_archive_valid_date($date)) {
-                continue;
-            }
-            $manifestValue = !empty($item['manifest_available'])
-                ? (string) max(0, (int) ($item['row_count'] ?? 0))
-                : admin_log_english_t('admin.logs.archive.manifest_unavailable', 'manifest unavailable');
-            $createdAt = (string) (($item['created_at'] ?? '') !== '' ? $item['created_at'] : admin_log_english_t('common.unknown', 'unknown'));
-            $deleteConfirm = admin_log_english_t('admin.logs.archive.delete_confirm', 'Permanently delete {file}? This archived log data cannot be recovered from PHP Gallery.', [
-                'file' => admin_log_archive_file_name($date),
-            ]);
-
-            echo '<tr><td><strong>' . e($date) . '</strong><div class="muted">' . e((string) ($item['file_name'] ?? admin_log_archive_file_name($date))) . '</div></td>';
-            echo '<td>' . e($manifestValue) . '</td>';
-            echo '<td>' . e(admin_dashboard_format_bytes(max(0, (int) ($item['bytes'] ?? 0)))) . '</td>';
-            echo '<td>' . e($createdAt) . '</td>';
-            echo '<td><div class="admin-log-archive-actions">';
-            echo '<a class="button secondary" target="_blank" rel="noopener" href="' . e(url_for('admin_log_archive_view', ['date' => $date, 'kind' => 'html'])) . '">' . e(admin_log_english_t('admin.logs.archive.view_html', 'View HTML')) . '</a>';
-            echo '<a class="button secondary" target="_blank" rel="noopener" href="' . e(url_for('admin_log_archive_view', ['date' => $date, 'kind' => 'json'])) . '">' . e(admin_log_english_t('admin.logs.archive.view_json', 'View JSON')) . '</a>';
-            echo '<a class="button secondary" href="' . e(url_for('admin_log_archive_download', ['date' => $date])) . '">' . e(admin_log_english_t('admin.logs.archive.download_zip', 'Download ZIP')) . '</a>';
-            echo '<form method="post" action="' . e(url_for('admin_log_archive_maintenance')) . '" class="admin-log-archive-delete-form">' . csrf_field();
-            echo '<input type="hidden" name="action" value="delete_archive"><input type="hidden" name="date" value="' . e($date) . '">';
-            echo '<button type="submit" class="secondary danger" onclick="return confirm(' . e(json_encode($deleteConfirm, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) . ');">' . e(admin_log_english_t('common.delete', 'Delete')) . '</button>';
-            echo '</form></div></td></tr>';
+    $itemModels = [];
+    foreach ($items as $item) {
+        if (!is_array($item)) {
+            continue;
         }
-        echo '</tbody></table></div>';
+        $date = (string) ($item['date'] ?? '');
+        if (!admin_log_archive_valid_date($date)) {
+            continue;
+        }
+        $fileName = (string) ($item['file_name'] ?? admin_log_archive_file_name($date));
+        $deleteConfirm = admin_log_english_t('admin.logs.archive.delete_confirm', 'Permanently delete {file}? This archived log data cannot be recovered from PHP Gallery.', [
+            'file' => $fileName,
+        ]);
+        $itemModels[] = [
+            'date' => $date,
+            'file_name' => $fileName,
+            'manifest_value' => !empty($item['manifest_available'])
+                ? (string) max(0, (int) ($item['row_count'] ?? 0))
+                : admin_log_english_t('admin.logs.archive.manifest_unavailable', 'manifest unavailable'),
+            'size_label' => admin_dashboard_format_bytes(max(0, (int) ($item['bytes'] ?? 0))),
+            'created_at_label' => (string) (($item['created_at'] ?? '') !== '' ? $item['created_at'] : admin_log_english_t('common.unknown', 'unknown')),
+            'html_url' => url_for('admin_log_archive_view', ['date' => $date, 'kind' => 'html']),
+            'json_url' => url_for('admin_log_archive_view', ['date' => $date, 'kind' => 'json']),
+            'download_url' => url_for('admin_log_archive_download', ['date' => $date]),
+            'delete_confirm_json' => (string) json_encode($deleteConfirm, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        ];
     }
-    echo render_admin_log_archive_pagination($archivePage, $archivePages);
-    echo '</section>';
+
+    return [
+        'notice' => $notice,
+        'zip_available' => !empty($status['zip_available']),
+        'retention_days' => $retentionDays,
+        'retention_options' => $retentionOptions,
+        'maintenance_url' => url_for('admin_log_archive_maintenance'),
+        'csrf_html' => csrf_field(),
+        'pagination_html' => render_admin_log_archive_pagination($archivePage, $archivePages),
+        'metrics' => [
+            'retention' => $retentionLabel,
+            'count' => (string) max(0, (int) ($inventory['count'] ?? 0)),
+            'storage' => admin_dashboard_format_bytes(max(0, (int) ($inventory['total_bytes'] ?? 0))),
+            'oldest' => $oldestDate,
+            'newest' => $newestDate,
+            'next_check' => $nextRunLabel,
+        ],
+        'last_summary' => $lastSummary,
+        'items' => $itemModels,
+        'labels' => [
+            'maintenance_title' => admin_log_english_t('admin.logs.archive.maintenance_title', 'Planned Admin log maintenance'),
+            'maintenance_intro' => admin_log_english_t('admin.logs.archive.maintenance_intro', 'Recent logs stay live in MariaDB. Older completed days are archived as permanent daily ZIP files containing JSON, a fully expanded static HTML report, and a verification manifest. Database rows are deleted only after that ZIP has been verified.'),
+            'zip_unavailable' => admin_log_english_t('admin.logs.archive.zip_unavailable', 'PHP ZipArchive is not available. Automatic Admin log archival cannot run safely until the ZIP extension is enabled.'),
+            'keep_live_logs' => admin_log_english_t('admin.logs.archive.keep_live_logs', 'Keep live logs'),
+            'save_retention' => admin_log_english_t('admin.logs.archive.save_retention', 'Save retention'),
+            'run_now' => admin_log_english_t('admin.logs.archive.run_now', 'Run maintenance cycle now'),
+            'policy' => admin_log_english_t('admin.logs.archive.policy', 'The lightweight due counter is checked on normal gallery and Admin page loads. When due, one safe daily archive cycle runs after the visible response. A backlog is retried shortly; once caught up, the next normal check is approximately 24 hours later. Archived ZIP files are never deleted automatically.'),
+            'live_retention' => admin_log_english_t('admin.logs.archive.live_retention', 'Live retention'),
+            'archived_zips' => admin_log_english_t('admin.logs.archive.archived_zips', 'Archived ZIPs'),
+            'storage' => admin_log_english_t('admin.logs.archive.storage', 'Archive storage'),
+            'oldest' => admin_log_english_t('admin.logs.archive.oldest', 'Oldest archive'),
+            'newest' => admin_log_english_t('admin.logs.archive.newest', 'Newest archive'),
+            'next_check' => admin_log_english_t('admin.logs.archive.next_check', 'Next automatic check'),
+            'files_title' => admin_log_english_t('admin.logs.archive.files_title', 'Archived logs'),
+            'files_intro' => admin_log_english_t('admin.logs.archive.files_intro', 'These rows come directly from ZIP files on disk. View the frozen HTML/JSON through authenticated routes, download the original ZIP, or delete a selected archive manually.'),
+            'none_yet' => admin_log_english_t('admin.logs.archive.none_yet', 'No Admin log ZIP archives exist yet.'),
+            'date' => admin_log_english_t('common.date', 'Date'),
+            'records' => admin_log_english_t('admin.logs.archive.records', 'Records'),
+            'zip_size' => admin_log_english_t('admin.logs.archive.zip_size', 'ZIP size'),
+            'created' => admin_log_english_t('common.created', 'Created'),
+            'actions' => admin_log_english_t('common.actions', 'Actions'),
+            'view_html' => admin_log_english_t('admin.logs.archive.view_html', 'View HTML'),
+            'view_json' => admin_log_english_t('admin.logs.archive.view_json', 'View JSON'),
+            'download_zip' => admin_log_english_t('admin.logs.archive.download_zip', 'Download ZIP'),
+            'delete' => admin_log_english_t('common.delete', 'Delete'),
+        ],
+    ];
+}
+
+/**
+ * Render filesystem-backed Admin log archive controls and archive files.
+ *
+ * @param array<string,mixed> $status Archive-maintenance status.
+ * @param array<string,mixed> $archiveList Paginated archive listing.
+ * @param string $notice Optional controller flash notice.
+ */
+function render_admin_log_archive_panel(array $status, array $archiveList, string $notice = ''): void
+{
+    view_render_admin_log_archive_panel(admin_log_archive_panel_view_model($status, $archiveList, $notice));
 }
 
 
@@ -860,27 +868,51 @@ function admin_log_section(mixed $value): string
 }
 
 /**
- * Render server-backed Admin Logs subtabs.
+ * Build the shared Admin Logs page heading presentation model.
  *
- * These deliberately navigate instead of only hiding DOM panels so the inactive
- * subsection does not perform its database or filesystem work in the background.
+ * The controller owns request-state preservation and capability policy so the
+ * view only receives labels and already-resolved navigation URLs.
  *
  * @param string $activeSection Current normalized subsection.
+ * @return array<string, mixed> Controller-prepared heading view model.
  */
-function render_admin_log_section_tabs(string $activeSection): void
+function admin_log_page_heading_view_model(string $activeSection): array
 {
     // $preservedParams keeps live-log filter state when temporarily opening maintenance.
     $preservedParams = $_GET;
     unset($preservedParams['page'], $preservedParams['section'], $preservedParams['ajax'], $preservedParams['archive_page']);
 
-    $logsUrl = url_for('admin_logs', $preservedParams);
-    $maintenanceUrl = url_for('admin_logs', array_merge($preservedParams, ['section' => 'maintenance']));
+    return [
+        'active_section' => $activeSection,
+        'telemetry_enabled' => feature_capability_effective_enabled('telemetry'),
+        'urls' => [
+            'admin' => url_for('admin'),
+            'telemetry' => url_for('admin_telemetry'),
+            'logs' => url_for('admin_logs', $preservedParams),
+            'maintenance' => url_for('admin_logs', array_merge($preservedParams, ['section' => 'maintenance'])),
+        ],
+        'labels' => [
+            'title' => admin_log_english_t('admin.logs.title', 'Admin log'),
+            'intro' => admin_log_english_t('admin.logs.intro', 'Operational events, failures, and maintenance actions.'),
+            'back_to_dashboard' => admin_log_english_t('admin.logs.back_to_dashboard', 'Back to dashboard'),
+            'anonymous_telemetry' => admin_log_english_t('admin.logs.anonymous_telemetry', 'Anonymous telemetry'),
+            'sections_aria' => admin_log_english_t('admin.logs.sections_aria', 'Admin log sections'),
+            'section_logs' => admin_log_english_t('admin.logs.section_logs', 'Logs'),
+            'section_maintenance' => admin_log_english_t('admin.logs.section_maintenance', 'Maintenance & archives'),
+        ],
+    ];
+}
 
-    echo '<nav class="admin-subtabs admin-log-section-tabs" aria-label="' . e(admin_log_english_t('admin.logs.sections_aria', 'Admin log sections')) . '">';
-    echo '<div class="admin-subtab-list">';
-    echo '<a class="admin-subtab' . ($activeSection === 'logs' ? ' is-active' : '') . '" href="' . e($logsUrl) . '"' . ($activeSection === 'logs' ? ' aria-current="page"' : '') . '>' . e(admin_log_english_t('admin.logs.section_logs', 'Logs')) . '</a>';
-    echo '<a class="admin-subtab' . ($activeSection === 'maintenance' ? ' is-active' : '') . '" href="' . e($maintenanceUrl) . '"' . ($activeSection === 'maintenance' ? ' aria-current="page"' : '') . '>' . e(admin_log_english_t('admin.logs.section_maintenance', 'Maintenance & archives')) . '</a>';
-    echo '</div></nav>';
+/**
+ * Render server-backed Admin Logs subtabs.
+ *
+ * Compatibility wrapper retained for existing controller call sites.
+ *
+ * @param string $activeSection Current normalized subsection.
+ */
+function render_admin_log_section_tabs(string $activeSection): void
+{
+    view_render_admin_log_section_tabs(admin_log_page_heading_view_model($activeSection));
 }
 
 /**
@@ -890,13 +922,7 @@ function render_admin_log_section_tabs(string $activeSection): void
  */
 function render_admin_log_page_heading(string $activeSection): void
 {
-    echo '<section class="hero"><h1>' . e(admin_log_english_t('admin.logs.title', 'Admin log')) . '</h1><p>' . e(admin_log_english_t('admin.logs.intro', 'Operational events, failures, and maintenance actions.')) . '</p><nav class="nav">';
-    echo '<a class="button secondary" href="' . e(url_for('admin')) . '">' . e(admin_log_english_t('admin.logs.back_to_dashboard', 'Back to dashboard')) . '</a>';
-    if (feature_capability_effective_enabled('telemetry')) {
-        echo '<a class="button secondary" href="' . e(url_for('admin_telemetry')) . '">' . e(admin_log_english_t('admin.logs.anonymous_telemetry', 'Anonymous telemetry')) . '</a>';
-    }
-    echo '</nav></section>';
-    render_admin_log_section_tabs($activeSection);
+    view_render_admin_log_page_heading(admin_log_page_heading_view_model($activeSection));
 }
 
 /**
@@ -920,10 +946,7 @@ function cms_admin_logs(): void
 
         render_header(admin_log_english_t('admin.logs.title', 'Admin log'));
         render_admin_log_page_heading($section);
-        if ($notice !== '') {
-            echo '<div class="notice">' . e($notice) . '</div>';
-        }
-        render_admin_log_archive_panel($archiveStatus, $archiveList);
+        render_admin_log_archive_panel($archiveStatus, $archiveList, $notice);
         render_footer();
         return;
     }
@@ -985,64 +1008,85 @@ function cms_admin_logs(): void
             'per_page' => $pageSize,
             'grouped' => $grouped ? 1 : 0,
             'time_sort' => $timeSort,
-            'empty_html' => '<p>' . e(admin_log_english_t('admin.logs.no_entries_match', 'No log entries match the current filters.')) . '</p>',
+            'empty_html' => view_render_admin_log_empty(admin_log_english_t('admin.logs.no_entries_match', 'No log entries match the current filters.')),
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         return;
     }
 
+    // Prepare the live-log presentation model after all filtering/query work is complete.
+    $nextTimeSort = $timeSort === 'desc' ? 'asc' : 'desc';
+    $liveViewModel = [
+        'notice' => $notice,
+        'category' => $category,
+        'selected_severities' => $selectedSeverities,
+        'query' => $query,
+        'time_sort' => $timeSort,
+        'next_time_sort' => $nextTimeSort,
+        'time_sort_symbol' => $timeSort === 'desc' ? '↓' : '↑',
+        'page_size' => $pageSize,
+        'page_size_options' => admin_log_page_size_options(),
+        'grouped' => $grouped,
+        'current_page' => $currentPage,
+        'count_text' => $countText,
+        'has_logs' => $logs !== [],
+        'pagination_html' => $paginationHtml,
+        'rows_html' => render_admin_log_table_rows($logs),
+        'severity_summary' => admin_log_severity_filter_summary($selectedSeverities),
+        'category_options' => admin_log_category_options(),
+        'severity_options' => admin_log_severity_options(),
+        'status_options' => admin_log_status_options(),
+        'csrf_html' => csrf_field(),
+        'urls' => [
+            'index' => base_url('index.php'),
+            'live' => url_for('admin_logs'),
+            'export_all_zip' => url_for('admin_logs_export_zip'),
+            'reset_severity' => url_for('admin_logs', ['reset_severity' => '1']),
+            'time_sort' => admin_log_filter_url(['time_sort' => $nextTimeSort, 'log_page' => 1]),
+            'update' => url_for('admin_log_update'),
+        ],
+        'labels' => [
+            'filters' => admin_log_english_t('admin.logs.filters', 'Filters'),
+            'filters_intro' => admin_log_english_t('admin.logs.filters_intro', 'Refine the operational log by category, severity, grouping, and row count.'),
+            'export_all_zip' => admin_log_english_t('admin.logs.export_all_zip', 'Export all logs ZIP'),
+            'searching' => admin_log_english_t('admin.logs.searching', 'Searching...'),
+            'updated' => admin_log_english_t('admin.logs.updated', 'Updated.'),
+            'live_search_failed' => admin_log_english_t('admin.logs.live_search_failed', 'Live search failed. Use Apply filters.'),
+            'shown_suffix' => admin_log_english_t('admin.logs.shown_suffix', 'shown'),
+            'when' => admin_log_english_t('admin.logs.when', 'When'),
+            'filter_scope' => admin_log_english_t('admin.logs.filter_scope', 'Log scope'),
+            'category' => admin_log_english_t('admin.logs.category', 'Category'),
+            'all_categories' => admin_log_english_t('admin.logs.all_categories', 'All categories'),
+            'time_order' => admin_log_english_t('admin.logs.time_order', 'Time order'),
+            'newest_first' => admin_log_english_t('admin.logs.newest_first', 'Newest first'),
+            'oldest_first' => admin_log_english_t('admin.logs.oldest_first', 'Oldest first'),
+            'grouping' => admin_log_english_t('admin.logs.grouping', 'Grouping'),
+            'group_similar' => admin_log_english_t('admin.logs.group_similar', 'Group similar events'),
+            'show_individual' => admin_log_english_t('admin.logs.show_individual', 'Show individual rows'),
+            'per_page' => admin_log_english_t('admin.logs.per_page', 'Rows per page'),
+            'severity_filter_all_summary' => admin_log_english_t('admin.logs.severity_filter_all_summary', 'All severities are shown.'),
+            'severity_filter_active_summary' => admin_log_english_t('admin.logs.severity_filter_active_summary', 'Active severities: {values}'),
+            'severity' => admin_log_english_t('admin.logs.severity', 'Severity'),
+            'severity_filter_hint' => admin_log_english_t('admin.logs.severity_filter_hint', 'Pick one or more severities. Empty means all.'),
+            'search' => admin_log_english_t('admin.logs.search', 'Search'),
+            'search_placeholder' => admin_log_english_t('admin.logs.search_placeholder', 'Event key, message, context, request, or route'),
+            'apply_filters' => admin_log_english_t('admin.logs.apply_filters', 'Apply filters'),
+            'reset_severity_filter' => admin_log_english_t('admin.logs.reset_severity_filter', 'Reset severity filter'),
+            'entries' => admin_log_english_t('admin.logs.entries', 'Entries'),
+            'no_entries_match' => admin_log_english_t('admin.logs.no_entries_match', 'No log entries match the current filters.'),
+            'select' => admin_log_english_t('admin.logs.select', 'Select'),
+            'instances' => admin_log_english_t('admin.logs.instances', 'Instances'),
+            'event' => admin_log_english_t('admin.logs.event', 'Event'),
+            'message' => admin_log_english_t('admin.logs.message', 'Message'),
+            'by' => admin_log_english_t('admin.logs.by', 'By'),
+            'bulk_set_selected' => admin_log_english_t('admin.logs.bulk_set_selected', 'Bulk set selected'),
+            'apply_to_selected' => admin_log_english_t('admin.logs.apply_to_selected', 'Apply to selected'),
+            'bulk_grouping_hint' => admin_log_english_t('admin.logs.bulk_grouping_hint', 'Selecting a grouped row applies the state to every matching instance in that group.'),
+        ],
+    ];
+
     render_header(admin_log_english_t('admin.logs.title', 'Admin log'));
     render_admin_log_page_heading($section);
-    if ($notice !== '') {
-        echo '<div class="notice">' . e($notice) . '</div>';
-    }
-
-    echo '<section class="panel admin-log-filters-panel"><div class="admin-log-filters-header"><div><h2>' . e(admin_log_english_t('admin.logs.filters', 'Filters')) . '</h2><p class="muted">' . e(admin_log_english_t('admin.logs.filters_intro', 'Refine the operational log by category, severity, grouping, and row count.')) . '</p></div><div class="admin-log-filters-header-actions"><a class="button secondary" href="' . e(url_for('admin_logs_export_zip')) . '">' . e(admin_log_english_t('admin.logs.export_all_zip', 'Export all logs ZIP')) . '</a><span class="admin-log-filter-state" data-admin-log-live-state aria-live="polite"></span></div></div><form method="get" action="' . e(base_url('index.php')) . '" class="admin-log-filter-grid" data-admin-log-filter-form data-admin-log-live-url="' . e(url_for('admin_logs')) . '" data-admin-log-searching-text="' . e(admin_log_english_t('admin.logs.searching', 'Searching...')) . '" data-admin-log-updated-text="' . e(admin_log_english_t('admin.logs.updated', 'Updated.')) . '" data-admin-log-failed-text="' . e(admin_log_english_t('admin.logs.live_search_failed', 'Live search failed. Use Apply filters.')) . '" data-admin-log-shown-text="' . e(admin_log_english_t('admin.logs.shown_suffix', 'shown')) . '" data-admin-log-when-text="' . e(admin_log_english_t('admin.logs.when', 'When')) . '">';
-    echo '<input type="hidden" name="page" value="admin_logs">';
-    echo '<input type="hidden" name="log_page" value="' . (int) $currentPage . '" data-admin-log-page-input>';
-    echo '<div class="admin-log-filter-main">';
-    echo '<fieldset class="admin-log-filter-group"><legend>' . e(admin_log_english_t('admin.logs.filter_scope', 'Log scope')) . '</legend><div class="admin-log-control-grid">';
-    echo '<label class="admin-log-filter-control"><span>' . e(admin_log_english_t('admin.logs.category', 'Category')) . '</span><select name="category" data-admin-log-live-filter><option value="">' . e(admin_log_english_t('admin.logs.all_categories', 'All categories')) . '</option>';
-    foreach (admin_log_category_options() as $value => $label) {
-        echo '<option value="' . e($value) . '"' . ($category === $value ? ' selected' : '') . '>' . e($label) . '</option>';
-    }
-    echo '</select></label>';
-    echo '<label class="admin-log-filter-control"><span>' . e(admin_log_english_t('admin.logs.time_order', 'Time order')) . '</span><select name="time_sort" data-admin-log-live-filter><option value="desc"' . ($timeSort === 'desc' ? ' selected' : '') . '>' . e(admin_log_english_t('admin.logs.newest_first', 'Newest first')) . '</option><option value="asc"' . ($timeSort === 'asc' ? ' selected' : '') . '>' . e(admin_log_english_t('admin.logs.oldest_first', 'Oldest first')) . '</option></select></label>';
-    echo '<label class="admin-log-filter-control"><span>' . e(admin_log_english_t('admin.logs.grouping', 'Grouping')) . '</span><select name="grouped" data-admin-log-live-filter><option value="1"' . ($grouped ? ' selected' : '') . '>' . e(admin_log_english_t('admin.logs.group_similar', 'Group similar events')) . '</option><option value="0"' . (!$grouped ? ' selected' : '') . '>' . e(admin_log_english_t('admin.logs.show_individual', 'Show individual rows')) . '</option></select></label>';
-    echo '<label class="admin-log-filter-control"><span>' . e(admin_log_english_t('admin.logs.per_page', 'Rows per page')) . '</span><select name="per_page" data-admin-log-live-filter>';
-    foreach (admin_log_page_size_options() as $option) {
-        echo '<option value="' . (int) $option . '"' . ($pageSize === $option ? ' selected' : '') . '>' . (int) $option . '</option>';
-    }
-    echo '</select></label>';
-    echo '</div></fieldset>';
-    echo '<fieldset class="admin-log-severity-filter admin-log-filter-group" data-admin-log-severity-filter data-all-text="' . e(admin_log_english_t('admin.logs.severity_filter_all_summary', 'All severities are shown.')) . '" data-active-template="' . e(admin_log_english_t('admin.logs.severity_filter_active_summary', 'Active severities: {values}')) . '"><legend><span>' . e(admin_log_english_t('admin.logs.severity', 'Severity')) . '</span><span class="admin-log-severity-count">' . e((string) count($selectedSeverities)) . '</span></legend>';
-    echo '<input type="hidden" name="severity_filter_submitted" value="1">';
-    echo '<p class="admin-log-filter-help">' . e(admin_log_english_t('admin.logs.severity_filter_hint', 'Pick one or more severities. Empty means all.')) . '</p>';
-    echo '<div class="admin-log-severity-options">';
-    foreach (admin_log_severity_options() as $value => $label) {
-        echo '<label class="admin-log-severity-choice is-' . e($value) . '"><input class="admin-log-severity-checkbox" type="checkbox" name="severities[]" value="' . e($value) . '"' . (in_array($value, $selectedSeverities, true) ? ' checked' : '') . ' data-admin-log-live-filter> <span>' . e($label) . '</span></label>';
-    }
-    echo '</div><p class="admin-log-severity-summary" data-admin-log-severity-summary>' . e(admin_log_severity_filter_summary($selectedSeverities)) . '</p></fieldset>';
-    echo '</div>';
-    echo '<div class="admin-log-filter-footer">';
-    echo '<label class="admin-log-filter-control admin-log-search-control"><span>' . e(admin_log_english_t('admin.logs.search', 'Search')) . '</span><input name="q" value="' . e($query) . '" placeholder="' . e(admin_log_english_t('admin.logs.search_placeholder', 'Event key, message, context, request, or route')) . '" autocomplete="off" data-admin-log-live-search></label>';
-    echo '<div class="admin-log-filter-actions"><button type="submit">' . e(admin_log_english_t('admin.logs.apply_filters', 'Apply filters')) . '</button><a class="button secondary" href="' . e(url_for('admin_logs', ['reset_severity' => '1'])) . '">' . e(admin_log_english_t('admin.logs.reset_severity_filter', 'Reset severity filter')) . '</a></div>';
-    echo '</div>';
-    echo '</form></section>';
-
-    echo '<section class="panel" data-admin-log-results><h2>' . e(admin_log_english_t('admin.logs.entries', 'Entries')) . ' <span class="muted" data-admin-log-count>(' . e($countText) . ')</span></h2>';
-    echo $paginationHtml;
-    if (!$logs) {
-        echo '<div data-admin-log-empty><p>' . e(admin_log_english_t('admin.logs.no_entries_match', 'No log entries match the current filters.')) . '</p></div>';
-    }
-    echo '<div class="admin-log-table-wrap">';
-    echo '<table class="admin-log-table"><thead><tr><th>' . e(admin_log_english_t('admin.logs.select', 'Select')) . '</th><th><a href="' . e(admin_log_filter_url(['time_sort' => $timeSort === 'desc' ? 'asc' : 'desc', 'log_page' => 1])) . '" data-admin-log-time-sort-link data-next-sort="' . e($timeSort === 'desc' ? 'asc' : 'desc') . '">' . e(admin_log_english_t('admin.logs.when', 'When')) . ' ' . e($timeSort === 'desc' ? '↓' : '↑') . '</a></th><th>' . e(admin_log_english_t('admin.logs.instances', 'Instances')) . '</th><th>' . e(admin_log_english_t('admin.logs.severity', 'Severity')) . '</th><th>' . e(admin_log_english_t('admin.logs.category', 'Category')) . '</th><th>' . e(admin_log_english_t('admin.logs.event', 'Event')) . '</th><th>' . e(admin_log_english_t('admin.logs.message', 'Message')) . '</th><th>' . e(admin_log_english_t('admin.logs.by', 'By')) . '</th></tr></thead><tbody data-admin-log-tbody>';
-    echo render_admin_log_table_rows($logs);
-    echo '</tbody></table></div><form id="admin-log-bulk-form" method="post" action="' . e(url_for('admin_log_update')) . '">' . csrf_field();
-    echo '<div class="bulk-row"><label>' . e(admin_log_english_t('admin.logs.bulk_set_selected', 'Bulk set selected')) . '<select name="status">';
-    foreach (admin_log_status_options() as $value => $label) {
-        echo '<option value="' . e($value) . '">' . e($label) . '</option>';
-    }
-    echo '</select></label><button type="submit" name="action" value="bulk">' . e(admin_log_english_t('admin.logs.apply_to_selected', 'Apply to selected')) . '</button><span class="muted">' . e(admin_log_english_t('admin.logs.bulk_grouping_hint', 'Selecting a grouped row applies the state to every matching instance in that group.')) . '</span></div></form></section>';
+    view_render_admin_logs_live($liveViewModel);
     render_footer();
 }
 
@@ -1206,7 +1250,12 @@ function cms_admin_log_archive_view(): void
         header("Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'");
     }
     try {
-        admin_log_archive_stream_member($date, $kind);
+        foreach (admin_log_archive_member_chunks($date, $kind) as $chunk) {
+            echo $chunk;
+            if (connection_aborted()) {
+                break;
+            }
+        }
     } catch (Throwable) {
         // The file existed when headers were prepared but could have become unavailable concurrently.
     }
@@ -1405,7 +1454,14 @@ function cms_admin_logs_export_zip(): void
         while (ob_get_level() > 0) {
             ob_end_clean();
         }
-        admin_log_send_export_zip($filePath, admin_log_export_zip_filename());
+        $download = admin_log_export_zip_descriptor($filePath, admin_log_export_zip_filename());
+        header('Content-Type: application/zip');
+        header('Content-Disposition: attachment; filename="' . (string) $download['filename'] . '"');
+        header('Content-Length: ' . (int) $download['size']);
+        header('X-Content-Type-Options: nosniff');
+        readfile((string) $download['path']);
+        @unlink((string) $download['path']);
+        return;
     } catch (Throwable $exception) {
         if ($filePath !== '' && is_file($filePath)) {
             @unlink($filePath);

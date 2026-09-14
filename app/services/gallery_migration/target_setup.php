@@ -42,16 +42,16 @@ use RuntimeException;
 use Throwable;
 use ZipArchive;
 use const Gallery\Core\CMS_VERSION;
-use function Gallery\Controllers\admin_edit_gallery_tab_url;
 use function Gallery\Core\cms_config;
 use function Gallery\Core\cms_current_version;
-use function Gallery\Core\db;
 use function Gallery\Core\gallery_public_url;
 use function Gallery\Core\is_supported_image_path;
 use function Gallery\Core\normalize_relative_path;
 use function Gallery\Core\now_sql;
 use function Gallery\Core\path_inside;
-use function Gallery\Core\unique_slug;
+use function Gallery\Models\flight_maps_model_upsert;
+use function Gallery\Models\gallery_model_unique_slug;
+use function Gallery\Models\gallery_model_update_fields;
 
 /**
  * Create or update a target job from a source manifest.
@@ -247,8 +247,7 @@ function gallery_migration_apply_gallery_metadata(int $targetGalleryId, array $m
         'Gallery migration metadata could not be applied because the database schema could not be verified.'
     );
     $metadata = (array) ($manifest['gallery'] ?? []);
-    $fields = [];
-    $values = [];
+    $updates = [];
     $allowed = [
         'title',
         'description',
@@ -281,24 +280,18 @@ function gallery_migration_apply_gallery_metadata(int $targetGalleryId, array $m
         if (!mutation_schema_optional_column_available('mutation.gallery_migration_gallery_metadata', 'galleries', $column, 'gallery_migration.apply_gallery_metadata')) {
             continue;
         }
-        $fields[] = $column . ' = ?';
-        $values[] = gallery_migration_gallery_column_value($column, $metadata[$column]);
+        $updates[$column] = gallery_migration_gallery_column_value($column, $metadata[$column]);
     }
 
     if (array_key_exists('slug', $metadata)
         && mutation_schema_optional_column_available('mutation.gallery_migration_gallery_metadata', 'galleries', 'slug', 'gallery_migration.apply_gallery_metadata')) {
-        $fields[] = 'slug = ?';
-        $values[] = unique_slug(db(), (string) $metadata['slug'], $targetGalleryId);
+        $updates['slug'] = gallery_model_unique_slug((string) $metadata['slug'], $targetGalleryId);
     }
-    if ($fields) {
-        $fields[] = 'updated_at = ?';
-        $values[] = now_sql();
-        $values[] = $targetGalleryId;
-        $stmt = db()->prepare('UPDATE galleries SET ' . implode(', ', $fields) . ' WHERE id = ?');
-        $stmt->execute($values);
+    if ($updates !== []) {
+        gallery_model_update_fields($targetGalleryId, $updates, now_sql());
     }
 
-    if (function_exists('Gallery\\Services\\sync_entity_tags')) {
+    if (function_exists('Gallery\Services\sync_entity_tags')) {
         sync_entity_tags('gallery', $targetGalleryId, (string) ($metadata['tags'] ?? ''));
     }
     if (content_localization_schema_ready('gallery') && (array_key_exists('content_language', $metadata) || array_key_exists('translations', $metadata))) {
@@ -339,7 +332,7 @@ function gallery_migration_gallery_column_value(string $column, mixed $value): m
  */
 function gallery_migration_apply_flight_map(int $targetGalleryId, array $manifest): void
 {
-    if (!function_exists('Gallery\\Services\\flight_map_schema_ready') || !flight_map_schema_ready()) {
+    if (!function_exists('Gallery\Services\flight_map_schema_ready') || !flight_map_schema_ready()) {
         return;
     }
     $flightMap = $manifest['flight_map'] ?? null;
@@ -357,37 +350,16 @@ function gallery_migration_apply_flight_map(int $targetGalleryId, array $manifes
     }
 
     $now = now_sql();
-    $stmt = db()->prepare("INSERT INTO gallery_flight_maps (
-        gallery_id,
-        map_source_type,
-        route_text,
-        resolved_points_json,
-        unresolved_points_json,
-        point_count,
-        resolved_at,
-        created_at,
-        updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON DUPLICATE KEY UPDATE
-        map_source_type = VALUES(map_source_type),
-        route_text = VALUES(route_text),
-        resolved_points_json = VALUES(resolved_points_json),
-        unresolved_points_json = VALUES(unresolved_points_json),
-        point_count = VALUES(point_count),
-        resolved_at = VALUES(resolved_at),
-        updated_at = VALUES(updated_at)");
-    $stmt->execute([
+    flight_maps_model_upsert(
         $targetGalleryId,
         (string) ($flightMap['map_source_type'] ?? GALLERY_MAP_SOURCE_FLIGHT_PATH),
         (string) ($flightMap['route_text'] ?? ''),
-        json_encode($resolved, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-        json_encode($unresolved, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-        count($resolved),
-        (string) ($flightMap['resolved_at'] ?? '') !== '' ? (string) $flightMap['resolved_at'] : $now,
+        $resolved,
+        $unresolved,
         $now,
-        $now,
-    ]);
-    if (function_exists('Gallery\\Services\\flight_map_clear_runtime_cache')) {
+        (string) ($flightMap['resolved_at'] ?? '')
+    );
+    if (function_exists('Gallery\Services\flight_map_clear_runtime_cache')) {
         flight_map_clear_runtime_cache();
     }
 }

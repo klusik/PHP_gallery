@@ -137,8 +137,8 @@ foreach (['general', 'appearance', 'content', 'media', 'uploads', 'privacy', 'ad
     }
 }
 
-if (!str_contains($view, "href=\"' . e(admin_settings_url(\$sectionId))")) {
-    throw new RuntimeException('Active Settings section is not represented by stable URL links.');
+if (!str_contains($view, "href=\"' . e((string) (\$section['url'] ?? ''))")) {
+    throw new RuntimeException('Active Settings section is not represented by controller-prepared stable URL links.');
 }
 
 echo "Admin Settings rendering contract tests passed.\n";

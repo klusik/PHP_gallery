@@ -21,6 +21,9 @@
  *   GALLERY_TEST_MYSQL_USER
  *   GALLERY_TEST_MYSQL_PASSWORD
  *
+ * Author:
+ *   Rudolf Klusal
+ *
  * Notes:
  *   - Run only against a dedicated test database with the current application migrations applied.
  *   - This harness intentionally does not run as part of the default driverless test suite.

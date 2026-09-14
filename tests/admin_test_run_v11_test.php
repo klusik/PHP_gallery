@@ -75,8 +75,9 @@ foreach (['entrypoint', 'configuration', 'helpers', 'database', 'security', 'mig
 assert_admin_test_run_v11(
     str_contains($controllerSource, "admin_test_run_request_begin_for_token(\$token, 'starter')")
         && str_contains($controllerSource, 'test_run_starter_request_id')
-        && str_contains($serviceSource, 'X-Gallery-Test-Request-ID')
-        && str_contains($serviceSource, 'Server-Timing: gallery-php'),
+        && str_contains($serviceSource, "'name' => 'X-Gallery-Test-Request-ID'")
+        && str_contains($serviceSource, "'name' => 'Server-Timing'")
+        && str_contains($controllerSource . $bootstrapSource, 'apply_response_header_intents'),
     'Starter tracing and browser/PHP request correlation headers must be wired.'
 );
 assert_admin_test_run_v11(

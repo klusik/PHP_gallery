@@ -15,14 +15,21 @@
  *   - Require server markup to emit JSON quality candidates
  *   - Require lazy pagination payloads to expose the same candidate model
  *   - Preserve the legacy preview/full attributes during progressive enhancement
- */
+  *
+ * Author:
+ *   Rudolf Klusal
+*/
 
 declare(strict_types=1);
 
 $root = dirname(__DIR__);
-$rendererSource = (string) file_get_contents($root . '/app/controllers/public_gallery_lightbox.php');
+$rendererControllerSource = (string) file_get_contents($root . '/app/controllers/public_gallery_lightbox.php');
+$rendererViewSource = (string) file_get_contents($root . '/app/views/public_gallery_lightbox.php');
+$rendererSource = $rendererControllerSource . "\n" . $rendererViewSource;
 $galleryPageSource = (string) file_get_contents($root . '/app/controllers/public_gallery_page.php');
-$smartGallerySource = (string) file_get_contents($root . '/app/controllers/smart_galleries.php');
+$smartGalleryControllerSource = (string) file_get_contents($root . '/app/controllers/smart_galleries.php');
+$smartGalleryViewSource = (string) file_get_contents($root . '/app/views/smart_galleries.php');
+$smartGallerySource = $smartGalleryControllerSource . "\n" . $smartGalleryViewSource;
 $lazyEndpointSource = (string) file_get_contents($root . '/app/controllers/gallery_lightbox.php');
 $lightboxStyleSource = (string) file_get_contents($root . '/public/assets/styles/lightbox.css');
 $mobileGalleryStyleSource = (string) file_get_contents($root . '/public/assets/styles/mobile-gallery.css');
@@ -71,8 +78,12 @@ lightbox_zoom_quality_rendering_assert(
     'Physical gallery cards must pass the already-resolved thumbnail bundle.'
 );
 lightbox_zoom_quality_rendering_assert(
-    str_contains($smartGallerySource, "'data-lightbox-image', \$voting, \$offset + \$index, \$bundle"),
-    'Smart Gallery cards must use the same bundle-backed source contract with a global ordered index.'
+    str_contains($smartGalleryControllerSource, "'data-lightbox-image'")
+        && str_contains($smartGalleryControllerSource, '$offset + $index')
+        && str_contains($smartGalleryControllerSource, '$bundle')
+        && str_contains($smartGalleryControllerSource, "'attributes_html' => \$attributesHtml")
+        && str_contains($smartGalleryViewSource, '($card[\'attributes_html\'] ?? \'\')'),
+    'Smart Gallery cards must preserve bundle-backed global lightbox attributes across the controller/view boundary.'
 );
 lightbox_zoom_quality_rendering_assert(
     str_contains($lazyEndpointSource, "'quality_sources' => lightbox_zoom_quality_candidates(\$image, \$previewUrl, \$mediaUrl, \$thumbnailBundle)"),

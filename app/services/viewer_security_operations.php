@@ -41,7 +41,11 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 use Throwable;
-use function Gallery\Core\db;
+use function Gallery\Models\viewer_security_operations_model_account_capacity;
+use function Gallery\Models\viewer_security_operations_model_event_aggregates;
+use function Gallery\Models\viewer_security_operations_model_event_trend;
+use function Gallery\Models\viewer_security_operations_model_rate_limit_rows;
+use function Gallery\Models\viewer_security_operations_model_registration_capacity;
 
 const VIEWER_SECURITY_OPERATIONS_STATUS_AVAILABLE = 'available';
 const VIEWER_SECURITY_OPERATIONS_STATUS_UNAVAILABLE = 'unavailable';
@@ -206,21 +210,13 @@ function viewer_security_operations_capacity_snapshot(): array
 
     if ($accountsStatus === VIEWER_SECURITY_OPERATIONS_STATUS_AVAILABLE) {
         try {
-            $stmt = db()->prepare(
-                'SELECT COUNT(*) AS current_count, '
-                . '(SELECT account_count FROM viewer_account_state WHERE state_key = ? LIMIT 1) AS capacity_counter_count '
-                . 'FROM viewer_accounts'
-            );
-            $stmt->execute([VIEWER_ACCOUNT_CAPACITY_STATE_KEY]);
-            $row = $stmt->fetch() ?: [];
+            $row = viewer_security_operations_model_account_capacity(VIEWER_ACCOUNT_CAPACITY_STATE_KEY);
             $currentCount = (int) ($row['current_count'] ?? 0);
             $counterRaw = $row['capacity_counter_count'] ?? null;
             $counterCount = $counterRaw === null ? null : (int) $counterRaw;
             $result['accounts']['current_count'] = $currentCount;
             $result['accounts']['capacity_counter_count'] = $counterCount;
-            $result['accounts']['capacity_counter_consistent'] = $counterCount === null
-                ? null
-                : $counterCount === $currentCount;
+            $result['accounts']['capacity_counter_consistent'] = $counterCount === null ? null : $counterCount === $currentCount;
         } catch (Throwable) {
             $result['accounts']['status'] = VIEWER_SECURITY_OPERATIONS_STATUS_UNKNOWN;
         }
@@ -228,15 +224,7 @@ function viewer_security_operations_capacity_snapshot(): array
 
     if ($registrationsStatus === VIEWER_SECURITY_OPERATIONS_STATUS_AVAILABLE) {
         try {
-            $stmt = db()->prepare(
-                'SELECT COUNT(*) AS current_count, '
-                . 'COALESCE(SUM(CASE WHEN viewer_invitation_id IS NULL THEN 1 ELSE 0 END), 0) AS open_origin_count, '
-                . 'COALESCE(SUM(CASE WHEN viewer_invitation_id IS NOT NULL THEN 1 ELSE 0 END), 0) AS invitation_backed_count, '
-                . '(SELECT active_request_count FROM viewer_registration_state WHERE state_key = ? LIMIT 1) AS capacity_counter_count '
-                . 'FROM viewer_registration_requests'
-            );
-            $stmt->execute([VIEWER_REGISTRATION_STATE_KEY]);
-            $row = $stmt->fetch() ?: [];
+            $row = viewer_security_operations_model_registration_capacity(VIEWER_REGISTRATION_STATE_KEY);
             $currentCount = (int) ($row['current_count'] ?? 0);
             $counterRaw = $row['capacity_counter_count'] ?? null;
             $counterCount = $counterRaw === null ? null : (int) $counterRaw;
@@ -244,9 +232,7 @@ function viewer_security_operations_capacity_snapshot(): array
             $result['registrations']['open_origin_count'] = (int) ($row['open_origin_count'] ?? 0);
             $result['registrations']['invitation_backed_count'] = (int) ($row['invitation_backed_count'] ?? 0);
             $result['registrations']['capacity_counter_count'] = $counterCount;
-            $result['registrations']['capacity_counter_consistent'] = $counterCount === null
-                ? null
-                : $counterCount === $currentCount;
+            $result['registrations']['capacity_counter_consistent'] = $counterCount === null ? null : $counterCount === $currentCount;
         } catch (Throwable) {
             $result['registrations']['status'] = VIEWER_SECURITY_OPERATIONS_STATUS_UNKNOWN;
         }
@@ -289,18 +275,8 @@ function viewer_security_operations_event_snapshot(?int $nowTimestamp = null): a
 
     try {
         $persistedKeys = array_values($eventKeys);
-        $placeholders = implode(',', array_fill(0, count($persistedKeys), '?'));
-        $stmt = db()->prepare(
-            'SELECT event_key, '
-            . 'SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) AS count_24h, '
-            . 'COUNT(*) AS count_7d '
-            . 'FROM viewer_security_events '
-            . 'WHERE event_key IN (' . $placeholders . ') AND created_at >= ? '
-            . 'GROUP BY event_key'
-        );
-        $stmt->execute(array_merge([$cutoff24], $persistedKeys, [$cutoff7]));
         $byEvent = [];
-        foreach ($stmt->fetchAll() ?: [] as $row) {
+        foreach (viewer_security_operations_model_event_aggregates($persistedKeys, $cutoff24, $cutoff7) as $row) {
             $eventKey = (string) ($row['event_key'] ?? '');
             if (in_array($eventKey, $persistedKeys, true)) {
                 $byEvent[$eventKey] = [
@@ -315,18 +291,8 @@ function viewer_security_operations_event_snapshot(?int $nowTimestamp = null): a
         }
 
         $trendKeys = viewer_security_operations_trend_event_keys();
-        $trendPlaceholders = implode(',', array_fill(0, count($trendKeys), '?'));
-        $trendStmt = db()->prepare(
-            'SELECT DATE(created_at) AS activity_date, event_key, COUNT(*) AS event_count '
-            . 'FROM viewer_security_events '
-            . 'WHERE event_key IN (' . $trendPlaceholders . ') '
-            . 'AND created_at >= ? AND created_at <= ? '
-            . 'GROUP BY DATE(created_at), event_key '
-            . 'ORDER BY activity_date ASC, event_key ASC'
-        );
-        $trendStmt->execute(array_merge($trendKeys, [$trendStart, $nowSql]));
         $trendCounts = [];
-        foreach ($trendStmt->fetchAll() ?: [] as $row) {
+        foreach (viewer_security_operations_model_event_trend($trendKeys, $trendStart, $nowSql) as $row) {
             $date = (string) ($row['activity_date'] ?? '');
             $eventKey = (string) ($row['event_key'] ?? '');
             if ($date !== '' && in_array($eventKey, $trendKeys, true)) {
@@ -391,40 +357,8 @@ function viewer_security_operations_rate_limit_policies(): array
  */
 function viewer_security_operations_rate_limit_query(array $policies, int $nowTimestamp): string
 {
-    $case = [];
-    $bucketSql = [];
-    $maximumWindow = 0;
-    foreach ($policies as $bucket => $policy) {
-        if (preg_match('/^[a-z0-9_]{1,64}$/D', $bucket) !== 1) {
-            continue;
-        }
-        $window = max(1, (int) ($policy['window_seconds'] ?? 1));
-        $cutoff = date('Y-m-d H:i:s', $nowTimestamp - $window);
-        $case[] = "WHEN '{$bucket}' THEN '{$cutoff}'";
-        $bucketSql[] = "'{$bucket}'";
-        $maximumWindow = max($maximumWindow, $window);
-    }
-    if ($case === [] || $bucketSql === []) {
-        return '';
-    }
-
-    $nowSql = date('Y-m-d H:i:s', $nowTimestamp);
-    $oldestCutoff = date('Y-m-d H:i:s', $nowTimestamp - $maximumWindow);
-    $cutoffCase = 'CASE b.bucket ' . implode(' ', $case) . " ELSE '{$nowSql}' END";
-
-    return 'SELECT b.bucket, b.entry_count, '
-        . 'COALESCE(SUM(CASE WHEN r.subject_hash IS NOT NULL '
-        . 'AND (r.last_attempt_at >= ' . $cutoffCase . " OR r.locked_until > '{$nowSql}') "
-        . 'THEN 1 ELSE 0 END), 0) AS active_subjects, '
-        . 'COALESCE(SUM(CASE WHEN r.subject_hash IS NOT NULL '
-        . "AND r.locked_until > '{$nowSql}' THEN 1 ELSE 0 END), 0) AS locked_subjects, "
-        . 'COALESCE(MAX(CASE WHEN r.subject_hash IS NOT NULL '
-        . 'AND r.first_attempt_at >= ' . $cutoffCase . ' THEN r.attempts ELSE 0 END), 0) AS current_window_attempts '
-        . 'FROM viewer_rate_limit_buckets b '
-        . 'LEFT JOIN viewer_rate_limits r ON r.bucket = b.bucket '
-        . "AND (r.last_attempt_at >= '{$oldestCutoff}' OR r.first_attempt_at >= '{$oldestCutoff}' OR r.locked_until > '{$nowSql}') "
-        . 'WHERE b.bucket IN (' . implode(',', $bucketSql) . ') '
-        . 'GROUP BY b.bucket, b.entry_count';
+    // Kept only as a compatibility signal for older callers; SQL construction belongs to the model.
+    return '';
 }
 
 /**
@@ -465,19 +399,12 @@ function viewer_security_operations_rate_limit_snapshot(?int $nowTimestamp = nul
             'viewer_verify_mail_global_day' => null,
         ],
     ];
-    if ($status !== VIEWER_SECURITY_OPERATIONS_STATUS_AVAILABLE) {
-        return $result;
-    }
-
-    $now = $nowTimestamp ?? time();
-    $sql = viewer_security_operations_rate_limit_query($policies, $now);
-    if ($sql === '') {
-        $result['status'] = VIEWER_SECURITY_OPERATIONS_STATUS_UNKNOWN;
+    if ($status !== VIEWER_SECURITY_OPERATIONS_STATUS_AVAILABLE || $policies === []) {
         return $result;
     }
 
     try {
-        $rows = db()->query($sql)->fetchAll() ?: [];
+        $rows = viewer_security_operations_model_rate_limit_rows($policies, $nowTimestamp ?? time());
         foreach ($buckets as $bucket => $bucketData) {
             $result['buckets'][$bucket]['active_subjects'] = 0;
             $result['buckets'][$bucket]['locked_subjects'] = 0;

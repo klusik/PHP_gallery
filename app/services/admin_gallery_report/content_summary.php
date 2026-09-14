@@ -37,10 +37,16 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
-use Throwable;
 use function Gallery\Core\cms_config;
 use function Gallery\Core\cms_current_version;
-use function Gallery\Core\db;
+use function Gallery\Models\admin_gallery_report_model_admin_log_summary;
+use function Gallery\Models\admin_gallery_report_model_feature_settings;
+use function Gallery\Models\admin_gallery_report_model_gallery_detail_rows;
+use function Gallery\Models\admin_gallery_report_model_gallery_parent_rows;
+use function Gallery\Models\admin_gallery_report_model_gallery_summary;
+use function Gallery\Models\admin_gallery_report_model_largest_images;
+use function Gallery\Models\admin_gallery_report_model_tag_summary;
+use function Gallery\Models\admin_gallery_report_model_vote_summary;
 
 /**
  * Return gallery structure and policy summary.
@@ -49,24 +55,15 @@ use function Gallery\Core\db;
  */
 function admin_gallery_report_gallery_summary(): array
 {
-    $summary = [
-        'total' => admin_gallery_report_scalar_int('SELECT COUNT(*) FROM galleries'),
-        'root_count' => admin_gallery_report_scalar_int('SELECT COUNT(*) FROM galleries WHERE parent_id IS NULL'),
-        'nested_count' => admin_gallery_report_scalar_int('SELECT COUNT(*) FROM galleries WHERE parent_id IS NOT NULL'),
-        'empty_count' => admin_gallery_report_scalar_int('SELECT COUNT(*) FROM galleries g LEFT JOIN images i ON i.gallery_id = g.id GROUP BY g.id HAVING COUNT(i.id) = 0', [], true),
-        'visibility_rows' => admin_gallery_report_group_query('SELECT visibility AS label, COUNT(*) AS count FROM galleries GROUP BY visibility ORDER BY count DESC'),
-        'access_rows' => admin_gallery_report_group_query('SELECT access_mode AS label, COUNT(*) AS count FROM galleries GROUP BY access_mode ORDER BY count DESC'),
-        'listing_rows' => admin_gallery_report_group_query('SELECT access_listing AS label, COUNT(*) AS count FROM galleries GROUP BY access_listing ORDER BY count DESC'),
-        'image_visibility_rows' => admin_gallery_report_group_query('SELECT visibility AS label, COUNT(*) AS count FROM images GROUP BY visibility ORDER BY count DESC'),
-        'largest_rows' => admin_gallery_report_rows('SELECT g.id, g.title, g.folder_path, g.visibility, COUNT(i.id) AS image_count, COALESCE(SUM(COALESCE(i.file_size, 0)), 0) AS source_bytes FROM galleries g LEFT JOIN images i ON i.gallery_id = g.id GROUP BY g.id, g.title, g.folder_path, g.visibility ORDER BY image_count DESC, source_bytes DESC LIMIT 80'),
-        'deepest_depth' => admin_gallery_report_deepest_gallery_depth(),
-    ];
-    if (admin_gallery_report_column_exists('galleries', 'date_start')) {
-        $summary['dated_gallery_count'] = admin_gallery_report_scalar_int('SELECT COUNT(*) FROM galleries WHERE date_start IS NOT NULL OR date_end IS NOT NULL');
+    $hasDates = admin_gallery_report_column_exists('galleries', 'date_start');
+    $hasGpsMap = admin_gallery_report_column_exists('galleries', 'gps_map_enabled');
+    $summary = admin_gallery_report_model_gallery_summary($hasDates, $hasGpsMap);
+    foreach (['visibility_rows', 'access_rows', 'listing_rows', 'image_visibility_rows', 'gps_map_override_rows'] as $key) {
+        if (isset($summary[$key]) && is_array($summary[$key])) {
+            $summary[$key] = admin_gallery_report_normalize_group_rows($summary[$key]);
+        }
     }
-    if (admin_gallery_report_column_exists('galleries', 'gps_map_enabled')) {
-        $summary['gps_map_override_rows'] = admin_gallery_report_group_query('SELECT gps_map_enabled AS label, COUNT(*) AS count FROM galleries GROUP BY gps_map_enabled ORDER BY gps_map_enabled ASC');
-    }
+    $summary['deepest_depth'] = admin_gallery_report_deepest_gallery_depth();
     return $summary;
 }
 
@@ -77,9 +74,8 @@ function admin_gallery_report_gallery_summary(): array
  */
 function admin_gallery_report_deepest_gallery_depth(): int
 {
-    try {
-        $rows = db()->query('SELECT id, parent_id FROM galleries')->fetchAll();
-    } catch (Throwable) {
+    $rows = admin_gallery_report_model_gallery_parent_rows();
+    if (!$rows) {
         return 0;
     }
     $parentById = [];
@@ -108,31 +104,12 @@ function admin_gallery_report_deepest_gallery_depth(): int
  */
 function admin_gallery_report_gallery_detail_rows(): array
 {
-    $gpsImageExpression = (admin_gallery_report_column_exists('images', 'gps_lat') && admin_gallery_report_column_exists('images', 'gps_lng'))
-        ? 'SUM(CASE WHEN i.gps_lat IS NOT NULL AND i.gps_lng IS NOT NULL THEN 1 ELSE 0 END) AS gps_images'
-        : '0 AS gps_images';
-    $selects = [
-        'g.id', 'g.parent_id', 'g.title', 'g.folder_path', 'g.slug', 'g.visibility', 'g.access_mode', 'g.access_listing',
-        'g.sort_order', 'g.created_at', 'g.updated_at',
-        'COUNT(i.id) AS image_count',
-        'COALESCE(SUM(COALESCE(i.file_size, 0)), 0) AS source_bytes',
-        $gpsImageExpression,
-        admin_gallery_report_column_select('galleries', 'date_start', 'g', 'NULL', 'date_start'),
-        admin_gallery_report_column_select('galleries', 'date_end', 'g', 'NULL', 'date_end'),
-        admin_gallery_report_column_select('galleries', 'gps_map_enabled', 'g', 'NULL', 'gps_map_enabled'),
-        admin_gallery_report_column_select('galleries', 'picture_game_enabled', 'g', 'NULL', 'picture_game_enabled'),
-    ];
-    $groupBy = 'g.id, g.parent_id, g.title, g.folder_path, g.slug, g.visibility, g.access_mode, g.access_listing, g.sort_order, g.created_at, g.updated_at';
-    if (admin_gallery_report_column_exists('galleries', 'date_start')) {
-        $groupBy .= ', g.date_start, g.date_end';
-    }
-    if (admin_gallery_report_column_exists('galleries', 'gps_map_enabled')) {
-        $groupBy .= ', g.gps_map_enabled';
-    }
-    if (admin_gallery_report_column_exists('galleries', 'picture_game_enabled')) {
-        $groupBy .= ', g.picture_game_enabled';
-    }
-    return admin_gallery_report_rows('SELECT ' . implode(', ', $selects) . ' FROM galleries g LEFT JOIN images i ON i.gallery_id = g.id GROUP BY ' . $groupBy . ' ORDER BY g.folder_path ASC');
+    return admin_gallery_report_model_gallery_detail_rows([
+        'gps_coordinates' => admin_gallery_report_column_exists('images', 'gps_lat') && admin_gallery_report_column_exists('images', 'gps_lng'),
+        'dates' => admin_gallery_report_column_exists('galleries', 'date_start'),
+        'gps_map' => admin_gallery_report_column_exists('galleries', 'gps_map_enabled'),
+        'picture_game' => admin_gallery_report_column_exists('galleries', 'picture_game_enabled'),
+    ]);
 }
 
 /**
@@ -142,11 +119,11 @@ function admin_gallery_report_gallery_detail_rows(): array
  */
 function admin_gallery_report_tag_summary(): array
 {
-    return [
-        'tag_count' => admin_gallery_report_table_exists('tags') ? admin_gallery_report_scalar_int('SELECT COUNT(*) FROM tags') : 0,
-        'gallery_tag_rows' => admin_gallery_report_table_exists('gallery_tags') ? admin_gallery_report_rows('SELECT t.name AS label, COUNT(gt.gallery_id) AS count FROM tags t INNER JOIN gallery_tags gt ON gt.tag_id = t.id GROUP BY t.id, t.name ORDER BY count DESC, t.name ASC LIMIT 80') : [],
-        'image_tag_rows' => admin_gallery_report_table_exists('image_tags') ? admin_gallery_report_rows('SELECT t.name AS label, COUNT(it.image_id) AS count FROM tags t INNER JOIN image_tags it ON it.tag_id = t.id GROUP BY t.id, t.name ORDER BY count DESC, t.name ASC LIMIT 80') : [],
-    ];
+    return admin_gallery_report_model_tag_summary(
+        admin_gallery_report_table_exists('tags'),
+        admin_gallery_report_table_exists('gallery_tags'),
+        admin_gallery_report_table_exists('image_tags')
+    );
 }
 
 /**
@@ -156,10 +133,13 @@ function admin_gallery_report_tag_summary(): array
  */
 function admin_gallery_report_vote_summary(): array
 {
-    return [
-        'image_vote_rows' => admin_gallery_report_table_exists('image_votes') ? admin_gallery_report_group_query('SELECT vote AS label, COUNT(*) AS count FROM image_votes GROUP BY vote ORDER BY vote DESC') : [],
-        'picture_game_vote_rows' => admin_gallery_report_table_exists('picture_game_votes') ? admin_gallery_report_group_query("SELECT CASE WHEN winner_image_id IS NULL THEN 'shown_without_vote' ELSE 'completed_vote' END AS label, COUNT(*) AS count FROM picture_game_votes GROUP BY CASE WHEN winner_image_id IS NULL THEN 'shown_without_vote' ELSE 'completed_vote' END ORDER BY label ASC") : [],
-    ];
+    $summary = admin_gallery_report_model_vote_summary(
+        admin_gallery_report_table_exists('image_votes'),
+        admin_gallery_report_table_exists('picture_game_votes')
+    );
+    $summary['image_vote_rows'] = admin_gallery_report_normalize_group_rows($summary['image_vote_rows'] ?? []);
+    $summary['picture_game_vote_rows'] = admin_gallery_report_normalize_group_rows($summary['picture_game_vote_rows'] ?? []);
+    return $summary;
 }
 
 /**
@@ -169,10 +149,9 @@ function admin_gallery_report_vote_summary(): array
  */
 function admin_gallery_report_feature_summary(): array
 {
-    $settings = [];
-    if (admin_gallery_report_table_exists('app_settings')) {
-        $settings = admin_gallery_report_rows("SELECT setting_key, setting_value, updated_at FROM app_settings WHERE setting_key LIKE 'feature_%' OR setting_key LIKE '%enabled%' OR setting_key LIKE '%telemetry%' OR setting_key LIKE '%thumbnail%' ORDER BY setting_key ASC LIMIT 250");
-    }
+    $settings = admin_gallery_report_table_exists('app_settings')
+        ? admin_gallery_report_model_feature_settings()
+        : [];
     return [
         'settings_rows' => $settings,
     ];
@@ -190,16 +169,12 @@ function admin_gallery_report_admin_log_summary(): array
     }
     $hasSeverity = admin_gallery_report_column_exists('admin_logs', 'severity');
     $hasCategory = admin_gallery_report_column_exists('admin_logs', 'category');
-    return [
-        'available' => true,
-        'total' => admin_gallery_report_scalar_int('SELECT COUNT(*) FROM admin_logs'),
-        'last_7_days' => admin_gallery_report_scalar_int('SELECT COUNT(*) FROM admin_logs WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)'),
-        'level_rows' => admin_gallery_report_group_query('SELECT level AS label, COUNT(*) AS count FROM admin_logs GROUP BY level ORDER BY count DESC'),
-        'severity_rows' => $hasSeverity ? admin_gallery_report_group_query('SELECT severity AS label, COUNT(*) AS count FROM admin_logs GROUP BY severity ORDER BY count DESC') : [],
-        'category_rows' => $hasCategory ? admin_gallery_report_group_query('SELECT category AS label, COUNT(*) AS count FROM admin_logs GROUP BY category ORDER BY count DESC') : [],
-        'recent_errors' => admin_gallery_report_rows("SELECT created_at, level, " . ($hasSeverity ? 'severity,' : "'' AS severity,") . " event_key, message, route_name FROM admin_logs WHERE level IN ('error','critical')" . ($hasSeverity ? " OR severity IN ('error','critical')" : '') . " ORDER BY created_at DESC LIMIT 80"),
-        'top_events' => admin_gallery_report_group_query('SELECT event_key AS label, COUNT(*) AS count FROM admin_logs GROUP BY event_key ORDER BY count DESC LIMIT 80'),
-    ];
+    $summary = admin_gallery_report_model_admin_log_summary($hasSeverity, $hasCategory);
+    $summary['available'] = true;
+    foreach (['level_rows', 'severity_rows', 'category_rows', 'top_events'] as $key) {
+        $summary[$key] = admin_gallery_report_normalize_group_rows($summary[$key] ?? []);
+    }
+    return $summary;
 }
 
 /**
@@ -262,6 +237,5 @@ function admin_gallery_report_telemetry_section(int $days): array
  */
 function admin_gallery_report_largest_images(int $limit = 200): array
 {
-    $limit = max(1, min(500, $limit));
-    return admin_gallery_report_rows('SELECT i.id, i.filename, i.relative_path, i.mime_type, i.file_size, i.width, i.height, i.visibility, g.title AS gallery_title, g.folder_path AS gallery_folder_path FROM images i INNER JOIN galleries g ON g.id = i.gallery_id ORDER BY COALESCE(i.file_size, 0) DESC, i.id DESC LIMIT ' . $limit);
+    return admin_gallery_report_model_largest_images($limit);
 }

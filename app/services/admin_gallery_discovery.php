@@ -37,15 +37,15 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+use function Gallery\Models\admin_gallery_discovery_model_existing_gallery_rows;
+use function Gallery\Models\admin_gallery_discovery_model_folder_paths;
 use DirectoryIterator;
 use FilesystemIterator;
-use PDO;
 use RecursiveCallbackFilterIterator;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use SplFileInfo;
 use Throwable;
-use function Gallery\Core\db;
 use function Gallery\Core\is_supported_image_path;
 use function Gallery\Core\normalize_relative_path;
 
@@ -618,13 +618,10 @@ function admin_gallery_discovery_delete_directory_tree(string $absolutePath): ar
 function admin_gallery_discovery_known_gallery_paths(): array
 {
     try {
-        $stmt = db()->prepare('SELECT folder_path FROM galleries');
-        $stmt->execute();
-        $paths = $stmt->fetchAll(PDO::FETCH_COLUMN);
+        $paths = admin_gallery_discovery_model_folder_paths();
     } catch (Throwable) {
         return [];
     }
-
     $known = [];
     foreach ($paths as $path) {
         $normalized = normalize_relative_path((string) $path);
@@ -632,7 +629,6 @@ function admin_gallery_discovery_known_gallery_paths(): array
             $known[$normalized] = true;
         }
     }
-
     return $known;
 }
 
@@ -1082,15 +1078,11 @@ function admin_gallery_discovery_existing_gallery_rows(): array
     if (is_array($rows)) {
         return $rows;
     }
-
     try {
-        $stmt = db()->prepare('SELECT id, title, folder_path FROM galleries');
-        $stmt->execute();
-        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $rows = admin_gallery_discovery_model_existing_gallery_rows();
     } catch (Throwable) {
         $rows = [];
     }
-
     return $rows;
 }
 

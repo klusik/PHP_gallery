@@ -38,8 +38,12 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 use function Gallery\Core\cms_config;
-use function Gallery\Core\db;
 use function Gallery\Core\now_sql;
+use function Gallery\Models\auth_throttle_model_cleanup;
+use function Gallery\Models\auth_throttle_model_row;
+use function Gallery\Models\auth_throttle_model_reset_window;
+use function Gallery\Models\auth_throttle_model_update_attempts;
+use function Gallery\Models\auth_throttle_model_clear;
 use function Gallery\Core\visitor_hash;
 
 /**
@@ -90,9 +94,9 @@ function auth_throttle_subject_hash(string $subject): string
  *
  * @return string Text result for the caller.
  */
-function auth_throttle_visitor_subject(): string
+function auth_throttle_visitor_subject(string $remoteAddress = ''): string
 {
-    return function_exists('Gallery\\Core\\visitor_hash') ? visitor_hash() : auth_throttle_subject_hash((string) ($_SERVER['REMOTE_ADDR'] ?? ''));
+    return function_exists('Gallery\\Core\\visitor_hash') ? visitor_hash() : auth_throttle_subject_hash($remoteAddress);
 }
 
 /**
@@ -122,11 +126,7 @@ function auth_throttle_cleanup(): void
         return;
     }
 
-    $stmt = db()->prepare('DELETE FROM auth_rate_limits WHERE locked_until IS NULL AND last_attempt_at < ?');
-    $stmt->execute([date('Y-m-d H:i:s', time() - 86400)]);
-
-    $stmt = db()->prepare('DELETE FROM auth_rate_limits WHERE locked_until IS NOT NULL AND locked_until < ? AND last_attempt_at < ?');
-    $stmt->execute([now_sql(), date('Y-m-d H:i:s', time() - 86400)]);
+    auth_throttle_model_cleanup(date('Y-m-d H:i:s', time() - 86400), now_sql());
 }
 
 /**
@@ -142,10 +142,7 @@ function auth_throttle_row(string $bucket, string $subjectHash): ?array
         return null;
     }
 
-    $stmt = db()->prepare('SELECT * FROM auth_rate_limits WHERE bucket = ? AND subject_hash = ? LIMIT 1');
-    $stmt->execute([$bucket, $subjectHash]);
-    $row = $stmt->fetch();
-    return $row ?: null;
+    return auth_throttle_model_row($bucket, $subjectHash);
 }
 
 /**
@@ -199,8 +196,7 @@ function auth_throttle_record_attempt(string $bucket, string $subject): void
     $now = now_sql();
 
     if (!$row || strtotime((string) $row['first_attempt_at']) < time() - (int) $policy['window_seconds']) {
-        $stmt = db()->prepare('INSERT INTO auth_rate_limits (bucket, subject_hash, attempts, first_attempt_at, last_attempt_at, locked_until) VALUES (?, ?, 1, ?, ?, NULL) ON DUPLICATE KEY UPDATE attempts = 1, first_attempt_at = VALUES(first_attempt_at), last_attempt_at = VALUES(last_attempt_at), locked_until = NULL');
-        $stmt->execute([$bucket, $subjectHash, $now, $now]);
+        auth_throttle_model_reset_window($bucket, $subjectHash, $now);
         return;
     }
 
@@ -209,8 +205,7 @@ function auth_throttle_record_attempt(string $bucket, string $subject): void
         ? date('Y-m-d H:i:s', time() + (int) $policy['lock_seconds'])
         : null;
 
-    $stmt = db()->prepare('UPDATE auth_rate_limits SET attempts = ?, last_attempt_at = ?, locked_until = ? WHERE bucket = ? AND subject_hash = ?');
-    $stmt->execute([$attempts, $now, $lockedUntil, $bucket, $subjectHash]);
+    auth_throttle_model_update_attempts($bucket, $subjectHash, $attempts, $now, $lockedUntil);
 }
 
 /**
@@ -225,8 +220,7 @@ function auth_throttle_clear(string $bucket, string $subject): void
         return;
     }
 
-    $stmt = db()->prepare('DELETE FROM auth_rate_limits WHERE bucket = ? AND subject_hash = ?');
-    $stmt->execute([$bucket, auth_throttle_subject_hash($subject)]);
+    auth_throttle_model_clear($bucket, auth_throttle_subject_hash($subject));
 }
 
 /**

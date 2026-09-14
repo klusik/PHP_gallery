@@ -40,11 +40,17 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+use function Gallery\Core\request_data;
+
+use function Gallery\Models\admin_log_archive_model_day_snapshot;
+use function Gallery\Models\admin_log_archive_model_delete_verified_batch;
+use function Gallery\Models\admin_log_archive_model_oldest_eligible_created_at;
+use function Gallery\Models\admin_log_archive_model_remaining_rows;
+use function Gallery\Models\admin_log_archive_model_row_batch;
 use DateTimeImmutable;
 use RuntimeException;
 use Throwable;
 use ZipArchive;
-use function Gallery\Core\db;
 use function Gallery\Core\now_sql;
 
 const ADMIN_LOG_ARCHIVE_DEFAULT_RETENTION_DAYS = 30;
@@ -325,10 +331,8 @@ function admin_log_archive_oldest_eligible_date(string $eligibleBefore): ?string
     if ($eligibleBefore === '' || !admin_log_schema_ready()) {
         return null;
     }
-    $stmt = db()->prepare('SELECT MIN(created_at) FROM admin_logs WHERE created_at < ?');
-    $stmt->execute([$eligibleBefore]);
-    $value = $stmt->fetchColumn();
-    if (!is_string($value) || $value === '') {
+    $value = admin_log_archive_model_oldest_eligible_created_at($eligibleBefore);
+    if ($value === null) {
         return null;
     }
     $date = substr($value, 0, 10);
@@ -344,16 +348,7 @@ function admin_log_archive_oldest_eligible_date(string $eligibleBefore): ?string
 function admin_log_archive_day_snapshot(string $date): array
 {
     $bounds = admin_log_archive_day_bounds($date);
-    $stmt = db()->prepare(
-        'SELECT COUNT(*) AS row_count, MIN(id) AS first_log_id, MAX(id) AS last_log_id,'
-        . ' MIN(created_at) AS first_created_at, MAX(created_at) AS last_created_at'
-        . ' FROM admin_logs WHERE created_at >= ? AND created_at < ?'
-    );
-    $stmt->execute([$bounds['start'], $bounds['end']]);
-    $row = $stmt->fetch();
-    if (!is_array($row)) {
-        $row = [];
-    }
+    $row = admin_log_archive_model_day_snapshot($bounds['start'], $bounds['end']);
     return [
         'date' => $date,
         'period_start' => $bounds['start'],
@@ -376,20 +371,7 @@ function admin_log_archive_day_snapshot(string $date): array
  */
 function admin_log_archive_row_batch(array $snapshot, int $afterId, int $limit = ADMIN_LOG_ARCHIVE_ROW_BATCH_SIZE): array
 {
-    $safeLimit = max(25, min(1000, $limit));
-    $stmt = db()->prepare(
-        'SELECT l.*, u.username FROM admin_logs l LEFT JOIN users u ON u.id = l.user_id'
-        . ' WHERE l.created_at >= ? AND l.created_at < ? AND l.id > ? AND l.id <= ?'
-        . ' ORDER BY l.id ASC LIMIT ' . $safeLimit
-    );
-    $stmt->execute([
-        (string) ($snapshot['period_start'] ?? ''),
-        (string) ($snapshot['period_end'] ?? ''),
-        max(0, $afterId),
-        max(0, (int) ($snapshot['last_log_id'] ?? 0)),
-    ]);
-    $rows = $stmt->fetchAll();
-    return is_array($rows) ? $rows : [];
+    return admin_log_archive_model_row_batch($snapshot, $afterId, $limit);
 }
 
 /**
@@ -795,16 +777,7 @@ function admin_log_archive_verify_file(string $path, string $expectedDate = ''):
  */
 function admin_log_archive_remaining_database_rows(array $manifest): int
 {
-    $stmt = db()->prepare(
-        'SELECT COUNT(*) FROM admin_logs WHERE created_at >= ? AND created_at < ? AND id >= ? AND id <= ?'
-    );
-    $stmt->execute([
-        (string) ($manifest['period_start'] ?? ''),
-        (string) ($manifest['period_end'] ?? ''),
-        max(0, (int) ($manifest['first_log_id'] ?? 0)),
-        max(0, (int) ($manifest['last_log_id'] ?? 0)),
-    ]);
-    return max(0, (int) $stmt->fetchColumn());
+    return admin_log_archive_model_remaining_rows($manifest);
 }
 
 /**
@@ -830,17 +803,7 @@ function admin_log_archive_delete_verified_rows(array $manifest, ?float $deadlin
         if ($deadline !== null && microtime(true) >= ($deadline - 0.25)) {
             break;
         }
-        $stmt = db()->prepare(
-            'DELETE FROM admin_logs WHERE created_at >= ? AND created_at < ? AND id >= ? AND id <= ?'
-            . ' ORDER BY id ASC LIMIT ' . ADMIN_LOG_ARCHIVE_DELETE_BATCH_SIZE
-        );
-        $stmt->execute([
-            (string) ($manifest['period_start'] ?? ''),
-            (string) ($manifest['period_end'] ?? ''),
-            max(0, (int) ($manifest['first_log_id'] ?? 0)),
-            max(0, (int) ($manifest['last_log_id'] ?? 0)),
-        ]);
-        $batchDeleted = max(0, $stmt->rowCount());
+        $batchDeleted = admin_log_archive_model_delete_verified_batch($manifest, ADMIN_LOG_ARCHIVE_DELETE_BATCH_SIZE);
         $deleted += $batchDeleted;
         if ($batchDeleted < ADMIN_LOG_ARCHIVE_DELETE_BATCH_SIZE) {
             break;
@@ -1225,7 +1188,7 @@ function admin_log_archive_register_request_trigger(string $page): void
     if (PHP_SAPI === 'cli') {
         return;
     }
-    $method = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
+    $method = strtoupper((string) (request_data('server')['REQUEST_METHOD'] ?? 'GET'));
     if (!in_array($method, ['GET', 'HEAD'], true)
         || !admin_log_archive_route_allows_request_trigger($page)
         || !admin_log_archive_request_trigger_can_detach_response()
@@ -1346,12 +1309,13 @@ function admin_log_archive_list(int $page = 1, int $perPage = ADMIN_LOG_ARCHIVE_
 }
 
 /**
- * Stream one member of a filesystem archive without extracting it permanently.
+ * Yield one member of a filesystem archive without extracting it permanently.
  *
  * @param string $date Canonical archive date.
  * @param string $kind html or json.
+ * @return \Generator<int, string> Archive member chunks.
  */
-function admin_log_archive_stream_member(string $date, string $kind): void
+function admin_log_archive_member_chunks(string $date, string $kind): \Generator
 {
     if (!class_exists(ZipArchive::class)) {
         throw new RuntimeException('ZipArchive is not available.');
@@ -1383,9 +1347,8 @@ function admin_log_archive_stream_member(string $date, string $kind): void
             if ($chunk === false) {
                 throw new RuntimeException('Unable to stream Admin log archive member.');
             }
-            echo $chunk;
-            if (connection_aborted()) {
-                break;
+            if ($chunk !== '') {
+                yield $chunk;
             }
         }
     } finally {

@@ -36,6 +36,12 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+use function Gallery\Core\now_sql;
+use function Gallery\Models\gallery_model_next_child_sort_order;
+use function Gallery\Models\gallery_order_model_save_children;
+use function Gallery\Models\gallery_order_model_save_tree;
+use function Gallery\Models\gallery_order_model_tree_rows;
+
 /**
  * Return whether a gallery row has a filled start date usable for sorting.
  *
@@ -122,4 +128,47 @@ function gallery_sort_rows_by_date_preserving_undated_positions(array $galleries
     }
 
     return array_values($galleries);
+}
+
+/**
+ * Return complete persisted gallery tree state for reorder validation.
+ *
+ * @return array<int,array<string,mixed>> Gallery rows ordered by identifier.
+ */
+function gallery_reorder_current_tree_rows(): array
+{
+    return gallery_order_model_tree_rows();
+}
+
+/**
+ * Persist sibling sort order for the submitted complete gallery tree.
+ *
+ * @param array<int,array{id:int,parent_id:int}> $submittedEntries Submitted flattened tree order.
+ * @return array<int,int> Persisted sort order keyed by gallery identifier.
+ */
+function gallery_reorder_save_tree_order(array $submittedEntries): array
+{
+    return gallery_order_model_save_tree($submittedEntries, now_sql());
+}
+
+/**
+ * Persist the complete direct-child order for one parent gallery.
+ *
+ * @param int $parentGalleryId Parent gallery identifier.
+ * @param array<int,int> $orderedIds Complete direct-child gallery identifiers.
+ */
+function gallery_reorder_save_child_order(int $parentGalleryId, array $orderedIds): void
+{
+    gallery_order_model_save_children($parentGalleryId, $orderedIds, now_sql());
+}
+
+/**
+ * Return the next append-style sort order for children of one gallery.
+ *
+ * @param int $parentGalleryId Parent gallery identifier.
+ * @return int Next sort-order value.
+ */
+function gallery_next_child_sort_order(int $parentGalleryId): int
+{
+    return gallery_model_next_child_sort_order($parentGalleryId);
 }

@@ -15,6 +15,9 @@
  *   - Keep English, Czech, German, and Swedish catalogs aligned for this feature
  *   - Confirm the browser export includes catalog strings rather than a separate list
  *
+ * Author:
+ *   Rudolf Klusal
+ *
  * Last Updated:
  *   2026-08-16
  */
@@ -66,7 +69,7 @@ foreach ($languages as $language) {
 }
 
 $assetRendererSource = (string) file_get_contents($root . '/app/helpers_page_rendering.php');
-$lightboxMarkupSource = (string) file_get_contents($root . '/app/controllers/public_gallery_lightbox.php');
+$lightboxMarkupSource = (string) file_get_contents($root . '/app/views/public_gallery_lightbox.php');
 $lightboxBrowserSource = (string) file_get_contents($root . '/public/assets/gallery-modules/lightbox.js');
 lightbox_zoom_translation_assert(
     str_contains($assetRendererSource, 'array_merge($defaultStrings, $activeStrings)'),

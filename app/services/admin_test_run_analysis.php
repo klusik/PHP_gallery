@@ -43,6 +43,9 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+// Keep request_data() available when this service module is loaded in isolation.
+require_once dirname(__DIR__) . '/request_data.php';
+
 // This module is split into focused part files under app/services/admin_test_run_analysis/.
 // SQL hotspot detection and write classification.
 require_once __DIR__ . '/admin_test_run_analysis/sql_analysis.php';

@@ -7,7 +7,10 @@
  *
  * Purpose:
  *   Styles the framework-free Admin duplicate photo detector and its side-panel results.
- */
+  *
+ * Author:
+ *   Rudolf Klusal
+*/
 
 .admin-duplicate-photo-detector {
     display: grid;

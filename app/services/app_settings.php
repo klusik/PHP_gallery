@@ -36,9 +36,14 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+use function Gallery\Core\request_data;
+
 use PDOException;
-use function Gallery\Core\db;
 use function Gallery\Core\now_sql;
+use function Gallery\Models\app_settings_model_all;
+use function Gallery\Models\app_settings_model_delete;
+use function Gallery\Models\app_settings_model_get;
+use function Gallery\Models\app_settings_model_set;
 
 /**
  * Application settings service.
@@ -470,15 +475,12 @@ function app_settings_prime_request_cache(): void
     }
 
     try {
-        $stmt = db()->query('SELECT setting_key, setting_value FROM app_settings');
-        if ($stmt !== false) {
-            foreach ($stmt->fetchAll() as $row) {
-                $settingKey = (string) ($row['setting_key'] ?? '');
-                if ($settingKey === '') {
-                    continue;
-                }
-                $GLOBALS['cms_app_settings_cache'][$settingKey] = (string) ($row['setting_value'] ?? '');
+        foreach (app_settings_model_all() as $row) {
+            $settingKey = (string) ($row['setting_key'] ?? '');
+            if ($settingKey === '') {
+                continue;
             }
+            $GLOBALS['cms_app_settings_cache'][$settingKey] = (string) ($row['setting_value'] ?? '');
         }
         $GLOBALS['cms_app_settings_cache_loaded'] = true;
     } catch (PDOException) {
@@ -516,10 +518,8 @@ function app_setting(string $key, ?string $default = null): ?string
     }
 
     try {
-        // Preload failure is deliberately recoverable through the legacy one-key query.
-        $stmt = db()->prepare('SELECT setting_value FROM app_settings WHERE setting_key = ?');
-        $stmt->execute([$key]);
-        $value = $stmt->fetchColumn();
+        // Preload failure is deliberately recoverable through the legacy one-key model read.
+        $value = app_settings_model_get($key);
         $GLOBALS['cms_app_settings_cache'][$key] = $value === false ? null : (string) $value;
         return $value === false ? $default : (string) $value;
     } catch (PDOException) {
@@ -535,9 +535,7 @@ function app_setting(string $key, ?string $default = null): ?string
  */
 function set_app_setting(string $key, string $value): void
 {
-    // Variable $stmt stores this steps working value.
-    $stmt = db()->prepare('INSERT INTO app_settings (setting_key, setting_value, updated_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), updated_at = VALUES(updated_at)');
-    $stmt->execute([$key, $value, now_sql()]);
+    app_settings_model_set($key, $value, now_sql());
 
     if (!isset($GLOBALS['cms_app_settings_cache']) || !is_array($GLOBALS['cms_app_settings_cache'])) {
         $GLOBALS['cms_app_settings_cache'] = [];
@@ -557,11 +555,7 @@ function delete_app_settings(array $keys): void
     if ($keys === []) {
         return;
     }
-    // $placeholders stores an intermediate value used by the surrounding gallery workflow.
-    $placeholders = implode(', ', array_fill(0, count($keys), '?'));
-    // $stmt stores an intermediate value used by the surrounding gallery workflow.
-    $stmt = db()->prepare('DELETE FROM app_settings WHERE setting_key IN (' . $placeholders . ')');
-    $stmt->execute($keys);
+    app_settings_model_delete($keys);
 
     if (!isset($GLOBALS['cms_app_settings_cache']) || !is_array($GLOBALS['cms_app_settings_cache'])) {
         $GLOBALS['cms_app_settings_cache'] = [];
@@ -628,7 +622,7 @@ function url_rewrite_marker_file_ok(string $path): bool
  */
 function url_rewrite_compatibility(?array $server = null, ?string $root = null): array
 {
-    $server = $server ?? $_SERVER;
+    $server = $server ?? request_data('server');
     $root = $root ?? dirname(__DIR__, 2);
     $enabled = url_rewrite_enabled();
 

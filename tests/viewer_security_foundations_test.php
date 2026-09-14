@@ -15,7 +15,10 @@
  *   - Verify token generation, hashing, password handling, and one-time token expiry policy
  *   - Verify identifier normalization and trusted-proxy client IP resolution
  *   - Verify viewer security event context excludes secret/PII-shaped fields
- */
+  *
+ * Author:
+ *   Rudolf Klusal
+*/
 
 declare(strict_types=1);
 

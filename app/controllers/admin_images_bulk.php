@@ -38,10 +38,8 @@ namespace Gallery\Controllers;
 
 use RuntimeException;
 use Throwable;
-use function Gallery\Core\db;
 use function Gallery\Core\flash_message;
 use function Gallery\Core\gallery_public_url;
-use function Gallery\Core\now_sql;
 use function Gallery\Core\redirect_to;
 use function Gallery\Core\require_admin;
 use function Gallery\Core\verify_csrf;
@@ -53,6 +51,10 @@ use function Gallery\Services\find_image;
 use function Gallery\Services\gallery_count_badge_storage_value;
 use function Gallery\Services\gallery_shows_filenames;
 use function Gallery\Services\gallery_visibility_storage_value;
+use function Gallery\Services\gallery_direct_image_count;
+use function Gallery\Services\gallery_next_child_sort_order;
+use function Gallery\Services\image_bulk_set_nsfw_enabled;
+use function Gallery\Services\image_bulk_set_visibility;
 use function Gallery\Services\move_gallery_images;
 use function Gallery\Services\nsfw_guard_schema_ready;
 use function Gallery\Services\nsfw_guard_schema_status;
@@ -151,9 +153,7 @@ function cms_admin_bulk_images(): void
                 // $newGalleryTemplateGallery stores the gallery whose default settings seed the new destination.
                 $newGalleryTemplateGallery = is_array($newGalleryParent) ? $newGalleryParent : $gallery;
                 // $newGallerySortOrder stores the next position among the selected parent's children.
-                $newGallerySortStmt = db()->prepare('SELECT COALESCE(MAX(sort_order), 0) + 10 FROM galleries WHERE parent_id = ?');
-                $newGallerySortStmt->execute([$newGalleryParentId]);
-                $newGallerySortOrder = (int) $newGallerySortStmt->fetchColumn();
+                $newGallerySortOrder = gallery_next_child_sort_order($newGalleryParentId);
                 // $newGallery stores the newly created destination gallery under the selected parent.
                 $newGallery = admin_create_gallery_from_input([
                     'title' => $newGalleryTitle,
@@ -235,9 +235,7 @@ function cms_admin_bulk_images(): void
             if ($createdGalleryId > 0) {
                 try {
                     // $createdGalleryImageCount keeps a successfully populated new gallery from being deleted after a late non-critical failure.
-                    $createdGalleryImageCountStmt = db()->prepare('SELECT COUNT(*) FROM images WHERE gallery_id = ?');
-                    $createdGalleryImageCountStmt->execute([$createdGalleryId]);
-                    $createdGalleryImageCount = (int) $createdGalleryImageCountStmt->fetchColumn();
+                    $createdGalleryImageCount = gallery_direct_image_count($createdGalleryId);
                 } catch (Throwable) {
                     $createdGalleryImageCount = $moveAttempted ? 1 : 0;
                 }
@@ -310,11 +308,7 @@ function cms_admin_bulk_images(): void
         return;
     }
     if (in_array($action, ['draft', 'public', 'private'], true)) {
-        // Variable $placeholders stores this steps working value.
-        $placeholders = implode(',', array_fill(0, count($ownedIds), '?'));
-        // Variable $stmt stores this steps working value.
-        $stmt = db()->prepare('UPDATE images SET visibility = ?, updated_at = ? WHERE id IN (' . $placeholders . ')');
-        $stmt->execute(array_merge([$action, now_sql()], $ownedIds));
+        image_bulk_set_visibility($ownedIds, $action);
         if (admin_wants_json()) {
             $updated = find_gallery($galleryId, true) ?: find_gallery($galleryId) ?: $gallery;
             $notice = 'Updated visibility on ' . count($ownedIds) . ' image(s).';
@@ -337,11 +331,7 @@ function cms_admin_bulk_images(): void
         redirect_to(admin_edit_gallery_tab_url($galleryId, $returnTab));
     }
     if (in_array($action, ['nsfw_on', 'nsfw_off'], true)) {
-        // $placeholders stores this steps working value.
-        $placeholders = implode(',', array_fill(0, count($ownedIds), '?'));
-        // $stmt stores this steps working value.
-        $stmt = db()->prepare('UPDATE images SET nsfw_enabled = ?, updated_at = ? WHERE id IN (' . $placeholders . ')');
-        $stmt->execute(array_merge([$action === 'nsfw_on' ? 1 : 0, now_sql()], $ownedIds));
+        image_bulk_set_nsfw_enabled($ownedIds, $action === 'nsfw_on');
         $notice = 'Updated NSFW Guard on ' . count($ownedIds) . ' image(s).';
         if (admin_wants_json()) {
             $updated = find_gallery($galleryId, true) ?: find_gallery($galleryId) ?: $gallery;

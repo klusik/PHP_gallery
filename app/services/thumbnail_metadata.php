@@ -40,8 +40,16 @@ namespace Gallery\Services;
 
 use RuntimeException;
 use Throwable;
-use function Gallery\Core\db;
 use function Gallery\Core\now_sql;
+use function Gallery\Models\thumbnail_metadata_model_delete_image_variants;
+use function Gallery\Models\thumbnail_metadata_model_delete_variant;
+use function Gallery\Models\thumbnail_metadata_model_image_has_rows;
+use function Gallery\Models\thumbnail_metadata_model_renderable_rows;
+use function Gallery\Models\thumbnail_metadata_model_storage_counts;
+use function Gallery\Models\thumbnail_metadata_model_storage_size;
+use function Gallery\Models\thumbnail_metadata_model_table_columns;
+use function Gallery\Models\thumbnail_metadata_model_update_image_source;
+use function Gallery\Models\thumbnail_metadata_model_upsert_variant;
 
 /**
  * Return true when durable thumbnail metadata storage is available.
@@ -192,25 +200,14 @@ function thumbnail_metadata_preload_renderable_rows(array $images, array $sizes)
         return;
     }
 
-    // $imagePlaceholders stores placeholders for image ids.
-    $imagePlaceholders = implode(',', array_fill(0, count($missingImageIds), '?'));
-    // $sizePlaceholders stores placeholders for thumbnail sizes.
-    $sizePlaceholders = implode(',', array_fill(0, count($sizes), '?'));
     // $formats stores generated formats permitted in public metadata bundles.
     $formats = function_exists('Gallery\\Services\\thumbnail_policy_requested_formats') ? thumbnail_policy_requested_formats() : ['webp'];
     $formats = array_values(array_intersect(['jpg', 'webp'], $formats));
     if (!$formats) {
         return;
     }
-    // $formatPlaceholders stores placeholders for policy-approved formats.
-    $formatPlaceholders = implode(',', array_fill(0, count($formats), '?'));
-    // $params stores bound image ids, sizes, and internally whitelisted formats.
-    $params = array_merge($missingImageIds, $sizes, $formats);
     try {
-        // $stmt stores the batched thumbnail metadata query.
-        $stmt = db()->prepare("SELECT * FROM image_thumbnail_variants WHERE image_id IN ($imagePlaceholders) AND size_px IN ($sizePlaceholders) AND format IN ($formatPlaceholders) ORDER BY image_id, size_px, format");
-        $stmt->execute($params);
-        $metadataRows = $stmt->fetchAll();
+        $metadataRows = thumbnail_metadata_model_renderable_rows($missingImageIds, $sizes, $formats);
     } catch (Throwable) {
         return;
     }
@@ -253,28 +250,23 @@ function thumbnail_metadata_preload_renderable_rows(array $images, array $sizes)
 function thumbnail_metadata_table_columns(string $table, bool $refresh = false): array
 {
     static $cache = [];
-    $safeTable = preg_replace('/[^a-zA-Z0-9_]/', '', $table) ?? '';
-    if ($safeTable === '') {
+    if (!in_array($table, ['image_thumbnail_variants', 'images'], true)) {
         return [];
     }
     if ($refresh) {
-        unset($cache[$safeTable]);
+        unset($cache[$table]);
     }
-    if (array_key_exists($safeTable, $cache)) {
-        return $cache[$safeTable];
+    if (array_key_exists($table, $cache)) {
+        return $cache[$table];
     }
 
-    $columns = [];
     try {
-        $stmt = db()->query('SHOW COLUMNS FROM `' . $safeTable . '`');
-        foreach ($stmt->fetchAll() as $column) {
-            $columns[(string) ($column['Field'] ?? '')] = true;
-        }
+        $columns = thumbnail_metadata_model_table_columns($table);
     } catch (Throwable) {
         $columns = [];
     }
 
-    return $cache[$safeTable] = $columns;
+    return $cache[$table] = $columns;
 }
 
 /**
@@ -642,9 +634,7 @@ function thumbnail_metadata_image_has_rows(array $image): bool
     }
 
     try {
-        $stmt = db()->prepare('SELECT 1 FROM image_thumbnail_variants WHERE image_id = ? LIMIT 1');
-        $stmt->execute([$imageId]);
-        return $cache[$imageId] = (bool) $stmt->fetchColumn();
+        return $cache[$imageId] = thumbnail_metadata_model_image_has_rows($imageId);
     } catch (Throwable) {
         return $cache[$imageId] = false;
     }
@@ -678,8 +668,7 @@ function thumbnail_metadata_delete_variant(array|int $image, int $size, string $
     }
 
     try {
-        $stmt = db()->prepare('DELETE FROM image_thumbnail_variants WHERE image_id = ? AND size_px = ? AND format = ?');
-        $stmt->execute([$imageId, $size, $format]);
+        thumbnail_metadata_model_delete_variant($imageId, $size, $format);
     } catch (Throwable) {
     }
 }
@@ -707,8 +696,7 @@ function thumbnail_metadata_delete_image_variants(array|int $image): void
     }
 
     try {
-        $stmt = db()->prepare('DELETE FROM image_thumbnail_variants WHERE image_id = ?');
-        $stmt->execute([$imageId]);
+        thumbnail_metadata_model_delete_image_variants($imageId);
     } catch (Throwable) {
     }
 }
@@ -791,16 +779,7 @@ function thumbnail_metadata_sync_image_source_payload(array $image, array $sourc
         return false;
     }
 
-    $assignments = [];
-    $params = [];
-    foreach ($available as $column => $value) {
-        $assignments[] = '`' . $column . '` = ?';
-        $params[] = $value;
-    }
-    $params[] = $imageId;
-
-    $stmt = db()->prepare('UPDATE images SET ' . implode(', ', $assignments) . ' WHERE id = ?');
-    $stmt->execute($params);
+    thumbnail_metadata_model_update_image_source($imageId, $available);
     $synced[$imageId] = $signature;
     return true;
 }
@@ -919,15 +898,8 @@ function thumbnail_metadata_record_file(array $image, array $gallery, int $size,
         );
     }
 
-    $columnNames = array_keys($variantColumns);
-    $insertColumns = implode(', ', array_map(static fn (string $column): string => '`' . $column . '`', $columnNames));
-    $placeholders = implode(', ', array_fill(0, count($columnNames), '?'));
-    $updateColumns = array_values(array_filter($columnNames, static fn (string $column): bool => !in_array($column, ['image_id', 'size_px', 'format', 'created_at'], true)));
-    $updates = implode(', ', array_map(static fn (string $column): string => '`' . $column . '` = VALUES(`' . $column . '`)', $updateColumns));
-
     try {
-        $stmt = db()->prepare('INSERT INTO image_thumbnail_variants (' . $insertColumns . ') VALUES (' . $placeholders . ') ON DUPLICATE KEY UPDATE ' . $updates);
-        $stmt->execute(array_values($variantColumns));
+        thumbnail_metadata_model_upsert_variant($variantColumns);
     } catch (Throwable $exception) {
         return [
             'status' => $status,
@@ -1034,15 +1006,8 @@ function thumbnail_metadata_record_prepared_variant(array $image, array $gallery
         );
     }
 
-    $columnNames = array_keys($variantColumns);
-    $insertColumns = implode(', ', array_map(static fn (string $column): string => '`' . $column . '`', $columnNames));
-    $placeholders = implode(', ', array_fill(0, count($columnNames), '?'));
-    $updateColumns = array_values(array_filter($columnNames, static fn (string $column): bool => !in_array($column, ['image_id', 'size_px', 'format', 'created_at'], true)));
-    $updates = implode(', ', array_map(static fn (string $column): string => '`' . $column . '` = VALUES(`' . $column . '`)', $updateColumns));
-
     try {
-        $stmt = db()->prepare('INSERT INTO image_thumbnail_variants (' . $insertColumns . ') VALUES (' . $placeholders . ') ON DUPLICATE KEY UPDATE ' . $updates);
-        $stmt->execute(array_values($variantColumns));
+        thumbnail_metadata_model_upsert_variant($variantColumns);
     } catch (Throwable $exception) {
         return [
             'status' => $status,
@@ -1215,24 +1180,18 @@ function thumbnail_metadata_storage_snapshot(): array
     ];
 
     try {
-        $snapshot['row_count'] = (int) db()->query('SELECT COUNT(*) FROM image_thumbnail_variants')->fetchColumn();
-        $stmt = db()->query('SELECT status, COUNT(*) AS count_rows FROM image_thumbnail_variants GROUP BY status ORDER BY status');
-        foreach ($stmt->fetchAll() as $row) {
-            $snapshot['status_counts'][(string) ($row['status'] ?? '')] = (int) ($row['count_rows'] ?? 0);
-        }
+        $counts = thumbnail_metadata_model_storage_counts();
+        $snapshot['row_count'] = $counts['row_count'];
+        $snapshot['status_counts'] = $counts['status_counts'];
     } catch (Throwable $exception) {
         $snapshot['row_count_error'] = $exception->getMessage();
     }
 
     try {
-        $stmt = db()->prepare('SELECT data_length, index_length FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ? LIMIT 1');
-        $stmt->execute(['image_thumbnail_variants']);
-        $table = $stmt->fetch() ?: [];
-        $dataBytes = (int) ($table['data_length'] ?? 0);
-        $indexBytes = (int) ($table['index_length'] ?? 0);
-        $snapshot['data_bytes'] = $dataBytes;
-        $snapshot['index_bytes'] = $indexBytes;
-        $snapshot['total_bytes'] = $dataBytes + $indexBytes;
+        $size = thumbnail_metadata_model_storage_size();
+        $snapshot['data_bytes'] = $size['data_bytes'];
+        $snapshot['index_bytes'] = $size['index_bytes'];
+        $snapshot['total_bytes'] = $size['total_bytes'];
     } catch (Throwable $exception) {
         $snapshot['size_error'] = $exception->getMessage();
     }

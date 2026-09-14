@@ -241,16 +241,19 @@ foreach (array_keys($dormantLanguages) as $languageCode) {
     }
 }
 
-$adminThemeSource = @file_get_contents($root . '/app/controllers/admin_theme_language.php');
+$adminThemeControllerSource = @file_get_contents($root . '/app/controllers/admin_theme_language.php');
+$adminThemeViewSource = @file_get_contents($root . '/app/views/admin_theme.php');
 if (
-    !is_string($adminThemeSource)
-    || !str_contains($adminThemeSource, '<select name="cms_language">')
-    || !str_contains($adminThemeSource, '<select name="public_language">')
-    || !str_contains($adminThemeSource, 'translation_supported_languages()')
-    || !str_contains($adminThemeSource, 'translation_detected_language_packs()')
-    || substr_count($adminThemeSource, 'foreach ($languagePacks as $languagePack)') < 2
+    !is_string($adminThemeControllerSource)
+    || !is_string($adminThemeViewSource)
+    || !str_contains($adminThemeViewSource, '<select name="cms_language">')
+    || !str_contains($adminThemeViewSource, '<select name="public_language">')
+    || !str_contains($adminThemeControllerSource, 'translation_supported_languages()')
+    || !str_contains($adminThemeControllerSource, 'translation_detected_language_packs()')
+    || substr_count($adminThemeViewSource, 'foreach ($languagePacks as $languagePack)') < 2
+    || !str_contains($adminThemeControllerSource, 'view_render_admin_theme_language_tab([')
 ) {
-    translation_catalog_test_fail('Admin Theme no longer filters detected packs into supported Admin/public selectors.');
+    translation_catalog_test_fail('Admin Theme no longer filters detected packs into supported Admin/public selectors through the MVC presentation boundary.');
 }
 
 fwrite(

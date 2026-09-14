@@ -1,4 +1,17 @@
 #!/usr/bin/env python3
+# Project: PHP Gallery
+# Repository: https://github.com/klusik/PHP_gallery
+#
+# File: winapp/gallery_http_monitor.py
+#
+# Author:
+#   Rudolf Klusal
+#
+# License:
+#   MIT License (see LICENSE file in repository)
+#
+# Notes:
+#   - Keep comments and docstrings intact when modifying this file.
 """
 Long-running first-party HTTP monitor for PHP Gallery and similar websites.
 

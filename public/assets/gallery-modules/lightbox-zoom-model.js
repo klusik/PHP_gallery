@@ -15,6 +15,9 @@
  *   - Select the smallest safe source that satisfies the active zoom density
  *   - Keep model behavior testable without a browser DOM
  *
+ * Author:
+ *   Rudolf Klusal
+ *
  * Last Updated:
  *   2026-08-16
  */

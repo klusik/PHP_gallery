@@ -37,6 +37,8 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+use function Gallery\Core\request_data;
+
 use RuntimeException;
 use Throwable;
 use function Gallery\Core\current_user;
@@ -134,7 +136,7 @@ function gallery_benchmark_media_context_from_cookie(): ?array
     static $cachedContext = null;
     static $cacheReady = false;
 
-    $raw = trim((string) ($_COOKIE[gallery_benchmark_media_cookie_name()] ?? ''));
+    $raw = trim((string) (request_data('cookie')[gallery_benchmark_media_cookie_name()] ?? ''));
     if ($cacheReady && $cachedRaw === $raw) {
         return $cachedContext;
     }
@@ -205,8 +207,8 @@ function gallery_benchmark_media_request_begin(string $route, array $context = [
     } catch (Throwable) {
         $requestId = sprintf('%d-%s', function_exists('getmypid') ? (int) getmypid() : 0, str_replace('.', '', uniqid('', true)));
     }
-    $requestTime = isset($_SERVER['REQUEST_TIME_FLOAT']) && is_numeric($_SERVER['REQUEST_TIME_FLOAT'])
-        ? (float) $_SERVER['REQUEST_TIME_FLOAT']
+    $requestTime = isset(request_data('server')['REQUEST_TIME_FLOAT']) && is_numeric(request_data('server')['REQUEST_TIME_FLOAT'])
+        ? (float) request_data('server')['REQUEST_TIME_FLOAT']
         : microtime(true);
     $safeContext = [];
     foreach ($context as $key => $value) {
@@ -214,7 +216,7 @@ function gallery_benchmark_media_request_begin(string $route, array $context = [
             $safeContext[(string) $key] = $value;
         }
     }
-    $requestPath = parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH);
+    $requestPath = parse_url((string) (request_data('server')['REQUEST_URI'] ?? ''), PHP_URL_PATH);
     $state = [
         'request_id' => $requestId,
         'token' => $benchmark['token'],
@@ -223,8 +225,8 @@ function gallery_benchmark_media_request_begin(string $route, array $context = [
         'request_time_unix' => $requestTime,
         'controller_enter_unix' => microtime(true),
         'request_path' => is_string($requestPath) ? substr($requestPath, 0, 900) : '',
-        'request_uri' => substr((string) ($_SERVER['REQUEST_URI'] ?? ''), 0, 1200),
-        'request_method' => substr((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'), 0, 12),
+        'request_uri' => substr((string) (request_data('server')['REQUEST_URI'] ?? ''), 0, 1200),
+        'request_method' => substr((string) (request_data('server')['REQUEST_METHOD'] ?? 'GET'), 0, 12),
         'pid' => function_exists('getmypid') ? getmypid() : null,
         'context' => $safeContext,
         'marks' => [],
@@ -348,7 +350,9 @@ function gallery_benchmark_media_request_finish(?string $requestId, array $conte
         'connection' => [
             'aborted' => function_exists('connection_aborted') ? connection_aborted() === 1 : null,
             'status' => function_exists('connection_status') ? connection_status() : null,
-            'http_status' => http_response_code(),
+            'http_status' => isset($safeFinal['http_status']) && is_numeric($safeFinal['http_status'])
+                ? (int) $safeFinal['http_status']
+                : null,
         ],
         'process' => [
             'memory_usage_bytes' => memory_get_usage(true),
@@ -383,8 +387,8 @@ function gallery_benchmark_request_trace_enabled(): bool
     if (function_exists(__NAMESPACE__ . '\\dev_mode_enabled') && !dev_mode_enabled()) {
         return false;
     }
-    $token = strtolower(trim((string) ($_GET['benchmark_token'] ?? '')));
-    $runIndex = (int) ($_GET['benchmark_run'] ?? 0);
+    $token = strtolower(trim((string) (request_data('query')['benchmark_token'] ?? '')));
+    $runIndex = (int) (request_data('query')['benchmark_run'] ?? 0);
     if ($runIndex > 0 && gallery_benchmark_token_is_valid($token)) {
         return true;
     }
@@ -407,8 +411,8 @@ function gallery_benchmark_trace_mark(string $name, array $context = []): void
         return;
     }
     if (!isset($GLOBALS['gallery_benchmark_request_trace']) || !is_array($GLOBALS['gallery_benchmark_request_trace'])) {
-        $requestTime = isset($_SERVER['REQUEST_TIME_FLOAT']) && is_numeric($_SERVER['REQUEST_TIME_FLOAT'])
-            ? (float) $_SERVER['REQUEST_TIME_FLOAT']
+        $requestTime = isset(request_data('server')['REQUEST_TIME_FLOAT']) && is_numeric(request_data('server')['REQUEST_TIME_FLOAT'])
+            ? (float) request_data('server')['REQUEST_TIME_FLOAT']
             : microtime(true);
         $GLOBALS['gallery_benchmark_request_trace'] = [
             'request_time_unix' => $requestTime,
@@ -444,7 +448,7 @@ function gallery_benchmark_request_trace_snapshot(): array
         : [];
     $requestTime = isset($trace['request_time_unix']) && is_numeric($trace['request_time_unix'])
         ? (float) $trace['request_time_unix']
-        : (isset($_SERVER['REQUEST_TIME_FLOAT']) && is_numeric($_SERVER['REQUEST_TIME_FLOAT']) ? (float) $_SERVER['REQUEST_TIME_FLOAT'] : microtime(true));
+        : (isset(request_data('server')['REQUEST_TIME_FLOAT']) && is_numeric(request_data('server')['REQUEST_TIME_FLOAT']) ? (float) request_data('server')['REQUEST_TIME_FLOAT'] : microtime(true));
     $marks = isset($trace['marks']) && is_array($trace['marks']) ? $trace['marks'] : [];
     $markTimes = [];
     $serializedMarks = [];
@@ -474,15 +478,15 @@ function gallery_benchmark_request_trace_snapshot(): array
     $now = microtime(true);
     $sessionIdPresent = session_status() === PHP_SESSION_ACTIVE && session_id() !== '';
 
-    $browserRequestMs = isset($_GET['benchmark_browser_request_ms']) && is_numeric($_GET['benchmark_browser_request_ms'])
-        ? (float) $_GET['benchmark_browser_request_ms']
+    $browserRequestMs = isset(request_data('query')['benchmark_browser_request_ms']) && is_numeric(request_data('query')['benchmark_browser_request_ms'])
+        ? (float) request_data('query')['benchmark_browser_request_ms']
         : null;
 
     return [
         'request_time_unix' => $requestTime,
         'snapshot_at_unix' => $now,
         'request_age_ms' => max(0.0, ($now - $requestTime) * 1000),
-        'benchmark_phase' => substr(trim((string) ($_GET['benchmark_phase'] ?? '')), 0, 80),
+        'benchmark_phase' => substr(trim((string) (request_data('query')['benchmark_phase'] ?? '')), 0, 80),
         'browser_correlation_input' => [
             'browser_request_wall_ms' => $browserRequestMs,
             'method' => 'duration_difference_no_clock_sync',
@@ -501,7 +505,7 @@ function gallery_benchmark_request_trace_snapshot(): array
             'id_present' => $sessionIdPresent,
             'save_handler' => (string) ini_get('session.save_handler'),
             'use_strict_mode' => (string) ini_get('session.use_strict_mode'),
-            'cookie_present' => isset($_COOKIE[session_name()]),
+            'cookie_present' => isset(request_data('cookie')[session_name()]),
         ],
         'process' => [
             'pid' => function_exists('getmypid') ? getmypid() : null,
@@ -539,8 +543,8 @@ function gallery_benchmark_server_context(): array
         'session_use_strict_mode' => (string) ini_get('session.use_strict_mode'),
         'host_load_average' => is_array($loadAverage) ? array_values($loadAverage) : null,
         'https' => function_exists('Gallery\Core\request_is_https') ? request_is_https() : null,
-        'server_software' => (string) ($_SERVER['SERVER_SOFTWARE'] ?? ''),
-        'http_host' => (string) ($_SERVER['HTTP_HOST'] ?? ''),
+        'server_software' => (string) (request_data('server')['SERVER_SOFTWARE'] ?? ''),
+        'http_host' => (string) (request_data('server')['HTTP_HOST'] ?? ''),
     ];
 }
 
@@ -552,10 +556,10 @@ function gallery_benchmark_server_context(): array
 function gallery_benchmark_request_context(): array
 {
     return [
-        'method' => (string) ($_SERVER['REQUEST_METHOD'] ?? ''),
-        'request_uri' => (string) ($_SERVER['REQUEST_URI'] ?? ''),
-        'remote_addr_present' => (string) ($_SERVER['REMOTE_ADDR'] ?? '') !== '',
-        'user_agent' => substr((string) ($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 500),
+        'method' => (string) (request_data('server')['REQUEST_METHOD'] ?? ''),
+        'request_uri' => (string) (request_data('server')['REQUEST_URI'] ?? ''),
+        'remote_addr_present' => (string) (request_data('server')['REMOTE_ADDR'] ?? '') !== '',
+        'user_agent' => substr((string) (request_data('server')['HTTP_USER_AGENT'] ?? ''), 0, 500),
     ];
 }
 
@@ -851,9 +855,9 @@ function gallery_benchmark_record_public_render(array $gallery, array $snapshot)
         return;
     }
 
-    $token = strtolower(trim((string) ($_GET['benchmark_token'] ?? '')));
-    $runIndex = (int) ($_GET['benchmark_run'] ?? 0);
-    $phase = substr(trim((string) ($_GET['benchmark_phase'] ?? '')), 0, 80);
+    $token = strtolower(trim((string) (request_data('query')['benchmark_token'] ?? '')));
+    $runIndex = (int) (request_data('query')['benchmark_run'] ?? 0);
+    $phase = substr(trim((string) (request_data('query')['benchmark_phase'] ?? '')), 0, 80);
     if ($token === '' || $runIndex < 1 || !gallery_benchmark_token_is_valid($token) || !current_user()) {
         return;
     }
@@ -919,8 +923,8 @@ function gallery_benchmark_record_auxiliary_render(array $gallery, array $snapsh
         return;
     }
 
-    $token = strtolower(trim((string) ($_GET['benchmark_token'] ?? '')));
-    $runIndex = (int) ($_GET['benchmark_run'] ?? 0);
+    $token = strtolower(trim((string) (request_data('query')['benchmark_token'] ?? '')));
+    $runIndex = (int) (request_data('query')['benchmark_run'] ?? 0);
     $type = substr(trim($type), 0, 80);
     if ($token === '' || $runIndex < 1 || $type === '' || !gallery_benchmark_token_is_valid($token) || !current_user()) {
         return;
@@ -970,9 +974,9 @@ function gallery_benchmark_record_request_completion(string $page): void
     if ($page !== 'gallery') {
         return;
     }
-    $token = strtolower(trim((string) ($_GET['benchmark_token'] ?? '')));
-    $runIndex = (int) ($_GET['benchmark_run'] ?? 0);
-    $phase = substr(trim((string) ($_GET['benchmark_phase'] ?? '')), 0, 80);
+    $token = strtolower(trim((string) (request_data('query')['benchmark_token'] ?? '')));
+    $runIndex = (int) (request_data('query')['benchmark_run'] ?? 0);
+    $phase = substr(trim((string) (request_data('query')['benchmark_phase'] ?? '')), 0, 80);
     if ($token === '' || $runIndex < 1 || !gallery_benchmark_token_is_valid($token) || !current_user()) {
         return;
     }

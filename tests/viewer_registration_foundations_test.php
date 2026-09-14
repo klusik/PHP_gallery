@@ -16,7 +16,10 @@
  *   - Verify three-state schema inspection fails closed
  *   - Protect the no-account-creation boundary and later HTTP reuse of the same service
  *   - Protect schema uniqueness, expiry, and bounded-capacity constraints
- */
+  *
+ * Author:
+ *   Rudolf Klusal
+*/
 
 declare(strict_types=1);
 
@@ -168,16 +171,17 @@ namespace {
     viewer_registration_assert(stripos($migration, 'password') === false, 'Pending-registration schema must not store password material.');
 
     $registrationService = (string) file_get_contents($root . '/app/services/viewer_registration.php');
+    $registrationModel = (string) file_get_contents($root . '/app/models/viewer_registration.php');
     viewer_registration_assert(stripos($registrationService, "prepare('INSERT INTO viewer_accounts") === false && stripos($registrationService, 'prepare("INSERT INTO viewer_accounts') === false, 'Phase 0.5 registration service must not create durable viewer accounts.');
     viewer_registration_assert(str_contains($registrationService, 'viewer_registration_verification_validate') && str_contains($registrationService, 'viewer_registration_verification_confirm'), 'Verification inspection and irreversible confirmation must remain separate operations.');
-    viewer_registration_assert(str_contains($registrationService, 'FOR UPDATE'), 'Single-use invitation/verification transitions must use transactional row locking.');
+    viewer_registration_assert(str_contains($registrationService, 'viewer_registration_model_transaction(') && str_contains($registrationModel, 'FOR UPDATE'), 'Single-use invitation/verification transitions must use transactional row locking.');
     viewer_registration_assert(str_contains($registrationService, 'viewer_registration_capacity_lock'), 'Pending registration admission must serialize against a hard row cap.');
     viewer_registration_assert(str_contains($registrationService, 'viewer_invitation_registration_preflight'), 'Invite-only registration must have a non-consuming preflight that supports idempotent retries.');
     viewer_registration_assert(str_contains($registrationService, 'The earlier preflight is') && str_contains($registrationService, '$invitationStateValid'), 'Invitation authority must be re-validated under the transactional row lock rather than trusting preflight state.');
     $preflightPosition = strpos($registrationService, 'viewer_invitation_registration_preflight((string) $invitationToken');
     $identityBudgetPosition = strpos($registrationService, 'viewer_registration_request_authorize_identity($normalized)');
     viewer_registration_assert(is_int($preflightPosition) && is_int($identityBudgetPosition) && $preflightPosition < $identityBudgetPosition, 'Invalid invite guesses must not consume the installation-wide registration budget.');
-    viewer_registration_assert(str_contains($registrationService, "SET status = ?, cancelled_at = ?, updated_at = ?") && str_contains($registrationService, 'viewer_invitation_revoke'), 'Revoking a claimed invitation must also cancel its staged registration state.');
+    viewer_registration_assert(str_contains($registrationService, 'viewer_registration_model_cancel_for_invitation(') && str_contains($registrationService, 'viewer_invitation_revoke') && str_contains($registrationModel, "SET status = ?, cancelled_at = ?, updated_at = ?"), 'Revoking a claimed invitation must also cancel its staged registration state.');
     viewer_registration_assert(!str_contains($registrationService, 'if (!viewer_registration_requests_enabled() || $invitationId <= 0'), 'Invitation revocation must remain available while registration admission is disabled.');
 
     $services = (string) file_get_contents($root . '/app/services.php');

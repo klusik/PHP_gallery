@@ -42,7 +42,10 @@ require_once __DIR__ . '/controllers/admin_theme.php';
 require_once __DIR__ . '/controllers/theme_assets.php';
 // Load separated controller modules. These require_once calls preserve the legacy app/controllers.php include contract.
 require_once __DIR__ . '/controllers/http_helpers.php';
+require_once __DIR__ . '/controllers/shared_layout.php';
 require_once __DIR__ . '/controllers/public_gallery.php';
+require_once __DIR__ . '/controllers/public_gallery_descriptions.php';
+require_once __DIR__ . '/controllers/public_seo.php';
 require_once __DIR__ . '/controllers/public_search.php';
 require_once __DIR__ . '/controllers/gallery_lightbox.php';
 require_once __DIR__ . '/controllers/picture_manager.php';
@@ -66,6 +69,7 @@ require_once __DIR__ . '/controllers/mobile_webdav.php';
 require_once __DIR__ . '/controllers/gallery_migration.php';
 require_once __DIR__ . '/controllers/admin_media_renamer.php';
 require_once __DIR__ . '/controllers/admin_galleries.php';
+require_once __DIR__ . '/controllers/admin_gallery_form_models.php';
 require_once __DIR__ . '/controllers/admin_trash.php';
 require_once __DIR__ . '/controllers/admin_gallery_dates.php';
 require_once __DIR__ . '/controllers/admin_duplicate_photos.php';

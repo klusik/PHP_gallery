@@ -17,6 +17,9 @@
  *   - Prevent zoom state from adding persistence or media-fetch behavior
  *   - Preserve gallery and NSFW access checks in the existing lightbox endpoint
  *
+ * Author:
+ *   Rudolf Klusal
+ *
  * Last Updated:
  *   2026-08-16
  */
@@ -113,15 +116,14 @@ lightbox_zoom_integration_assert(
     'Anonymous and authenticated browser entrypoints must invalidate the deferred lightbox cache together.'
 );
 lightbox_zoom_integration_assert(
-    substr_count($assetRendererSource, "gallery-modules/lightbox-zoom-model.js'") === 2,
+    substr_count($layoutSource, "gallery-modules/lightbox-zoom-model.js'") === 2,
     'Both public asset revision models must include the zoom-model dependency.'
 );
 lightbox_zoom_integration_assert(
     str_contains($runtimeHelpersSource, 'function asset_dependency_revision(array $paths): string')
         && str_contains($runtimeHelpersSource, "hash_init('sha256')")
         && str_contains($runtimeHelpersSource, '@file_get_contents($path)')
-        && str_contains($assetRendererSource, 'asset_dependency_revision($scriptVersionPaths)')
-        && str_contains($layoutSource, 'asset_dependency_revision($scriptVersionPaths)')
+        && substr_count($layoutSource, 'asset_dependency_revision($scriptVersionPaths)') >= 1
         && !str_contains($assetRendererSource, 'max($scriptVersion, filemtime($versionPath))')
         && !str_contains($layoutSource, 'max($scriptVersion, filemtime($versionPath))'),
     'Browser asset revisions must change with dependency content instead of depending on the single newest mtime.'

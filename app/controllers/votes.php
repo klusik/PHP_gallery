@@ -36,26 +36,25 @@ declare(strict_types=1);
 
 namespace Gallery\Controllers;
 
-use function Gallery\Core\csrf_field;
 use function Gallery\Core\current_user;
-use function Gallery\Core\db;
-use function Gallery\Core\e;
-use function Gallery\Core\now_sql;
 use function Gallery\Core\redirect_to;
 use function Gallery\Core\request_method;
 use function Gallery\Core\url_for;
 use function Gallery\Core\verify_csrf;
 use function Gallery\Core\verify_vote_rate_limit;
-use function Gallery\Core\visitor_hash;
 use function Gallery\Services\current_vote_for_image;
+use function Gallery\Services\delete_current_vote_for_image;
 use function Gallery\Services\find_gallery;
 use function Gallery\Services\find_image;
 use function Gallery\Services\gallery_voting_allowed;
+use function Gallery\Services\save_current_vote_for_image;
 use function Gallery\Services\schema_inspection_is_missing;
 use function Gallery\Services\schema_inspection_is_available;
 use function Gallery\Services\presentation_schema_log_degraded;
 use function Gallery\Services\presentation_voting_schema_status;
 use function Gallery\Services\t;
+use function Gallery\Views\view_render_vote_form;
+use function Gallery\Views\view_vote_form_html;
 use function Gallery\Services\visitor_can_access_gallery;
 use function Gallery\Services\vote_score;
 
@@ -70,18 +69,7 @@ use function Gallery\Services\vote_score;
  */
 function render_vote_form_html(int $imageId, int $score, int $currentVote, bool $votingAllowed = true): string
 {
-    if (!$votingAllowed) {
-        return '';
-    }
-
-    return '<form class="vote-row image-vote-overlay" method="post" action="' . e(url_for('vote')) . '" data-vote-form>'
-        . '<input type="hidden" name="image_id" value="' . $imageId . '">'
-        . csrf_field()
-        . '<span class="vote-score-badge" aria-label="' . e(t('public.vote.likes', 'Likes')) . '"><span aria-hidden="true">&#9650;</span><strong data-score-for="' . $imageId . '">' . $score . '</strong></span>'
-        . '<span class="vote-action-group">'
-        . '<button type="submit" name="vote" value="1" class="' . ($currentVote === 1 ? 'is-active' : '') . '" aria-pressed="' . ($currentVote === 1 ? 'true' : 'false') . '" aria-label="' . e(t('public.vote.up', 'Vote up')) . '">&#9650;</button>'
-        . '</span>'
-        . '</form>';
+    return view_vote_form_html(vote_form_view_model($imageId, $score, $currentVote, $votingAllowed));
 }
 
 /**
@@ -94,7 +82,25 @@ function render_vote_form_html(int $imageId, int $score, int $currentVote, bool 
  */
 function render_vote_form(int $imageId, int $score, int $currentVote, bool $votingAllowed = true): void
 {
-    echo render_vote_form_html($imageId, $score, $currentVote, $votingAllowed);
+    view_render_vote_form(vote_form_view_model($imageId, $score, $currentVote, $votingAllowed));
+}
+
+/**
+ * Prepare vote controls for the presentation layer.
+ *
+ * @return array<string, mixed> Prepared vote presentation model.
+ */
+function vote_form_view_model(int $imageId, int $score, int $currentVote, bool $votingAllowed = true): array
+{
+    return [
+        'enabled' => $votingAllowed,
+        'image_id' => $imageId,
+        'score' => $score,
+        'current_vote' => $currentVote,
+        'action_url' => url_for('vote'),
+        'likes_label' => t('public.vote.likes', 'Likes'),
+        'up_label' => t('public.vote.up', 'Vote up'),
+    ];
 }
 
 /**
@@ -135,8 +141,6 @@ function cms_vote(): void
         echo json_encode(['error' => t('public.vote.invalid', 'Invalid vote.')]);
         return;
     }
-    // Variable $user stores this steps working value.
-    $user = current_user();
     // $existingVote stores the current vote for the logged-in user or visitor.
     $existingVote = current_vote_for_image($imageId);
 
@@ -148,13 +152,7 @@ function cms_vote(): void
     }
 
     if ($vote === 0) {
-        if ($user) {
-            $stmt = db()->prepare('DELETE FROM image_votes WHERE image_id = ? AND user_id = ?');
-            $stmt->execute([$imageId, (int) $user['id']]);
-        } else {
-            $stmt = db()->prepare('DELETE FROM image_votes WHERE image_id = ? AND visitor_hash = ?');
-            $stmt->execute([$imageId, visitor_hash()]);
-        }
+        delete_current_vote_for_image($imageId);
         $result = ['image_id' => $imageId, 'score' => vote_score($imageId), 'vote' => 0];
         if (str_contains((string) ($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json')) {
             header('Content-Type: application/json');
@@ -167,13 +165,7 @@ function cms_vote(): void
     // card votes, image-detail votes, lightbox votes, and keyboard-triggered
     // lightbox votes consistent even if older cached JavaScript still posts 1.
     if ($existingVote === 1) {
-        if ($user) {
-            $stmt = db()->prepare('DELETE FROM image_votes WHERE image_id = ? AND user_id = ?');
-            $stmt->execute([$imageId, (int) $user['id']]);
-        } else {
-            $stmt = db()->prepare('DELETE FROM image_votes WHERE image_id = ? AND visitor_hash = ?');
-            $stmt->execute([$imageId, visitor_hash()]);
-        }
+        delete_current_vote_for_image($imageId);
         $result = ['image_id' => $imageId, 'score' => vote_score($imageId), 'vote' => 0];
         if (str_contains((string) ($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json')) {
             header('Content-Type: application/json');
@@ -182,17 +174,7 @@ function cms_vote(): void
         }
         redirect_to((string) ($_SERVER['HTTP_REFERER'] ?? url_for('home')));
     }
-    if ($user) {
-        // Variable $stmt stores this steps working value.
-        $stmt = db()->prepare('INSERT INTO image_votes (image_id, user_id, visitor_hash, vote, created_at, updated_at) VALUES (?, ?, NULL, ?, ?, ?) ON DUPLICATE KEY UPDATE vote = VALUES(vote), updated_at = VALUES(updated_at)');
-        $stmt->execute([$imageId, (int) $user['id'], $vote, now_sql(), now_sql()]);
-    } else {
-        // Variable $hash stores this steps working value.
-        $hash = visitor_hash();
-        // Variable $stmt stores this steps working value.
-        $stmt = db()->prepare('INSERT INTO image_votes (image_id, user_id, visitor_hash, vote, created_at, updated_at) VALUES (?, NULL, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE vote = VALUES(vote), updated_at = VALUES(updated_at)');
-        $stmt->execute([$imageId, $hash, $vote, now_sql(), now_sql()]);
-    }
+    save_current_vote_for_image($imageId, $vote);
     // Variable $result stores this steps working value.
     $result = ['image_id' => $imageId, 'score' => vote_score($imageId), 'vote' => 1];
     if (str_contains((string) ($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json')) {

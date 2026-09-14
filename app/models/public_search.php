@@ -26,7 +26,7 @@
  *
  * Notes:
  *   - Keep comments and docstrings intact when modifying this file.
- *   - Listing SQL fragments are hardcoded service-policy fragments and must never contain user-derived values.
+ *   - Search scope SQL and wildcard patterns are owned here and are built from semantic service inputs.
  *   - Progressive candidate-first data access lives in app/models/public_search_progressive.php.
  *
  * Last Updated:
@@ -38,7 +38,60 @@ declare(strict_types=1);
 namespace Gallery\Models;
 
 use function Gallery\Core\db;
-use function Gallery\Core\db_column_exists;
+use function Gallery\Core\normalize_relative_path;
+
+/**
+ * Return an escaped substring pattern for one normalized public-search query.
+ *
+ * @param string $query Normalized query.
+ * @return string Escaped LIKE pattern.
+ */
+function public_search_model_like_pattern(string $query): string
+{
+    return '%' . str_replace(['%', '_'], ['\\%', '\\_'], $query) . '%';
+}
+
+/**
+ * Return an escaped prefix pattern for one normalized public-search query.
+ *
+ * @param string $query Normalized query.
+ * @return string Escaped LIKE prefix pattern.
+ */
+function public_search_model_prefix_pattern(string $query): string
+{
+    return str_replace(['%', '_'], ['\\%', '\\_'], $query) . '%';
+}
+
+/**
+ * Build the persistence-owned public gallery scope for public-search queries.
+ *
+ * The service layer supplies semantic policy inputs only. SQL syntax and bound
+ * branch-scope values are created here inside the model layer.
+ *
+ * @param string $alias Gallery table alias.
+ * @param bool $listedOnly Whether public access policy requires listed galleries.
+ * @param ?array $contextGallery Optional gallery branch context.
+ * @return array{0: string, 1: array<int, mixed>} SQL condition and bound values.
+ */
+function public_search_model_listing_scope(string $alias, bool $listedOnly, ?array $contextGallery): array
+{
+    $prefix = $alias . '.';
+    $condition = $prefix . "visibility = 'public'";
+    if ($listedOnly) {
+        $condition .= ' AND ' . $prefix . "access_listing = 'listed'";
+    }
+
+    if (!$contextGallery) {
+        return [$condition, []];
+    }
+
+    $folderPath = normalize_relative_path((string) ($contextGallery['folder_path'] ?? ''));
+    if ($folderPath === '') {
+        $folderPath = (string) ($contextGallery['folder_path'] ?? '');
+    }
+    $condition = '(' . $condition . ') AND (' . $prefix . 'folder_path = ? OR ' . $prefix . 'folder_path LIKE ?)';
+    return [$condition, [$folderPath, $folderPath . '/%']];
+}
 
 /**
  * Fetch gallery rows for the legacy/no-phase compatibility search.
@@ -48,9 +101,8 @@ use function Gallery\Core\db_column_exists;
  * callers that use the endpoint without a phase parameter.
  *
  * @param string $query Normalized search query.
- * @param string $like Escaped substring LIKE pattern.
- * @param string $listingCondition Hardcoded public-listing SQL condition.
- * @param array<int, mixed> $contextParams Bound branch-scope values.
+ * @param bool $listedOnly Whether public access policy requires listed galleries.
+ * @param ?array $contextGallery Optional gallery branch context.
  * @param bool $aiSearchReady Whether AI searchable metadata may be queried.
  * @param bool $localizedGallerySearchReady Whether gallery translations may be queried.
  * @param string $contentLanguage Active content language.
@@ -59,15 +111,16 @@ use function Gallery\Core\db_column_exists;
  */
 function public_search_model_compatibility_gallery_rows(
     string $query,
-    string $like,
-    string $listingCondition,
-    array $contextParams,
+    bool $listedOnly,
+    ?array $contextGallery,
     bool $aiSearchReady,
     bool $localizedGallerySearchReady,
     string $contentLanguage,
     int $limit
 ): array {
     $limit = max(1, min(90, $limit));
+    $like = public_search_model_like_pattern($query);
+    [$listingCondition, $contextParams] = public_search_model_listing_scope('g', $listedOnly, $contextGallery);
     $aiJoin = $aiSearchReady ? 'LEFT JOIN image_ai_metadata public_image_ai ON public_image_ai.image_id = public_image.id' : '';
     $aiScoreSql = $aiSearchReady ? ', MAX(CASE WHEN public_image_ai.searchable_text LIKE ? THEN 10 ELSE 0 END) AS ai_score' : ', 0 AS ai_score';
     $aiWhereSql = $aiSearchReady ? ' OR public_image_ai.searchable_text LIKE ?' : '';
@@ -122,9 +175,8 @@ function public_search_model_compatibility_gallery_rows(
  * Fetch image rows for the legacy/no-phase compatibility search.
  *
  * @param string $query Normalized search query.
- * @param string $like Escaped substring LIKE pattern.
- * @param string $listingCondition Hardcoded public-listing SQL condition.
- * @param array<int, mixed> $contextParams Bound branch-scope values.
+ * @param bool $listedOnly Whether public access policy requires listed galleries.
+ * @param ?array $contextGallery Optional gallery branch context.
  * @param bool $aiSearchReady Whether AI searchable metadata may be queried.
  * @param bool $localizedSearchReady Whether image translations may be queried.
  * @param string $contentLanguage Active content language.
@@ -133,15 +185,16 @@ function public_search_model_compatibility_gallery_rows(
  */
 function public_search_model_compatibility_image_rows(
     string $query,
-    string $like,
-    string $listingCondition,
-    array $contextParams,
+    bool $listedOnly,
+    ?array $contextGallery,
     bool $aiSearchReady,
     bool $localizedSearchReady,
     string $contentLanguage,
     int $limit
 ): array {
     $limit = max(1, min(90, $limit));
+    $like = public_search_model_like_pattern($query);
+    [$listingCondition, $contextParams] = public_search_model_listing_scope('g', $listedOnly, $contextGallery);
     $aiJoin = $aiSearchReady ? 'LEFT JOIN image_ai_metadata image_ai ON image_ai.image_id = i.id' : '';
     $aiScoreSql = $aiSearchReady ? ', MAX(CASE WHEN image_ai.searchable_text LIKE ? THEN 14 ELSE 0 END) AS ai_score' : ', 0 AS ai_score';
     $aiWhereSql = $aiSearchReady ? ' OR image_ai.searchable_text LIKE ?' : '';
@@ -157,8 +210,8 @@ function public_search_model_compatibility_image_rows(
             g.access_share_token AS matched_gallery_access_share_token, g.access_token_hash AS matched_gallery_access_token_hash,
             g.access_token_expires_at AS matched_gallery_access_token_expires_at, g.created_at AS matched_gallery_created_at,
             g.updated_at AS matched_gallery_updated_at,
-            " . (db_column_exists('galleries', 'url_slug') ? 'g.url_slug AS matched_gallery_url_slug,' : "'' AS matched_gallery_url_slug,") . "
-            " . (db_column_exists('galleries', 'url_path') ? 'g.url_path AS matched_gallery_url_path,' : "'' AS matched_gallery_url_path,") . "
+            " . (database_helpers_model_column_exists('galleries', 'url_slug') ? 'g.url_slug AS matched_gallery_url_slug,' : "'' AS matched_gallery_url_slug,") . "
+            " . (database_helpers_model_column_exists('galleries', 'url_path') ? 'g.url_path AS matched_gallery_url_path,' : "'' AS matched_gallery_url_path,") . "
             GROUP_CONCAT(DISTINCT image_tag.name ORDER BY image_tag.name SEPARATOR ', ') AS image_tag_names,
             MAX(CASE WHEN LOWER(i.filename) = LOWER(?) OR LOWER(i.title) = LOWER(?) THEN 70 ELSE 0 END) AS exact_name_score,
             MAX(CASE WHEN i.filename LIKE ? OR i.title LIKE ? THEN 36 ELSE 0 END) AS name_score,

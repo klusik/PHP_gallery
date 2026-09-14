@@ -38,6 +38,11 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+// Keep request_data() available when this service module is loaded in isolation.
+require_once dirname(__DIR__) . '/request_data.php';
+
+use function Gallery\Core\request_data;
+
 use function Gallery\Core\cms_config;
 
 /**
@@ -208,7 +213,7 @@ function request_client_ip_from_forwarded_for(string $header, string $remoteAddr
  */
 function request_client_ip(): string
 {
-    $remoteAddress = request_client_ip_normalize((string) ($_SERVER['REMOTE_ADDR'] ?? ''));
+    $remoteAddress = request_client_ip_normalize((string) (request_data('server')['REMOTE_ADDR'] ?? ''));
     if ($remoteAddress === '') {
         return '';
     }
@@ -220,7 +225,7 @@ function request_client_ip(): string
 
     foreach ($config['headers'] as $header) {
         if ($header === 'x-forwarded-for') {
-            $value = trim((string) ($_SERVER['HTTP_X_FORWARDED_FOR'] ?? ''));
+            $value = trim((string) (request_data('server')['HTTP_X_FORWARDED_FOR'] ?? ''));
             if ($value !== '') {
                 $resolved = request_client_ip_from_forwarded_for($value, $remoteAddress, $config['proxies']);
                 if ($resolved !== '') {
@@ -231,7 +236,7 @@ function request_client_ip(): string
         }
 
         $serverKey = $header === 'x-real-ip' ? 'HTTP_X_REAL_IP' : 'HTTP_CF_CONNECTING_IP';
-        $resolved = request_client_ip_normalize((string) ($_SERVER[$serverKey] ?? ''));
+        $resolved = request_client_ip_normalize((string) (request_data('server')[$serverKey] ?? ''));
         if ($resolved !== '') {
             return $resolved;
         }
@@ -274,7 +279,7 @@ function request_trusted_proxy_protocol_headers(): array
 function request_trusted_forwarded_protocol_state(string $header): array
 {
     if ($header === 'x-forwarded-proto') {
-        $value = trim((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''));
+        $value = trim((string) (request_data('server')['HTTP_X_FORWARDED_PROTO'] ?? ''));
         if ($value === '') {
             return ['present' => false, 'valid' => true, 'https' => false];
         }
@@ -289,7 +294,7 @@ function request_trusted_forwarded_protocol_state(string $header): array
     }
 
     if ($header === 'x-forwarded-ssl') {
-        $value = trim((string) ($_SERVER['HTTP_X_FORWARDED_SSL'] ?? ''));
+        $value = trim((string) (request_data('server')['HTTP_X_FORWARDED_SSL'] ?? ''));
         if ($value === '') {
             return ['present' => false, 'valid' => true, 'https' => false];
         }
@@ -317,15 +322,15 @@ function request_trusted_forwarded_protocol_state(string $header): array
  */
 function viewer_request_is_https(): bool
 {
-    $https = strtolower(trim((string) ($_SERVER['HTTPS'] ?? '')));
+    $https = strtolower(trim((string) (request_data('server')['HTTPS'] ?? '')));
     if ($https !== '' && $https !== 'off' && $https !== '0') {
         return true;
     }
-    if ((string) ($_SERVER['SERVER_PORT'] ?? '') === '443') {
+    if ((string) (request_data('server')['SERVER_PORT'] ?? '') === '443') {
         return true;
     }
 
-    $remoteAddress = request_client_ip_normalize((string) ($_SERVER['REMOTE_ADDR'] ?? ''));
+    $remoteAddress = request_client_ip_normalize((string) (request_data('server')['REMOTE_ADDR'] ?? ''));
     if ($remoteAddress === '') {
         return false;
     }

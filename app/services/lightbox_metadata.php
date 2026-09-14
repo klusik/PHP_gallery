@@ -36,8 +36,11 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
-use PDO;
-use function Gallery\Core\db;
+use function Gallery\Models\lightbox_metadata_model_fetch_images;
+use function Gallery\Models\lightbox_metadata_model_image_position;
+use function Gallery\Models\lightbox_metadata_model_state_summary;
+use function Gallery\Models\lightbox_metadata_model_total_count;
+
 
 /**
  * Return true when the current public lightbox request must hide NSFW image rows.
@@ -71,22 +74,16 @@ function gallery_lightbox_gallery_restricted_by_nsfw(array $gallery, bool $publi
 }
 
 /**
- * Build the SQL WHERE clause shared by photo counts, page rows, and lightbox windows.
+ * Build the semantic visibility scope shared by lightbox model queries.
  *
- * @param bool $publicOnly True when only public image rows should be selected.
- * @param bool $excludeRestrictedNsfw True when image-level NSFW rows should be removed.
- * @return string SQL fragment with one gallery-id placeholder as the first parameter.
+ * @return array{public_only:bool,exclude_restricted_nsfw:bool}
  */
-function gallery_lightbox_image_where_sql(bool $publicOnly, bool $excludeRestrictedNsfw = false): string
+function gallery_lightbox_image_scope(bool $publicOnly, bool $excludeRestrictedNsfw = false): array
 {
-    $where = "i.gallery_id = ? AND i.relative_path NOT LIKE '%/%'";
-    if ($publicOnly) {
-        $where .= " AND i.visibility = 'public'";
-    }
-    if ($excludeRestrictedNsfw && nsfw_guard_schema_ready()) {
-        $where .= ' AND COALESCE(i.nsfw_enabled, 0) = 0';
-    }
-    return $where;
+    return [
+        'public_only' => $publicOnly,
+        'exclude_restricted_nsfw' => $excludeRestrictedNsfw && nsfw_guard_schema_ready(),
+    ];
 }
 
 /**
@@ -107,13 +104,8 @@ function gallery_lightbox_state_summary(array $gallery, bool $publicOnly, bool $
         return ['count' => 0, 'revision' => ''];
     }
 
-    $stmt = db()->prepare("SELECT COUNT(*) AS image_count, COALESCE(MAX(i.updated_at), '') AS image_revision FROM images i WHERE " . gallery_lightbox_image_where_sql($publicOnly, $excludeRestrictedNsfw));
-    $stmt->execute([(int) $gallery['id']]);
-    $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
-    return [
-        'count' => max(0, (int) ($row['image_count'] ?? 0)),
-        'revision' => trim((string) ($row['image_revision'] ?? '')),
-    ];
+    $scope = gallery_lightbox_image_scope($publicOnly, $excludeRestrictedNsfw);
+    return lightbox_metadata_model_state_summary((int) $gallery['id'], $scope['public_only'], $scope['exclude_restricted_nsfw']);
 }
 
 /**
@@ -130,9 +122,8 @@ function gallery_lightbox_total_count(array $gallery, bool $publicOnly, bool $ex
         return 0;
     }
 
-    $stmt = db()->prepare('SELECT COUNT(*) FROM images i WHERE ' . gallery_lightbox_image_where_sql($publicOnly, $excludeRestrictedNsfw));
-    $stmt->execute([(int) $gallery['id']]);
-    return max(0, (int) $stmt->fetchColumn());
+    $scope = gallery_lightbox_image_scope($publicOnly, $excludeRestrictedNsfw);
+    return lightbox_metadata_model_total_count((int) $gallery['id'], $scope['public_only'], $scope['exclude_restricted_nsfw']);
 }
 
 /**
@@ -155,28 +146,14 @@ function gallery_lightbox_fetch_images(array $gallery, bool $publicOnly, int $of
         return [];
     }
 
-    $offset = max(0, $offset);
-    $where = gallery_lightbox_image_where_sql($publicOnly, $excludeRestrictedNsfw);
-    $sql = "SELECT i.*, (
-            SELECT COALESCE(SUM(v.vote), 0)
-            FROM image_votes v
-            WHERE v.image_id = i.id
-        ) AS score
-        FROM images i
-        WHERE $where
-        ORDER BY i.sort_order, i.filename, i.id";
-    if ($limit !== null) {
-        $sql .= ' LIMIT ? OFFSET ?';
-    }
-
-    $stmt = db()->prepare($sql);
-    $stmt->bindValue(1, (int) $gallery['id'], PDO::PARAM_INT);
-    if ($limit !== null) {
-        $stmt->bindValue(2, max(1, $limit), PDO::PARAM_INT);
-        $stmt->bindValue(3, $offset, PDO::PARAM_INT);
-    }
-    $stmt->execute();
-    return $stmt->fetchAll();
+    $scope = gallery_lightbox_image_scope($publicOnly, $excludeRestrictedNsfw);
+    return lightbox_metadata_model_fetch_images(
+        (int) $gallery['id'],
+        $scope['public_only'],
+        max(0, $offset),
+        $limit,
+        $scope['exclude_restricted_nsfw']
+    );
 }
 
 /**
@@ -203,24 +180,11 @@ function gallery_lightbox_image_position(array $image, array $gallery, bool $pub
         return -1;
     }
 
-    $where = gallery_lightbox_image_where_sql($publicOnly, $excludeRestrictedNsfw);
-    $sql = 'SELECT COUNT(*)
-        FROM images i
-        WHERE ' . $where . '
-          AND (
-              i.sort_order < ?
-              OR (i.sort_order = ? AND i.filename < ?)
-              OR (i.sort_order = ? AND i.filename = ? AND i.id < ?)
-          )';
-    $stmt = db()->prepare($sql);
-    $stmt->execute([
+    $scope = gallery_lightbox_image_scope($publicOnly, $excludeRestrictedNsfw);
+    return lightbox_metadata_model_image_position(
         (int) $gallery['id'],
-        (int) ($image['sort_order'] ?? 0),
-        (int) ($image['sort_order'] ?? 0),
-        (string) ($image['filename'] ?? ''),
-        (int) ($image['sort_order'] ?? 0),
-        (string) ($image['filename'] ?? ''),
-        (int) ($image['id'] ?? 0),
-    ]);
-    return max(0, (int) $stmt->fetchColumn());
+        $image,
+        $scope['public_only'],
+        $scope['exclude_restricted_nsfw']
+    );
 }

@@ -15,7 +15,10 @@
  *   - Prove current_viewer() is backed only by viewer-specific session/account storage
  *   - Prove historical gallery/media admin bypass checks do not recognize viewer state
  *   - Prove Phase 0 leaves existing admin authentication, CSRF, and share-token implementations untouched
- */
+  *
+ * Author:
+ *   Rudolf Klusal
+*/
 
 declare(strict_types=1);
 
@@ -71,6 +74,7 @@ $security = (string) file_get_contents($root . '/app/security.php');
 $galleryAccess = (string) file_get_contents($root . '/app/services/gallery_access.php');
 $publicMedia = (string) file_get_contents($root . '/app/controllers/public_media.php');
 $viewerAccounts = (string) file_get_contents($root . '/app/services/viewer_accounts.php');
+$viewerAccountModel = (string) file_get_contents($root . '/app/models/viewer_accounts.php');
 $adminAuth = (string) file_get_contents($root . '/app/controllers/admin_auth.php');
 $adminPersistence = (string) file_get_contents($root . '/app/services/auth_persistence.php');
 $sessionBootstrap = (string) file_get_contents($root . '/app/bootstrap/session.php');
@@ -82,7 +86,7 @@ viewer_identity_assert(stripos($currentUser, 'viewer') === false, 'current_user(
 
 $currentViewer = viewer_identity_function_source($viewerAccounts, 'current_viewer');
 viewer_identity_assert(str_contains($currentViewer, 'viewer_session_state()'), 'current_viewer() must consume only viewer-specific session state.');
-viewer_identity_assert(str_contains($currentViewer, 'FROM viewer_sessions') && str_contains($currentViewer, 'viewer_accounts'), 'current_viewer() must load only the viewer identity domain.');
+viewer_identity_assert(str_contains($currentViewer, 'viewer_account_model_session_principal(') && str_contains($viewerAccountModel, 'FROM viewer_sessions') && str_contains($viewerAccountModel, 'viewer_accounts'), 'current_viewer() must load only the viewer identity domain.');
 viewer_identity_assert(stripos($currentViewer, 'FROM users') === false && !str_contains($currentViewer, "\$_SESSION['user_id']"), 'current_viewer() must never depend on the admin users/session identity.');
 
 $visitorAccess = viewer_identity_function_source($galleryAccess, 'visitor_can_access_gallery');

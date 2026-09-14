@@ -41,17 +41,16 @@ use function Gallery\Core\e;
 use function Gallery\Core\render_footer;
 use function Gallery\Core\render_header;
 use function Gallery\Core\url_for;
-use function Gallery\Services\feature_capability_effective_enabled;
 use function Gallery\Services\t;
 
 /**
  * Render the Admin complete gallery overview report page.
  *
  * @param string $notice Notice text.
+ * @param bool $telemetryEnabled Whether telemetry controls are available.
  */
-function view_render_admin_gallery_report_page(string $notice = ''): void
+function view_render_admin_gallery_report_page(string $notice = '', bool $telemetryEnabled = false): void
 {
-    $telemetryEnabled = feature_capability_effective_enabled('telemetry');
     render_header(t('admin.gallery_report.page_title', 'Complete gallery overview'));
 
     echo '<section class="hero admin-dashboard-hero admin-gallery-report-hero"><div><p class="admin-kicker">' . e(t('admin.gallery_report.kicker', 'Maintenance report')) . '</p><h1>' . e(t('admin.gallery_report.page_title', 'Complete gallery overview')) . '</h1><p class="muted">' . e(t('admin.gallery_report.page_description', 'Generate one self-contained HTML report with storage, database, gallery, EXIF, GPS, telemetry, logs, feature, and runtime diagnostics. The finished report is returned to the browser only and is not saved on the server.')) . '</p></div>';

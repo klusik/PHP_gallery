@@ -150,7 +150,15 @@ function feature_capability_definitions(): array
             'group' => 'maps_flightsim',
             'label' => t('admin.features.navigation_data.label', 'Navigation data maintenance'),
             'description' => t('admin.features.navigation_data.description', 'Admin tools for local airport, navaid, and waypoint lookup data used by route maps.'),
-            'routes' => ['admin_navdata', 'admin_update_navdata', 'navdata_lookup'],
+            'routes' => [
+                'admin_navdata',
+                'admin_update_navdata',
+                'navdata_lookup',
+                'admin_navigraph_connect',
+                'admin_navigraph_callback',
+                'admin_navigraph_disconnect',
+                'admin_navigraph_refresh',
+            ],
         ],
         'simbrief' => [
             'group' => 'maps_flightsim',

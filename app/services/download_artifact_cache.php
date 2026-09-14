@@ -671,17 +671,29 @@ function legacy_download_artifact_build(
 }
 
 /**
- * Stream one managed artifact while holding a shared lease against maintenance deletion.
+ * Prepare one managed artifact stream while holding a shared lease against maintenance deletion.
  *
  * Authorization has already happened in the controller before this function is
  * called. The lease controls only cache lifecycle, never access authorization.
+ * The returned lease handle must be released with legacy_download_artifact_stream_release().
+ *
+ * @return array{status:int,path:string,filename:string,mime:string,length:int,cache_control:string,retry_after:int,message:string,lease_handle:mixed}
  */
-function send_legacy_download_artifact(string $filePath, string $downloadName): never
+function legacy_download_artifact_stream_descriptor(string $filePath, string $downloadName): array
 {
     $root = legacy_download_artifact_cache_root();
     if (!is_file($filePath) || basename($filePath) !== LEGACY_DOWNLOAD_ARTIFACT_ARCHIVE_NAME || !path_inside($root, $filePath)) {
-        http_response_code(404);
-        exit(t('download.error.not_found', 'Download not found.'));
+        return [
+            'status' => 404,
+            'path' => '',
+            'filename' => '',
+            'mime' => 'text/plain; charset=utf-8',
+            'length' => 0,
+            'cache_control' => 'private, no-store',
+            'retry_after' => 0,
+            'message' => t('download.error.not_found', 'Download not found.'),
+            'lease_handle' => null,
+        ];
     }
 
     $leasePath = dirname($filePath) . DIRECTORY_SEPARATOR . LEGACY_DOWNLOAD_ARTIFACT_LEASE_NAME;
@@ -690,30 +702,57 @@ function send_legacy_download_artifact(string $filePath, string $downloadName): 
         if (is_resource($leaseHandle)) {
             fclose($leaseHandle);
         }
-        http_response_code(503);
-        header('Retry-After: ' . legacy_download_busy_retry_after_seconds());
-        header('Content-Type: text/plain; charset=utf-8');
-        header('Cache-Control: private, no-store');
-        exit(t('download.progress.legacy_busy', 'Download preparation is temporarily busy. Please retry in a few seconds.'));
+        return [
+            'status' => 503,
+            'path' => '',
+            'filename' => '',
+            'mime' => 'text/plain; charset=utf-8',
+            'length' => 0,
+            'cache_control' => 'private, no-store',
+            'retry_after' => legacy_download_busy_retry_after_seconds(),
+            'message' => t('download.progress.legacy_busy', 'Download preparation is temporarily busy. Please retry in a few seconds.'),
+            'lease_handle' => null,
+        ];
     }
 
     $size = filesize($filePath);
     if ($size === false || $size <= 0) {
         @flock($leaseHandle, LOCK_UN);
         fclose($leaseHandle);
-        http_response_code(404);
-        exit(t('download.error.not_found', 'Download not found.'));
+        return [
+            'status' => 404,
+            'path' => '',
+            'filename' => '',
+            'mime' => 'text/plain; charset=utf-8',
+            'length' => 0,
+            'cache_control' => 'private, no-store',
+            'retry_after' => 0,
+            'message' => t('download.error.not_found', 'Download not found.'),
+            'lease_handle' => null,
+        ];
     }
 
-    header('Content-Type: application/zip');
-    header('X-Content-Type-Options: nosniff');
-    header('Cache-Control: private, no-store, no-transform');
-    header('Content-Disposition: attachment; filename="' . str_replace('"', '', $downloadName) . '"');
-    header('Content-Length: ' . $size);
-    readfile($filePath);
+    return [
+        'status' => 200,
+        'path' => $filePath,
+        'filename' => str_replace('"', '', $downloadName),
+        'mime' => 'application/zip',
+        'length' => (int) $size,
+        'cache_control' => 'private, no-store, no-transform',
+        'retry_after' => 0,
+        'message' => '',
+        'lease_handle' => $leaseHandle,
+    ];
+}
+
+/** Release a shared artifact stream lease obtained from legacy_download_artifact_stream_descriptor(). */
+function legacy_download_artifact_stream_release(mixed $leaseHandle): void
+{
+    if (!is_resource($leaseHandle)) {
+        return;
+    }
     @flock($leaseHandle, LOCK_UN);
     fclose($leaseHandle);
-    exit;
 }
 
 /** Try to remove one expired completed artifact only if no request is serving it. */

@@ -92,29 +92,42 @@ function cms_admin_mobile_uploads(): void
 
     $created = is_array($_SESSION['mobile_webdav_created'] ?? null) ? $_SESSION['mobile_webdav_created'] : null;
     unset($_SESSION['mobile_webdav_created']);
-    render_header(t('mobile_webdav.title', 'Mobile uploads'));
-    echo '<section class="hero"><h1>' . e(t('mobile_webdav.title', 'Mobile uploads')) . '</h1><p>' . e(t('mobile_webdav.intro', 'Create WebDAV-compatible upload connections for mobile photo-transfer apps such as PhotoSync.')) . '</p></section>';
-    if ($notice = flash_message('admin_notice')) {
-        echo '<div class="notice">' . e((string) $notice) . '</div>';
-    }
-    if (!mobile_webdav_ready()) {
+    $ready = mobile_webdav_ready();
+    $unavailableTitle = '';
+    $unavailableHelp = '';
+    if (!$ready) {
         $schemaStatus = mobile_webdav_schema_status();
-        $title = schema_inspection_is_unknown($schemaStatus)
+        $unavailableTitle = schema_inspection_is_unknown($schemaStatus)
             ? t('mobile_webdav.schema_unknown_title', 'Database schema temporarily unavailable')
             : t('mobile_webdav.migration_required_title', 'Database migration required');
-        $help = schema_inspection_is_unknown($schemaStatus)
+        $unavailableHelp = schema_inspection_is_unknown($schemaStatus)
             ? t('mobile_webdav.schema_unknown_help', 'The mobile-upload schema could not be verified. Credential creation and upload authentication are paused until database metadata inspection succeeds.')
             : t('mobile_webdav.migration_required_help', 'Run database migrations from the dashboard before creating mobile upload connections.');
-        echo '<section class="panel"><h2>' . e($title) . '</h2><p class="muted">' . e($help) . '</p></section>';
-        render_footer();
-        return;
     }
-    if ($created) {
-        render_mobile_webdav_created_credentials($created);
+    $tokens = $ready ? mobile_webdav_tokens() : [];
+    foreach ($tokens as &$tokenRow) {
+        $tokenRow['absolute_url'] = mobile_webdav_absolute_url((string) $tokenRow['path_token']);
     }
-    render_mobile_webdav_create_form();
-    render_mobile_webdav_token_list(mobile_webdav_tokens());
-    render_footer();
+    unset($tokenRow);
+    $confirmMessage = t('mobile_webdav.confirm_delete', 'Delete this mobile upload connection?');
+    \Gallery\Views\view_render_admin_mobile_uploads([
+        'notice' => (string) (flash_message('admin_notice') ?? ''),
+        'ready' => $ready,
+        'unavailable_title' => $unavailableTitle,
+        'unavailable_help' => $unavailableHelp,
+        'created' => $created,
+        'create_form' => [
+            'action_url' => url_for('admin_mobile_uploads'),
+            'csrf_html' => csrf_field(),
+            'gallery_options_html' => gallery_options_for_select(0),
+        ],
+        'tokens' => $tokens,
+        'token_list' => [
+            'action_url' => url_for('admin_mobile_uploads'),
+            'csrf_html' => csrf_field(),
+            'confirm_json' => json_encode($confirmMessage, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '""',
+        ],
+    ]);
 }
 
 /**
@@ -124,13 +137,7 @@ function cms_admin_mobile_uploads(): void
  */
 function render_mobile_webdav_created_credentials(array $created): void
 {
-    echo '<section class="panel"><h2>' . e(t('mobile_webdav.created_title', 'New connection details')) . '</h2>';
-    echo '<p class="notice">' . e(t('mobile_webdav.password_once', 'Copy this password now. It is stored hashed and cannot be shown again.')) . '</p>';
-    echo '<dl class="admin-definition-list">';
-    echo '<dt>' . e(t('mobile_webdav.server_url', 'Server URL')) . '</dt><dd><code>' . e((string) $created['url']) . '</code></dd>';
-    echo '<dt>' . e(t('mobile_webdav.username', 'Username')) . '</dt><dd><code>' . e((string) $created['username']) . '</code></dd>';
-    echo '<dt>' . e(t('mobile_webdav.password', 'Password')) . '</dt><dd><code>' . e((string) $created['password']) . '</code></dd>';
-    echo '</dl></section>';
+    \Gallery\Views\view_render_mobile_webdav_created_credentials($created);
 }
 
 /**
@@ -138,15 +145,11 @@ function render_mobile_webdav_created_credentials(array $created): void
  */
 function render_mobile_webdav_create_form(): void
 {
-    echo '<section class="panel"><h2>' . e(t('mobile_webdav.create_title', 'Create mobile upload connection')) . '</h2>';
-    echo '<form method="post" action="' . e(url_for('admin_mobile_uploads')) . '" class="form-grid">' . csrf_field();
-    echo '<input type="hidden" name="action" value="create">';
-    echo '<label>' . e(t('mobile_webdav.label', 'Label')) . '<input type="text" name="label" value="PhotoSync iPhone" maxlength="190"></label>';
-    echo '<label>' . e(t('admin.upload.gallery', 'Gallery')) . '<select name="gallery_id" required>' . gallery_options_for_select(0) . '</select></label>';
-    echo '<button type="submit">' . e(t('mobile_webdav.create_button', 'Create connection')) . '</button>';
-    echo '</form>';
-    echo '<p class="muted">' . e(t('mobile_webdav.photosync_hint', 'In the mobile app, use WebDAV as the target and enable HEIC to JPEG conversion before transfer when available.')) . '</p>';
-    echo '</section>';
+    \Gallery\Views\view_render_mobile_webdav_create_form([
+        'action_url' => url_for('admin_mobile_uploads'),
+        'csrf_html' => csrf_field(),
+        'gallery_options_html' => gallery_options_for_select(0),
+    ]);
 }
 
 /**
@@ -156,19 +159,16 @@ function render_mobile_webdav_create_form(): void
  */
 function render_mobile_webdav_token_list(array $tokens): void
 {
-    echo '<section class="panel"><h2>' . e(t('mobile_webdav.existing_title', 'Existing connections')) . '</h2>';
-    if (!$tokens) {
-        echo '<p class="muted">' . e(t('mobile_webdav.none', 'No mobile upload connections exist yet.')) . '</p></section>';
-        return;
+    foreach ($tokens as &$tokenRow) {
+        $tokenRow['absolute_url'] = mobile_webdav_absolute_url((string) $tokenRow['path_token']);
     }
-    echo '<table><thead><tr><th>' . e(t('mobile_webdav.label', 'Label')) . '</th><th>' . e(t('admin.upload.gallery', 'Gallery')) . '</th><th>' . e(t('mobile_webdav.server_url', 'Server URL')) . '</th><th>' . e(t('mobile_webdav.last_used', 'Last used')) . '</th><th>' . e(t('admin.common.actions', 'Actions')) . '</th></tr></thead><tbody>';
-    foreach ($tokens as $token) {
-        echo '<tr><td>' . e((string) $token['label']) . '</td><td>' . e((string) $token['gallery_title']) . '</td><td><code>' . e(mobile_webdav_absolute_url((string) $token['path_token'])) . '</code></td><td>' . e((string) ($token['last_used_at'] ?? '')) . '</td><td>';
-        echo '<form method="post" action="' . e(url_for('admin_mobile_uploads')) . '" onsubmit="return confirm(\'' . e(t('mobile_webdav.confirm_delete', 'Delete this mobile upload connection?')) . '\');">' . csrf_field();
-        echo '<input type="hidden" name="action" value="delete"><input type="hidden" name="token_id" value="' . (int) $token['id'] . '"><button type="submit" class="secondary danger">' . e(t('admin.common.delete', 'Delete')) . '</button></form>';
-        echo '</td></tr>';
-    }
-    echo '</tbody></table></section>';
+    unset($tokenRow);
+    $confirmMessage = t('mobile_webdav.confirm_delete', 'Delete this mobile upload connection?');
+    \Gallery\Views\view_render_mobile_webdav_token_list($tokens, [
+        'action_url' => url_for('admin_mobile_uploads'),
+        'csrf_html' => csrf_field(),
+        'confirm_json' => json_encode($confirmMessage, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '""',
+    ]);
 }
 
 /**
@@ -197,7 +197,12 @@ function cms_mobile_webdav(): void
         return;
     }
 
-    $token = mobile_webdav_authenticated_token($pathToken);
+    $token = mobile_webdav_authenticated_token(
+        $pathToken,
+        (string) ($_SERVER['PHP_AUTH_USER'] ?? ''),
+        (string) ($_SERVER['PHP_AUTH_PW'] ?? ''),
+        (string) ($_SERVER['HTTP_AUTHORIZATION'] ?? '')
+    );
     if (!$token) {
         header('WWW-Authenticate: Basic realm="PHP Gallery Mobile Upload"');
         http_response_code(401);
@@ -275,6 +280,5 @@ function mobile_webdav_propfind_response(string $pathToken): void
     $href = base_url('webdav/' . rawurlencode($pathToken) . '/');
     http_response_code(207);
     header('Content-Type: application/xml; charset=UTF-8');
-    echo '<?xml version="1.0" encoding="UTF-8"?>';
-    echo '<d:multistatus xmlns:d="DAV:"><d:response><d:href>' . e($href) . '</d:href><d:propstat><d:prop><d:resourcetype><d:collection/></d:resourcetype></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response></d:multistatus>';
+    \Gallery\Views\view_render_mobile_webdav_propfind_xml($href);
 }

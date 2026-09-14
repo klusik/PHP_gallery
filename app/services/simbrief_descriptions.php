@@ -45,7 +45,6 @@ use function Gallery\Core\cms_current_version;
 use function Gallery\Core\normalize_relative_path;
 use function Gallery\Core\now_sql;
 use function Gallery\Core\path_inside;
-use function Gallery\Views\view_simbrief_description_markdown;
 
 const SIMBRIEF_DESCRIPTION_ENDPOINT = 'https://www.simbrief.com/api/xml.fetcher.php';
 const SIMBRIEF_DESCRIPTION_BASE_URL = 'https://www.simbrief.com';
@@ -257,9 +256,7 @@ function simbrief_description_generate_for_identifier(string $pilotId, string $p
     $identifier = simbrief_description_identifier($pilotId, $pilotName);
     $payload = simbrief_description_fetch_latest_ofp($identifier);
     $details = simbrief_description_extract_details($payload);
-    $description = function_exists('Gallery\\Views\\view_simbrief_description_markdown')
-        ? view_simbrief_description_markdown($details)
-        : simbrief_description_build_markdown($details);
+    $description = simbrief_description_build_markdown($details);
 
     return [
         'description' => $description,
@@ -1108,9 +1105,6 @@ function simbrief_description_route_text_from_points(array $points, array $detai
  */
 function simbrief_description_build_markdown(array $details): string
 {
-    if (function_exists('Gallery\\Views\\view_simbrief_description_markdown')) {
-        return view_simbrief_description_markdown($details);
-    }
     $originCode = simbrief_description_markdown_code($details['origin_code'] ?? '');
     $destinationCode = simbrief_description_markdown_code($details['destination_code'] ?? '');
     $originLabel = simbrief_description_place_label((string) ($details['origin_name'] ?? ''), $originCode);

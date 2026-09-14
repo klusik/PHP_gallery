@@ -37,35 +37,33 @@ declare(strict_types=1);
 namespace Gallery\Views;
 
 use function Gallery\Core\e;
-use function Gallery\Core\url_for;
-use function Gallery\Services\public_home_search_enabled;
-use function Gallery\Services\t;
 
 /**
  * Render the optional thin public search bar above public gallery content.
  *
- * @param ?array $gallery Gallery row or gallery data.
+ * @param array<string, mixed> $viewModel Prepared public-search presentation data.
  */
-function view_render_public_search_bar(?array $gallery = null): void
+function view_render_public_search_bar(array $viewModel): void
 {
-    if (!public_home_search_enabled()) {
+    if (empty($viewModel['enabled'])) {
         return;
     }
 
-    $searchId = $gallery ? 'public-gallery-search-input-' . (int) $gallery['id'] : 'public-home-search-input';
-    $contextId = $gallery ? 'public-gallery-search-context-' . (int) $gallery['id'] : '';
-    $ariaLabel = $gallery ? t('search.gallery_label', 'Search this gallery and all galleries') : t('search.home_label', 'Search galleries and photos');
-    $placeholder = $gallery ? t('search.gallery_placeholder', 'Search this gallery, subgalleries, tags, photos...') : t('search.placeholder', 'Search galleries, tags, photos...');
+    $searchId = (string) ($viewModel['search_id'] ?? 'public-home-search-input');
+    $contextId = (string) ($viewModel['context_id'] ?? '');
+    $galleryId = isset($viewModel['gallery_id']) ? (int) $viewModel['gallery_id'] : 0;
+    $ariaLabel = (string) ($viewModel['aria_label'] ?? '');
+    $placeholder = (string) ($viewModel['placeholder'] ?? '');
 
-    echo '<section class="public-home-search" data-public-home-search data-search-url="' . e(url_for('public_search')) . '" data-min-length="2" data-delay-ms="200" data-media-delay-ms="100" data-descriptive-delay-ms="300" data-deep-delay-ms="550" data-loading-label="' . e(t('search.loading', 'Searching...')) . '" data-empty-label="' . e(t('search.empty', 'No matches found.')) . '" data-error-label="' . e(t('search.error', 'Search is temporarily unavailable.')) . '"' . ($gallery ? ' data-gallery-id="' . (int) $gallery['id'] . '"' : '') . ' aria-label="' . e($ariaLabel) . '" aria-busy="false">';
+    echo '<section class="public-home-search" data-public-home-search data-search-url="' . e((string) ($viewModel['search_url'] ?? '')) . '" data-min-length="' . (int) ($viewModel['min_length'] ?? 2) . '" data-delay-ms="' . (int) ($viewModel['delay_ms'] ?? 200) . '" data-media-delay-ms="' . (int) ($viewModel['media_delay_ms'] ?? 100) . '" data-descriptive-delay-ms="' . (int) ($viewModel['descriptive_delay_ms'] ?? 300) . '" data-deep-delay-ms="' . (int) ($viewModel['deep_delay_ms'] ?? 550) . '" data-loading-label="' . e((string) ($viewModel['loading_label'] ?? '')) . '" data-empty-label="' . e((string) ($viewModel['empty_label'] ?? '')) . '" data-error-label="' . e((string) ($viewModel['error_label'] ?? '')) . '"' . ($galleryId > 0 ? ' data-gallery-id="' . $galleryId . '"' : '') . ' aria-label="' . e($ariaLabel) . '" aria-busy="false">';
     echo '<label class="visually-hidden" for="' . e($searchId) . '">' . e($ariaLabel) . '</label>';
     echo '<div class="public-home-search-shell">';
     echo '<span class="public-home-search-icon" aria-hidden="true">&#128269;</span>';
     echo '<input id="' . e($searchId) . '" class="public-home-search-input" type="search" autocomplete="off" spellcheck="false" placeholder="' . e($placeholder) . '" data-public-home-search-input>';
-    if ($gallery) {
-        echo '<label class="public-home-search-context" for="' . e($contextId) . '"><input id="' . e($contextId) . '" type="checkbox" checked data-public-home-search-context> <span>' . e(t('search.context_current_gallery', 'Search only this gallery and its subgalleries')) . '</span></label>';
+    if ($galleryId > 0 && $contextId !== '') {
+        echo '<label class="public-home-search-context" for="' . e($contextId) . '"><input id="' . e($contextId) . '" type="checkbox" checked data-public-home-search-context> <span>' . e((string) ($viewModel['context_label'] ?? '')) . '</span></label>';
     }
-    echo '<button type="button" class="public-home-search-clear" data-public-home-search-clear aria-label="' . e(t('search.clear', 'Clear search')) . '" hidden>&times;</button>';
+    echo '<button type="button" class="public-home-search-clear" data-public-home-search-clear aria-label="' . e((string) ($viewModel['clear_label'] ?? '')) . '" hidden>&times;</button>';
     echo '</div>';
     echo '<div class="public-home-search-results" data-public-home-search-results role="region" aria-label="' . e($ariaLabel) . '" hidden></div>';
     echo '</section>';

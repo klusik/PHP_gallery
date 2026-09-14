@@ -139,6 +139,7 @@ use function Gallery\Services\translation_set_active_language;
 use function Gallery\Services\translation_set_public_language;
 use function Gallery\Views\view_render_admin_hero;
 use function Gallery\Views\view_render_admin_tab_intro;
+use function Gallery\Views\view_render_admin_theme_page;
 
 /**
  * Admin theme controller.
@@ -274,43 +275,63 @@ function render_admin_theme_page(bool $gpsMapsFeatureEnabled, bool $lightboxMode
     $tagPageDescriptionLayout = tag_page_gallery_description_layout();
     // $publicThumbnailRenderingMode stores the validated public photo-card rendering mode shown by the Layout form.
     $publicThumbnailRenderingMode = public_thumbnail_rendering_mode();
-    render_header(t('admin.theme.page_title', 'Theme'));
+    // $gridResetNotice stores the optional post-reset notice as presentation text.
+    $gridResetNotice = null;
     if (!empty($_GET['grid_reset'])) {
         // $databaseRows stores how many database gallery rows reported a custom-grid reset.
         $databaseRows = max(0, (int) ($_GET['db_rows'] ?? 0));
         // $sidecars stores how many gallery.json files had stale custom-grid metadata removed.
         $sidecars = max(0, (int) ($_GET['sidecars'] ?? 0));
-        echo '<section class="panel notice"><p>' . e(t('admin.theme.grid_reset_notice', 'Custom gallery grid settings were reset. Database rows changed: {db_rows}. Sidecar files cleaned: {sidecars}.', ['db_rows' => $databaseRows, 'sidecars' => $sidecars])) . '</p></section>';
+        $gridResetNotice = t('admin.theme.grid_reset_notice', 'Custom gallery grid settings were reset. Database rows changed: {db_rows}. Sidecar files cleaned: {sidecars}.', ['db_rows' => $databaseRows, 'sidecars' => $sidecars]);
     }
     // $themeBackgroundUrl stores the current global background asset so the live preview can mirror the public page before saving.
     $themeBackgroundUrl = theme_background_asset_url();
-    view_render_admin_hero([
-        'title' => t('admin.theme.title', 'Theme'),
-        'description' => t('admin.theme.description', 'Control the public gallery appearance, media identity, layout, and custom stylesheet from one focused workspace.'),
-        'class' => 'admin-theme-hero',
-        'actions_html' => '<a class="button secondary" href="' . e(admin_settings_url('appearance')) . '">' . e(t('admin.settings.open_centralized', 'Open centralized settings')) . '</a><button type="submit" form="admin-theme-form">' . e(t('admin.theme.save_theme', 'Save theme')) . '</button>',
-    ]);
 
-    $themeTabs = [
-        ['id' => 'admin-theme-tab-appearance', 'label' => t('admin.theme.tab_appearance', 'Appearance')],
-        ['id' => 'admin-theme-tab-media', 'label' => t('admin.theme.tab_media', 'Branding & media')],
-        ['id' => 'admin-theme-tab-layout', 'label' => t('admin.theme.tab_layout', 'Layout')],
-        ['id' => 'admin-theme-tab-language', 'label' => t('admin.theme.language.tab_label', 'Language')],
-        ['id' => 'admin-theme-tab-custom-css', 'label' => t('admin.theme.tab_custom_css', 'Custom CSS')],
-    ];
-    render_admin_tabs($themeTabs, 'admin-theme-tab-appearance');
-
-    echo '<form id="admin-theme-form" method="post" enctype="multipart/form-data" class="form-grid admin-theme-form" data-theme-form>' . csrf_field();
-    echo '<input type="hidden" name="theme_controls_changed" value="0" data-theme-controls-changed>';
-
-
+    // Prepare child-tab fragments before the page view composes the Theme form shell.
+    ob_start();
     render_admin_theme_appearance_tab($theme, $themeBackgroundUrl, $gpsMapsFeatureEnabled, $tagPageGridSettings, $tagPageDescriptionLayout);
+    $appearanceHtml = (string) ob_get_clean();
+    ob_start();
     render_admin_theme_media_tab($theme);
+    $mediaHtml = (string) ob_get_clean();
+    ob_start();
     render_admin_theme_layout_tab($theme, $paginationSettings, $homeGridSettings, $publicThumbnailRenderingMode, $lightboxModesFeatureEnabled);
+    $layoutHtml = (string) ob_get_clean();
+    ob_start();
     render_admin_theme_language_tab();
+    $languageHtml = (string) ob_get_clean();
+    ob_start();
     render_admin_theme_custom_css_tab();
+    $customCssHtml = (string) ob_get_clean();
 
-    echo '<div class="panel admin-theme-save-panel"><div><strong>' . e(t('admin.theme.save_panel_title', 'Save changes')) . '</strong><p class="muted">' . e(t('admin.theme.save_panel_hint', 'All Theme tabs are saved together, so hidden tab settings are preserved when you submit the form.')) . '</p></div><div class="bulk-row"><button type="submit">' . e(t('admin.theme.save_theme', 'Save theme')) . '</button><button type="submit" class="secondary" name="reset_theme_overrides" value="1" formnovalidate>' . e(t('admin.theme.custom_css.reset_to_css', 'Reset to CSS')) . '</button></div></div></form>';
+    render_header(t('admin.theme.page_title', 'Theme'));
+    view_render_admin_theme_page([
+        'grid_reset_notice' => $gridResetNotice,
+        'settings_url' => admin_settings_url('appearance'),
+        'csrf_html' => csrf_field(),
+        'tabs' => [
+            ['id' => 'admin-theme-tab-appearance', 'label' => t('admin.theme.tab_appearance', 'Appearance')],
+            ['id' => 'admin-theme-tab-media', 'label' => t('admin.theme.tab_media', 'Branding & media')],
+            ['id' => 'admin-theme-tab-layout', 'label' => t('admin.theme.tab_layout', 'Layout')],
+            ['id' => 'admin-theme-tab-language', 'label' => t('admin.theme.language.tab_label', 'Language')],
+            ['id' => 'admin-theme-tab-custom-css', 'label' => t('admin.theme.tab_custom_css', 'Custom CSS')],
+        ],
+        'tab_fragments' => [
+            'appearance' => $appearanceHtml,
+            'media' => $mediaHtml,
+            'layout' => $layoutHtml,
+            'language' => $languageHtml,
+            'custom_css' => $customCssHtml,
+        ],
+        'labels' => [
+            'title' => t('admin.theme.title', 'Theme'),
+            'description' => t('admin.theme.description', 'Control the public gallery appearance, media identity, layout, and custom stylesheet from one focused workspace.'),
+            'open_centralized' => t('admin.settings.open_centralized', 'Open centralized settings'),
+            'save_theme' => t('admin.theme.save_theme', 'Save theme'),
+            'save_panel_title' => t('admin.theme.save_panel_title', 'Save changes'),
+            'save_panel_hint' => t('admin.theme.save_panel_hint', 'All Theme tabs are saved together, so hidden tab settings are preserved when you submit the form.'),
+            'reset_to_css' => t('admin.theme.custom_css.reset_to_css', 'Reset to CSS'),
+        ],
+    ]);
     render_footer();
-
 }

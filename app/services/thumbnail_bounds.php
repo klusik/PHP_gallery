@@ -37,10 +37,11 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
-use function Gallery\Core\db;
 use function Gallery\Core\e;
 use function Gallery\Core\normalize_relative_path;
 use function Gallery\Core\now_sql;
+use function Gallery\Models\gallery_model_branch_ids_by_folder_path;
+use function Gallery\Models\gallery_model_set_thumbnail_bounds;
 
 /**
  * Return true when thumbnail-bound columns are available for galleries and images.
@@ -104,10 +105,10 @@ function thumbnail_bound_post_value(mixed $value): ?int
  * @param string $prefix Prefix value.
  * @return array Structured result data for the caller.
  */
-function thumbnail_bound_pair_from_post(string $prefix): array
+function thumbnail_bound_pair_from_post(string $prefix, array $input): array
 {
-    $minSize = thumbnail_bound_post_value($_POST[$prefix . '_min_size'] ?? 0);
-    $maxSize = thumbnail_bound_post_value($_POST[$prefix . '_max_size'] ?? 0);
+    $minSize = thumbnail_bound_post_value($input[$prefix . '_min_size'] ?? 0);
+    $maxSize = thumbnail_bound_post_value($input[$prefix . '_max_size'] ?? 0);
     if ($minSize !== null && $maxSize !== null && $minSize > $maxSize) {
         $temporarySize = $minSize;
         $minSize = $maxSize;
@@ -128,10 +129,7 @@ function thumbnail_bound_gallery_branch_ids(array $gallery): array
     if ($folderPath === '') {
         return [(int) $gallery['id']];
     }
-    $stmt = db()->prepare('SELECT id FROM galleries WHERE folder_path = ? OR folder_path LIKE ? ORDER BY CHAR_LENGTH(folder_path), folder_path, id');
-    $stmt->execute([$folderPath, $folderPath . '/%']);
-    $ids = array_map('intval', array_column($stmt->fetchAll(), 'id'));
-    return $ids !== [] ? $ids : [(int) $gallery['id']];
+    return gallery_model_branch_ids_by_folder_path((int) $gallery['id'], $folderPath);
 }
 
 /**
@@ -149,10 +147,7 @@ function save_gallery_thumbnail_bounds(array $gallery, ?int $minSize, ?int $maxS
         return 0;
     }
     $galleryIds = $recursive ? thumbnail_bound_gallery_branch_ids($gallery) : [(int) $gallery['id']];
-    $placeholders = implode(', ', array_fill(0, count($galleryIds), '?'));
-    $stmt = db()->prepare('UPDATE galleries SET thumbnail_min_size = ?, thumbnail_max_size = ?, updated_at = ? WHERE id IN (' . $placeholders . ')');
-    $stmt->execute(array_merge([$minSize, $maxSize, now_sql()], $galleryIds));
-    $changedRows = $stmt->rowCount();
+    $changedRows = gallery_model_set_thumbnail_bounds($galleryIds, $minSize, $maxSize, now_sql());
     if (function_exists('Gallery\\Services\\write_gallery_sidecar')) {
         foreach ($galleryIds as $galleryId) {
             $updatedGallery = find_gallery((int) $galleryId, true);
@@ -165,18 +160,16 @@ function save_gallery_thumbnail_bounds(array $gallery, ?int $minSize, ?int $maxS
 }
 
 /**
- * Render a dual-pin thumbnail-bound slider for Admin forms.
+ * Prepare one thumbnail-bound slider view model for Admin forms.
  *
- * @param string $prefix Prefix value.
- * @param ?int $storedMinSize Stored min size value.
- * @param ?int $storedMaxSize Stored max size value.
- * @param string $label Label value.
- * @param string $description Description value.
+ * @param ?int $storedMinSize Stored minimum size.
+ * @param ?int $storedMaxSize Stored maximum size.
+ * @return array{values:array<int,int>,min_index:int,max_index:int} Prepared slider state.
  */
-function render_admin_thumbnail_bound_slider(string $prefix, ?int $storedMinSize, ?int $storedMaxSize, string $label, string $description): void
+function admin_thumbnail_bound_slider_state(?int $storedMinSize, ?int $storedMaxSize): array
 {
     $values = thumbnail_bound_slider_values();
-    $maxIndex = count($values) - 1;
+    $maxIndex = max(0, count($values) - 1);
     $minIndex = array_search(thumbnail_bound_form_value($storedMinSize), $values, true);
     $maxValue = thumbnail_bound_form_value($storedMaxSize);
     $maxIndexValue = $maxValue === 0 ? $maxIndex : array_search($maxValue, $values, true);
@@ -185,21 +178,7 @@ function render_admin_thumbnail_bound_slider(string $prefix, ?int $storedMinSize
     if ($minIndex > $maxIndexValue) {
         $minIndex = $maxIndexValue;
     }
-
-    echo '<div class="admin-thumbnail-bound-control" data-thumbnail-bound-control data-thumbnail-bound-values="' . e(implode(',', $values)) . '">';
-    echo '<div class="admin-thumbnail-bound-header"><div><h3>' . e($label) . '</h3><p class="muted">' . e($description) . '</p></div><strong data-thumbnail-bound-summary>' . e(t('thumbnail_bounds.auto', 'Auto')) . '</strong></div>';
-    echo '<div class="admin-thumbnail-bound-valuebar" aria-hidden="true">';
-    echo '<span><small>' . e(t('thumbnail_bounds.min', 'Min')) . '</small><b data-thumbnail-bound-min-display>' . e(t('thumbnail_bounds.auto_min', 'Auto min')) . '</b></span>';
-    echo '<span><small>' . e(t('thumbnail_bounds.max', 'Max')) . '</small><b data-thumbnail-bound-max-display>' . e(t('thumbnail_bounds.auto_max', 'Auto max')) . '</b></span>';
-    echo '</div>';
-    echo '<div class="admin-thumbnail-bound-slider" aria-label="' . e($label) . '">';
-    echo '<div class="admin-thumbnail-bound-rail" aria-hidden="true"></div>';
-    echo '<input type="range" min="0" max="' . (int) $maxIndex . '" step="1" value="' . (int) $minIndex . '" data-thumbnail-bound-min-index aria-label="' . e(t('thumbnail_bounds.minimum_size', 'Minimum thumbnail size')) . '">';
-    echo '<input type="range" min="0" max="' . (int) $maxIndex . '" step="1" value="' . (int) $maxIndexValue . '" data-thumbnail-bound-max-index aria-label="' . e(t('thumbnail_bounds.maximum_size', 'Maximum thumbnail size')) . '">';
-    echo '</div>';
-    echo '<input type="hidden" name="' . e($prefix) . '_min_size" value="' . (int) $values[$minIndex] . '" data-thumbnail-bound-min-value>';
-    echo '<input type="hidden" name="' . e($prefix) . '_max_size" value="' . (int) $values[$maxIndexValue] . '" data-thumbnail-bound-max-value>';
-    echo '</div>';
+    return ['values' => $values, 'min_index' => $minIndex, 'max_index' => $maxIndexValue];
 }
 
 

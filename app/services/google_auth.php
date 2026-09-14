@@ -38,14 +38,17 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 use RuntimeException;
-use function Gallery\Controllers\cms_normalize_account_email;
 use function Gallery\Core\absolute_public_url;
 use function Gallery\Core\cms_config;
 use function Gallery\Core\current_user;
-use function Gallery\Core\db;
 use function Gallery\Core\now_sql;
 use function Gallery\Core\sanitize_login_return_target;
 use function Gallery\Core\url_for;
+use function Gallery\Models\google_auth_model_disconnect_account;
+use function Gallery\Models\google_auth_model_link_account;
+use function Gallery\Models\google_auth_model_linked_account;
+use function Gallery\Models\google_auth_model_touch_login;
+use function Gallery\Models\google_auth_model_user_by_subject;
 
 const CMS_GOOGLE_AUTH_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth';
 const CMS_GOOGLE_TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token';
@@ -603,12 +606,8 @@ function google_auth_linked_account(int $userId): ?array
         return null;
     }
 
-    // $stmt stores the linked-account lookup query.
-    $stmt = db()->prepare('SELECT * FROM user_google_accounts WHERE user_id = ? LIMIT 1');
-    $stmt->execute([$userId]);
-    // $row stores the linked Google account row.
-    $row = $stmt->fetch();
-    return $row ?: null;
+    // The Model owns the linked-account lookup query.
+    return google_auth_model_linked_account($userId);
 }
 
 /**
@@ -626,12 +625,8 @@ function google_auth_user_by_subject(string $subject): ?array
         return null;
     }
 
-    // $stmt stores the linked admin lookup query.
-    $stmt = db()->prepare('SELECT u.id, u.username, u.email, u.role, uga.id AS google_account_id FROM user_google_accounts uga INNER JOIN users u ON u.id = uga.user_id WHERE uga.google_sub = ? LIMIT 1');
-    $stmt->execute([$subject]);
-    // $row stores the linked admin row.
-    $row = $stmt->fetch();
-    return $row ?: null;
+    // The Model owns the linked-admin lookup query.
+    return google_auth_model_user_by_subject($subject);
 }
 
 /**
@@ -657,7 +652,7 @@ function google_auth_link_account(int $userId, array $claims): void
     }
 
     // $email stores the verified Google account email.
-    $email = cms_normalize_account_email((string) ($claims['email'] ?? ''));
+    $email = auth_account_normalize_email((string) ($claims['email'] ?? ''));
     // $name stores the Google display name.
     $name = trim((string) ($claims['name'] ?? ''));
     // $pictureUrl stores the optional Google profile picture URL.
@@ -665,9 +660,13 @@ function google_auth_link_account(int $userId, array $claims): void
     // $emailVerified stores whether Google reported the email as verified.
     $emailVerified = (($claims['email_verified'] ?? false) === true || (string) ($claims['email_verified'] ?? '') === 'true') ? 1 : 0;
 
-    // $stmt stores the account upsert query.
-    $stmt = db()->prepare('INSERT INTO user_google_accounts (user_id, google_sub, email, email_verified, name, picture_url, linked_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE google_sub = VALUES(google_sub), email = VALUES(email), email_verified = VALUES(email_verified), name = VALUES(name), picture_url = VALUES(picture_url), updated_at = VALUES(updated_at)');
-    $stmt->execute([$userId, $subject, $email !== '' ? $email : null, $emailVerified, $name !== '' ? $name : null, $pictureUrl !== '' ? $pictureUrl : null, now_sql(), now_sql()]);
+    google_auth_model_link_account($userId, [
+        'subject' => $subject,
+        'email' => $email !== '' ? $email : null,
+        'email_verified' => $emailVerified,
+        'name' => $name !== '' ? $name : null,
+        'picture_url' => $pictureUrl !== '' ? $pictureUrl : null,
+    ], now_sql());
 }
 
 /**
@@ -681,9 +680,7 @@ function google_auth_disconnect_account(int $userId): void
         return;
     }
 
-    // $stmt stores the unlink query.
-    $stmt = db()->prepare('DELETE FROM user_google_accounts WHERE user_id = ?');
-    $stmt->execute([$userId]);
+    google_auth_model_disconnect_account($userId);
 }
 
 /**
@@ -703,7 +700,5 @@ function google_auth_touch_login(int $googleAccountId): void
         return;
     }
 
-    // $stmt stores the login timestamp update.
-    $stmt = db()->prepare('UPDATE user_google_accounts SET last_login_at = ?, updated_at = ? WHERE id = ?');
-    $stmt->execute([now_sql(), now_sql(), $googleAccountId]);
+    google_auth_model_touch_login($googleAccountId, now_sql());
 }

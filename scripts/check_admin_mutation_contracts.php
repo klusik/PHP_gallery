@@ -274,12 +274,12 @@ contract_forbid($metadataOrganizer, 'mergeApplyPayloadUrls', 'Obsolete Metadata 
 // Dynamically injected panel forms must be caught by delegated or lifecycle-safe handlers.
 $dynamicContracts = [
     ['app/views/admin_gallery_forms.php', 'data-gallery-panel-create-form', $sidePanel, "form.matches('[data-gallery-panel-create-form]')"],
-    ['app/controllers/admin_uploads.php', 'data-gallery-upload-form', $sidePanel, "document.querySelectorAll('[data-gallery-upload-form]')"],
-    ['app/controllers/admin_galleries_edit_page.php', 'data-admin-panel-scan-images-form', $sidePanel, "form.matches('[data-admin-panel-scan-images-form]')"],
-    ['app/controllers/admin_galleries_edit_views.php', 'data-admin-panel-ai-reprocess-form', $sidePanel, "form.matches('[data-admin-panel-ai-reprocess-form]')"],
-    ['app/controllers/admin_galleries_edit_page.php', 'data-admin-image-bulk-form', $sidePanel, "body.querySelector('[data-admin-image-bulk-form]')"],
-    ['app/controllers/upload_automation.php', 'data-admin-upload-automation-token-form', $sidePanel, "form.matches('[data-admin-upload-automation-token-form]')"],
-    ['app/controllers/smart_galleries.php', 'data-smart-gallery-panel-form', $sidePanel, "form.matches('[data-smart-gallery-panel-form]')"],
+    ['app/views/admin_uploads.php', 'data-gallery-upload-form', $sidePanel, "document.querySelectorAll('[data-gallery-upload-form]')"],
+    ['app/views/admin_gallery_edit_tabs.php', 'data-admin-panel-scan-images-form', $sidePanel, "form.matches('[data-admin-panel-scan-images-form]')"],
+    ['app/views/admin_gallery_edit_components.php', 'data-admin-panel-ai-reprocess-form', $sidePanel, "form.matches('[data-admin-panel-ai-reprocess-form]')"],
+    ['app/views/admin_gallery_edit_tabs.php', 'data-admin-image-bulk-form', $sidePanel, "body.querySelector('[data-admin-image-bulk-form]')"],
+    ['app/views/upload_automation.php', 'data-admin-upload-automation-token-form', $sidePanel, "form.matches('[data-admin-upload-automation-token-form]')"],
+    ['app/views/smart_galleries.php', 'data-smart-gallery-panel-form', $sidePanel, "form.matches('[data-smart-gallery-panel-form]')"],
 ];
 foreach ($dynamicContracts as [$serverFile, $serverMarker, $browserContents, $browserMarker]) {
     $serverContents = contract_file($root, $serverFile, $failures);

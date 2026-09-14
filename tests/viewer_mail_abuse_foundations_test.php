@@ -16,7 +16,10 @@
  *   - Verify conservative default limits and one generic external response code
  *   - Protect corrected max-attempt semantics used by the future mail budgets
  *   - Protect trusted-client handling by refusing valid mail authorization without a usable client IP
- */
+  *
+ * Author:
+ *   Rudolf Klusal
+*/
 
 declare(strict_types=1);
 
@@ -171,7 +174,8 @@ namespace {
     viewer_mail_assert(stripos($mailService, 'curl_') === false, 'Phase 0.5 viewer mail boundary must not add a provider/API transport.');
 
     $rateService = (string) file_get_contents($root . '/app/services/viewer_rate_limits.php');
-    viewer_mail_assert(str_contains($rateService, '$attempts > (int) $policy[\'max_attempts\']'), 'Rate limiter max_attempts must mean the number of attempts that may pass, with the following attempt locked.');
+    $rateModel = (string) file_get_contents($root . '/app/models/viewer_rate_limits.php');
+    viewer_mail_assert(str_contains($rateModel, '$attempts > (int) $policy[\'max_attempts\']'), 'Rate limiter model must preserve max_attempts as the number of attempts that may pass, with the following attempt locked.');
 
     $configExample = (string) file_get_contents($root . '/config.example.php');
     viewer_mail_assert(str_contains($configExample, "'verification_mail_global_daily_limit' => 50"), 'Example configuration must expose a conservative global verification-mail circuit breaker.');

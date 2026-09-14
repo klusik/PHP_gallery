@@ -19,6 +19,9 @@
  *   - Verify the Admin selector exposes only disabled, invite_only, and open through the existing mode service
  *   - Verify open-only public discoverability and the absence of CAPTCHA/Phase 5 surfaces
  *
+ * Author:
+ *   Rudolf Klusal
+ *
  * Last Updated:
  *   2026-08-20
  */
@@ -375,6 +378,8 @@ namespace {
 
     $root = dirname(__DIR__);
     require_once $root . '/tests/support/module_source.php';
+    require_once $root . '/app/bootstrap/viewer_identity_context.php';
+    require_once $root . '/app/models/viewer_registration.php';
     require_once $root . '/app/services/viewer_registration.php';
     require_once $root . '/app/services/viewer_http.php';
 
@@ -487,6 +492,7 @@ namespace {
     viewer_phase41_assert($expiredPdo->row['verification_token_hash'] !== $expiredOldHash, 'Expired verification authority may rotate to a fresh hash.');
 
     $controller = (string) file_get_contents($root . '/app/controllers/viewer_accounts.php');
+    $viewerView = (string) file_get_contents($root . '/app/views/viewer_accounts.php');
     $httpService = (string) file_get_contents($root . '/app/services/viewer_http.php');
     $registrationService = (string) file_get_contents($root . '/app/services/viewer_registration.php');
     $dispatch = (string) file_get_contents($root . '/app/bootstrap/dispatch.php');
@@ -503,11 +509,13 @@ namespace {
     viewer_phase41_assert(preg_match("/'viewer_accounts'\s*=>\s*\[.*?'route_prefixes'\s*=>\s*\['viewer_'\]/s", $featureFlags) === 1, 'Global Viewer Accounts capability metadata must own the generic registration route.');
 
     $register = viewer_phase41_function_source($controller, 'cms_viewer_register');
+    $registerView = viewer_phase41_function_source($viewerView, 'view_render_viewer_register');
     $deliver = viewer_phase41_function_source($controller, 'viewer_deliver_registration_verification');
     $verify = viewer_phase41_function_source($controller, 'cms_viewer_verify');
     $confirm = viewer_phase41_function_source($registrationService, 'viewer_registration_verification_confirm');
     $activate = viewer_phase41_function_source($registrationService, 'viewer_registration_activate_verified');
     $admin = viewer_phase41_function_source($controller, 'cms_admin_viewer_invitations');
+    $adminView = viewer_phase41_function_source($viewerView, 'view_render_admin_viewer_accounts');
     $openHttp = viewer_phase41_function_source($httpService, 'viewer_http_open_registration_available');
     $lifecycleHttp = viewer_phase41_function_source($httpService, 'viewer_http_registration_lifecycle_available');
 
@@ -524,7 +532,7 @@ namespace {
     viewer_phase41_assert(!str_contains($register, 'invitation_token') && !str_contains($register, "\$_POST['token']"), 'Generic registration route must not accept invitation/origin authority from anonymous form input.');
 
     // All ordinary service/mail outcomes converge on one generic response string with no internal reason disclosure.
-    viewer_phase41_assert(substr_count($register, 'viewer.register.request_received') === 1, 'Registration POST must render one generic public outcome notice.');
+    viewer_phase41_assert(substr_count($registerView, 'viewer.register.request_received') === 1, 'Registration view must render one generic public outcome notice.');
     foreach (['existing_account', 'rate_limited', 'storage_cap', 'limiter_unavailable', 'pending_verification', 'mail_transport_unavailable'] as $internalReason) {
         viewer_phase41_assert(!str_contains($register, $internalReason), 'Generic registration HTTP output must not branch on internal reason: ' . $internalReason);
     }
@@ -546,14 +554,14 @@ namespace {
     viewer_phase41_assert(str_contains($verify, 'viewer_http_registration_verification_available()'), 'Verification HTTP route must use the shared registration lifecycle gate.');
     viewer_phase41_assert(str_contains($verify, 'viewer_registration_verification_validate($token)') && str_contains($verify, 'viewer_registration_verification_confirm($token)'), 'Verification must retain scanner-safe GET inspection plus explicit POST confirmation.');
     viewer_phase41_assert(!str_contains($verify, 'viewer_session_establish') && !str_contains($confirm, 'viewer_session_establish'), 'Verification GET/confirmation alone must not establish Viewer identity.');
-    viewer_phase41_assert(str_contains($activate, 'viewer_registration_request_allowed_by_current_mode($request)') && strpos($activate, 'viewer_registration_request_allowed_by_current_mode($request)') < strpos($activate, 'INSERT INTO viewer_accounts'), 'Final activation must retain Phase 4.0 current-mode authorization before durable account creation.');
+    viewer_phase41_assert(str_contains($activate, 'viewer_registration_request_allowed_by_current_mode($request)') && strpos($activate, 'viewer_registration_request_allowed_by_current_mode($request)') < strpos($activate, 'viewer_registration_model_activate_account('), 'Final activation must retain Phase 4.0 current-mode authorization before durable account creation.');
     viewer_phase41_assert(!str_contains($activate, 'viewer_session_establish') && !str_contains($activate, "\$_SESSION['user_id']"), 'Final activation must create a durable viewer account without auto-login or Admin identity.');
     viewer_phase41_assert(str_contains($verify, "redirect_to(url_for('viewer_login', ['activated' => '1']))"), 'Successful activation must return to the separate viewer login ceremony.');
 
     // Admin UI is exactly three-state and delegates lifecycle-aware persistence to the single existing setting service.
-    viewer_phase41_assert(str_contains($admin, '<select name="viewer_accounts_mode" required>'), 'Admin registration mode must be one clear selector.');
+    viewer_phase41_assert(str_contains($adminView, '<select name="viewer_accounts_mode" required>'), 'Admin registration mode must be one clear selector in the view.');
     foreach (['disabled', 'invite_only', 'open'] as $mode) {
-        viewer_phase41_assert(str_contains($admin, '<option value="' . $mode . '"'), 'Admin selector must expose registration mode: ' . $mode);
+        viewer_phase41_assert(str_contains($adminView, '<option value="' . $mode . '"'), 'Admin selector must expose registration mode: ' . $mode);
     }
     viewer_phase41_assert(str_contains($admin, "in_array(\$requestedMode, ['disabled', 'invite_only', 'open'], true)"), 'Admin POST must explicitly allow only the three registration modes.');
     viewer_phase41_assert(str_contains($admin, 'viewer_accounts_set_admin_registration_mode($requestedMode)'), 'Admin mode mutation must use the lifecycle-aware registration-mode service.');
@@ -568,8 +576,10 @@ namespace {
 
     // Discoverability is guarded by exact open availability on login and public header.
     $login = viewer_phase41_function_source($controller, 'cms_viewer_login');
-    viewer_phase41_assert(str_contains($login, 'if (viewer_http_open_registration_available())') && str_contains($login, "url_for('viewer_register')"), 'Viewer login must show Create viewer account only when open registration is available.');
-    viewer_phase41_assert(str_contains($layout, 'if (viewer_http_open_registration_available())') && str_contains($layout, "url_for('viewer_register')"), 'Anonymous public header must show Register only behind the open-registration availability helper.');
+    $loginView = viewer_phase41_function_source($viewerView, 'view_render_viewer_login');
+    viewer_phase41_assert(str_contains($login, "'registration_available' => viewer_http_open_registration_available()") && str_contains($login, "'register_url' => url_for('viewer_register')") && str_contains($loginView, "if (!empty(\$viewModel['registration_available']))"), 'Viewer login must show Create viewer account only when open registration is available across the controller/view boundary.');
+    $sharedLayoutController = (string) file_get_contents($root . '/app/controllers/shared_layout.php');
+    viewer_phase41_assert(str_contains($sharedLayoutController, 'viewer_http_open_registration_available()') && str_contains($layout, "!empty(\$model['viewer_open_registration'])") && str_contains($layout, "url_for('viewer_register')"), 'Anonymous public header must show Register only behind the controller-prepared open-registration gate.');
 
     // Phase 4.2 may add explicit resend, but CAPTCHA, public profiles, and Phase 5 authentication remain absent.
     foreach (["'viewer_profile'", "'viewer_passkey'", "'viewer_totp'", "'viewer_oidc'"] as $forbiddenSurface) {

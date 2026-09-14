@@ -17,6 +17,21 @@ Use `declare(strict_types=1);` in new PHP files and follow the existing 4-space 
 
 When a model, service, or controller module grows past comfortable reading length, split it into part files inside a sibling directory named after the module, and keep the original file as the module entry point holding the module docblock, shared constants, shared types, and an ordered `require_once` list. Do not register part files in a top-level layer loader and do not require a part file from outside its own module, so the historical include contract and load order stay intact. A part file lives one directory deeper than the entry file, so re-base every filesystem-relative expression you move into one: the project root is `dirname(__DIR__, 3)`, and the `dirname(__DIR__, 2)` that was correct in the entry file silently resolves to `app/` instead. Byte-identical function bodies do not prove equivalence here, and `php -l` cannot catch it; `tests/module_split_path_resolution_test.php` enforces the depth and the resulting storage locations. Widen any path filter that names its own module, such as backtrace filtering, to cover the whole part directory. Source-level contract checks must read the whole module: tests use `module_source()` from `tests/support/module_source.php`, and `scripts/check_admin_mutation_contracts.php` does the same inside `contract_file()`. The current split modules are listed under "Split Modules" in `ARCHITECTURE.md`. Migration files must be timestamp-prefixed, such as `202606040001_mobile_webdav_upload_tokens.php`. JavaScript and CSS assets should stay framework-free and be placed in `public/assets/`.
 
+## Strict MVC Requirement
+
+MVC is mandatory for all new code and for any responsibility being materially refactored. The canonical dependency direction is `Controller -> Service -> Model`; controllers select views and pass prepared view-model data. Do not use a controller, service, generic helper, bootstrap file, or view as a temporary place for SQL. Do not make a view call a feature-policy/domain service to discover what it should render.
+
+Use these ownership rules:
+
+- Models: SQL, PDO, persistence, schema-specific query construction, row mapping.
+- Services: reusable use cases, validation independent of HTTP transport, domain policy, orchestration, filesystem workflows.
+- Controllers: request globals, route/request normalization, authentication/CSRF boundary checks, response type/status/headers, service calls, view-model preparation.
+- Views: markup and presentation-only formatting from already prepared data.
+
+Before adding a helper, search for the existing domain owner and extend/centralize it instead of creating a near-duplicate. Semantic inputs must cross layers, not SQL fragments. For example, a service may pass a gallery scope or ID to a model, but not `$whereSql`. Keep existing docstrings/comments when moving code.
+
+`scripts/check_mvc_boundaries.php` is a mandatory audit suite. Existing violations are migration debt captured in `scripts/mvc_boundary_baseline.json`. Never add a new baseline entry to make a change pass. A migrated file should remove its resolved debt with `php scripts/check_mvc_boundaries.php --refresh-baseline`, which is designed to fail if new violations exist.
+
 ## Testing Guidelines
 Tests are plain PHP scripts rather than PHPUnit cases. Keep new tests executable from the command line with `php tests/<name>_test.php`. Favor focused tests that validate a single behavior without requiring a browser or live database unless the feature truly depends on one. When changing schema logic, add or update a migration and include a test where practical.
 

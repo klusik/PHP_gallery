@@ -39,16 +39,7 @@ use function Gallery\Core\csrf_field;
 use function Gallery\Core\e;
 use function Gallery\Core\render_footer;
 use function Gallery\Core\render_header;
-use function Gallery\Services\admin_settings_bool_label;
-use function Gallery\Services\admin_settings_section_id;
-use function Gallery\Services\admin_settings_section_normalize;
-use function Gallery\Services\admin_settings_sections;
-use function Gallery\Services\admin_settings_url;
 use function Gallery\Services\t;
-use function Gallery\Services\translation_load_language;
-use function Gallery\Services\translation_public_language_selector_enabled;
-use function Gallery\Services\translation_public_language_selector_languages;
-use function Gallery\Services\translation_public_language_selector_design;
 
 /**
  * Render the centralized Admin Settings page.
@@ -57,12 +48,12 @@ use function Gallery\Services\translation_public_language_selector_design;
  */
 function view_render_admin_settings_page(array $model): void
 {
-    $activeSection = admin_settings_section_normalize($model['active_section'] ?? 'general');
+    $activeSection = (string) ($model['active_section'] ?? 'general');
     $registry = is_array($model['registry'] ?? null) ? $model['registry'] : [];
     $errors = is_array($model['errors'] ?? null) ? $model['errors'] : [];
     $submittedValues = is_array($model['submitted_values'] ?? null) ? $model['submitted_values'] : [];
     $notice = trim((string) ($model['notice'] ?? ''));
-    $sections = admin_settings_sections();
+    $sections = is_array($model['sections'] ?? null) ? $model['sections'] : [];
 
     render_header(t('admin.settings.page_title', 'Settings'));
     view_render_admin_hero([
@@ -81,20 +72,20 @@ function view_render_admin_settings_page(array $model): void
     echo '<nav class="admin-tabs admin-settings-tabs" data-admin-tabs data-admin-tabs-url-mode="href" aria-label="' . e(t('admin.settings.sections_aria', 'Settings sections')) . '">';
     echo '<div class="admin-tab-list" role="tablist">';
     foreach ($sections as $sectionId => $section) {
-        $panelId = admin_settings_section_id($sectionId);
+        $panelId = (string) ($section['panel_id'] ?? ('settings-' . $sectionId));
         $isActive = $sectionId === $activeSection;
-        echo '<a class="admin-tab' . ($isActive ? ' is-active' : '') . '" id="' . e($panelId . '-control') . '" href="' . e(admin_settings_url($sectionId)) . '" role="tab" aria-controls="' . e($panelId) . '" aria-selected="' . ($isActive ? 'true' : 'false') . '" tabindex="' . ($isActive ? '0' : '-1') . '" data-admin-tab-target="' . e($panelId) . '">';
+        echo '<a class="admin-tab' . ($isActive ? ' is-active' : '') . '" id="' . e($panelId . '-control') . '" href="' . e((string) ($section['url'] ?? '')) . '" role="tab" aria-controls="' . e($panelId) . '" aria-selected="' . ($isActive ? 'true' : 'false') . '" tabindex="' . ($isActive ? '0' : '-1') . '" data-admin-tab-target="' . e($panelId) . '">';
         echo '<span>' . e(t((string) $section['label_key'], (string) $section['label'])) . '</span></a>';
     }
     echo '</div></nav>';
 
     foreach ($sections as $sectionId => $section) {
-        $panelId = admin_settings_section_id($sectionId);
+        $panelId = (string) ($section['panel_id'] ?? ('settings-' . $sectionId));
         $isActive = $sectionId === $activeSection;
         $entries = array_filter($registry, static fn (array $entry): bool => ($entry['group'] ?? '') === $sectionId && empty($entry['discovery_only']));
         echo '<section class="panel admin-tab-panel admin-settings-section' . ($isActive ? ' is-active' : '') . '" id="' . e($panelId) . '" role="tabpanel" aria-labelledby="' . e($panelId . '-control') . '" data-admin-tab-panel' . ($isActive ? '' : ' hidden') . '>';
         echo '<div class="admin-tab-intro"><div><h2>' . e(t((string) $section['label_key'], (string) $section['label'])) . '</h2><p>' . e(t((string) $section['description_key'], (string) $section['description'])) . '</p></div></div>';
-        view_render_admin_settings_section($sectionId, $entries, $errors, $submittedValues);
+        view_render_admin_settings_section($sectionId, $entries, $errors, $submittedValues, $model);
         echo '</section>';
     }
 
@@ -119,14 +110,14 @@ function view_render_admin_settings_search(array $sections, array $registry): vo
     echo '<p class="admin-settings-search-status" role="status" aria-live="polite" data-admin-settings-search-status></p>';
     echo '<div class="admin-settings-search-list">';
     foreach ($registry as $id => $entry) {
-        $sectionId = admin_settings_section_normalize($entry['group'] ?? 'general');
+        $sectionId = (string) ($entry['view_group'] ?? 'general');
         $section = $sections[$sectionId] ?? [];
         $label = view_admin_settings_entry_label($entry);
         $description = view_admin_settings_entry_description($entry);
         $sectionLabel = t((string) ($section['label_key'] ?? ''), (string) ($section['label'] ?? $sectionId));
         $targetId = 'admin-setting-result-' . preg_replace('/[^a-z0-9_-]/i', '-', (string) $id);
         $keywords = implode(' ', [(string) $id, str_replace('_', ' ', (string) $id), $label, $description, $sectionLabel, (string) ($entry['sensitivity'] ?? '')]);
-        echo '<a class="admin-settings-search-result" id="admin-settings-search-option-' . e((string) $id) . '" href="' . e(admin_settings_url($sectionId)) . '" role="option" aria-selected="false" data-admin-settings-search-result data-search-text="' . e($keywords) . '" data-search-label="' . e($label) . '" data-search-section="' . e($sectionId) . '" data-search-target="' . e($targetId) . '" hidden>';
+        echo '<a class="admin-settings-search-result" id="admin-settings-search-option-' . e((string) $id) . '" href="' . e((string) ($entry['view_section_url'] ?? '')) . '" role="option" aria-selected="false" data-admin-settings-search-result data-search-text="' . e($keywords) . '" data-search-label="' . e($label) . '" data-search-section="' . e($sectionId) . '" data-search-target="' . e($targetId) . '" hidden>';
         echo '<span class="admin-settings-search-result-section">' . e($sectionLabel) . '</span>';
         echo '<span class="admin-settings-search-result-copy"><strong>' . e($label) . '</strong><small>' . e($description) . '</small></span>';
         echo '<span class="admin-settings-search-result-arrow" aria-hidden="true">&rarr;</span></a>';
@@ -160,7 +151,7 @@ function view_render_admin_settings_overview(array $sections, array $registry, s
             echo '</dl>';
         }
         echo '<div class="admin-settings-overview-actions">';
-        echo '<a class="button secondary" href="' . e(admin_settings_url($sectionId)) . '">' . e(t('admin.settings.configure_section', 'Configure')) . '</a>';
+        echo '<a class="button secondary" href="' . e((string) ($section['url'] ?? '')) . '">' . e(t('admin.settings.configure_section', 'Configure')) . '</a>';
         $specializedEntry = null;
         foreach ($entries as $entry) {
             if ((string) ($entry['specialized_url'] ?? '') !== '') {
@@ -185,13 +176,13 @@ function view_render_admin_settings_overview(array $sections, array $registry, s
  * @param array<string,mixed> $errors Validation errors.
  * @param array<string,mixed> $submittedValues Submitted values retained after validation failure.
  */
-function view_render_admin_settings_section(string $sectionId, array $entries, array $errors, array $submittedValues): void
+function view_render_admin_settings_section(string $sectionId, array $entries, array $errors, array $submittedValues, array $pageModel = []): void
 {
     $editable = array_filter($entries, static fn (array $entry): bool => !empty($entry['central_editable']));
     $summaryOnly = array_filter($entries, static fn (array $entry): bool => empty($entry['central_editable']));
 
     if ($editable !== []) {
-        echo '<form method="post" action="' . e(admin_settings_url($sectionId)) . '" class="form-grid admin-settings-group-form">' . csrf_field();
+        echo '<form method="post" action="' . e((string) ($pageModel['sections'][$sectionId]['url'] ?? '')) . '" class="form-grid admin-settings-group-form">' . csrf_field();
         echo '<input type="hidden" name="return_section" value="' . e($sectionId) . '">';
         echo '<fieldset class="form-grid"><legend>' . e(t('admin.settings.quick_settings', 'Central settings')) . '</legend>';
         echo '<p class="muted">' . e(t('admin.settings.quick_settings_hint', 'Only settings with a shared canonical normalizer and safe service-level save path are editable here.')) . '</p>';
@@ -207,17 +198,21 @@ function view_render_admin_settings_section(string $sectionId, array $entries, a
                     'detailed_design' => false,
                     'enabled' => array_key_exists('public_language_selector_enabled', $submittedValues)
                         ? !empty($submittedValues['public_language_selector_enabled'])
-                        : translation_public_language_selector_enabled(),
+                        : !empty($pageModel['language_selector']['enabled']),
                     'languages' => array_key_exists('public_language_selector_languages', $submittedValues)
                         ? (array) $submittedValues['public_language_selector_languages']
-                        : translation_public_language_selector_languages(),
+                        : (array) ($pageModel['language_selector']['languages'] ?? []),
                     'design' => array_key_exists('public_language_selector_design', $submittedValues)
                         ? (array) $submittedValues['public_language_selector_design']
-                        : translation_public_language_selector_design(),
+                        : (array) ($pageModel['language_selector']['design'] ?? []),
                     'errors' => [
                         'enabled' => $errors['public_language_selector_enabled'] ?? '',
                         'languages' => $errors['public_language_selector_languages'] ?? '',
                     ],
+                    'presentations' => (array) ($pageModel['language_selector']['presentations'] ?? []),
+                    'supported_languages' => (array) ($pageModel['language_selector']['supported_languages'] ?? []),
+                    'design_defaults' => (array) ($pageModel['language_selector']['design_defaults'] ?? []),
+                    'design_bounds' => (array) ($pageModel['language_selector']['design_bounds'] ?? []),
                 ]);
                 continue;
             }
@@ -365,7 +360,7 @@ function view_admin_settings_display_value(array $entry): string
     }
     $value = $entry['current'] ?? '';
     if (in_array((string) ($entry['input_type'] ?? ''), ['checkbox'], true) || in_array((string) ($entry['id'] ?? ''), ['pagination_enabled', 'admin_upload_auto_rename_enabled', 'browser_upload_enabled', 'telemetry_enabled', 'telemetry_public_usage_enabled', 'seo_request_guard_enabled', 'seo_request_guard_logging_enabled', 'site_maintenance_enabled'], true)) {
-        return admin_settings_bool_label((string) $value === '1');
+        return (string) $value === '1' ? t('admin.common.enabled', 'Enabled') : t('admin.common.disabled', 'Disabled');
     }
     return trim((string) $value) !== '' ? (string) $value : t('admin.settings.status.not_configured', 'Not configured');
 }
@@ -385,11 +380,7 @@ function view_admin_settings_option_label(string $id, string $value): string
             : t('admin.settings.thumbnail.responsive', 'Responsive (Legacy)');
     }
     if ($id === 'public_language') {
-        // $languageStrings stores pack metadata so the central selector matches the Theme language selector.
-        $languageStrings = translation_load_language($value);
-        // $languageName stores the native human-readable name declared by the language pack.
-        $languageName = trim((string) ($languageStrings['_language_name'] ?? ''));
-        return $languageName !== '' ? $languageName . ' (' . $value . ')' : strtoupper($value);
+        return strtoupper($value);
     }
     return strtoupper($value);
 }

@@ -115,11 +115,10 @@ function public_search_descriptive_gallery_candidates(string $query, int $limit,
  */
 function public_search_descriptive_gallery_description_candidates(string $query, int $limit, ?array $contextGallery = null): array
 {
-    $listingCondition = public_search_context_listing_sql_fragment('g', $contextGallery);
     $rows = public_search_model_gallery_description_rows(
-        public_search_like_pattern($query),
-        $listingCondition,
-        public_search_context_params($contextGallery),
+        $query,
+        public_search_listing_requires_listed(),
+        $contextGallery,
         $limit
     );
     $score = public_search_relevance_score('gallery_description');
@@ -146,11 +145,10 @@ function public_search_descriptive_gallery_description_candidates(string $query,
  */
 function public_search_descriptive_gallery_tag_description_candidates(string $query, int $limit, ?array $contextGallery = null): array
 {
-    $listingCondition = public_search_context_listing_sql_fragment('g', $contextGallery);
     $rows = public_search_model_gallery_tag_description_rows(
-        public_search_like_pattern($query),
-        $listingCondition,
-        public_search_context_params($contextGallery),
+        $query,
+        public_search_listing_requires_listed(),
+        $contextGallery,
         $limit
     );
     $score = public_search_relevance_score('tag_description');
@@ -181,12 +179,11 @@ function public_search_descriptive_gallery_translated_title_candidates(string $q
         return [];
     }
 
-    $listingCondition = public_search_context_listing_sql_fragment('g', $contextGallery);
     $rows = public_search_model_gallery_translated_title_rows(
         translation_active_language(),
-        public_search_like_pattern($query),
-        $listingCondition,
-        public_search_context_params($contextGallery),
+        $query,
+        public_search_listing_requires_listed(),
+        $contextGallery,
         $limit
     );
     $score = public_search_relevance_score('translated_title');
@@ -250,12 +247,11 @@ function public_search_deep_gallery_translated_description_candidates(string $qu
         return [];
     }
 
-    $listingCondition = public_search_context_listing_sql_fragment('g', $contextGallery);
     $rows = public_search_model_gallery_translated_description_rows(
         translation_active_language(),
-        public_search_like_pattern($query),
-        $listingCondition,
-        public_search_context_params($contextGallery),
+        $query,
+        public_search_listing_requires_listed(),
+        $contextGallery,
         $limit
     );
     $score = public_search_relevance_score('translated_description');
@@ -317,11 +313,10 @@ function public_search_deep_image_candidates(string $query, int $limit, ?array $
  */
 function public_search_deep_image_description_candidates(string $query, int $limit, ?array $contextGallery = null): array
 {
-    $listingCondition = public_search_context_listing_sql_fragment('g', $contextGallery);
     $rows = public_search_model_image_description_rows(
-        public_search_like_pattern($query),
-        $listingCondition,
-        public_search_context_params($contextGallery),
+        $query,
+        public_search_listing_requires_listed(),
+        $contextGallery,
         $limit
     );
     return public_search_deep_image_rows_to_candidates(
@@ -341,11 +336,10 @@ function public_search_deep_image_description_candidates(string $query, int $lim
  */
 function public_search_deep_image_tag_description_candidates(string $query, int $limit, ?array $contextGallery = null): array
 {
-    $listingCondition = public_search_context_listing_sql_fragment('g', $contextGallery);
     $rows = public_search_model_image_tag_description_rows(
-        public_search_like_pattern($query),
-        $listingCondition,
-        public_search_context_params($contextGallery),
+        $query,
+        public_search_listing_requires_listed(),
+        $contextGallery,
         $limit
     );
     return public_search_deep_image_rows_to_candidates(
@@ -369,17 +363,15 @@ function public_search_deep_image_translation_candidates(string $query, int $lim
         return [];
     }
 
-    $listingCondition = public_search_context_listing_sql_fragment('g', $contextGallery);
-    $like = public_search_like_pattern($query);
     $titleScore = public_search_relevance_score('translated_title');
     $descriptionScore = public_search_relevance_score('translated_description');
     $rows = public_search_model_image_translation_rows(
         translation_active_language(),
-        $like,
+        $query,
         $titleScore,
         $descriptionScore,
-        $listingCondition,
-        public_search_context_params($contextGallery),
+        public_search_listing_requires_listed(),
+        $contextGallery,
         $limit
     );
 
@@ -414,11 +406,10 @@ function public_search_deep_image_ai_candidates(string $query, int $limit, ?arra
         return [];
     }
 
-    $listingCondition = public_search_context_listing_sql_fragment('g', $contextGallery);
     $rows = public_search_model_image_ai_rows(
-        public_search_like_pattern($query),
-        $listingCondition,
-        public_search_context_params($contextGallery),
+        $query,
+        public_search_listing_requires_listed(),
+        $contextGallery,
         $limit
     );
     return public_search_deep_image_rows_to_candidates(

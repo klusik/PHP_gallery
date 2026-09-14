@@ -15,7 +15,10 @@
  *   - Require a JSDoc block for named JavaScript functions, methods, and arrow functions
  *   - Report exact source locations for maintainers
  *   - Ignore anonymous inline callbacks that have no stable callable name
- */
+  *
+ * Author:
+ *   Rudolf Klusal
+*/
 
 declare(strict_types=1);
 

@@ -37,13 +37,18 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 use FilesystemIterator;
-use PDO;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use RuntimeException;
-use function Gallery\Core\db;
 use function Gallery\Core\now_sql;
 use function Gallery\Core\path_inside;
+use function Gallery\Models\thumbnail_maintenance_model_batch;
+use function Gallery\Models\thumbnail_maintenance_model_clear_variant_metadata;
+use function Gallery\Models\thumbnail_maintenance_model_count;
+use function Gallery\Models\thumbnail_maintenance_model_gallery_folder_paths;
+use function Gallery\Models\thumbnail_maintenance_model_inventory_state;
+use function Gallery\Models\thumbnail_maintenance_model_rows;
+use function Gallery\Models\thumbnail_maintenance_model_rows_by_ids;
 
 const THUMBNAIL_MAINTENANCE_LAST_CHECK_SETTING = 'thumbnail_maintenance_last_check_report';
 
@@ -193,31 +198,14 @@ function thumbnail_maintenance_status(array $image, array $gallery, bool $mutate
  */
 function thumbnail_maintenance_summary(?array $galleryIds = null, int $maxImagesToScan = 1000): array
 {
-    // Variable $params stores this steps working value.
-    $params = [];
-    // $where stores an intermediate value used by the surrounding gallery workflow.
-    $where = "i.relative_path NOT LIKE '%/%'";
     if ($galleryIds !== null) {
-        // $galleryIds stores an intermediate value used by the surrounding gallery workflow.
         $galleryIds = array_values(array_unique(array_filter(array_map('intval', $galleryIds), static fn (int $id): bool => $id > 0)));
-        if (!$galleryIds) {
+        if ($galleryIds === []) {
             return ['images_scanned' => 0, 'images_with_missing' => 0, 'missing_variants' => 0, 'webp_skipped' => 0, 'limited' => false, 'inventory_fingerprint' => thumbnail_inventory_fingerprint($galleryIds)];
         }
-        $where .= ' AND i.gallery_id IN (' . implode(',', array_fill(0, count($galleryIds), '?')) . ')';
-        // $params stores an intermediate value used by the surrounding gallery workflow.
-        $params = $galleryIds;
     }
-    // $limitSql stores an optional scan cap. A non-positive value means scan all matching images.
-    $limitSql = '';
-    if ($maxImagesToScan > 0) {
-        $limit = max(1, $maxImagesToScan + 1);
-        $limitSql = ' LIMIT ' . $limit;
-    }
-    // $stmt stores an intermediate value used by the surrounding gallery workflow.
-    $stmt = db()->prepare("SELECT i.*, g.folder_path AS gallery_folder_path FROM images i JOIN galleries g ON g.id = i.gallery_id WHERE $where ORDER BY g.folder_path, i.sort_order, i.filename$limitSql");
-    $stmt->execute($params);
-    // $rows stores an intermediate value used by the surrounding gallery workflow.
-    $rows = $stmt->fetchAll();
+    $queryLimit = $maxImagesToScan > 0 ? max(1, $maxImagesToScan + 1) : null;
+    $rows = thumbnail_maintenance_model_rows($galleryIds, $queryLimit, false);
     // $limited stores an intermediate value used by the surrounding gallery workflow.
     $limited = $maxImagesToScan > 0 && count($rows) > $maxImagesToScan;
     if ($limited) {
@@ -271,32 +259,14 @@ function thumbnail_maintenance_summary(?array $galleryIds = null, int $maxImages
  */
 function thumbnail_maintenance_image_ids(?array $galleryIds = null, int $maxImagesToScan = 1000): array
 {
-    // Variable $params stores this steps working value.
-    $params = [];
-    // $where stores an intermediate value used by the surrounding gallery workflow.
-    $where = "i.relative_path NOT LIKE '%/%'";
     if ($galleryIds !== null) {
-        // $galleryIds stores this steps working value.
         $galleryIds = array_values(array_unique(array_filter(array_map('intval', $galleryIds), static fn (int $id): bool => $id > 0)));
-        if (!$galleryIds) {
+        if ($galleryIds === []) {
             return [];
         }
-        $where .= ' AND i.gallery_id IN (' . implode(',', array_fill(0, count($galleryIds), '?')) . ')';
-        // $params stores an intermediate value used by the surrounding gallery workflow.
-        $params = $galleryIds;
     }
-
-    // $limitSql stores an optional scan cap. A non-positive value means scan all matching images.
-    $limitSql = '';
-    if ($maxImagesToScan > 0) {
-        $limit = max(1, $maxImagesToScan + 1);
-        $limitSql = ' LIMIT ' . $limit;
-    }
-    // $stmt stores an intermediate value used by the surrounding gallery workflow.
-    $stmt = db()->prepare("SELECT i.*, g.folder_path AS gallery_folder_path FROM images i JOIN galleries g ON g.id = i.gallery_id WHERE $where ORDER BY g.folder_path, i.sort_order, i.filename$limitSql");
-    $stmt->execute($params);
-    // $rows stores an intermediate value used by the surrounding gallery workflow.
-    $rows = $stmt->fetchAll();
+    $queryLimit = $maxImagesToScan > 0 ? max(1, $maxImagesToScan + 1) : null;
+    $rows = thumbnail_maintenance_model_rows($galleryIds, $queryLimit, false);
     if ($maxImagesToScan > 0 && count($rows) > $maxImagesToScan) {
         array_pop($rows);
     }
@@ -337,32 +307,14 @@ function thumbnail_maintenance_image_ids(?array $galleryIds = null, int $maxImag
  */
 function thumbnail_maintenance_check_report(?array $galleryIds = null, int $maxImagesToScan = 0): array
 {
-    // Variable $params stores this steps working value.
-    $params = [];
-    // $where stores the same top-level image condition used by generation and nightly maintenance.
-    $where = "i.relative_path NOT LIKE '%/%'";
     if ($galleryIds !== null) {
-        // $galleryIds stores a normalized optional gallery scope.
         $galleryIds = array_values(array_unique(array_filter(array_map('intval', $galleryIds), static fn (int $id): bool => $id > 0)));
-        if (!$galleryIds) {
+        if ($galleryIds === []) {
             return thumbnail_maintenance_empty_check_report($galleryIds);
         }
-        $where .= ' AND i.gallery_id IN (' . implode(',', array_fill(0, count($galleryIds), '?')) . ')';
-        $params = $galleryIds;
     }
-
-    // $limitSql stores an optional scan cap. A non-positive value means scan all matching images.
-    $limitSql = '';
-    if ($maxImagesToScan > 0) {
-        $limit = max(1, $maxImagesToScan + 1);
-        $limitSql = ' LIMIT ' . $limit;
-    }
-
-    // $stmt stores the dry inventory query. Gallery columns are included for the grouped report.
-    $stmt = db()->prepare("SELECT i.*, g.title AS gallery_title, g.folder_path AS gallery_folder_path FROM images i JOIN galleries g ON g.id = i.gallery_id WHERE $where ORDER BY g.folder_path, i.sort_order, i.filename$limitSql");
-    $stmt->execute($params);
-    // $rows stores the image rows that will be inspected on disk.
-    $rows = $stmt->fetchAll();
+    $queryLimit = $maxImagesToScan > 0 ? max(1, $maxImagesToScan + 1) : null;
+    $rows = thumbnail_maintenance_model_rows($galleryIds, $queryLimit, true);
     // $limited stores whether the report intentionally stopped before every matching image.
     $limited = $maxImagesToScan > 0 && count($rows) > $maxImagesToScan;
     if ($limited) {
@@ -388,13 +340,7 @@ function thumbnail_maintenance_check_report_for_image_ids(array $imageIds): arra
         return thumbnail_maintenance_empty_check_report(null);
     }
 
-    // $placeholders stores bound parameters for the selected image list.
-    $placeholders = implode(',', array_fill(0, count($imageIds), '?'));
-    // $stmt stores selected direct image rows with parent gallery data for grouping.
-    $stmt = db()->prepare("SELECT i.*, g.title AS gallery_title, g.folder_path AS gallery_folder_path FROM images i JOIN galleries g ON g.id = i.gallery_id WHERE i.id IN ($placeholders) AND i.relative_path NOT LIKE '%/%' ORDER BY g.folder_path, i.sort_order, i.filename");
-    $stmt->execute($imageIds);
-    // $rows stores only the image rows selected by the completed repair job.
-    $rows = $stmt->fetchAll();
+    $rows = thumbnail_maintenance_model_rows_by_ids($imageIds);
 
     return thumbnail_maintenance_check_report_from_rows($rows, null, false);
 }
@@ -500,14 +446,9 @@ function thumbnail_maintenance_check_report_from_rows(array $rows, ?array $galle
  */
 function thumbnail_maintenance_check_batch(?array $galleryIds = null, int $offset = 0, int $batchSize = 150): array
 {
-    // Variable $params stores this steps working value.
-    $params = [];
-    // $where stores the same top-level image condition used by generation and nightly maintenance.
-    $where = "i.relative_path NOT LIKE '%/%'";
     if ($galleryIds !== null) {
-        // $galleryIds stores a normalized optional gallery scope.
         $galleryIds = array_values(array_unique(array_filter(array_map('intval', $galleryIds), static fn (int $id): bool => $id > 0)));
-        if (!$galleryIds) {
+        if ($galleryIds === []) {
             $report = thumbnail_maintenance_empty_check_report($galleryIds);
             $report['total'] = 0;
             $report['processed'] = 0;
@@ -515,23 +456,11 @@ function thumbnail_maintenance_check_batch(?array $galleryIds = null, int $offse
             $report['done'] = true;
             return $report;
         }
-        $where .= ' AND i.gallery_id IN (' . implode(',', array_fill(0, count($galleryIds), '?')) . ')';
-        $params = $galleryIds;
     }
-
     $offset = max(0, $offset);
     $batchSize = max(1, min(500, $batchSize));
-
-    // $countStmt stores the total matching image count for the progress bar.
-    $countStmt = db()->prepare("SELECT COUNT(*) FROM images i JOIN galleries g ON g.id = i.gallery_id WHERE $where");
-    $countStmt->execute($params);
-    $total = max(0, (int) $countStmt->fetchColumn());
-
-    // $stmt stores the dry inventory batch query. Limit and offset are sanitized integers.
-    $stmt = db()->prepare("SELECT i.*, g.title AS gallery_title, g.folder_path AS gallery_folder_path FROM images i JOIN galleries g ON g.id = i.gallery_id WHERE $where ORDER BY g.folder_path, i.sort_order, i.filename LIMIT $batchSize OFFSET $offset");
-    $stmt->execute($params);
-    // $rows stores the image rows that will be inspected on disk.
-    $rows = $stmt->fetchAll();
+    $total = thumbnail_maintenance_model_count($galleryIds);
+    $rows = thumbnail_maintenance_model_batch($galleryIds, $offset, $batchSize);
 
     $report = thumbnail_maintenance_check_report_from_rows($rows, $galleryIds, false, false);
     $processed = min($total, $offset + count($rows));
@@ -1040,26 +969,14 @@ function thumbnail_maintenance_summary_cache_clear_diagnostic(): array
  */
 function thumbnail_inventory_fingerprint(?array $galleryIds = null): string
 {
-    // $params stores bound gallery ids when the caller wants a scoped inventory check.
-    $params = [];
-    // $where stores the same top-level image condition used by thumbnail_maintenance_summary().
-    $where = "relative_path NOT LIKE '%/%'";
-
     if ($galleryIds !== null) {
         $galleryIds = array_values(array_unique(array_filter(array_map('intval', $galleryIds), static fn (int $id): bool => $id > 0)));
         if ($galleryIds === []) {
             return hash('sha256', 'empty-gallery-scope');
         }
-        $where .= ' AND gallery_id IN (' . implode(',', array_fill(0, count($galleryIds), '?')) . ')';
-        $params = $galleryIds;
     }
 
-    // $stmt reads only aggregate metadata so the check stays cheap even on large galleries.
-    $stmt = db()->prepare("SELECT COUNT(*) AS image_count, COALESCE(MAX(id), 0) AS newest_id, COALESCE(MAX(created_at), '') AS newest_created_at FROM images WHERE $where");
-    $stmt->execute($params);
-    // $row stores the aggregate inventory state that controls warning dismissal.
-    $row = $stmt->fetch() ?: [];
-
+    $row = thumbnail_maintenance_model_inventory_state($galleryIds);
     return hash('sha256', implode('|', [
         (string) ($row['image_count'] ?? '0'),
         (string) ($row['newest_id'] ?? '0'),
@@ -1095,12 +1012,10 @@ function delete_all_thumbnail_files(): array
     $galleryRoot = galleries_root();
 
     if (schema_inspection_is_available($metadataSchemaStatus)) {
-        db()->exec('DELETE FROM image_thumbnail_variants');
+        thumbnail_maintenance_model_clear_variant_metadata();
     }
 
-    $stmt = db()->prepare('SELECT folder_path FROM galleries ORDER BY folder_path');
-    $stmt->execute();
-    foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $folderPath) {
+    foreach (thumbnail_maintenance_model_gallery_folder_paths() as $folderPath) {
         // $gallery stores the minimum shape required by gallery_thumbs_dir().
         $gallery = ['folder_path' => (string) $folderPath];
         // $thumbsDirectory stores the generated thumbnail cache directory for this gallery.

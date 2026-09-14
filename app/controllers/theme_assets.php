@@ -38,9 +38,6 @@ namespace Gallery\Controllers;
 
 use InvalidArgumentException;
 use function Gallery\Core\css_value;
-use function Gallery\Services\translation_active_language;
-use function Gallery\Services\translation_language_allowed;
-use function Gallery\Services\translation_normalize_language_code;
 use function Gallery\Views\view_browser_i18n_javascript;
 use function Gallery\Services\favicon_path;
 use function Gallery\Services\favicon_safe_size;
@@ -64,12 +61,11 @@ use function Gallery\Services\theme_settings;
  */
 function cms_browser_i18n(): void
 {
-    $language = translation_normalize_language_code((string) ($_GET['lang'] ?? ''));
-    if ($language === '' || !translation_language_allowed($language)) {
-        $language = translation_active_language();
-    }
-
-    $javascript = view_browser_i18n_javascript($language);
+    $i18nModel = shared_layout_browser_i18n_model((string) ($_GET['lang'] ?? ''));
+    $javascript = view_browser_i18n_javascript(
+        (string) ($i18nModel['language'] ?? 'en'),
+        (array) ($i18nModel['strings'] ?? [])
+    );
     $etag = '"' . sha1($javascript) . '"';
     if ((string) ($_SERVER['HTTP_IF_NONE_MATCH'] ?? '') === $etag) {
         header('ETag: ' . $etag);

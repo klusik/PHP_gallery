@@ -16,7 +16,10 @@
  *   - Verify every current viewer route and Admin viewer-management entry belongs to the wrapper
  *   - Verify hidden Admin navigation and maintained translations are wired to the registered feature
  *   - Audit existing feature-menu and route-map references against the canonical feature registry
- */
+  *
+ * Author:
+ *   Rudolf Klusal
+*/
 
 declare(strict_types=1);
 
@@ -167,20 +170,24 @@ namespace {
     }
 
     $publicLayout = (string) file_get_contents($root . '/app/views/layout.php');
+    $sharedLayoutController = (string) file_get_contents($root . '/app/controllers/shared_layout.php');
     viewer_feature_wrapper_assert(
-        str_contains($publicLayout, "if (\$bodyClass === 'public-page' && viewer_accounts_enabled())"),
+        str_contains($sharedLayoutController, "\$viewerAccounts = \$bodyClass === 'public-page' && viewer_accounts_enabled();")
+            && str_contains($publicLayout, "if (\$bodyClass === 'public-page' && !empty(\$model['viewer_accounts_enabled']))"),
         'Public Viewer Login/Account navigation must remain behind the effective viewer-account gate.'
     );
 
     $featureService = module_source($root . '/app/services/feature_flags.php');
+    $dispatchSource = (string) file_get_contents($root . '/app/bootstrap/dispatch.php');
     viewer_feature_wrapper_assert(
         ($definitions['viewer_accounts']['route_prefixes'] ?? []) === ['viewer_'],
         'The canonical capability registry must own the complete viewer_* route family.'
     );
     viewer_feature_wrapper_assert(
         str_contains($featureService, 'if (!$isAdmin)')
-            && str_contains($featureService, "http_response_code(404);")
-            && str_contains($featureService, "'error' => 'not_found'"),
+            && str_contains($featureService, "'status' => 404")
+            && str_contains($featureService, "'error' => 'not_found'")
+            && str_contains($dispatchSource, 'http_response_code((int) ($decision[\'status\'] ?? 404));'),
         'Disabled public viewer routes must look unavailable rather than advertise the hidden subsystem.'
     );
 

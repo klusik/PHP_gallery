@@ -30,7 +30,7 @@
  *   - Keep comments and docstrings intact when modifying this file.
  *
  * Last Updated:
- *   2026-09-06
+ *   2026-09-13
  */
 
 declare(strict_types=1);
@@ -38,7 +38,6 @@ declare(strict_types=1);
 namespace Gallery\Controllers;
 
 use function Gallery\Core\csrf_field;
-use function Gallery\Core\e;
 use function Gallery\Core\render_footer;
 use function Gallery\Core\render_header;
 use function Gallery\Core\request_method;
@@ -48,6 +47,8 @@ use function Gallery\Services\find_gallery;
 use function Gallery\Services\gallery_images;
 use function Gallery\Services\media_renamer_normalize_pattern;
 use function Gallery\Services\t;
+use function Gallery\Views\view_render_admin_gallery_editor_form_close;
+use function Gallery\Views\view_render_admin_gallery_editor_form_open;
 
 /**
  * Handles cms admin edit gallery logic for the gallery application.
@@ -82,15 +83,18 @@ function cms_admin_edit_gallery(): void
     admin_edit_gallery_render_overview($gallery, count($images), $activeEditTab, $capabilities);
 
     // Identity, Access, Display, and Media share one form saved by the bottom save bar.
-    echo '<form method="post" enctype="multipart/form-data" class="admin-edit-gallery-form" autocomplete="off">' . csrf_field();
-    echo '<input type="hidden" name="id" value="' . (int) $gallery['id'] . '">';
-    echo '<input type="hidden" name="return_tab" value="admin-edit-identity">';
+    view_render_admin_gallery_editor_form_open([
+        'csrf_html' => csrf_field(),
+        'gallery_id' => (int) $gallery['id'],
+    ]);
     admin_edit_gallery_render_identity_tab($gallery, $activeEditTab);
     admin_edit_gallery_render_access_tab($gallery, $activeEditTab, $capabilities);
     admin_edit_gallery_render_display_tab($gallery, $activeEditTab, $capabilities);
     admin_edit_gallery_render_media_tab($gallery, $activeEditTab);
-    echo '<div class="admin-edit-gallery-savebar"><button type="submit">' . e(t('admin.gallery_editor.save_gallery', 'Save gallery')) . '</button><span class="muted">' . e(t('admin.gallery_editor.savebar_help', 'Saves all settings from Identity, Access, Display, and Media.')) . '</span></div>';
-    echo '</form>';
+    view_render_admin_gallery_editor_form_close([
+        'save_label' => t('admin.gallery_editor.save_gallery', 'Save gallery'),
+        'help' => t('admin.gallery_editor.savebar_help', 'Saves all settings from Identity, Access, Display, and Media.'),
+    ]);
 
     // The remaining tabs own their own forms and panels outside the editor form.
     admin_edit_gallery_render_images_tab($gallery, $images, $activeEditTab);

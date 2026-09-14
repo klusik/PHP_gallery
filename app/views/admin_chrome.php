@@ -40,10 +40,6 @@ use function Gallery\Controllers\thumbnail_maintenance_notice_is_dismissed;
 use function Gallery\Core\csrf_field;
 use function Gallery\Core\e;
 use function Gallery\Core\url_for;
-use function Gallery\Services\application_update_nav_label;
-use function Gallery\Services\application_update_pending;
-use function Gallery\Services\feature_capability_effective_enabled;
-use function Gallery\Services\feature_flag_enabled;
 use function Gallery\Services\t;
 
 /**
@@ -53,10 +49,13 @@ use function Gallery\Services\t;
  *
  * @return array Structured result data for the caller.
  */
-function view_admin_menu_structure(): array
+function view_admin_menu_structure(array $model = []): array
 {
-    $updatePending = function_exists('Gallery\\Services\\application_update_pending') ? application_update_pending() : false;
-    $updateLabel = function_exists('Gallery\\Services\\application_update_nav_label') ? application_update_nav_label($updatePending) : t('admin.menu.updates', 'Updates');
+    $updatePending = !empty($model['update_pending']);
+    $updateLabel = trim((string) ($model['update_label'] ?? ''));
+    if ($updateLabel === '') {
+        $updateLabel = t('admin.menu.updates', 'Updates');
+    }
     return [
         [
             'label' => t('admin.menu.dashboard', 'Dashboard'),
@@ -333,20 +332,18 @@ function view_render_admin_thumbnail_maintenance_notice(array $summary): void
  *
  * @param string $currentPage Current page value.
  */
-function view_render_admin_sidebar(string $currentPage): void
+function view_render_admin_sidebar(string $currentPage, array $model = []): void
 {
     echo '<aside class="admin-sidebar" aria-label="' . e(t('admin.menu.aria_navigation', 'Admin navigation')) . '">';
     echo '<div class="admin-sidebar-title">' . e(t('admin.menu.title', 'Admin')) . '</div>';
-    foreach (view_admin_menu_structure() as $group) {
+    foreach (view_admin_menu_structure($model) as $group) {
         echo '<section class="admin-menu-group">';
         echo '<h2>' . e((string) $group['label']) . '</h2>';
         echo '<nav class="admin-menu-links">';
         foreach ((array) $group['items'] as $item) {
             $featureKey = (string) ($item['feature'] ?? '');
-            $featureEnabled = $featureKey === ''
-                || (function_exists('Gallery\\Services\\feature_capability_effective_enabled')
-                    ? feature_capability_effective_enabled($featureKey)
-                    : (!function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled($featureKey)));
+            $featureStates = is_array($model['feature_enabled'] ?? null) ? $model['feature_enabled'] : [];
+            $featureEnabled = $featureKey === '' || !empty($featureStates[$featureKey]);
             if (!$featureEnabled) {
                 continue;
             }

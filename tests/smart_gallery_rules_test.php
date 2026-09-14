@@ -1,10 +1,26 @@
 <?php
 
+/**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ *
+ * File: tests/smart_gallery_rules_test.php
+ *
+ * Author:
+ *   Rudolf Klusal
+ *
+ * License:
+ *   MIT License (see LICENSE file in repository)
+ *
+ * Notes:
+ *   - Keep comments and docstrings intact when modifying this file.
+ */
 /** Regression tests for Smart Gallery validation and safe SQL compilation. */
 
 declare(strict_types=1);
 
 namespace Gallery\Services {
+    require_once dirname(__DIR__) . '/app/models/smart_galleries.php';
     require_once dirname(__DIR__) . '/app/services/smart_galleries.php';
 
     /** Fail the standalone test with a useful message. */
@@ -31,15 +47,15 @@ namespace Gallery\Services {
         ['type' => 'condition', 'field' => 'tag', 'operator' => 'has_tag', 'value' => 7],
         ['type' => 'condition', 'field' => 'rating', 'operator' => 'gte', 'value' => 4],
     ]]];
-    $compiled = smart_gallery_compile_rules($simple);
+    $compiled = \Gallery\Models\smart_gallery_model_compile_rules(smart_gallery_validate_rules($simple));
     smart_gallery_test_assert(str_contains($compiled['sql'], 'EXISTS') && str_contains($compiled['sql'], 'editorial_rating >= ?'), 'AND rules compile to both predicates.');
     smart_gallery_test_assert($compiled['params'] === [7, 7, 4.0], 'Tag IDs and comparison values remain bound parameters.');
     smart_gallery_test_assert(str_contains($compiled['sql'], 'gallery_tags'), 'Tag predicates include tags attached to the physical source gallery.');
     smart_gallery_test_assert(str_contains($compiled['sql'], 'sg_tag_gallery.folder_path'), 'Gallery tags apply to images in the tagged gallery branch.');
 
-    $allTags = smart_gallery_compile_rules(['version' => 1, 'root' => ['type' => 'group', 'operator' => 'AND', 'children' => [
+    $allTags = \Gallery\Models\smart_gallery_model_compile_rules(smart_gallery_validate_rules(['version' => 1, 'root' => ['type' => 'group', 'operator' => 'AND', 'children' => [
         ['type' => 'condition', 'field' => 'tag', 'operator' => 'has_all_tags', 'value' => [7, 9]],
-    ]]]);
+    ]]]));
     smart_gallery_test_assert($allTags['params'] === [7, 7, 9, 9], 'All-tags matching binds each ID for image and gallery tag relations.');
     smart_gallery_test_assert(substr_count($allTags['sql'], 'gallery_tags') === 2, 'All-tags matching requires every selected tag across both supported relations.');
 
@@ -52,14 +68,14 @@ namespace Gallery\Services {
             ['type' => 'condition', 'field' => 'description', 'operator' => 'contains', 'value' => 'screenshot'],
         ]],
     ]]];
-    $nestedCompiled = smart_gallery_compile_rules($nested);
+    $nestedCompiled = \Gallery\Models\smart_gallery_model_compile_rules(smart_gallery_validate_rules($nested));
     smart_gallery_test_assert(str_contains($nestedCompiled['sql'], ' OR ') && str_contains($nestedCompiled['sql'], 'NOT'), 'Nested OR and NOT logic is preserved.');
 
     $injection = "x%' OR 1=1 --";
     $injectionRules = ['version' => 1, 'root' => ['type' => 'group', 'operator' => 'AND', 'children' => [
         ['type' => 'condition', 'field' => 'filename', 'operator' => 'contains', 'value' => $injection],
     ]]];
-    $injectionCompiled = smart_gallery_compile_rules($injectionRules);
+    $injectionCompiled = \Gallery\Models\smart_gallery_model_compile_rules(smart_gallery_validate_rules($injectionRules));
     smart_gallery_test_assert(!str_contains($injectionCompiled['sql'], 'OR 1=1'), 'Injection text never enters SQL syntax.');
     smart_gallery_test_assert(str_contains($injectionCompiled['params'][0], 'OR 1=1'), 'Injection text remains a bound value.');
 
@@ -83,7 +99,9 @@ namespace Gallery\Services {
     $homeSource = file_get_contents(dirname(__DIR__) . '/app/controllers/public_gallery_home.php');
     $gallerySource = file_get_contents(dirname(__DIR__) . '/app/controllers/public_gallery_page.php');
     $serviceSource = file_get_contents(dirname(__DIR__) . '/app/services/smart_galleries.php');
+    $modelSource = file_get_contents(dirname(__DIR__) . '/app/models/smart_galleries.php');
     $adminControllerSource = file_get_contents(dirname(__DIR__) . '/app/controllers/smart_galleries.php');
+    $adminViewSource = file_get_contents(dirname(__DIR__) . '/app/views/smart_galleries.php');
     smart_gallery_test_assert(str_contains((string) $homeSource, 'smart_galleries_for_placement(null, true)'), 'Root Smart Galleries join homepage pagination input.');
     smart_gallery_test_assert(str_contains((string) $gallerySource, "smart_gallery_attachment_groups((int) \$gallery['id'], \$publicOnly)"), 'Placed Smart Galleries are collected independently around physical gallery content.');
     smart_gallery_test_assert(str_contains((string) $serviceSource, '$submittedSlug !== \'\' ? $submittedSlug : $title'), 'A blank submitted slug is generated from the Smart Gallery title.');
@@ -92,8 +110,8 @@ namespace Gallery\Services {
     smart_gallery_test_assert(!str_contains((string) $ruleBuilderSource, 'parentSelect.required = requiresParent'), 'Smart Gallery definition no longer enforces one physical parent in the browser.');
     $multiplePlacementMigration = file_get_contents(dirname(__DIR__) . '/database/migrations/202608140003_smart_gallery_multiple_placements.php');
     smart_gallery_test_assert(is_string($multiplePlacementMigration) && str_contains($multiplePlacementMigration, 'CREATE TABLE smart_gallery_placements') && str_contains($multiplePlacementMigration, 'PRIMARY KEY (smart_gallery_id, gallery_id)'), 'Multiple-placement migration stores a many-to-many Smart Gallery relationship.');
-    smart_gallery_test_assert(str_contains((string) $serviceSource, 'DELETE FROM smart_gallery_placements WHERE gallery_id = ?') && str_contains((string) $serviceSource, 'INSERT INTO smart_gallery_placements'), 'Physical gallery assignment replaces only that gallery placements without moving other parents.');
-    smart_gallery_test_assert(str_contains((string) $serviceSource, 'function smart_gallery_remove_from_gallery') && str_contains((string) $adminControllerSource, 'value="remove_placement"'), 'Smart Gallery editor exposes a per-location removal action backed by the canonical placement service.');
+    smart_gallery_test_assert(str_contains((string) $serviceSource, 'smart_gallery_model_replace_gallery_attachments') && str_contains((string) $modelSource, 'DELETE FROM smart_gallery_placements WHERE gallery_id = ?') && str_contains((string) $modelSource, 'INSERT INTO smart_gallery_placements'), 'Physical gallery assignment delegates an atomic per-parent replacement to the Smart Gallery model without moving other parents.');
+    smart_gallery_test_assert(str_contains((string) $serviceSource, 'function smart_gallery_remove_from_gallery') && str_contains((string) $adminViewSource, 'value="remove_placement"') && str_contains((string) $adminControllerSource, 'smart_gallery_admin_editor_view_model'), 'Smart Gallery editor exposes a per-location removal action backed by the canonical placement service through the MVC view contract.');
 
     fwrite(STDOUT, "Smart Gallery rule tests passed.\n");
 }

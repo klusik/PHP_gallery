@@ -29,17 +29,25 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-12
+ *   2026-09-13
  */
 
 declare(strict_types=1);
 
 namespace Gallery\Services;
 
-use PDOException;
 use function Gallery\Core\current_user;
-use function Gallery\Core\db;
+use function Gallery\Core\now_sql;
 use function Gallery\Core\visitor_hash;
+use function Gallery\Models\vote_model_delete_user_vote;
+use function Gallery\Models\vote_model_delete_visitor_vote;
+use function Gallery\Models\vote_model_score;
+use function Gallery\Models\vote_model_upsert_user_vote;
+use function Gallery\Models\vote_model_upsert_visitor_vote;
+use function Gallery\Models\vote_model_user_vote;
+use function Gallery\Models\vote_model_user_votes;
+use function Gallery\Models\vote_model_visitor_vote;
+use function Gallery\Models\vote_model_visitor_votes;
 
 /**
  * Tag and voting service functions.
@@ -59,10 +67,7 @@ use function Gallery\Core\visitor_hash;
  */
 function vote_score(int $imageId): int
 {
-    // Variable $stmt stores this steps working value.
-    $stmt = db()->prepare('SELECT COALESCE(SUM(vote), 0) FROM image_votes WHERE image_id = ?');
-    $stmt->execute([$imageId]);
-    return (int) $stmt->fetchColumn();
+    return vote_model_score($imageId);
 }
 
 /**
@@ -73,18 +78,12 @@ function vote_score(int $imageId): int
  */
 function current_vote_for_image(int $imageId): int
 {
-    // Variable $user stores this steps working value.
     $user = current_user();
     if ($user) {
-        // Variable $stmt stores this steps working value.
-        $stmt = db()->prepare('SELECT vote FROM image_votes WHERE image_id = ? AND user_id = ?');
-        $stmt->execute([$imageId, (int) $user['id']]);
-        return (int) ($stmt->fetchColumn() ?: 0);
+        return vote_model_user_vote($imageId, (int) $user['id']);
     }
-    // Variable $stmt stores this steps working value.
-    $stmt = db()->prepare('SELECT vote FROM image_votes WHERE image_id = ? AND visitor_hash = ?');
-    $stmt->execute([$imageId, visitor_hash()]);
-    return (int) ($stmt->fetchColumn() ?: 0);
+
+    return vote_model_visitor_vote($imageId, visitor_hash());
 }
 
 /**
@@ -100,27 +99,45 @@ function current_votes_for_images(array $imageIds): array
     if (!$imageIds) {
         return [];
     }
-    // $user stores an intermediate value used by the surrounding gallery workflow.
+
     $user = current_user();
-    // $placeholders stores an intermediate value used by the surrounding gallery workflow.
-    $placeholders = implode(',', array_fill(0, count($imageIds), '?'));
-    try {
-        if ($user) {
-            // $stmt stores an intermediate value used by the surrounding gallery workflow.
-            $stmt = db()->prepare('SELECT image_id, vote FROM image_votes WHERE user_id = ? AND image_id IN (' . $placeholders . ')');
-            $stmt->execute(array_merge([(int) $user['id']], $imageIds));
-        } else {
-            // $stmt stores an intermediate value used by the surrounding gallery workflow.
-            $stmt = db()->prepare('SELECT image_id, vote FROM image_votes WHERE visitor_hash = ? AND image_id IN (' . $placeholders . ')');
-            $stmt->execute(array_merge([visitor_hash()], $imageIds));
-        }
-        // $votes stores an intermediate value used by the surrounding gallery workflow.
-        $votes = [];
-        foreach ($stmt->fetchAll() as $row) {
-            $votes[(int) $row['image_id']] = (int) $row['vote'];
-        }
-        return $votes;
-    } catch (PDOException) {
-        return [];
+    if ($user) {
+        return vote_model_user_votes($imageIds, (int) $user['id']);
     }
+
+    return vote_model_visitor_votes($imageIds, visitor_hash());
+}
+
+/**
+ * Delete the current logged-in user or anonymous visitor's vote for an image.
+ *
+ * @param int $imageId Image identifier.
+ */
+function delete_current_vote_for_image(int $imageId): void
+{
+    $user = current_user();
+    if ($user) {
+        vote_model_delete_user_vote($imageId, (int) $user['id']);
+        return;
+    }
+
+    vote_model_delete_visitor_vote($imageId, visitor_hash());
+}
+
+/**
+ * Insert or update the current logged-in user or anonymous visitor's vote.
+ *
+ * @param int $imageId Image identifier.
+ * @param int $vote Vote value.
+ */
+function save_current_vote_for_image(int $imageId, int $vote): void
+{
+    $now = now_sql();
+    $user = current_user();
+    if ($user) {
+        vote_model_upsert_user_vote($imageId, (int) $user['id'], $vote, $now);
+        return;
+    }
+
+    vote_model_upsert_visitor_vote($imageId, visitor_hash(), $vote, $now);
 }

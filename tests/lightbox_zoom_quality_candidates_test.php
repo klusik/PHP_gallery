@@ -15,7 +15,10 @@
  *   - Keep the protected full source as the largest candidate
  *   - Collapse identical preview/full URLs
  *   - Reject missing geometry without emitting unsafe source metadata
- */
+  *
+ * Author:
+ *   Rudolf Klusal
+*/
 
 declare(strict_types=1);
 

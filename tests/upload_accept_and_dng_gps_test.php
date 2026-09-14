@@ -38,6 +38,7 @@ declare(strict_types=1);
 use function Gallery\Services\admin_upload_accept_value_for_mode;
 use function Gallery\Services\extract_dng_gps_metadata;
 
+require_once __DIR__ . '/../app/models/app_settings.php';
 require_once __DIR__ . '/../app/services/app_settings.php';
 require_once __DIR__ . '/../app/services/uploads.php';
 

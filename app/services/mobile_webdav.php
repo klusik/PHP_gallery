@@ -36,12 +36,15 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
-use PDO;
 use RuntimeException;
 use function Gallery\Core\absolute_public_url;
 use function Gallery\Core\base_url;
-use function Gallery\Core\db;
 use function Gallery\Core\now_sql;
+use function Gallery\Models\mobile_webdav_model_create_token;
+use function Gallery\Models\mobile_webdav_model_delete_token;
+use function Gallery\Models\mobile_webdav_model_find_active_by_path_token;
+use function Gallery\Models\mobile_webdav_model_mark_used;
+use function Gallery\Models\mobile_webdav_model_tokens;
 
 /**
  * Return whether the WebDAV token table is available.
@@ -69,11 +72,7 @@ function mobile_webdav_tokens(): array
         'mobile_webdav.list_tokens',
         t('mobile_webdav.error_schema_unknown', 'Mobile upload connections are temporarily unavailable because their database schema could not be verified.')
     );
-    $stmt = db()->query("SELECT t.*, g.title AS gallery_title, g.folder_path AS gallery_folder_path
-        FROM mobile_webdav_upload_tokens t
-        INNER JOIN galleries g ON g.id = t.gallery_id
-        ORDER BY t.created_at DESC, t.id DESC");
-    return $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
+    return mobile_webdav_model_tokens();
 }
 
 /**
@@ -100,11 +99,10 @@ function mobile_webdav_create_token(int $userId, int $galleryId, string $label):
     $pathToken = bin2hex(random_bytes(24));
     $password = mobile_webdav_plain_password();
     $username = 'mobile-' . $pathToken;
-    $stmt = db()->prepare('INSERT INTO mobile_webdav_upload_tokens (user_id, gallery_id, label, username, password_hash, path_token, enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)');
     $now = now_sql();
-    $stmt->execute([$userId, $galleryId, $cleanLabel, $username, password_hash($password, PASSWORD_DEFAULT), $pathToken, $now, $now]);
+    $tokenId = mobile_webdav_model_create_token($userId, $galleryId, $cleanLabel, $username, password_hash($password, PASSWORD_DEFAULT), $pathToken, $now);
     return [
-        'id' => (int) db()->lastInsertId(),
+        'id' => $tokenId,
         'label' => $cleanLabel,
         'username' => $username,
         'password' => $password,
@@ -127,8 +125,7 @@ function mobile_webdav_delete_token(int $tokenId): void
         t('mobile_webdav.error_migration_required', 'Run database migrations before managing mobile upload connections.'),
         t('mobile_webdav.error_schema_unknown', 'The mobile upload credential could not be deleted because its database schema could not be verified. No credential was changed.')
     );
-    $stmt = db()->prepare('DELETE FROM mobile_webdav_upload_tokens WHERE id = ?');
-    $stmt->execute([$tokenId]);
+    mobile_webdav_model_delete_token($tokenId);
 }
 
 /**
@@ -169,14 +166,7 @@ function mobile_webdav_find_by_path_token(string $pathToken): ?array
         t('mobile_webdav.error_migration_required', 'Run database migrations before using mobile upload connections.'),
         t('mobile_webdav.error_schema_unknown', 'Mobile upload authentication is temporarily unavailable because its database schema could not be verified.')
     );
-    $stmt = db()->prepare("SELECT t.*, g.folder_path, g.title AS gallery_title
-        FROM mobile_webdav_upload_tokens t
-        INNER JOIN galleries g ON g.id = t.gallery_id
-        WHERE t.path_token = ? AND t.enabled = 1
-        LIMIT 1");
-    $stmt->execute([$pathToken]);
-    $row = $stmt->fetch(PDO::FETCH_ASSOC);
-    return is_array($row) ? $row : null;
+    return mobile_webdav_model_find_active_by_path_token($pathToken);
 }
 
 /**
@@ -185,16 +175,14 @@ function mobile_webdav_find_by_path_token(string $pathToken): ?array
  * @param string $pathToken Path token filesystem path.
  * @return ?array Structured result data for the caller.
  */
-function mobile_webdav_authenticated_token(string $pathToken): ?array
+function mobile_webdav_authenticated_token(string $pathToken, string $username = '', string $password = '', string $authorization = ''): ?array
 {
     $token = mobile_webdav_find_by_path_token($pathToken);
     if (!$token) {
         return null;
     }
-    $username = (string) ($_SERVER['PHP_AUTH_USER'] ?? '');
-    $password = (string) ($_SERVER['PHP_AUTH_PW'] ?? '');
-    if ($username === '' && isset($_SERVER['HTTP_AUTHORIZATION'])) {
-        $decoded = mobile_webdav_decode_basic_authorization((string) $_SERVER['HTTP_AUTHORIZATION']);
+    if ($username === '' && $authorization !== '') {
+        $decoded = mobile_webdav_decode_basic_authorization($authorization);
         $username = (string) ($decoded['username'] ?? '');
         $password = (string) ($decoded['password'] ?? '');
     }
@@ -294,9 +282,7 @@ function mobile_webdav_store_put(array $token, string $filename, string $sourceP
         $finalNames = uploaded_gallery_filenames_for_image_ids((int) $gallery['id'], $imageIds);
         $storedFilename = (string) ($finalNames[0] ?? $storedFilename);
     }
-    $stmt = db()->prepare('UPDATE mobile_webdav_upload_tokens SET last_used_at = ?, updated_at = ? WHERE id = ?');
-    $now = now_sql();
-    $stmt->execute([$now, $now, (int) $token['id']]);
+    mobile_webdav_model_mark_used((int) $token['id'], now_sql());
     admin_log_event('info', 'mobile_webdav.uploaded', 'Mobile WebDAV client uploaded an image.', [
         'token_id' => (int) $token['id'],
         'gallery_id' => (int) $gallery['id'],

@@ -1,5 +1,20 @@
 <?php
 
+/**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ *
+ * File: tests/stage4_mutation_hardening_contract_test.php
+ *
+ * Author:
+ *   Rudolf Klusal
+ *
+ * License:
+ *   MIT License (see LICENSE file in repository)
+ *
+ * Notes:
+ *   - Keep comments and docstrings intact when modifying this file.
+ */
 declare(strict_types=1);
 
 require_once __DIR__ . '/support/module_source.php';
@@ -43,7 +58,7 @@ stage4_expect(str_contains($helper, "'postcondition' => " . '$postcondition'), '
 stage4_expect(str_contains($helper, 'admin_mutation_gallery_context_count'), 'Physical gallery membership verification must use an authoritative full-context count.');
 stage4_expect(str_contains($helper, 'admin_mutation_gallery_membership_postcondition'), 'Physical gallery workflows must share one pagination-safe membership postcondition builder.');
 
-$galleryPage = stage4_source('app/controllers/public_gallery_page.php');
+$galleryPage = stage4_source('app/controllers/public_gallery_page.php') . "\n" . stage4_source('app/views/public_gallery_pages.php');
 foreach ([
     'data-admin-mutation-canonical-url',
     'data-public-context-gallery-id',
@@ -59,15 +74,15 @@ foreach ([
     stage4_expect(str_contains($galleryPage, $metadata), 'Gallery render is missing Stage 4 ownership/state metadata ' . $metadata . '.');
 }
 
-$galleryHome = stage4_source('app/controllers/public_gallery_home.php');
+$galleryHome = stage4_source('app/controllers/public_gallery_home.php') . "\n" . stage4_source('app/views/public_gallery_pages.php');
 foreach (['data-public-root-gallery-count', 'data-public-root-gallery-revision', 'data-public-gallery-page', 'data-public-gallery-total-pages', 'data-public-root-smart-gallery-count', 'data-admin-mutation-canonical-url'] as $metadata) {
     stage4_expect(str_contains($galleryHome, $metadata), 'Root gallery index is missing Stage 4 ownership/state metadata ' . $metadata . '.');
 }
 
-$tags = stage4_source('app/controllers/public_tags.php');
+$tags = stage4_source('app/controllers/public_tags.php') . "\n" . stage4_source('app/views/public_tags.php');
 stage4_expect(str_contains($tags, 'data-admin-mutation-canonical-url'), 'Tag landing pages must expose their canonical refresh owner URL.');
 
-$cards = stage4_source('app/controllers/public_gallery_cards.php');
+$cards = stage4_source('app/controllers/public_gallery_cards.php') . "\n" . stage4_source('app/views/public_gallery_cards.php');
 stage4_expect(str_contains($cards, 'data-smart-gallery-placement'), 'Smart Gallery cards must expose their rendered placement.');
 stage4_expect(str_contains($cards, 'data-smart-gallery-placement-order'), 'Smart Gallery cards must expose their rendered placement order.');
 

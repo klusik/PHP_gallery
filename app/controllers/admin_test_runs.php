@@ -39,6 +39,8 @@ declare(strict_types=1);
 namespace Gallery\Controllers;
 
 use Throwable;
+use function Gallery\Core\apply_cookie_intents;
+use function Gallery\Core\apply_response_header_intents;
 use function Gallery\Core\current_user;
 use function Gallery\Core\redirect_to;
 use function Gallery\Core\request_method;
@@ -81,7 +83,7 @@ function admin_test_run_json_response(array $payload, int $statusCode = 200): vo
     http_response_code($statusCode);
     header('Content-Type: application/json; charset=utf-8');
     header('Cache-Control: no-store, private');
-    admin_test_run_response_logical_finish('json_response_ready');
+    apply_response_header_intents(admin_test_run_response_logical_finish('json_response_ready', $statusCode));
     echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
     exit;
 }
@@ -130,8 +132,11 @@ function cms_admin_test_run_start(): void
         if (function_exists('Gallery\\Diagnostics\\admin_test_run_early_bind_token')) {
             \Gallery\Diagnostics\admin_test_run_early_bind_token($token);
         }
-        admin_test_run_set_cookie($token);
+        apply_cookie_intents(admin_test_run_set_cookie($token));
         $starterRequestId = admin_test_run_request_begin_for_token($token, 'starter');
+        if (function_exists('Gallery\\Services\\admin_test_run_request_header_intents')) {
+            apply_response_header_intents(\Gallery\Services\admin_test_run_request_header_intents());
+        }
         admin_test_run_register_final_shutdown_observer();
         admin_test_run_set_starter_request_id($token, $starterRequestId);
         admin_test_run_mark('starter.cache_and_context_preparation_complete', [
@@ -148,7 +153,7 @@ function cms_admin_test_run_start(): void
             'test_run_cache_bust' => (string) round(microtime(true) * 1000),
         ]);
         admin_test_run_mark('starter.redirect_preparation_complete');
-        admin_test_run_response_logical_finish('starter_redirect_ready');
+        apply_response_header_intents(admin_test_run_response_logical_finish('starter_redirect_ready', 302));
         redirect_to($redirect);
     } catch (Throwable $exception) {
         http_response_code(500);
@@ -220,13 +225,13 @@ function cms_admin_test_run_finish(): void
         admin_test_run_mark('test_run_browser_payload_stored');
         // Clearing the cookie here makes the subsequent report assembly request intentionally untraced.
         // This lets the current request reach its real shutdown observer before sidecars are assembled.
-        admin_test_run_clear_cookie();
+        apply_cookie_intents(admin_test_run_clear_cookie());
         admin_test_run_json_response([
             'ok' => true,
             'finalize_url' => url_for('admin_test_run_finalize'),
         ]);
     } catch (Throwable $exception) {
-        admin_test_run_clear_cookie();
+        apply_cookie_intents(admin_test_run_clear_cookie());
         admin_test_run_json_response([
             'ok' => false,
             'error' => 'browser_payload_store_failed',

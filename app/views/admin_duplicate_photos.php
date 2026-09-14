@@ -40,10 +40,8 @@ use function Gallery\Core\e;
 use function Gallery\Core\gallery_public_url;
 use function Gallery\Core\image_public_url;
 use function Gallery\Core\url_for;
-use function Gallery\Services\admin_dashboard_format_bytes;
-use function Gallery\Services\duplicate_photo_detector_normalize_checksum;
+use function Gallery\Core\format_bytes;
 use function Gallery\Services\t;
-use function Gallery\Services\thumbnail_url;
 
 /**
  * Return a translated display label for one normalized EXIF fingerprint field.
@@ -116,6 +114,21 @@ function view_duplicate_photo_dimensions_label(array $image): string
 }
 
 /**
+ * Normalize a SHA-256 checksum for duplicate-result presentation.
+ *
+ * @param mixed $value Candidate checksum value.
+ * @return ?string Canonical lowercase checksum or null when invalid.
+ */
+function view_duplicate_photo_normalize_checksum(mixed $value): ?string
+{
+    if (!is_scalar($value)) {
+        return null;
+    }
+    $checksum = strtolower(trim((string) $value));
+    return preg_match('/^[a-f0-9]{64}$/', $checksum) === 1 ? $checksum : null;
+}
+
+/**
  * Render one result-group matching explanation and confidence badges.
  *
  * @param array<string,mixed> $group Duplicate group view model.
@@ -142,7 +155,7 @@ function view_render_duplicate_photo_group_reason(array $group): void
     echo '<ul class="admin-duplicate-photo-signals">';
     if ($confidence === 'exact') {
         $images = is_array($group['images'] ?? null) ? $group['images'] : [];
-        $checksum = $images !== [] ? duplicate_photo_detector_normalize_checksum($images[0]['checksum_sha256'] ?? null) : null;
+        $checksum = $images !== [] ? view_duplicate_photo_normalize_checksum($images[0]['checksum_sha256'] ?? null) : null;
         echo '<li><strong>' . e(t('admin.duplicate_photos.signal_checksum', 'SHA-256')) . ':</strong> ' . e(t('admin.duplicate_photos.reason_exact', 'All images have the same non-empty content checksum.'));
         if ($checksum !== null) {
             echo ' <code>' . e($checksum) . '</code>';
@@ -228,14 +241,14 @@ function view_render_duplicate_photo_image_card(array $image, string $jobToken, 
 
     echo '<article class="admin-duplicate-photo-image-card">';
     echo '<div class="admin-duplicate-photo-side-label">' . e($sideLabel) . '</div>';
-    echo '<a class="admin-duplicate-photo-preview" href="' . e($imageUrl) . '" target="_blank" rel="noopener" title="' . e($openImageTitle) . '"><img src="' . e(thumbnail_url($image, 300)) . '" alt="' . e(t('admin.duplicate_photos.preview_alt', 'Preview of {file}', ['file' => $filename !== '' ? $filename : $relativePath])) . '" loading="lazy" decoding="async"></a>';
+    echo '<a class="admin-duplicate-photo-preview" href="' . e($imageUrl) . '" target="_blank" rel="noopener" title="' . e($openImageTitle) . '"><img src="' . e((string) ($image['view_thumbnail_url'] ?? '')) . '" alt="' . e(t('admin.duplicate_photos.preview_alt', 'Preview of {file}', ['file' => $filename !== '' ? $filename : $relativePath])) . '" loading="lazy" decoding="async"></a>';
     echo '<div class="admin-duplicate-photo-image-body">';
     echo '<div class="admin-duplicate-photo-image-title"><strong>#' . $imageId . '</strong> <a href="' . e($imageUrl) . '" target="_blank" rel="noopener" title="' . e($openImageTitle) . '">' . e($filename !== '' ? $filename : $relativePath) . '</a></div>';
     echo '<dl class="admin-duplicate-photo-metadata">';
     echo '<div><dt>' . e(t('admin.duplicate_photos.gallery', 'Gallery')) . '</dt><dd><a href="' . e($galleryUrl) . '" target="_blank" rel="noopener" title="' . e($openGalleryTitle) . '">' . e($galleryTitle) . '</a></dd></div>';
     echo '<div><dt>' . e(t('admin.duplicate_photos.gallery_path', 'Gallery path')) . '</dt><dd><a href="' . e($galleryUrl) . '" target="_blank" rel="noopener" title="' . e($openGalleryTitle) . '"><code>' . e($galleryPath !== '' ? $galleryPath : '/') . '</code></a></dd></div>';
     echo '<div><dt>' . e(t('admin.duplicate_photos.relative_path', 'Gallery-relative path')) . '</dt><dd><a href="' . e($imageUrl) . '" target="_blank" rel="noopener" title="' . e($openImageTitle) . '"><code>' . e($relativePath) . '</code></a></dd></div>';
-    echo '<div><dt>' . e(t('admin.duplicate_photos.file_size', 'File size')) . '</dt><dd>' . e($fileSize > 0 ? admin_dashboard_format_bytes($fileSize) : t('admin.duplicate_photos.unavailable', 'Unavailable')) . '</dd></div>';
+    echo '<div><dt>' . e(t('admin.duplicate_photos.file_size', 'File size')) . '</dt><dd>' . e($fileSize > 0 ? format_bytes($fileSize) : t('admin.duplicate_photos.unavailable', 'Unavailable')) . '</dd></div>';
     echo '<div><dt>' . e(t('admin.duplicate_photos.dimensions', 'Dimensions')) . '</dt><dd>' . e(view_duplicate_photo_dimensions_label($image)) . '</dd></div>';
     echo '<div><dt>' . e(t('admin.duplicate_photos.mime_type', 'MIME type')) . '</dt><dd>' . e($mimeType !== '' ? $mimeType : t('admin.duplicate_photos.unavailable', 'Unavailable')) . '</dd></div>';
     echo '<div><dt>' . e(t('admin.duplicate_photos.capture_date', 'Capture date')) . '</dt><dd>' . e($captureDate !== '' ? $captureDate : t('admin.duplicate_photos.unavailable', 'Unavailable')) . '</dd></div>';

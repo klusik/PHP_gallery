@@ -1,6 +1,21 @@
 <?php
 
 /**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ *
+ * File: tests/public_search_progressive_stage7_test.php
+ *
+ * Author:
+ *   Rudolf Klusal
+ *
+ * License:
+ *   MIT License (see LICENSE file in repository)
+ *
+ * Notes:
+ *   - Keep comments and docstrings intact when modifying this file.
+ */
+/**
  * Protect Stage 7 progressive public-search UX stabilization and MVC completion.
  */
 

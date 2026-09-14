@@ -20,6 +20,13 @@ ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 
 The database connection is configured in `config.php` and opened by `app/database.php` through the shared `db()` function.
 
+
+## MVC Persistence Ownership
+
+Application persistence is owned by `app/models/`. SQL strings, PDO calls, schema-facing reads/writes, and row mapping for feature code must remain in Model modules. Services orchestrate those model APIs and may apply domain policy, but they do not construct SQL or access PDO directly. Controllers and Views have no application persistence authority.
+
+This ownership is mechanically enforced by `scripts/check_mvc_boundaries.php`; the reviewed MVC baseline is zero occurrences as of 2026-09-14. Infrastructure-level schema migration and connection code remains in `database/migrations/` and `app/database.php` and is not a bypass for feature persistence.
+
 ## Migration System
 
 Applied migrations are recorded in:

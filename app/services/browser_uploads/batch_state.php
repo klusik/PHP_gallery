@@ -43,13 +43,14 @@ use RuntimeException;
 use Throwable;
 use function Gallery\Core\cms_config;
 use function Gallery\Core\cms_runtime_limit;
-use function Gallery\Core\db;
 use function Gallery\Core\gallery_public_url;
 use function Gallery\Core\is_dng_image_path;
 use function Gallery\Core\is_supported_image_path;
 use function Gallery\Core\normalize_relative_path;
 use function Gallery\Core\now_sql;
 use function Gallery\Core\url_for;
+use function Gallery\Models\image_model_apply_upload_sort_order;
+use function Gallery\Models\image_model_next_sort_order;
 
 /**
  * Return a safe idempotency cache directory for acknowledged batches.
@@ -168,9 +169,7 @@ function browser_upload_session_sort_base(int $galleryId, string $sessionId): in
         }
     }
 
-    $stmt = db()->prepare('SELECT COALESCE(MAX(sort_order), 0) FROM images WHERE gallery_id = ?');
-    $stmt->execute([$galleryId]);
-    $base = (int) $stmt->fetchColumn() + 10;
+    $base = image_model_next_sort_order($galleryId);
     $dir = browser_upload_batch_cache_dir();
     if (is_dir($dir) && is_writable($dir)) {
         @file_put_contents($path, json_encode([
@@ -197,24 +196,14 @@ function browser_upload_apply_source_sort_order(int $galleryId, array $sourceInd
         return 0;
     }
 
-    $select = db()->prepare('SELECT id FROM images WHERE gallery_id = ? AND relative_path_hash = ? LIMIT 1');
-    $update = db()->prepare('UPDATE images SET sort_order = ?, updated_at = ? WHERE id = ?');
-    $changed = 0;
+    $sourceIndexByPathHash = [];
     foreach ($sourceIndexByRelativePath as $relativePath => $sourceIndex) {
         $relativePath = normalize_relative_path((string) $relativePath);
-        if ($relativePath === '') {
-            continue;
+        if ($relativePath !== '') {
+            $sourceIndexByPathHash[hash('sha256', $relativePath)] = (int) $sourceIndex;
         }
-        $select->execute([$galleryId, hash('sha256', $relativePath)]);
-        $imageId = (int) ($select->fetchColumn() ?: 0);
-        if ($imageId <= 0) {
-            continue;
-        }
-        $sortOrder = $sortBase + max(0, (int) $sourceIndex) * 10;
-        $update->execute([$sortOrder, now_sql(), $imageId]);
-        $changed += $update->rowCount() > 0 ? 1 : 0;
     }
-    return $changed;
+    return image_model_apply_upload_sort_order($galleryId, $sourceIndexByPathHash, $sortBase, now_sql());
 }
 
 /**

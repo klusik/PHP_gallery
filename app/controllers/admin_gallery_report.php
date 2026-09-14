@@ -46,7 +46,9 @@ use function Gallery\Core\verify_csrf;
 use function Gallery\Services\admin_gallery_report_process_job;
 use function Gallery\Services\admin_gallery_report_start_job;
 use function Gallery\Services\admin_log_event;
+use function Gallery\Services\feature_capability_effective_enabled;
 use function Gallery\Views\view_render_admin_gallery_report_page;
+use function Gallery\Views\view_render_admin_gallery_report_export_html;
 
 /**
  * Render the complete gallery overview report generator page.
@@ -54,7 +56,7 @@ use function Gallery\Views\view_render_admin_gallery_report_page;
 function cms_admin_gallery_report(): void
 {
     require_admin();
-    view_render_admin_gallery_report_page((string) flash_message('admin_notice'));
+    view_render_admin_gallery_report_page((string) flash_message('admin_notice'), feature_capability_effective_enabled('telemetry'));
 }
 
 /**
@@ -83,6 +85,12 @@ function cms_admin_gallery_report_generate(): void
 
         while (ob_get_level() > $bufferLevel) {
             ob_end_clean();
+        }
+        if (isset($state['_report_view_model']) && is_array($state['_report_view_model'])) {
+            $html = view_render_admin_gallery_report_export_html($state['_report_view_model']);
+            unset($state['_report_view_model']);
+            $state['report_html'] = $html;
+            $state['report_bytes'] = strlen($html);
         }
         admin_gallery_report_json_response($state);
     } catch (Throwable $exception) {

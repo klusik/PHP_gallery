@@ -332,7 +332,7 @@ function application_autoupdate_relative_time_label(int $lastCheckedAt): string
  *
  * @param int $ttlSeconds Ttl seconds value.
  */
-function application_autoupdate_maybe_run(int $ttlSeconds = 3600): void
+function application_autoupdate_maybe_run(int $ttlSeconds = 3600, string $requestMethod = 'GET'): void
 {
     if (function_exists(__NAMESPACE__ . '\feature_capability_effective_enabled') && !feature_capability_effective_enabled('built_in_update_installer')) {
         return;
@@ -356,7 +356,7 @@ function application_autoupdate_maybe_run(int $ttlSeconds = 3600): void
     // normal page traffic. Manual dry checks intentionally bypass this throttle.
     $ttlSeconds = max(3600, $ttlSeconds);
     // $method stores the current HTTP verb so uploads, votes, edits, and CSRF flows are not interrupted.
-    $method = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
+    $method = strtoupper(trim($requestMethod));
     if (!in_array($method, ['GET', 'HEAD'], true) || !application_autoupdate_enabled()) {
         return;
     }

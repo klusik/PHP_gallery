@@ -132,17 +132,6 @@ function public_search_result_key(string $type, int $id): string
 }
 
 /**
- * Return a LIKE prefix pattern for one normalized query.
- *
- * @param string $query Query value.
- * @return string Escaped LIKE pattern ending with one wildcard.
- */
-function public_search_prefix_pattern(string $query): string
-{
-    return str_replace(['%', '_'], ['\\%', '\\_'], $query) . '%';
-}
-
-/**
  * Execute one implemented progressive public-search phase.
  *
  * @param string $phase Stable phase identifier.
@@ -219,36 +208,29 @@ function public_search_primary_gallery_candidates(string $query, int $limit, ?ar
 
     $limit = max(1, min(30, $limit));
     $candidateLimit = min(90, max($limit * 2, $limit + 8));
-    $listingCondition = public_search_context_listing_sql_fragment('g', $contextGallery);
-    $contextParams = public_search_context_params($contextGallery);
-    $prefix = public_search_prefix_pattern($query);
-    $like = public_search_like_pattern($query);
+    $listedOnly = public_search_listing_requires_listed();
 
     $titleRows = public_search_model_primary_gallery_title_rows(
         $query,
-        $prefix,
-        $like,
         [
             'exact' => public_search_relevance_score('gallery_title_exact'),
             'normalized_exact' => public_search_relevance_score('gallery_title_normalized_exact'),
             'prefix' => public_search_relevance_score('gallery_title_prefix'),
             'substring' => public_search_relevance_score('gallery_title_substring'),
         ],
-        $listingCondition,
-        $contextParams,
+        $listedOnly,
+        $contextGallery,
         $candidateLimit
     );
     $tagRows = public_search_model_primary_gallery_tag_rows(
         $query,
-        $prefix,
-        $like,
         [
             'exact' => public_search_relevance_score('gallery_tag_exact'),
             'prefix' => public_search_relevance_score('gallery_tag_prefix'),
             'substring' => public_search_relevance_score('gallery_tag_substring'),
         ],
-        $listingCondition,
-        $contextParams,
+        $listedOnly,
+        $contextGallery,
         $candidateLimit
     );
 
@@ -493,22 +475,17 @@ function public_search_media_image_candidates(string $query, int $limit, ?array 
  */
 function public_search_media_image_name_candidates(string $query, int $limit, ?array $contextGallery = null): array
 {
-    $listingCondition = public_search_context_listing_sql_fragment('g', $contextGallery);
-    $contextParams = public_search_context_params($contextGallery);
-    $prefix = public_search_prefix_pattern($query);
-    $like = public_search_like_pattern($query);
+    $listedOnly = public_search_listing_requires_listed();
 
     $rows = public_search_model_media_image_name_rows(
         $query,
-        $prefix,
-        $like,
         [
             'exact' => public_search_relevance_score('image_name_exact'),
             'prefix' => public_search_relevance_score('image_name_prefix'),
             'substring' => public_search_relevance_score('image_name_substring'),
         ],
-        $listingCondition,
-        $contextParams,
+        $listedOnly,
+        $contextGallery,
         $limit
     );
 
@@ -546,22 +523,17 @@ function public_search_media_image_name_candidates(string $query, int $limit, ?a
  */
 function public_search_media_image_tag_candidates(string $query, int $limit, ?array $contextGallery = null): array
 {
-    $listingCondition = public_search_context_listing_sql_fragment('g', $contextGallery);
-    $contextParams = public_search_context_params($contextGallery);
-    $prefix = public_search_prefix_pattern($query);
-    $like = public_search_like_pattern($query);
+    $listedOnly = public_search_listing_requires_listed();
 
     $rows = public_search_model_media_image_tag_rows(
         $query,
-        $prefix,
-        $like,
         [
             'exact' => public_search_relevance_score('image_tag_exact'),
             'prefix' => public_search_relevance_score('image_tag_prefix'),
             'substring' => public_search_relevance_score('image_tag_substring'),
         ],
-        $listingCondition,
-        $contextParams,
+        $listedOnly,
+        $contextGallery,
         $limit
     );
 
@@ -651,11 +623,10 @@ function public_search_hydrate_media_image_candidates(array $candidates, ?array 
         return [];
     }
 
-    $listingCondition = public_search_context_listing_sql_fragment('g', $contextGallery);
     $imageRows = public_search_model_media_image_rows_by_ids(
         $ids,
-        $listingCondition,
-        public_search_context_params($contextGallery)
+        public_search_listing_requires_listed(),
+        $contextGallery
     );
 
     $contentLanguage = translation_active_language();

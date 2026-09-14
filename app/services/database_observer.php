@@ -36,9 +36,11 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+use function Gallery\Core\request_data;
+
 use Throwable;
-use function Gallery\Core\db;
 use function Gallery\Core\now_sql;
+use function Gallery\Models\telemetry_model_upsert_db_query_metric;
 
 /**
  * Database telemetry helper functions.
@@ -112,32 +114,17 @@ function telemetry_sql_fingerprint(string $sql): string
  */
 function telemetry_record_db_query(string $sql, float $latencyMs, int $rowsReturned = 0, int $rowsAffected = 0, bool $failed = false): void
 {
-    if (function_exists(__NAMESPACE__ . '\\feature_capability_effective_enabled') && !feature_capability_effective_enabled('telemetry')) {
+    if (function_exists(__NAMESPACE__ . '\feature_capability_effective_enabled') && !feature_capability_effective_enabled('telemetry')) {
         return;
     }
     if (!telemetry_setting_enabled('telemetry_database_enabled', '1') || !telemetry_settings_schema_ready()) {
         return;
     }
     try {
-        // $slowThreshold stores the configured slow-query threshold.
         $slowThreshold = (int) telemetry_setting('telemetry_slow_query_threshold_ms', '250');
-        // $stmt stores the hourly database metric upsert query.
-        $stmt = db()->prepare('INSERT INTO telemetry_db_query_metrics (
-            bucket_start, route_name, operation, table_name, query_fingerprint, query_count, failed_count,
-            slow_count, latency_ms_sum, latency_ms_max, rows_returned_sum, rows_affected_sum, updated_at
-        ) VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)
-        ON DUPLICATE KEY UPDATE
-            query_count = query_count + 1,
-            failed_count = failed_count + VALUES(failed_count),
-            slow_count = slow_count + VALUES(slow_count),
-            latency_ms_sum = latency_ms_sum + VALUES(latency_ms_sum),
-            latency_ms_max = GREATEST(latency_ms_max, VALUES(latency_ms_max)),
-            rows_returned_sum = rows_returned_sum + VALUES(rows_returned_sum),
-            rows_affected_sum = rows_affected_sum + VALUES(rows_affected_sum),
-            updated_at = VALUES(updated_at)');
-        $stmt->execute([
+        telemetry_model_upsert_db_query_metric([
             date('Y-m-d H:00:00'),
-            telemetry_short_identifier($_GET['page'] ?? 'unknown', 80) ?? 'unknown',
+            telemetry_short_identifier(request_data('query')['page'] ?? 'unknown', 80) ?? 'unknown',
             telemetry_sql_operation($sql),
             telemetry_sql_table_name($sql),
             telemetry_sql_fingerprint($sql),

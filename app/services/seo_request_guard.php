@@ -12,8 +12,8 @@
  *
  * Responsibilities:
  *   - Keep public GET parameter validation centralized
- *   - Reject suspicious public query strings before controllers render content
- *   - Emit stable fallback canonical URLs for public pages that do not own a richer SEO model
+ *   - Build explicit redirect/reject decisions for suspicious public query strings before controllers render content
+ *   - Return stable fallback canonical URLs for public pages that do not own a richer SEO model
  *   - Keep rejection logging sampled so crawler abuse cannot flood the admin log
  *
  * Author:
@@ -40,10 +40,7 @@ namespace Gallery\Services;
 use Throwable;
 use function Gallery\Core\absolute_public_url;
 use function Gallery\Core\canonical_url_for_gallery;
-use function Gallery\Core\current_user;
-use function Gallery\Core\e;
 use function Gallery\Core\public_base_url;
-use function Gallery\Core\request_method;
 use function Gallery\Core\url_for;
 
 const CMS_SEO_REQUEST_GUARD_LOG_LIMIT_PER_DAY = 25;
@@ -132,12 +129,9 @@ function seo_request_guard_route_is_non_indexable_download(string $page): bool
  * consistently remain outside search indexes. Normal gallery pages are not
  * affected.
  */
-function seo_request_guard_emit_route_robots_header(string $page): void
+function seo_request_guard_route_robots_header_value(string $page): ?string
 {
-    if (!seo_request_guard_route_is_non_indexable_download($page) || headers_sent()) {
-        return;
-    }
-    header('X-Robots-Tag: noindex, nofollow');
+    return seo_request_guard_route_is_non_indexable_download($page) ? 'noindex, nofollow' : null;
 }
 
 /**
@@ -250,13 +244,13 @@ function seo_request_guard_allowed_parameters_for_page(string $page): array
  * @param string $page Page number or page data.
  * @return array<int string>.
  */
-function seo_request_guard_unexpected_query_parameters(string $page): array
+function seo_request_guard_unexpected_query_parameters(string $page, array $query): array
 {
     $allowed = array_fill_keys(seo_request_guard_allowed_parameters_for_page($page), true);
     $tracking = seo_request_guard_ignored_tracking_parameters();
     $unexpected = [];
 
-    foreach (array_keys($_GET) as $rawName) {
+    foreach (array_keys($query) as $rawName) {
         $name = (string) $rawName;
         $lowerName = strtolower($name);
         if (isset($allowed[$name]) || isset($tracking[$lowerName])) {
@@ -270,79 +264,81 @@ function seo_request_guard_unexpected_query_parameters(string $page): array
 }
 
 /**
- * Enforce public GET query-string safety before route handlers render content.
+ * Build the public GET query-string enforcement decision before route handlers render content.
  *
- * @param string $page Page number or page data.
+ * @param string $page Route identifier.
+ * @param string $method HTTP request method supplied by the bootstrap boundary.
+ * @param array<string,mixed> $query Parsed query parameters supplied by the bootstrap boundary.
+ * @param bool $authenticated Whether an authenticated administrator is already available.
+ * @param string $requestUri Raw request URI used only for redacted sampled logging.
+ * @param string $remoteAddress Remote address used only for sampled security logging.
+ * @param string $userAgent User-Agent used only for sampled security logging.
+ * @return array{action:string,status?:int,location?:string,headers?:array<string,string>,body?:string}
  */
-function seo_request_guard_enforce(string $page): void
-{
-    if (request_method() !== 'GET' || !seo_request_guard_enabled()) {
-        return;
+function seo_request_guard_enforcement_decision(
+    string $page,
+    string $method,
+    array $query,
+    bool $authenticated,
+    string $requestUri = '',
+    string $remoteAddress = '',
+    string $userAgent = ''
+): array {
+    if (strtoupper($method) !== 'GET' || !seo_request_guard_enabled()) {
+        return ['action' => 'allow'];
     }
     if (seo_request_guard_route_is_exempt($page)) {
-        return;
+        return ['action' => 'allow'];
     }
 
-    $unexpected = seo_request_guard_unexpected_query_parameters($page);
-    if ($page === 'home' && $unexpected) {
-        seo_request_guard_redirect_home_with_supported_query();
+    $unexpected = seo_request_guard_unexpected_query_parameters($page, $query);
+    if ($page === 'home' && $unexpected !== []) {
+        return [
+            'action' => 'redirect',
+            'status' => 301,
+            'location' => seo_request_guard_home_redirect_location($query),
+        ];
     }
-    if (current_user() !== null) {
-        return;
+    if ($authenticated || $unexpected === []) {
+        return ['action' => 'allow'];
     }
 
-    if (!$unexpected) {
-        return;
-    }
-
-    seo_request_guard_reject($page, $unexpected);
+    seo_request_guard_log_rejection($page, $unexpected, $requestUri, $remoteAddress, $userAgent);
+    return [
+        'action' => 'reject',
+        'status' => 404,
+        'headers' => [
+            'Content-Type' => 'text/plain; charset=utf-8',
+            'X-Robots-Tag' => 'noindex, nofollow',
+            'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
+            'Pragma' => 'no-cache',
+            'Expires' => '0',
+        ],
+        'body' => "Not found.\n",
+    ];
 }
 
 /**
- * Permanently redirect a public homepage query-string variant to its canonical URL.
+ * Build the canonical homepage redirect location while retaining supported query keys only.
  *
- * Only parameters owned by the homepage are retained. The explicit query string
- * in the Location header prevents Apache/PHP from carrying the original query.
+ * @param array<string,mixed> $query Parsed query parameters.
+ * @return string Absolute canonical homepage URL.
  */
-function seo_request_guard_redirect_home_with_supported_query(): never
+function seo_request_guard_home_redirect_location(array $query): string
 {
     $supported = array_fill_keys(['gallery_page', 'view_as', 'lang'], true);
-    $query = [];
-    foreach ($_GET as $name => $value) {
+    $retained = [];
+    foreach ($query as $name => $value) {
         if (isset($supported[(string) $name])) {
-            $query[(string) $name] = $value;
+            $retained[(string) $name] = $value;
         }
     }
 
     $location = rtrim(public_base_url(), '/') . '/';
-    if ($query !== []) {
-        $location .= '?' . http_build_query($query);
+    if ($retained !== []) {
+        $location .= '?' . http_build_query($retained);
     }
-
-    header('Location: ' . $location, true, 301);
-    exit;
-}
-
-/**
- * Reject a suspicious public query without invoking the normal public renderer.
- *
- * @param string $page Page number or page data.
- * @param array $unexpected Unexpected value.
- */
-function seo_request_guard_reject(string $page, array $unexpected): void
-{
-    seo_request_guard_log_rejection($page, $unexpected);
-
-    http_response_code(404);
-    if (!headers_sent()) {
-        header('Content-Type: text/plain; charset=utf-8');
-        header('X-Robots-Tag: noindex, nofollow');
-        header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
-        header('Pragma: no-cache');
-        header('Expires: 0');
-    }
-    echo "Not found.\n";
-    exit;
+    return $location;
 }
 
 /**
@@ -355,9 +351,9 @@ function seo_request_guard_reject(string $page, array $unexpected): void
  *
  * @return string Request path with a marker when a query string was present.
  */
-function seo_request_guard_safe_request_target_for_log(): string
+function seo_request_guard_safe_request_target_for_log(string $requestUri): string
 {
-    $requestUri = (string) ($_SERVER['REQUEST_URI'] ?? '');
+    $requestUri = (string) $requestUri;
     if ($requestUri === '') {
         return '';
     }
@@ -380,7 +376,7 @@ function seo_request_guard_safe_request_target_for_log(): string
  * @param string $page Page number or page data.
  * @param array $unexpected Unexpected value.
  */
-function seo_request_guard_log_rejection(string $page, array $unexpected): void
+function seo_request_guard_log_rejection(string $page, array $unexpected, string $requestUri = '', string $remoteAddress = '', string $userAgent = ''): void
 {
     if (!seo_request_guard_logging_enabled() || !function_exists('Gallery\\Services\\admin_log_event')) {
         return;
@@ -416,9 +412,9 @@ function seo_request_guard_log_rejection(string $page, array $unexpected): void
     admin_log_event('warning', 'seo.request_guard_rejected', 'Rejected suspicious public query string before rendering.', [
         'page' => $page,
         'unexpected_parameters' => $unexpected,
-        'request_uri' => seo_request_guard_safe_request_target_for_log(),
-        'remote_addr' => substr((string) ($_SERVER['REMOTE_ADDR'] ?? ''), 0, 80),
-        'user_agent' => substr((string) ($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 300),
+        'request_uri' => seo_request_guard_safe_request_target_for_log($requestUri),
+        'remote_addr' => substr($remoteAddress, 0, 80),
+        'user_agent' => substr($userAgent, 0, 300),
     ], ['category' => 'security', 'severity' => 'warning', 'route_name' => $page]);
 }
 
@@ -429,7 +425,7 @@ function seo_request_guard_log_rejection(string $page, array $unexpected): void
  * @param ?array $currentGallery Current gallery value.
  * @return string Text result for the caller.
  */
-function seo_request_guard_public_canonical_url(string $page, ?array $currentGallery = null): string
+function seo_request_guard_public_canonical_url(string $page, ?array $currentGallery = null, array $query = []): string
 {
     if ($page === 'home') {
         return rtrim(public_base_url(), '/') . '/';
@@ -438,13 +434,13 @@ function seo_request_guard_public_canonical_url(string $page, ?array $currentGal
         return canonical_url_for_gallery($currentGallery);
     }
     if ($page === 'smart_gallery') {
-        $slug = trim((string) ($_GET['slug'] ?? ''));
+        $slug = trim((string) ($query['slug'] ?? ''));
         if ($slug !== '') {
             return absolute_public_url(url_for('smart_gallery', ['slug' => $slug]));
         }
     }
     if ($page === 'tag') {
-        $slug = trim((string) ($_GET['slug'] ?? ''));
+        $slug = trim((string) ($query['slug'] ?? ''));
         if ($slug !== '') {
             return absolute_public_url(url_for('tag', ['slug' => $slug]));
         }
@@ -453,24 +449,3 @@ function seo_request_guard_public_canonical_url(string $page, ?array $currentGal
     return '';
 }
 
-/**
- * Return canonical head HTML unless the page already supplied a canonical tag.
- *
- * @param string $page Page number or page data.
- * @param ?array $currentGallery Current gallery value.
- * @param string $existingHeadHtml Existing head html HTML markup.
- * @return string Text result for the caller.
- */
-function seo_request_guard_canonical_head_html(string $page, ?array $currentGallery, string $existingHeadHtml): string
-{
-    if (stripos($existingHeadHtml, 'rel="canonical"') !== false || stripos($existingHeadHtml, "rel='canonical'") !== false) {
-        return '';
-    }
-
-    $canonical = seo_request_guard_public_canonical_url($page, $currentGallery);
-    if ($canonical === '') {
-        return '';
-    }
-
-    return '<link rel="canonical" href="' . e($canonical) . '">' . "\n";
-}

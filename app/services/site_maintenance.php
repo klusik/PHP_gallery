@@ -38,14 +38,17 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
-use PDO;
+use function Gallery\Core\request_data;
+
 use Throwable;
-use function Gallery\Controllers\cms_cleanup_password_reset_tokens;
 use function Gallery\Core\absolute_public_url;
-use function Gallery\Core\db;
 use function Gallery\Core\now_sql;
 use function Gallery\Core\pending_migrations_exist;
 use function Gallery\Core\url_for;
+use function Gallery\Models\site_maintenance_model_delete_thumbnail_variants_missing_galleries;
+use function Gallery\Models\site_maintenance_model_delete_thumbnail_variants_missing_images;
+use function Gallery\Models\site_maintenance_model_source_images_after_id;
+use function Gallery\Models\site_maintenance_model_total_source_image_count;
 
 const SITE_MAINTENANCE_STATE_SETTING = 'site_maintenance_run_state';
 const SITE_MAINTENANCE_LAST_RESULT_SETTING = 'site_maintenance_last_result';
@@ -542,8 +545,7 @@ function site_maintenance_empty_totals(): array
 function site_maintenance_total_source_image_count(): int
 {
     try {
-        $stmt = db()->query("SELECT COUNT(*) FROM images WHERE relative_path NOT LIKE '%/%'");
-        return max(0, (int) $stmt->fetchColumn());
+        return site_maintenance_model_total_source_image_count();
     } catch (Throwable) {
         return 0;
     }
@@ -824,7 +826,7 @@ function site_maintenance_register_request_trigger(string $page): void
         return;
     }
 
-    $method = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
+    $method = strtoupper((string) (request_data('server')['REQUEST_METHOD'] ?? 'GET'));
     if (!in_array($method, ['GET', 'HEAD'], true)) {
         return;
     }
@@ -1094,11 +1096,7 @@ function site_maintenance_process_thumbnail_step(array &$state, float $deadline)
 
     $cursorImageId = max(0, (int) ($state['cursor_image_id'] ?? 0));
     $batchSize = site_maintenance_batch_size();
-    $stmt = db()->prepare("SELECT i.* FROM images i WHERE i.relative_path NOT LIKE '%/%' AND i.id > ? ORDER BY i.id LIMIT ?");
-    $stmt->bindValue(1, $cursorImageId, PDO::PARAM_INT);
-    $stmt->bindValue(2, $batchSize, PDO::PARAM_INT);
-    $stmt->execute();
-    $images = $stmt->fetchAll();
+    $images = site_maintenance_model_source_images_after_id($cursorImageId, $batchSize);
 
     if (!$images) {
         $state['phase'] = 'cleanups';
@@ -1442,9 +1440,16 @@ function site_maintenance_process_cleanup_step(array &$state, float $deadline): 
         $cleanup['auth_rate_limits'] = 'cleaned';
     }
 
-    if (function_exists('Gallery\\Controllers\\cms_cleanup_password_reset_tokens')) {
-        cms_cleanup_password_reset_tokens();
-        $cleanup['password_reset_tokens'] = 'cleaned';
+    if (function_exists(__NAMESPACE__ . '\\auth_account_cleanup_password_reset_tokens')
+        && function_exists(__NAMESPACE__ . '\\auth_password_reset_schema_status')
+        && function_exists(__NAMESPACE__ . '\\auth_schema_assert_known')
+        && function_exists(__NAMESPACE__ . '\\schema_inspection_is_available')) {
+        $passwordResetSchemaStatus = auth_password_reset_schema_status();
+        auth_schema_assert_known($passwordResetSchemaStatus, 'auth_password_reset');
+        if (schema_inspection_is_available($passwordResetSchemaStatus)) {
+            auth_account_cleanup_password_reset_tokens();
+            $cleanup['password_reset_tokens'] = 'cleaned';
+        }
     }
 
     if (function_exists('Gallery\Services\viewer_security_maintenance_cleanup')) {
@@ -1496,9 +1501,7 @@ function site_maintenance_delete_orphan_thumbnail_metadata(): int
 
     $deleted = 0;
     try {
-        $stmt = db()->prepare('DELETE v FROM image_thumbnail_variants v LEFT JOIN images i ON i.id = v.image_id WHERE i.id IS NULL');
-        $stmt->execute();
-        $deleted += $stmt->rowCount();
+        $deleted += site_maintenance_model_delete_thumbnail_variants_missing_images();
     } catch (Throwable) {
         return $deleted;
     }
@@ -1508,9 +1511,7 @@ function site_maintenance_delete_orphan_thumbnail_metadata(): int
     }
 
     try {
-        $stmt = db()->prepare('DELETE v FROM image_thumbnail_variants v LEFT JOIN galleries g ON g.id = v.gallery_id WHERE g.id IS NULL');
-        $stmt->execute();
-        $deleted += $stmt->rowCount();
+        $deleted += site_maintenance_model_delete_thumbnail_variants_missing_galleries();
     } catch (Throwable) {
         return $deleted;
     }

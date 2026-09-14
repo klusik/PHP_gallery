@@ -14,6 +14,8 @@ php scripts/audit.php --profile=release
 
 The release profile already contains the deterministic coverage from `full`, plus browser integration when available, release consistency, manifest freshness, and Git whitespace validation. If a source or release artifact changes after a successful release audit, regenerate the manifest and rerun only the release profile.
 
+Strict MVC is part of release qualification. The release audit invokes `scripts/check_mvc_boundaries.php` against an intentionally empty baseline. A non-zero MVC finding is a release failure and must be corrected in source; release preparation must not reintroduce legacy baseline debt.
+
 ## Release phases
 
 ### 1. Establish the release scope

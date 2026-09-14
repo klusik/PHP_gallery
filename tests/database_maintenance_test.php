@@ -51,6 +51,7 @@ use function Gallery\Services\database_maintenance_sql_literals;
 use function Gallery\Services\database_maintenance_table_operation_plan;
 
 require_once __DIR__ . '/../app/migration_definitions.php';
+require_once __DIR__ . '/../app/models/database_maintenance.php';
 require_once __DIR__ . '/../app/services/admin_database_usage.php';
 require_once __DIR__ . '/../app/services/database_maintenance.php';
 
@@ -252,11 +253,13 @@ assert_database_maintenance(str_contains($controllerSource, 'database_maintenanc
 assert_database_maintenance(str_contains($controllerSource, 'database_maintenance_preview_optimize_tables($selectedTables)'), 'OPTIMIZE dry-run must not execute OPTIMIZE TABLE.');
 
 $serviceSource = (string) file_get_contents(__DIR__ . '/../app/services/database_maintenance.php');
-assert_database_maintenance(!str_contains($serviceSource, 'DELETE FROM admin_logs'), 'Generic database maintenance must not delete Admin logs.');
-assert_database_maintenance(!str_contains($serviceSource, 'DELETE FROM telemetry_'), 'Generic database maintenance must not delete telemetry.');
-assert_database_maintenance(str_contains($serviceSource, 'INSERT INTO database_maintenance_audit_log'), 'Every committed cleanup batch must write a transactional audit row.');
-assert_database_maintenance(str_contains($serviceSource, '\':removed_identifiers_json\' => json_encode($identifiers'), 'Transactional audit rows must contain every removed row identifier.');
-assert_database_maintenance(str_contains($serviceSource, 'identifier count did not match the deleted row count'), 'Identifier and delete counts must be verified before commit.');
-assert_database_maintenance(str_contains($serviceSource, 'if (!in_array($operation, [\'ANALYZE\', \'OPTIMIZE\'], true))'), 'Physical table operations must remain confined to the explicit selected-operation function.');
+$modelSource = (string) file_get_contents(__DIR__ . '/../app/models/database_maintenance.php');
+assert_database_maintenance(!str_contains($serviceSource, 'DELETE FROM admin_logs') && !str_contains($modelSource, 'DELETE FROM admin_logs'), 'Generic database maintenance must not delete Admin logs.');
+assert_database_maintenance(!str_contains($serviceSource, 'DELETE FROM telemetry_') && !str_contains($modelSource, 'DELETE FROM telemetry_'), 'Generic database maintenance must not delete telemetry.');
+assert_database_maintenance(str_contains($serviceSource, 'database_maintenance_model_execute_cleanup_rule('), 'Service cleanup orchestration must delegate the atomic delete/audit batch to the model.');
+assert_database_maintenance(str_contains($modelSource, 'INSERT INTO database_maintenance_audit_log'), 'Every committed cleanup batch must write a transactional audit row.');
+assert_database_maintenance(str_contains($modelSource, "':removed_identifiers_json' => json_encode(\$identifiers"), 'Transactional audit rows must contain every removed row identifier.');
+assert_database_maintenance(str_contains($modelSource, 'identifier count did not match the deleted row count'), 'Identifier and delete counts must be verified before commit.');
+assert_database_maintenance(str_contains($modelSource, "if (!in_array(\$operation, ['ANALYZE', 'OPTIMIZE'], true))"), 'Physical table operations must remain confined to the explicit selected-operation model function.');
 
 echo "Database maintenance tests passed.\n";

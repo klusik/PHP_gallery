@@ -38,6 +38,8 @@ namespace Gallery\Core;
 
 use PDO;
 use RuntimeException;
+use function Gallery\Controllers\public_gallery_json_ld_view_model;
+use function Gallery\Controllers\public_seo_tags_view_model;
 use function Gallery\Services\app_setting;
 use function Gallery\Services\application_update_nav_label;
 use function Gallery\Services\application_update_pending;
@@ -525,11 +527,10 @@ function social_preview_cache_busted_url(string $url, string $filePath): string
  */
 function render_meta_tag(string $attributeName, string $attributeValue, string $content): void
 {
-    if (function_exists('Gallery\\Views\\view_render_meta_tag')) {
-        view_render_meta_tag($attributeName, $attributeValue, $content);
-        return;
+    if (!function_exists('Gallery\Views\view_render_meta_tag')) {
+        throw new RuntimeException('SEO meta-tag view is unavailable. Ensure app/views.php is loaded before rendering.');
     }
-    echo '<meta ' . $attributeName . '="' . e($attributeValue) . '" content="' . e($content) . '">' . "\n";
+    view_render_meta_tag($attributeName, $attributeValue, $content);
 }
 
 /**
@@ -540,11 +541,10 @@ function render_meta_tag(string $attributeName, string $attributeValue, string $
  */
 function render_link_tag(string $rel, string $href): void
 {
-    if (function_exists('Gallery\\Views\\view_render_link_tag')) {
-        view_render_link_tag($rel, $href);
-        return;
+    if (!function_exists('Gallery\Views\view_render_link_tag')) {
+        throw new RuntimeException('SEO link-tag view is unavailable. Ensure app/views.php is loaded before rendering.');
     }
-    echo '<link rel="' . e($rel) . '" href="' . e($href) . '">' . "\n";
+    view_render_link_tag($rel, $href);
 }
 
 /**
@@ -555,51 +555,10 @@ function render_link_tag(string $rel, string $href): void
  */
 function render_public_seo_tags(array $gallery, array $images = []): void
 {
-    if (function_exists('Gallery\\Views\\view_render_public_seo_tags')) {
-        view_render_public_seo_tags($gallery, $images);
-        return;
+    if (!function_exists('Gallery\Views\view_render_public_seo_tags')) {
+        throw new RuntimeException('Public SEO view is unavailable. Ensure app/views.php is loaded before rendering.');
     }
-    // $title stores an intermediate value used by the surrounding gallery workflow.
-    $title = gallery_seo_title($gallery);
-    // $description stores an intermediate value used by the surrounding gallery workflow.
-    $description = gallery_seo_description($gallery);
-    // $canonical stores an intermediate value used by the surrounding gallery workflow.
-    $canonical = canonical_url_for_gallery($gallery);
-    // $previewImage stores crawler-safe social image metadata when available.
-    $previewImage = gallery_social_preview_image($gallery, $images);
-    // $ogImage stores an intermediate value used by the surrounding gallery workflow.
-    $ogImage = $previewImage['url'] ?? '';
-
-    render_link_tag('canonical', $canonical);
-    render_meta_tag('name', 'description', $description);
-    render_meta_tag('property', 'og:type', 'website');
-    render_meta_tag('property', 'og:title', $title);
-    render_meta_tag('property', 'og:description', $description);
-    render_meta_tag('property', 'og:url', $canonical);
-    render_meta_tag('property', 'og:site_name', site_name());
-    render_meta_tag('property', 'og:locale', 'cs_CZ');
-    if ($previewImage !== null) {
-        render_meta_tag('property', 'og:image', $previewImage['url']);
-        render_meta_tag('property', 'og:image:url', $previewImage['url']);
-        if (str_starts_with((string) $previewImage['secure_url'], 'https://')) {
-            render_meta_tag('property', 'og:image:secure_url', $previewImage['secure_url']);
-        }
-        render_meta_tag('property', 'og:image:type', $previewImage['type']);
-        render_meta_tag('property', 'og:image:width', (string) $previewImage['width']);
-        render_meta_tag('property', 'og:image:height', (string) $previewImage['height']);
-        render_meta_tag('property', 'og:image:alt', $previewImage['alt']);
-        render_meta_tag('name', 'image', $previewImage['url']);
-        render_meta_tag('itemprop', 'image', $previewImage['url']);
-    }
-    render_meta_tag('name', 'twitter:card', $ogImage !== '' ? 'summary_large_image' : 'summary');
-    render_meta_tag('name', 'twitter:title', $title);
-    render_meta_tag('name', 'twitter:description', $description);
-    render_meta_tag('name', 'twitter:url', $canonical);
-    if ($previewImage !== null) {
-        render_meta_tag('name', 'twitter:image', $previewImage['url']);
-        render_meta_tag('name', 'twitter:image:src', $previewImage['url']);
-        render_meta_tag('name', 'twitter:image:alt', $previewImage['alt']);
-    }
+    view_render_public_seo_tags(public_seo_tags_view_model($gallery, $images));
 }
 
 /**
@@ -617,79 +576,10 @@ function render_public_seo_tags(array $gallery, array $images = []): void
  */
 function render_gallery_json_ld(array $gallery, array $images = [], array $publicMediaManifest = []): void
 {
-    if (function_exists('Gallery\\Views\\view_render_gallery_json_ld')) {
-        view_render_gallery_json_ld($gallery, $images, $publicMediaManifest);
-        return;
+    if (!function_exists('Gallery\Views\view_render_gallery_json_ld')) {
+        throw new RuntimeException('Gallery JSON-LD view is unavailable. Ensure app/views.php is loaded before rendering.');
     }
-    // $items stores an intermediate value used by the surrounding gallery workflow.
-    $items = [];
-    // $position stores an intermediate value used by the surrounding gallery workflow.
-    $position = 1;
-    // $jsonLdImages stores a conservative visible-page subset for crawler metadata.
-    $jsonLdImages = array_slice($images, 0, 20);
-    public_render_profile_count('seo_json_ld_images', count($jsonLdImages));
-
-    foreach ($jsonLdImages as $image) {
-        if (image_nsfw_restricted($image, $gallery)) {
-            continue;
-        }
-        $imageName = image_alt_text($image, $gallery, $position);
-        $manifestEntry = is_array($publicMediaManifest[(int) ($image['id'] ?? 0)] ?? null) ? $publicMediaManifest[(int) ($image['id'] ?? 0)] : [];
-        $contentUrl = (string) ($manifestEntry['seo_content_url'] ?? '');
-        if ($contentUrl === '') {
-            $contentUrl = public_render_profile_with_thumbnail_purpose('seo json-ld visible content 1200 fallback', static fn (): string => thumbnail_url($image, 1200, 'jpg'));
-        } else {
-            public_render_profile_count('seo_json_ld_manifest_hits');
-        }
-        $thumbnailUrl = (string) ($manifestEntry['seo_thumbnail_url'] ?? '');
-        if ($thumbnailUrl === '') {
-            $thumbnailUrl = public_render_profile_with_thumbnail_purpose('seo json-ld thumbnail 800 fallback', static fn (): string => thumbnail_url($image, 800, 'jpg'));
-        } else {
-            public_render_profile_count('seo_json_ld_manifest_hits');
-        }
-        $item = [
-            '@type' => 'ImageObject',
-            'position' => $position++,
-            'name' => $imageName,
-            'description' => trim((string) ($image['description'] ?? '')) !== '' ? trim((string) $image['description']) : $imageName,
-            'contentUrl' => absolute_public_url($contentUrl),
-            'thumbnailUrl' => absolute_public_url($thumbnailUrl),
-            'url' => absolute_public_url(image_public_url($image, $gallery)),
-        ];
-        if (!empty($image['width'])) {
-            $item['width'] = (int) $image['width'];
-        }
-        if (!empty($image['height'])) {
-            $item['height'] = (int) $image['height'];
-        }
-        if (function_exists('Gallery\\Services\\public_sitemap_lastmod')) {
-            $dateModified = public_sitemap_lastmod(public_sitemap_image_last_modified($image));
-            if ($dateModified !== null) {
-                $item['dateModified'] = $dateModified;
-            }
-        }
-        $items[] = $item;
-    }
-    // $jsonLd stores an intermediate value used by the surrounding gallery workflow.
-    $jsonLd = [
-        '@context' => 'https://schema.org',
-        '@type' => 'ImageGallery',
-        'name' => gallery_seo_title($gallery),
-        'description' => gallery_seo_description($gallery),
-        'url' => canonical_url_for_gallery($gallery),
-        'image' => $items,
-    ];
-    // $metadata stores an intermediate value used by the surrounding gallery workflow.
-    $metadata = public_gallery_metadata($gallery);
-    if (!empty($metadata['tags'])) {
-        $jsonLd['keywords'] = $metadata['tags'];
-    }
-    // $json stores an intermediate value used by the surrounding gallery workflow.
-    $json = json_encode($jsonLd, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-    if ($json === false) {
-        return;
-    }
-    echo '<script type="application/ld+json">' . str_replace('</', '<\/', $json) . '</script>';
+    view_render_gallery_json_ld(public_gallery_json_ld_view_model($gallery, $images, $publicMediaManifest));
 }
 
 /**
@@ -697,42 +587,11 @@ function render_gallery_json_ld(array $gallery, array $images = [], array $publi
  */
 function output_sitemap_xml(): void
 {
-    header('Content-Type: application/xml; charset=utf-8');
-    $entries = function_exists('Gallery\\Services\\public_sitemap_entries')
+    if (!function_exists('Gallery\Views\view_render_sitemap_xml')) {
+        throw new RuntimeException('Sitemap XML view is unavailable. Ensure app/views.php is loaded before rendering.');
+    }
+    $entries = function_exists('Gallery\Services\public_sitemap_entries')
         ? public_sitemap_entries()
         : array_map(static fn (string $url): array => ['loc' => $url, 'images' => []], public_gallery_sitemap_entries());
-
-    echo '<?xml version="1.0" encoding="UTF-8"?>';
-    echo '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">';
-    foreach ($entries as $entry) {
-        $loc = trim((string) ($entry['loc'] ?? ''));
-        if ($loc === '') {
-            continue;
-        }
-        echo '<url>';
-        echo '<loc>' . e($loc) . '</loc>';
-        if (!empty($entry['lastmod'])) {
-            echo '<lastmod>' . e((string) $entry['lastmod']) . '</lastmod>';
-        }
-        if (!empty($entry['priority'])) {
-            echo '<priority>' . e((string) $entry['priority']) . '</priority>';
-        }
-        foreach (($entry['images'] ?? []) as $image) {
-            $imageLoc = trim((string) ($image['loc'] ?? ''));
-            if ($imageLoc === '') {
-                continue;
-            }
-            echo '<image:image>';
-            echo '<image:loc>' . e($imageLoc) . '</image:loc>';
-            if (!empty($image['title'])) {
-                echo '<image:title>' . e((string) $image['title']) . '</image:title>';
-            }
-            if (!empty($image['caption'])) {
-                echo '<image:caption>' . e((string) $image['caption']) . '</image:caption>';
-            }
-            echo '</image:image>';
-        }
-        echo '</url>';
-    }
-    echo '</urlset>';
+    \Gallery\Views\view_render_sitemap_xml($entries);
 }

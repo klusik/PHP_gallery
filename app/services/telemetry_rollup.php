@@ -36,8 +36,9 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
-use function Gallery\Core\db;
 use function Gallery\Core\now_sql;
+use function Gallery\Models\telemetry_model_delete_older_than;
+use function Gallery\Models\telemetry_model_rollup_daily;
 
 /**
  * Telemetry rollup and cleanup service.
@@ -69,29 +70,7 @@ function telemetry_rollup_daily(?string $fromDate = null, ?string $toDate = null
     $fromDate = $fromDate ?: date('Y-m-d', strtotime('-2 days'));
     // $toDate stores the inclusive end date for daily rollup.
     $toDate = $toDate ?: date('Y-m-d');
-    // $stmt stores the daily rollup insert-select query.
-    $stmt = db()->prepare('INSERT INTO telemetry_daily_metrics (
-        bucket_date, metric_name, route_name, page_kind, gallery_id, image_id, browser_family, os_family,
-        device_type, viewport_class, country_code, referrer_category, media_variant, cache_result,
-        sample_count, event_count, value_sum, value_min, value_max, updated_at
-    )
-    SELECT
-        DATE(bucket_start), metric_name, route_name, page_kind, gallery_id, image_id, browser_family, os_family,
-        device_type, viewport_class, country_code, referrer_category, media_variant, cache_result,
-        SUM(sample_count), SUM(event_count), SUM(value_sum), MIN(value_min), MAX(value_max), ?
-    FROM telemetry_hourly_metrics
-    WHERE bucket_start >= ? AND bucket_start < DATE_ADD(?, INTERVAL 1 DAY)
-    GROUP BY DATE(bucket_start), metric_name, route_name, page_kind, gallery_id, image_id, browser_family, os_family,
-        device_type, viewport_class, country_code, referrer_category, media_variant, cache_result
-    ON DUPLICATE KEY UPDATE
-        sample_count = VALUES(sample_count),
-        event_count = VALUES(event_count),
-        value_sum = VALUES(value_sum),
-        value_min = VALUES(value_min),
-        value_max = VALUES(value_max),
-        updated_at = VALUES(updated_at)');
-    $stmt->execute([now_sql(), $fromDate . ' 00:00:00', $toDate]);
-    return $stmt->rowCount();
+    return telemetry_model_rollup_daily($fromDate, $toDate, now_sql());
 }
 
 /**
@@ -131,22 +110,13 @@ function telemetry_purge_expired(): array
  */
 function telemetry_delete_older_than(string $tableName, string $columnName, int $days): int
 {
-    // $safeTables stores table and column names that are allowed in retention cleanup SQL.
-    $safeTables = [
-        'telemetry_events' => ['occurred_at'],
-        'telemetry_sessions' => ['last_seen_at'],
-        'telemetry_hourly_metrics' => ['bucket_start'],
-        'telemetry_daily_metrics' => ['bucket_date'],
-        'telemetry_db_query_metrics' => ['bucket_start'],
-        'telemetry_job_runs' => ['started_at'],
-    ];
-    if (!isset($safeTables[$tableName]) || !in_array($columnName, $safeTables[$tableName], true)) {
+    // Keep the service API fail-closed for unexpected table/column pairs while
+    // the model owns the persistence allowlist and delete statement.
+    try {
+        return telemetry_model_delete_older_than($tableName, $columnName, $days);
+    } catch (\InvalidArgumentException) {
         return 0;
     }
-    // $stmt stores the bounded retention delete query.
-    $stmt = db()->prepare("DELETE FROM {$tableName} WHERE {$columnName} < DATE_SUB(NOW(), INTERVAL ? DAY)");
-    $stmt->execute([$days]);
-    return $stmt->rowCount();
 }
 
 /**

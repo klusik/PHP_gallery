@@ -18,6 +18,9 @@
  *   - Verify suspension/deletion/master-feature/schema-failure behavior remains fail-closed and scoped
  *   - Verify runtime imports and cryptographic/session helper contracts beyond PHP syntax lint
  *
+ * Author:
+ *   Rudolf Klusal
+ *
  * Last Updated:
  *   2026-08-19
  */
@@ -90,13 +93,21 @@ require_once $root . '/tests/support/module_source.php';
 $servicePath = 'app/services/viewer_collection_shares.php';
 $controllerPath = 'app/controllers/viewer_collection_shares.php';
 $service = (string) file_get_contents($root . '/' . $servicePath);
+$shareModel = (string) file_get_contents($root . '/app/models/viewer_collection_shares.php');
+$collectionModel = (string) file_get_contents($root . '/app/models/viewer_collections.php');
+$identityAdapter = (string) file_get_contents($root . '/app/bootstrap/viewer_identity_context.php');
 $controller = (string) file_get_contents($root . '/' . $controllerPath);
+$shareView = (string) file_get_contents($root . '/app/views/viewer_collection_shares.php');
+$httpView = (string) file_get_contents($root . '/app/views/http.php');
 $collectionsService = (string) file_get_contents($root . '/app/services/viewer_collections.php');
 $collectionsController = (string) file_get_contents($root . '/app/controllers/viewer_collections.php');
 $contentFoundations = (string) file_get_contents($root . '/app/services/viewer_content_foundations.php');
+$imagesModel = (string) file_get_contents($root . '/app/models/images.php');
 $accountsService = (string) file_get_contents($root . '/app/services/viewer_accounts.php');
+$accountModel = (string) file_get_contents($root . '/app/models/viewer_accounts.php');
 $adminAccountsService = (string) file_get_contents($root . '/app/services/viewer_admin_accounts.php');
 $lifecycleService = (string) file_get_contents($root . '/app/services/viewer_lifecycle.php');
+$lifecycleModel = (string) file_get_contents($root . '/app/models/viewer_lifecycle.php');
 $rateLimits = (string) file_get_contents($root . '/app/services/viewer_rate_limits.php');
 $featureFlags = module_source($root . '/app/services/feature_flags.php');
 $dispatch = (string) file_get_contents($root . '/app/bootstrap/dispatch.php');
@@ -109,7 +120,7 @@ $galleryAccess = (string) file_get_contents($root . '/app/services/gallery_acces
 $migration = (string) file_get_contents($root . '/database/migrations/202608180001_viewer_security_foundations.php');
 $css = (string) file_get_contents($root . '/public/assets/styles/public-shared.css');
 
-viewer_phase30_assert($service !== '' && $controller !== '', 'Dedicated Phase 3.0 service and controller must exist.');
+viewer_phase30_assert($service !== '' && $controller !== '' && $shareView !== '', 'Dedicated Phase 3.0 service, controller, and view must exist.');
 viewer_phase30_assert(str_contains($servicesBootstrap, "'/services/viewer_collection_shares.php'"), 'Phase 3 service must load through app/services.php.');
 viewer_phase30_assert(str_contains($controllersBootstrap, "'/controllers/viewer_collection_shares.php'"), 'Phase 3 controller must load through app/controllers.php.');
 viewer_phase30_assert(str_contains($collectionsController, 'render_viewer_collection_share_owner_section($viewer, $collectionId)'), 'Sharing must integrate into the existing private collection detail page.');
@@ -171,8 +182,10 @@ viewer_phase30_assert(
     'All Phase 3 viewer_* routes must be owned by canonical Viewer Accounts route-prefix metadata.'
 );
 viewer_phase30_assert(str_contains($featureFlags, "'viewer_accounts' =>") && str_contains($featureFlags, "'default_enabled' => false"), 'Viewer Accounts master feature must remain default OFF.');
-$disabledRoute = viewer_phase30_function_source($featureFlags, 'feature_flag_render_disabled_route');
-viewer_phase30_assert(str_contains($disabledRoute, 'if (!$isAdmin)') && str_contains($disabledRoute, 'http_response_code(404)'), 'Anonymous Viewer Accounts routes must remain generic not-found while the master feature is OFF.');
+$disabledRouteDecision = viewer_phase30_function_source($featureFlags, 'feature_flag_disabled_route_decision');
+$disabledRouteTransport = viewer_phase30_function_source($dispatch, 'cms_apply_feature_disabled_route_response');
+viewer_phase30_assert(str_contains($disabledRouteDecision, 'if (!$isAdmin)') && str_contains($disabledRouteDecision, "'status' => 404"), 'Anonymous Viewer Accounts routes must remain generic not-found while the master feature is OFF.');
+viewer_phase30_assert(str_contains($disabledRouteTransport, 'http_response_code('), 'Disabled feature status emission must remain at the HTTP dispatch boundary.');
 viewer_phase30_assert(str_contains($routing, "'viewer_collection_share_exchange'") && str_contains($routing, "'viewer_collection_shared'"), 'Clean exchange/shared routes must be parsed by the existing router.');
 viewer_phase30_assert(str_contains($urlHelpers, "'viewer_collection_share_exchange'") && str_contains($urlHelpers, "'viewer_collection_shared'"), 'Phase 3 URLs must be built through url_for clean-route support.');
 viewer_phase30_assert(!str_contains($controller, 'localhost') && !str_contains($controller, 'Galerie/index.php'), 'Phase 3 controller must not hard-code installation paths.');
@@ -187,57 +200,60 @@ foreach (['cms_viewer_collection_share_replace', 'cms_viewer_collection_share_re
     viewer_phase30_assert(!str_contains($source, 'admin_csrf') && !str_contains($source, 'current_user('), $functionName . ' must not accept Admin identity/CSRF as owner authority.');
 }
 $ownerSection = viewer_phase30_function_source($controller, 'render_viewer_collection_share_owner_section');
-viewer_phase30_assert(str_contains($ownerSection, 'viewer_csrf_token()'), 'Owner share forms must emit Viewer CSRF.');
-viewer_phase30_assert(str_contains($ownerSection, 'readonly') && str_contains($ownerSection, 'viewer_collection_share_secret_flash_key($collectionId)'), 'New share secret must be readonly and collection-scoped show-once state.');
-viewer_phase30_assert(str_contains($ownerSection, 'Replace this share link?') && str_contains($ownerSection, 'Revoke this share link?'), 'Replace/revoke owner actions must use simple confirmations.');
+$ownerSectionView = viewer_phase30_function_source($shareView, 'view_render_viewer_collection_share_owner_section');
+viewer_phase30_assert(str_contains($ownerSection, 'viewer_csrf_token()'), 'Owner share controller must issue Viewer CSRF for the view model.');
+viewer_phase30_assert(str_contains($ownerSection, 'viewer_collection_share_secret_flash_key($collectionId)') && str_contains($ownerSection, "'new_secret_url' => " . '$newSecretUrl'), 'New share secret must remain collection-scoped show-once controller state.');
+viewer_phase30_assert(str_contains($ownerSectionView, 'readonly') && str_contains($ownerSectionView, "'new_secret_url'"), 'Owner share view must render the one-time secret as readonly output.');
+viewer_phase30_assert(str_contains($ownerSectionView, 'Replace this share link?') && str_contains($ownerSectionView, 'Revoke this share link?'), 'Replace/revoke owner actions must use simple confirmations in the presentation layer.');
 
 // Share create/replace transaction, ownership, stale-session, must-change-password, and rate-limit boundary.
 $replace = viewer_phase30_function_source($service, 'viewer_collection_share_replace');
 viewer_phase30_assert(str_contains($replace, "viewer_rate_limit_consume('viewer_share_create_account'"), 'Create/replace must reuse the existing viewer_share_create_account limiter.');
 viewer_phase30_assert(str_contains($rateLimits, "'viewer_share_create_account'"), 'Existing share-create limiter policy must remain defined.');
-viewer_phase30_assert(str_contains($replace, 'beginTransaction()') && str_contains($replace, 'commit()') && str_contains($replace, 'rollBack()'), 'Create/replace must be transactional.');
-viewer_phase30_assert(strpos($replace, 'viewer_collection_lock_mutation_account') < strpos($replace, 'viewer_collection_lock_owned') && strpos($replace, 'viewer_collection_lock_owned') < strpos($replace, 'FOR UPDATE'), 'Create/replace lock order must be account -> collection -> share rows.');
-viewer_phase30_assert(str_contains($replace, 'WHERE viewer_collection_id = ? AND revoked_at IS NULL ORDER BY id ASC FOR UPDATE'), 'Create/replace must lock all unrevoked share rows for the collection.');
-viewer_phase30_assert(str_contains($replace, 'UPDATE viewer_collection_share_tokens SET revoked_at = ?') && str_contains($replace, 'INSERT INTO viewer_collection_share_tokens'), 'Replacement must revoke previous unrevoked rows before creating new authority.');
+viewer_phase30_assert(str_contains($replace, 'viewer_collection_model_transaction(') && str_contains($collectionModel, 'beginTransaction()') && str_contains($collectionModel, 'commit()') && str_contains($collectionModel, 'rollBack()'), 'Create/replace must delegate to the collection model transaction boundary.');
+viewer_phase30_assert(strpos($replace, 'viewer_collection_lock_mutation_account') < strpos($replace, 'viewer_collection_lock_owned') && strpos($replace, 'viewer_collection_lock_owned') < strpos($replace, 'viewer_collection_share_model_active_ids_lock'), 'Create/replace lock order must be account -> collection -> share rows.');
+viewer_phase30_assert(str_contains($replace, 'viewer_collection_share_model_active_ids_lock(') && str_contains($shareModel, 'WHERE viewer_collection_id = ? AND revoked_at IS NULL ORDER BY id ASC FOR UPDATE'), 'Create/replace must lock all unrevoked share rows in the model.');
+viewer_phase30_assert(strpos($replace, 'viewer_collection_share_model_revoke_active(') < strpos($replace, 'viewer_collection_share_model_insert(') && str_contains($shareModel, 'UPDATE viewer_collection_share_tokens SET revoked_at = ?') && str_contains($shareModel, 'INSERT INTO viewer_collection_share_tokens'), 'Replacement must revoke previous unrevoked rows before creating new authority through the model.');
 viewer_phase30_assert(str_contains($replace, 'security_opaque_token_generate(32)') && str_contains($replace, 'security_authority_token_hash($token)'), 'Share token must use existing 32-byte opaque token and authority hash primitives.');
-viewer_phase30_assert(str_contains($replace, '(viewer_collection_id, created_by_viewer_account_id, token_hash, created_at, expires_at)'), 'Only token_hash, not plaintext token, may be persisted.');
-viewer_phase30_assert(!preg_match('/INSERT INTO viewer_collection_share_tokens[^;]*(?:\btoken\b)(?!_hash)/is', $replace), 'Share INSERT must never persist a plaintext token column.');
+viewer_phase30_assert(str_contains($shareModel, '(viewer_collection_id, created_by_viewer_account_id, token_hash, created_at, expires_at)'), 'Only token_hash, not plaintext token, may be persisted.');
+viewer_phase30_assert(!preg_match('/INSERT INTO viewer_collection_share_tokens[^;]*(?:\btoken\b)(?!_hash)/is', $shareModel), 'Share INSERT must never persist a plaintext token column.');
 viewer_phase30_assert(str_contains($replace, 'viewer_collection_share_lifetime_seconds()'), 'Share creation must use the fixed Phase 3 lifetime.');
 $accountLock = viewer_phase30_function_source($collectionsService, 'viewer_collection_lock_mutation_account');
-viewer_phase30_assert(str_contains($accountLock, 'must_change_password') && str_contains($accountLock, 'viewer_account_can_mutate_content($account)') && str_contains($accountLock, 'security_version\'] ?? 0) !== $expectedSecurityVersion'), 'Transaction account lock must revalidate must_change_password and security_version.');
+viewer_phase30_assert(str_contains($accountLock, 'viewer_collection_model_account_lock(') && str_contains($accountLock, 'viewer_account_can_mutate_content($account)') && str_contains($accountLock, 'security_version\'] ?? 0) !== $expectedSecurityVersion') && str_contains($collectionModel, 'must_change_password'), 'Transaction account lock must revalidate mutable-account policy and security_version against the locked model row.');
 
 // Revoke remains easy, owner-scoped, transactional, and does not touch collections/media/favourites.
 $revoke = viewer_phase30_function_source($service, 'viewer_collection_share_revoke');
 viewer_phase30_assert(!str_contains($revoke, 'viewer_rate_limit_consume'), 'Revocation must not be rate-limited.');
-viewer_phase30_assert(str_contains($revoke, 'viewer_collection_lock_mutation_account') && str_contains($revoke, 'viewer_collection_lock_owned') && str_contains($revoke, 'FOR UPDATE'), 'Revocation must revalidate owner/account state transactionally.');
-viewer_phase30_assert(str_contains($revoke, 'UPDATE viewer_collection_share_tokens SET revoked_at = ?'), 'Revocation must mark share authority revoked.');
-viewer_phase30_assert(!preg_match('/DELETE\s+FROM\s+(viewer_collections|viewer_collection_items|viewer_favourites|images|galleries)/i', $revoke), 'Revocation must not delete collection state, favourites, or source media.');
+viewer_phase30_assert(str_contains($revoke, 'viewer_collection_model_transaction(') && str_contains($revoke, 'viewer_collection_lock_mutation_account') && str_contains($revoke, 'viewer_collection_lock_owned') && str_contains($revoke, 'viewer_collection_share_model_active_ids_lock('), 'Revocation must revalidate owner/account/share state transactionally.');
+viewer_phase30_assert(str_contains($revoke, 'viewer_collection_share_model_revoke_active(') && str_contains($shareModel, 'UPDATE viewer_collection_share_tokens SET revoked_at = ?'), 'Revocation must mark share authority revoked through the model.');
+viewer_phase30_assert(!preg_match('/DELETE\s+FROM\s+(viewer_collections|viewer_collection_items|viewer_favourites|images|galleries)/i', $shareModel), 'Revocation persistence must not delete collection state, favourites, or source media.');
 
 // Raw token exchange is scanner-safe, strict before DB access, and establishes no identity/gallery authority.
 $exchange = viewer_phase30_function_source($service, 'viewer_collection_share_exchange');
 $syntaxValidator = viewer_phase30_function_source($service, 'viewer_collection_share_token_syntax_valid');
 viewer_phase30_assert(str_contains($syntaxValidator, 'strlen($token) === 43') && str_contains($syntaxValidator, '[A-Za-z0-9_-]{43}'), 'Raw token syntax must be strictly bounded to canonical 32-byte base64url encoding.');
-viewer_phase30_assert(strpos($exchange, 'viewer_collection_share_token_syntax_valid($token)') < strpos($exchange, 'viewer_collection_shares_storage_available()') && strpos($exchange, 'viewer_collection_shares_storage_available()') < strpos($exchange, 'security_authority_token_hash($token)') && strpos($exchange, 'security_authority_token_hash($token)') < strpos($exchange, 'prepare('), 'Malformed tokens must be rejected before schema/DB lookup.');
-viewer_phase30_assert(str_contains($exchange, 'token_hash = ?') && str_contains($exchange, 'revoked_at') && str_contains($exchange, 'viewer_collection_share_expiry_active'), 'Exchange must revalidate the exact durable share and its revoke/expiry state.');
-viewer_phase30_assert(str_contains($exchange, 'FROM viewer_accounts WHERE id = ? LIMIT 1 FOR UPDATE') && str_contains($exchange, 'viewer_account_can_authenticate($account)'), 'Exchange must reject missing/suspended/disabled owners.');
-viewer_phase30_assert(str_contains($exchange, 'FROM viewer_collections') && str_contains($exchange, 'viewer_account_id = ? LIMIT 1 FOR UPDATE'), 'Exchange must verify collection still exists under the share owner.');
-viewer_phase30_assert(str_contains($exchange, 'session_regenerate_id(true)'), 'Bearer capability exchange must rotate the PHP session id.');
+viewer_phase30_assert(strpos($exchange, 'viewer_collection_share_token_syntax_valid($token)') < strpos($exchange, 'viewer_collection_shares_storage_available()') && strpos($exchange, 'viewer_collection_shares_storage_available()') < strpos($exchange, 'security_authority_token_hash($token)') && strpos($exchange, 'security_authority_token_hash($token)') < strpos($exchange, 'viewer_collection_share_model_candidate('), 'Malformed tokens must be rejected before model lookup.');
+viewer_phase30_assert(str_contains($exchange, 'viewer_collection_share_model_lock(') && str_contains($shareModel, 'token_hash = ?') && str_contains($shareModel, 'revoked_at') && str_contains($exchange, 'viewer_collection_share_expiry_active'), 'Exchange must revalidate the exact durable share and its revoke/expiry state through the model.');
+viewer_phase30_assert(str_contains($exchange, 'viewer_collection_model_account_lock(') && str_contains($exchange, 'viewer_account_can_authenticate($account)') && str_contains($collectionModel, 'FROM viewer_accounts WHERE id = ? LIMIT 1 FOR UPDATE'), 'Exchange must lock and reject missing/suspended/disabled owners.');
+viewer_phase30_assert(str_contains($exchange, 'viewer_collection_model_owned_lock(') && str_contains($collectionModel, 'FROM viewer_collections WHERE id = ? AND viewer_account_id = ? LIMIT 1 FOR UPDATE'), 'Exchange must verify collection still exists under the share owner.');
+viewer_phase30_assert(str_contains($exchange, 'viewer_identity_session_regenerate()') && str_contains($identityAdapter, 'session_regenerate_id(true)'), 'Bearer capability exchange must rotate the PHP session id through the Core adapter.');
 viewer_phase30_assert(str_contains($exchange, 'viewer_collection_share_session_grant_store('), 'Exchange must mint only a narrow collection session grant.');
-viewer_phase30_assert(str_contains($exchange, 'last_used_at') && str_contains($exchange, 'operational telemetry'), 'last_used_at must remain best-effort operational metadata.');
+viewer_phase30_assert(str_contains($exchange, 'viewer_collection_share_model_touch_last_used(') && str_contains($exchange, 'operational telemetry') && str_contains($shareModel, 'last_used_at'), 'last_used_at must remain best-effort operational metadata persisted by the model.');
 foreach (['viewer_session_establish', 'viewer_user_id', "\$_SESSION['user_id']", 'gallery_access_grant', 'gallery_share', 'session_destroy('] as $forbidden) {
     viewer_phase30_assert(!str_contains($exchange, $forbidden), 'Token exchange must not establish broader authority or destroy unrelated session state: ' . $forbidden);
 }
 $exchangeController = viewer_phase30_function_source($controller, 'cms_viewer_collection_share_exchange');
 viewer_phase30_assert(str_contains($exchangeController, "request_method() !== 'GET'"), 'Raw bearer exchange must be GET.');
 viewer_phase30_assert(str_contains($exchangeController, "url_for('viewer_collection_shared'") && !str_contains($exchangeController, "'token' =>"), 'Successful exchange redirect target must be token-free.');
-viewer_phase30_assert(!str_contains($exchange, 'DELETE FROM viewer_collection_share_tokens') && !preg_match('/UPDATE viewer_collection_share_tokens SET revoked_at/', $exchange), 'Scanner/human GET exchange must not consume or revoke the reusable link.');
+viewer_phase30_assert(!str_contains($exchange, 'viewer_collection_share_model_revoke_active('), 'Scanner/human GET exchange must not consume or revoke the reusable link.');
 
 // Strict secret-bearing and clean-page response headers.
 $publicHeaders = viewer_phase30_function_source($controller, 'viewer_collection_share_public_headers');
 viewer_phase30_assert(str_contains($publicHeaders, 'no-store') && str_contains($publicHeaders, 'no-referrer') && str_contains($publicHeaders, 'noindex, nofollow'), 'Share exchange/shared pages must emit no-store, no-referrer, and noindex/nofollow headers.');
 viewer_phase30_assert(str_contains($exchangeController, 'viewer_collection_share_public_headers()'), 'Raw exchange must emit strict secret-route headers before validation.');
 $sharedController = viewer_phase30_function_source($controller, 'cms_viewer_collection_shared');
-viewer_phase30_assert(str_contains($sharedController, 'viewer_collection_share_public_headers()') && str_contains($sharedController, '<meta name="robots" content="noindex,nofollow">'), 'Clean shared page must remain no-store/noindex defense in depth.');
+$sharedView = viewer_phase30_function_source($shareView, 'view_render_viewer_collection_shared');
+viewer_phase30_assert(str_contains($sharedController, 'viewer_collection_share_public_headers()') && str_contains($sharedController, 'view_public_noindex_meta()') && str_contains($httpView, '<meta name="robots" content="noindex,nofollow">'), 'Clean shared page must remain no-store/noindex defense in depth through the shared HTTP view.');
 viewer_phase30_assert(!str_contains($exchangeController, 'render_header(') && !str_contains($exchangeController, '<script') && !str_contains($exchangeController, 'analytics'), 'Raw token endpoint must not render content/third parties before redirect.');
 
 // Session grants are isolated, token-free, bounded, deduplicated, and revalidated on every clean view.
@@ -248,35 +264,35 @@ $store = viewer_phase30_function_source($service, 'viewer_collection_share_sessi
 viewer_phase30_assert(str_contains($prune, 'array_slice($grants, -VIEWER_COLLECTION_SHARE_SESSION_MAX_GRANTS)') && str_contains($store, 'array_slice($filtered, -VIEWER_COLLECTION_SHARE_SESSION_MAX_GRANTS)'), 'Attacker-controlled exchanges must not grow the PHP session without bound.');
 viewer_phase30_assert(str_contains($store, "'share_id'") && str_contains($store, "'collection_id'") && str_contains($store, "'expires_at'") && !str_contains($store, "'token'"), 'Long-lived collection share session grants must never store the raw bearer token.');
 $authorize = viewer_phase30_function_source($service, 'viewer_collection_share_session_authorize');
-viewer_phase30_assert(str_contains($authorize, 'WHERE vcs.id = ? AND vcs.viewer_collection_id = ?') && str_contains($authorize, 'vcs.revoked_at') && str_contains($authorize, 'viewer_collection_share_expiry_active') && str_contains($authorize, 'viewer_account_can_authenticate($row)'), 'Every clean shared view must revalidate durable share, expiry, collection owner, and active account state.');
+viewer_phase30_assert(str_contains($authorize, 'viewer_collection_share_model_authorization_row(') && str_contains($shareModel, 'WHERE vcs.id = ? AND vcs.viewer_collection_id = ?') && str_contains($shareModel, 'vcs.revoked_at') && str_contains($authorize, 'viewer_collection_share_expiry_active') && str_contains($authorize, 'viewer_account_can_authenticate($row)'), 'Every clean shared view must revalidate durable share, expiry, collection owner, and active account state.');
 viewer_phase30_assert(str_contains($authorize, 'viewer_collection_share_session_grant_remove('), 'Invalid durable share state must remove the stale local grant reference.');
 $sharedRead = viewer_phase30_function_source($service, 'viewer_collection_shared_read');
-viewer_phase30_assert(strpos($sharedRead, 'viewer_collection_share_session_authorize($collectionId)') < strpos($sharedRead, 'SELECT id, title, created_at, updated_at FROM viewer_collections'), 'Collection metadata must not load before matching session-grant revalidation.');
-viewer_phase30_assert(str_contains($sharedRead, 'SELECT image_id, position, created_at FROM viewer_collection_items') && !str_contains($sharedRead, 'filename') && !str_contains($sharedRead, 'relative_path'), 'Shared read model must return references only, not source metadata or paths.');
+viewer_phase30_assert(strpos($sharedRead, 'viewer_collection_share_session_authorize($collectionId)') < strpos($sharedRead, 'viewer_collection_share_model_collection($collectionId)'), 'Collection metadata must not load before matching session-grant revalidation.');
+viewer_phase30_assert(str_contains($sharedRead, 'viewer_collection_share_model_references(') && str_contains($shareModel, 'SELECT image_id, position, created_at FROM viewer_collection_items') && !str_contains($shareModel, 'filename') && !str_contains($shareModel, 'relative_path'), 'Shared read model must return references only, not source metadata or paths.');
 
 // Live source ACL intersection is the existing no-Admin-bypass recipient policy.
 viewer_phase30_assert(str_contains($sharedController, 'viewer_source_images_resolve_authorized('), 'Shared page must resolve references through the canonical live source authorization helper.');
 $sourceResolver = viewer_phase30_function_source($contentFoundations, 'viewer_source_images_resolve_authorized');
 viewer_phase30_assert(str_contains($sourceResolver, 'visitor_can_access_gallery_without_admin_bypass($gallery)') && str_contains($sourceResolver, 'visitor_can_access_nsfw_content_without_admin_bypass()'), 'Shared recipient rendering must explicitly exclude Admin gallery/NSFW bypass.');
-viewer_phase30_assert(str_contains($sourceResolver, "visibility = ?") && str_contains($sourceResolver, "['public']"), 'Shared rendering must require current public image visibility before source authorization.');
+viewer_phase30_assert(str_contains($sourceResolver, 'image_model_public_rows_by_ids(') && str_contains($imagesModel, 'AND visibility = ?') && str_contains($imagesModel, "['public']"), 'Shared rendering must require current public image visibility before source authorization.');
 viewer_phase30_assert(!str_contains($sourceResolver, 'current_user()'), 'Canonical shared source resolver must not consult the Admin principal.');
-viewer_phase30_assert(str_contains($sharedController, 'e((string) $collection[\'title\'])'), 'Malicious collection titles must be HTML-escaped on the recipient page.');
-viewer_phase30_assert(!str_contains($sharedController, 'viewer email') && !str_contains($sharedController, "['email']") && !str_contains($sharedController, 'token_hash') && !str_contains($sharedController, 'relative_path') && !str_contains($sharedController, 'filename'), 'Recipient page must not expose owner identity, token hash, or hidden path/filename metadata.');
-viewer_phase30_assert(str_contains($sharedController, '$hiddenCount') && str_contains($sharedController, 'some_unavailable'), 'Denied items may only produce generic unavailability feedback.');
-viewer_phase30_assert(!str_contains($sharedController, '<form') && !str_contains($sharedController, 'viewer_favourite') && !str_contains($sharedController, 'render_viewer_collection_add_control_html'), 'Shared collection page must remain read-only and must not expose owner/favourite mutation controls.');
+viewer_phase30_assert(str_contains($sharedView, 'e((string) ($viewModel[\'title\'] ?? \'\'))'), 'Malicious collection titles must be HTML-escaped by the recipient view.');
+viewer_phase30_assert(!str_contains($sharedController, 'viewer email') && !str_contains($sharedController, "['email']") && !str_contains($sharedController, 'token_hash') && !str_contains($sharedController, 'relative_path') && !str_contains($sharedController, 'filename'), 'Recipient controller must not expose owner identity, token hash, or hidden path/filename metadata.');
+viewer_phase30_assert(str_contains($sharedController, '$hiddenCount') && str_contains($sharedView, 'some_unavailable'), 'Denied items may only produce generic unavailability feedback prepared by the controller and rendered by the view.');
+viewer_phase30_assert(!str_contains($sharedView, '<form') && !str_contains($sharedView, 'viewer_favourite') && !str_contains($sharedView, 'render_viewer_collection_add_control_html'), 'Shared collection view must remain read-only and must not expose owner/favourite mutation controls.');
 viewer_phase30_assert(!str_contains($publicMedia, 'viewer_collection_share') && !str_contains($publicMedia, 'viewer_collection_share_grants'), 'Direct media routes must not treat collection-share authority as source-media authorization.');
 viewer_phase30_assert(!str_contains($galleryAccess, 'viewer_collection_share'), 'Existing gallery access policy must not accept collection-share authority.');
 
 // Lifecycle invariants: suspension revokes, restore never resurrects, sign-out-all preserves shares, deletion is scoped.
 $transition = viewer_phase30_function_source($accountsService, 'viewer_account_transition_status');
-viewer_phase30_assert(str_contains($transition, 'UPDATE viewer_collection_share_tokens SET revoked_at = ?'), 'Suspension/disable transition must revoke collection-share capabilities.');
-viewer_phase30_assert(!preg_match('/UPDATE viewer_collection_share_tokens SET revoked_at\s*=\s*NULL/i', $transition), 'Restoration must never clear share revoked_at.');
+viewer_phase30_assert(str_contains($transition, 'viewer_account_model_revoke_transition_authority(') && str_contains($accountModel, 'UPDATE viewer_collection_share_tokens SET revoked_at = ?'), 'Suspension/disable transition must revoke collection-share capabilities.');
+viewer_phase30_assert(!preg_match('/UPDATE viewer_collection_share_tokens SET revoked_at\s*=\s*NULL/i', $transition . "\n" . $accountModel), 'Restoration must never clear share revoked_at.');
 $logoutAll = viewer_phase30_function_source($accountsService, 'viewer_session_revoke_all');
 viewer_phase30_assert(!str_contains($logoutAll, 'viewer_collection_share_tokens'), 'Sign out everywhere must not revoke active collection shares.');
 $accountDelete = viewer_phase30_function_source($lifecycleService, 'viewer_account_delete');
-viewer_phase30_assert(str_contains($accountDelete, 'UPDATE viewer_collection_share_tokens SET revoked_at = ?') && str_contains($accountDelete, 'DELETE FROM viewer_accounts'), 'Viewer account deletion must invalidate shares then use existing account/FK cleanup.');
+viewer_phase30_assert(str_contains($accountDelete, 'viewer_lifecycle_model_revoke_created_shares(') && str_contains($accountDelete, 'viewer_lifecycle_model_account_delete(') && str_contains($lifecycleModel, 'UPDATE viewer_collection_share_tokens SET revoked_at = ?') && str_contains($lifecycleModel, 'DELETE FROM viewer_accounts'), 'Viewer account deletion must invalidate shares then use existing account/FK cleanup through the lifecycle model.');
 $adminDelete = viewer_phase30_function_source($adminAccountsService, 'viewer_admin_account_delete');
-viewer_phase30_assert(str_contains($adminDelete, 'UPDATE viewer_collection_share_tokens SET revoked_at = ?') && str_contains($adminDelete, 'DELETE FROM viewer_accounts'), 'Admin viewer deletion must invalidate shares then use existing account/FK cleanup.');
+viewer_phase30_assert(str_contains($adminDelete, 'viewer_account_model_admin_delete(') && str_contains($accountModel, 'UPDATE viewer_collection_share_tokens SET revoked_at = ?') && str_contains($accountModel, 'DELETE FROM viewer_accounts'), 'Admin viewer deletion must invalidate shares then use existing account/FK cleanup.');
 viewer_phase30_assert(str_contains($migration, 'viewer_collection_items_collection_foreign') && str_contains($migration, 'ON DELETE CASCADE') && str_contains($migration, 'viewer_collection_share_collection_foreign'), 'Collection deletion must cascade item/share references through existing FKs.');
 viewer_phase30_assert(!preg_match('/FOREIGN KEY \(viewer_collection_id\)[^\n]*REFERENCES images/i', $migration), 'Collection share deletion must never cascade into source images.');
 
@@ -290,6 +306,7 @@ foreach (['sitemap', 'public_search', 'Smart Gallery'] as $discoverySurface) {
 
 // Pure helper behavior: 256-bit tokens, distinct values, fixed 30 days, strict syntax, and bounded token-free grants.
 require_once $root . '/app/services/security_tokens.php';
+require_once $root . '/app/bootstrap/viewer_identity_context.php';
 require_once $root . '/' . $servicePath;
 $tokenA = \Gallery\Services\security_opaque_token_generate(32);
 $tokenB = \Gallery\Services\security_opaque_token_generate(32);

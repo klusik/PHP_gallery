@@ -39,8 +39,9 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 use InvalidArgumentException;
-use function Gallery\Core\db;
 use function Gallery\Core\now_sql;
+use function Gallery\Core\viewer_identity_request_user_agent;
+use function Gallery\Models\viewer_security_event_model_insert;
 
 /**
  * Return the three-state schema capability for viewer security-event storage.
@@ -135,7 +136,7 @@ function viewer_security_event_record(string $eventKey, ?int $viewerAccountId = 
     $outcome = substr($outcome, 0, 32);
     $clientIp = request_client_ip();
     $ipHash = $clientIp === '' ? null : viewer_security_fingerprint('viewer-event-ip', $clientIp);
-    $userAgent = (string) ($_SERVER['HTTP_USER_AGENT'] ?? '');
+    $userAgent = viewer_identity_request_user_agent();
     $userAgentHash = $userAgent === '' ? null : viewer_security_fingerprint('viewer-event-ua', $userAgent);
     $requestId = function_exists('Gallery\\Services\\telemetry_request_id') ? (string) telemetry_request_id() : '';
     $requestId = substr($requestId, 0, 64);
@@ -147,8 +148,7 @@ function viewer_security_event_record(string $eventKey, ?int $viewerAccountId = 
     $retentionDays = (int) viewer_accounts_config()['security_event_retention_days'];
     $retentionUntil = date('Y-m-d H:i:s', time() + ($retentionDays * 86400));
 
-    $stmt = db()->prepare('INSERT INTO viewer_security_events (viewer_account_id, event_key, outcome, ip_hash, user_agent_hash, request_id, context_json, created_at, retention_until) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
-    $stmt->execute([
+    viewer_security_event_model_insert(
         $viewerAccountId,
         $eventKey,
         $outcome === '' ? null : $outcome,
@@ -157,6 +157,6 @@ function viewer_security_event_record(string $eventKey, ?int $viewerAccountId = 
         $requestId === '' ? null : $requestId,
         $contextJson,
         now_sql(),
-        $retentionUntil,
-    ]);
+        $retentionUntil
+    );
 }

@@ -40,9 +40,11 @@ namespace Gallery\Services;
 use DateTimeImmutable;
 use InvalidArgumentException;
 use RuntimeException;
-use function Gallery\Core\db;
 use function Gallery\Core\e;
 use function Gallery\Core\now_sql;
+use function Gallery\Models\gallery_model_date_suggestion_rows;
+use function Gallery\Models\gallery_model_update_fields;
+use function Gallery\Models\image_model_gallery_exif_date_ranges;
 
 /**
  * Return true when gallery rows can store the optional manual gallery date.
@@ -298,20 +300,12 @@ function gallery_date_save_range(int $galleryId, mixed $startValue, mixed $endVa
 
     // $range stores normalized database values accepted by the gallery date columns.
     $range = gallery_date_range_storage_values($startValue, $endValue);
-    // $fields stores the exact date columns available on this installation.
-    $fields = ['gallery_date = ?'];
-    // $values stores SQL values in the same order as $fields.
-    $values = [$range['start']];
+    // $fields stores the exact semantic date values available on this installation.
+    $fields = ['gallery_date' => $range['start']];
     if (gallery_date_range_schema_ready()) {
-        $fields[] = 'gallery_date_end = ?';
-        $values[] = $range['end'];
+        $fields['gallery_date_end'] = $range['end'];
     }
-    $fields[] = 'updated_at = ?';
-    $values[] = now_sql();
-    $values[] = $galleryId;
-
-    $stmt = db()->prepare('UPDATE galleries SET ' . implode(', ', $fields) . ' WHERE id = ?');
-    $stmt->execute($values);
+    gallery_model_update_fields($galleryId, $fields, now_sql());
 
     // $updatedGallery stores the post-save row so sidecar metadata mirrors the DB state.
     $updatedGallery = find_gallery($galleryId, true) ?: $gallery;
@@ -337,33 +331,23 @@ function gallery_date_end_value(array $gallery): ?string
 }
 
 /**
- * Render the optional public gallery date or date range when one was manually assigned.
+ * Build optional public gallery date presentation data when one was assigned.
  *
  * @param array $gallery Gallery row or gallery data.
- * @param string $class Class value.
+ * @return ?array{start:?string,end:?string,display:string} Prepared date model.
  */
-function render_gallery_date(array $gallery, string $class = 'gallery-date'): void
+function gallery_date_view_model(array $gallery): ?array
 {
     if (!gallery_date_schema_ready()) {
-        return;
+        return null;
     }
-    // $start stores the normalized date range start for machine-readable markup.
     $start = gallery_date_sidecar_value($gallery['gallery_date'] ?? null);
-    // $end stores the normalized date range end for machine-readable markup.
     $end = gallery_date_end_value($gallery);
-    // $displayDate stores the visitor-facing date string. Empty values are intentionally silent.
     $displayDate = gallery_date_range_display_value($start, $end);
     if ($displayDate === '') {
-        return;
+        return null;
     }
-    $attributes = ' class="' . e($class) . '"';
-    if ($start !== null) {
-        $attributes .= ' datetime="' . e($start) . '" data-date-start="' . e($start) . '"';
-    }
-    if ($end !== null) {
-        $attributes .= ' data-date-end="' . e($end) . '"';
-    }
-    echo '<time' . $attributes . '>' . e($displayDate) . '</time>';
+    return ['start' => $start, 'end' => $end, 'display' => $displayDate];
 }
 
 /**
@@ -373,20 +357,7 @@ function render_gallery_date(array $gallery, string $class = 'gallery-date'): vo
  */
 function gallery_date_suggestion_gallery_rows(): array
 {
-    $selects = [
-        'id',
-        'parent_id',
-        'folder_path',
-        'title',
-        'gallery_date',
-    ];
-    if (gallery_date_range_schema_ready()) {
-        $selects[] = 'gallery_date_end';
-    } else {
-        $selects[] = 'NULL AS gallery_date_end';
-    }
-
-    return db()->query('SELECT ' . implode(', ', $selects) . ' FROM galleries ORDER BY folder_path')->fetchAll();
+    return gallery_model_date_suggestion_rows(gallery_date_range_schema_ready());
 }
 
 /**
@@ -399,12 +370,7 @@ function gallery_date_direct_exif_ranges(): array
     if (!gallery_date_exif_suggestions_schema_ready()) {
         return [];
     }
-
-    $sql = "SELECT gallery_id, MIN(DATE(exif_taken_at)) AS suggested_start, MAX(DATE(exif_taken_at)) AS suggested_end, COUNT(*) AS image_count
-        FROM images
-        WHERE exif_taken_at IS NOT NULL AND exif_taken_at > '1000-01-01 00:00:00'
-        GROUP BY gallery_id";
-    return db()->query($sql)->fetchAll();
+    return image_model_gallery_exif_date_ranges();
 }
 
 /**

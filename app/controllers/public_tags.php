@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-12
+ *   2026-09-13
  */
 
 declare(strict_types=1);
@@ -37,9 +37,7 @@ declare(strict_types=1);
 namespace Gallery\Controllers;
 
 use function Gallery\Core\admin_anonymous_preview_active;
-use function Gallery\Core\csrf_field;
 use function Gallery\Core\current_user;
-use function Gallery\Core\e;
 use function Gallery\Core\render_footer;
 use function Gallery\Core\render_header;
 use function Gallery\Core\url_for;
@@ -50,11 +48,16 @@ use function Gallery\Services\pagination_grid_columns_class;
 use function Gallery\Services\pagination_model;
 use function Gallery\Services\pagination_slice_items;
 use function Gallery\Services\public_galleries_for_tag;
-use function Gallery\Services\render_pagination_controls;
+use function Gallery\Views\view_render_pagination_controls;
 use function Gallery\Services\t;
 use function Gallery\Services\tag_description_schema_ready;
 use function Gallery\Services\tag_page_gallery_description_layout;
 use function Gallery\Services\tag_page_gallery_grid_settings;
+use function Gallery\Views\view_render_compact_tag_list;
+use function Gallery\Views\view_render_public_tag_admin_actions;
+use function Gallery\Views\view_render_public_tag_admin_delete_form;
+use function Gallery\Views\view_render_public_tag_page;
+use function Gallery\Views\view_render_tag_list;
 
 /**
  * Tag and voting controllers.
@@ -95,33 +98,75 @@ function cms_tag(): void
     );
     $visibleGalleries = !empty($tagGridSettings['enabled']) ? pagination_slice_items($galleries, $tagPagination) : $galleries;
     $tagCardLayout = tag_page_gallery_description_layout();
-    render_header(t('public.tag.title_value', 'Tag: {tag}', ['tag' => (string) $tag['name']]));
-    echo '<nav class="breadcrumbs" aria-label="' . e(t('public.common.breadcrumbs', 'Breadcrumbs')) . '"><a href="' . e(url_for('home')) . '">' . e(t('public.gallery.galleries', 'Galleries')) . '</a><span aria-hidden="true">/</span><span>' . e(t('public.tag.title_value', 'Tag: {tag}', ['tag' => (string) $tag['name']])) . '</span></nav>';
-    echo '<section class="hero" data-public-tag-page data-tag-id="' . (int) $tag['id'] . '" data-public-tag-gallery-count="' . count($galleries) . '" data-admin-mutation-canonical-url="' . e(url_for('tag', ['slug' => (string) $tag['slug']])) . '"><div class="hero-title-row"><div><h1>' . e(t('public.tag.title_value', 'Tag: {tag}', ['tag' => (string) $tag['name']])) . '</h1></div>';
-    render_public_tag_admin_actions($tag);
-    echo '</div>';
-    if (tag_description_schema_ready() && trim((string) ($tag['description'] ?? '')) !== '') {
-        echo '<p>' . nl2br(e((string) $tag['description'])) . '</p>';
+    $pageTitle = t('public.tag.title_value', 'Tag: {tag}', ['tag' => (string) $tag['name']]);
+    $pagination = !empty($tagGridSettings['enabled']) ? $tagPagination : [];
+    $paginationLabel = t('public.tag.pagination_label', 'Tagged gallery pages');
+
+    ob_start();
+    view_render_pagination_controls($pagination, $paginationLabel);
+    $paginationHtml = (string) ob_get_clean();
+
+    ob_start();
+    foreach ($visibleGalleries as $cardIndex => $gallery) {
+        render_gallery_card($gallery, true, false, false, (int) $cardIndex, ['description_layout' => $tagCardLayout]);
     }
-    echo '<p class="muted">' . e(t('public.tag.gallery_count', '{count} galleries', ['count' => count($galleries)])) . '</p></section>';
-    if ($galleries) {
-        echo '<div class="gallery-list-frame" data-back-to-top-scope>';
-        // Keep pagination and the gallery grid together in the frame's main column.
-        // Without this wrapper, a rendered pagination control becomes the first grid
-        // child and pushes the gallery section into the zero-width back-to-top column.
-        echo '<div class="gallery-list-content" data-back-to-top-list>';
-        render_pagination_controls(!empty($tagGridSettings['enabled']) ? $tagPagination : [], t('public.tag.pagination_label', 'Tagged gallery pages'));
-        echo '<section class="grid' . e(pagination_grid_columns_class($tagGridSettings)) . '">';
-        foreach ($visibleGalleries as $cardIndex => $gallery) {
-            render_gallery_card($gallery, true, false, false, (int) $cardIndex, ['description_layout' => $tagCardLayout]);
-        }
-        echo '</section>';
-        render_pagination_controls(!empty($tagGridSettings['enabled']) ? $tagPagination : [], t('public.tag.pagination_label', 'Tagged gallery pages'));
-        echo '</div>';
-        render_back_to_top_button();
-        echo '</div>';
-    }
+    $galleryCardsHtml = (string) ob_get_clean();
+
+    ob_start();
+    render_back_to_top_button();
+    $backToTopHtml = (string) ob_get_clean();
+
+    $viewModel = [
+        'title' => $pageTitle,
+        'breadcrumbs_label' => t('public.common.breadcrumbs', 'Breadcrumbs'),
+        'home_url' => url_for('home'),
+        'galleries_label' => t('public.gallery.galleries', 'Galleries'),
+        'tag_id' => (int) $tag['id'],
+        'gallery_count' => count($galleries),
+        'canonical_url' => url_for('tag', ['slug' => (string) $tag['slug']]),
+        'admin_actions' => public_tag_admin_actions_view_model($tag),
+        'description_enabled' => tag_description_schema_ready(),
+        'description' => (string) ($tag['description'] ?? ''),
+        'gallery_count_label' => t('public.tag.gallery_count', '{count} galleries', ['count' => count($galleries)]),
+        'has_galleries' => $galleries !== [],
+        'pagination_top_html' => $paginationHtml,
+        'pagination_bottom_html' => $paginationHtml,
+        'grid_class' => pagination_grid_columns_class($tagGridSettings),
+        'gallery_cards_html' => $galleryCardsHtml,
+        'back_to_top_html' => $backToTopHtml,
+    ];
+
+    render_header($pageTitle);
+    view_render_public_tag_page($viewModel);
     render_footer();
+}
+
+/**
+ * Prepare compact public tag Admin actions for the presentation layer.
+ *
+ * @param array $tag Tag value.
+ * @return array<string, mixed> Prepared Admin action presentation model.
+ */
+function public_tag_admin_actions_view_model(array $tag): array
+{
+    if (!current_user() || admin_anonymous_preview_active()) {
+        return ['enabled' => false];
+    }
+
+    $name = trim((string) ($tag['name'] ?? 'tag'));
+    return [
+        'enabled' => true,
+        'tag_id' => (int) ($tag['id'] ?? 0),
+        'name' => $name,
+        'edit_label' => t('gallery.edit_tag_named', 'Edit tag {name}', ['name' => $name]),
+        'delete_label' => t('gallery.remove_tag_named', 'Remove tag {name} from CMS', ['name' => $name]),
+        'edit_url' => url_for('admin_tags', ['id' => (int) ($tag['id'] ?? 0)]),
+        'panel_url' => url_for('admin_tags', ['id' => (int) ($tag['id'] ?? 0), 'panel' => 1]),
+        'panel_kicker' => t('gallery.tag_editor', 'Tag editor'),
+        'panel_title' => t('gallery.edit_tag', 'Edit tag'),
+        'delete_url' => url_for('admin_tags', ['id' => (int) ($tag['id'] ?? 0)]),
+        'return_url' => url_for('home'),
+    ];
 }
 
 /**
@@ -135,15 +180,7 @@ function cms_tag(): void
  */
 function render_public_tag_admin_actions(array $tag): void
 {
-    if (!current_user() || admin_anonymous_preview_active()) {
-        return;
-    }
-    $name = trim((string) ($tag['name'] ?? 'tag'));
-    $label = t('gallery.edit_tag_named', 'Edit tag {name}', ['name' => $name]);
-    echo '<div class="hero-actions public-tag-admin-actions">';
-    echo '<a class="public-admin-edit-button public-admin-edit-button-hero public-admin-edit-button-tag" href="' . e(url_for('admin_tags', ['id' => (int) $tag['id']])) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="tag-edit" data-admin-side-panel-kicker="' . e(t('gallery.tag_editor', 'Tag editor')) . '" data-admin-side-panel-title="' . e(t('gallery.edit_tag', 'Edit tag')) . '" data-gallery-side-panel-url="' . e(url_for('admin_tags', ['id' => (int) $tag['id'], 'panel' => 1])) . '" aria-label="' . e($label) . '" title="' . e($label) . '"><span aria-hidden="true">&#9998;</span><span class="visually-hidden">' . e($label) . '</span></a>';
-    render_public_tag_admin_delete_form($tag);
-    echo '</div>';
+    view_render_public_tag_admin_actions(public_tag_admin_actions_view_model($tag));
 }
 
 /**
@@ -153,18 +190,28 @@ function render_public_tag_admin_actions(array $tag): void
  */
 function render_public_tag_admin_delete_form(array $tag): void
 {
-    if (!current_user() || admin_anonymous_preview_active()) {
-        return;
+    view_render_public_tag_admin_delete_form(public_tag_admin_actions_view_model($tag));
+}
+
+/**
+ * Prepare clickable tag pills for the presentation layer.
+ *
+ * @param array $tags Tags value.
+ * @param ?string $label Label value.
+ * @return array<string, mixed> Prepared tag-list presentation model.
+ */
+function tag_list_view_model(array $tags, ?string $label = null): array
+{
+    $publicTagBrowsingEnabled = feature_capability_effective_enabled('public_tag_browsing');
+    $items = [];
+    foreach ($tags as $tag) {
+        $items[] = [
+            'name' => (string) ($tag['name'] ?? ''),
+            'href' => $publicTagBrowsingEnabled ? url_for('tag', ['slug' => (string) ($tag['slug'] ?? '')]) : null,
+        ];
     }
-    $name = trim((string) ($tag['name'] ?? 'tag'));
-    $label = t('gallery.remove_tag_named', 'Remove tag {name} from CMS', ['name' => $name]);
-    echo '<form class="public-admin-delete-form public-admin-delete-form-hero public-admin-delete-form-tag" method="post" action="' . e(url_for('admin_tags', ['id' => (int) $tag['id']])) . '" data-public-admin-card-action data-public-admin-delete-form data-public-admin-delete-name="' . e($name) . '" data-public-admin-delete-kind="tag">';
-    echo csrf_field();
-    echo '<input type="hidden" name="tag_id" value="' . (int) $tag['id'] . '">';
-    echo '<input type="hidden" name="action" value="delete">';
-    echo '<input type="hidden" name="return_url" value="' . e(url_for('home')) . '">';
-    echo '<button type="submit" class="public-admin-card-action-button public-admin-delete-button" aria-label="' . e($label) . '" title="' . e($label) . '"><span aria-hidden="true">&#128465;</span><span class="visually-hidden">' . e($label) . '</span></button>';
-    echo '</form>';
+
+    return ['items' => $items, 'label' => $label];
 }
 
 /**
@@ -175,22 +222,7 @@ function render_public_tag_admin_delete_form(array $tag): void
  */
 function render_tag_list(array $tags, ?string $label = null): void
 {
-    if (!$tags) {
-        return;
-    }
-    echo '<p class="tag-list">';
-    if ($label !== null) {
-        echo '<span class="tag-list-label">' . e($label) . '</span>';
-    }
-    $publicTagBrowsingEnabled = feature_capability_effective_enabled('public_tag_browsing');
-    foreach ($tags as $tag) {
-        if ($publicTagBrowsingEnabled) {
-            echo '<a class="tag" href="' . e(url_for('tag', ['slug' => $tag['slug']])) . '">' . e($tag['name']) . '</a>';
-        } else {
-            echo '<span class="tag">' . e($tag['name']) . '</span>';
-        }
-    }
-    echo '</p>';
+    view_render_tag_list(tag_list_view_model($tags, $label));
 }
 
 /**
@@ -213,18 +245,8 @@ function render_compact_tag_list(array $tags, int $visibleLimit = 3): void
     $visibleLimit = max(1, $visibleLimit);
     $visibleTags = array_slice($tags, 0, $visibleLimit);
     $hiddenCount = max(0, count($tags) - count($visibleTags));
-
-    echo '<p class="tag-list tag-list-compact">';
-    $publicTagBrowsingEnabled = feature_capability_effective_enabled('public_tag_browsing');
-    foreach ($visibleTags as $tag) {
-        if ($publicTagBrowsingEnabled) {
-            echo '<a class="tag" href="' . e(url_for('tag', ['slug' => $tag['slug']])) . '">' . e($tag['name']) . '</a>';
-        } else {
-            echo '<span class="tag">' . e($tag['name']) . '</span>';
-        }
-    }
-    if ($hiddenCount > 0) {
-        echo '<span class="tag tag-more" title="' . e(t('gallery.more_tags', '{count} more tags', ['count' => $hiddenCount])) . '" aria-label="' . e(t('gallery.more_tags', '{count} more tags', ['count' => $hiddenCount])) . '">...</span>';
-    }
-    echo '</p>';
+    $viewModel = tag_list_view_model($visibleTags);
+    $viewModel['hidden_count'] = $hiddenCount;
+    $viewModel['more_label'] = $hiddenCount > 0 ? t('gallery.more_tags', '{count} more tags', ['count' => $hiddenCount]) : '';
+    view_render_compact_tag_list($viewModel);
 }

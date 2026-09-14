@@ -42,6 +42,7 @@ use const Gallery\Services\ADMIN_STORAGE_STATISTICS_MAX_BATCH_SIZE;
 use function Gallery\Core\e;
 use function Gallery\Core\flash_message;
 use function Gallery\Core\redirect_to;
+use function Gallery\Core\render_footer;
 use function Gallery\Core\request_method;
 use function Gallery\Core\require_admin;
 use function Gallery\Core\run_migrations;
@@ -55,11 +56,16 @@ use function Gallery\Services\database_maintenance_cleanup_state;
 use function Gallery\Services\database_maintenance_load_report;
 use function Gallery\Services\database_maintenance_schema_repair_readiness;
 use function Gallery\Services\admin_render_profile_start;
+use function Gallery\Services\admin_render_profile_panel_model;
+use function Gallery\Services\admin_render_profile_span;
 use function Gallery\Services\admin_storage_statistics_cached_snapshot;
 use function Gallery\Services\admin_storage_statistics_process_job;
 use function Gallery\Services\admin_storage_statistics_start_job;
 use function Gallery\Services\exif_gps_default_enabled;
 use function Gallery\Services\exif_gps_override_schema_ready;
+use function Gallery\Services\dev_mode_enabled;
+use function Gallery\Services\url_rewrite_compatibility;
+use function Gallery\Services\url_rewrite_enabled;
 use function Gallery\Services\presentation_schema_log_degraded;
 use function Gallery\Services\schema_inspection_is_unknown;
 use function Gallery\Services\schema_inspection_is_available;
@@ -79,6 +85,7 @@ use function Gallery\Services\set_url_rewrite_enabled;
 use function Gallery\Services\t;
 use function Gallery\Views\view_admin_storage_snapshot_status;
 use function Gallery\Views\view_render_admin_dashboard;
+use function Gallery\Views\view_render_admin_render_profile_panel;
 use function Gallery\Views\view_render_admin_dashboard_maintenance_panel;
 use function Gallery\Views\view_render_admin_devmode_panel;
 use function Gallery\Views\view_render_admin_migration_notice;
@@ -102,8 +109,11 @@ function cms_admin(): void
     $maintenanceDeepLink = in_array($requestedMaintenanceTab, ['content', 'media', 'navigation', 'system', 'trash'], true);
     $dashboardModel = admin_dashboard_view_model($maintenanceDeepLink);
     $dashboardModel['maintenance_loaded'] = $maintenanceDeepLink;
+    $dashboardModel['requested_maintenance_tab'] = $requestedMaintenanceTab;
     $dashboardModel['notices'] = admin_dashboard_notice_messages($_GET, (string) flash_message('admin_notice'));
-    view_render_admin_dashboard($dashboardModel);
+    admin_render_profile_span('render_dashboard', static function () use ($dashboardModel): void { view_render_admin_dashboard($dashboardModel); });
+    view_render_admin_render_profile_panel(admin_render_profile_panel_model());
+    admin_render_profile_span('render_footer', static function (): void { render_footer(); });
 }
 
 /**
@@ -119,6 +129,8 @@ function cms_admin_dashboard_maintenance(): void
     $bufferLevel = ob_get_level();
     try {
         $model = admin_dashboard_view_model(true);
+        $requestedMaintenanceTab = strtolower(trim((string) ($_GET['maintenance_tab'] ?? '')));
+        $model['requested_maintenance_tab'] = in_array($requestedMaintenanceTab, ['content', 'media', 'navigation', 'system', 'trash'], true) ? $requestedMaintenanceTab : '';
         ob_start();
         view_render_admin_dashboard_maintenance_panel($model);
         $html = (string) ob_get_clean();
@@ -184,6 +196,7 @@ function cms_admin_storage_statistics(): void
             'report' => function_exists('Gallery\\Services\\database_maintenance_load_report') ? database_maintenance_load_report() : null,
             'cleanup_state' => function_exists('Gallery\\Services\\database_maintenance_cleanup_state') ? database_maintenance_cleanup_state() : [],
             'repair_readiness' => function_exists('Gallery\\Services\\database_maintenance_schema_repair_readiness') ? database_maintenance_schema_repair_readiness() : [],
+            'mutations_enabled' => feature_capability_effective_enabled('advanced_database_maintenance'),
         ];
     }
     $notice = (string) flash_message('admin_notice');
@@ -313,7 +326,7 @@ function admin_storage_statistics_json_response(array $payload): void
  */
 function render_admin_url_rewrite_warning(): void
 {
-    view_render_admin_url_rewrite_warning();
+    view_render_admin_url_rewrite_warning(['url_rewrite_compatibility' => url_rewrite_compatibility()]);
 }
 
 /**
@@ -323,7 +336,7 @@ function render_admin_url_rewrite_warning(): void
  */
 function render_admin_url_rewrite_card(string $className): void
 {
-    view_render_admin_url_rewrite_card($className);
+    view_render_admin_url_rewrite_card($className, ['url_rewrite_enabled' => url_rewrite_enabled(), 'url_rewrite_compatibility' => url_rewrite_compatibility()]);
 }
 
 /**
@@ -473,7 +486,7 @@ function cms_admin_update_navdata(): void
  */
 function render_admin_devmode_panel(): void
 {
-    view_render_admin_devmode_panel();
+    view_render_admin_devmode_panel(['dev_mode_enabled' => dev_mode_enabled()]);
 }
 
 /**

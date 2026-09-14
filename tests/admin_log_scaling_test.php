@@ -52,6 +52,7 @@ function assert_admin_log_scaling(bool $condition, string $label): void
 }
 
 $serviceSource = (string) file_get_contents(__DIR__ . '/../app/services/logs.php');
+$modelSource = (string) file_get_contents(__DIR__ . '/../app/models/admin_logs.php');
 $controllerSource = (string) file_get_contents(__DIR__ . '/../app/controllers/admin_logs.php');
 $bootstrapSource = (string) file_get_contents(__DIR__ . '/../app/bootstrap.php')
     . (string) file_get_contents(__DIR__ . '/../app/bootstrap/dispatch.php');
@@ -66,8 +67,10 @@ assert_admin_log_scaling(
 );
 assert_admin_log_scaling(
     str_contains($serviceSource, 'function admin_log_group_member_page(')
-        && str_contains($serviceSource, 'LIMIT \' . $safeLimit . \' OFFSET \' . $safeOffset'),
-    'Grouped raw-instance browsing must use a bounded SQL page.'
+        && str_contains($serviceSource, 'admin_log_model_group_member_page($entry, $limit, $offset)')
+        && str_contains($modelSource, 'function admin_log_model_group_member_page(')
+        && str_contains($modelSource, "' LIMIT ' . max(1, min(500, \$limit)) . ' OFFSET ' . max(0, \$offset)"),
+    'Grouped raw-instance browsing must use a bounded SQL page in the model layer.'
 );
 assert_admin_log_scaling(
     str_contains($controllerSource, 'function cms_admin_log_group_members(): void')
@@ -88,7 +91,8 @@ assert_admin_log_scaling(
 );
 assert_admin_log_scaling(
     str_contains($controllerSource, 'admin_log_group_member_export_batch($entry, $beforeCreatedAt, $beforeId, $batchSize)')
-        && str_contains($serviceSource, 'l.created_at < ? OR (l.created_at = ? AND l.id < ?)'),
+        && str_contains($serviceSource, 'admin_log_model_group_member_export_batch($entry, $beforeCreatedAt, $beforeId, $limit)')
+        && str_contains($modelSource, 'l.created_at < ? OR (l.created_at = ? AND l.id < ?)'),
     'Grouped TXT export must use descending keyset batches rather than one unbounded fetch.'
 );
 assert_admin_log_scaling(admin_log_normalize_retention_days(0) === 0, 'Zero must remain a supported legacy retention value.');

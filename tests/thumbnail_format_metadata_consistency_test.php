@@ -1,6 +1,21 @@
 <?php
 
 /**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ *
+ * File: tests/thumbnail_format_metadata_consistency_test.php
+ *
+ * Author:
+ *   Rudolf Klusal
+ *
+ * License:
+ *   MIT License (see LICENSE file in repository)
+ *
+ * Notes:
+ *   - Keep comments and docstrings intact when modifying this file.
+ */
+/**
  * Regression coverage for thumbnail format policy at public metadata boundaries.
  */
 
@@ -249,6 +264,7 @@ namespace {
     use function Gallery\Services\thumbnail_policy_requested_formats;
     use function Gallery\Services\thumbnail_progressive_picture_html;
 
+    require_once __DIR__ . '/../app/models/thumbnail_metadata.php';
     require_once __DIR__ . '/../app/services/thumbnail_compatibility.php';
     require_once __DIR__ . '/../app/services/thumbnail_bundles.php';
     require_once __DIR__ . '/../app/services/public_gallery_media_manifest.php';

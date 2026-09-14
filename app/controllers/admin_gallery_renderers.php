@@ -36,19 +36,22 @@ declare(strict_types=1);
 
 namespace Gallery\Controllers;
 
-use function Gallery\Core\db;
-use function Gallery\Core\e;
-use function Gallery\Core\slugify;
 use function Gallery\Services\all_tag_names;
 use function Gallery\Services\find_gallery;
+use function Gallery\Services\gallery_editor_unique_slug;
 use function Gallery\Services\gallery_cover_choices;
 use function Gallery\Services\gallery_images;
 use function Gallery\Services\gallery_search_picker_rows;
+use function Gallery\Services\gallery_picker_source_rows;
 use function Gallery\Services\gallery_visibility_label;
 use function Gallery\Services\gallery_visibility_values;
 use function Gallery\Services\normalize_gallery_visibility;
 use function Gallery\Services\t;
 use function Gallery\Services\weighted_tag_suggestions_for_gallery;
+use function Gallery\Views\view_render_admin_select_options;
+use function Gallery\Views\view_render_gallery_search_picker;
+use function Gallery\Views\view_render_tag_datalist;
+use function Gallery\Views\view_render_weighted_tag_suggestions_attribute;
 
 /**
  * Handles visibility options logic for the gallery application.
@@ -58,14 +61,16 @@ use function Gallery\Services\weighted_tag_suggestions_for_gallery;
  */
 function visibility_options(string $selected): string
 {
-    // Variable $html stores this steps working value.
-    $html = '';
-    // $selected stores the canonical value shown by the simplified visibility UI.
     $selected = normalize_gallery_visibility($selected);
+    $rows = [];
     foreach (gallery_visibility_values() as $visibility) {
-        $html .= '<option value="' . e($visibility) . '"' . ($visibility === $selected ? ' selected' : '') . '>' . e(gallery_visibility_label($visibility)) . '</option>';
+        $rows[] = [
+            'value' => $visibility,
+            'label' => gallery_visibility_label($visibility),
+            'selected' => $visibility === $selected,
+        ];
     }
-    return $html;
+    return view_render_admin_select_options($rows);
 }
 
 /**
@@ -76,12 +81,15 @@ function visibility_options(string $selected): string
  */
 function image_visibility_options(string $selected): string
 {
-    // Variable $html stores this steps working value.
-    $html = '';
+    $rows = [];
     foreach (['draft', 'public', 'private'] as $visibility) {
-        $html .= '<option value="' . e($visibility) . '"' . ($visibility === $selected ? ' selected' : '') . '>' . e($visibility) . '</option>';
+        $rows[] = [
+            'value' => $visibility,
+            'label' => $visibility,
+            'selected' => $visibility === $selected,
+        ];
     }
-    return $html;
+    return view_render_admin_select_options($rows);
 }
 
 /**
@@ -89,11 +97,7 @@ function image_visibility_options(string $selected): string
  */
 function render_tag_datalist(): void
 {
-    echo '<datalist id="tag-suggestions">';
-    foreach (all_tag_names() as $name) {
-        echo '<option value="' . e((string) $name) . '"></option>';
-    }
-    echo '</datalist>';
+    view_render_tag_datalist(array_map('strval', all_tag_names()));
 }
 
 /**
@@ -104,14 +108,7 @@ function render_tag_datalist(): void
  */
 function admin_weighted_tag_suggestions_attribute(int $galleryId): string
 {
-    // Variable $payload stores this steps working value.
-    $payload = weighted_tag_suggestions_for_gallery($galleryId);
-    if (!$payload) {
-        return '';
-    }
-    // Variable $json stores this steps working value.
-    $json = json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-    return $json === false ? '' : ' data-tag-weighted-suggestions="' . e($json) . '"';
+    return view_render_weighted_tag_suggestions_attribute(weighted_tag_suggestions_for_gallery($galleryId));
 }
 
 /**
@@ -122,26 +119,23 @@ function admin_weighted_tag_suggestions_attribute(int $galleryId): string
  */
 function gallery_parent_options(array $currentGallery): string
 {
-    // Variable $galleries stores this steps working value.
-    $galleries = db()->query('SELECT id, title, folder_path FROM galleries ORDER BY folder_path')->fetchAll();
-    // Variable $html stores this steps working value.
-    $html = '';
-    // Variable $currentPath stores this steps working value.
+    $rows = [];
     $currentPath = rtrim((string) $currentGallery['folder_path'], '/');
-    foreach ($galleries as $gallery) {
+    foreach (gallery_picker_source_rows() as $gallery) {
         if ((int) $gallery['id'] === (int) $currentGallery['id']) {
             continue;
         }
-        // Variable $path stores this steps working value.
         $path = (string) $gallery['folder_path'];
         if ($path !== '' && str_starts_with($path . '/', $currentPath . '/')) {
             continue;
         }
-        // Variable $selected stores this steps working value.
-        $selected = (int) ($currentGallery['parent_id'] ?? 0) === (int) $gallery['id'] ? ' selected' : '';
-        $html .= '<option value="' . (int) $gallery['id'] . '"' . $selected . '>' . e($gallery['title'] . ' (' . $gallery['folder_path'] . ')') . '</option>';
+        $rows[] = [
+            'value' => (int) $gallery['id'],
+            'label' => (string) $gallery['title'] . ' (' . $path . ')',
+            'selected' => (int) ($currentGallery['parent_id'] ?? 0) === (int) $gallery['id'],
+        ];
     }
-    return $html;
+    return view_render_admin_select_options($rows);
 }
 
 /**
@@ -152,16 +146,15 @@ function gallery_parent_options(array $currentGallery): string
  */
 function gallery_parent_options_for_new(int $selectedGalleryId = 0): string
 {
-    // $html stores an intermediate value used by the surrounding gallery workflow.
-    $html = '';
-    // $galleries stores an intermediate value used by the surrounding gallery workflow.
-    $galleries = db()->query('SELECT id, title, folder_path FROM galleries ORDER BY folder_path')->fetchAll();
-    foreach ($galleries as $gallery) {
-        // $selected stores the HTML selected marker for contextual admin links opened from a gallery page.
-        $selected = (int) $gallery['id'] === $selectedGalleryId ? ' selected' : '';
-        $html .= '<option value="' . (int) $gallery['id'] . '"' . $selected . '>' . e($gallery['title'] . ' (' . $gallery['folder_path'] . ')') . '</option>';
+    $rows = [];
+    foreach (gallery_picker_source_rows() as $gallery) {
+        $rows[] = [
+            'value' => (int) $gallery['id'],
+            'label' => (string) $gallery['title'] . ' (' . (string) $gallery['folder_path'] . ')',
+            'selected' => (int) $gallery['id'] === $selectedGalleryId,
+        ];
     }
-    return $html;
+    return view_render_admin_select_options($rows);
 }
 
 
@@ -180,21 +173,11 @@ function gallery_parent_options_for_new(int $selectedGalleryId = 0): string
  */
 function render_gallery_search_picker(string $fieldName, int $selectedGalleryId = 0, int $excludedGalleryId = 0, array $options = []): string
 {
-    // $pickerId stores the DOM ID prefix used by ARIA attributes and labels.
     $pickerId = preg_replace('/[^a-zA-Z0-9_-]+/', '-', (string) ($options['id'] ?? ('gallery-picker-' . $fieldName . '-' . uniqid('', false))));
-    // $rows stores every selectable gallery option except the excluded source.
     $rows = gallery_search_picker_rows($selectedGalleryId, $excludedGalleryId);
-    // $prefillGalleryId stores a non-committed likely target shown in the text box.
     $prefillGalleryId = (int) ($options['prefill_gallery_id'] ?? 0);
-    // $prefillEnabled stores whether an empty picker may show a suggested first gallery.
     $prefillEnabled = empty($options['disable_prefill']);
-    // $placeholder stores the visible search hint before any prefill is applied.
-    $placeholder = (string) ($options['placeholder'] ?? t('gallery_picker.placeholder', 'Search gallery by name or path'));
-    // $hiddenAttributes stores custom data hooks used by public and admin JavaScript.
-    $hiddenAttributes = is_array($options['hidden_attributes'] ?? null) ? $options['hidden_attributes'] : [];
-    // $selectedRow stores the committed gallery row when an existing value is provided.
     $selectedRow = null;
-    // $prefillRow stores the suggested row shown to reduce typing for common flows.
     $prefillRow = null;
     foreach ($rows as $row) {
         if ((int) $row['id'] === $selectedGalleryId) {
@@ -207,42 +190,28 @@ function render_gallery_search_picker(string $fieldName, int $selectedGalleryId 
     if ($prefillEnabled && $prefillRow === null && $selectedRow === null && $rows !== []) {
         $prefillRow = $rows[0];
     }
-    // $inputValue stores either the committed label or the suggested uncommitted label.
-    $inputValue = $selectedRow !== null ? (string) $selectedRow['label'] : ($prefillRow !== null ? (string) $prefillRow['label'] : '');
-    // $hiddenValue stores only committed selections so accidental prefill cannot submit a move.
-    $hiddenValue = $selectedRow !== null ? (string) $selectedRow['id'] : '';
-    // $listId stores the ARIA listbox ID.
-    $listId = $pickerId . '-list';
-    // $html stores the rendered picker markup.
-    $html = '<div class="gallery-search-picker" data-gallery-search-picker data-search-delay="200">';
-    $html .= '<input type="hidden"' . ($fieldName !== '' ? ' name="' . e($fieldName) . '"' : '') . ' value="' . e($hiddenValue) . '" data-gallery-search-picker-value';
-    foreach ($hiddenAttributes as $name => $value) {
-        if (!is_string($name) || !preg_match('/^data-[a-z0-9_-]+$/i', $name)) {
-            continue;
-        }
-        $html .= ' ' . $name . '="' . e((string) $value) . '"';
+    $preparedRows = [];
+    foreach ($rows as $row) {
+        $prepared = $row;
+        $prepared['path_label'] = (string) ($row['path'] ?? '') !== ''
+            ? '/' . (string) $row['path']
+            : t('gallery_picker.root_gallery', 'Root gallery');
+        $preparedRows[] = $prepared;
     }
-    $html .= '>';
-    $html .= '<div class="gallery-search-picker-field">';
-    $html .= '<input id="' . e($pickerId) . '" type="text" value="' . e($inputValue) . '" placeholder="' . e($placeholder) . '" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="' . e($listId) . '" data-gallery-search-picker-input data-prefill-value="' . e($prefillRow !== null ? (string) $prefillRow['label'] : '') . '">';
-    $html .= '<button type="button" class="gallery-search-picker-clear" data-gallery-search-picker-clear aria-label="' . e(t('gallery_picker.clear', 'Clear selected gallery')) . '">×</button>';
-    $html .= '</div>';
-    $html .= '<div id="' . e($listId) . '" class="gallery-search-picker-menu" role="listbox" data-gallery-search-picker-menu hidden>';
-    $html .= '<p class="gallery-search-picker-empty" data-gallery-search-picker-empty hidden>' . e(t('gallery_picker.no_results', 'No matching galleries found.')) . '</p>';
-    foreach ($rows as $index => $row) {
-        // $optionId stores the ARIA option identifier for keyboard highlighting.
-        $optionId = $pickerId . '-option-' . $index;
-        // $pathLabel stores an optional path line below the gallery title.
-        $pathLabel = (string) $row['path'] !== '' ? '/' . (string) $row['path'] : t('gallery_picker.root_gallery', 'Root gallery');
-        $html .= '<button id="' . e($optionId) . '" type="button" class="gallery-search-picker-option" role="option" data-gallery-search-picker-option data-gallery-id="' . (int) $row['id'] . '" data-gallery-label="' . e((string) $row['label']) . '" data-gallery-title="' . e((string) $row['title']) . '" data-gallery-path="' . e((string) $row['path']) . '" data-gallery-search="' . e((string) $row['search']) . '" style="--gallery-picker-depth: ' . min((int) $row['depth'], 8) . ';">';
-        $html .= '<span class="gallery-search-picker-option-title">' . e((string) $row['title']) . '</span>';
-        $html .= '<span class="gallery-search-picker-option-path">' . e($pathLabel) . '</span>';
-        $html .= '</button>';
-    }
-    $html .= '</div>';
-    $html .= '<small class="gallery-search-picker-help" data-gallery-search-picker-help>' . e(t('gallery_picker.help', 'Type to search, then press Enter or click a result to select it.')) . '</small>';
-    $html .= '</div>';
-    return $html;
+    return view_render_gallery_search_picker([
+        'field_name' => $fieldName,
+        'picker_id' => $pickerId,
+        'list_id' => $pickerId . '-list',
+        'hidden_value' => $selectedRow !== null ? (string) $selectedRow['id'] : '',
+        'input_value' => $selectedRow !== null ? (string) $selectedRow['label'] : ($prefillRow !== null ? (string) $prefillRow['label'] : ''),
+        'prefill_value' => $prefillRow !== null ? (string) $prefillRow['label'] : '',
+        'placeholder' => (string) ($options['placeholder'] ?? t('gallery_picker.placeholder', 'Search gallery by name or path')),
+        'hidden_attributes' => is_array($options['hidden_attributes'] ?? null) ? $options['hidden_attributes'] : [],
+        'clear_label' => t('gallery_picker.clear', 'Clear selected gallery'),
+        'empty_label' => t('gallery_picker.no_results', 'No matching galleries found.'),
+        'help_label' => t('gallery_picker.help', 'Type to search, then press Enter or click a result to select it.'),
+        'rows' => $preparedRows,
+    ]);
 }
 
 /**
@@ -254,31 +223,23 @@ function render_gallery_search_picker(string $fieldName, int $selectedGalleryId 
  */
 function gallery_options_for_select(int $selectedGalleryId = 0, int $excludedGalleryId = 0): string
 {
-    // $html stores an intermediate value used by the surrounding gallery workflow.
-    $html = '';
-    // $galleries stores an intermediate value used by the surrounding gallery workflow.
-    $galleries = db()->query('SELECT id, title, folder_path FROM galleries ORDER BY folder_path')->fetchAll();
-    foreach ($galleries as $gallery) {
+    $rows = [];
+    foreach (gallery_picker_source_rows() as $gallery) {
         if ($excludedGalleryId > 0 && (int) $gallery['id'] === $excludedGalleryId) {
             continue;
         }
-        // $selected stores the HTML selected marker for contextual upload links opened from a gallery page.
-        $selected = (int) $gallery['id'] === $selectedGalleryId ? ' selected' : '';
-        // $folderPath stores the normalized public folder path used for hierarchy depth.
         $folderPath = trim((string) ($gallery['folder_path'] ?? ''), '/');
-        // $depth stores how deeply nested the gallery is in the hierarchy.
         $depth = $folderPath === '' ? 0 : max(0, substr_count($folderPath, '/'));
-        // $indent stores visible indentation that survives native select rendering better than CSS padding on options.
         $indent = str_repeat(' ', $depth);
-        // $branch stores a compact hierarchy marker for nested galleries.
         $branch = $depth > 0 ? '↳ ' : '';
-        // $pathSuffix stores the filesystem-style path hint without making the title hard to scan.
         $pathSuffix = $folderPath !== '' ? '  ·  /' . $folderPath : '';
-        // $label stores the formatted select option label.
-        $label = $indent . $branch . (string) $gallery['title'] . $pathSuffix;
-        $html .= '<option value="' . (int) $gallery['id'] . '"' . $selected . '>' . e($label) . '</option>';
+        $rows[] = [
+            'value' => (int) $gallery['id'],
+            'label' => $indent . $branch . (string) $gallery['title'] . $pathSuffix,
+            'selected' => (int) $gallery['id'] === $selectedGalleryId,
+        ];
     }
-    return $html;
+    return view_render_admin_select_options($rows);
 }
 
 /**
@@ -311,24 +272,23 @@ function selected_gallery_id_from_query(string $parameterName): int
  */
 function gallery_cover_options(int $galleryId, int $selectedImageId, bool $includeDescendants = false): string
 {
-    // $images stores an intermediate value used by the surrounding gallery workflow.
-    $images = $includeDescendants ? gallery_cover_choices($galleryId, false) : array_map(static fn (array $image): array => ['image' => $image], gallery_images($galleryId, false));
-    // Variable $html stores this steps working value.
-    $html = '';
+    $images = $includeDescendants
+        ? gallery_cover_choices($galleryId, false)
+        : array_map(static fn (array $image): array => ['image' => $image], gallery_images($galleryId, false));
+    $rows = [];
     foreach ($images as $entry) {
-        // $image stores an intermediate value used by the surrounding gallery workflow.
         $image = $entry['image'];
-        // Variable $selected stores this steps working value.
-        $selected = $selectedImageId === (int) $image['id'] ? ' selected' : '';
-        // Variable $label stores this steps working value.
         $label = ($image['title'] ?: $image['filename']) . ' (' . $image['relative_path'] . ')';
         if ($includeDescendants && !empty($entry['gallery_title'])) {
-            // $label stores an intermediate value used by the surrounding gallery workflow.
             $label = $entry['gallery_title'] . ' - ' . $label;
         }
-        $html .= '<option value="' . (int) $image['id'] . '"' . $selected . '>' . e($label) . '</option>';
+        $rows[] = [
+            'value' => (int) $image['id'],
+            'label' => $label,
+            'selected' => $selectedImageId === (int) $image['id'],
+        ];
     }
-    return $html;
+    return view_render_admin_select_options($rows);
 }
 
 /**
@@ -340,23 +300,5 @@ function gallery_cover_options(int $galleryId, int $selectedImageId, bool $inclu
  */
 function unique_slug_for_value(string $slug, int $excludeGalleryId): string
 {
-    // Variable $pdo stores this steps working value.
-    $pdo = db();
-    // Variable $base stores this steps working value.
-    $base = slugify($slug);
-    // Variable $candidate stores this steps working value.
-    $candidate = $base;
-    // Variable $counter stores this steps working value.
-    $counter = 2;
-    while (true) {
-        // Variable $stmt stores this steps working value.
-        $stmt = $pdo->prepare('SELECT id FROM galleries WHERE slug = ? AND id <> ?');
-        $stmt->execute([$candidate, $excludeGalleryId]);
-        if (!$stmt->fetch()) {
-            return $candidate;
-        }
-        // Variable $candidate stores this steps working value.
-        $candidate = $base . '-' . $counter;
-        $counter++;
-    }
+    return gallery_editor_unique_slug($slug, $excludeGalleryId);
 }

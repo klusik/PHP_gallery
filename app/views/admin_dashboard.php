@@ -42,21 +42,9 @@ use function Gallery\Core\e;
 use function Gallery\Core\gallery_public_url;
 use function Gallery\Core\render_admin_tab_panel;
 use function Gallery\Core\render_admin_tabs;
-use function Gallery\Core\render_footer;
 use function Gallery\Core\render_header;
 use function Gallery\Core\url_for;
-use function Gallery\Services\admin_render_profile_span;
-use function Gallery\Services\admin_settings_url;
-use function Gallery\Services\dev_mode_enabled;
-use function Gallery\Services\gallery_background_source;
-use function Gallery\Services\gallery_effective_gps_map_enabled;
-use function Gallery\Services\gallery_effective_visibility;
-use function Gallery\Services\gallery_visibility_label;
-use function Gallery\Services\feature_capability_effective_enabled;
-use function Gallery\Services\render_admin_render_profile_panel;
 use function Gallery\Services\t;
-use function Gallery\Services\url_rewrite_compatibility;
-use function Gallery\Services\url_rewrite_enabled;
 
 /**
  * Render the Admin dashboard page from a controller-provided model.
@@ -105,7 +93,7 @@ function view_render_admin_dashboard(array $model): void
         ['id' => 'admin-tab-maintenance', 'label' => t('admin.dashboard.tab_maintenance', 'Maintenance'), 'badge' => $maintenanceBadge],
     ];
 
-    admin_render_profile_span('render_header', static function (): void { render_header(t('admin.dashboard.page_title', 'Admin dashboard')); });
+    render_header(t('admin.dashboard.page_title', 'Admin dashboard'));
     $heroActions = [
         ['label' => t('admin.dashboard.create_gallery', 'Create gallery'), 'url' => url_for('admin_new_gallery'), 'class' => 'button'],
         ['label' => t('admin.dashboard.upload_photos', 'Upload photos'), 'url' => url_for('admin_upload'), 'class' => 'button secondary'],
@@ -126,10 +114,10 @@ function view_render_admin_dashboard(array $model): void
     ]);
 
     view_render_admin_dashboard_notices($notices);
-    view_render_admin_url_rewrite_warning();
+    view_render_admin_url_rewrite_warning($model);
     echo '<div id="admin-dashboard-thumbnail-progress" class="admin-dashboard-progress-slot" aria-live="polite"></div>';
 
-    admin_render_profile_span('render_admin_tabs', static function () use ($adminTabs): void { render_admin_tabs($adminTabs, 'admin-tab-overview'); });
+    render_admin_tabs($adminTabs, 'admin-tab-overview');
 
     ob_start();
     view_render_admin_dashboard_overview_panel($model);
@@ -178,7 +166,7 @@ function view_render_admin_dashboard(array $model): void
         $hasChildren = !empty($childrenByParent[(int) $gallery['id']]);
         // Variable $isCollapsed stores this steps working value.
         $isCollapsed = isset($collapsedIds[(int) $gallery['id']]);
-        echo '<tr class="' . ($depth > 0 ? 'is-subgallery' : '') . ($isCollapsed ? ' is-collapsed' : '') . '" data-gallery-row data-gallery-id="' . (int) $gallery['id'] . '" data-parent-id="' . (int) ($gallery['parent_id'] ?? 0) . '" data-depth="' . $depth . '" data-gallery-visibility="' . e(gallery_effective_visibility($gallery)) . '" data-gallery-title="' . e((string) $gallery['title']) . '" data-gallery-url="' . e(gallery_public_url($gallery)) . '" style="--gallery-depth: ' . min($depth, 8) . ';"><td><input type="checkbox" name="gallery_ids[]" value="' . (int) $gallery['id'] . '"></td>';
+        echo '<tr class="' . ($depth > 0 ? 'is-subgallery' : '') . ($isCollapsed ? ' is-collapsed' : '') . '" data-gallery-row data-gallery-id="' . (int) $gallery['id'] . '" data-parent-id="' . (int) ($gallery['parent_id'] ?? 0) . '" data-depth="' . $depth . '" data-gallery-visibility="' . e((string) ($gallery['view_visibility'] ?? 'unpublished')) . '" data-gallery-title="' . e((string) $gallery['title']) . '" data-gallery-url="' . e(gallery_public_url($gallery)) . '" style="--gallery-depth: ' . min($depth, 8) . ';"><td><input type="checkbox" name="gallery_ids[]" value="' . (int) $gallery['id'] . '"></td>';
         // Variable $depthClass stores this steps working value.
         $depthClass = 'tree-depth-' . min($depth, 8);
         // $previewUrl stores a small non-blocking gallery preview image for faster visual scanning.
@@ -190,15 +178,15 @@ function view_render_admin_dashboard(array $model): void
             echo '<span class="admin-gallery-preview is-empty" aria-hidden="true"><span>' . e(t('admin.dashboard.empty_gallery_preview', 'Gallery')) . '</span></span>';
         }
         echo '<div class="admin-gallery-summary-text"><span class="tree-title ' . e($depthClass) . '">' . ($hasChildren ? '<button type="button" class="tree-toggle" data-gallery-toggle="' . (int) $gallery['id'] . '" aria-expanded="' . ($isCollapsed ? 'false' : 'true') . '">' . ($isCollapsed ? '+' : '-') . '</button>' : '<span class="tree-spacer" aria-hidden="true"></span>') . ($depth > 0 ? '<span class="tree-branch" aria-hidden="true"></span>' : '') . '<a class="admin-gallery-title-link" href="' . e(gallery_public_url($gallery)) . '">' . e($gallery['title']) . '</a></span><span class="admin-gallery-path">' . e($gallery['folder_path']) . '</span>' . ((string) ($gallery['parent_title'] ?: '') !== '' ? '<span class="admin-gallery-parent">' . e(t('admin.dashboard.parent_label', 'Parent:')) . ' ' . e((string) $gallery['parent_title']) . '</span>' : '') . '</div></div></td>';
-        echo '<td class="admin-gallery-state-cell"><span class="admin-gallery-status-pill is-' . e(gallery_effective_visibility($gallery)) . '">' . e(gallery_visibility_label(gallery_effective_visibility($gallery))) . '</span>';
+        echo '<td class="admin-gallery-state-cell"><span class="admin-gallery-status-pill is-' . e((string) ($gallery['view_visibility'] ?? 'unpublished')) . '">' . e((string) ($gallery['view_visibility_label'] ?? ($gallery['view_visibility'] ?? 'unpublished'))) . '</span>';
         if ($accessReady) {
             // $accessLabel stores an intermediate value used by the surrounding gallery workflow.
             $accessLabel = (string) ($gallery['access_mode'] ?? 'normal') === 'password' ? (!empty($gallery['access_password_hash']) ? '' . t('admin.dashboard.access_password_locked', 'Password locked') . '' : '' . t('admin.dashboard.access_direct_link_token', 'Direct-link token') . '') : '' . t('admin.dashboard.access_no_password', 'No password') . '';
             echo '<span class="admin-gallery-access-label">' . e($accessLabel) . '</span>';
         }
-        $galleryGpsMapsEnabled = $gpsMapReady && gallery_effective_gps_map_enabled($gallery);
+        $galleryGpsMapsEnabled = $gpsMapReady && !empty($gallery['view_gps_map_enabled']);
         echo '</td><td class="admin-gallery-feature-cell"><span class="admin-gallery-feature" title="' . e(t('admin.dashboard.feature_maps', 'Maps')) . '">M ' . view_render_admin_feature_flag($galleryGpsMapsEnabled, '&#10003;', '' . t('admin.dashboard.feature_gps_maps_enabled', 'GPS maps enabled') . '') . '</span>';
-        echo '<span class="admin-gallery-feature" title="' . e(t('admin.dashboard.feature_background', 'Background')) . '">B ' . view_render_admin_feature_flag($backgroundSourceReady && gallery_background_source($gallery) !== null, '&#10003;', '' . t('admin.dashboard.feature_custom_background_set', 'Custom gallery background set') . '') . '</span>';
+        echo '<span class="admin-gallery-feature" title="' . e(t('admin.dashboard.feature_background', 'Background')) . '">B ' . view_render_admin_feature_flag(!empty($gallery['view_background_source_set']), '&#10003;', '' . t('admin.dashboard.feature_custom_background_set', 'Custom gallery background set') . '') . '</span>';
         if ($filenameDisplayReady) {
             echo '<span class="admin-gallery-feature" title="' . e(t('admin.dashboard.feature_file_names_shown', 'File names shown')) . '">N ' . view_render_admin_feature_flag((int) ($gallery['show_filenames'] ?? 0) === 1, '&#10003;', '' . t('admin.dashboard.feature_file_names_are_shown', 'File names are shown') . '') . '</span>';
         }
@@ -216,23 +204,21 @@ function view_render_admin_dashboard(array $model): void
     }
     echo '</tbody></table></div></section></form>';
     $galleriesHtml = (string) ob_get_clean();
-    admin_render_profile_span('render_galleries_tab_panel', static function () use ($galleriesHtml): void { render_admin_tab_panel('admin-tab-galleries', $galleriesHtml, false); });
+    render_admin_tab_panel('admin-tab-galleries', $galleriesHtml, false);
 
     ob_start();
     if (!empty($model['maintenance_loaded'])) {
         view_render_admin_dashboard_maintenance_panel($model);
     } else {
-        $requestedMaintenanceTab = strtolower(trim((string) ($_GET['maintenance_tab'] ?? '')));
+        $requestedMaintenanceTab = strtolower(trim((string) ($model['requested_maintenance_tab'] ?? '')));
         $maintenanceEndpointParams = in_array($requestedMaintenanceTab, ['content', 'media', 'navigation', 'system', 'trash'], true)
             ? ['maintenance_tab' => $requestedMaintenanceTab]
             : [];
         echo '<div class="admin-dashboard-deferred-panel" data-admin-dashboard-maintenance-placeholder data-maintenance-endpoint="' . e(url_for('admin_dashboard_maintenance', $maintenanceEndpointParams)) . '" data-maintenance-log-endpoint="' . e(url_for('admin_dashboard_maintenance_client_log')) . '" data-csrf-token="' . e(csrf_token()) . '" role="status"><p class="muted">' . e(t('admin.dashboard.maintenance_loading', 'Loading maintenance tools…')) . '</p><noscript><a href="' . e(url_for('admin_storage_statistics')) . '">' . e(t('admin.storage.open_details', 'Open storage and maintenance details')) . '</a></noscript></div>';
     }
     $maintenanceHtml = (string) ob_get_clean();
-    admin_render_profile_span('render_maintenance_tab_panel', static function () use ($maintenanceHtml): void { render_admin_tab_panel('admin-tab-maintenance', $maintenanceHtml, false); });
+    render_admin_tab_panel('admin-tab-maintenance', $maintenanceHtml, false);
 
-    render_admin_render_profile_panel();
-    admin_render_profile_span('render_footer', static function (): void { render_footer(); });
 }
 
 /**
@@ -255,10 +241,10 @@ function view_render_admin_dashboard_notices(array $notices): void
 /**
  * Render a non-blocking warning when clean URL generation is enabled but rewrite support looks unavailable.
  */
-function view_render_admin_url_rewrite_warning(): void
+function view_render_admin_url_rewrite_warning(array $model = []): void
 {
-    $compatibility = url_rewrite_compatibility();
-    if (!$compatibility['enabled'] || !in_array((string) $compatibility['status'], ['unsupported'], true)) {
+    $compatibility = is_array($model['url_rewrite_compatibility'] ?? null) ? $model['url_rewrite_compatibility'] : [];
+    if (empty($compatibility['enabled']) || !in_array((string) ($compatibility['status'] ?? 'unknown'), ['unsupported'], true)) {
         return;
     }
 
@@ -277,7 +263,7 @@ function view_render_admin_url_rewrite_warning(): void
  * @param bool $defaultEnabled Default enabled value.
  * @param int $overrideCount Override count value.
  */
-function view_render_admin_exif_gps_defaults_card(string $className, bool $defaultEnabled, int $overrideCount): void
+function view_render_admin_exif_gps_defaults_card(string $className, bool $defaultEnabled, int $overrideCount, array $model = []): void
 {
     echo '<form method="post" action="' . e(url_for('admin_exif_gps_settings')) . '" class="' . e($className) . '">' . csrf_field();
     echo '<strong>' . e(t('admin.dashboard.exif_gps_defaults', 'EXIF / GPS defaults')) . '</strong>';
@@ -285,7 +271,7 @@ function view_render_admin_exif_gps_defaults_card(string $className, bool $defau
     echo '<label class="checkbox-label"><input type="checkbox" name="exif_gps_default_enabled" value="1"' . ($defaultEnabled ? ' checked' : '') . '> ' . e(t('admin.dashboard.exif_gps_default_enabled_label', 'Show EXIF GPS maps by default for all galleries')) . '</label>';
     echo '<label class="checkbox-label"><input type="checkbox" name="reset_gallery_overrides" value="1"> ' . e(t('admin.dashboard.exif_gps_reset_overrides_label', 'Reset all per-gallery EXIF / GPS display overrides')) . '</label>';
     echo '<span class="muted">' . e(t('admin.dashboard.exif_gps_override_count', 'Gallery override(s): {count}', ['count' => (string) $overrideCount])) . '</span>';
-    echo '<div class="nav"><button type="submit" class="secondary">' . e(t('admin.dashboard.save_exif_gps_defaults', 'Save EXIF / GPS defaults')) . '</button><a class="button secondary" href="' . e(admin_settings_url('media')) . '">' . e(t('admin.settings.open_centralized', 'Open centralized settings')) . '</a></div></form>';
+    echo '<div class="nav"><button type="submit" class="secondary">' . e(t('admin.dashboard.save_exif_gps_defaults', 'Save EXIF / GPS defaults')) . '</button><a class="button secondary" href="' . e((string) (($model['admin_settings_urls']['media'] ?? url_for('admin_settings')))) . '">' . e(t('admin.settings.open_centralized', 'Open centralized settings')) . '</a></div></form>';
 }
 
 /**
@@ -293,9 +279,9 @@ function view_render_admin_exif_gps_defaults_card(string $className, bool $defau
  *
  * @param string $className Class name value.
  */
-function view_render_admin_gallery_dates_card(string $className): void
+function view_render_admin_gallery_dates_card(string $className, array $model = []): void
 {
-    if (!feature_capability_effective_enabled('exif_gallery_date_suggestions')) {
+    if (empty($model['feature_enabled']['exif_gallery_date_suggestions'])) {
         return;
     }
     echo '<article class="' . e($className) . '"><strong>' . e(t('admin.dashboard.gallery_dates', 'Gallery dates')) . '</strong><span>' . e(t('admin.dashboard.gallery_dates_hint', 'Approve editable date ranges suggested from scanned EXIF capture dates, including subgalleries.')) . '</span><a class="button secondary" href="' . e(url_for('admin_gallery_dates')) . '">' . e(t('admin.dashboard.open_gallery_dates', 'Open gallery dates')) . '</a></article>';
@@ -306,11 +292,11 @@ function view_render_admin_gallery_dates_card(string $className): void
  *
  * @param string $className Class name value.
  */
-function view_render_admin_url_rewrite_card(string $className): void
+function view_render_admin_url_rewrite_card(string $className, array $model = []): void
 {
-    $enabled = url_rewrite_enabled();
-    $compatibility = url_rewrite_compatibility();
-    $status = (string) $compatibility['status'];
+    $enabled = !empty($model['url_rewrite_enabled']);
+    $compatibility = is_array($model['url_rewrite_compatibility'] ?? null) ? $model['url_rewrite_compatibility'] : [];
+    $status = (string) ($compatibility['status'] ?? 'unknown');
     $statusLabels = [
         'disabled' => t('admin.dashboard.url_rewrite_status_disabled', 'Disabled intentionally'),
         'supported' => t('admin.dashboard.url_rewrite_status_supported', 'Supported'),
@@ -387,10 +373,10 @@ function view_render_admin_navdata_maintenance_card(bool $flightNavdataReady, ar
  *
  * @param string $className Class name value.
  */
-function view_render_admin_devmode_card(string $className): void
+function view_render_admin_devmode_card(string $className, array $model = []): void
 {
     // $enabled stores an intermediate value used by the surrounding gallery workflow.
-    $enabled = dev_mode_enabled();
+    $enabled = !empty($model['dev_mode_enabled']);
     echo '<form method="post" action="' . e(url_for('admin_devmode')) . '" class="' . e($className) . ' admin-devmode-card">' . csrf_field();
     echo '<strong>' . e(t('admin.dashboard.devmode_title', 'Dev mode')) . '</strong>';
     echo '<span>' . e(t('admin.dashboard.devmode_description', 'Optional admin-only diagnostics overlay for preload, cache, memory, network and frame-timing tuning in the public viewer and fullscreen viewer.')) . '</span>';
@@ -401,10 +387,10 @@ function view_render_admin_devmode_card(string $className): void
 /**
  * Render the admin dev mode panel.
  */
-function view_render_admin_devmode_panel(): void
+function view_render_admin_devmode_panel(array $model = []): void
 {
     echo '<section class="panel admin-devmode-panel admin-devmode-panel--secondary">';
-    view_render_admin_devmode_card('admin-maintenance-card');
+    view_render_admin_devmode_card('admin-maintenance-card', $model);
     echo '</section>';
 }
 

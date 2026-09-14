@@ -40,7 +40,6 @@ use PDO;
 use RuntimeException;
 use Throwable;
 use function Gallery\Core\absolute_public_url;
-use function Gallery\Core\db;
 use function Gallery\Core\gallery_public_url;
 use function Gallery\Core\gallery_seo_title;
 use function Gallery\Core\image_alt_text;
@@ -49,6 +48,20 @@ use function Gallery\Core\now_sql;
 use function Gallery\Core\normalize_relative_path;
 use function Gallery\Core\public_base_url;
 use function Gallery\Core\slugify;
+use function Gallery\Models\public_path_model_apply_full_regeneration;
+use function Gallery\Models\public_path_model_apply_parent_assignments;
+use function Gallery\Models\public_path_model_apply_gallery_regeneration;
+use function Gallery\Models\public_path_model_apply_image_slugs;
+use function Gallery\Models\public_path_model_find_gallery_by_path_hash;
+use function Gallery\Models\public_path_model_find_image_by_slug;
+use function Gallery\Models\public_path_model_gallery_image_regeneration_rows;
+use function Gallery\Models\public_path_model_gallery_images;
+use function Gallery\Models\public_path_model_gallery_regeneration_rows;
+use function Gallery\Models\public_path_model_image_regeneration_rows;
+use function Gallery\Models\public_path_model_public_gallery_max_updated_at;
+use function Gallery\Models\public_path_model_public_gallery_rows;
+use function Gallery\Models\public_path_model_public_images;
+use function Gallery\Models\gallery_model_public_listing_filter_sql;
 
 /**
 Public URL path and slug helpers.
@@ -123,7 +136,7 @@ function public_homepage_sitemap_entry(): array
 {
     $lastModified = null;
     try {
-        $lastModified = (string) db()->query("SELECT MAX(updated_at) FROM galleries WHERE visibility = 'public'")->fetchColumn();
+        $lastModified = public_path_model_public_gallery_max_updated_at();
     } catch (Throwable) {
         $lastModified = null;
     }
@@ -145,12 +158,7 @@ function public_sitemap_gallery_rows(): array
 {
     gallery_visibility_assert_public_policy_available();
     gallery_access_assert_public_policy_available();
-    $columns = gallery_access_schema_ready() ? '*' : 'id, parent_id, folder_path, slug, title, description, visibility, cover_image_id, created_at, updated_at';
-    $stmt = db()->query("SELECT $columns
-        FROM galleries
-        WHERE visibility = 'public'
-        ORDER BY folder_path");
-    return $stmt->fetchAll();
+    return public_path_model_public_gallery_rows(gallery_access_schema_ready());
 }
 
 /**
@@ -162,15 +170,8 @@ function public_sitemap_gallery_rows(): array
  */
 function public_sitemap_gallery_images(array $gallery, int $limit = 50): array
 {
-    $limit = max(1, min(100, $limit));
-    $stmt = db()->prepare('SELECT *
-        FROM images
-        WHERE gallery_id = ? AND visibility = ?
-        ORDER BY sort_order, filename
-        LIMIT ' . $limit);
-    $stmt->execute([(int) $gallery['id'], 'public']);
     $images = [];
-    foreach ($stmt->fetchAll() as $image) {
+    foreach (public_path_model_public_images((int) $gallery['id'], $limit) as $image) {
         if (function_exists('Gallery\\Services\\image_nsfw_restricted') && image_nsfw_restricted($image, $gallery)) {
             continue;
         }
@@ -259,13 +260,8 @@ function public_sitemap_gallery_last_modified(array $gallery, array $images): ?s
 function public_sitemap_gallery_freshness_images(array $gallery, array $seedImages): array
 {
     try {
-        $stmt = db()->prepare('SELECT *
-            FROM images
-            WHERE gallery_id = ? AND visibility = ?
-            ORDER BY sort_order, filename');
-        $stmt->execute([(int) $gallery['id'], 'public']);
         $images = [];
-        foreach ($stmt->fetchAll() as $image) {
+        foreach (public_path_model_public_images((int) $gallery['id']) as $image) {
             if (function_exists('Gallery\\Services\\image_nsfw_restricted') && image_nsfw_restricted($image, $gallery)) {
                 continue;
             }
@@ -522,11 +518,8 @@ function find_gallery_by_public_path(string $publicPath): ?array
     }
 
     if (public_path_schema_ready()) {
-        // $stmt stores an intermediate value used by the surrounding gallery workflow.
-        $stmt = db()->prepare('SELECT * FROM galleries WHERE url_path_hash = ?');
-        $stmt->execute([hash('sha256', $normalizedPath)]);
         // $gallery stores an intermediate value used by the surrounding gallery workflow.
-        $gallery = $stmt->fetch();
+        $gallery = public_path_model_find_gallery_by_path_hash(hash('sha256', $normalizedPath));
         if ($gallery) {
             return $cache[$cacheKey] = $gallery;
         }
@@ -567,20 +560,14 @@ function find_image_by_public_slug(int $galleryId, string $slug): ?array
     }
 
     if (public_path_schema_ready()) {
-        // $stmt stores an intermediate value used by the surrounding gallery workflow.
-        $stmt = db()->prepare('SELECT * FROM images WHERE gallery_id = ? AND url_slug = ?');
-        $stmt->execute([$galleryId, $cleanSlug]);
         // $image stores an intermediate value used by the surrounding gallery workflow.
-        $image = $stmt->fetch();
+        $image = public_path_model_find_image_by_slug($galleryId, $cleanSlug);
         if ($image) {
             return $cache[$cacheKey] = $image;
         }
     }
 
-    // $stmt stores an intermediate value used by the surrounding gallery workflow.
-    $stmt = db()->prepare('SELECT * FROM images WHERE gallery_id = ?');
-    $stmt->execute([$galleryId]);
-    foreach ($stmt->fetchAll() as $image) {
+    foreach (public_path_model_gallery_images($galleryId) as $image) {
         // $candidate stores an intermediate value used by the surrounding gallery workflow.
         $candidate = slugify((string) ($image['url_slug'] ?: pathinfo((string) $image['filename'], PATHINFO_FILENAME)));
         if ($candidate === $cleanSlug) {
@@ -603,16 +590,7 @@ function public_gallery_listing_sql_fragment(string $alias = 'g'): string
 {
     gallery_visibility_assert_public_policy_available();
     gallery_access_assert_public_policy_available();
-
-    // $prefix stores an intermediate value used by the surrounding gallery workflow.
-    $prefix = $alias . '.';
-    // $sql stores an intermediate value used by the surrounding gallery workflow.
-    $sql = $prefix . "visibility = 'public'";
-    if (gallery_access_schema_ready()) {
-        $sql .= ' AND ' . $prefix . "access_listing = 'listed'";
-    }
-    // Contract: MUST only return hardcoded SQL with no user-derived values because this fragment is interpolated into prepared statement strings.
-    return $sql;
+    return ltrim(gallery_model_public_listing_filter_sql($alias, true, gallery_access_schema_ready()), ' AND');
 }
 
 /**
@@ -652,26 +630,28 @@ function regenerate_public_paths(): array
         throw new RuntimeException('Clean public path columns are missing. Run database migrations first.');
     }
 
-    // $pdo stores an intermediate value used by the surrounding gallery workflow.
-    $pdo = db();
-    $pdo->beginTransaction();
+    $galleryRows = public_path_model_gallery_regeneration_rows();
+    $parentAssignments = gallery_parent_id_assignments_from_folder_paths($galleryRows);
+    if (function_exists(__NAMESPACE__ . '\\smart_gallery_validate_gallery_parent_map')) {
+        smart_gallery_validate_gallery_parent_map($parentAssignments);
+    }
+    $pathAssignments = gallery_public_path_assignments($galleryRows);
+    $imageAssignments = image_public_slug_assignments(public_path_model_image_regeneration_rows());
+    $result = public_path_model_apply_full_regeneration(
+        $galleryRows,
+        $parentAssignments,
+        $pathAssignments,
+        $imageAssignments,
+        now_sql()
+    );
 
-    try {
-        // $galleryCount stores an intermediate value used by the surrounding gallery workflow.
-        $galleryCount = regenerate_gallery_public_paths($pdo);
-        // $imageCount stores an intermediate value used by the surrounding gallery workflow.
-        $imageCount = regenerate_image_public_slugs($pdo);
-        $pdo->commit();
-    } catch (Throwable $exception) {
-        if ($pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
-        throw $exception;
+    if ($result['parent_changed'] > 0 && function_exists(__NAMESPACE__ . '\\smart_gallery_graph_cache_clear')) {
+        smart_gallery_graph_cache_clear();
     }
 
     return [
-        'galleries' => $galleryCount,
-        'images' => $imageCount,
+        'galleries' => $result['galleries'],
+        'images' => $result['images'],
     ];
 }
 
@@ -691,24 +671,22 @@ function refresh_gallery_public_paths(): int
         return 0;
     }
 
-    $pdo = db();
-    $ownsTransaction = !$pdo->inTransaction();
-    if ($ownsTransaction) {
-        $pdo->beginTransaction();
+    $galleryRows = public_path_model_gallery_regeneration_rows();
+    $parentAssignments = gallery_parent_id_assignments_from_folder_paths($galleryRows);
+    if (function_exists(__NAMESPACE__ . '\\smart_gallery_validate_gallery_parent_map')) {
+        smart_gallery_validate_gallery_parent_map($parentAssignments);
     }
-
-    try {
-        $count = regenerate_gallery_public_paths($pdo);
-        if ($ownsTransaction) {
-            $pdo->commit();
-        }
-        return $count;
-    } catch (Throwable $exception) {
-        if ($ownsTransaction && $pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
-        throw $exception;
+    $pathAssignments = gallery_public_path_assignments($galleryRows);
+    $result = public_path_model_apply_gallery_regeneration(
+        $galleryRows,
+        $parentAssignments,
+        $pathAssignments,
+        now_sql()
+    );
+    if ($result['parent_changed'] > 0 && function_exists(__NAMESPACE__ . '\\smart_gallery_graph_cache_clear')) {
+        smart_gallery_graph_cache_clear();
     }
+    return $result['galleries'];
 }
 
 /**
@@ -911,33 +889,16 @@ function gallery_public_path_from_folder_segments(string $folderPath): string
  */
 function repair_gallery_parent_ids_from_folder_paths(PDO $pdo): int
 {
-    $rows = $pdo->query('SELECT id, parent_id, folder_path FROM galleries ORDER BY CHAR_LENGTH(folder_path), folder_path, id')->fetchAll();
+    $rows = public_path_model_gallery_regeneration_rows($pdo);
     $assignments = gallery_parent_id_assignments_from_folder_paths($rows);
     if (function_exists(__NAMESPACE__ . '\\smart_gallery_validate_gallery_parent_map')) {
         smart_gallery_validate_gallery_parent_map($assignments);
     }
 
-    $updateParent = $pdo->prepare('UPDATE galleries SET parent_id = ? WHERE id = ?');
-    $changed = 0;
-
-    foreach ($rows as $row) {
-        $galleryId = (int) ($row['id'] ?? 0);
-        if ($galleryId <= 0) {
-            continue;
-        }
-        $currentParentId = $row['parent_id'] === null ? null : (int) $row['parent_id'];
-        $desiredParentId = $assignments[$galleryId] ?? null;
-        if ($currentParentId === $desiredParentId) {
-            continue;
-        }
-        $updateParent->execute([$desiredParentId, $galleryId]);
-        $changed++;
-    }
-
+    $changed = public_path_model_apply_parent_assignments($rows, $assignments, $pdo);
     if ($changed > 0 && function_exists(__NAMESPACE__ . '\\smart_gallery_graph_cache_clear')) {
         smart_gallery_graph_cache_clear();
     }
-
     return $changed;
 }
 
@@ -949,30 +910,23 @@ function repair_gallery_parent_ids_from_folder_paths(PDO $pdo): int
  */
 function regenerate_gallery_public_paths(PDO $pdo): int
 {
-    repair_gallery_parent_ids_from_folder_paths($pdo);
-
-    $stmt = $pdo->query('SELECT id, parent_id, title, folder_path, slug FROM galleries ORDER BY CHAR_LENGTH(folder_path), folder_path, id');
-    $galleries = $stmt->fetchAll();
-    $assignments = gallery_public_path_assignments($galleries);
-
-    // Clear the old values first so a title or hierarchy change cannot hit the
-    // unique url_path_hash index because another gallery still owns a path that
-    // will be reassigned later in this same rebuild.
-    $pdo->exec('UPDATE galleries SET url_slug = NULL, url_path = NULL, url_path_hash = NULL');
-
-    $update = $pdo->prepare('UPDATE galleries SET url_slug = ?, url_path = ?, url_path_hash = ?, updated_at = ? WHERE id = ?');
-    foreach ($assignments as $galleryId => $assignment) {
-        $path = $assignment['path'];
-        $update->execute([
-            $assignment['slug'],
-            $path,
-            hash('sha256', $path),
-            now_sql(),
-            $galleryId,
-        ]);
+    $galleries = public_path_model_gallery_regeneration_rows($pdo);
+    $parentAssignments = gallery_parent_id_assignments_from_folder_paths($galleries);
+    if (function_exists(__NAMESPACE__ . '\\smart_gallery_validate_gallery_parent_map')) {
+        smart_gallery_validate_gallery_parent_map($parentAssignments);
     }
-
-    return count($assignments);
+    $assignments = gallery_public_path_assignments($galleries);
+    $result = public_path_model_apply_gallery_regeneration(
+        $galleries,
+        $parentAssignments,
+        $assignments,
+        now_sql(),
+        $pdo
+    );
+    if ($result['parent_changed'] > 0 && function_exists(__NAMESPACE__ . '\\smart_gallery_graph_cache_clear')) {
+        smart_gallery_graph_cache_clear();
+    }
+    return $result['galleries'];
 }
 
 /**
@@ -998,32 +952,11 @@ function regenerate_gallery_image_public_slugs(int $galleryId): int
         return 0;
     }
 
-    // $stmt stores the gallery-local image set whose slugs can conflict with one another.
-    $stmt = db()->prepare('SELECT id, gallery_id, title, filename FROM images WHERE gallery_id = ? ORDER BY sort_order, filename, id');
-    $stmt->execute([$galleryId]);
-    $images = $stmt->fetchAll();
+    $images = public_path_model_gallery_image_regeneration_rows($galleryId);
     if (!$images) {
         return 0;
     }
-
-    // $usedSlugs stores gallery-local slug values already assigned in display order.
-    $usedSlugs = [];
-    // $update stores the prepared update used for each image in this gallery.
-    $update = db()->prepare('UPDATE images SET url_slug = ?, updated_at = ? WHERE id = ?');
-    $count = 0;
-    foreach ($images as $image) {
-        // $baseName stores the filename stem used when the image title is empty.
-        $baseName = pathinfo((string) $image['filename'], PATHINFO_FILENAME);
-        // $base stores the preferred text used to derive a stable clean URL slug.
-        $base = (string) ($image['title'] ?: $baseName ?: 'image');
-        // $slug stores the final gallery-unique slug.
-        $slug = unique_public_slug_in_set($base, $usedSlugs);
-        $usedSlugs[$slug] = true;
-        $update->execute([$slug, now_sql(), (int) $image['id']]);
-        $count++;
-    }
-
-    return $count;
+    return public_path_model_apply_image_slugs(image_public_slug_assignments($images), now_sql());
 }
 
 /**
@@ -1034,41 +967,36 @@ function regenerate_gallery_image_public_slugs(int $galleryId): int
  */
 function regenerate_image_public_slugs(PDO $pdo): int
 {
-    // $stmt stores an intermediate value used by the surrounding gallery workflow.
-    $stmt = $pdo->query('SELECT id, gallery_id, title, filename FROM images ORDER BY gallery_id, sort_order, filename, id');
-    // $images stores an intermediate value used by the surrounding gallery workflow.
-    $images = $stmt->fetchAll();
-    // $usedByGallery stores an intermediate value used by the surrounding gallery workflow.
-    $usedByGallery = [];
-    // $update stores an intermediate value used by the surrounding gallery workflow.
-    $update = $pdo->prepare('UPDATE images SET url_slug = ?, updated_at = ? WHERE id = ?');
-    // $count stores an intermediate value used by the surrounding gallery workflow.
-    $count = 0;
+    $images = public_path_model_image_regeneration_rows($pdo);
+    return public_path_model_apply_image_slugs(image_public_slug_assignments($images), now_sql(), $pdo);
+}
 
+/**
+ * Build deterministic gallery-local public image slug assignments.
+ *
+ * @param array<int,array<string,mixed>> $images Image rows in gallery/display order.
+ * @return array<int,string> Slugs keyed by image id.
+ */
+function image_public_slug_assignments(array $images): array
+{
+    $usedByGallery = [];
+    $assignments = [];
     foreach ($images as $image) {
-        // $galleryId stores an intermediate value used by the surrounding gallery workflow.
-        $galleryId = (int) $image['gallery_id'];
+        $imageId = (int) ($image['id'] ?? 0);
+        $galleryId = (int) ($image['gallery_id'] ?? 0);
+        if ($imageId <= 0 || $galleryId <= 0) {
+            continue;
+        }
         if (!isset($usedByGallery[$galleryId])) {
             $usedByGallery[$galleryId] = [];
         }
-
-        // $baseName stores an intermediate value used by the surrounding gallery workflow.
-        $baseName = pathinfo((string) $image['filename'], PATHINFO_FILENAME);
-        // $base stores an intermediate value used by the surrounding gallery workflow.
-        $base = (string) ($image['title'] ?: $baseName ?: 'image');
-        // $slug stores an intermediate value used by the surrounding gallery workflow.
+        $baseName = pathinfo((string) ($image['filename'] ?? ''), PATHINFO_FILENAME);
+        $base = (string) (($image['title'] ?? '') ?: $baseName ?: 'image');
         $slug = unique_public_slug_in_set($base, $usedByGallery[$galleryId]);
         $usedByGallery[$galleryId][$slug] = true;
-
-        $update->execute([
-            $slug,
-            now_sql(),
-            (int) $image['id'],
-        ]);
-        $count++;
+        $assignments[$imageId] = $slug;
     }
-
-    return $count;
+    return $assignments;
 }
 
 /**

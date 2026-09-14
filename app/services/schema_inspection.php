@@ -43,10 +43,13 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 use InvalidArgumentException;
-use PDO;
 use PDOException;
 use Throwable;
-use function Gallery\Core\db;
+use function Gallery\Models\schema_inspection_model_column_definition_contains;
+use function Gallery\Models\schema_inspection_model_column_nullable;
+use function Gallery\Models\schema_inspection_model_object_exists;
+use function Gallery\Models\schema_inspection_model_query_definition;
+use function Gallery\Models\schema_inspection_model_table_snapshot_rows;
 
 const SCHEMA_INSPECTION_AVAILABLE = 'available';
 const SCHEMA_INSPECTION_MISSING = 'missing';
@@ -220,16 +223,8 @@ function schema_inspection_prime_table_snapshots(array $tables): bool
     }
 
     try {
-        $placeholders = implode(',', array_fill(0, count($missing), '?'));
-        $statement = db()->prepare(
-            'SELECT TABLE_NAME, COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE '
-            . 'FROM information_schema.COLUMNS '
-            . 'WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN (' . $placeholders . ') '
-            . 'ORDER BY TABLE_NAME, ORDINAL_POSITION'
-        );
-        $statement->execute($missing);
-        $rows = $statement->fetchAll(PDO::FETCH_ASSOC);
-        schema_inspection_store_table_snapshots($missing, is_array($rows) ? $rows : []);
+        $rows = schema_inspection_model_table_snapshot_rows($missing);
+        schema_inspection_store_table_snapshots($missing, $rows);
     } catch (Throwable) {
         return false;
     }
@@ -373,31 +368,7 @@ function schema_inspection_error_code(Throwable $exception): string
  */
 function schema_inspection_query_definition(string $objectType, string $table, string $object): array
 {
-    if ($objectType === SCHEMA_INSPECTION_OBJECT_TABLE) {
-        return [
-            'sql' => 'SELECT 1 FROM information_schema.TABLES '
-                . 'WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? LIMIT 1',
-            'parameters' => [$table],
-        ];
-    }
-
-    if ($objectType === SCHEMA_INSPECTION_OBJECT_COLUMN) {
-        return [
-            'sql' => 'SELECT 1 FROM information_schema.COLUMNS '
-                . 'WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ? LIMIT 1',
-            'parameters' => [$table, $object],
-        ];
-    }
-
-    if ($objectType === SCHEMA_INSPECTION_OBJECT_INDEX) {
-        return [
-            'sql' => 'SELECT 1 FROM information_schema.STATISTICS '
-                . 'WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ? LIMIT 1',
-            'parameters' => [$table, $object],
-        ];
-    }
-
-    throw new InvalidArgumentException('Invalid schema object type.');
+    return schema_inspection_model_query_definition($objectType, $table, $object);
 }
 
 /**
@@ -418,11 +389,7 @@ function schema_inspection_execute_query(string $objectType, string $table, stri
     if (is_callable($override)) {
         return (bool) $override($objectType, $table, $object);
     }
-
-    $query = schema_inspection_query_definition($objectType, $table, $object);
-    $statement = db()->prepare($query['sql']);
-    $statement->execute($query['parameters']);
-    return (bool) $statement->fetchColumn();
+    return schema_inspection_model_object_exists($objectType, $table, $object);
 }
 
 /**
@@ -482,13 +449,7 @@ function schema_inspection_column_definition_contains(string $table, string $col
             // ignores surplus arguments for user-defined callables.
             $exists = (bool) $override('column_definition_contains', $table, $column, $token);
         } else {
-            $statement = db()->prepare(
-                'SELECT 1 FROM information_schema.COLUMNS '
-                . 'WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ? '
-                . 'AND LOCATE(?, COLUMN_TYPE) > 0 LIMIT 1'
-            );
-            $statement->execute([$table, $column, $token]);
-            $exists = (bool) $statement->fetchColumn();
+            $exists = schema_inspection_model_column_definition_contains($table, $column, $token);
         }
         $cache[$cacheKey] = schema_inspection_result(
             $exists ? SCHEMA_INSPECTION_AVAILABLE : SCHEMA_INSPECTION_MISSING,
@@ -556,13 +517,7 @@ function schema_inspection_column_nullable(string $table, string $column): array
         if (is_callable($override)) {
             $nullable = (bool) $override('column_nullable', $table, $column, 'YES');
         } else {
-            $statement = db()->prepare(
-                'SELECT 1 FROM information_schema.COLUMNS '
-                . 'WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ? '
-                . "AND IS_NULLABLE = 'YES' LIMIT 1"
-            );
-            $statement->execute([$table, $column]);
-            $nullable = (bool) $statement->fetchColumn();
+            $nullable = schema_inspection_model_column_nullable($table, $column);
         }
         $cache[$cacheKey] = schema_inspection_result(
             $nullable ? SCHEMA_INSPECTION_AVAILABLE : SCHEMA_INSPECTION_MISSING,

@@ -37,7 +37,8 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
-use function Gallery\Core\db;
+use function Gallery\Models\gallery_model_likely_destination_id;
+use function Gallery\Models\gallery_model_picker_rows;
 
 /**
  * Return gallery rows formatted for the shared searchable gallery picker.
@@ -55,9 +56,7 @@ function gallery_search_picker_rows(int $selectedGalleryId = 0, int $excludedGal
     // $rows stores normalized gallery choices for text-search widgets.
     $rows = [];
     // $galleries stores the canonical gallery list ordered by hierarchy path.
-    $stmt = db()->prepare('SELECT id, title, folder_path FROM galleries ORDER BY folder_path');
-    $stmt->execute();
-    $galleries = $stmt->fetchAll();
+    $galleries = gallery_model_picker_rows();
     foreach ($galleries as $gallery) {
         // $galleryId stores the numeric destination ID used by backend forms.
         $galleryId = (int) ($gallery['id'] ?? 0);
@@ -104,8 +103,16 @@ function likely_gallery_destination_id(int $sourceGalleryId): int
     if ($sourceGalleryId <= 0) {
         return 0;
     }
-    // $stmt stores the direct-child lookup ordered by the same fields as normal gallery listings.
-    $stmt = db()->prepare('SELECT id FROM galleries WHERE parent_id = ? ORDER BY sort_order, title, id LIMIT 1');
-    $stmt->execute([$sourceGalleryId]);
-    return (int) ($stmt->fetchColumn() ?: 0);
+    return gallery_model_likely_destination_id($sourceGalleryId);
+}
+
+/**
+ * Return compact raw gallery rows for legacy select and editor controls.
+ *
+ * @param bool $secondaryTitleSort Whether title is used as a secondary sort key.
+ * @return array<int,array<string,mixed>> Gallery rows.
+ */
+function gallery_picker_source_rows(bool $secondaryTitleSort = false): array
+{
+    return gallery_model_picker_rows($secondaryTitleSort);
 }

@@ -40,10 +40,16 @@ use PDOException;
 use RuntimeException;
 use function Gallery\Core\cms_config;
 use function Gallery\Core\current_user;
-use function Gallery\Core\db;
 use function Gallery\Core\normalize_relative_path;
 use function Gallery\Core\now_sql;
 use function Gallery\Core\visitor_hash;
+use function Gallery\Models\picture_game_model_gallery_branch_rows;
+use function Gallery\Models\picture_game_model_images;
+use function Gallery\Models\picture_game_model_record_displayed_pair;
+use function Gallery\Models\picture_game_model_record_vote;
+use function Gallery\Models\picture_game_model_seen_pairs;
+use function Gallery\Models\picture_game_model_sync_voting_state;
+use function Gallery\Models\picture_game_model_top_images;
 
 /**
  * Picture game and gallery-voting service layer.
@@ -100,10 +106,7 @@ function sync_gallery_voting_game_state(): int
     if (!schema_inspection_is_available($schemaStatus)) {
         return 0;
     }
-    // $stmt stores an intermediate value used by the surrounding gallery workflow.
-    $stmt = db()->prepare('UPDATE galleries SET voting_enabled = 1, updated_at = ? WHERE picture_game_enabled = 1 AND voting_enabled = 0');
-    $stmt->execute([now_sql()]);
-    return $stmt->rowCount();
+    return picture_game_model_sync_voting_state(now_sql());
 }
 
 /**
@@ -120,11 +123,9 @@ function picture_game_gallery_ids(array $gallery): array
     // Variable $folderPath stores this steps working value.
     $folderPath = normalize_relative_path((string) $gallery['folder_path']);
     try {
-        // Variable $stmt stores this steps working value.
-        $listingCondition = public_gallery_listing_sql_fragment('g');
-        // $stmt stores an intermediate value used by the surrounding gallery workflow.
-        $stmt = db()->prepare("SELECT g.* FROM galleries g WHERE $listingCondition AND (g.folder_path = ? OR g.folder_path LIKE ?) ORDER BY g.folder_path");
-        $stmt->execute([$folderPath, $folderPath . '/%']);
+        gallery_visibility_assert_public_policy_available();
+        gallery_access_assert_public_policy_available();
+        $rows = picture_game_model_gallery_branch_rows($folderPath, gallery_access_schema_ready());
     } catch (PDOException) {
         return [];
     }
@@ -132,7 +133,7 @@ function picture_game_gallery_ids(array $gallery): array
     $enabledPaths = [];
     // Variable $ids stores this steps working value.
     $ids = [];
-    foreach ($stmt->fetchAll() as $candidate) {
+    foreach ($rows as $candidate) {
         if (!visitor_can_access_gallery($candidate)) {
             continue;
         }
@@ -170,14 +171,7 @@ function picture_game_images(array $gallery): array
     if (!$galleryIds) {
         return $cache[$cacheKey] = [];
     }
-    // Variable $placeholders stores this steps working value.
-    $placeholders = implode(',', array_fill(0, count($galleryIds), '?'));
-    // Variable $filenameSelect stores this steps working value.
-    $filenameSelect = gallery_filename_display_schema_ready() ? 'g.show_filenames AS gallery_show_filenames' : '0 AS gallery_show_filenames';
-    // Variable $stmt stores this steps working value.
-    $stmt = db()->prepare("SELECT i.*, g.title AS gallery_title, g.folder_path AS gallery_folder_path, $filenameSelect FROM images i JOIN galleries g ON g.id = i.gallery_id WHERE i.gallery_id IN ($placeholders) AND i.visibility = 'public' AND i.relative_path NOT LIKE '%/%' ORDER BY g.folder_path, i.sort_order, i.filename");
-    $stmt->execute($galleryIds);
-    $rows = $stmt->fetchAll();
+    $rows = picture_game_model_images($galleryIds, gallery_filename_display_schema_ready());
     $galleryCache = [(int) $gallery['id'] => $gallery];
     $visible = [];
     foreach ($rows as $image) {
@@ -213,28 +207,19 @@ function picture_game_available_image_count(array $gallery, int $minimum = 2): i
         return 0;
     }
 
-    // Variable $placeholders stores this steps working value.
-    $placeholders = implode(',', array_fill(0, count($galleryIds), '?'));
-    // Variable $filenameSelect stores this steps working value.
-    $filenameSelect = gallery_filename_display_schema_ready() ? 'g.show_filenames AS gallery_show_filenames' : '0 AS gallery_show_filenames';
-    // Variable $sql stores this steps working value.
-    $sql = "SELECT i.*, g.title AS gallery_title, g.folder_path AS gallery_folder_path, $filenameSelect FROM images i JOIN galleries g ON g.id = i.gallery_id WHERE i.gallery_id IN ($placeholders) AND i.visibility = 'public' AND i.relative_path NOT LIKE '%/%'";
-    // Variable $params stores this steps working value.
-    $params = $galleryIds;
-    if (nsfw_guard_schema_ready() && !visitor_can_access_nsfw_content()) {
-        $sql .= ' AND COALESCE(i.nsfw_enabled, 0) = 0';
-    }
-    $sql .= ' ORDER BY g.folder_path, i.sort_order, i.filename LIMIT ' . $minimum;
-
-    // Variable $stmt stores this steps working value.
-    $stmt = db()->prepare($sql);
-    $stmt->execute($params);
+    $excludeNsfw = nsfw_guard_schema_ready() && !visitor_can_access_nsfw_content();
+    $rows = picture_game_model_images(
+        $galleryIds,
+        gallery_filename_display_schema_ready(),
+        $excludeNsfw,
+        $minimum
+    );
 
     // $galleryCache stores gallery rows reused for final visitor-specific checks.
     $galleryCache = [(int) $gallery['id'] => $gallery];
     // $visibleCount stores how many visible candidates have been found.
     $visibleCount = 0;
-    foreach ($stmt->fetchAll() as $image) {
+    foreach ($rows as $image) {
         // $imageGalleryId stores the owning gallery id for this candidate image.
         $imageGalleryId = (int) $image['gallery_id'];
         if (!array_key_exists($imageGalleryId, $galleryCache)) {
@@ -321,12 +306,9 @@ function next_picture_game_pair(array $gallery, ?array $images = null): ?array
     $ids = array_keys($imageById);
     // Variable $voterHash stores this steps working value.
     $voterHash = picture_game_voter_hash();
-    // Variable $stmt stores this steps working value.
-    $stmt = db()->prepare('SELECT image_a_id, image_b_id FROM picture_game_votes WHERE gallery_id = ? AND voter_hash = ?');
-    $stmt->execute([(int) $gallery['id'], $voterHash]);
     // Variable $seen stores this steps working value.
     $seen = [];
-    foreach ($stmt->fetchAll() as $row) {
+    foreach (picture_game_model_seen_pairs((int) $gallery['id'], $voterHash) as $row) {
         $seen[(int) $row['image_a_id'] . ':' . (int) $row['image_b_id']] = true;
     }
     // Variable $pairs stores this steps working value.
@@ -347,13 +329,13 @@ function next_picture_game_pair(array $gallery, ?array $images = null): ?array
     // Variable $pair stores this steps working value.
     $pair = $pairs[random_int(0, count($pairs) - 1)];
     // Record display immediately so a voter does not keep seeing the same pair.
-    db()->prepare('INSERT IGNORE INTO picture_game_votes (gallery_id, image_a_id, image_b_id, winner_image_id, voter_hash, created_at) VALUES (?, ?, ?, NULL, ?, ?)')->execute([
+    picture_game_model_record_displayed_pair(
         (int) $gallery['id'],
         (int) $pair[0],
         (int) $pair[1],
         $voterHash,
-        now_sql(),
-    ]);
+        now_sql()
+    );
     return [
         'left' => $imageById[$pair[0]],
         'right' => $imageById[$pair[1]],
@@ -387,28 +369,18 @@ function record_picture_game_vote(array $gallery, int $leftImageId, int $rightIm
     }
     // Variable $voterHash stores this steps working value.
     $voterHash = picture_game_voter_hash();
-    // Variable $existing stores this steps working value.
-    $existing = db()->prepare('SELECT winner_image_id FROM picture_game_votes WHERE gallery_id = ? AND voter_hash = ? AND image_a_id = ? AND image_b_id = ?');
-    $existing->execute([(int) $gallery['id'], $voterHash, $imageAId, $imageBId]);
-    // Variable $winner stores this steps working value.
-    $winner = $existing->fetchColumn();
-    if ($winner !== false && $winner !== null) {
-        return;
-    }
-    // Variable $stmt stores this steps working value.
-    $stmt = db()->prepare('INSERT INTO picture_game_votes (gallery_id, image_a_id, image_b_id, winner_image_id, voter_hash, created_at) VALUES (?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE winner_image_id = VALUES(winner_image_id)');
-    $stmt->execute([(int) $gallery['id'], $imageAId, $imageBId, $winnerImageId, $voterHash, now_sql()]);
     // Variable $user stores this steps working value.
     $user = current_user();
-    if ($user) {
-        // $vote stores an intermediate value used by the surrounding gallery workflow.
-        $vote = db()->prepare('INSERT INTO image_votes (image_id, user_id, visitor_hash, vote, created_at, updated_at) VALUES (?, ?, NULL, 1, ?, ?) ON DUPLICATE KEY UPDATE vote = VALUES(vote), updated_at = VALUES(updated_at)');
-        $vote->execute([$winnerImageId, (int) $user['id'], now_sql(), now_sql()]);
-        return;
-    }
-    // $vote stores an intermediate value used by the surrounding gallery workflow.
-    $vote = db()->prepare('INSERT INTO image_votes (image_id, user_id, visitor_hash, vote, created_at, updated_at) VALUES (?, NULL, ?, 1, ?, ?) ON DUPLICATE KEY UPDATE vote = VALUES(vote), updated_at = VALUES(updated_at)');
-    $vote->execute([$winnerImageId, visitor_hash(), now_sql(), now_sql()]);
+    picture_game_model_record_vote(
+        (int) $gallery['id'],
+        $imageAId,
+        $imageBId,
+        $winnerImageId,
+        $voterHash,
+        $user ? (int) $user['id'] : null,
+        $user ? '' : visitor_hash(),
+        now_sql()
+    );
 }
 
 /**
@@ -428,20 +400,5 @@ function picture_game_top_images(array $gallery, int $limit = 3, ?array $images 
     }
     // Variable $ids stores this steps working value.
     $ids = array_map(static fn (array $image): int => (int) $image['id'], $images);
-    // Variable $placeholders stores this steps working value.
-    $placeholders = implode(',', array_fill(0, count($ids), '?'));
-    // Variable $filenameSelect stores this steps working value.
-    $filenameSelect = gallery_filename_display_schema_ready() ? 'g.show_filenames AS gallery_show_filenames' : '0 AS gallery_show_filenames';
-    // Variable $stmt stores this steps working value.
-    $stmt = db()->prepare("SELECT i.*, g.title AS gallery_title, $filenameSelect,
-            (SELECT COUNT(*) FROM picture_game_votes pgv WHERE pgv.winner_image_id = i.id) AS game_wins,
-            (SELECT COALESCE(SUM(iv.vote), 0) FROM image_votes iv WHERE iv.image_id = i.id) AS score
-        FROM images i
-        JOIN galleries g ON g.id = i.gallery_id
-        WHERE i.id IN ($placeholders)
-            AND (SELECT COUNT(*) FROM picture_game_votes pgv WHERE pgv.winner_image_id = i.id) > 0
-        ORDER BY game_wins DESC, score DESC, i.sort_order, i.filename
-        LIMIT " . max(1, $limit));
-    $stmt->execute($ids);
-    return $stmt->fetchAll();
+    return picture_game_model_top_images($ids, gallery_filename_display_schema_ready(), max(1, $limit));
 }

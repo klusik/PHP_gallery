@@ -39,7 +39,6 @@ namespace Gallery\Services;
 
 use function Gallery\Core\gallery_public_url;
 use function Gallery\Core\image_public_url;
-use function Gallery\Core\normalize_relative_path;
 use function Gallery\Models\public_search_model_compatibility_gallery_rows;
 use function Gallery\Models\public_search_model_compatibility_image_rows;
 
@@ -143,54 +142,18 @@ function public_search_query_length(string $query): int
 
 
 /**
- * Return the public gallery listing condition, optionally restricted to one gallery branch.
+ * Return whether public-search persistence must restrict galleries to listed access.
  *
- * @param string $alias Alias value.
- * @param ?array $contextGallery Context gallery value.
- * @return string A hardcoded SQL fragment safe for interpolation — MUST NOT contain any user-derived values.
- * @internal
- */
-function public_search_context_listing_sql_fragment(string $alias, ?array $contextGallery): string
-{
-    $listingCondition = public_gallery_listing_sql_fragment($alias);
-    if (!$contextGallery) {
-        // Contract: MUST only return hardcoded SQL with no user-derived values because this fragment is interpolated into prepared statement strings.
-        return $listingCondition;
-    }
-
-    // Contract: MUST only return hardcoded SQL with no user-derived values because this fragment is interpolated into prepared statement strings.
-    return '(' . $listingCondition . ') AND (' . $alias . '.folder_path = ? OR ' . $alias . '.folder_path LIKE ?)';
-}
-
-/**
- * Return bound SQL values for a gallery branch search context.
+ * Public visibility/access policy stays in the service layer, while the model
+ * translates this semantic decision into SQL.
  *
- * @param ?array $contextGallery Context gallery value.
- * @return array Structured result data for the caller.
+ * @return bool True when public queries must require listed galleries.
  */
-function public_search_context_params(?array $contextGallery): array
+function public_search_listing_requires_listed(): bool
 {
-    if (!$contextGallery) {
-        return [];
-    }
-
-    $folderPath = normalize_relative_path((string) ($contextGallery['folder_path'] ?? ''));
-    if ($folderPath === '') {
-        return [(string) ($contextGallery['folder_path'] ?? ''), (string) ($contextGallery['folder_path'] ?? '') . '/%'];
-    }
-
-    return [$folderPath, $folderPath . '/%'];
-}
-
-/**
- * Return a wildcard LIKE pattern for one normalized query.
- *
- * @param string $query Query value.
- * @return string Text result for the caller.
- */
-function public_search_like_pattern(string $query): string
-{
-    return '%' . str_replace(['%', '_'], ['\\%', '\\_'], $query) . '%';
+    gallery_visibility_assert_public_policy_available();
+    gallery_access_assert_public_policy_available();
+    return gallery_access_schema_ready();
 }
 
 /**
@@ -219,18 +182,15 @@ function public_search_ai_metadata_ready(): bool
  */
 function public_search_gallery_results(string $query, int $limit, ?array $contextGallery = null): array
 {
-    $listingCondition = public_search_context_listing_sql_fragment('g', $contextGallery);
-    $contextParams = public_search_context_params($contextGallery);
-    $like = public_search_like_pattern($query);
+    $listedOnly = public_search_listing_requires_listed();
     $aiSearchReady = public_search_ai_metadata_ready();
     $contentLanguage = translation_active_language();
     $localizedGallerySearchReady = content_localization_enabled() && content_localization_schema_ready('gallery');
 
     $galleryRows = public_search_model_compatibility_gallery_rows(
         $query,
-        $like,
-        $listingCondition,
-        $contextParams,
+        $listedOnly,
+        $contextGallery,
         $aiSearchReady,
         $localizedGallerySearchReady,
         $contentLanguage,
@@ -280,9 +240,7 @@ function public_search_gallery_results(string $query, int $limit, ?array $contex
  */
 function public_search_image_results(string $query, int $limit, ?array $contextGallery = null): array
 {
-    $listingCondition = public_search_context_listing_sql_fragment('g', $contextGallery);
-    $contextParams = public_search_context_params($contextGallery);
-    $like = public_search_like_pattern($query);
+    $listedOnly = public_search_listing_requires_listed();
     $aiSearchReady = public_search_ai_metadata_ready();
     $contentLanguage = translation_active_language();
     $localizedSearchReady = content_localization_enabled()
@@ -290,9 +248,8 @@ function public_search_image_results(string $query, int $limit, ?array $contextG
 
     $rows = public_search_model_compatibility_image_rows(
         $query,
-        $like,
-        $listingCondition,
-        $contextParams,
+        $listedOnly,
+        $contextGallery,
         $aiSearchReady,
         $localizedSearchReady,
         $contentLanguage,

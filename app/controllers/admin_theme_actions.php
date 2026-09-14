@@ -46,9 +46,7 @@ use const Gallery\Services\THEME_FAVORITE_GALLERIES_MAX;
 use const Gallery\Services\PUBLIC_THUMBNAIL_RENDERING_PROGRESSIVE;
 use const Gallery\Services\PUBLIC_THUMBNAIL_RENDERING_RESPONSIVE;
 use function Gallery\Core\csrf_field;
-use function Gallery\Core\db;
 use function Gallery\Core\e;
-use function Gallery\Core\now_sql;
 use function Gallery\Core\redirect_to;
 use function Gallery\Core\render_admin_subtab_panel;
 use function Gallery\Core\render_admin_subtabs;
@@ -70,6 +68,7 @@ use function Gallery\Services\delete_theme_branding_asset;
 use function Gallery\Services\favicon_asset_url;
 use function Gallery\Services\feature_flag_enabled;
 use function Gallery\Services\gallery_background_source_schema_ready;
+use function Gallery\Services\gallery_clear_all_background_sources;
 use function Gallery\Services\gallery_description_layout_label;
 use function Gallery\Services\gallery_description_layout_normalize;
 use function Gallery\Services\gallery_description_layout_options;
@@ -123,6 +122,7 @@ use function Gallery\Services\tag_page_gallery_grid_settings;
 use function Gallery\Services\theme_page_width_custom_value;
 use function Gallery\Services\theme_page_width_mode;
 use function Gallery\Services\theme_settings;
+use function Gallery\Core\apply_cookie_intents;
 use function Gallery\Services\translation_admin_language;
 use function Gallery\Services\translation_clear_missing_diagnostics;
 use function Gallery\Services\translation_default_language;
@@ -139,6 +139,7 @@ use function Gallery\Services\translation_save_public_language_selector_design;
 use function Gallery\Services\translation_supported_languages;
 use function Gallery\Services\translation_save_language_json;
 use function Gallery\Services\translation_set_active_language;
+use function Gallery\Services\translation_admin_language_cookie_intents;
 use function Gallery\Services\translation_set_public_language;
 use function Gallery\Views\view_render_admin_hero;
 use function Gallery\Views\view_render_admin_tab_intro;
@@ -301,7 +302,10 @@ function admin_theme_process_post(bool $gpsMapsFeatureEnabled, bool $lightboxMod
         translation_save_public_language_selector_design($_POST['public_language_selector_design'] ?? []);
     }
     if (isset($_POST['cms_language'])) {
-        translation_set_active_language((string) $_POST['cms_language']);
+        $submittedAdminLanguage = (string) $_POST['cms_language'];
+        if (translation_set_active_language($submittedAdminLanguage)) {
+            apply_cookie_intents(translation_admin_language_cookie_intents($submittedAdminLanguage));
+        }
     }
     if (isset($_POST['public_language'])) {
         translation_set_public_language((string) $_POST['public_language']);
@@ -377,7 +381,7 @@ function admin_theme_process_post(bool $gpsMapsFeatureEnabled, bool $lightboxMod
         delete_theme_branding_asset('separator');
     } elseif (!empty($_POST['reset_all_gallery_backgrounds'])) {
         if (gallery_background_source_schema_ready()) {
-            db()->exec("UPDATE galleries SET background_source = NULL, updated_at = " . db()->quote(now_sql()) . " WHERE background_source IS NOT NULL");
+            gallery_clear_all_background_sources();
         }
     } elseif (!empty($_POST['reset_theme_overrides'])) {
         clear_theme_overrides();

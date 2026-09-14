@@ -14,6 +14,9 @@
  *   - Follow the active lightbox image without owning lightbox navigation state
  *   - Fall back to normal HTML form submission when JavaScript is unavailable
  *
+ * Author:
+ *   Rudolf Klusal
+ *
  * Notes:
  *   - Keep comments and docstrings intact when modifying this file.
  *   - The server remains authoritative for viewer identity, quota, and source authorization.

@@ -162,7 +162,6 @@ function admin_gallery_report_finish_job(array $job): array
     $job['image_summary'] = admin_gallery_report_finalize_image_summary(is_array($job['image_summary'] ?? null) ? $job['image_summary'] : admin_gallery_report_initial_image_summary());
     $job['storage'] = admin_gallery_report_storage_snapshot($job);
 
-    $html = admin_gallery_report_render_html($job);
     $filename = 'php-gallery-complete-overview-' . gmdate('Ymd-His') . '.html';
     admin_gallery_report_job_clear();
 
@@ -174,10 +173,14 @@ function admin_gallery_report_finish_job(array $job): array
         ], ['category' => 'admin', 'severity' => 'notice', 'route_name' => 'admin_gallery_report']);
     }
 
+    $job['presentation'] = array_merge(
+        is_array($job['presentation'] ?? null) ? $job['presentation'] : [],
+        ['gps_area_km' => ADMIN_GALLERY_REPORT_GPS_AREA_KM]
+    );
+
     return admin_gallery_report_public_state($job, [
-        'report_html' => $html,
+        '_report_view_model' => $job,
         'filename' => $filename,
-        'report_bytes' => strlen($html),
     ]);
 }
 

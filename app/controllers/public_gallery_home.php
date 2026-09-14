@@ -46,7 +46,6 @@ use function Gallery\Core\csrf_token;
 use function Gallery\Core\flash_message;
 use function Gallery\Core\css_value;
 use function Gallery\Core\current_user;
-use function Gallery\Core\db;
 use function Gallery\Core\e;
 use function Gallery\Core\gallery_public_url;
 use function Gallery\Core\image_alt_text;
@@ -118,9 +117,7 @@ use function Gallery\Services\pagination_photo_thumbnail_sizes_attribute;
 use function Gallery\Services\pagination_slice_items;
 use function Gallery\Services\picture_game_available;
 use function Gallery\Services\public_gallery_media_manifest;
-use function Gallery\Services\public_gallery_listing_sql_fragment;
 use function Gallery\Services\public_gallery_metadata;
-use function Gallery\Services\public_home_search_enabled;
 use function Gallery\Services\public_image_display_title;
 use function Gallery\Services\public_responsive_thumbnail_loading_attributes;
 use function Gallery\Services\public_thumbnail_render_picture_html;
@@ -128,14 +125,17 @@ use function Gallery\Services\public_thumbnail_rendering_mode;
 use function Gallery\Services\public_path_schema_ready;
 use function Gallery\Services\public_render_profile_count;
 use function Gallery\Services\public_render_profile_db;
+use function Gallery\Services\public_home_physical_galleries;
 use function Gallery\Services\public_render_profile_set_gallery;
 use function Gallery\Services\public_render_profile_span;
 use function Gallery\Services\public_render_profile_snapshot;
 use function Gallery\Services\public_render_profile_start;
+use function Gallery\Services\public_render_profile_panel_model;
 use function Gallery\Services\public_render_profile_with_thumbnail_purpose;
-use function Gallery\Services\render_gallery_date;
-use function Gallery\Services\render_pagination_controls;
-use function Gallery\Services\render_public_render_profile_panel;
+use function Gallery\Services\gallery_date_view_model;
+use function Gallery\Views\view_render_gallery_date;
+use function Gallery\Views\view_render_pagination_controls;
+use function Gallery\Views\view_render_public_render_profile_panel;
 use function Gallery\Services\resolve_public_gallery_path;
 use function Gallery\Services\site_name;
 use function Gallery\Services\t;
@@ -176,20 +176,8 @@ const PUBLIC_SUBGALLERY_DATE_SORT_PARAM = 'subgallery_date_sort';
 function cms_home(): void
 {
     public_render_profile_start('home');
-    // $listingCondition stores an intermediate value used by the surrounding gallery workflow.
-    $listingCondition = public_gallery_listing_sql_fragment('g');
-    // Variable $stmt stores this steps working value.
-    $galleries = public_render_profile_db('home_gallery_query', static function () use ($listingCondition): array {
-        // $stmt stores the prepared home gallery query.
-        $stmt = db()->prepare("SELECT g.*, COUNT(i.id) AS image_count
-            FROM galleries g
-            LEFT JOIN images i ON i.gallery_id = g.id AND i.visibility = 'public' AND i.relative_path NOT LIKE '%/%'
-            WHERE $listingCondition AND g.parent_id IS NULL
-            GROUP BY g.id
-            ORDER BY g.sort_order, g.title");
-        $stmt->execute();
-        return $stmt->fetchAll();
-    });
+    // $galleries stores public physical root galleries loaded through the model-backed lookup service.
+    $galleries = public_render_profile_db('home_gallery_query', static fn (): array => public_home_physical_galleries());
     $galleries = array_merge($galleries, smart_galleries_for_placement(null, true));
     // Variable $paginationSettings stores this steps working value.
     $paginationSettings = main_page_gallery_grid_settings();
@@ -227,20 +215,24 @@ function cms_home(): void
         // a list variable that was already touched by another page mode.
         $galleries = $allHomeGalleries;
     }
-    render_header(site_name());
-    // The stable root-context marker lets Admin mutation completion preserve clean/query pagination URLs without confusing home with other non-gallery public routes.
-    echo '<div data-public-gallery-index data-public-root-gallery-count="' . (int) $homePhysicalGalleryCount . '" data-public-root-gallery-revision="' . e($homePhysicalGalleryRevision) . '" data-public-root-smart-gallery-count="' . (int) $homeSmartGalleryCount . '" data-admin-mutation-canonical-url="' . e(url_for('home')) . '" hidden></div>';
-    view_render_public_search_bar();
+
+    // $paginationHtml preserves the established pagination renderer while the page shell moves into the view layer.
+    $paginationHtml = '';
+    // $cardsHtml stores already-rendered card fragments produced through the public card MVC wrappers.
+    $cardsHtml = '';
+    // $backToTopHtml stores the shared navigation control without duplicating its renderer.
+    $backToTopHtml = '';
     if ($homeGalleryCount > 0) {
-        echo '<div class="gallery-list-frame" data-back-to-top-scope>';
-        echo '<div class="gallery-list-content" data-back-to-top-list>';
-        render_pagination_controls(!empty($paginationSettings['enabled']) ? $galleryPagination : [], t('gallery.pagination.gallery_pages', 'Gallery pages'));
-        echo '<section class="grid public-home-gallery-grid' . e(pagination_grid_columns_class($paginationSettings)) . '" data-public-gallery-index-grid data-public-root-gallery-count="' . (int) $homePhysicalGalleryCount . '" data-public-root-gallery-revision="' . e($homePhysicalGalleryRevision) . '" data-public-root-smart-gallery-count="' . (int) $homeSmartGalleryCount . '" data-public-gallery-page="' . (int) ($galleryPagination['current_page'] ?? 1) . '" data-public-gallery-total-pages="' . (int) ($galleryPagination['total_pages'] ?? 1) . '">';
+        ob_start();
+        view_render_pagination_controls(!empty($paginationSettings['enabled']) ? $galleryPagination : [], t('gallery.pagination.gallery_pages', 'Gallery pages'));
+        $paginationHtml = (string) ob_get_clean();
+
         public_render_profile_count('rendered_subgalleries', count($galleries));
         $physicalGalleries = array_values(array_filter($galleries, static fn (array $gallery): bool => empty($gallery['__smart_gallery'])));
         $smartGalleries = array_values(array_filter($galleries, static fn (array $gallery): bool => !empty($gallery['__smart_gallery'])));
         $galleryCardContexts = public_render_profile_span('home_gallery_card_context_preload', static fn (): array => public_gallery_card_rendering_contexts($physicalGalleries, true, true));
         $smartGalleryCardContexts = public_render_profile_span('home_smart_gallery_card_context_preload', static fn (): array => smart_gallery_card_summaries($smartGalleries, true));
+        ob_start();
         public_render_profile_span('render_home_gallery_cards', static function () use ($galleries, $galleryCardContexts, $smartGalleryCardContexts): void {
             foreach ($galleries as $index => $gallery) {
                 if (!empty($gallery['__smart_gallery'])) {
@@ -250,16 +242,38 @@ function cms_home(): void
                 }
             }
         });
-        echo '</section>';
-        render_pagination_controls(!empty($paginationSettings['enabled']) ? $galleryPagination : [], t('gallery.pagination.gallery_pages', 'Gallery pages'));
-        echo '</div>';
+        $cardsHtml = (string) ob_get_clean();
+
+        ob_start();
         render_back_to_top_button();
-        echo '</div>';
+        $backToTopHtml = (string) ob_get_clean();
     }
-    render_public_render_profile_panel();
+
+    // $renderProfileHtml captures the optional profiler panel before the page view emits final markup.
+    ob_start();
+    view_render_public_render_profile_panel(public_render_profile_panel_model());
+    $renderProfileHtml = (string) ob_get_clean();
+
     telemetry_append_public_script([
         'route_name' => 'home',
         'page_kind' => 'home',
     ]);
-    render_footer();
+
+    \Gallery\Views\view_render_public_gallery_home([
+        'site_name' => site_name(),
+        'canonical_url' => url_for('home'),
+        'gallery_count' => $homeGalleryCount,
+        'physical_gallery_count' => $homePhysicalGalleryCount,
+        'physical_gallery_revision' => $homePhysicalGalleryRevision,
+        'smart_gallery_count' => $homeSmartGalleryCount,
+        'search_bar' => public_search_bar_view_model(),
+        'pagination_html' => $paginationHtml,
+        'grid_class' => pagination_grid_columns_class($paginationSettings),
+        'current_page' => (int) ($galleryPagination['current_page'] ?? 1),
+        'total_pages' => (int) ($galleryPagination['total_pages'] ?? 1),
+        'cards_html' => $cardsHtml,
+        'back_to_top_html' => $backToTopHtml,
+        'render_profile_html' => $renderProfileHtml,
+    ]);
 }
+
