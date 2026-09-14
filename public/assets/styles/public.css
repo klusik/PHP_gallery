@@ -1395,7 +1395,8 @@ td {
 
 .picture-manager-select-button:hover,
 .picture-manager-select-button:focus-visible,
-.image-card.is-picture-manager-selected .picture-manager-select-button {
+.image-card.is-picture-manager-selected .picture-manager-select-button,
+.gallery-card.is-picture-manager-selected .picture-manager-select-button {
     background: var(--accent);
     color: #fffdf8;
     border-color: var(--accent-dark);
@@ -2295,4 +2296,54 @@ body.gallery-download-modal-open {
     .gallery-download-dialog[open] {
         animation: none;
     }
+}
+
+/* Picture manager mixed-selection extensions for physical gallery cards. */
+.gallery-card.has-picture-manager-select {
+    isolation: isolate;
+    position: relative;
+}
+
+.gallery-card.is-picture-manager-selected {
+    outline: 2px solid color-mix(in srgb, var(--accent) 72%, #ffffff);
+    outline-offset: 3px;
+    box-shadow: 0 16px 42px rgba(54, 38, 20, 0.16);
+}
+
+.gallery-card.is-picture-manager-selected .gallery-card-media::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    pointer-events: none;
+    background: color-mix(in srgb, var(--accent) 13%, transparent);
+}
+
+.gallery-card.has-picture-manager-select .gallery-card-media {
+    position: relative;
+}
+
+.picture-manager-delete-button {
+    color: var(--danger, #b42318);
+}
+
+.picture-manager-delete-button:not(:disabled):hover,
+.picture-manager-delete-button:not(:disabled):focus-visible {
+    border-color: color-mix(in srgb, var(--danger, #b42318) 58%, var(--line));
+    background: color-mix(in srgb, var(--danger, #b42318) 10%, var(--panel));
+}
+
+.picture-manager-create-fields > .gallery-search-picker {
+    flex: 1 1 12rem;
+}
+
+.public-page .gallery-card.has-picture-manager-select .public-gallery-reorder-handle {
+    left: 2.65rem;
+    max-width: calc(100% - 3.05rem);
+}
+
+.public-page .gallery-card.has-picture-manager-select .public-admin-delete-form-card,
+.public-page .gallery-card.has-picture-manager-select .public-admin-edit-button-card,
+.public-page .gallery-card.has-picture-manager-select .public-admin-visibility-menu-card {
+    top: 2.65rem;
 }

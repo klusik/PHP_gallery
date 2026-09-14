@@ -11,9 +11,9 @@
  *   Provides reusable data and filesystem operations for public-view picture management.
  *
  * Responsibilities:
- *   - Validate public-view picture selections before mutation
+ *   - Validate public-view photo and physical-gallery selections before mutation
  *   - Reuse existing gallery image movement logic where possible
- *   - Copy selected images into newly created galleries without removing the source files
+ *   - Copy selected images and physical gallery trees without removing source files
  *   - Keep file and database changes reversible on failure
  *
  * Author:
@@ -30,7 +30,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-19
+ *   2026-09-14
  */
 
 declare(strict_types=1);
@@ -455,4 +455,277 @@ function picture_manager_image_copy_row(array $image, int $destinationGalleryId,
         $row[$column] = array_key_exists($column, $image) ? $image[$column] : null;
     }
     return $row;
+}
+
+/**
+ * Normalize submitted gallery IDs into unique positive integers while preserving order.
+ *
+ * @param array<mixed> $galleryIds Raw IDs from a POST body or caller-provided list.
+ * @return array<int> Unique positive IDs in submitted order.
+ */
+function picture_manager_normalize_gallery_ids(array $galleryIds): array
+{
+    // $normalizedIds stores the final physical-gallery selection.
+    $normalizedIds = [];
+    // $seen stores IDs already accepted so repeated form values cannot duplicate work.
+    $seen = [];
+    foreach ($galleryIds as $galleryId) {
+        // $id stores one sanitized gallery identifier.
+        $id = (int) $galleryId;
+        if ($id <= 0 || isset($seen[$id])) {
+            continue;
+        }
+        $seen[$id] = true;
+        $normalizedIds[] = $id;
+    }
+    return $normalizedIds;
+}
+
+/**
+ * Return selected physical galleries that are direct children of the source gallery.
+ *
+ * Picture manager selection is deliberately limited to cards rendered on the current
+ * public page. Requiring the persisted parent relationship prevents forged requests
+ * from mutating arbitrary or nested galleries that were not part of that selection.
+ *
+ * @param int $sourceGalleryId Parent gallery whose direct children may be selected.
+ * @param array<int> $galleryIds Normalized selected gallery IDs.
+ * @param array<int,string> $failures Mutable validation messages for rejected IDs.
+ * @return array<int,array<string,mixed>> Valid direct child gallery rows in submitted order.
+ */
+function picture_manager_owned_galleries_for_selection(int $sourceGalleryId, array $galleryIds, array &$failures): array
+{
+    // $galleries stores validated direct physical subgalleries.
+    $galleries = [];
+    foreach ($galleryIds as $galleryId) {
+        // $gallery stores one selected physical gallery row.
+        $gallery = find_gallery((int) $galleryId, true);
+        if (!$gallery) {
+            $failures[] = 'Selected gallery #' . (int) $galleryId . ' was not found.';
+            continue;
+        }
+        if ((int) ($gallery['parent_id'] ?? 0) !== $sourceGalleryId) {
+            $failures[] = 'Selected gallery #' . (int) $galleryId . ' is not a direct child of the source gallery.';
+            continue;
+        }
+        // $folderPath stores the authoritative filesystem location for the selected gallery.
+        $folderPath = normalize_relative_path((string) ($gallery['folder_path'] ?? ''));
+        if ($folderPath === '' || !is_dir(gallery_abs_path($folderPath))) {
+            $failures[] = 'Selected gallery #' . (int) $galleryId . ' does not have an accessible gallery folder.';
+            continue;
+        }
+        $galleries[] = $gallery;
+    }
+    return $galleries;
+}
+
+/**
+ * Refuse a destination that sits inside any selected physical gallery subtree.
+ *
+ * Copying a selected directory into itself or one of its descendants would create
+ * recursive filesystem growth. The same guard is used before a new destination
+ * gallery is created, because creating that folder first would otherwise make the
+ * source subtree contain its own copy target.
+ *
+ * @param int $destinationGalleryId Existing destination or future parent gallery ID.
+ * @param array<int> $selectedGalleryIds Selected direct subgallery IDs.
+ */
+function picture_manager_assert_destination_outside_gallery_selection(int $destinationGalleryId, array $selectedGalleryIds): void
+{
+    if (!$selectedGalleryIds) {
+        return;
+    }
+    // $destination stores the existing gallery that will contain copied data.
+    $destination = find_gallery($destinationGalleryId, true);
+    if (!$destination) {
+        throw new RuntimeException('Choose a valid destination gallery.');
+    }
+    // $destinationPath stores the normalized physical destination directory.
+    $destinationPath = normalize_relative_path((string) ($destination['folder_path'] ?? ''));
+    foreach ($selectedGalleryIds as $galleryId) {
+        // $selectedGallery stores one selected source root.
+        $selectedGallery = find_gallery((int) $galleryId, true);
+        if (!$selectedGallery) {
+            throw new RuntimeException('Selected gallery #' . (int) $galleryId . ' was not found.');
+        }
+        // $selectedPath stores the selected root used for descendant detection.
+        $selectedPath = normalize_relative_path((string) ($selectedGallery['folder_path'] ?? ''));
+        if ($selectedPath === '') {
+            throw new RuntimeException('Selected gallery #' . (int) $galleryId . ' has an invalid folder path.');
+        }
+        if ($destinationPath === $selectedPath || str_starts_with($destinationPath . '/', $selectedPath . '/')) {
+            throw new RuntimeException('A selected gallery cannot be copied into itself or one of its descendants.');
+        }
+    }
+}
+
+/**
+ * Copy selected physical subgallery trees below another existing gallery.
+ *
+ * The directory tree is copied first, including gallery.json sidecars and generated
+ * media files. Database gallery/image rows are then rebuilt from the copied folders,
+ * keeping the filesystem as the authoritative source of truth. Any failure rolls
+ * back all roots copied by this call.
+ *
+ * @param int $sourceGalleryId Gallery whose direct children were selected.
+ * @param int $destinationGalleryId Existing gallery that will receive copied roots.
+ * @param array<int> $galleryIds Selected direct child gallery IDs.
+ * @return array{requested:int,copied_roots:int,copied_rows:int,scanned_images:int,created_gallery_ids:array<int>}
+ */
+function picture_manager_copy_gallery_subtrees(int $sourceGalleryId, int $destinationGalleryId, array $galleryIds): array
+{
+    // $galleryIds stores a de-duplicated physical gallery selection.
+    $galleryIds = picture_manager_normalize_gallery_ids($galleryIds);
+    if (!$galleryIds) {
+        return ['requested' => 0, 'copied_roots' => 0, 'copied_rows' => 0, 'scanned_images' => 0, 'created_gallery_ids' => []];
+    }
+    if ($sourceGalleryId <= 0 || $destinationGalleryId <= 0) {
+        throw new RuntimeException('Source and destination galleries are required.');
+    }
+
+    // $sourceGallery stores the page where the selected subgallery cards were rendered.
+    $sourceGallery = find_gallery($sourceGalleryId, true);
+    // $destinationGallery stores the physical parent that will receive the clones.
+    $destinationGallery = find_gallery($destinationGalleryId, true);
+    if (!$sourceGallery || !$destinationGallery) {
+        throw new RuntimeException('Source or destination gallery was not found.');
+    }
+
+    // $validationFailures stores stale or forged selection failures.
+    $validationFailures = [];
+    // $selectedRoots stores only direct children of the source gallery.
+    $selectedRoots = picture_manager_owned_galleries_for_selection($sourceGalleryId, $galleryIds, $validationFailures);
+    if ($validationFailures || count($selectedRoots) !== count($galleryIds)) {
+        throw new RuntimeException(implode(' ', $validationFailures ?: ['One or more selected galleries are invalid.']));
+    }
+    picture_manager_assert_destination_outside_gallery_selection($destinationGalleryId, $galleryIds);
+
+    // $destinationPath stores the normalized folder path used to build cloned root paths.
+    $destinationPath = normalize_relative_path((string) $destinationGallery['folder_path']);
+    // $plans stores prevalidated source-to-target subtree mappings before any file is written.
+    $plans = [];
+    foreach ($selectedRoots as $selectedRoot) {
+        // Flush current DB-backed gallery metadata to sidecars before the filesystem clone.
+        $subtreeRows = gallery_subtree_rows((int) $selectedRoot['id']);
+        if (!$subtreeRows) {
+            throw new RuntimeException('Selected gallery subtree could not be loaded.');
+        }
+        foreach ($subtreeRows as $row) {
+            write_gallery_sidecar($row);
+        }
+
+        // $sourceRootPath stores the selected physical subtree root.
+        $sourceRootPath = normalize_relative_path((string) $selectedRoot['folder_path']);
+        // $targetRootPath preserves the selected root folder name under the destination.
+        $targetRootPath = normalize_relative_path($destinationPath . '/' . basename($sourceRootPath));
+        // $targetRootAbs stores the filesystem location that must be entirely unused.
+        $targetRootAbs = gallery_abs_path($targetRootPath);
+        if (file_exists($targetRootAbs) || find_gallery_by_folder_path($targetRootPath, true)) {
+            throw new RuntimeException('Destination already contains a gallery folder named ' . basename($sourceRootPath) . '.');
+        }
+
+        // Validate every indexed source-gallery path against the future target before copying.
+        foreach ($subtreeRows as $row) {
+            // $rowPath stores one indexed gallery path in the selected subtree.
+            $rowPath = normalize_relative_path((string) ($row['folder_path'] ?? ''));
+            if ($rowPath !== $sourceRootPath && !str_starts_with($rowPath . '/', $sourceRootPath . '/')) {
+                throw new RuntimeException('Selected gallery subtree contains an invalid indexed path.');
+            }
+            // $suffix stores the descendant path below the selected root, including its leading slash.
+            $suffix = $rowPath === $sourceRootPath ? '' : substr($rowPath, strlen($sourceRootPath));
+            // $targetPath stores the future indexed path for this descendant gallery.
+            $targetPath = normalize_relative_path($targetRootPath . $suffix);
+            if (find_gallery_by_folder_path($targetPath, true)) {
+                throw new RuntimeException('Destination already contains an indexed gallery at /' . $targetPath . '.');
+            }
+        }
+
+        $plans[] = [
+            'source_root_path' => $sourceRootPath,
+            'source_root_abs' => gallery_abs_path($sourceRootPath),
+            'target_root_path' => $targetRootPath,
+            'target_root_abs' => $targetRootAbs,
+            'rows' => $subtreeRows,
+        ];
+    }
+
+    // $createdRootIds stores clone roots that can be removed through the normal gallery deletion service on rollback.
+    $createdRootIds = [];
+    // $rawCopiedRoots stores copied directories that may exist before a database root row exists.
+    $rawCopiedRoots = [];
+    // $createdGalleryIds stores every new indexed gallery row for the result payload.
+    $createdGalleryIds = [];
+    // $scannedImages counts direct image files re-indexed from copied folders.
+    $scannedImages = 0;
+
+    try {
+        foreach ($plans as $plan) {
+            // Reserve the destination root atomically before copying. This prevents a
+            // concurrent create/import from turning a copy into an accidental directory merge.
+            $targetRootAbs = (string) $plan['target_root_abs'];
+            if (!@mkdir($targetRootAbs, 0775, false)) {
+                throw new RuntimeException('Destination gallery folder became unavailable before copy: ' . basename($targetRootAbs) . '.');
+            }
+            // Track the root before the recursive copier starts so a mid-copy failure
+            // still removes every partially written file during rollback.
+            $rawCopiedRoots[] = $targetRootAbs;
+            gallery_trash_copy_directory((string) $plan['source_root_abs'], $targetRootAbs);
+
+            // Parents must be created before children so parent_id discovery follows the copied tree.
+            $rows = (array) $plan['rows'];
+            usort($rows, static fn (array $left, array $right): int => strlen((string) ($left['folder_path'] ?? '')) <=> strlen((string) ($right['folder_path'] ?? '')));
+            foreach ($rows as $row) {
+                // $rowPath stores the original indexed gallery path.
+                $rowPath = normalize_relative_path((string) $row['folder_path']);
+                // $suffix stores the path below the copied selected root.
+                $suffix = $rowPath === (string) $plan['source_root_path'] ? '' : substr($rowPath, strlen((string) $plan['source_root_path']));
+                // $targetPath stores the corresponding copied gallery path.
+                $targetPath = normalize_relative_path((string) $plan['target_root_path'] . $suffix);
+                // $created stores the newly indexed gallery row read from the copied gallery.json sidecar.
+                $created = create_gallery_row_for_folder($targetPath);
+                if (!$created) {
+                    throw new RuntimeException('Copied gallery folder /' . $targetPath . ' could not be indexed.');
+                }
+                $createdGalleryIds[] = (int) $created['id'];
+                if ($suffix === '') {
+                    $createdRootIds[] = (int) $created['id'];
+                }
+            }
+        }
+
+        sync_gallery_parent_ids();
+        if (public_path_schema_ready()) {
+            refresh_gallery_public_paths();
+        }
+        foreach ($createdGalleryIds as $createdGalleryId) {
+            $scannedImages += scan_gallery_images($createdGalleryId);
+        }
+    } catch (Throwable $exception) {
+        if ($createdRootIds) {
+            try {
+                delete_gallery_subtrees($createdRootIds);
+            } catch (Throwable) {
+                // Continue with raw-folder cleanup below. The original copy error remains authoritative.
+            }
+        }
+        foreach (array_reverse($rawCopiedRoots) as $rawCopiedRoot) {
+            if (!is_dir($rawCopiedRoot)) {
+                continue;
+            }
+            try {
+                delete_directory_tree($rawCopiedRoot, galleries_root());
+            } catch (Throwable) {
+                // Preserve the original exception. A leftover copied folder remains discoverable for maintenance.
+            }
+        }
+        throw new RuntimeException('Gallery copy failed: ' . $exception->getMessage(), 0, $exception);
+    }
+
+    return [
+        'requested' => count($galleryIds),
+        'copied_roots' => count($createdRootIds),
+        'copied_rows' => count($createdGalleryIds),
+        'scanned_images' => $scannedImages,
+        'created_gallery_ids' => $createdGalleryIds,
+    ];
 }

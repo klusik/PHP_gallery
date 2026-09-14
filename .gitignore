@@ -5,6 +5,7 @@ config.php
 /tmp/
 /deploy/
 /galleries/
+/data/gallery-trash/
 /public/assets/custom.css
 .env
 *.log

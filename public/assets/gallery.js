@@ -27,7 +27,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-09-05
+ *   2026-09-14
  */
 
 /**
@@ -59,7 +59,7 @@ import { setupThumbnailWarmup } from './gallery-modules/thumbnail-warmup.js?v=20
 import { setupFaviconCropper } from './gallery-modules/favicon-cropper.js';
 import { setupBackToTopButton } from './gallery-modules/back-to-top.js?v=20260510-lifecycle-v3';
 import { setupGallerySearchPickers } from './gallery-modules/searchable-gallery-picker.js?v=20260519-gallery-picker-v1';
-import { setupPictureManager } from './gallery-modules/picture-manager.js?v=20260519-picture-manager-v5';
+import { setupPictureManager } from './gallery-modules/picture-manager.js?v=20260914-picture-manager-mixed-v1';
 import { setupAdminDatePickers } from './gallery-modules/admin-date-picker.js?v=20260512-admin-date-picker-v1';
 import { setupSimbriefDescriptionGenerator } from './gallery-modules/admin-simbrief-description.js?v=20260527-simbrief-ofp-route-v1';
 import { setupAdminNavigationDataPanel } from './gallery-modules/admin-navdata-panel.js?v=20260527-navdata-panel-v1';

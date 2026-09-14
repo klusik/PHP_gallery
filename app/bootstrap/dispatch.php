@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-09-03
+ *   2026-09-14
  */
 
 declare(strict_types=1);
@@ -119,6 +119,7 @@ function cms_dispatch_page(string $page): void
         'picture_manager_move' => '\\Gallery\\Controllers\\cms_picture_manager_move',
         'picture_manager_copy' => '\\Gallery\\Controllers\\cms_picture_manager_copy',
         'picture_manager_create_gallery' => '\\Gallery\\Controllers\\cms_picture_manager_create_gallery',
+        'picture_manager_delete' => '\\Gallery\\Controllers\\cms_picture_manager_delete',
         'picture_manager_download_selection' => '\\Gallery\\Controllers\\cms_picture_manager_download_selection',
         'download_gallery_start' => '\\Gallery\\Controllers\\cms_download_gallery_start',
         'download_gallery' => '\\Gallery\\Controllers\\cms_download_gallery',

@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-08-11
+ *   2026-09-14
  */
 
 declare(strict_types=1);
@@ -324,6 +324,13 @@ function render_picture_manager_toolbar(array $gallery, bool $hasVisibleDropTarg
         'prefill_gallery_id' => $suggestedDestinationId,
         'hidden_attributes' => ['data-picture-manager-destination' => ''],
     ]);
+    // $newParentPickerHtml commits the current gallery as the default parent while still allowing any physical gallery to be selected.
+    $newParentPickerHtml = render_gallery_search_picker('', $galleryId, 0, [
+        'id' => 'picture-manager-new-parent-' . $galleryId,
+        'placeholder' => t('picture_manager.search_parent', 'Search parent gallery'),
+        'disable_prefill' => true,
+        'hidden_attributes' => ['data-picture-manager-new-parent' => ''],
+    ]);
 
     \Gallery\Views\view_render_picture_manager_toolbar([
         'gallery_id' => $galleryId,
@@ -332,8 +339,10 @@ function render_picture_manager_toolbar(array $gallery, bool $hasVisibleDropTarg
         'move_url' => url_for('picture_manager_move'),
         'copy_url' => url_for('picture_manager_copy'),
         'create_url' => url_for('picture_manager_create_gallery'),
+        'delete_url' => url_for('picture_manager_delete'),
         'download_url' => url_for('picture_manager_download_selection'),
         'destination_picker_html' => $destinationPickerHtml,
+        'new_parent_picker_html' => $newParentPickerHtml,
     ]);
 }
 

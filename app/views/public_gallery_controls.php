@@ -34,7 +34,7 @@
  *     persistence, URL preparation, and domain-service orchestration.
  *
  * Last Updated:
- *   2026-09-13
+ *   2026-09-14
  */
 
 declare(strict_types=1);
@@ -107,28 +107,29 @@ function view_render_picture_manager_toolbar(array $viewModel): void
         ? t('picture_manager.drop_help_visible', 'Drag selected photos onto a visible subgallery, or use the destination list below.')
         : t('picture_manager.drop_help_hidden', 'No subgallery target is visible on this page. Use the destination list below.');
 
-    echo '<section class="picture-manager-toolbar is-picture-manager-collapsed" data-picture-manager data-source-gallery-id="' . $galleryId . '" data-csrf-token="' . e((string) ($viewModel['csrf_token'] ?? '')) . '" data-move-url="' . e((string) ($viewModel['move_url'] ?? '')) . '" data-copy-url="' . e((string) ($viewModel['copy_url'] ?? '')) . '" data-create-url="' . e((string) ($viewModel['create_url'] ?? '')) . '" data-download-url="' . e((string) ($viewModel['download_url'] ?? '')) . '">';
+    echo '<section class="picture-manager-toolbar is-picture-manager-collapsed" data-picture-manager data-source-gallery-id="' . $galleryId . '" data-csrf-token="' . e((string) ($viewModel['csrf_token'] ?? '')) . '" data-move-url="' . e((string) ($viewModel['move_url'] ?? '')) . '" data-copy-url="' . e((string) ($viewModel['copy_url'] ?? '')) . '" data-create-url="' . e((string) ($viewModel['create_url'] ?? '')) . '" data-delete-url="' . e((string) ($viewModel['delete_url'] ?? '')) . '" data-download-url="' . e((string) ($viewModel['download_url'] ?? '')) . '">';
     echo '<div class="picture-manager-summary">';
     echo '<button type="button" class="picture-manager-toggle" data-picture-manager-toggle aria-expanded="false">';
     echo '<span class="picture-manager-toggle-icon" aria-hidden="true">▸</span>';
-    echo '<span><strong>' . e(t('picture_manager.title', 'Picture manager')) . '</strong><small>' . e(t('picture_manager.collapsed_help', 'Select, move, copy, or create galleries' . ' from visible photos.')) . '</small></span>';
+    echo '<span><strong>' . e(t('picture_manager.title', 'Picture manager')) . '</strong><small>' . e(t('picture_manager.collapsed_help', 'Select photos or physical galleries, then move, copy, delete, or create a gallery.')) . '</small></span>';
     echo '</button>';
-    echo '<span class="picture-manager-count" data-picture-manager-count aria-live="polite">' . e(t('picture_manager.none_selected', 'No photos selected.')) . '</span>';
+    echo '<span class="picture-manager-count" data-picture-manager-count aria-live="polite">' . e(t('picture_manager.none_selected', 'No items selected.')) . '</span>';
     echo '</div>';
 
     echo '<div class="picture-manager-panel" data-picture-manager-panel>';
     echo '<div class="picture-manager-heading">';
-    echo '<div class="picture-manager-hints"><p>' . e(t('picture_manager.help', 'Select photos with the checkmarks. Shift-click selects a range. Ctrl-click or Cmd-click toggles one photo.')) . '</p><p>' . e($dropHelp) . '</p></div>';
+    echo '<div class="picture-manager-hints"><p>' . e(t('picture_manager.help', 'Select photos or physical subgalleries with the checkmarks. Shift-click selects a range. Ctrl-click or Cmd-click toggles one item.')) . '</p><p>' . e($dropHelp) . '</p></div>';
     echo '<div class="picture-manager-actions" aria-label="' . e(t('picture_manager.selection_actions', 'Selection actions')) . '">';
     echo '<button type="button" class="button secondary picture-manager-icon-button" data-picture-manager-select-all title="' . e(t('picture_manager.select_all', 'Select all')) . '" aria-label="' . e(t('picture_manager.select_all', 'Select all')) . '"><span class="picture-manager-button-icon" aria-hidden="true">☑</span><span class="picture-manager-button-label">' . e(t('picture_manager.select_all_short', 'All')) . '</span></button>';
     echo '<button type="button" class="button secondary picture-manager-icon-button" data-picture-manager-clear title="' . e(t('picture_manager.clear_selection', 'Clear selection')) . '" aria-label="' . e(t('picture_manager.clear_selection', 'Clear selection')) . '" disabled><span class="picture-manager-button-icon" aria-hidden="true">×</span><span class="picture-manager-button-label">' . e(t('picture_manager.clear_selection_short', 'Clear')) . '</span></button>';
     echo '<button type="button" class="button secondary picture-manager-icon-button picture-manager-share-button" data-picture-manager-share title="' . e(t('picture_manager.share_selected', 'Share selected')) . '" aria-label="' . e(t('picture_manager.share_selected', 'Share selected')) . '" disabled><span class="picture-manager-button-icon" aria-hidden="true">↗</span><span class="picture-manager-button-label">' . e(t('picture_manager.share_short', 'Share')) . '</span></button>';
+    echo '<button type="button" class="button secondary picture-manager-icon-button picture-manager-delete-button" data-picture-manager-delete title="' . e(t('picture_manager.delete_selected', 'Delete selected')) . '" aria-label="' . e(t('picture_manager.delete_selected', 'Delete selected')) . '" disabled><span class="picture-manager-button-icon" aria-hidden="true">⌫</span><span class="picture-manager-button-label">' . e(t('picture_manager.delete_short', 'Delete')) . '</span></button>';
     echo '</div>';
     echo '</div>';
 
     echo '<div class="picture-manager-action-grid">';
     echo '<div class="picture-manager-action-card">';
-    echo '<label for="picture-manager-destination-' . $galleryId . '">' . e(t('picture_manager.move_or_copy_to', 'Move or copy selected to gallery')) . '</label>';
+    echo '<label for="picture-manager-destination-' . $galleryId . '">' . e(t('picture_manager.move_or_copy_to', 'Move or copy selected photos to gallery')) . '</label>';
     echo '<div class="picture-manager-inline-fields">';
     echo (string) ($viewModel['destination_picker_html'] ?? '');
     echo '<button type="button" class="button picture-manager-icon-button is-primary-action" data-picture-manager-move title="' . e(t('picture_manager.move_selected', 'Move selected')) . '" aria-label="' . e(t('picture_manager.move_selected', 'Move selected')) . '" disabled><span class="picture-manager-button-icon" aria-hidden="true">↪</span><span class="picture-manager-button-label">' . e(t('picture_manager.move_short', 'Move')) . '</span></button>';
@@ -138,13 +139,14 @@ function view_render_picture_manager_toolbar(array $viewModel): void
     echo '</div>';
 
     echo '<div class="picture-manager-action-card">';
-    echo '<label for="picture-manager-new-title-' . $galleryId . '">' . e(t('picture_manager.create_from_selection', 'Create gallery from selected photos')) . '</label>';
-    echo '<div class="picture-manager-inline-fields">';
+    echo '<label for="picture-manager-new-title-' . $galleryId . '">' . e(t('picture_manager.create_from_selection', 'Create physical gallery from selection')) . '</label>';
+    echo '<div class="picture-manager-inline-fields picture-manager-create-fields">';
+    echo (string) ($viewModel['new_parent_picker_html'] ?? '');
     echo '<input id="picture-manager-new-title-' . $galleryId . '" type="text" data-picture-manager-new-title placeholder="' . e(t('picture_manager.new_gallery_title', 'New gallery title')) . '">';
     echo '<input type="text" data-picture-manager-new-folder placeholder="' . e(t('picture_manager.optional_folder_name', 'Optional folder name')) . '">';
     echo '<button type="button" class="button picture-manager-icon-button is-primary-action" data-picture-manager-create title="' . e(t('picture_manager.create_gallery', 'Create gallery')) . '" aria-label="' . e(t('picture_manager.create_gallery', 'Create gallery')) . '" disabled><span class="picture-manager-button-icon" aria-hidden="true">＋</span><span class="picture-manager-button-label">' . e(t('picture_manager.create_short', 'Create')) . '</span></button>';
     echo '</div>';
-    echo '<p>' . e(t('picture_manager.copy_warning', 'This copies selected photos into the new child gallery. Originals stay here.')) . '</p>';
+    echo '<p>' . e(t('picture_manager.copy_warning', 'Creates a real file-based gallery under the selected parent. Photos and selected physical subgallery trees are copied; originals stay here.')) . '</p>';
     echo '</div>';
     echo '</div>';
 

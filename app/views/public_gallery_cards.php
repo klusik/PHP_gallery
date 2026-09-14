@@ -33,7 +33,7 @@
  *     thumbnail selection, URL generation, and mutation configuration.
  *
  * Last Updated:
- *   2026-09-13
+ *   2026-09-14
  */
 
 declare(strict_types=1);
@@ -59,6 +59,7 @@ function view_render_public_gallery_card(array $viewModel): void
     $showReorderHandle = !empty($viewModel['show_reorder_handle']);
     $showUnpublishedMarker = !empty($viewModel['show_unpublished_marker']);
     $showCountBadge = !empty($viewModel['show_count_badge']);
+    $pictureManagerEnabled = !empty($viewModel['picture_manager_enabled']);
     $branchImageCount = max(0, (int) ($viewModel['branch_image_count'] ?? 0));
     $coverAsset = (string) ($viewModel['cover_asset'] ?? '');
     $coverPictureHtml = (string) ($viewModel['cover_picture_html'] ?? '');
@@ -70,14 +71,19 @@ function view_render_public_gallery_card(array $viewModel): void
     $galleryCardClass = 'gallery-card is-gallery-description-' . $descriptionLayout
         . ($isProtected ? ' is-protected-gallery' : '')
         . ($showReorderHandle ? ' has-public-reorder-handle' : '')
+        . ($pictureManagerEnabled ? ' has-picture-manager-select' : '')
         . ($showUnpublishedMarker ? ' is-admin-unpublished-gallery' : '');
 
-    echo '<article class="' . e($galleryCardClass) . '" data-gallery-id="' . $galleryId . '" data-gallery-visibility="' . e($visibility) . '" data-gallery-updated-at="' . e((string) ($viewModel['updated_at'] ?? '')) . '" data-public-gallery-order-item data-public-order-id="' . $galleryId . '">';
+    echo '<article class="' . e($galleryCardClass) . '" data-gallery-id="' . $galleryId . '"' . ($pictureManagerEnabled ? ' data-picture-manager-gallery data-picture-manager-gallery-id="' . $galleryId . '" aria-selected="false"' : '') . ' data-gallery-visibility="' . e($visibility) . '" data-gallery-updated-at="' . e((string) ($viewModel['updated_at'] ?? '')) . '" data-public-gallery-order-item data-public-order-id="' . $galleryId . '">';
     if ($showUnpublishedMarker) {
         echo '<span class="admin-gallery-visibility-marker" title="' . e(t('gallery.card.unpublished_admin_hint', 'Only logged-in admins can see this gallery in listings.')) . '">' . e(t('gallery.visibility.unpublished', 'unpublished')) . '</span>';
     }
     if ($showReorderHandle) {
         echo '<button type="button" class="public-reorder-handle public-gallery-reorder-handle" data-public-reorder-handle aria-label="' . e(t('gallery.reorder.drag_subgallery_aria', 'Drag subgallery to reorder visible subgalleries')) . '" title="' . e(t('gallery.reorder.drag_subgallery_title', 'Drag to reorder this visible subgallery')) . '"><span aria-hidden="true">↕</span><span>' . e(t('gallery.reorder.move_gallery', 'Move gallery')) . '</span></button>';
+    }
+
+    if ($pictureManagerEnabled) {
+        echo '<button type="button" class="picture-manager-select-button picture-manager-gallery-select-button" data-picture-manager-select aria-pressed="false" aria-label="' . e(t('picture_manager.select_gallery', 'Select gallery')) . '" title="' . e(t('picture_manager.select_gallery', 'Select gallery')) . '"><span aria-hidden="true">✓</span><span class="visually-hidden">' . e(t('picture_manager.select_gallery', 'Select gallery')) . '</span></button>';
     }
 
     echo '<a class="gallery-card-media" href="' . e($url) . '" aria-label="' . e(t('gallery.card.open_gallery', 'Open gallery {title}', ['title' => $title])) . '">';

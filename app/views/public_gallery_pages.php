@@ -32,7 +32,7 @@
  *     profiling orchestration, card preparation, and telemetry registration.
  *
  * Last Updated:
- *   2026-09-13
+ *   2026-09-14
  */
 
 declare(strict_types=1);
@@ -264,7 +264,6 @@ function view_render_public_gallery_image_section(array $viewModel): void
         return;
     }
 
-    echo (string) ($viewModel['picture_manager_toolbar_html'] ?? '');
     echo (string) ($viewModel['reorder_toolbar_html'] ?? '');
     echo (string) ($viewModel['pagination_html'] ?? '');
     echo '<section class="grid gallery-image-grid' . e((string) ($viewModel['grid_class'] ?? '')) . '" data-public-reorder-list="photo" data-gallery-image-list data-public-context-gallery-id="' . (int) ($viewModel['gallery_id'] ?? 0) . '" data-public-image-total-count="' . (int) ($viewModel['total_count'] ?? 0) . '" data-public-image-revision="' . e((string) ($viewModel['revision'] ?? '')) . '" data-public-image-page="' . max(1, (int) ($viewModel['current_page'] ?? 1)) . '" data-public-image-total-pages="' . max(1, (int) ($viewModel['total_pages'] ?? 1)) . '"';
@@ -296,6 +295,7 @@ function view_render_public_gallery_detail(array $viewModel): void
     echo (string) ($viewModel['branding_separator_html'] ?? '');
     echo (string) ($viewModel['preview_toolbar_html'] ?? '');
     view_render_public_search_bar((array) ($viewModel['search_bar'] ?? []));
+    echo (string) ($viewModel['picture_manager_toolbar_html'] ?? '');
 
     if (!empty($viewModel['has_list_content'])) {
         echo '<div class="gallery-list-frame" data-back-to-top-scope>';

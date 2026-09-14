@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-09-02
+ *   2026-09-14
  */
 
 declare(strict_types=1);
@@ -264,8 +264,9 @@ function public_gallery_card_rendering_contexts(array $galleries, bool $publicOn
  * @param bool $showSubgalleryBadge Show subgallery badge value.
  * @param mixed $cardIndex Input used by this operation.
  * @param array $cardContext Preloaded card rendering context.
+ * @param bool $pictureManagerEnabled Whether this physical gallery card participates in Picture manager selection.
  */
-function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicReorderHandle = false, bool $showSubgalleryBadge = false, int $cardIndex = 0, array $cardContext = []): void
+function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicReorderHandle = false, bool $showSubgalleryBadge = false, int $cardIndex = 0, array $cardContext = [], bool $pictureManagerEnabled = false): void
 {
     // $isProtectedPublicCard stores an intermediate value used by the surrounding gallery workflow.
     $isProtectedPublicCard = $publicOnly && gallery_access_requirement($gallery) !== null;
@@ -355,6 +356,7 @@ function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicR
         'description_links' => public_gallery_description_link_models((string) ($gallery['description'] ?? '')),
         'is_protected' => $isProtectedPublicCard,
         'show_reorder_handle' => $showPublicReorderHandle,
+        'picture_manager_enabled' => $pictureManagerEnabled,
         'show_unpublished_marker' => $showAdminUnpublishedMarker,
         'show_count_badge' => $showCountBadge,
         'branch_image_count' => $branchImageCount,

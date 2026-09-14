@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-09-03
+ *   2026-09-14
  */
 
 declare(strict_types=1);
@@ -510,10 +510,10 @@ function cms_gallery(): void
 
         public_render_profile_count('rendered_subgalleries', count($children));
         $subgalleryCardContexts = public_render_profile_span('subgallery_card_context_preload', static fn (): array => public_gallery_card_rendering_contexts($children, true, true));
-        $subgalleryCardsHtml = public_render_profile_span('render_subgallery_cards', static function () use ($children, $publicSubgalleryReorderEnabled, $subgalleryCardContexts): string {
+        $subgalleryCardsHtml = public_render_profile_span('render_subgallery_cards', static function () use ($children, $publicSubgalleryReorderEnabled, $subgalleryCardContexts, $pictureManagerEnabled): string {
             ob_start();
             foreach ($children as $index => $child) {
-                render_gallery_card($child, true, $publicSubgalleryReorderEnabled && count($children) > 1, true, $index, $subgalleryCardContexts[(int) $child['id']] ?? []);
+                render_gallery_card($child, true, $publicSubgalleryReorderEnabled && count($children) > 1, true, $index, $subgalleryCardContexts[(int) $child['id']] ?? [], $pictureManagerEnabled);
             }
             return (string) ob_get_clean();
         });
@@ -543,12 +543,12 @@ function cms_gallery(): void
     $photoReorderToolbarHtml = '';
     $photoPaginationHtml = '';
     $lightboxEndpoint = '';
+    if ($pictureManagerEnabled && ($images || $children)) {
+        ob_start();
+        render_picture_manager_toolbar($gallery, count($children) > 0);
+        $pictureManagerToolbarHtml = (string) ob_get_clean();
+    }
     if ($images) {
-        if ($pictureManagerEnabled) {
-            ob_start();
-            render_picture_manager_toolbar($gallery, count($children) > 0);
-            $pictureManagerToolbarHtml = (string) ob_get_clean();
-        }
         ob_start();
         render_public_page_reorder_toolbar('photo', $gallery, !empty($paginationSettings['enabled']) ? $photoPagination : [], count($images), $imageTotalCount);
         $photoReorderToolbarHtml = (string) ob_get_clean();
@@ -701,7 +701,6 @@ function cms_gallery(): void
 
     $imageSectionViewModel = [
         'visible' => $images !== [],
-        'picture_manager_toolbar_html' => $pictureManagerToolbarHtml,
         'reorder_toolbar_html' => $photoReorderToolbarHtml,
         'pagination_html' => $photoPaginationHtml,
         'grid_class' => pagination_grid_columns_class($paginationSettings),
@@ -751,6 +750,7 @@ function cms_gallery(): void
         'branding_separator_html' => $brandingSeparatorHtml,
         'preview_toolbar_html' => $previewToolbarHtml,
         'search_bar' => public_search_bar_view_model($gallery),
+        'picture_manager_toolbar_html' => $pictureManagerToolbarHtml,
         'has_list_content' => $topSmartChildren || $children || $images || $bottomSmartChildren,
         'top_smart_group_html' => $topSmartGroupHtml,
         'subgallery_section' => $subgallerySectionViewModel,
