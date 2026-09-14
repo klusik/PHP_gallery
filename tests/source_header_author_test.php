@@ -32,6 +32,9 @@ declare(strict_types=1);
 
 $root = dirname(__DIR__);
 $extensions = ['php', 'js', 'mjs', 'css', 'py', 'pyw', 'sh', 'bat', 'cmd', 'ps1'];
+$excludedFiles = [
+    'config.php',
+];
 $excludedDirectories = [
     '.git',
     '.claude',
@@ -63,6 +66,9 @@ foreach ($iterator as $fileInfo) {
 
     $path = $fileInfo->getPathname();
     $relative = str_replace('\\', '/', substr($path, strlen($root) + 1));
+    if (in_array($relative, $excludedFiles, true)) {
+        continue;
+    }
     $parts = explode('/', $relative);
     if (array_intersect($excludedDirectories, $parts) !== []) {
         continue;

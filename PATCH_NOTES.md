@@ -1,5 +1,173 @@
 # Patch notes
 
+## Version 0.101
+
+Version 0.101 is a major architectural and gallery-management release. It completes the repository-wide migration to strict MVC ownership, adds mixed photo and physical-gallery operations to the public Picture Manager, strengthens the Windows upload companion and automated release checks, and carries forward the complete schema needed by Smart Galleries, multilingual content, and viewer account lifecycle foundations. The release preserves existing public URLs, authorization rules, Admin side-panel behavior, both thumbnail renderers, no-JavaScript fallbacks, and updater integrity while substantially reducing cross-layer coupling.
+
+### Highlights
+
+#### Mixed-selection Picture Manager
+
+- Expanded the logged-in public Picture Manager from photo-only selection to a mixed selection of direct photographs and direct physical subgalleries.
+- Added visible selection controls to physical gallery cards while deliberately excluding Smart Gallery cards from file-based mixed-selection operations.
+- Added a `Delete selected` action that can remove selected photographs and complete selected physical subgallery trees in one validated request.
+- Routed selected physical-gallery deletion through the established recoverable gallery-trash workflow when Trash is enabled and available.
+- Kept direct photograph deletion on the existing filesystem-backed image deletion service, including database, thumbnail, derivative, and cache cleanup behavior.
+- Added creation of a real physical gallery from any combination of selected photographs and physical subgallery trees.
+- Added a searchable parent-gallery picker so the new physical gallery can be placed under an explicitly selected parent rather than always becoming a child of the gallery currently being viewed.
+- Copied selected photographs into the new gallery while retaining the originals in their source gallery.
+- Copied selected physical subgallery trees as real folders and files, wrote current metadata sidecars before the copy, recreated gallery rows from the copied filesystem hierarchy, refreshed parent/public-path relationships, and rescanned copied photographs.
+- Prevented recursive self-copy by refusing a destination that lies inside any selected gallery subtree.
+- Prevented accidental folder merges by prevalidating every selected subtree and reserving each target root before recursive copying begins.
+- Added rollback tracking before the first recursive copy so a failed or partial operation removes the newly created destination gallery and any partially copied roots where safe cleanup remains possible.
+- Kept move and copy-to-existing-gallery operations explicitly photo-only. When a physical gallery is selected, the browser explains that those selections must be cleared before using photo move/copy.
+- Kept physical gallery cards out of native drag operations, preserving drag-to-subgallery movement as a photo-only gesture.
+- Allowed Picture Manager controls to appear in a physical gallery that contains subgalleries but no direct photographs.
+- Updated selection counts, progress messages, confirmations, error messages, and completion notices to distinguish items, photographs, and physical gallery trees.
+
+#### Strict repository-wide MVC architecture
+
+- Completed the staged migration to the canonical `Bootstrap/Router -> Controller -> Service -> Model` dependency direction.
+- Moved SQL, PDO access, schema-specific queries, row mapping, persistence transitions, and database cleanup into dedicated model modules.
+- Kept reusable use cases, validation, policy, orchestration, filesystem/media work, and mutation coordination in services.
+- Kept request globals, CSRF/authentication boundaries, route normalization, headers, cookies, response types, redirects, and status handling in bootstrap or controllers.
+- Moved public and Admin HTML presentation into dedicated views supplied with prepared view-model data.
+- Removed view access to request/session globals, SQL/persistence owners, and feature-policy/domain discovery calls.
+- Removed service-owned headers, redirects, cookies, JSON/HTML output, and upward dependencies on controllers or views.
+- Added explicit request-data and viewer-identity context adapters so request semantics cross layers without exposing transport globals to domain code.
+- Added focused gallery/image bulk and editor mutation services so controllers no longer combine HTTP flow with persistence or filesystem orchestration.
+- Retained compatibility entry points where existing callers depend on them, with those adapters delegating to the new canonical owners rather than duplicating behavior.
+- Reordered and expanded the model, service, view, and controller loaders so isolated modules receive their dependencies in a deterministic downward-only order.
+- Preserved public route contracts, Admin AJAX mutation envelopes, side-panel persistence, direct-page fallbacks, lightbox behavior, viewer account controls, thumbnail processing, upload workflows, and updater activation semantics through the refactor.
+
+#### Enforced architecture rather than advisory conventions
+
+- Added `scripts/check_mvc_boundaries.php`, a token-based source checker for direct database access, SQL literals, request globals, transport output, presentation leakage, forbidden upward dependencies, and filesystem mutation from views.
+- Reduced `scripts/mvc_boundary_baseline.json` to an intentional zero-violation contract; Version 0.101 ships with no accepted legacy MVC exceptions.
+- Registered strict MVC validation in the central quick, full, and release audit profiles.
+- Added route-reference and loader-order checks so extracted modules cannot silently break dispatcher targets or dependency initialization.
+- Updated `AGENTS.md`, `ARCHITECTURE.md`, `CODEMAP.md`, `DATABASE.md`, `RELEASE.md`, and `TESTING.md` with the permanent ownership rules, module map, audit expectations, and release qualification requirements.
+- Removed the completed temporary strict-MVC implementation roadmap from the release tree after incorporating its lasting rules into permanent documentation and automated contracts.
+
+#### Upload automation and Windows companion resilience
+
+- Hardened upload automation inventory handling with checksum indexing and durable normalized state.
+- Improved the Windows watch uploader's persisted job history, discovery, media modeling, diagnostics, configuration handling, recovery paths, and installation/launcher integration.
+- Preserved confirmed-success source deletion rules while making interrupted or recovered work easier to reconcile deterministically.
+- Added Windows-side and PHP-side coverage for checksum indexing, inventory loading, simulated camera metadata, state persistence, and redesigned uploader behavior.
+
+### Technical Details
+
+#### Models and persistence
+
+- Added `app/models.php` as the model-layer loader and introduced dedicated model modules for galleries, images, gallery mutations/order/trash, authentication and persistence, viewer accounts and tokens, collections and sharing, favourites, tags, Smart Galleries, telemetry, logs, diagnostics, maintenance, uploads, thumbnails, downloads, AI metadata, EXIF, flight maps, navigation, schema inspection, public paths, Picture Manager, and related subsystems.
+- Extracted gallery and image persistence into `app/models/galleries.php`, `app/models/images.php`, `app/models/gallery_mutations.php`, `app/models/gallery_order.php`, and `app/models/gallery_trash.php`.
+- Extracted administrator and viewer identity persistence into focused authentication, throttling, account, registration, lifecycle, token, rate-limit, security-event, collection, sharing, and favourite models.
+- Extracted operational persistence for database maintenance, log archives, reports, telemetry, thumbnail metadata, upload automation, download signatures, duplicate-photo ledgers, Media Renamer state, and site maintenance.
+- Added `app/models/schema_inspection.php` as the persistence owner used by the schema-inspection service without changing the established three-state policy surface.
+- Preserved transaction boundaries, database compatibility behavior, row shapes, schema-cache invalidation, and security-sensitive fail-closed decisions while relocating their implementation.
+
+#### Services and domain orchestration
+
+- Added `app/services/gallery_bulk_mutations.php`, `app/services/gallery_editor_mutations.php`, `app/services/image_bulk_mutations.php`, `app/services/image_editor_mutations.php`, and `app/services/image_order.php` for reusable mutation use cases outside HTTP controllers.
+- Added `app/services/auth_accounts.php` and `app/services/admin_diagnostic_logs.php` for reusable account and diagnostic orchestration.
+- Refactored gallery discovery, reports, Trash, media renaming, thumbnail generation/maintenance, database maintenance, upload automation, Mobile WebDAV, Smart Galleries, viewer workflows, telemetry, tags, localization, downloads, and public path handling around their new persistence owners.
+- Kept mutation preflight ahead of the first irreversible filesystem or database change and retained recoverability for prepared uploads, migrations, copies, deletions, derivatives, and updater staging when readiness cannot be proven.
+- Preserved the narrower revocation policy for credentials: verified identity/revocation storage can still disable a credential even when unrelated issuance or authentication storage is unavailable.
+- Preserved schema result semantics throughout the refactor: `available` permits the established operation; confirmed `missing` uses only an explicitly supported legacy or bootstrap path; `unknown` blocks security-sensitive and mutation-sensitive work; and configuration `disabled` suppresses only capabilities with a real switch.
+- Preserved optional presentation/reporting behavior: unavailable optional reads may be omitted where policy allows, writes still require conclusive schema readiness, and disabled capabilities avoid unnecessary metadata probes.
+- Kept System Health, Runtime Diagnostics, and refusal logs bounded to capability/operation identifiers, validated database object names, safe categories, and request correlation; raw SQL, PDO/database exceptions, credentials, tokens, secrets, and private filesystem paths remain excluded.
+
+#### Controllers, request handling, and responses
+
+- Added `app/request_data.php` and `app/bootstrap/viewer_identity_context.php` to normalize transport inputs and authenticated viewer context before domain services are called.
+- Refactored public gallery, search, media, tags, SEO, downloads, votes, Smart Gallery, viewer, setup, upload, migration, update, and theme-asset controllers to own request/response flow without owning persistence or presentation.
+- Refactored Admin authentication, dashboards, diagnostics, galleries, reports, logs, telemetry, themes, uploads, thumbnails, Trash, Media Renamer, duplicate-photo, feature, settings, and test-run controllers around prepared view models and service calls.
+- Added controller modules for shared layout, public SEO, public gallery descriptions, and gallery form models where explicit transport/view-model ownership replaced mixed helper behavior.
+- Registered the new `picture_manager_delete` route and added it to the canonical `picture_manager` capability-owned route list.
+- Preserved authentication, CSRF, source ownership, destination validation, visibility/access enforcement, canonical mutation envelopes, status codes, and JSON/direct-page response compatibility.
+
+#### Views and presentation
+
+- Added `app/views.php` as the presentation-layer loader and introduced dedicated views for Admin authentication, dashboards, diagnostics, Features, gallery editing, reports, logs, telemetry, themes, updates, uploads, integrity, Media Renamer, tags, public inline tools, and render profiling.
+- Added dedicated public views for shared pages, gallery cards and controls, lightbox markup, tags, pagination, downloads, Picture Game, Smart Galleries, viewer accounts, collections, favourites, lifecycle pages, voting, and HTTP/service-unavailable output.
+- Moved formatting-only helpers into presentation-safe owners and supplied all views with controller-prepared URLs, labels, feature state, schema state, and result data.
+- Preserved semantic server-rendered image markup, useful alternative text, public access gates, no-JavaScript navigation, and both permanent `progressive` and `responsive` thumbnail renderer pipelines.
+
+#### Picture Manager backend and filesystem safety
+
+- Updated `app/controllers/picture_manager.php` to normalize mixed selections, validate that submitted photographs and galleries belong directly to the displayed source gallery, accept an explicit `new_gallery_parent_id`, coordinate mixed deletion, and return structured JSON results.
+- Updated `app/services/picture_manager.php` with physical gallery-ID normalization, direct-child ownership validation, destination-cycle protection, prevalidated subtree plans, collision checks, safe directory reservation/copy, sidecar synchronization, parent/public-path repair, image rescanning, and failure rollback.
+- Reused `move_gallery_subtrees_to_trash()` for recoverable gallery-tree deletion, `delete_gallery_images()` for photograph deletion, `gallery_trash_copy_directory()` for path-safe subtree copies, and normal gallery discovery/indexing services for the copied result.
+- Created new galleries with the selected parent's visibility, voting, filename-display, and count-badge defaults, while retaining the current gallery as the fallback parent for older clients that do not submit the new field.
+- Ensured create-from-selection builds physical galleries and never creates or rewrites Smart Gallery rules.
+
+#### Database
+
+- Added migration `202608140001_smart_galleries.php` for persisted Smart Gallery rule definitions, public/private enablement and ordering state, plus private editorial image ratings and lookup indexes.
+- Added migration `202608140002_smart_gallery_placement.php` for root, physical-gallery child, and unlisted Smart Gallery placement with an optional parent-gallery relationship.
+- Added migration `202608140003_smart_gallery_multiple_placements.php` for the many-to-many `smart_gallery_placements` table and migration of existing single-parent placements.
+- Added migration `202608150001_multilingual_content.php` for source-language markers and per-language gallery/image title and description tables with owner/language uniqueness and cascading cleanup.
+- Added migration `202608170001_smart_gallery_presentation.php` for optional Smart Gallery presentation overrides.
+- Added migration `202608170002_smart_gallery_attachment_ordering.php` for deterministic top/bottom placement areas and per-parent ordering.
+- Added migration `202608180004_viewer_account_lifecycle_foundations.php` for staged viewer email-change requests using selectors, hashed verification tokens, account security-version binding, expiry/state indexes, and cascading account cleanup.
+- Kept gallery/image and viewer-content data intact during migration; no Version 0.101 migration destructively rewrites existing photographs or gallery folders.
+
+#### Frontend and localization
+
+- Updated `public/assets/gallery-modules/picture-manager.js` to manage mixed card selection, submit both `image_ids[]` and `gallery_ids[]`, require the chosen parent for new galleries, perform mixed deletion, and keep photo-only actions disabled for gallery selections.
+- Updated public gallery card/control/page markup so physical subgallery cards expose accessible selection controls and the page-level toolbar remains available for subgallery-only views.
+- Updated `public/assets/styles/public.css` for mixed-selection gallery-card state, the delete action, parent selection, responsive creation fields, and the revised toolbar layout.
+- Updated `public/assets/gallery.js` and `public/assets/gallery-modules/admin-side-panel.js` with the shared `20260914-picture-manager-mixed-v1` cache revision so deployed browsers load the new handler consistently.
+- Updated English, Czech, German, and Swedish catalogs with mixed-selection actions, confirmation/progress/result messages, parent selection, physical-gallery wording, and photo-only move/copy guidance.
+- Preserved delegated event handling for dynamically rendered content and retained the browser URL, public page, and side-panel interaction model.
+
+#### Compatibility, packaging, and integrity
+
+- Added `data/gallery-trash/` to `.gitignore` so recoverable runtime Trash contents cannot enter source control or release packages.
+- Preserved historical controller/service/helper entry points where compatibility required them, while their implementations now delegate to canonical MVC owners.
+- Preserved both supported public thumbnail renderers, lightbox zoom/original-quality behavior, public search, visibility controls, viewer authorization, Smart Gallery access, and direct no-JavaScript routes.
+- Updated central audit registration, Admin mutation contracts, runtime-hardening checks, and release documentation for strict zero-baseline MVC qualification.
+- Regenerated `app/core-manifest.json` after the final updater-managed source and documentation changes.
+
+### Tests
+
+- Added `tests/mvc_layer_contract_test.php` and staged contracts `tests/stage3_controller_presentation_boundary_test.php` through `tests/stage13_loader_dependency_boundary_test.php` to cover presentation extraction, gallery/image persistence, relational features, identity/authentication, media pipelines, operational persistence, HTTP transport, view request independence, helper responsibility, and loader order.
+- Added `tests/admin_auth_mvc_boundary_test.php`, `tests/admin_media_renamer_mvc_boundary_test.php`, and `tests/public_gallery_mvc_boundary_test.php` for high-risk cross-layer surfaces.
+- Added `tests/route_reference_integrity_test.php` to verify dispatcher and registered route targets after module extraction.
+- Added `tests/source_header_author_test.php` to protect repository source-header ownership conventions.
+- Added `tests/picture_manager_mixed_selection_test.php` to cover route/capability ownership, physical-card selection markup, mixed request payloads, direct-child validation, Trash-backed deletion, explicit parent placement, physical subtree copying, rollback ordering, filesystem re-indexing, Smart Gallery exclusion, photo-only move/copy behavior, drag restrictions, and cache-busting imports.
+- Added `tests/upload_automation_checksum_indexing_test.php` and expanded upload inventory, simulated camera metadata, browser upload, and Windows companion regression coverage.
+- Updated the broad PHP regression tree for the new model/service/controller/view owners without weakening its behavioral assertions.
+- Updated JavaScript contracts for Admin mutation completion, side-panel delegation, gallery refresh, Picture Manager behavior, public search, downloads, uploads, lightbox/map lifecycle, and viewer favourites.
+- Updated WinApp regression coverage in `winapp/tests/test_redesign.py` for configuration, discovery, diagnostics, durable state, upload recovery, and UI/controller integration.
+- Updated `scripts/check_admin_mutation_contracts.php` and `scripts/audit_registry.php` so the central audit includes the new MVC and browser contracts.
+- Qualified complete-tree PHP and JavaScript syntax, PHP/Node/WinApp regression suites, strict MVC boundaries, Admin mutation envelopes, runtime hardening, release consistency, manifest freshness, Git whitespace, and environment-available browser integration through the release audit profile.
+
+### User Impact
+
+#### For visitors
+
+- Normal visitor behavior is unchanged: Picture Manager selection and mutations remain available only to authenticated administrators.
+- Public gallery URLs, visibility and password rules, NSFW protection, media authorization, semantic image markup, lightbox navigation/zoom, public search, maps, voting, downloads, and no-JavaScript fallbacks retain their established behavior.
+- The MVC refactor does not require visitors to migrate settings, change links, or learn a replacement interface.
+
+#### For administrators
+
+- Administrators can select photographs and physical subgalleries together from the public gallery view, delete them in one operation, or copy them into a new physical gallery under a chosen parent.
+- Selected physical galleries are clearly separated from Smart Galleries and from photo-only move, copy, share, download, and drag operations.
+- Failed physical subtree copies are validated and rolled back as early as possible instead of leaving an intentionally accepted partial gallery.
+- Existing Admin side-panel, direct-page, and non-JavaScript fallbacks remain available.
+- Installations upgrading across the included schema changes must run the normal migration workflow before using the affected Smart Gallery, multilingual-content, and viewer lifecycle storage.
+- Deployments receive stronger automated protection against future MVC boundary regressions and stale route/loader references.
+
+#### For maintainers and integrators
+
+- Persistence now has explicit model owners, domain policy and filesystem workflows have explicit service owners, transport decisions remain in controllers, and markup remains in views.
+- The zero-entry MVC baseline means new cross-layer violations fail qualification rather than being added as accepted migration debt.
+- Existing compatibility functions remain callable, but new and materially refactored work must use the canonical layer owner and dependency direction.
+- The Windows uploader retains its established workflow while using more durable checksum-indexed state and recovery behavior.
+
 ## Version 0.100
 
 Version 0.100 is a feature release introducing progressive public search. The new staged, relevance-aware search experience returns useful results early, defers expensive work, and preserves the gallery’s existing access, visibility, localization, and routing boundaries. It also adds bounded Admin diagnostics and dedicated regression coverage for the complete search pipeline.
