@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-09-03
+ *   2026-09-14
  */
 
 declare(strict_types=1);
@@ -38,12 +38,15 @@ namespace Gallery\Core;
 
 use Gallery\Services\PublicSchemaPolicyUnavailableException;
 use function Gallery\Controllers\cms_public_schema_unavailable;
-use function Gallery\Services\feature_flag_render_disabled_route;
+use function Gallery\Services\feature_flag_disabled_route_decision;
 use function Gallery\Services\feature_flag_route_enabled;
 use function Gallery\Services\gallery_access_assert_public_policy_available;
 use function Gallery\Services\gallery_visibility_assert_public_policy_available;
 use function Gallery\Services\nsfw_guard_assert_public_policy_available;
-use function Gallery\Services\seo_request_guard_emit_route_robots_header;
+use function Gallery\Services\seo_request_guard_route_robots_header_value;
+use function Gallery\Services\t;
+use function Gallery\Views\view_render_feature_disabled_admin;
+use function Gallery\Views\view_render_not_found;
 
 /**
  * Dispatch a resolved page identifier to the existing controller route table.
@@ -116,6 +119,7 @@ function cms_dispatch_page(string $page): void
         'picture_manager_move' => '\\Gallery\\Controllers\\cms_picture_manager_move',
         'picture_manager_copy' => '\\Gallery\\Controllers\\cms_picture_manager_copy',
         'picture_manager_create_gallery' => '\\Gallery\\Controllers\\cms_picture_manager_create_gallery',
+        'picture_manager_delete' => '\\Gallery\\Controllers\\cms_picture_manager_delete',
         'picture_manager_download_selection' => '\\Gallery\\Controllers\\cms_picture_manager_download_selection',
         'download_gallery_start' => '\\Gallery\\Controllers\\cms_download_gallery_start',
         'download_gallery' => '\\Gallery\\Controllers\\cms_download_gallery',
@@ -205,6 +209,10 @@ function cms_dispatch_page(string $page): void
         'admin_run_migrations' => '\\Gallery\\Controllers\\cms_admin_run_migrations',
         'admin_update_navdata' => '\\Gallery\\Controllers\\cms_admin_update_navdata',
         'admin_navdata' => '\\Gallery\\Controllers\\cms_admin_navdata',
+        'admin_navigraph_connect' => '\\Gallery\\Controllers\\cms_admin_navigraph_connect',
+        'admin_navigraph_callback' => '\\Gallery\\Controllers\\cms_admin_navigraph_callback',
+        'admin_navigraph_disconnect' => '\\Gallery\\Controllers\\cms_admin_navigraph_disconnect',
+        'admin_navigraph_refresh' => '\\Gallery\\Controllers\\cms_admin_navigraph_refresh',
         'admin_check_thumbnail_maintenance' => '\\Gallery\\Controllers\\cms_admin_check_thumbnail_maintenance',
         'admin_create_thumbnails' => '\\Gallery\\Controllers\\cms_admin_create_thumbnails',
         'admin_thumbnail_browser_source_chunk' => '\\Gallery\\Controllers\\cms_admin_thumbnail_browser_source_chunk',
@@ -248,10 +256,22 @@ function cms_dispatch_page(string $page): void
     ];
 
     // Download endpoints are crawler-excluded independently of authorization, feature state, and response type.
-    seo_request_guard_emit_route_robots_header($page);
+    $robotsDirective = seo_request_guard_route_robots_header_value($page);
+    if ($robotsDirective !== null && !headers_sent()) {
+        header('X-Robots-Tag: ' . $robotsDirective);
+    }
 
-    if (function_exists('Gallery\\Services\\feature_flag_route_enabled') && !feature_flag_route_enabled($page)) {
-        feature_flag_render_disabled_route($page);
+    if (function_exists('Gallery\Services\feature_flag_route_enabled') && !feature_flag_route_enabled($page)) {
+        $currentUser = current_user();
+        $isAdmin = is_array($currentUser) && (string) ($currentUser['role'] ?? '') === 'admin';
+        $accept = strtolower((string) ($_SERVER['HTTP_ACCEPT'] ?? ''));
+        $contentType = strtolower((string) ($_SERVER['CONTENT_TYPE'] ?? ''));
+        $wantsJson = str_contains($accept, 'application/json')
+            || str_contains($contentType, 'application/json')
+            || (string) ($_GET['ajax'] ?? $_POST['ajax'] ?? '') !== '';
+        cms_apply_feature_disabled_route_response(
+            feature_flag_disabled_route_decision($page, $wantsJson, $isAdmin)
+        );
         return;
     }
 
@@ -270,3 +290,42 @@ function cms_dispatch_page(string $page): void
     }
 
 }
+
+/**
+ * Apply one disabled-feature decision at the HTTP dispatch boundary.
+ *
+ * @param array{status:int,representation:string,headers:array<string,string>,payload:array<string,mixed>,title:string,message:string,admin:bool} $decision Disabled-route decision.
+ */
+function cms_apply_feature_disabled_route_response(array $decision): void
+{
+    http_response_code((int) ($decision['status'] ?? 404));
+    if (!headers_sent()) {
+        foreach (($decision['headers'] ?? []) as $name => $value) {
+            header((string) $name . ': ' . (string) $value);
+        }
+    }
+
+    if (($decision['representation'] ?? 'html') === 'json') {
+        if (!headers_sent()) {
+            header('Content-Type: application/json; charset=utf-8');
+        }
+        echo json_encode($decision['payload'] ?? [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        return;
+    }
+
+    $title = (string) ($decision['title'] ?? '');
+    $message = (string) ($decision['message'] ?? '');
+    render_header($title);
+    if (!empty($decision['admin'])) {
+        view_render_feature_disabled_admin(
+            $title,
+            $message,
+            url_for('admin_features'),
+            t('admin.features.open_settings', 'Open feature settings')
+        );
+    } else {
+        view_render_not_found($title, $message);
+    }
+    render_footer();
+}
+

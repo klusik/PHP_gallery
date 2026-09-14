@@ -1,3 +1,18 @@
+/**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ *
+ * File: tests/gallery_download_zip64_test.mjs
+ *
+ * Author:
+ *   Rudolf Klusal
+ *
+ * License:
+ *   MIT License (see LICENSE file in repository)
+ *
+ * Notes:
+ *   - Keep comments and docstrings intact when modifying this file.
+ */
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import {ZipStreamWriter} from '../public/assets/gallery-modules/zip-stream-writer.js';

@@ -39,6 +39,8 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+use function Gallery\Core\request_data;
+
 use Throwable;
 
 /**
@@ -51,7 +53,7 @@ function admin_test_run_opcache_capability(): array
     $extensionLoaded = extension_loaded('Zend OPcache') || function_exists('opcache_get_status');
     $enabled = filter_var((string) ini_get('opcache.enable'), FILTER_VALIDATE_BOOL, FILTER_NULL_ON_FAILURE);
     $restrictApi = trim((string) ini_get('opcache.restrict_api'));
-    $script = str_replace('\\', '/', (string) ($_SERVER['SCRIPT_FILENAME'] ?? __FILE__));
+    $script = str_replace('\\', '/', (string) (request_data('server')['SCRIPT_FILENAME'] ?? __FILE__));
     $normalizedRestriction = str_replace('\\', '/', $restrictApi);
     $restricted = false;
     if ($restrictApi !== '') {

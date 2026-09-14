@@ -16,6 +16,9 @@
  *   - Provide a private favourites landing page without preserving source-gallery permissions
  *   - Keep ordinary public gallery browsing operational when viewer favourite storage is unavailable
  *
+ * Author:
+ *   Rudolf Klusal
+ *
  * Notes:
  *   - Keep comments and docstrings intact when modifying this file.
  *   - Viewer authentication is not gallery authorization.
@@ -32,12 +35,9 @@ declare(strict_types=1);
 
 namespace Gallery\Controllers;
 
-use function Gallery\Core\e;
 use function Gallery\Core\image_alt_text;
 use function Gallery\Core\image_public_url;
 use function Gallery\Core\redirect_to;
-use function Gallery\Core\render_footer;
-use function Gallery\Core\render_header;
 use function Gallery\Core\request_method;
 use function Gallery\Core\url_for;
 use function Gallery\Services\current_viewer;
@@ -74,15 +74,15 @@ function render_viewer_favourite_form_html(int $imageId, bool $isFavourite, stri
     $label = $isFavourite
         ? t('viewer.favourites.remove', 'Remove from favourites')
         : t('viewer.favourites.add', 'Add to favourites');
-    $classes = trim('viewer-favourite-form ' . $className . ($isFavourite ? ' is-favourite' : ''));
-    $html = '<form class="' . e($classes) . '" method="post" action="' . e(url_for('viewer_favourite')) . '" data-viewer-favourite-form data-image-id="' . $imageId . '" data-favourite="' . ($isFavourite ? '1' : '0') . '">';
-    $html .= '<input type="hidden" name="viewer_csrf_token" value="' . e(viewer_csrf_token()) . '">';
-    $html .= '<input type="hidden" name="image_id" value="' . $imageId . '" data-viewer-favourite-image-id>';
-    $html .= '<input type="hidden" name="action" value="' . e($action) . '" data-viewer-favourite-action>';
-    $html .= '<button type="submit" class="viewer-favourite-button" aria-pressed="' . ($isFavourite ? 'true' : 'false') . '" aria-label="' . e($label) . '" title="' . e($label) . '" data-viewer-favourite-button>';
-    $html .= '<span aria-hidden="true" data-viewer-favourite-icon>' . ($isFavourite ? '&#9829;' : '&#9825;') . '</span>';
-    $html .= '<span class="visually-hidden" data-viewer-favourite-label>' . e($label) . '</span></button></form>';
-    return $html;
+    return \Gallery\Views\view_render_viewer_favourite_form_html([
+        'image_id' => $imageId,
+        'is_favourite' => $isFavourite,
+        'action' => $action,
+        'label' => $label,
+        'classes' => trim('viewer-favourite-form ' . $className . ($isFavourite ? ' is-favourite' : '')),
+        'url' => url_for('viewer_favourite'),
+        'csrf_token' => viewer_csrf_token(),
+    ]);
 }
 
 /**
@@ -99,13 +99,12 @@ function render_viewer_favourite_lightbox_form_html(): string
         return '';
     }
 
-    return '<form class="viewer-favourite-form viewer-favourite-lightbox-form" method="post" action="' . e(url_for('viewer_favourite')) . '" data-viewer-favourite-form data-viewer-favourite-lightbox-form hidden>'
-        . '<input type="hidden" name="viewer_csrf_token" value="' . e(viewer_csrf_token()) . '">'
-        . '<input type="hidden" name="image_id" value="0" data-viewer-favourite-image-id>'
-        . '<input type="hidden" name="action" value="add" data-viewer-favourite-action>'
-        . '<button type="submit" class="viewer-favourite-button" aria-pressed="false" aria-label="' . e(t('viewer.favourites.add', 'Add to favourites')) . '" title="' . e(t('viewer.favourites.add', 'Add to favourites')) . '" data-viewer-favourite-button>'
-        . '<span aria-hidden="true" data-viewer-favourite-icon>&#9825;</span>'
-        . '<span class="visually-hidden" data-viewer-favourite-label>' . e(t('viewer.favourites.add', 'Add to favourites')) . '</span></button></form>';
+    $label = t('viewer.favourites.add', 'Add to favourites');
+    return \Gallery\Views\view_render_viewer_favourite_lightbox_form_html([
+        'url' => url_for('viewer_favourite'),
+        'csrf_token' => viewer_csrf_token(),
+        'label' => $label,
+    ]);
 }
 
 /**
@@ -175,9 +174,12 @@ function cms_viewer_favourite(): void
             return;
         }
         http_response_code(403);
-        render_header(t('viewer.favourites.title', 'Favourites'));
-        echo '<section class="panel"><h1>' . e(t('viewer.favourites.title', 'Favourites')) . '</h1><p>' . e(t('viewer.common.invalid_request_message', 'The request could not be verified. Please reopen the page and try again.')) . '</p></section>';
-        render_footer();
+        \Gallery\Views\view_render_viewer_favourites_error([
+            'title' => t('viewer.favourites.title', 'Favourites'),
+            'message' => t('viewer.common.invalid_request_message', 'The request could not be verified. Please reopen the page and try again.'),
+            'back_url' => '',
+            'back_label' => '',
+        ]);
         return;
     }
 
@@ -220,9 +222,12 @@ function cms_viewer_favourite(): void
     }
 
     http_response_code($status);
-    render_header(t('viewer.favourites.title', 'Favourites'));
-    echo '<section class="panel"><h1>' . e(t('viewer.favourites.title', 'Favourites')) . '</h1><p>' . e($message) . '</p><p><a class="button secondary" href="' . e(url_for('viewer_favourites')) . '">' . e(t('viewer.favourites.open', 'Open favourites')) . '</a></p></section>';
-    render_footer();
+    \Gallery\Views\view_render_viewer_favourites_error([
+        'title' => t('viewer.favourites.title', 'Favourites'),
+        'message' => $message,
+        'back_url' => url_for('viewer_favourites'),
+        'back_label' => t('viewer.favourites.open', 'Open favourites'),
+    ]);
 }
 
 /**
@@ -240,12 +245,22 @@ function cms_viewer_favourites(): void
         redirect_to(url_for('viewer_login'));
     }
 
-    render_header(t('viewer.favourites.title', 'Favourites'));
-    echo '<section class="hero"><div class="hero-topbar"><div class="hero-primary"><div><h1>' . e(t('viewer.favourites.title', 'Favourites')) . '</h1><p>' . e(t('viewer.favourites.help', 'Only photos you can currently access are shown. A favourite never preserves access to a protected gallery.')) . '</p></div></div><div class="hero-meta"><div class="hero-actions"><a class="button secondary" href="' . e(url_for('viewer_account')) . '">' . e(t('viewer.favourites.back_to_account', 'Account')) . '</a></div></div></div></section>';
-
-    if (!viewer_favourites_storage_available()) {
-        echo '<section class="panel"><p>' . e(t('viewer.favourites.unavailable', 'Favourites are temporarily unavailable.')) . '</p></section>';
-        render_footer();
+    $title = t('viewer.favourites.title', 'Favourites');
+    $viewModel = [
+        'title' => $title,
+        'help' => t('viewer.favourites.help', 'Only photos you can currently access are shown. A favourite never preserves access to a protected gallery.'),
+        'account_url' => url_for('viewer_account'),
+        'account_label' => t('viewer.favourites.back_to_account', 'Account'),
+        'storage_available' => viewer_favourites_storage_available(),
+        'unavailable_message' => t('viewer.favourites.unavailable', 'Favourites are temporarily unavailable.'),
+        'cards' => [],
+        'empty_message' => '',
+        'hidden_unavailable' => false,
+        'hidden_message' => t('viewer.favourites.hidden_unavailable', 'Some saved favourites are hidden because their source gallery is not currently authorized.'),
+        'pagination' => ['visible' => false],
+    ];
+    if (!$viewModel['storage_available']) {
+        \Gallery\Views\view_render_viewer_favourites_page($viewModel);
         return;
     }
 
@@ -268,56 +283,55 @@ function cms_viewer_favourites(): void
         $authorized[] = $resolved;
     }
 
-    if ($authorized === []) {
-        echo '<section class="panel"><p>' . e($pageData['total'] > 0
-            ? t('viewer.favourites.none_accessible', 'No favourites on this page are currently accessible.')
-            : t('viewer.favourites.empty', 'You have not added any favourites yet.')) . '</p></section>';
-    } else {
-        echo '<section class="grid gallery-image-grid viewer-favourites-grid">';
-        foreach ($authorized as $index => $resolved) {
-            $image = $resolved['image'];
-            $gallery = $resolved['gallery'];
-            $imageId = (int) $image['id'];
-            $bundle = thumbnail_bundle($image);
-            $candidateSizes = array_values(array_filter(thumbnail_sizes(), static fn (int $size): bool => $size <= 960));
-            if ($candidateSizes === []) {
-                $candidateSizes = [300];
-            }
-            $title = public_image_display_title($image, $gallery);
-            $imageUrl = image_public_url($image, $gallery);
-            echo '<article class="image-card" data-image-id="' . $imageId . '" data-viewer-favourite="1"><div class="image-stage">';
-            echo '<a class="image-preview-link" href="' . e($imageUrl) . '">' . public_thumbnail_render_picture_html($image, 300, $candidateSizes, '(min-width: 1100px) 25vw, (min-width: 700px) 33vw, 50vw', image_alt_text($image, $gallery, $index + 1), $index, $bundle) . '</a>';
-            echo render_viewer_favourite_form_html($imageId, true, 'viewer-favourite-card-overlay');
-            if ($viewerCollectionsAvailable) {
-                echo render_viewer_collection_add_control_html($imageId, $viewerCollections, 'viewer-collection-card-overlay');
-            }
-            if ($title !== '') {
-                echo '<div class="image-meta image-meta-overlay"><h2>' . e($title) . '</h2></div>';
-            }
-            echo '</div></article>';
-        }
-        echo '</section>';
+    $candidateSizes = array_values(array_filter(thumbnail_sizes(), static fn (int $size): bool => $size <= 960));
+    if ($candidateSizes === []) {
+        $candidateSizes = [300];
+    }
+    $cards = [];
+    foreach ($authorized as $index => $resolved) {
+        $image = $resolved['image'];
+        $gallery = $resolved['gallery'];
+        $imageId = (int) $image['id'];
+        $bundle = thumbnail_bundle($image);
+        $cards[] = [
+            'image_id' => $imageId,
+            'image_url' => image_public_url($image, $gallery),
+            'thumbnail_html' => public_thumbnail_render_picture_html(
+                $image,
+                300,
+                $candidateSizes,
+                '(min-width: 1100px) 25vw, (min-width: 700px) 33vw, 50vw',
+                image_alt_text($image, $gallery, $index + 1),
+                $index,
+                $bundle
+            ),
+            'favourite_control_html' => render_viewer_favourite_form_html($imageId, true, 'viewer-favourite-card-overlay'),
+            'collection_control_html' => $viewerCollectionsAvailable
+                ? render_viewer_collection_add_control_html($imageId, $viewerCollections, 'viewer-collection-card-overlay')
+                : '',
+            'title' => public_image_display_title($image, $gallery),
+        ];
     }
 
-    if ($hiddenUnavailable) {
-        echo '<p class="muted">' . e(t('viewer.favourites.hidden_unavailable', 'Some saved favourites are hidden because their source gallery is not currently authorized.')) . '</p>';
-    }
+    $viewModel['cards'] = $cards;
+    $viewModel['empty_message'] = (int) $pageData['total'] > 0
+        ? t('viewer.favourites.none_accessible', 'No favourites on this page are currently accessible.')
+        : t('viewer.favourites.empty', 'You have not added any favourites yet.');
+    $viewModel['hidden_unavailable'] = $hiddenUnavailable;
 
     $total = (int) $pageData['total'];
     $perPage = (int) $pageData['per_page'];
     $currentPage = (int) $pageData['page'];
     $pageCount = max(1, (int) ceil($total / max(1, $perPage)));
-    if ($pageCount > 1) {
-        echo '<nav class="pagination" aria-label="' . e(t('viewer.favourites.pages', 'Favourite pages')) . '">';
-        if ($currentPage > 1) {
-            echo '<a class="button secondary" href="' . e(url_for('viewer_favourites', ['favourites_page' => $currentPage - 1])) . '">' . e(t('pagination.previous', 'Previous')) . '</a>';
-        }
-        echo '<span>' . e(t('pagination.page_of', 'Page {page} of {pages}', ['page' => $currentPage, 'pages' => $pageCount])) . '</span>';
-        if ($currentPage < $pageCount) {
-            echo '<a class="button secondary" href="' . e(url_for('viewer_favourites', ['favourites_page' => $currentPage + 1])) . '">' . e(t('pagination.next', 'Next')) . '</a>';
-        }
-        echo '</nav>';
-    }
+    $viewModel['pagination'] = [
+        'visible' => $pageCount > 1,
+        'aria_label' => t('viewer.favourites.pages', 'Favourite pages'),
+        'previous_url' => $currentPage > 1 ? url_for('viewer_favourites', ['favourites_page' => $currentPage - 1]) : '',
+        'previous_label' => t('pagination.previous', 'Previous'),
+        'page_label' => t('pagination.page_of', 'Page {page} of {pages}', ['page' => $currentPage, 'pages' => $pageCount]),
+        'next_url' => $currentPage < $pageCount ? url_for('viewer_favourites', ['favourites_page' => $currentPage + 1]) : '',
+        'next_label' => t('pagination.next', 'Next'),
+    ];
 
-    render_footer();
+    \Gallery\Views\view_render_viewer_favourites_page($viewModel);
 }

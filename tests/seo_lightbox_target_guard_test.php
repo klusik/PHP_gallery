@@ -1,5 +1,20 @@
 <?php
 
+/**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ *
+ * File: tests/seo_lightbox_target_guard_test.php
+ *
+ * Author:
+ *   Rudolf Klusal
+ *
+ * License:
+ *   MIT License (see LICENSE file in repository)
+ *
+ * Notes:
+ *   - Keep comments and docstrings intact when modifying this file.
+ */
 declare(strict_types=1);
 
 /** Execute the real request guard in isolated public/Admin requests, without a database. */
@@ -41,7 +56,20 @@ namespace {
             $body = ob_get_clean();
             echo json_encode(['status' => http_response_code(), 'reached' => $reached, 'body' => $body], JSON_THROW_ON_ERROR);
         });
-        \Gallery\Services\seo_request_guard_enforce($route);
+        $decision = \Gallery\Services\seo_request_guard_enforcement_decision(
+            $route,
+            'GET',
+            $_GET,
+            $GLOBALS['guardAdmin'],
+            '/index.php?page=' . rawurlencode($route),
+            '127.0.0.1',
+            'fixture'
+        );
+        if (($decision['action'] ?? 'allow') === 'reject') {
+            http_response_code((int) ($decision['status'] ?? 404));
+            echo (string) ($decision['body'] ?? '');
+            exit;
+        }
         $reached = true;
         exit;
     }

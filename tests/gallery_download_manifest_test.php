@@ -1,5 +1,20 @@
 <?php
 
+/**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ *
+ * File: tests/gallery_download_manifest_test.php
+ *
+ * Author:
+ *   Rudolf Klusal
+ *
+ * License:
+ *   MIT License (see LICENSE file in repository)
+ *
+ * Notes:
+ *   - Keep comments and docstrings intact when modifying this file.
+ */
 declare(strict_types=1);
 
 namespace Gallery\Tests {
@@ -111,6 +126,7 @@ namespace Gallery\Services {
     function visitor_can_access_gallery(array $gallery): bool { return !empty($gallery['allowed']); }
 
     require_once dirname(__DIR__) . '/app/services/download_manifest_cache.php';
+    require_once dirname(__DIR__) . '/app/models/downloads.php';
     require_once dirname(__DIR__) . '/app/services/downloads.php';
 }
 

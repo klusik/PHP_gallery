@@ -40,7 +40,8 @@ use function Gallery\Services\gallery_date_gallery_is_in_branch;
 use function Gallery\Services\gallery_date_range_display_value;
 use function Gallery\Services\gallery_date_range_storage_label;
 use function Gallery\Services\gallery_date_range_storage_values;
-use function Gallery\Services\render_gallery_date;
+use function Gallery\Services\gallery_date_view_model;
+use function Gallery\Views\view_render_gallery_date;
 
 if (!function_exists('db_column_exists')) {
         /**
@@ -90,6 +91,7 @@ if (!function_exists('t')) {
 
 require_once __DIR__ . '/support/namespaced_shims.php';
 require_once __DIR__ . '/../app/services/gallery_dates.php';
+require_once __DIR__ . '/../app/views/gallery_dates.php';
 
 /**
  * Throw when a gallery date expectation fails.
@@ -150,7 +152,7 @@ assert_gallery_dates_same(false, gallery_date_gallery_is_in_branch([
 ], 3, 1), 'sibling gallery does not belong to branch');
 
 ob_start();
-render_gallery_date(['gallery_date' => '2026-05-01', 'gallery_date_end' => '2026-05-03'], 'test-gallery-date');
+view_render_gallery_date(gallery_date_view_model(['gallery_date' => '2026-05-01', 'gallery_date_end' => '2026-05-03']), 'test-gallery-date');
 $html = (string) ob_get_clean();
 assert_gallery_dates_contains('class="test-gallery-date"', $html, 'rendered date uses custom CSS class');
 assert_gallery_dates_contains('datetime="2026-05-01"', $html, 'rendered date keeps start datetime');

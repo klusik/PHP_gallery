@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-24
+ *   2026-09-14
  */
 
 declare(strict_types=1);
@@ -38,10 +38,6 @@ namespace Gallery\Views;
 
 use function Gallery\Core\asset_url;
 use function Gallery\Core\e;
-use function Gallery\Services\link_favicon_cached_public_url;
-use function Gallery\Services\link_favicon_host_matches;
-use function Gallery\Services\link_favicon_known_icon_id;
-use function Gallery\Services\link_favicon_normalize_url;
 
 /**
  * Handle view gallery description utf8 excerpt.
@@ -107,7 +103,25 @@ function view_gallery_description_markdown_excerpt(string $markdown, int $limit 
  */
 function view_gallery_description_link_url(string $url): ?string
 {
-    return link_favicon_normalize_url($url);
+    $url = trim(html_entity_decode($url, ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+    if ($url === '') {
+        return null;
+    }
+    if (preg_match('/^www\./iu', $url) === 1) {
+        $url = 'https://' . $url;
+    }
+    if (preg_match('/^https?:\/\/[^\s<>]+$/iu', $url) !== 1) {
+        return null;
+    }
+    $parts = parse_url($url);
+    if (!is_array($parts) || trim((string) ($parts['host'] ?? '')) === '') {
+        return null;
+    }
+    $scheme = strtolower((string) ($parts['scheme'] ?? ''));
+    if ($scheme !== 'http' && $scheme !== 'https') {
+        return null;
+    }
+    return $url;
 }
 
 /**
@@ -119,7 +133,7 @@ function view_gallery_description_link_url(string $url): ?string
  */
 function view_gallery_description_link_host_matches(string $host, string $domain): bool
 {
-    return link_favicon_host_matches($host, $domain);
+    return $host === $domain || str_ends_with($host, '.' . $domain);
 }
 
 /**
@@ -133,7 +147,41 @@ function view_gallery_description_link_host_matches(string $host, string $domain
  */
 function view_gallery_description_link_icon_id(string $url): ?string
 {
-    return link_favicon_known_icon_id($url);
+    $normalized = view_gallery_description_link_url($url);
+    if ($normalized === null) {
+        return null;
+    }
+    $parts = parse_url($normalized);
+    if (!is_array($parts)) {
+        return null;
+    }
+    $host = strtolower(rtrim(trim((string) ($parts['host'] ?? '')), '.'));
+    if ($host === '') {
+        return null;
+    }
+
+    static $icons = [
+        'youtube' => ['youtube.com', 'youtu.be', 'youtube-nocookie.com'],
+        'facebook' => ['facebook.com', 'fb.com', 'fb.me', 'fb.watch'],
+        'twitter-x' => ['x.com', 'twitter.com', 't.co'],
+        'instagram' => ['instagram.com', 'instagr.am'],
+        'wikipedia' => ['wikipedia.org', 'wikimedia.org', 'wikidata.org'],
+        'linkedin' => ['linkedin.com', 'lnkd.in'],
+        'github' => ['github.com', 'githubusercontent.com'],
+        'reddit' => ['reddit.com', 'redd.it'],
+        'tiktok' => ['tiktok.com'],
+        'discord' => ['discord.com', 'discord.gg'],
+        'twitch' => ['twitch.tv'],
+        'vimeo' => ['vimeo.com'],
+    ];
+    foreach ($icons as $iconId => $domains) {
+        foreach ($domains as $domain) {
+            if (view_gallery_description_link_host_matches($host, $domain)) {
+                return $iconId;
+            }
+        }
+    }
+    return null;
 }
 
 /**
@@ -142,7 +190,7 @@ function view_gallery_description_link_icon_id(string $url): ?string
  * @param string $url Normalized HTTP(S) URL.
  * @return string Safe inline SVG markup, or an empty string for unknown hosts.
  */
-function view_gallery_description_link_icon_html(string $url): string
+function view_gallery_description_link_icon_html(string $url, array $linkModels = []): string
 {
     $iconId = view_gallery_description_link_icon_id($url);
     if ($iconId !== null) {
@@ -150,8 +198,8 @@ function view_gallery_description_link_icon_html(string $url): string
         return '<svg class="gallery-description-link-icon" aria-hidden="true" focusable="false" viewBox="0 0 16 16"><use href="' . e($spriteUrl . '#' . $iconId) . '"></use></svg>';
     }
 
-    $cachedUrl = link_favicon_cached_public_url($url);
-    if ($cachedUrl === null || $cachedUrl === '') {
+    $cachedUrl = (string) (($linkModels[$url]['cached_url'] ?? '') ?: '');
+    if ($cachedUrl === '') {
         return '';
     }
     return '<img class="gallery-description-link-icon gallery-description-link-favicon" src="' . e($cachedUrl) . '" alt="" aria-hidden="true" decoding="async">';
@@ -165,13 +213,13 @@ function view_gallery_description_link_icon_html(string $url): string
  * @param string $fallback Original escaped markup returned for unsafe URLs.
  * @return string Safe anchor HTML or the unchanged fallback markup.
  */
-function view_gallery_description_link_html(string $url, string $label, string $fallback): string
+function view_gallery_description_link_html(string $url, string $label, string $fallback, array $linkModels = []): string
 {
     $href = view_gallery_description_link_url($url);
     if ($href === null) {
         return $fallback;
     }
-    $iconHtml = view_gallery_description_link_icon_html($href);
+    $iconHtml = view_gallery_description_link_icon_html($href, $linkModels);
     return '<a class="gallery-description-external-link" href="' . e($href) . '" rel="noopener noreferrer" target="_blank">' . $iconHtml . $label . '</a>';
 }
 
@@ -183,7 +231,7 @@ function view_gallery_description_link_html(string $url, string $label, string $
  * @param string $markdown Markdown value.
  * @return string Text result for the caller.
  */
-function view_gallery_description_markdown_html(string $markdown): string
+function view_gallery_description_markdown_html(string $markdown, array $linkModels = []): string
 {
     $normalized = trim(str_replace(["\r\n", "\r"], "\n", $markdown));
     if ($normalized === '') {
@@ -202,15 +250,15 @@ function view_gallery_description_markdown_html(string $markdown): string
         $escaped = preg_replace('/__([^_\n]+)__/u', '<strong>$1</strong>', $escaped) ?? $escaped;
         $escaped = preg_replace('/(?<!\*)\*([^*\n]+)\*(?!\*)/u', '<em>$1</em>', $escaped) ?? $escaped;
         $escaped = preg_replace('/(?<!_)_([^_\n]+)_(?!_)/u', '<em>$1</em>', $escaped) ?? $escaped;
-        $escaped = preg_replace_callback('/\[(link|url)=([^\]\n]{1,2048})\]([^\n]*?)\[\/\1\]/iu', static function (array $matches): string {
-            return view_gallery_description_link_html((string) $matches[2], (string) $matches[3], (string) $matches[0]);
+        $escaped = preg_replace_callback('/\[(link|url)=([^\]\n]{1,2048})\]([^\n]*?)\[\/\1\]/iu', static function (array $matches) use ($linkModels): string {
+            return view_gallery_description_link_html((string) $matches[2], (string) $matches[3], (string) $matches[0], $linkModels);
         }, $escaped) ?? $escaped;
-        $escaped = preg_replace_callback('/\[(link|url)\]([^\[\]\n]{1,2048})\[\/\1\]/iu', static function (array $matches): string {
+        $escaped = preg_replace_callback('/\[(link|url)\]([^\[\]\n]{1,2048})\[\/\1\]/iu', static function (array $matches) use ($linkModels): string {
             $label = trim((string) $matches[2]);
-            return view_gallery_description_link_html($label, $label, (string) $matches[0]);
+            return view_gallery_description_link_html($label, $label, (string) $matches[0], $linkModels);
         }, $escaped) ?? $escaped;
-        $escaped = preg_replace_callback('/\[([^\]\n]{1,160})\]\((https?:\/\/[^\s<>")]+)\)/iu', static function (array $matches): string {
-            return view_gallery_description_link_html((string) $matches[2], (string) $matches[1], (string) $matches[0]);
+        $escaped = preg_replace_callback('/\[([^\]\n]{1,160})\]\((https?:\/\/[^\s<>")]+)\)/iu', static function (array $matches) use ($linkModels): string {
+            return view_gallery_description_link_html((string) $matches[2], (string) $matches[1], (string) $matches[0], $linkModels);
         }, $escaped) ?? $escaped;
         $html[] = '<p>' . str_replace("\n", '<br>', $escaped) . '</p>';
     }

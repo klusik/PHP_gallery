@@ -16,7 +16,10 @@
  *   - Batch-load translated overlays without public N+1 queries
  *   - Apply independent title and description fallback
  *   - Validate and persist Admin translation mutations
- */
+  *
+ * Author:
+ *   Rudolf Klusal
+*/
 
 declare(strict_types=1);
 
@@ -24,7 +27,6 @@ namespace Gallery\Services;
 
 use InvalidArgumentException;
 use RuntimeException;
-use function Gallery\Core\db;
 use function Gallery\Core\now_sql;
 
 const CONTENT_LOCALIZATION_ENTITY_GALLERY = 'gallery';
@@ -185,18 +187,8 @@ function content_translation_rows(string $entityType, array $entityIds, ?string 
         return [];
     }
 
-    $placeholders = implode(',', array_fill(0, count($entityIds), '?'));
-    $sql = 'SELECT ' . $storage['owner_column'] . ' AS owner_id, language_code, title, description, created_at, updated_at FROM ' . $storage['table'] . ' WHERE ' . $storage['owner_column'] . ' IN (' . $placeholders . ')';
-    $params = $entityIds;
-    if ($language !== null) {
-        $sql .= ' AND language_code = ?';
-        $params[] = $language;
-    }
-    $sql .= ' ORDER BY ' . $storage['owner_column'] . ', language_code';
-    $stmt = db()->prepare($sql);
-    $stmt->execute($params);
     $grouped = [];
-    foreach ($stmt->fetchAll() as $row) {
+    foreach (\Gallery\Models\content_localization_model_rows($entityType, $entityIds, $language) as $row) {
         $ownerId = (int) ($row['owner_id'] ?? 0);
         $rowLanguage = content_language_normalize($row['language_code'] ?? null);
         if ($ownerId > 0 && $rowLanguage !== null) {
@@ -294,37 +286,21 @@ function content_save_localizations(string $entityType, int $entityId, mixed $so
     if ($entityId < 1 || !content_localization_schema_ready($entityType)) {
         throw new RuntimeException('Multilingual content storage is unavailable. Apply pending database migrations and try again.');
     }
-    $storage = content_localization_storage($entityType);
     $normalizedSource = content_language_normalize($sourceLanguage);
     $submitted = is_array($translations) ? $translations : [];
-    $pdo = db();
-    $pdo->beginTransaction();
-    try {
-        $sourceStmt = $pdo->prepare('UPDATE ' . $storage['base_table'] . ' SET content_language = ?, updated_at = ? WHERE id = ?');
-        $sourceStmt->execute([$normalizedSource, now_sql(), $entityId]);
-        $deleteStmt = $pdo->prepare('DELETE FROM ' . $storage['table'] . ' WHERE ' . $storage['owner_column'] . ' = ? AND language_code = ?');
-        $upsertStmt = $pdo->prepare('INSERT INTO ' . $storage['table'] . ' (' . $storage['owner_column'] . ', language_code, title, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE title = VALUES(title), description = VALUES(description), updated_at = VALUES(updated_at)');
-        foreach (content_supported_languages() as $language) {
-            if ($language === $normalizedSource) {
-                $deleteStmt->execute([$entityId, $language]);
-                continue;
-            }
-            $row = is_array($submitted[$language] ?? null) ? $submitted[$language] : [];
-            $title = trim((string) ($row['title'] ?? ''));
-            $description = (string) ($row['description'] ?? '');
-            if ($title === '' && trim($description) === '') {
-                $deleteStmt->execute([$entityId, $language]);
-                continue;
-            }
-            $now = now_sql();
-            $upsertStmt->execute([$entityId, $language, $title !== '' ? $title : null, trim($description) !== '' ? $description : null, $now, $now]);
+    $normalizedRows = [];
+    foreach (content_supported_languages() as $language) {
+        if ($language === $normalizedSource) {
+            $normalizedRows[$language] = null;
+            continue;
         }
-        $pdo->commit();
-    } catch (\Throwable $exception) {
-        if ($pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
-        throw $exception;
+        $row = is_array($submitted[$language] ?? null) ? $submitted[$language] : [];
+        $title = trim((string) ($row['title'] ?? ''));
+        $description = (string) ($row['description'] ?? '');
+        $normalizedRows[$language] = ($title === '' && trim($description) === '')
+            ? null
+            : ['title' => $title !== '' ? $title : null, 'description' => trim($description) !== '' ? $description : null];
     }
+    \Gallery\Models\content_localization_model_save($entityType, $entityId, $normalizedSource, $normalizedRows, now_sql());
     content_localization_reset_request_cache();
 }

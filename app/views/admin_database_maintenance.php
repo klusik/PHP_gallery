@@ -41,7 +41,7 @@ namespace Gallery\Views;
 use function Gallery\Core\csrf_field;
 use function Gallery\Core\e;
 use function Gallery\Core\url_for;
-use function Gallery\Services\admin_dashboard_format_bytes;
+use function Gallery\Core\format_bytes;
 use function Gallery\Services\t;
 
 /**
@@ -50,8 +50,9 @@ use function Gallery\Services\t;
  * @param ?array $report Latest explicit inspection report.
  * @param array<string, mixed> $cleanupState Latest resumable cleanup state.
  * @param array<string, mixed> $repairReadiness Dedicated repair migration state.
+ * @param bool $mutationsEnabled Whether advanced database mutations are enabled.
  */
-function view_render_admin_database_maintenance_panel(?array $report, array $cleanupState, array $repairReadiness): void
+function view_render_admin_database_maintenance_panel(?array $report, array $cleanupState, array $repairReadiness, bool $mutationsEnabled = false): void
 {
     echo '<section class="panel admin-database-maintenance-intro">';
     echo '<div class="admin-panel-heading"><div><p class="admin-kicker">' . e(t('admin.database_maintenance.kicker', 'Database maintenance')) . '</p><h2>' . e(t('admin.database_maintenance.title', 'Inspect before changing anything')) . '</h2></div><p class="muted">' . e(t('admin.database_maintenance.description', 'The full schema, migration, code-reference, cleanup, and storage audit runs only after this explicit request. Ordinary dashboard rendering remains fast.')) . '</p></div>';
@@ -81,17 +82,17 @@ function view_render_admin_database_maintenance_panel(?array $report, array $cle
     ])) . '</p></div>';
     echo '<div class="admin-storage-summary-grid">';
     view_render_admin_storage_summary_card(t('admin.database_maintenance.tables', 'Audited tables'), (string) count($tables), t('admin.database_maintenance.tables_hint', 'Every table dynamically discovered in the active schema.'));
-    view_render_admin_storage_summary_card(t('admin.database_maintenance.total_size', 'Allocated database'), admin_dashboard_format_bytes($totalBytes), t('admin.database_maintenance.total_size_hint', 'Data plus indexes reported by information_schema.'));
+    view_render_admin_storage_summary_card(t('admin.database_maintenance.total_size', 'Allocated database'), format_bytes($totalBytes), t('admin.database_maintenance.total_size_hint', 'Data plus indexes reported by information_schema.'));
     view_render_admin_storage_summary_card(t('admin.database_maintenance.candidates', 'Safe candidates'), number_format($candidateCount), t('admin.database_maintenance.candidates_hint', 'Rows matching explicit high-confidence cleanup rules.'));
-    view_render_admin_storage_summary_card(t('admin.database_maintenance.data_free', 'Engine data_free'), admin_dashboard_format_bytes($reclaimableBytes), t('admin.database_maintenance.data_free_hint', 'Engine estimate only. Reclamation requires a separately confirmed physical operation.'));
+    view_render_admin_storage_summary_card(t('admin.database_maintenance.data_free', 'Engine data_free'), format_bytes($reclaimableBytes), t('admin.database_maintenance.data_free_hint', 'Engine estimate only. Reclamation requires a separately confirmed physical operation.'));
     echo '</div>';
     echo '<p class="muted">' . e((string) ($report['physical_optimization_note'] ?? '')) . '</p>';
     echo '</section>';
 
     view_render_admin_database_thumbnail_distribution_panel((array) ($tableSpecificAudit['image_thumbnail_variants'] ?? []));
-    view_render_admin_database_cleanup_panel($candidates, $cleanupState);
-    view_render_admin_database_schema_repair_panel($legacyFindings, $repairReadiness);
-    view_render_admin_database_physical_operations_panel($tables);
+    view_render_admin_database_cleanup_panel($candidates, $cleanupState, $mutationsEnabled);
+    view_render_admin_database_schema_repair_panel($legacyFindings, $repairReadiness, $mutationsEnabled);
+    view_render_admin_database_physical_operations_panel($tables, $mutationsEnabled);
     view_render_admin_database_inventory_panel($tables);
 }
 
@@ -132,10 +133,10 @@ function view_render_admin_database_thumbnail_distribution_panel(array $audit): 
  *
  * @param array<int, array<string, mixed>> $candidates Candidate rows.
  * @param array<string, mixed> $cleanupState Cleanup state.
+ * @param bool $mutationsEnabled Whether advanced database mutations are enabled.
  */
-function view_render_admin_database_cleanup_panel(array $candidates, array $cleanupState): void
+function view_render_admin_database_cleanup_panel(array $candidates, array $cleanupState, bool $mutationsEnabled): void
 {
-    $mutationsEnabled = \Gallery\Services\feature_capability_effective_enabled('advanced_database_maintenance');
     echo '<section class="panel admin-database-cleanup-panel">';
     echo '<div class="admin-panel-heading"><div><p class="admin-kicker">' . e(t('admin.database_maintenance.cleanup_kicker', 'Logical cleanup')) . '</p><h2>' . e(t('admin.database_maintenance.cleanup_title', 'Clean safe database data')) . '</h2></div><p class="muted">' . e(t('admin.database_maintenance.cleanup_hint', 'Only high-confidence orphan, deterministic duplicate, and explicitly expired temporary rows are eligible. Content, accounts, logs, telemetry, unknown tables, and filesystem files are protected.')) . '</p></div>';
 
@@ -200,10 +201,10 @@ function view_render_admin_database_cleanup_panel(array $candidates, array $clea
  *
  * @param array<int, array<string, mixed>> $findings Findings.
  * @param array<string, mixed> $readiness Migration readiness.
+ * @param bool $mutationsEnabled Whether advanced database mutations are enabled.
  */
-function view_render_admin_database_schema_repair_panel(array $findings, array $readiness): void
+function view_render_admin_database_schema_repair_panel(array $findings, array $readiness, bool $mutationsEnabled): void
 {
-    $mutationsEnabled = \Gallery\Services\feature_capability_effective_enabled('advanced_database_maintenance');
     echo '<section class="panel admin-database-schema-repair-panel">';
     echo '<div class="admin-panel-heading"><div><p class="admin-kicker">' . e(t('admin.database_maintenance.schema_kicker', 'Legacy schema')) . '</p><h2>' . e(t('admin.database_maintenance.schema_title', 'Repair legacy schema')) . '</h2></div><p class="muted">' . e(t('admin.database_maintenance.schema_hint', 'The dedicated migration inspects every object before alteration, preserves source geometry first, and tolerates legacy, partial, and already repaired schemas. DDL may auto-commit.')) . '</p></div>';
 
@@ -240,23 +241,23 @@ function view_render_admin_database_schema_repair_panel(array $findings, array $
  * Render selected-table ANALYZE and OPTIMIZE controls.
  *
  * @param array<string, array<string, mixed>> $tables Inventory tables.
+ * @param bool $mutationsEnabled Whether advanced database mutations are enabled.
  */
-function view_render_admin_database_physical_operations_panel(array $tables): void
+function view_render_admin_database_physical_operations_panel(array $tables, bool $mutationsEnabled): void
 {
-    $mutationsEnabled = \Gallery\Services\feature_capability_effective_enabled('advanced_database_maintenance');
     echo '<section class="panel admin-database-physical-panel">';
     echo '<div class="admin-panel-heading"><div><p class="admin-kicker">' . e(t('admin.database_maintenance.physical_kicker', 'Physical maintenance')) . '</p><h2>' . e(t('admin.database_maintenance.physical_title', 'Statistics and table space')) . '</h2></div><p class="muted">' . e(t('admin.database_maintenance.physical_hint', 'ANALYZE refreshes optimizer metadata. OPTIMIZE may lock or rebuild tables and may be expensive on shared hosting. Neither action runs automatically.')) . '</p></div>';
 
     echo '<div class="admin-storage-chart-grid">';
     echo '<article class="admin-storage-chart-card"><h3>' . e(t('admin.database_maintenance.analyze_title', 'Refresh database statistics')) . '</h3>';
     if ($mutationsEnabled) {
-        view_render_admin_database_table_selection_form('admin_database_maintenance_analyze', $tables, false);
+        view_render_admin_database_table_selection_form('admin_database_maintenance_analyze', $tables, false, $mutationsEnabled);
     } else {
         echo '<p class="muted">' . e(t('admin.features.advanced_database_maintenance.disabled_action', 'Advanced database mutations are disabled in Admin > Features. Inspection and dry-run planning remain available.')) . '</p>';
     }
     echo '</article>';
     echo '<article class="admin-storage-chart-card"><h3>' . e(t('admin.database_maintenance.optimize_title', 'Reclaim table space')) . '</h3><p class="muted">' . e(t('admin.database_maintenance.optimize_warning', 'The database engine may rebuild and lock selected tables. The displayed data_free value is an estimate, not a guaranteed reduction.')) . '</p>';
-    view_render_admin_database_table_selection_form('admin_database_maintenance_optimize', $tables, true);
+    view_render_admin_database_table_selection_form('admin_database_maintenance_optimize', $tables, true, $mutationsEnabled);
     echo '</article></div></section>';
 }
 
@@ -266,15 +267,15 @@ function view_render_admin_database_physical_operations_panel(array $tables): vo
  * @param string $route Route name.
  * @param array<string, array<string, mixed>> $tables Inventory tables.
  * @param bool $requiresConfirmation Whether OPTIMIZE confirmation is required.
+ * @param bool $mutationsEnabled Whether advanced database mutations are enabled.
  */
-function view_render_admin_database_table_selection_form(string $route, array $tables, bool $requiresConfirmation): void
+function view_render_admin_database_table_selection_form(string $route, array $tables, bool $requiresConfirmation, bool $mutationsEnabled): void
 {
-    $mutationsEnabled = \Gallery\Services\feature_capability_effective_enabled('advanced_database_maintenance');
     echo '<form method="post" action="' . e(url_for($route)) . '">';
     echo csrf_field();
     echo '<div class="admin-database-table-selection">';
     foreach ($tables as $tableName => $table) {
-        echo '<label><input type="checkbox" name="tables[]" value="' . e((string) $tableName) . '"> <code>' . e((string) $tableName) . '</code> <small>' . e(admin_dashboard_format_bytes((int) ($table['total_bytes'] ?? 0))) . ' · data_free ' . e(admin_dashboard_format_bytes((int) ($table['reclaimable_bytes_estimate'] ?? 0))) . '</small></label>';
+        echo '<label><input type="checkbox" name="tables[]" value="' . e((string) $tableName) . '"> <code>' . e((string) $tableName) . '</code> <small>' . e(format_bytes((int) ($table['total_bytes'] ?? 0))) . ' · data_free ' . e(format_bytes((int) ($table['reclaimable_bytes_estimate'] ?? 0))) . '</small></label>';
     }
     echo '</div>';
     if ($requiresConfirmation) {
@@ -302,15 +303,15 @@ function view_render_admin_database_inventory_panel(array $tables): void
     echo '<div class="admin-panel-heading"><div><p class="admin-kicker">' . e(t('admin.database_maintenance.inventory_kicker', 'Inventory')) . '</p><h2>' . e(t('admin.database_maintenance.inventory_title', 'Every discovered table')) . '</h2></div><p class="muted">' . e(t('admin.database_maintenance.inventory_hint', 'Open a table to inspect columns, keys, ownership, retention, duplicate handling, and physical-maintenance policy. Unknown tables remain protected.')) . '</p></div>';
 
     foreach ($tables as $tableName => $table) {
-        echo '<details class="admin-database-table-detail"><summary><code>' . e((string) $tableName) . '</code> <span>' . e((string) ($table['category'] ?? '')) . '</span><small>' . e(number_format((int) ($table['estimated_rows'] ?? 0))) . ' rows · ' . e(admin_dashboard_format_bytes((int) ($table['total_bytes'] ?? 0))) . '</small></summary>';
+        echo '<details class="admin-database-table-detail"><summary><code>' . e((string) $tableName) . '</code> <span>' . e((string) ($table['category'] ?? '')) . '</span><small>' . e(number_format((int) ($table['estimated_rows'] ?? 0))) . ' rows · ' . e(format_bytes((int) ($table['total_bytes'] ?? 0))) . '</small></summary>';
         echo '<div class="admin-storage-facts">';
         echo '<span><strong>' . e(t('admin.database_maintenance.engine', 'Engine')) . '</strong> ' . e((string) ($table['engine'] ?? '')) . '</span>';
         echo '<span><strong>' . e(t('admin.database_maintenance.charset', 'Charset')) . '</strong> ' . e((string) ($table['charset'] ?? '')) . '</span>';
         echo '<span><strong>' . e(t('admin.database_maintenance.collation', 'Collation')) . '</strong> ' . e((string) ($table['collation'] ?? '')) . '</span>';
         echo '<span><strong>' . e(t('admin.database_maintenance.auto_increment', 'Auto increment')) . '</strong> ' . e((string) ($table['auto_increment'] ?? '')) . '</span>';
-        echo '<span><strong>' . e(t('admin.database_maintenance.data_size', 'Data')) . '</strong> ' . e(admin_dashboard_format_bytes((int) ($table['data_bytes'] ?? 0))) . '</span>';
-        echo '<span><strong>' . e(t('admin.database_maintenance.index_size', 'Indexes')) . '</strong> ' . e(admin_dashboard_format_bytes((int) ($table['index_bytes'] ?? 0))) . '</span>';
-        echo '<span><strong>' . e(t('admin.database_maintenance.data_free', 'Engine data_free')) . '</strong> ' . e(admin_dashboard_format_bytes((int) ($table['reclaimable_bytes_estimate'] ?? 0))) . '</span>';
+        echo '<span><strong>' . e(t('admin.database_maintenance.data_size', 'Data')) . '</strong> ' . e(format_bytes((int) ($table['data_bytes'] ?? 0))) . '</span>';
+        echo '<span><strong>' . e(t('admin.database_maintenance.index_size', 'Indexes')) . '</strong> ' . e(format_bytes((int) ($table['index_bytes'] ?? 0))) . '</span>';
+        echo '<span><strong>' . e(t('admin.database_maintenance.data_free', 'Engine data_free')) . '</strong> ' . e(format_bytes((int) ($table['reclaimable_bytes_estimate'] ?? 0))) . '</span>';
         echo '<span><strong>' . e(t('admin.database_maintenance.created_at', 'Created')) . '</strong> ' . e((string) ($table['created_at'] ?? '')) . '</span>';
         echo '<span><strong>' . e(t('admin.database_maintenance.updated_at', 'Updated')) . '</strong> ' . e((string) ($table['updated_at'] ?? '')) . '</span>';
         echo '</div>';

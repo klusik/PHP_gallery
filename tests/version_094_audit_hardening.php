@@ -1,6 +1,21 @@
 <?php
 
 /**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ *
+ * File: tests/version_094_audit_hardening.php
+ *
+ * Author:
+ *   Rudolf Klusal
+ *
+ * License:
+ *   MIT License (see LICENSE file in repository)
+ *
+ * Notes:
+ *   - Keep comments and docstrings intact when modifying this file.
+ */
+/**
  * Focused regression checks for version 0.94 audit hardening.
  *
  * This CLI test intentionally avoids database access and destructive application

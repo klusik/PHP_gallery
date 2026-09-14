@@ -9,11 +9,12 @@
  *   Provides public gallery picture selection and bulk actions for logged-in users.
  *
  * Responsibilities:
- *   - Attach a visible file-manager-style selection model to public gallery photos
+ *   - Attach a visible file-manager-style selection model to public gallery photos and physical subgalleries
  *   - Support Shift-click range selection and Ctrl/Cmd-click item toggling
  *   - Move selected photos through the existing server-side move endpoint
  *   - Copy selected photos through the shared server-side copy endpoint
- *   - Create a child gallery from selected photos through the copy endpoint
+ *   - Delete mixed selections through the existing filesystem-backed mutation services
+ *   - Create a physical gallery from selected photos and subgallery trees at a chosen parent
  *   - Keep desktop drag-and-drop progressive, with toolbar actions as the fallback
  *   - Share selected browser-displayable photos through the native share sheet when available
  *
@@ -31,7 +32,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-06-06
+ *   2026-09-14
  */
 
 import { PUBLIC_PHOTO_MOVE_EVENT, highlightPublicPhotoDropTarget, publicPhotoDropTargetAtPoint, publicPhotoDropTargetGalleryId, publicPhotoDropTargets, publicPhotoImageIdsFromDataTransfer, setPublicPhotoDropTargetsActive, writePublicPhotoImageIdsToDataTransfer } from './public-photo-drop-actions.js?v=20260519-public-photo-drop-v1';
@@ -75,9 +76,13 @@ export function setupPictureManager() {
     }
     teardownPictureManager();
 
-    // cards stores the currently visible photo cards on this pagination page.
-    const cards = Array.from(document.querySelectorAll('[data-picture-manager-image]'))
+    // cards stores selectable direct photos and physical subgallery cards in document order.
+    const cards = Array.from(document.querySelectorAll('[data-picture-manager-image], [data-picture-manager-gallery]'))
         .filter((card) => card instanceof HTMLElement);
+    // imageCards stores the photo subset used by move, copy, share, and desktop drag behavior.
+    const imageCards = cards.filter((card) => card.hasAttribute('data-picture-manager-image'));
+    // galleryCards stores selected physical direct subgalleries used by delete and create-from-selection.
+    const galleryCards = cards.filter((card) => card.hasAttribute('data-picture-manager-gallery'));
     if (cards.length === 0) {
         activePictureManager = {
             toolbar,
@@ -93,8 +98,8 @@ export function setupPictureManager() {
     const eventController = new AbortController();
     const signalOptions = {signal: eventController.signal};
 
-    // selectedIds stores image IDs currently selected by the user.
-    const selectedIds = new Set();
+    // selectedKeys stores typed item keys so image and gallery IDs cannot collide.
+    const selectedKeys = new Set();
     // anchorCard stores the card where the latest contiguous range should begin.
     let anchorCard = null;
     // activeRequest stores whether a server mutation is currently in flight.
@@ -112,6 +117,8 @@ export function setupPictureManager() {
     const copyUrl = toolbar.dataset.copyUrl || '';
     // createUrl stores the JSON endpoint used for creating a child gallery copy.
     const createUrl = toolbar.dataset.createUrl || '';
+    // deleteUrl stores the JSON endpoint used for deleting selected physical items.
+    const deleteUrl = toolbar.dataset.deleteUrl || '';
     // downloadUrl stores the fallback endpoint that returns a ZIP of selected share candidates.
     const downloadUrl = toolbar.dataset.downloadUrl || '';
 
@@ -129,13 +136,17 @@ export function setupPictureManager() {
     const clearButton = toolbar.querySelector('[data-picture-manager-clear]');
     // shareButton stores the native device share-sheet action.
     const shareButton = toolbar.querySelector('[data-picture-manager-share]');
+    // deleteButton stores the destructive mixed-selection action.
+    const deleteButton = toolbar.querySelector('[data-picture-manager-delete]');
     // destinationInput stores the shared searchable gallery picker submitted value.
     const destinationInput = toolbar.querySelector('[data-picture-manager-destination]');
     // moveButton stores the explicit move action.
     const moveButton = toolbar.querySelector('[data-picture-manager-move]');
     // copyButton stores the explicit copy action.
     const copyButton = toolbar.querySelector('[data-picture-manager-copy]');
-    // newTitleInput stores the new child gallery title.
+    // newParentInput stores the committed physical parent gallery for create-from-selection.
+    const newParentInput = toolbar.querySelector('[data-picture-manager-new-parent]');
+    // newTitleInput stores the new physical gallery title.
     const newTitleInput = toolbar.querySelector('[data-picture-manager-new-title]');
     // newFolderInput stores the optional child gallery folder name.
     const newFolderInput = toolbar.querySelector('[data-picture-manager-new-folder]');
@@ -163,7 +174,7 @@ export function setupPictureManager() {
      * Expands the manager when a selection makes bulk actions relevant.
      */
     function expandForSelection() {
-        if (selectedIds.size > 0) {
+        if (selectedKeys.size > 0) {
             setPanelExpanded(true);
         }
     }
@@ -179,6 +190,34 @@ export function setupPictureManager() {
             return '';
         }
         return card.dataset.pictureManagerImageId || '';
+    }
+
+        /**
+     * Returns a stable physical gallery ID from a visible subgallery card.
+     *
+     * @param {Element|null} card Card element rendered for one physical gallery.
+     * @return {string} Gallery ID or an empty string when unavailable.
+     */
+    function cardGalleryId(card) {
+        if (!(card instanceof HTMLElement)) {
+            return '';
+        }
+        return card.dataset.pictureManagerGalleryId || '';
+    }
+
+        /**
+     * Returns the typed key used by the mixed selection set.
+     *
+     * @param {Element|null} card Selectable photo or physical gallery card.
+     * @return {string} Typed selection key or an empty string.
+     */
+    function cardSelectionKey(card) {
+        const imageId = cardImageId(card);
+        if (imageId !== '') {
+            return `image:${imageId}`;
+        }
+        const galleryId = cardGalleryId(card);
+        return galleryId !== '' ? `gallery:${galleryId}` : '';
     }
 
         /**
@@ -214,18 +253,29 @@ export function setupPictureManager() {
      * @return {string[]} Selected image IDs in visual order.
      */
     function selectedIdsInPageOrder() {
-        return cards
+        return imageCards
             .map((card) => cardImageId(card))
-            .filter((imageId) => selectedIds.has(imageId));
+            .filter((imageId) => imageId !== '' && selectedKeys.has(`image:${imageId}`));
     }
 
         /**
-     * Returns selected cards in the same order as the visible gallery page.
+     * Returns selected physical gallery IDs in visible page order.
+     *
+     * @return {string[]} Selected gallery IDs in visual order.
+     */
+    function selectedGalleryIdsInPageOrder() {
+        return galleryCards
+            .map((card) => cardGalleryId(card))
+            .filter((galleryId) => galleryId !== '' && selectedKeys.has(`gallery:${galleryId}`));
+    }
+
+        /**
+     * Returns selected photo cards in the same order as the visible gallery page.
      *
      * @return {HTMLElement[]} Selected visible image cards.
      */
     function selectedCardsInPageOrder() {
-        return cards.filter((card) => selectedIds.has(cardImageId(card)));
+        return imageCards.filter((card) => selectedKeys.has(cardSelectionKey(card)));
     }
 
         /**
@@ -234,17 +284,19 @@ export function setupPictureManager() {
      * @param {HTMLElement} card Visible image card.
      */
     function syncCardState(card) {
-        const imageId = cardImageId(card);
-        const isSelected = imageId !== '' && selectedIds.has(imageId);
+        const selectionKey = cardSelectionKey(card);
+        const isSelected = selectionKey !== '' && selectedKeys.has(selectionKey);
+        const isGallery = cardGalleryId(card) !== '';
         const button = card.querySelector('[data-picture-manager-select]');
         card.classList.toggle('is-picture-manager-selected', isSelected);
         card.setAttribute('aria-selected', isSelected ? 'true' : 'false');
-        // Every managed photo remains draggable so a single non-selected photo
-        // can be dropped into a subgallery without requiring a separate select step.
-        card.draggable = true;
+        // Only managed photos are native drag sources. Physical gallery cards remain drop targets.
+        card.draggable = !isGallery;
         if (button instanceof HTMLButtonElement) {
             button.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
-            button.title = isSelected ? i18n('picture_manager.deselect_photo', 'Deselect photo') : i18n('picture_manager.select_photo', 'Select photo');
+            button.title = isGallery
+                ? (isSelected ? i18n('picture_manager.deselect_gallery', 'Deselect gallery') : i18n('picture_manager.select_gallery', 'Select gallery'))
+                : (isSelected ? i18n('picture_manager.deselect_photo', 'Deselect photo') : i18n('picture_manager.select_photo', 'Select photo'));
         }
     }
 
@@ -253,9 +305,9 @@ export function setupPictureManager() {
      */
     function syncSelectionState() {
         cards.forEach(syncCardState);
-        const count = selectedIds.size;
+        const count = selectedKeys.size;
         if (countLabel instanceof HTMLElement) {
-            countLabel.textContent = count === 0 ? i18n('picture_manager.no_photos_selected', 'No photos selected.') : (count === 1 ? i18n('picture_manager.one_photo_selected', '1 photo selected.') : i18n('picture_manager.many_photos_selected', '{count} photos selected.', {count}));
+            countLabel.textContent = count === 0 ? i18n('picture_manager.no_items_selected', 'No items selected.') : (count === 1 ? i18n('picture_manager.one_item_selected', '1 item selected.') : i18n('picture_manager.many_items_selected', '{count} items selected.', {count}));
         }
         if (clearButton instanceof HTMLButtonElement) {
             clearButton.disabled = count === 0;
@@ -268,20 +320,26 @@ export function setupPictureManager() {
      * Enables or disables mutation buttons based on current form state.
      */
     function updateActionButtons() {
-        const hasSelection = selectedIds.size > 0;
+        const hasSelection = selectedKeys.size > 0;
+        const hasSelectedGalleries = selectedGalleryIdsInPageOrder().length > 0;
+        const hasSelectedImages = selectedIdsInPageOrder().length > 0;
         const hasDestination = destinationInput instanceof HTMLInputElement && destinationInput.value !== '';
+        const hasNewParent = newParentInput instanceof HTMLInputElement && newParentInput.value !== '';
         const hasTitle = newTitleInput instanceof HTMLInputElement && newTitleInput.value.trim() !== '';
         if (moveButton instanceof HTMLButtonElement) {
-            moveButton.disabled = activeRequest || !hasSelection || !hasDestination;
+            moveButton.disabled = activeRequest || !hasSelectedImages || hasSelectedGalleries || !hasDestination;
         }
         if (copyButton instanceof HTMLButtonElement) {
-            copyButton.disabled = activeRequest || !hasSelection || !hasDestination;
+            copyButton.disabled = activeRequest || !hasSelectedImages || hasSelectedGalleries || !hasDestination;
         }
         if (createButton instanceof HTMLButtonElement) {
-            createButton.disabled = activeRequest || !hasSelection || !hasTitle;
+            createButton.disabled = activeRequest || !hasSelection || !hasTitle || !hasNewParent;
         }
         if (shareButton instanceof HTMLButtonElement) {
-            shareButton.disabled = activeRequest || !hasSelection;
+            shareButton.disabled = activeRequest || !hasSelectedImages || hasSelectedGalleries;
+        }
+        if (deleteButton instanceof HTMLButtonElement) {
+            deleteButton.disabled = activeRequest || !hasSelection;
         }
         if (selectAllButton instanceof HTMLButtonElement) {
             selectAllButton.disabled = activeRequest;
@@ -298,6 +356,9 @@ export function setupPictureManager() {
         if (destinationInput instanceof HTMLInputElement) {
             destinationInput.disabled = isActive;
         }
+        if (newParentInput instanceof HTMLInputElement) {
+            newParentInput.disabled = isActive;
+        }
         if (newTitleInput instanceof HTMLInputElement) {
             newTitleInput.disabled = isActive;
         }
@@ -305,7 +366,7 @@ export function setupPictureManager() {
             newFolderInput.disabled = isActive;
         }
         if (clearButton instanceof HTMLButtonElement) {
-            clearButton.disabled = isActive || selectedIds.size === 0;
+            clearButton.disabled = isActive || selectedKeys.size === 0;
         }
         updateActionButtons();
     }
@@ -499,11 +560,11 @@ export function setupPictureManager() {
      * @param {HTMLElement|null} nextAnchor Card that becomes the new range anchor.
      */
     function replaceSelection(nextCards, nextAnchor) {
-        selectedIds.clear();
+        selectedKeys.clear();
         nextCards.forEach((card) => {
-            const imageId = cardImageId(card);
-            if (imageId !== '') {
-                selectedIds.add(imageId);
+            const selectionKey = cardSelectionKey(card);
+            if (selectionKey !== '') {
+                selectedKeys.add(selectionKey);
             }
         });
         anchorCard = nextAnchor;
@@ -515,14 +576,14 @@ export function setupPictureManager() {
      */
     function selectAllVisible() {
         replaceSelection(cards, cards[0] || null);
-        setStatus(i18n('picture_manager.selected_all_visible', 'Selected all {count} visible photo(s).', {count: cards.length}), 'ok');
+        setStatus(i18n('picture_manager.selected_all_visible', 'Selected all {count} visible item(s).', {count: cards.length}), 'ok');
     }
 
         /**
      * Clears every visible selected photo.
      */
     function clearSelection() {
-        selectedIds.clear();
+        selectedKeys.clear();
         anchorCard = null;
         syncSelectionState();
         setPanelExpanded(false);
@@ -535,14 +596,14 @@ export function setupPictureManager() {
      * @param {HTMLElement} card Card to toggle.
      */
     function toggleCard(card) {
-        const imageId = cardImageId(card);
-        if (imageId === '') {
+        const selectionKey = cardSelectionKey(card);
+        if (selectionKey === '') {
             return;
         }
-        if (selectedIds.has(imageId)) {
-            selectedIds.delete(imageId);
+        if (selectedKeys.has(selectionKey)) {
+            selectedKeys.delete(selectionKey);
         } else {
-            selectedIds.add(imageId);
+            selectedKeys.add(selectionKey);
         }
         anchorCard = card;
         syncSelectionState();
@@ -567,9 +628,9 @@ export function setupPictureManager() {
         const first = Math.min(anchorIndex, targetIndex);
         const last = Math.max(anchorIndex, targetIndex);
         cards.slice(first, last + 1).forEach((card) => {
-            const imageId = cardImageId(card);
-            if (imageId !== '') {
-                selectedIds.add(imageId);
+            const selectionKey = cardSelectionKey(card);
+            if (selectionKey !== '') {
+                selectedKeys.add(selectionKey);
             }
         });
         syncSelectionState();
@@ -582,7 +643,7 @@ export function setupPictureManager() {
      */
     function handleSelectButtonClick(event) {
         const button = event.currentTarget;
-        const card = button instanceof HTMLElement ? button.closest('[data-picture-manager-image]') : null;
+        const card = button instanceof HTMLElement ? button.closest('[data-picture-manager-image], [data-picture-manager-gallery]') : null;
         if (!(card instanceof HTMLElement)) {
             return;
         }
@@ -633,7 +694,7 @@ export function setupPictureManager() {
      * @param {PointerEvent} event Pointer event from the document.
      */
     function handleDocumentPointerDown(event) {
-        if (selectedIds.size > 0 || toolbar.dataset.pictureManagerExpanded !== '1') {
+        if (selectedKeys.size > 0 || toolbar.dataset.pictureManagerExpanded !== '1') {
             return;
         }
         if (!(event.target instanceof Node) || toolbar.contains(event.target)) {
@@ -649,10 +710,11 @@ export function setupPictureManager() {
      * @param {FormData} formData Request body to populate.
      * @param {string[]} imageIds Selected image IDs.
      */
-    function appendBaseFormData(formData, imageIds) {
+    function appendBaseFormData(formData, imageIds, galleryIds = []) {
         formData.append('csrf_token', csrfToken);
         formData.append('source_gallery_id', sourceGalleryId);
         imageIds.forEach((imageId) => formData.append('image_ids[]', imageId));
+        galleryIds.forEach((galleryId) => formData.append('gallery_ids[]', galleryId));
     }
 
         /**
@@ -710,6 +772,10 @@ export function setupPictureManager() {
             setStatus(i18n('picture_manager.select_photo_first', 'Select at least one photo first.'), 'error');
             return;
         }
+        if (!Array.isArray(explicitImageIds) && selectedGalleryIdsInPageOrder().length > 0) {
+            setStatus(i18n('picture_manager.move_copy_photos_only', 'Move and copy currently apply only to selected photos. Clear selected galleries first.'), 'error');
+            return;
+        }
         if (!destinationGalleryId) {
             setStatus(i18n('picture_manager.choose_destination_first', 'Choose a destination gallery first.'), 'error');
             return;
@@ -749,6 +815,10 @@ export function setupPictureManager() {
             setStatus(i18n('picture_manager.select_photo_first', 'Select at least one photo first.'), 'error');
             return;
         }
+        if (selectedGalleryIdsInPageOrder().length > 0) {
+            setStatus(i18n('picture_manager.move_copy_photos_only', 'Move and copy currently apply only to selected photos. Clear selected galleries first.'), 'error');
+            return;
+        }
         if (!destinationGalleryId) {
             setStatus(i18n('picture_manager.choose_destination_first', 'Choose a destination gallery first.'), 'error');
             return;
@@ -779,13 +849,20 @@ export function setupPictureManager() {
      */
     async function createGalleryFromSelection() {
         const imageIds = selectedIdsInPageOrder();
+        const galleryIds = selectedGalleryIdsInPageOrder();
+        const parentGalleryId = newParentInput instanceof HTMLInputElement ? newParentInput.value : '';
         const title = newTitleInput instanceof HTMLInputElement ? newTitleInput.value.trim() : '';
         const folderName = newFolderInput instanceof HTMLInputElement ? newFolderInput.value.trim() : '';
+        const selectedCount = imageIds.length + galleryIds.length;
         if (activeRequest) {
             return;
         }
-        if (imageIds.length === 0) {
-            setStatus(i18n('picture_manager.select_photo_first', 'Select at least one photo first.'), 'error');
+        if (selectedCount === 0) {
+            setStatus(i18n('picture_manager.select_item_first', 'Select at least one photo or physical gallery first.'), 'error');
+            return;
+        }
+        if (!parentGalleryId) {
+            setStatus(i18n('picture_manager.choose_parent_first', 'Choose the parent gallery for the new gallery first.'), 'error');
             return;
         }
         if (title === '') {
@@ -798,18 +875,64 @@ export function setupPictureManager() {
         }
 
         const formData = new FormData();
-        appendBaseFormData(formData, imageIds);
+        appendBaseFormData(formData, imageIds, galleryIds);
+        formData.append('new_gallery_parent_id', parentGalleryId);
         formData.append('new_gallery_title', title);
         formData.append('new_gallery_folder_name', folderName);
 
         setRequestActive(true);
-        setStatus(i18n('picture_manager.copying_into_new_gallery', 'Copying {count} selected photo(s) into the new gallery...', {count: imageIds.length}), 'working');
+        setStatus(i18n('picture_manager.copying_items_into_new_gallery', 'Copying {count} selected item(s) into the new physical gallery...', {count: selectedCount}), 'working');
         try {
             const payload = await postManagerAction(createUrl, formData);
-            setStatus(payload.message || i18n('picture_manager.create_complete', 'Gallery created from selected photos.'), 'ok');
+            setStatus(payload.message || i18n('picture_manager.create_complete', 'Physical gallery created from the selection.'), 'ok');
             reloadAfterSuccess(payload);
         } catch (error) {
             setStatus(error instanceof Error ? error.message : i18n('picture_manager.create_failed', 'Create gallery failed.'), 'error');
+            setRequestActive(false);
+        }
+    }
+
+        /**
+     * Deletes the current mixed selection after one explicit destructive confirmation.
+     *
+     * Physical galleries follow the configured server-side trash policy. The browser
+     * intentionally does not try to predict whether trash or permanent deletion is active.
+     */
+    async function deleteSelectedItems() {
+        const imageIds = selectedIdsInPageOrder();
+        const galleryIds = selectedGalleryIdsInPageOrder();
+        const selectedCount = imageIds.length + galleryIds.length;
+        if (activeRequest) {
+            return;
+        }
+        if (selectedCount === 0) {
+            setStatus(i18n('picture_manager.select_item_first', 'Select at least one photo or physical gallery first.'), 'error');
+            return;
+        }
+        if (!deleteUrl) {
+            setStatus(i18n('picture_manager.delete_endpoint_missing', 'Delete endpoint is not configured.'), 'error');
+            return;
+        }
+        const confirmation = i18n(
+            'picture_manager.delete_confirm',
+            'Delete {photos} selected photo(s) and {galleries} selected physical gallery tree(s)? Gallery trash policy will be applied when enabled.',
+            {photos: imageIds.length, galleries: galleryIds.length},
+        );
+        if (!window.confirm(confirmation)) {
+            setStatus(i18n('picture_manager.delete_cancelled', 'Delete cancelled.'), 'idle');
+            return;
+        }
+
+        const formData = new FormData();
+        appendBaseFormData(formData, imageIds, galleryIds);
+        setRequestActive(true);
+        setStatus(i18n('picture_manager.deleting_selected', 'Deleting {count} selected item(s)...', {count: selectedCount}), 'working');
+        try {
+            const payload = await postManagerAction(deleteUrl, formData);
+            setStatus(payload.message || i18n('picture_manager.delete_complete', 'Selected items were deleted.'), 'ok');
+            reloadAfterSuccess(payload);
+        } catch (error) {
+            setStatus(error instanceof Error ? error.message : i18n('picture_manager.delete_failed', 'Delete selection failed.'), 'error');
             setRequestActive(false);
         }
     }
@@ -874,7 +997,7 @@ export function setupPictureManager() {
             event.preventDefault();
             return;
         }
-        if (!selectedIds.has(imageId)) {
+        if (!selectedKeys.has(`image:${imageId}`)) {
             replaceSelection([card], card);
         }
         dragSelection = selectedIdsInPageOrder();
@@ -896,7 +1019,7 @@ export function setupPictureManager() {
         document.body.classList.remove('picture-manager-drag-active');
         setDropTargetsActive(false);
         if (!activeRequest) {
-            setStatus(selectedIds.size > 0 ? i18n('picture_manager.selection_ready', 'Selection ready.') : i18n('picture_manager.ready', 'Ready.'), 'idle');
+            setStatus(selectedKeys.size > 0 ? i18n('picture_manager.selection_ready', 'Selection ready.') : i18n('picture_manager.ready', 'Ready.'), 'idle');
         }
     }
 
@@ -1017,7 +1140,7 @@ export function setupPictureManager() {
      * @param {KeyboardEvent} event Keyboard event from the document.
      */
     function handleDocumentKeyDown(event) {
-        if (event.key === 'Escape' && selectedIds.size === 0 && toolbar.dataset.pictureManagerExpanded === '1') {
+        if (event.key === 'Escape' && selectedKeys.size === 0 && toolbar.dataset.pictureManagerExpanded === '1') {
             setPanelExpanded(false);
             setStatus(i18n('picture_manager.ready', 'Ready.'), 'idle');
             return;
@@ -1039,6 +1162,8 @@ export function setupPictureManager() {
             selectButton.addEventListener('click', handleSelectButtonClick, signalOptions);
         }
         card.addEventListener('click', handleCardClick, signalOptions);
+    });
+    imageCards.forEach((card) => {
         card.addEventListener('dragstart', handleDragStart, signalOptions);
         card.addEventListener('dragend', handleDragEnd, signalOptions);
     });
@@ -1066,6 +1191,11 @@ export function setupPictureManager() {
             shareSelectedPhotos();
         }, signalOptions);
     }
+    if (deleteButton instanceof HTMLButtonElement) {
+        deleteButton.addEventListener('click', () => {
+            deleteSelectedItems();
+        }, signalOptions);
+    }
     if (destinationInput instanceof HTMLInputElement) {
         destinationInput.addEventListener('change', updateActionButtons, signalOptions);
         destinationInput.addEventListener('input', updateActionButtons, signalOptions);
@@ -1081,6 +1211,10 @@ export function setupPictureManager() {
             const destinationGalleryId = destinationInput instanceof HTMLInputElement ? destinationInput.value : '';
             copySelectedToGallery(destinationGalleryId);
         }, signalOptions);
+    }
+    if (newParentInput instanceof HTMLInputElement) {
+        newParentInput.addEventListener('change', updateActionButtons, signalOptions);
+        newParentInput.addEventListener('input', updateActionButtons, signalOptions);
     }
     if (newTitleInput instanceof HTMLInputElement) {
         newTitleInput.addEventListener('input', updateActionButtons, signalOptions);

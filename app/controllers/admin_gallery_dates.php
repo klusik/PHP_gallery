@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-09-02
+ *   2026-09-13
  */
 
 declare(strict_types=1);
@@ -46,9 +46,7 @@ use function Gallery\Core\admin_mutation_postcondition;
 use function Gallery\Core\admin_mutation_public_gallery_context;
 use function Gallery\Core\admin_mutation_success_envelope;
 use function Gallery\Core\admin_wants_json;
-use function Gallery\Core\csrf_field;
 use function Gallery\Core\current_user;
-use function Gallery\Core\e;
 use function Gallery\Core\flash_message;
 use function Gallery\Core\gallery_public_url;
 use function Gallery\Core\redirect_to;
@@ -67,6 +65,8 @@ use function Gallery\Services\gallery_date_range_storage_label;
 use function Gallery\Services\gallery_date_save_range;
 use function Gallery\Services\t;
 use function Gallery\Views\view_render_admin_gallery_date_exif_suggestion;
+use function Gallery\Views\view_render_admin_gallery_dates_page;
+use function Gallery\Views\view_render_admin_gallery_dates_row;
 use function Gallery\Services\admin_log_event;
 
 
@@ -148,7 +148,7 @@ function admin_gallery_date_suggestion_panel_html(array $gallery): string
     }
 
     ob_start();
-    view_render_admin_gallery_date_exif_suggestion($gallery);
+    view_render_admin_gallery_date_exif_suggestion($gallery, admin_gallery_form_view_model('gallery', $gallery));
     return (string) ob_get_clean();
 }
 
@@ -373,6 +373,17 @@ function admin_gallery_dates_apply_selected(array $post): array
  */
 function admin_gallery_dates_render_row(array $row): void
 {
+    view_render_admin_gallery_dates_row(admin_gallery_dates_row_view_model($row));
+}
+
+/**
+ * Prepare one editable EXIF date suggestion row for the presentation layer.
+ *
+ * @param array $row Row data.
+ * @return array<string, mixed> Prepared row presentation model.
+ */
+function admin_gallery_dates_row_view_model(array $row): array
+{
     $galleryId = (int) ($row['id'] ?? 0);
     $suggestedStart = (string) ($row['suggested_start'] ?? '');
     $suggestedEnd = (string) ($row['suggested_end'] ?? '');
@@ -383,19 +394,26 @@ function admin_gallery_dates_render_row(array $row): void
     // $checked stores the safe default: approve empty galleries, leave existing manual dates untouched unless selected.
     $checked = !$matchesCurrent && !$hasCurrentRange;
 
-    echo '<tr' . ($matchesCurrent ? ' class="is-muted-row"' : '') . '>';
-    echo '<td><label class="admin-checkbox-row"><input type="checkbox" name="apply_gallery_ids[]" value="' . $galleryId . '"' . ($checked ? ' checked' : '') . '> <span>' . e($matchesCurrent ? t('admin.gallery_dates.status_current', 'current') : t('admin.gallery_dates.apply', 'Apply')) . '</span></label></td>';
-    echo '<td><strong><a href="' . e(admin_edit_gallery_tab_url($galleryId, 'admin-edit-identity')) . '">' . e((string) ($row['title'] ?? ('#' . $galleryId))) . '</a></strong><small>' . e((string) ($row['folder_path'] ?? '')) . '</small></td>';
-    echo '<td>' . ($currentLabel !== '' ? e($currentLabel) : '<span class="muted">' . e(t('admin.gallery_dates.no_current_date', 'No manual date')) . '</span>') . '</td>';
-    echo '<td><strong>' . e($suggestedLabel) . '</strong><small>' . e(t('admin.gallery_dates.suggestion_source_counts', '{images} EXIF photo(s), {galleries} gallery node(s)', [
-        'images' => (string) (int) ($row['exif_image_count'] ?? 0),
-        'galleries' => (string) (int) ($row['source_gallery_count'] ?? 0),
-    ])) . '</small></td>';
-    echo '<td><div class="admin-date-range-inputs admin-date-suggestion-inputs">';
-    echo '<label><span>' . e(t('admin.gallery_editor.gallery_date_from', 'From')) . '</span><input type="date" name="gallery_date[' . $galleryId . ']" value="' . e($suggestedStart) . '"></label>';
-    echo '<label><span>' . e(t('admin.gallery_editor.gallery_date_to', 'To')) . '</span><input type="date" name="gallery_date_end[' . $galleryId . ']" value="' . e($suggestedEnd) . '"></label>';
-    echo '</div></td>';
-    echo '</tr>';
+    return [
+        'gallery_id' => $galleryId,
+        'suggested_start' => $suggestedStart,
+        'suggested_end' => $suggestedEnd,
+        'current_label' => $currentLabel,
+        'suggested_label' => $suggestedLabel,
+        'muted' => $matchesCurrent,
+        'checked' => $checked,
+        'apply_label' => $matchesCurrent ? t('admin.gallery_dates.status_current', 'current') : t('admin.gallery_dates.apply', 'Apply'),
+        'edit_url' => admin_edit_gallery_tab_url($galleryId, 'admin-edit-identity'),
+        'title' => (string) ($row['title'] ?? ('#' . $galleryId)),
+        'folder_path' => (string) ($row['folder_path'] ?? ''),
+        'no_current_label' => t('admin.gallery_dates.no_current_date', 'No manual date'),
+        'source_counts_label' => t('admin.gallery_dates.suggestion_source_counts', '{images} EXIF photo(s), {galleries} gallery node(s)', [
+            'images' => (string) (int) ($row['exif_image_count'] ?? 0),
+            'galleries' => (string) (int) ($row['source_gallery_count'] ?? 0),
+        ]),
+        'from_label' => t('admin.gallery_editor.gallery_date_from', 'From'),
+        'to_label' => t('admin.gallery_editor.gallery_date_to', 'To'),
+    ];
 }
 
 /**
@@ -437,54 +455,53 @@ function cms_admin_gallery_dates(): void
     }
 
     $rows = gallery_date_exif_suggestion_rows($scopeGalleryId > 0 ? $scopeGalleryId : null);
-    render_header(t('admin.gallery_dates.page_title', 'Gallery dates'));
-    $notice = (string) flash_message('admin_notice');
-    if ($notice !== '') {
-        echo '<div class="notice">' . e($notice) . '</div>';
-    }
-
     $pageDescription = $scopeGallery
         ? t('admin.gallery_dates.scoped_description', 'Review EXIF-derived date range suggestions for {gallery} and its subgalleries.', ['gallery' => (string) ($scopeGallery['title'] ?? '')])
         : t('admin.gallery_dates.description', 'Review EXIF-derived date range suggestions. Each suggestion uses scanned original photo metadata from the gallery and all of its subgalleries.');
-    echo '<section class="hero admin-dashboard-hero"><div><p class="admin-kicker">' . e(t('admin.gallery_dates.kicker', 'Gallery maintenance')) . '</p><h1>' . e($scopeGallery ? t('admin.gallery_dates.scoped_title', 'Gallery dates for {gallery}', ['gallery' => (string) ($scopeGallery['title'] ?? '')]) : t('admin.gallery_dates.title', 'Gallery dates')) . '</h1><p class="muted">' . e($pageDescription) . '</p></div><div class="admin-hero-actions">';
+    $heroActions = [];
     if ($scopeGallery) {
-        echo '<a class="button secondary" href="' . e(admin_edit_gallery_tab_url((int) $scopeGallery['id'], 'admin-edit-identity')) . '">' . e(t('admin.gallery_dates.back_to_gallery', 'Back to gallery')) . '</a>';
-        echo '<a class="button secondary" href="' . e(url_for('admin_gallery_dates')) . '">' . e(t('admin.gallery_dates.review_all', 'Review all galleries')) . '</a>';
+        $heroActions[] = [
+            'url' => admin_edit_gallery_tab_url((int) $scopeGallery['id'], 'admin-edit-identity'),
+            'label' => t('admin.gallery_dates.back_to_gallery', 'Back to gallery'),
+        ];
+        $heroActions[] = [
+            'url' => url_for('admin_gallery_dates'),
+            'label' => t('admin.gallery_dates.review_all', 'Review all galleries'),
+        ];
     }
-    echo '<a class="button secondary" href="' . e(url_for('admin')) . '">' . e(t('admin.gallery_dates.back_to_admin', 'Back to Admin')) . '</a></div></section>';
-
-    if (!gallery_date_exif_suggestions_schema_ready()) {
-        echo '<section class="panel"><p class="muted">' . e(t('admin.gallery_dates.exif_unavailable', 'EXIF capture-date suggestions require the EXIF/GPS image metadata migration and scanned image rows.')) . '</p></section>';
-        render_footer();
-        return;
-    }
-
-    if (!$rows) {
-        echo '<section class="panel"><h2>' . e(t('admin.gallery_dates.no_suggestions_title', 'No EXIF dates found')) . '</h2><p class="muted">' . e(t('admin.gallery_dates.no_suggestions_hint', 'No scanned original photo currently has an EXIF capture date. Run Scan/import images for galleries that were imported before EXIF extraction existed.')) . '</p></section>';
-        render_footer();
-        return;
-    }
-
+    $heroActions[] = ['url' => url_for('admin'), 'label' => t('admin.gallery_dates.back_to_admin', 'Back to Admin')];
     $formParams = $scopeGalleryId > 0 ? ['gallery_id' => $scopeGalleryId] : [];
-    echo '<section class="panel admin-gallery-date-suggestions"><form method="post" action="' . e(url_for('admin_gallery_dates', $formParams)) . '">' . csrf_field();
-    if ($scopeGalleryId > 0) {
-        echo '<input type="hidden" name="scope_gallery_id" value="' . (int) $scopeGalleryId . '">';
-    }
-    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.gallery_dates.suggestions_kicker', 'EXIF suggestions')) . '</p><h2>' . e(t('admin.gallery_dates.suggestions_title', 'Approve, edit, or ignore suggestions')) . '</h2></div><p class="muted">' . e(t('admin.gallery_dates.suggestions_help', 'Checked rows will be saved. Unchecked rows are ignored. Date inputs are editable before applying. Existing manual dates are not checked by default.')) . '</p></div>';
-    echo '<div class="admin-table-scroll"><table class="admin-table"><thead><tr>';
-    echo '<th>' . e(t('admin.gallery_dates.column_apply', 'Apply')) . '</th>';
-    echo '<th>' . e(t('admin.gallery_dates.column_gallery', 'Gallery')) . '</th>';
-    echo '<th>' . e(t('admin.gallery_dates.column_current', 'Current')) . '</th>';
-    echo '<th>' . e(t('admin.gallery_dates.column_suggested', 'Suggested')) . '</th>';
-    echo '<th>' . e(t('admin.gallery_dates.column_edit', 'Edit before saving')) . '</th>';
-    echo '</tr></thead><tbody>';
-    foreach ($rows as $row) {
-        admin_gallery_dates_render_row($row);
-    }
-    echo '</tbody></table></div>';
-    $cancelUrl = $scopeGallery ? admin_edit_gallery_tab_url((int) $scopeGallery['id'], 'admin-edit-identity') : url_for('admin');
-    echo '<div class="admin-form-actions"><button type="submit">' . e(t('admin.gallery_dates.apply_selected', 'Apply selected date ranges')) . '</button><a class="button secondary" href="' . e($cancelUrl) . '">' . e(t('admin.gallery_dates.cancel', 'Cancel')) . '</a></div>';
-    echo '</form></section>';
+    $viewModel = [
+        'notice' => (string) flash_message('admin_notice'),
+        'kicker' => t('admin.gallery_dates.kicker', 'Gallery maintenance'),
+        'title' => $scopeGallery
+            ? t('admin.gallery_dates.scoped_title', 'Gallery dates for {gallery}', ['gallery' => (string) ($scopeGallery['title'] ?? '')])
+            : t('admin.gallery_dates.title', 'Gallery dates'),
+        'description' => $pageDescription,
+        'hero_actions' => $heroActions,
+        'exif_schema_ready' => gallery_date_exif_suggestions_schema_ready(),
+        'exif_unavailable_label' => t('admin.gallery_dates.exif_unavailable', 'EXIF capture-date suggestions require the EXIF/GPS image metadata migration and scanned image rows.'),
+        'rows' => array_map('Gallery\Controllers\admin_gallery_dates_row_view_model', $rows),
+        'empty_title' => t('admin.gallery_dates.no_suggestions_title', 'No EXIF dates found'),
+        'empty_hint' => t('admin.gallery_dates.no_suggestions_hint', 'No scanned original photo currently has an EXIF capture date. Run Scan/import images for galleries that were imported before EXIF extraction existed.'),
+        'form_action' => url_for('admin_gallery_dates', $formParams),
+        'scope_gallery_id' => $scopeGalleryId,
+        'suggestions_kicker' => t('admin.gallery_dates.suggestions_kicker', 'EXIF suggestions'),
+        'suggestions_title' => t('admin.gallery_dates.suggestions_title', 'Approve, edit, or ignore suggestions'),
+        'suggestions_help' => t('admin.gallery_dates.suggestions_help', 'Checked rows will be saved. Unchecked rows are ignored. Date inputs are editable before applying. Existing manual dates are not checked by default.'),
+        'column_labels' => [
+            t('admin.gallery_dates.column_apply', 'Apply'),
+            t('admin.gallery_dates.column_gallery', 'Gallery'),
+            t('admin.gallery_dates.column_current', 'Current'),
+            t('admin.gallery_dates.column_suggested', 'Suggested'),
+            t('admin.gallery_dates.column_edit', 'Edit before saving'),
+        ],
+        'cancel_url' => $scopeGallery ? admin_edit_gallery_tab_url((int) $scopeGallery['id'], 'admin-edit-identity') : url_for('admin'),
+        'apply_selected_label' => t('admin.gallery_dates.apply_selected', 'Apply selected date ranges'),
+        'cancel_label' => t('admin.gallery_dates.cancel', 'Cancel'),
+    ];
 
+    render_header(t('admin.gallery_dates.page_title', 'Gallery dates'));
+    view_render_admin_gallery_dates_page($viewModel);
     render_footer();
 }

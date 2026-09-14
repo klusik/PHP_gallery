@@ -44,8 +44,25 @@ use InvalidArgumentException;
 use RuntimeException;
 use Throwable;
 use function Gallery\Core\cms_config;
-use function Gallery\Core\db;
 use function Gallery\Core\now_sql;
+use function Gallery\Core\viewer_identity_session_get;
+use function Gallery\Core\viewer_identity_session_set;
+use function Gallery\Core\viewer_identity_session_unset;
+use function Gallery\Core\viewer_identity_session_regenerate;
+use function Gallery\Core\viewer_identity_request_user_agent;
+use function Gallery\Models\viewer_account_model_transaction;
+use function Gallery\Models\viewer_account_model_capacity_lock;
+use function Gallery\Models\viewer_account_model_capacity_recount_locked;
+use function Gallery\Models\viewer_account_model_session_cleanup;
+use function Gallery\Models\viewer_account_model_session_enforce_limit;
+use function Gallery\Models\viewer_account_model_lock_auth;
+use function Gallery\Models\viewer_account_model_session_insert;
+use function Gallery\Models\viewer_account_model_session_principal;
+use function Gallery\Models\viewer_account_model_session_revoke;
+use function Gallery\Models\viewer_account_model_invalidate_authentication;
+use function Gallery\Models\viewer_account_model_lock;
+use function Gallery\Models\viewer_account_model_update_status;
+use function Gallery\Models\viewer_account_model_revoke_transition_authority;
 
 const VIEWER_ACCOUNT_STATUS_PENDING_VERIFICATION = 'pending_verification';
 const VIEWER_ACCOUNT_STATUS_ACTIVE = 'active';
@@ -250,24 +267,12 @@ function viewer_accounts_set_admin_registration_mode(string $mode): int
         throw new RuntimeException('Viewer registration lifecycle service is unavailable.');
     }
 
-    $pdo = db();
-    if ($pdo->inTransaction()) {
-        throw new RuntimeException('Viewer registration mode transitions require an independent transaction boundary.');
-    }
-
     if ($normalized === 'open') {
         // Retire stale open-origin authority while the restrictive mode is still effective.
-        $pdo->beginTransaction();
-        try {
+        $cancelled = viewer_account_model_transaction(static function (): int {
             viewer_registration_capacity_lock();
-            $cancelled = viewer_registration_cancel_open_origin_staging();
-            $pdo->commit();
-        } catch (Throwable $exception) {
-            if ($pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
-            throw $exception;
-        }
+            return viewer_registration_cancel_open_origin_staging();
+        });
 
         // Open becomes effective only after durable stale-authority cleanup succeeded.
         set_app_setting(VIEWER_ACCOUNT_ADMIN_MODE_SETTING_KEY, $normalized);
@@ -277,15 +282,12 @@ function viewer_accounts_set_admin_registration_mode(string $mode): int
     // Serialize the restrictive policy write with request creation/final activation.
     // Once this transaction commits, every later holder of the registration lock sees
     // the restrictive mode before it can create staging or a durable viewer account.
-    $pdo->beginTransaction();
     try {
-        viewer_registration_capacity_lock();
-        set_app_setting(VIEWER_ACCOUNT_ADMIN_MODE_SETTING_KEY, $normalized);
-        $pdo->commit();
+        viewer_account_model_transaction(static function () use ($normalized): void {
+            viewer_registration_capacity_lock();
+            set_app_setting(VIEWER_ACCOUNT_ADMIN_MODE_SETTING_KEY, $normalized);
+        });
     } catch (Throwable $exception) {
-        if ($pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
         if (isset($GLOBALS['cms_app_settings_cache']) && is_array($GLOBALS['cms_app_settings_cache'])) {
             unset($GLOBALS['cms_app_settings_cache'][VIEWER_ACCOUNT_ADMIN_MODE_SETTING_KEY]);
         }
@@ -423,22 +425,7 @@ function viewer_account_cap(): int
  */
 function viewer_account_capacity_lock(): int
 {
-    $pdo = db();
-    $now = now_sql();
-    $pdo->prepare(
-        'INSERT INTO viewer_account_state (state_key, account_count, updated_at) '
-        . 'VALUES (?, 0, ?) ON DUPLICATE KEY UPDATE updated_at = updated_at'
-    )->execute([VIEWER_ACCOUNT_CAPACITY_STATE_KEY, $now]);
-
-    $stmt = $pdo->prepare(
-        'SELECT account_count FROM viewer_account_state WHERE state_key = ? LIMIT 1 FOR UPDATE'
-    );
-    $stmt->execute([VIEWER_ACCOUNT_CAPACITY_STATE_KEY]);
-    $count = $stmt->fetchColumn();
-    if ($count === false) {
-        throw new RuntimeException('Viewer account capacity state could not be locked.');
-    }
-    return (int) $count;
+    return viewer_account_model_capacity_lock(VIEWER_ACCOUNT_CAPACITY_STATE_KEY, now_sql());
 }
 
 /**
@@ -448,11 +435,7 @@ function viewer_account_capacity_lock(): int
  */
 function viewer_account_capacity_recount_locked(): int
 {
-    $count = (int) db()->query('SELECT COUNT(*) FROM viewer_accounts')->fetchColumn();
-    db()->prepare(
-        'UPDATE viewer_account_state SET account_count = ?, updated_at = ? WHERE state_key = ?'
-    )->execute([$count, now_sql(), VIEWER_ACCOUNT_CAPACITY_STATE_KEY]);
-    return $count;
+    return viewer_account_model_capacity_recount_locked(VIEWER_ACCOUNT_CAPACITY_STATE_KEY, now_sql());
 }
 
 /**
@@ -466,24 +449,10 @@ function viewer_account_capacity_reconcile(): int
         throw new RuntimeException('Viewer authentication storage is unavailable.');
     }
 
-    $pdo = db();
-    $ownsTransaction = !$pdo->inTransaction();
-    if ($ownsTransaction) {
-        $pdo->beginTransaction();
-    }
-    try {
+    return viewer_account_model_transaction(static function (): int {
         viewer_account_capacity_lock();
-        $count = viewer_account_capacity_recount_locked();
-        if ($ownsTransaction) {
-            $pdo->commit();
-        }
-        return $count;
-    } catch (\Throwable $exception) {
-        if ($ownsTransaction && $pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
-        throw $exception;
-    }
+        return viewer_account_capacity_recount_locked();
+    });
 }
 
 /**
@@ -755,10 +724,10 @@ function viewer_csrf_namespace_key(): string
 function viewer_csrf_token(): string
 {
     $key = viewer_csrf_namespace_key();
-    $token = $_SESSION[$key] ?? null;
+    $token = viewer_identity_session_get($key);
     if (!is_string($token) || preg_match('/^[a-f0-9]{64}$/D', $token) !== 1) {
         $token = bin2hex(random_bytes(32));
-        $_SESSION[$key] = $token;
+        viewer_identity_session_set($key, $token);
     }
     return $token;
 }
@@ -771,7 +740,7 @@ function viewer_csrf_token(): string
  */
 function viewer_csrf_verify(string $token): bool
 {
-    $stored = $_SESSION[viewer_csrf_namespace_key()] ?? null;
+    $stored = viewer_identity_session_get(viewer_csrf_namespace_key());
     return is_string($stored) && $stored !== '' && $token !== '' && hash_equals($stored, $token);
 }
 
@@ -782,7 +751,7 @@ function viewer_csrf_verify(string $token): bool
  */
 function viewer_session_state(): ?array
 {
-    $state = $_SESSION[viewer_session_namespace_key()] ?? null;
+    $state = viewer_identity_session_get(viewer_session_namespace_key());
     if (!is_array($state)) {
         return null;
     }
@@ -806,10 +775,10 @@ function viewer_session_state(): ?array
  */
 function viewer_session_clear(): void
 {
-    unset(
-        $_SESSION[viewer_session_namespace_key()],
-        $_SESSION[VIEWER_REAUTHENTICATION_NAMESPACE],
-        $_SESSION[VIEWER_EMAIL_CHANGE_CONFIRMATION_NAMESPACE]
+    viewer_identity_session_unset(
+        viewer_session_namespace_key(),
+        VIEWER_REAUTHENTICATION_NAMESPACE,
+        VIEWER_EMAIL_CHANGE_CONFIRMATION_NAMESPACE
     );
 }
 
@@ -823,13 +792,7 @@ function viewer_session_clear(): void
  */
 function viewer_session_cleanup_account_locked(int $viewerAccountId, string $now, int $limit = 100): int
 {
-    $limit = max(1, min(100, $limit));
-    $stmt = db()->prepare(
-        'DELETE FROM viewer_sessions WHERE viewer_account_id = ? '
-        . 'AND (revoked_at IS NOT NULL OR expires_at < ?) ORDER BY id ASC LIMIT ' . $limit
-    );
-    $stmt->execute([$viewerAccountId, $now]);
-    return $stmt->rowCount();
+    return viewer_account_model_session_cleanup($viewerAccountId, $now, $limit);
 }
 
 /**
@@ -842,30 +805,11 @@ function viewer_session_cleanup_account_locked(int $viewerAccountId, string $now
  */
 function viewer_session_enforce_limit_locked(int $viewerAccountId, string $now): void
 {
-    $cap = (int) viewer_accounts_config()['max_active_viewer_sessions_per_account'];
-    $countStmt = db()->prepare(
-        'SELECT COUNT(*) FROM viewer_sessions WHERE viewer_account_id = ? AND revoked_at IS NULL AND expires_at >= ?'
+    viewer_account_model_session_enforce_limit(
+        $viewerAccountId,
+        $now,
+        (int) viewer_accounts_config()['max_active_viewer_sessions_per_account']
     );
-    $countStmt->execute([$viewerAccountId, $now]);
-    $activeCount = (int) $countStmt->fetchColumn();
-    $revokeCount = max(0, $activeCount - $cap + 1);
-    if ($revokeCount === 0) {
-        return;
-    }
-
-    $idsStmt = db()->prepare(
-        'SELECT id FROM viewer_sessions WHERE viewer_account_id = ? AND revoked_at IS NULL AND expires_at >= ? '
-        . 'ORDER BY created_at ASC, id ASC LIMIT ' . $revokeCount
-    );
-    $idsStmt->execute([$viewerAccountId, $now]);
-    $ids = array_map('intval', $idsStmt->fetchAll(\PDO::FETCH_COLUMN));
-    if ($ids === []) {
-        return;
-    }
-    $placeholders = implode(',', array_fill(0, count($ids), '?'));
-    $params = array_merge([$now], $ids);
-    db()->prepare('UPDATE viewer_sessions SET revoked_at = ? WHERE id IN (' . $placeholders . ') AND revoked_at IS NULL')
-        ->execute($params);
 }
 
 /**
@@ -880,7 +824,7 @@ function viewer_session_enforce_limit_locked(int $viewerAccountId, string $now):
  */
 function viewer_session_establish(array $account): string
 {
-    unset($_SESSION[VIEWER_REAUTHENTICATION_NAMESPACE], $_SESSION[VIEWER_EMAIL_CHANGE_CONFIRMATION_NAMESPACE]);
+    viewer_identity_session_unset(VIEWER_REAUTHENTICATION_NAMESPACE, VIEWER_EMAIL_CHANGE_CONFIRMATION_NAMESPACE);
     if (!viewer_accounts_enabled() || !viewer_auth_storage_available()) {
         throw new RuntimeException('Viewer session establishment is unavailable.');
     }
@@ -894,69 +838,48 @@ function viewer_session_establish(array $account): string
         throw new InvalidArgumentException('Viewer account identity/security version is invalid.');
     }
 
-    $pdo = db();
-    $ownsTransaction = !$pdo->inTransaction();
-    if ($ownsTransaction) {
-        $pdo->beginTransaction();
-    }
+    $token = security_opaque_token_generate(32);
+    $sessionHash = security_authority_token_hash($token);
+    $config = viewer_accounts_config();
+    $now = now_sql();
+    $expiresAt = date('Y-m-d H:i:s', time() + (int) $config['session_lifetime_seconds']);
+    $clientIp = request_client_ip();
+    $ipHash = $clientIp === '' ? null : viewer_security_fingerprint('viewer-session-ip', $clientIp);
+    $userAgent = viewer_identity_request_user_agent();
+    $userAgentHash = $userAgent === '' ? null : viewer_security_fingerprint('viewer-session-ua', $userAgent);
 
     try {
-        $accountStmt = $pdo->prepare(
-            'SELECT id, email, normalized_email, password_hash, must_change_password, status, security_version, email_verified_at '
-            . 'FROM viewer_accounts WHERE id = ? LIMIT 1 FOR UPDATE'
-        );
-        $accountStmt->execute([$accountId]);
-        $lockedAccount = $accountStmt->fetch();
-        if (!$lockedAccount
-            || !viewer_account_can_authenticate($lockedAccount)
-            || viewer_account_requires_password_change($lockedAccount)
-            || (int) ($lockedAccount['security_version'] ?? 0) !== $expectedSecurityVersion) {
-            throw new RuntimeException('Viewer session establishment is unavailable.');
-        }
+        viewer_account_model_transaction(static function () use ($accountId, $expectedSecurityVersion, $sessionHash, $ipHash, $userAgentHash, $now, $expiresAt, $token): void {
+            $lockedAccount = viewer_account_model_lock_auth($accountId);
+            if (!$lockedAccount
+                || !viewer_account_can_authenticate($lockedAccount)
+                || viewer_account_requires_password_change($lockedAccount)
+                || (int) ($lockedAccount['security_version'] ?? 0) !== $expectedSecurityVersion) {
+                throw new RuntimeException('Viewer session establishment is unavailable.');
+            }
 
-        $token = security_opaque_token_generate(32);
-        $sessionHash = security_authority_token_hash($token);
-        $config = viewer_accounts_config();
-        $now = now_sql();
-        $expiresAt = date('Y-m-d H:i:s', time() + (int) $config['session_lifetime_seconds']);
-        $clientIp = request_client_ip();
-        $ipHash = $clientIp === '' ? null : viewer_security_fingerprint('viewer-session-ip', $clientIp);
-        $userAgent = (string) ($_SERVER['HTTP_USER_AGENT'] ?? '');
-        $userAgentHash = $userAgent === '' ? null : viewer_security_fingerprint('viewer-session-ua', $userAgent);
+            viewer_session_cleanup_account_locked($accountId, $now);
+            viewer_session_enforce_limit_locked($accountId, $now);
+            viewer_account_model_session_insert($accountId, $sessionHash, $expectedSecurityVersion, $ipHash, $userAgentHash, $now, $expiresAt);
 
-        viewer_session_cleanup_account_locked($accountId, $now);
-        viewer_session_enforce_limit_locked($accountId, $now);
+            if (function_exists(__NAMESPACE__ . '\\viewer_security_event_record')) {
+                viewer_security_event_record('viewer.session_created', $accountId, 'success', [
+                    'security_version' => $expectedSecurityVersion,
+                ]);
+            }
 
-        $stmt = $pdo->prepare(
-            'INSERT INTO viewer_sessions (viewer_account_id, session_hash, security_version, ip_hash, user_agent_hash, created_at, expires_at) '
-            . 'VALUES (?, ?, ?, ?, ?, ?, ?)'
-        );
-        $stmt->execute([$accountId, $sessionHash, $expectedSecurityVersion, $ipHash, $userAgentHash, $now, $expiresAt]);
-
-        if (function_exists(__NAMESPACE__ . '\\viewer_security_event_record')) {
-            viewer_security_event_record('viewer.session_created', $accountId, 'success', [
+            if (!viewer_identity_session_regenerate()) {
+                throw new RuntimeException('Viewer session id rotation failed.');
+            }
+            viewer_identity_session_set(viewer_session_namespace_key(), [
+                'account_id' => $accountId,
                 'security_version' => $expectedSecurityVersion,
+                'token' => $token,
             ]);
-        }
-
-        if (session_status() === PHP_SESSION_ACTIVE && !session_regenerate_id(true)) {
-            throw new RuntimeException('Viewer session id rotation failed.');
-        }
-        $_SESSION[viewer_session_namespace_key()] = [
-            'account_id' => $accountId,
-            'security_version' => $expectedSecurityVersion,
-            'token' => $token,
-        ];
-
-        if ($ownsTransaction) {
-            $pdo->commit();
-        }
+        });
         return $token;
-    } catch (\Throwable $exception) {
+    } catch (Throwable $exception) {
         viewer_session_clear();
-        if ($ownsTransaction && $pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
         throw $exception;
     }
 }
@@ -987,14 +910,10 @@ function current_viewer(): ?array
     }
 
     try {
-        $stmt = db()->prepare(
-            'SELECT va.id, va.email, va.normalized_email, va.password_hash, va.must_change_password, va.status, va.security_version, va.email_verified_at, '
-            . 'vs.id AS viewer_session_id, vs.security_version AS session_security_version, vs.expires_at, vs.revoked_at '
-            . 'FROM viewer_sessions vs INNER JOIN viewer_accounts va ON va.id = vs.viewer_account_id '
-            . 'WHERE vs.viewer_account_id = ? AND vs.session_hash = ? LIMIT 1'
+        $row = viewer_account_model_session_principal(
+            $state['account_id'],
+            security_authority_token_hash($state['token'])
         );
-        $stmt->execute([$state['account_id'], security_authority_token_hash($state['token'])]);
-        $row = $stmt->fetch();
         if (!$row
             || !viewer_account_can_authenticate($row)
             || viewer_account_requires_password_change($row)
@@ -1016,7 +935,7 @@ function current_viewer(): ?array
             'must_change_password' => false,
             'viewer_session_id' => (int) $row['viewer_session_id'],
         ];
-    } catch (\Throwable) {
+    } catch (Throwable) {
         viewer_session_clear();
         return null;
     }
@@ -1049,14 +968,15 @@ function viewer_session_revoke_current(): void
     }
 
     try {
-        $stmt = db()->prepare(
-            'UPDATE viewer_sessions SET revoked_at = ? WHERE viewer_account_id = ? AND session_hash = ? AND revoked_at IS NULL'
+        viewer_account_model_session_revoke(
+            $state['account_id'],
+            security_authority_token_hash($state['token']),
+            now_sql()
         );
-        $stmt->execute([now_sql(), $state['account_id'], security_authority_token_hash($state['token'])]);
         if (function_exists(__NAMESPACE__ . '\\viewer_security_event_record')) {
             viewer_security_event_record('viewer.session_revoked', $state['account_id'], 'success');
         }
-    } catch (\Throwable) {
+    } catch (Throwable) {
         // Local authority is always removed even if persistent revocation storage is unavailable.
     }
     viewer_session_clear();
@@ -1102,43 +1022,7 @@ function viewer_account_invalidate_authentication(int $viewerAccountId): int
         throw new RuntimeException('Viewer authentication storage is unavailable.');
     }
 
-    $pdo = db();
-    $ownsTransaction = !$pdo->inTransaction();
-    if ($ownsTransaction) {
-        $pdo->beginTransaction();
-    }
-    try {
-        $lock = $pdo->prepare('SELECT security_version FROM viewer_accounts WHERE id = ? LIMIT 1 FOR UPDATE');
-        $lock->execute([$viewerAccountId]);
-        if ($lock->fetchColumn() === false) {
-            throw new RuntimeException('Viewer account was not found.');
-        }
-
-        $now = now_sql();
-        $stmt = $pdo->prepare('UPDATE viewer_accounts SET security_version = security_version + 1, updated_at = ? WHERE id = ?');
-        $stmt->execute([$now, $viewerAccountId]);
-        if ($stmt->rowCount() !== 1) {
-            throw new RuntimeException('Viewer authentication invalidation did not update the account.');
-        }
-
-        $versionStmt = $pdo->prepare('SELECT security_version FROM viewer_accounts WHERE id = ? LIMIT 1');
-        $versionStmt->execute([$viewerAccountId]);
-        $newVersion = (int) $versionStmt->fetchColumn();
-
-        $pdo->prepare('UPDATE viewer_sessions SET revoked_at = ? WHERE viewer_account_id = ? AND revoked_at IS NULL')->execute([$now, $viewerAccountId]);
-        $pdo->prepare('UPDATE viewer_remember_tokens SET revoked_at = ? WHERE viewer_account_id = ? AND revoked_at IS NULL')->execute([$now, $viewerAccountId]);
-        $pdo->prepare('UPDATE viewer_password_reset_tokens SET invalidated_at = ? WHERE viewer_account_id = ? AND consumed_at IS NULL AND invalidated_at IS NULL')->execute([$now, $viewerAccountId]);
-
-        if ($ownsTransaction) {
-            $pdo->commit();
-        }
-        return $newVersion;
-    } catch (\Throwable $exception) {
-        if ($ownsTransaction && $pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
-        throw $exception;
-    }
+    return viewer_account_model_invalidate_authentication($viewerAccountId, now_sql());
 }
 
 /**
@@ -1165,29 +1049,15 @@ function viewer_account_transition_status(int $viewerAccountId, string $targetSt
         throw new RuntimeException('Viewer account security transition storage is unavailable.');
     }
 
-    $pdo = db();
-    $ownsTransaction = !$pdo->inTransaction();
-    if ($ownsTransaction) {
-        $pdo->beginTransaction();
-    }
-
-    try {
-        $stmt = $pdo->prepare('SELECT * FROM viewer_accounts WHERE id = ? LIMIT 1 FOR UPDATE');
-        $stmt->execute([$viewerAccountId]);
-        $account = $stmt->fetch();
+    $transition = viewer_account_model_transaction(static function () use ($viewerAccountId, $targetStatus): array {
+        $account = viewer_account_model_lock($viewerAccountId);
         if (!$account) {
-            if ($ownsTransaction) {
-                $pdo->commit();
-            }
-            return false;
+            return ['exists' => false, 'changed' => false, 'previous_status' => ''];
         }
 
         $currentStatus = (string) ($account['status'] ?? '');
         if ($currentStatus === $targetStatus) {
-            if ($ownsTransaction) {
-                $pdo->commit();
-            }
-            return true;
+            return ['exists' => true, 'changed' => false, 'previous_status' => $currentStatus];
         }
         if ($targetStatus === VIEWER_ACCOUNT_STATUS_ACTIVE
             && (empty($account['email_verified_at']) || (string) ($account['password_hash'] ?? '') === '')) {
@@ -1195,23 +1065,14 @@ function viewer_account_transition_status(int $viewerAccountId, string $targetSt
         }
 
         $now = now_sql();
-        $suspendedAt = $targetStatus === VIEWER_ACCOUNT_STATUS_SUSPENDED ? $now : null;
-        $disabledAt = $targetStatus === VIEWER_ACCOUNT_STATUS_DISABLED ? $now : null;
-        $update = $pdo->prepare(
-            'UPDATE viewer_accounts SET status = ?, security_version = security_version + 1, '
-            . 'suspended_at = ?, disabled_at = ?, updated_at = ? WHERE id = ?'
+        viewer_account_model_update_status(
+            $viewerAccountId,
+            $targetStatus,
+            $targetStatus === VIEWER_ACCOUNT_STATUS_SUSPENDED ? $now : null,
+            $targetStatus === VIEWER_ACCOUNT_STATUS_DISABLED ? $now : null,
+            $now
         );
-        $update->execute([$targetStatus, $suspendedAt, $disabledAt, $now, $viewerAccountId]);
-        if ($update->rowCount() !== 1) {
-            throw new RuntimeException('Viewer account state transition failed.');
-        }
-
-        $pdo->prepare('UPDATE viewer_sessions SET revoked_at = ? WHERE viewer_account_id = ? AND revoked_at IS NULL')->execute([$now, $viewerAccountId]);
-        $pdo->prepare('UPDATE viewer_remember_tokens SET revoked_at = ? WHERE viewer_account_id = ? AND revoked_at IS NULL')->execute([$now, $viewerAccountId]);
-        $pdo->prepare('UPDATE viewer_password_reset_tokens SET invalidated_at = ? WHERE viewer_account_id = ? AND consumed_at IS NULL AND invalidated_at IS NULL')->execute([$now, $viewerAccountId]);
-        $pdo->prepare('UPDATE viewer_email_verification_tokens SET invalidated_at = ? WHERE viewer_account_id = ? AND consumed_at IS NULL AND invalidated_at IS NULL')->execute([$now, $viewerAccountId]);
-        $pdo->prepare('UPDATE viewer_email_change_requests SET cancelled_at = ? WHERE viewer_account_id = ? AND consumed_at IS NULL AND cancelled_at IS NULL')->execute([$now, $viewerAccountId]);
-        $pdo->prepare('UPDATE viewer_collection_share_tokens SET revoked_at = ? WHERE created_by_viewer_account_id = ? AND revoked_at IS NULL')->execute([$now, $viewerAccountId]);
+        viewer_account_model_revoke_transition_authority($viewerAccountId, $now);
 
         if ($targetStatus === VIEWER_ACCOUNT_STATUS_SUSPENDED) {
             $eventKey = 'viewer.account_suspended';
@@ -1227,21 +1088,17 @@ function viewer_account_transition_status(int $viewerAccountId, string $targetSt
                 'account_state' => $targetStatus,
             ]);
         }
+        return ['exists' => true, 'changed' => true, 'previous_status' => $currentStatus];
+    });
 
-        if ($ownsTransaction) {
-            $pdo->commit();
-        }
-        $localState = viewer_session_state();
-        if ($localState !== null && (int) $localState['account_id'] === $viewerAccountId) {
-            viewer_session_clear();
-        }
-        return true;
-    } catch (\Throwable $exception) {
-        if ($ownsTransaction && $pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
-        throw $exception;
+    if (empty($transition['exists'])) {
+        return false;
     }
+    $localState = viewer_session_state();
+    if ($localState !== null && (int) $localState['account_id'] === $viewerAccountId && !empty($transition['changed'])) {
+        viewer_session_clear();
+    }
+    return true;
 }
 
 /**

@@ -136,6 +136,7 @@ if ($options['changed']) {
 
 $knownSuites = [
     'php-regression',
+    'mvc-boundaries',
     'node-fast',
     'node-full',
     'winapp',
@@ -669,6 +670,7 @@ function audit_suite_console_label(string $suiteId): string
 {
     return match ($suiteId) {
         'php-regression' => 'PHP regression',
+        'mvc-boundaries' => 'MVC layer boundaries',
         'node-fast' => 'Node regression (fast)',
         'node-full' => 'Node regression',
         'browser-map' => 'Chromium map integration',
@@ -699,6 +701,7 @@ foreach ($suiteIds as $suiteIndex => $suiteId) {
 
     $task = match ($suiteId) {
         'php-regression' => audit_run_php_regression($registry),
+        'mvc-boundaries' => audit_run_php_command('mvc-boundaries', 'MVC layer boundaries', 'scripts/check_mvc_boundaries.php', ['--quiet'], 30),
         'node-fast' => audit_run_node_suite('node-fast', 'Node regression (fast)', audit_select_node_tests($registry, false), $node),
         'node-full' => audit_run_node_suite('node-full', 'Node regression', audit_select_node_tests($registry, true), $node),
         'browser-map' => audit_run_node_suite('browser-map', 'Chromium map integration', audit_select_node_tests($registry, true, true), $node, $browser),

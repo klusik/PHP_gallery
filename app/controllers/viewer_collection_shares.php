@@ -18,6 +18,9 @@
  *   - Re-authorize every source image in recipient context without administrator bypass
  *   - Apply no-store, no-referrer, and noindex/nofollow policy to all share consumption pages
  *
+ * Author:
+ *   Rudolf Klusal
+ *
  * Notes:
  *   - Keep comments and docstrings intact when modifying this file.
  *   - Collection-share authority is read-only and never substitutes for current_viewer() or current_user().
@@ -30,6 +33,8 @@
 declare(strict_types=1);
 
 namespace Gallery\Controllers;
+
+use function Gallery\Views\view_public_noindex_meta;
 
 use function Gallery\Core\absolute_public_url;
 use function Gallery\Core\append_cms_head_extras;
@@ -99,43 +104,22 @@ function render_viewer_collection_share_owner_section(array $viewer, int $collec
         return;
     }
 
-    echo '<section class="panel viewer-collection-share"><h2>' . e(t('viewer.collection_share.title', 'Share this collection')) . '</h2>';
-    if (!viewer_collection_shares_storage_available()) {
-        echo '<p class="muted">' . e(t('viewer.collection_share.unavailable', 'Collection sharing is temporarily unavailable.')) . '</p></section>';
-        return;
+    $available = viewer_collection_shares_storage_available();
+    $share = null;
+    $newSecretUrl = '';
+    if ($available) {
+        $share = viewer_collection_share_state($viewerAccountId, $collectionId);
+        $newSecretUrl = (string) (flash_message(viewer_collection_share_secret_flash_key($collectionId)) ?? '');
     }
 
-    $share = viewer_collection_share_state($viewerAccountId, $collectionId);
-    $newSecretUrl = flash_message(viewer_collection_share_secret_flash_key($collectionId));
-    if ($newSecretUrl !== null && $newSecretUrl !== '') {
-        echo '<p><strong>' . e(t('viewer.collection_share.created', 'Share link created')) . '</strong></p>';
-        echo '<label>' . e(t('viewer.collection_share.link_label', 'Share link'))
-            . '<input class="viewer-collection-share-url" type="url" readonly value="' . e($newSecretUrl) . '"></label>';
-        echo '<p class="muted">' . e(t('viewer.collection_share.shown_once', 'This link is shown only once.')) . '</p>';
-    }
-
-    if ($share === null) {
-        echo '<p>' . e(t('viewer.collection_share.help', 'Anyone with the link can open this collection. The link does not unlock protected source galleries. The link expires after 30 days.')) . '</p>';
-        echo '<form method="post" action="' . e(url_for('viewer_collection_share_replace', ['collection_id' => $collectionId])) . '">';
-        echo '<input type="hidden" name="viewer_csrf_token" value="' . e(viewer_csrf_token()) . '">';
-        echo '<button type="submit" class="button">' . e(t('viewer.collection_share.create', 'Create share link')) . '</button></form></section>';
-        return;
-    }
-
-    echo '<p><strong>' . e(t('viewer.collection_share.active', 'Share link active')) . '</strong></p>';
-    echo '<p class="muted">' . e(t('viewer.collection_share.created_at', 'Created: {date}', ['date' => (string) $share['created_at']])) . '<br>';
-    echo e(t('viewer.collection_share.expires_at', 'Expires: {date}', ['date' => (string) $share['expires_at']])) . '</p>';
-    if ($newSecretUrl === null || $newSecretUrl === '') {
-        echo '<p class="muted">' . e(t('viewer.collection_share.not_redisplayed', 'For security, the complete link is shown only when it is created or replaced.')) . '</p>';
-    }
-    echo '<div class="viewer-collection-share-actions">';
-    echo '<form method="post" action="' . e(url_for('viewer_collection_share_replace', ['collection_id' => $collectionId])) . '" onsubmit="return confirm(this.dataset.confirm)" data-confirm="' . e(t('viewer.collection_share.replace_confirm', 'Replace this share link? The previous link will stop working.')) . '">';
-    echo '<input type="hidden" name="viewer_csrf_token" value="' . e(viewer_csrf_token()) . '">';
-    echo '<button type="submit" class="button secondary">' . e(t('viewer.collection_share.replace', 'Replace share link')) . '</button></form>';
-    echo '<form method="post" action="' . e(url_for('viewer_collection_share_revoke', ['collection_id' => $collectionId])) . '" onsubmit="return confirm(this.dataset.confirm)" data-confirm="' . e(t('viewer.collection_share.revoke_confirm', 'Revoke this share link?')) . '">';
-    echo '<input type="hidden" name="viewer_csrf_token" value="' . e(viewer_csrf_token()) . '">';
-    echo '<button type="submit" class="button danger">' . e(t('viewer.collection_share.revoke', 'Revoke share')) . '</button></form>';
-    echo '</div></section>';
+    \Gallery\Views\view_render_viewer_collection_share_owner_section([
+        'available' => $available,
+        'share' => $share,
+        'new_secret_url' => $newSecretUrl,
+        'replace_url' => url_for('viewer_collection_share_replace', ['collection_id' => $collectionId]),
+        'revoke_url' => url_for('viewer_collection_share_revoke', ['collection_id' => $collectionId]),
+        'csrf_token' => $available ? viewer_csrf_token() : '',
+    ]);
 }
 
 /**
@@ -240,7 +224,7 @@ function cms_viewer_collection_share_exchange(): void
 function cms_viewer_collection_shared(): void
 {
     viewer_collection_share_public_headers();
-    append_cms_head_extras('<meta name="robots" content="noindex,nofollow">');
+    append_cms_head_extras(view_public_noindex_meta());
     if (request_method() !== 'GET') {
         cms_not_found();
         return;
@@ -271,37 +255,38 @@ function cms_viewer_collection_shared(): void
     }
     $hiddenCount = max(0, count($references) - count($visible));
 
-    render_header((string) $collection['title']);
-    echo '<section class="hero panel"><div class="hero-content"><div><p class="eyebrow">' . e(t('viewer.collection_share.shared_label', 'Shared collection')) . '</p><h1>' . e((string) $collection['title']) . '</h1>';
-    echo '<p>' . e(t('viewer.collection_share.shared_help', 'Only photos you are currently allowed to access from their source galleries are shown.')) . '</p></div></div></section>';
+    $candidateSizes = array_values(array_filter(thumbnail_sizes(), static fn (int $size): bool => $size <= 960));
+    if ($candidateSizes === []) {
+        $candidateSizes = [300];
+    }
+    $cards = [];
+    foreach ($visible as $index => $resolved) {
+        $image = $resolved['image'];
+        $gallery = $resolved['gallery'];
+        $imageId = (int) $image['id'];
+        $bundle = thumbnail_bundle($image);
+        $cards[] = [
+            'image_id' => $imageId,
+            'image_url' => image_public_url($image, $gallery),
+            'thumbnail_html' => public_thumbnail_render_picture_html(
+                $image,
+                300,
+                $candidateSizes,
+                '(min-width: 1100px) 25vw, (min-width: 700px) 33vw, 50vw',
+                image_alt_text($image, $gallery, $index + 1),
+                $index,
+                $bundle
+            ),
+            'title' => public_image_display_title($image, $gallery),
+        ];
+    }
 
-    if ($visible === []) {
-        echo '<section class="panel"><p>' . e(count($references) > 0
+    \Gallery\Views\view_render_viewer_collection_shared([
+        'title' => (string) $collection['title'],
+        'cards' => $cards,
+        'empty_message' => count($references) > 0
             ? t('viewer.collection_share.none_available', 'No items in this shared collection are currently available to you.')
-            : t('viewer.collection_share.empty', 'This shared collection is empty.')) . '</p></section>';
-    } else {
-        echo '<section class="grid gallery-image-grid viewer-collection-grid viewer-shared-collection-grid">';
-        foreach ($visible as $index => $resolved) {
-            $image = $resolved['image'];
-            $gallery = $resolved['gallery'];
-            $imageId = (int) $image['id'];
-            $bundle = thumbnail_bundle($image);
-            $candidateSizes = array_values(array_filter(thumbnail_sizes(), static fn (int $size): bool => $size <= 960));
-            if ($candidateSizes === []) {
-                $candidateSizes = [300];
-            }
-            $title = public_image_display_title($image, $gallery);
-            $imageUrl = image_public_url($image, $gallery);
-            echo '<article class="image-card viewer-collection-item" data-image-id="' . $imageId . '"><div class="image-stage"><a class="image-preview-link" href="' . e($imageUrl) . '">' . public_thumbnail_render_picture_html($image, 300, $candidateSizes, '(min-width: 1100px) 25vw, (min-width: 700px) 33vw, 50vw', image_alt_text($image, $gallery, $index + 1), $index, $bundle) . '</a>';
-            if ($title !== '') {
-                echo '<div class="image-meta image-meta-overlay"><h2>' . e($title) . '</h2></div>';
-            }
-            echo '</div></article>';
-        }
-        echo '</section>';
-    }
-    if ($hiddenCount > 0) {
-        echo '<p class="muted">' . e(t('viewer.collection_share.some_unavailable', 'Some items in this collection are not currently available.')) . '</p>';
-    }
-    render_footer();
+            : t('viewer.collection_share.empty', 'This shared collection is empty.'),
+        'hidden_count' => $hiddenCount,
+    ]);
 }

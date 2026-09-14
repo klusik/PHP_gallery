@@ -8,7 +8,10 @@
  * Purpose:
  *   Executes the benchmark lightbox scenario far enough to prove that its
  *   cleanup variables exist in the same function scope as the finally block.
- */
+  *
+ * Author:
+ *   Rudolf Klusal
+*/
 
 import fs from 'node:fs';
 import path from 'node:path';

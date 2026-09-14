@@ -1,3 +1,18 @@
+/**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ *
+ * File: tests/admin_side_panel_created_gallery_refresh_test.mjs
+ *
+ * Author:
+ *   Rudolf Klusal
+ *
+ * License:
+ *   MIT License (see LICENSE file in repository)
+ *
+ * Notes:
+ *   - Keep comments and docstrings intact when modifying this file.
+ */
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
@@ -7,6 +22,7 @@ const browserUploadSource = fs.readFileSync('public/assets/gallery-modules/admin
 const adminOperationsSource = fs.readFileSync('public/assets/gallery-modules/admin-operations.js', 'utf8');
 const galleryEntrySource = fs.readFileSync('public/assets/gallery.js', 'utf8');
 const publicGalleryPageSource = fs.readFileSync('app/controllers/public_gallery_page.php', 'utf8');
+const publicGalleryPagesViewSource = fs.readFileSync('app/views/public_gallery_pages.php', 'utf8');
 const adminUploadsSource = fs.readFileSync('app/controllers/admin_uploads.php', 'utf8');
 
 function extractFunction(source, name) {
@@ -139,9 +155,14 @@ browserFns.mergeBrowserResult(aggregateFromExisting, {created_gallery: true});
 assert.equal(aggregateFromExisting.created_gallery, true, 'A batch response can promote the aggregate to created_gallery.');
 
 assert.match(
+    publicGalleryPagesViewSource,
+    /<section class="hero" data-public-gallery-id="' \. \(int\) \(\$viewModel\['gallery_id'\] \?\? 0\)/,
+    'Public gallery hero view must expose the controller-prepared gallery id for pagination-safe refresh ownership.'
+);
+assert.match(
     publicGalleryPageSource,
-    /<section class="hero" data-public-gallery-id="' \. \(int\) \$gallery\['id'\]/,
-    'Public gallery hero must expose the current gallery id for pagination-safe refresh ownership.'
+    /'gallery_id'\s*=>\s*\(int\) \$gallery\['id'\]/,
+    'Public gallery controller must prepare gallery_id for the hero view model.'
 );
 assert.match(
     adminOperationsSource,

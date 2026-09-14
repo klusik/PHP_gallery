@@ -36,8 +36,9 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+use function Gallery\Core\request_data;
+
 use function Gallery\Core\current_user;
-use function Gallery\Core\e;
 
 /**
  * Return whether the current request should collect admin dashboard profiling data.
@@ -55,7 +56,7 @@ function admin_render_profile_enabled(): bool
     if (function_exists(__NAMESPACE__ . '\\dev_mode_enabled') && !dev_mode_enabled()) {
         return false;
     }
-    return current_user() !== null && (string) ($_GET['page'] ?? '') === 'admin';
+    return current_user() !== null && (string) (request_data('query')['page'] ?? '') === 'admin';
 }
 
 /**
@@ -255,12 +256,14 @@ function admin_render_profile_setting_write(string $timer, callable $callback)
 }
 
 /**
- * Render the admin-only dashboard profile diagnostic panel.
+ * Build the admin-only dashboard profile diagnostic view model.
+ *
+ * @return array<string, mixed>|null Prepared profile data, or null when profiling is disabled.
  */
-function render_admin_render_profile_panel(): void
+function admin_render_profile_panel_model(): ?array
 {
     if (!admin_render_profile_enabled()) {
-        return;
+        return null;
     }
     $state =& admin_render_profile_state();
     $totalMs = (microtime(true) - (float) $state['started_at']) * 1000;
@@ -270,28 +273,12 @@ function render_admin_render_profile_panel(): void
         'max_ms' => $totalMs,
     ];
 
-    $counters = $state['counters'];
     $timers = $state['timers'];
     uasort($timers, static fn (array $left, array $right): int => $right['total_ms'] <=> $left['total_ms']);
 
-    echo '<details class="admin-render-profile" data-admin-render-profile open>';
-    echo '<summary>' . e(t('dev.admin_render_profile.title', 'Admin render profile'));
-    if ($state['route'] !== '') {
-        echo ' · ' . e((string) $state['route']);
-    }
-    echo '</summary>';
-    echo '<div class="admin-render-profile-grid">';
-    echo '<section><h2>' . e(t('dev.admin_render_profile.counters', 'Counters')) . '</h2><table><tbody>';
-    foreach ($counters as $name => $value) {
-        echo '<tr><th>' . e(str_replace('_', ' ', (string) $name)) . '</th><td>' . number_format((float) $value, 0, '.', ' ') . '</td></tr>';
-    }
-    echo '</tbody></table></section>';
-    echo '<section><h2>' . e(t('dev.admin_render_profile.timers', 'Timers')) . '</h2><table><thead><tr><th>' . e(t('dev.admin_render_profile.name', 'Name')) . '</th><th>' . e(t('dev.admin_render_profile.count', 'Count')) . '</th><th>' . e(t('dev.admin_render_profile.total_ms', 'Total ms')) . '</th><th>' . e(t('dev.admin_render_profile.max_ms', 'Max ms')) . '</th></tr></thead><tbody>';
-    foreach ($timers as $name => $timer) {
-        echo '<tr><th>' . e(str_replace('_', ' ', (string) $name)) . '</th><td>' . (int) $timer['count'] . '</td><td>' . number_format((float) $timer['total_ms'], 2, '.', ' ') . '</td><td>' . number_format((float) $timer['max_ms'], 2, '.', ' ') . '</td></tr>';
-    }
-    echo '</tbody></table></section>';
-    echo '</div>';
-    echo '<p class="admin-render-profile-note">' . e(t('dev.admin_render_profile.admin_only_note', 'Admin-only diagnostics for /index.php?page=admin. Use this output to identify first-load cost before optimizing.')) . '</p>';
-    echo '</details>';
+    return [
+        'route' => (string) $state['route'],
+        'counters' => $state['counters'],
+        'timers' => $timers,
+    ];
 }

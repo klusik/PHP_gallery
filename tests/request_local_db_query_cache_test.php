@@ -16,6 +16,9 @@
  *   - Prove gallery filename capability checks reuse the shared schema helper cache
  *   - Prove migration-style cache reset makes the next capability check re-query metadata
  *
+ * Author:
+ *   Rudolf Klusal
+ *
  * License:
  *   MIT License (see LICENSE file in repository)
  */
@@ -33,7 +36,9 @@ namespace Gallery\Core {
 }
 
 namespace {
-    require_once __DIR__ . '/../app/services/app_settings.php';
+    require_once __DIR__ . '/../app/models/app_settings.php';
+    require_once __DIR__ . '/../app/models/database_helpers.php';
+require_once __DIR__ . '/../app/services/app_settings.php';
     require_once __DIR__ . '/../app/services/database_helpers.php';
     require_once __DIR__ . '/../app/services/gallery_display.php';
 

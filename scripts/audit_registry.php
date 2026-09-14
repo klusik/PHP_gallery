@@ -39,6 +39,7 @@ return [
     'profiles' => [
         'quick' => [
             'php-regression',
+            'mvc-boundaries',
             'node-fast',
             'winapp',
             'mutation-contracts',
@@ -48,6 +49,7 @@ return [
         ],
         'full' => [
             'php-regression',
+            'mvc-boundaries',
             'node-full',
             'winapp',
             'mutation-contracts',
@@ -57,6 +59,7 @@ return [
         ],
         'release' => [
             'php-regression',
+            'mvc-boundaries',
             'node-full',
             'winapp',
             'mutation-contracts',

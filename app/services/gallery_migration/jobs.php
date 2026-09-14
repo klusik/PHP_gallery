@@ -44,14 +44,14 @@ use RuntimeException;
 use Throwable;
 use ZipArchive;
 use const Gallery\Core\CMS_VERSION;
-use function Gallery\Controllers\admin_edit_gallery_tab_url;
 use function Gallery\Core\cms_config;
 use function Gallery\Core\cms_current_version;
-use function Gallery\Core\db;
 use function Gallery\Core\gallery_public_url;
 use function Gallery\Core\is_supported_image_path;
 use function Gallery\Core\normalize_relative_path;
 use function Gallery\Core\now_sql;
+use function Gallery\Core\url_for;
+use function Gallery\Models\gallery_model_set_cover_image_id;
 use function Gallery\Core\path_inside;
 use function Gallery\Core\unique_slug;
 
@@ -308,11 +308,11 @@ function gallery_migration_complete_job(string $jobId, int $targetGalleryId): ar
         gallery_migration_apply_gallery_metadata($mappedGalleryId, ['gallery' => $metadata], $sourceGalleryId !== (int) ($manifest['source_gallery_id'] ?? 0), true);
         $coverSourceId = (int) ($metadata['cover_source_id'] ?? 0);
         if ($coverSourceId > 0 && !empty($imageMap[(string) $coverSourceId])) {
-            db()->prepare('UPDATE galleries SET cover_image_id = ?, updated_at = ? WHERE id = ?')->execute([
-                (int) $imageMap[(string) $coverSourceId],
-                now_sql(),
+            gallery_model_set_cover_image_id(
                 $mappedGalleryId,
-            ]);
+                (int) $imageMap[(string) $coverSourceId],
+                now_sql()
+            );
         }
         $gallery = find_gallery($mappedGalleryId, true) ?: find_gallery($mappedGalleryId);
         if ($gallery) {
@@ -351,6 +351,6 @@ function gallery_migration_complete_job(string $jobId, int $targetGalleryId): ar
         'assets_received' => $receivedAssets,
         'total_assets' => $totalAssets,
         'gallery_url' => $importedRoot ? gallery_public_url($importedRoot) : '',
-        'edit_url' => $importedRootId > 0 ? admin_edit_gallery_tab_url($importedRootId, 'admin-edit-api') : '',
+        'edit_url' => $importedRootId > 0 ? url_for('admin_edit_gallery', ['id' => $importedRootId, 'tab' => 'admin-edit-api']) . '#admin-edit-api' : '',
     ];
 }

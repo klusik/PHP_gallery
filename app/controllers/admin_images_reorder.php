@@ -42,17 +42,15 @@ use function Gallery\Core\admin_mutation_panel_metadata;
 use function Gallery\Core\admin_mutation_postcondition;
 use function Gallery\Core\admin_mutation_public_gallery_context;
 use function Gallery\Core\admin_mutation_success_envelope;
-use function Gallery\Core\db;
 use function Gallery\Core\flash_message;
 use function Gallery\Core\gallery_public_url;
-use function Gallery\Core\now_sql;
 use function Gallery\Core\redirect_to;
 use function Gallery\Core\require_admin;
 use function Gallery\Core\verify_csrf;
 use function Gallery\Services\feature_capability_effective_enabled;
 use function Gallery\Services\find_gallery;
 use function Gallery\Services\gallery_images;
-use function Gallery\Services\admin_log_event;
+use function Gallery\Services\admin_save_image_order;
 
 /**
  * Handles cms admin image reorder logic for the gallery application.
@@ -136,48 +134,6 @@ function cms_admin_reorder_images(): void
         admin_reorder_images_response(true, 'Image order saved.', $galleryId, $submittedIds);
     } catch (Throwable $exception) {
         admin_reorder_images_response(false, 'Image order could not be saved: ' . $exception->getMessage(), $galleryId);
-    }
-}
-
-/**
- * Persists a complete image order for one gallery.
- *
- * @param int $galleryId Gallery whose direct image order is being saved.
- * @param array<int> $orderedIds Complete ordered image ids for this gallery.
- * @param string $eventKey Admin log event key.
- * @param string $eventMessage Admin log event message.
- * @param array<string,mixed> $context Additional event context.
- */
-function admin_save_image_order(int $galleryId, array $orderedIds, string $eventKey, string $eventMessage, array $context = []): void
-{
-    // Variable $pdo stores the active database connection used for the atomic sort_order update.
-    $pdo = db();
-    // Variable $now stores one timestamp shared by all rows touched by this reorder operation.
-    $now = now_sql();
-    try {
-        $pdo->beginTransaction();
-        // Variable $stmt stores the prepared update reused for each reordered image row.
-        $stmt = $pdo->prepare('UPDATE images SET sort_order = ?, updated_at = ? WHERE id = ? AND gallery_id = ?');
-        foreach ($orderedIds as $index => $imageId) {
-            // Variable $sortOrder stores a spaced integer so future maintenance can insert between rows if needed.
-            $sortOrder = ($index + 1) * 10;
-            $stmt->execute([$sortOrder, $now, $imageId, $galleryId]);
-        }
-        $pdo->commit();
-        admin_log_event('info', $eventKey, $eventMessage, array_merge([
-            'gallery_id' => $galleryId,
-            'images' => count($orderedIds),
-        ], $context));
-    } catch (Throwable $exception) {
-        if ($pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
-        admin_log_event('error', 'image.reorder_failed', 'Admin image reorder failed.', [
-            'gallery_id' => $galleryId,
-            'error' => $exception->getMessage(),
-            'event_key' => $eventKey,
-        ]);
-        throw $exception;
     }
 }
 

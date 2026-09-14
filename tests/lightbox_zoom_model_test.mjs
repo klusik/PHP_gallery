@@ -13,6 +13,9 @@
  *   - Cover translation bounds and pan clamping
  *   - Cover pointer-anchor preservation and percentage formatting
  *
+ * Author:
+ *   Rudolf Klusal
+ *
  * Last Updated:
  *   2026-08-16
  */

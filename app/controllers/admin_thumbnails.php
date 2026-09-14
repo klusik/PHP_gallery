@@ -102,42 +102,7 @@ use function Gallery\Services\admin_log_event;
  */
 function render_admin_thumbnail_maintenance_notice(array $summary): void
 {
-    if (function_exists('Gallery\\Views\\view_render_admin_thumbnail_maintenance_notice')) {
-        view_render_admin_thumbnail_maintenance_notice($summary);
-        return;
-    }
-
-    if (($summary['images_with_missing'] ?? 0) <= 0) {
-        return;
-    }
-
-    if (thumbnail_maintenance_notice_is_dismissed($summary)) {
-        return;
-    }
-
-    echo '<div class="notice admin-thumbnail-maintenance-notice">';
-    echo '<div class="admin-thumbnail-maintenance-copy">';
-    if (($summary['images_with_missing'] ?? 0) > 0) {
-        echo '<strong>' . e(t('admin.thumbnails.maintenance_required', 'Thumbnail maintenance required.')) . '</strong> ';
-        echo e(t('admin.thumbnails.missing_images_value', '{count} image(s) are missing optimized thumbnails or have stale thumbnail files.', ['count' => (string) $summary['images_with_missing']])) . ' ';
-        echo e(t('admin.thumbnails.missing_variants_value', '{count} thumbnail variant(s) need to be created.', ['count' => (string) $summary['missing_variants']])) . ' ';
-        if (!empty($summary['limited'])) {
-            echo e(t('admin.thumbnails.limited_scan_value', 'Only the first {count} image(s) were checked, so more may be pending.', ['count' => (string) $summary['images_scanned']])) . ' ';
-        }
-        echo t('admin.thumbnails.public_visitors_do_not_generate', 'Public visitors will not generate these thumbnails while browsing. Use <strong>Create all thumbnails</strong> in the admin toolbar.');
-    }
-    if (($summary['webp_skipped'] ?? 0) > 0) {
-        echo (($summary['images_with_missing'] ?? 0) > 0 ? '<br>' : '');
-        echo e(t('admin.thumbnails.webp_skipped_exif', 'Some WebP variants are intentionally skipped because the source images contain EXIF metadata and this server cannot preserve EXIF during WebP conversion.'));
-    }
-    echo '</div>';
-    echo '<form method="post" action="' . e(url_for('admin_dismiss_thumbnail_notice')) . '" class="admin-thumbnail-maintenance-dismiss" data-thumbnail-maintenance-form>';
-    echo csrf_field();
-    echo '<input type="hidden" name="thumbnail_inventory_fingerprint" value="' . e((string) ($summary['inventory_fingerprint'] ?? '')) . '">';
-    echo '<button type="submit" class="secondary" formaction="' . e(url_for('admin_create_thumbnails')) . '" name="scope" value="missing" data-create-missing-thumbnails>' . e(t('admin.thumbnails.create_missing', 'Create missing thumbnails')) . '</button>';
-    echo '<button type="submit" class="secondary">' . e(t('admin.thumbnails.dismiss_7_days', 'Dismiss for 7 days')) . '</button>';
-    echo '</form>';
-    echo '</div>';
+    view_render_admin_thumbnail_maintenance_notice($summary);
 }
 
 /**
@@ -965,7 +930,18 @@ function cms_admin_thumbnail_browser_source_chunk(): void
             'skipped' => count((array) ($plan['skipped'] ?? [])),
             'source_payload_bytes' => (int) ($plan['source_payload_bytes'] ?? 0),
         ]);
-        browser_thumbnail_rebuild_stream_source_zip($plan);
+        while (ob_get_level() > 0) {
+            ob_end_clean();
+        }
+        header('Content-Type: application/zip');
+        header('Content-Disposition: attachment; filename="thumbnail-rebuild-source-' . (int) ($plan['offset'] ?? 0) . '.zip"');
+        header('X-Content-Type-Options: nosniff');
+        browser_thumbnail_rebuild_stream_source_zip($plan, static function (string $chunk): void {
+            echo $chunk;
+            if (function_exists('flush')) {
+                flush();
+            }
+        });
     } catch (Throwable $exception) {
         admin_log_event('error', 'thumbnail.browser_rebuild_source_failed', 'Browser thumbnail source chunk request failed.', [
             'error' => $exception->getMessage(),

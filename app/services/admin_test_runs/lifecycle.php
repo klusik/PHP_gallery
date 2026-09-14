@@ -181,13 +181,14 @@ function admin_test_run_request_begin_for_token(string $token = '', string $kind
     $requestId = is_array($early) && !empty($early['request_id'])
         ? (string) $early['request_id']
         : sprintf('%s-%s-%s', (string) (function_exists('getmypid') ? getmypid() : 0), str_replace('.', '', sprintf('%.6f', microtime(true))), bin2hex(random_bytes(4)));
+    $transport = admin_test_run_request_transport_context();
     $requestTime = is_array($early) && is_numeric($early['request_time_unix'] ?? null)
         ? (float) $early['request_time_unix']
-        : (isset($_SERVER['REQUEST_TIME_FLOAT']) && is_numeric($_SERVER['REQUEST_TIME_FLOAT']) ? (float) $_SERVER['REQUEST_TIME_FLOAT'] : microtime(true));
+        : (is_numeric($transport['request_time_float'] ?? null) ? (float) $transport['request_time_float'] : microtime(true));
     if (is_array($early)) {
         unset($early['token']);
     }
-    $uri = (string) ($_SERVER['REQUEST_URI'] ?? '');
+    $uri = (string) ($transport['request_uri'] ?? '');
     if (function_exists(__NAMESPACE__ . '\\admin_test_run_sanitize_url')) {
         $uri = admin_test_run_sanitize_url($uri);
     }
@@ -200,13 +201,13 @@ function admin_test_run_request_begin_for_token(string $token = '', string $kind
         'instrumentation_enter_unix' => microtime(true),
         'early_bootstrap' => $early,
         'request' => [
-            'method' => (string) ($_SERVER['REQUEST_METHOD'] ?? ''),
+            'method' => (string) ($transport['request_method'] ?? ''),
             'uri' => $uri,
-            'script_name' => (string) ($_SERVER['SCRIPT_NAME'] ?? ''),
-            'protocol' => (string) ($_SERVER['SERVER_PROTOCOL'] ?? ''),
-            'https' => !empty($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTPS']) !== 'off',
-            'query_keys' => array_values(array_map('strval', array_keys($_GET))),
-            'cookie_names' => array_values(array_map('strval', array_keys($_COOKIE))),
+            'script_name' => (string) ($transport['script_name'] ?? ''),
+            'protocol' => (string) ($transport['protocol'] ?? ''),
+            'https' => !empty($transport['https']),
+            'query_keys' => is_array($transport['query_keys'] ?? null) ? $transport['query_keys'] : [],
+            'cookie_names' => is_array($transport['cookie_names'] ?? null) ? $transport['cookie_names'] : [],
         ],
         'process' => admin_test_run_runtime_snapshot('request_begin'),
         'marks' => [],
@@ -244,9 +245,6 @@ function admin_test_run_request_begin_for_token(string $token = '', string $kind
         'pid' => $state['process']['pid'] ?? null,
         'uri' => $state['request']['uri'],
     ]);
-    if (!headers_sent()) {
-        header('X-Gallery-Test-Request-ID: ' . $requestId);
-    }
     if (function_exists('Gallery\\Diagnostics\\admin_test_run_early_mark_adopted')) {
         \Gallery\Diagnostics\admin_test_run_early_mark_adopted();
     }
@@ -271,6 +269,25 @@ function admin_test_run_current_request_id(): string
         : '';
 }
 
+
+/**
+ * Return response headers associated with the currently traced request.
+ *
+ * @return array<int,array{name:string,value:string,replace?:bool}>
+ */
+function admin_test_run_request_header_intents(): array
+{
+    $requestId = admin_test_run_current_request_id();
+    if ($requestId === '') {
+        return [];
+    }
+    return [[
+        'name' => 'X-Gallery-Test-Request-ID',
+        'value' => $requestId,
+        'replace' => true,
+    ]];
+}
+
 /**
  * Register the final shutdown observer after maintenance callbacks so worker-tail work is included.
  */
@@ -288,24 +305,29 @@ function admin_test_run_register_final_shutdown_observer(): void
 /**
  * Mark the time at which application code considers the response complete, without detaching the worker.
  */
-function admin_test_run_response_logical_finish(string $reason = 'response_complete'): void
+function admin_test_run_response_logical_finish(string $reason = 'response_complete', ?int $httpStatus = null): array
 {
     if (!isset($GLOBALS['admin_test_run_request']) || !is_array($GLOBALS['admin_test_run_request'])) {
-        return;
+        return [];
     }
     $state = &$GLOBALS['admin_test_run_request'];
     if (!empty($state['response_lifecycle']['logical_response_finished_at_unix'])) {
-        return;
+        return [];
     }
     $now = microtime(true);
     $state['response_lifecycle']['logical_response_finished_at_unix'] = $now;
     $state['response_lifecycle']['logical_response_finish_reason'] = $reason;
+    if ($httpStatus !== null && $httpStatus >= 100 && $httpStatus <= 599) {
+        $state['response_lifecycle']['http_status'] = $httpStatus;
+    }
     $state['response_lifecycle']['logical_response_finish_offset_ms'] = max(0.0, ($now - (float) $state['request_time_unix']) * 1000);
     admin_test_run_mark('response_logically_finished', ['reason' => $reason]);
-    if (!headers_sent()) {
-        $duration = max(0.0, ($now - (float) $state['request_time_unix']) * 1000);
-        header('Server-Timing: gallery-php;dur=' . number_format($duration, 3, '.', ''), false);
-    }
+    $duration = max(0.0, ($now - (float) $state['request_time_unix']) * 1000);
+    return [[
+        'name' => 'Server-Timing',
+        'value' => 'gallery-php;dur=' . number_format($duration, 3, '.', ''),
+        'replace' => false,
+    ]];
 }
 
 /**
@@ -391,7 +413,9 @@ function admin_test_run_request_finish(string $reason = 'normal'): void
     $state['response_lifecycle']['response_to_shutdown_ms'] = is_numeric($logicalFinish)
         ? max(0.0, ($finishedAt - (float) $logicalFinish) * 1000)
         : null;
-    $state['http_status'] = http_response_code();
+    $state['http_status'] = isset($state['response_lifecycle']['http_status'])
+        ? (int) $state['response_lifecycle']['http_status']
+        : null;
     $state['response'] = [
         'headers' => admin_test_run_response_headers(),
         'header_count' => count(headers_list()),

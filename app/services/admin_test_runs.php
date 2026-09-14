@@ -43,6 +43,9 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+// Keep request_data() available when this service module is loaded in isolation.
+require_once dirname(__DIR__) . '/request_data.php';
+
 const ADMIN_TEST_RUN_COOKIE = 'gallery_admin_test_run';
 const ADMIN_TEST_RUN_TTL_SECONDS = 600;
 const ADMIN_TEST_RUN_SCHEMA_VERSION = 2;

@@ -53,12 +53,10 @@ use function Gallery\Core\admin_mutation_success_envelope;
 use function Gallery\Core\csrf_field;
 use function Gallery\Core\csrf_token;
 use function Gallery\Core\current_user;
-use function Gallery\Core\db;
 use function Gallery\Core\e;
 use function Gallery\Core\flash_message;
 use function Gallery\Core\gallery_public_url;
 use function Gallery\Core\image_public_url;
-use function Gallery\Core\now_sql;
 use function Gallery\Core\redirect_to;
 use function Gallery\Core\render_admin_tab_panel;
 use function Gallery\Core\render_admin_tabs;
@@ -66,8 +64,6 @@ use function Gallery\Core\render_footer;
 use function Gallery\Core\render_header;
 use function Gallery\Core\request_method;
 use function Gallery\Core\require_admin;
-use function Gallery\Core\slugify;
-use function Gallery\Core\unique_slug;
 use function Gallery\Core\url_for;
 use function Gallery\Core\verify_csrf;
 use function Gallery\Services\ai_image_analysis_force_gallery_reprocess;
@@ -77,6 +73,9 @@ use function Gallery\Services\exif_gps_override_schema_ready;
 use function Gallery\Services\exif_gps_schema_ready;
 use function Gallery\Services\feature_capability_effective_enabled;
 use function Gallery\Services\find_gallery;
+use function Gallery\Services\gallery_editor_set_cover_image;
+use function Gallery\Services\gallery_editor_unique_slug;
+use function Gallery\Services\gallery_editor_update_fields;
 use function Gallery\Services\find_image;
 use function Gallery\Services\flight_map_schema_ready;
 use function Gallery\Services\gallery_access_schema_ready;
@@ -169,7 +168,6 @@ use function Gallery\Services\presentation_schema_assert_known;
 use function Gallery\Services\public_path_schema_ready;
 use function Gallery\Services\refresh_gallery_public_paths;
 use function Gallery\Services\regenerate_gallery_share_token;
-use function Gallery\Services\render_admin_thumbnail_bound_slider;
 use function Gallery\Services\revoke_gallery_share_token;
 use function Gallery\Services\save_gallery_flight_path_route;
 use function Gallery\Services\save_gallery_thumbnail_bounds;
@@ -612,14 +610,8 @@ function admin_save_gallery_title_picture(array $gallery, array $imageIds, strin
 
     // $coverImageId stores the first selected image because only one title picture can be saved.
     $coverImageId = (int) $ownedIds[0];
-    // $stmt stores the database update for the gallery title picture.
-    $stmt = db()->prepare('UPDATE galleries SET cover_image_id = ?, updated_at = ? WHERE id = ?');
-    $stmt->execute([$coverImageId, now_sql(), $galleryId]);
     // $updated stores the reloaded gallery row so JSON reflects the persisted database state.
-    $updated = find_gallery($galleryId, true) ?: find_gallery($galleryId) ?: $gallery;
-    if ($updated) {
-        write_gallery_sidecar($updated);
-    }
+    $updated = gallery_editor_set_cover_image($galleryId, $coverImageId, $gallery);
     // $notice stores the message returned to the direct page or side-panel workflow.
     $notice = t('admin.gallery_editor.title_picture_saved');
     if (admin_wants_json()) {
@@ -706,19 +698,7 @@ function render_admin_simbrief_description_tool(int $galleryId): void
     if (function_exists('Gallery\\Services\\feature_capability_effective_enabled') && !feature_capability_effective_enabled('simbrief')) {
         return;
     }
-    if (function_exists('Gallery\\Views\\view_render_admin_simbrief_description_tool')) {
-        view_render_admin_simbrief_description_tool($galleryId);
-        return;
-    }
-    echo '<div class="admin-simbrief-description" data-simbrief-description-tool data-simbrief-endpoint="' . e(url_for('admin_simbrief_description')) . '" data-gallery-id="' . (int) $galleryId . '">';
-    echo '<div class="admin-simbrief-description-heading"><div><h3>' . e(t('admin.simbrief.title', 'Generate from SimBrief')) . '</h3><p class="muted">' . e(t('admin.simbrief.help', 'Fetch the latest SimBrief OFP, save it with this gallery, generate an editable description draft, and update the flight route map from OFP coordinates.')) . '</p></div></div>';
-    echo '<div class="admin-simbrief-description-grid">';
-    echo '<label>' . e(t('admin.simbrief.pilot_id', 'SimBrief Pilot ID')) . '<input name="simbrief_pilot_id" autocomplete="off" inputmode="text" data-simbrief-pilot-id><span class="muted">' . e(t('admin.simbrief.pilot_id_help', 'Pilot ID = the numeric or account identifier used by SimBrief. If both fields are filled, Pilot ID is used first.')) . '</span></label>';
-    echo '<label>' . e(t('admin.simbrief.pilot_name', 'SimBrief pilot name')) . '<input name="simbrief_pilot_name" autocomplete="off" data-simbrief-pilot-name><span class="muted">' . e(t('admin.simbrief.pilot_name_help', 'Pilot name = the SimBrief pilot name exactly as it appears in the SimBrief profile.')) . '</span></label>';
-    echo '</div>';
-    echo '<div class="admin-simbrief-description-actions"><button type="button" class="button secondary" data-simbrief-generate>' . e(t('admin.simbrief.generate_button', 'Generate description and route map')) . '</button><span class="muted" data-simbrief-status role="status" aria-live="polite"></span></div>';
-    echo '<p class="muted" data-simbrief-route-status role="status" aria-live="polite" hidden></p>';
-    echo '</div>';
+    view_render_admin_simbrief_description_tool($galleryId);
 }
 
 /**
@@ -1013,7 +993,7 @@ function admin_save_gallery_from_input(array $gallery, array $input, array $file
     }
 
     // Variable $slug stores this steps working value.
-    $slug = $slug !== '' ? slugify($slug) : unique_slug(db(), $title, $galleryId);
+    $slug = gallery_editor_unique_slug($slug !== '' ? $slug : $title, $galleryId);
     // $descriptionLayoutOverride stores the optional gallery-card layout override for this gallery.
     $descriptionLayoutOverride = gallery_description_layout_schema_ready() ? gallery_description_layout_storage_value($input['description_layout'] ?? ($completeForm ? 'inherit' : ($gallery['description_layout'] ?? 'inherit'))) : null;
     // $shouldUpdateGrid stores whether grid fields are part of this request.
@@ -1029,7 +1009,7 @@ function admin_save_gallery_from_input(array $gallery, array $input, array $file
     // $shouldUpdateThumbnailBounds stores whether thumbnail-bound fields are part of this request.
     $shouldUpdateThumbnailBounds = $completeForm || admin_gallery_input_has_any_key($input, ['gallery_thumbnail_min_size', 'gallery_thumbnail_max_size', 'gallery_thumbnail_bounds_recursive']);
     // $thumbnailBounds stores the optional minimum and maximum responsive thumbnail sizes for this gallery.
-    $thumbnailBounds = thumbnail_bounds_schema_ready() && $shouldUpdateThumbnailBounds ? thumbnail_bound_pair_from_post('gallery_thumbnail') : [($gallery['thumbnail_min_size'] ?? null), ($gallery['thumbnail_max_size'] ?? null)];
+    $thumbnailBounds = thumbnail_bounds_schema_ready() && $shouldUpdateThumbnailBounds ? thumbnail_bound_pair_from_post('gallery_thumbnail', $_POST) : [($gallery['thumbnail_min_size'] ?? null), ($gallery['thumbnail_max_size'] ?? null)];
     // $thumbnailBoundsRecursive stores whether descendants should receive the same saved thumbnail bounds.
     $thumbnailBoundsRecursive = thumbnail_bounds_schema_ready() && !empty($input['gallery_thumbnail_bounds_recursive']);
     // $shouldUpdateAccess stores whether password/share access controls are part of this request.
@@ -1079,90 +1059,87 @@ function admin_save_gallery_from_input(array $gallery, array $input, array $file
 
     // $fields stores an intermediate value used by the surrounding gallery workflow.
     $fields = [
-        'title = ?' => $title,
-        'description = ?' => (string) ($input['description'] ?? $gallery['description'] ?? ''),
-        'slug = ?' => unique_slug_for_value($slug, $galleryId),
-        'visibility = ?' => $visibility,
-        'sort_order = ?' => (int) ($input['sort_order'] ?? $gallery['sort_order'] ?? 0),
+        'title' => $title,
+        'description' => (string) ($input['description'] ?? $gallery['description'] ?? ''),
+        'slug' => $slug,
+        'visibility' => $visibility,
+        'sort_order' => (int) ($input['sort_order'] ?? $gallery['sort_order'] ?? 0),
     ];
     if ($shouldMoveGallery) {
-        $fields['parent_id = ?'] = $parentId;
+        $fields['parent_id'] = $parentId;
     }
     if ($shouldUpdateCover) {
-        $fields['cover_image_id = ?'] = $coverImageId;
+        $fields['cover_image_id'] = $coverImageId;
     }
     if (gallery_date_schema_ready()) {
-        $fields['gallery_date = ?'] = $galleryDate;
+        $fields['gallery_date'] = $galleryDate;
     }
     if (gallery_date_range_schema_ready()) {
-        $fields['gallery_date_end = ?'] = $galleryDateEnd;
+        $fields['gallery_date_end'] = $galleryDateEnd;
     }
     if ($pictureGameReady) {
-        $fields['picture_game_enabled = ?'] = $pictureGameEnabled;
+        $fields['picture_game_enabled'] = $pictureGameEnabled;
     }
     if ($gpsMapOverrideReady) {
-        $fields['gps_map_enabled = ?'] = $gpsMapOverride;
+        $fields['gps_map_enabled'] = $gpsMapOverride;
     } elseif ($gpsMapReady) {
-        $fields['gps_map_enabled = ?'] = $gpsMapEnabled;
+        $fields['gps_map_enabled'] = $gpsMapEnabled;
     }
     if ($votingReady) {
-        $fields['voting_enabled = ?'] = $votingEnabled;
+        $fields['voting_enabled'] = $votingEnabled;
     }
     if (gallery_filename_display_schema_ready()) {
-        $fields['show_filenames = ?'] = $showFilenames;
+        $fields['show_filenames'] = $showFilenames;
     }
     if (gallery_description_layout_schema_ready()) {
-        $fields['description_layout = ?'] = $descriptionLayoutOverride;
+        $fields['description_layout'] = $descriptionLayoutOverride;
     }
     if (gallery_count_badge_schema_ready()) {
-        $fields['count_badge_visibility = ?'] = $countBadgeVisibility;
+        $fields['count_badge_visibility'] = $countBadgeVisibility;
     }
     if ($lightboxModeReady) {
-        $fields['lightbox_browsing_mode = ?'] = $lightboxBrowsingMode;
+        $fields['lightbox_browsing_mode'] = $lightboxBrowsingMode;
     }
     if (nsfw_guard_schema_ready()) {
-        $fields['nsfw_enabled = ?'] = $nsfwEnabled;
+        $fields['nsfw_enabled'] = $nsfwEnabled;
     }
     if (gallery_grid_schema_ready() && $shouldUpdateGrid) {
-        $fields['grid_columns = ?'] = $gridColumns;
-        $fields['grid_rows = ?'] = $gridRows;
-        $fields['grid_use_for_subgalleries = ?'] = $gridUseForSubgalleries;
+        $fields['grid_columns'] = $gridColumns;
+        $fields['grid_rows'] = $gridRows;
+        $fields['grid_use_for_subgalleries'] = $gridUseForSubgalleries;
     }
     if (thumbnail_bounds_schema_ready() && $shouldUpdateThumbnailBounds) {
-        $fields['thumbnail_min_size = ?'] = $thumbnailBounds[0];
-        $fields['thumbnail_max_size = ?'] = $thumbnailBounds[1];
+        $fields['thumbnail_min_size'] = $thumbnailBounds[0];
+        $fields['thumbnail_max_size'] = $thumbnailBounds[1];
     }
     if ($shouldUpdateAccessListing) {
-        $fields['access_listing = ?'] = $accessListing;
+        $fields['access_listing'] = $accessListing;
     }
     if ($accessReady && $shouldUpdateAccess) {
-        $fields['access_mode = ?'] = $accessMode;
-        $fields['access_password_hash = ?'] = $accessMode === 'password' ? $accessPasswordHash : null;
+        $fields['access_mode'] = $accessMode;
+        $fields['access_password_hash'] = $accessMode === 'password' ? $accessPasswordHash : null;
         if ($accessMode !== 'password') {
             if (gallery_access_share_token_schema_ready()) {
-                $fields['access_share_token = ?'] = null;
+                $fields['access_share_token'] = null;
             }
-            $fields['access_token_hash = ?'] = null;
-            $fields['access_token_expires_at = ?'] = null;
+            $fields['access_token_hash'] = null;
+            $fields['access_token_expires_at'] = null;
         }
     }
     if (gallery_cover_asset_schema_ready() && $shouldUpdateCover) {
-        $fields['cover_image_path = ?'] = $coverImagePath;
+        $fields['cover_image_path'] = $coverImagePath;
     }
     if (gallery_branding_schema_ready() && $shouldUpdateBranding) {
         foreach (gallery_branding_asset_types() as $brandingKind => $definition) {
             // $column stores an intermediate value used by the surrounding gallery workflow.
             $column = (string) $definition['column'];
-            $fields[$column . ' = ?'] = $brandingAssetPaths[$brandingKind] ?? null;
+            $fields[$column] = $brandingAssetPaths[$brandingKind] ?? null;
         }
     }
     if (gallery_background_source_schema_ready() && $shouldUpdateBackgroundSource) {
-        $fields['background_source = ?'] = $backgroundSource;
+        $fields['background_source'] = $backgroundSource;
     }
-    $fields['updated_at = ?'] = now_sql();
-    // $stmt stores an intermediate value used by the surrounding gallery workflow.
-    $stmt = db()->prepare('UPDATE galleries SET ' . implode(', ', array_keys($fields)) . ' WHERE id = ?');
-    $stmt->execute(array_merge(array_values($fields), [$galleryId]));
+    gallery_editor_update_fields($galleryId, $fields);
     if ($shouldUpdateLocalization) {
         content_save_localizations('gallery', $galleryId, $input['content_language'] ?? null, $input['translations'] ?? []);
     }

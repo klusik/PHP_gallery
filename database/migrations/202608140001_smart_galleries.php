@@ -1,6 +1,21 @@
 <?php
 
 /**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ *
+ * File: database/migrations/202608140001_smart_galleries.php
+ *
+ * Author:
+ *   Rudolf Klusal
+ *
+ * License:
+ *   MIT License (see LICENSE file in repository)
+ *
+ * Notes:
+ *   - Keep comments and docstrings intact when modifying this file.
+ */
+/**
  * Add persisted Smart Gallery definitions and private editorial image ratings.
  *
  * Smart Galleries store only a versioned rule document. Their image membership

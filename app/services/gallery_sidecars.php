@@ -38,18 +38,19 @@ namespace Gallery\Services;
 
 use DirectoryIterator;
 use FilesystemIterator;
-use PDO;
 use RecursiveCallbackFilterIterator;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use RuntimeException;
 use SplFileInfo;
 use Throwable;
-use function Gallery\Core\db;
 use function Gallery\Core\is_supported_image_path;
 use function Gallery\Core\normalize_relative_path;
 use function Gallery\Core\now_sql;
-use function Gallery\Core\unique_slug;
+use function Gallery\Models\gallery_model_folder_paths;
+use function Gallery\Models\gallery_model_insert;
+use function Gallery\Models\gallery_model_prepend_sort_order;
+use function Gallery\Models\gallery_model_unique_slug;
 
 /**
 Gallery discovery and sidecar metadata helpers.
@@ -96,10 +97,8 @@ function discover_gallery_candidates(): array
         return [];
     }
 
-    // Variable $pdo stores this steps working value.
-    $pdo = db();
     // Variable $known stores this steps working value.
-    $known = $pdo->query('SELECT folder_path FROM galleries')->fetchAll(PDO::FETCH_COLUMN);
+    $known = gallery_model_folder_paths();
     // Variable $known stores this steps working value.
     $known = array_flip($known);
     // Variable $candidates stores this steps working value.
@@ -529,87 +528,62 @@ function create_gallery_row_for_folder(string $folderPath): ?array
     $accessListing = gallery_access_schema_ready() && ($candidate['access_listing'] ?? '') === 'unlisted' ? 'unlisted' : 'listed';
     // Variable $parent stores this steps working value.
     $parent = find_parent_gallery_for_path($folderPath);
-    // Variable $pdo stores this steps working value.
-    $pdo = db();
-    // Variable $stmt stores this steps working value.
-    $columns = ['parent_id', 'folder_path', 'folder_path_hash', 'slug', 'title', 'description', 'sort_order', 'visibility', 'voting_enabled'];
-    // $values stores an intermediate value used by the surrounding gallery workflow.
-    $values = [
-        $parent ? (int) $parent['id'] : null,
-        $folderPath,
-        hash('sha256', $folderPath),
-        unique_slug($pdo, (string) $candidate['title']),
-        $candidate['title'],
-        $candidate['description'],
-        (int) $candidate['sort_order'],
-        $visibility,
-        $votingEnabled,
+    // $fields stores the schema-aware persistence values for the new gallery row.
+    $fields = [
+        'parent_id' => $parent ? (int) $parent['id'] : null,
+        'folder_path' => $folderPath,
+        'folder_path_hash' => hash('sha256', $folderPath),
+        'slug' => gallery_model_unique_slug((string) $candidate['title']),
+        'title' => $candidate['title'],
+        'description' => $candidate['description'],
+        'sort_order' => (int) $candidate['sort_order'],
+        'visibility' => $visibility,
+        'voting_enabled' => $votingEnabled,
     ];
     if (gallery_filename_display_schema_ready()) {
-        $columns[] = 'show_filenames';
-        $values[] = $showFilenames;
+        $fields['show_filenames'] = $showFilenames;
     }
     if (content_localization_schema_ready('gallery')) {
-        $columns[] = 'content_language';
-        $values[] = content_language_normalize($candidate['content_language'] ?? null);
+        $fields['content_language'] = content_language_normalize($candidate['content_language'] ?? null);
     }
     if (gallery_description_layout_schema_ready()) {
-        $columns[] = 'description_layout';
-        $values[] = $descriptionLayout;
+        $fields['description_layout'] = $descriptionLayout;
     }
     if (gallery_count_badge_schema_ready()) {
-        $columns[] = 'count_badge_visibility';
-        $values[] = $countBadgeVisibility;
+        $fields['count_badge_visibility'] = $countBadgeVisibility;
     }
     if (gallery_lightbox_browsing_mode_schema_ready()) {
-        $columns[] = 'lightbox_browsing_mode';
-        $values[] = $lightboxBrowsingMode;
+        $fields['lightbox_browsing_mode'] = $lightboxBrowsingMode;
     }
     if (gallery_date_schema_ready()) {
-        $columns[] = 'gallery_date';
-        $values[] = $galleryDate;
+        $fields['gallery_date'] = $galleryDate;
     }
     if (gallery_date_range_schema_ready()) {
-        $columns[] = 'gallery_date_end';
-        $values[] = $galleryDateEnd;
+        $fields['gallery_date_end'] = $galleryDateEnd;
     }
     if (gallery_grid_schema_ready()) {
-        $columns[] = 'grid_columns';
-        $columns[] = 'grid_rows';
-        $columns[] = 'grid_use_for_subgalleries';
-        $values[] = $candidateHasGrid ? pagination_dimension_value($candidate['grid_columns'], CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_MAX_COLUMNS) : null;
-        $values[] = $candidateHasGrid ? pagination_dimension_value($candidate['grid_rows'], CMS_PAGINATION_DEFAULT_ROWS, CMS_PAGINATION_MAX_ROWS) : null;
-        $values[] = !empty($candidate['grid_use_for_subgalleries']) ? 1 : 0;
+        $fields['grid_columns'] = $candidateHasGrid ? pagination_dimension_value($candidate['grid_columns'], CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_MAX_COLUMNS) : null;
+        $fields['grid_rows'] = $candidateHasGrid ? pagination_dimension_value($candidate['grid_rows'], CMS_PAGINATION_DEFAULT_ROWS, CMS_PAGINATION_MAX_ROWS) : null;
+        $fields['grid_use_for_subgalleries'] = !empty($candidate['grid_use_for_subgalleries']) ? 1 : 0;
     }
     if (thumbnail_bounds_schema_ready()) {
-        $columns[] = 'thumbnail_min_size';
-        $columns[] = 'thumbnail_max_size';
-        $values[] = $candidateHasThumbnailBounds ? thumbnail_bound_post_value($candidate['thumbnail_min_size']) : null;
-        $values[] = $candidateHasThumbnailBounds ? thumbnail_bound_post_value($candidate['thumbnail_max_size']) : null;
+        $fields['thumbnail_min_size'] = $candidateHasThumbnailBounds ? thumbnail_bound_post_value($candidate['thumbnail_min_size']) : null;
+        $fields['thumbnail_max_size'] = $candidateHasThumbnailBounds ? thumbnail_bound_post_value($candidate['thumbnail_max_size']) : null;
     }
     if (gallery_access_schema_ready()) {
-        $columns[] = 'access_mode';
-        $columns[] = 'access_listing';
-        $values[] = $accessMode;
-        $values[] = $accessMode === 'password' ? $accessListing : 'listed';
+        $fields['access_mode'] = $accessMode;
+        $fields['access_listing'] = $accessMode === 'password' ? $accessListing : 'listed';
     }
-    if (function_exists('Gallery\\Services\\gallery_branding_schema_ready') && gallery_branding_schema_ready()) {
+    if (function_exists('Gallery\Services\gallery_branding_schema_ready') && gallery_branding_schema_ready()) {
         foreach (gallery_branding_asset_types() as $kind => $definition) {
             // $column stores an intermediate value used by the surrounding gallery workflow.
             $column = (string) $definition['column'];
-            $columns[] = $column;
-            $values[] = !empty($candidate[$column]) ? normalize_relative_path((string) $candidate[$column]) : null;
+            $fields[$column] = !empty($candidate[$column]) ? normalize_relative_path((string) $candidate[$column]) : null;
         }
     }
-    $columns[] = 'created_at';
-    $columns[] = 'updated_at';
-    $values[] = now_sql();
-    $values[] = now_sql();
-    // $stmt stores an intermediate value used by the surrounding gallery workflow.
-    $stmt = $pdo->prepare('INSERT INTO galleries (' . implode(', ', $columns) . ') VALUES (' . implode(', ', array_fill(0, count($columns), '?')) . ')');
-    $stmt->execute($values);
-
-    $createdGalleryId = (int) $pdo->lastInsertId();
+    $fields['created_at'] = now_sql();
+    $fields['updated_at'] = now_sql();
+    $createdGalleryId = gallery_model_insert($fields);
     if (content_localization_schema_ready('gallery')) {
         content_save_localizations('gallery', $createdGalleryId, $candidate['content_language'] ?? null, $candidate['translations'] ?? []);
     }
@@ -637,17 +611,7 @@ function create_gallery_row_for_folder(string $folderPath): ?array
  */
 function next_gallery_prepend_sort_order(int $parentId): int
 {
-    if ($parentId > 0) {
-        // $stmt stores the query used for normal child galleries.
-        $stmt = db()->prepare('SELECT COALESCE(MIN(sort_order), 0) FROM galleries WHERE parent_id = ?');
-        $stmt->execute([$parentId]);
-    } else {
-        // $stmt stores the query used for root-level galleries.
-        $stmt = db()->query('SELECT COALESCE(MIN(sort_order), 0) FROM galleries WHERE parent_id IS NULL');
-    }
-    // $minimumSortOrder stores the first currently rendered sibling order.
-    $minimumSortOrder = (int) $stmt->fetchColumn();
-    return $minimumSortOrder - 10;
+    return gallery_model_prepend_sort_order($parentId);
 }
 
 /**

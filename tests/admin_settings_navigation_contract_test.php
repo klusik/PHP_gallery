@@ -31,12 +31,15 @@ $files = [
         . (string) file_get_contents(__DIR__ . '/../app/controllers/admin_theme_page.php'),
     'tags' => file_get_contents(__DIR__ . '/../app/controllers/admin_tags.php'),
     'uploads' => file_get_contents(__DIR__ . '/../app/views/admin_upload_settings.php'),
+    'uploads_controller' => file_get_contents(__DIR__ . '/../app/controllers/admin_uploads.php'),
     'telemetry' => file_get_contents(__DIR__ . '/../app/controllers/admin_telemetry.php'),
     'settings_view' => file_get_contents(__DIR__ . '/../app/views/admin_settings.php'),
     'tabs_js' => file_get_contents(__DIR__ . '/../public/assets/gallery-modules/admin-tabs.js'),
     'account' => file_get_contents(__DIR__ . '/../app/controllers/admin_auth.php'),
-    'dashboard' => file_get_contents(__DIR__ . '/../app/views/admin_dashboard.php'),
-    'dashboard_sections' => file_get_contents(__DIR__ . '/../app/views/admin_dashboard_sections.php'),
+    'dashboard' => (string) file_get_contents(__DIR__ . '/../app/services/admin_dashboard.php')
+        . (string) file_get_contents(__DIR__ . '/../app/views/admin_dashboard.php'),
+    'dashboard_sections' => (string) file_get_contents(__DIR__ . '/../app/services/admin_dashboard.php')
+        . (string) file_get_contents(__DIR__ . '/../app/views/admin_dashboard_sections.php'),
 ];
 foreach ($files as $name => $source) {
     if (!is_string($source)) {
@@ -49,7 +52,7 @@ $expectations = [
     ['chrome', "'page' => 'admin_settings'", 'Admin navigation Settings entry'],
     ['theme', "admin_settings_url('appearance')", 'Theme to central Settings link'],
     ['tags', "admin_settings_url('content')", 'Tags to central Settings link'],
-    ['uploads', "admin_settings_url('uploads')", 'Upload settings to central Settings link'],
+    ['uploads_controller', "admin_settings_url('uploads')", 'Upload settings controller prepares the central Settings link'],
     ['telemetry', "admin_settings_url('privacy')", 'Telemetry to central Settings link'],
     ['registry', 'function admin_settings_specialized_url(', 'central specialized URL helper'],
     ['registry', "'site_name' => admin_settings_entry('site_name', 'general'", 'central Theme-owned setting registry entry'],
@@ -57,7 +60,7 @@ $expectations = [
     ['registry', "'admin-theme-tab-appearance'", 'Gallery tags Theme hash'],
     ['registry', "'admin_tags'", 'central Settings to Tags route'],
     ['registry', "return 'settings-' . admin_settings_section_normalize(\$section);", 'stable section DOM ids'],
-    ['settings_view', "admin_settings_url(\$sectionId)", 'section query/hash links'],
+    ['settings_view', "(string) (\$section['url'] ?? '')", 'section query/hash links consume controller-prepared URLs'],
     ['settings_view', 'data-admin-tabs-url-mode="href"', 'Settings href-history tab mode'],
     ['tabs_js', "urlMode === 'href'", 'opt-in href-history support in reusable Admin tabs'],
     ['account', "admin_settings_url('advanced')", 'Account to central Advanced link'],

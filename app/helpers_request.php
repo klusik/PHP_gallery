@@ -110,6 +110,52 @@ function e(?string $value): string
 }
 
 /**
+ * Apply cookie instructions prepared by a service or controller policy layer.
+ *
+ * @param array<int,array{name:string,value:string,expires:int,path?:string,httponly?:bool,samesite?:string}> $instructions Cookie instructions.
+ */
+function apply_cookie_intents(array $instructions): void
+{
+    if (headers_sent()) {
+        return;
+    }
+    foreach ($instructions as $instruction) {
+        $name = (string) ($instruction['name'] ?? '');
+        if ($name === '' || preg_match('/^[A-Za-z0-9_]+$/D', $name) !== 1) {
+            continue;
+        }
+        setcookie($name, (string) ($instruction['value'] ?? ''), [
+            'expires' => (int) ($instruction['expires'] ?? 0),
+            'path' => (string) ($instruction['path'] ?? '/'),
+            'secure' => request_is_https(),
+            'httponly' => (bool) ($instruction['httponly'] ?? false),
+            'samesite' => (string) ($instruction['samesite'] ?? 'Lax'),
+        ]);
+    }
+}
+
+
+/**
+ * Apply response-header instructions prepared by a service or policy layer.
+ *
+ * @param array<int,array{name:string,value:string,replace?:bool}> $instructions Header instructions.
+ */
+function apply_response_header_intents(array $instructions): void
+{
+    if (headers_sent()) {
+        return;
+    }
+    foreach ($instructions as $instruction) {
+        $name = trim((string) ($instruction['name'] ?? ''));
+        if ($name === '' || preg_match('/^[A-Za-z0-9-]+$/D', $name) !== 1) {
+            continue;
+        }
+        $value = str_replace(["\r", "\n"], '', (string) ($instruction['value'] ?? ''));
+        header($name . ': ' . $value, (bool) ($instruction['replace'] ?? true));
+    }
+}
+
+/**
  * Return whether the current request reached the app through HTTPS.
  *
  * @return bool True when the condition matches.

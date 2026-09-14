@@ -36,26 +36,26 @@ declare(strict_types=1);
 
 namespace Gallery\Views;
 
-use const Gallery\Services\GALLERY_MIGRATION_RECONNECT_SECONDS;
 use function Gallery\Core\csrf_field;
 use function Gallery\Core\e;
 use function Gallery\Core\url_for;
-use function Gallery\Services\gallery_migration_current_version;
 use function Gallery\Services\t;
 
 /**
  * Render the gallery migration controls for the API tab.
  *
  * @param array $gallery Gallery row or gallery data.
+ * @param string $currentVersion Current PHP Gallery version.
+ * @param int $reconnectSeconds Default reconnect interval.
  */
-function view_render_admin_gallery_migration_panel(array $gallery): void
+function view_render_admin_gallery_migration_panel(array $gallery, string $currentVersion, int $reconnectSeconds): void
 {
     $galleryId = (int) ($gallery['id'] ?? 0);
     if ($galleryId <= 0) {
         return;
     }
 
-    echo '<section class="panel admin-gallery-migration-panel" data-gallery-migration data-gallery-migration-endpoint="' . e(url_for('admin_gallery_migration')) . '" data-gallery-id="' . $galleryId . '" data-current-version="' . e(gallery_migration_current_version()) . '">';
+    echo '<section class="panel admin-gallery-migration-panel" data-gallery-migration data-gallery-migration-endpoint="' . e(url_for('admin_gallery_migration')) . '" data-gallery-id="' . $galleryId . '" data-current-version="' . e($currentVersion) . '">';
     echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('gallery_migration.kicker', 'Migration')) . '</p><h3>' . e(t('gallery_migration.title', 'Migrate gallery via API')) . '</h3></div><p class="muted">' . e(t('gallery_migration.help', 'Move gallery trees between PHP Gallery instances using gallery-scoped API keys. Transfers are staged, version-checked, and use resumable ZIP packages containing originals and existing thumbnails.')) . '</p></div>';
     echo '<div class="admin-gallery-migration-grid">';
 
@@ -68,7 +68,7 @@ function view_render_admin_gallery_migration_panel(array $gallery): void
     echo '<label>' . e(t('gallery_migration.target_api_key', 'Target API key')) . '<input name="target_api_key" type="password" autocomplete="off" required></label>';
     echo '<label class="admin-checkbox-row"><input name="include_subgalleries" type="checkbox" value="1" checked> <span>' . e(t('gallery_migration.include_subgalleries', 'Include subgalleries')) . '</span></label>';
     echo '<p class="muted">' . e(t('gallery_migration.include_subgalleries_help', 'Enabled by default. The complete descendant tree is recreated below the imported root gallery.')) . '</p>';
-    echo '<label>' . e(t('gallery_migration.reconnect_seconds', 'Reconnect interval seconds')) . '<input name="reconnect_seconds" type="number" min="5" max="300" step="1" value="' . GALLERY_MIGRATION_RECONNECT_SECONDS . '" inputmode="numeric"></label>';
+    echo '<label>' . e(t('gallery_migration.reconnect_seconds', 'Reconnect interval seconds')) . '<input name="reconnect_seconds" type="number" min="5" max="300" step="1" value="' . $reconnectSeconds . '" inputmode="numeric"></label>';
     echo '<p class="muted">' . e(t('gallery_migration.reconnect_seconds_help', 'Each ZIP transfer request is refreshed after this many seconds. After a timeout or interrupted connection, the active instance asks the target which assets it already received before retrying the package.')) . '</p>';
     echo '<div class="admin-gallery-migration-actions"><button type="submit" class="button secondary">' . e(t('gallery_migration.start_export', 'Export via API')) . '</button><button type="button" class="secondary" data-gallery-migration-cancel hidden>' . e(t('gallery_migration.cancel', 'Cancel')) . '</button></div>';
     echo '<div class="thumbnail-progress admin-gallery-migration-progress" data-gallery-migration-progress hidden><progress class="thumbnail-progress-bar" data-gallery-migration-progress-fill value="0" max="100"></progress><p class="muted" data-gallery-migration-progress-text></p></div>';
@@ -84,7 +84,7 @@ function view_render_admin_gallery_migration_panel(array $gallery): void
     echo '<label>' . e(t('gallery_migration.source_api_key', 'Source API key')) . '<input name="source_api_key" type="password" autocomplete="off" required></label>';
     echo '<label class="admin-checkbox-row"><input name="include_subgalleries" type="checkbox" value="1" checked> <span>' . e(t('gallery_migration.include_subgalleries', 'Include subgalleries')) . '</span></label>';
     echo '<p class="muted">' . e(t('gallery_migration.include_subgalleries_help', 'Enabled by default. The complete descendant tree is recreated below the imported root gallery.')) . '</p>';
-    echo '<label>' . e(t('gallery_migration.reconnect_seconds', 'Reconnect interval seconds')) . '<input name="reconnect_seconds" type="number" min="5" max="300" step="1" value="' . GALLERY_MIGRATION_RECONNECT_SECONDS . '" inputmode="numeric"></label>';
+    echo '<label>' . e(t('gallery_migration.reconnect_seconds', 'Reconnect interval seconds')) . '<input name="reconnect_seconds" type="number" min="5" max="300" step="1" value="' . $reconnectSeconds . '" inputmode="numeric"></label>';
     echo '<p class="muted">' . e(t('gallery_migration.reconnect_seconds_help', 'Each ZIP transfer request is refreshed after this many seconds. After a timeout or interrupted connection, the active instance asks the target which assets it already received before retrying the package.')) . '</p>';
     echo '<div class="admin-gallery-migration-actions"><button type="submit" class="button secondary">' . e(t('gallery_migration.start_import', 'Import from API')) . '</button><button type="button" class="secondary" data-gallery-migration-cancel hidden>' . e(t('gallery_migration.cancel', 'Cancel')) . '</button></div>';
     echo '<div class="thumbnail-progress admin-gallery-migration-progress" data-gallery-migration-progress hidden><progress class="thumbnail-progress-bar" data-gallery-migration-progress-fill value="0" max="100"></progress><p class="muted" data-gallery-migration-progress-text></p></div>';
@@ -92,6 +92,6 @@ function view_render_admin_gallery_migration_panel(array $gallery): void
     echo '</form>';
 
     echo '</div>';
-    echo '<p class="muted">' . e(t('gallery_migration.version_policy', 'Version policy: migrations are accepted only when both instances run exactly version {version}. Compatibility rules can be expanded later.', ['version' => gallery_migration_current_version()])) . '</p>';
+    echo '<p class="muted">' . e(t('gallery_migration.version_policy', 'Version policy: migrations are accepted only when both instances run exactly version {version}. Compatibility rules can be expanded later.', ['version' => $currentVersion])) . '</p>';
     echo '</section>';
 }

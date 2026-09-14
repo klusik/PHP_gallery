@@ -1,3 +1,18 @@
+/**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ *
+ * File: public/assets/styles/mobile-gallery.css
+ *
+ * Author:
+ *   Rudolf Klusal
+ *
+ * License:
+ *   MIT License (see LICENSE file in repository)
+ *
+ * Notes:
+ *   - Keep comments and docstrings intact when modifying this file.
+ */
 /* Mobile public gallery and lightbox display.
    This file intentionally owns the mobile presentation layer so desktop
    lightbox and gallery rules do not need compact-screen exceptions. */

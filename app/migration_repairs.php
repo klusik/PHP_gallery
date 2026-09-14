@@ -88,6 +88,7 @@ function run_gallery_public_path_repair(PDO $pdo, bool $verifyHierarchy): void
     if (!function_exists('Gallery\\Services\\regenerate_gallery_public_paths')) {
         $projectRoot = dirname(__DIR__);
         require_once $projectRoot . '/app/helpers.php';
+        require_once $projectRoot . '/app/models/public_paths.php';
         require_once $projectRoot . '/app/services/public_paths.php';
     }
     if (!function_exists('Gallery\\Services\\regenerate_gallery_public_paths')) {

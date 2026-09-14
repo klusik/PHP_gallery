@@ -36,6 +36,8 @@ declare(strict_types=1);
 
 use function Gallery\Services\upload_automation_sim_camera_metadata;
 
+require_once __DIR__ . '/../app/models/images.php';
+require_once __DIR__ . '/../app/models/upload_automation.php';
 require_once __DIR__ . '/../app/services/upload_automation.php';
 
 /**
@@ -52,37 +54,37 @@ function assert_upload_automation_camera_same(mixed $expected, mixed $actual, st
     }
 }
 
-$_POST = [
+$input = [
     'sim_location_source' => 'simconnect_camera',
     'sim_camera_latitude' => '48.123456789',
     'sim_camera_longitude' => '16.987654321',
     'sim_camera_altitude' => '1234.567',
 ];
-$metadata = upload_automation_sim_camera_metadata();
+$metadata = upload_automation_sim_camera_metadata($input);
 assert_upload_automation_camera_same(48.1234568, $metadata['lat'] ?? null, 'valid latitude rounds to database precision');
 assert_upload_automation_camera_same(16.9876543, $metadata['lng'] ?? null, 'valid longitude rounds to database precision');
 assert_upload_automation_camera_same(1234.57, $metadata['altitude'] ?? null, 'valid altitude rounds to database precision');
 assert_upload_automation_camera_same('simconnect_camera', $metadata['source'] ?? null, 'valid source is preserved');
 
-$_POST = [
+$input = [
     'sim_location_source' => 'aircraft',
     'sim_camera_latitude' => '48.1',
     'sim_camera_longitude' => '16.9',
 ];
-assert_upload_automation_camera_same(null, upload_automation_sim_camera_metadata(), 'unsupported source is rejected');
+assert_upload_automation_camera_same(null, upload_automation_sim_camera_metadata($input), 'unsupported source is rejected');
 
-$_POST = [
+$input = [
     'sim_location_source' => 'simconnect_camera',
     'sim_camera_latitude' => '91',
     'sim_camera_longitude' => '16.9',
 ];
-assert_upload_automation_camera_same(null, upload_automation_sim_camera_metadata(), 'out-of-range latitude is rejected');
+assert_upload_automation_camera_same(null, upload_automation_sim_camera_metadata($input), 'out-of-range latitude is rejected');
 
-$_POST = [
+$input = [
     'sim_location_source' => 'simconnect_camera',
     'sim_camera_latitude' => '48.1',
     'sim_camera_longitude' => '181',
 ];
-assert_upload_automation_camera_same(null, upload_automation_sim_camera_metadata(), 'out-of-range longitude is rejected');
+assert_upload_automation_camera_same(null, upload_automation_sim_camera_metadata($input), 'out-of-range longitude is rejected');
 
 echo "upload automation SimConnect camera metadata tests passed\n";

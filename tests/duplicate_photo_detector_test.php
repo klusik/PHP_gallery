@@ -396,11 +396,15 @@ $serviceSource = file_get_contents(__DIR__ . '/../app/services/duplicate_photo_d
 if (!is_string($serviceSource)) {
     throw new RuntimeException('Could not read duplicate detector service source for matching-boundary SQL assertion.');
 }
+$modelSource = file_get_contents(__DIR__ . '/../app/models/duplicate_photo_detector.php');
+if (!is_string($modelSource)) {
+    throw new RuntimeException('Could not read duplicate detector model source for persistence-boundary assertions.');
+}
 assert_duplicate_detector_same(false, preg_match('/\b(?:UPDATE|DELETE\s+FROM|INSERT\s+INTO|REPLACE\s+INTO)\s+images\b/i', $serviceSource) === 1, 'detector service contains no image-table mutation SQL');
 
-assert_duplicate_detector_true(str_contains($serviceSource, 'INNER JOIN galleries child'), 'local detector resolves descendant galleries from the selected branch root');
-assert_duplicate_detector_true(str_contains($serviceSource, "child.folder_path LIKE CONCAT(root.folder_path, '/%')"), 'local detector includes nested subgallery folder paths');
-assert_duplicate_detector_true(str_contains($serviceSource, 'gallery_id IN ($placeholders)'), 'local image batches use the immutable gallery-branch id snapshot');
+assert_duplicate_detector_true(str_contains($modelSource, 'INNER JOIN galleries child'), 'local detector model resolves descendant galleries from the selected branch root');
+assert_duplicate_detector_true(str_contains($modelSource, "child.folder_path LIKE CONCAT(root.folder_path, '/%')"), 'local detector model includes nested subgallery folder paths');
+assert_duplicate_detector_true(str_contains($serviceSource, 'duplicate_photo_model_fetch_batch($galleryIds, $cursor, $maxImageId, $batchSize)') && str_contains($modelSource, 'gallery_id IN ('), 'local image batches pass the immutable gallery-branch id snapshot into model-owned persistence');
 assert_duplicate_detector_true(str_contains($serviceSource, 'DUPLICATE_PHOTO_DETECTOR_MAX_BATCH_SIZE = 300'), 'server caps one detector metadata batch at 300 rows');
 assert_duplicate_detector_true(str_contains($serviceSource, 'DUPLICATE_PHOTO_DETECTOR_JOB_TTL_SECONDS = 3600'), 'detector jobs expire after one hour');
 assert_duplicate_detector_true(str_contains($serviceSource, 'DUPLICATE_PHOTO_DETECTOR_MAX_SESSION_JOBS = 3'), 'administrator sessions retain at most three detector jobs');

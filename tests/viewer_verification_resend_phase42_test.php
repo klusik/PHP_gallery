@@ -18,6 +18,9 @@
  *   - Verify current registration-mode revalidation, invitation-backed resend, and anti-resurrection behavior
  *   - Protect Viewer/Admin principal separation and the zero-third-party security requirement
  *
+ * Author:
+ *   Rudolf Klusal
+ *
  * Notes:
  *   - Keep comments and docstrings intact when modifying this file.
  *   - This focused fixture does not require a live database or mail server.
@@ -493,6 +496,8 @@ namespace {
     $GLOBALS['viewer_phase42_pdo'] = new ResendPdo();
     $_SESSION = [];
 
+    require_once __DIR__ . '/../app/bootstrap/viewer_identity_context.php';
+    require_once __DIR__ . '/../app/models/viewer_registration.php';
     require_once __DIR__ . '/../app/services/viewer_registration.php';
     require_once __DIR__ . '/../app/services/viewer_http.php';
 
@@ -740,14 +745,17 @@ namespace {
 
     $root = dirname(__DIR__);
     $controller = (string) file_get_contents($root . '/app/controllers/viewer_accounts.php');
+    $viewerView = (string) file_get_contents($root . '/app/views/viewer_accounts.php');
     $httpService = (string) file_get_contents($root . '/app/services/viewer_http.php');
     $registrationService = (string) file_get_contents($root . '/app/services/viewer_registration.php');
+    $registrationModel = (string) file_get_contents($root . '/app/models/viewer_registration.php');
     $mailService = (string) file_get_contents($root . '/app/services/viewer_mail.php');
     $dispatch = (string) file_get_contents($root . '/app/bootstrap/dispatch.php');
     $routing = (string) file_get_contents($root . '/app/bootstrap/routing.php');
     $requestHelpers = (string) file_get_contents($root . '/app/helpers_request.php');
     $migration = (string) file_get_contents($root . '/database/migrations/202608200001_viewer_registration_verification_tokens.php');
     $resendController = viewer_phase42_function_source($controller, 'cms_viewer_resend_verification');
+    $resendView = viewer_phase42_function_source($viewerView, 'view_render_viewer_resend_verification');
     $resendDelivery = viewer_phase42_function_source($controller, 'viewer_deliver_registration_verification_resend');
     $resendHttp = viewer_phase42_function_source($httpService, 'viewer_http_verification_resend_available');
 
@@ -765,7 +773,7 @@ namespace {
     }
 
     // Every syntactically valid outcome reaches the same public notice; internal reasons stay in bounded security events only.
-    viewer_phase42_assert(substr_count($resendController, 'viewer.resend.request_received') === 1, 'Resend must expose exactly one generic valid-submission notice.');
+    viewer_phase42_assert(substr_count($resendView, 'viewer.resend.request_received') === 1, 'Resend view must expose exactly one generic valid-submission notice.');
     viewer_phase42_assert(str_contains($resendController, 'viewer.resend.invalid_email'), 'Malformed email may use local form validation.');
     viewer_phase42_assert(!str_contains($resendController, "echo \$result['reason']") && !str_contains($resendController, "e(\$result['reason'])"), 'Internal resend reason must never be rendered.');
     viewer_phase42_assert(str_contains($resendDelivery, 'viewer_mail_authorize_send(VIEWER_MAIL_ACTION_VERIFICATION'), 'Resend must reuse existing verification-mail authorization.');
@@ -778,7 +786,7 @@ namespace {
     viewer_phase42_assert(str_contains($migration, 'token_hash CHAR(64) NOT NULL') && str_contains($migration, 'UNIQUE KEY viewer_registration_verification_tokens_hash_unique'), 'Child authority must store only a unique hash.');
     viewer_phase42_assert(str_contains($migration, 'REFERENCES viewer_registration_requests(id) ON DELETE CASCADE'), 'Child authority must be owned and cascade-cleaned with its request.');
     viewer_phase42_assert(str_contains($registrationService, 'viewer_registration_resend_token_cap()') && str_contains($registrationService, 'VIEWER_REGISTRATION_RESEND_TOKEN_CAP'), 'Child authority accumulation must have an explicit per-request cap.');
-    viewer_phase42_assert(str_contains($registrationService, 'DELETE FROM viewer_registration_verification_tokens WHERE expires_at < ? LIMIT 1000'), 'Scheduled maintenance must clean expired child authorities.');
+    viewer_phase42_assert(str_contains($registrationService, 'viewer_registration_model_maintenance_delete_verification(') && str_contains($registrationModel, 'DELETE FROM viewer_registration_verification_tokens WHERE expires_at < ? LIMIT 1000'), 'Scheduled maintenance must clean expired child authorities.');
 
     // Scanner safety and principal separation remain unchanged.
     $verifyController = viewer_phase42_function_source($controller, 'cms_viewer_verify');

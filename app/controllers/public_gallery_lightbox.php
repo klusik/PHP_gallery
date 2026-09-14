@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-08-11
+ *   2026-09-13
  */
 
 declare(strict_types=1);
@@ -137,9 +137,9 @@ use function Gallery\Services\public_render_profile_with_thumbnail_purpose;
 use function Gallery\Services\public_search_normalize_query;
 use function Gallery\Services\public_search_query_length;
 use function Gallery\Services\public_search_results;
-use function Gallery\Services\render_gallery_date;
-use function Gallery\Services\render_pagination_controls;
-use function Gallery\Services\render_public_render_profile_panel;
+use function Gallery\Services\gallery_date_view_model;
+use function Gallery\Views\view_render_gallery_date;
+use function Gallery\Views\view_render_pagination_controls;
 use function Gallery\Services\resolve_public_gallery_path;
 use function Gallery\Services\site_name;
 use function Gallery\Services\t;
@@ -163,6 +163,10 @@ use function Gallery\Views\view_gallery_description_markdown_excerpt;
 use function Gallery\Views\view_gallery_description_markdown_html;
 use function Gallery\Views\view_render_gallery_json_ld;
 use function Gallery\Views\view_render_public_seo_tags;
+use function Gallery\Views\view_lightbox_image_data_attributes;
+use function Gallery\Views\view_render_lightbox;
+use function Gallery\Views\view_render_lightbox_source_nodes;
+use function Gallery\Views\view_render_lightbox_vote_template;
 use function Gallery\Services\admin_log_event;
 
 /**
@@ -188,34 +192,27 @@ use function Gallery\Services\admin_log_event;
  */
 function lightbox_image_data_attributes(array $image, array $gallery, string $mediaUrl, string $previewUrl, string $imagePageUrl, string $displayTitle, int $score, int $vote, ?array $imageMapPoint, string $sourceAttribute, bool $votingAllowed = true, ?int $lightboxIndex = null, ?array $thumbnailBundle = null): string
 {
-    // $mapPointAttribute stores the optional GPS payload used by map-enabled photos.
-    $mapPointAttribute = $imageMapPoint ? ' data-map-point="' . e(json_encode($imageMapPoint, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) . '"' : '';
-    // $votingAttribute marks whether a cloned gallery-card vote form should exist for this image.
-    $votingAttribute = $votingAllowed ? ' data-voting-allowed="1"' : '';
-    // $indexAttribute stores the zero-based async lightbox order position when known.
-    $indexAttribute = $lightboxIndex !== null ? ' data-lightbox-index="' . max(0, $lightboxIndex) . '"' : '';
     // $qualityCandidates stores only already-authorized thumbnail/media URLs with bounded source dimensions.
     $qualityCandidates = lightbox_zoom_quality_candidates($image, $previewUrl, $mediaUrl, $thumbnailBundle);
-    $qualityAttribute = $qualityCandidates !== []
-        ? ' data-lightbox-quality-sources="' . e(json_encode($qualityCandidates, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) . '"'
-        : '';
-    return $sourceAttribute
-        . ' data-image-id="' . (int) $image['id'] . '"'
-        . $indexAttribute
-        . ' data-gallery-id="' . (int) $gallery['id'] . '"'
-        . ' data-full-src="' . e($mediaUrl) . '"'
-        . ' data-preview-src="' . e($previewUrl) . '"'
-        . $qualityAttribute
-        . ' data-page-url="' . e($imagePageUrl) . '"'
-        . ' data-gallery-url="' . e(gallery_public_url($gallery)) . '"'
-        . ' data-title="' . e($displayTitle) . '"'
-        . ' data-description="' . e($image['description']) . '"'
-        . ' data-score="' . $score . '"'
-        . ' data-user-vote="' . $vote . '"'
-        . ' data-image-width="' . (int) ($image['width'] ?? 0) . '"'
-        . ' data-image-height="' . (int) ($image['height'] ?? 0) . '"'
-        . $votingAttribute
-        . $mapPointAttribute;
+    return view_lightbox_image_data_attributes([
+        'source_attribute' => $sourceAttribute,
+        'image_id' => (int) ($image['id'] ?? 0),
+        'lightbox_index' => $lightboxIndex,
+        'gallery_id' => (int) ($gallery['id'] ?? 0),
+        'media_url' => $mediaUrl,
+        'preview_url' => $previewUrl,
+        'quality_candidates' => $qualityCandidates,
+        'page_url' => $imagePageUrl,
+        'gallery_url' => gallery_public_url($gallery),
+        'title' => $displayTitle,
+        'description' => (string) ($image['description'] ?? ''),
+        'score' => $score,
+        'vote' => $vote,
+        'image_width' => (int) ($image['width'] ?? 0),
+        'image_height' => (int) ($image['height'] ?? 0),
+        'voting_allowed' => $votingAllowed,
+        'map_point' => $imageMapPoint,
+    ]);
 }
 
 /**
@@ -235,11 +232,7 @@ function render_lightbox_vote_template(int $imageId, int $score, int $vote, bool
 {
     // $voteFormHtml stores the exact same server-rendered widget used by visible gallery cards.
     $voteFormHtml = render_vote_form_html($imageId, $score, $vote, $votingAllowed);
-    if ($voteFormHtml === '') {
-        return;
-    }
-
-    echo '<template data-lightbox-vote-template>' . $voteFormHtml . '</template>';
+    view_render_lightbox_vote_template($voteFormHtml);
 }
 
 /**
@@ -256,7 +249,7 @@ function render_lightbox_vote_template(int $imageId, int $score, int $vote, bool
  */
 function render_lightbox_source_nodes(array $allImages, array $gallery, bool $mapsAllowed, array $votesById): void
 {
-    echo '<div class="lightbox-source-list" hidden aria-hidden="true">';
+    $nodes = [];
     foreach ($allImages as $image) {
         if (!current_user() && image_nsfw_restricted($image, $gallery) && !visitor_can_access_nsfw_content()) {
             continue;
@@ -265,7 +258,6 @@ function render_lightbox_source_nodes(array $allImages, array $gallery, bool $ma
         $mediaUrl = image_public_media_url($image, $gallery);
         // Variable $imagePageUrl stores this steps working value.
         $imagePageUrl = image_public_url($image, $gallery);
-        // Variable $previewUrl stores this steps working value.
         // Hidden source nodes are metadata for fullscreen order only. Keep their
         // preview empty so paginated galleries do not resolve a large thumbnail
         // for every non-rendered image during normal page render.
@@ -280,11 +272,12 @@ function render_lightbox_source_nodes(array $allImages, array $gallery, bool $ma
         $sourceAttribute = 'data-lightbox-source';
         // $votingAllowed stores whether this hidden source needs a reusable server-rendered vote widget.
         $votingAllowed = gallery_voting_allowed($gallery);
-        echo '<div ' . lightbox_image_data_attributes($image, $gallery, $mediaUrl, $previewUrl, $imagePageUrl, $displayTitle, (int) $image['score'], $vote, $imageMapPoint, $sourceAttribute, $votingAllowed) . '>';
-        render_lightbox_vote_template((int) $image['id'], (int) $image['score'], $vote, $votingAllowed);
-        echo '</div>';
+        $nodes[] = [
+            'attributes' => lightbox_image_data_attributes($image, $gallery, $mediaUrl, $previewUrl, $imagePageUrl, $displayTitle, (int) $image['score'], $vote, $imageMapPoint, $sourceAttribute, $votingAllowed),
+            'vote_form_html' => render_vote_form_html((int) $image['id'], (int) $image['score'], $vote, $votingAllowed),
+        ];
     }
-    echo '</div>';
+    view_render_lightbox_source_nodes($nodes);
 }
 
 /**
@@ -301,37 +294,15 @@ function render_lightbox(bool $votingAllowed = true, bool $mapsAllowed = false, 
 {
     // $lightboxBrowsingMode stores the effective public mode already resolved by the gallery controller.
     $lightboxBrowsingMode = gallery_lightbox_browsing_mode_normalize($lightboxBrowsingMode);
-    // $votePanelHtml is a host for the exact gallery-card vote widget.
-    // JavaScript clones the current image's server-rendered form into it.
-    $votePanelHtml = $votingAllowed ? '<div class="lightbox-vote-panel" data-lightbox-vote-panel hidden></div>' : '';
     // Viewer favourites are optional personalized controls and never alter gallery authorization.
     $viewerFavouriteHtml = render_viewer_favourite_lightbox_form_html();
-    // $galleryMapAttributes stores optional route/gallery map metadata for keyboard map opening.
-    $galleryMapAttributes = $galleryMapUrl !== ''
-        ? ' data-lightbox-gallery-map-url="' . e($galleryMapUrl) . '" data-lightbox-gallery-map-title="' . e($galleryMapTitle) . '"'
-        : '';
-    // $zoomControlsHtml is the normal-toolbar copy of the shared semantic zoom controls.
-    $zoomControlsHtml = '<span class="lightbox-zoom-controls" data-lightbox-zoom-controls role="group" aria-label="' . e(t('lightbox.zoom_controls', 'Image zoom')) . '"><button type="button" data-lightbox-action="zoom-out" aria-label="' . e(t('lightbox.zoom_out', 'Zoom out')) . '" title="' . e(t('lightbox.zoom_out', 'Zoom out')) . '">−</button><button type="button" data-lightbox-action="zoom-reset" aria-label="' . e(t('lightbox.zoom_reset', 'Reset zoom')) . '" title="' . e(t('lightbox.zoom_reset', 'Reset zoom')) . '"><span data-lightbox-zoom-status aria-hidden="true">100%</span></button><button type="button" data-lightbox-action="zoom-in" aria-label="' . e(t('lightbox.zoom_in', 'Zoom in')) . '" title="' . e(t('lightbox.zoom_in', 'Zoom in')) . '">+</button></span>';
-    // $zoomHudControlsHtml mirrors the same actions in the fullscreen HUD without introducing a separate viewer.
-    $zoomHudControlsHtml = '<span class="lightbox-zoom-controls lightbox-zoom-controls-hud lightbox-hud" data-lightbox-zoom-controls role="group" aria-label="' . e(t('lightbox.zoom_controls', 'Image zoom')) . '"><button type="button" data-lightbox-action="zoom-out" aria-label="' . e(t('lightbox.zoom_out', 'Zoom out')) . '" title="' . e(t('lightbox.zoom_out', 'Zoom out')) . '">−</button><button type="button" data-lightbox-action="zoom-reset" aria-label="' . e(t('lightbox.zoom_reset', 'Reset zoom')) . '" title="' . e(t('lightbox.zoom_reset', 'Reset zoom')) . '"><span data-lightbox-zoom-status aria-hidden="true">100%</span></button><button type="button" data-lightbox-action="zoom-in" aria-label="' . e(t('lightbox.zoom_in', 'Zoom in')) . '" title="' . e(t('lightbox.zoom_in', 'Zoom in')) . '">+</button></span>';
-    // $slideshowToolbarHtml keeps normal galleries unchanged while allowing Smart Galleries to disable this optional control.
-    $slideshowToolbarHtml = $slideshowAllowed ? '<button type="button" class="lightbox-slideshow-link" data-lightbox-action="slideshow" aria-label="' . e(t('lightbox.toggle_slideshow', 'Toggle slideshow')) . '" title="' . e(t('lightbox.toggle_slideshow', 'Toggle slideshow')) . '" aria-pressed="false">S ' . e(t('lightbox.slideshow', 'slideshow')) . '</button>' : '';
-    // $slideshowHudHtml mirrors the optional slideshow action in fullscreen mode.
-    $slideshowHudHtml = $slideshowAllowed ? '<button type="button" class="lightbox-slideshow-button lightbox-hud" data-lightbox-action="slideshow" aria-label="' . e(t('lightbox.toggle_slideshow', 'Toggle slideshow')) . '" title="' . e(t('lightbox.toggle_slideshow', 'Toggle slideshow')) . '" aria-pressed="false">S</button>' : '';
-    // $helpShortcuts omits the unavailable S shortcut when slideshow is disabled.
-    $helpShortcuts = $slideshowAllowed ? t('lightbox.help_shortcuts', '←/→ photos, Shift+←/→ ±10 photos, +/− zoom, 0 reset, F fullscreen, M map, S slideshow, X close') : t('lightbox.help_shortcuts_no_slideshow', '←/→ photos, Shift+←/→ ±10 photos, +/− zoom, 0 reset, F fullscreen, M map, X close');
-
-    echo '<div class="lightbox" data-lightbox data-lightbox-browsing-mode="' . e($lightboxBrowsingMode) . '" data-lightbox-maps-enabled="' . ($mapsAllowed ? '1' : '0') . '" data-lightbox-slideshow-enabled="' . ($slideshowAllowed ? '1' : '0') . '"' . $galleryMapAttributes . ' data-lightbox-slideshow-visible-ms="2000" data-lightbox-slideshow-transition-ms="1000" data-lightbox-zoom-status-template="' . e(t('lightbox.zoom_status', 'Zoom {percent}')) . '" hidden>';
-    echo '<button class="lightbox-close lightbox-hud" type="button" data-lightbox-action="close">' . e(t('lightbox.close', 'Close')) . '</button>';
-    echo '<span class="lightbox-mobile-counter lightbox-hud" data-lightbox-counter aria-hidden="true"></span>';
-    echo '<button type="button" class="lightbox-nav lightbox-previous lightbox-hud" data-lightbox-action="previous" aria-label="' . e(t('lightbox.previous_image', 'Previous image')) . '">&lt;</button>';
-    echo '<figure><button type="button" class="lightbox-stage-link" data-lightbox-stage data-lightbox-zoom-viewport aria-label="' . e(t('lightbox.toggle_fullscreen_image', 'Toggle fullscreen image')) . '"><span class="lightbox-initial-loader" data-lightbox-initial-loader data-lightbox-loading-count-template="' . e(t('lightbox.initial_loader_count', 'Preparing photo {current} of {total}')) . '" role="status" aria-live="polite" hidden><span class="lightbox-initial-loader-label" data-lightbox-initial-loader-label>' . e(t('lightbox.initial_loader', 'Preparing gallery...')) . '</span><span class="lightbox-initial-loader-track" aria-hidden="true"><span class="lightbox-initial-loader-fill" data-lightbox-initial-loader-fill></span></span><span class="lightbox-initial-loader-count" data-lightbox-initial-loader-count></span></span><span class="lightbox-zoom-surface" data-lightbox-zoom-surface><img decoding="async" data-lightbox-img alt=""></span></button><div class="lightbox-strip" data-lightbox-strip aria-label="' . e(t('lightbox.picture_strip_label', 'Nearby photos')) . '" hidden><div class="lightbox-strip-track" data-lightbox-strip-track></div></div><figcaption class="lightbox-meta"><div class="lightbox-toolbar"><span class="lightbox-counter" data-lightbox-counter></span>' . $zoomControlsHtml . '<button type="button" class="lightbox-fullscreen-link" data-lightbox-action="fullscreen" aria-label="' . e(t('lightbox.toggle_fullscreen', 'Toggle fullscreen')) . '" title="' . e(t('lightbox.toggle_fullscreen', 'Toggle fullscreen')) . '">F ' . e(t('lightbox.fullscreen', 'fullscreen')) . '</button>' . $slideshowToolbarHtml . '<button type="button" class="lightbox-map-button" data-lightbox-map hidden>&#128205; ' . e(t('lightbox.map', 'Map')) . '</button><button type="button" class="lightbox-help-button" data-lightbox-action="help" aria-expanded="false" aria-label="' . e(t('lightbox.help_label', 'Show keyboard shortcuts')) . '" title="' . e(t('lightbox.help_label', 'Show keyboard shortcuts')) . '">?</button>' . $viewerFavouriteHtml . $votePanelHtml . '</div><h2 data-lightbox-title></h2><p class="lightbox-description" data-lightbox-description></p><div class="lightbox-help-panel" data-lightbox-help-panel hidden><strong>' . e(t('lightbox.help_title', 'Controls')) . '</strong><span>' . e($helpShortcuts) . '</span></div></figcaption><div class="lightbox-map-split" data-lightbox-map-split hidden><button type="button" class="lightbox-map-split-close" data-lightbox-map-split-close aria-label="' . e(t('lightbox.close_map_split', 'Close map split')) . '">' . e(t('lightbox.close_map', 'Close map')) . '</button><div class="lightbox-map-split-title" data-lightbox-map-split-title></div><div class="lightbox-map-split-canvas" data-lightbox-map-split-canvas></div><div class="lightbox-map-split-nav" aria-label="' . e(t('lightbox.map_photo_navigation', 'Photo navigation while map is open')) . '"><button type="button" class="lightbox-map-split-nav-button" data-lightbox-action="previous">' . e(t('lightbox.previous_photo_short', '← Previous photo')) . '</button><button type="button" class="lightbox-map-split-nav-button" data-lightbox-action="next">' . e(t('lightbox.next_photo_short', 'Next photo →')) . '</button></div></div></figure>';
-    echo '<button type="button" class="lightbox-nav lightbox-next lightbox-hud" data-lightbox-action="next" aria-label="' . e(t('lightbox.next_image', 'Next image')) . '">&gt;</button>';
-    echo '<button type="button" class="lightbox-fullscreen-button lightbox-hud" data-lightbox-action="fullscreen" aria-label="' . e(t('lightbox.toggle_fullscreen', 'Toggle fullscreen')) . '" title="' . e(t('lightbox.toggle_fullscreen', 'Toggle fullscreen')) . '">F</button>';
-    echo $slideshowHudHtml;
-    echo '<button type="button" class="lightbox-map-hud-button lightbox-hud" data-lightbox-map aria-label="' . e(t('lightbox.map', 'Map')) . '" title="' . e(t('lightbox.map', 'Map')) . '" hidden>M</button>';
-    echo $zoomHudControlsHtml;
-    echo '<span class="visually-hidden" data-lightbox-zoom-announcement role="status" aria-live="polite">' . e(t('lightbox.zoom_status', 'Zoom {percent}', ['percent' => '100%'])) . '</span>';
-    echo '<button type="button" class="lightbox-mobile-fullscreen-button" data-lightbox-action="fullscreen" aria-label="' . e(t('lightbox.toggle_fullscreen', 'Toggle fullscreen')) . '" title="' . e(t('lightbox.toggle_fullscreen', 'Toggle fullscreen')) . '">&#9974;</button>';
-    echo '</div>';
+    view_render_lightbox([
+        'voting_allowed' => $votingAllowed,
+        'maps_allowed' => $mapsAllowed,
+        'gallery_map_url' => $galleryMapUrl,
+        'gallery_map_title' => $galleryMapTitle,
+        'browsing_mode' => $lightboxBrowsingMode,
+        'slideshow_allowed' => $slideshowAllowed,
+        'viewer_favourite_html' => $viewerFavouriteHtml,
+    ]);
 }

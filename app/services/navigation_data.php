@@ -44,9 +44,17 @@ use function Gallery\Core\absolute_public_url;
 use function Gallery\Core\cms_config;
 use function Gallery\Core\cms_current_version;
 use function Gallery\Core\current_user;
-use function Gallery\Core\db;
 use function Gallery\Core\now_sql;
 use function Gallery\Core\url_for;
+use function Gallery\Models\navigation_data_model_account;
+use function Gallery\Models\navigation_data_model_account_delete;
+use function Gallery\Models\navigation_data_model_account_exists;
+use function Gallery\Models\navigation_data_model_account_upsert;
+use function Gallery\Models\navigation_data_model_cache_status;
+use function Gallery\Models\navigation_data_model_cache_upsert;
+use function Gallery\Models\navigation_data_model_cached_point;
+use function Gallery\Models\navigation_data_model_local_point;
+use function Gallery\Models\navigation_data_model_local_point_count;
 
 const NAVIGATION_DATA_SOURCE_LOCAL_DB = 'local_db';
 const NAVIGATION_DATA_SOURCE_BUNDLED = 'bundled';
@@ -151,8 +159,9 @@ function navigation_data_status(): array
 
     if ($status['cache_ready']) {
         try {
-            $status['cache_count'] = (int) db()->query('SELECT COUNT(*) FROM navigation_data_cache')->fetchColumn();
-            $status['cache_last_update'] = (string) (db()->query('SELECT MAX(updated_at) FROM navigation_data_cache')->fetchColumn() ?: '');
+            $cacheStatus = navigation_data_model_cache_status();
+            $status['cache_count'] = $cacheStatus['count'];
+            $status['cache_last_update'] = $cacheStatus['last_update'];
         } catch (PDOException) {
             $status['cache_ready'] = false;
         }
@@ -160,9 +169,7 @@ function navigation_data_status(): array
 
     if ($status['local_db_ready']) {
         try {
-            $stmt = db()->prepare('SELECT COUNT(*) FROM flight_map_nav_points');
-            $stmt->execute();
-            $status['local_db_count'] = (int) $stmt->fetchColumn();
+            $status['local_db_count'] = navigation_data_model_local_point_count();
         } catch (PDOException) {
             $status['local_db_ready'] = false;
         }
@@ -247,21 +254,8 @@ function navigation_data_local_db_lookup(string $ident): ?array
         return null;
     }
 
-    $stmt = db()->prepare("SELECT ident, kind, region, latitude, longitude, source, cycle FROM flight_map_nav_points
-        WHERE ident = ?
-        ORDER BY CASE kind
-            WHEN 'airport' THEN 0
-            WHEN 'vor' THEN 1
-            WHEN 'navaid' THEN 2
-            WHEN 'ndb' THEN 3
-            WHEN 'fix' THEN 4
-            WHEN 'waypoint' THEN 5
-            ELSE 6
-        END, id
-        LIMIT 1");
-    $stmt->execute([$ident]);
-    $row = $stmt->fetch();
-    if (!is_array($row)) {
+    $row = navigation_data_model_local_point($ident);
+    if ($row === null) {
         return null;
     }
 
@@ -495,13 +489,8 @@ function navigation_data_cache_read(string $ident): ?array
         return null;
     }
 
-    $stmt = db()->prepare("SELECT payload_json, source, cycle FROM navigation_data_cache
-        WHERE ident = ? AND (expires_at IS NULL OR expires_at >= ?)
-        ORDER BY CASE source WHEN 'navigraph' THEN 0 ELSE 1 END, updated_at DESC
-        LIMIT 1");
-    $stmt->execute([$normalizedIdent, now_sql()]);
-    $row = $stmt->fetch();
-    if (!is_array($row)) {
+    $row = navigation_data_model_cached_point($normalizedIdent, now_sql());
+    if ($row === null) {
         return null;
     }
 
@@ -565,36 +554,16 @@ function navigation_data_cache_write(string $ident, array $point, string $source
     $now = now_sql();
     $expiresAt = gmdate('Y-m-d H:i:s', time() + (int) navigation_data_config()['cache_ttl_seconds']);
     $cacheKey = hash('sha256', implode('|', [$source, $cycle, $normalizedIdent, $normalizedPoint['kind']]));
-
-    $stmt = db()->prepare("INSERT INTO navigation_data_cache (
-        cache_key,
-        ident,
-        kind,
-        source,
-        cycle,
-        payload_json,
-        expires_at,
-        created_at,
-        updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON DUPLICATE KEY UPDATE
-        kind = VALUES(kind),
-        source = VALUES(source),
-        cycle = VALUES(cycle),
-        payload_json = VALUES(payload_json),
-        expires_at = VALUES(expires_at),
-        updated_at = VALUES(updated_at)");
-    $stmt->execute([
+    navigation_data_model_cache_upsert(
         $cacheKey,
         $normalizedIdent,
         (string) $normalizedPoint['kind'],
         substr(trim($source), 0, 64),
         substr(trim($cycle) !== '' ? trim($cycle) : NAVIGATION_DATA_BUNDLED_CYCLE, 0, 32),
-        json_encode($normalizedPoint, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        (string) json_encode($normalizedPoint, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
         $expiresAt,
-        $now,
-        $now,
-    ]);
+        $now
+    );
 }
 
 /**
@@ -758,9 +727,7 @@ function navigation_data_navigraph_account_exists(): bool
     }
 
     try {
-        $stmt = db()->prepare("SELECT 1 FROM navigation_data_accounts WHERE user_id = ? AND provider = 'navigraph' LIMIT 1");
-        $stmt->execute([$userId]);
-        return (bool) $stmt->fetchColumn();
+        return navigation_data_model_account_exists($userId);
     } catch (PDOException) {
         return false;
     }
@@ -782,14 +749,12 @@ function navigation_data_navigraph_load_account_session(): array
     }
 
     try {
-        $stmt = db()->prepare("SELECT * FROM navigation_data_accounts WHERE user_id = ? AND provider = 'navigraph' LIMIT 1");
-        $stmt->execute([$userId]);
-        $row = $stmt->fetch();
+        $row = navigation_data_model_account($userId);
     } catch (PDOException) {
         return [];
     }
 
-    if (!is_array($row)) {
+    if ($row === null) {
         return [];
     }
 
@@ -855,52 +820,19 @@ function navigation_data_navigraph_persist_session(array $session): void
     $subscription = is_array($session['subscription'] ?? null) ? $session['subscription'] : null;
 
     try {
-        $stmt = db()->prepare("INSERT INTO navigation_data_accounts (
-            user_id,
-            provider,
-            access_token_cipher,
-            refresh_token_cipher,
-            id_token_cipher,
-            token_expires_at,
-            scope_text,
-            claims_json,
-            subscription_json,
-            package_cycle,
-            package_status,
-            package_format,
-            package_checked_at,
-            connected_at,
-            updated_at
-        ) VALUES (?, 'navigraph', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON DUPLICATE KEY UPDATE
-            access_token_cipher = VALUES(access_token_cipher),
-            refresh_token_cipher = VALUES(refresh_token_cipher),
-            id_token_cipher = VALUES(id_token_cipher),
-            token_expires_at = VALUES(token_expires_at),
-            scope_text = VALUES(scope_text),
-            claims_json = VALUES(claims_json),
-            subscription_json = VALUES(subscription_json),
-            package_cycle = VALUES(package_cycle),
-            package_status = VALUES(package_status),
-            package_format = VALUES(package_format),
-            package_checked_at = VALUES(package_checked_at),
-            updated_at = VALUES(updated_at)");
-        $stmt->execute([
-            $userId,
-            $accessTokenCipher,
-            $refreshTokenCipher,
-            $idTokenCipher,
-            max(0, (int) ($session['expires_at'] ?? 0)),
-            substr((string) ($session['scope'] ?? ''), 0, 512),
-            json_encode($claims, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-            $subscription !== null ? json_encode($subscription, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : null,
-            substr((string) ($session['package_cycle'] ?? ''), 0, 32),
-            substr((string) ($session['package_status'] ?? ''), 0, 64),
-            substr((string) ($session['package_format'] ?? ''), 0, 64),
-            trim((string) ($session['package_checked_at'] ?? '')) !== '' ? (string) $session['package_checked_at'] : null,
-            $now,
-            $now,
-        ]);
+        navigation_data_model_account_upsert($userId, [
+            'access_token_cipher' => $accessTokenCipher,
+            'refresh_token_cipher' => $refreshTokenCipher,
+            'id_token_cipher' => $idTokenCipher,
+            'token_expires_at' => max(0, (int) ($session['expires_at'] ?? 0)),
+            'scope_text' => substr((string) ($session['scope'] ?? ''), 0, 512),
+            'claims_json' => json_encode($claims, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            'subscription_json' => $subscription !== null ? json_encode($subscription, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : null,
+            'package_cycle' => substr((string) ($session['package_cycle'] ?? ''), 0, 32),
+            'package_status' => substr((string) ($session['package_status'] ?? ''), 0, 64),
+            'package_format' => substr((string) ($session['package_format'] ?? ''), 0, 64),
+            'package_checked_at' => trim((string) ($session['package_checked_at'] ?? '')) !== '' ? (string) $session['package_checked_at'] : null,
+        ], $now);
     } catch (PDOException $exception) {
         admin_log_event('warning', 'navigation_data.navigraph_persist_failed', 'Navigraph account session could not be persisted.', [
             'error_code' => schema_inspection_error_code($exception),
@@ -930,8 +862,7 @@ function navigation_data_navigraph_delete_account_session(): void
     }
 
     try {
-        $stmt = db()->prepare("DELETE FROM navigation_data_accounts WHERE user_id = ? AND provider = 'navigraph'");
-        $stmt->execute([$userId]);
+        navigation_data_model_account_delete($userId);
     } catch (PDOException $exception) {
         admin_log_event('warning', 'navigation_data.navigraph_delete_failed', 'Navigraph account session could not be deleted.', [
             'error_code' => schema_inspection_error_code($exception),

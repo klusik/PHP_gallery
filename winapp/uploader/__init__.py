@@ -1,3 +1,16 @@
+# Project: PHP Gallery
+# Repository: https://github.com/klusik/PHP_gallery
+#
+# File: winapp/uploader/__init__.py
+#
+# Author:
+#   Rudolf Klusal
+#
+# License:
+#   MIT License (see LICENSE file in repository)
+#
+# Notes:
+#   - Keep comments and docstrings intact when modifying this file.
 """
 Support package for the PHP Gallery Windows uploader.
 

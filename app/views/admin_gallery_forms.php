@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-24
+ *   2026-09-14
  */
 
 declare(strict_types=1);
@@ -43,26 +43,7 @@ use function Gallery\Core\csrf_token;
 use function Gallery\Core\current_user;
 use function Gallery\Core\e;
 use function Gallery\Core\url_for;
-use function Gallery\Services\feature_capability_effective_enabled;
-use function Gallery\Services\gallery_count_badge_override_label;
-use function Gallery\Services\gallery_count_badge_override_values;
-use function Gallery\Services\gallery_count_badge_schema_ready;
-use function Gallery\Services\gallery_date_exif_suggestion_for_gallery;
-use function Gallery\Services\gallery_date_exif_suggestions_schema_ready;
-use function Gallery\Services\gallery_date_input_value;
-use function Gallery\Services\gallery_date_range_schema_ready;
-use function Gallery\Services\gallery_date_range_storage_label;
-use function Gallery\Services\gallery_date_schema_ready;
-use function Gallery\Services\openai_text_assist_available;
-use function Gallery\Services\openai_text_assist_default_language;
-use function Gallery\Services\openai_text_assist_image_input_allowed;
-use function Gallery\Services\openai_text_assist_language_catalog;
-use function Gallery\Services\content_localization_enabled;
-use function Gallery\Services\content_localization_schema_ready;
-use function Gallery\Services\content_supported_languages;
-use function Gallery\Services\content_translation_rows;
 use function Gallery\Services\t;
-use function Gallery\Services\translation_language_presentation;
 
 /**
  * Render optional source-language and translated title/description fields.
@@ -70,39 +51,39 @@ use function Gallery\Services\translation_language_presentation;
  * @param string $entityType Gallery or image architecture identifier.
  * @param array<string,mixed> $entity Entity row being edited.
  */
-function view_render_content_localization_fields(string $entityType, array $entity): void
+function view_render_content_localization_fields(string $entityType, array $entity, array $formModel = []): void
 {
-    if (!content_localization_enabled()) {
+    $localization = is_array($formModel['localization'] ?? null) ? $formModel['localization'] : [];
+    if (empty($localization['enabled'])) {
         return;
     }
-    if (!content_localization_schema_ready($entityType)) {
+    if (empty($localization['schema_ready'])) {
         echo '<p class="muted">' . e(t('admin.content_localization.migration_required', 'Other-language content will be available after the multilingual-content database migration is applied.')) . '</p>';
         return;
     }
-    $languages = content_supported_languages();
-    $presentation = translation_language_presentation();
+    $languages = (array) ($localization['languages'] ?? []);
+    $presentation = (array) ($localization['presentation'] ?? []);
     $sourceLanguage = (string) ($entity['content_language'] ?? '');
-    $translations = content_translation_rows($entityType, [(int) ($entity['id'] ?? 0)]);
-    $translations = $translations[(int) ($entity['id'] ?? 0)] ?? [];
+    $translations = (array) ($localization['translations'] ?? []);
 
     echo '<div class="admin-content-localization" data-content-localization>';
     echo '<label class="admin-content-source-language"><span>' . e(t('admin.content_localization.source_language', 'Language of the current title and description')) . '</span><select name="content_language">';
     echo '<option value="">' . e(t('admin.content_localization.not_specified', 'Not specified')) . '</option>';
     foreach ($languages as $language) {
-        $name = (string) ($presentation[$language]['name'] ?? strtoupper($language));
-        echo '<option value="' . e($language) . '"' . ($sourceLanguage === $language ? ' selected' : '') . '>' . e($name . ' (' . strtoupper($language) . ')') . '</option>';
+        $name = (string) ($presentation[$language]['name'] ?? strtoupper((string) $language));
+        echo '<option value="' . e((string) $language) . '"' . ($sourceLanguage === $language ? ' selected' : '') . '>' . e($name . ' (' . strtoupper((string) $language) . ')') . '</option>';
     }
     echo '</select><small class="muted">' . e(t('admin.content_localization.source_help', 'Existing fields remain the source content. Missing translations fall back to them.')) . '</small></label>';
     echo '<details class="admin-content-translations"><summary><span aria-hidden="true">&#127760;</span><span>' . e(t('admin.content_localization.other_languages', 'Other languages')) . '</span></summary>';
     echo '<div class="admin-content-translation-list">';
     foreach ($languages as $language) {
         $row = is_array($translations[$language] ?? null) ? $translations[$language] : [];
-        $name = (string) ($presentation[$language]['name'] ?? strtoupper($language));
-        echo '<fieldset class="admin-content-translation" data-content-translation-language="' . e($language) . '"><legend>' . e($name . ' (' . strtoupper($language) . ')') . '</legend>';
-        echo '<label><span>' . e(t('admin.content_localization.translated_title', 'Translated title')) . '</span><input name="translations[' . e($language) . '][title]" value="' . e((string) ($row['title'] ?? '')) . '" maxlength="255" data-content-translation-title="' . e($language) . '"></label>';
-        view_render_content_translation_suggestion_tool($entityType, $entity, $language, 'title');
-        echo '<label><span>' . e(t('admin.content_localization.translated_description', 'Translated description')) . '</span><textarea name="translations[' . e($language) . '][description]" rows="4" data-content-translation-description="' . e($language) . '">' . e((string) ($row['description'] ?? '')) . '</textarea></label>';
-        view_render_content_translation_suggestion_tool($entityType, $entity, $language, 'description');
+        $name = (string) ($presentation[$language]['name'] ?? strtoupper((string) $language));
+        echo '<fieldset class="admin-content-translation" data-content-translation-language="' . e((string) $language) . '"><legend>' . e($name . ' (' . strtoupper((string) $language) . ')') . '</legend>';
+        echo '<label><span>' . e(t('admin.content_localization.translated_title', 'Translated title')) . '</span><input name="translations[' . e((string) $language) . '][title]" value="' . e((string) ($row['title'] ?? '')) . '" maxlength="255" data-content-translation-title="' . e((string) $language) . '"></label>';
+        view_render_content_translation_suggestion_tool($entityType, $entity, (string) $language, 'title', $formModel);
+        echo '<label><span>' . e(t('admin.content_localization.translated_description', 'Translated description')) . '</span><textarea name="translations[' . e((string) $language) . '][description]" rows="4" data-content-translation-description="' . e((string) $language) . '">' . e((string) ($row['description'] ?? '')) . '</textarea></label>';
+        view_render_content_translation_suggestion_tool($entityType, $entity, (string) $language, 'description', $formModel);
         echo '<small class="muted">' . e(t('admin.content_localization.blank_fallback', 'Leave a field blank to use the source content for that field.')) . '</small></fieldset>';
     }
     echo '</div></details></div>';
@@ -116,11 +97,10 @@ function view_render_content_localization_fields(string $entityType, array $enti
  * @param string $language Target language code.
  * @param string $field Title or description field.
  */
-function view_render_content_translation_suggestion_tool(string $entityType, array $entity, string $language, string $field): void
+function view_render_content_translation_suggestion_tool(string $entityType, array $entity, string $language, string $field, array $formModel = []): void
 {
-    $user = current_user();
-    $userId = is_array($user) ? (int) ($user['id'] ?? 0) : 0;
-    if ($userId < 1 || !openai_text_assist_available($userId)) {
+    $openAi = is_array($formModel['openai'] ?? null) ? $formModel['openai'] : [];
+    if (empty($openAi['available'])) {
         return;
     }
     $galleryId = $entityType === 'gallery' ? (int) ($entity['id'] ?? 0) : (int) ($entity['gallery_id'] ?? 0);
@@ -159,20 +139,21 @@ function view_render_gallery_description_formatting_hint(): void
  *
  * @param array $gallery Gallery row or gallery data.
  */
-function view_render_admin_gallery_date_exif_suggestion(array $gallery): void
+function view_render_admin_gallery_date_exif_suggestion(array $gallery, array $formModel = []): void
 {
-    if (!feature_capability_effective_enabled('exif_gallery_date_suggestions')) {
+    $dateModel = is_array($formModel['date'] ?? null) ? $formModel['date'] : [];
+    if (empty($dateModel['exif_suggestion_enabled'])) {
         return;
     }
 
     // $galleryId stores the branch root whose own images and descendants form the suggestion.
     $galleryId = (int) ($gallery['id'] ?? 0);
-    if ($galleryId <= 0 || !gallery_date_exif_suggestions_schema_ready()) {
+    if ($galleryId <= 0) {
         return;
     }
 
     // $suggestion stores the recursive EXIF date range for this gallery branch.
-    $suggestion = gallery_date_exif_suggestion_for_gallery($galleryId);
+    $suggestion = is_array($dateModel['exif_suggestion'] ?? null) ? $dateModel['exif_suggestion'] : null;
     echo '<div class="admin-date-range-suggestion" data-admin-gallery-date-suggestion data-admin-gallery-date-endpoint="' . e(url_for('admin_gallery_date_suggestion')) . '" data-admin-gallery-date-gallery-id="' . $galleryId . '" data-admin-gallery-date-csrf="' . e(csrf_token()) . '">';
     echo '<div><strong>' . e(t('admin.gallery_editor.exif_date_suggestion_title', 'EXIF date suggestion')) . '</strong>';
     if (!$suggestion) {
@@ -183,7 +164,7 @@ function view_render_admin_gallery_date_exif_suggestion(array $gallery): void
     }
 
     // $suggestedLabel stores the visible From/To range suggested for this gallery branch.
-    $suggestedLabel = gallery_date_range_storage_label($suggestion['suggested_start'] ?? null, $suggestion['suggested_end'] ?? null);
+    $suggestedLabel = (string) ($dateModel['exif_suggestion_label'] ?? '');
     echo '<p>' . e(t('admin.gallery_editor.exif_date_suggestion_value', 'Suggested range: {range}', ['range' => $suggestedLabel])) . '</p>';
     echo '<p class="muted">' . e(t('admin.gallery_editor.exif_date_suggestion_help', 'Computed from {images} EXIF photo(s) in this gallery and all subgalleries. Applying it updates this gallery date range only; branch review can also update daily subgalleries.', [
         'images' => (string) (int) ($suggestion['exif_image_count'] ?? 0),
@@ -206,9 +187,10 @@ function view_render_admin_gallery_date_exif_suggestion(array $gallery): void
  * @param array $gallery Gallery row or gallery data.
  * @param bool $panelMode Panel mode value.
  */
-function view_render_admin_gallery_date_range_fields(array $gallery = [], bool $panelMode = false): void
+function view_render_admin_gallery_date_range_fields(array $gallery = [], bool $panelMode = false, array $formModel = []): void
 {
-    if (!gallery_date_schema_ready()) {
+    $dateModel = is_array($formModel['date'] ?? null) ? $formModel['date'] : [];
+    if (empty($dateModel['schema_ready'])) {
         if ($panelMode) {
             echo '<div class="admin-side-panel-field admin-side-panel-field-wide"><span>' . e(t('admin.gallery_editor.gallery_date_range', 'Date range')) . '</span><small>' . e(t('admin.gallery_editor.gallery_date_migration_hidden', 'Gallery date will be available after the database migration is applied.')) . '</small></div>';
             return;
@@ -218,11 +200,11 @@ function view_render_admin_gallery_date_range_fields(array $gallery = [], bool $
     }
 
     // $startValue stores the current range start for the native date input.
-    $startValue = gallery_date_input_value($gallery['gallery_date'] ?? null);
+    $startValue = (string) ($dateModel['start_value'] ?? '');
     // $endValue stores the current range end for the native date input when the migration is available.
-    $endValue = gallery_date_range_schema_ready() ? gallery_date_input_value($gallery['gallery_date_end'] ?? null) : '';
+    $endValue = (string) ($dateModel['end_value'] ?? '');
 
-    if (!gallery_date_range_schema_ready()) {
+    if (empty($dateModel['range_schema_ready'])) {
         if ($panelMode) {
             echo '<label class="admin-side-panel-field"><span>' . e(t('admin.gallery_editor.gallery_date', 'Date')) . '</span><input name="gallery_date" type="date" value="' . e($startValue) . '"><small>' . e(t('admin.gallery_editor.gallery_date_help', 'Optional manual gallery date, for example an event, trip, or shooting date.')) . '</small></label>';
             return;
@@ -243,7 +225,7 @@ function view_render_admin_gallery_date_range_fields(array $gallery = [], bool $
     echo '<label>' . e(t('admin.gallery_editor.gallery_date_from', 'From')) . '<input name="gallery_date" type="date" value="' . e($startValue) . '"></label>';
     echo '<label>' . e(t('admin.gallery_editor.gallery_date_to', 'To')) . '<input name="gallery_date_end" type="date" value="' . e($endValue) . '"></label>';
     echo '</div><span class="muted">' . e(t('admin.gallery_editor.gallery_date_range_help', 'Optional manual date range for an event, trip, or photo series. Leave To empty for a single date.')) . '</span></fieldset>';
-    view_render_admin_gallery_date_exif_suggestion($gallery);
+    view_render_admin_gallery_date_exif_suggestion($gallery, $formModel);
 }
 
 /**
@@ -255,7 +237,7 @@ function view_render_admin_gallery_date_range_fields(array $gallery = [], bool $
  * @param bool $panelMode Panel mode value.
  * @param string $workflow Workflow value.
  */
-function view_render_admin_new_gallery_fields(int $prefillParentId, bool $panelMode, string $workflow = 'create'): void
+function view_render_admin_new_gallery_fields(int $prefillParentId, bool $panelMode, string $workflow = 'create', array $formModel = []): void
 {
     if ($panelMode) {
         echo '<input type="hidden" name="panel" value="1">';
@@ -266,7 +248,7 @@ function view_render_admin_new_gallery_fields(int $prefillParentId, bool $panelM
         echo '<label class="admin-side-panel-field admin-side-panel-field-wide"><span>' . e(t('admin.gallery_editor.gallery_name', 'Gallery name')) . '</span><input name="title" required></label>';
         echo '<label class="admin-side-panel-field"><span>' . e(t('admin.gallery_editor.folder_name', 'Folder name')) . '</span><input name="folder_name" autocomplete="off"><small>' . e(t('admin.gallery_editor.derive_from_gallery_name', 'Leave empty to derive it from the gallery name.')) . '</small></label>';
         echo '<label class="admin-side-panel-field"><span>' . e(t('admin.gallery_editor.metric_visibility')) . '</span><select name="visibility">' . visibility_options('unpublished') . '</select></label>';
-        view_render_admin_gallery_date_range_fields([], true);
+        view_render_admin_gallery_date_range_fields([], true, $formModel);
         echo '<label class="admin-side-panel-field admin-side-panel-field-wide"><span>' . e(t('admin.gallery_editor.parent_gallery', 'Parent gallery')) . '</span><select name="parent_id"><option value="0"' . ($prefillParentId === 0 ? ' selected' : '') . '>' . e(t('admin.gallery_editor.no_parent', 'No parent')) . '</option>' . gallery_parent_options_for_new($prefillParentId) . '</select></label>';
         echo '<label class="admin-side-panel-field admin-side-panel-field-wide"><span>' . e(t('admin.gallery_editor.description', 'Description')) . '</span><textarea name="description" rows="4"></textarea></label>';
         view_render_gallery_description_formatting_hint();
@@ -274,10 +256,11 @@ function view_render_admin_new_gallery_fields(int $prefillParentId, bool $panelM
         echo '<label><input type="checkbox" name="voting_enabled" value="1"> <span>' . e(t('admin.gallery_editor.enable_image_voting_short', 'Enable image voting')) . '</span></label>';
         echo '<label><input type="checkbox" name="show_filenames" value="1"> <span>' . e(t('admin.gallery_editor.show_file_names', 'Show file names')) . '</span></label>';
         echo '</div></div>';
-        if (gallery_count_badge_schema_ready()) {
+        if (!empty(($formModel['count_badge'] ?? [])['schema_ready'])) {
             echo '<div class="admin-side-panel-card"><label class="admin-side-panel-field"><span>' . e(t('admin.gallery_editor.count_badge_title', 'Contained-picture badge')) . '</span><select name="count_badge_visibility">';
-            foreach (gallery_count_badge_override_values() as $countBadgeOption) {
-                echo '<option value="' . e($countBadgeOption) . '"' . ($countBadgeOption === 'inherit' ? ' selected' : '') . '>' . e(gallery_count_badge_override_label($countBadgeOption)) . '</option>';
+            foreach ((array) (($formModel['count_badge'] ?? [])['options'] ?? []) as $countBadgeOption) {
+                $value = (string) ($countBadgeOption['value'] ?? '');
+                echo '<option value="' . e($value) . '"' . ($value === 'inherit' ? ' selected' : '') . '>' . e((string) ($countBadgeOption['label'] ?? $value)) . '</option>';
             }
             echo '</select><small>' . e(t('admin.gallery_editor.count_badge_new_gallery_help', 'Controls the stacked-picture branch image count on this gallery card and its opened-gallery hero.')) . '</small></label></div>';
         }
@@ -288,13 +271,14 @@ function view_render_admin_new_gallery_fields(int $prefillParentId, bool $panelM
     echo '<label>' . e(t('admin.gallery_editor.folder_name', 'Folder name')) . '<input name="folder_name" autocomplete="off"><span class="muted">' . e(t('admin.gallery_editor.derive_from_gallery_name', 'Leave empty to derive it from the gallery name.')) . '</span></label>';
     echo '<label>' . e(t('admin.gallery_editor.parent_gallery', 'Parent gallery')) . '<select name="parent_id"><option value="0"' . ($prefillParentId === 0 ? ' selected' : '') . '>' . e(t('admin.gallery_editor.no_parent', 'No parent')) . '</option>' . gallery_parent_options_for_new($prefillParentId) . '</select></label>';
     echo '<label>' . e(t('admin.gallery_editor.visibility', 'Visibility')) . '<select name="visibility">' . visibility_options('unpublished') . '</select></label>';
-    view_render_admin_gallery_date_range_fields([], false);
+    view_render_admin_gallery_date_range_fields([], false, $formModel);
     echo '<label><input type="checkbox" name="voting_enabled" value="1"> ' . e(t('admin.gallery_editor.enable_image_voting', 'Enable image voting for this gallery')) . '</label>';
     echo '<label><input type="checkbox" name="show_filenames" value="1"> ' . e(t('admin.gallery_editor.show_file_names', 'Show file names')) . '</label>';
-    if (gallery_count_badge_schema_ready()) {
+    if (!empty(($formModel['count_badge'] ?? [])['schema_ready'])) {
         echo '<label>' . e(t('admin.gallery_editor.count_badge_title', 'Contained-picture badge')) . '<select name="count_badge_visibility">';
-        foreach (gallery_count_badge_override_values() as $countBadgeOption) {
-            echo '<option value="' . e($countBadgeOption) . '"' . ($countBadgeOption === 'inherit' ? ' selected' : '') . '>' . e(gallery_count_badge_override_label($countBadgeOption)) . '</option>';
+        foreach ((array) (($formModel['count_badge'] ?? [])['options'] ?? []) as $countBadgeOption) {
+            $value = (string) ($countBadgeOption['value'] ?? '');
+            echo '<option value="' . e($value) . '"' . ($value === 'inherit' ? ' selected' : '') . '>' . e((string) ($countBadgeOption['label'] ?? $value)) . '</option>';
         }
         echo '</select><span class="muted">' . e(t('admin.gallery_editor.count_badge_new_gallery_help', 'Controls the stacked-picture branch image count on this gallery card and its opened-gallery hero.')) . '</span></label>';
     }
@@ -311,7 +295,7 @@ function view_render_admin_new_gallery_fields(int $prefillParentId, bool $panelM
  * @param ?array $prefillParentGallery Prefill parent gallery value.
  * @param string $error Error value.
  */
-function view_render_admin_new_gallery_side_panel(int $prefillParentId, ?array $prefillParentGallery, string $error): void
+function view_render_admin_new_gallery_side_panel(int $prefillParentId, ?array $prefillParentGallery, string $error, array $formModel = []): void
 {
     echo '<div class="admin-side-panel-stack" data-gallery-create-panel>';
     echo '<div class="admin-side-panel-copy"><p class="admin-kicker">' . e(t('admin.gallery_editor.gallery_workflow', 'Gallery workflow')) . '</p><h2>' . e(t('admin.gallery_editor.create_gallery', 'Create gallery')) . '</h2><p class="muted">' . e(t('admin.gallery_editor.create_gallery_empty_help', 'Create a new empty gallery in the selected parent. Photo upload stays in the separate upload workflow.')) . '</p></div>';
@@ -323,7 +307,7 @@ function view_render_admin_new_gallery_side_panel(int $prefillParentId, ?array $
     }
     echo '<section class="admin-side-panel-workflow" data-gallery-panel-workflow>';
     echo '<form method="post" action="' . e(url_for('admin_new_gallery')) . '" class="admin-side-panel-form" data-gallery-panel-create-form>' . csrf_field();
-    view_render_admin_new_gallery_fields($prefillParentId, true);
+    view_render_admin_new_gallery_fields($prefillParentId, true, 'create', $formModel);
     echo '<div class="admin-side-panel-actions"><button type="submit" class="button primary" data-gallery-panel-submit>' . e(t('admin.gallery_editor.create_gallery', 'Create gallery')) . '</button><p class="muted">' . e(t('admin.gallery_editor.new_gallery_empty_help', 'The new gallery is created empty. Use Upload photos for media.')) . '</p></div>';
     echo '</form></section>';
     echo '</div>';
@@ -355,11 +339,10 @@ function view_render_admin_simbrief_description_tool(int $galleryId): void
  * @param int $imageId Image id used for photo-level prompt context, or zero for gallery editors.
  * @param string $mode UI mode, either gallery or image.
  */
-function view_render_admin_openai_text_assist_tool(int $galleryId, int $imageId = 0, string $mode = 'gallery'): void
+function view_render_admin_openai_text_assist_tool(int $galleryId, int $imageId = 0, string $mode = 'gallery', array $formModel = []): void
 {
-    $user = function_exists('Gallery\\Core\\current_user') ? current_user() : null;
-    $userId = is_array($user) ? (int) ($user['id'] ?? 0) : 0;
-    if ($userId <= 0 || !function_exists('Gallery\\Services\\openai_text_assist_available') || !openai_text_assist_available($userId)) {
+    $openAi = is_array($formModel['openai'] ?? null) ? $formModel['openai'] : [];
+    if (empty($openAi['available'])) {
         return;
     }
 
@@ -374,9 +357,9 @@ function view_render_admin_openai_text_assist_tool(int $galleryId, int $imageId 
     $button = $mode === 'image'
         ? t('admin.openai.generate_image_button', 'Generate photo description')
         : t('admin.openai.generate_gallery_button', 'Generate gallery description');
-    $allowImageInput = function_exists('Gallery\\Services\\openai_text_assist_image_input_allowed') && openai_text_assist_image_input_allowed($userId);
-    $languageCatalog = function_exists('Gallery\\Services\\openai_text_assist_language_catalog') ? openai_text_assist_language_catalog() : [];
-    $defaultLanguage = function_exists('Gallery\\Services\\openai_text_assist_default_language') ? openai_text_assist_default_language() : 'en';
+    $allowImageInput = !empty($openAi['allow_image_input']);
+    $languageCatalog = (array) ($openAi['language_catalog'] ?? []);
+    $defaultLanguage = (string) ($openAi['default_language'] ?? 'en');
 
     echo '<div class="admin-openai-text-assist" data-openai-text-assist data-openai-endpoint="' . e(url_for('admin_openai_text_assist')) . '" data-gallery-id="' . (int) $galleryId . '" data-image-id="' . (int) $imageId . '" data-openai-target-selector="[data-openai-description-textarea]">';
     echo '<div class="admin-openai-text-assist-heading"><div><h3>' . e($title) . '</h3><p class="muted">' . e($help) . '</p></div></div>';

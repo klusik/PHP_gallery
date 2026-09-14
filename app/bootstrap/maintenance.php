@@ -60,7 +60,7 @@ function cms_run_request_maintenance(string $page): void
             'background_continue_budget_seconds' => 3.0,
         ]);
     }
-    application_autoupdate_maybe_run();
+    application_autoupdate_maybe_run(3600, request_method());
     if (function_exists('Gallery\\Services\\admin_test_run_mark')) {
         \Gallery\Services\admin_test_run_mark('maintenance.autoupdate.end');
     }

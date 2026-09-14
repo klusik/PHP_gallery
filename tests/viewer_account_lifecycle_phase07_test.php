@@ -17,6 +17,9 @@
  *   - Prove Phase 0.7 services remain route-free while later HTTP wiring stays in a separate thin controller
  *   - Prove the foundational mail/content services remain transport-free and collection-CRUD-free
  *
+ * Author:
+ *   Rudolf Klusal
+ *
  * Last Updated:
  *   2026-08-18
  */
@@ -86,6 +89,10 @@ namespace {
         ],
     ];
 
+    require_once __DIR__ . '/../app/bootstrap/viewer_identity_context.php';
+    require_once __DIR__ . '/../app/models/viewer_accounts.php';
+    require_once __DIR__ . '/../app/models/viewer_registration.php';
+    require_once __DIR__ . '/../app/models/viewer_lifecycle.php';
     require_once __DIR__ . '/../app/services/schema_inspection.php';
     require_once __DIR__ . '/../app/services/security_tokens.php';
     require_once __DIR__ . '/../app/services/client_ip.php';
@@ -200,7 +207,9 @@ namespace {
     $authService = (string) file_get_contents($root . '/app/services/viewer_authentication.php');
     $tokenService = (string) file_get_contents($root . '/app/services/viewer_tokens.php');
     $lifecycleService = (string) file_get_contents($root . '/app/services/viewer_lifecycle.php');
+    $lifecycleModel = (string) file_get_contents($root . '/app/models/viewer_lifecycle.php');
     $contentService = (string) file_get_contents($root . '/app/services/viewer_content_foundations.php');
+    $imagesModel = (string) file_get_contents($root . '/app/models/images.php');
     $galleryAccessService = (string) file_get_contents($root . '/app/services/gallery_access.php');
     $mailService = (string) file_get_contents($root . '/app/services/viewer_mail.php');
     $migration = (string) file_get_contents($root . '/database/migrations/202608180004_viewer_account_lifecycle_foundations.php');
@@ -209,28 +218,28 @@ namespace {
     viewer_phase07_assert(str_contains($migration, 'verification_token_hash CHAR(64)') && !str_contains($migration, 'verification_token VARCHAR'), 'Email-change storage must persist only verification-token hashes.');
     viewer_phase07_assert(str_contains($migration, 'normalized_new_email') && str_contains($migration, 'security_version BIGINT UNSIGNED NOT NULL'), 'Email-change staging must bind normalized target identity to security version.');
 
-    viewer_phase07_assert(str_contains($authService, 'viewer_reauthentication_establish($authenticatedViewer)'), 'Successful interactive password login must establish recent reauthentication when the lifecycle service is loaded.');
+    viewer_phase07_assert(str_contains($authService, 'viewer_reauthentication_establish('), 'Successful interactive password login must establish recent reauthentication when the lifecycle service is loaded.');
     viewer_phase07_assert(str_contains($lifecycleService, "viewer_login_rate_limits_consume((string) \$viewer['normalized_email']"), 'Explicit password reauthentication must reuse the established viewer password-attempt abuse-control budgets before password verification.');
     viewer_phase07_assert(!str_contains($tokenService, 'viewer_reauthentication_establish'), 'Remember-token restoration must never establish recent reauthentication.');
-    viewer_phase07_assert(str_contains($accountService, "unset(\$_SESSION[VIEWER_REAUTHENTICATION_NAMESPACE]"), 'New viewer session establishment must discard inherited recent-auth authority.');
+    viewer_phase07_assert(str_contains($accountService, 'viewer_identity_session_unset(VIEWER_REAUTHENTICATION_NAMESPACE'), 'New viewer session establishment must discard inherited recent-auth authority.');
 
-    viewer_phase07_assert(str_contains($lifecycleService, 'function viewer_change_password(string $newPassword, ?string $currentPassword = null)') && str_contains($lifecycleService, 'FOR UPDATE'), 'Password change must be route-free, account-locked, and able to require explicit current-password proof.');
-    viewer_phase07_assert(str_contains($lifecycleService, 'password_changed_at = ?') && str_contains($lifecycleService, 'security_version = ?'), 'Password change must update password_changed_at and security_version.');
-    viewer_phase07_assert(str_contains($lifecycleService, 'UPDATE viewer_sessions SET revoked_at = ?') && str_contains($lifecycleService, 'UPDATE viewer_remember_tokens SET revoked_at = ?'), 'Password/email lifecycle transitions must revoke viewer session and remember authority.');
-    viewer_phase07_assert(str_contains($lifecycleService, 'UPDATE viewer_password_reset_tokens SET invalidated_at = ?'), 'Password/email lifecycle transitions must invalidate reset authority.');
+    viewer_phase07_assert(str_contains($lifecycleService, 'function viewer_change_password(string $newPassword, ?string $currentPassword = null)') && str_contains($lifecycleService, 'viewer_lifecycle_model_account_lock(') && str_contains($lifecycleModel, 'LIMIT 1 FOR UPDATE'), 'Password change must be route-free, account-locked through the model, and able to require explicit current-password proof.');
+    viewer_phase07_assert(str_contains($lifecycleService, 'viewer_lifecycle_model_password_update(') && str_contains($lifecycleModel, 'password_changed_at = ?') && str_contains($lifecycleModel, 'security_version = ?'), 'Password change must update password_changed_at and security_version through the lifecycle model.');
+    viewer_phase07_assert(str_contains($lifecycleService, 'viewer_lifecycle_model_revoke_after_password_change(') && str_contains($lifecycleService, 'viewer_lifecycle_model_revoke_after_email_change(') && str_contains($lifecycleModel, 'UPDATE viewer_sessions SET revoked_at = ?') && str_contains($lifecycleModel, 'UPDATE viewer_remember_tokens SET revoked_at = ?'), 'Password/email lifecycle transitions must revoke viewer session and remember authority through the lifecycle model.');
+    viewer_phase07_assert(str_contains($lifecycleModel, 'UPDATE viewer_password_reset_tokens SET invalidated_at = ?'), 'Password/email lifecycle transitions must invalidate reset authority in the lifecycle model.');
 
     viewer_phase07_assert(str_contains($lifecycleService, 'function viewer_email_change_request_inspect(string $verificationToken)') && str_contains($lifecycleService, 'function viewer_email_change_authorize(string $verificationToken)'), 'Email-change inspection and explicit confirmation authorization must remain separate.');
-    viewer_phase07_assert(str_contains($lifecycleService, 'SELECT * FROM viewer_email_change_requests WHERE id = ? LIMIT 1 FOR UPDATE'), 'Final email change must lock the staged request.');
-    viewer_phase07_assert(str_contains($lifecycleService, 'normalized_email = ? AND id <> ?') && str_contains($migration, 'viewer_accounts_normalized_email_unique') === false, 'Email change must re-check target uniqueness while relying on the existing account unique constraint.');
+    viewer_phase07_assert(str_contains($lifecycleService, 'viewer_lifecycle_model_email_change_lock(') && str_contains($lifecycleModel, 'SELECT * FROM viewer_email_change_requests WHERE id = ? LIMIT 1 FOR UPDATE'), 'Final email change must lock the staged request through the lifecycle model.');
+    viewer_phase07_assert(str_contains($lifecycleService, 'viewer_lifecycle_model_email_conflict_exists(') && str_contains($lifecycleModel, 'normalized_email = ? AND id <> ?') && str_contains($migration, 'viewer_accounts_normalized_email_unique') === false, 'Email change must re-check target uniqueness through the lifecycle model while relying on the existing account unique constraint.');
     viewer_phase07_assert(str_contains($lifecycleService, 'viewer_mail_authorize_send(VIEWER_MAIL_ACTION_EMAIL_CHANGE'), 'Email-change request creation must pass the existing mail-abuse authorization boundary.');
     viewer_phase07_assert(str_contains($mailService, "const VIEWER_MAIL_ACTION_EMAIL_CHANGE = 'email_change';"), 'Email-change mail intent must be allowlisted without adding transport.');
 
-    viewer_phase07_assert(str_contains($lifecycleService, 'function viewer_account_delete(): array') && str_contains($lifecycleService, 'DELETE FROM viewer_accounts WHERE id = ?'), 'Account deletion must be an internal route-free terminal transition.');
+    viewer_phase07_assert(str_contains($lifecycleService, 'function viewer_account_delete(): array') && str_contains($lifecycleService, 'viewer_lifecycle_model_account_delete(') && str_contains($lifecycleModel, 'DELETE FROM viewer_accounts WHERE id = ?'), 'Account deletion must be an internal route-free terminal transition with model-owned persistence.');
     viewer_phase07_assert(str_contains($lifecycleService, 'viewer_account_capacity_lock();') && substr_count($lifecycleService, 'viewer_account_capacity_recount_locked();') >= 2, 'Account deletion must serialize and reconcile durable account capacity in the same transaction.');
-    viewer_phase07_assert(str_contains($lifecycleService, 'UPDATE viewer_collection_share_tokens SET revoked_at = ?') && str_contains($migration, 'ON DELETE CASCADE'), 'Deletion must revoke creator share authority and rely on FK cascades for owned rows.');
+    viewer_phase07_assert(str_contains($lifecycleService, 'viewer_lifecycle_model_revoke_created_shares(') && str_contains($lifecycleModel, 'UPDATE viewer_collection_share_tokens SET revoked_at = ?') && str_contains($migration, 'ON DELETE CASCADE'), 'Deletion must revoke creator share authority through the model and rely on FK cascades for owned rows.');
 
     viewer_phase07_assert(str_contains($contentService, 'visitor_can_access_gallery_without_admin_bypass($gallery)'), 'Viewer source-image references must use the canonical no-admin-bypass gallery decision.');
-    viewer_phase07_assert(str_contains($contentService, "SELECT * FROM images WHERE id = ? LIMIT 1") && str_contains($contentService, 'find_gallery($galleryId, true)'), 'Source-image authorization must reload authoritative image/gallery state.');
+    viewer_phase07_assert(str_contains($contentService, 'image_model_find_by_id($imageId)') && str_contains($imagesModel, 'SELECT * FROM images WHERE id = ?') && str_contains($contentService, 'find_gallery($galleryId, true)'), 'Source-image authorization must reload authoritative image/gallery state.');
     viewer_phase07_assert(!str_contains($contentService, 'current_viewer()'), 'Viewer authentication must remain independent from source-media authorization.');
     viewer_phase07_assert(str_contains($contentService, 'viewer_source_image_can_reference') && str_contains($contentService, 'viewer_source_image_can_render_reference'), 'Future create/render paths must share one source-image authorization primitive.');
     viewer_phase07_assert(str_contains($galleryAccessService, 'function visitor_can_access_gallery_without_admin_bypass') && !str_contains(substr($galleryAccessService, strpos($galleryAccessService, 'function visitor_can_access_gallery_without_admin_bypass'), 1800), 'current_user()'), 'No-admin-bypass gallery helper must not consult the administrator principal.');

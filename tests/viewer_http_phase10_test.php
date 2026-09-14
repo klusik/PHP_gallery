@@ -17,6 +17,9 @@
  *   - Verify mail delivery remains behind viewer abuse authorization
  *   - Prove Phase 4.1 open signup reuses Phase 1 verification while collections, sharing, profiles, uploads, and later favourites stay isolated
  *
+ * Author:
+ *   Rudolf Klusal
+ *
  * Last Updated:
  *   2026-08-20
  */
@@ -73,7 +76,9 @@ $root = dirname(__DIR__);
 $controller = (string) file_get_contents($root . '/app/controllers/viewer_accounts.php');
 $httpService = (string) file_get_contents($root . '/app/services/viewer_http.php');
 $registrationService = (string) file_get_contents($root . '/app/services/viewer_registration.php');
+$registrationModel = (string) file_get_contents($root . '/app/models/viewer_registration.php');
 $authService = (string) file_get_contents($root . '/app/services/viewer_authentication.php');
+$authModel = (string) file_get_contents($root . '/app/models/viewer_authentication.php');
 $tokenService = (string) file_get_contents($root . '/app/services/viewer_tokens.php');
 $accountsService = (string) file_get_contents($root . '/app/services/viewer_accounts.php');
 $galleryAccess = (string) file_get_contents($root . '/app/services/gallery_access.php');
@@ -83,6 +88,7 @@ $requestBootstrap = (string) file_get_contents($root . '/app/bootstrap/request.p
 $security = (string) file_get_contents($root . '/app/security.php');
 $seoGuard = (string) file_get_contents($root . '/app/services/seo_request_guard.php');
 $layout = (string) file_get_contents($root . '/app/views/layout.php');
+$sharedLayoutController = (string) file_get_contents($root . '/app/controllers/shared_layout.php');
 $adminChrome = (string) file_get_contents($root . '/app/views/admin_chrome.php');
 $servicesLoader = (string) file_get_contents($root . '/app/services.php');
 $controllersLoader = (string) file_get_contents($root . '/app/controllers.php');
@@ -143,13 +149,13 @@ viewer_phase10_assert(str_contains($verify, 'viewer_registration_verification_va
 viewer_phase10_assert(str_contains($verify, 'viewer_registration_verification_confirm($token)'), 'Verification POST must exchange the bearer into server-side activation authority.');
 viewer_phase10_assert(str_contains($verify, 'viewer_registration_activate_verified($password)'), 'Final registration POST must use existing atomic activation service.');
 viewer_phase10_assert(!str_contains($verify, 'INSERT INTO viewer_accounts'), 'Viewer controller must never implement account creation SQL.');
-viewer_phase10_assert(str_contains($registrationService, 'SELECT * FROM viewer_invitations WHERE id = ? LIMIT 1 FOR UPDATE') && str_contains($registrationService, 'viewer_account_capacity_lock();'), 'Existing activation service must retain invitation/account-cap locking.');
+viewer_phase10_assert(str_contains($registrationService, 'viewer_registration_model_invitation_lock(') && str_contains($registrationService, 'viewer_account_capacity_lock();') && str_contains($registrationModel, 'SELECT * FROM viewer_invitations WHERE id = ? LIMIT 1 FOR UPDATE'), 'Existing activation service must retain invitation/account-cap locking.');
 
 // Viewer login remains identity-separated and all slow hashing stays behind service-side admission control.
 $login = viewer_phase10_function_source($controller, 'cms_viewer_login');
 viewer_phase10_assert(str_contains($login, 'viewer_authenticate_password('), 'Viewer login must delegate password authentication to existing viewer service.');
 viewer_phase10_assert(str_contains($login, 'viewer_csrf_field()') && str_contains($login, 'viewer_verify_csrf_or_render_error()'), 'Viewer login must be CSRF protected.');
-viewer_phase10_assert(str_contains($login, 'viewer_remember_token_issue(') && str_contains($login, 'viewer_remember_cookie_set('), 'Remember-me must use dedicated viewer token plus cookie bridge.');
+viewer_phase10_assert(str_contains($login, 'viewer_remember_token_issue(') && str_contains($login, 'viewer_identity_remember_cookie_set('), 'Remember-me must use dedicated viewer token plus Core cookie bridge.');
 viewer_phase10_assert(!str_contains($login, "\$_SESSION['user_id']") && !str_contains($login, 'current_user('), 'Viewer login must never establish or inspect administrator identity.');
 viewer_phase10_assert(strpos($authService, 'viewer_login_rate_limits_consume(') < strpos($authService, 'viewer_password_verify('), 'Viewer login rate limiting must execute before expensive password verification.');
 viewer_phase10_assert(str_contains(viewer_phase10_function_source($accountsService, 'viewer_session_establish'), 'viewer_session_namespace_key()') && !str_contains(viewer_phase10_function_source($accountsService, 'viewer_session_establish'), "\$_SESSION['user_id']"), 'Viewer session establishment must remain in its dedicated namespace only.');
@@ -157,15 +163,15 @@ viewer_phase10_assert(str_contains(viewer_phase10_function_source($accountsServi
 // Viewer logout is a POST/CSRF mutation and does not destroy or revoke Admin identity.
 $logout = viewer_phase10_function_source($controller, 'cms_viewer_logout');
 viewer_phase10_assert(str_contains($logout, "request_method() !== 'POST'") && str_contains($logout, 'viewer_verify_csrf_or_render_error()'), 'Viewer logout must require POST plus viewer CSRF.');
-viewer_phase10_assert(str_contains($logout, 'viewer_remember_revoke_current_cookie()') && str_contains($logout, 'viewer_session_revoke_current()') && str_contains($logout, 'viewer_clear_reauthentication()'), 'Viewer logout must revoke viewer remember/session/recent-auth authority.');
+viewer_phase10_assert(str_contains($logout, 'viewer_identity_remember_revoke_current_cookie()') && str_contains($logout, 'viewer_session_revoke_current()') && str_contains($logout, 'viewer_clear_reauthentication()'), 'Viewer logout must revoke viewer remember/session/recent-auth authority.');
 viewer_phase10_assert(!str_contains($logout, 'session_destroy(') && !str_contains($logout, 'cms_admin_logout') && !str_contains($logout, "unset(\$_SESSION['user_id'])"), 'Viewer logout must preserve administrator session authority.');
 
 // Dedicated persistent viewer authority rotates and never counts as recent reauthentication.
-viewer_phase10_assert(str_contains($httpService, "viewer_remember_cookie_contract()['name']") && str_contains($httpService, 'viewer_remember_restore_and_rotate('), 'Viewer remember cookie bridge must use the dedicated established token contract and rotation service.');
-viewer_phase10_assert(str_contains($httpService, 'viewer_clear_reauthentication();'), 'Remember restoration must explicitly leave recent reauthentication unsatisfied.');
+viewer_phase10_assert(str_contains($httpService, 'viewer_remember_cookie_name()') && str_contains($httpService, 'viewer_remember_restore_and_rotate('), 'Viewer remember cookie bridge must use the dedicated established token contract and rotation service.');
+viewer_phase10_assert(str_contains($httpService, 'Remember restoration deliberately does') && str_contains($httpService, 'not establish recent reauthentication.'), 'Remember restoration must explicitly leave recent reauthentication unsatisfied.');
 viewer_phase10_assert(!str_contains($httpService, "\$_SESSION['user_id']"), 'Viewer remember adapter must never write administrator identity.');
 viewer_phase10_assert(str_contains($tokenService, "'name' => 'php_gallery_viewer_remember'"), 'Viewer persistent login must retain its dedicated cookie namespace.');
-viewer_phase10_assert(strpos($requestBootstrap, 'viewer_remember_restore_from_cookie();') < strpos($requestBootstrap, 'send_security_headers();'), 'Remember restoration must occur before response cache classification.');
+viewer_phase10_assert(strpos($requestBootstrap, 'viewer_identity_remember_restore_request();') < strpos($requestBootstrap, 'send_security_headers();'), 'Remember restoration must occur before response cache classification.');
 $rememberRestore = viewer_phase10_function_source($httpService, 'viewer_remember_restore_from_cookie');
 viewer_phase10_assert(str_contains($rememberRestore, 'if (!viewer_accounts_enabled())') && str_contains($rememberRestore, 'viewer_session_clear();') && str_contains($rememberRestore, 'viewer_registration_activation_clear();') && str_contains($rememberRestore, 'viewer_password_reset_state_clear();'), 'Disabling viewer accounts must clear local viewer-only authority so ordinary public requests return to the historical anonymous cache path.');
 
@@ -176,7 +182,7 @@ viewer_phase10_assert(str_contains($forgot, 'viewer_password_reset_request('), '
 viewer_phase10_assert(str_contains($reset, 'viewer_password_reset_inspect($token)') && str_contains($reset, 'viewer_password_reset_authorize('), 'Reset flow must separate scanner-safe inspection from explicit authorization.');
 viewer_phase10_assert(str_contains($reset, 'viewer_password_reset_complete($password)'), 'Final reset POST must use existing atomic reset transition.');
 viewer_phase10_assert(!str_contains($reset, 'UPDATE viewer_accounts') && !str_contains($reset, 'DELETE FROM viewer_sessions'), 'Reset controller must not duplicate lifecycle SQL.');
-viewer_phase10_assert(str_contains($authService, 'UPDATE viewer_sessions SET revoked_at = ?') && str_contains($authService, 'UPDATE viewer_remember_tokens SET revoked_at = ?'), 'Existing reset service must continue revoking old viewer authority.');
+viewer_phase10_assert(str_contains($authService, 'viewer_authentication_model_revoke_after_password_reset(') && str_contains($authModel, 'UPDATE viewer_sessions SET revoked_at = ?') && str_contains($authModel, 'UPDATE viewer_remember_tokens SET revoked_at = ?'), 'Existing reset service must continue revoking old viewer authority.');
 
 // Personalized responses and bearer-cookie requests are never eligible for shared/public cache treatment.
 foreach (['cms_viewer_register', 'cms_viewer_invite', 'cms_viewer_verify', 'cms_viewer_login', 'cms_viewer_logout', 'cms_viewer_forgot_password', 'cms_viewer_reset_password', 'cms_viewer_account'] as $functionName) {
@@ -189,9 +195,9 @@ viewer_phase10_assert(!str_contains(viewer_phase10_function_source($security, 's
 viewer_phase10_assert(str_contains(viewer_phase10_function_source($controller, 'viewer_http_auth_available'), 'viewer_accounts_enabled()'), 'Viewer HTTP boundary must respect the global viewer feature switch.');
 viewer_phase10_assert(str_contains(viewer_phase10_function_source($httpService, 'viewer_http_invite_registration_available'), 'viewer_http_registration_lifecycle_available()'), 'Invitation HTTP availability must support the shared invite_only/open registration lifecycle.');
 viewer_phase10_assert(str_contains(viewer_phase10_function_source($httpService, 'viewer_http_open_registration_available'), "viewer_registration_mode() === 'open'"), 'Generic registration HTTP availability must require exact open mode.');
-viewer_phase10_assert(str_contains($layout, 'viewer_accounts_enabled()') && str_contains($layout, "url_for('viewer_login')") && str_contains($layout, "url_for('viewer_account')"), 'Public navigation must retain Viewer Login/Account while enabled.');
-viewer_phase10_assert(str_contains($layout, 'if (viewer_http_open_registration_available())') && str_contains($layout, "url_for('viewer_register')") && !str_contains($layout, "url_for('viewer_signup')"), 'Public Register discovery must exist only behind the narrow Phase 4.1 open-registration gate.');
-viewer_phase10_assert(str_contains($layout, "str_starts_with(\$page, 'viewer_') ? [] : ['return' => current_login_return_target()]"), 'Secret-bearing viewer routes must not be copied into the Admin login return parameter.');
+viewer_phase10_assert(str_contains($sharedLayoutController, 'viewer_accounts_enabled()') && str_contains($layout, "url_for('viewer_login')") && str_contains($layout, "url_for('viewer_account')"), 'Public navigation must retain Viewer Login/Account while enabled.');
+viewer_phase10_assert(str_contains($sharedLayoutController, 'viewer_http_open_registration_available()') && str_contains($layout, "!empty(\$model['viewer_open_registration'])") && str_contains($layout, "url_for('viewer_register')") && !str_contains($layout, "url_for('viewer_signup')"), 'Public Register discovery must exist only behind the narrow Phase 4.1 open-registration gate.');
+viewer_phase10_assert(str_contains($sharedLayoutController, "'admin_login_return' => str_starts_with(\$page, 'viewer_') ? '' : current_login_return_target()") && str_contains($layout, "\$adminLoginParams = \$returnTarget !== '' ? ['return' => \$returnTarget] : [];"), 'Secret-bearing viewer routes must not be copied into the Admin login return parameter.');
 viewer_phase10_assert(str_contains(viewer_phase10_function_source($controller, 'viewer_http_no_store'), "Referrer-Policy: no-referrer"), 'Viewer bearer/pre-auth responses must suppress Referer propagation of secret-bearing URLs.');
 
 // Authentication remains separate from gallery authorization and out-of-scope content features remain absent.

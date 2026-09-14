@@ -17,6 +17,9 @@
  *   - Return bounded favourite state for public-card/lightbox rendering
  *   - Fail closed without making ordinary gallery browsing depend on viewer storage
  *
+ * Author:
+ *   Rudolf Klusal
+ *
  * Notes:
  *   - Keep comments and docstrings intact when modifying this file.
  *   - Viewer authentication is not gallery authorization.
@@ -32,7 +35,6 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 use Throwable;
-use function Gallery\Core\db;
 use function Gallery\Core\now_sql;
 
 /**
@@ -71,34 +73,15 @@ function viewer_favourites_storage_available(): bool
  */
 function viewer_favourites_for_image_ids(int $viewerAccountId, array $imageIds): array
 {
-    if ($viewerAccountId <= 0 || !viewer_favourites_storage_available()) {
-        return [];
-    }
-
+    if ($viewerAccountId <= 0 || !viewer_favourites_storage_available()) return [];
     $ids = [];
     foreach ($imageIds as $imageId) {
         $imageId = (int) $imageId;
-        if ($imageId > 0) {
-            $ids[$imageId] = true;
-        }
+        if ($imageId > 0) $ids[$imageId] = true;
     }
-    if ($ids === []) {
-        return [];
-    }
-
+    if ($ids === []) return [];
     try {
-        $result = [];
-        foreach (array_chunk(array_keys($ids), 200) as $idList) {
-            $placeholders = implode(',', array_fill(0, count($idList), '?'));
-            $stmt = db()->prepare(
-                'SELECT image_id FROM viewer_favourites WHERE viewer_account_id = ? AND image_id IN (' . $placeholders . ')'
-            );
-            $stmt->execute(array_merge([$viewerAccountId], $idList));
-            foreach ($stmt->fetchAll(\PDO::FETCH_COLUMN) as $imageId) {
-                $result[(int) $imageId] = true;
-            }
-        }
-        return $result;
+        return \Gallery\Models\viewer_favourites_model_for_image_ids($viewerAccountId, array_keys($ids), 200);
     } catch (Throwable) {
         return [];
     }
@@ -120,27 +103,8 @@ function viewer_favourites_page(int $viewerAccountId, int $page = 1, int $perPag
     if ($viewerAccountId <= 0 || !viewer_favourites_storage_available()) {
         return ['rows' => [], 'total' => 0, 'page' => $page, 'per_page' => $perPage];
     }
-
     try {
-        $countStmt = db()->prepare('SELECT COUNT(*) FROM viewer_favourites WHERE viewer_account_id = ?');
-        $countStmt->execute([$viewerAccountId]);
-        $total = (int) $countStmt->fetchColumn();
-        $maxPage = max(1, (int) ceil($total / $perPage));
-        $page = min($page, $maxPage);
-        $offset = ($page - 1) * $perPage;
-        $stmt = db()->prepare(
-            'SELECT image_id, created_at FROM viewer_favourites WHERE viewer_account_id = ? '
-            . 'ORDER BY created_at DESC, image_id DESC LIMIT ' . $perPage . ' OFFSET ' . $offset
-        );
-        $stmt->execute([$viewerAccountId]);
-        $rows = [];
-        foreach ($stmt->fetchAll() as $row) {
-            $rows[] = [
-                'image_id' => (int) ($row['image_id'] ?? 0),
-                'created_at' => (string) ($row['created_at'] ?? ''),
-            ];
-        }
-        return ['rows' => $rows, 'total' => $total, 'page' => $page, 'per_page' => $perPage];
+        return \Gallery\Models\viewer_favourites_model_page($viewerAccountId, $page, $perPage);
     } catch (Throwable) {
         return ['rows' => [], 'total' => 0, 'page' => $page, 'per_page' => $perPage];
     }
@@ -172,69 +136,18 @@ function viewer_favourite_set(array $viewer, int $imageId, bool $desiredFavourit
         return ['ok' => false, 'favourite' => false, 'changed' => false, 'reason' => 'source_forbidden'];
     }
 
-    $pdo = db();
-    $ownsTransaction = !$pdo->inTransaction();
-    if ($ownsTransaction) {
-        $pdo->beginTransaction();
-    }
-
+    $quota = viewer_content_quota_config();
     try {
-        $accountStmt = $pdo->prepare(
-            'SELECT id, email, normalized_email, password_hash, status, security_version, email_verified_at '
-            . 'FROM viewer_accounts WHERE id = ? LIMIT 1 FOR UPDATE'
+        return \Gallery\Models\viewer_favourite_model_set(
+            $viewerAccountId,
+            $imageId,
+            $desiredFavourite,
+            (int) $quota['max_viewer_favourites_per_account'],
+            now_sql(),
+            static fn (array $lockedAccount): bool => viewer_account_can_mutate_content($lockedAccount)
+                && (int) ($lockedAccount['security_version'] ?? 0) === $expectedSecurityVersion
         );
-        $accountStmt->execute([$viewerAccountId]);
-        $lockedAccount = $accountStmt->fetch();
-        if (!$lockedAccount
-            || !viewer_account_can_mutate_content($lockedAccount)
-            || (int) ($lockedAccount['security_version'] ?? 0) !== $expectedSecurityVersion) {
-            if ($ownsTransaction && $pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
-            return ['ok' => false, 'favourite' => false, 'changed' => false, 'reason' => 'account_unavailable'];
-        }
-
-        $existsStmt = $pdo->prepare(
-            'SELECT 1 FROM viewer_favourites WHERE viewer_account_id = ? AND image_id = ? LIMIT 1'
-        );
-        $existsStmt->execute([$viewerAccountId, $imageId]);
-        $exists = (bool) $existsStmt->fetchColumn();
-        $initialExists = $exists;
-
-        if ($desiredFavourite && !$exists) {
-            $quota = viewer_content_quota_config();
-            $countStmt = $pdo->prepare('SELECT COUNT(*) FROM viewer_favourites WHERE viewer_account_id = ?');
-            $countStmt->execute([$viewerAccountId]);
-            if ((int) $countStmt->fetchColumn() >= (int) $quota['max_viewer_favourites_per_account']) {
-                if ($ownsTransaction && $pdo->inTransaction()) {
-                    $pdo->rollBack();
-                }
-                return ['ok' => false, 'favourite' => false, 'changed' => false, 'reason' => 'quota'];
-            }
-            $insert = $pdo->prepare(
-                'INSERT INTO viewer_favourites (viewer_account_id, image_id, created_at) VALUES (?, ?, ?)'
-            );
-            $insert->execute([$viewerAccountId, $imageId, now_sql()]);
-            $exists = true;
-        } elseif (!$desiredFavourite && $exists) {
-            $delete = $pdo->prepare('DELETE FROM viewer_favourites WHERE viewer_account_id = ? AND image_id = ?');
-            $delete->execute([$viewerAccountId, $imageId]);
-            $exists = false;
-        }
-
-        if ($ownsTransaction) {
-            $pdo->commit();
-        }
-        return [
-            'ok' => true,
-            'favourite' => $exists,
-            'changed' => $exists !== $initialExists,
-            'reason' => 'ok',
-        ];
     } catch (Throwable) {
-        if ($ownsTransaction && $pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
         return ['ok' => false, 'favourite' => false, 'changed' => false, 'reason' => 'unavailable'];
     }
 }

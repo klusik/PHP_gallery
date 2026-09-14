@@ -4,7 +4,10 @@
  * Project: PHP Gallery
  * File: tests/admin_dashboard_deferred_maintenance_test.php
  * Purpose: Verify that dashboard maintenance work is deferred until activation.
- */
+  *
+ * Author:
+ *   Rudolf Klusal
+*/
 
 declare(strict_types=1);
 
@@ -43,7 +46,8 @@ assert_admin_dashboard_deferred_contains($controllerSource, "admin.dashboard_mai
 assert_admin_dashboard_deferred_contains($viewSource, 'data-maintenance-log-endpoint', 'dashboard exposes its maintenance diagnostics endpoint');
 assert_admin_dashboard_deferred_contains($tabsSource, "body.set('response_snippet'", 'browser reports the failed maintenance response snippet');
 assert_admin_dashboard_deferred_contains($sectionsSource, "['maintenance_tab' => 'media']", 'thumbnail gap metric links to media maintenance');
-assert_admin_dashboard_deferred_contains($sectionsSource, "strtolower(trim((string) (\$_GET['maintenance_tab'] ?? '')))", 'thumbnail maintenance deep-link parameter is parsed with balanced function calls');
+assert_admin_dashboard_deferred_contains($controllerSource, "strtolower(trim((string) (\$_GET['maintenance_tab'] ?? '')))", 'thumbnail maintenance deep-link parameter is parsed at the controller boundary');
+assert_admin_dashboard_deferred_contains($sectionsSource, "\$model['requested_maintenance_tab']", 'maintenance View consumes the controller-prepared deep-link value');
 assert_admin_dashboard_deferred_contains($sectionsSource, "'media' => 'admin-maintenance-media'", 'thumbnail maintenance deep link activates the media subtab');
 assert_admin_dashboard_deferred_contains($sectionsSource, "'trash' => 'admin-maintenance-trash'", 'trash maintenance deep link activates the Trash subtab');
 

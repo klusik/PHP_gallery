@@ -1,6 +1,21 @@
 <?php
 
 /**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ *
+ * File: tests/gallery_trash_model_test.php
+ *
+ * Author:
+ *   Rudolf Klusal
+ *
+ * License:
+ *   MIT License (see LICENSE file in repository)
+ *
+ * Notes:
+ *   - Keep comments and docstrings intact when modifying this file.
+ */
+/**
  * Regression contracts for the recoverable gallery trash bin.
  *
  * The tests cover the pure retention/token/path model, the real filesystem move
@@ -367,6 +382,7 @@ namespace {
     // 6. Source contracts
     // ---------------------------------------------------------------------
     $service = (string) file_get_contents($root . '/app/services/gallery_trash.php');
+    $trashModel = (string) file_get_contents($root . '/app/models/gallery_trash.php');
     $bulk = (string) file_get_contents($root . '/app/controllers/admin_galleries_bulk.php');
     $inline = (string) file_get_contents($root . '/app/controllers/admin_public_inline.php');
     $maintenance = (string) file_get_contents($root . '/app/services/site_maintenance.php');
@@ -387,9 +403,9 @@ namespace {
         strpos($trashFunction, 'write_gallery_sidecar') < strpos($trashFunction, 'gallery_trash_move_directory'),
         'Every gallery sidecar is refreshed before the folder leaves the gallery root, so the payload carries current metadata.'
     );
-    // The deletion helper also appears in the earlier stale-row branch, so the
-    // ordering contracts compare against its final call on the normal trash path.
-    $finalRowDeletion = (int) strrpos($trashFunction, 'gallery_delete_database_subtree_rows');
+    // Persistence now owns the atomic subtree-row deletion plus PREPARING -> TRASHED transition.
+    // The service must still capture the snapshot and isolate the payload before invoking that model operation.
+    $finalRowDeletion = (int) strrpos($trashFunction, 'gallery_trash_model_finalize_preparing_delete');
     gallery_trash_assert(
         strpos($trashFunction, 'gallery_trash_capture_snapshot') < $finalRowDeletion,
         'The restore snapshot is captured while the gallery rows still exist.'
@@ -450,8 +466,8 @@ namespace {
         'Scheduled maintenance purges expired trash entries during its cleanup phase.'
     );
     gallery_trash_assert(
-        str_contains($service, "status = 'trashed' AND purge_after <= ?"),
-        'Automatic purging selects only trashed entries whose retention window has elapsed.'
+        str_contains($trashModel, "status = 'trashed' AND purge_after <= ?"),
+        'Automatic purging delegates to model persistence that selects only trashed entries whose retention window has elapsed.'
     );
     gallery_trash_assert(
         str_contains($service, 'gallery_trash_normalize_purge_batch_size($limit ?? gallery_trash_purge_batch_size())'),

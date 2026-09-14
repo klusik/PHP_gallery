@@ -18,6 +18,9 @@
  *   - Revalidate every clean shared-collection request against current durable share/account state
  *   - Keep collection-container authority separate from viewer identity, administrator identity, and gallery/media access
  *
+ * Author:
+ *   Rudolf Klusal
+ *
  * Notes:
  *   - Keep comments and docstrings intact when modifying this file.
  *   - A collection share never grants source image or source gallery authorization.
@@ -32,9 +35,25 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
-use PDO;
 use Throwable;
-use function Gallery\Core\db;
+use function Gallery\Core\viewer_identity_session_active;
+use function Gallery\Core\viewer_identity_session_get;
+use function Gallery\Core\viewer_identity_session_regenerate;
+use function Gallery\Core\viewer_identity_session_set;
+use function Gallery\Models\viewer_collection_model_abort;
+use function Gallery\Models\viewer_collection_model_account_lock;
+use function Gallery\Models\viewer_collection_model_owned_lock;
+use function Gallery\Models\viewer_collection_model_transaction;
+use function Gallery\Models\viewer_collection_share_model_active_ids_lock;
+use function Gallery\Models\viewer_collection_share_model_authorization_row;
+use function Gallery\Models\viewer_collection_share_model_candidate;
+use function Gallery\Models\viewer_collection_share_model_collection;
+use function Gallery\Models\viewer_collection_share_model_insert;
+use function Gallery\Models\viewer_collection_share_model_lock;
+use function Gallery\Models\viewer_collection_share_model_references;
+use function Gallery\Models\viewer_collection_share_model_revoke_active;
+use function Gallery\Models\viewer_collection_share_model_state;
+use function Gallery\Models\viewer_collection_share_model_touch_last_used;
 use function Gallery\Core\now_sql;
 
 const VIEWER_COLLECTION_SHARE_SESSION_NAMESPACE = 'viewer_collection_share_grants';
@@ -142,17 +161,7 @@ function viewer_collection_share_state(int $viewerAccountId, int $collectionId):
     }
 
     try {
-        $stmt = db()->prepare(
-            'SELECT vcs.id, vcs.viewer_collection_id, vcs.created_at, vcs.expires_at '
-            . 'FROM viewer_collection_share_tokens vcs '
-            . 'INNER JOIN viewer_collections vc ON vc.id = vcs.viewer_collection_id '
-            . 'WHERE vcs.viewer_collection_id = ? AND vc.viewer_account_id = ? '
-            . 'AND vcs.created_by_viewer_account_id = vc.viewer_account_id '
-            . 'AND vcs.revoked_at IS NULL AND vcs.expires_at IS NOT NULL AND vcs.expires_at > ? '
-            . 'ORDER BY vcs.id DESC LIMIT 1'
-        );
-        $stmt->execute([$collectionId, $viewerAccountId, now_sql()]);
-        $row = $stmt->fetch();
+        $row = viewer_collection_share_model_state($viewerAccountId, $collectionId, now_sql());
         if (!$row) {
             return null;
         }
@@ -213,82 +222,56 @@ function viewer_collection_share_replace(array $viewer, int $collectionId): arra
         return $empty;
     }
 
-    $pdo = db();
-    $ownsTransaction = !$pdo->inTransaction();
-    if ($ownsTransaction) {
-        $pdo->beginTransaction();
-    }
-
     try {
-        if (viewer_collection_lock_mutation_account($pdo, $viewer) === null) {
-            if ($ownsTransaction && $pdo->inTransaction()) {
-                $pdo->rollBack();
+        $result = viewer_collection_model_transaction(static function () use ($viewer, $viewerAccountId, $collectionId, $empty): array {
+            if (viewer_collection_lock_mutation_account($viewer) === null) {
+                $failure = $empty;
+                $failure['reason'] = 'account_unavailable';
+                viewer_collection_model_abort($failure);
             }
-            $empty['reason'] = 'account_unavailable';
-            return $empty;
-        }
-        if (viewer_collection_lock_owned($pdo, $viewerAccountId, $collectionId) === null) {
-            if ($ownsTransaction && $pdo->inTransaction()) {
-                $pdo->rollBack();
+            if (viewer_collection_lock_owned($viewerAccountId, $collectionId) === null) {
+                $failure = $empty;
+                $failure['reason'] = 'not_found';
+                viewer_collection_model_abort($failure);
             }
-            $empty['reason'] = 'not_found';
-            return $empty;
-        }
 
-        $shareRows = $pdo->prepare(
-            'SELECT id FROM viewer_collection_share_tokens '
-            . 'WHERE viewer_collection_id = ? AND revoked_at IS NULL ORDER BY id ASC FOR UPDATE'
-        );
-        $shareRows->execute([$collectionId]);
-        $previousIds = array_map('intval', $shareRows->fetchAll(PDO::FETCH_COLUMN));
-        $replaced = $previousIds !== [];
-        $now = now_sql();
-        if ($replaced) {
-            $revoke = $pdo->prepare(
-                'UPDATE viewer_collection_share_tokens SET revoked_at = ? '
-                . 'WHERE viewer_collection_id = ? AND revoked_at IS NULL'
+            $previousIds = viewer_collection_share_model_active_ids_lock($collectionId);
+            $replaced = $previousIds !== [];
+            $now = now_sql();
+            if ($replaced) {
+                viewer_collection_share_model_revoke_active($collectionId, $now);
+            }
+            $token = security_opaque_token_generate(32);
+            $expiresAt = date('Y-m-d H:i:s', time() + viewer_collection_share_lifetime_seconds());
+            $shareId = viewer_collection_share_model_insert(
+                $collectionId,
+                $viewerAccountId,
+                security_authority_token_hash($token),
+                $now,
+                $expiresAt
             );
-            $revoke->execute([$now, $collectionId]);
+            return [
+                'ok' => true,
+                'changed' => true,
+                'reason' => 'ok',
+                'token' => $token,
+                'share_id' => $shareId,
+                'expires_at' => $expiresAt,
+                'retry_after_seconds' => 0,
+                'replaced' => $replaced,
+            ];
+        });
+        if ($result['ok']) {
+            viewer_collection_share_security_event_best_effort(
+                $result['replaced'] ? 'viewer.collection_share_replaced' : 'viewer.collection_share_created',
+                $viewerAccountId,
+                'success',
+                $collectionId,
+                (int) $result['share_id']
+            );
         }
-
-        $token = security_opaque_token_generate(32);
-        $tokenHash = security_authority_token_hash($token);
-        $expiresAt = date('Y-m-d H:i:s', time() + viewer_collection_share_lifetime_seconds());
-        $insert = $pdo->prepare(
-            'INSERT INTO viewer_collection_share_tokens '
-            . '(viewer_collection_id, created_by_viewer_account_id, token_hash, created_at, expires_at) '
-            . 'VALUES (?, ?, ?, ?, ?)'
-        );
-        $insert->execute([$collectionId, $viewerAccountId, $tokenHash, $now, $expiresAt]);
-        $shareId = (int) $pdo->lastInsertId();
-        if ($shareId <= 0) {
-            throw new \RuntimeException('Viewer collection share insert did not return an identifier.');
-        }
-
-        if ($ownsTransaction) {
-            $pdo->commit();
-        }
-        viewer_collection_share_security_event_best_effort(
-            $replaced ? 'viewer.collection_share_replaced' : 'viewer.collection_share_created',
-            $viewerAccountId,
-            'success',
-            $collectionId,
-            $shareId
-        );
-        return [
-            'ok' => true,
-            'changed' => true,
-            'reason' => 'ok',
-            'token' => $token,
-            'share_id' => $shareId,
-            'expires_at' => $expiresAt,
-            'retry_after_seconds' => 0,
-            'replaced' => $replaced,
-        ];
+        return $result;
     } catch (Throwable) {
-        if ($ownsTransaction && $pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
         $empty['reason'] = 'unavailable';
         return $empty;
     }
@@ -313,56 +296,33 @@ function viewer_collection_share_revoke(array $viewer, int $collectionId): array
         return ['ok' => false, 'changed' => false, 'reason' => 'unavailable'];
     }
 
-    $pdo = db();
-    $ownsTransaction = !$pdo->inTransaction();
-    if ($ownsTransaction) {
-        $pdo->beginTransaction();
-    }
     try {
-        if (viewer_collection_lock_mutation_account($pdo, $viewer) === null) {
-            if ($ownsTransaction && $pdo->inTransaction()) {
-                $pdo->rollBack();
+        $result = viewer_collection_model_transaction(static function () use ($viewer, $viewerAccountId, $collectionId): array {
+            if (viewer_collection_lock_mutation_account($viewer) === null) {
+                viewer_collection_model_abort(['ok' => false, 'changed' => false, 'reason' => 'account_unavailable', 'share_id' => 0]);
             }
-            return ['ok' => false, 'changed' => false, 'reason' => 'account_unavailable'];
-        }
-        if (viewer_collection_lock_owned($pdo, $viewerAccountId, $collectionId) === null) {
-            if ($ownsTransaction && $pdo->inTransaction()) {
-                $pdo->rollBack();
+            if (viewer_collection_lock_owned($viewerAccountId, $collectionId) === null) {
+                viewer_collection_model_abort(['ok' => false, 'changed' => false, 'reason' => 'not_found', 'share_id' => 0]);
             }
-            return ['ok' => false, 'changed' => false, 'reason' => 'not_found'];
-        }
-
-        $shares = $pdo->prepare(
-            'SELECT id FROM viewer_collection_share_tokens '
-            . 'WHERE viewer_collection_id = ? AND revoked_at IS NULL ORDER BY id ASC FOR UPDATE'
-        );
-        $shares->execute([$collectionId]);
-        $shareIds = array_map('intval', $shares->fetchAll(PDO::FETCH_COLUMN));
-        $changed = $shareIds !== [];
-        if ($changed) {
-            $revoke = $pdo->prepare(
-                'UPDATE viewer_collection_share_tokens SET revoked_at = ? '
-                . 'WHERE viewer_collection_id = ? AND revoked_at IS NULL'
-            );
-            $revoke->execute([now_sql(), $collectionId]);
-        }
-        if ($ownsTransaction) {
-            $pdo->commit();
-        }
-        if ($changed) {
+            $shareIds = viewer_collection_share_model_active_ids_lock($collectionId);
+            $changed = $shareIds !== [];
+            if ($changed) {
+                viewer_collection_share_model_revoke_active($collectionId, now_sql());
+            }
+            return ['ok' => true, 'changed' => $changed, 'reason' => 'ok', 'share_id' => $changed ? (int) end($shareIds) : 0];
+        });
+        if ($result['changed']) {
             viewer_collection_share_security_event_best_effort(
                 'viewer.collection_share_revoked',
                 $viewerAccountId,
                 'success',
                 $collectionId,
-                (int) end($shareIds)
+                (int) $result['share_id']
             );
         }
-        return ['ok' => true, 'changed' => $changed, 'reason' => 'ok'];
+        unset($result['share_id']);
+        return $result;
     } catch (Throwable) {
-        if ($ownsTransaction && $pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
         return ['ok' => false, 'changed' => false, 'reason' => 'unavailable'];
     }
 }
@@ -377,7 +337,7 @@ function viewer_collection_share_revoke(array $viewer, int $collectionId): array
  */
 function viewer_collection_share_session_grants_prune(): array
 {
-    $raw = $_SESSION[viewer_collection_share_session_namespace_key()] ?? [];
+    $raw = viewer_identity_session_get(viewer_collection_share_session_namespace_key());
     if (!is_array($raw)) {
         $raw = [];
     }
@@ -409,7 +369,7 @@ function viewer_collection_share_session_grants_prune(): array
     if (count($grants) > VIEWER_COLLECTION_SHARE_SESSION_MAX_GRANTS) {
         $grants = array_slice($grants, -VIEWER_COLLECTION_SHARE_SESSION_MAX_GRANTS);
     }
-    $_SESSION[viewer_collection_share_session_namespace_key()] = $grants;
+    viewer_identity_session_set(viewer_collection_share_session_namespace_key(), $grants);
     return $grants;
 }
 
@@ -439,7 +399,7 @@ function viewer_collection_share_session_grant_store(int $shareId, int $collecti
     if (count($filtered) > VIEWER_COLLECTION_SHARE_SESSION_MAX_GRANTS) {
         $filtered = array_slice($filtered, -VIEWER_COLLECTION_SHARE_SESSION_MAX_GRANTS);
     }
-    $_SESSION[viewer_collection_share_session_namespace_key()] = array_values($filtered);
+    viewer_identity_session_set(viewer_collection_share_session_namespace_key(), array_values($filtered));
     return true;
 }
 
@@ -449,12 +409,12 @@ function viewer_collection_share_session_grant_store(int $shareId, int $collecti
 function viewer_collection_share_session_grant_remove(int $shareId, int $collectionId): void
 {
     $grants = viewer_collection_share_session_grants_prune();
-    $_SESSION[viewer_collection_share_session_namespace_key()] = array_values(array_filter(
+    viewer_identity_session_set(viewer_collection_share_session_namespace_key(), array_values(array_filter(
         $grants,
         static fn (array $grant): bool => !(
             (int) $grant['share_id'] === $shareId && (int) $grant['collection_id'] === $collectionId
         )
-    ));
+    )));
 }
 
 /**
@@ -468,22 +428,12 @@ function viewer_collection_share_session_grant_remove(int $shareId, int $collect
  */
 function viewer_collection_share_exchange(string $token): ?array
 {
-    if (!viewer_collection_share_token_syntax_valid($token)) {
-        return null;
-    }
-    if (!viewer_collection_shares_storage_available()) {
+    if (!viewer_collection_share_token_syntax_valid($token) || !viewer_collection_shares_storage_available()) {
         return null;
     }
     $tokenHash = security_authority_token_hash($token);
-    $pdo = db();
-
     try {
-        $lookup = $pdo->prepare(
-            'SELECT id, viewer_collection_id, created_by_viewer_account_id '
-            . 'FROM viewer_collection_share_tokens WHERE token_hash = ? LIMIT 1'
-        );
-        $lookup->execute([$tokenHash]);
-        $candidate = $lookup->fetch();
+        $candidate = viewer_collection_share_model_candidate($tokenHash);
         if (!$candidate) {
             return null;
         }
@@ -494,88 +444,34 @@ function viewer_collection_share_exchange(string $token): ?array
             return null;
         }
 
-        $ownsTransaction = !$pdo->inTransaction();
-        if ($ownsTransaction) {
-            $pdo->beginTransaction();
-        }
-        try {
-            $accountStmt = $pdo->prepare(
-                'SELECT id, email, normalized_email, password_hash, must_change_password, status, security_version, email_verified_at '
-                . 'FROM viewer_accounts WHERE id = ? LIMIT 1 FOR UPDATE'
-            );
-            $accountStmt->execute([$ownerId]);
-            $account = $accountStmt->fetch();
+        $authority = viewer_collection_model_transaction(static function () use ($shareId, $collectionId, $ownerId, $tokenHash): ?array {
+            $account = viewer_collection_model_account_lock($ownerId);
             if (!$account || !viewer_account_can_authenticate($account)) {
-                if ($ownsTransaction && $pdo->inTransaction()) {
-                    $pdo->rollBack();
-                }
-                return null;
+                viewer_collection_model_abort(null);
             }
-
-            $collectionStmt = $pdo->prepare(
-                'SELECT id, viewer_account_id FROM viewer_collections '
-                . 'WHERE id = ? AND viewer_account_id = ? LIMIT 1 FOR UPDATE'
-            );
-            $collectionStmt->execute([$collectionId, $ownerId]);
-            if (!$collectionStmt->fetch()) {
-                if ($ownsTransaction && $pdo->inTransaction()) {
-                    $pdo->rollBack();
-                }
-                return null;
+            if (viewer_collection_model_owned_lock($ownerId, $collectionId) === null) {
+                viewer_collection_model_abort(null);
             }
-
-            $shareStmt = $pdo->prepare(
-                'SELECT id, viewer_collection_id, created_by_viewer_account_id, created_at, expires_at, revoked_at '
-                . 'FROM viewer_collection_share_tokens '
-                . 'WHERE id = ? AND viewer_collection_id = ? AND created_by_viewer_account_id = ? AND token_hash = ? '
-                . 'LIMIT 1 FOR UPDATE'
-            );
-            $shareStmt->execute([$shareId, $collectionId, $ownerId, $tokenHash]);
-            $share = $shareStmt->fetch();
+            $share = viewer_collection_share_model_lock($shareId, $collectionId, $ownerId, $tokenHash);
             if (!$share || !empty($share['revoked_at']) || !viewer_collection_share_expiry_active((string) ($share['expires_at'] ?? ''))) {
-                if ($ownsTransaction && $pdo->inTransaction()) {
-                    $pdo->rollBack();
-                }
-                return null;
+                viewer_collection_model_abort(null);
             }
-            $expiresAt = (string) $share['expires_at'];
-            if ($ownsTransaction) {
-                $pdo->commit();
-            }
-        } catch (Throwable $exception) {
-            if ($ownsTransaction && $pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
-            throw $exception;
-        }
-
-        if (session_status() !== PHP_SESSION_ACTIVE) {
+            return ['expires_at' => (string) $share['expires_at']];
+        });
+        if ($authority === null || !viewer_identity_session_active() || !viewer_identity_session_regenerate()) {
             return null;
         }
-        if (!session_regenerate_id(true)) {
-            return null;
-        }
+        $expiresAt = (string) $authority['expires_at'];
         if (!viewer_collection_share_session_grant_store($shareId, $collectionId, $expiresAt)) {
             return null;
         }
 
         try {
-            $lastUsed = $pdo->prepare(
-                'UPDATE viewer_collection_share_tokens SET last_used_at = ? '
-                . 'WHERE id = ? AND revoked_at IS NULL AND expires_at IS NOT NULL AND expires_at > ?'
-            );
-            $now = now_sql();
-            $lastUsed->execute([$now, $shareId, $now]);
+            viewer_collection_share_model_touch_last_used($shareId, now_sql());
         } catch (Throwable) {
             // last_used_at is operational telemetry and is not authorization state.
         }
-        viewer_collection_share_security_event_best_effort(
-            'viewer.collection_share_exchanged',
-            $ownerId,
-            'success',
-            $collectionId,
-            $shareId
-        );
+        viewer_collection_share_security_event_best_effort('viewer.collection_share_exchanged', $ownerId, 'success', $collectionId, $shareId);
         return [
             'share_id' => $shareId,
             'collection_id' => $collectionId,
@@ -614,17 +510,7 @@ function viewer_collection_share_session_authorize(int $collectionId): ?array
 
     $shareId = (int) $grant['share_id'];
     try {
-        $stmt = db()->prepare(
-            'SELECT vcs.id, vcs.viewer_collection_id, vcs.created_by_viewer_account_id, vcs.created_at, vcs.expires_at, vcs.revoked_at, '
-            . 'vc.viewer_account_id, va.password_hash, va.status, va.email_verified_at '
-            . 'FROM viewer_collection_share_tokens vcs '
-            . 'INNER JOIN viewer_collections vc ON vc.id = vcs.viewer_collection_id '
-            . 'INNER JOIN viewer_accounts va ON va.id = vc.viewer_account_id '
-            . 'WHERE vcs.id = ? AND vcs.viewer_collection_id = ? '
-            . 'AND vcs.created_by_viewer_account_id = vc.viewer_account_id LIMIT 1'
-        );
-        $stmt->execute([$shareId, $collectionId]);
-        $row = $stmt->fetch();
+        $row = viewer_collection_share_model_authorization_row($shareId, $collectionId);
         if (!$row
             || !empty($row['revoked_at'])
             || !viewer_collection_share_expiry_active((string) ($row['expires_at'] ?? ''))
@@ -660,23 +546,13 @@ function viewer_collection_shared_read(int $collectionId): ?array
     }
 
     try {
-        $collectionStmt = db()->prepare(
-            'SELECT id, title, created_at, updated_at FROM viewer_collections WHERE id = ? LIMIT 1'
-        );
-        $collectionStmt->execute([$collectionId]);
-        $collection = $collectionStmt->fetch();
+        $collection = viewer_collection_share_model_collection($collectionId);
         if (!$collection) {
             return null;
         }
-
         $limit = max(1, (int) viewer_content_quota_config()['max_viewer_items_per_collection']);
-        $itemsStmt = db()->prepare(
-            'SELECT image_id, position, created_at FROM viewer_collection_items '
-            . 'WHERE viewer_collection_id = ? ORDER BY position ASC, image_id ASC LIMIT ' . $limit
-        );
-        $itemsStmt->execute([$collectionId]);
         $references = [];
-        foreach ($itemsStmt->fetchAll() as $row) {
+        foreach (viewer_collection_share_model_references($collectionId, $limit) as $row) {
             $references[] = [
                 'image_id' => (int) ($row['image_id'] ?? 0),
                 'position' => (int) ($row['position'] ?? 0),

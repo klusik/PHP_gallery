@@ -85,11 +85,15 @@ function viewer_admin_account_function_source(string $source, string $functionNa
 
 $root = dirname(__DIR__);
 $adminService = (string) file_get_contents($root . '/app/services/viewer_admin_accounts.php');
+$accountModel = (string) file_get_contents($root . '/app/models/viewer_accounts.php');
 $accountsService = (string) file_get_contents($root . '/app/services/viewer_accounts.php');
 $authenticationService = (string) file_get_contents($root . '/app/services/viewer_authentication.php');
+$authenticationModel = (string) file_get_contents($root . '/app/models/viewer_authentication.php');
 $tokensService = (string) file_get_contents($root . '/app/services/viewer_tokens.php');
 $lifecycleService = (string) file_get_contents($root . '/app/services/viewer_lifecycle.php');
+$lifecycleModel = (string) file_get_contents($root . '/app/models/viewer_lifecycle.php');
 $controller = (string) file_get_contents($root . '/app/controllers/viewer_accounts.php');
+$viewerView = (string) file_get_contents($root . '/app/views/viewer_accounts.php');
 $servicesLoader = (string) file_get_contents($root . '/app/services.php');
 $dispatch = (string) file_get_contents($root . '/app/bootstrap/dispatch.php');
 $routing = (string) file_get_contents($root . '/app/bootstrap/routing.php');
@@ -107,10 +111,11 @@ viewer_admin_account_assert(str_contains($servicesLoader, "'/services/viewer_adm
 viewer_admin_account_assert(str_contains($servicesLoader, "'/services/viewer_lifecycle.php'") && strpos($servicesLoader, "'/services/viewer_lifecycle.php'") < strpos($servicesLoader, "'/services/viewer_admin_accounts.php'"), 'Lifecycle helpers must be loaded before administrator account deletion uses them.');
 
 $create = viewer_admin_account_function_source($adminService, 'viewer_admin_account_create');
-viewer_admin_account_assert(str_contains($create, 'viewer_account_capacity_lock();') && str_contains($create, 'viewer_account_capacity_recount_locked();'), 'Direct Admin creation must enforce the existing race-safe durable account capacity primitive.');
+$modelCreate = viewer_admin_account_function_source($accountModel, 'viewer_account_model_admin_create');
+viewer_admin_account_assert(str_contains($create, 'viewer_account_model_admin_create(') && str_contains($modelCreate, 'viewer_account_model_capacity_lock(') && str_contains($modelCreate, 'viewer_account_model_capacity_recount_locked('), 'Direct Admin creation must enforce the existing race-safe durable account capacity primitive.');
 viewer_admin_account_assert(str_contains($create, 'viewer_password_hash($password)'), 'Temporary passwords must be hashed before storage.');
-viewer_admin_account_assert(str_contains($create, 'must_change_password') && str_contains($create, 'VALUES (?, ?, ?, 1,'), 'Direct Admin creation must mark the temporary password for forced replacement.');
-viewer_admin_account_assert(str_contains($create, 'VIEWER_ACCOUNT_STATUS_ACTIVE') && str_contains($create, 'email_verified_at'), 'Direct Admin creation must create an active administratively verified viewer identity.');
+viewer_admin_account_assert(str_contains($create, 'viewer_account_model_admin_create(') && str_contains($modelCreate, 'must_change_password') && str_contains($modelCreate, 'VALUES (?, ?, ?, 1,'), 'Direct Admin creation must mark the temporary password for forced replacement.');
+viewer_admin_account_assert(str_contains($create, 'VIEWER_ACCOUNT_STATUS_ACTIVE') && str_contains($modelCreate, 'email_verified_at'), 'Direct Admin creation must create an active administratively verified viewer identity.');
 viewer_admin_account_assert(!str_contains($create, '$_SESSION[\'user_id\']') && !str_contains($create, 'current_user()') && !str_contains($create, 'current_viewer()'), 'Direct Admin creation must not mix Admin/viewer principal session semantics into the service.');
 viewer_admin_account_assert(!str_contains($create, 'mail(') && !str_contains($create, 'viewer_send_security_mail'), 'Provisioning service must not email the temporary password or perform transport work.');
 
@@ -118,8 +123,9 @@ $list = viewer_admin_account_function_source($adminService, 'viewer_admin_accoun
 viewer_admin_account_assert(!str_contains($list, 'password_hash') && !str_contains($list, 'remember') && !str_contains($list, 'session_hash'), 'Admin account list must not expose password/session/remember secrets.');
 
 $delete = viewer_admin_account_function_source($adminService, 'viewer_admin_account_delete');
-viewer_admin_account_assert(str_contains($delete, 'DELETE FROM viewer_accounts WHERE id = ?'), 'Admin deletion must delete the selected viewer identity through the authoritative viewer table.');
-viewer_admin_account_assert(str_contains($delete, 'security_version') && str_contains($delete, 'viewer_account_capacity_recount_locked();'), 'Admin deletion must invalidate viewer authority and reconcile account capacity atomically.');
+$modelDelete = viewer_admin_account_function_source($accountModel, 'viewer_account_model_admin_delete');
+viewer_admin_account_assert(str_contains($delete, 'viewer_account_model_admin_delete(') && str_contains($modelDelete, 'DELETE FROM viewer_accounts WHERE id = ?'), 'Admin deletion must delete the selected viewer identity through the authoritative viewer table.');
+viewer_admin_account_assert(str_contains($modelDelete, 'security_version') && str_contains($modelDelete, 'viewer_account_model_capacity_recount_locked('), 'Admin deletion must invalidate viewer authority and reconcile account capacity atomically.');
 foreach (['DELETE FROM images', 'DELETE FROM galleries', 'DELETE FROM users', 'session_destroy()', '$_SESSION[\'user_id\']'] as $forbidden) {
     viewer_admin_account_assert(!str_contains($delete, $forbidden), 'Admin viewer deletion must not affect gallery/Admin identity state: ' . $forbidden);
 }
@@ -137,25 +143,25 @@ $branch = strpos($authenticate, 'viewer_account_requires_password_change($locked
 $normalSession = strpos($authenticate, 'viewer_session_establish($lockedAccount)');
 viewer_admin_account_assert($branch !== false && $normalSession !== false && $branch < $normalSession, 'Password login must branch into forced replacement before normal viewer session establishment.');
 viewer_admin_account_assert(str_contains($authenticate, 'viewer_first_login_password_establish($lockedAccount)'), 'Temporary-password login must establish only limited first-login authority.');
-viewer_admin_account_assert(str_contains($authenticate, "'password_change_required' => true"), 'Temporary-password login must signal the forced-change controller path.');
+viewer_admin_account_assert((bool) preg_match("/'password_change_required'\\s*=>\\s*true/", $authenticate), 'Temporary-password login must signal the forced-change controller path.');
 
 $firstState = viewer_admin_account_function_source($authenticationService, 'viewer_first_login_password_state');
 $firstComplete = viewer_admin_account_function_source($authenticationService, 'viewer_first_login_password_complete');
 viewer_admin_account_assert(str_contains($firstState, 'VIEWER_FIRST_LOGIN_PASSWORD_LIFETIME_SECONDS') || str_contains($authenticationService, 'VIEWER_FIRST_LOGIN_PASSWORD_LIFETIME_SECONDS = 900'), 'Forced first-login authority must be short-lived.');
 viewer_admin_account_assert(str_contains($firstState, 'viewer_account_requires_password_change($account)') && str_contains($firstState, 'hash_equals($expected, $context)'), 'Forced first-login state must be revalidated against live account state and an integrity context.');
-viewer_admin_account_assert(str_contains($firstComplete, 'must_change_password = 0'), 'Successful first-login password replacement must atomically clear the forced-change flag.');
-viewer_admin_account_assert(str_contains($firstComplete, '$newSecurityVersion = (int) $account[\'security_version\'] + 1'), 'Successful replacement must increment viewer security_version.');
-viewer_admin_account_assert(str_contains($firstComplete, 'viewer_password_verify($newPassword, (string) $account[\'password_hash\'])'), 'Replacement must reject reuse of the administrator-issued temporary password.');
-viewer_admin_account_assert(str_contains($firstComplete, 'UPDATE viewer_sessions SET revoked_at') && str_contains($firstComplete, 'UPDATE viewer_remember_tokens SET revoked_at'), 'Replacement must revoke older normal/persistent viewer authority.');
-$clearFlagPosition = strpos($firstComplete, 'must_change_password = 0');
+viewer_admin_account_assert(str_contains($firstComplete, 'viewer_authentication_model_complete_first_login(') && str_contains((string) file_get_contents($root . '/app/models/viewer_authentication.php'), 'must_change_password = 0'), 'Successful first-login password replacement must atomically clear the forced-change flag.');
+viewer_admin_account_assert((bool) preg_match('/\$newSecurityVersion\s*=\s*\(int\)\s*\$account\[\'security_version\'\]\s*\+\s*1/', $firstComplete), 'Successful replacement must increment viewer security_version.');
+viewer_admin_account_assert(str_contains($firstComplete, 'viewer_password_verify($newPassword') && str_contains($firstComplete, "['password_hash']"), 'Replacement must reject reuse of the administrator-issued temporary password.');
+viewer_admin_account_assert(str_contains($firstComplete, 'viewer_authentication_model_revoke_after_first_login_password_change(') && str_contains($authenticationModel, 'UPDATE viewer_sessions SET revoked_at') && str_contains($authenticationModel, 'UPDATE viewer_remember_tokens SET revoked_at'), 'Replacement must revoke older normal/persistent viewer authority.');
+$clearFlagPosition = strpos($firstComplete, 'viewer_authentication_model_complete_first_login(');
 $newNormalSessionPosition = strpos($firstComplete, 'viewer_session_establish($account)');
 viewer_admin_account_assert($clearFlagPosition !== false && $newNormalSessionPosition !== false && $clearFlagPosition < $newNormalSessionPosition, 'Normal viewer session may be established only after the forced-change flag is cleared.');
 viewer_admin_account_assert(!str_contains($firstComplete, '$_SESSION[\'user_id\']') && !str_contains($firstComplete, 'current_user()'), 'Forced password replacement must never acquire Admin identity.');
 
 $resetComplete = viewer_admin_account_function_source($authenticationService, 'viewer_password_reset_complete');
 $changePassword = viewer_admin_account_function_source($lifecycleService, 'viewer_change_password');
-viewer_admin_account_assert(str_contains($resetComplete, 'must_change_password = 0'), 'A successful password reset must satisfy the temporary-password replacement requirement.');
-viewer_admin_account_assert(str_contains($changePassword, 'must_change_password = 0'), 'Normal password changes must defensively clear the temporary-password flag.');
+viewer_admin_account_assert(str_contains($resetComplete, 'viewer_authentication_model_complete_password_reset(') && str_contains($authenticationModel, 'must_change_password = 0'), 'A successful password reset must satisfy the temporary-password replacement requirement.');
+viewer_admin_account_assert(str_contains($changePassword, 'viewer_lifecycle_model_password_update(') && str_contains($lifecycleModel, 'must_change_password = 0'), 'Normal password changes must defensively clear the temporary-password flag through model-owned persistence.');
 
 $rememberIssue = viewer_admin_account_function_source($tokensService, 'viewer_remember_token_issue');
 $rememberVerify = viewer_admin_account_function_source($tokensService, 'viewer_remember_token_verify');
@@ -165,10 +171,11 @@ viewer_admin_account_assert(str_contains($rememberVerify, 'viewer_account_requir
 viewer_admin_account_assert(str_contains($rememberRestore, 'viewer_account_requires_password_change($account)'), 'Remember-me restoration must reject temporary-password accounts.');
 
 $adminController = viewer_admin_account_function_source($controller, 'cms_admin_viewer_invitations');
+$adminView = viewer_admin_account_function_source($viewerView, 'view_render_admin_viewer_accounts');
 viewer_admin_account_assert(str_contains($adminController, "elseif (\$action === 'create_account')") && str_contains($adminController, 'viewer_admin_account_create('), 'Admin page must expose direct account creation through the service.');
 viewer_admin_account_assert(str_contains($adminController, "elseif (\$action === 'delete_account')") && str_contains($adminController, 'viewer_admin_account_delete('), 'Admin page must expose explicit account deletion through the service.');
 viewer_admin_account_assert(str_contains($adminController, 'verify_csrf();'), 'Direct Admin account mutations must remain protected by Admin CSRF.');
-viewer_admin_account_assert(str_contains($adminController, "viewer.admin.accounts.delete_confirm") && str_contains($adminController, 'return confirm(this.dataset.confirm)'), 'Admin viewer-account deletion must require an explicit browser confirmation before POST submission.');
+viewer_admin_account_assert(str_contains($adminView, "viewer.admin.accounts.delete_confirm") && str_contains($adminView, 'return confirm(this.dataset.confirm)'), 'Admin viewer-account deletion must require an explicit browser confirmation before POST submission in the Admin Viewer view.');
 viewer_admin_account_assert(!str_contains($adminController, 'INSERT INTO viewer_accounts') && !str_contains($adminController, 'DELETE FROM viewer_accounts'), 'Admin controller must not duplicate account SQL.');
 viewer_admin_account_assert(str_contains($adminController, "\$_SESSION['viewer_admin_account_show_once']"), 'Temporary password must be passed through bounded show-once Admin session state.');
 $mailStart = strpos($adminController, "'viewer.email.admin_created_body'");

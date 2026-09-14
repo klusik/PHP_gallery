@@ -80,7 +80,8 @@ namespace {
     use function Gallery\Services\tag_usage_counts;
 
     require_once __DIR__ . '/../app/services/theme.php';
-    require_once __DIR__ . '/../app/services/tag_metadata.php';
+    require_once __DIR__ . '/../app/models/tags.php';
+require_once __DIR__ . '/../app/services/tag_metadata.php';
 
     /**
      * Throw when two hero-tag model values are not identical.
@@ -218,7 +219,8 @@ assert_hero_tag_source_contains($adminTagsSource, "#admin-theme-tab-appearance",
 assert_hero_tag_source_contains($adminThemeSource, "appearance_subtab", 'Theme controller accepts a Gallery tags deep link');
 
     $publicGallerySource = (string) file_get_contents(__DIR__ . '/../app/controllers/public_gallery.php')
-        . (string) file_get_contents(__DIR__ . '/../app/controllers/public_gallery_page.php');
+        . (string) file_get_contents(__DIR__ . '/../app/controllers/public_gallery_page.php')
+        . (string) file_get_contents(__DIR__ . '/../app/views/public_gallery_pages.php');
     assert_hero_tag_source_contains($publicGallerySource, 'sort_public_hero_tag_groups($heroTagGroups, theme_hero_tag_sort_mode())', 'public server-side hero sort');
     assert_hero_tag_source_contains($publicGallerySource, 'data-hero-tags data-hero-tag-visible-limit=', 'public hero configuration markup');
     assert_hero_tag_source_contains($publicGallerySource, "render_tag_list(\$heroTagGroups['gallery'])", 'direct tags remain server-rendered');

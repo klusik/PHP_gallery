@@ -61,8 +61,8 @@ function feature_capability_definitions(): array
         'picture_manager' => [
             'group' => 'public_display',
             'label' => t('admin.features.picture_manager.label', 'Public picture manager controls'),
-            'description' => t('admin.features.picture_manager.description', 'Logged-in admin move/copy controls rendered over public gallery photo cards.'),
-            'routes' => ['picture_manager_move', 'picture_manager_copy', 'picture_manager_create_gallery', 'picture_manager_download_selection'],
+            'description' => t('admin.features.picture_manager.description', 'Logged-in admin selection, move/copy, delete, and physical-gallery creation controls rendered on public gallery cards.'),
+            'routes' => ['picture_manager_move', 'picture_manager_copy', 'picture_manager_create_gallery', 'picture_manager_delete', 'picture_manager_download_selection'],
         ],
         'inline_administration' => [
             'group' => 'public_display',
@@ -150,7 +150,15 @@ function feature_capability_definitions(): array
             'group' => 'maps_flightsim',
             'label' => t('admin.features.navigation_data.label', 'Navigation data maintenance'),
             'description' => t('admin.features.navigation_data.description', 'Admin tools for local airport, navaid, and waypoint lookup data used by route maps.'),
-            'routes' => ['admin_navdata', 'admin_update_navdata', 'navdata_lookup'],
+            'routes' => [
+                'admin_navdata',
+                'admin_update_navdata',
+                'navdata_lookup',
+                'admin_navigraph_connect',
+                'admin_navigraph_callback',
+                'admin_navigraph_disconnect',
+                'admin_navigraph_refresh',
+            ],
         ],
         'simbrief' => [
             'group' => 'maps_flightsim',

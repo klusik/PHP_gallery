@@ -85,7 +85,8 @@ namespace {
         return ['base_url' => 'https://example.test'];
     }
 
-    require_once __DIR__ . '/../app/services/app_settings.php';
+    require_once __DIR__ . '/../app/models/app_settings.php';
+require_once __DIR__ . '/../app/services/app_settings.php';
     require_once __DIR__ . '/../app/helpers.php';
     require_once __DIR__ . '/../app/services/public_gallery_media_manifest.php';
 

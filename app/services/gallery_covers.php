@@ -37,11 +37,13 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 use RuntimeException;
-use Throwable;
-use function Gallery\Core\db;
 use function Gallery\Core\normalize_relative_path;
 use function Gallery\Core\now_sql;
 use function Gallery\Core\url_for;
+use function Gallery\Models\gallery_model_cover_image_path_column_exists;
+use function Gallery\Models\gallery_model_set_cover_image_id;
+use function Gallery\Models\gallery_model_set_cover_image_path;
+use function Gallery\Models\image_model_first_direct_cover_candidate;
 
 /**
  * Gallery cover model.
@@ -57,17 +59,11 @@ function ensure_gallery_cover(int $galleryId): void
     if (!$gallery || !empty($gallery['cover_image_id'])) {
         return;
     }
-    // Variable $stmt stores this steps working value.
-    $stmt = db()->prepare("SELECT id FROM images WHERE gallery_id = ? AND relative_path NOT LIKE '%/%' ORDER BY CASE WHEN visibility = 'public' THEN 0 ELSE 1 END, sort_order, filename LIMIT 1");
-    $stmt->execute([$galleryId]);
-    // Variable $coverId stores this steps working value.
-    $coverId = $stmt->fetchColumn();
-    if (!$coverId) {
+    $cover = image_model_first_direct_cover_candidate($galleryId, false);
+    if (!$cover) {
         return;
     }
-    // Variable $update stores this steps working value.
-    $update = db()->prepare('UPDATE galleries SET cover_image_id = ?, updated_at = ? WHERE id = ?');
-    $update->execute([(int) $coverId, now_sql(), $galleryId]);
+    gallery_model_set_cover_image_id($galleryId, (int) $cover['id'], now_sql());
 }
 
 /**
@@ -94,16 +90,7 @@ function gallery_cover_asset_schema_ready(): bool
     if ($ready !== null) {
         return $ready;
     }
-    try {
-        // $stmt stores an intermediate value used by the surrounding gallery workflow.
-        $stmt = db()->query("SHOW COLUMNS FROM galleries LIKE 'cover_image_path'");
-        // $ready stores an intermediate value used by the surrounding gallery workflow.
-        $ready = (bool) $stmt->fetch();
-    } catch (Throwable) {
-        // $ready stores an intermediate value used by the surrounding gallery workflow.
-        $ready = false;
-    }
-    return $ready;
+    return $ready = gallery_model_cover_image_path_column_exists();
 }
 
 /**
@@ -117,9 +104,11 @@ function set_gallery_cover_path(int $galleryId, ?string $relativePath): void
     if (!gallery_cover_asset_schema_ready()) {
         return;
     }
-    // $stmt stores an intermediate value used by the surrounding gallery workflow.
-    $stmt = db()->prepare('UPDATE galleries SET cover_image_path = ?, updated_at = ? WHERE id = ?');
-    $stmt->execute([$relativePath !== null && $relativePath !== '' ? $relativePath : null, now_sql(), $galleryId]);
+    gallery_model_set_cover_image_path(
+        $galleryId,
+        $relativePath !== null && $relativePath !== '' ? $relativePath : null,
+        now_sql()
+    );
 }
 
 /**
@@ -161,18 +150,7 @@ function gallery_direct_cover_image(int $galleryId, bool $publicOnly): ?array
             return $cache[$cacheKey] = $cover;
         }
     }
-    // Variable $sql stores this steps working value.
-    $sql = "SELECT * FROM images WHERE gallery_id = ? AND relative_path NOT LIKE '%/%'";
-    if ($publicOnly) {
-        $sql .= " AND visibility = 'public'";
-    }
-    $sql .= " ORDER BY CASE WHEN visibility = 'public' THEN 0 ELSE 1 END, sort_order, filename LIMIT 1";
-    // Variable $stmt stores this steps working value.
-    $stmt = db()->prepare($sql);
-    $stmt->execute([$galleryId]);
-    // Variable $image stores this steps working value.
-    $image = $stmt->fetch();
-    return $cache[$cacheKey] = ($image ?: null);
+    return $cache[$cacheKey] = image_model_first_direct_cover_candidate($galleryId, $publicOnly);
 }
 
 /**
@@ -296,8 +274,6 @@ function apply_gallery_cover_from_sidecar(array $gallery): void
     if (!$image) {
         return;
     }
-    // Variable $stmt stores this steps working value.
-    $stmt = db()->prepare('UPDATE galleries SET cover_image_id = ?, updated_at = ? WHERE id = ?');
-    $stmt->execute([(int) $image['id'], now_sql(), (int) $gallery['id']]);
+    gallery_model_set_cover_image_id((int) $gallery['id'], (int) $image['id'], now_sql());
 }
 

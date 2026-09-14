@@ -30,7 +30,7 @@
  *   - Keep comments and docstrings intact when modifying this file.
  *
  * Last Updated:
- *   2026-09-06
+ *   2026-09-13
  */
 
 declare(strict_types=1);
@@ -38,14 +38,12 @@ declare(strict_types=1);
 namespace Gallery\Controllers;
 
 use function Gallery\Core\csrf_field;
-use function Gallery\Core\e;
-use function Gallery\Core\render_admin_tab_panel;
 use function Gallery\Core\url_for;
 use function Gallery\Services\feature_capability_effective_enabled;
 use function Gallery\Services\gallery_shows_filenames;
 use function Gallery\Services\t;
 use function Gallery\Services\thumbnail_url;
-use function Gallery\Views\view_render_admin_tab_intro;
+use function Gallery\Views\view_render_admin_gallery_images_tab;
 
 /**
  * Render the Images tab panel.
@@ -56,8 +54,6 @@ use function Gallery\Views\view_render_admin_tab_intro;
  */
 function admin_edit_gallery_render_images_tab(array $gallery, array $images, string $activeEditTab): void
 {
-    ob_start();
-    $scanImagesActionHtml = '<form method="post" action="' . e(url_for('admin_scan_images')) . '" data-admin-panel-scan-images-form>' . csrf_field() . '<input type="hidden" name="gallery_id" value="' . (int) $gallery['id'] . '"><button type="submit" class="secondary">' . e(t('admin.gallery_editor.scan_import_images', 'Scan/import images')) . '</button></form>';
     $actions = [
         [
             'label' => t('admin.gallery_editor.upload_photos_here', 'Upload photos here'),
@@ -86,25 +82,70 @@ function admin_edit_gallery_render_images_tab(array $gallery, array $images, str
             ],
         ];
     }
-    view_render_admin_tab_intro([
-        'kicker' => t('admin.gallery_editor.tab_images', 'Images'),
-        'title' => t('admin.gallery_editor.images_title', 'Photos and ordering'),
-        'actions' => $actions,
-        'actions_html' => $scanImagesActionHtml,
-    ]);
-    echo '<form method="post" action="' . e(url_for('admin_bulk_images')) . '" data-admin-image-bulk-form>' . csrf_field();
-    echo '<input type="hidden" name="gallery_id" value="' . (int) $gallery['id'] . '">';
-    echo '<input type="hidden" name="return_tab" value="admin-edit-images">';
+
+    ob_start();
     render_admin_image_bulk_toolbar($gallery);
-    echo '<div class="admin-image-order-toolbar" data-admin-image-order-toolbar data-reorder-url="' . e(url_for('admin_reorder_images')) . '"><p class="muted">' . e(t('admin.gallery_editor.drag_photos_help', 'Drag photos by the handle to change their gallery order, or click the Name column header to sort the gallery by filename. Each change is saved immediately.')) . '</p><span class="admin-image-order-status" data-admin-image-order-status aria-live="polite">' . e(t('admin.gallery_editor.order_unchanged', 'Order unchanged.')) . '</span></div>';
-    echo '<table class="admin-image-order-table" data-admin-image-order-table><thead><tr><th>' . e(t('admin.gallery_editor.move', 'Move')) . '</th><th>' . e(t('admin.gallery_editor.select', 'Select')) . '</th><th>' . e(t('admin.gallery_editor.preview', 'Preview')) . '</th><th aria-sort="none"><button type="button" class="admin-image-name-sort" data-admin-image-name-sort data-sort-direction="asc" aria-label="' . e(t('admin.gallery_editor.sort_photos_a_z', 'Sort photos by name from A to Z')) . '">' . e(t('admin.gallery_editor.name', 'Name')) . ' <span aria-hidden="true">↕</span></button></th><th title="' . e(t('admin.gallery_editor.file_names_shown', 'File names shown')) . '">N</th><th>' . e(t('admin.gallery_editor.status', 'Status')) . '</th><th>' . e(t('admin.gallery_editor.cover', 'Cover')) . '</th><th>' . e(t('admin.gallery_editor.actions', 'Actions')) . '</th></tr></thead><tbody>';
+    $bulkToolbarHtml = (string) ob_get_clean();
+
+    $filenameFlagHtml = render_admin_feature_flag(
+        gallery_shows_filenames($gallery),
+        '✓',
+        t('admin.gallery_editor.file_names_shown_for_gallery', 'File names are shown for this gallery')
+    );
+
+    $imageRows = [];
     foreach ($images as $image) {
-        // Variable $isCover stores this steps working value.
-        $isCover = (int) ($gallery['cover_image_id'] ?? 0) === (int) $image['id'];
-        echo '<tr data-admin-image-order-row data-image-id="' . (int) $image['id'] . '" data-image-name="' . e((string) $image['relative_path']) . '"><td class="admin-image-order-cell"><span class="admin-image-drag-handle" data-admin-image-drag-handle role="button" tabindex="0" aria-label="' . e(t('admin.image_order.move_aria', 'Move {file}', ['file' => (string) $image['relative_path']])) . '" title="' . e(t('admin.image_order.drag_title', 'Drag to reorder')) . '">↕</span></td><td><input type="checkbox" name="image_ids[]" value="' . (int) $image['id'] . '"></td>';
-        echo '<td><img class="admin-thumb" decoding="async" loading="lazy" src="' . e(thumbnail_url($image, 300)) . '" alt=""></td>';
-        echo '<td data-admin-image-name-cell>' . e($image['relative_path']) . '</td><td>' . render_admin_feature_flag(gallery_shows_filenames($gallery), '✓', t('admin.gallery_editor.file_names_shown_for_gallery', 'File names are shown for this gallery')) . '</td><td>' . e($image['visibility']) . '</td><td data-admin-image-cover-cell>' . ($isCover ? t('admin.gallery_editor.title_picture_current', 'Title picture') : '') . '</td><td><a href="' . e(url_for('admin_edit_image', ['id' => $image['id']])) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="image-edit" data-admin-side-panel-kicker="' . e(t('admin.gallery_editor.photo_editor', 'Photo editor')) . '" data-admin-side-panel-title="' . e(t('admin.gallery_editor.edit_photo', 'Edit photo')) . '" data-gallery-side-panel-url="' . e(url_for('admin_edit_image', ['id' => $image['id'], 'panel' => 1])) . '">' . e(t('admin.gallery_editor.edit', 'Edit')) . '</a> <button type="submit" class="secondary danger inline-admin-action" name="action" value="delete:' . (int) $image['id'] . '" data-admin-image-delete-single data-image-id="' . (int) $image['id'] . '" data-image-name="' . e((string) $image['relative_path']) . '">' . e(t('admin.gallery_editor.delete', 'Delete')) . '</button></td></tr>';
+        $imageId = (int) $image['id'];
+        $relativePath = (string) $image['relative_path'];
+        $imageRows[] = [
+            'id' => $imageId,
+            'relative_path' => $relativePath,
+            'visibility' => (string) $image['visibility'],
+            'thumbnail_url' => thumbnail_url($image, 300),
+            'move_aria' => t('admin.image_order.move_aria', 'Move {file}', ['file' => $relativePath]),
+            'cover_label' => (int) ($gallery['cover_image_id'] ?? 0) === $imageId
+                ? t('admin.gallery_editor.title_picture_current', 'Title picture')
+                : '',
+            'edit_url' => url_for('admin_edit_image', ['id' => $imageId]),
+            'panel_url' => url_for('admin_edit_image', ['id' => $imageId, 'panel' => 1]),
+        ];
     }
-    echo '</tbody></table></form>';
-    render_admin_tab_panel('admin-edit-images', (string) ob_get_clean(), $activeEditTab === 'admin-edit-images');
+
+    view_render_admin_gallery_images_tab([
+        'active' => $activeEditTab === 'admin-edit-images',
+        'gallery_id' => (int) $gallery['id'],
+        'csrf_html' => csrf_field(),
+        'bulk_action_url' => url_for('admin_bulk_images'),
+        'reorder_url' => url_for('admin_reorder_images'),
+        'bulk_toolbar_html' => $bulkToolbarHtml,
+        'filename_flag_html' => $filenameFlagHtml,
+        'scan_action' => [
+            'url' => url_for('admin_scan_images'),
+            'label' => t('admin.gallery_editor.scan_import_images', 'Scan/import images'),
+        ],
+        'intro' => [
+            'kicker' => t('admin.gallery_editor.tab_images', 'Images'),
+            'title' => t('admin.gallery_editor.images_title', 'Photos and ordering'),
+            'actions' => $actions,
+        ],
+        'images' => $imageRows,
+        'labels' => [
+            'drag_help' => t('admin.gallery_editor.drag_photos_help', 'Drag photos by the handle to change their gallery order, or click the Name column header to sort the gallery by filename. Each change is saved immediately.'),
+            'order_unchanged' => t('admin.gallery_editor.order_unchanged', 'Order unchanged.'),
+            'move' => t('admin.gallery_editor.move', 'Move'),
+            'select' => t('admin.gallery_editor.select', 'Select'),
+            'preview' => t('admin.gallery_editor.preview', 'Preview'),
+            'sort_a_z' => t('admin.gallery_editor.sort_photos_a_z', 'Sort photos by name from A to Z'),
+            'name' => t('admin.gallery_editor.name', 'Name'),
+            'file_names_shown' => t('admin.gallery_editor.file_names_shown', 'File names shown'),
+            'status' => t('admin.gallery_editor.status', 'Status'),
+            'cover' => t('admin.gallery_editor.cover', 'Cover'),
+            'actions' => t('admin.gallery_editor.actions', 'Actions'),
+            'drag_title' => t('admin.image_order.drag_title', 'Drag to reorder'),
+            'photo_editor' => t('admin.gallery_editor.photo_editor', 'Photo editor'),
+            'edit_photo' => t('admin.gallery_editor.edit_photo', 'Edit photo'),
+            'edit' => t('admin.gallery_editor.edit', 'Edit'),
+            'delete' => t('admin.gallery_editor.delete', 'Delete'),
+        ],
+    ]);
 }

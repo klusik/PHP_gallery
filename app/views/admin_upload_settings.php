@@ -43,8 +43,6 @@ use function Gallery\Core\e;
 use function Gallery\Core\render_footer;
 use function Gallery\Core\render_header;
 use function Gallery\Core\url_for;
-use function Gallery\Services\admin_settings_url;
-use function Gallery\Services\media_renamer_default_pattern;
 use function Gallery\Services\t;
 
 /**
@@ -98,7 +96,7 @@ function view_render_admin_upload_settings_page(array $model): void
         'title' => t('admin.upload_settings.title', 'Upload settings'),
         'description' => t('admin.upload_settings.description', 'Configure upload preferences separately from the upload workflow. Browser-side preparation is the default when enabled, and the upload form can still be unchecked to use the normal server fallback.'),
         'actions' => [
-            ['label' => t('admin.settings.open_centralized', 'Open centralized settings'), 'url' => admin_settings_url('uploads'), 'class' => 'button secondary'],
+            ['label' => t('admin.settings.open_centralized', 'Open centralized settings'), 'url' => (string) ($model['central_settings_url'] ?? url_for('admin_settings')), 'class' => 'button secondary'],
             ['label' => t('admin.upload_settings.back_to_upload', 'Upload photos'), 'url' => url_for('admin_upload'), 'class' => 'button secondary'],
             ['label' => t('admin.common.back_to_dashboard', 'Back to dashboard'), 'url' => url_for('admin'), 'class' => 'button secondary'],
         ],
@@ -168,7 +166,7 @@ function view_render_admin_upload_general_settings_form(array $model): void
     echo '<form method="post" action="' . e(url_for('admin_upload_settings')) . '" class="form-grid admin-upload-settings-form">' . csrf_field();
     echo '<input type="hidden" name="update_upload_general_settings" value="1">';
     echo '<label>' . e(t('admin.upload.client_format_mode', 'Phone upload format')) . '<select name="admin_upload_client_format_mode"><option value="server_supported"' . ($clientFormatMode === 'server_supported' ? ' selected' : '') . '>' . e(t('admin.upload.client_format_server_supported', 'Allow all server-supported formats')) . '</option><option value="phone_jpeg"' . ($clientFormatMode === 'phone_jpeg' ? ' selected' : '') . '>' . e(t('admin.upload.client_format_phone_jpeg', 'Prefer phone-rendered JPG/PNG/WebP, no RAW/DNG')) . '</option></select><span class="muted">' . e(t('admin.upload.client_format_help', 'Use the phone-rendered mode when iPhone ProRAW/DNG uploads produce poor color. Browsers treat this as a picker request, not an absolute conversion guarantee.')) . '</span></label>';
-    echo '<label class="checkbox-label"><input type="checkbox" name="admin_upload_auto_rename_enabled" value="1"' . ($autoRenameEnabled ? ' checked' : '') . '> <span>' . e(t('admin.upload.auto_rename_enabled', 'Rename uploaded photos automatically')) . '</span><span class="muted">' . e(t('admin.upload.auto_rename_help', 'When enabled, browser, API, and WebDAV uploads are renamed after scan with the same default media-renamer template: {pattern}.', ['pattern' => media_renamer_default_pattern()])) . '</span></label>';
+    echo '<label class="checkbox-label"><input type="checkbox" name="admin_upload_auto_rename_enabled" value="1"' . ($autoRenameEnabled ? ' checked' : '') . '> <span>' . e(t('admin.upload.auto_rename_enabled', 'Rename uploaded photos automatically')) . '</span><span class="muted">' . e(t('admin.upload.auto_rename_help', 'When enabled, browser, API, and WebDAV uploads are renamed after scan with the same default media-renamer template: {pattern}.', ['pattern' => (string) ($model['media_renamer_default_pattern'] ?? '{gallery_context}_{seq4}')])) . '</span></label>';
     echo '<button type="submit" class="secondary">' . e(t('admin.upload_settings.save_general', 'Save general upload settings')) . '</button>';
     echo '</form>';
 }

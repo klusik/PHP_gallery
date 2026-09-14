@@ -44,10 +44,19 @@ namespace Gallery\Services;
 use PDO;
 use RuntimeException;
 use Throwable;
-use function Gallery\Core\db;
 use function Gallery\Core\pending_migration_files;
 use function Gallery\Core\discover_migration_files;
 use function Gallery\Core\run_migrations;
+use function Gallery\Models\database_maintenance_model_applied_migration_versions;
+use function Gallery\Models\database_maintenance_model_duplicate_rule;
+use function Gallery\Models\database_maintenance_model_execute_cleanup_rule;
+use function Gallery\Models\database_maintenance_model_expiry_rule;
+use function Gallery\Models\database_maintenance_model_inspect_cleanup_candidates;
+use function Gallery\Models\database_maintenance_model_orphan_rule;
+use function Gallery\Models\database_maintenance_model_run_table_operation;
+use function Gallery\Models\database_maintenance_model_schema_inventory_rows;
+use function Gallery\Models\database_maintenance_model_thumbnail_distribution_rows;
+use function Gallery\Models\database_maintenance_model_write_cleanup_audit;
 
 const DATABASE_MAINTENANCE_REPORT_FILE = 'admin-database-maintenance-report.json';
 const DATABASE_MAINTENANCE_STATE_SETTING = 'database_maintenance_cleanup_state';
@@ -171,42 +180,14 @@ function database_maintenance_schema_inventory(): array
     if ($databaseName === '') {
         throw new RuntimeException('Current database name could not be detected.');
     }
-
-    $tableRows = database_maintenance_query_schema(
-        'SELECT TABLE_NAME, ENGINE, TABLE_COLLATION, TABLE_ROWS, DATA_LENGTH, INDEX_LENGTH, DATA_FREE, AUTO_INCREMENT, CREATE_TIME, UPDATE_TIME, TABLE_COMMENT
-           FROM information_schema.TABLES
-          WHERE TABLE_SCHEMA = ?
-          ORDER BY TABLE_NAME',
-        [$databaseName]
+    $rows = database_maintenance_model_schema_inventory_rows($databaseName);
+    return database_maintenance_normalize_inventory(
+        $databaseName,
+        (array) ($rows['tables'] ?? []),
+        (array) ($rows['columns'] ?? []),
+        (array) ($rows['indexes'] ?? []),
+        (array) ($rows['constraints'] ?? [])
     );
-    $columnRows = database_maintenance_query_schema(
-        'SELECT TABLE_NAME, COLUMN_NAME, ORDINAL_POSITION, COLUMN_DEFAULT, IS_NULLABLE, DATA_TYPE, COLUMN_TYPE, CHARACTER_SET_NAME, COLLATION_NAME, COLUMN_KEY, EXTRA, COLUMN_COMMENT
-           FROM information_schema.COLUMNS
-          WHERE TABLE_SCHEMA = ?
-          ORDER BY TABLE_NAME, ORDINAL_POSITION',
-        [$databaseName]
-    );
-    $indexRows = database_maintenance_query_schema(
-        'SELECT TABLE_NAME, INDEX_NAME, NON_UNIQUE, SEQ_IN_INDEX, COLUMN_NAME, SUB_PART, INDEX_TYPE, COLLATION, CARDINALITY, INDEX_COMMENT
-           FROM information_schema.STATISTICS
-          WHERE TABLE_SCHEMA = ?
-          ORDER BY TABLE_NAME, INDEX_NAME, SEQ_IN_INDEX',
-        [$databaseName]
-    );
-    $constraintRows = database_maintenance_query_schema(
-        'SELECT k.TABLE_NAME, k.CONSTRAINT_NAME, k.COLUMN_NAME, k.ORDINAL_POSITION, k.REFERENCED_TABLE_NAME, k.REFERENCED_COLUMN_NAME,
-                r.UPDATE_RULE, r.DELETE_RULE
-           FROM information_schema.KEY_COLUMN_USAGE k
-           LEFT JOIN information_schema.REFERENTIAL_CONSTRAINTS r
-             ON r.CONSTRAINT_SCHEMA = k.CONSTRAINT_SCHEMA
-            AND r.TABLE_NAME = k.TABLE_NAME
-            AND r.CONSTRAINT_NAME = k.CONSTRAINT_NAME
-          WHERE k.TABLE_SCHEMA = ?
-          ORDER BY k.TABLE_NAME, k.CONSTRAINT_NAME, k.ORDINAL_POSITION',
-        [$databaseName]
-    );
-
-    return database_maintenance_normalize_inventory($databaseName, $tableRows, $columnRows, $indexRows, $constraintRows);
 }
 
 /**
@@ -218,9 +199,7 @@ function database_maintenance_schema_inventory(): array
  */
 function database_maintenance_query_schema(string $sql, array $parameters): array
 {
-    $statement = db()->prepare($sql);
-    $statement->execute($parameters);
-    return $statement->fetchAll(PDO::FETCH_ASSOC);
+    throw new \LogicException('Raw information_schema SQL is model-owned. Use database_maintenance_schema_inventory().');
 }
 
 /**
@@ -849,12 +828,7 @@ function database_maintenance_cleanup_rules(array $inventory): array
         if ($identityColumns === [] || !database_maintenance_inventory_has($inventory, $table, [$column]) || !database_maintenance_inventory_has($inventory, $parent, [$parentColumn])) {
             return;
         }
-        $quotedTable = admin_database_usage_quote_identifier($table);
-        $quotedColumn = admin_database_usage_quote_identifier($column);
-        $quotedParent = admin_database_usage_quote_identifier($parent);
-        $quotedParentColumn = admin_database_usage_quote_identifier($parentColumn);
-        $predicate = $quotedTable . '.' . $quotedColumn . ' IS NOT NULL AND NOT EXISTS (SELECT 1 FROM ' . $quotedParent . ' p WHERE p.' . $quotedParentColumn . ' = ' . $quotedTable . '.' . $quotedColumn . ')';
-        $rules[] = database_maintenance_make_rule($key, $table, 'orphaned_rows', 'high', $reason, $predicate, $identityColumns);
+        $rules[] = database_maintenance_model_orphan_rule($key, $table, $column, $parent, $parentColumn, $reason, $identityColumns);
     };
 
     $addOrphan('gallery_tags_missing_gallery', 'gallery_tags', 'gallery_id', 'galleries', 'id', 'Gallery/tag link references a gallery that does not exist.');
@@ -881,17 +855,21 @@ function database_maintenance_cleanup_rules(array $inventory): array
     $addOrphan('webdav_tokens_missing_user', 'mobile_webdav_upload_tokens', 'user_id', 'users', 'id', 'WebDAV credential references a user that does not exist.');
     $addOrphan('webdav_tokens_missing_gallery', 'mobile_webdav_upload_tokens', 'gallery_id', 'galleries', 'id', 'WebDAV credential references a gallery that does not exist.');
 
-    if (database_maintenance_inventory_has($inventory, 'admin_remember_tokens', ['expires_at', 'revoked_at'])) {
-        $rules[] = database_maintenance_make_rule('expired_admin_remember_tokens', 'admin_remember_tokens', 'expired_temporary_state', 'high', 'Persistent login token is expired or explicitly revoked.', '(expires_at < NOW() OR revoked_at IS NOT NULL)', database_maintenance_table_identity_columns($inventory, 'admin_remember_tokens'));
-    }
-    if (database_maintenance_inventory_has($inventory, 'password_reset_tokens', ['expires_at', 'used_at'])) {
-        $rules[] = database_maintenance_make_rule('expired_password_reset_tokens', 'password_reset_tokens', 'expired_temporary_state', 'high', 'Password reset token is expired or already used.', '(expires_at < NOW() OR used_at IS NOT NULL)', database_maintenance_table_identity_columns($inventory, 'password_reset_tokens'));
-    }
-    if (database_maintenance_inventory_has($inventory, 'navigation_data_cache', ['expires_at'])) {
-        $rules[] = database_maintenance_make_rule('expired_navigation_cache', 'navigation_data_cache', 'expired_temporary_state', 'high', 'Navigation cache row has an explicit expires_at value in the past.', 'expires_at IS NOT NULL AND expires_at < NOW()', database_maintenance_table_identity_columns($inventory, 'navigation_data_cache'));
-    }
-    if (database_maintenance_inventory_has($inventory, 'auth_rate_limits', ['last_attempt_at', 'locked_until'])) {
-        $rules[] = database_maintenance_make_rule('expired_auth_rate_limits', 'auth_rate_limits', 'expired_temporary_state', 'high', 'Authentication throttle state is outside the application 24-hour cleanup policy.', 'last_attempt_at < DATE_SUB(NOW(), INTERVAL 1 DAY) AND (locked_until IS NULL OR locked_until < NOW())', database_maintenance_table_identity_columns($inventory, 'auth_rate_limits'));
+    $expiryDefinitions = [
+        ['expired_admin_remember_tokens', 'admin_remember_tokens', ['expires_at', 'revoked_at'], 'Persistent login token is expired or explicitly revoked.'],
+        ['expired_password_reset_tokens', 'password_reset_tokens', ['expires_at', 'used_at'], 'Password reset token is expired or already used.'],
+        ['expired_navigation_cache', 'navigation_data_cache', ['expires_at'], 'Navigation cache row has an explicit expires_at value in the past.'],
+        ['expired_auth_rate_limits', 'auth_rate_limits', ['last_attempt_at', 'locked_until'], 'Authentication throttle state is outside the application 24-hour cleanup policy.'],
+    ];
+    foreach ($expiryDefinitions as [$key, $table, $columns, $reason]) {
+        if (!database_maintenance_inventory_has($inventory, $table, $columns)) {
+            continue;
+        }
+        $identityColumns = database_maintenance_table_identity_columns($inventory, $table);
+        if ($identityColumns === []) {
+            continue;
+        }
+        $rules[] = database_maintenance_model_expiry_rule($key, $table, $reason, $identityColumns);
     }
 
     $duplicateDefinitions = [
@@ -903,7 +881,7 @@ function database_maintenance_cleanup_rules(array $inventory): array
         if (!database_maintenance_inventory_has($inventory, $table, array_merge([$idColumn], $identityColumns))) {
             continue;
         }
-        $rules[] = database_maintenance_make_duplicate_rule($key, $table, $idColumn, $identityColumns, $reason);
+        $rules[] = database_maintenance_model_duplicate_rule($key, $table, $idColumn, $identityColumns, $reason);
     }
 
     return $rules;
@@ -914,29 +892,7 @@ function database_maintenance_cleanup_rules(array $inventory): array
  */
 function database_maintenance_make_rule(string $key, string $table, string $category, string $confidence, string $reason, string $predicate, array $identityColumns): array
 {
-    $quotedTable = admin_database_usage_quote_identifier($table);
-    $quotedIdentity = array_map('Gallery\\Services\\admin_database_usage_quote_identifier', $identityColumns);
-    $identitySelect = implode(', ', $quotedIdentity);
-    $identityOrder = implode(', ', $quotedIdentity);
-    $automatic = $confidence === 'high' && $identityColumns !== [];
-    return [
-        'key' => $key,
-        'table_name' => $table,
-        'category' => $category,
-        'confidence' => $automatic ? $confidence : 'report_only',
-        'reason' => $reason,
-        'count_sql' => 'SELECT COUNT(*) FROM ' . $quotedTable . ' WHERE ' . $predicate,
-        'identifiers_sql' => $automatic
-            ? 'SELECT ' . $identitySelect . ' FROM ' . $quotedTable . ' WHERE ' . $predicate . ' ORDER BY ' . $identityOrder . ' LIMIT :batch_size'
-            : '',
-        'delete_sql' => $automatic
-            ? 'DELETE FROM ' . $quotedTable . ' WHERE ' . $predicate . ' ORDER BY ' . $identityOrder . ' LIMIT :batch_size'
-            : '',
-        'identifier_columns' => $identityColumns,
-        'parameters' => [],
-        'automatic' => $automatic,
-        'filesystem_effects' => false,
-    ];
+    throw new \LogicException('Raw database-maintenance predicates are model-owned. Use semantic cleanup-rule builders.');
 }
 
 /**
@@ -949,29 +905,7 @@ function database_maintenance_make_rule(string $key, string $table, string $cate
  */
 function database_maintenance_make_duplicate_rule(string $key, string $table, string $idColumn, array $identityColumns, string $reason): array
 {
-    $quotedTable = admin_database_usage_quote_identifier($table);
-    $quotedId = admin_database_usage_quote_identifier($idColumn);
-    $identity = implode(', ', array_map('Gallery\\Services\\admin_database_usage_quote_identifier', $identityColumns));
-    $join = implode(' AND ', array_map(static fn (string $column): string => 'candidate.' . admin_database_usage_quote_identifier($column) . ' <=> duplicates.' . admin_database_usage_quote_identifier($column), $identityColumns));
-    $groupCount = 'SELECT COALESCE(SUM(duplicate_count - 1), 0) FROM (SELECT COUNT(*) AS duplicate_count FROM ' . $quotedTable . ' GROUP BY ' . $identity . ' HAVING COUNT(*) > 1) duplicate_groups';
-    $duplicateJoin = ' FROM ' . $quotedTable . ' candidate JOIN (SELECT ' . $identity . ', MIN(' . $quotedId . ') AS survivor_id FROM ' . $quotedTable . ' GROUP BY ' . $identity . ' HAVING COUNT(*) > 1) duplicates ON ' . $join . ' WHERE candidate.' . $quotedId . ' <> duplicates.survivor_id ORDER BY candidate.' . $quotedId . ' LIMIT :batch_size';
-    $duplicateIds = 'SELECT candidate.' . $quotedId . $duplicateJoin;
-    $duplicateIdsForDelete = 'SELECT candidate.' . $quotedId . ' AS duplicate_id' . $duplicateJoin;
-    return [
-        'key' => $key,
-        'table_name' => $table,
-        'category' => 'duplicate_logical_rows',
-        'confidence' => 'high',
-        'reason' => $reason,
-        'count_sql' => $groupCount,
-        'identifiers_sql' => $duplicateIds,
-        'delete_sql' => 'DELETE FROM ' . $quotedTable . ' WHERE ' . $quotedId . ' IN (SELECT duplicate_id FROM (' . $duplicateIdsForDelete . ') bounded_duplicates)',
-        'identifier_columns' => [$idColumn],
-        'parameters' => [],
-        'automatic' => true,
-        'filesystem_effects' => false,
-        'survivor_rule' => 'Keep the lowest ' . $idColumn . '.',
-    ];
+    return database_maintenance_model_duplicate_rule($key, $table, $idColumn, $identityColumns, $reason);
 }
 
 /**
@@ -982,18 +916,7 @@ function database_maintenance_make_duplicate_rule(string $key, string $table, st
  */
 function database_maintenance_inspect_cleanup_candidates(array $rules): array
 {
-    $candidates = [];
-    foreach ($rules as $rule) {
-        try {
-            $statement = db()->prepare((string) $rule['count_sql']);
-            $statement->execute((array) ($rule['parameters'] ?? []));
-            $count = max(0, (int) $statement->fetchColumn());
-            $candidates[] = $rule + ['candidate_count' => $count, 'inspection_error' => ''];
-        } catch (Throwable $exception) {
-            $candidates[] = $rule + ['candidate_count' => 0, 'inspection_error' => $exception->getMessage()];
-        }
-    }
-    return $candidates;
+    return database_maintenance_model_inspect_cleanup_candidates($rules);
 }
 
 /**
@@ -1082,11 +1005,7 @@ function database_maintenance_thumbnail_distribution(array $inventory): array
         ? array_values(array_map('intval', thumbnail_sizes()))
         : [300, 600, 800, 960, 1280, 1600];
     $supportedFormats = ['jpg', 'webp'];
-    $rows = db()->query(
-        'SELECT size_px, format, status, COUNT(*) AS row_count '
-        . 'FROM ' . admin_database_usage_quote_identifier('image_thumbnail_variants') . ' '
-        . 'GROUP BY size_px, format, status ORDER BY size_px, format, status'
-    )->fetchAll(PDO::FETCH_ASSOC);
+    $rows = database_maintenance_model_thumbnail_distribution_rows();
 
     return ['available' => true] + database_maintenance_normalize_thumbnail_distribution($rows, $configuredSizes, $supportedFormats);
 }
@@ -1373,59 +1292,18 @@ function database_maintenance_cleanup_step(bool $dryRun, int $batchSize = DATABA
     }
 
     $rule = $rules[$ruleIndex];
-    $pdo = db();
     try {
-        $countStatement = $pdo->prepare((string) $rule['count_sql']);
-        $countStatement->execute((array) ($rule['parameters'] ?? []));
-        $beforeCount = max(0, (int) $countStatement->fetchColumn());
-        $deleted = 0;
-        $removedIdentifiers = [];
-        if ($beforeCount > 0) {
-            $ownsTransaction = !$pdo->inTransaction();
-            if ($ownsTransaction) {
-                $pdo->beginTransaction();
-            }
-            try {
-                $identifierStatement = $pdo->prepare((string) $rule['identifiers_sql']);
-                foreach ((array) ($rule['parameters'] ?? []) as $name => $value) {
-                    $identifierStatement->bindValue(is_int($name) ? $name + 1 : (string) $name, $value);
-                }
-                $identifierStatement->bindValue(':batch_size', $batchSize, PDO::PARAM_INT);
-                $identifierStatement->execute();
-                $removedIdentifiers = $identifierStatement->fetchAll(PDO::FETCH_ASSOC);
-                if ($removedIdentifiers === []) {
-                    throw new RuntimeException('Cleanup count reported candidates, but no deterministic identifier batch could be selected. The transaction was rolled back.');
-                }
-
-                if ($removedIdentifiers !== []) {
-                    $deleteStatement = $pdo->prepare((string) $rule['delete_sql']);
-                    foreach ((array) ($rule['parameters'] ?? []) as $name => $value) {
-                        $deleteStatement->bindValue(is_int($name) ? $name + 1 : (string) $name, $value);
-                    }
-                    $deleteStatement->bindValue(':batch_size', $batchSize, PDO::PARAM_INT);
-                    $deleteStatement->execute();
-                    $deleted = max(0, $deleteStatement->rowCount());
-                    if ($deleted !== count($removedIdentifiers)) {
-                        throw new RuntimeException('Cleanup batch identifier count did not match the deleted row count. The transaction was rolled back.');
-                    }
-                    database_maintenance_write_cleanup_audit($pdo, $rule, $removedIdentifiers, $deleted, (string) ($state['operation_id'] ?? ''));
-                }
-                if ($ownsTransaction) {
-                    $pdo->commit();
-                }
-            } catch (Throwable $exception) {
-                if ($ownsTransaction && $pdo->inTransaction()) {
-                    $pdo->rollBack();
-                }
-                throw $exception;
-            }
-            if ($deleted > 0) {
-                database_maintenance_log_cleanup_batch($rule, $deleted, (string) ($state['operation_id'] ?? ''));
-            }
+        $execution = database_maintenance_model_execute_cleanup_rule(
+            $rule,
+            $batchSize,
+            (string) ($state['operation_id'] ?? '')
+        );
+        $beforeCount = max(0, (int) ($execution['before_count'] ?? 0));
+        $deleted = max(0, (int) ($execution['deleted_count'] ?? 0));
+        $remaining = max(0, (int) ($execution['remaining_count'] ?? 0));
+        if ($deleted > 0) {
+            database_maintenance_log_cleanup_batch($rule, $deleted, (string) ($state['operation_id'] ?? ''));
         }
-        $remainingStatement = $pdo->prepare((string) $rule['count_sql']);
-        $remainingStatement->execute((array) ($rule['parameters'] ?? []));
-        $remaining = max(0, (int) $remainingStatement->fetchColumn());
         $state = database_maintenance_record_live_progress($state, $rule, $beforeCount, $deleted, $remaining);
         if ($remaining === 0) {
             $state['rule_index'] = $ruleIndex + 1;
@@ -1459,21 +1337,7 @@ function database_maintenance_cleanup_step(bool $dryRun, int $batchSize = DATABA
  */
 function database_maintenance_write_cleanup_audit(PDO $pdo, array $rule, array $identifiers, int $deletedCount, string $operationId): void
 {
-    $statement = $pdo->prepare(
-        'INSERT INTO database_maintenance_audit_log '
-        . '(operation_id, rule_key, table_name, category, reason, identifier_columns_json, removed_identifiers_json, deleted_count, created_at) '
-        . 'VALUES (:operation_id, :rule_key, :table_name, :category, :reason, :identifier_columns_json, :removed_identifiers_json, :deleted_count, NOW())'
-    );
-    $statement->execute([
-        ':operation_id' => $operationId,
-        ':rule_key' => (string) ($rule['key'] ?? ''),
-        ':table_name' => (string) ($rule['table_name'] ?? ''),
-        ':category' => (string) ($rule['category'] ?? ''),
-        ':reason' => (string) ($rule['reason'] ?? ''),
-        ':identifier_columns_json' => json_encode((array) ($rule['identifier_columns'] ?? []), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
-        ':removed_identifiers_json' => json_encode($identifiers, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
-        ':deleted_count' => $deletedCount,
-    ]);
+    database_maintenance_model_write_cleanup_audit($pdo, $rule, $identifiers, $deletedCount, $operationId);
 }
 
 /**
@@ -1556,7 +1420,7 @@ function database_maintenance_schema_repair_readiness(): array
     $files = discover_migration_files(database_maintenance_project_root() . '/database/migrations');
     $applied = [];
     if (schema_inspection_is_available($schemaStatus)) {
-        $applied = db()->query('SELECT version FROM schema_migrations')->fetchAll(PDO::FETCH_COLUMN);
+        $applied = database_maintenance_model_applied_migration_versions();
     }
     $pendingFiles = pending_migration_files($files, array_map('strval', $applied));
     $pendingVersions = array_map(static fn (string $file): string => basename($file, '.php'), $pendingFiles);
@@ -1713,11 +1577,10 @@ function database_maintenance_run_table_operation(string $operation, array $sele
     $reports = [];
     foreach ($tables as $tableName) {
         try {
-            $statement = db()->query($operation . ' TABLE ' . admin_database_usage_quote_identifier($tableName));
             $reports[] = [
                 'table_name' => $tableName,
                 'status' => 'ok',
-                'messages' => admin_database_usage_normalize_analyze_messages($statement ? $statement->fetchAll(PDO::FETCH_ASSOC) : []),
+                'messages' => admin_database_usage_normalize_analyze_messages(database_maintenance_model_run_table_operation($operation, $tableName)),
             ];
         } catch (Throwable $exception) {
             $reports[] = ['table_name' => $tableName, 'status' => 'failed', 'messages' => [], 'error' => $exception->getMessage()];

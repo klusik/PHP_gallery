@@ -37,11 +37,17 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+// Keep request_data() available when this service module is loaded in isolation.
+require_once dirname(__DIR__) . '/request_data.php';
+
+use function Gallery\Core\request_data;
+
 use RuntimeException;
 
 use function Gallery\Core\cms_config;
 use function Gallery\Core\current_user;
-use function Gallery\Core\db;
+use function Gallery\Models\gallery_model_find_by_access_token_hash;
+use function Gallery\Models\gallery_model_update_fields;
 use function Gallery\Core\now_sql;
 
 /**
@@ -712,7 +718,7 @@ function gallery_public_access_session_is_valid(int $galleryId): bool
 function request_share_token_allows_gallery(array $gallery): bool
 {
     // $token stores an intermediate value used by the surrounding gallery workflow.
-    $token = trim((string) ($_GET['share'] ?? $_GET['token'] ?? ''));
+    $token = trim((string) (request_data('query')['share'] ?? request_data('query')['token'] ?? ''));
     if ($token === '') {
         return false;
     }
@@ -840,9 +846,11 @@ function regenerate_gallery_share_token(int $galleryId, ?string $expiresAt): str
     $token = bin2hex(random_bytes(24));
     // $storedToken stores an intermediate value used by the surrounding gallery workflow.
     $storedToken = encrypt_gallery_share_token($token);
-    // $stmt stores an intermediate value used by the surrounding gallery workflow.
-    $stmt = db()->prepare('UPDATE galleries SET access_share_token = ?, access_token_hash = ?, access_token_expires_at = ?, updated_at = ? WHERE id = ?');
-    $stmt->execute([$storedToken, hash('sha256', $token), $expiresAt, now_sql(), $galleryId]);
+    gallery_model_update_fields($galleryId, [
+        'access_share_token' => $storedToken,
+        'access_token_hash' => hash('sha256', $token),
+        'access_token_expires_at' => $expiresAt,
+    ], now_sql());
     return $token;
 }
 
@@ -865,14 +873,15 @@ function revoke_gallery_share_token(int $galleryId): void
     }
 
     $shareStatus = gallery_access_share_token_schema_status();
+    $fields = [
+        'access_token_hash' => null,
+        'access_token_expires_at' => null,
+    ];
     if (schema_inspection_is_available($shareStatus)) {
-        // $stmt stores an intermediate value used by the surrounding gallery workflow.
-        $stmt = db()->prepare('UPDATE galleries SET access_share_token = NULL, access_token_hash = NULL, access_token_expires_at = NULL, updated_at = ? WHERE id = ?');
-    } else {
-        // Clearing the validating hash is sufficient to revoke every copy of the token.
-        $stmt = db()->prepare('UPDATE galleries SET access_token_hash = NULL, access_token_expires_at = NULL, updated_at = ? WHERE id = ?');
+        $fields['access_share_token'] = null;
     }
-    $stmt->execute([now_sql(), $galleryId]);
+    // Clearing the validating hash is sufficient to revoke every copy of the token.
+    gallery_model_update_fields($galleryId, $fields, now_sql());
 }
 
 /**
@@ -958,9 +967,9 @@ function gallery_share_token_for_admin(array $gallery): ?string
         if ($encrypted === null) {
             return null;
         }
-        // $stmt stores an intermediate value used by the surrounding gallery workflow.
-        $stmt = db()->prepare('UPDATE galleries SET access_share_token = ?, updated_at = ? WHERE id = ?');
-        $stmt->execute([$encrypted, now_sql(), (int) $gallery['id']]);
+        gallery_model_update_fields((int) $gallery['id'], [
+            'access_share_token' => $encrypted,
+        ], now_sql());
         return $stored;
     }
 
@@ -1027,3 +1036,17 @@ function gallery_share_token_key(): string
     return hash('sha256', 'gallery-share-token|' . (string) cms_config()['visitor_vote_secret'], true);
 }
 
+/**
+ * Find the gallery addressed by one plaintext share token.
+ *
+ * @param string $token Plaintext access token supplied by the visitor.
+ * @param int $galleryId Optional gallery identifier restriction.
+ * @return array<string,mixed>|null Matching gallery row.
+ */
+function gallery_access_find_by_token(string $token, int $galleryId = 0): ?array
+{
+    if ($token === '') {
+        return null;
+    }
+    return gallery_model_find_by_access_token_hash(hash('sha256', $token), $galleryId);
+}

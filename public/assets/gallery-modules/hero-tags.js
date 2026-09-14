@@ -16,6 +16,9 @@
  *   - Enable scrolling only after actual wrapped rows exceed the configured limit
  *   - Recalculate row wrapping when the hero width changes
  *
+ * Author:
+ *   Rudolf Klusal
+ *
  * Notes:
  *   - All tags remain present in the server HTML. Without JavaScript the full
  *     collection stays visible and usable.

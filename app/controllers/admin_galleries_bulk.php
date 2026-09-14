@@ -38,9 +38,7 @@ namespace Gallery\Controllers;
 
 use Throwable;
 use function Gallery\Core\current_user;
-use function Gallery\Core\db;
 use function Gallery\Core\flash_message;
-use function Gallery\Core\now_sql;
 use function Gallery\Core\redirect_to;
 use function Gallery\Core\request_method;
 use function Gallery\Core\require_admin;
@@ -54,11 +52,14 @@ use function Gallery\Services\gallery_trash_schema_status;
 use function Gallery\Services\move_gallery_subtrees_to_trash;
 use function Gallery\Services\exif_gps_override_schema_ready;
 use function Gallery\Services\exif_gps_schema_ready;
-use function Gallery\Services\find_gallery;
 use function Gallery\Services\gallery_filename_display_schema_ready;
-use function Gallery\Services\gallery_subtree_ids;
 use function Gallery\Services\gallery_visibility_storage_value;
 use function Gallery\Services\gallery_visibility_values;
+use function Gallery\Services\gallery_bulk_set_gps_map_enabled;
+use function Gallery\Services\gallery_bulk_set_picture_game_enabled;
+use function Gallery\Services\gallery_bulk_set_show_filenames;
+use function Gallery\Services\gallery_bulk_set_visibility;
+use function Gallery\Services\gallery_bulk_set_voting_enabled;
 use function Gallery\Services\feature_capability_effective_enabled;
 use function Gallery\Services\gallery_voting_schema_ready;
 use function Gallery\Services\presentation_picture_game_schema_status;
@@ -69,7 +70,6 @@ use function Gallery\Services\regenerate_public_paths;
 use function Gallery\Services\scan_gallery_images;
 use function Gallery\Services\set_collapsed_gallery_ids;
 use function Gallery\Services\t;
-use function Gallery\Services\write_gallery_sidecar;
 use function Gallery\Services\admin_log_event;
 
 /**
@@ -156,18 +156,7 @@ function cms_admin_bulk_galleries(): void
         }
     }
     if (in_array($action, gallery_visibility_values(), true) && $galleryIds) {
-        // Variable $placeholders stores this steps working value.
-        $placeholders = implode(',', array_fill(0, count($galleryIds), '?'));
-        // Variable $stmt stores this steps working value.
-        $stmt = db()->prepare('UPDATE galleries SET visibility = ?, updated_at = ? WHERE id IN (' . $placeholders . ')');
-        $stmt->execute(array_merge([gallery_visibility_storage_value($action), now_sql()], $galleryIds));
-        foreach ($galleryIds as $galleryId) {
-            // Variable $gallery stores this steps working value.
-            $gallery = find_gallery($galleryId);
-            if ($gallery) {
-                write_gallery_sidecar($gallery);
-            }
-        }
+        gallery_bulk_set_visibility($galleryIds, gallery_visibility_storage_value($action));
         flash_message('admin_notice', 'Updated ' . count($galleryIds) . ' gallery folder(s).');
         redirect_to(url_for('admin'));
     }
@@ -186,30 +175,10 @@ function cms_admin_bulk_galleries(): void
             flash_message('admin_notice', t('admin.galleries.gps_requires_migration'));
             redirect_to(url_for('admin'));
         }
-        // Variable $expandedIds stores this steps working value.
-        $expandedIds = [];
-        foreach ($galleryIds as $galleryId) {
-            // $expandedIds stores an intermediate value used by the surrounding gallery workflow.
-            $expandedIds = array_merge($expandedIds, gallery_subtree_ids($galleryId));
-        }
-        // $expandedIds stores an intermediate value used by the surrounding gallery workflow.
-        $expandedIds = array_values(array_unique(array_filter($expandedIds)));
-        if ($expandedIds) {
-            // Variable $placeholders stores this steps working value.
-            $placeholders = implode(',', array_fill(0, count($expandedIds), '?'));
-            // $gpsMapValue stores the explicit or inherited GPS display value for the selected gallery branches.
-            $gpsMapValue = $action === 'maps_inherit' ? null : ($action === 'maps_on' ? 1 : 0);
-            // Variable $stmt stores this steps working value.
-            $stmt = db()->prepare('UPDATE galleries SET gps_map_enabled = ?, updated_at = ? WHERE id IN (' . $placeholders . ')');
-            $stmt->execute(array_merge([$gpsMapValue, now_sql()], $expandedIds));
-            foreach ($expandedIds as $expandedId) {
-                // Variable $gallery stores this steps working value.
-                $gallery = find_gallery((int) $expandedId, true);
-                if ($gallery) {
-                    write_gallery_sidecar($gallery);
-                }
-            }
-        }
+        // $gpsMapValue stores the explicit or inherited GPS display value for the selected gallery branches.
+        $gpsMapValue = $action === 'maps_inherit' ? null : ($action === 'maps_on');
+        // $expandedIds stores all galleries changed by the subtree-scoped service operation.
+        $expandedIds = gallery_bulk_set_gps_map_enabled($galleryIds, $gpsMapValue);
         flash_message('admin_notice', 'Updated ' . count($expandedIds) . ' gallery folder(s).');
         redirect_to(url_for('admin'));
     }
@@ -228,26 +197,8 @@ function cms_admin_bulk_galleries(): void
             flash_message('admin_notice', t('admin.galleries.voting_requires_migration'));
             redirect_to(url_for('admin'));
         }
-        // Variable $expandedIds stores this steps working value.
-        $expandedIds = [];
-        foreach ($galleryIds as $galleryId) {
-            // $expandedIds stores an intermediate value used by the surrounding gallery workflow.
-            $expandedIds = array_merge($expandedIds, gallery_subtree_ids($galleryId));
-        }
-        // $expandedIds stores an intermediate value used by the surrounding gallery workflow.
-        $expandedIds = array_values(array_unique(array_filter($expandedIds)));
-        if ($expandedIds) {
-            // Variable $placeholders stores this steps working value.
-            $placeholders = implode(',', array_fill(0, count($expandedIds), '?'));
-            // Variable $stmt stores this steps working value.
-            $stmt = db()->prepare('UPDATE galleries SET voting_enabled = ?, updated_at = ? WHERE id IN (' . $placeholders . ')');
-            $stmt->execute(array_merge([$action === 'vote_on' ? 1 : 0, now_sql()], $expandedIds));
-            if ($action === 'vote_off') {
-                // $stmt stores an intermediate value used by the surrounding gallery workflow.
-                $stmt = db()->prepare('UPDATE galleries SET picture_game_enabled = 0, updated_at = ? WHERE id IN (' . $placeholders . ')');
-                $stmt->execute(array_merge([now_sql()], $expandedIds));
-            }
-        }
+        // $expandedIds stores all galleries changed by the subtree-scoped service operation.
+        $expandedIds = gallery_bulk_set_voting_enabled($galleryIds, $action === 'vote_on');
         flash_message('admin_notice', 'Updated ' . count($expandedIds) . ' gallery folder(s).');
         redirect_to(url_for('admin'));
     }
@@ -260,28 +211,8 @@ function cms_admin_bulk_galleries(): void
             flash_message('admin_notice', t('admin.galleries.filename_requires_migration'));
             redirect_to(url_for('admin'));
         }
-        // Variable $expandedIds stores this steps working value.
-        $expandedIds = [];
-        foreach ($galleryIds as $galleryId) {
-            // $expandedIds stores an intermediate value used by the surrounding gallery workflow.
-            $expandedIds = array_merge($expandedIds, gallery_subtree_ids($galleryId));
-        }
-        // $expandedIds stores an intermediate value used by the surrounding gallery workflow.
-        $expandedIds = array_values(array_unique(array_filter($expandedIds)));
-        if ($expandedIds) {
-            // Variable $placeholders stores this steps working value.
-            $placeholders = implode(',', array_fill(0, count($expandedIds), '?'));
-            // Variable $stmt stores this steps working value.
-            $stmt = db()->prepare('UPDATE galleries SET show_filenames = ?, updated_at = ? WHERE id IN (' . $placeholders . ')');
-            $stmt->execute(array_merge([$action === 'filenames_on' ? 1 : 0, now_sql()], $expandedIds));
-            foreach ($expandedIds as $expandedId) {
-                // Variable $gallery stores this steps working value.
-                $gallery = find_gallery((int) $expandedId);
-                if ($gallery) {
-                    write_gallery_sidecar($gallery);
-                }
-            }
-        }
+        // $expandedIds stores all galleries changed by the subtree-scoped service operation.
+        $expandedIds = gallery_bulk_set_show_filenames($galleryIds, $action === 'filenames_on');
         flash_message('admin_notice', 'Updated filename display for ' . count($expandedIds) . ' gallery folder(s).');
         redirect_to(url_for('admin'));
     }
@@ -306,26 +237,8 @@ function cms_admin_bulk_galleries(): void
             }
             redirect_to(url_for('admin'));
         }
-        // Variable $expandedIds stores this steps working value.
-        $expandedIds = [];
-        foreach ($galleryIds as $galleryId) {
-            // $expandedIds stores an intermediate value used by the surrounding gallery workflow.
-            $expandedIds = array_merge($expandedIds, gallery_subtree_ids($galleryId));
-        }
-        // $expandedIds stores an intermediate value used by the surrounding gallery workflow.
-        $expandedIds = array_values(array_unique(array_filter($expandedIds)));
-        if ($expandedIds) {
-            // Variable $placeholders stores this steps working value.
-            $placeholders = implode(',', array_fill(0, count($expandedIds), '?'));
-            // Variable $stmt stores this steps working value.
-            $stmt = db()->prepare('UPDATE galleries SET picture_game_enabled = ?, updated_at = ? WHERE id IN (' . $placeholders . ')');
-            $stmt->execute(array_merge([$action === 'game_on' ? 1 : 0, now_sql()], $expandedIds));
-            if ($action === 'game_on') {
-                // $stmt stores an intermediate value used by the surrounding gallery workflow.
-                $stmt = db()->prepare('UPDATE galleries SET voting_enabled = 1, updated_at = ? WHERE id IN (' . $placeholders . ')');
-                $stmt->execute(array_merge([now_sql()], $expandedIds));
-            }
-        }
+        // $expandedIds stores all galleries changed by the subtree-scoped service operation.
+        $expandedIds = gallery_bulk_set_picture_game_enabled($galleryIds, $action === 'game_on');
         flash_message('admin_notice', 'Updated ' . count($expandedIds) . ' gallery folder(s).');
         redirect_to(url_for('admin'));
     }

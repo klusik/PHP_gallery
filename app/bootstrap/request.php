@@ -36,9 +36,12 @@ declare(strict_types=1);
 
 namespace Gallery\Core;
 
-use function Gallery\Services\seo_request_guard_enforce;
+use function Gallery\Services\seo_request_guard_enforcement_decision;
 use function Gallery\Services\translation_bootstrap_request;
-use function Gallery\Services\viewer_remember_restore_from_cookie;
+use const Gallery\Services\CMS_ADMIN_LANGUAGE_COOKIE;
+use const Gallery\Services\CMS_LANGUAGE_COOKIE;
+use const Gallery\Services\CMS_PUBLIC_LANGUAGE_COOKIE;
+use function Gallery\Core\viewer_identity_remember_restore_request;
 
 /**
  * Resolve the route and initialize request-scoped behavior in the legacy startup order.
@@ -55,16 +58,63 @@ function cms_initialize_request(): string
     foreach ($route['params'] as $name => $value) {
         $_GET[$name] = $value;
     }
-    if (function_exists('Gallery\\Services\\seo_request_guard_enforce')) {
-        seo_request_guard_enforce($page);
+    if (function_exists('Gallery\\Services\\seo_request_guard_enforcement_decision')) {
+        $seoDecision = seo_request_guard_enforcement_decision(
+            $page,
+            request_method(),
+            $_GET,
+            current_user() !== null,
+            (string) ($_SERVER['REQUEST_URI'] ?? ''),
+            (string) ($_SERVER['REMOTE_ADDR'] ?? ''),
+            (string) ($_SERVER['HTTP_USER_AGENT'] ?? '')
+        );
+        cms_apply_seo_request_guard_decision($seoDecision);
     }
-    translation_bootstrap_request($page);
+    $languageCookieIntents = translation_bootstrap_request($page, [
+        'query' => $_GET,
+        'admin_cookie' => (string) ($_COOKIE[CMS_ADMIN_LANGUAGE_COOKIE] ?? ''),
+        'legacy_cookie' => (string) ($_COOKIE[CMS_LANGUAGE_COOKIE] ?? ''),
+        'public_cookie' => (string) ($_COOKIE[CMS_PUBLIC_LANGUAGE_COOKIE] ?? ''),
+    ]);
+    apply_cookie_intents($languageCookieIntents);
     // Restore only the dedicated viewer persistent credential before response cache classification.
     // The adapter is fail-closed and never mutates administrator identity.
-    viewer_remember_restore_from_cookie();
+    viewer_identity_remember_restore_request();
     send_security_headers();
 
     return $page;
+}
+
+/**
+ * Apply one SEO request-guard decision at the request bootstrap boundary.
+ *
+ * @param array{action:string,status?:int,location?:string,headers?:array<string,string>,body?:string} $decision Guard decision.
+ */
+function cms_apply_seo_request_guard_decision(array $decision): void
+{
+    $action = (string) ($decision['action'] ?? 'allow');
+    if ($action === 'allow') {
+        return;
+    }
+
+    $status = (int) ($decision['status'] ?? ($action === 'redirect' ? 301 : 404));
+    if ($action === 'redirect') {
+        $location = (string) ($decision['location'] ?? '');
+        if ($location !== '') {
+            header('Location: ' . $location, true, $status);
+            exit;
+        }
+        return;
+    }
+
+    http_response_code($status);
+    if (!headers_sent()) {
+        foreach (($decision['headers'] ?? []) as $name => $value) {
+            header((string) $name . ': ' . (string) $value);
+        }
+    }
+    echo (string) ($decision['body'] ?? '');
+    exit;
 }
 
 /**
@@ -117,8 +167,26 @@ function cms_prime_read_only_media_schema_cache(string $page): void
  */
 function cms_request_trace_begin(): void
 {
+    if (function_exists('Gallery\\Services\\admin_test_run_bind_request_transport_context')) {
+        \Gallery\Services\admin_test_run_bind_request_transport_context([
+            'cookie_token' => (string) ($_COOKIE[\Gallery\Services\ADMIN_TEST_RUN_COOKIE] ?? ''),
+            'request_time_float' => isset($_SERVER['REQUEST_TIME_FLOAT']) && is_numeric($_SERVER['REQUEST_TIME_FLOAT'])
+                ? (float) $_SERVER['REQUEST_TIME_FLOAT']
+                : microtime(true),
+            'request_uri' => (string) ($_SERVER['REQUEST_URI'] ?? ''),
+            'request_method' => (string) ($_SERVER['REQUEST_METHOD'] ?? ''),
+            'script_name' => (string) ($_SERVER['SCRIPT_NAME'] ?? ''),
+            'protocol' => (string) ($_SERVER['SERVER_PROTOCOL'] ?? ''),
+            'https' => request_is_https(),
+            'query_keys' => array_keys($_GET),
+            'cookie_names' => array_keys($_COOKIE),
+        ]);
+    }
     if (function_exists('Gallery\\Services\\admin_test_run_request_begin')) {
         \Gallery\Services\admin_test_run_request_begin();
+        if (function_exists('Gallery\\Services\\admin_test_run_request_header_intents')) {
+            apply_response_header_intents(\Gallery\Services\admin_test_run_request_header_intents());
+        }
     }
     cms_request_trace_mark('cms_run_enter');
 }

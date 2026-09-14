@@ -16,7 +16,10 @@
  *   - Keep the indicator pointer-transparent and reduced-motion safe
  *   - Announce the translated loading state without adding another live region
  *   - Keep one decorative byte-progress bar consistent across normal and fullscreen modes
- */
+  *
+ * Author:
+ *   Rudolf Klusal
+*/
 
 declare(strict_types=1);
 

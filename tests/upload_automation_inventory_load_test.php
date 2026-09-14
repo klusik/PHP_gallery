@@ -144,7 +144,9 @@ namespace Gallery\Services {
         return __DIR__ . '/nonexistent-upload-automation-inventory-gallery';
     }
 
-    require_once __DIR__ . '/../app/services/upload_automation.php';
+    require_once __DIR__ . '/../app/models/images.php';
+require_once __DIR__ . '/../app/models/upload_automation.php';
+require_once __DIR__ . '/../app/services/upload_automation.php';
 
     /**
      * Emit one compact assertion result and fail the standalone test on mismatch.

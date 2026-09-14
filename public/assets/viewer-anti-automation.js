@@ -13,7 +13,10 @@
  *   - Use Web Crypto SHA-256 without third-party libraries, remote imports, or fingerprinting
  *   - Keep work bounded by the server-supplied hard counter ceiling
  *   - Fall back to the server-enforced first-party no-JavaScript path when Web Crypto is unavailable
- */
+  *
+ * Author:
+ *   Rudolf Klusal
+*/
 
 (function () {
     'use strict';

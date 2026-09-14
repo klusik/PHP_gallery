@@ -1,4 +1,19 @@
 /**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ *
+ * File: public/assets/gallery-modules/admin-smart-galleries.js
+ *
+ * Author:
+ *   Rudolf Klusal
+ *
+ * License:
+ *   MIT License (see LICENSE file in repository)
+ *
+ * Notes:
+ *   - Keep comments and docstrings intact when modifying this file.
+ */
+/**
  * Visual nested rule editor for Smart Galleries.
  *
  * The hidden JSON field remains the canonical form payload. All field and

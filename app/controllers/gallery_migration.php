@@ -37,6 +37,8 @@ declare(strict_types=1);
 
 namespace Gallery\Controllers;
 
+use const Gallery\Services\GALLERY_MIGRATION_RECONNECT_SECONDS;
+
 use RuntimeException;
 use Throwable;
 use const Gallery\Services\GALLERY_MIGRATION_PROTOCOL_VERSION;
@@ -106,7 +108,11 @@ function gallery_migration_api_gallery(): array
         throw new RuntimeException(gallery_migration_t('gallery_migration.error.api_unavailable', 'Upload automation API keys are not installed. Run pending migrations first.'));
     }
 
-    $token = upload_automation_request_token();
+    $token = upload_automation_request_token(
+        (string) ($_SERVER['HTTP_X_GALLERY_API_KEY'] ?? ''),
+        (string) ($_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? ''),
+        $_POST['api_key'] ?? ''
+    );
     $tokenRow = find_upload_automation_token($token);
     if (!$tokenRow) {
         admin_log_event('warning', 'gallery_migration.unauthorized', 'Gallery migration request used a missing or invalid API key.', [
@@ -806,6 +812,6 @@ function gallery_migration_admin_mutation_descriptor(string $action, int $galler
 function render_admin_gallery_migration_panel(array $gallery): void
 {
     if (function_exists('Gallery\\Views\\view_render_admin_gallery_migration_panel')) {
-        view_render_admin_gallery_migration_panel($gallery);
+        view_render_admin_gallery_migration_panel($gallery, gallery_migration_current_version(), GALLERY_MIGRATION_RECONNECT_SECONDS);
     }
 }

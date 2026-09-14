@@ -18,6 +18,9 @@
  *   - Protect Phase 4.0 through 4.2 rate-limit, generic-response, token, mode, scanner-safe, and principal boundaries
  *   - Reject third-party CAPTCHA, remote challenge, fingerprinting, Composer/npm, Redis, and Memcached integration
  *
+ * Author:
+ *   Rudolf Klusal
+ *
  * Notes:
  *   - Keep comments and docstrings intact when modifying this file.
  *   - This focused fixture requires no live database, mail server, remote service, or browser.
@@ -557,6 +560,7 @@ namespace {
 
     // Integration: register and resend both require Viewer CSRF before the anti-automation service and existing business services.
     $controller = (string) file_get_contents($root . '/app/controllers/viewer_accounts.php');
+    $viewerView = (string) file_get_contents($root . '/app/views/viewer_accounts.php');
     $registerStart = strpos($controller, 'function cms_viewer_register(): void');
     $inviteStart = strpos($controller, 'function cms_viewer_invite(): void');
     $resendStart = strpos($controller, 'function cms_viewer_resend_verification(): void');
@@ -572,7 +576,7 @@ namespace {
     viewer_phase43_assert(strpos($resendBlock, 'viewer_anti_automation_authorize_submission(') < strpos($resendBlock, 'viewer_registration_verification_resend_prepare('), 'Resend anti-automation gate must precede resend authority creation.');
     viewer_phase43_assert(str_contains($registerBlock, 'viewer_anti_automation_form_fields(VIEWER_ANTI_AUTOMATION_ACTION_REGISTER)'), 'Registration GET/form must carry signed first-party form state.');
     viewer_phase43_assert(str_contains($resendBlock, 'viewer_anti_automation_form_fields(VIEWER_ANTI_AUTOMATION_ACTION_RESEND)'), 'Resend GET/form must carry signed first-party form state.');
-    viewer_phase43_assert(str_contains($controller, 'viewer_csrf_field();') && str_contains($controller, 'viewer_aa_challenge_ticket'), 'Challenge continuation and fallback must remain Viewer-CSRF protected.');
+    viewer_phase43_assert(str_contains($controller, "'csrf_html' => viewer_csrf_field()") && str_contains($viewerView, 'viewer_aa_challenge_ticket'), 'Challenge continuation and fallback must remain Viewer-CSRF protected across the controller/view boundary.');
 
     // Suppress branches must not call registration/resend or mail work before returning generic completion state.
     $registerSuppressPos = strpos($registerBlock, 'VIEWER_ANTI_AUTOMATION_RESULT_SUPPRESS');
@@ -581,9 +585,10 @@ namespace {
     $resendPreparePos = strpos($resendBlock, 'viewer_registration_verification_resend_prepare(');
     viewer_phase43_assert(is_int($registerSuppressPos) && is_int($registerBeginPos) && $registerSuppressPos < $registerBeginPos, 'Registration suppression branch must be decided before request staging.');
     viewer_phase43_assert(is_int($resendSuppressPos) && is_int($resendPreparePos) && $resendSuppressPos < $resendPreparePos, 'Resend suppression branch must be decided before resend authority preparation.');
-    viewer_phase43_assert(substr_count($registerBlock, 'viewer.register.request_received') === 1, 'Registration must retain one generic valid-submission completion notice.');
-    viewer_phase43_assert(substr_count($resendBlock, 'viewer.resend.request_received') === 1, 'Resend must retain one generic valid-submission completion notice.');
+    viewer_phase43_assert(substr_count($viewerView, 'viewer.register.request_received') === 1, 'Registration must retain one generic valid-submission completion notice in the viewer view.');
+    viewer_phase43_assert(substr_count($viewerView, 'viewer.resend.request_received') === 1, 'Resend must retain one generic valid-submission completion notice in the viewer view.');
 
+    require_once $root . '/app/views/viewer_accounts.php';
     require_once $root . '/app/controllers/viewer_accounts.php';
 
     $_SERVER['REQUEST_METHOD'] = 'POST';

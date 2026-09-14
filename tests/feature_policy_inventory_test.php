@@ -332,10 +332,11 @@ namespace Gallery\Core {
         'Public Tag Browsing must own only the public tag route and preserve internal tag records/assignments.'
     );
     $publicTagSource = (string) file_get_contents($root . '/app/controllers/public_tags.php');
+    $publicTagViewSource = (string) file_get_contents($root . '/app/views/public_tags.php');
     $adminTagSource = (string) file_get_contents($root . '/app/controllers/admin_tags.php');
     feature_policy_inventory_assert(
-        substr_count($publicTagSource, "feature_capability_effective_enabled('public_tag_browsing')") >= 2
-            && str_contains($publicTagSource, '<span class="tag">')
+        substr_count($publicTagSource, "feature_capability_effective_enabled('public_tag_browsing')") >= 1
+            && str_contains($publicTagViewSource, '<span class="tag">')
             && substr_count($adminTagSource, "feature_capability_effective_enabled('public_tag_browsing')") >= 2,
         'Public Tag Browsing OFF must render tag metadata without dead links while keeping Admin tag management available.'
     );
@@ -348,13 +349,15 @@ namespace Gallery\Core {
     );
     $contentLocalizationSource = (string) file_get_contents($root . '/app/services/content_localization.php');
     $adminLocalizationView = (string) file_get_contents($root . '/app/views/admin_gallery_forms.php');
+    $adminLocalizationBoundary = (string) file_get_contents($root . '/app/controllers/admin_gallery_form_models.php') . $adminLocalizationView;
     $galleryLocalizationSave = (string) file_get_contents($root . '/app/controllers/admin_galleries_edit_actions.php');
     $imageLocalizationSave = (string) file_get_contents($root . '/app/controllers/admin_public_inline.php');
     $publicSearchSource = (string) file_get_contents($root . '/app/services/public_search.php');
     feature_policy_inventory_assert(
         str_contains($contentLocalizationSource, "feature_capability_effective_enabled('multilingual_content')")
             && str_contains($contentLocalizationSource, 'content_localization_enabled() ? content_translation_rows')
-            && str_contains($adminLocalizationView, 'if (!content_localization_enabled())')
+            && str_contains($adminLocalizationBoundary, '$localizationEnabled = content_localization_enabled();')
+            && str_contains($adminLocalizationView, "\$localization = is_array(\$formModel['localization'] ?? null)")
             && substr_count($galleryLocalizationSave . $imageLocalizationSave, 'content_localization_enabled()') >= 2
             && str_contains($publicSearchSource, '$localizedSearchReady = content_localization_enabled()'),
         'Multilingual authored-content OFF must skip public translation resolution/search queries and ignore hidden Admin localization fields.'
@@ -417,12 +420,16 @@ namespace Gallery\Core {
     );
 
     $galleryDateSources = implode("\n", [
+        (string) file_get_contents($root . '/app/controllers/admin_gallery_form_models.php'),
+        (string) file_get_contents($root . '/app/services/admin_dashboard.php'),
         (string) file_get_contents($root . '/app/views/admin_gallery_forms.php'),
         (string) file_get_contents($root . '/app/views/admin_dashboard.php'),
         (string) file_get_contents($root . '/app/controllers/admin_galleries_edit_page/post_actions.php'),
     ]);
     feature_policy_inventory_assert(
-        substr_count($galleryDateSources, "feature_capability_effective_enabled('exif_gallery_date_suggestions')") >= 3
+        substr_count($galleryDateSources, "feature_capability_effective_enabled('exif_gallery_date_suggestions')") >= 2
+            && str_contains($galleryDateSources, "'exif_gallery_date_suggestions'")
+            && str_contains($galleryDateSources, "feature_enabled']['exif_gallery_date_suggestions")
             && str_contains($galleryDateSources, 'function view_render_admin_gallery_date_range_fields')
             && str_contains($galleryDateSources, 'name="gallery_date"')
             && str_contains($galleryDateSources, 'name="gallery_date_end"'),
@@ -431,12 +438,15 @@ namespace Gallery\Core {
 
     $reportNavigationSources = implode("\n", [
         (string) file_get_contents($root . '/app/views/admin_chrome.php'),
-        (string) file_get_contents($root . '/app/helpers_admin_rendering.php'),
         (string) file_get_contents($root . '/app/views/admin_dashboard_sections.php'),
+        (string) file_get_contents($root . '/app/controllers/shared_layout.php'),
+        (string) file_get_contents($root . '/app/services/admin_dashboard.php'),
     ]);
     feature_policy_inventory_assert(
-        substr_count($reportNavigationSources, "'feature' => 'complete_gallery_report'") >= 2
-            && str_contains($reportNavigationSources, "view_admin_dashboard_feature_enabled('complete_gallery_report')"),
+        substr_count($reportNavigationSources, "'feature' => 'complete_gallery_report'") >= 1
+            && str_contains($reportNavigationSources, "view_admin_dashboard_feature_enabled(\$model, 'complete_gallery_report')")
+            && str_contains($reportNavigationSources, 'view_render_admin_gallery_report_maintenance_card($model')
+            && substr_count($reportNavigationSources, "'complete_gallery_report'") >= 3,
         'Complete Gallery Report navigation and dashboard entry points must honor only the report capability.'
     );
 
@@ -482,14 +492,15 @@ namespace Gallery\Core {
         'Built-in Update Installer must action-gate mixed updater workflows instead of hiding the read-only update page.'
     );
     $updateControllerSource = (string) file_get_contents($root . '/app/controllers/updates.php');
+    $updateViewSource = (string) file_get_contents($root . '/app/views/admin_updates.php');
     $updateInstallSource = (string) file_get_contents($root . '/app/services/updates_install.php');
     $updateLifecycleSource = (string) file_get_contents($root . '/app/services/updates_jobs/lifecycle.php');
     feature_policy_inventory_assert(
         str_contains($updateControllerSource, '$installerMutationActions')
             && substr_count($updateLifecycleSource, "feature_capability_effective_enabled('built_in_update_installer')") >= 4
             && str_contains($updateInstallSource, "feature_capability_effective_enabled('built_in_update_installer')")
-            && str_contains($updateControllerSource, 'name="update_action" value="force_check"')
-            && str_contains($updateControllerSource, 'name="update_action" value="autoupdate_dry_run"'),
+            && str_contains($updateViewSource, 'name="update_action" value="force_check"')
+            && str_contains($updateViewSource, 'name="update_action" value="autoupdate_dry_run"'),
         'Built-in Update Installer OFF must block install/resume/rollback mutation boundaries while preserving read-only checks and dry runs.'
     );
 
@@ -500,12 +511,14 @@ namespace Gallery\Core {
             && ($databaseMaintenanceDefinition['data_disable_policy'] ?? '') === 'preserve',
         'Advanced Database Maintenance must action-gate mixed maintenance routes so read-only inspection remains available.'
     );
-    $databaseControllerSource = (string) file_get_contents($root . '/app/controllers/admin_database_maintenance.php');
+    $databaseControllerSource = (string) file_get_contents($root . '/app/controllers/admin_database_maintenance.php')
+        . (string) file_get_contents($root . '/app/controllers/admin_dashboard.php');
     $databaseViewSource = (string) file_get_contents($root . '/app/views/admin_database_maintenance.php');
     feature_policy_inventory_assert(
         substr_count($databaseControllerSource, 'admin_database_maintenance_require_mutation_enabled()') >= 5
             && str_contains($databaseControllerSource, '$dryRun = !empty($_POST[\'dry_run\'])')
-            && str_contains($databaseViewSource, "feature_capability_effective_enabled('advanced_database_maintenance')")
+            && str_contains($databaseControllerSource, "'mutations_enabled' => feature_capability_effective_enabled('advanced_database_maintenance')")
+            && str_contains($databaseViewSource, 'bool $mutationsEnabled = false')
             && str_contains($databaseViewSource, 'name="dry_run" value="1"'),
         'Advanced Database Maintenance OFF must block live cleanup/repair/ANALYZE/OPTIMIZE while keeping inspection and dry-run planning visible.'
     );

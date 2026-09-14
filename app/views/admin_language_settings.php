@@ -15,7 +15,10 @@
  *   - Render accessible feature and per-language checkboxes
  *   - Reuse canonical language presentation metadata and locally bundled flags
  *   - Preserve submitted values and validation errors
- */
+  *
+ * Author:
+ *   Rudolf Klusal
+*/
 
 declare(strict_types=1);
 
@@ -25,14 +28,6 @@ use function Gallery\Core\asset_url;
 use function Gallery\Core\e;
 use function Gallery\Core\url_for;
 use function Gallery\Services\t;
-use function Gallery\Services\translation_language_presentation;
-use function Gallery\Services\translation_public_language_selector_enabled;
-use function Gallery\Services\translation_public_language_selector_languages;
-use function Gallery\Services\translation_public_language_selector_design;
-use function Gallery\Services\translation_public_language_selector_design_defaults;
-use function Gallery\Services\translation_public_language_selector_design_normalize;
-use function Gallery\Services\translation_public_language_selector_design_numeric_bounds;
-use function Gallery\Services\translation_supported_languages;
 
 /**
  * Render a resettable select field in the selector design editor.
@@ -94,17 +89,17 @@ function view_render_public_language_selector_settings_panel(array $model = []):
     $languagesTargetId = preg_replace('/[^a-z0-9_-]/i', '-', (string) ($model['languages_target_id'] ?? '')) ?: '';
     $enabled = array_key_exists('enabled', $model)
         ? !empty($model['enabled'])
-        : translation_public_language_selector_enabled();
+        : false;
     $languages = array_key_exists('languages', $model) && is_array($model['languages'])
         ? array_values($model['languages'])
-        : translation_public_language_selector_languages();
+        : [];
     $errors = is_array($model['errors'] ?? null) ? $model['errors'] : [];
     $enabledError = trim((string) ($errors['enabled'] ?? ''));
     $languagesError = trim((string) ($errors['languages'] ?? ''));
-    $presentations = translation_language_presentation();
+    $presentations = is_array($model['presentations'] ?? null) ? $model['presentations'] : [];
     $detailedDesign = !array_key_exists('detailed_design', $model) || !empty($model['detailed_design']);
-    $designDefaults = translation_public_language_selector_design_defaults();
-    $design = translation_public_language_selector_design_normalize($model['design'] ?? translation_public_language_selector_design());
+    $designDefaults = is_array($model['design_defaults'] ?? null) ? $model['design_defaults'] : [];
+    $design = is_array($model['design'] ?? null) ? $model['design'] : $designDefaults;
 
     echo '<section class="admin-language-selector-settings" id="' . e($idPrefix) . '" data-public-language-selector-settings' . (!empty($model['admin_setting_target']) ? ' data-admin-setting-target tabindex="-1"' : '') . '>';
     echo '<div class="admin-language-selector-settings-copy"><strong>' . e(t('admin.theme.language.viewer_selector_title', 'Viewer language selector')) . '</strong>';
@@ -122,7 +117,7 @@ function view_render_public_language_selector_settings_panel(array $model = []):
     echo '<fieldset class="admin-language-selector-language-list"' . ($languagesTargetId !== '' ? ' id="' . e($languagesTargetId) . '" data-admin-setting-target tabindex="-1"' : '') . ($languagesError !== '' ? ' aria-invalid="true"' : '') . '><legend>' . e(t('admin.theme.language.viewer_languages_legend', 'Languages available to viewers')) . '</legend>';
     echo '<p class="muted">' . e(t('admin.theme.language.viewer_languages_hint', 'Select at least one language to offer. This list affects only the public viewer selector. A viewer\'s selection is stored in that viewer\'s browser, never as an account or site-wide language setting.')) . '</p>';
     echo '<div class="admin-language-selector-language-grid">';
-    foreach (translation_supported_languages() as $language) {
+    foreach ((array) ($model['supported_languages'] ?? []) as $language) {
         $presentation = $presentations[$language] ?? ['name' => strtoupper($language), 'flag_asset' => ''];
         $languageName = trim((string) ($presentation['name'] ?? strtoupper($language)));
         $flagAsset = trim((string) ($presentation['flag_asset'] ?? ''));
@@ -166,7 +161,7 @@ function view_render_public_language_selector_settings_panel(array $model = []):
 
     $colorLabels = ['container_bg' => 'Background', 'text_color' => 'Text', 'border_color' => 'Border', 'active_bg' => 'Active background', 'active_text' => 'Active text', 'hover_bg' => 'Hover background', 'focus_color' => 'Focus outline'];
     $numericLabels = ['selector_padding_x' => 'Selector horizontal padding', 'selector_padding_y' => 'Selector vertical padding', 'selector_margin' => 'Selector margin', 'gap' => 'Item gap', 'button_padding_x' => 'Button horizontal padding', 'button_padding_y' => 'Button vertical padding', 'border_width' => 'Border width', 'selector_radius' => 'Selector radius', 'button_radius' => 'Button radius', 'flag_width' => 'Flag width', 'flag_height' => 'Flag height', 'font_size' => 'Text size'];
-    $bounds = translation_public_language_selector_design_numeric_bounds();
+    $bounds = is_array($model['design_bounds'] ?? null) ? $model['design_bounds'] : [];
     foreach ($design['presets'] as $presetId => $presetValues) {
         $presetDefaults = is_array($designDefaults['presets'][$presetId] ?? null) ? $designDefaults['presets'][$presetId] : [];
         $presetDefaults['use_theme_colors'] = (bool) ($presetDefaults['use_theme_colors'] ?? false);

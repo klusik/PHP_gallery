@@ -16,6 +16,9 @@
  *   - Leave unrelated thumbnail files untouched
  *   - Prove deletion staging removes live media paths and can be rolled back
  *
+ * Author:
+ *   Rudolf Klusal
+ *
  * Notes:
  *   - Keep comments and docstrings intact when modifying this file.
  *   - Prefer small, readable changes over broad rewrites.

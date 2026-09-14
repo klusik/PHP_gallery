@@ -37,15 +37,16 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 use Imagick;
-use PDO;
 use RuntimeException;
 use Throwable;
-use function Gallery\Core\db;
 use function Gallery\Core\is_dng_image_path;
 use function Gallery\Core\is_supported_image_path;
 use function Gallery\Core\normalize_relative_path;
 use function Gallery\Core\path_inside;
 use function Gallery\Core\slugify;
+use function Gallery\Models\image_model_existing_ids_for_gallery;
+use function Gallery\Models\image_model_find_by_path_hash;
+use function Gallery\Models\image_model_relative_paths_for_gallery_ids;
 
 /**
  * Upload service model.
@@ -950,10 +951,7 @@ function uploaded_gallery_image_row_by_path(int $galleryId, string $relativePath
         return null;
     }
 
-    $stmt = db()->prepare('SELECT * FROM images WHERE gallery_id = ? AND relative_path_hash = ? LIMIT 1');
-    $stmt->execute([$galleryId, hash('sha256', $relativePath)]);
-    $row = $stmt->fetch();
-    return is_array($row) ? $row : null;
+    return image_model_find_by_path_hash($galleryId, hash('sha256', $relativePath));
 }
 
 /**
@@ -1025,11 +1023,7 @@ function uploaded_gallery_existing_image_ids(int $galleryId, array $imageIds): a
         return [];
     }
 
-    $placeholders = implode(',', array_fill(0, count($ids), '?'));
-    $stmt = db()->prepare('SELECT id FROM images WHERE gallery_id = ? AND id IN (' . $placeholders . ')');
-    $stmt->execute(array_merge([$galleryId], $ids));
-    $existingMap = array_fill_keys(array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN)), true);
-    return array_values(array_filter($ids, static fn (int $id): bool => isset($existingMap[$id])));
+    return image_model_existing_ids_for_gallery($galleryId, $ids);
 }
 
 /**
@@ -1046,12 +1040,9 @@ function uploaded_gallery_filenames_for_image_ids(int $galleryId, array $imageId
         return [];
     }
 
-    $placeholders = implode(',', array_fill(0, count($ids), '?'));
-    $stmt = db()->prepare('SELECT id, relative_path FROM images WHERE gallery_id = ? AND id IN (' . $placeholders . ')');
-    $stmt->execute(array_merge([$galleryId], $ids));
-    $pathMap = [];
-    foreach ($stmt->fetchAll() as $row) {
-        $pathMap[(int) ($row['id'] ?? 0)] = normalize_relative_path((string) ($row['relative_path'] ?? ''));
+    $pathMap = image_model_relative_paths_for_gallery_ids($galleryId, $ids);
+    foreach ($pathMap as $imageId => $relativePath) {
+        $pathMap[$imageId] = normalize_relative_path($relativePath);
     }
 
     $paths = [];

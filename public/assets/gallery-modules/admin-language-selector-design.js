@@ -5,7 +5,10 @@
  * Purpose:
  *   Provides the in-place live preview and unsaved reset controls for the
  *   reusable public viewer-language selector design editor.
- */
+  *
+ * Author:
+ *   Rudolf Klusal
+*/
 
 const DESIGN_COLOR_PROPERTIES = {
     container_bg: '--language-selector-bg', text_color: '--language-selector-text', border_color: '--language-selector-border',

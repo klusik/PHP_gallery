@@ -36,6 +36,8 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+use function Gallery\Core\request_data;
+
 use function Gallery\Core\e;
 use function Gallery\Core\gallery_public_url;
 use function Gallery\Core\public_base_url;
@@ -135,7 +137,7 @@ function tag_page_gallery_grid_settings(): array
 function pagination_current_page(string $parameterName = CMS_PAGINATION_PARAM): int
 {
     // $rawValue stores the untrusted GET value before validation.
-    $rawValue = $_GET[$parameterName] ?? 1;
+    $rawValue = request_data('query')[$parameterName] ?? 1;
     // $page stores the validated current-page candidate.
     $page = filter_var($rawValue, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
     return $page === false ? 1 : (int) $page;
@@ -216,7 +218,7 @@ function pagination_page_url(string $parameterName, int $pageNumber, ?array $bas
     }
 
     // $query stores the current route and filter query without stale pagination state.
-    $query = $baseQuery ?? $_GET;
+    $query = $baseQuery ?? request_data('query');
     if ($pageNumber <= 1) {
         unset($query[$parameterName]);
     } else {
@@ -311,7 +313,7 @@ function pagination_photo_thumbnail_sizes_attribute(array $settings): string
 function pagination_clean_query_suffix(array $removeNames = []): string
 {
     // $query stores current GET parameters that should survive clean pagination links.
-    $query = $_GET;
+    $query = request_data('query');
     foreach (array_merge(['page', 'public_path', 'gallery_path', 'slug', 'gallery_page', 'photo_page', CMS_PAGINATION_PARAM], $removeNames) as $name) {
         unset($query[$name]);
     }
@@ -363,49 +365,4 @@ function pagination_home_gallery_clean_url(int $pageNumber): string
         return public_base_url() . '/' . pagination_clean_query_suffix();
     }
     return public_base_url() . '/galleries/' . $safePage . '/' . pagination_clean_query_suffix();
-}
-
-/**
- * Render accessible public pagination controls for one listing.
- *
- * @param array $pagination Pagination value.
- * @param string $label Label value.
- */
-function render_pagination_controls(array $pagination, string $label = ''): void
-{
-    if (empty($pagination['pagination_needed'])) {
-        return;
-    }
-
-    $navLabel = $label !== '' ? $label : t('pagination.label', 'Pagination');
-    echo '<nav class="pagination" aria-label="' . e($navLabel) . '">';
-    if ((string) $pagination['previous_url'] !== '') {
-        echo '<a class="pagination-link" href="' . e((string) $pagination['previous_url']) . '">' . e(t('pagination.previous', 'Previous')) . '</a>';
-    } else {
-        echo '<span class="pagination-link is-disabled" aria-disabled="true">' . e(t('pagination.previous', 'Previous')) . '</span>';
-    }
-
-    // $previousPage stores the last rendered page number so gaps can be shown.
-    $previousPage = 0;
-    foreach ((array) $pagination['page_urls'] as $pageLink) {
-        // $pageNumber stores the visible page number for this link.
-        $pageNumber = (int) $pageLink['page'];
-        if ($previousPage > 0 && $pageNumber > $previousPage + 1) {
-            echo '<span class="pagination-gap" aria-hidden="true">...</span>';
-        }
-        if (!empty($pageLink['current'])) {
-            echo '<span class="pagination-link is-current" aria-current="page">' . $pageNumber . '</span>';
-        } else {
-            echo '<a class="pagination-link" href="' . e((string) $pageLink['url']) . '">' . $pageNumber . '</a>';
-        }
-        $previousPage = $pageNumber;
-    }
-
-    if ((string) $pagination['next_url'] !== '') {
-        echo '<a class="pagination-link" href="' . e((string) $pagination['next_url']) . '">' . e(t('pagination.next', 'Next')) . '</a>';
-    } else {
-        echo '<span class="pagination-link is-disabled" aria-disabled="true">' . e(t('pagination.next', 'Next')) . '</span>';
-    }
-    echo '<span class="pagination-status">' . e(t('pagination.status', 'Page {current} of {total}', ['current' => (string) $pagination['current_page'], 'total' => (string) $pagination['total_pages']])) . '</span>';
-    echo '</nav>';
 }

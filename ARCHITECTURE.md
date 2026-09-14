@@ -9,7 +9,7 @@ This document is intended to help future maintainers and AI coding agents unders
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.100';
+const CMS_VERSION = '0.101';
 ```
 
 Update-related code uses:
@@ -27,8 +27,8 @@ const CMS_UPDATE_BRANCHES = ['main', 'master'];
 2. **Filesystem-backed gallery content**
    Gallery folders and image files live on disk. The database stores metadata, visibility, tags, generated slugs, access rules, voting state, AI metadata, telemetry, and operational state.
 
-3. **MVC boundaries are explicit for new/refactored features**
-   Model files under `app/models/` own SQL/data access. Service files under `app/services/` own reusable domain orchestration, policy, ranking, localization, and result shaping. Controller files under `app/controllers/` read requests, validate permissions, and return responses. View files under `app/views/` own HTML presentation. Older modules may still combine model/service concerns and are migrated incrementally when touched.
+3. **MVC boundaries are repository-wide and mechanically enforced**
+   Model files under `app/models/` own SQL/data access. Service files under `app/services/` own reusable domain orchestration, policy, ranking, localization, and result shaping. Controller files under `app/controllers/` read requests, validate permissions, prepare view models, and own HTTP responses. View files under `app/views/` own HTML presentation. The strict MVC migration reached a zero-occurrence boundary baseline on 2026-09-14, so new cross-layer leakage is rejected rather than recorded as migration debt.
 
 4. **Database migrations are append-only and prevalidated**
    Schema changes are stored as sequential PHP migration files in `database/migrations/`. Migrations are prevalidated as a complete pending set, applied in filename order, and recorded in `schema_migrations` only after SQL statements and optional repair callbacks succeed.
@@ -41,6 +41,20 @@ const CMS_UPDATE_BRANCHES = ['main', 'master'];
 
 7. **Feature isolation**
    Recent features are usually introduced as focused controller and service files instead of expanding old monolithic files.
+
+## Strict MVC Layer Contract
+
+The long-term application flow is `Bootstrap/Router -> Controller -> Service -> Model`, with controllers selecting views for presentation. This is a repository contract, not a naming convention. New code and materially refactored code must not introduce responsibility leakage between these layers.
+
+- `app/models/` owns application persistence. SQL strings, query construction, PDO calls, schema-facing reads/writes, and row mapping belong here. Models must not read request/session globals, emit HTTP responses, render HTML, or depend on services/controllers/views.
+- `app/services/` owns reusable use cases and domain policy. Services may orchestrate models and pure/core helpers, but must not own SQL/PDO, request globals, HTTP response output, or views.
+- `app/controllers/` owns the HTTP boundary. Controllers normalize request data, perform boundary authentication/CSRF checks, call services, prepare view models, select views, and emit JSON/binary/redirect responses. Controllers must not contain SQL/PDO or reusable persistence/business rules.
+- `app/views/` owns HTML presentation. Views receive prepared presentation data and may use presentation-only helpers such as escaping and translation. Views must not inspect request/session globals, query persistence, decide domain authorization/feature policy, mutate state, or emit response headers.
+- Bootstrap, routing, migrations, CLI scripts, and `app/database.php` remain infrastructure boundaries. Feature-specific persistence must not be hidden there to bypass MVC.
+
+The contract is enforced by `scripts/check_mvc_boundaries.php`. `scripts/mvc_boundary_baseline.json` is retained as an always-empty assertion with `violation_count: 0`, not as a legacy allowlist. Any detected SQL/PDO/request/transport/presentation/upward-dependency signature fails immediately. `tests/mvc_layer_contract_test.php` protects the checker semantics, the Stage 7-13 boundary tests protect the intermediate ownership contracts, and all central audit profiles run the boundary checker.
+
+When adding a new feature, use the strict vertical slice directly. Do not first place SQL in a controller/service or policy in a view with the intention of moving it later.
 
 ## Canonical Capability Policy
 

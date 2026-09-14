@@ -17,6 +17,9 @@
  *   - Verify the existing Phase 0 favourites schema is reused without collection/share scope creep
  *   - Verify favourites fail closed without making anonymous gallery browsing depend on viewer storage
  *
+ * Author:
+ *   Rudolf Klusal
+ *
  * Last Updated:
  *   2026-08-18
  */
@@ -108,8 +111,10 @@ function viewer_phase11_assert_function_imports_resolve(string $root, string $mo
 
 $root = dirname(__DIR__);
 $service = (string) file_get_contents($root . '/app/services/viewer_favourites.php');
+$model = (string) file_get_contents($root . '/app/models/viewer_favourites.php');
 $contentFoundations = (string) file_get_contents($root . '/app/services/viewer_content_foundations.php');
 $controller = (string) file_get_contents($root . '/app/controllers/viewer_favourites.php');
+$favouritesView = (string) file_get_contents($root . '/app/views/viewer_favourites.php');
 $accountController = (string) file_get_contents($root . '/app/controllers/viewer_accounts.php');
 $dispatch = (string) file_get_contents($root . '/app/bootstrap/dispatch.php');
 $routing = (string) file_get_contents($root . '/app/bootstrap/routing.php');
@@ -145,22 +150,22 @@ viewer_phase11_assert(!str_contains($service, 'viewer_collection_items') && !str
 $mutation = viewer_phase11_function_source($controller, 'cms_viewer_favourite');
 viewer_phase11_assert(str_contains($mutation, "request_method() !== 'POST'"), 'Favourite mutation endpoint must be POST-only.');
 viewer_phase11_assert(str_contains($mutation, 'current_viewer()'), 'Favourite mutation must require the viewer principal.');
-viewer_phase11_assert(str_contains($mutation, "viewer_csrf_verify((string) (\$_POST['viewer_csrf_token'] ?? ''))") && str_contains($controller, 'name="viewer_csrf_token"'), 'Favourite mutation must use the established viewer CSRF namespace and field convention.');
+viewer_phase11_assert(str_contains($mutation, "viewer_csrf_verify((string) (\$_POST['viewer_csrf_token'] ?? ''))") && str_contains($favouritesView, 'name="viewer_csrf_token"'), 'Favourite mutation must use the established viewer CSRF namespace and field convention.');
 viewer_phase11_assert(str_contains($mutation, 'viewer_favourite_set('), 'Controller must delegate favourite mutation to the service.');
 viewer_phase11_assert(str_contains($mutation, 'viewer_http_no_store();'), 'Favourite mutation responses must be no-store.');
 viewer_phase11_assert(!str_contains($mutation, 'current_user()') && !str_contains($mutation, "\$_SESSION['user_id']"), 'Favourite mutation must not depend on or write administrator identity.');
 viewer_phase11_assert(!str_contains($mutation, 'INSERT INTO viewer_favourites') && !str_contains($mutation, 'DELETE FROM viewer_favourites'), 'Controller must not contain favourite SQL.');
-viewer_phase11_assert(!str_contains($mutation, "\$_POST['return']") && !str_contains($controller, 'name="return"'), 'Favourite mutations must not copy arbitrary or secret-bearing gallery return URLs through the viewer endpoint.');
+viewer_phase11_assert(!str_contains($mutation, "\$_POST['return']") && !str_contains($favouritesView, 'name="return"'), 'Favourite mutations must not copy arbitrary or secret-bearing gallery return URLs through the viewer endpoint.');
 viewer_phase11_assert(str_contains($mutation, "'invalid' => 400"), 'Malformed favourite mutations must fail as a bounded client error rather than a service-availability error.');
 
 $setFavourite = viewer_phase11_function_source($service, 'viewer_favourite_set');
 viewer_phase11_assert(str_contains($setFavourite, 'viewer_source_image_can_reference($imageId)'), 'Every favourite write must re-check canonical source-image authorization.');
 viewer_phase11_assert(str_contains($setFavourite, 'viewer_account_can_mutate_content('), 'Favourite write must require an active viewer account that may mutate content.');
 viewer_phase11_assert(str_contains($setFavourite, 'security_version'), 'Favourite write must bind mutation authority to the current viewer security version.');
-viewer_phase11_assert(str_contains($setFavourite, 'FOR UPDATE'), 'Favourite write must serialize account-owned quota admission.');
+viewer_phase11_assert(str_contains($setFavourite, 'viewer_favourite_model_set(') && str_contains($model, 'FOR UPDATE'), 'Favourite write must delegate account-owned quota serialization to the model row lock.');
 viewer_phase11_assert(str_contains($setFavourite, "max_viewer_favourites_per_account"), 'Favourite write must use the centralized favourites quota.');
-viewer_phase11_assert(str_contains($setFavourite, 'COUNT(*) FROM viewer_favourites'), 'Favourite add must count owned rows while quota admission is serialized.');
-viewer_phase11_assert(str_contains($setFavourite, 'INSERT INTO viewer_favourites') && str_contains($setFavourite, 'DELETE FROM viewer_favourites'), 'Favourite service must implement only the existing add/remove reference mutations.');
+viewer_phase11_assert(str_contains($model, 'COUNT(*) FROM viewer_favourites'), 'Favourite model must count owned rows while quota admission is serialized.');
+viewer_phase11_assert(str_contains($model, 'INSERT INTO viewer_favourites') && str_contains($model, 'DELETE FROM viewer_favourites'), 'Favourite model must implement only the existing add/remove reference mutations.');
 viewer_phase11_assert(!str_contains($setFavourite, 'UPDATE images') && !str_contains($setFavourite, 'UPDATE galleries'), 'Favourite writes must never alter source image/gallery authorization state.');
 viewer_phase11_assert(!str_contains($setFavourite, "\$_SESSION['user_id']"), 'Favourite service must never create administrator session state.');
 
@@ -173,7 +178,7 @@ viewer_phase11_assert(!str_contains($listPage, 'visitor_can_access_gallery('), '
 $batchRead = viewer_phase11_function_source($service, 'viewer_favourites_for_image_ids');
 viewer_phase11_assert(str_contains($batchRead, 'catch (Throwable'), 'Favourite state decoration must fail closed when viewer storage is unavailable.');
 viewer_phase11_assert(str_contains($batchRead, 'return [];'), 'Viewer storage failure must degrade to no favourite decoration rather than breaking public gallery rendering.');
-viewer_phase11_assert(str_contains($batchRead, 'array_chunk(array_keys($ids), 200)') && !str_contains($batchRead, 'count($ids) >= 200'), 'Favourite state lookup must chunk large rendered pages rather than silently truncating state after 200 images.');
+viewer_phase11_assert(str_contains($batchRead, 'viewer_favourites_model_for_image_ids($viewerAccountId, array_keys($ids), 200)') && str_contains($model, 'array_chunk($ids, max(1, $chunkSize))'), 'Favourite state lookup must delegate bounded chunking to the model rather than silently truncating state after 200 images.');
 viewer_phase11_assert(!str_contains($batchRead, 'visitor_can_access_gallery('), 'Favourite state lookup must not be treated as source authorization.');
 
 // Route surface is deliberately small and private. Collections/shares remain absent.
@@ -190,7 +195,7 @@ viewer_phase11_assert(str_contains($publicGallery, 'viewer_favourites_for_image_
 viewer_phase11_assert(str_contains($publicGallery, 'render_viewer_favourite_form_html('), 'Normal public gallery cards must expose the minimal favourite control for authenticated viewers.');
 viewer_phase11_assert(str_contains($publicGallery, 'viewer_source_image_can_reference((int) $image[\'id\'])') && str_contains($publicGallery, '$viewerFavouriteRequiresSourceRecheck'), 'Dual Admin+viewer physical-gallery rendering must suppress favourite controls for rows visible only through administrator authority.');
 viewer_phase11_assert(str_contains($smartGalleries, 'viewer_favourites_for_image_ids(') && str_contains($smartGalleries, 'render_viewer_favourite_form_html('), 'Smart Gallery cards must use the same favourite state/control model.');
-viewer_phase11_assert(substr_count($smartGalleries, 'viewer_source_image_can_reference((int) $image[\'id\'])') >= 2 && str_contains($smartGalleries, 'current_user() !== null'), 'Dual Admin+viewer Smart Gallery cards and lightbox data must independently suppress favourite state for administrator-only source access.');
+viewer_phase11_assert(str_contains($smartGalleries, 'viewer_source_image_can_reference($imageId)') && str_contains($smartGalleries, 'viewer_source_image_can_reference((int) $image[\'id\'])') && substr_count($smartGalleries, 'current_user() !== null') >= 2, 'Dual Admin+viewer Smart Gallery cards and lightbox data must independently suppress favourite state for administrator-only source access.');
 viewer_phase11_assert(str_contains($publicLightbox, 'render_viewer_favourite_lightbox_form_html()'), 'Lightbox toolbar must expose the same viewer favourite mutation control.');
 viewer_phase11_assert(str_contains($lightboxJson, "'viewer_favourite'"), 'Normal gallery lightbox JSON must carry current viewer favourite state.');
 viewer_phase11_assert(str_contains($lightboxJson, 'viewer_source_image_can_reference((int) $image[\'id\'])') && str_contains($lightboxJson, '$viewerFavouriteRequiresSourceRecheck'), 'Dual Admin+viewer lightbox data must suppress favourite state for rows visible only through administrator authority.');

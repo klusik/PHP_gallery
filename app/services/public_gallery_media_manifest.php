@@ -36,8 +36,9 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+use function Gallery\Models\thumbnail_metadata_model_public_manifest_rows;
+
 use Throwable;
-use function Gallery\Core\db;
 use function Gallery\Core\image_public_asset_url_with_version;
 use function Gallery\Core\image_public_media_url;
 use function Gallery\Core\image_public_thumbnail_url;
@@ -105,30 +106,22 @@ function public_gallery_media_manifest_renderable_rows(array $imagesById, array 
 
     // $imageIds stores image ids for the batched metadata lookup.
     $imageIds = array_keys($imagesById);
-    // $imagePlaceholders stores placeholders for image ids.
-    $imagePlaceholders = implode(',', array_fill(0, count($imageIds), '?'));
-    // $sizePlaceholders stores placeholders for thumbnail sizes.
-    $sizePlaceholders = implode(',', array_fill(0, count($sizes), '?'));
     // $formats stores only generated formats allowed by the active compatibility policy.
     $formats = function_exists('Gallery\\Services\\thumbnail_policy_requested_formats') ? thumbnail_policy_requested_formats() : ['webp'];
     $formats = array_values(array_intersect(['jpg', 'webp'], $formats));
     if (!$formats) {
         return [];
     }
-    // $formatPlaceholders stores placeholders for policy-approved formats.
-    $formatPlaceholders = implode(',', array_fill(0, count($formats), '?'));
-    // $params stores bound image ids, sizes, and internally whitelisted formats.
-    $params = array_merge($imageIds, array_values($sizes), $formats);
-
-    // $derivativeVersionSelect stores a compatible staleness marker for compact and older metadata schemas.
-    $derivativeVersionSelect = thumbnail_metadata_variant_column_exists('derivative_version') ? 'derivative_version' : '0 AS derivative_version';
 
     try {
         // $metadataRows stores the measured database result for this manifest-only lookup.
-        $metadataRows = public_render_profile_db('media_manifest_query_metadata', static function () use ($imagePlaceholders, $sizePlaceholders, $formatPlaceholders, $derivativeVersionSelect, $params): array {
-            $stmt = db()->prepare("SELECT image_id, size_px, format, width, height, status, $derivativeVersionSelect FROM image_thumbnail_variants WHERE image_id IN ($imagePlaceholders) AND size_px IN ($sizePlaceholders) AND format IN ($formatPlaceholders) AND status = 'valid' ORDER BY image_id, size_px, format");
-            $stmt->execute($params);
-            return $stmt->fetchAll();
+        $metadataRows = public_render_profile_db('media_manifest_query_metadata', static function () use ($imageIds, $sizes, $formats): array {
+            return thumbnail_metadata_model_public_manifest_rows(
+                $imageIds,
+                array_values($sizes),
+                $formats,
+                thumbnail_metadata_variant_column_exists('derivative_version')
+            );
         });
     } catch (Throwable) {
         return [];

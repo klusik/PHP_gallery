@@ -39,9 +39,9 @@ namespace Gallery\Services;
 
 use RuntimeException;
 use Throwable;
+use function Gallery\Models\image_model_rows_by_ids;
 use function Gallery\Core\cms_config;
 use function Gallery\Core\cms_runtime_limit;
-use function Gallery\Core\db;
 use function Gallery\Core\gallery_public_url;
 use function Gallery\Core\is_dng_image_path;
 use function Gallery\Core\is_supported_image_path;
@@ -102,14 +102,7 @@ function browser_upload_image_rows_by_ids(array $imageIds): array
     if (!$ids) {
         return [];
     }
-    $placeholders = implode(',', array_fill(0, count($ids), '?'));
-    $stmt = db()->prepare('SELECT * FROM images WHERE id IN (' . $placeholders . ')');
-    $stmt->execute($ids);
-    $rows = [];
-    foreach ($stmt->fetchAll() as $row) {
-        $rows[(int) ($row['id'] ?? 0)] = $row;
-    }
-    return $rows;
+    return image_model_rows_by_ids($ids);
 }
 
 /**

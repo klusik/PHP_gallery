@@ -16,6 +16,9 @@
  *   - Require decoded-image replacement to remeasure the active viewport
  *   - Preserve the shared navigation path for arrows, strip, swipe, and slideshow
  *
+ * Author:
+ *   Rudolf Klusal
+ *
  * Last Updated:
  *   2026-08-16
  */

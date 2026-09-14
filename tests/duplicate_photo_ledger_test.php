@@ -96,15 +96,17 @@ assert_duplicate_ledger_true(str_contains($migrationSource, 'REFERENCES images(i
 assert_duplicate_ledger_true(str_contains($migrationSource, 'REFERENCES galleries(id) ON DELETE CASCADE'), 'gallery ledger rows are removed automatically when referenced galleries are deleted');
 
 $serviceSource = file_get_contents(__DIR__ . '/../app/services/duplicate_photo_ledger.php');
-if (!is_string($serviceSource)) {
-    throw new RuntimeException('Could not read Duplicate Photo Detector ledger service source.');
+$modelSource = file_get_contents(__DIR__ . '/../app/models/duplicate_photo_ledger.php');
+if (!is_string($serviceSource) || !is_string($modelSource)) {
+    throw new RuntimeException('Could not read Duplicate Photo Detector ledger MVC sources.');
 }
-assert_duplicate_ledger_true(str_contains($serviceSource, "db()->prepare("), 'ledger writes and reads use prepared statements');
-assert_duplicate_ledger_true(str_contains($serviceSource, 'INSERT IGNORE INTO duplicate_photo_ledger_pairs'), 'pair decisions persist only to the dedicated ledger table');
-assert_duplicate_ledger_true(str_contains($serviceSource, 'INSERT IGNORE INTO duplicate_photo_ledger_galleries'), 'gallery decisions persist only to the dedicated ledger table');
-assert_duplicate_ledger_same(false, preg_match('/\\b(?:UPDATE|DELETE\\s+FROM|INSERT\\s+(?:IGNORE\\s+)?INTO|REPLACE\\s+INTO)\\s+(?:images|galleries)\\b/i', $serviceSource) === 1, 'ledger service does not mutate image or gallery records');
-assert_duplicate_ledger_true(str_contains($serviceSource, 'DELETE FROM duplicate_photo_ledger_pairs WHERE user_id = ?'), 'clear ledger deletes only the current administrator pair rules');
-assert_duplicate_ledger_true(str_contains($serviceSource, 'DELETE FROM duplicate_photo_ledger_galleries WHERE user_id = ?'), 'clear ledger deletes only the current administrator gallery rules');
+assert_duplicate_ledger_true(str_contains($modelSource, "db()->prepare("), 'ledger model writes and reads use prepared statements');
+assert_duplicate_ledger_true(str_contains($modelSource, 'INSERT IGNORE INTO duplicate_photo_ledger_pairs'), 'pair decisions persist only to the dedicated ledger table');
+assert_duplicate_ledger_true(str_contains($modelSource, 'INSERT IGNORE INTO duplicate_photo_ledger_galleries'), 'gallery decisions persist only to the dedicated ledger table');
+assert_duplicate_ledger_same(false, preg_match('/\b(?:UPDATE|DELETE\s+FROM|INSERT\s+(?:IGNORE\s+)?INTO|REPLACE\s+INTO)\s+(?:images|galleries)\b/i', $modelSource) === 1, 'ledger model does not mutate image or gallery records');
+assert_duplicate_ledger_true(str_contains($modelSource, 'DELETE FROM duplicate_photo_ledger_pairs WHERE user_id = ?'), 'clear ledger deletes only the current administrator pair rules');
+assert_duplicate_ledger_true(str_contains($modelSource, 'DELETE FROM duplicate_photo_ledger_galleries WHERE user_id = ?'), 'clear ledger deletes only the current administrator gallery rules');
+assert_duplicate_ledger_same(false, str_contains($serviceSource, 'db()->'), 'ledger service delegates persistence to the model layer');
 
 $maintenanceSource = file_get_contents(__DIR__ . '/../app/services/database_maintenance.php');
 if (!is_string($maintenanceSource)) {

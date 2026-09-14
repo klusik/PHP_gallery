@@ -36,15 +36,26 @@ declare(strict_types=1);
 
 namespace Gallery\Views;
 
-use function Gallery\Services\simbrief_description_plain_text;
 
 /**
- * Handle view simbrief description markdown.
+ * Normalize SimBrief text for presentation without depending on the service layer.
  *
- * Used by server-rendered view helpers.
+ * @param string $value Raw SimBrief text.
+ * @return string Plain normalized presentation text.
+ */
+function view_simbrief_description_plain_text(string $value): string
+{
+    $value = html_entity_decode($value, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    $value = (string) preg_replace('/[\x00-\x1F\x7F]+/u', ' ', $value);
+    $value = (string) preg_replace('/\s+/u', ' ', $value);
+    return trim($value);
+}
+
+/**
+ * Build an editable Markdown gallery description from normalized SimBrief details.
  *
- * @param array $details Details value.
- * @return string Text result for the caller.
+ * @param array<string,mixed> $details Normalized SimBrief flight details.
+ * @return string Generated Markdown description draft.
  */
 function view_simbrief_description_markdown(array $details): string
 {
@@ -156,7 +167,7 @@ function view_simbrief_indefinite_article(string $label): string
  */
 function view_simbrief_markdown_text(string $value): string
 {
-    $value = simbrief_description_plain_text($value);
+    $value = view_simbrief_description_plain_text($value);
     $value = str_replace(['\\', '`', '*', '_', '[', ']', '<', '>'], ['\\\\', '\`', '\*', '\_', '\[', '\]', '', ''], $value);
     return trim($value);
 }
@@ -171,7 +182,7 @@ function view_simbrief_markdown_text(string $value): string
  */
 function view_simbrief_markdown_code(string $value): string
 {
-    $value = simbrief_description_plain_text($value);
+    $value = view_simbrief_description_plain_text($value);
     $value = str_replace('`', "'", $value);
     return trim($value);
 }
@@ -206,7 +217,7 @@ function view_simbrief_place_label(string $name, string $code): string
  */
 function view_simbrief_shorten(string $value, int $limit): string
 {
-    $value = simbrief_description_plain_text($value);
+    $value = view_simbrief_description_plain_text($value);
     if ($limit <= 0) {
         return '';
     }

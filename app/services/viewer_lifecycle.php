@@ -16,6 +16,9 @@
  *   - Stage and confirm verified viewer email changes without mail transport
  *   - Delete viewer accounts atomically while reconciling durable account capacity
  *
+ * Author:
+ *   Rudolf Klusal
+ *
  * Notes:
  *   - Keep comments and docstrings intact when modifying this file.
  *   - No Phase 0.7 route exposes these functions.
@@ -31,10 +34,29 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 use InvalidArgumentException;
-use PDOException;
 use RuntimeException;
 use Throwable;
-use function Gallery\Core\db;
+use Gallery\Models\ViewerLifecycleEmailConflict;
+use function Gallery\Core\viewer_identity_session_get;
+use function Gallery\Core\viewer_identity_session_regenerate;
+use function Gallery\Core\viewer_identity_session_set;
+use function Gallery\Core\viewer_identity_session_unset;
+use function Gallery\Models\viewer_lifecycle_model_account_delete;
+use function Gallery\Models\viewer_lifecycle_model_account_get;
+use function Gallery\Models\viewer_lifecycle_model_account_lock;
+use function Gallery\Models\viewer_lifecycle_model_account_mark_deleting;
+use function Gallery\Models\viewer_lifecycle_model_email_change_cancel_active;
+use function Gallery\Models\viewer_lifecycle_model_email_change_consume;
+use function Gallery\Models\viewer_lifecycle_model_email_change_insert;
+use function Gallery\Models\viewer_lifecycle_model_email_change_inspect;
+use function Gallery\Models\viewer_lifecycle_model_email_change_lock;
+use function Gallery\Models\viewer_lifecycle_model_email_conflict_exists;
+use function Gallery\Models\viewer_lifecycle_model_email_update;
+use function Gallery\Models\viewer_lifecycle_model_password_update;
+use function Gallery\Models\viewer_lifecycle_model_revoke_after_email_change;
+use function Gallery\Models\viewer_lifecycle_model_revoke_after_password_change;
+use function Gallery\Models\viewer_lifecycle_model_revoke_created_shares;
+use function Gallery\Models\viewer_lifecycle_model_transaction;
 use function Gallery\Core\now_sql;
 
 /**
@@ -133,7 +155,7 @@ function viewer_reauthentication_lifetime_seconds(): int
  */
 function viewer_clear_reauthentication(): void
 {
-    unset($_SESSION[viewer_reauthentication_namespace_key()]);
+    viewer_identity_session_unset(viewer_reauthentication_namespace_key());
 }
 
 /**
@@ -151,13 +173,13 @@ function viewer_reauthentication_establish(array $viewer): void
     }
 
     $now = time();
-    $_SESSION[viewer_reauthentication_namespace_key()] = [
+    viewer_identity_session_set(viewer_reauthentication_namespace_key(), [
         'account_id' => $accountId,
         'security_version' => $securityVersion,
         'viewer_session_id' => $viewerSessionId,
         'authenticated_at' => $now,
         'expires_at' => $now + viewer_reauthentication_lifetime_seconds(),
-    ];
+    ]);
 }
 
 /**
@@ -176,7 +198,7 @@ function viewer_reauthentication_status(): array
         'expires_at' => null,
     ];
 
-    $state = $_SESSION[viewer_reauthentication_namespace_key()] ?? null;
+    $state = viewer_identity_session_get(viewer_reauthentication_namespace_key());
     if (!is_array($state)) {
         return $failure('missing');
     }
@@ -258,9 +280,7 @@ function viewer_reauthenticate_password(string $password, ?string $clientIp = nu
         return ['reauthenticated' => false, 'reason' => (string) $rateDecision['reason']];
     }
 
-    $stmt = db()->prepare('SELECT * FROM viewer_accounts WHERE id = ? LIMIT 1');
-    $stmt->execute([(int) $viewer['id']]);
-    $account = $stmt->fetch();
+    $account = viewer_lifecycle_model_account_get((int) $viewer['id']);
     if (!$account
         || !viewer_account_can_authenticate($account)
         || (int) $account['security_version'] !== (int) $viewer['security_version']
@@ -315,69 +335,34 @@ function viewer_change_password(string $newPassword, ?string $currentPassword = 
         return ['changed' => false, 'reason' => 'password_policy'];
     }
 
-    $pdo = db();
-    $ownsTransaction = !$pdo->inTransaction();
-    if ($ownsTransaction) {
-        $pdo->beginTransaction();
-    }
-    try {
-        $accountStmt = $pdo->prepare('SELECT * FROM viewer_accounts WHERE id = ? LIMIT 1 FOR UPDATE');
-        $accountStmt->execute([(int) $viewer['id']]);
-        $account = $accountStmt->fetch();
+    $result = viewer_lifecycle_model_transaction(static function () use ($viewer, $newPassword): array {
+        $account = viewer_lifecycle_model_account_lock((int) $viewer['id']);
         if (!$account
             || !viewer_account_can_authenticate($account)
             || (int) $account['security_version'] !== (int) $viewer['security_version']) {
-            if ($ownsTransaction) {
-                $pdo->commit();
-            }
-            viewer_session_clear();
             return ['changed' => false, 'reason' => 'authentication_state_changed'];
         }
 
         $now = now_sql();
         $newSecurityVersion = (int) $account['security_version'] + 1;
-        $update = $pdo->prepare(
-            'UPDATE viewer_accounts SET password_hash = ?, must_change_password = 0, password_changed_at = ?, security_version = ?, updated_at = ? '
-            . 'WHERE id = ? AND security_version = ?'
-        );
-        $update->execute([
-            viewer_password_hash($newPassword),
-            $now,
-            $newSecurityVersion,
-            $now,
+        viewer_lifecycle_model_password_update(
             (int) $account['id'],
             (int) $account['security_version'],
-        ]);
-        if ($update->rowCount() !== 1) {
-            throw new RuntimeException('Viewer password change lost the account security-version race.');
-        }
-
-        $pdo->prepare('UPDATE viewer_password_reset_tokens SET invalidated_at = ? WHERE viewer_account_id = ? AND consumed_at IS NULL AND invalidated_at IS NULL')
-            ->execute([$now, (int) $account['id']]);
-        $pdo->prepare('UPDATE viewer_email_verification_tokens SET invalidated_at = ? WHERE viewer_account_id = ? AND consumed_at IS NULL AND invalidated_at IS NULL')
-            ->execute([$now, (int) $account['id']]);
-        $pdo->prepare('UPDATE viewer_email_change_requests SET cancelled_at = ? WHERE viewer_account_id = ? AND consumed_at IS NULL AND cancelled_at IS NULL')
-            ->execute([$now, (int) $account['id']]);
-        $pdo->prepare('UPDATE viewer_sessions SET revoked_at = ? WHERE viewer_account_id = ? AND revoked_at IS NULL')
-            ->execute([$now, (int) $account['id']]);
-        $pdo->prepare('UPDATE viewer_remember_tokens SET revoked_at = ? WHERE viewer_account_id = ? AND revoked_at IS NULL')
-            ->execute([$now, (int) $account['id']]);
-
+            $newSecurityVersion,
+            viewer_password_hash($newPassword),
+            $now
+        );
+        viewer_lifecycle_model_revoke_after_password_change((int) $account['id'], $now);
         viewer_security_event_record('viewer.password_changed', (int) $account['id'], 'success', [
             'security_version' => $newSecurityVersion,
         ]);
-
-        if ($ownsTransaction) {
-            $pdo->commit();
-        }
-        viewer_session_clear();
         return ['changed' => true, 'reason' => 'password_changed'];
-    } catch (Throwable $exception) {
-        if ($ownsTransaction && $pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
-        throw $exception;
+    });
+
+    if ($result['changed'] || $result['reason'] === 'authentication_state_changed') {
+        viewer_session_clear();
     }
+    return $result;
 }
 
 /**
@@ -431,7 +416,7 @@ function viewer_email_change_confirmation_context(
  */
 function viewer_email_change_confirmation_clear(): void
 {
-    unset($_SESSION[viewer_email_change_confirmation_namespace_key()]);
+    viewer_identity_session_unset(viewer_email_change_confirmation_namespace_key());
 }
 
 /**
@@ -480,10 +465,7 @@ function viewer_email_change_request_start(string $newEmail, ?string $clientIp =
     if (hash_equals((string) $viewer['normalized_email'], $normalizedEmail)) {
         return $failure('email_unchanged');
     }
-
-    $existing = db()->prepare('SELECT id FROM viewer_accounts WHERE normalized_email = ? AND id <> ? LIMIT 1');
-    $existing->execute([$normalizedEmail, (int) $viewer['id']]);
-    if ($existing->fetchColumn() !== false) {
+    if (viewer_lifecycle_model_email_conflict_exists($normalizedEmail, (int) $viewer['id'])) {
         return $failure('email_unavailable');
     }
 
@@ -492,48 +474,23 @@ function viewer_email_change_request_start(string $newEmail, ?string $clientIp =
         return $failure($mailDecision['reason']);
     }
 
-    $pdo = db();
-    $ownsTransaction = !$pdo->inTransaction();
-    if ($ownsTransaction) {
-        $pdo->beginTransaction();
-    }
-    try {
-        $accountStmt = $pdo->prepare('SELECT * FROM viewer_accounts WHERE id = ? LIMIT 1 FOR UPDATE');
-        $accountStmt->execute([(int) $viewer['id']]);
-        $account = $accountStmt->fetch();
+    return viewer_lifecycle_model_transaction(static function () use ($viewer, $newEmail, $normalizedEmail, $failure): array {
+        $account = viewer_lifecycle_model_account_lock((int) $viewer['id']);
         if (!$account
             || !viewer_account_can_authenticate($account)
             || (int) $account['security_version'] !== (int) $viewer['security_version']) {
-            if ($ownsTransaction) {
-                $pdo->commit();
-            }
             return $failure('authentication_state_changed');
         }
-
-        $conflict = $pdo->prepare('SELECT id FROM viewer_accounts WHERE normalized_email = ? AND id <> ? LIMIT 1');
-        $conflict->execute([$normalizedEmail, (int) $account['id']]);
-        if ($conflict->fetchColumn() !== false) {
-            if ($ownsTransaction) {
-                $pdo->commit();
-            }
+        if (viewer_lifecycle_model_email_conflict_exists($normalizedEmail, (int) $account['id'])) {
             return $failure('email_unavailable');
         }
 
         $now = now_sql();
-        $pdo->prepare(
-            'UPDATE viewer_email_change_requests SET cancelled_at = ? '
-            . 'WHERE viewer_account_id = ? AND consumed_at IS NULL AND cancelled_at IS NULL'
-        )->execute([$now, (int) $account['id']]);
-
+        viewer_lifecycle_model_email_change_cancel_active((int) $account['id'], $now);
         $selector = security_token_selector_generate(18);
         $verificationToken = security_opaque_token_generate(32);
         $expiresAt = date('Y-m-d H:i:s', time() + viewer_email_change_request_lifetime_seconds());
-        $insert = $pdo->prepare(
-            'INSERT INTO viewer_email_change_requests '
-            . '(viewer_account_id, new_email, normalized_new_email, selector, verification_token_hash, security_version, created_at, expires_at) '
-            . 'VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-        );
-        $insert->execute([
+        $requestId = viewer_lifecycle_model_email_change_insert(
             (int) $account['id'],
             trim($newEmail),
             $normalizedEmail,
@@ -541,21 +498,13 @@ function viewer_email_change_request_start(string $newEmail, ?string $clientIp =
             security_authority_token_hash($verificationToken),
             (int) $account['security_version'],
             $now,
-            $expiresAt,
-        ]);
-        $requestId = (int) $pdo->lastInsertId();
-        if ($requestId <= 0) {
-            throw new RuntimeException('Viewer email-change request was not created.');
-        }
+            $expiresAt
+        );
 
         viewer_email_change_confirmation_clear();
         viewer_security_event_record('viewer.email_change_requested', (int) $account['id'], 'success', [
             'security_version' => (int) $account['security_version'],
         ]);
-
-        if ($ownsTransaction) {
-            $pdo->commit();
-        }
         return [
             'requested' => true,
             'reason' => 'email_change_requested',
@@ -564,12 +513,7 @@ function viewer_email_change_request_start(string $newEmail, ?string $clientIp =
             'verification_token' => $verificationToken,
             'expires_at' => $expiresAt,
         ];
-    } catch (Throwable $exception) {
-        if ($ownsTransaction && $pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
-        throw $exception;
-    }
+    });
 }
 
 /**
@@ -588,14 +532,7 @@ function viewer_email_change_request_inspect(string $verificationToken): ?array
         return null;
     }
 
-    $stmt = db()->prepare(
-        'SELECT vecr.*, va.status AS account_status, va.password_hash, va.email_verified_at, '
-        . 'va.security_version AS account_security_version '
-        . 'FROM viewer_email_change_requests vecr INNER JOIN viewer_accounts va ON va.id = vecr.viewer_account_id '
-        . 'WHERE vecr.verification_token_hash = ? LIMIT 1'
-    );
-    $stmt->execute([security_authority_token_hash($verificationToken)]);
-    $row = $stmt->fetch();
+    $row = viewer_lifecycle_model_email_change_inspect(security_authority_token_hash($verificationToken));
     $expiry = $row ? strtotime((string) ($row['expires_at'] ?? '')) : false;
     $account = $row ? [
         'status' => $row['account_status'] ?? '',
@@ -659,17 +596,17 @@ function viewer_email_change_authorize(string $verificationToken): bool
         return false;
     }
 
-    if (session_status() === PHP_SESSION_ACTIVE && !session_regenerate_id(true)) {
+    if (!viewer_identity_session_regenerate()) {
         throw new RuntimeException('Viewer email-change session rotation failed.');
     }
-    $_SESSION[viewer_email_change_confirmation_namespace_key()] = [
+    viewer_identity_session_set(viewer_email_change_confirmation_namespace_key(), [
         'request_id' => $inspected['request_id'],
         'account_id' => $inspected['account_id'],
         'security_version' => $inspected['security_version'],
         'token_expires_at' => $inspected['expires_at'],
         'expires_at' => min($tokenExpiry, time() + viewer_email_change_confirmation_lifetime_seconds()),
         'context' => $inspected['context'],
-    ];
+    ]);
     return true;
 }
 
@@ -680,7 +617,7 @@ function viewer_email_change_authorize(string $verificationToken): bool
  */
 function viewer_email_change_confirmation_state(): ?array
 {
-    $state = $_SESSION[viewer_email_change_confirmation_namespace_key()] ?? null;
+    $state = viewer_identity_session_get(viewer_email_change_confirmation_namespace_key());
     if (!is_array($state)) {
         return null;
     }
@@ -742,126 +679,70 @@ function viewer_email_change_confirm(): array
         return ['changed' => false, 'reason' => 'confirmation_state_invalid'];
     }
 
-    $pdo = db();
-    $ownsTransaction = !$pdo->inTransaction();
-    if ($ownsTransaction) {
-        $pdo->beginTransaction();
-    }
     try {
-        $accountStmt = $pdo->prepare('SELECT * FROM viewer_accounts WHERE id = ? LIMIT 1 FOR UPDATE');
-        $accountStmt->execute([$state['account_id']]);
-        $account = $accountStmt->fetch();
-        if (!$account
-            || !viewer_account_can_authenticate($account)
-            || (int) $account['security_version'] !== $state['security_version']) {
-            if ($ownsTransaction) {
-                $pdo->commit();
+        $result = viewer_lifecycle_model_transaction(static function () use ($state): array {
+            $account = viewer_lifecycle_model_account_lock($state['account_id']);
+            if (!$account
+                || !viewer_account_can_authenticate($account)
+                || (int) $account['security_version'] !== $state['security_version']) {
+                return ['changed' => false, 'reason' => 'confirmation_state_invalid', 'clear_session' => true];
             }
-            viewer_session_clear();
-            return ['changed' => false, 'reason' => 'confirmation_state_invalid'];
-        }
 
-        $requestStmt = $pdo->prepare('SELECT * FROM viewer_email_change_requests WHERE id = ? LIMIT 1 FOR UPDATE');
-        $requestStmt->execute([$state['request_id']]);
-        $request = $requestStmt->fetch();
-        $expiry = $request ? strtotime((string) ($request['expires_at'] ?? '')) : false;
-        $context = $request ? viewer_email_change_confirmation_context(
-            (int) $request['id'],
-            (int) $request['viewer_account_id'],
-            (int) $request['security_version'],
-            (string) $request['expires_at'],
-            (string) $request['verification_token_hash']
-        ) : '';
-        if (!$request
-            || (int) $request['viewer_account_id'] !== $state['account_id']
-            || (int) $request['security_version'] !== $state['security_version']
-            || !empty($request['consumed_at'])
-            || !empty($request['cancelled_at'])
-            || $expiry === false
-            || $expiry <= time()
-            || $context === ''
-            || !hash_equals($context, $state['context'])) {
-            if ($ownsTransaction) {
-                $pdo->commit();
+            $request = viewer_lifecycle_model_email_change_lock($state['request_id']);
+            $expiry = $request ? strtotime((string) ($request['expires_at'] ?? '')) : false;
+            $context = $request ? viewer_email_change_confirmation_context(
+                (int) $request['id'],
+                (int) $request['viewer_account_id'],
+                (int) $request['security_version'],
+                (string) $request['expires_at'],
+                (string) $request['verification_token_hash']
+            ) : '';
+            if (!$request
+                || (int) $request['viewer_account_id'] !== $state['account_id']
+                || (int) $request['security_version'] !== $state['security_version']
+                || !empty($request['consumed_at'])
+                || !empty($request['cancelled_at'])
+                || $expiry === false
+                || $expiry <= time()
+                || $context === ''
+                || !hash_equals($context, $state['context'])) {
+                return ['changed' => false, 'reason' => 'confirmation_state_invalid', 'clear_confirmation' => true];
             }
-            viewer_email_change_confirmation_clear();
-            return ['changed' => false, 'reason' => 'confirmation_state_invalid'];
-        }
-
-        $conflict = $pdo->prepare('SELECT id FROM viewer_accounts WHERE normalized_email = ? AND id <> ? LIMIT 1');
-        $conflict->execute([(string) $request['normalized_new_email'], (int) $account['id']]);
-        if ($conflict->fetchColumn() !== false) {
-            if ($ownsTransaction) {
-                $pdo->commit();
+            if (viewer_lifecycle_model_email_conflict_exists((string) $request['normalized_new_email'], (int) $account['id'])) {
+                return ['changed' => false, 'reason' => 'email_unavailable', 'clear_confirmation' => true];
             }
-            viewer_email_change_confirmation_clear();
-            return ['changed' => false, 'reason' => 'email_unavailable'];
-        }
 
-        $now = now_sql();
-        $newSecurityVersion = (int) $account['security_version'] + 1;
-        $update = $pdo->prepare(
-            'UPDATE viewer_accounts SET email = ?, normalized_email = ?, email_verified_at = ?, security_version = ?, updated_at = ? '
-            . 'WHERE id = ? AND security_version = ?'
-        );
-        $update->execute([
-            (string) $request['new_email'],
-            (string) $request['normalized_new_email'],
-            $now,
-            $newSecurityVersion,
-            $now,
-            (int) $account['id'],
-            (int) $account['security_version'],
-        ]);
-        if ($update->rowCount() !== 1) {
-            throw new RuntimeException('Viewer email change lost the account security-version race.');
-        }
-
-        $consume = $pdo->prepare(
-            'UPDATE viewer_email_change_requests SET consumed_at = ? '
-            . 'WHERE id = ? AND consumed_at IS NULL AND cancelled_at IS NULL'
-        );
-        $consume->execute([$now, (int) $request['id']]);
-        if ($consume->rowCount() !== 1) {
-            throw new RuntimeException('Viewer email-change request consumption lost a concurrent race.');
-        }
-        $pdo->prepare(
-            'UPDATE viewer_email_change_requests SET cancelled_at = ? '
-            . 'WHERE viewer_account_id = ? AND id <> ? AND consumed_at IS NULL AND cancelled_at IS NULL'
-        )->execute([$now, (int) $account['id'], (int) $request['id']]);
-        $pdo->prepare('UPDATE viewer_password_reset_tokens SET invalidated_at = ? WHERE viewer_account_id = ? AND consumed_at IS NULL AND invalidated_at IS NULL')
-            ->execute([$now, (int) $account['id']]);
-        $pdo->prepare('UPDATE viewer_email_verification_tokens SET invalidated_at = ? WHERE viewer_account_id = ? AND consumed_at IS NULL AND invalidated_at IS NULL')
-            ->execute([$now, (int) $account['id']]);
-        $pdo->prepare('UPDATE viewer_sessions SET revoked_at = ? WHERE viewer_account_id = ? AND revoked_at IS NULL')
-            ->execute([$now, (int) $account['id']]);
-        $pdo->prepare('UPDATE viewer_remember_tokens SET revoked_at = ? WHERE viewer_account_id = ? AND revoked_at IS NULL')
-            ->execute([$now, (int) $account['id']]);
-
-        viewer_security_event_record('viewer.email_change_confirmed', (int) $account['id'], 'success', [
-            'security_version' => $newSecurityVersion,
-        ]);
-
-        if ($ownsTransaction) {
-            $pdo->commit();
-        }
-        viewer_session_clear();
-        return ['changed' => true, 'reason' => 'email_changed'];
-    } catch (PDOException $exception) {
-        if ($ownsTransaction && $pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
-        if ((string) $exception->getCode() === '23000') {
-            viewer_email_change_confirmation_clear();
-            return ['changed' => false, 'reason' => 'email_unavailable'];
-        }
-        throw $exception;
-    } catch (Throwable $exception) {
-        if ($ownsTransaction && $pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
-        throw $exception;
+            $now = now_sql();
+            $newSecurityVersion = (int) $account['security_version'] + 1;
+            viewer_lifecycle_model_email_update(
+                (int) $account['id'],
+                (int) $account['security_version'],
+                $newSecurityVersion,
+                (string) $request['new_email'],
+                (string) $request['normalized_new_email'],
+                $now
+            );
+            viewer_lifecycle_model_email_change_consume((int) $request['id'], $now);
+            viewer_lifecycle_model_email_change_cancel_active((int) $account['id'], $now, (int) $request['id']);
+            viewer_lifecycle_model_revoke_after_email_change((int) $account['id'], $now);
+            viewer_security_event_record('viewer.email_change_confirmed', (int) $account['id'], 'success', [
+                'security_version' => $newSecurityVersion,
+            ]);
+            return ['changed' => true, 'reason' => 'email_changed'];
+        });
+    } catch (ViewerLifecycleEmailConflict) {
+        viewer_email_change_confirmation_clear();
+        return ['changed' => false, 'reason' => 'email_unavailable'];
     }
+
+    if (!empty($result['clear_confirmation'])) {
+        viewer_email_change_confirmation_clear();
+    }
+    if (!empty($result['clear_session']) || !empty($result['changed'])) {
+        viewer_session_clear();
+    }
+    unset($result['clear_confirmation'], $result['clear_session']);
+    return $result;
 }
 
 /**
@@ -894,68 +775,35 @@ function viewer_account_delete(): array
         return ['deleted' => false, 'reason' => 'reauthentication_required'];
     }
 
-    $pdo = db();
-    $ownsTransaction = !$pdo->inTransaction();
-    if ($ownsTransaction) {
-        $pdo->beginTransaction();
-    }
-    try {
-        $accountStmt = $pdo->prepare('SELECT * FROM viewer_accounts WHERE id = ? LIMIT 1 FOR UPDATE');
-        $accountStmt->execute([(int) $viewer['id']]);
-        $account = $accountStmt->fetch();
+    $result = viewer_lifecycle_model_transaction(static function () use ($viewer): array {
+        $account = viewer_lifecycle_model_account_lock((int) $viewer['id']);
         if (!$account
             || !viewer_account_can_authenticate($account)
             || (int) $account['security_version'] !== (int) $viewer['security_version']) {
-            if ($ownsTransaction) {
-                $pdo->commit();
-            }
-            viewer_session_clear();
             return ['deleted' => false, 'reason' => 'authentication_state_changed'];
         }
 
         viewer_account_capacity_lock();
         viewer_account_capacity_recount_locked();
-
         $now = now_sql();
         $invalidatedSecurityVersion = (int) $account['security_version'] + 1;
-        $invalidate = $pdo->prepare(
-            'UPDATE viewer_accounts SET security_version = ?, updated_at = ? WHERE id = ? AND security_version = ?'
-        );
-        $invalidate->execute([
-            $invalidatedSecurityVersion,
-            $now,
+        viewer_lifecycle_model_account_mark_deleting(
             (int) $account['id'],
             (int) $account['security_version'],
-        ]);
-        if ($invalidate->rowCount() !== 1) {
-            throw new RuntimeException('Viewer deletion lost the account security-version race.');
-        }
-
-        $pdo->prepare(
-            'UPDATE viewer_collection_share_tokens SET revoked_at = ? '
-            . 'WHERE created_by_viewer_account_id = ? AND revoked_at IS NULL'
-        )->execute([$now, (int) $account['id']]);
-
+            $invalidatedSecurityVersion,
+            $now
+        );
+        viewer_lifecycle_model_revoke_created_shares((int) $account['id'], $now);
         viewer_security_event_record('viewer.account_deleted', (int) $account['id'], 'success', [
             'security_version' => $invalidatedSecurityVersion,
         ]);
-
-        $delete = $pdo->prepare('DELETE FROM viewer_accounts WHERE id = ?');
-        $delete->execute([(int) $account['id']]);
-        if ($delete->rowCount() !== 1) {
-            throw new RuntimeException('Viewer account deletion did not remove the locked account.');
-        }
-
+        viewer_lifecycle_model_account_delete((int) $account['id']);
         viewer_account_capacity_recount_locked();
-        if ($ownsTransaction) {
-            $pdo->commit();
-        }
-        viewer_session_clear();
         return ['deleted' => true, 'reason' => 'account_deleted'];
-    } catch (Throwable $exception) {
-        if ($ownsTransaction && $pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
-        throw $exception;
+    });
+
+    if ($result['deleted'] || $result['reason'] === 'authentication_state_changed') {
+        viewer_session_clear();
     }
+    return $result;
 }

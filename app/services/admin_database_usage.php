@@ -38,9 +38,11 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+use function Gallery\Models\admin_database_usage_model_analyze_table;
+use function Gallery\Models\admin_database_usage_model_current_database_name;
+use function Gallery\Models\admin_database_usage_model_table_rows;
 use Throwable;
 use function Gallery\Core\cms_config;
-use function Gallery\Core\db;
 
 /**
  * Return table names that represent gallery content or gallery-derived metadata.
@@ -140,8 +142,7 @@ function admin_database_usage_recompute_statistics(): array
     foreach ($tableNames as $tableName) {
         $tableStartedAt = microtime(true);
         try {
-            $stmt = db()->query('ANALYZE TABLE ' . admin_database_usage_quote_identifier($tableName));
-            $messages = $stmt ? $stmt->fetchAll() : [];
+            $messages = admin_database_usage_model_analyze_table($tableName);
             $tableReports[] = [
                 'table_name' => $tableName,
                 'status' => 'ok',
@@ -253,12 +254,14 @@ function admin_database_usage_normalize_analyze_messages(array $messages): array
 function admin_database_usage_current_database_name(): string
 {
     try {
-        $row = db()->query('SELECT DATABASE() AS database_name')->fetch() ?: [];
-        return trim((string) ($row['database_name'] ?? ''));
+        $databaseName = admin_database_usage_model_current_database_name();
+        if ($databaseName !== '') {
+            return $databaseName;
+        }
     } catch (Throwable) {
-        $config = cms_config();
-        return trim((string) ($config['database']['name'] ?? ''));
     }
+    $config = cms_config();
+    return trim((string) ($config['database']['name'] ?? ''));
 }
 
 /**
@@ -269,18 +272,7 @@ function admin_database_usage_current_database_name(): string
  */
 function admin_database_usage_table_rows(string $databaseName): array
 {
-    $stmt = db()->prepare(
-        'SELECT TABLE_NAME AS table_name,
-                COALESCE(TABLE_ROWS, 0) AS table_rows,
-                COALESCE(DATA_LENGTH, 0) AS data_bytes,
-                COALESCE(INDEX_LENGTH, 0) AS index_bytes,
-                COALESCE(ENGINE, "") AS engine
-           FROM information_schema.TABLES
-          WHERE TABLE_SCHEMA = :database_name
-          ORDER BY (COALESCE(DATA_LENGTH, 0) + COALESCE(INDEX_LENGTH, 0)) DESC, TABLE_NAME ASC'
-    );
-    $stmt->execute(['database_name' => $databaseName]);
-    return $stmt->fetchAll();
+    return admin_database_usage_model_table_rows($databaseName);
 }
 
 /**

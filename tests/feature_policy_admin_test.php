@@ -162,8 +162,10 @@ namespace {
     );
 
     $controllerSource = (string) file_get_contents($root . '/app/controllers/admin_features.php');
+    $viewSource = (string) file_get_contents($root . '/app/views/admin_features.php');
+    $featurePageSource = $controllerSource . "\n" . $viewSource;
     feature_policy_admin_assert(
-        str_contains($controllerSource, 'name="feature_registry_revision"')
+        str_contains($featurePageSource, 'name="feature_registry_revision"')
             && str_contains($controllerSource, 'feature_capability_admin_health_snapshot')
             && str_contains($controllerSource, "health['configured']")
             && str_contains($controllerSource, "health['effective']")

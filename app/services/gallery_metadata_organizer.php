@@ -42,7 +42,12 @@ use DateTimeImmutable;
 use InvalidArgumentException;
 use RuntimeException;
 use Throwable;
-use function Gallery\Core\db;
+use function Gallery\Models\gallery_model_direct_child_ids;
+use function Gallery\Models\gallery_model_find_child_by_title;
+use function Gallery\Models\image_model_count_for_gallery;
+use function Gallery\Models\image_model_metadata_organizer_candidate_count;
+use function Gallery\Models\image_model_metadata_organizer_candidates;
+use function Gallery\Models\image_model_metadata_organizer_rows;
 
 /**
  * Return true when image rows expose capture-date metadata needed by the organizer.
@@ -69,9 +74,7 @@ function gallery_metadata_organizer_source_image_count(int $galleryId): int
         return 0;
     }
 
-    $stmt = db()->prepare('SELECT COUNT(*) FROM images WHERE gallery_id = ?');
-    $stmt->execute([$galleryId]);
-    return (int) $stmt->fetchColumn();
+    return image_model_count_for_gallery($galleryId);
 }
 
 /**
@@ -192,9 +195,7 @@ function gallery_metadata_organizer_date_folder_name(string $date): string
  */
 function gallery_metadata_organizer_next_child_sort_order(int $parentGalleryId): int
 {
-    $stmt = db()->prepare('SELECT COALESCE(MAX(sort_order), 0) + 10 FROM galleries WHERE parent_id = ?');
-    $stmt->execute([$parentGalleryId]);
-    return (int) $stmt->fetchColumn();
+    return gallery_next_child_sort_order($parentGalleryId);
 }
 
 /**
@@ -206,10 +207,7 @@ function gallery_metadata_organizer_next_child_sort_order(int $parentGalleryId):
  */
 function gallery_metadata_organizer_find_child_by_title(int $parentGalleryId, string $title): ?array
 {
-    $stmt = db()->prepare('SELECT * FROM galleries WHERE parent_id = ? AND title = ? ORDER BY sort_order, id LIMIT 1');
-    $stmt->execute([$parentGalleryId, $title]);
-    $row = $stmt->fetch();
-    return is_array($row) ? $row : null;
+    return gallery_model_find_child_by_title($parentGalleryId, $title);
 }
 
 /**
@@ -239,16 +237,7 @@ function gallery_metadata_organizer_source_images_page(int $galleryId, int $offs
 
     $offset = max(0, $offset);
     $limit = max(0, $limit);
-    $sql = "SELECT id, gallery_id, relative_path, filename, title, exif_taken_at, sort_order, visibility
-        FROM images
-        WHERE gallery_id = ?
-        ORDER BY exif_taken_at, sort_order, filename, id";
-    if ($limit > 0) {
-        $sql .= ' LIMIT ' . $limit . ' OFFSET ' . $offset;
-    }
-    $stmt = db()->prepare($sql);
-    $stmt->execute([$galleryId]);
-    return $stmt->fetchAll();
+    return image_model_metadata_organizer_rows($galleryId, $offset, $limit);
 }
 
 /**
@@ -468,19 +457,10 @@ function gallery_metadata_organizer_candidate_images_batch(int $galleryId, array
 
     $options = gallery_metadata_organizer_options($input);
     $limit = max(1, min(100, $limit));
-    $stmt = db()->prepare("SELECT id, gallery_id, relative_path, filename, title, exif_taken_at, sort_order, visibility
-        FROM images
-        WHERE gallery_id = ?
-          AND exif_taken_at IS NOT NULL
-          AND TRIM(exif_taken_at) <> ''
-          AND SUBSTR(exif_taken_at, 1, 10) >= ?
-          AND SUBSTR(exif_taken_at, 1, 10) <= ?
-        ORDER BY exif_taken_at, sort_order, filename, id
-        LIMIT " . $limit);
-    $stmt->execute([$galleryId, $options['min_date'], $options['max_date']]);
+    $candidateImages = image_model_metadata_organizer_candidates($galleryId, $options['min_date'], $options['max_date'], $limit);
 
     $rows = [];
-    foreach ($stmt->fetchAll() as $image) {
+    foreach ($candidateImages as $image) {
         $takenAt = trim((string) ($image['exif_taken_at'] ?? ''));
         $date = substr($takenAt, 0, 10);
         $parsed = DateTimeImmutable::createFromFormat('!Y-m-d', $date);
@@ -506,15 +486,7 @@ function gallery_metadata_organizer_remaining_candidate_count(int $galleryId, ar
     }
 
     $options = gallery_metadata_organizer_options($input);
-    $stmt = db()->prepare("SELECT COUNT(*)
-        FROM images
-        WHERE gallery_id = ?
-          AND exif_taken_at IS NOT NULL
-          AND TRIM(exif_taken_at) <> ''
-          AND SUBSTR(exif_taken_at, 1, 10) >= ?
-          AND SUBSTR(exif_taken_at, 1, 10) <= ?");
-    $stmt->execute([$galleryId, $options['min_date'], $options['max_date']]);
-    return (int) $stmt->fetchColumn();
+    return image_model_metadata_organizer_candidate_count($galleryId, $options['min_date'], $options['max_date']);
 }
 
 /**
@@ -768,17 +740,7 @@ function gallery_metadata_organizer_finalize_move_maintenance(int $sourceGallery
     $affectedGalleryIds = array_values(array_unique(array_filter(array_merge([$sourceGalleryId], $directChildIds, array_map('intval', $destinationGalleryIds)), static fn (int $galleryId): bool => $galleryId > 0)));
 
     if (public_path_schema_ready()) {
-        $pdo = db();
-        $pdo->beginTransaction();
-        try {
-            $result['gallery_public_paths'] = regenerate_gallery_public_paths($pdo);
-            $pdo->commit();
-        } catch (Throwable $exception) {
-            if ($pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
-            throw $exception;
-        }
+        $result['gallery_public_paths'] = refresh_gallery_public_paths();
 
         foreach ($affectedGalleryIds as $galleryId) {
             $result['image_public_slugs'] += regenerate_gallery_image_public_slugs($galleryId);
@@ -807,9 +769,7 @@ function gallery_metadata_organizer_direct_child_ids(int $sourceGalleryId): arra
         return [];
     }
 
-    $stmt = db()->prepare('SELECT id FROM galleries WHERE parent_id = ? ORDER BY sort_order, id');
-    $stmt->execute([$sourceGalleryId]);
-    return array_values(array_map('intval', $stmt->fetchAll(\PDO::FETCH_COLUMN)));
+    return gallery_model_direct_child_ids($sourceGalleryId);
 }
 
 /**

@@ -68,7 +68,7 @@ use function Gallery\Services\viewer_password_reset_state_clear;
 use function Gallery\Services\viewer_reauthenticate_password;
 use function Gallery\Services\viewer_recent_reauthentication_required;
 use function Gallery\Services\viewer_registration_activation_clear;
-use function Gallery\Services\viewer_remember_cookie_clear;
+use function Gallery\Core\viewer_identity_remember_cookie_clear;
 use function Gallery\Services\viewer_security_event_record_best_effort;
 use function Gallery\Services\viewer_security_url;
 
@@ -151,11 +151,24 @@ function viewer_require_recent_reauthentication(string $destination): void
  */
 function viewer_clear_local_lifecycle_state(): void
 {
-    viewer_remember_cookie_clear();
+    viewer_identity_remember_cookie_clear();
     viewer_clear_reauthentication();
     viewer_registration_activation_clear();
     viewer_password_reset_state_clear();
     unset($_SESSION[viewer_csrf_namespace_key()]);
+}
+
+
+/**
+ * Capture one existing lifecycle presentation helper as a trusted HTML fragment.
+ *
+ * @param callable():void $renderer Presentation callback.
+ */
+function viewer_lifecycle_capture_html(callable $renderer): string
+{
+    ob_start();
+    $renderer();
+    return (string) ob_get_clean();
 }
 
 /**
@@ -207,18 +220,13 @@ function cms_viewer_account_reauth(): void
         $error = t('viewer.reauth.failed', 'Password confirmation failed. Check your password and try again.');
     }
 
-    render_header(t('viewer.reauth.title', 'Confirm viewer password'));
-    if ($error !== '') {
-        echo '<div class="notice">' . e($error) . '</div>';
-    }
-    echo '<section class="panel"><h1>' . e(t('viewer.reauth.title', 'Confirm viewer password')) . '</h1>';
-    echo '<p>' . e(t('viewer.reauth.help', 'Confirm your current viewer password before continuing with this sensitive account action.')) . '</p>';
-    echo '<form method="post" action="' . e(url_for('viewer_account_reauth')) . '" class="form-grid">' . viewer_csrf_field();
-    echo '<input type="hidden" name="destination" value="' . e($destination) . '">';
-    echo '<label>' . e(t('viewer.common.password', 'Password')) . '<input type="password" name="password" required autocomplete="current-password"></label>';
-    echo '<button type="submit">' . e(t('viewer.reauth.button', 'Confirm password')) . '</button></form>';
-    echo '<p class="muted"><a href="' . e(url_for('viewer_account')) . '">' . e(t('viewer.lifecycle.back_to_account', 'Back to account')) . '</a></p></section>';
-    render_footer();
+    \Gallery\Views\view_render_viewer_reauthentication([
+        'error' => $error,
+        'action_url' => url_for('viewer_account_reauth'),
+        'csrf_html' => viewer_csrf_field(),
+        'destination' => $destination,
+        'account_url' => url_for('viewer_account'),
+    ]);
 }
 
 /**
@@ -271,19 +279,14 @@ function cms_viewer_account_password(): void
         }
     }
 
-    render_header(t('viewer.password_change.title', 'Change viewer password'));
-    if ($error !== '') {
-        echo '<div class="notice">' . e($error) . '</div>';
-    }
-    echo '<section class="panel"><h1>' . e(t('viewer.password_change.title', 'Change viewer password')) . '</h1>';
-    echo '<p>' . e(t('viewer.password_change.help', 'Changing your password signs the viewer account out on all devices and revokes viewer remember-me credentials.')) . '</p>';
-    echo '<form method="post" class="form-grid">' . viewer_csrf_field();
-    echo '<label>' . e(t('viewer.password_change.new_password', 'New password')) . '<input type="password" name="password" required autocomplete="new-password"></label>';
-    echo '<label>' . e(t('viewer.common.confirm_password', 'Confirm password')) . '<input type="password" name="password_confirmation" required autocomplete="new-password"></label>';
-    viewer_render_password_policy_hint();
-    echo '<button type="submit">' . e(t('viewer.password_change.button', 'Change password')) . '</button></form>';
-    echo '<p class="muted"><a href="' . e(url_for('viewer_account')) . '">' . e(t('viewer.lifecycle.back_to_account', 'Back to account')) . '</a></p></section>';
-    render_footer();
+    \Gallery\Views\view_render_viewer_password_change([
+        'error' => $error,
+        'csrf_html' => viewer_csrf_field(),
+        'password_policy_html' => viewer_lifecycle_capture_html(static function (): void {
+            viewer_render_password_policy_hint();
+        }),
+        'account_url' => url_for('viewer_account'),
+    ]);
 }
 
 /**
@@ -355,21 +358,13 @@ function cms_viewer_account_email(): void
         }
     }
 
-    render_header(t('viewer.email_change.title', 'Change viewer email'));
-    if ($notice !== '') {
-        echo '<div class="notice">' . e($notice) . '</div>';
-    }
-    if ($error !== '') {
-        echo '<div class="notice">' . e($error) . '</div>';
-    }
-    echo '<section class="panel"><h1>' . e(t('viewer.email_change.title', 'Change viewer email')) . '</h1>';
-    echo '<p>' . e(t('viewer.email_change.current', 'Current verified email: {email}', ['email' => (string) $viewer['email']])) . '</p>';
-    echo '<p class="muted">' . e(t('viewer.email_change.help', 'The current email stays active until the new address is verified and explicitly confirmed.')) . '</p>';
-    echo '<form method="post" class="form-grid">' . viewer_csrf_field();
-    echo '<label>' . e(t('viewer.email_change.new_email', 'New email')) . '<input type="email" name="email" required autocomplete="email"></label>';
-    echo '<button type="submit">' . e(t('viewer.email_change.button', 'Send verification email')) . '</button></form>';
-    echo '<p class="muted"><a href="' . e(url_for('viewer_account')) . '">' . e(t('viewer.lifecycle.back_to_account', 'Back to account')) . '</a></p></section>';
-    render_footer();
+    \Gallery\Views\view_render_viewer_email_change([
+        'notice' => $notice,
+        'error' => $error,
+        'current_email' => (string) $viewer['email'],
+        'csrf_html' => viewer_csrf_field(),
+        'account_url' => url_for('viewer_account'),
+    ]);
 }
 
 /**
@@ -402,11 +397,9 @@ function cms_viewer_email_change_verify(): void
 
     $viewer = current_viewer();
     if ($viewer === null) {
-        render_header(t('viewer.email_change.verify_title', 'Verify new viewer email'));
-        echo '<section class="panel"><h1>' . e(t('viewer.email_change.verify_title', 'Verify new viewer email')) . '</h1>';
-        echo '<p>' . e(t('viewer.email_change.login_first', 'Sign in to the viewer account, then reopen this verification link to continue. The email has not changed.')) . '</p>';
-        echo '<p><a class="button" href="' . e(url_for('viewer_login')) . '">' . e(t('viewer.login.button', 'Sign in')) . '</a></p></section>';
-        render_footer();
+        \Gallery\Views\view_render_viewer_email_verify_login_required([
+            'login_url' => url_for('viewer_login'),
+        ]);
         return;
     }
     if ((int) $viewer['id'] !== (int) $inspected['account_id']
@@ -427,14 +420,12 @@ function cms_viewer_email_change_verify(): void
 
     viewer_require_recent_reauthentication('email_confirm');
 
-    render_header(t('viewer.email_change.verify_title', 'Verify new viewer email'));
-    echo '<section class="panel"><h1>' . e(t('viewer.email_change.verify_title', 'Verify new viewer email')) . '</h1>';
-    echo '<p>' . e(t('viewer.email_change.verify_help', 'The verification link is valid. Confirm the final email change below. This page has not changed the account email.')) . '</p>';
-    echo '<p><strong>' . e((string) $inspected['new_email']) . '</strong></p>';
-    echo '<form method="post" action="' . e(url_for('viewer_email_change_confirm')) . '" class="form-grid">' . viewer_csrf_field();
-    echo '<button type="submit">' . e(t('viewer.email_change.confirm_button', 'Confirm email change')) . '</button></form>';
-    echo '<p class="muted"><a href="' . e(url_for('viewer_account')) . '">' . e(t('viewer.lifecycle.back_to_account', 'Back to account')) . '</a></p></section>';
-    render_footer();
+    \Gallery\Views\view_render_viewer_email_verify([
+        'new_email' => (string) $inspected['new_email'],
+        'confirm_url' => url_for('viewer_email_change_confirm'),
+        'csrf_html' => viewer_csrf_field(),
+        'account_url' => url_for('viewer_account'),
+    ]);
 }
 
 /**
@@ -457,12 +448,10 @@ function cms_viewer_email_change_confirm(): void
 
     if (request_method() === 'GET') {
         viewer_require_recent_reauthentication('email_confirm');
-        render_header(t('viewer.email_change.verify_title', 'Verify new viewer email'));
-        echo '<section class="panel"><h1>' . e(t('viewer.email_change.verify_title', 'Verify new viewer email')) . '</h1>';
-        echo '<p>' . e(t('viewer.email_change.confirm_help', 'Confirm the final email change. The account email remains unchanged until this POST request succeeds.')) . '</p>';
-        echo '<form method="post" action="' . e(url_for('viewer_email_change_confirm')) . '" class="form-grid">' . viewer_csrf_field();
-        echo '<button type="submit">' . e(t('viewer.email_change.confirm_button', 'Confirm email change')) . '</button></form></section>';
-        render_footer();
+        \Gallery\Views\view_render_viewer_email_confirm([
+            'confirm_url' => url_for('viewer_email_change_confirm'),
+            'csrf_html' => viewer_csrf_field(),
+        ]);
         return;
     }
     if (request_method() !== 'POST') {
@@ -489,11 +478,9 @@ function cms_viewer_email_change_confirm(): void
         redirect_to(url_for('viewer_account_reauth', ['destination' => 'email_confirm']));
     }
 
-    render_header(t('viewer.email_change.verify_title', 'Verify new viewer email'));
-    echo '<section class="panel"><h1>' . e(t('viewer.email_change.verify_title', 'Verify new viewer email')) . '</h1>';
-    echo '<div class="notice">' . e(t('viewer.email_change.confirm_failed', 'The email change could not be confirmed. Request a new email change and try again.')) . '</div>';
-    echo '<p><a class="button secondary" href="' . e(url_for('viewer_account_email')) . '">' . e(t('viewer.email_change.start_again', 'Start email change again')) . '</a></p></section>';
-    render_footer();
+    \Gallery\Views\view_render_viewer_email_confirm_failed([
+        'restart_url' => url_for('viewer_account_email'),
+    ]);
 }
 
 /**
@@ -533,11 +520,9 @@ function cms_viewer_account_delete(): void
             }
             if (!empty($result['deleted'])) {
                 viewer_clear_local_lifecycle_state();
-                render_header(t('viewer.delete.completed_title', 'Viewer account deleted'));
-                echo '<section class="panel"><h1>' . e(t('viewer.delete.completed_title', 'Viewer account deleted')) . '</h1>';
-                echo '<p>' . e(t('viewer.delete.completed', 'The viewer account and its viewer-owned data have been deleted. Gallery photographs were not deleted.')) . '</p>';
-                echo '<p><a class="button" href="' . e(url_for('home')) . '">' . e(t('viewer.delete.back_home', 'Back to gallery')) . '</a></p></section>';
-                render_footer();
+                \Gallery\Views\view_render_viewer_account_deleted([
+                    'home_url' => url_for('home'),
+                ]);
                 return;
             }
             if (($result['reason'] ?? '') === 'reauthentication_required') {
@@ -547,15 +532,9 @@ function cms_viewer_account_delete(): void
         }
     }
 
-    render_header(t('viewer.delete.title', 'Delete viewer account'));
-    if ($error !== '') {
-        echo '<div class="notice">' . e($error) . '</div>';
-    }
-    echo '<section class="panel"><h1>' . e(t('viewer.delete.title', 'Delete viewer account')) . '</h1>';
-    echo '<p>' . e(t('viewer.delete.help', 'This permanently deletes your viewer account and viewer-owned data such as favourites. Gallery photographs are not deleted. This action cannot be undone.')) . '</p>';
-    echo '<form method="post" class="form-grid">' . viewer_csrf_field();
-    echo '<label class="account-settings-toggle"><input type="checkbox" name="confirm_delete" value="1" required> <span><strong>' . e(t('viewer.delete.confirm_label', 'I understand that this permanently deletes my viewer account.')) . '</strong></span></label>';
-    echo '<button type="submit" class="button secondary">' . e(t('viewer.delete.button', 'Delete viewer account')) . '</button></form>';
-    echo '<p class="muted"><a href="' . e(url_for('viewer_account')) . '">' . e(t('viewer.lifecycle.back_to_account', 'Back to account')) . '</a></p></section>';
-    render_footer();
+    \Gallery\Views\view_render_viewer_account_delete([
+        'error' => $error,
+        'csrf_html' => viewer_csrf_field(),
+        'account_url' => url_for('viewer_account'),
+    ]);
 }

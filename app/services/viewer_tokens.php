@@ -41,8 +41,22 @@ namespace Gallery\Services;
 
 use InvalidArgumentException;
 use RuntimeException;
-use function Gallery\Core\db;
 use function Gallery\Core\now_sql;
+use function Gallery\Core\viewer_identity_request_user_agent;
+use function Gallery\Models\viewer_account_model_transaction;
+use function Gallery\Models\viewer_account_model_lock_auth;
+use function Gallery\Models\viewer_token_model_issue_email_verification;
+use function Gallery\Models\viewer_token_model_issue_password_reset;
+use function Gallery\Models\viewer_token_model_lock_one_time;
+use function Gallery\Models\viewer_token_model_mark_consumed;
+use function Gallery\Models\viewer_token_model_remember_cleanup;
+use function Gallery\Models\viewer_token_model_remember_enforce_limit;
+use function Gallery\Models\viewer_token_model_remember_insert;
+use function Gallery\Models\viewer_token_model_remember_verify_row;
+use function Gallery\Models\viewer_token_model_remember_revoke;
+use function Gallery\Models\viewer_token_model_remember_account_id;
+use function Gallery\Models\viewer_token_model_remember_lock;
+use function Gallery\Models\viewer_token_model_remember_rotate;
 
 /**
  * Return true only when one allowlisted viewer token table is verifiably available.
@@ -103,31 +117,13 @@ function viewer_email_verification_token_issue(int $viewerAccountId, string $ema
     if ($emailFingerprint === '') {
         throw new InvalidArgumentException('Viewer email verification requires a valid email address.');
     }
-
     $token = security_opaque_token_generate(32);
     $now = now_sql();
     $expiresAt = date('Y-m-d H:i:s', time() + $lifetimeSeconds);
-    $pdo = db();
-    $ownsTransaction = !$pdo->inTransaction();
-    if ($ownsTransaction) {
-        $pdo->beginTransaction();
-    }
-
-    try {
-        $pdo->prepare('UPDATE viewer_email_verification_tokens SET invalidated_at = ? WHERE viewer_account_id = ? AND consumed_at IS NULL AND invalidated_at IS NULL')
-            ->execute([$now, $viewerAccountId]);
-        $pdo->prepare('INSERT INTO viewer_email_verification_tokens (viewer_account_id, token_hash, email_fingerprint, created_at, expires_at) VALUES (?, ?, ?, ?, ?)')
-            ->execute([$viewerAccountId, security_authority_token_hash($token), $emailFingerprint, $now, $expiresAt]);
-        if ($ownsTransaction) {
-            $pdo->commit();
-        }
-        return $token;
-    } catch (\Throwable $exception) {
-        if ($ownsTransaction && $pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
-        throw $exception;
-    }
+    viewer_account_model_transaction(static function () use ($viewerAccountId, $token, $emailFingerprint, $now, $expiresAt): void {
+        viewer_token_model_issue_email_verification($viewerAccountId, security_authority_token_hash($token), $emailFingerprint, $now, $expiresAt);
+    });
+    return $token;
 }
 
 /**
@@ -157,31 +153,13 @@ function viewer_password_reset_token_issue(int $viewerAccountId, int $securityVe
     if ($viewerAccountId <= 0 || $securityVersion <= 0 || $lifetimeSeconds < 300 || $lifetimeSeconds > 86400) {
         throw new InvalidArgumentException('Viewer password reset token parameters are invalid.');
     }
-
     $token = security_opaque_token_generate(32);
     $now = now_sql();
     $expiresAt = date('Y-m-d H:i:s', time() + $lifetimeSeconds);
-    $pdo = db();
-    $ownsTransaction = !$pdo->inTransaction();
-    if ($ownsTransaction) {
-        $pdo->beginTransaction();
-    }
-
-    try {
-        $pdo->prepare('UPDATE viewer_password_reset_tokens SET invalidated_at = ? WHERE viewer_account_id = ? AND consumed_at IS NULL AND invalidated_at IS NULL')
-            ->execute([$now, $viewerAccountId]);
-        $pdo->prepare('INSERT INTO viewer_password_reset_tokens (viewer_account_id, token_hash, security_version, created_at, expires_at) VALUES (?, ?, ?, ?, ?)')
-            ->execute([$viewerAccountId, security_authority_token_hash($token), $securityVersion, $now, $expiresAt]);
-        if ($ownsTransaction) {
-            $pdo->commit();
-        }
-        return $token;
-    } catch (\Throwable $exception) {
-        if ($ownsTransaction && $pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
-        throw $exception;
-    }
+    viewer_account_model_transaction(static function () use ($viewerAccountId, $securityVersion, $token, $now, $expiresAt): void {
+        viewer_token_model_issue_password_reset($viewerAccountId, security_authority_token_hash($token), $securityVersion, $now, $expiresAt);
+    });
+    return $token;
 }
 
 /**
@@ -210,56 +188,26 @@ function viewer_one_time_token_consume(string $table, string $token): ?array
     if (!viewer_accounts_enabled()) {
         return null;
     }
-
     $allowedTables = [
         'viewer_email_verification_tokens' => true,
         'viewer_password_reset_tokens' => true,
     ];
-    if (!isset($allowedTables[$table]) || $token === '') {
-        return null;
-    }
-    if (!viewer_token_table_storage_available($table)) {
+    if (!isset($allowedTables[$table]) || $token === '' || !viewer_token_table_storage_available($table)) {
         return null;
     }
 
-    $pdo = db();
-    $ownsTransaction = !$pdo->inTransaction();
-    if ($ownsTransaction) {
-        $pdo->beginTransaction();
-    }
-
-    try {
-        $stmt = $pdo->prepare('SELECT * FROM ' . $table . ' WHERE token_hash = ? LIMIT 1 FOR UPDATE');
-        $stmt->execute([security_authority_token_hash($token)]);
-        $row = $stmt->fetch();
+    return viewer_account_model_transaction(static function () use ($table, $token): ?array {
+        $row = viewer_token_model_lock_one_time($table, security_authority_token_hash($token));
         if (!$row || !viewer_one_time_token_row_is_usable($row)) {
-            if ($ownsTransaction) {
-                $pdo->commit();
-            }
             return null;
         }
-
         $consumedAt = now_sql();
-        $update = $pdo->prepare('UPDATE ' . $table . ' SET consumed_at = ? WHERE id = ? AND consumed_at IS NULL AND invalidated_at IS NULL');
-        $update->execute([$consumedAt, (int) $row['id']]);
-        if ($update->rowCount() !== 1) {
-            if ($ownsTransaction) {
-                $pdo->rollBack();
-            }
+        if (!viewer_token_model_mark_consumed($table, (int) $row['id'], $consumedAt)) {
             return null;
-        }
-
-        if ($ownsTransaction) {
-            $pdo->commit();
         }
         $row['consumed_at'] = $consumedAt;
         return $row;
-    } catch (\Throwable $exception) {
-        if ($ownsTransaction && $pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
-        throw $exception;
-    }
+    });
 }
 
 /**
@@ -272,13 +220,7 @@ function viewer_one_time_token_consume(string $table, string $token): ?array
  */
 function viewer_remember_token_cleanup_account_locked(int $viewerAccountId, string $now, int $limit = 100): int
 {
-    $limit = max(1, min(100, $limit));
-    $stmt = db()->prepare(
-        'DELETE FROM viewer_remember_tokens WHERE viewer_account_id = ? '
-        . 'AND (revoked_at IS NOT NULL OR expires_at < ?) ORDER BY id ASC LIMIT ' . $limit
-    );
-    $stmt->execute([$viewerAccountId, $now]);
-    return $stmt->rowCount();
+    return viewer_token_model_remember_cleanup($viewerAccountId, $now, $limit);
 }
 
 /**
@@ -295,34 +237,13 @@ function viewer_remember_token_enforce_limit_locked(
     int $reserveSlots = 0,
     int $keepTokenId = 0
 ): void {
-    $cap = (int) viewer_accounts_config()['max_active_viewer_remember_tokens_per_account'];
-    $allowedExisting = max(0, $cap - max(0, $reserveSlots));
-    $countStmt = db()->prepare(
-        'SELECT COUNT(*) FROM viewer_remember_tokens WHERE viewer_account_id = ? AND revoked_at IS NULL AND expires_at >= ?'
+    viewer_token_model_remember_enforce_limit(
+        $viewerAccountId,
+        $now,
+        (int) viewer_accounts_config()['max_active_viewer_remember_tokens_per_account'],
+        $reserveSlots,
+        $keepTokenId
     );
-    $countStmt->execute([$viewerAccountId, $now]);
-    $activeCount = (int) $countStmt->fetchColumn();
-    $revokeCount = max(0, $activeCount - $allowedExisting);
-    if ($revokeCount === 0) {
-        return;
-    }
-
-    $sql = 'SELECT id FROM viewer_remember_tokens WHERE viewer_account_id = ? AND revoked_at IS NULL AND expires_at >= ?';
-    $params = [$viewerAccountId, $now];
-    if ($keepTokenId > 0) {
-        $sql .= ' AND id <> ?';
-        $params[] = $keepTokenId;
-    }
-    $sql .= ' ORDER BY created_at ASC, id ASC LIMIT ' . $revokeCount;
-    $idsStmt = db()->prepare($sql);
-    $idsStmt->execute($params);
-    $ids = array_map('intval', $idsStmt->fetchAll(\PDO::FETCH_COLUMN));
-    if ($ids === []) {
-        return;
-    }
-    $placeholders = implode(',', array_fill(0, count($ids), '?'));
-    db()->prepare('UPDATE viewer_remember_tokens SET revoked_at = ? WHERE id IN (' . $placeholders . ') AND revoked_at IS NULL')
-        ->execute(array_merge([$now], $ids));
 }
 
 /**
@@ -347,17 +268,8 @@ function viewer_remember_token_issue(int $viewerAccountId, int $securityVersion)
         throw new InvalidArgumentException('Viewer remember token account data is invalid.');
     }
 
-    $pdo = db();
-    $ownsTransaction = !$pdo->inTransaction();
-    if ($ownsTransaction) {
-        $pdo->beginTransaction();
-    }
-    try {
-        $accountStmt = $pdo->prepare(
-            'SELECT id, password_hash, must_change_password, status, security_version, email_verified_at FROM viewer_accounts WHERE id = ? LIMIT 1 FOR UPDATE'
-        );
-        $accountStmt->execute([$viewerAccountId]);
-        $account = $accountStmt->fetch();
+    return viewer_account_model_transaction(static function () use ($viewerAccountId, $securityVersion): array {
+        $account = viewer_account_model_lock_auth($viewerAccountId);
         if (!$account
             || !viewer_account_can_authenticate($account)
             || viewer_account_requires_password_change($account)
@@ -367,40 +279,23 @@ function viewer_remember_token_issue(int $viewerAccountId, int $securityVersion)
 
         $selector = security_token_selector_generate(18);
         $verifier = security_opaque_token_generate(32);
-        $config = viewer_accounts_config();
         $now = now_sql();
-        $expiresAt = date('Y-m-d H:i:s', time() + ((int) $config['remember_lifetime_days'] * 86400));
-        $userAgent = (string) ($_SERVER['HTTP_USER_AGENT'] ?? '');
+        $expiresAt = date('Y-m-d H:i:s', time() + ((int) viewer_accounts_config()['remember_lifetime_days'] * 86400));
+        $userAgent = viewer_identity_request_user_agent();
         $userAgentHash = $userAgent === '' ? null : viewer_security_fingerprint('viewer-remember-ua', $userAgent);
-
         viewer_remember_token_cleanup_account_locked($viewerAccountId, $now);
         viewer_remember_token_enforce_limit_locked($viewerAccountId, $now, 1);
-
-        $stmt = $pdo->prepare(
-            'INSERT INTO viewer_remember_tokens '
-            . '(viewer_account_id, selector, verifier_hash, security_version, user_agent_hash, created_at, expires_at) '
-            . 'VALUES (?, ?, ?, ?, ?, ?, ?)'
-        );
-        $stmt->execute([
+        viewer_token_model_remember_insert(
             $viewerAccountId,
             $selector,
             security_authority_token_hash($verifier),
             $securityVersion,
             $userAgentHash,
             $now,
-            $expiresAt,
-        ]);
-
-        if ($ownsTransaction) {
-            $pdo->commit();
-        }
+            $expiresAt
+        );
         return ['selector' => $selector, 'verifier' => $verifier, 'expires_at' => $expiresAt];
-    } catch (\Throwable $exception) {
-        if ($ownsTransaction && $pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
-        throw $exception;
-    }
+    });
 }
 
 /**
@@ -418,15 +313,7 @@ function viewer_remember_token_verify(string $selector, string $verifier): ?arra
     if (preg_match('/^[a-f0-9]{36}$/', $selector) !== 1 || $verifier === '') {
         return null;
     }
-
-    $stmt = db()->prepare(
-        'SELECT vrt.*, va.password_hash, va.must_change_password, va.status AS account_status, va.email_verified_at, '
-        . 'va.security_version AS account_security_version '
-        . 'FROM viewer_remember_tokens vrt INNER JOIN viewer_accounts va ON va.id = vrt.viewer_account_id '
-        . 'WHERE vrt.selector = ? AND vrt.revoked_at IS NULL AND vrt.expires_at >= ? LIMIT 1'
-    );
-    $stmt->execute([$selector, now_sql()]);
-    $row = $stmt->fetch();
+    $row = viewer_token_model_remember_verify_row($selector, now_sql());
     $account = $row ? [
         'status' => $row['account_status'] ?? '',
         'password_hash' => $row['password_hash'] ?? '',
@@ -456,8 +343,7 @@ function viewer_remember_token_revoke(string $selector): void
     if (!viewer_auth_storage_available()) {
         return;
     }
-    db()->prepare('UPDATE viewer_remember_tokens SET revoked_at = ? WHERE selector = ? AND revoked_at IS NULL')
-        ->execute([now_sql(), $selector]);
+    viewer_token_model_remember_revoke($selector, now_sql());
 }
 
 /**
@@ -478,94 +364,56 @@ function viewer_remember_restore_and_rotate(string $selector, string $verifier):
     if (preg_match('/^[a-f0-9]{36}$/D', $selector) !== 1 || $verifier === '' || strlen($verifier) > 512) {
         return null;
     }
-
-    $lookup = db()->prepare('SELECT viewer_account_id FROM viewer_remember_tokens WHERE selector = ? LIMIT 1');
-    $lookup->execute([$selector]);
-    $viewerAccountId = (int) $lookup->fetchColumn();
+    $viewerAccountId = viewer_token_model_remember_account_id($selector);
     if ($viewerAccountId <= 0) {
         return null;
     }
 
-    $pdo = db();
-    $ownsTransaction = !$pdo->inTransaction();
-    if ($ownsTransaction) {
-        $pdo->beginTransaction();
-    }
     try {
-        $accountStmt = $pdo->prepare(
-            'SELECT id, email, normalized_email, password_hash, must_change_password, status, security_version, email_verified_at '
-            . 'FROM viewer_accounts WHERE id = ? LIMIT 1 FOR UPDATE'
-        );
-        $accountStmt->execute([$viewerAccountId]);
-        $account = $accountStmt->fetch();
-        if (!$account
-            || !viewer_account_can_authenticate($account)
-            || viewer_account_requires_password_change($account)) {
-            if ($ownsTransaction) {
-                $pdo->commit();
+        return viewer_account_model_transaction(static function () use ($selector, $verifier, $viewerAccountId): ?array {
+            $account = viewer_account_model_lock_auth($viewerAccountId);
+            if (!$account || !viewer_account_can_authenticate($account) || viewer_account_requires_password_change($account)) {
+                return null;
             }
-            return null;
-        }
-
-        $tokenStmt = $pdo->prepare('SELECT * FROM viewer_remember_tokens WHERE selector = ? LIMIT 1 FOR UPDATE');
-        $tokenStmt->execute([$selector]);
-        $token = $tokenStmt->fetch();
-        $expiresAtTimestamp = $token ? strtotime((string) ($token['expires_at'] ?? '')) : false;
-        if (!$token
-            || !empty($token['revoked_at'])
-            || $expiresAtTimestamp === false
-            || $expiresAtTimestamp < time()
-            || (int) ($token['viewer_account_id'] ?? 0) !== $viewerAccountId
-            || (int) ($token['security_version'] ?? 0) !== (int) ($account['security_version'] ?? -1)
-            || !security_authority_token_verify((string) ($token['verifier_hash'] ?? ''), $verifier)) {
-            if ($ownsTransaction) {
-                $pdo->commit();
+            $token = viewer_token_model_remember_lock($selector);
+            $expiresAtTimestamp = $token ? strtotime((string) ($token['expires_at'] ?? '')) : false;
+            if (!$token
+                || !empty($token['revoked_at'])
+                || $expiresAtTimestamp === false
+                || $expiresAtTimestamp < time()
+                || (int) ($token['viewer_account_id'] ?? 0) !== $viewerAccountId
+                || (int) ($token['security_version'] ?? 0) !== (int) ($account['security_version'] ?? -1)
+                || !security_authority_token_verify((string) ($token['verifier_hash'] ?? ''), $verifier)) {
+                return null;
             }
-            return null;
-        }
 
-        $now = now_sql();
-        viewer_remember_token_cleanup_account_locked($viewerAccountId, $now);
-        viewer_remember_token_enforce_limit_locked($viewerAccountId, $now, 0, (int) $token['id']);
+            $now = now_sql();
+            viewer_remember_token_cleanup_account_locked($viewerAccountId, $now);
+            viewer_remember_token_enforce_limit_locked($viewerAccountId, $now, 0, (int) $token['id']);
+            $newSelector = security_token_selector_generate(18);
+            $newVerifier = security_opaque_token_generate(32);
+            $newExpiresAt = date('Y-m-d H:i:s', time() + ((int) viewer_accounts_config()['remember_lifetime_days'] * 86400));
+            if (!viewer_token_model_remember_rotate(
+                (int) $token['id'],
+                $selector,
+                $newSelector,
+                security_authority_token_hash($newVerifier),
+                $now,
+                $newExpiresAt
+            )) {
+                throw new RuntimeException('Viewer remember credential rotation lost a concurrent race.');
+            }
 
-        $newSelector = security_token_selector_generate(18);
-        $newVerifier = security_opaque_token_generate(32);
-        $newExpiresAt = date(
-            'Y-m-d H:i:s',
-            time() + ((int) viewer_accounts_config()['remember_lifetime_days'] * 86400)
-        );
-        $rotate = $pdo->prepare(
-            'UPDATE viewer_remember_tokens SET selector = ?, verifier_hash = ?, last_used_at = ?, expires_at = ? '
-            . 'WHERE id = ? AND selector = ? AND revoked_at IS NULL'
-        );
-        $rotate->execute([
-            $newSelector,
-            security_authority_token_hash($newVerifier),
-            $now,
-            $newExpiresAt,
-            (int) $token['id'],
-            $selector,
-        ]);
-        if ($rotate->rowCount() !== 1) {
-            throw new RuntimeException('Viewer remember credential rotation lost a concurrent race.');
-        }
-
-        viewer_session_establish($account);
-        if (function_exists(__NAMESPACE__ . '\\viewer_security_event_record')) {
-            viewer_security_event_record('viewer.remember_restored', $viewerAccountId, 'success', [
-                'security_version' => (int) $account['security_version'],
-            ]);
-        }
-
-        if ($ownsTransaction) {
-            $pdo->commit();
-        }
-        return ['selector' => $newSelector, 'verifier' => $newVerifier, 'expires_at' => $newExpiresAt];
+            viewer_session_establish($account);
+            if (function_exists(__NAMESPACE__ . '\\viewer_security_event_record')) {
+                viewer_security_event_record('viewer.remember_restored', $viewerAccountId, 'success', [
+                    'security_version' => (int) $account['security_version'],
+                ]);
+            }
+            return ['selector' => $newSelector, 'verifier' => $newVerifier, 'expires_at' => $newExpiresAt];
+        });
     } catch (\Throwable $exception) {
         viewer_session_clear();
-        if ($ownsTransaction && $pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
         throw $exception;
     }
 }

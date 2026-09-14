@@ -41,7 +41,7 @@ namespace Gallery\Views;
 use function Gallery\Core\csrf_field;
 use function Gallery\Core\e;
 use function Gallery\Core\url_for;
-use function Gallery\Services\admin_dashboard_format_bytes;
+use function Gallery\Core\format_bytes;
 use function Gallery\Services\t;
 
 /**
@@ -79,10 +79,10 @@ function view_render_admin_database_usage_panel(?array $usage): void
     $databaseName = (string) ($usage['database_name'] ?? '');
 
     echo '<div class="admin-storage-summary-grid admin-database-usage-summary-grid">';
-    view_render_admin_storage_summary_card(t('admin.database_usage.total_database', 'Total database'), admin_dashboard_format_bytes($totalBytes), t('admin.database_usage.total_database_hint', '{count} table(s), data plus indexes.', ['count' => (string) $tableCount]));
-    view_render_admin_storage_summary_card(t('admin.database_usage.gallery_database', 'Gallery DB data'), admin_dashboard_format_bytes($galleryBytes), t('admin.database_usage.gallery_database_hint', '{count} gallery/content table(s), {percent}% of DB.', ['count' => (string) $galleryTableCount, 'percent' => number_format($galleryPercent, 1)]));
-    view_render_admin_storage_summary_card(t('admin.database_usage.sql_data_pages', 'SQL data pages'), admin_dashboard_format_bytes($dataBytes), t('admin.database_usage.sql_data_pages_hint', 'Table payload pages reported by the database engine.'));
-    view_render_admin_storage_summary_card(t('admin.database_usage.sql_indexes', 'SQL indexes'), admin_dashboard_format_bytes($indexBytes), t('admin.database_usage.sql_indexes_hint', 'Index pages reported by the database engine.'));
+    view_render_admin_storage_summary_card(t('admin.database_usage.total_database', 'Total database'), format_bytes($totalBytes), t('admin.database_usage.total_database_hint', '{count} table(s), data plus indexes.', ['count' => (string) $tableCount]));
+    view_render_admin_storage_summary_card(t('admin.database_usage.gallery_database', 'Gallery DB data'), format_bytes($galleryBytes), t('admin.database_usage.gallery_database_hint', '{count} gallery/content table(s), {percent}% of DB.', ['count' => (string) $galleryTableCount, 'percent' => number_format($galleryPercent, 1)]));
+    view_render_admin_storage_summary_card(t('admin.database_usage.sql_data_pages', 'SQL data pages'), format_bytes($dataBytes), t('admin.database_usage.sql_data_pages_hint', 'Table payload pages reported by the database engine.'));
+    view_render_admin_storage_summary_card(t('admin.database_usage.sql_indexes', 'SQL indexes'), format_bytes($indexBytes), t('admin.database_usage.sql_indexes_hint', 'Index pages reported by the database engine.'));
     echo '</div>';
 
     echo '<div class="admin-storage-facts admin-database-usage-facts">';
@@ -92,7 +92,7 @@ function view_render_admin_database_usage_panel(?array $usage): void
     echo '<span><strong>' . e(t('admin.database_usage.estimated_rows', 'Estimated rows')) . '</strong> ' . e(number_format($rowEstimate)) . '</span>';
     echo '<span><strong>' . e(t('admin.database_usage.gallery_estimated_rows', 'Gallery rows')) . '</strong> ' . e(number_format($galleryRowEstimate)) . '</span>';
     if ($largestTableName !== '') {
-        echo '<span><strong>' . e(t('admin.database_usage.largest_table', 'Largest table')) . '</strong> ' . e($largestTableName) . ' <em>' . e(admin_dashboard_format_bytes($largestTableBytes)) . '</em></span>';
+        echo '<span><strong>' . e(t('admin.database_usage.largest_table', 'Largest table')) . '</strong> ' . e($largestTableName) . ' <em>' . e(format_bytes($largestTableBytes)) . '</em></span>';
     }
     echo '<span><strong>' . e(t('admin.database_usage.method', 'Method')) . '</strong> ' . e(t('admin.database_usage.method_information_schema', 'information_schema estimate')) . '</span>';
     echo '</div>';
@@ -164,10 +164,10 @@ function view_render_admin_database_usage_table_chart(string $title, string $hin
         $percent = min(100.0, max(0.0, (float) ($row['percent'] ?? 0.0)));
         $engine = trim((string) ($row['engine'] ?? ''));
         $details = t('admin.database_usage.chart_row_details', '{size}, {rows} estimated row(s), data {data}, indexes {indexes}', [
-            'size' => admin_dashboard_format_bytes($bytes),
+            'size' => format_bytes($bytes),
             'rows' => number_format($rowCount),
-            'data' => admin_dashboard_format_bytes($dataBytes),
-            'indexes' => admin_dashboard_format_bytes($indexBytes),
+            'data' => format_bytes($dataBytes),
+            'indexes' => format_bytes($indexBytes),
         ]);
         if ($engine !== '') {
             $details .= ' · ' . $engine;

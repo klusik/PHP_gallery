@@ -501,7 +501,7 @@ function browser_thumbnail_rebuild_zip_central_header(string $entryName, int $cr
  *
  * @param string $path Filesystem path.
  */
-function browser_thumbnail_rebuild_stream_file_payload(string $path): void
+function browser_thumbnail_rebuild_stream_file_payload(string $path, callable $emit): void
 {
     $handle = @fopen($path, 'rb');
     if (!is_resource($handle)) {
@@ -513,10 +513,7 @@ function browser_thumbnail_rebuild_stream_file_payload(string $path): void
             if ($chunk === false) {
                 throw new RuntimeException(t('browser_thumbnail_rebuild.error_source_read', 'Could not read one original image for download.'));
             }
-            echo $chunk;
-            if (function_exists('fastcgi_finish_request')) {
-                flush();
-            }
+            $emit($chunk);
         }
     } finally {
         fclose($handle);
@@ -528,7 +525,7 @@ function browser_thumbnail_rebuild_stream_file_payload(string $path): void
  *
  * @param array $plan Plan value.
  */
-function browser_thumbnail_rebuild_stream_source_zip(array $plan): void
+function browser_thumbnail_rebuild_stream_source_zip(array $plan, callable $emit): void
 {
     @set_time_limit(max(1, (int) cms_runtime_limit('browser_thumbnail_rebuild.request_time_limit_seconds')));
     $timestamp = time();
@@ -558,24 +555,17 @@ function browser_thumbnail_rebuild_stream_source_zip(array $plan): void
         throw new RuntimeException(t('browser_thumbnail_rebuild.error_manifest_encode', 'Could not encode the thumbnail rebuild manifest.'));
     }
 
-    while (ob_get_level() > 0) {
-        ob_end_clean();
-    }
-    header('Content-Type: application/zip');
-    header('Content-Disposition: attachment; filename="thumbnail-rebuild-source-' . (int) ($plan['offset'] ?? 0) . '.zip"');
-    header('X-Content-Type-Options: nosniff');
-
     $central = [];
     $offset = 0;
-    $writeEntry = static function (string $entryName, string $payload, ?string $filePath = null) use (&$central, &$offset, $timestamp): void {
+    $writeEntry = static function (string $entryName, string $payload, ?string $filePath = null) use (&$central, &$offset, $timestamp, $emit): void {
         $size = $filePath === null ? strlen($payload) : (int) (filesize($filePath) ?: 0);
         $crc = $filePath === null ? browser_thumbnail_rebuild_crc32_data($payload) : browser_thumbnail_rebuild_crc32_file($filePath);
         $localHeader = browser_thumbnail_rebuild_zip_local_header($entryName, $crc, $size, $timestamp);
-        echo $localHeader;
+        $emit($localHeader);
         if ($filePath === null) {
-            echo $payload;
+            $emit($payload);
         } else {
-            browser_thumbnail_rebuild_stream_file_payload($filePath);
+            browser_thumbnail_rebuild_stream_file_payload($filePath, $emit);
         }
         $central[] = browser_thumbnail_rebuild_zip_central_header($entryName, $crc, $size, $timestamp, $offset);
         $offset += strlen($localHeader) + $size;
@@ -596,15 +586,15 @@ function browser_thumbnail_rebuild_stream_source_zip(array $plan): void
 
     $centralOffset = $offset;
     $centralBlob = implode('', $central);
-    echo $centralBlob;
-    echo "\x50\x4b\x05\x06"
+    $emit($centralBlob);
+    $emit("\x50\x4b\x05\x06"
         . browser_thumbnail_rebuild_pack_uint16(0)
         . browser_thumbnail_rebuild_pack_uint16(0)
         . browser_thumbnail_rebuild_pack_uint16(count($central))
         . browser_thumbnail_rebuild_pack_uint16(count($central))
         . browser_thumbnail_rebuild_pack_uint32(strlen($centralBlob))
         . browser_thumbnail_rebuild_pack_uint32($centralOffset)
-        . browser_thumbnail_rebuild_pack_uint16(0);
+        . browser_thumbnail_rebuild_pack_uint16(0));
 }
 
 /**

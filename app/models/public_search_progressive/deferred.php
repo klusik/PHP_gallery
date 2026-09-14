@@ -28,7 +28,7 @@
  * Notes:
  *   - Keep comments and docstrings intact when modifying this file.
  *   - This part is loaded only by app/models/public_search_progressive.php.
- *   - SQL listing fragments passed into this model must be hardcoded service-policy fragments.
+ *   - Search scope SQL and wildcard patterns are built inside the model from semantic service inputs.
  *
  * Last Updated:
  *   2026-09-13
@@ -42,15 +42,17 @@ namespace Gallery\Models;
 /**
  * Fetch galleries whose canonical description contains the query.
  *
- * @param string $like Escaped substring LIKE pattern.
- * @param string $listingCondition Hardcoded public-listing SQL condition.
- * @param array<int, mixed> $contextParams Bound branch-scope values.
+ * @param string $query Normalized query.
+ * @param bool $listedOnly Whether public access policy requires listed galleries.
+ * @param ?array $contextGallery Optional gallery branch context.
  * @param int $limit Maximum rows returned.
  * @return array<int, array<string, mixed>> Raw gallery rows.
  */
-function public_search_model_gallery_description_rows(string $like, string $listingCondition, array $contextParams, int $limit): array
+function public_search_model_gallery_description_rows(string $query, bool $listedOnly, ?array $contextGallery, int $limit): array
 {
     $limit = max(1, min(90, $limit));
+    $like = public_search_model_like_pattern($query);
+    [$listingCondition, $contextParams] = public_search_model_listing_scope('g', $listedOnly, $contextGallery);
     $sql = "SELECT g.id, g.title
         FROM galleries g
         WHERE $listingCondition
@@ -67,15 +69,17 @@ function public_search_model_gallery_description_rows(string $like, string $list
 /**
  * Fetch galleries through matching gallery-tag descriptions.
  *
- * @param string $like Escaped substring LIKE pattern.
- * @param string $listingCondition Hardcoded public-listing SQL condition.
- * @param array<int, mixed> $contextParams Bound branch-scope values.
+ * @param string $query Normalized query.
+ * @param bool $listedOnly Whether public access policy requires listed galleries.
+ * @param ?array $contextGallery Optional gallery branch context.
  * @param int $limit Maximum rows returned.
  * @return array<int, array<string, mixed>> Raw gallery rows.
  */
-function public_search_model_gallery_tag_description_rows(string $like, string $listingCondition, array $contextParams, int $limit): array
+function public_search_model_gallery_tag_description_rows(string $query, bool $listedOnly, ?array $contextGallery, int $limit): array
 {
     $limit = max(1, min(90, $limit));
+    $like = public_search_model_like_pattern($query);
+    [$listingCondition, $contextParams] = public_search_model_listing_scope('g', $listedOnly, $contextGallery);
     $sql = "SELECT g.id, g.title
         FROM (
             SELECT DISTINCT gt.gallery_id
@@ -98,15 +102,17 @@ function public_search_model_gallery_tag_description_rows(string $like, string $
  * Fetch galleries by translated title in one language.
  *
  * @param string $language Active content language.
- * @param string $like Escaped substring LIKE pattern.
- * @param string $listingCondition Hardcoded public-listing SQL condition.
- * @param array<int, mixed> $contextParams Bound branch-scope values.
+ * @param string $query Normalized query.
+ * @param bool $listedOnly Whether public access policy requires listed galleries.
+ * @param ?array $contextGallery Optional gallery branch context.
  * @param int $limit Maximum rows returned.
  * @return array<int, array<string, mixed>> Raw translated gallery rows.
  */
-function public_search_model_gallery_translated_title_rows(string $language, string $like, string $listingCondition, array $contextParams, int $limit): array
+function public_search_model_gallery_translated_title_rows(string $language, string $query, bool $listedOnly, ?array $contextGallery, int $limit): array
 {
     $limit = max(1, min(90, $limit));
+    $like = public_search_model_like_pattern($query);
+    [$listingCondition, $contextParams] = public_search_model_listing_scope('g', $listedOnly, $contextGallery);
     $sql = "SELECT g.id, COALESCE(NULLIF(tr.title, ''), g.title) AS title_sort
         FROM gallery_translations tr
         INNER JOIN galleries g ON g.id = tr.gallery_id
@@ -126,15 +132,17 @@ function public_search_model_gallery_translated_title_rows(string $language, str
  * Fetch galleries by translated description in one language.
  *
  * @param string $language Active content language.
- * @param string $like Escaped substring LIKE pattern.
- * @param string $listingCondition Hardcoded public-listing SQL condition.
- * @param array<int, mixed> $contextParams Bound branch-scope values.
+ * @param string $query Normalized query.
+ * @param bool $listedOnly Whether public access policy requires listed galleries.
+ * @param ?array $contextGallery Optional gallery branch context.
  * @param int $limit Maximum rows returned.
  * @return array<int, array<string, mixed>> Raw translated gallery rows.
  */
-function public_search_model_gallery_translated_description_rows(string $language, string $like, string $listingCondition, array $contextParams, int $limit): array
+function public_search_model_gallery_translated_description_rows(string $language, string $query, bool $listedOnly, ?array $contextGallery, int $limit): array
 {
     $limit = max(1, min(90, $limit));
+    $like = public_search_model_like_pattern($query);
+    [$listingCondition, $contextParams] = public_search_model_listing_scope('g', $listedOnly, $contextGallery);
     $sql = "SELECT g.id, COALESCE(NULLIF(tr.title, ''), g.title) AS title_sort
         FROM gallery_translations tr
         INNER JOIN galleries g ON g.id = tr.gallery_id
@@ -153,15 +161,17 @@ function public_search_model_gallery_translated_description_rows(string $languag
 /**
  * Fetch public images whose canonical description contains the query.
  *
- * @param string $like Escaped substring LIKE pattern.
- * @param string $listingCondition Hardcoded public-listing SQL condition.
- * @param array<int, mixed> $contextParams Bound branch-scope values.
+ * @param string $query Normalized query.
+ * @param bool $listedOnly Whether public access policy requires listed galleries.
+ * @param ?array $contextGallery Optional gallery branch context.
  * @param int $limit Maximum rows returned.
  * @return array<int, array<string, mixed>> Raw image rows.
  */
-function public_search_model_image_description_rows(string $like, string $listingCondition, array $contextParams, int $limit): array
+function public_search_model_image_description_rows(string $query, bool $listedOnly, ?array $contextGallery, int $limit): array
 {
     $limit = max(1, min(90, $limit));
+    $like = public_search_model_like_pattern($query);
+    [$listingCondition, $contextParams] = public_search_model_listing_scope('g', $listedOnly, $contextGallery);
     $sql = "SELECT i.id, i.filename, i.title
         FROM images i
         INNER JOIN galleries g ON g.id = i.gallery_id
@@ -182,15 +192,17 @@ function public_search_model_image_description_rows(string $like, string $listin
  *
  * The relation is reduced to distinct image IDs before joining image/gallery rows.
  *
- * @param string $like Escaped substring LIKE pattern.
- * @param string $listingCondition Hardcoded public-listing SQL condition.
- * @param array<int, mixed> $contextParams Bound branch-scope values.
+ * @param string $query Normalized query.
+ * @param bool $listedOnly Whether public access policy requires listed galleries.
+ * @param ?array $contextGallery Optional gallery branch context.
  * @param int $limit Maximum rows returned.
  * @return array<int, array<string, mixed>> Raw image rows.
  */
-function public_search_model_image_tag_description_rows(string $like, string $listingCondition, array $contextParams, int $limit): array
+function public_search_model_image_tag_description_rows(string $query, bool $listedOnly, ?array $contextGallery, int $limit): array
 {
     $limit = max(1, min(90, $limit));
+    $like = public_search_model_like_pattern($query);
+    [$listingCondition, $contextParams] = public_search_model_listing_scope('g', $listedOnly, $contextGallery);
     $sql = "SELECT i.id, i.filename, i.title
         FROM (
             SELECT DISTINCT it.image_id
@@ -225,14 +237,16 @@ function public_search_model_image_tag_description_rows(string $like, string $li
  */
 function public_search_model_image_translation_rows(
     string $language,
-    string $like,
+    string $query,
     int $titleScore,
     int $descriptionScore,
-    string $listingCondition,
-    array $contextParams,
+    bool $listedOnly,
+    ?array $contextGallery,
     int $limit
 ): array {
     $limit = max(1, min(90, $limit));
+    $like = public_search_model_like_pattern($query);
+    [$listingCondition, $contextParams] = public_search_model_listing_scope('g', $listedOnly, $contextGallery);
     $sql = "SELECT i.id, i.filename, i.title,
             COALESCE(NULLIF(tr.title, ''), NULLIF(i.title, ''), i.filename) AS title_sort,
             CASE
@@ -261,15 +275,17 @@ function public_search_model_image_translation_rows(
  *
  * Matching metadata is reduced to distinct image IDs before image/gallery joins.
  *
- * @param string $like Escaped substring LIKE pattern.
- * @param string $listingCondition Hardcoded public-listing SQL condition.
- * @param array<int, mixed> $contextParams Bound branch-scope values.
+ * @param string $query Normalized query.
+ * @param bool $listedOnly Whether public access policy requires listed galleries.
+ * @param ?array $contextGallery Optional gallery branch context.
  * @param int $limit Maximum rows returned.
  * @return array<int, array<string, mixed>> Raw image rows.
  */
-function public_search_model_image_ai_rows(string $like, string $listingCondition, array $contextParams, int $limit): array
+function public_search_model_image_ai_rows(string $query, bool $listedOnly, ?array $contextGallery, int $limit): array
 {
     $limit = max(1, min(90, $limit));
+    $like = public_search_model_like_pattern($query);
+    [$listingCondition, $contextParams] = public_search_model_listing_scope('g', $listedOnly, $contextGallery);
     $sql = "SELECT i.id, i.filename, i.title
         FROM (
             SELECT DISTINCT m.image_id

@@ -1,3 +1,16 @@
+# Project: PHP Gallery
+# Repository: https://github.com/klusik/PHP_gallery
+#
+# File: winapp/uploader/media.py
+#
+# Author:
+#   Rudolf Klusal
+#
+# License:
+#   MIT License (see LICENSE file in repository)
+#
+# Notes:
+#   - Keep comments and docstrings intact when modifying this file.
 """
 Local image decoder/thumbnail capability checks for the Windows uploader.
 """

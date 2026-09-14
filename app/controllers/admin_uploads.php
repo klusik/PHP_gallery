@@ -41,7 +41,6 @@ use Throwable;
 use function Gallery\Core\csrf_field;
 use function Gallery\Core\current_login_return_target;
 use function Gallery\Core\current_user;
-use function Gallery\Core\e;
 use function Gallery\Core\flash_message;
 use function Gallery\Core\gallery_public_url;
 use function Gallery\Core\admin_mutation_descriptor;
@@ -53,8 +52,6 @@ use function Gallery\Core\admin_mutation_postcondition;
 use function Gallery\Core\admin_mutation_public_gallery_context;
 use function Gallery\Core\admin_mutation_success_envelope;
 use function Gallery\Core\redirect_to;
-use function Gallery\Core\render_footer;
-use function Gallery\Core\render_header;
 use function Gallery\Core\request_method;
 use function Gallery\Core\require_admin;
 use function Gallery\Core\url_for;
@@ -74,6 +71,7 @@ use function Gallery\Services\gallery_upload_entries;
 use function Gallery\Services\gallery_upload_entries_or_empty;
 use function Gallery\Services\gallery_lightbox_total_count;
 use function Gallery\Services\heic_conversion_supported;
+use function Gallery\Services\media_renamer_default_pattern;
 use function Gallery\Services\raw_conversion_supported;
 use function Gallery\Services\set_admin_upload_auto_rename_enabled;
 use function Gallery\Services\set_app_setting;
@@ -83,6 +81,7 @@ use function Gallery\Services\t;
 use function Gallery\Views\view_render_admin_upload_settings_page;
 use function Gallery\Views\view_render_admin_upload_support_panel;
 use function Gallery\Services\admin_log_event;
+use function Gallery\Services\admin_settings_url;
 
 /**
  * Admin upload controller model.
@@ -234,6 +233,7 @@ function admin_upload_settings_view_model(string $activeTab, string $notice = ''
         'client_format_mode' => admin_upload_client_format_mode(),
         'auto_rename_enabled' => admin_upload_auto_rename_enabled(),
         'browser_settings' => function_exists('Gallery\\Services\\browser_upload_settings') ? browser_upload_settings() : [],
+        'central_settings_url' => admin_settings_url('uploads'),
     ];
 }
 
@@ -639,25 +639,33 @@ function cms_admin_upload(): void
         render_admin_upload_side_panel($prefillGalleryId, $prefillGallery, $error, $requestedUploadMode, $prefillParentId, $prefillParentGallery);
         return;
     }
-    render_header(t('admin.upload.title', 'Upload photos'));
-    echo '<section class="hero"><h1>' . e(t('admin.upload.title', 'Upload photos')) . '</h1><nav class="nav"><a class="button secondary" href="' . e(url_for('admin')) . '">' . e(t('admin.common.back_to_dashboard', 'Back to dashboard')) . '</a><a class="button secondary" href="' . e(url_for('admin_new_gallery')) . '">' . e(t('admin.upload.create_empty_gallery', 'Create empty gallery')) . '</a></nav></section>';
-    if ($prefillGallery) {
-        echo '<div class="notice">' . e(t('admin.upload.target_preselected', 'Upload target pre-selected: {title}.', ['title' => (string) $prefillGallery['title']])) . '</div>';
-    }
-    if ($prefillParentGallery) {
-        echo '<div class="notice">' . e(t('admin.upload.new_gallery_parent_notice', 'New gallery will be created inside: {title}.', ['title' => (string) $prefillParentGallery['title']])) . '</div>';
-    }
-    if ($error !== '') {
-        echo '<div class="notice">' . e(t('admin.upload.failed_value', 'Upload failed: {error}', ['error' => $error])) . '</div>';
-    }
-    render_admin_upload_support_panel();
+    $formFragments = [];
     if ($requestedUploadMode === 'new' || $prefillParentId > 0) {
-        render_admin_upload_new_gallery_form($prefillParentId);
+        $formFragments[] = admin_upload_capture_html(static function () use ($prefillParentId): void {
+            render_admin_upload_new_gallery_form($prefillParentId);
+        });
     } else {
-        render_admin_upload_existing_gallery_form($prefillGalleryId);
-        render_admin_upload_new_gallery_form($prefillGalleryId);
+        $formFragments[] = admin_upload_capture_html(static function () use ($prefillGalleryId): void {
+            render_admin_upload_existing_gallery_form($prefillGalleryId);
+        });
+        $formFragments[] = admin_upload_capture_html(static function () use ($prefillGalleryId): void {
+            render_admin_upload_new_gallery_form($prefillGalleryId);
+        });
     }
-    render_footer();
+    \Gallery\Views\view_render_admin_upload_page([
+        'title' => t('admin.upload.title', 'Upload photos'),
+        'dashboard_url' => url_for('admin'),
+        'dashboard_label' => t('admin.common.back_to_dashboard', 'Back to dashboard'),
+        'new_gallery_url' => url_for('admin_new_gallery'),
+        'new_gallery_label' => t('admin.upload.create_empty_gallery', 'Create empty gallery'),
+        'notices' => array_values(array_filter([
+            $prefillGallery ? t('admin.upload.target_preselected', 'Upload target pre-selected: {title}.', ['title' => (string) $prefillGallery['title']]) : '',
+            $prefillParentGallery ? t('admin.upload.new_gallery_parent_notice', 'New gallery will be created inside: {title}.', ['title' => (string) $prefillParentGallery['title']]) : '',
+            $error !== '' ? t('admin.upload.failed_value', 'Upload failed: {error}', ['error' => $error]) : '',
+        ], static fn (string $notice): bool => $notice !== '')),
+        'support_html' => admin_upload_capture_html(static function (): void { render_admin_upload_support_panel(); }),
+        'form_fragments' => $formFragments,
+    ]);
 }
 
 /**
@@ -673,31 +681,42 @@ function cms_admin_upload(): void
 function render_admin_upload_side_panel(int $prefillGalleryId, ?array $prefillGallery, string $error, string $requestedUploadMode = 'existing', int $prefillParentId = 0, ?array $prefillParentGallery = null): void
 {
     $createAndUploadMode = $requestedUploadMode === 'new' || $prefillParentId > 0;
-    echo '<div class="admin-side-panel-stack" data-admin-upload-panel>';
     if ($createAndUploadMode) {
-        echo '<div class="admin-side-panel-copy"><p class="admin-kicker">' . e(t('gallery.workflow', 'Gallery workflow')) . '</p><h2>' . e(t('admin.upload.create_gallery_here', 'Create gallery here')) . '</h2><p class="muted">' . e(t('admin.upload.create_gallery_here_help', 'Create a child gallery and upload photos in the same workflow. Photos are optional, so the gallery can still be created empty when needed.')) . '</p></div>';
-        if ($prefillParentGallery) {
-            echo '<div class="notice">' . e(t('admin.upload.new_gallery_parent_notice', 'New gallery will be created inside: {title}.', ['title' => (string) $prefillParentGallery['title']])) . '</div>';
-        }
-        if ($error !== '') {
-            echo '<div class="notice">' . e(t('admin.upload.create_or_upload_failed_value', 'Create or upload failed: {error}', ['error' => $error])) . '</div>';
-        }
-        render_admin_upload_new_gallery_panel_form($prefillParentId);
-        echo '</div>';
-        return;
+        $formHtml = admin_upload_capture_html(static function () use ($prefillParentId): void {
+            render_admin_upload_new_gallery_panel_form($prefillParentId);
+        });
+        $notices = array_values(array_filter([
+            $prefillParentGallery ? t('admin.upload.new_gallery_parent_notice', 'New gallery will be created inside: {title}.', ['title' => (string) $prefillParentGallery['title']]) : '',
+            $error !== '' ? t('admin.upload.create_or_upload_failed_value', 'Create or upload failed: {error}', ['error' => $error]) : '',
+        ], static fn (string $notice): bool => $notice !== ''));
+        $supportHtml = '';
+    } else {
+        $formHtml = admin_upload_capture_html(static function () use ($prefillGalleryId): void {
+            render_admin_upload_existing_gallery_form($prefillGalleryId, true);
+        });
+        $notices = array_values(array_filter([
+            $prefillGallery ? t('admin.upload.target_preselected', 'Upload target pre-selected: {title}.', ['title' => (string) $prefillGallery['title']]) : '',
+            $error !== '' ? t('admin.upload.failed_value', 'Upload failed: {error}', ['error' => $error]) : '',
+        ], static fn (string $notice): bool => $notice !== ''));
+        $supportHtml = admin_upload_capture_html(static function (): void { render_admin_upload_support_panel(); });
     }
-    echo '<div class="admin-side-panel-copy"><p class="admin-kicker">' . e(t('admin.upload.workflow', 'Upload workflow')) . '</p><h2>' . e(t('admin.upload.title', 'Upload photos')) . '</h2><p class="muted">' . e(t('admin.upload.existing_panel_help', 'Add photos to an existing gallery without leaving the drawer.')) . '</p></div>';
-    if ($prefillGallery) {
-        echo '<div class="notice">' . e(t('admin.upload.target_preselected', 'Upload target pre-selected: {title}.', ['title' => (string) $prefillGallery['title']])) . '</div>';
-    }
-    if ($error !== '') {
-        echo '<div class="notice">' . e(t('admin.upload.failed_value', 'Upload failed: {error}', ['error' => $error])) . '</div>';
-    }
-    render_admin_upload_support_panel();
-    render_admin_upload_existing_gallery_form($prefillGalleryId, true);
-    echo '</div>';
+
+    \Gallery\Views\view_render_admin_upload_side_panel([
+        'create_mode' => $createAndUploadMode,
+        'notices' => $notices,
+        'support_html' => $supportHtml,
+        'form_html' => $formHtml,
+    ]);
 }
 
+
+/** Capture trusted HTML produced by an existing upload presentation renderer. */
+function admin_upload_capture_html(callable $renderer): string
+{
+    ob_start();
+    $renderer();
+    return (string) ob_get_clean();
+}
 
 /**
  * Return the upload accept attribute shared by upload page and side-panel forms.
@@ -726,15 +745,16 @@ function render_admin_upload_support_panel(): void
  */
 function render_admin_upload_browser_checkbox(bool $panelMode = false): void
 {
-    $config = function_exists('Gallery\\Services\\browser_upload_browser_config') ? browser_upload_browser_config() : ['enabled' => false];
+    $config = function_exists('Gallery\Services\browser_upload_browser_config') ? browser_upload_browser_config() : ['enabled' => false];
     $encodedConfig = json_encode($config, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     if (!is_string($encodedConfig)) {
         $encodedConfig = '{}';
     }
-    $disabled = empty($config['enabled']);
-    $checked = $disabled ? '' : ' checked';
-    $className = $panelMode ? 'admin-side-panel-browser-upload-toggle' : 'browser-upload-toggle';
-    echo '<label class="' . e($className) . '"><input type="checkbox" name="browser_client_upload" value="1" data-browser-upload-toggle data-browser-upload-config="' . e($encodedConfig) . '"' . $checked . ($disabled ? ' disabled' : '') . '> <span>' . e(t('admin.upload.browser_client_upload_label', 'Prepare thumbnails and ZIP batches in this browser')) . '</span><span class="muted">' . e(t('admin.upload.browser_client_upload_help', 'Checked by default. When selected photos are present, browser-side processing is strict: preparation failures stop the upload instead of silently switching thumbnail generation to PHP. Uncheck this option to use the standard server-side path.')) . '</span><span class="muted">' . e(t('admin.upload.browser_zip_help', 'You may also select ZIP archives. Supported images are extracted locally; other entries are skipped. ZIP import never uses the PHP fallback.')) . '</span></label>';
+    \Gallery\Views\view_render_admin_upload_browser_checkbox([
+        'disabled' => empty($config['enabled']),
+        'class_name' => $panelMode ? 'admin-side-panel-browser-upload-toggle' : 'browser-upload-toggle',
+        'encoded_config' => $encodedConfig,
+    ]);
 }
 
 /** Return image accept hints plus ZIP only when browser-assisted upload is enabled. */
@@ -753,31 +773,19 @@ function admin_browser_upload_accept_value(): string
  */
 function render_admin_upload_existing_gallery_form(int $prefillGalleryId, bool $panelMode = false): void
 {
-    // $acceptValue stores an intermediate value used by the surrounding gallery workflow.
-    $acceptValue = admin_browser_upload_accept_value();
-    if ($panelMode) {
-        echo '<section class="admin-side-panel-card admin-side-panel-upload-card"><div class="admin-side-panel-card-heading"><div><p class="admin-kicker">' . e(t('admin.upload.existing_gallery', 'Existing gallery')) . '</p><h3>' . e(t('admin.upload.upload_existing_title', 'Upload into an existing gallery')) . '</h3></div><p class="muted">' . e(t('admin.upload.upload_existing_help', 'Choose a gallery and upload photos without leaving the drawer.')) . '</p></div><form method="post" action="' . e(url_for('admin_upload')) . '" enctype="multipart/form-data" class="admin-side-panel-form" data-gallery-upload-form data-gallery-panel-close-on-success="1">' . csrf_field();
-        echo '<input type="hidden" name="panel" value="1">';
-    } else {
-        echo '<section class="panel"><h2>' . e(t('admin.upload.upload_existing_title', 'Upload into existing gallery')) . '</h2><form method="post" action="' . e(url_for('admin_upload')) . '" enctype="multipart/form-data" class="form-grid" data-gallery-upload-form>' . csrf_field();
-    }
-    echo '<input type="hidden" name="upload_mode" value="existing">';
-    if ($panelMode && $prefillGalleryId > 0) {
-        $targetGallery = find_gallery($prefillGalleryId, true);
-        echo '<input type="hidden" name="gallery_id" value="' . (int) $prefillGalleryId . '">';
-        echo '<div class="admin-side-panel-target"><span>' . e(t('admin.upload.target_gallery', 'Target gallery')) . '</span><strong>' . e((string) ($targetGallery['title'] ?? ('#' . $prefillGalleryId))) . '</strong></div>';
-    } else {
-        echo '<label' . ($panelMode ? ' class="admin-side-panel-field admin-side-panel-field-wide"' : '') . '><span>' . e(t('admin.upload.gallery', 'Gallery')) . '</span><select name="gallery_id" required>' . gallery_options_for_select($prefillGalleryId) . '</select></label>';
-    }
-    echo '<label' . ($panelMode ? ' class="admin-side-panel-file-drop"' : '') . '><span class="admin-side-panel-file-title">' . e(t('admin.upload.images', 'Images')) . '</span><input name="images[]" type="file" accept="' . e($acceptValue) . '" multiple' . ($panelMode ? ' required' : ' required') . '><span class="muted">' . e(t('admin.upload.choose_images_for_gallery', 'Choose one or more images for this gallery.')) . '</span></label>';
-    echo '<label' . ($panelMode ? ' class="admin-side-panel-thumbnail-toggle"' : '') . '><input type="checkbox" name="create_thumbnails" value="1" checked> <span>' . e(t('admin.upload.create_thumbnails_after_upload', 'Create optimized thumbnails after upload')) . '</span></label>';
-    render_admin_upload_browser_checkbox($panelMode);
-    if ($panelMode) {
-        echo '<div class="admin-side-panel-actions"><button type="submit" class="button primary" data-gallery-panel-submit>' . e(t('admin.upload.upload_images', 'Upload images')) . '</button><p class="muted">' . e(t('admin.upload.progress_top_panel', 'Progress appears at the top of this panel.')) . '</p></div>';
-    } else {
-        echo '<button type="submit">' . e(t('admin.upload.upload_images', 'Upload images')) . '</button>';
-    }
-    echo '</form></section>';
+    $targetGallery = $panelMode && $prefillGalleryId > 0 ? find_gallery($prefillGalleryId, true) : null;
+    \Gallery\Views\view_render_admin_upload_existing_gallery_form([
+        'panel_mode' => $panelMode,
+        'action_url' => url_for('admin_upload'),
+        'csrf_html' => csrf_field(),
+        'gallery_id' => $panelMode ? $prefillGalleryId : 0,
+        'target_title' => is_array($targetGallery) ? (string) ($targetGallery['title'] ?? ('#' . $prefillGalleryId)) : '',
+        'gallery_options_html' => $panelMode && $prefillGalleryId > 0 ? '' : gallery_options_for_select($prefillGalleryId),
+        'accept_value' => admin_browser_upload_accept_value(),
+        'browser_checkbox_html' => admin_upload_capture_html(static function () use ($panelMode): void {
+            render_admin_upload_browser_checkbox($panelMode);
+        }),
+    ]);
 }
 
 /**
@@ -808,37 +816,17 @@ function render_admin_upload_new_gallery_panel_form(int $prefillParentId): void
  */
 function render_admin_upload_new_gallery_form_shell(int $prefillParentId, bool $panelMode): void
 {
-    // $acceptValue stores an intermediate value used by the surrounding gallery workflow.
-    $acceptValue = admin_browser_upload_accept_value();
-    if (!$panelMode) {
-        echo '<section class="panel"><h2>' . e(t('admin.upload.create_and_upload_title', 'Create gallery and upload photos')) . '</h2>';
-        echo '<form method="post" action="' . e(url_for('admin_upload')) . '" enctype="multipart/form-data" class="form-grid" data-gallery-upload-form>' . csrf_field();
-        echo '<input type="hidden" name="upload_mode" value="new">';
-        render_admin_new_gallery_fields($prefillParentId, false, 'upload');
-        echo '<label>' . e(t('admin.upload.images', 'Images')) . '<input name="images[]" type="file" accept="' . e($acceptValue) . '" multiple required><span class="muted">' . e(t('admin.upload.choose_one_or_more_images', 'Choose one or more images.')) . '</span></label>';
-        echo '<label><input type="checkbox" name="create_thumbnails" value="1" checked> ' . e(t('admin.upload.create_thumbnails_after_upload', 'Create optimized thumbnails after upload')) . '</label>';
-        render_admin_upload_browser_checkbox(false);
-        echo '<button type="submit">' . e(t('admin.upload.create_gallery_and_upload', 'Create gallery and upload')) . '</button></form></section>';
-        return;
-    }
-
-    echo '<section class="admin-side-panel-workflow" data-gallery-panel-workflow>';
-    echo '<div class="admin-side-panel-progress-anchor" data-gallery-panel-progress-anchor></div>';
-    echo '<form method="post" action="' . e(url_for('admin_upload')) . '" enctype="multipart/form-data" class="admin-side-panel-form" data-gallery-upload-form data-gallery-panel-close-on-success="1">' . csrf_field();
-    echo '<input type="hidden" name="upload_mode" value="new">';
-    render_admin_new_gallery_fields($prefillParentId, true, 'upload');
-
-    echo '<div class="admin-side-panel-card admin-side-panel-upload-card">';
-    echo '<div class="admin-side-panel-card-heading"><div><p class="admin-kicker">' . e(t('admin.upload.optional_photos', 'Optional photos')) . '</p><h3>' . e(t('admin.upload.upload_now', 'Upload now')) . '</h3></div><p class="muted">' . e(t('admin.upload.optional_photos_help', 'Leave this empty to create only the gallery.')) . '</p></div>';
-    echo '<label class="admin-side-panel-file-drop"><span class="admin-side-panel-file-title">' . e(t('admin.upload.choose_images', 'Choose images')) . '</span><input name="images[]" type="file" accept="' . e($acceptValue) . '" multiple><span class="muted">' . e(t('admin.upload.multiple_files_help', 'Multiple files are supported. The existing upload pipeline and thumbnail generation are reused.')) . '</span></label>';
-    echo '<label class="admin-side-panel-thumbnail-toggle"><input type="checkbox" name="create_thumbnails" value="1" checked> <span>' . e(t('admin.upload.create_thumbnails_after_upload', 'Create optimized thumbnails after upload')) . '</span></label>';
-    render_admin_upload_browser_checkbox(true);
-    echo '</div>';
-
-    echo '<div class="admin-side-panel-actions">';
-    echo '<button type="submit" class="button primary" data-gallery-panel-submit>' . e(t('admin.upload.create_gallery', 'Create gallery')) . '</button>';
-    echo '<p class="muted">' . e(t('admin.upload.progress_top_panel_during_upload', 'Progress appears at the top of this panel during upload.')) . '</p>';
-    echo '</div>';
-    echo '</form></section>';
+    \Gallery\Views\view_render_admin_upload_new_gallery_form([
+        'panel_mode' => $panelMode,
+        'action_url' => url_for('admin_upload'),
+        'csrf_html' => csrf_field(),
+        'gallery_fields_html' => admin_upload_capture_html(static function () use ($prefillParentId, $panelMode): void {
+            render_admin_new_gallery_fields($prefillParentId, $panelMode, 'upload');
+        }),
+        'accept_value' => admin_browser_upload_accept_value(),
+        'browser_checkbox_html' => admin_upload_capture_html(static function () use ($panelMode): void {
+            render_admin_upload_browser_checkbox($panelMode);
+        }),
+    ]);
 }
 

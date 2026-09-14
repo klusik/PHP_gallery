@@ -12,7 +12,10 @@
  * the real controller functions responsible for normalizing the input,
  * persisting through create_empty_gallery(), enforcing the admin and CSRF
  * gates, and building the JSON refresh metadata consumed by the side panel.
- */
+  *
+ * Author:
+ *   Rudolf Klusal
+*/
 
 declare(strict_types=1);
 

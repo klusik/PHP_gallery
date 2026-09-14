@@ -41,7 +41,6 @@ use const Gallery\Services\ADMIN_GALLERY_DISCOVERY_DEFAULT_BATCH_SIZE;
 use const Gallery\Services\ADMIN_GALLERY_DISCOVERY_MAX_BATCH_SIZE;
 use function Gallery\Core\csrf_field;
 use function Gallery\Core\csrf_token;
-use function Gallery\Core\e;
 use function Gallery\Core\flash_message;
 use function Gallery\Core\gallery_public_url;
 use function Gallery\Core\admin_mutation_descriptor;
@@ -53,8 +52,6 @@ use function Gallery\Core\admin_mutation_postcondition;
 use function Gallery\Core\admin_mutation_public_gallery_context;
 use function Gallery\Core\admin_mutation_success_envelope;
 use function Gallery\Core\redirect_to;
-use function Gallery\Core\render_footer;
-use function Gallery\Core\render_header;
 use function Gallery\Core\request_method;
 use function Gallery\Core\require_admin;
 use function Gallery\Core\url_for;
@@ -66,10 +63,6 @@ use function Gallery\Services\admin_gallery_discovery_process_job;
 use function Gallery\Services\admin_gallery_discovery_start_job;
 use function Gallery\Services\create_empty_gallery;
 use function Gallery\Services\find_gallery;
-use function Gallery\Services\gallery_count_badge_override_label;
-use function Gallery\Services\gallery_count_badge_override_values;
-use function Gallery\Services\gallery_count_badge_schema_ready;
-use function Gallery\Services\gallery_date_schema_ready;
 use function Gallery\Services\gallery_visibility_storage_value;
 use function Gallery\Services\import_galleries;
 use function Gallery\Services\import_galleries_without_thumbnails;
@@ -103,10 +96,12 @@ function cms_admin_discover(): void
 
     $jobToken = preg_replace('/[^A-Fa-f0-9]/', '', (string) ($_GET['job_token'] ?? '')) ?: '';
 
-    render_header(t('admin.galleries.discover_title'));
-    echo '<section class="hero"><h1>' . e(t('admin.galleries.discover_title')) . '</h1><nav class="nav"><a class="button secondary" href="' . e(url_for('admin')) . '">' . e(t('admin.common.back_to_dashboard')) . '</a></nav></section>';
-    render_admin_gallery_discovery_shell($jobToken);
-    render_footer();
+    \Gallery\Views\view_render_admin_gallery_discovery_page([
+        'title' => t('admin.galleries.discover_title'),
+        'back_url' => url_for('admin'),
+        'back_label' => t('admin.common.back_to_dashboard'),
+        'shell' => admin_gallery_discovery_shell_view_model($jobToken),
+    ]);
 }
 
 /**
@@ -241,12 +236,26 @@ function admin_gallery_discovery_json_response(array $payload): void
  */
 function render_admin_gallery_discovery_shell(string $jobToken = ''): void
 {
-    echo '<section class="panel admin-discovery-panel" data-admin-discovery-panel data-discovery-endpoint="' . e(url_for('admin_discover')) . '" data-import-url="' . e(url_for('admin_import')) . '" data-csrf-token="' . e(csrf_token()) . '" data-job-token="' . e($jobToken) . '">';
-    echo '<p class="muted">' . e(t('admin.galleries.discovery_intro', 'Discovery now runs in browser-driven batches, so large gallery folders no longer freeze the Admin page.')) . '</p>';
-    echo '<div class="thumbnail-progress" data-admin-discovery-progress hidden><progress class="thumbnail-progress-bar" max="100" value="0" data-admin-discovery-progress-bar></progress><p class="muted" data-admin-discovery-status>' . e(t('admin.galleries.discovery_starting', 'Preparing gallery discovery...')) . '</p><p class="muted" data-admin-discovery-counts></p></div>';
-    echo '<template data-admin-gallery-move-options><option value="">' . e(t('admin.galleries.discover_move_target_placeholder', 'Choose existing destination gallery')) . '</option>' . gallery_options_for_select(0) . '</template>';
-    echo '<div data-admin-discovery-results></div>';
-    echo '</section>';
+    \Gallery\Views\view_render_admin_gallery_discovery_shell(admin_gallery_discovery_shell_view_model($jobToken));
+}
+
+/**
+ * Build presentation state for the browser-driven Admin gallery discovery shell.
+ *
+ * @return array<string,mixed> Discovery shell view model.
+ */
+function admin_gallery_discovery_shell_view_model(string $jobToken = ''): array
+{
+    return [
+        'endpoint' => url_for('admin_discover'),
+        'import_url' => url_for('admin_import'),
+        'csrf_token' => csrf_token(),
+        'job_token' => $jobToken,
+        'intro' => t('admin.galleries.discovery_intro', 'Discovery now runs in browser-driven batches, so large gallery folders no longer freeze the Admin page.'),
+        'starting_message' => t('admin.galleries.discovery_starting', 'Preparing gallery discovery...'),
+        'move_placeholder' => t('admin.galleries.discover_move_target_placeholder', 'Choose existing destination gallery'),
+        'gallery_options_html' => gallery_options_for_select(0),
+    ];
 }
 
 /**
@@ -396,18 +405,23 @@ function cms_admin_new_gallery(): void
         return;
     }
 
-    render_header(t('admin.galleries.create_empty_title'));
-    echo '<section class="hero"><h1>' . e(t('admin.galleries.create_empty_title')) . '</h1><nav class="nav"><a class="button secondary" href="' . e(url_for('admin')) . '">' . e(t('admin.common.back_to_dashboard')) . '</a><a class="button secondary" href="' . e(url_for('admin_upload')) . '">' . e(t('admin.upload.title')) . '</a></nav></section>';
-    if ($prefillParentGallery) {
-        echo '<div class="notice">' . e(t('admin.galleries.create_inside_notice', 'New gallery will be created inside: {gallery}.', ['gallery' => (string) $prefillParentGallery['title']])) . '</div>';
-    }
-    if ($error !== '') {
-        echo '<div class="notice">' . e(t('admin.galleries.create_failed', ['error' => $error])) . '</div>';
-    }
-    echo '<section class="panel"><form method="post" action="' . e(url_for('admin_new_gallery')) . '" class="form-grid">' . csrf_field();
-    render_admin_new_gallery_fields($prefillParentId, false);
-    echo '<button type="submit">' . e(t('admin.galleries.create_folder_button')) . '</button></form></section>';
-    render_footer();
+    \Gallery\Views\view_render_admin_new_gallery_page([
+        'title' => t('admin.galleries.create_empty_title'),
+        'dashboard_url' => url_for('admin'),
+        'dashboard_label' => t('admin.common.back_to_dashboard'),
+        'upload_url' => url_for('admin_upload'),
+        'upload_label' => t('admin.upload.title'),
+        'parent_notice' => $prefillParentGallery
+            ? t('admin.galleries.create_inside_notice', 'New gallery will be created inside: {gallery}.', ['gallery' => (string) $prefillParentGallery['title']])
+            : '',
+        'error_notice' => $error !== '' ? t('admin.galleries.create_failed', ['error' => $error]) : '',
+        'action_url' => url_for('admin_new_gallery'),
+        'csrf_html' => csrf_field(),
+        'fields_html' => admin_gallery_discovery_capture_html(static function () use ($prefillParentId): void {
+            render_admin_new_gallery_fields($prefillParentId, false);
+        }),
+        'submit_label' => t('admin.galleries.create_folder_button'),
+    ]);
 }
 
 /**
@@ -541,26 +555,21 @@ function admin_new_gallery_success_response(array $gallery): array
 }
 
 /**
+ * Capture trusted HTML produced by an existing presentation renderer for inclusion in a view model.
+ */
+function admin_gallery_discovery_capture_html(callable $renderer): string
+{
+    ob_start();
+    $renderer();
+    return (string) ob_get_clean();
+}
+
+/**
  * Render compact Markdown formatting guidance for gallery description fields.
  */
 function render_gallery_description_formatting_hint(): void
 {
-    if (function_exists('Gallery\\Views\\view_render_gallery_description_formatting_hint')) {
-        view_render_gallery_description_formatting_hint();
-        return;
-    }
-    echo '<details class="gallery-description-format-help"><summary><span aria-hidden="true">💡</span><span>' . e(t('admin.gallery_editor.description_format_hints', 'Formatting hints')) . '</span></summary><div class="gallery-description-format-help-popover">';
-    echo '<p>' . e(t('admin.gallery_editor.description_format_intro', 'Basic formatting is supported in public gallery descriptions.')) . '</p>';
-    echo '<ul>';
-    echo '<li><code>**' . e(t('admin.gallery_editor.description_format_bold_word', 'bold')) . '**</code> ' . e(t('admin.gallery_editor.description_format_bold', 'makes bold text')) . '</li>';
-    echo '<li><code>*' . e(t('admin.gallery_editor.description_format_italic_word', 'italic')) . '*</code> ' . e(t('admin.gallery_editor.description_format_italic', 'makes italic text')) . '</li>';
-    echo '<li><code>`code`</code> ' . e(t('admin.gallery_editor.description_format_code', 'uses inline code styling')) . '</li>';
-    echo '<li><code>[url]www.example.com[/url]</code> / <code>[link]https://example.com[/link]</code> ' . e(t('admin.gallery_editor.description_format_link', 'creates a clickable external link; URL and LINK tags are case-insensitive')) . '</li>';
-    echo '<li><code>[url=https://example.com]' . e(t('admin.gallery_editor.description_format_link_word', 'Link text')) . '[/url]</code> ' . e(t('admin.gallery_editor.description_format_link_named', 'creates a link with custom text; LINK= works the same way')) . '</li>';
-    echo '<li><code>[' . e(t('admin.gallery_editor.description_format_link_word', 'Link text')) . '](https://example.com)</code> ' . e(t('admin.gallery_editor.description_format_link_markdown', 'is the equivalent Markdown syntax')) . '</li>';
-    echo '<li>' . e(t('admin.gallery_editor.description_format_link_icon', 'Well-known sites such as YouTube, Facebook, X/Twitter, Instagram, Wikipedia, LinkedIn, GitHub, Reddit, TikTok, Discord, Twitch, and Vimeo use bundled local icons. For other HTTP(S) links, saving the gallery attempts to fetch a safe favicon into the shared local cache; when available, it is shown before the link text.')) . '</li>';
-    echo '<li>' . e(t('admin.gallery_editor.description_format_newlines', 'A single Enter is preserved as a new line. Empty lines create separate paragraphs.')) . '</li>';
-    echo '</ul></div></details>';
+    view_render_gallery_description_formatting_hint();
 }
 
 /**
@@ -572,67 +581,7 @@ function render_gallery_description_formatting_hint(): void
  */
 function render_admin_new_gallery_fields(int $prefillParentId, bool $panelMode, string $workflow = 'create'): void
 {
-    if (function_exists('Gallery\\Views\\view_render_admin_new_gallery_fields')) {
-        view_render_admin_new_gallery_fields($prefillParentId, $panelMode, $workflow);
-        return;
-    }
-    // $isUploadWorkflow stores whether the shared create fields are embedded in the upload workflow.
-    $isUploadWorkflow = $workflow === 'upload';
-    if ($panelMode) {
-        echo '<input type="hidden" name="panel" value="1">';
-    }
-    if ($panelMode) {
-        $panelHelp = $isUploadWorkflow ? t('admin.upload.gallery_identity_help', 'Create an empty gallery, or select photos and upload them immediately.') : t('admin.gallery_editor.only_gallery_created_here', 'Only the gallery is created here.');
-        $panelKicker = $isUploadWorkflow ? t('admin.upload.new_child_gallery', 'New child gallery') : t('admin.gallery_editor.new_gallery_kicker', 'New gallery');
-        echo '<div class="admin-side-panel-card admin-side-panel-primary-card"><div class="admin-side-panel-card-heading"><div><p class="admin-kicker">' . e($panelKicker) . '</p><h3>' . e(t('admin.gallery_editor.gallery_identity', 'Gallery identity')) . '</h3></div><p class="muted">' . e($panelHelp) . '</p></div><div class="admin-side-panel-field-grid">';
-        echo '<label class="admin-side-panel-field admin-side-panel-field-wide"><span>' . e(t('admin.gallery_editor.gallery_name', 'Gallery name')) . '</span><input name="title" required></label>';
-        echo '<label class="admin-side-panel-field"><span>' . e(t('admin.gallery_editor.folder_name', 'Folder name')) . '</span><input name="folder_name" autocomplete="off"><small>' . e(t('admin.gallery_editor.derive_from_gallery_name', 'Leave empty to derive it from the gallery name.')) . '</small></label>';
-        echo '<label class="admin-side-panel-field"><span>' . e(t('admin.gallery_editor.metric_visibility')) . '</span><select name="visibility">' . visibility_options('unpublished') . '</select></label>';
-        if (function_exists('Gallery\\Views\\view_render_admin_gallery_date_range_fields')) {
-            view_render_admin_gallery_date_range_fields([], true);
-        } elseif (gallery_date_schema_ready()) {
-            echo '<label class="admin-side-panel-field"><span>' . e(t('admin.gallery_editor.gallery_date', 'Date')) . '</span><input name="gallery_date" type="date"><small>' . e(t('admin.gallery_editor.gallery_date_help', 'Optional manual gallery date, for example an event, trip, or shooting date.')) . '</small></label>';
-        } else {
-            echo '<div class="admin-side-panel-field admin-side-panel-field-wide"><span>' . e(t('admin.gallery_editor.gallery_date', 'Date')) . '</span><small>' . e(t('admin.gallery_editor.gallery_date_migration_hidden', 'Gallery date will be available after the database migration is applied.')) . '</small></div>';
-        }
-        echo '<label class="admin-side-panel-field admin-side-panel-field-wide"><span>' . e(t('admin.gallery_editor.parent_gallery', 'Parent gallery')) . '</span><select name="parent_id"><option value="0"' . ($prefillParentId === 0 ? ' selected' : '') . '>' . e(t('admin.gallery_editor.no_parent', 'No parent')) . '</option>' . gallery_parent_options_for_new($prefillParentId) . '</select></label>';
-        echo '<label class="admin-side-panel-field admin-side-panel-field-wide"><span>' . e(t('admin.gallery_editor.description', 'Description')) . '</span><textarea name="description" rows="4"></textarea></label>';
-        render_gallery_description_formatting_hint();
-        echo '</div><div class="admin-side-panel-toggle-row">';
-        echo '<label><input type="checkbox" name="voting_enabled" value="1"> <span>' . e(t('admin.gallery_editor.enable_image_voting_short', 'Enable image voting')) . '</span></label>';
-        echo '<label><input type="checkbox" name="show_filenames" value="1"> <span>' . e(t('admin.gallery_editor.show_file_names', 'Show file names')) . '</span></label>';
-        echo '</div></div>';
-        if (gallery_count_badge_schema_ready()) {
-            echo '<div class="admin-side-panel-card"><label class="admin-side-panel-field"><span>' . e(t('admin.gallery_editor.count_badge_title', 'Contained-picture badge')) . '</span><select name="count_badge_visibility">';
-            foreach (gallery_count_badge_override_values() as $countBadgeOption) {
-                echo '<option value="' . e($countBadgeOption) . '"' . ($countBadgeOption === 'inherit' ? ' selected' : '') . '>' . e(gallery_count_badge_override_label($countBadgeOption)) . '</option>';
-            }
-            echo '</select><small>' . e(t('admin.gallery_editor.count_badge_new_gallery_help', 'Controls the stacked-picture branch image count on this gallery card and its opened-gallery hero.')) . '</small></label></div>';
-        }
-        return;
-    }
-    echo '<label>' . e(t('admin.gallery_editor.gallery_name', 'Gallery name')) . '<input name="title" required></label>';
-    echo '<label>' . e(t('admin.gallery_editor.folder_name', 'Folder name')) . '<input name="folder_name" autocomplete="off"><span class="muted">' . e(t('admin.gallery_editor.derive_from_gallery_name', 'Leave empty to derive it from the gallery name.')) . '</span></label>';
-    echo '<label>' . e(t('admin.gallery_editor.parent_gallery', 'Parent gallery')) . '<select name="parent_id"><option value="0"' . ($prefillParentId === 0 ? ' selected' : '') . '>' . e(t('admin.gallery_editor.no_parent', 'No parent')) . '</option>' . gallery_parent_options_for_new($prefillParentId) . '</select></label>';
-    echo '<label>' . e(t('admin.gallery_editor.visibility', 'Visibility')) . '<select name="visibility">' . visibility_options('unpublished') . '</select></label>';
-    if (function_exists('Gallery\\Views\\view_render_admin_gallery_date_range_fields')) {
-        view_render_admin_gallery_date_range_fields([], false);
-    } elseif (gallery_date_schema_ready()) {
-        echo '<label>' . e(t('admin.gallery_editor.gallery_date', 'Date')) . '<input name="gallery_date" type="date"><span class="muted">' . e(t('admin.gallery_editor.gallery_date_help', 'Optional manual gallery date, for example an event, trip, or shooting date.')) . '</span></label>';
-    } else {
-        echo '<p class="muted">' . e(t('admin.gallery_editor.gallery_date_migration_hidden', 'Gallery date will be available after the database migration is applied.')) . '</p>';
-    }
-    echo '<label><input type="checkbox" name="voting_enabled" value="1"> ' . e(t('admin.gallery_editor.enable_image_voting', 'Enable image voting for this gallery')) . '</label>';
-    echo '<label><input type="checkbox" name="show_filenames" value="1"> ' . e(t('admin.gallery_editor.show_file_names', 'Show file names')) . '</label>';
-    if (gallery_count_badge_schema_ready()) {
-        echo '<label>' . e(t('admin.gallery_editor.count_badge_title', 'Contained-picture badge')) . '<select name="count_badge_visibility">';
-        foreach (gallery_count_badge_override_values() as $countBadgeOption) {
-            echo '<option value="' . e($countBadgeOption) . '"' . ($countBadgeOption === 'inherit' ? ' selected' : '') . '>' . e(gallery_count_badge_override_label($countBadgeOption)) . '</option>';
-        }
-        echo '</select><span class="muted">' . e(t('admin.gallery_editor.count_badge_new_gallery_help', 'Controls the stacked-picture branch image count on this gallery card and its opened-gallery hero.')) . '</span></label>';
-    }
-    echo '<label>' . e(t('admin.gallery_editor.description', 'Description')) . '<textarea name="description"></textarea></label>';
-    render_gallery_description_formatting_hint();
+    view_render_admin_new_gallery_fields($prefillParentId, $panelMode, $workflow, admin_gallery_form_view_model('gallery'));
 }
 
 /**
@@ -644,22 +593,5 @@ function render_admin_new_gallery_fields(int $prefillParentId, bool $panelMode, 
  */
 function render_admin_new_gallery_side_panel(int $prefillParentId, ?array $prefillParentGallery, string $error): void
 {
-    if (function_exists('Gallery\\Views\\view_render_admin_new_gallery_side_panel')) {
-        view_render_admin_new_gallery_side_panel($prefillParentId, $prefillParentGallery, $error);
-        return;
-    }
-    echo '<div class="admin-side-panel-stack" data-gallery-create-panel>';
-    echo '<div class="admin-side-panel-copy"><p class="admin-kicker">' . e(t('admin.gallery_editor.gallery_workflow', 'Gallery workflow')) . '</p><h2>' . e(t('admin.gallery_editor.create_gallery', 'Create gallery')) . '</h2><p class="muted">' . e(t('admin.gallery_editor.create_gallery_empty_help', 'Create a new empty gallery in the selected parent. Photo upload stays in the separate upload workflow.')) . '</p></div>';
-    if ($prefillParentGallery) {
-        echo '<div class="notice">' . e(t('admin.gallery_editor.target_parent', 'Target parent: {title}.', ['title' => (string) $prefillParentGallery['title']])) . '</div>';
-    }
-    if ($error !== '') {
-        echo '<div class="notice">' . e(t('admin.galleries.create_failed', ['error' => $error])) . '</div>';
-    }
-    echo '<section class="admin-side-panel-workflow" data-gallery-panel-workflow>';
-    echo '<form method="post" action="' . e(url_for('admin_new_gallery')) . '" class="admin-side-panel-form" data-gallery-panel-create-form>' . csrf_field();
-    render_admin_new_gallery_fields($prefillParentId, true);
-    echo '<div class="admin-side-panel-actions"><button type="submit" class="button primary" data-gallery-panel-submit>' . e(t('admin.gallery_editor.create_gallery', 'Create gallery')) . '</button><p class="muted">' . e(t('admin.gallery_editor.new_gallery_empty_help', 'The new gallery is created empty. Use Upload photos for media.')) . '</p></div>';
-    echo '</form></section>';
-    echo '</div>';
+    view_render_admin_new_gallery_side_panel($prefillParentId, $prefillParentGallery, $error, admin_gallery_form_view_model('gallery'));
 }

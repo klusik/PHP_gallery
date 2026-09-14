@@ -37,13 +37,19 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
-use PDO;
 use RuntimeException;
 use Throwable;
-use function Gallery\Core\db;
 use function Gallery\Core\normalize_relative_path;
 use function Gallery\Core\now_sql;
 use function Gallery\Core\path_inside;
+use function Gallery\Models\media_renamer_model_all_gallery_ids;
+use function Gallery\Models\media_renamer_model_apply_updates;
+use function Gallery\Models\media_renamer_model_delete_download_archives;
+use function Gallery\Models\media_renamer_model_download_archives;
+use function Gallery\Models\media_renamer_model_existing_gallery_ids;
+use function Gallery\Models\media_renamer_model_gallery_rows;
+use function Gallery\Models\media_renamer_model_image_gallery_rows;
+use function Gallery\Models\media_renamer_model_indexed_paths;
 
 /**
  * Return gallery rows with direct-image counts for the site-wide renamer UI.
@@ -53,13 +59,7 @@ use function Gallery\Core\path_inside;
  */
 function media_renamer_gallery_rows(bool $hideEmptyGalleries = false): array
 {
-    $having = $hideEmptyGalleries ? ' HAVING direct_image_count > 0' : '';
-    $stmt = db()->query("SELECT g.*, COUNT(i.id) AS direct_image_count
-        FROM galleries g
-        LEFT JOIN images i ON i.gallery_id = g.id AND i.relative_path NOT LIKE '%/%'
-        GROUP BY g.id" . $having . "
-        ORDER BY CHAR_LENGTH(g.folder_path), g.folder_path, g.title, g.id");
-    return $stmt->fetchAll();
+    return media_renamer_model_gallery_rows($hideEmptyGalleries);
 }
 
 /**
@@ -70,18 +70,7 @@ function media_renamer_gallery_rows(bool $hideEmptyGalleries = false): array
  */
 function media_renamer_all_gallery_ids(bool $hideEmptyGalleries = false): array
 {
-    if (!$hideEmptyGalleries) {
-        $stmt = db()->prepare('SELECT id FROM galleries ORDER BY CHAR_LENGTH(folder_path), folder_path, id');
-        $stmt->execute();
-        return array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
-    }
-
-    $stmt = db()->prepare("SELECT g.id
-        FROM galleries g
-        INNER JOIN images i ON i.gallery_id = g.id AND i.relative_path NOT LIKE '%/%'
-        GROUP BY g.id
-        ORDER BY CHAR_LENGTH(g.folder_path), g.folder_path, g.id");
-    return array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+    return media_renamer_model_all_gallery_ids($hideEmptyGalleries);
 }
 
 
@@ -242,11 +231,9 @@ function media_renamer_db_availability_for_gallery(int $galleryId, string $patte
  */
 function media_renamer_indexed_relative_path_image_ids(int $galleryId): array
 {
-    $stmt = db()->prepare('SELECT id, relative_path FROM images WHERE gallery_id = ?');
-    $stmt->execute([$galleryId]);
     $paths = [];
 
-    foreach ($stmt->fetchAll() as $image) {
+    foreach (media_renamer_model_indexed_paths($galleryId) as $image) {
         $relativePath = normalize_relative_path((string) ($image['relative_path'] ?? ''));
         if ($relativePath === '') {
             continue;
@@ -361,15 +348,7 @@ function media_renamer_gallery_ids_with_pending_renames(array $galleryIds, strin
  */
 function media_renamer_existing_gallery_ids(array $galleryIds): array
 {
-    $ids = array_values(array_unique(array_filter(array_map('intval', $galleryIds), static fn (int $id): bool => $id > 0)));
-    if (!$ids) {
-        return [];
-    }
-
-    $placeholders = implode(',', array_fill(0, count($ids), '?'));
-    $stmt = db()->prepare('SELECT id FROM galleries WHERE id IN (' . $placeholders . ') ORDER BY CHAR_LENGTH(folder_path), folder_path, id');
-    $stmt->execute($ids);
-    return array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+    return media_renamer_model_existing_gallery_ids($galleryIds);
 }
 
 /**
@@ -974,11 +953,8 @@ function media_renamer_execute_image_batch(array $imageIds, string $pattern = ''
         return $result;
     }
 
-    $placeholders = implode(',', array_fill(0, count($ids), '?'));
-    $stmt = db()->prepare('SELECT id, gallery_id FROM images WHERE id IN (' . $placeholders . ') ORDER BY gallery_id, sort_order, id');
-    $stmt->execute($ids);
     $byGallery = [];
-    foreach ($stmt->fetchAll() as $row) {
+    foreach (media_renamer_model_image_gallery_rows($ids) as $row) {
         $galleryId = (int) ($row['gallery_id'] ?? 0);
         $imageId = (int) ($row['id'] ?? 0);
         if ($galleryId <= 0 || $imageId <= 0) {
@@ -1507,38 +1483,28 @@ function media_renamer_rollback_file_moves(array $finalFiles, array $stagedFiles
  */
 function media_renamer_update_database_rows(array $items): array
 {
-    $pdo = db();
     $now = now_sql();
     $result = ['titles_updated' => 0];
-    $pdo->beginTransaction();
-    try {
-        $tempStmt = $pdo->prepare('UPDATE images SET relative_path = ?, relative_path_hash = ?, filename = ?, updated_at = ? WHERE id = ?');
-        foreach ($items as $item) {
-            $imageId = (int) ($item['image_id'] ?? 0);
-            $tempRelativePath = '__media_renamer_tmp_' . $imageId . '_' . substr(hash('sha256', (string) microtime(true) . random_int(1, PHP_INT_MAX)), 0, 16) . '.tmp';
-            $tempStmt->execute([$tempRelativePath, hash('sha256', $tempRelativePath), $tempRelativePath, $now, $imageId]);
+    $updates = [];
+    foreach ($items as $item) {
+        $image = (array) ($item['image'] ?? []);
+        $imageId = (int) ($item['image_id'] ?? 0);
+        $finalRelativePath = normalize_relative_path((string) ($item['new_relative_path'] ?? ''));
+        $finalFilename = (string) ($item['new_filename'] ?? basename($finalRelativePath));
+        $finalTitle = media_renamer_title_after_rename($image, $finalFilename);
+        if ($finalTitle !== ($image['title'] ?? null)) {
+            $result['titles_updated']++;
         }
-
-        $finalStmt = $pdo->prepare('UPDATE images SET relative_path = ?, relative_path_hash = ?, filename = ?, title = ?, updated_at = ? WHERE id = ?');
-        foreach ($items as $item) {
-            $image = (array) ($item['image'] ?? []);
-            $finalRelativePath = normalize_relative_path((string) ($item['new_relative_path'] ?? ''));
-            $finalFilename = (string) ($item['new_filename'] ?? basename($finalRelativePath));
-            $finalTitle = media_renamer_title_after_rename($image, $finalFilename);
-            if ($finalTitle !== ($image['title'] ?? null)) {
-                $result['titles_updated']++;
-            }
-            $finalStmt->execute([$finalRelativePath, hash('sha256', $finalRelativePath), $finalFilename, $finalTitle, $now, (int) ($item['image_id'] ?? 0)]);
-        }
-
-        $pdo->commit();
-        return $result;
-    } catch (Throwable $exception) {
-        if ($pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
-        throw $exception;
+        $updates[] = [
+            'id' => $imageId,
+            'temp_relative_path' => '__media_renamer_tmp_' . $imageId . '_' . substr(hash('sha256', (string) microtime(true) . random_int(1, PHP_INT_MAX)), 0, 16) . '.tmp',
+            'relative_path' => $finalRelativePath,
+            'filename' => $finalFilename,
+            'title' => $finalTitle,
+        ];
     }
+    media_renamer_model_apply_updates($updates, $now);
+    return $result;
 }
 
 /**
@@ -1582,17 +1548,8 @@ function media_renamer_clear_download_archives(array $galleryIds): int
     }
 
     $galleryIds = array_values(array_unique(array_filter(array_map('intval', $galleryIds), static fn (int $id): bool => $id > 0)));
-    $params = [];
-    $where = "scope = 'all'";
-    if ($galleryIds) {
-        $where .= ' OR gallery_id IN (' . implode(',', array_fill(0, count($galleryIds), '?')) . ')';
-        $params = $galleryIds;
-    }
-
-    $stmt = db()->prepare('SELECT id, file_path FROM zip_archives WHERE ' . $where);
-    $stmt->execute($params);
-    $rows = $stmt->fetchAll();
-    if (!$rows) {
+    $rows = media_renamer_model_download_archives($galleryIds);
+    if ($rows === []) {
         return 0;
     }
 
@@ -1605,12 +1562,5 @@ function media_renamer_clear_download_archives(array $galleryIds): int
         $deleteIds[] = (int) ($row['id'] ?? 0);
     }
 
-    $deleteIds = array_values(array_filter($deleteIds, static fn (int $id): bool => $id > 0));
-    if (!$deleteIds) {
-        return 0;
-    }
-
-    $delete = db()->prepare('DELETE FROM zip_archives WHERE id IN (' . implode(',', array_fill(0, count($deleteIds), '?')) . ')');
-    $delete->execute($deleteIds);
-    return (int) $delete->rowCount();
+    return media_renamer_model_delete_download_archives($deleteIds);
 }

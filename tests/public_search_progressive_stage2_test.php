@@ -1,6 +1,21 @@
 <?php
 
 /**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ *
+ * File: tests/public_search_progressive_stage2_test.php
+ *
+ * Author:
+ *   Rudolf Klusal
+ *
+ * License:
+ *   MIT License (see LICENSE file in repository)
+ *
+ * Notes:
+ *   - Keep comments and docstrings intact when modifying this file.
+ */
+/**
  * Protect the Stage 1/2 progressive public-search contracts and fast primary phase.
  */
 
@@ -12,7 +27,7 @@ require_once dirname(__DIR__) . '/app/services/public_search_progressive.php';
 
 use function Gallery\Services\public_search_phase_result_limit;
 use function Gallery\Services\public_search_phase_supported;
-use function Gallery\Services\public_search_prefix_pattern;
+use function Gallery\Models\public_search_model_prefix_pattern;
 use function Gallery\Services\public_search_primary_gallery_match_source;
 use function Gallery\Services\public_search_relevance_score;
 use function Gallery\Services\public_search_result_key;
@@ -48,7 +63,7 @@ public_search_progressive_assert(public_search_phase_result_limit('descriptive',
 public_search_progressive_assert(public_search_phase_result_limit('deep', 14) === 8, 'Deep phase must remain bounded.');
 public_search_progressive_assert(public_search_result_key('gallery', 42) === 'gallery:42', 'Gallery result keys must remain stable.');
 public_search_progressive_assert(public_search_result_key('photo', 7) === 'photo:7', 'Photo result keys must remain stable.');
-public_search_progressive_assert(public_search_prefix_pattern('A_3%') === 'A\\_3\\%%', 'Prefix LIKE escaping must preserve literal wildcard characters.');
+public_search_progressive_assert(public_search_model_prefix_pattern('A_3%') === 'A\\_3\\%%', 'Model-owned prefix LIKE escaping must preserve literal wildcard characters.');
 
 $expectedScores = [
     'gallery_title_exact' => 1200,

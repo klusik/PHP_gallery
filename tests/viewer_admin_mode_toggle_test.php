@@ -15,7 +15,10 @@
  *   - Verify the historical config.php values remain the fallback when no override exists
  *   - Verify the Admin control exposes exactly disabled, invite_only, and open modes
  *   - Verify the invitation controller uses Admin authentication and CSRF for the toggle
- */
+  *
+ * Author:
+ *   Rudolf Klusal
+*/
 
 declare(strict_types=1);
 
@@ -98,13 +101,14 @@ namespace {
     viewer_toggle_assert(!\Gallery\Services\viewer_accounts_enabled(), 'Malformed Admin override must fail back to the safe historical configuration.');
 
     $controller = (string) file_get_contents($root . '/app/controllers/viewer_accounts.php');
+    $viewerView = (string) file_get_contents($root . '/app/views/viewer_accounts.php');
     viewer_toggle_assert(str_contains($controller, "if (\$action === 'set_mode')"), 'Viewer invitation Admin page must process the dedicated mode action.');
     viewer_toggle_assert(str_contains($controller, 'verify_csrf();'), 'Viewer mode mutation must remain protected by Admin CSRF.');
     viewer_toggle_assert(str_contains($controller, 'require_admin();'), 'Viewer mode mutation must remain on an administrator-only page.');
     viewer_toggle_assert(str_contains($controller, "in_array(\$requestedMode, ['disabled', 'invite_only', 'open'], true)"), 'Controller must explicitly allow only the three supported registration modes.');
     viewer_toggle_assert(str_contains($controller, 'viewer_accounts_set_admin_registration_mode($requestedMode);'), 'Controller must delegate persistence to the lifecycle-aware registration-mode service.');
     foreach (['disabled', 'invite_only', 'open'] as $mode) {
-        viewer_toggle_assert(str_contains($controller, '<option value="' . $mode . '"'), 'Admin selector missing mode: ' . $mode);
+        viewer_toggle_assert(str_contains($viewerView, '<option value="' . $mode . '"'), 'Admin selector missing mode: ' . $mode);
     }
     viewer_toggle_assert(!str_contains($controller, 'file_put_contents(') && !str_contains($controller, 'config.php\''), 'Admin viewer toggle must not rewrite config.php.');
     viewer_toggle_assert(!str_contains($controller, 'session_destroy()'), 'Viewer availability toggle must never destroy the shared Admin session.');

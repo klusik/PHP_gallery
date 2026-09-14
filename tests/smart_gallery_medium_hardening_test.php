@@ -1,6 +1,21 @@
 <?php
 
 /**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ *
+ * File: tests/smart_gallery_medium_hardening_test.php
+ *
+ * Author:
+ *   Rudolf Klusal
+ *
+ * License:
+ *   MIT License (see LICENSE file in repository)
+ *
+ * Notes:
+ *   - Keep comments and docstrings intact when modifying this file.
+ */
+/**
  * Regression contracts for Smart Gallery medium-priority release hardening.
  *
  * These checks protect hierarchy mutation preflight/cache invalidation and the
@@ -20,7 +35,9 @@ function smart_gallery_medium_hardening_assert(bool $condition, string $message)
 
 $root = dirname(__DIR__);
 $mutations = (string) file_get_contents($root . '/app/services/gallery_mutations.php');
+$mutationModel = (string) file_get_contents($root . '/app/models/gallery_mutations.php');
 $publicPaths = (string) file_get_contents($root . '/app/services/public_paths.php');
+$publicPathModel = (string) file_get_contents($root . '/app/models/public_paths.php');
 $reorder = (string) file_get_contents($root . '/app/controllers/admin_galleries_reorder.php');
 $downloads = (string) file_get_contents($root . '/app/services/downloads.php');
 $downloadController = (string) file_get_contents($root . '/app/controllers/downloads.php');
@@ -35,8 +52,11 @@ smart_gallery_medium_hardening_assert(
     $syncSource !== ''
     && str_contains($syncSource, '$desiredParentById = [];')
     && str_contains($syncSource, 'smart_gallery_validate_gallery_parent_map($desiredParentById);')
-    && strpos($syncSource, 'smart_gallery_validate_gallery_parent_map($desiredParentById);') < strpos($syncSource, "UPDATE galleries SET parent_id"),
-    'Filesystem parent synchronization validates the complete proposed parent map before its first parent_id UPDATE.'
+    && str_contains($syncSource, 'gallery_mutation_model_sync_parent_map($galleries, $desiredParentById, now_sql())')
+    && strpos($syncSource, 'smart_gallery_validate_gallery_parent_map($desiredParentById);') < strpos($syncSource, 'gallery_mutation_model_sync_parent_map($galleries, $desiredParentById, now_sql())')
+    && str_contains($mutationModel, 'UPDATE galleries SET parent_id = NULL')
+    && str_contains($mutationModel, 'UPDATE galleries SET parent_id = ?, updated_at = ?'),
+    'Filesystem parent synchronization validates the complete proposed parent map before model-owned parent_id persistence.'
 );
 smart_gallery_medium_hardening_assert(
     str_contains($syncSource, 'smart_gallery_graph_cache_clear();')
@@ -52,9 +72,11 @@ $repairSource = $repairStart !== false
 smart_gallery_medium_hardening_assert(
     $repairSource !== ''
     && str_contains($repairSource, 'smart_gallery_validate_gallery_parent_map($assignments);')
-    && strpos($repairSource, 'smart_gallery_validate_gallery_parent_map($assignments);') < strpos($repairSource, "UPDATE galleries SET parent_id")
-    && str_contains($repairSource, 'smart_gallery_graph_cache_clear();'),
-    'Public-path parent repair validates before writes and invalidates the Smart Gallery graph after a committed hierarchy change.'
+    && str_contains($repairSource, 'public_path_model_apply_parent_assignments($rows, $assignments, $pdo)')
+    && strpos($repairSource, 'smart_gallery_validate_gallery_parent_map($assignments);') < strpos($repairSource, 'public_path_model_apply_parent_assignments($rows, $assignments, $pdo)')
+    && str_contains($repairSource, 'smart_gallery_graph_cache_clear();')
+    && str_contains($publicPathModel, 'UPDATE galleries SET parent_id = ? WHERE id = ?'),
+    'Public-path parent repair validates before model-owned writes and invalidates the Smart Gallery graph after a committed hierarchy change.'
 );
 
 $moveStart = strpos($mutations, 'function move_gallery_folder_to_parent');

@@ -47,10 +47,17 @@ namespace Gallery\Core {
 }
 
 namespace Gallery\Services {
-    /** Keep crawler-header dispatch outside this schema-policy fixture's scope. */
-    function seo_request_guard_emit_route_robots_header(string $page): void
+    /**
+     * Keep crawler-header policy inert for this dispatcher fixture.
+     *
+     * @param string $page Route identifier.
+     * @return ?string No robots directive for fixture routes.
+     */
+    function seo_request_guard_route_robots_header_value(string $page): ?string
     {
+        return null;
     }
+
 
 
     /**
@@ -110,14 +117,27 @@ namespace Gallery\Services {
     }
 
     /**
-     * Record an unexpected disabled-route render attempt.
+     * Record an unexpected disabled-route decision request.
      *
-     * @param string $page Resolved route identifier.
+     * @param string $page Route identifier.
+     * @param bool $wantsJson Whether JSON was requested.
+     * @param bool $isAdmin Whether the current principal is Admin.
+     * @return array<string,mixed> Disabled-route decision.
      */
-    function feature_flag_render_disabled_route(string $page): void
+    function feature_flag_disabled_route_decision(string $page, bool $wantsJson, bool $isAdmin): array
     {
         $GLOBALS['nsfw_policy_fixture_disabled_route'] = $page;
+        return [
+            'status' => 404,
+            'representation' => $wantsJson ? 'json' : 'html',
+            'headers' => [],
+            'payload' => ['ok' => false],
+            'title' => 'Not found',
+            'message' => 'Not found',
+            'admin' => false,
+        ];
     }
+
 }
 
 namespace Gallery\Controllers {
@@ -167,6 +187,7 @@ namespace {
     $projectRoot = dirname(__DIR__, 2);
     require_once $projectRoot . '/app/services/schema_inspection.php';
     require_once $projectRoot . '/app/services/gallery_access.php';
+    require_once $projectRoot . '/app/views/http.php';
     require_once $projectRoot . '/app/controllers/http_helpers.php';
     require_once $projectRoot . '/app/helpers_request.php';
     require_once $projectRoot . '/app/bootstrap/dispatch.php';

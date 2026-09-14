@@ -37,8 +37,11 @@ namespace Gallery\Services;
 
 use InvalidArgumentException;
 use RuntimeException;
-use PDO;
-use function Gallery\Core\db;
+use function Gallery\Models\duplicate_photo_ledger_model_add_gallery;
+use function Gallery\Models\duplicate_photo_ledger_model_add_pair;
+use function Gallery\Models\duplicate_photo_ledger_model_clear;
+use function Gallery\Models\duplicate_photo_ledger_model_gallery_ids;
+use function Gallery\Models\duplicate_photo_ledger_model_pairs;
 
 const DUPLICATE_PHOTO_LEDGER_PAIR_TABLE = 'duplicate_photo_ledger_pairs';
 const DUPLICATE_PHOTO_LEDGER_GALLERY_TABLE = 'duplicate_photo_ledger_galleries';
@@ -121,14 +124,7 @@ function duplicate_photo_ledger_snapshot(int $adminUserId): array
 
     $snapshot = duplicate_photo_ledger_empty_snapshot(true, 'available');
 
-    $pairStmt = db()->prepare(
-        'SELECT image_id_low, image_id_high
-         FROM duplicate_photo_ledger_pairs
-         WHERE user_id = ?
-         ORDER BY image_id_low, image_id_high'
-    );
-    $pairStmt->execute([$adminUserId]);
-    foreach ($pairStmt->fetchAll(PDO::FETCH_ASSOC) ?: [] as $row) {
+    foreach (duplicate_photo_ledger_model_pairs($adminUserId) as $row) {
         $lowId = (int) ($row['image_id_low'] ?? 0);
         $highId = (int) ($row['image_id_high'] ?? 0);
         if ($lowId <= 0 || $highId <= 0 || $lowId === $highId) {
@@ -137,15 +133,7 @@ function duplicate_photo_ledger_snapshot(int $adminUserId): array
         $snapshot['pairs'][$lowId . ':' . $highId] = true;
     }
 
-    $galleryStmt = db()->prepare(
-        'SELECT gallery_id
-         FROM duplicate_photo_ledger_galleries
-         WHERE user_id = ?
-         ORDER BY gallery_id'
-    );
-    $galleryStmt->execute([$adminUserId]);
-    foreach ($galleryStmt->fetchAll(PDO::FETCH_COLUMN) ?: [] as $galleryId) {
-        $galleryId = (int) $galleryId;
+    foreach (duplicate_photo_ledger_model_gallery_ids($adminUserId) as $galleryId) {
         if ($galleryId > 0) {
             $snapshot['galleries'][$galleryId] = true;
         }
@@ -210,11 +198,7 @@ function duplicate_photo_ledger_add_pair(int $adminUserId, int $firstImageId, in
     );
 
     [$lowId, $highId] = duplicate_photo_ledger_normalize_pair($firstImageId, $secondImageId);
-    $stmt = db()->prepare(
-        'INSERT IGNORE INTO duplicate_photo_ledger_pairs (user_id, image_id_low, image_id_high, created_at)
-         VALUES (?, ?, ?, NOW())'
-    );
-    $stmt->execute([$adminUserId, $lowId, $highId]);
+    duplicate_photo_ledger_model_add_pair($adminUserId, $lowId, $highId);
 }
 
 /**
@@ -236,11 +220,7 @@ function duplicate_photo_ledger_add_gallery(int $adminUserId, int $galleryId): v
         'Duplicate photo ledger storage could not be verified. No ledger change was made.'
     );
 
-    $stmt = db()->prepare(
-        'INSERT IGNORE INTO duplicate_photo_ledger_galleries (user_id, gallery_id, created_at)
-         VALUES (?, ?, NOW())'
-    );
-    $stmt->execute([$adminUserId, $galleryId]);
+    duplicate_photo_ledger_model_add_gallery($adminUserId, $galleryId);
 }
 
 /**
@@ -261,23 +241,5 @@ function duplicate_photo_ledger_clear(int $adminUserId): array
         'Duplicate photo ledger storage could not be verified. No ledger change was made.'
     );
 
-    $pdo = db();
-    $pdo->beginTransaction();
-    try {
-        $pairStmt = $pdo->prepare('DELETE FROM duplicate_photo_ledger_pairs WHERE user_id = ?');
-        $pairStmt->execute([$adminUserId]);
-        $galleryStmt = $pdo->prepare('DELETE FROM duplicate_photo_ledger_galleries WHERE user_id = ?');
-        $galleryStmt->execute([$adminUserId]);
-        $pdo->commit();
-    } catch (\Throwable $exception) {
-        if ($pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
-        throw $exception;
-    }
-
-    return [
-        'pairs' => $pairStmt->rowCount(),
-        'galleries' => $galleryStmt->rowCount(),
-    ];
+    return duplicate_photo_ledger_model_clear($adminUserId);
 }

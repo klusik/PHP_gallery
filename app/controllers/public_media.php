@@ -39,7 +39,6 @@ namespace Gallery\Controllers;
 use finfo;
 use InvalidArgumentException;
 use function Gallery\Core\current_user;
-use function Gallery\Core\output_sitemap_xml;
 use function Gallery\Core\public_base_url;
 use function Gallery\Services\current_user_is_known_under_18;
 use function Gallery\Services\find_gallery;
@@ -60,9 +59,11 @@ use function Gallery\Services\image_nsfw_restricted;
 use function Gallery\Services\image_public_display_file;
 use function Gallery\Services\public_image_visible_to_current_visitor;
 use function Gallery\Services\public_media_needs_private_cache;
+use function Gallery\Services\public_sitemap_entries;
 use function Gallery\Services\resolve_public_gallery_path;
 use function Gallery\Services\thumbnail_ensure_image_thumbnail_variant_file;
 use function Gallery\Services\thumbnail_response_file_geometry_status;
+use function Gallery\Views\view_render_sitemap_xml;
 use function Gallery\Services\thumbnail_sizes;
 use function Gallery\Services\visitor_can_access_gallery;
 use function Gallery\Services\visitor_can_access_nsfw_content;
@@ -216,11 +217,13 @@ function cms_thumb(): void
     $readBytes = readfile($path);
     gallery_benchmark_media_request_mark($benchmarkMediaRequest, 'stream_end', [
         'readfile_bytes' => is_int($readBytes) ? $readBytes : null,
+        'http_status' => http_response_code() ?: 200,
     ]);
     gallery_benchmark_media_request_finish($benchmarkMediaRequest, [
         'finish_reason' => 'normal',
         'expected_bytes' => $bytes,
         'readfile_bytes' => is_int($readBytes) ? $readBytes : null,
+        'http_status' => http_response_code() ?: 200,
     ]);
 }
 
@@ -296,11 +299,13 @@ function cms_public_thumb(): void
     $readBytes = readfile($path);
     gallery_benchmark_media_request_mark($benchmarkMediaRequest, 'stream_end', [
         'readfile_bytes' => is_int($readBytes) ? $readBytes : null,
+        'http_status' => http_response_code() ?: 200,
     ]);
     gallery_benchmark_media_request_finish($benchmarkMediaRequest, [
         'finish_reason' => 'normal',
         'expected_bytes' => $bytes,
         'readfile_bytes' => is_int($readBytes) ? $readBytes : null,
+        'http_status' => http_response_code() ?: 200,
     ]);
 }
 
@@ -360,18 +365,30 @@ function cms_public_media(): void
     ]);
     send_conditional_file_headers($path, $cacheControl);
     if (function_exists('telemetry_record_media_served_event')) {
-        \telemetry_record_media_served_event($image, $gallery, 'media.image.served', $bytes, (string) $displayFile['variant'], 'miss');
+        \telemetry_record_media_served_event(
+            $image,
+            $gallery,
+            'media.image.served',
+            $bytes,
+            (string) $displayFile['variant'],
+            'miss',
+            (string) ($_GET['page'] ?? 'media'),
+            isset($_SERVER['HTTP_REFERER']) ? (string) $_SERVER['HTTP_REFERER'] : null,
+            http_response_code() ?: 200
+        );
     }
     header('Content-Length: ' . $bytes);
     gallery_benchmark_media_request_mark($benchmarkMediaRequest, 'stream_begin');
     $readBytes = readfile($path);
     gallery_benchmark_media_request_mark($benchmarkMediaRequest, 'stream_end', [
         'readfile_bytes' => is_int($readBytes) ? $readBytes : null,
+        'http_status' => http_response_code() ?: 200,
     ]);
     gallery_benchmark_media_request_finish($benchmarkMediaRequest, [
         'finish_reason' => 'normal',
         'expected_bytes' => $bytes,
         'readfile_bytes' => is_int($readBytes) ? $readBytes : null,
+        'http_status' => http_response_code() ?: 200,
     ]);
 }
 
@@ -558,18 +575,30 @@ function cms_media(): void
     ]);
     send_conditional_file_headers($path, $cacheControl);
     if (function_exists('telemetry_record_media_served_event')) {
-        \telemetry_record_media_served_event($image, $gallery, 'media.image.served', $bytes, (string) $displayFile['variant'], 'miss');
+        \telemetry_record_media_served_event(
+            $image,
+            $gallery,
+            'media.image.served',
+            $bytes,
+            (string) $displayFile['variant'],
+            'miss',
+            (string) ($_GET['page'] ?? 'media'),
+            isset($_SERVER['HTTP_REFERER']) ? (string) $_SERVER['HTTP_REFERER'] : null,
+            http_response_code() ?: 200
+        );
     }
     header('Content-Length: ' . $bytes);
     gallery_benchmark_media_request_mark($benchmarkMediaRequest, 'stream_begin');
     $readBytes = readfile($path);
     gallery_benchmark_media_request_mark($benchmarkMediaRequest, 'stream_end', [
         'readfile_bytes' => is_int($readBytes) ? $readBytes : null,
+        'http_status' => http_response_code() ?: 200,
     ]);
     gallery_benchmark_media_request_finish($benchmarkMediaRequest, [
         'finish_reason' => 'normal',
         'expected_bytes' => $bytes,
         'readfile_bytes' => is_int($readBytes) ? $readBytes : null,
+        'http_status' => http_response_code() ?: 200,
     ]);
 }
 
@@ -610,5 +639,6 @@ function cms_robots_txt(): void
  */
 function cms_sitemap_xml(): void
 {
-    output_sitemap_xml();
+    header('Content-Type: application/xml; charset=utf-8');
+    view_render_sitemap_xml(public_sitemap_entries());
 }

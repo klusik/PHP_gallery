@@ -38,9 +38,8 @@ namespace Gallery\Services;
 
 use GdImage;
 use RuntimeException;
-use Throwable;
-use function Gallery\Core\db;
 use function Gallery\Core\url_for;
+use function Gallery\Models\gallery_model_background_source_column_exists;
 
 /**
  * Gallery and theme background service helpers.
@@ -66,16 +65,7 @@ function gallery_background_source_schema_ready(): bool
     if ($ready !== null) {
         return $ready;
     }
-    try {
-        // $stmt stores an intermediate value used by the surrounding gallery workflow.
-        $stmt = db()->query("SHOW COLUMNS FROM galleries LIKE 'background_source'");
-        // $ready stores an intermediate value used by the surrounding gallery workflow.
-        $ready = (bool) $stmt->fetch();
-    } catch (Throwable) {
-        // $ready stores an intermediate value used by the surrounding gallery workflow.
-        $ready = false;
-    }
-    return $ready;
+    return $ready = gallery_model_background_source_column_exists();
 }
 
 /**

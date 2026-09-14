@@ -1,4 +1,19 @@
-﻿/* Public admin-only card reordering for visible pagination pages. */
+﻿/**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ *
+ * File: public/assets/styles/utilities.css
+ *
+ * Author:
+ *   Rudolf Klusal
+ *
+ * License:
+ *   MIT License (see LICENSE file in repository)
+ *
+ * Notes:
+ *   - Keep comments and docstrings intact when modifying this file.
+ */
+/* Public admin-only card reordering for visible pagination pages. */
 .public-reorder-toolbar {
     display: flex;
     align-items: center;

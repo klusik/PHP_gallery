@@ -40,13 +40,6 @@ namespace Gallery\Views;
 use function Gallery\Core\csrf_field;
 use function Gallery\Core\e;
 use function Gallery\Core\url_for;
-use function Gallery\Services\gallery_trash_auto_purge_active;
-use function Gallery\Services\gallery_trash_auto_purge_enabled;
-use function Gallery\Services\gallery_trash_days_remaining;
-use function Gallery\Services\gallery_trash_entry_can_purge;
-use function Gallery\Services\gallery_trash_enabled;
-use function Gallery\Services\gallery_trash_retention_days;
-use function Gallery\Services\gallery_trash_purge_batch_size;
 use function Gallery\Services\t;
 
 /**
@@ -74,8 +67,9 @@ function admin_trash_format_bytes(int $bytes): string
  * @param array<string,mixed> $summary Aggregate trash counters.
  * @param bool $panelOnly True to omit page chrome for the side panel.
  */
-function render_admin_trash_page(array $entries, array $summary, bool $panelOnly = false): void
+function render_admin_trash_page(array $entries, array $summary, bool $panelOnly = false, array $settings = []): void
 {
+    $autoPurgeActive = !empty($settings['auto_purge_active']);
     if (!$panelOnly) {
         echo '<section class="hero"><h1>' . e(t('admin.trash.title', 'Trash')) . '</h1><nav class="nav">';
         echo '<a class="button secondary" href="' . e(url_for('admin')) . '">' . e(t('admin.common.back_to_dashboard', 'Back to dashboard')) . '</a>';
@@ -84,7 +78,7 @@ function render_admin_trash_page(array $entries, array $summary, bool $panelOnly
 
     echo '<section class="panel" data-admin-trash-panel data-admin-trash-refresh-url="' . e(url_for('admin_trash', ['panel' => 1])) . '">';
     echo '<h2>' . e(t('admin.trash.title', 'Trash')) . '</h2>';
-    echo '<p class="muted">' . e(gallery_trash_auto_purge_active()
+    echo '<p class="muted">' . e($autoPurgeActive
         ? t('admin.trash.intro_auto_purge', 'Deleted galleries stay here with all their subgalleries and photos until you restore them, delete them permanently, or their retention window ends.')
         : t('admin.trash.intro_manual', 'Deleted galleries stay here with all their subgalleries and photos until you restore them or delete them permanently. Automatic deletion is disabled.')) . '</p>';
     echo '<p class="notice" data-admin-trash-status hidden></p>';
@@ -95,7 +89,7 @@ function render_admin_trash_page(array $entries, array $summary, bool $panelOnly
         return;
     }
 
-    render_admin_trash_settings_form();
+    render_admin_trash_settings_form($settings);
 
     if (!$entries) {
         echo '<p class="muted">' . e(t('admin.trash.empty_state', 'The trash is empty.')) . '</p>';
@@ -128,7 +122,7 @@ function render_admin_trash_page(array $entries, array $summary, bool $panelOnly
     echo '<th>' . e(t('admin.trash.column_deleted', 'Deleted')) . '</th>';
     echo '<th>' . e(t('admin.trash.column_deleted_by', 'Deleted by')) . '</th>';
     echo '<th>' . e(t('admin.trash.column_state', 'State')) . '</th>';
-    echo '<th>' . e(gallery_trash_auto_purge_active()
+    echo '<th>' . e($autoPurgeActive
         ? t('admin.trash.column_purges_in', 'Purges in')
         : t('admin.trash.column_auto_purge', 'Automatic purge')) . '</th>';
     echo '<th>' . e(t('admin.common.actions', 'Actions')) . '</th>';
@@ -175,7 +169,7 @@ function render_admin_trash_row(array $entry): void
     // $status stores the lifecycle state used to decide which actions are safe.
     $status = (string) ($entry['status'] ?? 'trashed');
     // $daysRemaining stores whole days left before scheduled maintenance purges a recoverable entry.
-    $daysRemaining = gallery_trash_days_remaining($entry);
+    $daysRemaining = (int) ($entry['view_days_remaining'] ?? 0);
     // $deletedBy stores the stable username when the deleting account still exists.
     $deletedBy = trim((string) ($entry['deleted_by_username'] ?? ''));
     if ($deletedBy === '') {
@@ -200,7 +194,7 @@ function render_admin_trash_row(array $entry): void
         ])) . '</span>';
     }
     echo '</td>';
-    if ($status === 'trashed' && gallery_trash_auto_purge_active()) {
+    if ($status === 'trashed' && $autoPurgeActive) {
         echo '<td>' . e($daysRemaining > 0
             ? t('admin.trash.days_remaining', '{days} day(s)', ['days' => $daysRemaining])
             : t('admin.trash.due_now', 'At next maintenance')) . '<br><span class="muted">' . e((string) ($entry['purge_after'] ?? '')) . '</span></td>';
@@ -223,7 +217,7 @@ function render_admin_trash_row(array $entry): void
         echo '<span class="muted">' . e(t('admin.trash.operation_pending', 'Recovery/maintenance operation pending.')) . '</span>';
     }
 
-    $canPurge = gallery_trash_entry_can_purge($entry);
+    $canPurge = !empty($entry['view_can_purge']);
     if ($canPurge) {
         $purgeConfirm = t('admin.trash.purge_confirm', 'Permanently delete "{title}"? This cannot be undone.', ['title' => $title]);
         echo '<form method="post" action="' . e(url_for('admin_trash_purge')) . '" class="inline-action-form" data-admin-trash-purge-form onsubmit="return confirm(' . e(json_encode($purgeConfirm, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) . ');">' . csrf_field();
@@ -240,22 +234,22 @@ function render_admin_trash_row(array $entry): void
 /**
  * Render the trash retention and enablement settings form.
  */
-function render_admin_trash_settings_form(): void
+function render_admin_trash_settings_form(array $settings = []): void
 {
     echo '<form method="post" action="' . e(url_for('admin_trash_settings')) . '" class="admin-trash-settings">' . csrf_field();
-    echo '<label><input type="checkbox" name="gallery_trash_enabled" value="1"' . (gallery_trash_enabled() ? ' checked' : '') . '> ';
+    echo '<label><input type="checkbox" name="gallery_trash_enabled" value="1"' . (!empty($settings['enabled']) ? ' checked' : '') . '> ';
     echo e(t('admin.trash.enabled_label', 'Move deleted galleries to the trash instead of deleting them immediately')) . '</label>';
     echo '<p class="muted">' . e(t('admin.trash.enabled_hint', 'Turning this off only changes future deletes. Existing trash contents are kept and remain available here.')) . '</p>';
-    echo '<label><input type="checkbox" name="gallery_trash_auto_purge_enabled" value="1"' . (gallery_trash_auto_purge_enabled() ? ' checked' : '') . '> ';
+    echo '<label><input type="checkbox" name="gallery_trash_auto_purge_enabled" value="1"' . (!empty($settings['auto_purge_enabled']) ? ' checked' : '') . '> ';
     echo e(t('admin.trash.auto_purge_enabled_label', 'Automatically delete trashed galleries after the retention period')) . '</label>';
     echo '<p class="muted">' . e(t('admin.trash.auto_purge_enabled_hint', 'Off by default. Enabling it gives every currently recoverable item a fresh full retention period before automatic deletion can occur.')) . '</p>';
-    if (!gallery_trash_enabled() && gallery_trash_auto_purge_enabled()) {
+    if (!!empty($settings['enabled']) && !empty($settings['auto_purge_enabled'])) {
         echo '<p class="notice">' . e(t('admin.trash.auto_purge_paused_feature_disabled', 'Automatic purge is configured but paused while the Trash feature is disabled. Re-enabling Trash will give current recoverable items a fresh full retention period before purge resumes.')) . '</p>';
     }
     echo '<label>' . e(t('admin.trash.retention_label', 'Automatic purge retention (days)')) . ' ';
-    echo '<input type="number" name="gallery_trash_retention_days" min="1" max="365" value="' . e((string) gallery_trash_retention_days()) . '"></label>';
+    echo '<input type="number" name="gallery_trash_retention_days" min="1" max="365" value="' . e((string) (int) ($settings['retention_days'] ?? 30)) . '"></label>';
     echo '<label>' . e(t('admin.trash.purge_batch_label', 'Cleanup batch size')) . ' ';
-    echo '<input type="number" name="gallery_trash_purge_batch" min="1" max="100" value="' . e((string) gallery_trash_purge_batch_size()) . '"></label>';
+    echo '<input type="number" name="gallery_trash_purge_batch" min="1" max="100" value="' . e((string) (int) ($settings['purge_batch_size'] ?? 20)) . '"></label>';
     echo '<button type="submit" class="secondary">' . e(t('admin.common.save', 'Save')) . '</button>';
     echo '</form>';
 }

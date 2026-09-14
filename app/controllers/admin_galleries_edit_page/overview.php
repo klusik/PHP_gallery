@@ -30,14 +30,13 @@
  *   - Keep comments and docstrings intact when modifying this file.
  *
  * Last Updated:
- *   2026-09-06
+ *   2026-09-13
  */
 
 declare(strict_types=1);
 
 namespace Gallery\Controllers;
 
-use function Gallery\Core\e;
 use function Gallery\Core\flash_message;
 use function Gallery\Core\gallery_public_url;
 use function Gallery\Core\render_admin_tabs;
@@ -48,6 +47,7 @@ use function Gallery\Services\normalize_gallery_visibility;
 use function Gallery\Services\t;
 use function Gallery\Views\view_render_admin_hero;
 use function Gallery\Views\view_render_admin_metric_grid;
+use function Gallery\Views\view_render_admin_gallery_editor_notices;
 
 /**
  * Render the one-time notices shown above the gallery editor.
@@ -57,19 +57,20 @@ use function Gallery\Views\view_render_admin_metric_grid;
  */
 function admin_edit_gallery_render_notices(array $gallery, array $capabilities): void
 {
+    $messages = [];
     // $galleryError stores an intermediate value used by the surrounding gallery workflow.
     $galleryError = (string) ($_SESSION['admin_gallery_error_' . (int) $gallery['id']] ?? '');
     unset($_SESSION['admin_gallery_error_' . (int) $gallery['id']]);
     if ($galleryError !== '') {
-        echo '<div class="notice">' . e(t('admin.gallery_editor.folder_move_failed', ['error' => $galleryError])) . '</div>';
+        $messages[] = t('admin.gallery_editor.folder_move_failed', ['error' => $galleryError]);
     }
     // $galleryNotice stores an intermediate value used by the surrounding gallery workflow.
     $galleryNotice = (string) flash_message('admin_notice');
     if ($galleryNotice !== '') {
-        echo '<div class="notice">' . e($galleryNotice) . '</div>';
+        $messages[] = $galleryNotice;
     }
     if (isset($_GET['created'])) {
-        echo '<div class="notice">' . e(t('admin.gallery_editor.folder_created')) . '</div>';
+        $messages[] = t('admin.gallery_editor.folder_created');
     } elseif (isset($_GET['uploaded'])) {
         // $thumbnailFailed stores required derivatives that failed during upload thumbnail generation.
         $thumbnailFailed = (int) ($_GET['thumbnail_failed'] ?? 0);
@@ -83,15 +84,24 @@ function admin_edit_gallery_render_notices(array $gallery, array $capabilities):
         if ($thumbnailFailed > 0) {
             $uploadNotice .= ' ' . t('admin.gallery_editor.upload_thumbnail_warning', 'Warning: {count} thumbnail or DNG display derivative(s) failed. Use Create gallery thumbnails or check the admin logs for details.', ['count' => $thumbnailFailed]);
         }
-        echo '<div class="notice">' . e($uploadNotice) . '</div>';
+        $messages[] = $uploadNotice;
     } elseif (isset($_GET['moved'])) {
-        echo '<div class="notice">' . e(t('admin.gallery_editor.folder_moved')) . '</div>';
+        $messages[] = t('admin.gallery_editor.folder_moved');
     } elseif (isset($_GET['saved'])) {
-        echo '<div class="notice">' . e(t('admin.gallery_editor.gallery_saved')) . '</div>';
+        $messages[] = t('admin.gallery_editor.gallery_saved');
     }
+
+    $migrationNoticeHtml = '';
     if (!$capabilities['picture_game_ready'] && $capabilities['picture_game_feature_enabled'] && $capabilities['image_voting_feature_enabled']) {
+        ob_start();
         render_admin_migration_notice(t('admin.gallery_editor.picture_game_migration_hidden'));
+        $migrationNoticeHtml = (string) ob_get_clean();
     }
+
+    view_render_admin_gallery_editor_notices([
+        'messages' => $messages,
+        'migration_notice_html' => $migrationNoticeHtml,
+    ]);
 }
 
 /**

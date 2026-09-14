@@ -1,4 +1,19 @@
 /**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ *
+ * File: tests/lightbox_map_navigation_test.mjs
+ *
+ * Author:
+ *   Rudolf Klusal
+ *
+ * License:
+ *   MIT License (see LICENSE file in repository)
+ *
+ * Notes:
+ *   - Keep comments and docstrings intact when modifying this file.
+ */
+/**
  * Execute production closure functions with controlled DOM, fetch, and timer boundaries.
  * No navigation algorithm is duplicated here. The small DOM adapter cannot verify
  * Leaflet hit testing or visual fullscreen layout; those remain browser checks.

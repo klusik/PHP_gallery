@@ -38,10 +38,11 @@ namespace Gallery\Services;
 
 use GdImage;
 use Imagick;
-use PDO;
 use RuntimeException;
 use Throwable;
-use function Gallery\Core\db;
+use function Gallery\Models\gallery_model_ids_by_folder_path;
+use function Gallery\Models\image_model_all_direct_ids_ordered;
+use function Gallery\Models\image_model_direct_ids_for_galleries;
 
 /**
  * Return the JPEG quality used by generated thumbnail files.
@@ -304,9 +305,7 @@ function create_all_thumbnails(): int
 {
     // Variable $count stores this steps working value.
     $count = 0;
-    $stmt = db()->prepare('SELECT id FROM galleries ORDER BY folder_path');
-    $stmt->execute();
-    foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $galleryId) {
+    foreach (gallery_model_ids_by_folder_path() as $galleryId) {
         $count += create_gallery_thumbnails((int) $galleryId);
     }
     return $count;
@@ -641,12 +640,7 @@ function image_ids_for_galleries(array $galleryIds): array
     if (!$galleryIds) {
         return [];
     }
-    // Variable $placeholders stores this steps working value.
-    $placeholders = implode(',', array_fill(0, count($galleryIds), '?'));
-    // Variable $stmt stores this steps working value.
-    $stmt = db()->prepare("SELECT id FROM images WHERE gallery_id IN ($placeholders) AND relative_path NOT LIKE '%/%' ORDER BY gallery_id, sort_order, filename");
-    $stmt->execute($galleryIds);
-    return array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+    return image_model_direct_ids_for_galleries($galleryIds);
 }
 
 /**
@@ -656,9 +650,7 @@ function image_ids_for_galleries(array $galleryIds): array
  */
 function all_image_ids(): array
 {
-    // Variable $rows stores this steps working value.
-    $rows = db()->query("SELECT i.id FROM images i JOIN galleries g ON g.id = i.gallery_id WHERE i.relative_path NOT LIKE '%/%' ORDER BY g.folder_path, i.sort_order, i.filename")->fetchAll(PDO::FETCH_COLUMN);
-    return array_map('intval', $rows);
+    return image_model_all_direct_ids_ordered();
 }
 
 /**

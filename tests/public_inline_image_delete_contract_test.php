@@ -15,6 +15,9 @@
  *   - Prevent the historical direct DELETE FROM images statement from returning
  *   - Keep original files and generated thumbnail cleanup on one mutation path
  *
+ * Author:
+ *   Rudolf Klusal
+ *
  * Notes:
  *   - Keep comments and docstrings intact when modifying this file.
  *   - Prefer small, readable changes over broad rewrites.

@@ -37,6 +37,8 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+use function Gallery\Core\request_data;
+
 use function Gallery\Core\cms_config;
 use function Gallery\Core\current_user;
 use function Gallery\Core\e;
@@ -276,9 +278,9 @@ function thumbnail_warmup_log_visitor_type(): string
 function thumbnail_warmup_log_request_context(): array
 {
     // $referer stores the public page that rendered fallback image candidates, when the browser sent it.
-    $referer = trim((string) ($_SERVER['HTTP_REFERER'] ?? ''));
+    $referer = trim((string) (request_data('server')['HTTP_REFERER'] ?? ''));
     // $userAgent stores a short browser signature for diagnosing repeated warmup activity without logging full headers.
-    $userAgent = trim((string) ($_SERVER['HTTP_USER_AGENT'] ?? ''));
+    $userAgent = trim((string) (request_data('server')['HTTP_USER_AGENT'] ?? ''));
 
     return array_filter([
         'visitor_type' => thumbnail_warmup_log_visitor_type(),

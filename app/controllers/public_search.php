@@ -53,6 +53,40 @@ use function Gallery\Services\public_search_results;
 use function Gallery\Services\t;
 
 /**
+ * Prepare the public-search bar presentation model for one public page.
+ *
+ * @param ?array $gallery Optional gallery context.
+ * @return array<string, mixed> View-model data consumed by the public-search view.
+ */
+function public_search_bar_view_model(?array $gallery = null): array
+{
+    $enabled = public_home_search_enabled();
+    $galleryId = $gallery ? (int) ($gallery['id'] ?? 0) : 0;
+    $searchId = $galleryId > 0 ? 'public-gallery-search-input-' . $galleryId : 'public-home-search-input';
+    $contextId = $galleryId > 0 ? 'public-gallery-search-context-' . $galleryId : '';
+
+    return [
+        'enabled' => $enabled,
+        'search_url' => url_for('public_search'),
+        'search_id' => $searchId,
+        'context_id' => $contextId,
+        'gallery_id' => $galleryId > 0 ? $galleryId : null,
+        'aria_label' => $galleryId > 0 ? t('search.gallery_label', 'Search this gallery and all galleries') : t('search.home_label', 'Search galleries and photos'),
+        'placeholder' => $galleryId > 0 ? t('search.gallery_placeholder', 'Search this gallery, subgalleries, tags, photos...') : t('search.placeholder', 'Search galleries, tags, photos...'),
+        'context_label' => t('search.context_current_gallery', 'Search only this gallery and its subgalleries'),
+        'clear_label' => t('search.clear', 'Clear search'),
+        'loading_label' => t('search.loading', 'Searching...'),
+        'empty_label' => t('search.empty', 'No matches found.'),
+        'error_label' => t('search.error', 'Search is temporarily unavailable.'),
+        'min_length' => 2,
+        'delay_ms' => 200,
+        'media_delay_ms' => 100,
+        'descriptive_delay_ms' => 300,
+        'deep_delay_ms' => 550,
+    ];
+}
+
+/**
  * Return JSON results for the optional public live search.
  */
 function cms_public_search(): void

@@ -18,6 +18,9 @@
  *   - Prove later open signup stays isolated from lifecycle logic while collections, sharing, profiles, uploads, and optional authentication remain absent
  *   - Audit imported controller symbols against actual repository definitions
  *
+ * Author:
+ *   Rudolf Klusal
+ *
  * Last Updated:
  *   2026-08-18
  */
@@ -103,6 +106,7 @@ $root = dirname(__DIR__);
 $lifecycleController = (string) file_get_contents($root . '/app/controllers/viewer_lifecycle.php');
 $accountController = (string) file_get_contents($root . '/app/controllers/viewer_accounts.php');
 $lifecycleService = (string) file_get_contents($root . '/app/services/viewer_lifecycle.php');
+$lifecycleModel = (string) file_get_contents($root . '/app/models/viewer_lifecycle.php');
 $accountsService = (string) file_get_contents($root . '/app/services/viewer_accounts.php');
 $httpService = (string) file_get_contents($root . '/app/services/viewer_http.php');
 $dispatch = (string) file_get_contents($root . '/app/bootstrap/dispatch.php');
@@ -170,7 +174,7 @@ $reauth = viewer_phase12_function_source($lifecycleController, 'cms_viewer_accou
 viewer_phase12_assert(str_contains($reauth, 'viewer_reauthenticate_password('), 'Recent reauthentication must use the established password service.');
 viewer_phase12_assert(str_contains($reauth, 'viewer_verify_csrf_or_render_error()'), 'Recent reauthentication POST must use viewer CSRF.');
 viewer_phase12_assert(str_contains($lifecycleService, 'viewer_login_rate_limits_consume('), 'Recent password proof must retain established viewer login throttles.');
-viewer_phase12_assert(str_contains($httpService, 'Remember restoration deliberately does not establish recent reauthentication.'), 'Remember-me restoration must explicitly remain insufficient for recent reauthentication.');
+viewer_phase12_assert(str_contains($httpService, 'Remember restoration deliberately does') && str_contains($httpService, 'not establish recent reauthentication.'), 'Remember-me restoration must explicitly remain insufficient for recent reauthentication.');
 viewer_phase12_assert(!str_contains($lifecycleController, 'return=') && !str_contains($lifecycleController, 'next=') && !str_contains($lifecycleController, 'redirect='), 'Lifecycle forms must not carry arbitrary URL return parameters.');
 
 // Password change is POST-only for mutation and delegates all credential transitions to the lifecycle service.
@@ -183,7 +187,7 @@ viewer_phase12_assert(str_contains($password, "viewer_require_recent_reauthentic
 viewer_phase12_assert(str_contains($password, 'viewer_password_input_is_acceptable('), 'Password change must use the established viewer password policy.');
 viewer_phase12_assert(str_contains($password, 'viewer_change_password($password)'), 'Password change must delegate to the Phase 0.7 atomic lifecycle service.');
 viewer_phase12_assert(!preg_match('/\bUPDATE\b|\bINSERT\b|\bDELETE\s+FROM\b/i', $password), 'Password controller must not contain lifecycle SQL.');
-viewer_phase12_assert(str_contains($lifecycleService, 'viewer_session_clear();') && str_contains($lifecycleService, 'UPDATE viewer_remember_tokens SET revoked_at = ?'), 'Password service must retain logout and remember-token invalidation semantics.');
+viewer_phase12_assert(str_contains($lifecycleService, 'viewer_session_clear();') && str_contains($lifecycleService, 'viewer_lifecycle_model_revoke_after_password_change(') && str_contains($lifecycleModel, 'UPDATE viewer_remember_tokens SET revoked_at = ?'), 'Password service must retain logout and model-owned remember-token invalidation semantics.');
 
 // Email request is staged, budget-controlled in the service, and mail transport occurs only after a staged request succeeds.
 $email = viewer_phase12_function_source($lifecycleController, 'cms_viewer_account_email');
@@ -213,8 +217,8 @@ viewer_phase12_assert($confirmCall !== false && $postBranch !== false && $postBr
 viewer_phase12_assert(str_contains($confirm, 'viewer_verify_csrf_or_render_error()'), 'Final email confirmation POST must use viewer CSRF.');
 viewer_phase12_assert(str_contains($confirm, "viewer_require_recent_reauthentication('email_confirm')"), 'Final email confirmation must retain recent viewer authentication.');
 viewer_phase12_assert(!str_contains($confirm, "\$_GET['token']") && !str_contains($confirm, "\$_POST['token']"), 'Final email confirmation must be tokenless and rely on server-side authority.');
-viewer_phase12_assert(str_contains($lifecycleService, 'UPDATE viewer_accounts SET email = ?, normalized_email = ?'), 'Final email transition must remain inside the Phase 0.7 lifecycle service.');
-viewer_phase12_assert(str_contains($lifecycleService, 'consumed_at = ?') && str_contains($lifecycleService, 'security_version = ?'), 'Email-change service must retain one-time consumption and security-version invalidation.');
+viewer_phase12_assert(str_contains($lifecycleService, 'viewer_lifecycle_model_email_update(') && str_contains($lifecycleModel, 'UPDATE viewer_accounts SET email = ?, normalized_email = ?'), 'Final email transition policy must remain in the lifecycle service while persistence belongs to the lifecycle model.');
+viewer_phase12_assert(str_contains($lifecycleService, 'viewer_lifecycle_model_email_change_consume(') && str_contains($lifecycleModel, 'consumed_at = ?') && str_contains($lifecycleModel, 'security_version = ?'), 'Email-change flow must retain one-time consumption and security-version invalidation across service/model boundaries.');
 
 // Deletion requires active viewer auth, recent reauthentication, CSRF, and explicit server-side confirmation.
 $delete = viewer_phase12_function_source($lifecycleController, 'cms_viewer_account_delete');

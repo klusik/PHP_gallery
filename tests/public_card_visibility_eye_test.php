@@ -1,6 +1,21 @@
 <?php
 
 /**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ *
+ * File: tests/public_card_visibility_eye_test.php
+ *
+ * Author:
+ *   Rudolf Klusal
+ *
+ * License:
+ *   MIT License (see LICENSE file in repository)
+ *
+ * Notes:
+ *   - Keep comments and docstrings intact when modifying this file.
+ */
+/**
  * Protect the public-card visibility eye rendering and in-place mutation wiring.
  */
 
@@ -15,7 +30,7 @@ function visibility_eye_expect(bool $condition, string $message): void
     }
 }
 
-$cards = (string) file_get_contents(__DIR__ . '/../app/controllers/public_gallery_cards.php');
+$cards = (string) file_get_contents(__DIR__ . '/../app/controllers/public_gallery_cards.php') . "\n" . (string) file_get_contents(__DIR__ . '/../app/views/public_gallery_cards.php');
 $page = (string) file_get_contents(__DIR__ . '/../app/controllers/public_gallery_page.php');
 $inline = (string) file_get_contents(__DIR__ . '/../app/controllers/admin_public_inline.php');
 $editActions = (string) file_get_contents(__DIR__ . '/../app/controllers/admin_galleries_edit_actions.php');
@@ -38,7 +53,7 @@ visibility_eye_expect(str_contains($inline, 'image.visibility'), 'Image visibili
 visibility_eye_expect(str_contains($inline, 'draft'), 'Image unpublished state must map to legacy draft storage.');
 visibility_eye_expect(str_contains($editActions, '$visibilityInputPresent = array_key_exists(\'visibility\', $input);'), 'Partial gallery visibility saves must explicitly own the listing compatibility state.');
 visibility_eye_expect(str_contains($editActions, '$shouldUpdateAccessListing = $accessReady && ($completeForm || $visibilityInputPresent);'), 'Visibility-only saves must synchronize access_listing when the access schema is available.');
-visibility_eye_expect(str_contains($editActions, 'if ($shouldUpdateAccessListing) {') && str_contains($editActions, '$fields[\'access_listing = ?\'] = $accessListing;'), 'Visibility listing synchronization must have a dedicated persistence branch.');
+visibility_eye_expect(str_contains($editActions, 'if ($shouldUpdateAccessListing) {') && str_contains($editActions, '$fields[\'access_listing\'] = $accessListing;'), 'Visibility listing synchronization must have a dedicated semantic persistence branch.');
 visibility_eye_expect(str_contains($browser, 'beginPublicCardVisibilityFeedback(target)'), 'Visibility changes must show pending feedback before the request completes.');
 visibility_eye_expect(str_contains($browser, 'completePublicCardVisibilityFeedback(target)'), 'Verified visibility changes must animate the refreshed card.');
 visibility_eye_expect(str_contains($styles, '.public-admin-visibility-menu:hover .public-admin-visibility-options'), 'Pointer hover must expose the visibility submenu.');

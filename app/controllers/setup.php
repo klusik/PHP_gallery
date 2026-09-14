@@ -36,14 +36,14 @@ declare(strict_types=1);
 
 namespace Gallery\Controllers;
 
+use function Gallery\Services\auth_account_normalize_email;
+
 use function Gallery\Core\cms_admin_user_exists;
 use function Gallery\Core\cms_config;
 use function Gallery\Core\cms_setup_is_locked;
 use function Gallery\Core\cms_write_setup_lock;
 use function Gallery\Core\csrf_field;
-use function Gallery\Core\db;
 use function Gallery\Core\e;
-use function Gallery\Core\now_sql;
 use function Gallery\Core\redirect_to;
 use function Gallery\Core\render_footer;
 use function Gallery\Core\render_header;
@@ -52,7 +52,10 @@ use function Gallery\Core\run_migrations;
 use function Gallery\Core\url_for;
 use function Gallery\Core\verify_csrf;
 use function Gallery\Services\t;
+use function Gallery\Services\auth_setup_upsert_admin;
 use function Gallery\Services\feature_capability_seed_fresh_install_defaults;
+use function Gallery\Views\view_render_setup_form;
+use function Gallery\Views\view_render_setup_locked;
 
 /**
  * Setup controller model.
@@ -63,9 +66,10 @@ function cms_setup(): void
 {
     if (cms_setup_is_locked()) {
         http_response_code(403);
-        render_header(t('setup.locked_title'));
-        echo '<section class="panel"><h1>' . e(t('setup.locked_title')) . '</h1><p>' . e(t('setup.locked_completed')) . '</p></section>';
-        render_footer();
+        view_render_setup_locked([
+            'title' => t('setup.locked_title'),
+            'message' => t('setup.locked_completed'),
+        ]);
         return;
     }
     // Variable $key stores this steps working value.
@@ -79,9 +83,10 @@ function cms_setup(): void
     if (cms_admin_user_exists()) {
         cms_write_setup_lock();
         http_response_code(403);
-        render_header(t('setup.locked_title'));
-        echo '<section class="panel"><h1>' . e(t('setup.locked_title')) . '</h1><p>' . e(t('setup.locked_admin_exists')) . '</p></section>';
-        render_footer();
+        view_render_setup_locked([
+            'title' => t('setup.locked_title'),
+            'message' => t('setup.locked_admin_exists'),
+        ]);
         return;
     }
 
@@ -93,31 +98,22 @@ function cms_setup(): void
         // Variable $username stores this steps working value.
         $username = trim((string) $_POST['username']);
         // Variable $email stores this steps working value.
-        $email = cms_normalize_account_email((string) ($_POST['email'] ?? ''));
+        $email = auth_account_normalize_email((string) ($_POST['email'] ?? ''));
         // Variable $password stores this steps working value.
         $password = (string) $_POST['password'];
         if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
             // Variable $error stores this steps working value.
             $error = t('setup.error_recovery_email_invalid');
         } elseif ($username !== '' && $password !== '') {
-            // Variable $stmt stores this steps working value.
-            $stmt = db()->prepare('INSERT INTO users (username, email, password_hash, role, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE email = VALUES(email), password_hash = VALUES(password_hash), updated_at = VALUES(updated_at)');
-            $stmt->execute([$username, $email === '' ? null : $email, password_hash($password, PASSWORD_DEFAULT), 'admin', now_sql(), now_sql()]);
+            auth_setup_upsert_admin($username, $email, $password);
             cms_write_setup_lock();
             redirect_to(url_for('admin_login'));
         }
     }
-    render_header(t('setup.title'));
-    if (isset($error)) {
-        echo '<div class="notice">' . e($error) . '</div>';
-    }
-    echo '<section class="panel"><h1>' . e(t('setup.title')) . '</h1><p>' . e(t('setup.applied_migrations', 'Applied migrations: {migrations}', ['migrations' => $ran ? implode(', ', $ran) : t('admin.common.none')])) . '</p>';
-    echo '<form method="post" class="form-grid">' . csrf_field();
-    echo '<label>' . e(t('setup.admin_username')) . '<input name="username" required autocomplete="username"></label>';
-    echo '<label>' . e(t('setup.admin_recovery_email')) . '<input name="email" type="email" autocomplete="email"></label>';
-    echo '<p class="muted">' . e(t('setup.recovery_email_help')) . '</p>';
-    echo '<label>' . e(t('setup.admin_password')) . '<input name="password" type="password" required autocomplete="new-password"></label>';
-    echo '<button type="submit">' . e(t('setup.create_or_update_admin')) . '</button></form></section>';
-    render_footer();
+    view_render_setup_form([
+        'error' => isset($error) ? (string) $error : '',
+        'migrations' => $ran,
+        'csrf_html' => csrf_field(),
+    ]);
 }
 

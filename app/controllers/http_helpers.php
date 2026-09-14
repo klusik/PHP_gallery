@@ -36,12 +36,14 @@ declare(strict_types=1);
 
 namespace Gallery\Controllers;
 
-use function Gallery\Core\e;
 use function Gallery\Core\render_footer;
 use function Gallery\Core\render_header;
 use function Gallery\Services\t;
 use function Gallery\Services\admin_log_event;
 use function Gallery\Services\telemetry_request_id;
+use function Gallery\Views\view_render_back_to_top_button;
+use function Gallery\Views\view_render_not_found;
+use function Gallery\Views\view_render_public_service_unavailable;
 
 const PUBLIC_SCHEMA_UNAVAILABLE_EVENT = 'security.public_schema_inspection_unavailable';
 const NSFW_GUARD_SCHEMA_UNAVAILABLE_EVENT = 'security.nsfw_schema_inspection_unavailable';
@@ -187,11 +189,11 @@ function cms_public_schema_unavailable(string $page, string $feature, string $sc
     }
 
     header('Content-Type: text/html; charset=utf-8');
-    echo '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>' . e(t('public.service_unavailable_title', 'Temporarily unavailable')) . '</title></head><body><main><h1>' . e(t('public.service_unavailable_title', 'Temporarily unavailable')) . '</h1><p>' . e($message) . '</p>';
-    if ($requestId !== '') {
-        echo '<p>' . e(t('public.request_reference', 'Reference: {request_id}', ['request_id' => $requestId])) . '</p>';
-    }
-    echo '</main></body></html>';
+    $title = t('public.service_unavailable_title', 'Temporarily unavailable');
+    $requestReference = $requestId !== ''
+        ? t('public.request_reference', 'Reference: {request_id}', ['request_id' => $requestId])
+        : '';
+    view_render_public_service_unavailable($title, $message, $requestReference);
 }
 
 /**
@@ -262,7 +264,10 @@ function send_asset_cache_control(string $cacheControl): void
  */
 function render_back_to_top_button(): void
 {
-    echo '<button type="button" class="back-to-top-button" data-back-to-top-button hidden aria-label="' . e(t('public.back_to_top_label', 'Go back to top')) . '" title="' . e(t('public.back_to_top_label', 'Go back to top')) . '"><span aria-hidden="true">↑</span><span>' . e(t('public.back_to_top_short', 'Top')) . '</span></button>';
+    view_render_back_to_top_button(
+        t('public.back_to_top_label', 'Go back to top'),
+        t('public.back_to_top_short', 'Top')
+    );
 }
 
 /**
@@ -275,7 +280,10 @@ function cms_not_found(): void
         header('X-Robots-Tag: noindex, nofollow');
     }
     render_header(t('public.not_found_title', 'Not found'));
-    echo '<section class="panel"><h1>' . e(t('public.not_found_title', 'Not found')) . '</h1><p>' . e(t('public.not_found_message', 'The requested page was not found.')) . '</p></section>';
+    view_render_not_found(
+        t('public.not_found_title', 'Not found'),
+        t('public.not_found_message', 'The requested page was not found.')
+    );
     render_footer();
 }
 

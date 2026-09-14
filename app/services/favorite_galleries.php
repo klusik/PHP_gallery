@@ -38,7 +38,6 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 use PDOException;
-use function Gallery\Core\db;
 use function Gallery\Core\gallery_public_url;
 use function Gallery\Core\url_for;
 
@@ -144,52 +143,16 @@ function theme_favorite_gallery_rows_by_ids(array $ids): array
         return [];
     }
 
-    // $selects stores explicit columns so partially upgraded installations stay safe.
-    $selects = [
-        'id',
-        'parent_id',
-        'folder_path',
-        'slug',
-        'title',
-        'visibility',
-    ];
-    $selects[] = db_column_exists('galleries', 'url_path') ? 'url_path' : "'' AS url_path";
-
     // Access columns must be evaluated as one capability. A metadata inspection
     // failure or partially applied access migration must never be converted into
     // permissive normal/listed aliases for public favorite-gallery consumers.
     gallery_access_assert_public_policy_available();
-    if (gallery_access_schema_ready()) {
-        $selects[] = 'access_mode';
-        $selects[] = 'access_listing';
-        $selects[] = 'access_password_hash';
-        $selects[] = 'access_token_hash';
-        $selects[] = 'access_token_expires_at';
-    } else {
-        // The only allowed fallback is the confirmed pre-access-schema shape.
-        $selects[] = "'normal' AS access_mode";
-        $selects[] = "'listed' AS access_listing";
-        $selects[] = 'NULL AS access_password_hash';
-        $selects[] = 'NULL AS access_token_hash';
-        $selects[] = 'NULL AS access_token_expires_at';
-    }
-
-    // $placeholders stores the prepared statement placeholders for the ID list.
-    $placeholders = implode(', ', array_fill(0, count($ids), '?'));
     try {
-        // $stmt stores the favorite gallery lookup.
-        $stmt = db()->prepare('SELECT ' . implode(', ', $selects) . ' FROM galleries WHERE id IN (' . $placeholders . ')');
-        $stmt->execute($ids);
-        // $rows stores lookup results keyed by integer gallery ID.
-        $rows = [];
-        foreach ($stmt->fetchAll() as $row) {
-            // $galleryId stores the numeric row key used for order restoration.
-            $galleryId = (int) ($row['id'] ?? 0);
-            if ($galleryId > 0) {
-                $rows[$galleryId] = $row;
-            }
-        }
-        return $rows;
+        return \Gallery\Models\favorite_gallery_model_rows_by_ids(
+            $ids,
+            db_column_exists('galleries', 'url_path'),
+            gallery_access_schema_ready()
+        );
     } catch (PDOException) {
         return [];
     }

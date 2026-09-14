@@ -40,15 +40,7 @@ use function Gallery\Core\csrf_field;
 use function Gallery\Core\csrf_token;
 use function Gallery\Core\e;
 use function Gallery\Core\url_for;
-use function Gallery\Services\admin_settings_url;
-use function Gallery\Services\browser_thumbnail_rebuild_browser_config;
-use function Gallery\Services\feature_capability_effective_enabled;
-use function Gallery\Services\feature_flag_enabled;
-use function Gallery\Services\public_home_search_enabled;
-use function Gallery\Services\seo_request_guard_status;
 use function Gallery\Services\t;
-use function Gallery\Services\thumbnail_compatibility_mode;
-use function Gallery\Services\thumbnail_maintenance_last_check;
 
 /**
  * Return true when an optional dashboard feature should be rendered.
@@ -56,11 +48,9 @@ use function Gallery\Services\thumbnail_maintenance_last_check;
  * @param string $featureKey Feature key value.
  * @return bool True when the condition matches.
  */
-function view_admin_dashboard_feature_enabled(string $featureKey): bool
+function view_admin_dashboard_feature_enabled(array $model, string $featureKey): bool
 {
-    return function_exists('Gallery\\Services\\feature_capability_effective_enabled')
-        ? feature_capability_effective_enabled($featureKey)
-        : (!function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled($featureKey));
+    return !empty($model['feature_enabled'][$featureKey]);
 }
 
 /**
@@ -132,7 +122,7 @@ function view_render_admin_dashboard_overview_panel(array $model): void
         'class' => 'admin-panel-heading',
     ]);
     echo '<div class="admin-action-grid">';
-    view_render_admin_dashboard_settings_card();
+    view_render_admin_dashboard_settings_card($model);
     view_render_admin_dashboard_manage_galleries_card();
     view_render_admin_dashboard_upload_card();
     view_render_admin_dashboard_discover_card();
@@ -217,9 +207,9 @@ function view_render_admin_dashboard_manage_galleries_card(): void
 /**
  * Render the overview card for centralized global settings.
  */
-function view_render_admin_dashboard_settings_card(): void
+function view_render_admin_dashboard_settings_card(array $model = []): void
 {
-    echo '<article class="admin-action-card"><strong>' . e(t('admin.settings.title', 'Settings')) . '</strong><span>' . e(t('admin.settings.dashboard_hint', 'Review important global values in one place, then open specialized pages for complex or sensitive configuration.')) . '</span><div class="nav"><a class="button secondary" href="' . e(admin_settings_url()) . '">' . e(t('admin.settings.open_centralized', 'Open centralized settings')) . '</a></div></article>';
+    echo '<article class="admin-action-card"><strong>' . e(t('admin.settings.title', 'Settings')) . '</strong><span>' . e(t('admin.settings.dashboard_hint', 'Review important global values in one place, then open specialized pages for complex or sensitive configuration.')) . '</span><div class="nav"><a class="button secondary" href="' . e((string) ($model['admin_settings_urls']['default'] ?? url_for('admin_settings'))) . '">' . e(t('admin.settings.open_centralized', 'Open centralized settings')) . '</a></div></article>';
 }
 
 /**
@@ -286,10 +276,10 @@ function view_render_admin_dashboard_maintenance_panel(array $model): void
         'description' => t('admin.dashboard.system_tools_hint', 'Operational controls are grouped by purpose so display settings, media cache work, map data, and system health do not compete in one long list.'),
     ]);
     echo '<div class="admin-maintenance-grid admin-maintenance-featured-grid">';
-    view_render_admin_gallery_report_maintenance_card('admin-maintenance-card is-featured');
+    view_render_admin_gallery_report_maintenance_card($model, 'admin-maintenance-card is-featured');
     echo '</div>';
     echo '<div class="admin-subtab-scope admin-dashboard-maintenance-scope" data-admin-subtab-scope>';
-    $requestedMaintenanceTab = strtolower(trim((string) ($_GET['maintenance_tab'] ?? '')));
+    $requestedMaintenanceTab = strtolower(trim((string) ($model['requested_maintenance_tab'] ?? '')));
     $maintenanceTabMap = [
         'content' => 'admin-maintenance-content',
         'media' => 'admin-maintenance-media',
@@ -316,7 +306,14 @@ function view_render_admin_dashboard_maintenance_panel(array $model): void
     render_admin_trash_page(
         view_admin_dashboard_array($model, 'gallery_trash_entries'),
         $trashSummary,
-        true
+        true,
+        [
+            'enabled' => view_admin_dashboard_bool($model, 'gallery_trash_enabled'),
+            'auto_purge_enabled' => view_admin_dashboard_bool($model, 'gallery_trash_auto_purge_enabled'),
+            'auto_purge_active' => view_admin_dashboard_bool($model, 'gallery_trash_auto_purge_active'),
+            'retention_days' => view_admin_dashboard_int($model, 'gallery_trash_retention_days', 30),
+            'purge_batch_size' => view_admin_dashboard_int($model, 'gallery_trash_purge_batch_size', 20),
+        ]
     );
     view_render_admin_subtab_panel('admin-maintenance-trash', (string) ob_get_clean(), $activeMaintenanceTab === 'admin-maintenance-trash');
 
@@ -341,18 +338,18 @@ function view_render_admin_dashboard_content_display_tools(array $model): void
         'class' => 'admin-dashboard-subtab-heading',
     ]);
     echo '<div class="admin-maintenance-grid">';
-    if (view_admin_dashboard_feature_enabled('public_search')) {
-        view_render_admin_dashboard_public_search_card('admin-maintenance-card');
+    if (view_admin_dashboard_feature_enabled($model, 'public_search')) {
+        view_render_admin_dashboard_public_search_card('admin-maintenance-card', $model);
     }
     if (view_admin_dashboard_bool($model, 'gps_map_override_ready')) {
-        view_render_admin_exif_gps_defaults_card('admin-maintenance-card', view_admin_dashboard_bool($model, 'exif_gps_default_enabled'), view_admin_dashboard_int($model, 'exif_gps_override_count'));
+        view_render_admin_exif_gps_defaults_card('admin-maintenance-card', view_admin_dashboard_bool($model, 'exif_gps_default_enabled'), view_admin_dashboard_int($model, 'exif_gps_override_count'), $model);
     }
     if (view_admin_dashboard_bool($model, 'gallery_date_range_ready')) {
-        view_render_admin_gallery_dates_card('admin-maintenance-card');
+        view_render_admin_gallery_dates_card('admin-maintenance-card', $model);
     }
     view_render_admin_dashboard_public_paths_card('admin-maintenance-card');
-    view_render_admin_dashboard_seo_guard_card('admin-maintenance-card');
-    view_render_admin_url_rewrite_card('admin-maintenance-card');
+    view_render_admin_dashboard_seo_guard_card('admin-maintenance-card', $model);
+    view_render_admin_url_rewrite_card('admin-maintenance-card', $model);
     echo '</div>';
 }
 
@@ -372,10 +369,10 @@ function view_render_admin_dashboard_media_tools(array $model): void
     echo '<div class="admin-maintenance-grid">';
     view_render_admin_dashboard_thumbnail_card($model, 'admin-maintenance-card');
     view_render_admin_dashboard_site_maintenance_card($model, 'admin-maintenance-card');
-    if (view_admin_dashboard_feature_enabled('downloads')) {
+    if (view_admin_dashboard_feature_enabled($model, 'downloads')) {
         view_render_admin_dashboard_archive_card('admin-maintenance-card');
     }
-    if (view_admin_dashboard_feature_enabled('media_renamer')) {
+    if (view_admin_dashboard_feature_enabled($model, 'media_renamer')) {
         view_render_admin_dashboard_media_renamer_card('admin-maintenance-card');
     }
     echo '</div>';
@@ -395,7 +392,7 @@ function view_render_admin_dashboard_navigation_tools(array $model): void
         'class' => 'admin-dashboard-subtab-heading',
     ]);
     echo '<div class="admin-maintenance-grid">';
-    if (view_admin_dashboard_feature_enabled('navigation_data')) {
+    if (view_admin_dashboard_feature_enabled($model, 'navigation_data')) {
         view_render_admin_navdata_maintenance_card(view_admin_dashboard_bool($model, 'flight_navdata_ready'), view_admin_dashboard_array($model, 'flight_navdata_status'));
     } else {
         echo '<article class="admin-maintenance-card"><strong>' . e(t('admin.dashboard.navigation_data_hidden', 'Navigation data')) . '</strong><span>' . e(t('admin.dashboard.navigation_data_hidden_hint', 'Navigation data maintenance is hidden by Admin > Features.')) . '</span><a class="button secondary" href="' . e(url_for('admin_features')) . '">' . e(t('admin.dashboard.open_features', 'Open features')) . '</a></article>';
@@ -408,9 +405,9 @@ function view_render_admin_dashboard_navigation_tools(array $model): void
  *
  * @param string $className CSS class name for the card wrapper.
  */
-function view_render_admin_gallery_report_maintenance_card(string $className = 'admin-maintenance-card'): void
+function view_render_admin_gallery_report_maintenance_card(array $model, string $className = 'admin-maintenance-card'): void
 {
-    if (!view_admin_dashboard_feature_enabled('complete_gallery_report')) {
+    if (!view_admin_dashboard_feature_enabled($model, 'complete_gallery_report')) {
         return;
     }
     echo '<article class="' . e($className) . '"><strong>' . e(t('admin.dashboard.gallery_report', 'Complete gallery report')) . '</strong><span>' . e(t('admin.dashboard.gallery_report_hint', 'Generate one detailed downloadable HTML report with storage, database, telemetry, EXIF, GPS, galleries, and runtime diagnostics.')) . '</span><a class="button secondary" href="' . e(url_for('admin_gallery_report')) . '">' . e(t('admin.dashboard.open_gallery_report', 'Open report generator')) . '</a></article>';
@@ -446,15 +443,15 @@ function view_render_admin_dashboard_system_tools(array $model): void
     ]);
     echo '<div class="admin-maintenance-grid">';
     echo '<article class="admin-maintenance-card"><strong>' . e(t('admin.dashboard.logs', 'Logs')) . '</strong><span>' . e(t('admin.dashboard.logs_hint', 'Review operational events, failures, and workflow status.')) . '</span><a class="button secondary" href="' . e(url_for('admin_logs')) . '">' . e(t('admin.dashboard.open_logs', 'Open logs')) . '</a></article>';
-    if (view_admin_dashboard_feature_enabled('telemetry')) {
+    if (view_admin_dashboard_feature_enabled($model, 'telemetry')) {
         echo '<article class="admin-maintenance-card"><strong>' . e(t('admin.dashboard.telemetry', 'Telemetry')) . '</strong><span>' . e(t('admin.dashboard.telemetry_hint', 'Inspect anonymous usage telemetry without collecting personal data.')) . '</span><a class="button secondary" href="' . e(url_for('admin_telemetry')) . '">' . e(t('admin.dashboard.open_telemetry', 'Open telemetry')) . '</a></article>';
     }
     echo '<article class="admin-maintenance-card"><strong>' . e(t('admin.dashboard.integrity', 'Integrity')) . '</strong><span>' . e(t('admin.dashboard.integrity_hint', 'Check core files and deployment health.')) . '</span><a class="button secondary" href="' . e(url_for('admin_integrity')) . '">' . e(t('admin.dashboard.run_integrity_check', 'Run integrity check')) . '</a></article>';
     echo '<article class="admin-maintenance-card"><strong>' . e(t('admin.search_diagnostics.dashboard_title', 'Search diagnostics')) . '</strong><span>' . e(t('admin.search_diagnostics.dashboard_hint', 'Measure progressive public-search phases, SQL timings, indexes, and optimizer plans against the live database.')) . '</span><a class="button secondary" href="' . e(url_for('admin_search_diagnostics')) . '">' . e(t('admin.search_diagnostics.open_button', 'Open search diagnostics')) . '</a></article>';
-    view_render_admin_gallery_report_maintenance_card('admin-maintenance-card');
+    view_render_admin_gallery_report_maintenance_card($model, 'admin-maintenance-card');
     echo '<article class="admin-maintenance-card"><strong>' . e(t('admin.dashboard.updates', 'Updates')) . '</strong><span>' . e(t('admin.dashboard.updates_hint', 'Check and apply project updates.')) . '</span><a class="' . e($updateButtonClass) . '" href="' . e(url_for('admin_update')) . '">' . e($updateLabel) . '</a></article>';
     echo '<article class="admin-maintenance-card"><strong>' . e(t('admin.dashboard.features', 'Features')) . '</strong><span>' . e(t('admin.dashboard.features_hint', 'Enable or hide unfinished, optional, or site-specific feature areas.')) . '</span><a class="button secondary" href="' . e(url_for('admin_features')) . '">' . e(t('admin.dashboard.open_features', 'Open features')) . '</a></article>';
-    view_render_admin_devmode_card('admin-maintenance-card');
+    view_render_admin_devmode_card('admin-maintenance-card', $model);
     if ($migrationPending) {
         view_render_admin_dashboard_migration_card('admin-maintenance-card');
     }
@@ -659,12 +656,12 @@ function view_render_admin_dashboard_nsfw_schema_card(array $status, string $cla
  *
  * @param string $className Class name value.
  */
-function view_render_admin_dashboard_public_search_card(string $className): void
+function view_render_admin_dashboard_public_search_card(string $className, array $model = []): void
 {
     echo '<form method="post" action="' . e(url_for('admin_public_search_settings')) . '" class="' . e($className) . ' admin-public-search-settings">' . csrf_field();
     echo '<strong>' . e(t('admin.dashboard.public_search_title', 'Public search')) . '</strong><span>' . e(t('admin.dashboard.public_search_hint', 'Show a thin live search bar above the public front-page and gallery content. Gallery pages include a visitor checkbox to limit results to that gallery and its subgalleries.')) . '</span>';
-    echo '<label class="admin-compact-toggle"><input type="checkbox" name="public_home_search_enabled" value="1"' . (public_home_search_enabled() ? ' checked' : '') . '> <span>' . e(t('admin.dashboard.public_search_enable', 'Enable public search bar')) . '</span></label>';
-    echo '<div class="nav"><button type="submit" class="secondary">' . e(t('admin.dashboard.save_public_search', 'Save search setting')) . '</button><a class="button secondary" href="' . e(admin_settings_url('general')) . '">' . e(t('admin.settings.open_centralized', 'Open centralized settings')) . '</a></div></form>';
+    echo '<label class="admin-compact-toggle"><input type="checkbox" name="public_home_search_enabled" value="1"' . (!empty($model['public_home_search_enabled']) ? ' checked' : '') . '> <span>' . e(t('admin.dashboard.public_search_enable', 'Enable public search bar')) . '</span></label>';
+    echo '<div class="nav"><button type="submit" class="secondary">' . e(t('admin.dashboard.save_public_search', 'Save search setting')) . '</button><a class="button secondary" href="' . e((string) ($model['admin_settings_urls']['general'] ?? url_for('admin_settings'))) . '">' . e(t('admin.settings.open_centralized', 'Open centralized settings')) . '</a></div></form>';
 }
 
 /**
@@ -683,9 +680,9 @@ function view_render_admin_dashboard_public_paths_card(string $className): void
  *
  * @param string $className Class name value.
  */
-function view_render_admin_dashboard_seo_guard_card(string $className): void
+function view_render_admin_dashboard_seo_guard_card(string $className, array $model = []): void
 {
-    $status = function_exists('Gallery\\Services\\seo_request_guard_status') ? seo_request_guard_status() : [
+    $status = is_array($model['seo_guard_status'] ?? null) ? $model['seo_guard_status'] : [
         'enabled' => true,
         'logging_enabled' => true,
         'log_day' => '',
@@ -705,7 +702,7 @@ function view_render_admin_dashboard_seo_guard_card(string $className): void
     echo '<label class="admin-compact-toggle"><input type="checkbox" name="seo_request_guard_enabled" value="1"' . (!empty($status['enabled']) ? ' checked' : '') . '> <span>' . e(t('admin.dashboard.seo_guard_enable', 'Reject suspicious public query strings')) . '</span></label>';
     echo '<label class="admin-compact-toggle"><input type="checkbox" name="seo_request_guard_logging_enabled" value="1"' . (!empty($status['logging_enabled']) ? ' checked' : '') . '> <span>' . e(t('admin.dashboard.seo_guard_logging_enable', 'Log sampled rejected requests')) . '</span></label>';
     echo '<small class="muted">' . e($logStatus) . '</small>';
-    echo '<div class="nav"><button type="submit" class="secondary">' . e(t('admin.dashboard.save_seo_guard', 'Save crawler safety')) . '</button><a class="button secondary" href="' . e(admin_settings_url('privacy')) . '">' . e(t('admin.settings.open_centralized', 'Open centralized settings')) . '</a></div></form>';
+    echo '<div class="nav"><button type="submit" class="secondary">' . e(t('admin.dashboard.save_seo_guard', 'Save crawler safety')) . '</button><a class="button secondary" href="' . e((string) ($model['admin_settings_urls']['privacy'] ?? url_for('admin_settings'))) . '">' . e(t('admin.settings.open_centralized', 'Open centralized settings')) . '</a></div></form>';
 }
 
 /**
@@ -718,8 +715,11 @@ function view_render_admin_dashboard_thumbnail_card(array $model, string $classN
 {
     $thumbnailSummary = view_admin_dashboard_array($model, 'thumbnail_summary');
     $missingThumbnailVariants = view_admin_dashboard_int($model, 'missing_thumbnail_variants');
-    $compatibilityMode = function_exists('Gallery\\Services\\thumbnail_compatibility_mode') ? thumbnail_compatibility_mode() : 'modern';
-    $lastThumbnailCheck = function_exists('Gallery\\Services\\thumbnail_maintenance_last_check') ? thumbnail_maintenance_last_check() : [];
+    $compatibilityMode = trim((string) ($model['thumbnail_compatibility_mode'] ?? 'modern'));
+    if (!in_array($compatibilityMode, ['modern', 'legacy'], true)) {
+        $compatibilityMode = 'modern';
+    }
+    $lastThumbnailCheck = is_array($model['thumbnail_maintenance_last_check'] ?? null) ? $model['thumbnail_maintenance_last_check'] : [];
 
     echo '<article class="' . e($className) . ' admin-thumbnail-maintenance-card">';
     echo '<strong>' . e(t('admin.dashboard.thumbnail_maintenance', 'Thumbnail maintenance')) . '</strong>';
@@ -797,7 +797,9 @@ function view_render_admin_dashboard_thumbnail_card(array $model, string $classN
     echo '<button type="submit" class="secondary" data-check-missing-thumbnails>' . e(t('admin.thumbnails.check_missing', 'Check missing thumbnails')) . '</button>';
     echo '</form>';
 
-    $browserRebuildConfig = function_exists('Gallery\\Services\\browser_thumbnail_rebuild_browser_config') ? browser_thumbnail_rebuild_browser_config() : ['enabled' => false];
+    $browserRebuildConfig = is_array($model['browser_thumbnail_rebuild_config'] ?? null)
+        ? $model['browser_thumbnail_rebuild_config']
+        : ['enabled' => false];
     $browserRebuildJson = json_encode($browserRebuildConfig, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     if (!is_string($browserRebuildJson)) {
         $browserRebuildJson = '{}';
@@ -933,7 +935,7 @@ function view_render_admin_dashboard_site_maintenance_card(array $model, string 
     echo '<button type="submit" name="site_maintenance_action" value="rotate_token" class="secondary danger" onclick="return confirm(' . e(json_encode(t('admin.site_maintenance.rotate_confirm', 'Rotate the hidden web-cron token? Existing external web cron URLs will stop working until updated.'), JSON_UNESCAPED_UNICODE)) . ');">' . e(t('admin.site_maintenance.rotate_token', 'Rotate hidden web-cron token')) . '</button>';
     echo '</div>';
     echo '</form>';
-    echo '<div class="nav"><a class="button secondary" href="' . e(admin_settings_url('privacy')) . '">' . e(t('admin.settings.open_centralized', 'Open centralized settings')) . '</a></div>';
+    echo '<div class="nav"><a class="button secondary" href="' . e((string) ($model['admin_settings_urls']['privacy'] ?? url_for('admin_settings'))) . '">' . e(t('admin.settings.open_centralized', 'Open centralized settings')) . '</a></div>';
 
     echo '</article>';
 }

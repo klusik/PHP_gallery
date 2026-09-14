@@ -37,9 +37,10 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
-use function Gallery\Core\db;
 use function Gallery\Core\normalize_relative_path;
 use function Gallery\Core\now_sql;
+use function Gallery\Models\gallery_model_all_rows_by_folder_path;
+use function Gallery\Models\gallery_model_reset_grid_overrides;
 
 /**
  * Return true when the gallery-grid override columns exist in the database.
@@ -185,18 +186,13 @@ function reset_all_gallery_grid_overrides(): array
         'schema_ready' => gallery_grid_schema_ready(),
     ];
 
-    // $pdo stores the active database connection used for both reading and updating gallery rows.
-    $pdo = db();
     // $galleryRows stores all known gallery folders, including their existing metadata when the grid schema exists.
-    $galleryRows = $pdo->query('SELECT * FROM galleries ORDER BY folder_path')->fetchAll();
+    $galleryRows = gallery_model_all_rows_by_folder_path();
 
     if ($result['schema_ready']) {
         // $now stores a consistent update timestamp for every row changed by this reset operation.
         $now = now_sql();
-        // $stmt clears explicit grid settings while preserving every other gallery option.
-        $stmt = $pdo->prepare('UPDATE galleries SET grid_columns = NULL, grid_rows = NULL, grid_use_for_subgalleries = 1, updated_at = ? WHERE grid_columns IS NOT NULL OR grid_rows IS NOT NULL OR grid_use_for_subgalleries <> 1');
-        $stmt->execute([$now]);
-        $result['database_rows'] = $stmt->rowCount();
+        $result['database_rows'] = gallery_model_reset_grid_overrides($now);
     }
 
     foreach ($galleryRows as $galleryRow) {

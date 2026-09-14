@@ -36,7 +36,7 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
-use function Gallery\Core\db;
+use function Gallery\Models\download_signatures_model_rows;
 
 /**
  * Download cache signature service.
@@ -70,19 +70,7 @@ function gallery_zip_signature(int $galleryId, bool $publicOnly): string
         return hash('sha256', 'empty-visible-gallery-' . $galleryId . '-' . ($publicOnly ? 'public' : 'admin'));
     }
 
-    // Variable $placeholders stores this steps working value.
-    $placeholders = implode(',', array_fill(0, count($galleryIds), '?'));
-    // Variable $imageVisibilitySql stores this steps working value.
-    $imageVisibilitySql = $publicOnly ? " AND i.visibility = 'public'" : '';
-    // Variable $stmt stores this steps working value.
-    $stmt = db()->prepare("SELECT g.id AS gallery_id, g.parent_id, g.folder_path, g.visibility AS gallery_visibility,
-            g.access_mode, g.updated_at AS gallery_updated_at, i.id AS image_id, i.relative_path, i.relative_path_hash,
-            i.file_size, i.modified_at, i.checksum_sha256, i.visibility, i.updated_at AS image_updated_at
-        FROM galleries g
-        LEFT JOIN images i ON i.gallery_id = g.id" . $imageVisibilitySql . "
-        WHERE g.id IN ($placeholders)
-        ORDER BY g.folder_path, i.relative_path");
-    $stmt->execute($galleryIds);
+    $rows = download_signatures_model_rows($galleryIds, $publicOnly);
 
-    return hash('sha256', json_encode($stmt->fetchAll(), JSON_UNESCAPED_SLASHES));
+    return hash('sha256', json_encode($rows, JSON_UNESCAPED_SLASHES));
 }

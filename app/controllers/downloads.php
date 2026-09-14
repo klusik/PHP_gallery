@@ -62,7 +62,7 @@ use function Gallery\Services\download_capability_issue;
 use function Gallery\Services\download_capability_validate;
 use function Gallery\Services\download_manifest_profile_begin;
 use function Gallery\Services\download_manifest_profile_finish;
-use function Gallery\Services\download_manifest_profile_emit_headers;
+use function Gallery\Services\download_manifest_profile_response_headers;
 use function Gallery\Services\download_manifest_cache_invalidate_source_mismatch;
 use function Gallery\Services\gallery_zip_failure_reason;
 use function Gallery\Services\gallery_download_manifest;
@@ -77,14 +77,16 @@ use Gallery\Services\LegacyDownloadBuildException;
 use Gallery\Services\SmartGalleryZipBuildException;
 use function Gallery\Services\build_legacy_smart_gallery_zip;
 use function Gallery\Services\build_selected_images_zip;
-use function Gallery\Services\send_download;
-use function Gallery\Services\send_legacy_download_artifact;
+use function Gallery\Services\download_stream_descriptor;
+use function Gallery\Services\legacy_download_artifact_stream_descriptor;
+use function Gallery\Services\legacy_download_artifact_stream_release;
 use function Gallery\Services\smart_gallery_effective_presentation;
 use function Gallery\Services\smart_gallery_find_public_by_id;
 use function Gallery\Services\smart_gallery_zip_failure_reason;
 use function Gallery\Services\request_client_ip;
 use function Gallery\Services\telemetry_request_id;
 use function Gallery\Services\viewer_security_fingerprint;
+use function Gallery\Views\view_render_download_legacy_confirmation;
 use const Gallery\Services\DOWNLOAD_CAPABILITY_RESOURCE_GALLERY;
 use const Gallery\Services\DOWNLOAD_CAPABILITY_RESOURCE_SMART_GALLERY;
 use const Gallery\Services\DOWNLOAD_CAPABILITY_SCOPE_PROGRESSIVE;
@@ -581,15 +583,12 @@ function cms_download_render_legacy_confirmation(string $resourceType, int $reso
     $capability = download_capability_issue($resourceType, $resourceId, DOWNLOAD_CAPABILITY_SCOPE_LEGACY);
 
     cms_download_progressive_capability_headers();
-    render_header($label);
-    echo '<section class="hero"><div><h1>' . e($label) . '</h1></div><div class="hero-actions">';
-    echo '<form method="post" action="' . e(url_for($legacyRoute)) . '">';
-    echo '<input type="hidden" name="id" value="' . $resourceId . '">';
-    echo '<input type="hidden" name="capability" value="' . e($capability) . '">';
-    echo '<button type="submit" class="button">' . e($label) . '</button>';
-    echo '</form>';
-    echo '</div></section>';
-    render_footer();
+    view_render_download_legacy_confirmation([
+        'label' => $label,
+        'action_url' => url_for($legacyRoute),
+        'resource_id' => $resourceId,
+        'capability' => $capability,
+    ]);
 }
 
 /**
@@ -638,6 +637,66 @@ function cms_download_smart_gallery_start(): void
         return;
     }
     cms_download_start_response(DOWNLOAD_CAPABILITY_RESOURCE_SMART_GALLERY, $galleryId, 'download_smart_gallery_manifest');
+}
+
+/** Emit prepared manifest profiling headers at the HTTP boundary. */
+function cms_download_emit_manifest_profile_headers(): void
+{
+    if (headers_sent()) {
+        return;
+    }
+    foreach (download_manifest_profile_response_headers() as $name => $value) {
+        header($name . ': ' . $value);
+    }
+}
+
+/** Stream one validated ZIP descriptor at the HTTP boundary. */
+function cms_download_send_zip_file(string $filePath, string $downloadName): never
+{
+    $stream = download_stream_descriptor($filePath, $downloadName);
+    $status = (int) ($stream['status'] ?? 500);
+    http_response_code($status);
+    header('Content-Type: ' . (string) ($stream['mime'] ?? 'application/octet-stream'));
+    if ($status !== 200) {
+        echo (string) ($stream['message'] ?? '');
+        exit;
+    }
+    header('X-Content-Type-Options: nosniff');
+    header('Content-Disposition: attachment; filename="' . addcslashes((string) ($stream['filename'] ?? 'download.zip'), "\"\\") . '"');
+    header('Content-Length: ' . (int) ($stream['length'] ?? 0));
+    readfile((string) ($stream['path'] ?? ''));
+    exit;
+}
+
+/** Stream one prepared legacy artifact descriptor at the HTTP boundary. */
+function cms_download_send_legacy_artifact(string $filePath, string $downloadName): never
+{
+    $stream = legacy_download_artifact_stream_descriptor($filePath, $downloadName);
+    $status = (int) ($stream['status'] ?? 500);
+    http_response_code($status);
+    if ($status !== 200) {
+        $retryAfter = (int) ($stream['retry_after'] ?? 0);
+        if ($retryAfter > 0) {
+            header('Retry-After: ' . $retryAfter);
+        }
+        header('Content-Type: ' . (string) ($stream['mime'] ?? 'text/plain; charset=utf-8'));
+        header('Cache-Control: ' . (string) ($stream['cache_control'] ?? 'private, no-store'));
+        echo (string) ($stream['message'] ?? '');
+        exit;
+    }
+
+    $leaseHandle = $stream['lease_handle'] ?? null;
+    try {
+        header('Content-Type: ' . (string) ($stream['mime'] ?? 'application/octet-stream'));
+        header('X-Content-Type-Options: nosniff');
+        header('Cache-Control: ' . (string) ($stream['cache_control'] ?? 'private, no-store'));
+        header('Content-Disposition: attachment; filename="' . addcslashes((string) ($stream['filename'] ?? 'download.zip'), "\"\\") . '"');
+        header('Content-Length: ' . (int) ($stream['length'] ?? 0));
+        readfile((string) ($stream['path'] ?? ''));
+    } finally {
+        legacy_download_artifact_stream_release($leaseHandle);
+    }
+    exit;
 }
 
 /**
@@ -695,7 +754,7 @@ function cms_download_gallery(): void
         $failureStage = 'archive_build';
         $zip = build_legacy_gallery_zip((int) $gallery['id'], $manifest);
         $failureStage = 'archive_send';
-        send_legacy_download_artifact($zip, slugify((string) $gallery['title']) . '.zip');
+        cms_download_send_legacy_artifact($zip, slugify((string) $gallery['title']) . '.zip');
     } catch (GalleryDownloadManifestException $exception) {
         $context = ['gallery_id' => (int) $gallery['id']]
             + cms_download_failure_request_context('download_gallery', 'manifest', $exception->reason(), $exception);
@@ -767,7 +826,7 @@ function cms_download_gallery_manifest(): void
         $payload = ['ok' => false, 'error' => $exception->getMessage()];
     } finally {
         download_manifest_profile_finish();
-        download_manifest_profile_emit_headers();
+        cms_download_emit_manifest_profile_headers();
     }
     echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
 }
@@ -899,7 +958,7 @@ function cms_download_smart_gallery(): void
         $failureStage = 'archive_build';
         $zip = build_legacy_smart_gallery_zip($gallery, $manifest);
         $failureStage = 'archive_send';
-        send_legacy_download_artifact($zip, slugify((string) $gallery['title']) . '.zip');
+        cms_download_send_legacy_artifact($zip, slugify((string) $gallery['title']) . '.zip');
     } catch (GalleryDownloadManifestException $exception) {
         $context = ['smart_gallery_id' => (int) $gallery['id']]
             + cms_download_failure_request_context('download_smart_gallery', 'manifest', $exception->reason(), $exception);
@@ -971,7 +1030,7 @@ function cms_download_smart_gallery_manifest(): void
         $payload = ['ok' => false, 'error' => $exception->getMessage()];
     } finally {
         download_manifest_profile_finish();
-        download_manifest_profile_emit_headers();
+        cms_download_emit_manifest_profile_headers();
     }
     echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
 }
@@ -1021,7 +1080,7 @@ function cms_picture_manager_download_selection(): void
             'source_gallery_id' => (int) $sourceGallery['id'],
             'selected_count' => count($imageIds),
         ], ['category' => 'other', 'severity' => 'info']);
-        send_download($zip, slugify((string) $sourceGallery['title']) . '-selected-photos.zip');
+        cms_download_send_zip_file($zip, slugify((string) $sourceGallery['title']) . '-selected-photos.zip');
     } catch (Throwable $exception) {
         admin_log_event('error', 'picture_manager.selection_zip_failed', 'Picture manager selected-photo ZIP failed.', [
             'source_gallery_id' => (int) ($_POST['source_gallery_id'] ?? 0),
@@ -1041,5 +1100,5 @@ function cms_download_all(): void
     require_admin();
     // Variable $zip stores this steps working value.
     $zip = build_all_zip();
-    send_download($zip, 'all-galleries.zip');
+    cms_download_send_zip_file($zip, 'all-galleries.zip');
 }

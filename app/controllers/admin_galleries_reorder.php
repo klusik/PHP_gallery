@@ -37,12 +37,10 @@ declare(strict_types=1);
 namespace Gallery\Controllers;
 
 use Throwable;
-use function Gallery\Core\db;
 use function Gallery\Core\flash_message;
 use function Gallery\Core\gallery_public_url;
 use function Gallery\Core\normalize_relative_path;
 use function Gallery\Core\redirect_to;
-use function Gallery\Core\now_sql;
 use function Gallery\Core\require_admin;
 use function Gallery\Core\verify_csrf;
 use function Gallery\Services\child_galleries;
@@ -51,6 +49,9 @@ use function Gallery\Services\find_gallery;
 use function Gallery\Services\gallery_folder_name_from_path;
 use function Gallery\Services\gallery_path_diagnostics;
 use function Gallery\Services\gallery_sort_rows_by_date_preserving_undated_positions;
+use function Gallery\Services\gallery_reorder_current_tree_rows;
+use function Gallery\Services\gallery_reorder_save_child_order;
+use function Gallery\Services\gallery_reorder_save_tree_order;
 use function Gallery\Services\move_gallery_folder_to_parent;
 use function Gallery\Services\public_path_schema_ready;
 use function Gallery\Services\regenerate_public_paths;
@@ -123,7 +124,7 @@ function cms_admin_reorder_galleries(): void
 
     sync_gallery_parent_ids();
     // Variable $currentRows stores current database state for validation and change detection.
-    $currentRows = db()->query('SELECT id, parent_id, sort_order, title, folder_path FROM galleries ORDER BY id')->fetchAll();
+    $currentRows = gallery_reorder_current_tree_rows();
     // Variable $currentIds stores all gallery ids currently known by the database.
     $currentIds = array_map(static fn (array $row): int => (int) $row['id'], $currentRows);
     // Variable $sortedSubmittedIds stores the submitted id set in sorted order.
@@ -181,10 +182,6 @@ function cms_admin_reorder_galleries(): void
         $submittedParentById[(int) $entry['id']] = (int) $entry['parent_id'];
     }
 
-    // Variable $pdo stores the active database connection used for sibling order updates.
-    $pdo = db();
-    // Variable $now stores one timestamp shared by all sort_order updates.
-    $now = now_sql();
     // Variable $movedCount stores how many gallery folders changed parent.
     $movedCount = 0;
     // Variable $reorderDiagnostics stores filesystem details for moved galleries if saving fails.
@@ -210,25 +207,8 @@ function cms_admin_reorder_galleries(): void
             $activeMoveDiagnostics = null;
         }
 
-        // Variable $siblingPositionByParent stores the next sort index for each parent id.
-        $siblingPositionByParent = [];
         // Variable $nextSortOrderById stores the calculated persisted sort order for each submitted gallery.
-        $nextSortOrderById = [];
-        $pdo->beginTransaction();
-        // Variable $stmt stores the prepared update reused for each reordered gallery row.
-        $stmt = $pdo->prepare('UPDATE galleries SET sort_order = ?, updated_at = ? WHERE id = ?');
-        foreach ($submittedEntries as $entry) {
-            // Variable $parentId stores the submitted parent group whose sibling order is being assigned.
-            $parentId = (int) $entry['parent_id'];
-            // Variable $position stores the next sibling position in this parent group.
-            $position = ($siblingPositionByParent[$parentId] ?? 0) + 1;
-            $siblingPositionByParent[$parentId] = $position;
-            // Variable $sortOrder stores a spaced integer so future maintenance can insert between rows if needed.
-            $sortOrder = $position * 10;
-            $nextSortOrderById[(int) $entry['id']] = $sortOrder;
-            $stmt->execute([$sortOrder, $now, (int) $entry['id']]);
-        }
-        $pdo->commit();
+        $nextSortOrderById = gallery_reorder_save_tree_order($submittedEntries);
 
         sync_gallery_parent_ids(true);
 
@@ -314,9 +294,6 @@ function cms_admin_reorder_galleries(): void
 
         admin_reorder_galleries_response(true, $movedCount > 0 ? t('admin.galleries.reorder_moved_saved') : t('admin.galleries.reorder_order_saved'), $jsonResponseBufferStarted);
     } catch (Throwable $exception) {
-        if ($pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
         admin_log_event('error', 'gallery.reorder_failed', t('admin.galleries.log_reorder_failed'), [
             'error' => $exception->getMessage(),
             'exception_class' => get_class($exception),
@@ -565,20 +542,8 @@ function cms_admin_sort_public_subgalleries_by_date(): void
     // $sortedIds stores the direct-child ids in the order that will become the real public order.
     $sortedIds = array_map(static fn (array $gallery): int => (int) $gallery['id'], $sortedRows);
 
-    // $pdo stores the active database connection used for the atomic order update.
-    $pdo = db();
-    // $now stores one timestamp shared by all rows touched by this date-sort save.
-    $now = now_sql();
     try {
-        $pdo->beginTransaction();
-        // $stmt stores the prepared update reused for each direct child gallery.
-        $stmt = $pdo->prepare('UPDATE galleries SET sort_order = ?, updated_at = ? WHERE id = ? AND parent_id = ?');
-        foreach ($sortedIds as $index => $galleryId) {
-            // $sortOrder stores a normalized sibling position after the persistent date sort.
-            $sortOrder = ($index + 1) * 10;
-            $stmt->execute([$sortOrder, $now, $galleryId, $parentGalleryId]);
-        }
-        $pdo->commit();
+        gallery_reorder_save_child_order($parentGalleryId, $sortedIds);
 
         admin_log_event('info', 'gallery.public_subgallery_date_sorted', t('admin.galleries.log_public_subgallery_date_sorted', 'Public subgalleries were sorted by date.'), [
             'parent_gallery_id' => $parentGalleryId,
@@ -588,9 +553,6 @@ function cms_admin_sort_public_subgalleries_by_date(): void
         ]);
         flash_message('public_notice', t('admin.galleries.public_subgallery_date_sort_saved', 'Subgallery date order was saved. This is now the real order for all visitors.'));
     } catch (Throwable $exception) {
-        if ($pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
         admin_log_event('error', 'gallery.public_subgallery_date_sort_failed', t('admin.galleries.log_public_subgallery_date_sort_failed', 'Public subgallery date sort failed.'), [
             'parent_gallery_id' => $parentGalleryId,
             'sort_mode' => $sortMode,
@@ -646,20 +608,8 @@ function cms_admin_reorder_public_galleries(): void
         return;
     }
 
-    // $pdo stores the active database connection used for the atomic order update.
-    $pdo = db();
-    // $now stores one timestamp shared by all rows touched by this reorder operation.
-    $now = now_sql();
     try {
-        $pdo->beginTransaction();
-        // $stmt stores the prepared update reused for each direct child gallery.
-        $stmt = $pdo->prepare('UPDATE galleries SET sort_order = ?, updated_at = ? WHERE id = ? AND parent_id = ?');
-        foreach ($nextIds as $index => $galleryId) {
-            // $sortOrder stores a normalized sibling position while preserving every non-visible sibling position.
-            $sortOrder = ($index + 1) * 10;
-            $stmt->execute([$sortOrder, $now, $galleryId, $parentGalleryId]);
-        }
-        $pdo->commit();
+        gallery_reorder_save_child_order($parentGalleryId, $nextIds);
 
         admin_log_event('info', 'gallery.public_page_reordered', t('admin.galleries.log_public_page_reordered'), [
             'parent_gallery_id' => $parentGalleryId,
@@ -669,9 +619,6 @@ function cms_admin_reorder_public_galleries(): void
         ]);
         admin_reorder_public_page_response(true, t('admin.galleries.public_subgallery_order_saved'));
     } catch (Throwable $exception) {
-        if ($pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
         admin_log_event('error', 'gallery.public_page_reorder_failed', t('admin.galleries.log_public_page_reorder_failed'), [
             'parent_gallery_id' => $parentGalleryId,
             'error' => $exception->getMessage(),

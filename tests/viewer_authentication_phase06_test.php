@@ -16,6 +16,9 @@
  *   - Protect transaction/locking/resource-limit structure when live MySQL is unavailable
  *   - Prove the Phase 0.6 service layer remains cookie-transport free after later HTTP wiring
  *
+ * Author:
+ *   Rudolf Klusal
+ *
  * Last Updated:
  *   2026-08-18
  */
@@ -267,29 +270,33 @@ namespace {
     // Static transactional/route-free contracts supplement live DB races when PDO MySQL is unavailable.
     $root = dirname(__DIR__);
     $accountService = (string) file_get_contents($root . '/app/services/viewer_accounts.php');
+    $accountModel = (string) file_get_contents($root . '/app/models/viewer_accounts.php');
     $authService = (string) file_get_contents($root . '/app/services/viewer_authentication.php');
+    $authModel = (string) file_get_contents($root . '/app/models/viewer_authentication.php');
     $tokenService = (string) file_get_contents($root . '/app/services/viewer_tokens.php');
+    $tokenModel = (string) file_get_contents($root . '/app/models/viewer_tokens.php');
     $registrationService = (string) file_get_contents($root . '/app/services/viewer_registration.php');
+    $registrationModel = (string) file_get_contents($root . '/app/models/viewer_registration.php');
     $mailService = (string) file_get_contents($root . '/app/services/viewer_mail.php');
     $securityService = (string) file_get_contents($root . '/app/security.php');
     $maintenanceService = (string) file_get_contents($root . '/app/services/site_maintenance.php');
     $migration = (string) file_get_contents($root . '/database/migrations/202608180003_viewer_authentication_foundations.php');
 
     viewer_phase06_assert(str_contains($migration, 'CREATE TABLE IF NOT EXISTS viewer_account_state') && str_contains($migration, 'ENGINE=InnoDB'), 'Account-cap migration must be additive/replay-safe and transactional-engine compatible.');
-    viewer_phase06_assert(str_contains($accountService, 'SELECT account_count FROM viewer_account_state') && str_contains($accountService, 'FOR UPDATE'), 'Durable viewer-account cap must serialize on a locked singleton row.');
+    viewer_phase06_assert(str_contains($accountService, 'viewer_account_model_capacity_lock(') && str_contains($accountModel, 'SELECT account_count FROM viewer_account_state') && str_contains($accountModel, 'FOR UPDATE'), 'Durable viewer-account cap must serialize on a locked singleton row.');
     viewer_phase06_assert(str_contains($registrationService, 'function viewer_registration_activate_verified(string $password)') && !str_contains($registrationService, 'viewer_registration_activate_verified(string $password, string'), 'Activation authority must not accept a client request id parameter.');
-    viewer_phase06_assert(str_contains($registrationService, "SELECT * FROM viewer_invitations WHERE id = ? LIMIT 1 FOR UPDATE"), 'Activation must re-lock and re-check invitation authority.');
-    viewer_phase06_assert(str_contains($registrationService, 'DELETE FROM viewer_registration_requests WHERE id = ?'), 'Successful activation must retire plaintext staging registration data.');
-    viewer_phase06_assert(strpos($authService, 'viewer_login_rate_limits_consume(') < strpos($authService, "SELECT * FROM viewer_accounts WHERE normalized_email = ?"), 'Viewer login rate limits must precede account lookup.');
+    viewer_phase06_assert(str_contains($registrationService, 'viewer_registration_model_invitation_lock(') && str_contains($registrationModel, "SELECT * FROM viewer_invitations WHERE id = ? LIMIT 1 FOR UPDATE"), 'Activation must re-lock and re-check invitation authority.');
+    viewer_phase06_assert(str_contains($registrationService, 'viewer_registration_model_request_delete(') && str_contains($registrationModel, 'DELETE FROM viewer_registration_requests WHERE id = ?'), 'Successful activation must retire plaintext staging registration data.');
+    viewer_phase06_assert(strpos($authService, 'viewer_login_rate_limits_consume(') < strpos($authService, 'viewer_authentication_model_account_by_normalized_email('), 'Viewer login rate limits must precede account lookup.');
     viewer_phase06_assert(strpos($authService, 'viewer_login_rate_limits_consume(') < strpos($authService, 'viewer_password_verify('), 'Viewer login rate limits must precede expensive password verification.');
-    viewer_phase06_assert(str_contains($accountService, 'ORDER BY created_at ASC, id ASC LIMIT') && str_contains($accountService, 'max_active_viewer_sessions_per_account'), 'Viewer active-session cap must revoke deterministically under account locking.');
-    viewer_phase06_assert(str_contains($tokenService, 'max_active_viewer_remember_tokens_per_account') && str_contains($tokenService, 'ORDER BY created_at ASC, id ASC LIMIT'), 'Remember-token cap must be deterministic and bounded.');
-    viewer_phase06_assert(str_contains($tokenService, 'SET selector = ?, verifier_hash = ?, last_used_at = ?, expires_at = ?') && str_contains($tokenService, 'viewer_session_establish($account)'), 'Remember restoration must rotate verifier authority before establishing a normal viewer session.');
+    viewer_phase06_assert(str_contains($accountService, 'max_active_viewer_sessions_per_account') && str_contains($accountModel, 'ORDER BY created_at ASC, id ASC LIMIT'), 'Viewer active-session cap must revoke deterministically under account locking.');
+    viewer_phase06_assert(str_contains($tokenService, 'max_active_viewer_remember_tokens_per_account') && str_contains($tokenModel, 'ORDER BY created_at ASC, id ASC LIMIT'), 'Remember-token cap must be deterministic and bounded.');
+    viewer_phase06_assert(str_contains($tokenService, 'viewer_token_model_remember_rotate(') && str_contains($tokenModel, 'SET selector = ?, verifier_hash = ?, last_used_at = ?, expires_at = ?') && str_contains($tokenService, 'viewer_session_establish($account)'), 'Remember restoration must rotate verifier authority before establishing a normal viewer session.');
     viewer_phase06_assert(stripos($tokenService, 'setcookie(') === false, 'Phase 0.6 remember orchestration must not emit a browser cookie.');
     viewer_phase06_assert(str_contains($authService, 'function viewer_password_reset_inspect(string $token)') && str_contains($authService, 'function viewer_password_reset_authorize(string $token)'), 'Password-reset inspection and explicit pre-auth authorization must remain separate.');
-    viewer_phase06_assert(str_contains($authService, "SELECT * FROM viewer_password_reset_tokens WHERE id = ? LIMIT 1 FOR UPDATE") && str_contains($authService, 'security_version = ?'), 'Final reset must lock token/account state and be security-version aware.');
-    viewer_phase06_assert(str_contains($authService, 'UPDATE viewer_sessions SET revoked_at = ?') && str_contains($authService, 'UPDATE viewer_remember_tokens SET revoked_at = ?'), 'Successful password reset must revoke viewer sessions and remember credentials.');
-    viewer_phase06_assert(str_contains($accountService, 'UPDATE viewer_collection_share_tokens SET revoked_at = ?'), 'Account suspension/disable foundation must revoke viewer-created collection share authority.');
+    viewer_phase06_assert(str_contains($authService, 'viewer_authentication_model_password_reset_lock(') && str_contains($authModel, "SELECT * FROM viewer_password_reset_tokens WHERE id = ? LIMIT 1 FOR UPDATE") && str_contains($authModel, 'security_version = ?'), 'Final reset must lock token/account state and be security-version aware.');
+    viewer_phase06_assert(str_contains($authService, 'viewer_authentication_model_revoke_after_password_reset(') && str_contains($authModel, 'UPDATE viewer_sessions SET revoked_at = ?') && str_contains($authModel, 'UPDATE viewer_remember_tokens SET revoked_at = ?'), 'Successful password reset must revoke viewer sessions and remember credentials.');
+    viewer_phase06_assert(str_contains($accountService, 'viewer_account_model_revoke_transition_authority(') && str_contains($accountModel, 'UPDATE viewer_collection_share_tokens SET revoked_at = ?'), 'Account suspension/disable foundation must revoke viewer-created collection share authority.');
     viewer_phase06_assert(str_contains($securityService, "isset(\$_SESSION['viewer_auth'])") && str_contains($securityService, "isset(\$_SESSION['viewer_registration_activation'])") && str_contains($securityService, "isset(\$_SESSION['viewer_password_reset'])"), 'Viewer and pre-auth session state must force the safer cache path without viewer DB lookup.');
     viewer_phase06_assert(!str_contains($securityService, 'current_viewer()'), 'Cache classification must not query viewer persistence just to choose no-store.');
     viewer_phase06_assert(!str_contains($maintenanceService, 'viewer_accounts_enabled()') && str_contains($maintenanceService, 'viewer_security_maintenance_cleanup()'), 'Scheduled viewer cleanup must continue while feature capability is disabled.');

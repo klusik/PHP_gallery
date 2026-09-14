@@ -36,13 +36,15 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
-use PDOException;
-use PDOStatement;
 use RuntimeException;
 use Throwable;
 use function Gallery\Core\cms_current_version;
-use function Gallery\Core\db;
 use function Gallery\Core\now_sql;
+use function Gallery\Models\flight_maps_model_delete;
+use function Gallery\Models\flight_maps_model_find;
+use function Gallery\Models\flight_maps_model_navdata_status;
+use function Gallery\Models\flight_maps_model_replace_navdata;
+use function Gallery\Models\flight_maps_model_upsert;
 
 const GALLERY_MAP_SOURCE_EXIF_POINT = 'exif_point';
 const GALLERY_MAP_SOURCE_FLIGHT_PATH = 'flight_path';
@@ -94,10 +96,7 @@ function gallery_flight_map_row(int $galleryId): ?array
     if ($galleryId <= 0 || !flight_map_schema_ready()) {
         return null;
     }
-    $stmt = db()->prepare('SELECT * FROM gallery_flight_maps WHERE gallery_id = ? LIMIT 1');
-    $stmt->execute([$galleryId]);
-    $row = $stmt->fetch();
-    return is_array($row) ? $row : null;
+    return flight_maps_model_find($galleryId);
 }
 
 /**
@@ -138,8 +137,7 @@ function delete_gallery_flight_path_map(int $galleryId): void
     if (!schema_inspection_is_available($schemaStatus)) {
         return;
     }
-    $stmt = db()->prepare('DELETE FROM gallery_flight_maps WHERE gallery_id = ?');
-    $stmt->execute([$galleryId]);
+    flight_maps_model_delete($galleryId);
     flight_map_clear_runtime_cache();
 }
 
@@ -181,36 +179,14 @@ function save_gallery_flight_path_route(int $galleryId, string $routeText): arra
     $unresolved = $resolved['unresolved'];
     $now = now_sql();
 
-    $stmt = db()->prepare("INSERT INTO gallery_flight_maps (
-        gallery_id,
-        map_source_type,
-        route_text,
-        resolved_points_json,
-        unresolved_points_json,
-        point_count,
-        resolved_at,
-        created_at,
-        updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON DUPLICATE KEY UPDATE
-        map_source_type = VALUES(map_source_type),
-        route_text = VALUES(route_text),
-        resolved_points_json = VALUES(resolved_points_json),
-        unresolved_points_json = VALUES(unresolved_points_json),
-        point_count = VALUES(point_count),
-        resolved_at = VALUES(resolved_at),
-        updated_at = VALUES(updated_at)");
-    $stmt->execute([
+    flight_maps_model_upsert(
         $galleryId,
         GALLERY_MAP_SOURCE_FLIGHT_PATH,
         $routeText,
-        json_encode($points, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-        json_encode($unresolved, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-        count($points),
-        $now,
-        $now,
-        $now,
-    ]);
+        $points,
+        $unresolved,
+        $now
+    );
 
     flight_map_clear_runtime_cache();
 
@@ -331,36 +307,14 @@ function save_gallery_flight_path_resolved_points(int $galleryId, string $routeT
     }
 
     $now = now_sql();
-    $stmt = db()->prepare("INSERT INTO gallery_flight_maps (
-        gallery_id,
-        map_source_type,
-        route_text,
-        resolved_points_json,
-        unresolved_points_json,
-        point_count,
-        resolved_at,
-        created_at,
-        updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON DUPLICATE KEY UPDATE
-        map_source_type = VALUES(map_source_type),
-        route_text = VALUES(route_text),
-        resolved_points_json = VALUES(resolved_points_json),
-        unresolved_points_json = VALUES(unresolved_points_json),
-        point_count = VALUES(point_count),
-        resolved_at = VALUES(resolved_at),
-        updated_at = VALUES(updated_at)");
-    $stmt->execute([
+    flight_maps_model_upsert(
         $galleryId,
         GALLERY_MAP_SOURCE_FLIGHT_PATH,
         trim($routeText),
-        json_encode($normalizedPoints, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-        json_encode(array_values($unresolved), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-        count($normalizedPoints),
-        $now,
-        $now,
-        $now,
-    ]);
+        $normalizedPoints,
+        array_values($unresolved),
+        $now
+    );
 
     flight_map_clear_runtime_cache();
 
@@ -732,25 +686,11 @@ function flight_map_navdata_status(): array
     }
 
     try {
-        $stmt = db()->prepare('SELECT COUNT(*) FROM flight_map_nav_points');
-        $stmt->execute();
-        $status['total'] = (int) $stmt->fetchColumn();
-
-        $stmt = db()->prepare('SELECT kind, COUNT(*) AS row_count FROM flight_map_nav_points GROUP BY kind ORDER BY kind');
-        $stmt->execute();
-        $kindRows = $stmt->fetchAll();
-        foreach ($kindRows ?: [] as $row) {
-            $status['by_kind'][(string) ($row['kind'] ?? 'unknown')] = (int) ($row['row_count'] ?? 0);
-        }
-
-        $stmt = db()->prepare('SELECT source, COUNT(*) AS row_count FROM flight_map_nav_points GROUP BY source ORDER BY source');
-        $stmt->execute();
-        $sourceRows = $stmt->fetchAll();
-        foreach ($sourceRows ?: [] as $row) {
-            $source = trim((string) ($row['source'] ?? ''));
-            $status['by_source'][$source !== '' ? $source : 'manual'] = (int) ($row['row_count'] ?? 0);
-        }
-    } catch (PDOException) {
+        $modelStatus = flight_maps_model_navdata_status();
+        $status['total'] = (int) ($modelStatus['total'] ?? 0);
+        $status['by_kind'] = is_array($modelStatus['by_kind'] ?? null) ? $modelStatus['by_kind'] : [];
+        $status['by_source'] = is_array($modelStatus['by_source'] ?? null) ? $modelStatus['by_source'] : [];
+    } catch (Throwable) {
         $status['ready'] = false;
     }
 
@@ -790,56 +730,26 @@ function flight_map_update_navdata_from_ourairports(): array
         'updated_at' => $now,
     ];
 
-    $pdo = db();
-    $pdo->beginTransaction();
-    try {
-        $stmt = $pdo->prepare("INSERT INTO flight_map_nav_points (
-            ident,
-            kind,
-            region,
-            latitude,
-            longitude,
-            source,
-            cycle,
-            created_at,
-            updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON DUPLICATE KEY UPDATE
-            latitude = VALUES(latitude),
-            longitude = VALUES(longitude),
-            source = VALUES(source),
-            cycle = VALUES(cycle),
-            updated_at = VALUES(updated_at)");
+    $airportResult = flight_map_import_ourairports_airports($airportCsv, $cycle, $now);
+    $navaidResult = flight_map_import_ourairports_navaids($navaidCsv, $cycle, $now);
+    $rows = array_merge($airportResult['rows'], $navaidResult['rows']);
+    $deleted = flight_maps_model_replace_navdata($rows, FLIGHT_MAP_NAVDATA_SOURCE_OURAIRPORTS, $now);
 
-        $airportResult = flight_map_import_ourairports_airports($airportCsv, $stmt, $cycle, $now);
-        $navaidResult = flight_map_import_ourairports_navaids($navaidCsv, $stmt, $cycle, $now);
+    $result['airports'] = (int) $airportResult['imported'];
+    $result['navaids'] = (int) $navaidResult['imported'];
+    $result['skipped'] = (int) $airportResult['skipped'] + (int) $navaidResult['skipped'];
+    $result['deleted'] = $deleted;
+    $result['total'] = $result['airports'] + $result['navaids'];
 
-        $deleteStmt = $pdo->prepare('DELETE FROM flight_map_nav_points WHERE source = ? AND updated_at <> ?');
-        $deleteStmt->execute([FLIGHT_MAP_NAVDATA_SOURCE_OURAIRPORTS, $now]);
-        $deleted = (int) $deleteStmt->rowCount();
+    set_app_setting('flight_map_navdata_last_update', $now);
+    set_app_setting('flight_map_navdata_last_source', FLIGHT_MAP_NAVDATA_SOURCE_OURAIRPORTS);
+    set_app_setting('flight_map_navdata_last_airports', (string) $result['airports']);
+    set_app_setting('flight_map_navdata_last_navaids', (string) $result['navaids']);
+    set_app_setting('flight_map_navdata_last_skipped', (string) $result['skipped']);
+    set_app_setting('flight_map_navdata_last_deleted', (string) $result['deleted']);
 
-        $pdo->commit();
+    return $result;
 
-        $result['airports'] = (int) $airportResult['imported'];
-        $result['navaids'] = (int) $navaidResult['imported'];
-        $result['skipped'] = (int) $airportResult['skipped'] + (int) $navaidResult['skipped'];
-        $result['deleted'] = $deleted;
-        $result['total'] = $result['airports'] + $result['navaids'];
-
-        set_app_setting('flight_map_navdata_last_update', $now);
-        set_app_setting('flight_map_navdata_last_source', FLIGHT_MAP_NAVDATA_SOURCE_OURAIRPORTS);
-        set_app_setting('flight_map_navdata_last_airports', (string) $result['airports']);
-        set_app_setting('flight_map_navdata_last_navaids', (string) $result['navaids']);
-        set_app_setting('flight_map_navdata_last_skipped', (string) $result['skipped']);
-        set_app_setting('flight_map_navdata_last_deleted', (string) $result['deleted']);
-
-        return $result;
-    } catch (Throwable $exception) {
-        if ($pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
-        throw $exception;
-    }
 }
 
 /**
@@ -919,18 +829,18 @@ function flight_map_basic_https_fetch(string $url, int $timeoutSeconds): string
  * Import airport rows from OurAirports airports.csv.
  *
  * @param string $csvBody Csv body value.
- * @param PDOStatement $stmt Stmt value.
  * @param string $cycle Cycle value.
  * @param string $now Now value.
  * @return array Structured result data for the caller.
  */
-function flight_map_import_ourairports_airports(string $csvBody, PDOStatement $stmt, string $cycle, string $now): array
+function flight_map_import_ourairports_airports(string $csvBody, string $cycle, string $now): array
 {
     $imported = 0;
     $skipped = 0;
     $seen = [];
+    $rows = [];
 
-    flight_map_each_csv_row($csvBody, static function (array $row) use ($stmt, $cycle, $now, &$imported, &$skipped, &$seen): void {
+    flight_map_each_csv_row($csvBody, static function (array $row) use ($cycle, $now, &$imported, &$skipped, &$seen, &$rows): void {
         $latitude = flight_map_csv_float($row, ['latitude_deg', 'latitude', 'lat']);
         $longitude = flight_map_csv_float($row, ['longitude_deg', 'longitude', 'lon', 'lng']);
         $region = flight_map_csv_text($row, ['iso_country', 'continent']);
@@ -947,7 +857,9 @@ function flight_map_import_ourairports_airports(string $csvBody, PDOStatement $s
                 continue;
             }
             $seen[$dedupeKey] = true;
-            if (flight_map_insert_nav_point($stmt, $ident, 'airport', $region, $latitude, $longitude, $cycle, $now)) {
+            $record = flight_map_nav_point_record($ident, 'airport', $region, $latitude, $longitude, $cycle, $now);
+            if ($record !== null) {
+                $rows[] = $record;
                 $imported++;
             } else {
                 $skipped++;
@@ -955,25 +867,25 @@ function flight_map_import_ourairports_airports(string $csvBody, PDOStatement $s
         }
     });
 
-    return ['imported' => $imported, 'skipped' => $skipped];
+    return ['imported' => $imported, 'skipped' => $skipped, 'rows' => $rows];
 }
 
 /**
  * Import navaid rows from OurAirports navaids.csv.
  *
  * @param string $csvBody Csv body value.
- * @param PDOStatement $stmt Stmt value.
  * @param string $cycle Cycle value.
  * @param string $now Now value.
  * @return array Structured result data for the caller.
  */
-function flight_map_import_ourairports_navaids(string $csvBody, PDOStatement $stmt, string $cycle, string $now): array
+function flight_map_import_ourairports_navaids(string $csvBody, string $cycle, string $now): array
 {
     $imported = 0;
     $skipped = 0;
     $seen = [];
+    $rows = [];
 
-    flight_map_each_csv_row($csvBody, static function (array $row) use ($stmt, $cycle, $now, &$imported, &$skipped, &$seen): void {
+    flight_map_each_csv_row($csvBody, static function (array $row) use ($cycle, $now, &$imported, &$skipped, &$seen, &$rows): void {
         $ident = flight_map_normalize_nav_ident(flight_map_csv_text($row, ['ident']));
         $latitude = flight_map_csv_float($row, ['latitude_deg', 'latitude', 'lat']);
         $longitude = flight_map_csv_float($row, ['longitude_deg', 'longitude', 'lon', 'lng']);
@@ -991,14 +903,16 @@ function flight_map_import_ourairports_navaids(string $csvBody, PDOStatement $st
         }
         $seen[$dedupeKey] = true;
 
-        if (flight_map_insert_nav_point($stmt, $ident, $kind, $region, $latitude, $longitude, $cycle, $now)) {
+        $record = flight_map_nav_point_record($ident, $kind, $region, $latitude, $longitude, $cycle, $now);
+        if ($record !== null) {
+            $rows[] = $record;
             $imported++;
         } else {
             $skipped++;
         }
     });
 
-    return ['imported' => $imported, 'skipped' => $skipped];
+    return ['imported' => $imported, 'skipped' => $skipped, 'rows' => $rows];
 }
 
 /**
@@ -1128,9 +1042,8 @@ function flight_map_normalize_nav_ident(string $ident): string
 }
 
 /**
- * Insert or update one nav point row when coordinates are valid.
+ * Build one normalized navdata persistence row when coordinates are valid.
  *
- * @param PDOStatement $stmt Stmt value.
  * @param string $ident Ident value.
  * @param string $kind Kind value.
  * @param string $region Region value.
@@ -1138,28 +1051,26 @@ function flight_map_normalize_nav_ident(string $ident): string
  * @param float $longitude Longitude value.
  * @param string $cycle Cycle value.
  * @param string $now Now value.
- * @return bool True when the condition matches.
+ * @return ?array Normalized persistence row, or null when the point is invalid.
  */
-function flight_map_insert_nav_point(PDOStatement $stmt, string $ident, string $kind, string $region, float $latitude, float $longitude, string $cycle, string $now): bool
+function flight_map_nav_point_record(string $ident, string $kind, string $region, float $latitude, float $longitude, string $cycle, string $now): ?array
 {
     $point = flight_map_point_from_values($ident, $latitude, $longitude, $kind);
     if ($point === null) {
-        return false;
+        return null;
     }
 
-    $stmt->execute([
-        flight_map_normalize_nav_ident($ident),
-        $kind,
-        substr(strtoupper(trim($region)) !== '' ? strtoupper(trim($region)) : 'ZZ', 0, 32),
-        round((float) $point['latitude'], 7),
-        round((float) $point['longitude'], 7),
-        FLIGHT_MAP_NAVDATA_SOURCE_OURAIRPORTS,
-        $cycle,
-        $now,
-        $now,
-    ]);
-
-    return true;
+    return [
+        'ident' => flight_map_normalize_nav_ident($ident),
+        'kind' => $kind,
+        'region' => substr(strtoupper(trim($region)) !== '' ? strtoupper(trim($region)) : 'ZZ', 0, 32),
+        'latitude' => round((float) $point['latitude'], 7),
+        'longitude' => round((float) $point['longitude'], 7),
+        'source' => FLIGHT_MAP_NAVDATA_SOURCE_OURAIRPORTS,
+        'cycle' => $cycle,
+        'created_at' => $now,
+        'updated_at' => $now,
+    ];
 }
 
 /**

@@ -139,14 +139,11 @@ function viewer_remember_cookie_encode(array $credential): string
 /**
  * Parse one dedicated viewer remember cookie without touching persistent storage.
  *
- * @param ?string $value Explicit cookie value for tests, otherwise the current request cookie.
+ * @param string $value Explicit cookie value supplied by the HTTP adapter.
  * @return ?array{selector:string,verifier:string} Parsed credential or null.
  */
-function viewer_remember_cookie_parse(?string $value = null): ?array
+function viewer_remember_cookie_parse(string $value): ?array
 {
-    if ($value === null) {
-        $value = (string) ($_COOKIE[viewer_remember_cookie_name()] ?? '');
-    }
     if ($value === '' || strlen($value) > 700) {
         return null;
     }
@@ -162,92 +159,90 @@ function viewer_remember_cookie_parse(?string $value = null): ?array
 }
 
 /**
- * Emit one dedicated viewer remember cookie from an already-issued credential.
+ * Build one dedicated viewer remember-cookie instruction from an issued credential.
+ *
+ * The service owns credential validation and cookie policy. The Core HTTP adapter owns
+ * header emission and the request cookie mirror.
  *
  * @param array{selector:string,verifier:string,expires_at:string} $credential Viewer persistent credential.
- * @return bool True when the cookie was emitted.
+ * @return ?array{name:string,value:string,expires_at:int,path:string,secure:bool,httponly:bool,samesite:string}
  */
-function viewer_remember_cookie_set(array $credential): bool
+function viewer_remember_cookie_set(array $credential): ?array
 {
-    if (headers_sent() || !viewer_accounts_enabled() || !viewer_security_transport_allowed()) {
-        return false;
+    if (!viewer_accounts_enabled() || !viewer_security_transport_allowed()) {
+        return null;
     }
     $value = viewer_remember_cookie_encode($credential);
     $expiresAt = strtotime((string) ($credential['expires_at'] ?? ''));
     if ($value === '' || $expiresAt === false || $expiresAt <= time()) {
-        return false;
+        return null;
     }
     $contract = viewer_remember_cookie_contract();
-    $ok = setcookie((string) $contract['name'], $value, [
-        'expires' => $expiresAt,
+    return [
+        'name' => (string) $contract['name'],
+        'value' => $value,
+        'expires_at' => $expiresAt,
         'path' => '/',
         'secure' => true,
         'httponly' => (bool) $contract['httponly'],
         'samesite' => (string) $contract['samesite'],
-    ]);
-    if ($ok) {
-        $_COOKIE[(string) $contract['name']] = $value;
-    }
-    return $ok;
+    ];
 }
 
 /**
- * Clear the dedicated viewer remember cookie without affecting administrator cookies.
+ * Build the dedicated viewer remember-cookie clearing instruction.
+ *
+ * @return array{name:string,value:string,expires_at:int,path:string,secure:bool,httponly:bool,samesite:string}
  */
-function viewer_remember_cookie_clear(): void
+function viewer_remember_cookie_clear(): array
 {
-    $name = viewer_remember_cookie_name();
-    unset($_COOKIE[$name]);
-    if (headers_sent()) {
-        return;
-    }
-    setcookie($name, '', [
-        'expires' => time() - 3600,
+    return [
+        'name' => viewer_remember_cookie_name(),
+        'value' => '',
+        'expires_at' => time() - 3600,
         'path' => '/',
         'secure' => true,
         'httponly' => true,
         'samesite' => 'Lax',
-    ]);
+    ];
 }
 
 /**
- * Revoke the current browser remember credential, when present, then clear its cookie.
+ * Revoke one explicitly supplied browser remember credential.
  *
- * Storage failure never preserves local cookie authority in the current browser.
+ * Storage failure never preserves HTTP authority because the caller independently emits
+ * the clearing instruction returned by viewer_remember_cookie_clear().
  *
+ * @param ?array{selector:string,verifier:string} $credential Parsed browser credential.
  * @return bool True when a syntactically valid selector was presented for revocation.
  */
-function viewer_remember_revoke_current_cookie(): bool
+function viewer_remember_revoke_current_cookie(?array $credential): bool
 {
-    $credential = viewer_remember_cookie_parse();
     if ($credential === null) {
-        viewer_remember_cookie_clear();
         return false;
     }
     try {
         viewer_remember_token_revoke($credential['selector']);
     } catch (Throwable) {
-        // Browser authority is still removed below even when persistent storage is unavailable.
+        // The HTTP adapter still removes local browser authority.
     }
-    viewer_remember_cookie_clear();
     return true;
 }
 
 /**
- * Restore viewer identity from the dedicated remember cookie and rotate it atomically.
+ * Restore viewer identity from one explicitly supplied remember credential and rotate it atomically.
  *
- * This function is safe to call during request initialization. It never throws into the
- * public gallery pipeline: malformed, expired, revoked, or operationally unavailable viewer
- * storage simply leaves the request without a viewer principal and clears stale browser state.
- * Remember restoration deliberately does not establish recent reauthentication.
+ * This service never reads request globals or emits headers. It returns a cookie instruction for
+ * the Core request adapter. Malformed, expired, revoked, or operationally unavailable storage
+ * simply leaves the request without a viewer principal. Remember restoration deliberately does
+ * not establish recent reauthentication.
  *
- * @return bool True only when viewer identity was restored successfully.
+ * @param ?array{selector:string,verifier:string} $credential Parsed browser credential.
+ * @return array{restored:bool,cookie_instruction:?array,rotated_selector:?string}
  */
-function viewer_remember_restore_from_cookie(): bool
+function viewer_remember_restore_from_cookie(?array $credential): array
 {
     if (!viewer_accounts_enabled()) {
-        // Disabling the feature also retires local viewer-only authority so ordinary
-        // public pages immediately return to their historical anonymous cache path.
         viewer_session_clear();
         if (function_exists(__NAMESPACE__ . '\\viewer_clear_reauthentication')) {
             viewer_clear_reauthentication();
@@ -258,45 +253,62 @@ function viewer_remember_restore_from_cookie(): bool
         if (function_exists(__NAMESPACE__ . '\\viewer_password_reset_state_clear')) {
             viewer_password_reset_state_clear();
         }
-        unset($_SESSION[viewer_csrf_namespace_key()]);
-        if (isset($_COOKIE[viewer_remember_cookie_name()])) {
-            viewer_remember_cookie_clear();
-        }
-        return false;
+        \Gallery\Core\viewer_identity_session_unset(viewer_csrf_namespace_key());
+        return [
+            'restored' => false,
+            'cookie_instruction' => viewer_remember_cookie_clear(),
+            'rotated_selector' => null,
+        ];
     }
-    if (viewer_session_state() !== null) {
-        return false;
-    }
-    $credential = viewer_remember_cookie_parse();
-    if ($credential === null) {
-        return false;
+    if (viewer_session_state() !== null || $credential === null) {
+        return ['restored' => false, 'cookie_instruction' => null, 'rotated_selector' => null];
     }
     if (!viewer_security_transport_allowed()) {
-        viewer_remember_cookie_clear();
-        return false;
+        return [
+            'restored' => false,
+            'cookie_instruction' => viewer_remember_cookie_clear(),
+            'rotated_selector' => null,
+        ];
     }
 
     try {
         $rotated = viewer_remember_restore_and_rotate($credential['selector'], $credential['verifier']);
-        if ($rotated === null || !viewer_remember_cookie_set($rotated)) {
-            if ($rotated !== null) {
-                try {
-                    viewer_remember_token_revoke((string) $rotated['selector']);
-                } catch (Throwable) {
-                    // Local authority is cleared below regardless of persistent cleanup outcome.
-                }
-                viewer_session_revoke_current();
+        if ($rotated === null) {
+            return [
+                'restored' => false,
+                'cookie_instruction' => viewer_remember_cookie_clear(),
+                'rotated_selector' => null,
+            ];
+        }
+        $instruction = viewer_remember_cookie_set($rotated);
+        if ($instruction === null) {
+            try {
+                viewer_remember_token_revoke((string) $rotated['selector']);
+            } catch (Throwable) {
+                // Session authority is revoked below regardless of persistent cleanup outcome.
             }
-            viewer_remember_cookie_clear();
-            return false;
+            viewer_session_revoke_current();
+            return [
+                'restored' => false,
+                'cookie_instruction' => viewer_remember_cookie_clear(),
+                'rotated_selector' => null,
+            ];
         }
         if (function_exists(__NAMESPACE__ . '\\viewer_clear_reauthentication')) {
             viewer_clear_reauthentication();
         }
-        return true;
+        return [
+            'restored' => true,
+            'cookie_instruction' => $instruction,
+            'rotated_selector' => (string) $rotated['selector'],
+        ];
     } catch (Throwable) {
         viewer_session_clear();
-        viewer_remember_cookie_clear();
-        return false;
+        return [
+            'restored' => false,
+            'cookie_instruction' => viewer_remember_cookie_clear(),
+            'rotated_selector' => null,
+        ];
     }
 }
+

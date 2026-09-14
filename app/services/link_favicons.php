@@ -39,11 +39,15 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
-use PDO;
 use Throwable;
-use function Gallery\Core\db;
 use function Gallery\Core\now_sql;
 use function Gallery\Core\url_for;
+use function Gallery\Models\link_favicons_model_existing_row;
+use function Gallery\Models\link_favicons_model_gallery_description;
+use function Gallery\Models\link_favicons_model_gallery_translation_descriptions;
+use function Gallery\Models\link_favicons_model_public_file;
+use function Gallery\Models\link_favicons_model_refresh_state;
+use function Gallery\Models\link_favicons_model_upsert;
 
 const LINK_FAVICON_CACHE_TABLE = 'link_favicon_cache';
 const LINK_FAVICON_INTERNAL_DIRECTORY = '_php-gallery-internal/link-favicons';
@@ -241,16 +245,9 @@ function link_favicon_gallery_descriptions(int $galleryId): array
     }
 
     try {
-        $stmt = db()->prepare('SELECT description FROM galleries WHERE id = ?');
-        $stmt->execute([$galleryId]);
-        $descriptions = [(string) ($stmt->fetchColumn() ?: '')];
-
+        $descriptions = [link_favicons_model_gallery_description($galleryId)];
         if (content_localization_schema_ready('gallery')) {
-            $translated = db()->prepare('SELECT description FROM gallery_translations WHERE gallery_id = ? AND description IS NOT NULL');
-            $translated->execute([$galleryId]);
-            foreach ($translated->fetchAll(PDO::FETCH_COLUMN) as $description) {
-                $descriptions[] = (string) $description;
-            }
+            array_push($descriptions, ...link_favicons_model_gallery_translation_descriptions($galleryId));
         }
         return $descriptions;
     } catch (Throwable) {
@@ -333,10 +330,8 @@ function link_favicon_refresh_gallery(int $galleryId): array
 function link_favicon_host_needs_refresh(string $host): bool
 {
     try {
-        $stmt = db()->prepare('SELECT status, icon_file, retry_after FROM ' . LINK_FAVICON_CACHE_TABLE . ' WHERE hostname = ?');
-        $stmt->execute([$host]);
-        $row = $stmt->fetch(PDO::FETCH_ASSOC);
-        if (!is_array($row)) {
+        $row = link_favicons_model_refresh_state($host);
+        if ($row === null) {
             return true;
         }
 
@@ -373,10 +368,7 @@ function link_favicon_store_fetch_result(string $host, array $fetch): void
     $oldRow = null;
     $oldFile = null;
     try {
-        $oldStmt = db()->prepare('SELECT status, icon_file, mime_type, source_url, content_sha256, fetched_at FROM ' . LINK_FAVICON_CACHE_TABLE . ' WHERE hostname = ?');
-        $oldStmt->execute([$host]);
-        $candidate = $oldStmt->fetch(PDO::FETCH_ASSOC);
-        $oldRow = is_array($candidate) ? $candidate : null;
+        $oldRow = link_favicons_model_existing_row($host);
         $oldFile = $oldRow !== null ? link_favicon_valid_file_name((string) ($oldRow['icon_file'] ?? '')) : null;
     } catch (Throwable) {
         $oldRow = null;
@@ -453,12 +445,17 @@ function link_favicon_store_fetch_result(string $host, array $fetch): void
     };
 
     try {
-        $stmt = db()->prepare(
-            'INSERT INTO ' . LINK_FAVICON_CACHE_TABLE . ' (hostname, status, icon_file, mime_type, source_url, content_sha256, fetched_at, last_attempt_at, retry_after, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-             ON DUPLICATE KEY UPDATE status = VALUES(status), icon_file = VALUES(icon_file), mime_type = VALUES(mime_type), source_url = VALUES(source_url), content_sha256 = VALUES(content_sha256), fetched_at = VALUES(fetched_at), last_attempt_at = VALUES(last_attempt_at), retry_after = VALUES(retry_after), updated_at = VALUES(updated_at)'
-        );
-        $stmt->execute([$host, $status, $iconFile, $mimeType, $sourceUrl, $contentHash, $fetchedAt, $now, $retryAfter, $now]);
+        link_favicons_model_upsert($host, [
+            'status' => $status,
+            'icon_file' => $iconFile,
+            'mime_type' => $mimeType,
+            'source_url' => $sourceUrl,
+            'content_sha256' => $contentHash,
+            'fetched_at' => $fetchedAt,
+            'last_attempt_at' => $now,
+            'retry_after' => $retryAfter,
+            'updated_at' => $now,
+        ]);
     } catch (Throwable) {
         if ($iconFile !== null && $iconFile !== $oldFile) {
             @unlink(link_favicon_cache_directory() . DIRECTORY_SEPARATOR . $iconFile);
@@ -505,9 +502,7 @@ function link_favicon_cached_public_url(string $url): ?string
     }
 
     try {
-        $stmt = db()->prepare('SELECT icon_file FROM ' . LINK_FAVICON_CACHE_TABLE . " WHERE hostname = ? AND status = 'ok' LIMIT 1");
-        $stmt->execute([$host]);
-        $file = link_favicon_valid_file_name((string) ($stmt->fetchColumn() ?: ''));
+        $file = link_favicon_valid_file_name((string) (link_favicons_model_public_file($host) ?? ''));
         if ($file === null || !is_file(link_favicon_cache_directory() . DIRECTORY_SEPARATOR . $file)) {
             return $cache[$host] = null;
         }

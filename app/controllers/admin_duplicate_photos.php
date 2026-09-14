@@ -76,6 +76,7 @@ use function Gallery\Services\find_gallery;
 use function Gallery\Services\find_image;
 use function Gallery\Services\admin_log_event;
 use function Gallery\Services\t;
+use function Gallery\Services\thumbnail_url;
 use function Gallery\Views\view_render_admin_duplicate_photo_detector;
 
 /**
@@ -122,12 +123,31 @@ function admin_duplicate_photos_panel_html(array $gallery, ?array $job, int $pag
     $ledger = duplicate_photo_ledger_snapshot($adminUserId);
     $resultPage = null;
     if (is_array($job) && (string) ($job['status'] ?? '') === 'complete') {
-        $resultPage = duplicate_photo_detector_result_page($job, $page, $ledger);
+        $resultPage = admin_duplicate_photos_prepare_result_page(duplicate_photo_detector_result_page($job, $page, $ledger));
     }
 
     ob_start();
     view_render_admin_duplicate_photo_detector($gallery, $job, $resultPage, $ledger);
     return (string) ob_get_clean();
+}
+
+/**
+ * Enrich one detector result page with presentation-ready thumbnail URLs.
+ *
+ * @param array<string,mixed> $resultPage Detector result page.
+ * @return array<string,mixed> Result page prepared for rendering.
+ */
+function admin_duplicate_photos_prepare_result_page(array $resultPage): array
+{
+    foreach ((array) ($resultPage['groups'] ?? []) as $groupIndex => $group) {
+        foreach ((array) ($group['images'] ?? []) as $imageIndex => $image) {
+            if (!is_array($image)) {
+                continue;
+            }
+            $resultPage['groups'][$groupIndex]['images'][$imageIndex]['view_thumbnail_url'] = thumbnail_url($image, 300);
+        }
+    }
+    return $resultPage;
 }
 
 /**
@@ -714,7 +734,7 @@ function cms_admin_duplicate_photos(): void
     $adminUserId = admin_duplicate_photos_current_admin_id();
     $ledger = duplicate_photo_ledger_snapshot($adminUserId);
     $resultPage = $job !== null && (string) ($job['status'] ?? '') === 'complete'
-        ? duplicate_photo_detector_result_page($job, $page, $ledger)
+        ? admin_duplicate_photos_prepare_result_page(duplicate_photo_detector_result_page($job, $page, $ledger))
         : null;
 
     render_header(t('admin.duplicate_photos.page_title', 'Duplicate Photo Detector'));

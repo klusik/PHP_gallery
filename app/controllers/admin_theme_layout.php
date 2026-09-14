@@ -139,6 +139,7 @@ use function Gallery\Services\translation_set_active_language;
 use function Gallery\Services\translation_set_public_language;
 use function Gallery\Views\view_render_admin_hero;
 use function Gallery\Views\view_render_admin_tab_intro;
+use function Gallery\Views\view_render_admin_theme_layout_tab;
 
 /**
  * Admin theme controller.
@@ -265,24 +266,10 @@ use function Gallery\Views\view_render_admin_tab_intro;
  */
 function render_admin_theme_layout_tab(array $theme, array $paginationSettings, array $homeGridSettings, string $publicThumbnailRenderingMode, bool $lightboxModesFeatureEnabled): void
 {
-    ob_start();
-    view_render_admin_tab_intro([
-        'kicker' => t('admin.theme.layout.kicker', 'Layout'),
-        'title' => t('admin.theme.layout.title', 'Pagination and gallery grids'),
-        'description' => t('admin.theme.layout.description', 'Tune the default public grid while keeping per-gallery overrides available from gallery editing.'),
-    ]);
-    echo '<div class="admin-subtab-scope admin-theme-subtab-scope" data-admin-subtab-scope>';
-    render_admin_subtabs([
-        ['id' => 'admin-theme-layout-subtab-shortcuts', 'label' => t('admin.theme.subtab_shortcuts', 'Header shortcuts')],
-        ['id' => 'admin-theme-layout-subtab-cards', 'label' => t('admin.theme.subtab_cards_badges', 'Cards & badges')],
-        ['id' => 'admin-theme-layout-subtab-grids', 'label' => t('admin.theme.subtab_grids_lightbox', 'Grids & lightbox')],
-    ], 'admin-theme-layout-subtab-shortcuts', t('admin.theme.layout.subtabs_label', 'Layout subsections'));
-    ob_start();
-    echo '<div class="theme-tab-card-grid">';
+    // $favoriteGalleryIds stores configured Theme header shortcuts.
     $favoriteGalleryIds = function_exists('Gallery\\Services\\theme_favorite_gallery_ids') ? theme_favorite_gallery_ids() : [];
-    echo '<fieldset class="form-grid admin-theme-favorite-galleries" id="admin-theme-favorite-galleries"><legend>' . e(t('admin.theme.layout.favorite_galleries_legend', 'Favorite gallery shortcuts')) . '</legend>';
-    echo '<p class="muted">' . e(t('admin.theme.layout.favorite_galleries_hint', 'Choose up to three shortcuts to show as direct buttons in the top header navigation. Each slot can point to the main page or to one gallery. Leave all three empty to hide the old Galleries button completely.')) . '</p>';
-    echo '<div class="admin-theme-favorite-gallery-list">';
+    // $favoriteShortcuts stores presentation-only shortcut rows for the view.
+    $favoriteShortcuts = [];
     for ($favoriteIndex = 0; $favoriteIndex < THEME_FAVORITE_GALLERIES_MAX; $favoriteIndex++) {
         // $selectedFavoriteShortcut stores the configured shortcut for one visible slot.
         $selectedFavoriteShortcut = $favoriteGalleryIds[$favoriteIndex] ?? '';
@@ -290,102 +277,125 @@ function render_admin_theme_layout_tab(array $theme, array $paginationSettings, 
         $selectedFavoriteType = $selectedFavoriteShortcut === THEME_FAVORITE_GALLERIES_HOME_TOKEN ? THEME_FAVORITE_GALLERIES_HOME_TOKEN : ((int) $selectedFavoriteShortcut > 0 ? 'gallery' : '');
         // $selectedFavoriteGalleryId stores the configured gallery ID when this slot targets a gallery.
         $selectedFavoriteGalleryId = $selectedFavoriteType === 'gallery' ? (int) $selectedFavoriteShortcut : 0;
-        echo '<div class="admin-theme-favorite-gallery-slot"><strong>' . e(t('admin.theme.layout.favorite_gallery_slot', 'Shortcut {number}', ['number' => $favoriteIndex + 1])) . '</strong>';
-        echo '<label>' . e(t('admin.theme.layout.favorite_gallery_type', 'Shortcut target')) . '<select name="theme_favorite_gallery_types[]">';
-        echo '<option value=""' . ($selectedFavoriteType === '' ? ' selected' : '') . '>' . e(t('admin.theme.layout.favorite_gallery_empty', 'No shortcut')) . '</option>';
-        echo '<option value="' . e(THEME_FAVORITE_GALLERIES_HOME_TOKEN) . '"' . ($selectedFavoriteType === THEME_FAVORITE_GALLERIES_HOME_TOKEN ? ' selected' : '') . '>' . e(t('admin.theme.layout.favorite_gallery_home', 'Main page')) . '</option>';
-        echo '<option value="gallery"' . ($selectedFavoriteType === 'gallery' ? ' selected' : '') . '>' . e(t('admin.theme.layout.favorite_gallery_gallery', 'Gallery')) . '</option>';
-        echo '</select></label>';
+        $pickerHtml = '';
+        $fallbackOptionsHtml = '';
         if (function_exists('Gallery\\Controllers\\render_gallery_search_picker')) {
-            echo render_gallery_search_picker('theme_favorite_gallery_ids[]', $selectedFavoriteGalleryId, 0, [
+            $pickerHtml = render_gallery_search_picker('theme_favorite_gallery_ids[]', $selectedFavoriteGalleryId, 0, [
                 'id' => 'theme-favorite-gallery-' . ($favoriteIndex + 1),
                 'placeholder' => t('admin.theme.layout.favorite_gallery_placeholder', 'Search gallery by name or path'),
                 'disable_prefill' => true,
             ]);
         } else {
-            echo '<select name="theme_favorite_gallery_ids[]"><option value="">' . e(t('admin.theme.layout.favorite_gallery_empty', 'No shortcut')) . '</option>' . gallery_options_for_select($selectedFavoriteGalleryId) . '</select>';
+            $fallbackOptionsHtml = gallery_options_for_select($selectedFavoriteGalleryId);
         }
-        echo '<small class="muted">' . e(t('admin.theme.layout.favorite_gallery_gallery_hint', 'Gallery picker is used only when the shortcut target is Gallery.')) . '</small>';
-        echo '</div>';
+        $favoriteShortcuts[] = [
+            'selected_type' => $selectedFavoriteType,
+            'slot_label' => t('admin.theme.layout.favorite_gallery_slot', 'Shortcut {number}', ['number' => $favoriteIndex + 1]),
+            'picker_html' => $pickerHtml,
+            'fallback_options_html' => $fallbackOptionsHtml,
+        ];
     }
-    echo '</div>';
-    echo '<p class="muted">' . e(t('admin.theme.layout.favorite_galleries_visibility_hint', 'Deleted galleries and duplicate selections are ignored on save. Anonymous visitors only see configured favorites that remain public and listed. Main page shortcuts stay visible to all visitors.')) . '</p>';
-    echo '</fieldset>';
-    echo '</div>';
-    $layoutShortcutsHtml = ob_get_clean();
-    render_admin_subtab_panel('admin-theme-layout-subtab-shortcuts', $layoutShortcutsHtml, true);
 
-    ob_start();
-    echo '<div class="theme-tab-card-grid">';
-    echo '<fieldset class="form-grid admin-theme-description-layout" id="admin-gallery-description-layout"><legend>' . e(t('admin.theme.layout.description_layout_legend', 'Gallery description format')) . '</legend>';
-    echo '<p class="muted">' . e(t('admin.theme.layout.description_layout_hint', 'Choose how gallery intro cards should feel on public pages. The preview uses your current Theme colors, corners, and typography.')) . '</p>';
-    echo '<label class="admin-theme-description-select">' . e(t('admin.theme.layout.description_layout_label', 'Default gallery-card layout')) . '<select name="theme_gallery_description_layout" data-theme-description-layout-select>';
+    // $currentDescriptionLayout stores the normalized Theme gallery description layout.
     $currentDescriptionLayout = gallery_description_layout_normalize((string) ($theme['gallery_description_layout'] ?? 'vertical'));
+    // $descriptionLayouts stores presentation-only layout options and preview text.
+    $descriptionLayouts = [];
     foreach (gallery_description_layout_options() as $descriptionLayoutOption) {
-        echo '<option value="' . e($descriptionLayoutOption) . '"' . ($currentDescriptionLayout === $descriptionLayoutOption ? ' selected' : '') . '>' . e(gallery_description_layout_label($descriptionLayoutOption)) . '</option>';
+        $descriptionLayouts[] = [
+            'value' => $descriptionLayoutOption,
+            'label' => gallery_description_layout_label($descriptionLayoutOption),
+            'selected' => $currentDescriptionLayout === $descriptionLayoutOption,
+            'summary' => $descriptionLayoutOption === 'horizontal'
+                ? t('admin.theme.layout.description_layout_horizontal_summary', 'Image first, then a compact story card below it.')
+                : t('admin.theme.layout.description_layout_vertical_summary', 'Image and text side by side, close to the classic gallery look.'),
+        ];
     }
-    echo '</select></label>';
-    echo '<div class="admin-theme-description-layout-picker" data-theme-description-layout-picker>';
-    foreach (gallery_description_layout_options() as $descriptionLayoutOption) {
-        $isHorizontalPreview = $descriptionLayoutOption === 'horizontal';
-        echo '<button type="button" class="admin-theme-description-card" data-theme-description-layout-option="' . e($descriptionLayoutOption) . '" aria-pressed="' . ($currentDescriptionLayout === $descriptionLayoutOption ? 'true' : 'false') . '">';
-        echo '<span class="admin-theme-description-card-copy"><strong>' . e(gallery_description_layout_label($descriptionLayoutOption)) . '</strong><span>' . e($isHorizontalPreview ? t('admin.theme.layout.description_layout_horizontal_summary', 'Image first, then a compact story card below it.') : t('admin.theme.layout.description_layout_vertical_summary', 'Image and text side by side, close to the classic gallery look.')) . '</span></span>';
-        echo '<span class="admin-theme-description-card-preview is-' . e($descriptionLayoutOption) . '" aria-hidden="true">';
-        echo '<span class="admin-theme-description-media"><span></span></span>';
-        echo '<span class="admin-theme-description-body"><span class="admin-theme-description-title">' . e(t('admin.theme.layout.description_preview_title', 'Summer gallery')) . '</span><span class="admin-theme-description-meta">' . e(t('admin.theme.layout.description_preview_meta', '12 photos')) . '</span><span class="admin-theme-description-tags"><i>' . e(t('admin.theme.layout.description_preview_tag_travel', 'travel')) . '</i><i>' . e(t('admin.theme.layout.description_preview_tag_family', 'family')) . '</i><i>2026</i></span><span class="admin-theme-description-line is-wide"></span><span class="admin-theme-description-line"></span></span>';
-        echo '</span>';
-        echo '</button>';
-    }
-    echo '</div>';
-    echo '</fieldset>';
-    echo '<fieldset class="form-grid" id="admin-gallery-count-badge"><legend>' . e(t('admin.theme.layout.count_badge_legend', 'Contained-picture badge')) . '</legend>';
-    echo '<label class="checkbox-label"><input type="checkbox" name="theme_gallery_count_badge_enabled" value="1"' . (((string) ($theme['gallery_count_badge_enabled'] ?? '1')) === '1' ? ' checked' : '') . '> ' . e(t('admin.theme.layout.show_count_badge', 'Show stacked-picture image count on gallery cards and opened gallery heroes')) . '</label>';
-    echo '<p class="muted">' . e(t('admin.theme.layout.count_badge_hint', 'Enabled by default. Individual galleries can inherit this setting or override it in the gallery editor.')) . '</p>';
-    echo '</fieldset>';
-    echo '<fieldset class="form-grid" id="admin-public-thumbnail-rendering"><legend>' . e(t('admin.theme.layout.thumbnail_rendering_legend', 'Public thumbnail rendering')) . '</legend>';
-    echo '<label>' . e(t('admin.theme.layout.thumbnail_rendering_label', 'Selected-gallery photo cards')) . '<select name="public_thumbnail_rendering_mode" aria-describedby="admin-public-thumbnail-rendering-help admin-public-thumbnail-rendering-transfer">';
-    echo '<option value="' . e(PUBLIC_THUMBNAIL_RENDERING_PROGRESSIVE) . '"' . ($publicThumbnailRenderingMode === PUBLIC_THUMBNAIL_RENDERING_PROGRESSIVE ? ' selected' : '') . '>' . e(t('admin.theme.layout.thumbnail_rendering_progressive_label', 'Progressive thumbnail sharpening - Default')) . '</option>';
-    echo '<option value="' . e(PUBLIC_THUMBNAIL_RENDERING_RESPONSIVE) . '"' . ($publicThumbnailRenderingMode === PUBLIC_THUMBNAIL_RENDERING_RESPONSIVE ? ' selected' : '') . '>' . e(t('admin.theme.layout.thumbnail_rendering_responsive_label', 'Responsive browser selection - Legacy')) . '</option>';
-    echo '</select></label>';
-    echo '<p class="muted" id="admin-public-thumbnail-rendering-help"><strong>' . e(t('admin.theme.layout.thumbnail_rendering_responsive_title', 'Responsive browser selection:')) . '</strong> ' . e(t('admin.theme.layout.thumbnail_rendering_responsive_help', 'The complete responsive candidate set is exposed immediately and the browser selects the most appropriate available thumbnail.')) . '</p>';
-    echo '<p class="muted"><strong>' . e(t('admin.theme.layout.thumbnail_rendering_progressive_title', 'Progressive thumbnail sharpening:')) . '</strong> ' . e(t('admin.theme.layout.thumbnail_rendering_progressive_help', 'A small thumbnail is presented first. Larger thumbnails are activated later for relevant visible or near-visible cards, prioritizing initial page responsiveness over earliest full sharpness.')) . '</p>';
-    echo '<p class="muted" id="admin-public-thumbnail-rendering-transfer">' . e(t('admin.theme.layout.thumbnail_rendering_transfer_note', 'Progressive rendering can transfer both the small thumbnail and a larger replacement, potentially increasing total transferred bytes while improving perceived initial responsiveness.')) . '</p>';
-    echo '<p class="muted">' . e(t('admin.theme.layout.thumbnail_rendering_scope_note', 'This setting applies to photo cards in a selected gallery. Gallery cover and collage thumbnails keep responsive browser selection.')) . '</p>';
-    echo '</fieldset>';
-    echo '</div>';
-    $layoutCardsHtml = ob_get_clean();
-    render_admin_subtab_panel('admin-theme-layout-subtab-cards', $layoutCardsHtml, false);
 
-    ob_start();
-    echo '<div class="theme-tab-card-grid">';
-    echo '<fieldset class="form-grid" id="admin-pagination"><legend>' . e(t('admin.theme.layout.pagination_legend', 'Pagination')) . '</legend>';
-    echo '<label class="checkbox-label"><input type="checkbox" name="pagination_enabled" value="1"' . (!empty($paginationSettings['enabled']) ? ' checked' : '') . '> ' . e(t('admin.theme.layout.enable_pagination', 'Enable pagination')) . '</label>';
-    echo '<label>' . e(t('admin.theme.layout.columns_per_page', 'Columns per page')) . ' <span class="muted" data-pagination-columns-display>' . (int) $paginationSettings['columns'] . '</span><input type="range" name="pagination_columns" min="1" max="' . CMS_PAGINATION_MAX_COLUMNS . '" value="' . (int) $paginationSettings['columns'] . '" data-pagination-columns></label>';
-    echo '<label>' . e(t('admin.theme.layout.rows_per_page', 'Rows per page')) . ' <span class="muted" data-pagination-rows-display>' . (int) $paginationSettings['rows'] . '</span><input type="range" name="pagination_rows" min="1" max="' . CMS_PAGINATION_MAX_ROWS . '" value="' . (int) $paginationSettings['rows'] . '" data-pagination-rows></label>';
-    echo '<p class="muted">' . e(t('admin.theme.layout.items_per_page_preview', 'Items per page preview:')) . ' <span data-pagination-items-preview>' . (int) $paginationSettings['items_per_page'] . '</span></p>';
-    echo '<p class="muted">' . e(t('admin.theme.layout.pagination_hint', 'These values remain the fallback for galleries that do not define or inherit a custom grid.')) . '</p>';
-    echo '</fieldset>';
+    // $lightboxOptions stores presentation-only browsing-mode rows when the feature is enabled.
+    $lightboxOptions = [];
     if ($lightboxModesFeatureEnabled) {
-        echo '<fieldset class="form-grid" id="admin-lightbox-mode"><legend>' . e(t('admin.theme.layout.lightbox_mode_legend', 'Public lightbox browsing mode')) . '</legend>';
-        echo '<label>' . e(t('admin.theme.layout.lightbox_mode_label', 'Default browsing mode')) . '<select name="theme_lightbox_browsing_mode">';
         foreach (gallery_lightbox_browsing_mode_options() as $lightboxModeOption) {
-            echo '<option value="' . e($lightboxModeOption) . '"' . (($theme['lightbox_browsing_mode'] ?? 'single') === $lightboxModeOption ? ' selected' : '') . '>' . e(gallery_lightbox_browsing_mode_label($lightboxModeOption)) . '</option>';
+            $lightboxOptions[] = [
+                'value' => $lightboxModeOption,
+                'label' => gallery_lightbox_browsing_mode_label($lightboxModeOption),
+                'selected' => ($theme['lightbox_browsing_mode'] ?? 'single') === $lightboxModeOption,
+            ];
         }
-        echo '</select><span class="muted">' . e(t('admin.theme.layout.lightbox_mode_hint', 'Single image keeps the classic viewer. Picture strip adds compact nearby thumbnails below the photo. 3D carousel places a few neighboring photos behind the main image with depth and scale. Individual galleries may inherit this value or override it.')) . '</span></label>';
-        echo '</fieldset>';
     }
-    echo '<fieldset class="form-grid" id="admin-home-grid"><legend>' . e(t('admin.theme.layout.main_page_grid_legend', 'Main page gallery grid')) . '</legend>';
-    echo '<label>' . e(t('admin.theme.layout.main_page_columns', 'Main page columns')) . ' <span class="muted" data-home-grid-columns-display>' . (int) $homeGridSettings['columns'] . '</span><input type="range" name="home_gallery_grid_columns" min="1" max="' . CMS_PAGINATION_MAX_COLUMNS . '" value="' . (int) $homeGridSettings['columns'] . '" data-home-grid-columns></label>';
-    echo '<label>' . e(t('admin.theme.layout.main_page_rows', 'Main page rows')) . ' <span class="muted" data-home-grid-rows-display>' . (int) $homeGridSettings['rows'] . '</span><input type="range" name="home_gallery_grid_rows" min="1" max="' . CMS_PAGINATION_MAX_ROWS . '" value="' . (int) $homeGridSettings['rows'] . '" data-home-grid-rows></label>';
-    echo '<p class="muted">' . e(t('admin.theme.layout.main_page_grid_hint', 'This affects only the front page where top-level galleries are listed. It can use a different grid than gallery pages and inherited subgallery pages.')) . '</p>';
-    echo '<div class="bulk-row"><button type="submit" class="secondary" name="reset_all_gallery_grid_overrides" value="1" formnovalidate onclick="return confirm(&quot;' . e(t('admin.theme.layout.reset_gallery_grids_confirm', 'Reset all custom per-gallery grid settings? The global Theme grid and main page grid will stay unchanged.')) . '&quot;);">' . e(t('admin.theme.layout.reset_all_gallery_grids', 'Reset all custom gallery grids')) . '</button></div>';
-    echo '<p class="muted">' . e(t('admin.theme.layout.reset_gallery_grids_hint', 'This clears every per-gallery custom grid and resets subgallery inheritance flags to default. It also removes matching grid keys from gallery.json files, so future scans cannot re-import stale custom grid settings.')) . '</p>';
-    echo '</fieldset>';
-    echo '</div>';
-    $layoutGridsHtml = ob_get_clean();
-    render_admin_subtab_panel('admin-theme-layout-subtab-grids', $layoutGridsHtml, false);
-    echo '</div>';
-    $layoutHtml = ob_get_clean();
-    render_admin_tab_panel('admin-theme-tab-layout', $layoutHtml, false);
 
+    view_render_admin_theme_layout_tab([
+        'favorite_shortcuts' => $favoriteShortcuts,
+        'home_token' => THEME_FAVORITE_GALLERIES_HOME_TOKEN,
+        'description_layouts' => $descriptionLayouts,
+        'gallery_count_badge_enabled' => ((string) ($theme['gallery_count_badge_enabled'] ?? '1')) === '1',
+        'thumbnail_modes' => [
+            [
+                'value' => PUBLIC_THUMBNAIL_RENDERING_PROGRESSIVE,
+                'selected' => $publicThumbnailRenderingMode === PUBLIC_THUMBNAIL_RENDERING_PROGRESSIVE,
+                'label' => t('admin.theme.layout.thumbnail_rendering_progressive_label', 'Progressive thumbnail sharpening - Default'),
+            ],
+            [
+                'value' => PUBLIC_THUMBNAIL_RENDERING_RESPONSIVE,
+                'selected' => $publicThumbnailRenderingMode === PUBLIC_THUMBNAIL_RENDERING_RESPONSIVE,
+                'label' => t('admin.theme.layout.thumbnail_rendering_responsive_label', 'Responsive browser selection - Legacy'),
+            ],
+        ],
+        'pagination' => $paginationSettings,
+        'home_grid' => $homeGridSettings,
+        'max_columns' => CMS_PAGINATION_MAX_COLUMNS,
+        'max_rows' => CMS_PAGINATION_MAX_ROWS,
+        'lightbox_modes_enabled' => $lightboxModesFeatureEnabled,
+        'lightbox_options' => $lightboxOptions,
+        'labels' => [
+            'kicker' => t('admin.theme.layout.kicker', 'Layout'),
+            'title' => t('admin.theme.layout.title', 'Pagination and gallery grids'),
+            'description' => t('admin.theme.layout.description', 'Tune the default public grid while keeping per-gallery overrides available from gallery editing.'),
+            'subtab_shortcuts' => t('admin.theme.subtab_shortcuts', 'Header shortcuts'),
+            'subtab_cards' => t('admin.theme.subtab_cards_badges', 'Cards & badges'),
+            'subtab_grids' => t('admin.theme.subtab_grids_lightbox', 'Grids & lightbox'),
+            'subtabs_label' => t('admin.theme.layout.subtabs_label', 'Layout subsections'),
+            'favorite_galleries_legend' => t('admin.theme.layout.favorite_galleries_legend', 'Favorite gallery shortcuts'),
+            'favorite_galleries_hint' => t('admin.theme.layout.favorite_galleries_hint', 'Choose up to three shortcuts to show as direct buttons in the top header navigation. Each slot can point to the main page or to one gallery. Leave all three empty to hide the old Galleries button completely.'),
+            'favorite_gallery_type' => t('admin.theme.layout.favorite_gallery_type', 'Shortcut target'),
+            'favorite_gallery_empty' => t('admin.theme.layout.favorite_gallery_empty', 'No shortcut'),
+            'favorite_gallery_home' => t('admin.theme.layout.favorite_gallery_home', 'Main page'),
+            'favorite_gallery_gallery' => t('admin.theme.layout.favorite_gallery_gallery', 'Gallery'),
+            'favorite_gallery_gallery_hint' => t('admin.theme.layout.favorite_gallery_gallery_hint', 'Gallery picker is used only when the shortcut target is Gallery.'),
+            'favorite_galleries_visibility_hint' => t('admin.theme.layout.favorite_galleries_visibility_hint', 'Deleted galleries and duplicate selections are ignored on save. Anonymous visitors only see configured favorites that remain public and listed. Main page shortcuts stay visible to all visitors.'),
+            'description_layout_legend' => t('admin.theme.layout.description_layout_legend', 'Gallery description format'),
+            'description_layout_hint' => t('admin.theme.layout.description_layout_hint', 'Choose how gallery intro cards should feel on public pages. The preview uses your current Theme colors, corners, and typography.'),
+            'description_layout_label' => t('admin.theme.layout.description_layout_label', 'Default gallery-card layout'),
+            'description_preview_title' => t('admin.theme.layout.description_preview_title', 'Summer gallery'),
+            'description_preview_meta' => t('admin.theme.layout.description_preview_meta', '12 photos'),
+            'description_preview_tag_travel' => t('admin.theme.layout.description_preview_tag_travel', 'travel'),
+            'description_preview_tag_family' => t('admin.theme.layout.description_preview_tag_family', 'family'),
+            'count_badge_legend' => t('admin.theme.layout.count_badge_legend', 'Contained-picture badge'),
+            'show_count_badge' => t('admin.theme.layout.show_count_badge', 'Show stacked-picture image count on gallery cards and opened gallery heroes'),
+            'count_badge_hint' => t('admin.theme.layout.count_badge_hint', 'Enabled by default. Individual galleries can inherit this setting or override it in the gallery editor.'),
+            'thumbnail_rendering_legend' => t('admin.theme.layout.thumbnail_rendering_legend', 'Public thumbnail rendering'),
+            'thumbnail_rendering_label' => t('admin.theme.layout.thumbnail_rendering_label', 'Selected-gallery photo cards'),
+            'thumbnail_rendering_responsive_title' => t('admin.theme.layout.thumbnail_rendering_responsive_title', 'Responsive browser selection:'),
+            'thumbnail_rendering_responsive_help' => t('admin.theme.layout.thumbnail_rendering_responsive_help', 'The complete responsive candidate set is exposed immediately and the browser selects the most appropriate available thumbnail.'),
+            'thumbnail_rendering_progressive_title' => t('admin.theme.layout.thumbnail_rendering_progressive_title', 'Progressive thumbnail sharpening:'),
+            'thumbnail_rendering_progressive_help' => t('admin.theme.layout.thumbnail_rendering_progressive_help', 'A small thumbnail is presented first. Larger thumbnails are activated later for relevant visible or near-visible cards, prioritizing initial page responsiveness over earliest full sharpness.'),
+            'thumbnail_rendering_transfer_note' => t('admin.theme.layout.thumbnail_rendering_transfer_note', 'Progressive rendering can transfer both the small thumbnail and a larger replacement, potentially increasing total transferred bytes while improving perceived initial responsiveness.'),
+            'thumbnail_rendering_scope_note' => t('admin.theme.layout.thumbnail_rendering_scope_note', 'This setting applies to photo cards in a selected gallery. Gallery cover and collage thumbnails keep responsive browser selection.'),
+            'pagination_legend' => t('admin.theme.layout.pagination_legend', 'Pagination'),
+            'enable_pagination' => t('admin.theme.layout.enable_pagination', 'Enable pagination'),
+            'columns_per_page' => t('admin.theme.layout.columns_per_page', 'Columns per page'),
+            'rows_per_page' => t('admin.theme.layout.rows_per_page', 'Rows per page'),
+            'items_per_page_preview' => t('admin.theme.layout.items_per_page_preview', 'Items per page preview:'),
+            'pagination_hint' => t('admin.theme.layout.pagination_hint', 'These values remain the fallback for galleries that do not define or inherit a custom grid.'),
+            'lightbox_mode_legend' => t('admin.theme.layout.lightbox_mode_legend', 'Public lightbox browsing mode'),
+            'lightbox_mode_label' => t('admin.theme.layout.lightbox_mode_label', 'Default browsing mode'),
+            'lightbox_mode_hint' => t('admin.theme.layout.lightbox_mode_hint', 'Single image keeps the classic viewer. Picture strip adds compact nearby thumbnails below the photo. 3D carousel places a few neighboring photos behind the main image with depth and scale. Individual galleries may inherit this value or override it.'),
+            'main_page_grid_legend' => t('admin.theme.layout.main_page_grid_legend', 'Main page gallery grid'),
+            'main_page_columns' => t('admin.theme.layout.main_page_columns', 'Main page columns'),
+            'main_page_rows' => t('admin.theme.layout.main_page_rows', 'Main page rows'),
+            'main_page_grid_hint' => t('admin.theme.layout.main_page_grid_hint', 'This affects only the front page where top-level galleries are listed. It can use a different grid than gallery pages and inherited subgallery pages.'),
+            'reset_gallery_grids_confirm' => t('admin.theme.layout.reset_gallery_grids_confirm', 'Reset all custom per-gallery grid settings? The global Theme grid and main page grid will stay unchanged.'),
+            'reset_all_gallery_grids' => t('admin.theme.layout.reset_all_gallery_grids', 'Reset all custom gallery grids'),
+            'reset_gallery_grids_hint' => t('admin.theme.layout.reset_gallery_grids_hint', 'This clears every per-gallery custom grid and resets subgallery inheritance flags to default. It also removes matching grid keys from gallery.json files, so future scans cannot re-import stale custom grid settings.'),
+        ],
+    ]);
 }

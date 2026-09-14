@@ -37,10 +37,9 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
-use Throwable;
-use function Gallery\Core\cms_config;
-use function Gallery\Core\cms_current_version;
-use function Gallery\Core\db;
+use function Gallery\Models\admin_gallery_report_model_exact_database_table_counts;
+use function Gallery\Models\admin_gallery_report_model_known_table_counts;
+
 
 /**
  * Return database usage and table metadata.
@@ -74,42 +73,7 @@ function admin_gallery_report_database_section(): array
  */
 function admin_gallery_report_exact_database_table_counts(string $databaseName): array
 {
-    $result = [
-        'available' => false,
-        'counts' => [],
-        'errors' => [],
-        'total_rows' => 0,
-    ];
-    if ($databaseName === '') {
-        $result['errors'][] = 'Database name is empty.';
-        return $result;
-    }
-
-    try {
-        $stmt = db()->prepare("SELECT TABLE_NAME AS table_name FROM information_schema.TABLES WHERE TABLE_SCHEMA = :database_name AND TABLE_TYPE = 'BASE TABLE' ORDER BY TABLE_NAME ASC");
-        $stmt->execute(['database_name' => $databaseName]);
-        $tables = $stmt->fetchAll();
-    } catch (Throwable $exception) {
-        $result['errors'][] = 'Database table inventory could not be read.';
-        return $result;
-    }
-
-    $result['available'] = true;
-    foreach ($tables as $row) {
-        $tableName = trim((string) ($row['table_name'] ?? ''));
-        if ($tableName === '') {
-            continue;
-        }
-        try {
-            $count = (int) (db()->query('SELECT COUNT(*) FROM ' . admin_gallery_report_quote_identifier($tableName))->fetchColumn() ?: 0);
-            $result['counts'][$tableName] = $count;
-            $result['total_rows'] = (int) ($result['total_rows'] ?? 0) + $count;
-        } catch (Throwable $exception) {
-            $result['errors'][] = $tableName . ': exact row count unavailable.';
-        }
-    }
-
-    return $result;
+    return admin_gallery_report_model_exact_database_table_counts($databaseName);
 }
 
 /**
@@ -194,17 +158,25 @@ function admin_gallery_report_table_counts(): array
         'telemetry_sessions', 'telemetry_hourly_metrics', 'telemetry_daily_metrics', 'telemetry_db_query_metrics',
         'telemetry_job_runs', 'telemetry_settings', 'navigation_data_accounts', 'navigation_data_cache',
     ];
+    $existing = [];
+    foreach ($tables as $table) {
+        if (admin_gallery_report_table_exists($table)) {
+            $existing[] = $table;
+        }
+    }
+    $counts = admin_gallery_report_model_known_table_counts($existing);
     $rows = [];
     foreach ($tables as $table) {
-        if (!admin_gallery_report_table_exists($table)) {
+        if (!in_array($table, $existing, true)) {
             $rows[] = ['table_name' => $table, 'exists' => 'no', 'rows' => null];
             continue;
         }
-        try {
-            $rows[] = ['table_name' => $table, 'exists' => 'yes', 'rows' => (int) (db()->query('SELECT COUNT(*) FROM `' . str_replace('`', '``', $table) . '`')->fetchColumn() ?: 0)];
-        } catch (Throwable $exception) {
-            $rows[] = ['table_name' => $table, 'exists' => 'yes', 'rows' => null, 'error' => 'Exact row count unavailable.'];
+        $count = $counts[$table] ?? null;
+        $row = ['table_name' => $table, 'exists' => 'yes', 'rows' => is_int($count) ? $count : null];
+        if (!is_int($count)) {
+            $row['error'] = 'Exact row count unavailable.';
         }
+        $rows[] = $row;
     }
     return $rows;
 }

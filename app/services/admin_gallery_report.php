@@ -64,5 +64,3 @@ require_once __DIR__ . '/admin_gallery_report/content_summary.php';
 require_once __DIR__ . '/admin_gallery_report/query_helpers.php';
 // Pure value formatting and labelling helpers.
 require_once __DIR__ . '/admin_gallery_report/format.php';
-// Self-contained HTML rendering for the finished report.
-require_once __DIR__ . '/admin_gallery_report/render.php';

@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-09-03
+ *   2026-09-14
  */
 
 declare(strict_types=1);
@@ -126,7 +126,6 @@ use function Gallery\Services\picture_game_available;
 use function Gallery\Services\public_gallery_media_manifest;
 use function Gallery\Services\public_gallery_listing_sql_fragment;
 use function Gallery\Services\public_gallery_metadata;
-use function Gallery\Services\public_home_search_enabled;
 use function Gallery\Services\public_image_display_title;
 use function Gallery\Services\public_responsive_thumbnail_loading_attributes;
 use function Gallery\Services\public_thumbnail_render_picture_html;
@@ -138,10 +137,12 @@ use function Gallery\Services\public_render_profile_set_gallery;
 use function Gallery\Services\public_render_profile_span;
 use function Gallery\Services\public_render_profile_snapshot;
 use function Gallery\Services\public_render_profile_start;
+use function Gallery\Services\public_render_profile_panel_model;
 use function Gallery\Services\public_render_profile_with_thumbnail_purpose;
-use function Gallery\Services\render_gallery_date;
-use function Gallery\Services\render_pagination_controls;
-use function Gallery\Services\render_public_render_profile_panel;
+use function Gallery\Services\gallery_date_view_model;
+use function Gallery\Views\view_render_gallery_date;
+use function Gallery\Views\view_render_pagination_controls;
+use function Gallery\Views\view_render_public_render_profile_panel;
 use function Gallery\Services\resolve_public_gallery_path;
 use function Gallery\Services\site_name;
 use function Gallery\Services\t;
@@ -175,6 +176,7 @@ use function Gallery\Views\view_gallery_description_markdown_html;
 use function Gallery\Views\view_render_gallery_json_ld;
 use function Gallery\Views\view_render_public_seo_tags;
 use function Gallery\Views\view_render_public_search_bar;
+use function Gallery\Views\view_gallery_background_style;
 use function Gallery\Services\admin_log_event;
 
 /** Render one ordered Smart Gallery attachment area around the physical gallery content. */
@@ -182,15 +184,16 @@ function render_public_smart_gallery_attachment_group(array $smartGalleries, str
 {
     if ($smartGalleries === []) return;
     $placement = $placement === 'top' ? 'top' : 'bottom';
-    $label = $placement === 'top'
-        ? t('smart_gallery.public_group_top', 'Smart Galleries above gallery content')
-        : t('smart_gallery.public_group_bottom', 'Smart Galleries below gallery content');
-    echo '<section class="panel public-smart-gallery-attachment-panel public-smart-gallery-attachment-' . e($placement) . '" data-smart-gallery-attachment-group="' . e($placement) . '" aria-label="' . e($label) . '">';
-    echo '<div class="grid' . e(pagination_grid_columns_class($paginationSettings)) . '">';
+    ob_start();
     foreach ($smartGalleries as $index => $smartGallery) {
         render_smart_gallery_card($smartGallery, $index, $cardContexts[(int) ($smartGallery['id'] ?? 0)] ?? []);
     }
-    echo '</div></section>';
+    $cardsHtml = (string) ob_get_clean();
+    \Gallery\Views\view_render_public_smart_gallery_attachment_group([
+        'placement' => $placement,
+        'grid_class' => pagination_grid_columns_class($paginationSettings),
+        'cards_html' => $cardsHtml,
+    ]);
 }
 
 /**
@@ -375,19 +378,15 @@ function cms_gallery(): void
     // Variable $seo stores this steps working value.
     $seo = public_render_profile_span('seo_metadata_lookup', static fn (): array => public_gallery_metadata($gallery));
     ob_start();
-    view_render_public_seo_tags($gallery, $allImages);
-    view_render_gallery_json_ld($gallery, $images, $publicMediaManifest);
+    view_render_public_seo_tags(public_seo_tags_view_model($gallery, $allImages));
+    view_render_gallery_json_ld(public_gallery_json_ld_view_model($gallery, $images, $publicMediaManifest));
     append_cms_head_extras((string) ob_get_clean());
     if ($backgroundAssetUrl !== '') {
-        append_cms_head_extras('<style>.theme-background-image{background-image:url("' . css_value($backgroundAssetUrl) . '");}</style>');
+        append_cms_head_extras(view_gallery_background_style($backgroundAssetUrl));
     }
 
-    render_header((string) $seo['title'], $gallery, $publicOnly);
     // $publicNotice stores one-time admin feedback for public-page actions.
     $publicNotice = (string) flash_message('public_notice');
-    if ($publicNotice !== '') {
-        echo '<div class="notice">' . e($publicNotice) . '</div>';
-    }
     // $heroTagGroups keeps direct gallery tags and inherited/contained tags semantically separate while sharing one display policy.
     $heroTagGroups = [
         'gallery' => tags_for_entity('gallery', (int) $gallery['id']),
@@ -417,97 +416,145 @@ function cms_gallery(): void
         ? public_render_profile_span('gallery_hero_branch_image_count', static fn (): int => gallery_branch_image_count((int) $gallery['id'], true))
         : 0;
 
-    echo '<section class="hero" data-public-gallery-id="' . (int) $gallery['id'] . '" data-public-gallery-visibility="' . e(gallery_effective_visibility($gallery)) . '" data-public-gallery-updated-at="' . e((string) ($gallery['updated_at'] ?? '')) . '" data-public-cover-image-id="' . max(0, (int) ($gallery['cover_image_id'] ?? 0)) . '" data-public-image-count="' . (int) $imageTotalCount . '" data-public-image-revision="' . e($imageStateRevision) . '" data-public-subgallery-count="' . count($allChildren) . '" data-public-subgallery-revision="' . e($subgalleryStateRevision) . '" data-public-smart-gallery-count="' . (count($topSmartChildren) + count($bottomSmartChildren)) . '" data-admin-mutation-canonical-url="' . e(gallery_public_url($gallery)) . '">';
-    // Keep the title, date, description, and breadcrumbs in one primary column so long descriptions do not become a narrow middle strip.
-    echo '<div class="hero-topbar">';
-    echo '<div class="hero-primary">';
+    ob_start();
     render_public_gallery_branding_header($gallery, $seo, $publicOnly);
+    $brandingHeaderHtml = (string) ob_get_clean();
+    ob_start();
     render_breadcrumbs($gallery);
-    echo '</div>';
-    echo '<div class="hero-meta">';
-    echo '<div class="hero-actions" aria-label="' . e(t('gallery.actions', 'Gallery actions')) . '">';
-    if ($showHeroCountBadge) {
-        // Keep the branch count in the same responsive action row while its accessible label explains that descendants are included.
-        echo '<div class="gallery-hero-count-badge" aria-label="' . e(t('gallery.hero.branch_image_count_aria', 'Image count for this gallery and its subgalleries: {count}', ['count' => $heroBranchImageCount])) . '" title="' . e(t('gallery.hero.branch_image_count_hint', 'Includes images from this gallery and its subgalleries.')) . '">';
-        echo '<span class="subgallery-stack-icon" aria-hidden="true"><span></span><span></span><span></span></span>';
-        echo '<span class="gallery-hero-count-value">' . $heroBranchImageCount . '</span>';
-        echo '</div>';
-    }
+    $breadcrumbsHtml = (string) ob_get_clean();
+    ob_start();
     render_public_gallery_admin_delete_form($gallery, 'hero');
     render_public_gallery_admin_edit_link($gallery, 'hero');
     render_public_gallery_admin_add_child_link($gallery, 'hero');
-    if (feature_capability_effective_enabled('downloads')) {
-        $downloadLabel = t('gallery.download', 'Download gallery');
-        $legacyDownloadCapability = download_capability_issue(DOWNLOAD_CAPABILITY_RESOURCE_GALLERY, (int) $gallery['id'], DOWNLOAD_CAPABILITY_SCOPE_LEGACY);
-        echo '<form class="public-download-legacy-form" method="post" action="' . e(url_for('download_gallery')) . '"><input type="hidden" name="id" value="' . (int) $gallery['id'] . '"><input type="hidden" name="capability" value="' . e($legacyDownloadCapability) . '"><button type="submit" class="button hero-icon-button hero-download-button" data-gallery-download data-gallery-download-start-url="' . e(url_for('download_gallery_start', ['id' => $gallery['id']])) . '" aria-label="' . e($downloadLabel) . '" title="' . e($downloadLabel) . '"><span aria-hidden="true">&#10515;</span><span class="visually-hidden">' . e($downloadLabel) . '</span></button></form>';
-    }
-    if ($galleryMapAvailable) {
-        echo '<button type="button" class="button secondary map-button" data-gallery-map-url="' . e($galleryMapUrl) . '" data-gallery-map-title="' . e((string) $gallery['title']) . '">' . e(t('gallery.show_map', 'Show gallery map')) . '</button>';
-    }
-    if ($pictureGameAvailable) {
-        echo '<a class="button secondary hero-icon-button hero-picture-game-button" href="' . e(url_for('picture_game', ['id' => $gallery['id']])) . '" aria-label="' . e(t('gallery.play_picture_game', 'Play picture game')) . '" title="' . e(t('gallery.play_picture_game', 'Play picture game')) . '"><span aria-hidden="true">&#127918;</span><span class="visually-hidden">' . e(t('gallery.play_picture_game', 'Play picture game')) . '</span></a>';
-    }
-    echo '</div>';
-    echo '</div>';
-    if ($heroTagCount > 0) {
-        echo '<div class="hero-tags" aria-label="' . e(t('gallery.tags', 'Gallery tags')) . '" data-hero-tags data-hero-tag-visible-limit="' . $heroTagVisibleLimit . '" data-hero-tag-display-all="' . ($heroTagDisplayAll ? '1' : '0') . '" data-hero-tag-scrollbar-enabled="' . ($heroTagScrollbarEnabled ? '1' : '0') . '" data-hero-tag-scrollbar-rows="' . $heroTagScrollbarRows . '">';
-        echo '<div class="hero-tags-content" data-hero-tags-content>';
-        render_tag_list($heroTagGroups['gallery']);
-        render_tag_list($heroTagGroups['contained'], t('gallery.containing_tags', 'Containing tags'));
-        echo '</div>';
-        if (!$heroTagDisplayAll && $heroTagCount > $heroTagVisibleLimit) {
-            // The browser toggles visibility in-place. No navigation or server request is required to expose the complete collection.
-            echo '<div class="hero-tags-controls"><button type="button" class="button secondary hero-tags-toggle" data-hero-tags-toggle hidden data-show-all-label="' . e(t('gallery.show_all_tags', 'Display all tags')) . '" data-show-fewer-label="' . e(t('gallery.show_fewer_tags', 'Show fewer tags')) . '" aria-expanded="false">' . e(t('gallery.show_all_tags', 'Display all tags')) . '</button></div>';
-        }
-        echo '</div>';
-    }
-    echo '</div>';
-    echo '</section>';
+    $heroAdminActionsHtml = (string) ob_get_clean();
+    ob_start();
+    render_tag_list($heroTagGroups['gallery']);
+    $heroGalleryTagsHtml = (string) ob_get_clean();
+    ob_start();
+    render_tag_list($heroTagGroups['contained'], t('gallery.containing_tags', 'Containing tags'));
+    $heroContainedTagsHtml = (string) ob_get_clean();
+
+    $downloadsEnabled = feature_capability_effective_enabled('downloads');
+    $legacyDownloadCapability = $downloadsEnabled
+        ? download_capability_issue(DOWNLOAD_CAPABILITY_RESOURCE_GALLERY, (int) $gallery['id'], DOWNLOAD_CAPABILITY_SCOPE_LEGACY)
+        : '';
+    $heroViewModel = [
+        'gallery_id' => (int) $gallery['id'],
+        'title' => (string) $gallery['title'],
+        'visibility' => gallery_effective_visibility($gallery),
+        'updated_at' => (string) ($gallery['updated_at'] ?? ''),
+        'cover_image_id' => max(0, (int) ($gallery['cover_image_id'] ?? 0)),
+        'image_count' => $imageTotalCount,
+        'image_revision' => $imageStateRevision,
+        'subgallery_count' => count($allChildren),
+        'subgallery_revision' => $subgalleryStateRevision,
+        'smart_gallery_count' => count($topSmartChildren) + count($bottomSmartChildren),
+        'canonical_url' => gallery_public_url($gallery),
+        'branding_header_html' => $brandingHeaderHtml,
+        'breadcrumbs_html' => $breadcrumbsHtml,
+        'show_count_badge' => $showHeroCountBadge,
+        'branch_image_count' => $heroBranchImageCount,
+        'admin_actions_html' => $heroAdminActionsHtml,
+        'download_enabled' => $downloadsEnabled,
+        'download_url' => $downloadsEnabled ? url_for('download_gallery') : '',
+        'download_start_url' => $downloadsEnabled ? url_for('download_gallery_start', ['id' => $gallery['id']]) : '',
+        'download_capability' => $legacyDownloadCapability,
+        'map_available' => $galleryMapAvailable,
+        'map_url' => $galleryMapUrl,
+        'picture_game_available' => $pictureGameAvailable,
+        'picture_game_url' => $pictureGameAvailable ? url_for('picture_game', ['id' => $gallery['id']]) : '',
+        'tag_count' => $heroTagCount,
+        'tag_visible_limit' => $heroTagVisibleLimit,
+        'tag_display_all' => $heroTagDisplayAll,
+        'tag_scrollbar_enabled' => $heroTagScrollbarEnabled,
+        'tag_scrollbar_rows' => $heroTagScrollbarRows,
+        'gallery_tags_html' => $heroGalleryTagsHtml,
+        'contained_tags_html' => $heroContainedTagsHtml,
+    ];
+
+    ob_start();
     render_public_gallery_branding_separator($gallery, $publicOnly);
+    $brandingSeparatorHtml = (string) ob_get_clean();
+    ob_start();
     render_public_gallery_preview_toolbar($gallery);
-    view_render_public_search_bar($gallery);
+    $previewToolbarHtml = (string) ob_get_clean();
+
     // Variable $publicPageReorderEnabled stores whether the logged-in admin can reorder visible public-page cards.
     $publicPageReorderEnabled = current_user() && !admin_anonymous_preview_active() && feature_capability_effective_enabled('inline_administration');
     // $publicSubgalleryReorderEnabled stores whether subgallery cards can expose drag ordering handles.
     $publicSubgalleryReorderEnabled = $publicPageReorderEnabled && $subgalleryDateSortMode === '';
     // $pictureManagerEnabled stores whether the logged-in viewer can select and manage visible photos.
     $pictureManagerEnabled = current_user() && !admin_anonymous_preview_active() && (!function_exists('Gallery\\Services\\feature_capability_effective_enabled') || feature_capability_effective_enabled('picture_manager'));
-    if ($topSmartChildren || $children || $images || $bottomSmartChildren) {
-        echo '<div class="gallery-list-frame" data-back-to-top-scope>';
-        echo '<div class="gallery-list-content" data-back-to-top-list>';
-    }
+
+    ob_start();
     render_public_smart_gallery_attachment_group($topSmartChildren, 'top', $paginationSettings, $smartGalleryCardContexts);
+    $topSmartGroupHtml = (string) ob_get_clean();
+    ob_start();
+    render_public_smart_gallery_attachment_group($bottomSmartChildren, 'bottom', $paginationSettings, $smartGalleryCardContexts);
+    $bottomSmartGroupHtml = (string) ob_get_clean();
+
+    $subgallerySectionViewModel = ['visible' => false];
     if ($children) {
-        echo '<section class="panel public-subgallery-panel" data-public-subgallery-section data-public-context-gallery-id="' . (int) $gallery['id'] . '" data-public-subgallery-total-count="' . count($allChildren) . '" data-public-subgallery-revision="' . e($subgalleryStateRevision) . '" data-public-gallery-page="' . (int) ($childPagination['current_page'] ?? 1) . '" data-public-gallery-total-pages="' . (int) ($childPagination['total_pages'] ?? 1) . '" aria-label="' . e(t('public.subgalleries', 'Subgalleries')) . '">';
+        ob_start();
         render_public_subgallery_date_sort_toolbar($gallery, $subgalleryDateSortMode, $datedSubgalleryCount, count($allChildren));
+        $subgallerySortToolbarHtml = (string) ob_get_clean();
+        $subgalleryReorderToolbarHtml = '';
         if ($subgalleryDateSortMode === '') {
+            ob_start();
             render_public_page_reorder_toolbar('gallery', $gallery, !empty($paginationSettings['enabled']) ? $childPagination : [], count($children), count($allChildren));
+            $subgalleryReorderToolbarHtml = (string) ob_get_clean();
         }
-        render_pagination_controls(!empty($paginationSettings['enabled']) ? $childPagination : [], t('pagination.subgallery_pages', 'Subgallery pages'));
-        echo '<div class="grid' . e(pagination_grid_columns_class($paginationSettings)) . '" data-public-reorder-list="gallery" data-public-subgallery-grid data-public-context-gallery-id="' . (int) $gallery['id'] . '" data-public-subgallery-total-count="' . count($allChildren) . '" data-public-subgallery-revision="' . e($subgalleryStateRevision) . '" data-public-gallery-page="' . (int) ($childPagination['current_page'] ?? 1) . '" data-public-gallery-total-pages="' . (int) ($childPagination['total_pages'] ?? 1) . '">';
+        ob_start();
+        view_render_pagination_controls(!empty($paginationSettings['enabled']) ? $childPagination : [], t('pagination.subgallery_pages', 'Subgallery pages'));
+        $subgalleryPaginationHtml = (string) ob_get_clean();
+
         public_render_profile_count('rendered_subgalleries', count($children));
         $subgalleryCardContexts = public_render_profile_span('subgallery_card_context_preload', static fn (): array => public_gallery_card_rendering_contexts($children, true, true));
-        public_render_profile_span('render_subgallery_cards', static function () use ($children, $publicSubgalleryReorderEnabled, $subgalleryCardContexts): void {
+        $subgalleryCardsHtml = public_render_profile_span('render_subgallery_cards', static function () use ($children, $publicSubgalleryReorderEnabled, $subgalleryCardContexts, $pictureManagerEnabled): string {
+            ob_start();
             foreach ($children as $index => $child) {
-                render_gallery_card($child, true, $publicSubgalleryReorderEnabled && count($children) > 1, true, $index, $subgalleryCardContexts[(int) $child['id']] ?? []);
+                render_gallery_card($child, true, $publicSubgalleryReorderEnabled && count($children) > 1, true, $index, $subgalleryCardContexts[(int) $child['id']] ?? [], $pictureManagerEnabled);
             }
+            return (string) ob_get_clean();
         });
-        echo '</div>';
-        render_pagination_controls(!empty($paginationSettings['enabled']) ? $childPagination : [], t('pagination.subgallery_pages', 'Subgallery pages'));
-        echo '</section>';
+        $subgallerySectionViewModel = [
+            'visible' => true,
+            'gallery_id' => (int) $gallery['id'],
+            'total_count' => count($allChildren),
+            'revision' => $subgalleryStateRevision,
+            'current_page' => (int) ($childPagination['current_page'] ?? 1),
+            'total_pages' => (int) ($childPagination['total_pages'] ?? 1),
+            'sort_toolbar_html' => $subgallerySortToolbarHtml,
+            'reorder_toolbar_html' => $subgalleryReorderToolbarHtml,
+            'pagination_html' => $subgalleryPaginationHtml,
+            'grid_class' => pagination_grid_columns_class($paginationSettings),
+            'cards_html' => $subgalleryCardsHtml,
+        ];
     }
+
     // Variable $publicPhotoReorderEnabled stores whether visible photo cards should render drag handles.
     $publicPhotoReorderEnabled = $publicPageReorderEnabled && count($images) > 1;
     // $lightboxFeatureEnabled stores whether cards should open in the JavaScript lightbox instead of plain image URLs.
     $lightboxFeatureEnabled = !function_exists('Gallery\\Services\\feature_capability_effective_enabled') || feature_capability_effective_enabled('lightbox_modes');
     // $publicThumbnailRenderingMode stores the validated site-level picture strategy for selected-gallery photo cards.
     $publicThumbnailRenderingMode = public_thumbnail_rendering_mode();
+
+    $pictureManagerToolbarHtml = '';
+    $photoReorderToolbarHtml = '';
+    $photoPaginationHtml = '';
+    $lightboxEndpoint = '';
+    if ($pictureManagerEnabled && ($images || $children)) {
+        ob_start();
+        render_picture_manager_toolbar($gallery, count($children) > 0);
+        $pictureManagerToolbarHtml = (string) ob_get_clean();
+    }
     if ($images) {
-        if ($pictureManagerEnabled) {
-            render_picture_manager_toolbar($gallery, count($children) > 0);
-        }
+        ob_start();
         render_public_page_reorder_toolbar('photo', $gallery, !empty($paginationSettings['enabled']) ? $photoPagination : [], count($images), $imageTotalCount);
-        render_pagination_controls(!empty($paginationSettings['enabled']) ? $photoPagination : [], t('pagination.photo_pages', 'Photo pages'));
+        $photoReorderToolbarHtml = (string) ob_get_clean();
+        ob_start();
+        view_render_pagination_controls(!empty($paginationSettings['enabled']) ? $photoPagination : [], t('pagination.photo_pages', 'Photo pages'));
+        $photoPaginationHtml = (string) ob_get_clean();
         // Pin lazy single-photo metadata to the same language as the rendered page.
         // This avoids a direct-photo lightbox falling back to a stale/default
         // session language while its server-rendered card is already localized.
@@ -518,9 +565,9 @@ function cms_gallery(): void
         if ($anonymousPreview) {
             $lightboxEndpointParams['view_as'] = 'anonymous';
         }
-        $lightboxConfigAttributes = $lightboxFeatureEnabled ? ' data-lightbox-config data-lightbox-endpoint="' . e(url_for('gallery_lightbox_data', $lightboxEndpointParams)) . '" data-lightbox-total="' . (int) $lightboxTotalCount . '" data-lightbox-window-size="60" data-lightbox-browsing-mode="' . e($lightboxBrowsingMode) . '" data-lightbox-maps-enabled="' . ($mapsAllowed ? '1' : '0') . '" data-lightbox-gallery-map-url="' . e($galleryMapUrl) . '" data-lightbox-gallery-map-title="' . e((string) $gallery['title']) . '"' : '';
-        echo '<section class="grid gallery-image-grid' . e(pagination_grid_columns_class($paginationSettings)) . '" data-public-reorder-list="photo" data-gallery-image-list data-public-context-gallery-id="' . (int) $gallery['id'] . '" data-public-image-total-count="' . (int) $imageTotalCount . '" data-public-image-revision="' . e($imageStateRevision) . '" data-public-image-page="' . (int) ($photoPagination['current_page'] ?? $photoCurrentPage) . '" data-public-image-total-pages="' . (int) ($photoPagination['total_pages'] ?? 1) . '"' . $lightboxConfigAttributes . '>';
+        $lightboxEndpoint = $lightboxFeatureEnabled ? url_for('gallery_lightbox_data', $lightboxEndpointParams) : '';
     }
+
     public_render_profile_count('rendered_images', count($images));
     // Viewer favourites are personalized only for an authenticated viewer and never participate in gallery authorization.
     $viewerPrincipal = current_viewer();
@@ -537,125 +584,182 @@ function cms_gallery(): void
     $viewerCollections = $viewerCollectionControlsEnabled
         ? viewer_collections_for_owner((int) $viewerPrincipal['id'])
         : [];
-    public_render_profile_span('render_image_cards', static function () use ($images, $gallery, $publicOnly, $photoMapsAllowed, $imageTagsById, $votesById, $votingAllowed, $paginationSettings, $photoPagination, $publicPhotoReorderEnabled, $pictureManagerEnabled, $lightboxExcludesRestrictedNsfw, $lightboxFeatureEnabled, $publicMediaManifest, $publicThumbnailRenderingMode, $viewerFavouriteControlsEnabled, $viewerFavouriteRequiresSourceRecheck, $viewerFavouriteStates, $viewerCollectionControlsEnabled, $viewerCollectionRequiresSourceRecheck, $viewerCollections): void {
-    foreach ($images as $index => $image) {
-        // Variable $imageNeedsNsfwGate stores whether this card must avoid exposing thumbnail/media URLs.
-        $imageNeedsNsfwGate = $publicOnly && image_nsfw_restricted($image, $gallery) && !visitor_can_access_nsfw_content();
-        if ($imageNeedsNsfwGate) {
-            echo '<article class="image-card nsfw-card" data-public-photo-order-item data-public-order-id="' . (int) $image['id'] . '" data-public-image-visibility="' . e((string) ($image['visibility'] ?? '')) . '" data-public-image-nsfw="' . ((int) ($image['nsfw_enabled'] ?? 0) === 1 ? '1' : '0') . '" data-public-image-updated-at="' . e((string) ($image['updated_at'] ?? '')) . '"><div class="image-stage nsfw-stage"><a class="nsfw-placeholder" href="' . e(image_public_url($image, $gallery)) . '"><strong>' . e(t('public.nsfw_photo_title', '18+ photo')) . '</strong><span>' . e(t('public.nsfw_photo_message', 'Confirm your age to view this restricted photo.')) . '</span></a></div>';
+
+    $imageCardsHtml = public_render_profile_span('render_image_cards', static function () use ($images, $gallery, $publicOnly, $photoMapsAllowed, $imageTagsById, $votesById, $votingAllowed, $paginationSettings, $photoPagination, $publicPhotoReorderEnabled, $pictureManagerEnabled, $lightboxExcludesRestrictedNsfw, $lightboxFeatureEnabled, $publicMediaManifest, $publicThumbnailRenderingMode, $viewerFavouriteControlsEnabled, $viewerFavouriteRequiresSourceRecheck, $viewerFavouriteStates, $viewerCollectionControlsEnabled, $viewerCollectionRequiresSourceRecheck, $viewerCollections): string {
+        ob_start();
+        foreach ($images as $index => $image) {
+            // Variable $imageNeedsNsfwGate stores whether this card must avoid exposing thumbnail/media URLs.
+            $imageNeedsNsfwGate = $publicOnly && image_nsfw_restricted($image, $gallery) && !visitor_can_access_nsfw_content();
+            if ($imageNeedsNsfwGate) {
+                ob_start();
+                render_public_image_admin_edit_link($image);
+                render_public_image_admin_visibility_menu($image);
+                render_public_image_admin_delete_form($image);
+                $adminControlsHtml = (string) ob_get_clean();
+                \Gallery\Views\view_render_public_gallery_nsfw_image_card([
+                    'image_id' => (int) $image['id'],
+                    'visibility' => (string) ($image['visibility'] ?? ''),
+                    'nsfw' => (int) ($image['nsfw_enabled'] ?? 0) === 1,
+                    'updated_at' => (string) ($image['updated_at'] ?? ''),
+                    'image_url' => image_public_url($image, $gallery),
+                    'admin_controls_html' => $adminControlsHtml,
+                ]);
+                continue;
+            }
+            // Variable $mediaUrl stores this steps working value.
+            $mediaUrl = image_public_media_url($image, $gallery);
+            // Variable $imagePageUrl stores this steps working value.
+            $imagePageUrl = image_public_url($image, $gallery);
+            // $mediaManifestEntry stores thumbnail data prepared once for the visible image set.
+            $mediaManifestEntry = is_array($publicMediaManifest[(int) $image['id']] ?? null) ? $publicMediaManifest[(int) $image['id']] : [];
+            // Variable $thumbnailBundle stores all generated variants for this visible card during this request.
+            $thumbnailBundle = is_array($mediaManifestEntry['bundle'] ?? null)
+                ? $mediaManifestEntry['bundle']
+                : public_render_profile_with_thumbnail_purpose('image card bundle discovery fallback', static fn (): array => thumbnail_bundle($image));
+            // Variable $previewUrl stores this steps working value.
+            $previewUrl = (string) ($mediaManifestEntry['preview_url'] ?? '');
+            if ($previewUrl === '') {
+                $previewUrl = public_render_profile_with_thumbnail_purpose('image card lightbox preview 1600 fallback', static fn (): string => thumbnail_bundle_url($thumbnailBundle, 1600));
+            }
+            // Variable $imageTags stores this steps working value.
+            $imageTags = $imageTagsById[(int) $image['id']] ?? [];
+            // Variable $imageHasPublicGps stores this steps working value.
+            $imageHasPublicGps = $photoMapsAllowed && image_has_gps($image);
+            // Variable $imageMapPoint stores this steps working value.
+            $imageMapPoint = $imageHasPublicGps ? public_render_profile_with_thumbnail_purpose('image card map preview 300', static fn (): array => image_map_point($image, $gallery, true, $thumbnailBundle)) : null;
+            // Variable $displayIndex stores this steps working value.
+            $displayIndex = $index + 1 + (!empty($paginationSettings['enabled']) ? (int) $photoPagination['offset'] : 0);
+            // $lightboxIndex stores the zero-based index in the async lightbox order.
+            $lightboxIndex = $lightboxExcludesRestrictedNsfw ? gallery_lightbox_image_position($image, $gallery, $publicOnly, true) : $displayIndex - 1;
+            // Variable $altText stores this steps working value.
+            $altText = image_alt_text($image, $gallery, $displayIndex);
+            // Variable $vote stores this steps working value.
+            $vote = $votesById[(int) $image['id']] ?? 0;
+            // Variable $displayTitle stores this steps working value.
+            $displayTitle = public_image_display_title($image, $gallery);
+            $imageCardClass = 'image-card' . ($publicPhotoReorderEnabled ? ' has-public-reorder-handle' : '') . ($pictureManagerEnabled ? ' has-picture-manager-select' : '');
+            $lightboxAttributes = $lightboxFeatureEnabled ? ' ' . lightbox_image_data_attributes($image, $gallery, $mediaUrl, $previewUrl, $imagePageUrl, $displayTitle, (int) $image['score'], $vote, $imageMapPoint, 'data-lightbox-image', $votingAllowed, $lightboxIndex >= 0 ? $lightboxIndex : null, $thumbnailBundle) : '';
+            $viewerFavouriteAvailableForImage = $viewerFavouriteControlsEnabled
+                && (!$viewerFavouriteRequiresSourceRecheck || viewer_source_image_can_reference((int) $image['id']));
+            $viewerCollectionAvailableForImage = $viewerCollectionControlsEnabled
+                && (!$viewerCollectionRequiresSourceRecheck || viewer_source_image_can_reference((int) $image['id']));
+            // $thumbnailSizesAttribute stores a responsive image hint derived from the configured grid.
+            $thumbnailSizesAttribute = pagination_photo_thumbnail_sizes_attribute($paginationSettings);
+            // $publicThumbnailRenderingMode selects only the photo picture strategy; loading policy stays centralized with the renderer.
+            $thumbnailHtml = public_render_profile_with_thumbnail_purpose('image card public thumbnail picture', static fn (): string => public_thumbnail_render_picture_html($image, 300, [300, 600, 800, 960], $thumbnailSizesAttribute, $altText, $index, $thumbnailBundle, $publicThumbnailRenderingMode));
+            $favouriteHtml = $viewerFavouriteAvailableForImage
+                ? render_viewer_favourite_form_html((int) $image['id'], !empty($viewerFavouriteStates[(int) $image['id']]), 'viewer-favourite-card-overlay')
+                : '';
+            $collectionHtml = $viewerCollectionAvailableForImage
+                ? render_viewer_collection_add_control_html((int) $image['id'], $viewerCollections, 'viewer-collection-card-overlay')
+                : '';
+            ob_start();
+            render_vote_form((int) $image['id'], (int) $image['score'], $vote, $votingAllowed);
+            $voteHtml = (string) ob_get_clean();
+            ob_start();
+            render_tag_list($imageTags);
+            $tagsHtml = (string) ob_get_clean();
+            ob_start();
             render_public_image_admin_edit_link($image);
             render_public_image_admin_visibility_menu($image);
             render_public_image_admin_delete_form($image);
-            echo '</article>';
-            continue;
+            $adminControlsHtml = (string) ob_get_clean();
+            // Variable $hasPublicImageMeta stores whether the anonymous-facing metadata overlay has visible content.
+            // Empty metadata is not rendered, because hidden file names should not leave a blank bar under the photo.
+            // The metadata is rendered inside .image-stage so long descriptions do not increase card height or break the grid rhythm.
+            $hasPublicImageMeta = $displayTitle !== '' || trim((string) $image['description']) !== '' || $imageTags;
+
+            \Gallery\Views\view_render_public_gallery_image_card([
+                'class' => $imageCardClass,
+                'image_id' => (int) $image['id'],
+                'visibility' => (string) ($image['visibility'] ?? ''),
+                'nsfw' => (int) ($image['nsfw_enabled'] ?? 0) === 1,
+                'updated_at' => (string) ($image['updated_at'] ?? ''),
+                'picture_manager_enabled' => $pictureManagerEnabled,
+                'display_index' => $displayIndex,
+                'preview_url' => $previewUrl,
+                'share_filename' => $pictureManagerEnabled ? picture_manager_share_filename($image, $displayTitle) : '',
+                'display_title' => $displayTitle,
+                'lightbox_attributes' => $lightboxAttributes,
+                'viewer_favourite_available' => $viewerFavouriteAvailableForImage,
+                'viewer_favourite' => !empty($viewerFavouriteStates[(int) $image['id']]),
+                'reorder_enabled' => $publicPhotoReorderEnabled,
+                'image_url' => $imagePageUrl,
+                'thumbnail_html' => $thumbnailHtml,
+                'map_available' => $imageMapPoint !== null,
+                'favourite_html' => $favouriteHtml,
+                'collection_html' => $collectionHtml,
+                'vote_html' => $voteHtml,
+                'has_public_meta' => $hasPublicImageMeta,
+                'description' => (string) ($image['description'] ?? ''),
+                'tags_html' => $tagsHtml,
+                'admin_controls_html' => $adminControlsHtml,
+            ]);
         }
-        // Variable $mediaUrl stores this steps working value.
-        $mediaUrl = image_public_media_url($image, $gallery);
-        // Variable $imagePageUrl stores this steps working value.
-        $imagePageUrl = image_public_url($image, $gallery);
-        // $mediaManifestEntry stores thumbnail data prepared once for the visible image set.
-        $mediaManifestEntry = is_array($publicMediaManifest[(int) $image['id']] ?? null) ? $publicMediaManifest[(int) $image['id']] : [];
-        // Variable $thumbnailBundle stores all generated variants for this visible card during this request.
-        $thumbnailBundle = is_array($mediaManifestEntry['bundle'] ?? null)
-            ? $mediaManifestEntry['bundle']
-            : public_render_profile_with_thumbnail_purpose('image card bundle discovery fallback', static fn (): array => thumbnail_bundle($image));
-        // Variable $previewUrl stores this steps working value.
-        $previewUrl = (string) ($mediaManifestEntry['preview_url'] ?? '');
-        if ($previewUrl === '') {
-            $previewUrl = public_render_profile_with_thumbnail_purpose('image card lightbox preview 1600 fallback', static fn (): string => thumbnail_bundle_url($thumbnailBundle, 1600));
-        }
-        // Variable $imageTags stores this steps working value.
-        $imageTags = $imageTagsById[(int) $image['id']] ?? [];
-        // Variable $imageHasPublicGps stores this steps working value.
-        $imageHasPublicGps = $photoMapsAllowed && image_has_gps($image);
-        // Variable $imageMapPoint stores this steps working value.
-        $imageMapPoint = $imageHasPublicGps ? public_render_profile_with_thumbnail_purpose('image card map preview 300', static fn (): array => image_map_point($image, $gallery, true, $thumbnailBundle)) : null;
-        // Variable $displayIndex stores this steps working value.
-        $displayIndex = $index + 1 + (!empty($paginationSettings['enabled']) ? (int) $photoPagination['offset'] : 0);
-        // $lightboxIndex stores the zero-based index in the async lightbox order.
-        $lightboxIndex = $lightboxExcludesRestrictedNsfw ? gallery_lightbox_image_position($image, $gallery, $publicOnly, true) : $displayIndex - 1;
-        // Variable $altText stores this steps working value.
-        $altText = image_alt_text($image, $gallery, $displayIndex);
-        // Variable $vote stores this steps working value.
-        $vote = $votesById[(int) $image['id']] ?? 0;
-        // Variable $displayTitle stores this steps working value.
-        $displayTitle = public_image_display_title($image, $gallery);
-        $imageCardClass = 'image-card' . ($publicPhotoReorderEnabled ? ' has-public-reorder-handle' : '') . ($pictureManagerEnabled ? ' has-picture-manager-select' : '');
-        $pictureManagerAttributes = $pictureManagerEnabled ? ' data-picture-manager-image data-picture-manager-image-id="' . (int) $image['id'] . '" data-picture-manager-index="' . (int) $displayIndex . '" data-picture-manager-share-url="' . e($previewUrl) . '" data-picture-manager-share-filename="' . e(picture_manager_share_filename($image, $displayTitle)) . '" data-picture-manager-share-title="' . e($displayTitle) . '"' : '';
-        $lightboxAttributes = $lightboxFeatureEnabled ? ' ' . lightbox_image_data_attributes($image, $gallery, $mediaUrl, $previewUrl, $imagePageUrl, $displayTitle, (int) $image['score'], $vote, $imageMapPoint, 'data-lightbox-image', $votingAllowed, $lightboxIndex >= 0 ? $lightboxIndex : null, $thumbnailBundle) : '';
-        $viewerFavouriteAvailableForImage = $viewerFavouriteControlsEnabled
-            && (!$viewerFavouriteRequiresSourceRecheck || viewer_source_image_can_reference((int) $image['id']));
-        $viewerFavouriteAttribute = $viewerFavouriteAvailableForImage ? ' data-viewer-favourite="' . (!empty($viewerFavouriteStates[(int) $image['id']]) ? '1' : '0') . '"' : '';
-        $viewerCollectionAvailableForImage = $viewerCollectionControlsEnabled
-            && (!$viewerCollectionRequiresSourceRecheck || viewer_source_image_can_reference((int) $image['id']));
-        echo '<article class="' . e($imageCardClass) . '" data-public-photo-order-item data-public-order-id="' . (int) $image['id'] . '" data-public-image-visibility="' . e((string) ($image['visibility'] ?? '')) . '" data-public-image-nsfw="' . ((int) ($image['nsfw_enabled'] ?? 0) === 1 ? '1' : '0') . '" data-public-image-updated-at="' . e((string) ($image['updated_at'] ?? '')) . '"' . $pictureManagerAttributes . $lightboxAttributes . $viewerFavouriteAttribute . '>';
-        if ($publicPhotoReorderEnabled) {
-            echo '<button type="button" class="public-reorder-handle public-photo-reorder-handle" data-public-reorder-handle aria-label="' . e(t('public.reorder.drag_photo_label', 'Drag photo to reorder visible photos')) . '" title="' . e(t('public.reorder.drag_photo_title', 'Drag to reorder this visible photo')) . '"><span aria-hidden="true">↕</span><span>' . e(t('public.reorder.move_photo', 'Move photo')) . '</span></button>';
-        }
-        if ($pictureManagerEnabled) {
-            echo '<button type="button" class="picture-manager-select-button" data-picture-manager-select aria-pressed="false" aria-label="' . e(t('picture_manager.select_photo', 'Select photo')) . '" title="' . e(t('picture_manager.select_photo', 'Select photo')) . '"><span aria-hidden="true">✓</span><span class="visually-hidden">' . e(t('picture_manager.select_photo', 'Select photo')) . '</span></button>';
-        }
-        echo '<div class="image-stage">';
-        // $thumbnailSizesAttribute stores a responsive image hint derived from the configured grid.
-        $thumbnailSizesAttribute = pagination_photo_thumbnail_sizes_attribute($paginationSettings);
-        // $publicThumbnailRenderingMode selects only the photo picture strategy; loading policy stays centralized with the renderer.
-        echo '<a class="image-preview-link" href="' . e($imagePageUrl) . '">' . public_render_profile_with_thumbnail_purpose('image card public thumbnail picture', static fn (): string => public_thumbnail_render_picture_html($image, 300, [300, 600, 800, 960], $thumbnailSizesAttribute, $altText, $index, $thumbnailBundle, $publicThumbnailRenderingMode)) . '</a>';
-        if ($imageMapPoint) {
-            echo '<button type="button" class="photo-map-pin" data-photo-map aria-label="' . e(t('public.show_photo_location', 'Show photo location')) . '" title="' . e(t('public.show_photo_location', 'Show photo location')) . '">&#128205;</button>';
-        }
-        if ($viewerFavouriteAvailableForImage) {
-            echo render_viewer_favourite_form_html((int) $image['id'], !empty($viewerFavouriteStates[(int) $image['id']]), 'viewer-favourite-card-overlay');
-        }
-        if ($viewerCollectionAvailableForImage) {
-            echo render_viewer_collection_add_control_html((int) $image['id'], $viewerCollections, 'viewer-collection-card-overlay');
-        }
-        render_vote_form((int) $image['id'], (int) $image['score'], $vote, $votingAllowed);
-        // Variable $hasPublicImageMeta stores whether the anonymous-facing metadata overlay has visible content.
-        // Empty metadata is not rendered, because hidden file names should not leave a blank bar under the photo.
-        // The metadata is rendered inside .image-stage so long descriptions do not increase card height or break the grid rhythm.
-        $hasPublicImageMeta = $displayTitle !== '' || trim((string) $image['description']) !== '' || $imageTags;
-        if ($hasPublicImageMeta) {
-            echo '<div class="image-meta image-meta-overlay">';
-            if ($displayTitle !== '') {
-                echo '<h2>' . e($displayTitle) . '</h2>';
-            }
-            if (trim((string) $image['description']) !== '') {
-                echo '<p>' . e($image['description']) . '</p>';
-            }
-            render_tag_list($imageTags);
-            echo '</div>';
-        }
-        echo '</div>';
-        render_public_image_admin_edit_link($image);
-        render_public_image_admin_visibility_menu($image);
-        render_public_image_admin_delete_form($image);
-        echo '</article>';
-    }
+        return (string) ob_get_clean();
     });
-    if ($images) {
-        echo '</section>';
-        render_pagination_controls(!empty($paginationSettings['enabled']) ? $photoPagination : [], t('pagination.photo_pages', 'Photo pages'));
-    }
-    render_public_smart_gallery_attachment_group($bottomSmartChildren, 'bottom', $paginationSettings, $smartGalleryCardContexts);
-    if ($topSmartChildren || $children || $images || $bottomSmartChildren) {
-        echo '</div>';
-        render_back_to_top_button();
-        echo '</div>';
-    }
+
+    $imageSectionViewModel = [
+        'visible' => $images !== [],
+        'reorder_toolbar_html' => $photoReorderToolbarHtml,
+        'pagination_html' => $photoPaginationHtml,
+        'grid_class' => pagination_grid_columns_class($paginationSettings),
+        'gallery_id' => (int) $gallery['id'],
+        'total_count' => $imageTotalCount,
+        'revision' => $imageStateRevision,
+        'current_page' => (int) ($photoPagination['current_page'] ?? $photoCurrentPage),
+        'total_pages' => (int) ($photoPagination['total_pages'] ?? 1),
+        'lightbox_enabled' => $lightboxFeatureEnabled,
+        'lightbox_endpoint' => $lightboxEndpoint,
+        'lightbox_total' => $lightboxTotalCount,
+        'lightbox_browsing_mode' => $lightboxBrowsingMode,
+        'lightbox_maps_enabled' => $mapsAllowed,
+        'gallery_map_url' => $galleryMapUrl,
+        'gallery_map_title' => (string) $gallery['title'],
+        'cards_html' => $imageCardsHtml,
+    ];
+
+    ob_start();
+    render_back_to_top_button();
+    $backToTopHtml = (string) ob_get_clean();
+    $lightboxHtml = '';
     if ($lightboxFeatureEnabled) {
+        ob_start();
         render_lightbox($votingAllowed, $mapsAllowed, $galleryMapUrl, (string) $gallery['title'], $lightboxBrowsingMode);
+        $lightboxHtml = (string) ob_get_clean();
     }
     if ($requestedImage && $lightboxFeatureEnabled) {
-        append_cms_footer_script('document.addEventListener("DOMContentLoaded",function(){var selector="[data-lightbox-image][data-image-id=\"' . (int) $requestedImage['id'] . '\"], [data-lightbox-source][data-image-id=\"' . (int) $requestedImage['id'] . '\"]";var card=document.querySelector(selector);if(card){card.click();}});');
+        append_cms_footer_script('document.addEventListener("DOMContentLoaded",function(){var selector="[data-lightbox-image][data-image-id=\\"' . (int) $requestedImage['id'] . '\\"], [data-lightbox-source][data-image-id=\\"' . (int) $requestedImage['id'] . '\\"]";var card=document.querySelector(selector);if(card){card.click();}});');
     }
-    render_public_render_profile_panel();
+    ob_start();
+    view_render_public_render_profile_panel(public_render_profile_panel_model());
+    $renderProfileHtml = (string) ob_get_clean();
     telemetry_append_public_script([
         'route_name' => 'gallery',
         'page_kind' => 'gallery',
         'gallery_id' => (int) $gallery['id'],
         'image_id' => $requestedImage ? (int) $requestedImage['id'] : null,
     ]);
-    render_footer();
+
+    \Gallery\Views\view_render_public_gallery_detail([
+        'page_title' => (string) $seo['title'],
+        'gallery' => $gallery,
+        'public_only' => $publicOnly,
+        'notice' => $publicNotice,
+        'hero' => $heroViewModel,
+        'branding_separator_html' => $brandingSeparatorHtml,
+        'preview_toolbar_html' => $previewToolbarHtml,
+        'search_bar' => public_search_bar_view_model($gallery),
+        'picture_manager_toolbar_html' => $pictureManagerToolbarHtml,
+        'has_list_content' => $topSmartChildren || $children || $images || $bottomSmartChildren,
+        'top_smart_group_html' => $topSmartGroupHtml,
+        'subgallery_section' => $subgallerySectionViewModel,
+        'image_section' => $imageSectionViewModel,
+        'bottom_smart_group_html' => $bottomSmartGroupHtml,
+        'back_to_top_html' => $backToTopHtml,
+        'lightbox_html' => $lightboxHtml,
+        'render_profile_html' => $renderProfileHtml,
+    ]);
     gallery_benchmark_record_public_render($gallery, public_render_profile_snapshot());
 }
 

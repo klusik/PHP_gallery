@@ -7,7 +7,10 @@
  *
  * Purpose:
  *   Provides a local Spotlight-style search over the centralized Settings registry.
- */
+  *
+ * Author:
+ *   Rudolf Klusal
+*/
 
 /** Normalize searchable text while keeping matching friendly across translated accents. */
 function normalizeSettingsSearchText(value) {

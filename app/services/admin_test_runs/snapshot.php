@@ -39,6 +39,8 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+use function Gallery\Core\request_data;
+
 use RuntimeException;
 use Throwable;
 use ZipArchive;
@@ -108,7 +110,7 @@ function admin_test_run_runtime_snapshot(string $stage): array
         'php_version' => PHP_VERSION,
         'php_sapi' => PHP_SAPI,
         'os_family' => PHP_OS_FAMILY,
-        'server_software' => (string) ($_SERVER['SERVER_SOFTWARE'] ?? ''),
+        'server_software' => (string) (request_data('server')['SERVER_SOFTWARE'] ?? ''),
         'memory_usage_bytes' => memory_get_usage(true),
         'memory_usage_real_bytes' => memory_get_usage(false),
         'memory_peak_bytes' => memory_get_peak_usage(true),

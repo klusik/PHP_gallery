@@ -41,7 +41,6 @@ namespace Gallery\Services;
 
 use function Gallery\Core\cms_config;
 use function Gallery\Core\current_user;
-use function Gallery\Core\request_is_https;
 
 const CMS_LANGUAGE_COOKIE = 'cms_language';
 const CMS_ADMIN_LANGUAGE_COOKIE = 'cms_admin_language';
@@ -589,14 +588,14 @@ function translation_public_language(): string
  *
  * @return string Text result for the caller.
  */
-function translation_admin_language(): string
+function translation_admin_language(string $adminCookie = '', string $legacyCookie = ''): string
 {
     $candidate = translation_normalize_language_code((string) ($_SESSION['cms_admin_language'] ?? ''));
     if ($candidate !== '' && translation_language_allowed($candidate)) {
         return $candidate;
     }
 
-    $candidate = translation_normalize_language_code((string) ($_COOKIE[CMS_ADMIN_LANGUAGE_COOKIE] ?? $_COOKIE[CMS_LANGUAGE_COOKIE] ?? ''));
+    $candidate = translation_normalize_language_code($adminCookie !== '' ? $adminCookie : $legacyCookie);
     if ($candidate !== '' && translation_language_allowed($candidate)) {
         return $candidate;
     }
@@ -609,22 +608,29 @@ function translation_admin_language(): string
  *
  * Admin routes use a private admin language preference. Public routes use the
  * site-wide public language setting, with an optional visitor override through
- * ?lang= and a visitor cookie. This lets the administrator keep the backend in
- * one language while anonymous users see another language.
+ * a request-provided language value and public-language cookie. Cookie emission
+ * is returned as transport intent for the bootstrap boundary.
  *
  * @param ?string $route Route value.
+ * @param array{query?:array<string,mixed>,admin_cookie?:string,legacy_cookie?:string,public_cookie?:string} $requestContext Request context prepared by bootstrap.
+ * @return array<int,array{name:string,value:string,expires:int,path:string,httponly:bool,samesite:string}> Cookie instructions.
  */
-function translation_bootstrap_request(?string $route = null): void
+function translation_bootstrap_request(?string $route = null, array $requestContext = []): array
 {
-    $route = (string) ($route ?? ($_GET['page'] ?? ''));
+    $route = (string) ($route ?? '');
+    $query = is_array($requestContext['query'] ?? null) ? $requestContext['query'] : [];
+    $adminCookie = (string) ($requestContext['admin_cookie'] ?? '');
+    $legacyCookie = (string) ($requestContext['legacy_cookie'] ?? '');
+    $publicCookie = (string) ($requestContext['public_cookie'] ?? '');
+    $cookieIntents = [];
     $isAdminRoute = translation_route_is_admin($route);
     $_SESSION['cms_translation_context'] = $isAdminRoute ? 'admin' : 'public';
 
     if ($isAdminRoute) {
-        $selected = translation_admin_language();
+        $selected = translation_admin_language($adminCookie, $legacyCookie);
         $_SESSION['cms_admin_language'] = $selected;
         $_SESSION['cms_language'] = $selected;
-        return;
+        return [];
     }
 
     $selected = '';
@@ -632,20 +638,11 @@ function translation_bootstrap_request(?string $route = null): void
     // It must never create or reset a viewer preference merely because a page
     // loaded its translated JavaScript payload.
     $acceptViewerLanguageRequest = $route !== 'browser_i18n' && translation_public_language_selector_enabled();
-    if ($acceptViewerLanguageRequest && isset($_GET['lang'])) {
-        $requestedLanguage = strtolower(trim((string) $_GET['lang']));
+    if ($acceptViewerLanguageRequest && array_key_exists('lang', $query)) {
+        $requestedLanguage = strtolower(trim((string) $query['lang']));
         if ($requestedLanguage === 'default') {
             unset($_SESSION['cms_public_language_override']);
-            unset($_COOKIE[CMS_PUBLIC_LANGUAGE_COOKIE]);
-            if (!headers_sent()) {
-                setcookie(CMS_PUBLIC_LANGUAGE_COOKIE, '', [
-                    'expires' => time() - 3600,
-                    'path' => '/',
-                    'secure' => request_is_https(),
-                    'httponly' => false,
-                    'samesite' => 'Lax',
-                ]);
-            }
+            $cookieIntents[] = translation_public_language_cookie_intent('', time() - 3600);
             $selected = translation_public_language();
         }
 
@@ -653,15 +650,7 @@ function translation_bootstrap_request(?string $route = null): void
         if ($selected === '' && $candidate !== '' && translation_public_language_selector_language_allowed($candidate)) {
             $selected = $candidate;
             $_SESSION['cms_public_language_override'] = $selected;
-            if (!headers_sent()) {
-                setcookie(CMS_PUBLIC_LANGUAGE_COOKIE, $selected, [
-                    'expires' => time() + 31536000,
-                    'path' => '/',
-                    'secure' => request_is_https(),
-                    'httponly' => false,
-                    'samesite' => 'Lax',
-                ]);
-            }
+            $cookieIntents[] = translation_public_language_cookie_intent($selected, time() + 31536000);
         }
     }
 
@@ -673,7 +662,7 @@ function translation_bootstrap_request(?string $route = null): void
     }
 
     if ($selected === '') {
-        $candidate = translation_normalize_language_code((string) ($_COOKIE[CMS_PUBLIC_LANGUAGE_COOKIE] ?? ''));
+        $candidate = translation_normalize_language_code($publicCookie);
         if ($candidate !== '' && translation_public_language_selector_language_allowed($candidate)) {
             $selected = $candidate;
             $_SESSION['cms_public_language_override'] = $selected;
@@ -685,12 +674,65 @@ function translation_bootstrap_request(?string $route = null): void
     }
 
     $_SESSION['cms_language'] = $selected;
+    return $cookieIntents;
+}
+
+/**
+ * Build one public-language cookie transport instruction.
+ *
+ * @param string $value Cookie value, or an empty string to clear the cookie.
+ * @param int $expires Expiration timestamp.
+ * @return array{name:string,value:string,expires:int,path:string,httponly:bool,samesite:string}
+ */
+function translation_public_language_cookie_intent(string $value, int $expires): array
+{
+    return [
+        'name' => CMS_PUBLIC_LANGUAGE_COOKIE,
+        'value' => $value,
+        'expires' => $expires,
+        'path' => '/',
+        'httponly' => false,
+        'samesite' => 'Lax',
+    ];
+}
+
+/**
+ * Build administrator-language cookie transport instructions.
+ *
+ * @param string $language Valid normalized language code.
+ * @return array<int,array{name:string,value:string,expires:int,path:string,httponly:bool,samesite:string}>
+ */
+function translation_admin_language_cookie_intents(string $language): array
+{
+    $language = translation_normalize_language_code($language);
+    if ($language === '' || !translation_language_allowed($language)) {
+        return [];
+    }
+    $expires = time() + 31536000;
+    return [
+        [
+            'name' => CMS_ADMIN_LANGUAGE_COOKIE,
+            'value' => $language,
+            'expires' => $expires,
+            'path' => '/',
+            'httponly' => false,
+            'samesite' => 'Lax',
+        ],
+        [
+            'name' => CMS_LANGUAGE_COOKIE,
+            'value' => $language,
+            'expires' => $expires,
+            'path' => '/',
+            'httponly' => false,
+            'samesite' => 'Lax',
+        ],
+    ];
 }
 
 /**
  * Return whether the public visitor currently has a valid personal override.
  */
-function translation_public_language_override_active(): bool
+function translation_public_language_override_active(string $publicCookie = ''): bool
 {
     if (!translation_public_language_selector_enabled()) {
         return false;
@@ -700,7 +742,7 @@ function translation_public_language_override_active(): bool
         return true;
     }
 
-    $cookieLanguage = translation_normalize_language_code((string) ($_COOKIE[CMS_PUBLIC_LANGUAGE_COOKIE] ?? ''));
+    $cookieLanguage = translation_normalize_language_code($publicCookie);
     return $cookieLanguage !== '' && translation_public_language_selector_language_allowed($cookieLanguage);
 }
 
@@ -710,7 +752,7 @@ function translation_public_language_override_active(): bool
  * Only the language parameter is replaced. The cookie established by the next
  * request carries the selection to later pages without polluting ordinary URLs.
  */
-function translation_public_language_url(string $language): string
+function translation_public_language_url(string $language, string $requestUri = '', string $scriptName = '/index.php'): string
 {
     $language = strtolower(trim($language));
     if ($language !== 'default') {
@@ -720,11 +762,10 @@ function translation_public_language_url(string $language): string
         }
     }
 
-    $requestUri = (string) ($_SERVER['REQUEST_URI'] ?? '');
     $parts = parse_url($requestUri);
     $path = is_array($parts) ? (string) ($parts['path'] ?? '') : '';
     if ($path === '') {
-        $path = (string) ($_SERVER['SCRIPT_NAME'] ?? '/index.php');
+        $path = $scriptName !== '' ? $scriptName : '/index.php';
     }
 
     $query = [];
@@ -1000,22 +1041,6 @@ function translation_set_active_language(string $language): bool
 
     $_SESSION['cms_admin_language'] = $language;
     $_SESSION['cms_language'] = $language;
-    if (!headers_sent()) {
-        setcookie(CMS_ADMIN_LANGUAGE_COOKIE, $language, [
-            'expires' => time() + 31536000,
-            'path' => '/',
-            'secure' => request_is_https(),
-            'httponly' => false,
-            'samesite' => 'Lax',
-        ]);
-        setcookie(CMS_LANGUAGE_COOKIE, $language, [
-            'expires' => time() + 31536000,
-            'path' => '/',
-            'secure' => request_is_https(),
-            'httponly' => false,
-            'samesite' => 'Lax',
-        ]);
-    }
     return true;
 }
 
@@ -1095,6 +1120,26 @@ function translation_missing_diagnostics(): array
         return [];
     }
     return array_values(array_filter($rows, static fn ($row): bool => is_array($row)));
+}
+
+/**
+ * Build presentation-ready metadata for the reusable public language selector editor.
+ *
+ * The View layer consumes this structure without calling translation services.
+ *
+ * @return array<string,mixed> Selector state and static presentation metadata.
+ */
+function translation_public_language_selector_view_data(): array
+{
+    return [
+        'enabled' => translation_public_language_selector_enabled(),
+        'languages' => translation_public_language_selector_languages(),
+        'design' => translation_public_language_selector_design(),
+        'design_defaults' => translation_public_language_selector_design_defaults(),
+        'design_bounds' => translation_public_language_selector_design_numeric_bounds(),
+        'presentations' => translation_language_presentation(),
+        'supported_languages' => translation_supported_languages(),
+    ];
 }
 
 /**

@@ -30,7 +30,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-16
+ *   2026-09-14
  */
 
 declare(strict_types=1);
@@ -40,10 +40,23 @@ namespace Gallery\Services;
 use DirectoryIterator;
 use RuntimeException;
 use Throwable;
-use function Gallery\Core\db;
 use function Gallery\Core\is_supported_image_path;
 use function Gallery\Core\normalize_relative_path;
 use function Gallery\Core\now_sql;
+use function Gallery\Models\image_model_direct_inventory_summary;
+use function Gallery\Models\image_model_direct_rows_by_checksums;
+use function Gallery\Models\image_model_find_by_path_hash;
+use function Gallery\Models\image_model_relative_paths_for_gallery_ids;
+use function Gallery\Models\image_model_set_checksums_for_gallery_ids;
+use function Gallery\Models\image_model_set_gps_metadata_for_ids;
+use function Gallery\Models\upload_automation_model_acquire_gallery_lock;
+use function Gallery\Models\upload_automation_model_active_tokens_for_gallery;
+use function Gallery\Models\upload_automation_model_active_tokens_for_manager;
+use function Gallery\Models\upload_automation_model_create_token;
+use function Gallery\Models\upload_automation_model_find_active_token_by_hash;
+use function Gallery\Models\upload_automation_model_mark_token_used;
+use function Gallery\Models\upload_automation_model_release_gallery_lock;
+use function Gallery\Models\upload_automation_model_revoke_token;
 
 /**
  * Upload automation service model.
@@ -139,19 +152,17 @@ function create_gallery_upload_automation_token(int $galleryId, ?int $createdByU
     $token = upload_automation_generate_token_value();
     // $normalizedLabel stores the display label saved beside the hash.
     $normalizedLabel = upload_automation_normalize_label($label);
-    // $stmt stores the insert for the one-way hashed API key.
-    $stmt = db()->prepare('INSERT INTO gallery_upload_tokens (gallery_id, token_hash, label, active, created_by_user_id, created_at) VALUES (?, ?, ?, 1, ?, ?)');
-    $stmt->execute([
+    $tokenId = upload_automation_model_create_token(
         $galleryId,
         upload_automation_token_hash($token),
         $normalizedLabel,
         $createdByUserId,
-        now_sql(),
-    ]);
+        now_sql()
+    );
 
     return [
         'token' => $token,
-        'id' => (int) db()->lastInsertId(),
+        'id' => $tokenId,
         'label' => $normalizedLabel,
     ];
 }
@@ -174,10 +185,7 @@ function gallery_upload_automation_tokens(int $galleryId): array
         t('upload_automation.error.schema_unknown', 'Upload automation is temporarily unavailable because its database schema could not be verified.')
     );
 
-    // $stmt stores the active tokens listed in the gallery editor.
-    $stmt = db()->prepare('SELECT id, gallery_id, label, active, created_at, last_used_at, revoked_at FROM gallery_upload_tokens WHERE gallery_id = ? AND active = 1 AND revoked_at IS NULL ORDER BY created_at DESC, id DESC');
-    $stmt->execute([$galleryId]);
-    return $stmt->fetchAll() ?: [];
+    return upload_automation_model_active_tokens_for_gallery($galleryId);
 }
 
 /**
@@ -197,17 +205,7 @@ function upload_automation_tokens_for_manager(): array
         t('upload_automation.error.schema_unknown', 'Upload automation is temporarily unavailable because its database schema could not be verified.')
     );
 
-    // $sql stores the manager query. The users table in the base schema has
-    // username but no display_name column, so both admin identity aliases use
-    // username to keep the query compatible with existing installations.
-    $sql = 'SELECT t.id, t.gallery_id, t.label, t.active, t.created_at, t.last_used_at, t.revoked_at, g.title AS gallery_title, g.slug AS gallery_slug, u.username AS created_by_username, u.username AS created_by_display_name
-            FROM gallery_upload_tokens t
-            INNER JOIN galleries g ON g.id = t.gallery_id
-            LEFT JOIN users u ON u.id = t.created_by_user_id
-            WHERE t.active = 1 AND t.revoked_at IS NULL
-            ORDER BY g.title ASC, t.created_at DESC, t.id DESC';
-    $stmt = db()->query($sql);
-    return $stmt ? ($stmt->fetchAll() ?: []) : [];
+    return upload_automation_model_active_tokens_for_manager();
 }
 
 /**
@@ -226,10 +224,7 @@ function revoke_gallery_upload_automation_token(int $galleryId, int $tokenId): b
         t('upload_automation.error.schema_unknown', 'Upload automation is temporarily unavailable because the API-key revocation schema could not be verified. No API key was changed.')
     );
 
-    // $stmt stores the revoke update. The gallery predicate prevents cross-gallery revocation.
-    $stmt = db()->prepare('UPDATE gallery_upload_tokens SET active = 0, revoked_at = ? WHERE id = ? AND gallery_id = ?');
-    $stmt->execute([now_sql(), $tokenId, $galleryId]);
-    return $stmt->rowCount() > 0;
+    return upload_automation_model_revoke_token($galleryId, $tokenId, now_sql());
 }
 
 /**
@@ -252,12 +247,7 @@ function find_upload_automation_token(string $token): ?array
         t('upload_automation.error.schema_unknown', 'Upload automation authentication is temporarily unavailable because its database schema could not be verified.')
     );
 
-    // $stmt stores the lookup by hash so raw API keys are never stored server-side.
-    $stmt = db()->prepare('SELECT id, gallery_id, label, active, created_at, last_used_at FROM gallery_upload_tokens WHERE token_hash = ? AND active = 1 AND revoked_at IS NULL LIMIT 1');
-    $stmt->execute([upload_automation_token_hash($normalizedToken)]);
-    // $row stores the matching token, if any.
-    $row = $stmt->fetch();
-    return is_array($row) ? $row : null;
+    return upload_automation_model_find_active_token_by_hash(upload_automation_token_hash($normalizedToken));
 }
 
 /**
@@ -274,9 +264,7 @@ function mark_upload_automation_token_used(int $tokenId): void
         t('upload_automation.error.schema_unknown', 'Upload automation usage metadata could not be updated because its database schema could not be verified.')
     );
 
-    // $stmt stores a lightweight audit timestamp for the admin UI.
-    $stmt = db()->prepare('UPDATE gallery_upload_tokens SET last_used_at = ? WHERE id = ?');
-    $stmt->execute([now_sql(), $tokenId]);
+    upload_automation_model_mark_token_used($tokenId, now_sql());
 }
 
 
@@ -363,10 +351,7 @@ function upload_automation_inventory_candidates(array $payload): array
  */
 function upload_automation_gallery_inventory_fingerprint(int $galleryId): string
 {
-    // $stmt stores a small aggregate used by clients for diagnostic logging.
-    $stmt = db()->prepare("SELECT COUNT(*) AS image_count, COALESCE(MAX(updated_at), '') AS newest_update, COALESCE(SUM(COALESCE(file_size, 0)), 0) AS total_size FROM images WHERE gallery_id = ? AND relative_path NOT LIKE '%/%'");
-    $stmt->execute([$galleryId]);
-    $row = $stmt->fetch() ?: [];
+    $row = image_model_direct_inventory_summary($galleryId);
     return hash('sha256', json_encode([
         'image_count' => (int) ($row['image_count'] ?? 0),
         'newest_update' => (string) ($row['newest_update'] ?? ''),
@@ -392,11 +377,7 @@ function upload_automation_inventory_db_matches(int $galleryId, array $candidate
     // $matches stores rows keyed by remote checksum_sha256.
     $matches = [];
     foreach (array_chunk($hashes, 250) as $hashChunk) {
-        // $placeholders stores the prepared IN-list for this bounded chunk.
-        $placeholders = implode(',', array_fill(0, count($hashChunk), '?'));
-        $stmt = db()->prepare("SELECT id, filename, relative_path, file_size, checksum_sha256 FROM images WHERE gallery_id = ? AND relative_path NOT LIKE '%/%' AND checksum_sha256 IN ($placeholders)");
-        $stmt->execute(array_merge([$galleryId], $hashChunk));
-        foreach ($stmt->fetchAll() ?: [] as $row) {
+        foreach (image_model_direct_rows_by_checksums($galleryId, $hashChunk) as $row) {
             $hash = strtolower((string) ($row['checksum_sha256'] ?? ''));
             if ($hash === '') {
                 continue;
@@ -541,21 +522,19 @@ function upload_automation_gallery_inventory_response(int $galleryId, array $gal
  *
  * @return string Text result for the caller.
  */
-function upload_automation_request_token(): string
+function upload_automation_request_token(string $headerToken = '', string $authorization = '', mixed $postToken = ''): string
 {
-    // $headerToken stores the preferred explicit API-key header.
-    $headerToken = trim((string) ($_SERVER['HTTP_X_GALLERY_API_KEY'] ?? ''));
+    $headerToken = trim($headerToken);
     if ($headerToken !== '') {
         return $headerToken;
     }
 
-    // $authorization stores the standard bearer token header when forwarded by the web server.
-    $authorization = trim((string) ($_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? ''));
+    $authorization = trim($authorization);
     if ($authorization !== '' && preg_match('/^Bearer\s+(.+)$/i', $authorization, $match) === 1) {
         return trim((string) $match[1]);
     }
 
-    return trim((string) ($_POST['api_key'] ?? ''));
+    return is_array($postToken) ? '' : trim((string) $postToken);
 }
 
 /**
@@ -563,18 +542,18 @@ function upload_automation_request_token(): string
  *
  * @return ?array Structured result data for the caller.
  */
-function upload_automation_uploaded_files(): ?array
+function upload_automation_uploaded_files(?array $images, ?array $image): ?array
 {
-    if (isset($_FILES['images']) && is_array($_FILES['images'])) {
-        return $_FILES['images'];
+    if (is_array($images)) {
+        return $images;
     }
 
-    if (!isset($_FILES['image']) || !is_array($_FILES['image'])) {
+    if (!is_array($image)) {
         return null;
     }
 
     // $file stores the single-file upload shape used by simple clients.
-    $file = $_FILES['image'];
+    $file = $image;
     return [
         'name' => [(string) ($file['name'] ?? '')],
         'type' => [(string) ($file['type'] ?? '')],
@@ -610,10 +589,9 @@ function upload_automation_normalize_client_id(string $clientId): string
  *
  * @return array<int string>.
  */
-function upload_automation_image_client_ids(): array
+function upload_automation_image_client_ids(mixed $rawIds): array
 {
     // $rawIds stores submitted IDs aligned with the images[] multipart field order.
-    $rawIds = $_POST['image_client_ids'] ?? [];
     if (!is_array($rawIds)) {
         $rawIds = [$rawIds];
     }
@@ -632,9 +610,9 @@ function upload_automation_image_client_ids(): array
  *
  * @return array{lat:float,lng:float,altitude:float|null,source:string}|null Structured result data for the caller.
  */
-function upload_automation_sim_camera_metadata(): ?array
+function upload_automation_sim_camera_metadata(array $input): ?array
 {
-    $rawSource = $_POST['sim_location_source'] ?? '';
+    $rawSource = $input['sim_location_source'] ?? '';
     if (is_array($rawSource)) {
         return null;
     }
@@ -644,9 +622,9 @@ function upload_automation_sim_camera_metadata(): ?array
         return null;
     }
 
-    $latitude = upload_automation_float_field('sim_camera_latitude');
-    $longitude = upload_automation_float_field('sim_camera_longitude');
-    $altitude = upload_automation_float_field('sim_camera_altitude');
+    $latitude = upload_automation_float_field($input['sim_camera_latitude'] ?? null);
+    $longitude = upload_automation_float_field($input['sim_camera_longitude'] ?? null);
+    $altitude = upload_automation_float_field($input['sim_camera_altitude'] ?? null);
     if ($latitude === null || $longitude === null) {
         return null;
     }
@@ -668,9 +646,8 @@ function upload_automation_sim_camera_metadata(): ?array
  * @param string $name Name value.
  * @return ?float Numeric result for the caller.
  */
-function upload_automation_float_field(string $name): ?float
+function upload_automation_float_field(mixed $raw): ?float
 {
-    $raw = $_POST[$name] ?? null;
     if (is_array($raw)) {
         return null;
     }
@@ -682,6 +659,79 @@ function upload_automation_float_field(string $name): ?float
 
     $value = filter_var($text, FILTER_VALIDATE_FLOAT);
     return $value === false ? null : (float) $value;
+}
+
+/**
+ * Persist content hashes for images accepted through the upload automation API.
+ *
+ * The targeted upload scanner intentionally skips SHA-256 work so normal browser
+ * uploads stay lightweight on shared hosting. The automation inventory protocol,
+ * however, uses checksum_sha256 as its database-only duplicate key. Hash only the
+ * small set of images accepted by this API request so routine watcher inventory is
+ * authoritative immediately after a successful upload or process restart.
+ *
+ * @param int $galleryId Target gallery authorized by the API key.
+ * @param array<string,mixed> $gallery Gallery row authorized by the API key.
+ * @param array<string,mixed> $stored Stored upload result containing image ids.
+ * @return array{hashed:int,persisted:int,skipped:int,failed:int,errors:array<int,string>} Checksum indexing result.
+ */
+function upload_automation_refresh_stored_checksums(int $galleryId, array $gallery, array $stored): array
+{
+    $result = ['hashed' => 0, 'persisted' => 0, 'skipped' => 0, 'failed' => 0, 'errors' => []];
+    $imageIds = array_values(array_unique(array_filter(array_map('intval', (array) ($stored['image_ids'] ?? [])), static fn (int $id): bool => $id > 0)));
+    if ($galleryId <= 0 || $imageIds === []) {
+        return $result;
+    }
+
+    $root = gallery_abs_path((string) ($gallery['folder_path'] ?? ''));
+    $realRoot = realpath($root);
+    if (!is_string($realRoot) || !is_dir($realRoot)) {
+        $result['failed'] = count($imageIds);
+        $result['errors'][] = 'Gallery folder is unavailable while indexing upload checksums.';
+        return $result;
+    }
+
+    $relativePaths = image_model_relative_paths_for_gallery_ids($galleryId, $imageIds);
+    $checksums = [];
+    foreach ($imageIds as $imageId) {
+        try {
+            $relative = normalize_relative_path((string) ($relativePaths[$imageId] ?? ''));
+        } catch (Throwable) {
+            $relative = '';
+        }
+        if ($relative === '') {
+            $result['failed']++;
+            $result['errors'][] = 'Stored image row has no valid gallery-relative path.';
+            continue;
+        }
+
+        $candidate = $realRoot . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relative);
+        $realPath = realpath($candidate);
+        if (!is_string($realPath) || !is_file($realPath) || ($realPath !== $realRoot && !str_starts_with($realPath, $realRoot . DIRECTORY_SEPARATOR))) {
+            $result['failed']++;
+            $result['errors'][] = 'Stored image file is unavailable while indexing its checksum.';
+            continue;
+        }
+
+        $checksum = strtolower((string) (hash_file('sha256', $realPath) ?: ''));
+        if (preg_match('/^[a-f0-9]{64}$/D', $checksum) !== 1) {
+            $result['failed']++;
+            $result['errors'][] = 'Stored image checksum could not be calculated.';
+            continue;
+        }
+
+        $checksums[$imageId] = $checksum;
+        $result['hashed']++;
+    }
+
+    if ($checksums === []) {
+        return $result;
+    }
+
+    $counts = image_model_set_checksums_for_gallery_ids($galleryId, $checksums, now_sql());
+    $result['persisted'] = (int) ($counts['updated'] ?? 0);
+    $result['skipped'] = (int) ($counts['skipped'] ?? 0);
+    return $result;
 }
 
 /**
@@ -711,24 +761,16 @@ function upload_automation_apply_sim_camera_metadata(int $galleryId, array $stor
     }
 
     try {
-        $stmt = db()->prepare('UPDATE images SET gps_lat = ?, gps_lng = ?, gps_altitude = ?, gps_extracted_at = ?, updated_at = ? WHERE id = ? AND gallery_id = ?');
-        $now = now_sql();
-        foreach ($imageIds as $imageId) {
-            $stmt->execute([
-                $metadata['lat'],
-                $metadata['lng'],
-                $metadata['altitude'],
-                $now,
-                $now,
-                $imageId,
-                $galleryId,
-            ]);
-            if ($stmt->rowCount() > 0) {
-                $result['attached']++;
-            } else {
-                $result['skipped']++;
-            }
-        }
+        $counts = image_model_set_gps_metadata_for_ids(
+            $galleryId,
+            $imageIds,
+            (float) $metadata['lat'],
+            (float) $metadata['lng'],
+            isset($metadata['altitude']) ? (float) $metadata['altitude'] : null,
+            now_sql()
+        );
+        $result['attached'] = $counts['updated'];
+        $result['skipped'] = $counts['skipped'];
     } catch (Throwable $exception) {
         $result['attached'] = 0;
         $result['skipped'] = count($imageIds);
@@ -748,24 +790,15 @@ function upload_automation_apply_sim_camera_metadata(int $galleryId, array $stor
  *
  * @return array<int array{tmp_name:string,name:string,size_px:int,format:string,client_id:string}>.
  */
-function upload_automation_client_thumbnail_entries(): array
+function upload_automation_client_thumbnail_entries(?array $files, mixed $clientIds, mixed $sizes, mixed $formats): array
 {
-    if (!isset($_FILES['client_thumbnails']) || !is_array($_FILES['client_thumbnails'])) {
-        return [];
-    }
-
-    // $files stores the PHP multipart upload shape for all submitted thumbnails.
-    $files = $_FILES['client_thumbnails'];
-    if (empty($files['name']) || !is_array($files['name'])) {
+    if (!is_array($files) || empty($files['name']) || !is_array($files['name'])) {
         return [];
     }
 
     // $clientIds stores thumbnail-to-image correlation IDs aligned by index.
-    $clientIds = $_POST['thumbnail_client_ids'] ?? [];
     // $sizes stores target long-side sizes aligned by index.
-    $sizes = $_POST['thumbnail_sizes'] ?? [];
     // $formats stores target file formats aligned by index.
-    $formats = $_POST['thumbnail_formats'] ?? [];
     if (!is_array($clientIds)) {
         $clientIds = [$clientIds];
     }
@@ -905,12 +938,7 @@ function upload_automation_find_image_by_path_uncached(int $galleryId, string $r
 {
     // $normalizedPath stores the canonical path used by the image hash index.
     $normalizedPath = normalize_relative_path($relativePath);
-    // $stmt stores the direct database lookup that bypasses static finder caches.
-    $stmt = db()->prepare('SELECT * FROM images WHERE gallery_id = ? AND relative_path_hash = ? LIMIT 1');
-    $stmt->execute([$galleryId, hash('sha256', $normalizedPath)]);
-    // $image stores the fetched row or false when the image was not indexed.
-    $image = $stmt->fetch();
-    return is_array($image) ? $image : null;
+    return image_model_find_by_path_hash($galleryId, hash('sha256', $normalizedPath));
 }
 
 /**
@@ -931,26 +959,14 @@ function upload_automation_find_image_by_path_uncached(int $galleryId, string $r
  */
 function upload_automation_with_gallery_lock(int $galleryId, callable $callback): mixed
 {
-    // $lockName stores a short deterministic advisory lock name for this gallery.
-    $lockName = 'php_gallery_upload_automation_' . $galleryId;
-    // $pdo stores the shared connection used for GET_LOCK() and RELEASE_LOCK().
-    $pdo = db();
-    // $stmt stores the advisory lock request. Ten seconds is enough for normal
-    // small multipart requests while still failing clearly if a worker hangs.
-    $stmt = $pdo->prepare('SELECT GET_LOCK(?, 10)');
-    $stmt->execute([$lockName]);
-    // $locked stores MySQL's GET_LOCK result: 1 acquired, 0 timeout, null error.
-    $locked = (int) $stmt->fetchColumn();
-    if ($locked !== 1) {
+    if (!upload_automation_model_acquire_gallery_lock($galleryId, 10)) {
         throw new RuntimeException(t('upload_automation.error.gallery_busy', 'The target gallery is busy processing another upload. Please retry shortly.'));
     }
 
     try {
         return $callback();
     } finally {
-        // $releaseStmt stores the matching advisory lock release request.
-        $releaseStmt = $pdo->prepare('SELECT RELEASE_LOCK(?)');
-        $releaseStmt->execute([$lockName]);
+        upload_automation_model_release_gallery_lock($galleryId);
     }
 }
 

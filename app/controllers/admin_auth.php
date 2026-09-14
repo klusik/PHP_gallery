@@ -44,13 +44,8 @@ use function Gallery\Core\cms_config;
 use function Gallery\Core\csrf_field;
 use function Gallery\Core\current_login_return_target;
 use function Gallery\Core\current_user;
-use function Gallery\Core\db;
-use function Gallery\Core\e;
 use function Gallery\Core\flash_message;
-use function Gallery\Core\now_sql;
 use function Gallery\Core\redirect_to;
-use function Gallery\Core\render_footer;
-use function Gallery\Core\render_header;
 use function Gallery\Core\request_method;
 use function Gallery\Core\require_admin;
 use function Gallery\Core\sanitize_login_return_target;
@@ -58,7 +53,19 @@ use function Gallery\Core\url_for;
 use function Gallery\Core\verify_csrf;
 use function Gallery\Core\visitor_hash;
 use function Gallery\Services\app_setting;
-use function Gallery\Services\auth_issue_persistent_login;
+use function Gallery\Services\auth_account_cleanup_password_reset_tokens;
+use function Gallery\Services\auth_account_complete_password_reset;
+use function Gallery\Services\auth_account_email_taken;
+use function Gallery\Services\auth_account_find_by_email;
+use function Gallery\Services\auth_account_find_by_username;
+use function Gallery\Services\auth_account_find_valid_password_reset;
+use function Gallery\Services\auth_account_normalize_email;
+use function Gallery\Services\auth_account_password_matches;
+use function Gallery\Services\auth_account_profile_row;
+use function Gallery\Services\auth_account_replace_password_reset_token;
+use function Gallery\Services\auth_account_update_profile;
+use function Gallery\Services\auth_account_username_taken;
+use function Gallery\Core\admin_auth_issue_persistent_login_for_request;
 use function Gallery\Services\auth_password_reset_schema_status;
 use function Gallery\Services\auth_schema_assert_known;
 use function Gallery\Services\auth_user_email_schema_status;
@@ -70,14 +77,14 @@ use function Gallery\Services\google_auth_schema_status;
 use function Gallery\Services\auth_persistence_config;
 use function Gallery\Services\auth_persistent_login_schema_status;
 use function Gallery\Services\auth_persistent_login_ready;
-use function Gallery\Services\auth_revoke_current_persistent_login;
-use function Gallery\Services\auth_revoke_user_persistent_logins;
+use function Gallery\Core\admin_auth_revoke_current_persistent_login_for_request;
+use function Gallery\Core\admin_auth_revoke_user_persistent_logins_for_request;
 use function Gallery\Services\auth_throttle_check;
 use function Gallery\Services\auth_throttle_clear;
 use function Gallery\Services\auth_throttle_log;
 use function Gallery\Services\auth_throttle_normalize_identifier;
 use function Gallery\Services\auth_throttle_record_attempt;
-use function Gallery\Services\auth_throttle_visitor_subject;
+use function Gallery\Core\admin_auth_throttle_visitor_subject_for_request;
 use function Gallery\Services\telemetry_request_id;
 use function Gallery\Services\db_column_exists;
 use function Gallery\Services\db_table_exists;
@@ -115,17 +122,6 @@ use function Gallery\Services\admin_settings_url;
  */
 
 /**
- * Normalize an optional account email value before validation or storage.
- *
- * @param string $email Email value.
- * @return string Text result for the caller.
- */
-function cms_normalize_account_email(string $email): string
-{
-    return trim(strtolower($email));
-}
-
-/**
  * Resolve an admin login identifier against email first, then username.
  *
  * Email is tried first to keep username-or-email login deterministic when one
@@ -146,23 +142,15 @@ function cms_find_admin_user_by_identifier(string $identifier): ?array
     $emailSchemaStatus = auth_user_email_schema_status();
     auth_schema_assert_known($emailSchemaStatus, 'auth_user_email');
     if (schema_inspection_is_available($emailSchemaStatus)) {
-        // Variable $stmt stores this steps working value.
-        $stmt = db()->prepare('SELECT * FROM users WHERE email IS NOT NULL AND LOWER(email) = LOWER(?) LIMIT 1');
-        $stmt->execute([$normalizedIdentifier]);
         // Variable $user stores this steps working value.
-        $user = $stmt->fetch();
+        $user = auth_account_find_by_email($normalizedIdentifier);
         if ($user) {
             return $user;
         }
     }
 
     // Confirmed pre-email installations continue to support username login.
-    // Variable $stmt stores this steps working value.
-    $stmt = db()->prepare('SELECT * FROM users WHERE username = ? LIMIT 1');
-    $stmt->execute([$normalizedIdentifier]);
-    // Variable $user stores this steps working value.
-    $user = $stmt->fetch();
-    return $user ?: null;
+    return auth_account_find_by_username($normalizedIdentifier);
 }
 
 
@@ -214,7 +202,7 @@ function cms_save_password_reset_settings(array $input): array
     $transport = (string) ($input['password_reset_transport'] ?? 'php_mail');
     $transport = $transport === 'smtp' ? 'smtp' : 'php_mail';
     // $fromEmail stores an intermediate value used by the surrounding gallery workflow.
-    $fromEmail = cms_normalize_account_email((string) ($input['password_reset_from_email'] ?? ''));
+    $fromEmail = auth_account_normalize_email((string) ($input['password_reset_from_email'] ?? ''));
     // $fromName stores an intermediate value used by the surrounding gallery workflow.
     $fromName = trim((string) ($input['password_reset_from_name'] ?? ''));
     // $lifetimeMinutes stores an intermediate value used by the surrounding gallery workflow.
@@ -312,9 +300,7 @@ function cms_cleanup_password_reset_tokens(): void
     if (!schema_inspection_is_available($schemaStatus)) {
         return;
     }
-    // Variable $stmt stores this steps working value.
-    $stmt = db()->prepare('DELETE FROM password_reset_tokens WHERE expires_at < ? OR used_at IS NOT NULL');
-    $stmt->execute([now_sql()]);
+    auth_account_cleanup_password_reset_tokens();
 }
 
 /**
@@ -346,13 +332,7 @@ function cms_create_password_reset_token(int $userId): ?array
     $requestHash = visitor_hash();
 
     // Invalidate older unused tokens for the same user before issuing a new one.
-    // Variable $stmt stores this steps working value.
-    $stmt = db()->prepare('UPDATE password_reset_tokens SET used_at = ? WHERE user_id = ? AND used_at IS NULL');
-    $stmt->execute([now_sql(), $userId]);
-
-    // Variable $stmt stores this steps working value.
-    $stmt = db()->prepare('INSERT INTO password_reset_tokens (user_id, selector, token_hash, requested_at, expires_at, request_hash) VALUES (?, ?, ?, ?, ?, ?)');
-    $stmt->execute([$userId, $selector, $tokenHash, now_sql(), $expiresAt, $requestHash]);
+    auth_account_replace_password_reset_token($userId, $selector, $tokenHash, $expiresAt, $requestHash);
 
     return ['selector' => $selector, 'token' => $token, 'expires_at' => $expiresAt];
 }
@@ -702,11 +682,8 @@ function cms_find_valid_password_reset_token(string $selector, string $token): ?
     if (!schema_inspection_is_available($schemaStatus)) {
         return null;
     }
-    // Variable $stmt stores this steps working value.
-    $stmt = db()->prepare('SELECT prt.*, u.username, u.email FROM password_reset_tokens prt INNER JOIN users u ON u.id = prt.user_id WHERE prt.selector = ? AND prt.used_at IS NULL AND prt.expires_at >= ? LIMIT 1');
-    $stmt->execute([$selector, now_sql()]);
     // Variable $row stores this steps working value.
-    $row = $stmt->fetch();
+    $row = auth_account_find_valid_password_reset($selector);
     if (!$row || !hash_equals((string) $row['token_hash'], hash('sha256', $token))) {
         return null;
     }
@@ -809,9 +786,9 @@ function cms_admin_google_callback(): void
 
         session_regenerate_id(true);
         $_SESSION['user_id'] = (int) $linkedUser['id'];
-        if (function_exists('Gallery\\Services\\auth_issue_persistent_login')) {
+        if (function_exists('Gallery\\Core\\admin_auth_issue_persistent_login_for_request')) {
             try {
-                auth_issue_persistent_login((int) $linkedUser['id']);
+                admin_auth_issue_persistent_login_for_request((int) $linkedUser['id']);
             } catch (AuthenticationSchemaUnavailableException $exception) {
                 admin_log_event('warning', 'auth.persistent_login_schema_unavailable', 'Persistent login was not issued because its schema state is unknown.', [
                     'operation' => 'google_login_issue',
@@ -864,7 +841,7 @@ function cms_admin_login(): void
         // $normalizedIdentifier stores the submitted login identifier after trimming and lowercasing for safe throttling.
         $normalizedIdentifier = auth_throttle_normalize_identifier($identifier);
         // $visitorSubject stores the privacy-safe visitor identifier used by the login throttling service.
-        $visitorSubject = auth_throttle_visitor_subject();
+        $visitorSubject = admin_auth_throttle_visitor_subject_for_request();
         // $visitorThrottle stores the current visitor-level login throttle status.
         $visitorThrottle = auth_throttle_check('admin_login_visitor', $visitorSubject);
         // $identifierThrottle stores the current identifier-level login throttle status.
@@ -899,9 +876,9 @@ function cms_admin_login(): void
                 }
                 session_regenerate_id(true);
                 $_SESSION['user_id'] = (int) $user['id'];
-                if (!empty($_POST['remember_login']) && function_exists('Gallery\Services\auth_issue_persistent_login')) {
+                if (!empty($_POST['remember_login']) && function_exists('Gallery\Core\admin_auth_issue_persistent_login_for_request')) {
                     try {
-                        auth_issue_persistent_login((int) $user['id']);
+                        admin_auth_issue_persistent_login_for_request((int) $user['id']);
                     } catch (AuthenticationSchemaUnavailableException $exception) {
                         admin_log_event('warning', 'auth.persistent_login_issue_refused', 'Persistent login token issuance was refused because schema inspection is unknown.', [
                             'feature' => $exception->feature(),
@@ -925,18 +902,17 @@ function cms_admin_login(): void
             }
         }
     }
-    render_header(t('admin.auth.login_title'));
+    // $notices contains only controller-resolved request/session messages for the login view.
+    $notices = [];
     if (isset($_GET['reset'])) {
-        echo '<div class="notice">' . e(t('admin.auth.password_reset_completed')) . '</div>';
+        $notices[] = t('admin.auth.password_reset_completed');
     }
     if ((string) ($_GET['google'] ?? '') === 'not_linked') {
-        echo '<div class="notice">' . e(t('admin.google.login_not_linked', 'This Google account is not linked to an admin profile yet. Log in with your password first, then link Google in Account settings.')) . '</div>';
+        $notices[] = t('admin.google.login_not_linked', 'This Google account is not linked to an admin profile yet. Log in with your password first, then link Google in Account settings.');
     }
-    if ($flash = flash_message('admin_notice')) {
-        echo '<div class="notice">' . e($flash) . '</div>';
-    }
-    if (isset($error)) {
-        echo '<div class="notice">' . e($error) . '</div>';
+    $flash = flash_message('admin_notice');
+    if ($flash !== null && $flash !== '') {
+        $notices[] = $flash;
     }
     // $rememberConfig stores persistent login defaults for the checkbox below.
     $rememberConfig = function_exists('Gallery\Services\auth_persistence_config') ? auth_persistence_config() : ['persistent_login_default_checked' => true];
@@ -948,25 +924,20 @@ function cms_admin_login(): void
     $googleSchemaStatus = google_auth_schema_status();
     // $googleReady stores whether Google sign-in can be used on this installation.
     $googleReady = function_exists('Gallery\Services\google_auth_ready') && google_auth_ready();
-    echo '<section class="panel"><h1>' . e(t('admin.auth.login_title')) . '</h1><form method="post" class="form-grid">';
-    echo csrf_field();
-    // Keep the sanitized return target through failed login attempts without exposing unsafe redirect data.
-    echo '<input type="hidden" name="return" value="' . e($returnTarget) . '">';
-    echo '<label>' . e(t('admin.auth.username_or_email')) . '<input name="identifier" required autocomplete="username"></label>';
-    echo '<label>' . e(t('admin.auth.password')) . '<input name="password" type="password" required autocomplete="current-password"></label>';
-    if ($rememberReady) {
-        echo '<label class="account-settings-toggle account-settings-compact-toggle"><input type="checkbox" name="remember_login" value="1"' . (!empty($rememberConfig['persistent_login_default_checked']) ? ' checked' : '') . '> <span><strong>' . e(t('admin.auth.keep_signed_in', 'Keep me signed in')) . '</strong><small>' . e(t('admin.auth.keep_signed_in_help', 'Uses a hashed browser token so the admin session can survive normal shared-host PHP session cleanup.')) . '</small></span></label>';
-    } elseif (!empty($rememberConfig['persistent_login_enabled']) && schema_inspection_is_unknown($rememberSchemaStatus)) {
-        echo '<p class="muted">' . e(t('admin.auth.remember_schema_unknown', 'Persistent login is temporarily disabled because its database schema could not be verified. Ordinary session login remains available.')) . '</p>';
-    }
-    echo '<button type="submit">' . e(t('admin.auth.login_button')) . '</button></form>';
-    if ($googleReady) {
-        echo '<div class="admin-google-login-choice"><span>' . e(t('admin.auth.or', 'or')) . '</span><a class="button secondary" href="' . e(url_for('admin_google_start', ['mode' => 'login', 'return' => $returnTarget])) . '">' . e(t('admin.google.continue_with_google', 'Continue with Google')) . '</a></div>';
-    } elseif (google_auth_configuration_ready() && schema_inspection_is_unknown($googleSchemaStatus)) {
-        echo '<p class="muted">' . e(t('admin.google.schema_unknown', 'Google login is temporarily disabled because its identity-link schema could not be verified.')) . '</p>';
-    }
-    echo '<p class="muted"><a href="' . e(url_for('admin_forgot_password')) . '">' . e(t('admin.auth.forgot_password_link')) . '</a></p></section>';
-    render_footer();
+
+    \Gallery\Views\view_render_admin_login([
+        'notices' => $notices,
+        'error' => isset($error) ? (string) $error : '',
+        'csrf_html' => csrf_field(),
+        'return_target' => $returnTarget,
+        'remember_ready' => $rememberReady,
+        'remember_default_checked' => !empty($rememberConfig['persistent_login_default_checked']),
+        'show_remember_schema_unknown' => !empty($rememberConfig['persistent_login_enabled']) && schema_inspection_is_unknown($rememberSchemaStatus),
+        'google_ready' => $googleReady,
+        'show_google_schema_unknown' => google_auth_configuration_ready() && schema_inspection_is_unknown($googleSchemaStatus),
+        'google_login_url' => url_for('admin_google_start', ['mode' => 'login', 'return' => $returnTarget]),
+        'forgot_password_url' => url_for('admin_forgot_password'),
+    ]);
 }
 
 
@@ -987,7 +958,7 @@ function cms_admin_forgot_password(): void
         // $normalizedIdentifier stores the submitted reset identifier after trimming and lowercasing for safe throttling.
         $normalizedIdentifier = auth_throttle_normalize_identifier($identifier);
         // $visitorSubject stores the privacy-safe visitor identifier used by the reset throttling service.
-        $visitorSubject = auth_throttle_visitor_subject();
+        $visitorSubject = admin_auth_throttle_visitor_subject_for_request();
         // $visitorThrottle stores the current visitor-level reset throttle status.
         $visitorThrottle = auth_throttle_check('password_reset_visitor', $visitorSubject);
         // $identifierThrottle stores the current identifier-level reset throttle status.
@@ -1037,7 +1008,7 @@ function cms_admin_forgot_password(): void
                     // $delivery stores safe mail diagnostics for the admin log without storing the submitted identifier or token value.
                     $delivery = cms_send_password_reset_email($user, $resetUrl, (string) $token['expires_at']);
                     admin_log_event(!empty($delivery['sent']) ? 'info' : 'warning', 'auth.password_reset_requested', !empty($delivery['sent']) ? t('admin.auth.log_password_reset_email_sent') : t('admin.auth.log_password_reset_token_created_no_email'), [
-                        'identifier_sha256' => hash('sha256', cms_normalize_account_email($identifier)),
+                        'identifier_sha256' => hash('sha256', auth_account_normalize_email($identifier)),
                         'identifier_looks_like_email' => filter_var(trim($identifier), FILTER_VALIDATE_EMAIL) !== false,
                         'visitor_hash' => visitor_hash(),
                         'request_id' => function_exists('Gallery\Services\telemetry_request_id') ? telemetry_request_id() : '',
@@ -1054,17 +1025,11 @@ function cms_admin_forgot_password(): void
         }
     }
 
-    render_header(t('admin.auth.forgot_password_title'));
-    if ($notice !== '') {
-        echo '<div class="notice">' . e($notice) . '</div>';
-    }
-    echo '<section class="panel"><h1>' . e(t('admin.auth.forgot_password_title')) . '</h1>';
-    echo '<p class="muted">' . e(t('admin.auth.forgot_password_help')) . '</p>';
-    echo '<form method="post" class="form-grid">' . csrf_field();
-    echo '<label>' . e(t('admin.auth.username_or_recovery_email')) . '<input name="identifier" required autocomplete="username"></label>';
-    echo '<button type="submit">' . e(t('admin.auth.request_reset_link')) . '</button></form>';
-    echo '<p class="muted"><a href="' . e(url_for('admin_login')) . '">' . e(t('admin.auth.back_to_login')) . '</a></p></section>';
-    render_footer();
+    \Gallery\Views\view_render_admin_forgot_password([
+        'notice' => $notice,
+        'csrf_html' => csrf_field(),
+        'login_url' => url_for('admin_login'),
+    ]);
 }
 
 /**
@@ -1086,19 +1051,19 @@ function cms_admin_reset_password(): void
         admin_log_event('warning', 'auth.password_reset_consume_schema_unavailable', 'Password reset token consumption was refused because schema inspection is unknown.', [
             'feature' => $exception->feature(),
         ]);
-        render_header(t('admin.auth.reset_password_title'));
-        echo '<section class="panel"><h1>' . e(t('admin.auth.reset_password_title')) . '</h1><div class="notice">' . e(t('admin.auth.schema_temporarily_unavailable', 'Authentication storage is temporarily unavailable. Try again after the database/schema inspection issue is resolved.')) . '</div></section>';
-        render_footer();
+        \Gallery\Views\view_render_admin_reset_password([
+            'state' => 'schema_unavailable',
+        ]);
         return;
     }
     // Variable $error stores this steps working value.
     $error = '';
 
     if (!$resetRow) {
-        render_header(t('admin.auth.reset_password_title'));
-        echo '<section class="panel"><h1>' . e(t('admin.auth.reset_password_title')) . '</h1><div class="notice">' . e(t('admin.auth.reset_link_invalid')) . '</div>';
-        echo '<p><a class="button secondary" href="' . e(url_for('admin_forgot_password')) . '">' . e(t('admin.auth.request_new_reset_link')) . '</a></p></section>';
-        render_footer();
+        \Gallery\Views\view_render_admin_reset_password([
+            'state' => 'invalid',
+            'forgot_password_url' => url_for('admin_forgot_password'),
+        ]);
         return;
     }
 
@@ -1113,14 +1078,9 @@ function cms_admin_reset_password(): void
         } elseif ($newPassword !== $confirmPassword) {
             $error = t('admin.auth.password_confirmation_mismatch');
         } else {
-            // Variable $stmt stores this steps working value.
-            $stmt = db()->prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?');
-            $stmt->execute([password_hash($newPassword, PASSWORD_DEFAULT), now_sql(), (int) $resetRow['user_id']]);
-            // Variable $stmt stores this steps working value.
-            $stmt = db()->prepare('UPDATE password_reset_tokens SET used_at = ? WHERE id = ?');
-            $stmt->execute([now_sql(), (int) $resetRow['id']]);
-            if (function_exists('Gallery\Services\auth_revoke_user_persistent_logins')) {
-                auth_revoke_user_persistent_logins((int) $resetRow['user_id']);
+            auth_account_complete_password_reset((int) $resetRow['user_id'], (int) $resetRow['id'], $newPassword);
+            if (function_exists('Gallery\Core\admin_auth_revoke_user_persistent_logins_for_request')) {
+                admin_auth_revoke_user_persistent_logins_for_request((int) $resetRow['user_id']);
             }
             admin_log_event('info', 'auth.password_reset_completed', t('admin.auth.log_password_reset_completed'), [
                 'user_id' => (int) $resetRow['user_id'],
@@ -1129,19 +1089,14 @@ function cms_admin_reset_password(): void
         }
     }
 
-    render_header(t('admin.auth.reset_password_title'));
-    if ($error !== '') {
-        echo '<div class="notice">' . e($error) . '</div>';
-    }
-    echo '<section class="panel"><h1>' . e(t('admin.auth.reset_password_title')) . '</h1>';
-    echo '<p class="muted">' . e(t('admin.auth.set_new_password_for', ['username' => (string) $resetRow['username']])) . '</p>';
-    echo '<form method="post" class="form-grid">' . csrf_field();
-    echo '<input type="hidden" name="selector" value="' . e($selector) . '">';
-    echo '<input type="hidden" name="token" value="' . e($token) . '">';
-    echo '<label>' . e(t('admin.auth.new_password')) . '<input name="new_password" type="password" required minlength="8" autocomplete="new-password"></label>';
-    echo '<label>' . e(t('admin.auth.confirm_new_password')) . '<input name="confirm_password" type="password" required minlength="8" autocomplete="new-password"></label>';
-    echo '<button type="submit">' . e(t('admin.auth.save_new_password')) . '</button></form></section>';
-    render_footer();
+    \Gallery\Views\view_render_admin_reset_password([
+        'state' => 'form',
+        'error' => $error,
+        'username' => (string) $resetRow['username'],
+        'selector' => $selector,
+        'token' => $token,
+        'csrf_html' => csrf_field(),
+    ]);
 }
 
 /**
@@ -1149,8 +1104,8 @@ function cms_admin_reset_password(): void
  */
 function cms_admin_logout(): void
 {
-    if (function_exists('Gallery\\Services\\auth_revoke_current_persistent_login')) {
-        auth_revoke_current_persistent_login();
+    if (function_exists('Gallery\\Core\\admin_auth_revoke_current_persistent_login_for_request')) {
+        admin_auth_revoke_current_persistent_login_for_request();
     }
     unset($_SESSION['user_id']);
     unset($_SESSION['csrf_token']);
@@ -1226,12 +1181,7 @@ function cms_admin_account(): void
             } else {
             // $currentPassword stores the profile password used to authorize Google unlinking.
             $currentPassword = (string) ($_POST['current_password'] ?? '');
-            // $stmt stores the password hash for the authenticated profile owner.
-            $stmt = db()->prepare('SELECT password_hash FROM users WHERE id = ?');
-            $stmt->execute([(int) $user['id']]);
-            // $account stores the account row needed for the password challenge.
-            $account = $stmt->fetch();
-            if (!$account || !password_verify($currentPassword, (string) $account['password_hash'])) {
+            if (!auth_account_password_matches((int) $user['id'], $currentPassword)) {
                 $error = t('admin.account.error_current_password_required');
             } else {
                 if (function_exists('Gallery\\Services\\google_auth_disconnect_account')) {
@@ -1250,12 +1200,7 @@ function cms_admin_account(): void
             } else {
             // $currentPassword stores the profile password used to authorize credential changes.
             $currentPassword = (string) ($_POST['current_password'] ?? '');
-            // $stmt stores the password hash for the authenticated profile owner.
-            $stmt = db()->prepare('SELECT password_hash FROM users WHERE id = ?');
-            $stmt->execute([(int) $user['id']]);
-            // $account stores the account row needed for the password challenge.
-            $account = $stmt->fetch();
-            if (!$account || !password_verify($currentPassword, (string) $account['password_hash'])) {
+            if (!auth_account_password_matches((int) $user['id'], $currentPassword)) {
                 $error = t('admin.account.error_current_password_required');
             } else {
                 // $result stores the validated and saved OpenAI profile settings.
@@ -1280,7 +1225,7 @@ function cms_admin_account(): void
             // Variable $newUsername stores this steps working value.
             $newUsername = trim((string) ($_POST['username'] ?? ''));
             // Variable $newEmail stores this steps working value only when the optional email column is verified.
-            $newEmail = $emailSchemaAvailable ? cms_normalize_account_email((string) ($_POST['email'] ?? '')) : '';
+            $newEmail = $emailSchemaAvailable ? auth_account_normalize_email((string) ($_POST['email'] ?? '')) : '';
             // Variable $newPassword stores this steps working value.
             $newPassword = (string) ($_POST['new_password'] ?? '');
             // Variable $confirmPassword stores this steps working value.
@@ -1288,15 +1233,9 @@ function cms_admin_account(): void
             // Variable $errors stores this steps working value.
             $errors = [];
 
-            // Variable $stmt stores this steps working value.
-            $accountSql = $emailSchemaAvailable
-                ? 'SELECT username, email, password_hash FROM users WHERE id = ?'
-                : 'SELECT username, password_hash FROM users WHERE id = ?';
-            $stmt = db()->prepare($accountSql);
-            $stmt->execute([(int) $user['id']]);
             // Variable $account stores this steps working value.
-            $account = $stmt->fetch();
-            if (!$account || !password_verify($currentPassword, (string) $account['password_hash'])) {
+            $account = auth_account_profile_row((int) $user['id'], $emailSchemaAvailable);
+            if (!$account || !auth_account_password_matches((int) $user['id'], $currentPassword)) {
                 $errors[] = t('admin.account.error_current_password_required');
             }
             if ($newUsername === '') {
@@ -1312,47 +1251,25 @@ function cms_admin_account(): void
                 $errors[] = t('admin.account.error_password_length');
             }
             if ($newUsername !== '') {
-                // Variable $stmt stores this steps working value.
-                $stmt = db()->prepare('SELECT id FROM users WHERE username = ? AND id <> ?');
-                $stmt->execute([$newUsername, (int) $user['id']]);
-                if ($stmt->fetch()) {
+                if (auth_account_username_taken($newUsername, (int) $user['id'])) {
                     $errors[] = t('admin.account.error_username_taken');
                 }
             }
             if ($emailSchemaAvailable && $newEmail !== '') {
-                // Variable $stmt stores this steps working value.
-                $stmt = db()->prepare('SELECT id FROM users WHERE email IS NOT NULL AND LOWER(email) = LOWER(?) AND id <> ?');
-                $stmt->execute([$newEmail, (int) $user['id']]);
-                if ($stmt->fetch()) {
+                if (auth_account_email_taken($newEmail, (int) $user['id'])) {
                     $errors[] = t('admin.account.error_recovery_email_taken');
                 }
             }
             if (!$errors) {
-                // $sql stores an intermediate value used by the surrounding gallery workflow.
-                $sql = $emailSchemaAvailable
-                    ? 'UPDATE users SET username = ?, email = ?, updated_at = ?'
-                    : 'UPDATE users SET username = ?, updated_at = ?';
-                // Variable $params stores this steps working value.
-                $params = $emailSchemaAvailable
-                    ? [$newUsername, $newEmail === '' ? null : $newEmail, now_sql()]
-                    : [$newUsername, now_sql()];
-                if ($newPassword !== '') {
-                    $sql .= ', password_hash = ?';
-                    $params[] = password_hash($newPassword, PASSWORD_DEFAULT);
-                }
-                $sql .= ' WHERE id = ?';
-                $params[] = (int) $user['id'];
-                // Variable $stmt stores this steps working value.
-                $stmt = db()->prepare($sql);
-                $stmt->execute($params);
-                if ($newPassword !== '' && function_exists('Gallery\Services\auth_revoke_user_persistent_logins')) {
-                    auth_revoke_user_persistent_logins((int) $user['id']);
+                auth_account_update_profile((int) $user['id'], $newUsername, $newEmail, $emailSchemaAvailable, $newPassword);
+                if ($newPassword !== '' && function_exists('Gallery\Core\admin_auth_revoke_user_persistent_logins_for_request')) {
+                    admin_auth_revoke_user_persistent_logins_for_request((int) $user['id']);
                 }
                 session_regenerate_id(true);
                 $_SESSION['user_id'] = (int) $user['id'];
-                if ($newPassword !== '' && function_exists('Gallery\Services\auth_issue_persistent_login')) {
+                if ($newPassword !== '' && function_exists('Gallery\Core\admin_auth_issue_persistent_login_for_request')) {
                     try {
-                        auth_issue_persistent_login((int) $user['id']);
+                        admin_auth_issue_persistent_login_for_request((int) $user['id']);
                     } catch (AuthenticationSchemaUnavailableException $exception) {
                         admin_log_event('warning', 'auth.persistent_login_schema_unavailable', 'Persistent login was not reissued after a password change because its schema state is unknown.', [
                             'operation' => 'account_password_change_issue',
@@ -1396,191 +1313,82 @@ function cms_admin_account(): void
     // $googleLinkedAccount stores the Google identity linked to the current admin profile only after schema verification.
     $googleLinkedAccount = $googleSchemaReady && function_exists('Gallery\\Services\\google_auth_linked_account') ? google_auth_linked_account((int) $user['id']) : null;
 
-    render_header(t('admin.account.title'));
+    // $notices contains request/session messages resolved before presentation.
+    $notices = [];
     if (isset($_GET['saved'])) {
-        echo '<div class="notice">' . e(t('admin.account.notice_saved')) . '</div>';
+        $notices[] = t('admin.account.notice_saved');
     }
     if (isset($_GET['reset_settings_saved'])) {
-        echo '<div class="notice">' . e(t('admin.account.notice_reset_settings_saved')) . '</div>';
+        $notices[] = t('admin.account.notice_reset_settings_saved');
     }
     if (isset($_GET['test_email'])) {
-        echo '<div class="notice">' . e($_GET['test_email'] === 'sent' ? t('admin.account.notice_test_email_sent') : t('admin.account.notice_test_email_failed')) . '</div>';
+        $notices[] = $_GET['test_email'] === 'sent' ? t('admin.account.notice_test_email_sent') : t('admin.account.notice_test_email_failed');
     }
     if (isset($_GET['openai_saved'])) {
-        echo '<div class="notice">' . e(t('admin.openai.notice_saved', 'OpenAI text-assistance settings were saved.')) . '</div>';
+        $notices[] = t('admin.openai.notice_saved', 'OpenAI text-assistance settings were saved.');
     }
     if ((string) ($_GET['google'] ?? '') === 'linked') {
-        echo '<div class="notice">' . e(t('admin.google.notice_linked', 'Google account linked. You can now use Continue with Google on the login page.')) . '</div>';
+        $notices[] = t('admin.google.notice_linked', 'Google account linked. You can now use Continue with Google on the login page.');
     }
     if ((string) ($_GET['google'] ?? '') === 'disconnected') {
-        echo '<div class="notice">' . e(t('admin.google.notice_disconnected', 'Google account disconnected. Password login remains available.')) . '</div>';
+        $notices[] = t('admin.google.notice_disconnected', 'Google account disconnected. Password login remains available.');
     }
-    if ($flash = flash_message('admin_notice')) {
-        echo '<div class="notice">' . e($flash) . '</div>';
-    }
-    if (isset($error)) {
-        echo '<div class="notice">' . e($error) . '</div>';
+    $flash = flash_message('admin_notice');
+    if ($flash !== null && $flash !== '') {
+        $notices[] = $flash;
     }
 
-    echo '<section class="panel account-settings-page">';
-    echo '<div class="account-settings-hero">';
-    echo '<div><p class="account-settings-kicker">' . e(t('admin.account.kicker')) . '</p><h1>' . e(t('admin.account.title')) . '</h1><p class="muted">' . e(t('admin.account.description')) . '</p></div>';
-    echo '<div class="nav"><a class="button secondary" href="' . e(admin_settings_url('advanced')) . '">' . e(t('admin.settings.open_centralized', 'Open centralized settings')) . '</a></div>';
-    echo '<div class="account-settings-status ' . ($resetReady ? 'is-ready' : 'is-incomplete') . '">';
-    echo '<span class="account-settings-status-label">' . e(t('admin.account.password_reset')) . '</span>';
-    echo '<strong>' . e($resetReady ? t('admin.account.status_ready') : t('admin.account.status_needs_setup')) . '</strong>';
-    echo '<small>' . e($resetReady ? t('admin.account.status_ready_help') : t('admin.account.status_needs_setup_help')) . '</small>';
-    echo '</div></div>';
-    echo '<div class="account-settings-grid">';
-
-    echo '<article class="account-settings-card">';
-    echo '<div class="account-settings-card-header"><div><h2>' . e(t('admin.account.profile_title')) . '</h2><p class="muted">' . e(t('admin.account.profile_description')) . '</p></div></div>';
-    echo '<form method="post" class="form-grid account-settings-form">';
-    echo csrf_field();
-    echo '<input type="hidden" name="account_action" value="profile">';
-    echo '<label>' . e(t('admin.account.username')) . '<input name="username" required autocomplete="username" value="' . e((string) $user['username']) . '"></label>';
-    echo '<label>' . e(t('admin.account.recovery_email')) . '<input name="email" type="email" autocomplete="email" value="' . e($accountEmail) . '" placeholder="admin@example.com"' . ($emailSchemaAvailable ? '' : ' disabled') . '></label>';
-    if ($emailSchemaAvailable) {
-        echo '<p class="account-settings-help">' . e(t('admin.account.recovery_email_help')) . '</p>';
-    } elseif (schema_inspection_is_unknown($emailSchemaStatus)) {
-        echo '<p class="account-settings-help">' . e(t('admin.auth.schema_temporarily_unavailable', 'Authentication storage is temporarily unavailable. Try again after the database/schema inspection issue is resolved.')) . '</p>';
-    } else {
-        echo '<p class="account-settings-help">' . e(t('admin.auth.password_reset_migration_required', 'Password reset storage is not installed yet. Apply the pending database migration before using password reset.')) . '</p>';
-    }
-    echo '<div class="account-settings-callout"><strong>' . e(t('admin.account.before_save')) . '</strong> ' . e(t('admin.account.before_save_help')) . '</div>';
-    echo '<label>' . e(t('admin.account.current_password')) . '<input name="current_password" type="password" required autocomplete="current-password"></label>';
-    echo '<div class="account-settings-two-column">';
-    echo '<label>' . e(t('admin.account.new_password')) . '<input name="new_password" type="password" autocomplete="new-password" placeholder="' . e(t('admin.account.new_password_placeholder')) . '"></label>';
-    echo '<label>' . e(t('admin.account.confirm_new_password')) . '<input name="confirm_password" type="password" autocomplete="new-password" placeholder="' . e(t('admin.account.confirm_new_password_placeholder')) . '"></label>';
-    echo '</div>';
-    echo '<p class="account-settings-help">' . e(t('admin.account.password_optional_help')) . '</p>';
-    echo '<div class="account-settings-actions"><button type="submit">' . e(t('admin.account.save_account')) . '</button></div></form></article>';
-
-    echo '<article class="account-settings-card">';
-    echo '<div class="account-settings-card-header"><div><h2>' . e(t('admin.account.reset_email_title')) . '</h2><p class="muted">' . e(t('admin.account.reset_email_description')) . '</p></div></div>';
-    echo '<div class="account-settings-readiness">';
-    echo '<strong>' . e(t('admin.account.recovery_status')) . '</strong> ' . e($resetReady ? t('admin.account.recovery_status_ready') : t('admin.account.recovery_status_incomplete')) . '</div>';
-    echo '<form method="post" class="form-grid account-settings-form account-settings-reset-form">' . csrf_field();
-    echo '<input type="hidden" name="account_action" value="password_reset_settings">';
-    echo '<label class="account-settings-toggle"><input type="checkbox" name="password_reset_enabled" value="1"' . ($resetSettings['enabled'] ? ' checked' : '') . '> <span><strong>' . e(t('admin.account.enable_reset_emails')) . '</strong><small>' . e(t('admin.account.enable_reset_emails_help')) . '</small></span></label>';
-    echo '<div class="account-settings-two-column">';
-    echo '<label>' . e(t('admin.account.mail_transport')) . '<select name="password_reset_transport"><option value="php_mail"' . ($resetSettings['transport'] === 'php_mail' ? ' selected' : '') . '>' . e(t('admin.account.transport_php_mail')) . '</option><option value="smtp"' . ($resetSettings['transport'] === 'smtp' ? ' selected' : '') . '>' . e(t('admin.account.transport_smtp')) . '</option></select></label>';
-    echo '<label>' . e(t('admin.account.reset_link_lifetime')) . '<input name="password_reset_token_lifetime_minutes" type="number" min="15" max="1440" step="1" value="' . e((string) $resetSettings['token_lifetime_minutes']) . '"></label>';
-    echo '</div>';
-    echo '<div class="account-settings-two-column">';
-    echo '<label>' . e(t('admin.account.sender_email')) . '<input name="password_reset_from_email" type="email" autocomplete="email" value="' . e((string) $resetSettings['from_email']) . '" placeholder="no-reply@example.com"></label>';
-    echo '<label>' . e(t('admin.account.sender_name')) . '<input name="password_reset_from_name" value="' . e((string) $resetSettings['from_name']) . '" placeholder="' . e(site_name()) . '"></label>';
-    echo '</div>';
-    echo '<details class="account-settings-details" open><summary>' . e(t('admin.account.smtp_settings')) . '</summary>';
-    echo '<p class="account-settings-help">' . e(t('admin.account.smtp_help')) . '</p>';
-    echo '<div class="account-settings-two-column">';
-    echo '<label>' . e(t('admin.account.smtp_host')) . '<input name="password_reset_smtp_host" value="' . e((string) $resetSettings['smtp_host']) . '" placeholder="smtp.example.com"></label>';
-    echo '<label>' . e(t('admin.account.smtp_port')) . '<input name="password_reset_smtp_port" type="number" min="1" max="65535" step="1" value="' . e((string) $resetSettings['smtp_port']) . '"></label>';
-    echo '</div>';
-    echo '<label>' . e(t('admin.account.smtp_encryption')) . '<select name="password_reset_smtp_encryption"><option value="tls"' . ($resetSettings['smtp_encryption'] === 'tls' ? ' selected' : '') . '>STARTTLS</option><option value="ssl"' . ($resetSettings['smtp_encryption'] === 'ssl' ? ' selected' : '') . '>' . e(t('admin.account.smtp_implicit_tls')) . '</option><option value="none"' . ($resetSettings['smtp_encryption'] === 'none' ? ' selected' : '') . '>' . e(t('admin.common.none')) . '</option></select></label>';
-    echo '<div class="account-settings-two-column">';
-    echo '<label>' . e(t('admin.account.smtp_username')) . '<input name="password_reset_smtp_username" autocomplete="username" value="' . e((string) $resetSettings['smtp_username']) . '"></label>';
-    echo '<label>' . e(t('admin.account.smtp_password')) . '<input name="password_reset_smtp_password" type="password" autocomplete="new-password" placeholder="' . e(!empty($resetSettings['smtp_password']) ? t('admin.account.smtp_password_placeholder_keep') : '') . '"></label>';
-    echo '</div>';
-    echo '<input type="hidden" name="keep_existing_smtp_password" value="1">';
-    echo '<p class="account-settings-help">' . e(t('admin.account.smtp_password_help')) . '</p>';
-    echo '</details>';
-    echo '<div class="account-settings-actions"><button type="submit">' . e(t('admin.account.save_reset_settings')) . '</button></div></form>';
-    echo '<form method="post" class="account-settings-test-form">' . csrf_field();
-    echo '<input type="hidden" name="account_action" value="password_reset_test_email">';
-    echo '<div><strong>' . e(t('admin.account.delivery_test')) . '</strong><p class="muted">' . e(t('admin.account.delivery_test_help')) . '</p></div>';
-    echo '<button type="submit" class="button secondary">' . e(t('admin.account.send_test_email')) . '</button></form></article>';
-
-    echo '<article class="account-settings-card account-google-settings-card">';
-    echo '<div class="account-settings-card-header"><div><h2>' . e(t('admin.google.profile_title', 'Google login')) . '</h2><p class="muted">' . e(t('admin.google.profile_description', 'Optional Google sign-in for this admin account. Password login remains available.')) . '</p></div></div>';
-    echo '<div class="account-settings-readiness ' . ($googleReady ? 'is-ready' : 'is-incomplete') . '">';
-    echo '<strong>' . e(t('admin.google.status', 'Status')) . '</strong> ';
+    // $googleStatus is a presentation-safe enum derived from schema/config/account policy.
     if (schema_inspection_is_unknown($googleSchemaStatus)) {
-        echo e(t('admin.google.schema_unknown', 'Google login storage could not be inspected. Linking and Google sign-in are temporarily disabled until the database/schema inspection issue is resolved.'));
+        $googleStatus = 'schema_unknown';
     } elseif (!$googleSchemaReady) {
-        echo e(t('admin.google.status_migration_required', 'Database migration required before Google login can be configured.'));
+        $googleStatus = 'migration_required';
     } elseif (!$googleReady) {
-        echo e(t('admin.google.status_config_required', 'Add Google OAuth client ID and secret to config.php before linking accounts.'));
+        $googleStatus = 'config_required';
     } elseif ($googleLinkedAccount) {
-        echo e(t('admin.google.status_linked', 'Linked and ready for login.'));
+        $googleStatus = 'linked';
     } else {
-        echo e(t('admin.google.status_ready_to_link', 'Configured. Link this profile to a Google account before using Google login.'));
-    }
-    echo '</div>';
-    echo '<p class="account-settings-help"><strong>' . e(t('admin.google.callback_url', 'Authorized redirect URI')) . ':</strong> <code>' . e((string) ($googleConfig['redirect_uri'] ?? '')) . '</code></p>';
-    if ($googleLinkedAccount) {
-        echo '<div class="account-settings-callout"><strong>' . e(t('admin.google.linked_account', 'Linked Google account')) . '</strong> ' . e(trim((string) ($googleLinkedAccount['email'] ?? '')) !== '' ? (string) $googleLinkedAccount['email'] : t('admin.google.linked_account_no_email', 'Google account is linked without a stored email.')) . '</div>';
-        if (!empty($googleLinkedAccount['name'])) {
-            echo '<p class="account-settings-help">' . e(t('admin.google.linked_name', 'Google display name')) . ': ' . e((string) $googleLinkedAccount['name']) . '</p>';
-        }
-        echo '<form method="post" class="form-grid account-settings-form account-settings-google-form">' . csrf_field();
-        echo '<input type="hidden" name="account_action" value="google_disconnect">';
-        echo '<label>' . e(t('admin.account.current_password')) . '<input name="current_password" type="password" required autocomplete="current-password"></label>';
-        echo '<div class="account-settings-actions"><button type="submit" class="button secondary">' . e(t('admin.google.disconnect', 'Disconnect Google account')) . '</button></div></form>';
-    } elseif ($googleReady) {
-        echo '<p class="account-settings-help">' . e(t('admin.google.link_help', 'Linking must be started while you are logged in with your normal admin password. After that, Google login will accept only this linked Google account.')) . '</p>';
-        echo '<div class="account-settings-actions"><a class="button" href="' . e(url_for('admin_google_start', ['mode' => 'link', 'return' => url_for('admin_account')])) . '">' . e(t('admin.google.link_button', 'Link Google account')) . '</a></div>';
-    }
-    echo '</article>';
-
-    if ($openaiFeatureEnabled) {
-    echo '<article class="account-settings-card account-openai-settings-card">';
-    echo '<div class="account-settings-card-header"><div><h2>' . e(t('admin.openai.profile_title', 'OpenAI text assistance')) . '</h2><p class="muted">' . e(t('admin.openai.profile_description', 'Optional profile-level API access for gallery description drafts and text cleanup.')) . '</p></div></div>';
-    echo '<div class="account-settings-readiness ' . ($openaiReady ? 'is-ready' : 'is-incomplete') . '">';
-    echo '<strong>' . e(t('admin.openai.status', 'Status')) . '</strong> ';
-    if (!$openaiSchemaReady) {
-        echo e(t('admin.openai.status_migration_required', 'Database migration required before this optional feature can be configured.'));
-    } elseif ($openaiReady) {
-        echo e(t('admin.openai.status_ready', 'Enabled and ready for this account.'));
-    } else {
-        echo e(t('admin.openai.status_disabled', 'Disabled. Gallery editors will not show AI controls.'));
-    }
-    echo '</div>';
-    if ($openaiSchemaReady) {
-        $openaiEnabled = (int) ($openaiSettings['enabled'] ?? 0) === 1;
-        $openaiAllowImageInput = (int) ($openaiSettings['allow_image_input'] ?? 0) === 1;
-        $openaiKeyHint = (string) ($openaiSettings['api_key_hint'] ?? '');
-        $openaiModel = openai_text_assist_normalize_model((string) ($openaiSettings['model'] ?? OPENAI_TEXT_ASSIST_DEFAULT_MODEL));
-        $openaiModels = function_exists('Gallery\\Services\\openai_text_assist_model_catalog') ? openai_text_assist_model_catalog() : [];
-        echo '<form method="post" class="form-grid account-settings-form account-settings-openai-form">' . csrf_field();
-        echo '<input type="hidden" name="account_action" value="openai_text_settings">';
-        echo '<label class="account-settings-toggle"><input type="checkbox" name="openai_text_enabled" value="1"' . ($openaiEnabled ? ' checked' : '') . '> <span><strong>' . e(t('admin.openai.enable', 'Enable OpenAI text assistance')) . '</strong><small>' . e(t('admin.openai.enable_help', 'When enabled and a key is saved, selected editors can request reviewable AI text suggestions.')) . '</small></span></label>';
-        if ($openaiKeyHint !== '') {
-            echo '<p class="account-settings-key-status"><strong>' . e(t('admin.openai.saved_key', 'Saved key')) . ':</strong> ' . e($openaiKeyHint) . '</p>';
-        }
-        echo '<div class="account-settings-two-column">';
-        echo '<label>' . e(t('admin.openai.api_key', 'OpenAI API key')) . '<input name="openai_text_api_key" type="password" autocomplete="new-password" placeholder="' . e($openaiKeyHint !== '' ? t('admin.openai.api_key_placeholder_keep', 'Leave blank to keep the saved key') : t('admin.openai.api_key_placeholder_new', 'sk-...')) . '"></label>';
-        echo '<label>' . e(t('admin.openai.model', 'Model')) . '<select name="openai_text_model">';
-        foreach ($openaiModels as $modelId => $modelInfo) {
-            echo '<option value="' . e($modelId) . '"' . ($openaiModel === $modelId ? ' selected' : '') . '>' . e((string) ($modelInfo['label'] ?? $modelId)) . '</option>';
-        }
-        echo '</select></label>';
-        echo '</div>';
-        echo '<p class="account-settings-help">' . e(t('admin.openai.api_key_help', 'The key is encrypted before database storage. It is never shown again and is never written to admin logs.')) . '</p>';
-        echo '<div class="account-openai-model-list" aria-label="' . e(t('admin.openai.model_choices', 'Available OpenAI models')) . '">';
-        foreach ($openaiModels as $modelId => $modelInfo) {
-            $isSelected = $openaiModel === $modelId;
-            echo '<div class="account-openai-model-card' . ($isSelected ? ' is-selected' : '') . '">';
-            echo '<div><strong>' . e((string) ($modelInfo['label'] ?? $modelId)) . '</strong><code>' . e($modelId) . '</code></div>';
-            echo '<span>' . e((string) ($modelInfo['badge'] ?? '')) . '</span>';
-            echo '<p>' . e((string) ($modelInfo['description'] ?? '')) . '</p>';
-            echo '</div>';
-        }
-        echo '</div>';
-        echo '<p class="account-settings-help">' . e(t('admin.openai.model_help', 'Default: GPT-5.4 mini. You can change this later without changing gallery data.')) . '</p>';
-        echo '<label class="account-settings-toggle"><input type="checkbox" name="openai_text_allow_image_input" value="1"' . ($openaiAllowImageInput ? ' checked' : '') . ($openaiImageInputColumnReady ? '' : ' disabled') . '> <span><strong>' . e(t('admin.openai.enable_image_input', 'Allow AI tools to send small image thumbnails to OpenAI')) . '</strong><small>' . e($openaiImageInputColumnReady ? t('admin.openai.enable_image_input_help', 'Default off. When enabled, photo and gallery AI actions may send small generated thumbnails, not originals, to describe visible content.') : t('admin.openai.enable_image_input_help_migration', 'Apply the latest database migration to save this optional thumbnail-consent setting.')) . '</small></span></label>';
-        if ($openaiKeyHint !== '') {
-            echo '<label class="account-settings-toggle account-settings-compact-toggle"><input type="checkbox" name="openai_text_clear_key" value="1"> <span><strong>' . e(t('admin.openai.clear_key', 'Clear saved API key')) . '</strong><small>' . e(t('admin.openai.clear_key_help', 'This disables OpenAI text assistance unless a new key is saved.')) . '</small></span></label>';
-        }
-        echo '<div class="account-settings-callout"><strong>' . e(t('admin.account.before_save')) . '</strong> ' . e(t('admin.account.before_save_help')) . '</div>';
-        echo '<label>' . e(t('admin.openai.current_password', 'Current password')) . '<input name="current_password" type="password" required autocomplete="current-password"></label>';
-        echo '<div class="account-settings-actions"><button type="submit">' . e(t('admin.openai.save_settings', 'Save OpenAI settings')) . '</button></div></form>';
-    }
-    echo '</article>';
+        $googleStatus = 'ready_to_link';
     }
 
-    echo '</div></section>';
-    render_footer();
+    // OpenAI presentation values are normalized here so the view performs no domain-service lookup.
+    $openaiEnabled = $openaiSchemaReady && (int) ($openaiSettings['enabled'] ?? 0) === 1;
+    $openaiAllowImageInput = $openaiSchemaReady && (int) ($openaiSettings['allow_image_input'] ?? 0) === 1;
+    $openaiKeyHint = $openaiSchemaReady ? (string) ($openaiSettings['api_key_hint'] ?? '') : '';
+    $openaiModel = $openaiSchemaReady
+        ? openai_text_assist_normalize_model((string) ($openaiSettings['model'] ?? OPENAI_TEXT_ASSIST_DEFAULT_MODEL))
+        : OPENAI_TEXT_ASSIST_DEFAULT_MODEL;
+    $openaiModels = $openaiSchemaReady && function_exists('Gallery\Services\openai_text_assist_model_catalog')
+        ? openai_text_assist_model_catalog()
+        : [];
+
+    \Gallery\Views\view_render_admin_account([
+        'user' => $user,
+        'notices' => $notices,
+        'error' => isset($error) ? (string) $error : '',
+        'csrf_html' => csrf_field(),
+        'site_name' => site_name(),
+        'central_settings_url' => admin_settings_url('advanced'),
+        'account_email' => $accountEmail,
+        'email_schema_available' => $emailSchemaAvailable,
+        'email_schema_unknown' => schema_inspection_is_unknown($emailSchemaStatus),
+        'reset_settings' => $resetSettings,
+        'reset_ready' => $resetReady,
+        'google_ready' => $googleReady,
+        'google_status' => $googleStatus,
+        'google_redirect_uri' => (string) ($googleConfig['redirect_uri'] ?? ''),
+        'google_linked_account' => $googleLinkedAccount,
+        'google_link_url' => url_for('admin_google_start', ['mode' => 'link', 'return' => url_for('admin_account')]),
+        'openai_feature_enabled' => $openaiFeatureEnabled,
+        'openai_schema_ready' => $openaiSchemaReady,
+        'openai_ready' => $openaiReady,
+        'openai_image_input_column_ready' => $openaiImageInputColumnReady,
+        'openai_enabled' => $openaiEnabled,
+        'openai_allow_image_input' => $openaiAllowImageInput,
+        'openai_key_hint' => $openaiKeyHint,
+        'openai_model' => $openaiModel,
+        'openai_models' => $openaiModels,
+    ]);
 }
 
 /**
@@ -1616,23 +1424,12 @@ function cms_admin_reset(): void
         }
     }
 
-    render_header(t('admin.reset.title'));
-    echo '<section class="hero"><h1>' . e(t('admin.reset.title')) . '</h1><nav class="nav">';
-    echo '<a class="button secondary" href="' . e(url_for('admin')) . '">' . e(t('admin.common.back_to_dashboard')) . '</a>';
-    echo '<a class="button secondary" href="' . e(url_for('admin_update')) . '">' . e(t('admin.reset.open_updates')) . '</a>';
-    echo '</nav></section>';
-    if ($notice !== '') {
-        echo '<div class="notice">' . e($notice) . '</div>';
-    }
-    if ($error !== null) {
-        echo '<div class="notice">' . e(t('admin.reset.failed_value', ['error' => $error])) . '</div>';
-    }
-    echo '<section class="panel"><h2>' . e(t('admin.reset.restore_stable_title')) . '</h2>';
-    echo '<p>' . e(t('admin.reset.restore_stable_description')) . '</p>';
-    echo '<p class="muted">' . e(t('admin.reset.restore_stable_help')) . '</p>';
-    echo '<form method="post" class="form-grid">' . csrf_field();
-    echo '<button type="submit" class="button danger">' . e(t('admin.reset.button')) . '</button>';
-    echo '</form></section>';
-    render_footer();
+    \Gallery\Views\view_render_admin_stable_reset([
+        'notice' => $notice,
+        'error' => $error !== null ? $error : '',
+        'dashboard_url' => url_for('admin'),
+        'updates_url' => url_for('admin_update'),
+        'csrf_html' => csrf_field(),
+    ]);
 }
 

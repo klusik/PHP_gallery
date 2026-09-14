@@ -47,6 +47,10 @@ use function Gallery\Services\admin_settings_normalize_editable_value;
 use function Gallery\Services\admin_settings_registry;
 use function Gallery\Services\admin_settings_save_editable_value;
 use function Gallery\Services\admin_settings_section_normalize;
+use function Gallery\Services\admin_settings_sections;
+use function Gallery\Services\admin_settings_section_id;
+use function Gallery\Services\translation_language_presentation;
+use function Gallery\Services\translation_public_language_selector_view_data;
 use function Gallery\Services\admin_settings_url;
 use function Gallery\Services\t;
 use function Gallery\Views\view_render_admin_settings_page;
@@ -125,11 +129,34 @@ function cms_admin_settings(): void
     }
 
     $notice = (string) flash_message('admin_notice');
+    $sections = admin_settings_sections();
+    foreach ($sections as $sectionId => $definition) {
+        $sections[$sectionId]['panel_id'] = admin_settings_section_id($sectionId);
+        $sections[$sectionId]['url'] = admin_settings_url($sectionId);
+    }
+    $registry = admin_settings_registry();
+    $languagePresentations = translation_language_presentation();
+    foreach ($registry as $id => $entry) {
+        $group = admin_settings_section_normalize($entry['group'] ?? 'general');
+        $registry[$id]['view_group'] = $group;
+        $registry[$id]['view_section_url'] = (string) ($sections[$group]['url'] ?? admin_settings_url('general'));
+        if ($id === 'public_language' && is_array($entry['allowed'] ?? null)) {
+            $optionLabels = [];
+            foreach ($entry['allowed'] as $language) {
+                $code = (string) $language;
+                $name = trim((string) ($languagePresentations[$code]['name'] ?? ''));
+                $optionLabels[$code] = $name !== '' ? $name . ' (' . $code . ')' : strtoupper($code);
+            }
+            $registry[$id]['view_option_labels'] = $optionLabels;
+        }
+    }
     view_render_admin_settings_page([
         'active_section' => $section,
-        'registry' => admin_settings_registry(),
+        'sections' => $sections,
+        'registry' => $registry,
         'errors' => $errors,
         'submitted_values' => $submittedValues,
         'notice' => $notice,
+        'language_selector' => translation_public_language_selector_view_data(),
     ]);
 }

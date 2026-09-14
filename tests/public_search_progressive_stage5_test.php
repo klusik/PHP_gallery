@@ -1,6 +1,21 @@
 <?php
 
 /**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ *
+ * File: tests/public_search_progressive_stage5_test.php
+ *
+ * Author:
+ *   Rudolf Klusal
+ *
+ * License:
+ *   MIT License (see LICENSE file in repository)
+ *
+ * Notes:
+ *   - Keep comments and docstrings intact when modifying this file.
+ */
+/**
  * Protect the Stage 5 descriptive/deep search split and deferred browser scheduling.
  */
 
@@ -50,6 +65,7 @@ $progressiveSource = module_source($root . '/app/services/public_search_progress
 $modelSource = module_source($root . '/app/models/public_search_progressive.php');
 $browserSource = (string) file_get_contents($root . '/public/assets/gallery-modules/public-home-search.js');
 $viewSource = (string) file_get_contents($root . '/app/views/public_search.php');
+$controllerSource = (string) file_get_contents($root . '/app/controllers/public_search.php');
 
 public_search_progressive_stage5_assert(public_search_phase_supported('descriptive'), 'Stage 5 must expose the descriptive phase.');
 public_search_progressive_stage5_assert(public_search_phase_supported('deep'), 'Stage 5 must expose the deep phase.');
@@ -113,7 +129,7 @@ public_search_progressive_stage5_assert(str_contains($runSearchSource, 'deepTime
 public_search_progressive_stage5_assert(!str_contains($runSearchSource, 'requestCompatibilitySearch(generation, query)'), 'Normal Stage 5 live search must no longer schedule the monolithic compatibility query.');
 public_search_progressive_stage5_assert(str_contains($browserSource, "pendingPhases = new Set(['primary', 'media', 'descriptive', 'deep'])"), 'Browser completion state must track all progressive phases independently.');
 public_search_progressive_stage5_assert(str_contains($browserSource, "settlePhase('deep', false)"), 'Deep failure must settle independently without replacing earlier results.');
-public_search_progressive_stage5_assert(str_contains($viewSource, 'data-descriptive-delay-ms="300"'), 'Search markup must expose an explicit descriptive delay.');
-public_search_progressive_stage5_assert(str_contains($viewSource, 'data-deep-delay-ms="550"'), 'Search markup must expose an explicit deep delay.');
+public_search_progressive_stage5_assert(str_contains($controllerSource, "'descriptive_delay_ms' => 300") && str_contains($viewSource, "data-descriptive-delay-ms=\"' . (int) (\$viewModel['descriptive_delay_ms'] ?? 300)"), 'Controller view model and view must expose an explicit descriptive delay.');
+public_search_progressive_stage5_assert(str_contains($controllerSource, "'deep_delay_ms' => 550") && str_contains($viewSource, "data-deep-delay-ms=\"' . (int) (\$viewModel['deep_delay_ms'] ?? 550)"), 'Controller view model and view must expose an explicit deep delay.');
 
 fwrite(STDOUT, "Progressive public-search Stage 5 checks passed.\n");

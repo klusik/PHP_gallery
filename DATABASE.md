@@ -1,6 +1,6 @@
 # PHP Gallery Database Documentation
 
-This document describes the database schema used by PHP Gallery as of application version 0.100. Version 0.97 adds the recoverable gallery-trash state machine through migrations `202609070001_gallery_trash_bin.php` and `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6 introduced no schema changes. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
+This document describes the database schema used by PHP Gallery as of application version 0.101. Version 0.97 adds the recoverable gallery-trash state machine through migrations `202609070001_gallery_trash_bin.php` and `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6 introduced no schema changes. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
 
 ## Database Engine
 
@@ -19,6 +19,13 @@ ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 ```
 
 The database connection is configured in `config.php` and opened by `app/database.php` through the shared `db()` function.
+
+
+## MVC Persistence Ownership
+
+Application persistence is owned by `app/models/`. SQL strings, PDO calls, schema-facing reads/writes, and row mapping for feature code must remain in Model modules. Services orchestrate those model APIs and may apply domain policy, but they do not construct SQL or access PDO directly. Controllers and Views have no application persistence authority.
+
+This ownership is mechanically enforced by `scripts/check_mvc_boundaries.php`; the reviewed MVC baseline is zero occurrences as of 2026-09-14. Infrastructure-level schema migration and connection code remains in `database/migrations/` and `app/database.php` and is not a bypass for feature persistence.
 
 ## Migration System
 

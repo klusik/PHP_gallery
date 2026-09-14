@@ -1,4 +1,18 @@
 @echo off
+
+rem Project: PHP Gallery
+rem Repository: https://github.com/klusik/PHP_gallery
+rem
+rem File: winapp/install.bat
+rem
+rem Author:
+rem   Rudolf Klusal
+rem
+rem License:
+rem   MIT License (see LICENSE file in repository)
+rem
+rem Notes:
+rem   - Keep comments and docstrings intact when modifying this file.
 setlocal EnableExtensions EnableDelayedExpansion
 
 rem PHP Gallery Uploader installer.

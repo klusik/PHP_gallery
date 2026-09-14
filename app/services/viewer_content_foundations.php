@@ -16,6 +16,9 @@
  *   - Validate future viewer-owned labels as bounded UTF-8 plain text without output escaping
  *   - Centralize bounded security/resource quotas for future favourites and collections
  *
+ * Author:
+ *   Rudolf Klusal
+ *
  * Notes:
  *   - Keep comments and docstrings intact when modifying this file.
  *   - Collections and favourites store references, never permissions.
@@ -29,9 +32,11 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+use function Gallery\Models\image_model_find_by_id;
+use function Gallery\Models\image_model_public_rows_by_ids;
+
 use InvalidArgumentException;
 use Throwable;
-use function Gallery\Core\db;
 
 /**
  * Return the centralized bounded quota contract for future viewer content mutations.
@@ -150,9 +155,7 @@ function viewer_source_image_resolve_authorized(int $imageId): ?array
     }
 
     try {
-        $stmt = db()->prepare('SELECT * FROM images WHERE id = ? LIMIT 1');
-        $stmt->execute([$imageId]);
-        $image = $stmt->fetch();
+        $image = image_model_find_by_id($imageId);
         if (!$image || (string) ($image['visibility'] ?? '') !== 'public') {
             return null;
         }
@@ -225,20 +228,7 @@ function viewer_source_images_resolve_authorized(array $imageIds): array
     }
 
     try {
-        $imagesById = [];
-        foreach (array_chunk(array_keys($orderedIds), 200) as $idList) {
-            $placeholders = implode(',', array_fill(0, count($idList), '?'));
-            $stmt = db()->prepare(
-                'SELECT * FROM images WHERE id IN (' . $placeholders . ') AND visibility = ?'
-            );
-            $stmt->execute(array_merge($idList, ['public']));
-            foreach ($stmt->fetchAll() as $image) {
-                $imageId = (int) ($image['id'] ?? 0);
-                if ($imageId > 0) {
-                    $imagesById[$imageId] = $image;
-                }
-            }
-        }
+        $imagesById = image_model_public_rows_by_ids(array_keys($orderedIds));
 
         $galleries = [];
         foreach ($imagesById as $image) {

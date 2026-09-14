@@ -183,26 +183,27 @@ function download_manifest_profile_snapshot(): array
 }
 
 /**
- * Emit non-sensitive response timing/cache diagnostics for one completed manifest request.
+ * Return non-sensitive response timing/cache diagnostics for one completed manifest request.
+ *
+ * @return array<string,string> HTTP response headers keyed by header name.
  */
-function download_manifest_profile_emit_headers(): void
+function download_manifest_profile_response_headers(): array
 {
-    if (headers_sent()) {
-        return;
-    }
     $snapshot = download_manifest_profile_snapshot();
     if ($snapshot === []) {
-        return;
+        return [];
     }
 
     $cache = (string) ($snapshot['cache'] ?? 'none');
-    header('X-PHP-Gallery-Manifest-Cache: ' . $cache);
     $parts = ['download-manifest;dur=' . number_format((float) ($snapshot['elapsed_ms'] ?? 0.0), 2, '.', '')];
     if ($snapshot['db_queries'] !== null) {
         $parts[] = 'download-manifest-db;desc="' . (int) $snapshot['db_queries'] . ' queries"';
     }
     $parts[] = 'download-manifest-fs;desc="' . (int) ($snapshot['filesystem_checks'] ?? 0) . ' checks"';
-    header('Server-Timing: ' . implode(', ', $parts));
+    return [
+        'X-PHP-Gallery-Manifest-Cache' => $cache,
+        'Server-Timing' => implode(', ', $parts),
+    ];
 }
 
 /**

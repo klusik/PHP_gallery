@@ -36,8 +36,11 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+use function Gallery\Models\admin_storage_statistics_model_fingerprint_rows;
+use function Gallery\Models\admin_storage_statistics_model_image_rows;
+use function Gallery\Models\admin_storage_statistics_model_image_rows_after_id;
+use function Gallery\Models\admin_storage_statistics_model_thumbnail_summary_rows;
 use Throwable;
-use function Gallery\Core\db;
 
 const ADMIN_STORAGE_STATISTICS_CACHE_KEY = 'admin_storage_statistics_cache_v2';
 const ADMIN_STORAGE_STATISTICS_JOB_KEY = 'admin_storage_statistics_job_v1';
@@ -205,16 +208,10 @@ function admin_storage_statistics_process_job(int $batchSize = ADMIN_STORAGE_STA
 function admin_storage_statistics_fingerprint(): string
 {
     try {
-        $stmt = db()->prepare("SELECT COUNT(*) AS image_count, COALESCE(SUM(COALESCE(file_size, 0)), 0) AS original_bytes, COALESCE(MAX(id), 0) AS newest_image_id, COALESCE(MAX(updated_at), '') AS newest_image_update FROM images");
-        $stmt->execute();
-        $row = $stmt->fetch() ?: [];
-        $stmt = db()->prepare("SELECT COUNT(*) AS gallery_count, COALESCE(MAX(updated_at), '') AS newest_gallery_update FROM galleries");
-        $stmt->execute();
-        $galleryRow = $stmt->fetch() ?: [];
+        [$row, $galleryRow] = admin_storage_statistics_model_fingerprint_rows();
     } catch (Throwable) {
         return '';
     }
-
     return hash('sha256', implode('|', [
         (string) ($row['image_count'] ?? '0'),
         (string) ($row['original_bytes'] ?? '0'),
@@ -312,11 +309,10 @@ function admin_storage_statistics_build(string $fingerprint): array
  */
 function admin_storage_statistics_image_rows(): array
 {
-    $derivativeVersionSelect = admin_storage_statistics_image_derivative_version_select();
+    $hasDerivativeVersion = function_exists('Gallery\Services\db_column_exists')
+        && db_column_exists('images', 'thumbnail_derivative_version');
     try {
-        $stmt = db()->prepare("SELECT i.id AS image_id, i.gallery_id AS image_gallery_id, i.relative_path, i.filename, i.mime_type, COALESCE(i.file_size, 0) AS file_size, i.width, i.height, $derivativeVersionSelect AS thumbnail_derivative_version, g.id AS gallery_id, g.title AS gallery_title, g.folder_path AS gallery_folder_path FROM images i INNER JOIN galleries g ON g.id = i.gallery_id ORDER BY g.folder_path, i.relative_path");
-        $stmt->execute();
-        return $stmt->fetchAll();
+        return admin_storage_statistics_model_image_rows($hasDerivativeVersion);
     } catch (Throwable) {
         return [];
     }
@@ -333,12 +329,10 @@ function admin_storage_statistics_image_rows_after_id(int $lastImageId, int $lim
 {
     $lastImageId = max(0, $lastImageId);
     $limit = max(1, min(ADMIN_STORAGE_STATISTICS_MAX_BATCH_SIZE, $limit));
-    $derivativeVersionSelect = admin_storage_statistics_image_derivative_version_select();
-
+    $hasDerivativeVersion = function_exists('Gallery\Services\db_column_exists')
+        && db_column_exists('images', 'thumbnail_derivative_version');
     try {
-        $stmt = db()->prepare("SELECT i.id AS image_id, i.gallery_id AS image_gallery_id, i.relative_path, i.filename, i.mime_type, COALESCE(i.file_size, 0) AS file_size, i.width, i.height, $derivativeVersionSelect AS thumbnail_derivative_version, g.id AS gallery_id, g.title AS gallery_title, g.folder_path AS gallery_folder_path FROM images i INNER JOIN galleries g ON g.id = i.gallery_id WHERE i.id > ? ORDER BY i.id LIMIT ?");
-        $stmt->execute([$lastImageId, $limit]);
-        return $stmt->fetchAll();
+        return admin_storage_statistics_model_image_rows_after_id($lastImageId, $limit, $hasDerivativeVersion);
     } catch (Throwable) {
         return [];
     }
@@ -537,18 +531,11 @@ function admin_storage_statistics_thumbnail_metadata_summary(): array
     if ($sizes === []) {
         return $summary;
     }
-
-    $sizePlaceholders = implode(',', array_fill(0, count($sizes), '?'));
-    $params = $sizes;
-    $derivativeVersionPredicate = '';
-    if (function_exists('Gallery\\Services\\db_column_exists') && db_column_exists('image_thumbnail_variants', 'derivative_version') && db_column_exists('images', 'thumbnail_derivative_version')) {
-        $derivativeVersionPredicate = ' AND v.derivative_version = GREATEST(1, i.thumbnail_derivative_version)';
-    }
-
+    $matchDerivativeVersion = function_exists('Gallery\Services\db_column_exists')
+        && db_column_exists('image_thumbnail_variants', 'derivative_version')
+        && db_column_exists('images', 'thumbnail_derivative_version');
     try {
-        $stmt = db()->prepare("SELECT v.format, COUNT(*) AS variant_count, COALESCE(SUM(COALESCE(v.file_size, 0)), 0) AS total_bytes FROM image_thumbnail_variants v INNER JOIN images i ON i.id = v.image_id WHERE v.status = 'valid' AND v.format IN ('jpg', 'webp') AND v.size_px IN ($sizePlaceholders)$derivativeVersionPredicate GROUP BY v.format ORDER BY v.format");
-        $stmt->execute($params);
-        $rows = $stmt->fetchAll();
+        $rows = admin_storage_statistics_model_thumbnail_summary_rows($sizes, $matchDerivativeVersion);
     } catch (Throwable) {
         return $summary;
     }
@@ -573,8 +560,6 @@ function admin_storage_statistics_thumbnail_metadata_summary(): array
         ]);
         $summary['generated_type_groups'] = $generatedTypeGroups;
     }
-
-    $summary['generated_bytes'] = (int) $summary['thumbnail_bytes'] + (int) $summary['display_master_bytes'];
     return $summary;
 }
 

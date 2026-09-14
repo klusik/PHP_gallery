@@ -152,10 +152,9 @@ leaflet_marker_assert_contains($galleryEntrypoint, '20260905-map-popup-viewer-na
 leaflet_marker_assert_contains($publicEntrypoint, '20260905-map-popup-viewer-navigation-v2', 'public entrypoint cache revision');
 leaflet_marker_assert_not_contains($lightboxCss, '.lightbox.is-fullscreen figure a', 'fullscreen popup anchor sizing');
 
-foreach ([$helpers, $layout] as $assetRendererSource) {
-    leaflet_marker_assert_contains($assetRendererSource, "gallery-modules/lightbox.js'", 'anonymous lightbox asset-version dependency');
-    leaflet_marker_assert_contains($assetRendererSource, 'data-gallery-asset-revision=', 'entrypoint revision data attribute');
-}
+leaflet_marker_assert_contains($layout, "gallery-modules/lightbox.js'", 'shared lightbox asset-version dependency');
+leaflet_marker_assert_contains($layout, 'data-gallery-asset-revision=', 'entrypoint revision data attribute');
+leaflet_marker_assert_not_contains($helpers, 'data-gallery-asset-revision=', 'generic helpers no longer own asset rendering');
 
 $defaultPngCall = strpos($lightbox, 'L.Icon.Default.mergeOptions');
 $divIconCall = strpos($lightbox, 'L.divIcon({');

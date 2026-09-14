@@ -19,7 +19,10 @@
  *   - Keep lazy metadata hydration on the same quality-source contract
  *   - Start the tracked byte-progress download synchronously with the zoom input, before any decode/installation work
  *   - Abort a superseded tracked download instead of letting it finish, without recording the abort as a failure
- */
+  *
+ * Author:
+ *   Rudolf Klusal
+*/
 
 declare(strict_types=1);
 

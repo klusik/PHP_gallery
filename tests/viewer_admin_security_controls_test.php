@@ -434,6 +434,9 @@ namespace {
     require_once $root . '/app/services/schema_inspection.php';
     require_once $root . '/app/services/security_tokens.php';
     require_once $root . '/app/services/client_ip.php';
+    require_once $root . '/app/bootstrap/viewer_identity_context.php';
+    require_once $root . '/app/models/viewer_accounts.php';
+    require_once $root . '/app/models/viewer_authentication.php';
     require_once $root . '/app/services/viewer_accounts.php';
     require_once $root . '/app/services/viewer_authentication.php';
     require_once $root . '/app/security.php';
@@ -608,7 +611,9 @@ namespace {
     viewer_phase25_assert(function_exists('Gallery\\Services\\viewer_account_suspend') && function_exists('Gallery\\Services\\viewer_account_restore') && function_exists('Gallery\\Services\\viewer_session_revoke_all'), 'Runtime lifecycle symbols imported by the Admin controller must exist in Gallery\\Services.');
 
     $controller = (string) file_get_contents($root . '/app/controllers/viewer_accounts.php');
+    $viewerView = (string) file_get_contents($root . '/app/views/viewer_accounts.php');
     $adminPage = viewer_phase25_function_source($controller, 'cms_admin_viewer_invitations');
+    $adminView = viewer_phase25_function_source($viewerView, 'view_render_admin_viewer_accounts');
     $postGuard = strpos($adminPage, "if (request_method() === 'POST')");
     foreach (['suspend_account', 'restore_account', 'revoke_sessions'] as $action) {
         $position = strpos($adminPage, "elseif (\$action === '{$action}')");
@@ -621,19 +626,20 @@ namespace {
     viewer_phase25_assert(str_contains($adminPage, 'viewer.account_admin_suspended') && str_contains($adminPage, 'viewer.account_admin_restored') && str_contains($adminPage, 'viewer.account_admin_sessions_revoked'), 'Admin audit event attribution must cover all Phase 2.5 controls.');
     viewer_phase25_assert(!str_contains($adminPage, 'session_destroy()') && !str_contains($adminPage, "unset(\$_SESSION['user_id'])"), 'Admin security controls must never destroy the shared PHP/Admin session authority.');
     viewer_phase25_assert(str_contains($adminPage, 'VIEWER_ACCOUNT_STATUS_ACTIVE') && str_contains($adminPage, 'VIEWER_ACCOUNT_STATUS_SUSPENDED'), 'Admin account table must present state-specific actions.');
-    viewer_phase25_assert(str_contains($adminPage, "value=\"suspend_account\"") && str_contains($adminPage, "value=\"restore_account\"") && str_contains($adminPage, "value=\"revoke_sessions\""), 'Admin account table must render Suspend, Restore, and Sign out everywhere POST forms.');
-    viewer_phase25_assert(!str_contains($adminPage, "value=\"disable_account\""), 'Phase 2.5 must not expose a second Admin-facing Disable action.');
+    viewer_phase25_assert(str_contains($adminView, "value=\"suspend_account\"") && str_contains($adminView, "value=\"restore_account\"") && str_contains($adminView, "value=\"revoke_sessions\""), 'Admin account view must render Suspend, Restore, and Sign out everywhere POST forms.');
+    viewer_phase25_assert(!str_contains($adminView, "value=\"disable_account\""), 'Phase 2.5 must not expose a second Admin-facing Disable action.');
 
     $accountsSource = (string) file_get_contents($root . '/app/services/viewer_accounts.php');
+    $accountModelSource = (string) file_get_contents($root . '/app/models/viewer_accounts.php');
     $transition = viewer_phase25_function_source($accountsSource, 'viewer_account_transition_status');
     $logoutAll = viewer_phase25_function_source($accountsSource, 'viewer_session_revoke_all');
     $invalidate = viewer_phase25_function_source($accountsSource, 'viewer_account_invalidate_authentication');
-    viewer_phase25_assert(str_contains($transition, 'FOR UPDATE') && str_contains($transition, 'security_version = security_version + 1'), 'Suspend/restore must remain transactional and security-versioned in the existing service.');
+    viewer_phase25_assert(str_contains($transition, 'viewer_account_model_transaction(') && str_contains($transition, 'viewer_account_model_lock(') && str_contains($transition, 'viewer_account_model_update_status(') && str_contains($accountModelSource, 'FOR UPDATE') && str_contains($accountModelSource, 'security_version = security_version + 1'), 'Suspend/restore must remain transactional and security-versioned across service policy and model persistence.');
     foreach (['viewer_sessions', 'viewer_remember_tokens', 'viewer_password_reset_tokens', 'viewer_email_verification_tokens', 'viewer_email_change_requests', 'viewer_collection_share_tokens'] as $table) {
-        viewer_phase25_assert(str_contains($transition, $table), 'Account transition must retain revocation coverage for ' . $table . '.');
+        viewer_phase25_assert(str_contains($transition, 'viewer_account_model_revoke_transition_authority(') && str_contains($accountModelSource, $table), 'Account transition must retain revocation coverage for ' . $table . '.');
     }
     viewer_phase25_assert(str_contains($logoutAll, 'viewer_account_invalidate_authentication($viewerAccountId)'), 'Sign out everywhere must reuse central authentication invalidation.');
-    viewer_phase25_assert(str_contains($invalidate, 'viewer_sessions') && str_contains($invalidate, 'viewer_remember_tokens') && str_contains($invalidate, 'viewer_password_reset_tokens'), 'Central logout-all invalidation must revoke sessions, remember tokens, and reset authority.');
+    viewer_phase25_assert(str_contains($invalidate, 'viewer_account_model_invalidate_authentication(') && str_contains($accountModelSource, 'viewer_sessions') && str_contains($accountModelSource, 'viewer_remember_tokens') && str_contains($accountModelSource, 'viewer_password_reset_tokens'), 'Central logout-all invalidation must revoke sessions, remember tokens, and reset authority.');
     viewer_phase25_assert(!str_contains($invalidate, 'status =') && !str_contains($invalidate, 'viewer_favourites') && !str_contains($invalidate, 'viewer_collections'), 'Sign out everywhere must not change account status or viewer-owned content.');
 
     $authenticationSource = (string) file_get_contents($root . '/app/services/viewer_authentication.php');

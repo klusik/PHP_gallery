@@ -18,6 +18,9 @@
  *   - Apply owner-scoped rename, delete, remove, and transactional reorder operations
  *   - Keep dormant collection-sharing storage completely outside the Phase 2.0 API
  *
+ * Author:
+ *   Rudolf Klusal
+ *
  * Notes:
  *   - Keep comments and docstrings intact when modifying this file.
  *   - Viewer authentication is not gallery authorization.
@@ -32,9 +35,26 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
-use PDO;
 use Throwable;
-use function Gallery\Core\db;
+use function Gallery\Models\viewer_collection_model_abort;
+use function Gallery\Models\viewer_collection_model_account_lock;
+use function Gallery\Models\viewer_collection_model_delete;
+use function Gallery\Models\viewer_collection_model_insert;
+use function Gallery\Models\viewer_collection_model_item_count_and_max_position;
+use function Gallery\Models\viewer_collection_model_item_delete;
+use function Gallery\Models\viewer_collection_model_item_exists;
+use function Gallery\Models\viewer_collection_model_item_insert;
+use function Gallery\Models\viewer_collection_model_item_references;
+use function Gallery\Models\viewer_collection_model_items_lock;
+use function Gallery\Models\viewer_collection_model_list_for_owner;
+use function Gallery\Models\viewer_collection_model_normalize_positions;
+use function Gallery\Models\viewer_collection_model_owned_get;
+use function Gallery\Models\viewer_collection_model_owned_lock;
+use function Gallery\Models\viewer_collection_model_owner_count;
+use function Gallery\Models\viewer_collection_model_rename;
+use function Gallery\Models\viewer_collection_model_touch;
+use function Gallery\Models\viewer_collection_model_transaction;
+use function Gallery\Models\viewer_collection_model_update_positions;
 use function Gallery\Core\now_sql;
 
 /**
@@ -99,17 +119,8 @@ function viewer_collections_for_owner(int $viewerAccountId): array
 
     try {
         $limit = max(1, (int) viewer_content_quota_config()['max_viewer_collections_per_account']);
-        $stmt = db()->prepare(
-            'SELECT vc.id, vc.title, vc.created_at, vc.updated_at, COUNT(vci.image_id) AS item_count '
-            . 'FROM viewer_collections vc '
-            . 'LEFT JOIN viewer_collection_items vci ON vci.viewer_collection_id = vc.id '
-            . 'WHERE vc.viewer_account_id = ? '
-            . 'GROUP BY vc.id, vc.title, vc.created_at, vc.updated_at '
-            . 'ORDER BY vc.updated_at DESC, vc.id DESC LIMIT ' . $limit
-        );
-        $stmt->execute([$viewerAccountId]);
         $rows = [];
-        foreach ($stmt->fetchAll() as $row) {
+        foreach (viewer_collection_model_list_for_owner($viewerAccountId, $limit) as $row) {
             $rows[] = [
                 'id' => (int) ($row['id'] ?? 0),
                 'title' => (string) ($row['title'] ?? ''),
@@ -138,13 +149,7 @@ function viewer_collection_owned_get(int $viewerAccountId, int $collectionId): ?
     }
 
     try {
-        $stmt = db()->prepare(
-            'SELECT vc.id, vc.title, vc.created_at, vc.updated_at, '
-            . '(SELECT COUNT(*) FROM viewer_collection_items vci WHERE vci.viewer_collection_id = vc.id) AS item_count '
-            . 'FROM viewer_collections vc WHERE vc.id = ? AND vc.viewer_account_id = ? LIMIT 1'
-        );
-        $stmt->execute([$collectionId, $viewerAccountId]);
-        $row = $stmt->fetch();
+        $row = viewer_collection_model_owned_get($viewerAccountId, $collectionId);
         if (!$row) {
             return null;
         }
@@ -178,16 +183,8 @@ function viewer_collection_item_references(int $viewerAccountId, int $collection
 
     try {
         $limit = max(1, (int) viewer_content_quota_config()['max_viewer_items_per_collection']);
-        $stmt = db()->prepare(
-            'SELECT vci.image_id, vci.position, vci.created_at '
-            . 'FROM viewer_collection_items vci '
-            . 'INNER JOIN viewer_collections vc ON vc.id = vci.viewer_collection_id '
-            . 'WHERE vci.viewer_collection_id = ? AND vc.viewer_account_id = ? '
-            . 'ORDER BY vci.position ASC, vci.image_id ASC LIMIT ' . $limit
-        );
-        $stmt->execute([$collectionId, $viewerAccountId]);
         $rows = [];
-        foreach ($stmt->fetchAll() as $row) {
+        foreach (viewer_collection_model_item_references($viewerAccountId, $collectionId, $limit) as $row) {
             $rows[] = [
                 'image_id' => (int) ($row['image_id'] ?? 0),
                 'position' => (int) ($row['position'] ?? 0),
@@ -203,24 +200,20 @@ function viewer_collection_item_references(int $viewerAccountId, int $collection
 /**
  * Lock and revalidate the current viewer account before a collection mutation.
  *
- * @param PDO $pdo Active database handle.
- * @param array $viewer Current viewer principal returned by current_viewer().
+ * @param mixed $transactionContextOrViewer Viewer principal, or legacy transaction context followed by viewer principal.
+ * @param ?array $viewer Optional viewer principal for legacy internal callers.
  * @return ?array Locked account row, or null when authority changed.
  */
-function viewer_collection_lock_mutation_account(PDO $pdo, array $viewer): ?array
+function viewer_collection_lock_mutation_account(mixed $transactionContextOrViewer, ?array $viewer = null): ?array
 {
+    $viewer = $viewer ?? (is_array($transactionContextOrViewer) ? $transactionContextOrViewer : []);
     $viewerAccountId = (int) ($viewer['id'] ?? 0);
     $expectedSecurityVersion = (int) ($viewer['security_version'] ?? 0);
     if ($viewerAccountId <= 0 || $expectedSecurityVersion <= 0) {
         return null;
     }
 
-    $stmt = $pdo->prepare(
-        'SELECT id, email, normalized_email, password_hash, must_change_password, status, security_version, email_verified_at '
-        . 'FROM viewer_accounts WHERE id = ? LIMIT 1 FOR UPDATE'
-    );
-    $stmt->execute([$viewerAccountId]);
-    $account = $stmt->fetch();
+    $account = viewer_collection_model_account_lock($viewerAccountId);
     if (!$account
         || !viewer_account_can_mutate_content($account)
         || (int) ($account['security_version'] ?? 0) !== $expectedSecurityVersion) {
@@ -232,20 +225,17 @@ function viewer_collection_lock_mutation_account(PDO $pdo, array $viewer): ?arra
 /**
  * Lock one collection under an explicit owner predicate.
  *
- * @param PDO $pdo Active database handle.
- * @param int $viewerAccountId Authenticated viewer owner id.
- * @param int $collectionId Collection id.
+ * @param mixed $transactionContextOrViewerAccountId Viewer account id, or legacy transaction context.
+ * @param int $viewerAccountIdOrCollectionId Viewer account id or collection id depending on call shape.
+ * @param ?int $collectionId Optional collection id for legacy internal callers.
  * @return ?array Locked collection row.
  */
-function viewer_collection_lock_owned(PDO $pdo, int $viewerAccountId, int $collectionId): ?array
+function viewer_collection_lock_owned(mixed $transactionContextOrViewerAccountId, int $viewerAccountIdOrCollectionId, ?int $collectionId = null): ?array
 {
-    $stmt = $pdo->prepare(
-        'SELECT id, viewer_account_id, title, created_at, updated_at '
-        . 'FROM viewer_collections WHERE id = ? AND viewer_account_id = ? LIMIT 1 FOR UPDATE'
-    );
-    $stmt->execute([$collectionId, $viewerAccountId]);
-    $row = $stmt->fetch();
-    return $row ?: null;
+    if ($collectionId === null) {
+        return viewer_collection_model_owned_lock((int) $transactionContextOrViewerAccountId, $viewerAccountIdOrCollectionId);
+    }
+    return viewer_collection_model_owned_lock($viewerAccountIdOrCollectionId, $collectionId);
 }
 
 /**
@@ -254,35 +244,13 @@ function viewer_collection_lock_owned(PDO $pdo, int $viewerAccountId, int $colle
  * The caller must already hold the owned collection row lock. At the Phase 2 quota this is a
  * bounded update and prevents repeated remove/add churn from causing unbounded position growth.
  *
- * @param PDO $pdo Active database handle.
- * @param int $collectionId Locked collection identifier.
+ * @param mixed $transactionContextOrCollectionId Collection id, or legacy transaction context.
+ * @param ?int $collectionId Optional locked collection id for legacy internal callers.
  * @return int Number of collection items after normalization.
  */
-function viewer_collection_normalize_positions(PDO $pdo, int $collectionId): int
+function viewer_collection_normalize_positions(mixed $transactionContextOrCollectionId, ?int $collectionId = null): int
 {
-    $stmt = $pdo->prepare(
-        'SELECT image_id, position FROM viewer_collection_items '
-        . 'WHERE viewer_collection_id = ? ORDER BY position ASC, image_id ASC FOR UPDATE'
-    );
-    $stmt->execute([$collectionId]);
-    $rows = $stmt->fetchAll();
-    $update = null;
-    foreach ($rows as $index => $row) {
-        $targetPosition = $index + 1;
-        if ((int) ($row['position'] ?? 0) === $targetPosition) {
-            continue;
-        }
-        if ($update === null) {
-            $update = $pdo->prepare(
-                'UPDATE viewer_collection_items SET position = ? WHERE viewer_collection_id = ? AND image_id = ?'
-            );
-        }
-        $update->execute([$targetPosition, $collectionId, (int) ($row['image_id'] ?? 0)]);
-        if ($update->rowCount() > 1) {
-            throw new \RuntimeException('Viewer collection position normalization affected multiple rows.');
-        }
-    }
-    return count($rows);
+    return viewer_collection_model_normalize_positions($collectionId ?? (int) $transactionContextOrCollectionId);
 }
 
 /**
@@ -349,50 +317,23 @@ function viewer_collection_create(array $viewer, string $rawTitle): array
         ];
     }
 
-    $pdo = db();
-    $ownsTransaction = !$pdo->inTransaction();
-    if ($ownsTransaction) {
-        $pdo->beginTransaction();
-    }
-
     try {
-        $account = viewer_collection_lock_mutation_account($pdo, $viewer);
-        if ($account === null) {
-            if ($ownsTransaction && $pdo->inTransaction()) {
-                $pdo->rollBack();
+        $result = viewer_collection_model_transaction(static function () use ($viewer, $viewerAccountId, $prepared): array {
+            if (viewer_collection_lock_mutation_account($viewer) === null) {
+                viewer_collection_model_abort(['ok' => false, 'collection_id' => 0, 'changed' => false, 'reason' => 'account_unavailable', 'retry_after_seconds' => 0]);
             }
-            return ['ok' => false, 'collection_id' => 0, 'changed' => false, 'reason' => 'account_unavailable', 'retry_after_seconds' => 0];
-        }
-
-        $quota = viewer_content_quota_config();
-        $countStmt = $pdo->prepare('SELECT COUNT(*) FROM viewer_collections WHERE viewer_account_id = ?');
-        $countStmt->execute([$viewerAccountId]);
-        if ((int) $countStmt->fetchColumn() >= (int) $quota['max_viewer_collections_per_account']) {
-            if ($ownsTransaction && $pdo->inTransaction()) {
-                $pdo->rollBack();
+            $quota = viewer_content_quota_config();
+            if (viewer_collection_model_owner_count($viewerAccountId) >= (int) $quota['max_viewer_collections_per_account']) {
+                viewer_collection_model_abort(['ok' => false, 'collection_id' => 0, 'changed' => false, 'reason' => 'quota', 'retry_after_seconds' => 0]);
             }
-            return ['ok' => false, 'collection_id' => 0, 'changed' => false, 'reason' => 'quota', 'retry_after_seconds' => 0];
+            $collectionId = viewer_collection_model_insert($viewerAccountId, $prepared['title'], now_sql());
+            return ['ok' => true, 'collection_id' => $collectionId, 'changed' => true, 'reason' => 'ok', 'retry_after_seconds' => 0];
+        });
+        if ($result['ok']) {
+            viewer_collection_security_event_best_effort('viewer.collection_created', $viewerAccountId, 'success', (int) $result['collection_id']);
         }
-
-        $now = now_sql();
-        $insert = $pdo->prepare(
-            'INSERT INTO viewer_collections (viewer_account_id, title, created_at, updated_at) VALUES (?, ?, ?, ?)'
-        );
-        $insert->execute([$viewerAccountId, $prepared['title'], $now, $now]);
-        $collectionId = (int) $pdo->lastInsertId();
-        if ($collectionId <= 0) {
-            throw new \RuntimeException('Viewer collection insert did not return an identifier.');
-        }
-
-        if ($ownsTransaction) {
-            $pdo->commit();
-        }
-        viewer_collection_security_event_best_effort('viewer.collection_created', $viewerAccountId, 'success', $collectionId);
-        return ['ok' => true, 'collection_id' => $collectionId, 'changed' => true, 'reason' => 'ok', 'retry_after_seconds' => 0];
+        return $result;
     } catch (Throwable) {
-        if ($ownsTransaction && $pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
         return ['ok' => false, 'collection_id' => 0, 'changed' => false, 'reason' => 'unavailable', 'retry_after_seconds' => 0];
     }
 }
@@ -419,47 +360,26 @@ function viewer_collection_rename(array $viewer, int $collectionId, string $rawT
         return ['ok' => false, 'changed' => false, 'reason' => 'invalid_title'];
     }
 
-    $pdo = db();
-    $ownsTransaction = !$pdo->inTransaction();
-    if ($ownsTransaction) {
-        $pdo->beginTransaction();
-    }
     try {
-        if (viewer_collection_lock_mutation_account($pdo, $viewer) === null) {
-            if ($ownsTransaction && $pdo->inTransaction()) {
-                $pdo->rollBack();
+        $result = viewer_collection_model_transaction(static function () use ($viewer, $viewerAccountId, $collectionId, $prepared): array {
+            if (viewer_collection_lock_mutation_account($viewer) === null) {
+                viewer_collection_model_abort(['ok' => false, 'changed' => false, 'reason' => 'account_unavailable']);
             }
-            return ['ok' => false, 'changed' => false, 'reason' => 'account_unavailable'];
-        }
-        $collection = viewer_collection_lock_owned($pdo, $viewerAccountId, $collectionId);
-        if ($collection === null) {
-            if ($ownsTransaction && $pdo->inTransaction()) {
-                $pdo->rollBack();
+            $collection = viewer_collection_lock_owned($viewerAccountId, $collectionId);
+            if ($collection === null) {
+                viewer_collection_model_abort(['ok' => false, 'changed' => false, 'reason' => 'not_found']);
             }
-            return ['ok' => false, 'changed' => false, 'reason' => 'not_found'];
-        }
-
-        $changed = (string) ($collection['title'] ?? '') !== $prepared['title'];
-        if ($changed) {
-            $stmt = $pdo->prepare(
-                'UPDATE viewer_collections SET title = ?, updated_at = ? WHERE id = ? AND viewer_account_id = ?'
-            );
-            $stmt->execute([$prepared['title'], now_sql(), $collectionId, $viewerAccountId]);
-            if ($stmt->rowCount() !== 1) {
-                throw new \RuntimeException('Viewer collection rename lost ownership.');
+            $changed = (string) ($collection['title'] ?? '') !== $prepared['title'];
+            if ($changed) {
+                viewer_collection_model_rename($viewerAccountId, $collectionId, $prepared['title'], now_sql());
             }
-        }
-        if ($ownsTransaction) {
-            $pdo->commit();
-        }
-        if ($changed) {
+            return ['ok' => true, 'changed' => $changed, 'reason' => 'ok'];
+        });
+        if ($result['changed']) {
             viewer_collection_security_event_best_effort('viewer.collection_renamed', $viewerAccountId, 'success', $collectionId);
         }
-        return ['ok' => true, 'changed' => $changed, 'reason' => 'ok'];
+        return $result;
     } catch (Throwable) {
-        if ($ownsTransaction && $pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
         return ['ok' => false, 'changed' => false, 'reason' => 'unavailable'];
     }
 }
@@ -484,39 +404,22 @@ function viewer_collection_delete(array $viewer, int $collectionId): array
         return ['ok' => false, 'changed' => false, 'reason' => 'unavailable'];
     }
 
-    $pdo = db();
-    $ownsTransaction = !$pdo->inTransaction();
-    if ($ownsTransaction) {
-        $pdo->beginTransaction();
-    }
     try {
-        if (viewer_collection_lock_mutation_account($pdo, $viewer) === null) {
-            if ($ownsTransaction && $pdo->inTransaction()) {
-                $pdo->rollBack();
+        $result = viewer_collection_model_transaction(static function () use ($viewer, $viewerAccountId, $collectionId): array {
+            if (viewer_collection_lock_mutation_account($viewer) === null) {
+                viewer_collection_model_abort(['ok' => false, 'changed' => false, 'reason' => 'account_unavailable']);
             }
-            return ['ok' => false, 'changed' => false, 'reason' => 'account_unavailable'];
-        }
-        if (viewer_collection_lock_owned($pdo, $viewerAccountId, $collectionId) === null) {
-            if ($ownsTransaction && $pdo->inTransaction()) {
-                $pdo->rollBack();
+            if (viewer_collection_lock_owned($viewerAccountId, $collectionId) === null) {
+                viewer_collection_model_abort(['ok' => false, 'changed' => false, 'reason' => 'not_found']);
             }
-            return ['ok' => false, 'changed' => false, 'reason' => 'not_found'];
+            viewer_collection_model_delete($viewerAccountId, $collectionId);
+            return ['ok' => true, 'changed' => true, 'reason' => 'ok'];
+        });
+        if ($result['changed']) {
+            viewer_collection_security_event_best_effort('viewer.collection_deleted', $viewerAccountId, 'success', $collectionId);
         }
-
-        $delete = $pdo->prepare('DELETE FROM viewer_collections WHERE id = ? AND viewer_account_id = ?');
-        $delete->execute([$collectionId, $viewerAccountId]);
-        if ($delete->rowCount() !== 1) {
-            throw new \RuntimeException('Viewer collection delete lost ownership.');
-        }
-        if ($ownsTransaction) {
-            $pdo->commit();
-        }
-        viewer_collection_security_event_best_effort('viewer.collection_deleted', $viewerAccountId, 'success', $collectionId);
-        return ['ok' => true, 'changed' => true, 'reason' => 'ok'];
+        return $result;
     } catch (Throwable) {
-        if ($ownsTransaction && $pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
         return ['ok' => false, 'changed' => false, 'reason' => 'unavailable'];
     }
 }
@@ -546,74 +449,40 @@ function viewer_collection_item_add(array $viewer, int $collectionId, int $image
         return ['ok' => false, 'changed' => false, 'reason' => 'source_forbidden'];
     }
 
-    $pdo = db();
-    $ownsTransaction = !$pdo->inTransaction();
-    if ($ownsTransaction) {
-        $pdo->beginTransaction();
-    }
     try {
-        if (viewer_collection_lock_mutation_account($pdo, $viewer) === null) {
-            if ($ownsTransaction && $pdo->inTransaction()) {
-                $pdo->rollBack();
+        $result = viewer_collection_model_transaction(static function () use ($viewer, $viewerAccountId, $collectionId, $imageId): array {
+            if (viewer_collection_lock_mutation_account($viewer) === null) {
+                viewer_collection_model_abort(['ok' => false, 'changed' => false, 'reason' => 'account_unavailable']);
             }
-            return ['ok' => false, 'changed' => false, 'reason' => 'account_unavailable'];
-        }
-        if (viewer_collection_lock_owned($pdo, $viewerAccountId, $collectionId) === null) {
-            if ($ownsTransaction && $pdo->inTransaction()) {
-                $pdo->rollBack();
+            if (viewer_collection_lock_owned($viewerAccountId, $collectionId) === null) {
+                viewer_collection_model_abort(['ok' => false, 'changed' => false, 'reason' => 'not_found']);
             }
-            return ['ok' => false, 'changed' => false, 'reason' => 'not_found'];
-        }
-
-        $existsStmt = $pdo->prepare(
-            'SELECT 1 FROM viewer_collection_items WHERE viewer_collection_id = ? AND image_id = ? LIMIT 1'
-        );
-        $existsStmt->execute([$collectionId, $imageId]);
-        if ($existsStmt->fetchColumn()) {
-            if ($ownsTransaction) {
-                $pdo->commit();
+            if (viewer_collection_model_item_exists($collectionId, $imageId)) {
+                return ['ok' => true, 'changed' => false, 'reason' => 'already_present'];
             }
-            return ['ok' => true, 'changed' => false, 'reason' => 'already_present'];
-        }
-
-        $quota = viewer_content_quota_config();
-        $countStmt = $pdo->prepare('SELECT COUNT(*) FROM viewer_collection_items WHERE viewer_collection_id = ?');
-        $countStmt->execute([$collectionId]);
-        $itemCount = (int) $countStmt->fetchColumn();
-        if ($itemCount >= (int) $quota['max_viewer_items_per_collection']) {
-            if ($ownsTransaction && $pdo->inTransaction()) {
-                $pdo->rollBack();
+            $quota = viewer_content_quota_config();
+            $state = viewer_collection_model_item_count_and_max_position($collectionId);
+            $itemCount = (int) $state['item_count'];
+            if ($itemCount >= (int) $quota['max_viewer_items_per_collection']) {
+                viewer_collection_model_abort(['ok' => false, 'changed' => false, 'reason' => 'quota']);
             }
-            return ['ok' => false, 'changed' => false, 'reason' => 'quota'];
+            if ((int) $state['max_position'] !== $itemCount) {
+                $itemCount = viewer_collection_normalize_positions($collectionId);
+            }
+            $position = $itemCount + 1;
+            if ($position <= 0 || $position > 4294967295) {
+                throw new \RuntimeException('Viewer collection position is out of range.');
+            }
+            $now = now_sql();
+            viewer_collection_model_item_insert($collectionId, $imageId, $position, $now);
+            viewer_collection_model_touch($viewerAccountId, $collectionId, $now);
+            return ['ok' => true, 'changed' => true, 'reason' => 'ok'];
+        });
+        if ($result['changed']) {
+            viewer_collection_security_event_best_effort('viewer.collection_item_added', $viewerAccountId, 'success', $collectionId);
         }
-
-        $positionStmt = $pdo->prepare('SELECT COALESCE(MAX(position), 0) FROM viewer_collection_items WHERE viewer_collection_id = ?');
-        $positionStmt->execute([$collectionId]);
-        $maxPosition = (int) $positionStmt->fetchColumn();
-        if ($maxPosition !== $itemCount) {
-            $itemCount = viewer_collection_normalize_positions($pdo, $collectionId);
-        }
-        $position = $itemCount + 1;
-        if ($position <= 0 || $position > 4294967295) {
-            throw new \RuntimeException('Viewer collection position is out of range.');
-        }
-
-        $insert = $pdo->prepare(
-            'INSERT INTO viewer_collection_items (viewer_collection_id, image_id, position, created_at) VALUES (?, ?, ?, ?)'
-        );
-        $insert->execute([$collectionId, $imageId, $position, now_sql()]);
-        $pdo->prepare('UPDATE viewer_collections SET updated_at = ? WHERE id = ? AND viewer_account_id = ?')
-            ->execute([now_sql(), $collectionId, $viewerAccountId]);
-
-        if ($ownsTransaction) {
-            $pdo->commit();
-        }
-        viewer_collection_security_event_best_effort('viewer.collection_item_added', $viewerAccountId, 'success', $collectionId);
-        return ['ok' => true, 'changed' => true, 'reason' => 'ok'];
+        return $result;
     } catch (Throwable) {
-        if ($ownsTransaction && $pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
         return ['ok' => false, 'changed' => false, 'reason' => 'unavailable'];
     }
 }
@@ -636,46 +505,26 @@ function viewer_collection_item_remove(array $viewer, int $collectionId, int $im
         return ['ok' => false, 'changed' => false, 'reason' => 'unavailable'];
     }
 
-    $pdo = db();
-    $ownsTransaction = !$pdo->inTransaction();
-    if ($ownsTransaction) {
-        $pdo->beginTransaction();
-    }
     try {
-        if (viewer_collection_lock_mutation_account($pdo, $viewer) === null) {
-            if ($ownsTransaction && $pdo->inTransaction()) {
-                $pdo->rollBack();
+        $result = viewer_collection_model_transaction(static function () use ($viewer, $viewerAccountId, $collectionId, $imageId): array {
+            if (viewer_collection_lock_mutation_account($viewer) === null) {
+                viewer_collection_model_abort(['ok' => false, 'changed' => false, 'reason' => 'account_unavailable']);
             }
-            return ['ok' => false, 'changed' => false, 'reason' => 'account_unavailable'];
-        }
-        if (viewer_collection_lock_owned($pdo, $viewerAccountId, $collectionId) === null) {
-            if ($ownsTransaction && $pdo->inTransaction()) {
-                $pdo->rollBack();
+            if (viewer_collection_lock_owned($viewerAccountId, $collectionId) === null) {
+                viewer_collection_model_abort(['ok' => false, 'changed' => false, 'reason' => 'not_found']);
             }
-            return ['ok' => false, 'changed' => false, 'reason' => 'not_found'];
-        }
-
-        $delete = $pdo->prepare(
-            'DELETE FROM viewer_collection_items WHERE viewer_collection_id = ? AND image_id = ?'
-        );
-        $delete->execute([$collectionId, $imageId]);
-        $changed = $delete->rowCount() > 0;
-        if ($changed) {
-            viewer_collection_normalize_positions($pdo, $collectionId);
-            $pdo->prepare('UPDATE viewer_collections SET updated_at = ? WHERE id = ? AND viewer_account_id = ?')
-                ->execute([now_sql(), $collectionId, $viewerAccountId]);
-        }
-        if ($ownsTransaction) {
-            $pdo->commit();
-        }
-        if ($changed) {
+            $changed = viewer_collection_model_item_delete($collectionId, $imageId);
+            if ($changed) {
+                viewer_collection_normalize_positions($collectionId);
+                viewer_collection_model_touch($viewerAccountId, $collectionId, now_sql());
+            }
+            return ['ok' => true, 'changed' => $changed, 'reason' => 'ok'];
+        });
+        if ($result['changed']) {
             viewer_collection_security_event_best_effort('viewer.collection_item_removed', $viewerAccountId, 'success', $collectionId);
         }
-        return ['ok' => true, 'changed' => $changed, 'reason' => 'ok'];
+        return $result;
     } catch (Throwable) {
-        if ($ownsTransaction && $pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
         return ['ok' => false, 'changed' => false, 'reason' => 'unavailable'];
     }
 }
@@ -703,8 +552,7 @@ function viewer_collection_reorder(array $viewer, int $collectionId, array $subm
         return ['ok' => false, 'changed' => false, 'reason' => 'unavailable'];
     }
 
-    $quota = viewer_content_quota_config();
-    $maxItems = (int) $quota['max_viewer_items_per_collection'];
+    $maxItems = (int) viewer_content_quota_config()['max_viewer_items_per_collection'];
     if (count($submittedImageIds) > $maxItems) {
         return ['ok' => false, 'changed' => false, 'reason' => 'oversized'];
     }
@@ -724,108 +572,65 @@ function viewer_collection_reorder(array $viewer, int $collectionId, array $subm
         $submitted[] = $imageId;
     }
 
-    $pdo = db();
-    $ownsTransaction = !$pdo->inTransaction();
-    if ($ownsTransaction) {
-        $pdo->beginTransaction();
-    }
     try {
-        if (viewer_collection_lock_mutation_account($pdo, $viewer) === null) {
-            if ($ownsTransaction && $pdo->inTransaction()) {
-                $pdo->rollBack();
+        return viewer_collection_model_transaction(static function () use ($viewer, $viewerAccountId, $collectionId, $maxItems, $submitted, $seen): array {
+            if (viewer_collection_lock_mutation_account($viewer) === null) {
+                viewer_collection_model_abort(['ok' => false, 'changed' => false, 'reason' => 'account_unavailable']);
             }
-            return ['ok' => false, 'changed' => false, 'reason' => 'account_unavailable'];
-        }
-        if (viewer_collection_lock_owned($pdo, $viewerAccountId, $collectionId) === null) {
-            if ($ownsTransaction && $pdo->inTransaction()) {
-                $pdo->rollBack();
+            if (viewer_collection_lock_owned($viewerAccountId, $collectionId) === null) {
+                viewer_collection_model_abort(['ok' => false, 'changed' => false, 'reason' => 'not_found']);
             }
-            return ['ok' => false, 'changed' => false, 'reason' => 'not_found'];
-        }
+            $rows = viewer_collection_model_items_lock($collectionId);
+            if (count($rows) > $maxItems) {
+                viewer_collection_model_abort(['ok' => false, 'changed' => false, 'reason' => 'quota_state_invalid']);
+            }
 
-        $itemsStmt = $pdo->prepare(
-            'SELECT image_id, position FROM viewer_collection_items '
-            . 'WHERE viewer_collection_id = ? ORDER BY position ASC, image_id ASC FOR UPDATE'
-        );
-        $itemsStmt->execute([$collectionId]);
-        $rows = $itemsStmt->fetchAll();
-        if (count($rows) > $maxItems) {
-            if ($ownsTransaction && $pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
-            return ['ok' => false, 'changed' => false, 'reason' => 'quota_state_invalid'];
-        }
-
-        $currentOrder = [];
-        $currentSet = [];
-        foreach ($rows as $row) {
-            $imageId = (int) ($row['image_id'] ?? 0);
-            if ($imageId <= 0) {
-                throw new \RuntimeException('Viewer collection contains an invalid image reference.');
-            }
-            $currentOrder[] = $imageId;
-            $currentSet[$imageId] = true;
-        }
-        if ($submitted === [] && $currentOrder !== []) {
-            if ($ownsTransaction && $pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
-            return ['ok' => false, 'changed' => false, 'reason' => 'invalid_order'];
-        }
-        foreach ($submitted as $imageId) {
-            if (!isset($currentSet[$imageId])) {
-                if ($ownsTransaction && $pdo->inTransaction()) {
-                    $pdo->rollBack();
+            $currentOrder = [];
+            $currentSet = [];
+            foreach ($rows as $row) {
+                $imageId = (int) ($row['image_id'] ?? 0);
+                if ($imageId <= 0) {
+                    throw new \RuntimeException('Viewer collection contains an invalid image reference.');
                 }
-                return ['ok' => false, 'changed' => false, 'reason' => 'foreign_item'];
+                $currentOrder[] = $imageId;
+                $currentSet[$imageId] = true;
             }
-        }
-
-        $newOrder = $currentOrder;
-        $submittedIndex = 0;
-        foreach ($currentOrder as $index => $imageId) {
-            if (isset($seen[$imageId])) {
-                $newOrder[$index] = $submitted[$submittedIndex];
-                $submittedIndex++;
+            if ($submitted === [] && $currentOrder !== []) {
+                viewer_collection_model_abort(['ok' => false, 'changed' => false, 'reason' => 'invalid_order']);
             }
-        }
-        if ($submittedIndex !== count($submitted)) {
-            if ($ownsTransaction && $pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
-            return ['ok' => false, 'changed' => false, 'reason' => 'invalid_order'];
-        }
-
-        $positionsNormalized = true;
-        foreach ($rows as $index => $row) {
-            if ((int) ($row['position'] ?? 0) !== $index + 1) {
-                $positionsNormalized = false;
-                break;
-            }
-        }
-        $changed = $newOrder !== $currentOrder || !$positionsNormalized;
-        if ($changed) {
-            $update = $pdo->prepare(
-                'UPDATE viewer_collection_items SET position = ? WHERE viewer_collection_id = ? AND image_id = ?'
-            );
-            foreach ($newOrder as $index => $imageId) {
-                $update->execute([$index + 1, $collectionId, $imageId]);
-                if ($update->rowCount() > 1) {
-                    throw new \RuntimeException('Viewer collection reorder affected multiple rows.');
+            foreach ($submitted as $imageId) {
+                if (!isset($currentSet[$imageId])) {
+                    viewer_collection_model_abort(['ok' => false, 'changed' => false, 'reason' => 'foreign_item']);
                 }
             }
-            $pdo->prepare('UPDATE viewer_collections SET updated_at = ? WHERE id = ? AND viewer_account_id = ?')
-                ->execute([now_sql(), $collectionId, $viewerAccountId]);
-        }
 
-        if ($ownsTransaction) {
-            $pdo->commit();
-        }
-        return ['ok' => true, 'changed' => $changed, 'reason' => 'ok'];
+            $newOrder = $currentOrder;
+            $submittedIndex = 0;
+            foreach ($currentOrder as $index => $imageId) {
+                if (isset($seen[$imageId])) {
+                    $newOrder[$index] = $submitted[$submittedIndex];
+                    $submittedIndex++;
+                }
+            }
+            if ($submittedIndex !== count($submitted)) {
+                viewer_collection_model_abort(['ok' => false, 'changed' => false, 'reason' => 'invalid_order']);
+            }
+
+            $positionsNormalized = true;
+            foreach ($rows as $index => $row) {
+                if ((int) ($row['position'] ?? 0) !== $index + 1) {
+                    $positionsNormalized = false;
+                    break;
+                }
+            }
+            $changed = $newOrder !== $currentOrder || !$positionsNormalized;
+            if ($changed) {
+                viewer_collection_model_update_positions($collectionId, $newOrder);
+                viewer_collection_model_touch($viewerAccountId, $collectionId, now_sql());
+            }
+            return ['ok' => true, 'changed' => $changed, 'reason' => 'ok'];
+        });
     } catch (Throwable) {
-        if ($ownsTransaction && $pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
         return ['ok' => false, 'changed' => false, 'reason' => 'unavailable'];
     }
 }
