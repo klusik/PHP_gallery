@@ -49,8 +49,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.101.1}
-\newcommand{\manualdate}{14 September 2026}
+\newcommand{\version}{0.101.2}
+\newcommand{\manualdate}{17 September 2026}
 
 \hypersetup{
   colorlinks=true,
@@ -1707,7 +1707,7 @@ Detailed \ui{Storage statistics} are~calculated only when an~administrator reque
 
 The~Database tab reads information-schema storage statistics separately from~the~filesystem scan. It~distinguishes Gallery-owned tables from~the~whole selected database where possible and~shows the~largest tables rather than~forcing a~full table inspection into the~ordinary dashboard request. The~explicit \ui{Recompute database statistics} action runs the~database engine's statistics refresh for~the~available tables and~reports partial failures in~the~Admin log instead of~pretending the~recompute was~complete.
 
-\ui{Maintenance > Complete report} builds one self-contained HTML report covering storage, database structure and~size, gallery structure, image and~EXIF statistics, GPS overview, telemetry, operational logs, feature/settings state, and~runtime diagnostics. Image and~generated-media work is~processed in~bounded browser-driven batches so~the~report remains practical on~shared hosting. GPS place summaries use local approximate clustering and~offline reference data; probable simulator or~game screenshots are~excluded from~real-world place frequency where the~available evidence supports that classification.
+\ui{Maintenance > Complete report} builds one self-contained HTML report covering storage, database structure and~size, gallery structure, image and~EXIF statistics, GPS overview, telemetry, operational logs, feature/settings state, and~runtime diagnostics. Image and~generated-media work is~processed in~bounded browser-driven batches so~the~report remains practical on~shared hosting. Transient timeout, rate-limit, and~server failures are~retried with~short increasing delays, while high-cardinality EXIF and~GPS summaries remain bounded to~control session-storage and~memory use on~large libraries. The~selected telemetry period affects only the~telemetry section; image statistics always cover the~complete image library. GPS place summaries use local approximate clustering and~offline reference data; probable simulator or~game screenshots are~excluded from~real-world place frequency where the~available evidence supports that classification.
 
 The~completed report is~returned to~the~browser as~a~download and~is~not~saved as~a~report file on~the~server. To~keep a~PDF copy, open the~generated HTML and~use the~browser's Print or~Save as~PDF function; print styling is~included in~the~report. Treat any exported report as~administrative data because it~can~contain detailed operational and~collection statistics.
 
@@ -1812,7 +1812,7 @@ Viewer accounts, lifecycle, favourites, private collections, and~unlisted sharin
 Database readiness/System Health & Tri-state schema inspection separating Available, Missing, Unknown, and~Disabled where applicable; distinct security/authentication, mutation-sensitive, and~optional presentation/report capability panels; writes fail closed on~unknown required schema.\\
 Database maintenance & Explicit schema/migration/code-reference inventory, storage information, dry-run cleanup candidates, bounded logical cleanup, dedicated legacy repair readiness, selected ANALYZE, selected-table optimization preview, and~separately confirmed OPTIMIZE TABLE.\\
 Storage statistics & On-demand source/generated-media scan, file-type/size distribution, largest galleries/files, DNG master and~thumbnail accounting, stale snapshot handling, separate database/table usage view, explicit database-statistics recompute, database-maintenance links, and~bounded refresh batches.\\
-Complete report & Self-contained HTML export covering storage, database, gallery/image/EXIF/GPS statistics, feature/settings state, telemetry, logs, and~runtime diagnostics, with bounded image/generated-media processing.\\
+Complete report & Self-contained HTML export covering storage, database, gallery/image/EXIF/GPS statistics, feature/settings state, telemetry, logs, and~runtime diagnostics, with bounded image/generated-media processing, transient-request retries, and~bounded high-cardinality summaries.\\
 Telemetry & Optional privacy-controlled anonymous usage/performance/cache/database measurements, DNT respect, administrator exclusion, bounded view time, raw/hourly/daily retention, rollups/purge, Admin dashboard, and~HTML export.\\
 Admin logs & Structured events, filters/status, repeated-event grouping with member expansion, bounded exports/ZIP export, configurable live retention, protected daily JSON+HTML archives, resume/recovery state, and~archive download/view tools.\\
 Scheduled site maintenance & Daily UTC window, optional request-triggered continuation, bounded image batch/time budget, CLI/web-cron support, run-one-slice action, interrupted-state reset, rotatable hidden web-cron token, thumbnail/metadata/cleanup/telemetry/log-archive tasks.\\
