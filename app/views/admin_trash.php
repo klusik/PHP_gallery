@@ -129,7 +129,7 @@ function render_admin_trash_page(array $entries, array $summary, bool $panelOnly
     echo '</tr></thead><tbody>';
 
     foreach ($entries as $entry) {
-        render_admin_trash_row($entry);
+        render_admin_trash_row($entry, $autoPurgeActive);
     }
 
     echo '</tbody></table></div>';
@@ -157,8 +157,9 @@ function admin_trash_status_label(string $status): string
  * Render one trash listing row with lifecycle-safe controls.
  *
  * @param array<string,mixed> $entry Trash entry row.
+ * @param bool $autoPurgeActive Whether automatic purge is active.
  */
-function render_admin_trash_row(array $entry): void
+function render_admin_trash_row(array $entry, bool $autoPurgeActive = false): void
 {
     // $token stores the trash entry identifier submitted by both action forms.
     $token = (string) ($entry['trash_token'] ?? '');

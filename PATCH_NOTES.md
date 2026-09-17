@@ -1,5 +1,28 @@
 # Patch notes
 
+## Version 0.101.1
+
+Version 0.101.1 is a small maintenance patch that fixes the Admin Trash listing warning when rendering recoverable gallery rows.
+
+### Highlights
+
+#### Admin Trash rendering
+
+- Fixed the automatic-purge status display so Trash rows render without repeated `Undefined variable $autoPurgeActive` warnings.
+
+### Technical Details
+
+#### Backend
+
+- Updated `app/views/admin_trash.php` to pass the automatic-purge state explicitly to each Trash row renderer.
+- Added no database migrations or schema changes.
+
+### User Impact
+
+#### For administrators
+
+- Admin Trash pages and side-panel fragments no longer emit PHP warnings while listing entries.
+
 ## Version 0.101
 
 Version 0.101 is a major architectural and gallery-management release. It completes the repository-wide migration to strict MVC ownership, adds mixed photo and physical-gallery operations to the public Picture Manager, strengthens the Windows upload companion and automated release checks, and carries forward the complete schema needed by Smart Galleries, multilingual content, and viewer account lifecycle foundations. The release preserves existing public URLs, authorization rules, Admin side-panel behavior, both thumbnail renderers, no-JavaScript fallbacks, and updater integrity while substantially reducing cross-layer coupling.
