@@ -84,6 +84,9 @@ function admin_gallery_report_accumulate_gps_cluster(array &$clusters, array $ro
 
     $key = admin_gallery_report_find_gps_cluster_key($clusters, $lat, $lng);
     if ($key === '') {
+        if (count($clusters) >= ADMIN_GALLERY_REPORT_MAX_GPS_CLUSTERS) {
+            return;
+        }
         $key = admin_gallery_report_new_gps_cluster_key($clusters);
         $clusters[$key] = admin_gallery_report_empty_gps_cluster($lat, $lng);
     }
@@ -98,7 +101,9 @@ function admin_gallery_report_accumulate_gps_cluster(array &$clusters, array $ro
     $cluster['lng_max'] = max((float) ($cluster['lng_max'] ?? $lng), $lng);
     $galleryId = (int) ($row['gallery_id'] ?? $row['image_gallery_id'] ?? 0);
     if ($galleryId > 0) {
-        $cluster['gallery_ids'][$galleryId] = true;
+        if (count($cluster['gallery_ids']) < 100) {
+            $cluster['gallery_ids'][$galleryId] = true;
+        }
         $label = trim((string) ($row['gallery_title'] ?? ''));
         if ($label === '') {
             $label = trim((string) ($row['gallery_folder_path'] ?? ''));
