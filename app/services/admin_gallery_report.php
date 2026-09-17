@@ -41,9 +41,13 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 const ADMIN_GALLERY_REPORT_JOB_KEY = 'admin_gallery_report_job_v1';
-const ADMIN_GALLERY_REPORT_DEFAULT_BATCH_SIZE = 20;
-const ADMIN_GALLERY_REPORT_MAX_BATCH_SIZE = 100;
+const ADMIN_GALLERY_REPORT_DEFAULT_BATCH_SIZE = 250;
+const ADMIN_GALLERY_REPORT_MAX_BATCH_SIZE = 500;
+// Keep high-cardinality EXIF aggregates small enough for shared-hosting session storage.
+const ADMIN_GALLERY_REPORT_MAX_GROUPS = 500;
 const ADMIN_GALLERY_REPORT_GPS_AREA_KM = 20.0;
+// Bound the browser-job session state and the cost of approximate GPS matching on large libraries.
+const ADMIN_GALLERY_REPORT_MAX_GPS_CLUSTERS = 500;
 const ADMIN_GALLERY_REPORT_PLACE_MATCH_DEFAULT_RADIUS_KM = 35.0;
 
 // This module is split into focused part files under app/services/admin_gallery_report/.

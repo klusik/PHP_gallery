@@ -156,12 +156,19 @@ function admin_gallery_report_normalize_group_rows(array $rows): array
 function admin_gallery_report_add_group(array &$groups, string $key, string $label, int $count, int $bytes = 0, array $meta = []): void
 {
     if (!isset($groups[$key]) || !is_array($groups[$key])) {
-        $groups[$key] = array_merge([
-            'key' => $key,
-            'label' => $label,
-            'count' => 0,
-            'bytes' => 0,
-        ], $meta);
+        if (count($groups) >= ADMIN_GALLERY_REPORT_MAX_GROUPS) {
+            $key = '__other_values__';
+            $label = 'Other values';
+            $meta = [];
+        }
+        if (!isset($groups[$key]) || !is_array($groups[$key])) {
+            $groups[$key] = array_merge([
+                'key' => $key,
+                'label' => $label,
+                'count' => 0,
+                'bytes' => 0,
+            ], $meta);
+        }
     }
     $groups[$key]['count'] = (int) ($groups[$key]['count'] ?? 0) + $count;
     $groups[$key]['bytes'] = (int) ($groups[$key]['bytes'] ?? 0) + $bytes;

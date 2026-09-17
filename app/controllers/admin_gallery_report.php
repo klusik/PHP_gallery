@@ -88,9 +88,13 @@ function cms_admin_gallery_report_generate(): void
         }
         if (isset($state['_report_view_model']) && is_array($state['_report_view_model'])) {
             $html = view_render_admin_gallery_report_export_html($state['_report_view_model']);
-            unset($state['_report_view_model']);
-            $state['report_html'] = $html;
-            $state['report_bytes'] = strlen($html);
+            $filename = (string) ($state['filename'] ?? 'php-gallery-complete-overview.html');
+            header('Content-Type: text/html; charset=utf-8');
+            header('X-Gallery-Report-Complete: 1');
+            header('X-Gallery-Report-Filename: ' . rawurlencode($filename));
+            header('X-Gallery-Report-Bytes: ' . strlen($html));
+            echo $html;
+            return;
         }
         admin_gallery_report_json_response($state);
     } catch (Throwable $exception) {

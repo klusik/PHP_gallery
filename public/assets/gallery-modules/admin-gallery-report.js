@@ -30,7 +30,7 @@
  *   2026-06-15
  */
 
-import { i18n } from './admin-core.js?v=20260512-modular-admin-v1';
+import { i18n } from './admin-core.js?v=20260512-modular-admin-v2';
 
 const reportObjectUrls = new WeakMap();
 
@@ -126,16 +126,22 @@ async function postGalleryReportAction(endpoint, csrfToken, action, telemetryDay
     const body = new FormData();
     body.set('csrf_token', csrfToken);
     body.set('action', action);
-    body.set('batch_size', '20');
+    body.set('batch_size', '250');
     body.set('telemetry_days', String(telemetryDays));
 
-    const response = await fetch(endpoint, {
-        method: 'POST',
-        body,
-        headers: {'Accept': 'application/json'},
-    });
+    const response = await fetchGalleryReportWithRetry(endpoint, body);
     if (!response.ok) {
         throw new Error(i18n('admin.gallery_report.progress_failed_http', 'Gallery report request failed.'));
+    }
+
+    if (response.headers.get('X-Gallery-Report-Complete') === '1') {
+        return {
+            ok: true,
+            status: 'complete',
+            report_html: await response.text(),
+            filename: decodeURIComponent(response.headers.get('X-Gallery-Report-Filename') || 'php-gallery-complete-overview.html'),
+            report_bytes: Number(response.headers.get('X-Gallery-Report-Bytes') || 0),
+        };
     }
 
     try {
@@ -143,6 +149,42 @@ async function postGalleryReportAction(endpoint, csrfToken, action, telemetryDay
     } catch (error) {
         throw new Error(i18n('admin.gallery_report.progress_failed_json', 'Gallery report response was not valid JSON.'));
     }
+}
+
+/**
+ * Send one report request with bounded retry/backoff for transient hosting failures.
+ *
+ * @param {string} endpoint Ajax endpoint URL.
+ * @param {FormData} body Request body.
+ * @return {Promise<Response>} Completed response.
+ */
+async function fetchGalleryReportWithRetry(endpoint, body) {
+    const retryableStatuses = new Set([408, 429, 500, 502, 503, 504]);
+    let lastError = null;
+
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+        if (attempt > 0) {
+            await new Promise((resolve) => window.setTimeout(resolve, 750 * (2 ** (attempt - 1))));
+        }
+        try {
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                body,
+                headers: {'Accept': 'application/json'},
+            });
+            if (response.ok || !retryableStatuses.has(response.status) || attempt === 3) {
+                return response;
+            }
+            lastError = new Error(`HTTP ${response.status}`);
+        } catch (error) {
+            lastError = error;
+            if (attempt === 3) {
+                throw error;
+            }
+        }
+    }
+
+    throw lastError instanceof Error ? lastError : new Error('Gallery report request failed.');
 }
 
 /**

@@ -191,7 +191,9 @@ function admin_gallery_report_model_image_count(): int
 function admin_gallery_report_model_image_rows_after_id(int $lastImageId, int $limit, array $capabilities): array
 {
     $lastImageId = max(0, $lastImageId);
-    $limit = max(1, min(100, $limit));
+    // Keep this clamp aligned with the report service. A lower model-only cap
+    // silently multiplies Ajax requests and can hit shared-hosting request limits.
+    $limit = max(1, min(500, $limit));
     $optional = static function (string $column, string $alias) use ($capabilities): string {
         return !empty($capabilities[$column]) ? 'i.' . $column . ' AS ' . $alias : 'NULL AS ' . $alias;
     };
