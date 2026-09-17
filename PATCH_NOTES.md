@@ -1,5 +1,48 @@
 # Patch notes
 
+## Version 0.101.2
+
+Version 0.101.2 is a focused maintenance release that makes the administrator Complete Report reliable for large image libraries and constrained shared-hosting environments. It reduces the number of browser requests, retries transient hosting failures, bounds high-cardinality report state, and returns the completed HTML export without retaining a second large copy in the server-side job session.
+
+### Highlights
+
+#### Complete Report reliability
+
+- Increased the normal image-processing batch from 20 to 250 rows while retaining a bounded maximum of 500 rows.
+- Added limited exponential-backoff retries for transient timeout, rate-limit, and server responses during browser-driven report generation.
+- Prevented large EXIF and GPS value sets from growing the server-side report job without a fixed bound.
+- Returned the completed HTML report directly to the browser, reducing peak session-storage and serialization pressure near the end of large reports.
+
+### Technical Details
+
+#### Backend
+
+- Aligned the browser, service, and model batch limits so the database layer no longer silently reduces 250-row requests to 100 rows and multiplies the total request count.
+- Limited high-cardinality image-summary groups and GPS clusters to 500 entries, grouped excess summary values into an `Other values` bucket, and bounded gallery identifiers retained per GPS cluster.
+- Updated `app/controllers/admin_gallery_report.php` to stream the final self-contained HTML export with bounded completion metadata instead of embedding it in the JSON job state.
+- Added no database migrations, schema changes, configuration changes, or stored-data rewrites.
+
+#### Frontend
+
+- Updated `public/assets/gallery-modules/admin-gallery-report.js` to process 250 image rows per request and retry transient HTTP `408`, `429`, `500`, `502`, `503`, and `504` failures up to three times after the initial attempt.
+- Refreshed the Complete Report browser-module cache key in `public/assets/gallery.js` so deployed browsers load the corrected workflow.
+
+### Tests
+
+- Added `tests/admin_gallery_report_batching_test.php` to keep browser, service, and model batch limits aligned.
+- Retained the central release audit as the authoritative verification for PHP and JavaScript syntax, regression coverage, release consistency, and manifest freshness.
+
+### User Impact
+
+#### For administrators
+
+- Large Complete Reports now require substantially fewer requests and are less likely to fail late because of shared-hosting request, timeout, memory, or session-storage limits.
+- The telemetry range selection continues to control only the telemetry portion of the report; image-database processing still covers the complete image library.
+
+#### For visitors
+
+- No public gallery behavior changed.
+
 ## Version 0.101.1
 
 Version 0.101.1 is a small maintenance patch that fixes the Admin Trash listing warning when rendering recoverable gallery rows.
