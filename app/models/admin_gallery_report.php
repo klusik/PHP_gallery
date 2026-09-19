@@ -69,7 +69,11 @@ function admin_gallery_report_model_gallery_summary(bool $hasDates, bool $hasGps
         'total' => admin_gallery_report_model_scalar_int('SELECT COUNT(*) FROM galleries'),
         'root_count' => admin_gallery_report_model_scalar_int('SELECT COUNT(*) FROM galleries WHERE parent_id IS NULL'),
         'nested_count' => admin_gallery_report_model_scalar_int('SELECT COUNT(*) FROM galleries WHERE parent_id IS NOT NULL'),
+        // Keep empty_count as a compatibility alias for historical report readers.
         'empty_count' => admin_gallery_report_model_scalar_int('SELECT COUNT(*) FROM galleries g WHERE NOT EXISTS (SELECT 1 FROM images i WHERE i.gallery_id = g.id)'),
+        'zero_direct_image_count' => admin_gallery_report_model_scalar_int('SELECT COUNT(*) FROM galleries g WHERE NOT EXISTS (SELECT 1 FROM images i WHERE i.gallery_id = g.id)'),
+        'empty_leaf_count' => admin_gallery_report_model_scalar_int('SELECT COUNT(*) FROM galleries g WHERE NOT EXISTS (SELECT 1 FROM images i WHERE i.gallery_id = g.id) AND NOT EXISTS (SELECT 1 FROM galleries c WHERE c.parent_id = g.id)'),
+        'structural_container_count' => admin_gallery_report_model_scalar_int('SELECT COUNT(*) FROM galleries g WHERE NOT EXISTS (SELECT 1 FROM images i WHERE i.gallery_id = g.id) AND EXISTS (SELECT 1 FROM galleries c WHERE c.parent_id = g.id)'),
         'visibility_rows' => admin_gallery_report_model_rows('SELECT visibility AS label, COUNT(*) AS count FROM galleries GROUP BY visibility ORDER BY count DESC'),
         'access_rows' => admin_gallery_report_model_rows('SELECT access_mode AS label, COUNT(*) AS count FROM galleries GROUP BY access_mode ORDER BY count DESC'),
         'listing_rows' => admin_gallery_report_model_rows('SELECT access_listing AS label, COUNT(*) AS count FROM galleries GROUP BY access_listing ORDER BY count DESC'),

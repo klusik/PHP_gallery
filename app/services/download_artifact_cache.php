@@ -43,6 +43,7 @@ use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use Throwable;
 use ZipArchive;
+use function Gallery\Core\cms_config;
 use function Gallery\Core\cms_runtime_limit;
 use function Gallery\Core\path_inside;
 
@@ -50,6 +51,185 @@ const LEGACY_DOWNLOAD_ARTIFACT_CACHE_FORMAT_VERSION = 1;
 const LEGACY_DOWNLOAD_ARTIFACT_ARCHIVE_NAME = 'archive.zip';
 const LEGACY_DOWNLOAD_ARTIFACT_METADATA_NAME = 'metadata.json';
 const LEGACY_DOWNLOAD_ARTIFACT_LEASE_NAME = 'artifact.lock';
+
+/** Return the configured ZIP-cache path without creating or normalizing filesystem state. */
+function legacy_download_artifact_configured_cache_path(): string
+{
+    $config = cms_config();
+    $path = trim((string) ($config['zip_cache_path'] ?? ''));
+    if ($path === '') {
+        return '';
+    }
+    return rtrim($path, DIRECTORY_SEPARATOR);
+}
+
+/** Convert one cache-health reason into the bounded exception reason used by controllers and logs. */
+function legacy_download_artifact_health_exception_reason(string $reason): string
+{
+    $reason = preg_replace('/[^a-z0-9_]+/', '_', strtolower(trim($reason))) ?? '';
+    $reason = trim($reason, '_');
+    $candidate = 'legacy_cache_' . ($reason !== '' ? $reason : 'unavailable');
+    return strlen($candidate) <= 48 ? $candidate : 'legacy_cache_unavailable';
+}
+
+/**
+ * Probe one configured legacy cache path without exposing it outside authenticated Admin diagnostics.
+ *
+ * Missing directories are created when possible because the legacy fallback owns this private
+ * storage subtree. The probe is deliberately warning-free and returns a stable machine-readable
+ * reason instead of relying on PHP filesystem warnings.
+ *
+ * @param callable|null $freeSpaceProbe Optional test seam matching disk_free_space(string): int|float|false.
+ * @return array<string,mixed> Structured legacy server ZIP capability state.
+ */
+function legacy_download_artifact_cache_status_for_path(string $configuredPath, ?callable $freeSpaceProbe = null): array
+{
+    $configuredPath = trim($configuredPath);
+    $cachePath = $configuredPath !== '' ? rtrim($configuredPath, DIRECTORY_SEPARATOR) : '';
+    $artifactRoot = $cachePath !== '' ? $cachePath . DIRECTORY_SEPARATOR . 'legacy-artifacts' : '';
+    $stateDir = $artifactRoot !== '' ? $artifactRoot . DIRECTORY_SEPARATOR . '.state' : '';
+    $coordinationDir = $cachePath !== '' ? $cachePath . DIRECTORY_SEPARATOR . '.legacy-build-state' : '';
+
+    $status = [
+        'configured_path' => $cachePath,
+        'path_configured' => $cachePath !== '',
+        'exists' => false,
+        'is_directory' => false,
+        'readable' => false,
+        'writable' => false,
+        'artifact_root' => $artifactRoot,
+        'artifact_root_exists' => false,
+        'artifact_root_readable' => false,
+        'artifact_root_writable' => false,
+        'state_dir' => $stateDir,
+        'state_dir_exists' => false,
+        'state_dir_readable' => false,
+        'state_dir_writable' => false,
+        'coordination_dir' => $coordinationDir,
+        'coordination_dir_exists' => false,
+        'coordination_dir_readable' => false,
+        'coordination_dir_writable' => false,
+        'free_space_known' => false,
+        'free_bytes' => null,
+        'legacy_server_build_capable' => false,
+        'reason' => 'path_not_configured',
+    ];
+
+    if ($cachePath === '') {
+        return $status;
+    }
+    if (file_exists($cachePath) && !is_dir($cachePath)) {
+        $status['exists'] = true;
+        $status['reason'] = 'configured_path_is_file';
+        return $status;
+    }
+    if (!is_dir($cachePath) && !@mkdir($cachePath, 0775, true) && !is_dir($cachePath)) {
+        $status['reason'] = 'cache_dir_unavailable';
+        return $status;
+    }
+
+    $status['exists'] = true;
+    $status['is_directory'] = true;
+    $status['readable'] = is_readable($cachePath);
+    $status['writable'] = is_writable($cachePath);
+    if (!$status['readable']) {
+        $status['reason'] = 'cache_not_readable';
+        return $status;
+    }
+    if (!$status['writable']) {
+        $status['reason'] = 'cache_not_writable';
+        return $status;
+    }
+
+    if (!is_dir($artifactRoot) && !@mkdir($artifactRoot, 0775, true) && !is_dir($artifactRoot)) {
+        $status['reason'] = 'artifact_root_unavailable';
+        return $status;
+    }
+    $status['artifact_root_exists'] = true;
+    $status['artifact_root_readable'] = is_readable($artifactRoot);
+    $status['artifact_root_writable'] = is_writable($artifactRoot);
+    if (!$status['artifact_root_readable'] || !$status['artifact_root_writable']) {
+        $status['reason'] = !$status['artifact_root_readable'] ? 'artifact_root_not_readable' : 'artifact_root_not_writable';
+        return $status;
+    }
+
+    $guardPath = $artifactRoot . DIRECTORY_SEPARATOR . '.htaccess';
+    if (!is_file($guardPath) && @file_put_contents($guardPath, "Require all denied\n") === false) {
+        $status['reason'] = 'artifact_guard_unavailable';
+        return $status;
+    }
+
+    if (!is_dir($stateDir) && !@mkdir($stateDir, 0775, true) && !is_dir($stateDir)) {
+        $status['reason'] = 'artifact_state_dir_unavailable';
+        return $status;
+    }
+    $status['state_dir_exists'] = true;
+    $status['state_dir_readable'] = is_readable($stateDir);
+    $status['state_dir_writable'] = is_writable($stateDir);
+    if (!$status['state_dir_readable'] || !$status['state_dir_writable']) {
+        $status['reason'] = !$status['state_dir_readable'] ? 'artifact_state_not_readable' : 'artifact_state_not_writable';
+        return $status;
+    }
+
+    if (!is_dir($coordinationDir) && !@mkdir($coordinationDir, 0775, true) && !is_dir($coordinationDir)) {
+        $status['reason'] = 'coordination_dir_unavailable';
+        return $status;
+    }
+    $status['coordination_dir_exists'] = true;
+    $status['coordination_dir_readable'] = is_readable($coordinationDir);
+    $status['coordination_dir_writable'] = is_writable($coordinationDir);
+    if (!$status['coordination_dir_readable'] || !$status['coordination_dir_writable']) {
+        $status['reason'] = !$status['coordination_dir_readable'] ? 'coordination_not_readable' : 'coordination_not_writable';
+        return $status;
+    }
+
+    $probe = $freeSpaceProbe;
+    if ($probe === null && function_exists('disk_free_space')) {
+        $probe = static fn(string $path) => @disk_free_space($path);
+    }
+    if ($probe !== null) {
+        try {
+            $raw = $probe($cachePath);
+            if (is_int($raw) || is_float($raw)) {
+                $status['free_space_known'] = true;
+                $status['free_bytes'] = max(0, (int) $raw);
+            }
+        } catch (Throwable) {
+            // Free-space reporting is diagnostic only. Capacity reservation keeps its fail-open behavior.
+        }
+    }
+
+    $status['legacy_server_build_capable'] = true;
+    $status['reason'] = !empty($status['free_space_known']) ? 'ok' : 'ok_free_space_unknown';
+    return $status;
+}
+
+/**
+ * Return the current legacy server ZIP capability status for the configured cache path.
+ *
+ * @return array<string,mixed> Structured cache-health state.
+ */
+function legacy_download_artifact_cache_status(bool $refresh = false): array
+{
+    static $cached = null;
+    if ($refresh || !is_array($cached)) {
+        $cached = legacy_download_artifact_cache_status_for_path(legacy_download_artifact_configured_cache_path());
+    }
+    return $cached;
+}
+
+/** Fail before legacy manifest/build work when the server ZIP fallback cache is unavailable. */
+function legacy_download_artifact_require_build_capability(): void
+{
+    $status = legacy_download_artifact_cache_status(true);
+    if (!empty($status['legacy_server_build_capable'])) {
+        return;
+    }
+    throw new LegacyDownloadBuildUnavailableException(
+        legacy_download_artifact_health_exception_reason((string) ($status['reason'] ?? 'unavailable')),
+        t('download.progress.legacy_unavailable', 'The server ZIP fallback is unavailable. Open the gallery in a modern browser and use Download gallery there.')
+    );
+}
 
 /**
  * Return the private managed root for immutable legacy download artifacts.
@@ -60,27 +240,27 @@ const LEGACY_DOWNLOAD_ARTIFACT_LEASE_NAME = 'artifact.lock';
  */
 function legacy_download_artifact_cache_root(): string
 {
-    $path = zip_cache_dir() . DIRECTORY_SEPARATOR . 'legacy-artifacts';
-    legacy_download_artifact_ensure_directory($path);
-
-    // Preserve Apache denial even when a deployment points zip_cache_path at a
-    // custom web-reachable directory rather than the standard protected cache/ tree.
-    $guardPath = $path . DIRECTORY_SEPARATOR . '.htaccess';
-    if (!is_file($guardPath) && @file_put_contents($guardPath, "Require all denied\n") === false) {
-        throw new LegacyDownloadBuildException(
-            'artifact_cache_guard_failed',
-            t('download.progress.legacy_failed', 'The server ZIP fallback could not be prepared. Open the gallery in a modern browser and use Download gallery there.')
+    $status = legacy_download_artifact_cache_status();
+    if (empty($status['legacy_server_build_capable'])) {
+        throw new LegacyDownloadBuildUnavailableException(
+            legacy_download_artifact_health_exception_reason((string) ($status['reason'] ?? 'unavailable')),
+            t('download.progress.legacy_unavailable', 'The server ZIP fallback is unavailable. Open the gallery in a modern browser and use Download gallery there.')
         );
     }
-    return $path;
+    return (string) $status['artifact_root'];
 }
 
 /** Return the private internal-state directory used for cache reservations and capacity locking. */
 function legacy_download_artifact_state_dir(): string
 {
-    $path = legacy_download_artifact_cache_root() . DIRECTORY_SEPARATOR . '.state';
-    legacy_download_artifact_ensure_directory($path);
-    return $path;
+    $status = legacy_download_artifact_cache_status();
+    if (empty($status['legacy_server_build_capable'])) {
+        throw new LegacyDownloadBuildUnavailableException(
+            legacy_download_artifact_health_exception_reason((string) ($status['reason'] ?? 'unavailable')),
+            t('download.progress.legacy_unavailable', 'The server ZIP fallback is unavailable. Open the gallery in a modern browser and use Download gallery there.')
+        );
+    }
+    return (string) $status['state_dir'];
 }
 
 /** Ensure one managed cache directory exists or fail with a stable build error. */

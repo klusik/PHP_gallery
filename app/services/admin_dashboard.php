@@ -218,6 +218,10 @@ function admin_dashboard_view_model(bool $includeMaintenance = false): array
     $thumbnailSummary = admin_render_profile_span('thumbnail_maintenance_summary_cached_read', static fn (): array => cached_thumbnail_maintenance_summary_if_available(null, 1000));
     // $lastThumbnailCheck stores an explicit full dry-run result when an admin requested one.
     $lastThumbnailCheck = function_exists('Gallery\\Services\\thumbnail_maintenance_last_check') ? admin_render_profile_setting_read('thumbnail_maintenance_last_check', static fn (): array => thumbnail_maintenance_last_check()) : [];
+    // $legacyJpgThumbnailInventory is a cheap metadata aggregate. It never mutates thumbnail files.
+    $legacyJpgThumbnailInventory = $includeMaintenance && function_exists('Gallery\Services\thumbnail_legacy_jpg_inventory')
+        ? admin_render_profile_db('legacy_jpg_thumbnail_inventory', static fn (): array => thumbnail_legacy_jpg_inventory())
+        : ['available' => false, 'registered_variant_count' => 0, 'affected_image_count' => 0, 'registered_bytes' => 0, 'cleanup_available' => false, 'cleanup_recommended' => false];
     if ($lastThumbnailCheck) {
         $thumbnailSummary = [
             'images_scanned' => (int) ($lastThumbnailCheck['images_scanned'] ?? 0),
@@ -327,6 +331,7 @@ function admin_dashboard_view_model(bool $includeMaintenance = false): array
         'public_home_search_enabled' => public_home_search_enabled(),
         'seo_guard_status' => $seoGuardStatus,
         'thumbnail_compatibility_mode' => thumbnail_compatibility_mode(),
+        'thumbnail_legacy_jpg_inventory' => $legacyJpgThumbnailInventory,
         'thumbnail_maintenance_last_check' => $lastThumbnailCheck,
         'browser_thumbnail_rebuild_config' => $browserThumbnailRebuildConfig,
         'dev_mode_enabled' => dev_mode_enabled(),

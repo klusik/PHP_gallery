@@ -65,6 +65,7 @@ function admin_gallery_report_start_job(int $telemetryDays = 30): array
         'runtime' => admin_gallery_report_runtime_summary(),
         'database' => admin_gallery_report_database_section(),
         'data_paths' => admin_gallery_report_data_path_summary(),
+        'thumbnail_legacy_inventory' => function_exists(__NAMESPACE__ . '\\thumbnail_legacy_jpg_inventory') ? thumbnail_legacy_jpg_inventory() : ['available' => false],
         'tables' => admin_gallery_report_table_counts(),
         'galleries' => admin_gallery_report_gallery_summary(),
         'gallery_rows' => admin_gallery_report_gallery_detail_rows(),

@@ -830,6 +830,47 @@ all changed JavaScript modules and Node fixtures to parse and pass, the integrit
 manifest to be current, the administrator manual to be rebuilt and visually verified,
 and no temporary implementation roadmap to remain in the repository or release package.
 
+### Gallery audit remediation regression ownership
+
+The audit-remediation program is protected by focused tests registered in the normal
+PHP/Node regression suites. Automated agents should use `scripts/audit.php` according
+to `AGENTS.md`; the list below documents ownership and is not an instruction to replay
+the tests manually after a successful central audit.
+
+- authorization/media ownership: `public_media_authorization_contract_test.php`;
+- corrected session/page-view semantics: `telemetry_semantics_contract_test.php` and
+  `telemetry_semantics_fixture_test.php`;
+- photo activation lifecycle/privacy: `telemetry_photo_lifecycle_test.mjs` and
+  `telemetry_photo_privacy_contract_test.php`;
+- traffic segmentation: `telemetry_traffic_segment_contract_test.php`;
+- page/image/media/cache/database observability: the `telemetry_*observability*`,
+  `telemetry_page_load_metric_contract_test.php`, and
+  `telemetry_database_observer_contract_test.php` fixtures;
+- cardinality/storage evidence: `telemetry_dimension_normalization_contract_test.php`,
+  `telemetry_dimension_normalization_workload_test.php`,
+  `telemetry_storage_diagnostics_contract_test.php`,
+  `telemetry_daily_rollup_consistency_test.php`,
+  `telemetry_report_query_profile_contract_test.php`, and
+  `telemetry_report_query_plan_contract_test.php`;
+- legacy server-ZIP cache health: `legacy_download_cache_health_test.php` plus the
+  download controller/service tests;
+- legacy JPEG inventory and explicit cleanup: `thumbnail_compatibility_model_test.php`;
+- complete-report semantics: `admin_gallery_report_semantics_contract_test.php`;
+- maintenance failure isolation/redaction: `site_maintenance_diagnostics_contract_test.php`;
+- final cross-stage integration: `gallery_audit_remediation_stage11_contract_test.php`.
+
+Stage 6 has an intentional production-evidence boundary. The code can reduce new
+hourly aggregate dimensionality and expose exact operator diagnostics, but index or
+retention changes require representative hosting measurements first. When reviewing
+those measurements, compare exact table rows, data/index bytes, approximate recent
+rows/day, oldest/newest rows, retention horizons, per-metric dimension cardinality,
+request-local report-query timings, sanitized EXPLAIN plans, and completed-day
+hourly-vs-daily rollup consistency. The representative normalization workload also
+proves that irrelevant page-view dimensions collapse materially while image-level
+photo metrics keep their required cardinality. Do not infer an index change solely
+from table size, and do not move long-window reports to daily storage while rollup
+consistency reports a mismatch or missing daily data.
+
 ### 2.1 Release preparation and handoff
 
 `RELEASE.md` is authoritative for release preparation, consistency, packaging, and post-publication qualification. The release-specific agent rule is deliberately stricter than older focused-test lists in this guide:

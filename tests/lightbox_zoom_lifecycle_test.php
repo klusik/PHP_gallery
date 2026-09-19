@@ -70,7 +70,7 @@ lightbox_zoom_lifecycle_assert(
     'Decoded preview/full-image replacement must schedule a bounded zoom recalculation.'
 );
 lightbox_zoom_lifecycle_assert(str_contains($lightboxSource, 'openAt(nextIndex, options);'), 'Previous/next navigation must keep using openAt.');
-lightbox_zoom_lifecycle_assert(str_contains($lightboxSource, 'openAt(stripIndex);'), 'Picture-strip navigation must keep using openAt.');
+lightbox_zoom_lifecycle_assert(str_contains($lightboxSource, "openAt(stripIndex, {telemetryTrigger: 'click'});"), 'Picture-strip navigation must keep using openAt with the bounded click telemetry origin.');
 lightbox_zoom_lifecycle_assert(str_contains($lightboxSource, "zoomSurface.style.removeProperty('transform');"), 'Canonical reset must remove the zoom-surface transform.');
 
 echo "Lightbox zoom lifecycle checks passed.\n";

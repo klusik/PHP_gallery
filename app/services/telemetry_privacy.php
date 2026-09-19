@@ -281,7 +281,7 @@ function telemetry_context_json(string $eventName, mixed $context): ?string
     // $allowedKeys stores the context allowlist by event family.
     $allowedKeys = [
         'public.photo.visible_time' => ['lightbox_mode'],
-        'public.photo.opened' => ['lightbox_mode'],
+        'public.photo.opened' => ['lightbox_mode', 'trigger'],
         'client.performance.image_decode' => ['display_width_bucket', 'natural_width_bucket'],
         'client.performance.image_display' => ['display_width_bucket', 'natural_width_bucket'],
         'client.error.javascript' => ['component'],
@@ -293,6 +293,18 @@ function telemetry_context_json(string $eventName, mixed $context): ?string
     $safeContext = [];
     foreach (($allowedKeys[$eventName] ?? []) as $key) {
         if (!array_key_exists($key, $context) || !is_scalar($context[$key])) {
+            continue;
+        }
+        if ($key === 'trigger') {
+            $safeContext[$key] = telemetry_enum(
+                $context[$key],
+                ['click', 'keyboard', 'swipe', 'slideshow', 'history', 'direct', 'fallback', 'unknown'],
+                'unknown'
+            );
+            continue;
+        }
+        if ($key === 'lightbox_mode') {
+            $safeContext[$key] = telemetry_enum($context[$key], ['normal', 'fullscreen'], 'normal');
             continue;
         }
         $safeContext[$key] = substr((string) $context[$key], 0, 80);

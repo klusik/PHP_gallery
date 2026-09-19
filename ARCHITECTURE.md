@@ -989,6 +989,40 @@ require verified settings storage. Daily rollup and retention purge may no-op fo
 confirmed pre-telemetry schema, but an `unknown` reporting schema raises the Phase
 11 policy boundary instead of silently reporting successful maintenance.
 
+The audit-remediation telemetry contract additionally makes the semantic owners
+explicit. `telemetry_sessions` is the canonical unique-session source, while
+`public.page_views` is an explicit aggregate event rather than a side effect of
+session start. Semantics version `2` records the transition boundary so historical
+session-row counters are not silently presented as corrected data. Photo activation
+is owned by one browser state machine shared byte-for-byte by `usage.js` and the
+compatibility `telemetry.js`; preloading does not create photo-open events and
+activation origin is restricted to a bounded technical vocabulary. Traffic reports
+may be segmented as all, bot-classified, or non-bot-classified without treating the
+classification as a human identity signal.
+
+Performance/media/cache/database observability is deliberately scoped. Page-load,
+visible-image decode/display, PHP-observed media bytes, decoded-lightbox in-memory
+cache events, and bounded PDO execution aggregates each identify their measurement
+layer in the Admin export. Query text and bound values are never telemetry payloads.
+The database observer buffers request-local aggregates and suppresses re-entrant
+telemetry writes. Hourly aggregate writes normalize irrelevant dimensions per metric
+family to reduce row/index cardinality without changing report meaning.
+
+Stage 6 storage tuning is evidence-driven. The authenticated telemetry export can
+report exact rows, data/index bytes, oldest/newest rows, approximate recent row
+growth, configured retention, and bounded per-metric dimension cardinality. The same
+export also records request-local SQL execution timings for fixed report-query
+families and sanitized `EXPLAIN` metadata for a fixed source-owned subset of
+representative telemetry report queries. SQL text, bound values, result payloads,
+and raw database errors never enter this evidence layer, and EXPLAIN probes run only
+after the runtime timing snapshot has been captured. The export also compares recent
+completed-day hourly totals with persisted daily rollups by metric, excluding the
+current partial day, and reports exact match, mismatch, missing daily data, or no
+samples. These diagnostics do not change indexes or retention. The current 30-day
+export remains inside the default hourly-retention horizon; any future report window
+beyond hourly retention must use daily rollups only after this consistency evidence
+shows that their corrected semantics match the hourly source.
+
 #### Lazy System Health and cache budget
 
 `presentation_schema_health_definitions()` stores callable resolvers, not eager

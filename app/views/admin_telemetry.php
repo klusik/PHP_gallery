@@ -100,7 +100,10 @@ function view_render_admin_telemetry_dashboard(array $viewModel): void
     echo '<section class="hero"><h1>' . e(t('admin.telemetry.title', 'Anonymous telemetry')) . '</h1><p>' . e(t('admin.telemetry.description', 'Local, privacy-safe usage and performance statistics for tuning the gallery.')) . '</p><nav class="nav">';
     echo '<a class="button secondary" href="' . e((string) ($viewModel['settings_url'] ?? '')) . '">' . e(t('admin.settings.open_centralized', 'Open centralized settings')) . '</a>';
     echo '<a class="button secondary" href="' . e((string) ($viewModel['logs_url'] ?? '')) . '">' . e(t('admin.telemetry.operational_logs', 'Operational logs')) . '</a>';
-    echo '<a class="button secondary" href="' . e((string) ($viewModel['export_url'] ?? '')) . '">' . e(t('admin.telemetry.export_html_report', 'Export HTML report')) . '</a>';
+    $exportUrls = (array) ($viewModel['export_urls'] ?? []);
+    echo '<a class="button secondary" href="' . e((string) ($exportUrls['all'] ?? '')) . '">' . e(t('admin.telemetry.export_all_traffic', 'Export all traffic')) . '</a>';
+    echo '<a class="button secondary" href="' . e((string) ($exportUrls['non_bot'] ?? '')) . '">' . e(t('admin.telemetry.export_non_bot_traffic', 'Export non-bot-classified')) . '</a>';
+    echo '<a class="button secondary" href="' . e((string) ($exportUrls['bot'] ?? '')) . '">' . e(t('admin.telemetry.export_bot_traffic', 'Export bot-classified')) . '</a>';
     echo '<a class="button secondary" href="' . e((string) ($viewModel['dashboard_url'] ?? '')) . '">' . e(t('admin.common.dashboard', 'Dashboard')) . '</a></nav></section>';
 
     if (empty($viewModel['schema_ready'])) {
@@ -329,6 +332,39 @@ function view_telemetry_export_trend_chart(array $rows, string $valueKey, string
 
 
 /**
+ * Return a human-readable label for one browser performance aggregate.
+ *
+ * @param string $metricName Aggregate metric identifier.
+ * @return string Localized presentation label.
+ */
+function view_telemetry_performance_metric_label(string $metricName): string
+{
+    return match ($metricName) {
+        'client.page_load_ms' => t('admin.telemetry.performance.page_load', 'Page load'),
+        'client.image_decode_ms' => t('admin.telemetry.performance.image_decode', 'Visible image decode'),
+        'client.image_display_ms' => t('admin.telemetry.performance.image_display', 'Visible image display'),
+        'web_vital.lcp' => t('admin.telemetry.performance.lcp', 'Largest Contentful Paint'),
+        'web_vital.cls' => t('admin.telemetry.performance.cls', 'Cumulative Layout Shift'),
+        'web_vital.inp' => t('admin.telemetry.performance.inp', 'Interaction to Next Paint'),
+        'web_vital.fcp' => t('admin.telemetry.performance.fcp', 'First Contentful Paint'),
+        'web_vital.ttfb' => t('admin.telemetry.performance.ttfb', 'Time to First Byte'),
+        default => $metricName,
+    };
+}
+
+/**
+ * Return the display unit for one browser performance aggregate.
+ *
+ * @param string $metricName Aggregate metric identifier.
+ * @return string Unit label.
+ */
+function view_telemetry_performance_metric_unit(string $metricName): string
+{
+    return $metricName === 'web_vital.cls' ? t('admin.telemetry.performance.score_unit', 'score') : 'ms';
+}
+
+
+/**
  * Render the standalone anonymous telemetry HTML export from controller-prepared data.
  *
  * @param array<string,mixed> $viewModel Complete export presentation state.
@@ -354,6 +390,10 @@ function view_render_admin_telemetry_export_document(array $viewModel): string
         'cache_efficiency' => t('admin.telemetry.export.cache_efficiency', 'Cache efficiency'),
         'db_queries' => t('admin.telemetry.export.db_queries', 'DB queries'),
         'daily_trends' => t('admin.telemetry.export.daily_trends', 'Daily trends'),
+        'consistency' => t('admin.telemetry.export.consistency', 'Telemetry consistency'),
+        'consistency_sessions' => t('admin.telemetry.export.consistency_sessions', 'Session summary vs daily sessions'),
+        'consistency_page_views' => t('admin.telemetry.export.consistency_page_views', 'Hourly page views vs daily page views'),
+        'consistency_session_rows' => t('admin.telemetry.export.consistency_session_rows', 'Session-row page views vs canonical page views'),
         'sessions_per_day' => t('admin.telemetry.export.sessions_per_day', 'Sessions per day'),
         'page_views_per_day' => t('admin.telemetry.export.page_views_per_day', 'Page views per day'),
         'photo_opens_per_day' => t('admin.telemetry.export.photo_opens_per_day', 'Photo opens per day'),
@@ -379,6 +419,16 @@ function view_render_admin_telemetry_export_document(array $viewModel): string
         'photo_engagement' => t('admin.telemetry.export.photo_engagement', 'Photo engagement'),
         'top_viewed_photos' => t('admin.telemetry.export.top_viewed_photos', 'Top viewed photos'),
         'longest_viewed_photos' => t('admin.telemetry.export.longest_viewed_photos', 'Longest viewed photos'),
+        'photo_open_diagnostics' => t('admin.telemetry.export.photo_open_diagnostics', 'Photo-open diagnostics'),
+        'photo_open_diagnostics_note' => t('admin.telemetry.export.photo_open_diagnostics_note', 'Session distribution uses the selected report window. Gallery and activation-origin diagnostics use only the retained raw-event window ({days} days). Historical events without the new trigger context are labelled legacy/unclassified.'),
+        'photo_open_distribution' => t('admin.telemetry.export.photo_open_distribution', 'Photo opens per session'),
+        'photo_open_bucket' => t('admin.telemetry.export.photo_open_bucket', 'Opens/session bucket'),
+        'photo_open_sessions_above' => t('admin.telemetry.export.photo_open_sessions_above', 'Sessions above {count} opens'),
+        'photo_open_max_session' => t('admin.telemetry.export.photo_open_max_session', 'Maximum opens in one session'),
+        'average_opens' => t('admin.telemetry.export.average_opens', 'Average opens'),
+        'maximum_opens' => t('admin.telemetry.export.maximum_opens', 'Maximum opens'),
+        'galleries_by_opens_per_session' => t('admin.telemetry.export.galleries_by_opens_per_session', 'Galleries by opens per session'),
+        'activation_origins' => t('admin.telemetry.export.activation_origins', 'Photo-open activation origins'),
         'thumbnail_bytes_by_variant' => t('admin.telemetry.export.thumbnail_bytes_by_variant', 'Thumbnail bytes by variant'),
         'image_bytes_by_variant' => t('admin.telemetry.export.image_bytes_by_variant', 'Image bytes by variant'),
         'variant' => t('admin.telemetry.export.variant', 'Variant'),
@@ -394,6 +444,8 @@ function view_render_admin_telemetry_export_document(array $viewModel): string
         'cache_result' => t('admin.telemetry.export.cache_result', 'Cache result'),
         'browser_performance' => t('admin.telemetry.export.browser_performance', 'Browser performance'),
         'metric' => t('admin.telemetry.export.metric', 'Metric'),
+        'unit' => t('admin.telemetry.export.unit', 'Unit'),
+        'average_value' => t('admin.telemetry.export.average_value', 'Average'),
         'samples' => t('admin.telemetry.export.samples', 'Samples'),
         'average_ms_value' => t('admin.telemetry.export.average_ms_value', 'Average ms/value'),
         'minimum' => t('admin.telemetry.export.minimum', 'Minimum'),
@@ -401,6 +453,9 @@ function view_render_admin_telemetry_export_document(array $viewModel): string
         'error_kind' => t('admin.telemetry.export.error_kind', 'Error kind'),
         'last_seen' => t('admin.telemetry.export.last_seen', 'Last seen'),
         'database_telemetry' => t('admin.telemetry.export.database_telemetry', 'Database telemetry'),
+        'database_scope_note' => t('admin.telemetry.export.database_scope_note', 'Database telemetry is observed centrally at the PDO execution boundary. Query text and bound values are not stored; only bounded operation, table, route, latency, row-count, and fingerprint aggregates are retained.'),
+        'media_scope_note' => t('admin.telemetry.export.media_scope_note', 'Media byte telemetry covers PHP-observed image, thumbnail, and source-download response paths. Browser/CDN bytes served outside those PHP paths are not measured here.'),
+        'cache_scope_note' => t('admin.telemetry.export.cache_scope_note', 'Cache efficiency describes only the decoded-lightbox in-memory application cache. It is not HTTP, browser, proxy, or CDN cache telemetry.'),
         'queries' => t('admin.telemetry.export.queries', 'Queries'),
         'slow_queries' => t('admin.telemetry.export.slow_queries', 'Slow queries'),
         'failed_queries' => t('admin.telemetry.export.failed_queries', 'Failed queries'),
@@ -439,6 +494,57 @@ function view_render_admin_telemetry_export_document(array $viewModel): string
         'items' => t('admin.telemetry.export.items', 'Items'),
         'retries' => t('admin.telemetry.export.retries', 'Retries'),
         'stored_telemetry_volume' => t('admin.telemetry.export.stored_telemetry_volume', 'Stored telemetry volume'),
+        'storage_diagnostics' => t('admin.telemetry.export.storage_diagnostics', 'Telemetry storage diagnostics'),
+        'report_query_profile' => t('admin.telemetry.export.report_query_profile', 'Telemetry report query runtime'),
+        'report_query_plans' => t('admin.telemetry.export.report_query_plans', 'Telemetry report query plans'),
+        'report_query_plans_note' => t('admin.telemetry.export.report_query_plans_note', 'Sanitized EXPLAIN output for a fixed set of telemetry report queries. SQL text, bound values, result data, and database error messages are not included. Unavailable means the hosting database did not return a usable plan.'),
+        'plan_status' => t('admin.telemetry.export.plan_status', 'Plan status'),
+        'select_id' => t('admin.telemetry.export.select_id', 'Select ID'),
+        'select_type' => t('admin.telemetry.export.select_type', 'Select type'),
+        'access_type' => t('admin.telemetry.export.access_type', 'Access type'),
+        'possible_keys' => t('admin.telemetry.export.possible_keys', 'Possible keys'),
+        'key_used' => t('admin.telemetry.export.key_used', 'Key used'),
+        'rows_estimate' => t('admin.telemetry.export.rows_estimate', 'Rows estimate'),
+        'filtered_percent' => t('admin.telemetry.export.filtered_percent', 'Filtered %'),
+        'extra' => t('admin.telemetry.export.extra', 'Extra'),
+        'report_query_profile_note' => t('admin.telemetry.export.report_query_profile_note', 'Request-local SQL execution timing for bounded telemetry report query families. These measurements are not persisted and do not include SQL text, bound values, result data, view rendering, or network latency.'),
+        'query_family' => t('admin.telemetry.export.query_family', 'Query family'),
+        'calls' => t('admin.telemetry.export.calls', 'Calls'),
+        'failed_calls' => t('admin.telemetry.export.failed_calls', 'Failed calls'),
+        'total_ms' => t('admin.telemetry.export.total_ms', 'Total ms'),
+        'avg_ms' => t('admin.telemetry.export.avg_ms', 'Avg ms'),
+        'max_ms' => t('admin.telemetry.export.max_ms', 'Max ms'),
+        'storage_diagnostics_note' => t('admin.telemetry.export.storage_diagnostics_note', 'Operator-only evidence for Stage 6 storage tuning. Row growth is an approximate seven-day average; no index or retention change is implied by these numbers.'),
+        'storage_source_hourly' => t('admin.telemetry.export.storage_source_hourly', 'The selected report window is fully inside hourly retention, so current report queries do not require the daily rollup for completeness.'),
+        'storage_source_daily_required' => t('admin.telemetry.export.storage_source_daily_required', 'The selected report window exceeds hourly retention. A complete long-window implementation must use validated daily rollups for the older portion before hourly retention is shortened.'),
+        'daily_rollup_consistency' => t('admin.telemetry.export.daily_rollup_consistency', 'Daily rollup consistency'),
+        'daily_rollup_consistency_note' => t('admin.telemetry.export.daily_rollup_consistency_note', 'Read-only comparison of hourly aggregates with persisted daily rollups for recent completed calendar days. The current partial day is excluded. A clean match is required before long-window reports can safely rely on daily rollups.'),
+        'rollup_state' => t('admin.telemetry.export.rollup_state', 'Rollup state'),
+        'hourly_samples' => t('admin.telemetry.export.hourly_samples', 'Hourly samples'),
+        'daily_samples' => t('admin.telemetry.export.daily_samples', 'Daily samples'),
+        'sample_difference' => t('admin.telemetry.export.sample_difference', 'Sample difference'),
+        'hourly_events' => t('admin.telemetry.export.hourly_events', 'Hourly events'),
+        'daily_events' => t('admin.telemetry.export.daily_events', 'Daily events'),
+        'event_difference' => t('admin.telemetry.export.event_difference', 'Event difference'),
+        'hourly_value_sum' => t('admin.telemetry.export.hourly_value_sum', 'Hourly value sum'),
+        'daily_value_sum' => t('admin.telemetry.export.daily_value_sum', 'Daily value sum'),
+        'value_difference' => t('admin.telemetry.export.value_difference', 'Value difference'),
+        'exact_rows' => t('admin.telemetry.export.exact_rows', 'Exact rows'),
+        'approx_rows_per_day' => t('admin.telemetry.export.approx_rows_per_day', 'Approx rows/day'),
+        'data_size' => t('admin.telemetry.export.data_size', 'Data size'),
+        'index_size' => t('admin.telemetry.export.index_size', 'Index size'),
+        'total_size' => t('admin.telemetry.export.total_size', 'Total size'),
+        'oldest_row' => t('admin.telemetry.export.oldest_row', 'Oldest row'),
+        'newest_row' => t('admin.telemetry.export.newest_row', 'Newest row'),
+        'retention_days' => t('admin.telemetry.export.retention_days', 'Retention days'),
+        'hourly_metric_cardinality' => t('admin.telemetry.export.hourly_metric_cardinality', 'Hourly metric cardinality'),
+        'row_count' => t('admin.telemetry.export.row_count', 'Rows'),
+        'route_cardinality' => t('admin.telemetry.export.route_cardinality', 'Routes'),
+        'gallery_cardinality' => t('admin.telemetry.export.gallery_cardinality', 'Galleries'),
+        'image_cardinality' => t('admin.telemetry.export.image_cardinality', 'Images'),
+        'device_cardinality' => t('admin.telemetry.export.device_cardinality', 'Devices'),
+        'variant_cardinality' => t('admin.telemetry.export.variant_cardinality', 'Variants'),
+        'cache_cardinality' => t('admin.telemetry.export.cache_cardinality', 'Cache states'),
         'raw_events' => t('admin.telemetry.export.raw_events', 'Raw events'),
         'hourly_metrics' => t('admin.telemetry.export.hourly_metrics', 'Hourly metrics'),
         'daily_metrics' => t('admin.telemetry.export.daily_metrics', 'Daily metrics'),
@@ -446,10 +552,159 @@ function view_render_admin_telemetry_export_document(array $viewModel): string
         'job_runs' => t('admin.telemetry.export.job_runs', 'Job runs'),
     ];
 
+    $consistency = is_array($consistency ?? null) ? $consistency : [];
+    $semanticsVersion = (string) ($consistency['semantics_version'] ?? '1');
+    $semanticsEffectiveAt = trim((string) ($consistency['semantics_effective_at'] ?? ''));
+    $semanticsBoundaryText = $semanticsEffectiveAt !== ''
+        ? t('admin.telemetry.export.semantics_boundary_recorded', 'Telemetry semantics version {version} is recorded as effective from {time}. Session-row page counters before this boundary used legacy semantics and may remain inflated until those sessions age out.', [
+            'version' => $semanticsVersion,
+            'time' => $semanticsEffectiveAt,
+        ])
+        : t('admin.telemetry.export.semantics_boundary_unrecorded', 'Telemetry semantics version {version} is active in this codebase, but its first-event boundary has not been recorded yet. Existing session-row page counters may still contain legacy semantics.', [
+            'version' => $semanticsVersion,
+        ]);
+    $consistencyRows = [
+        [
+            'label' => $labels['consistency_sessions'],
+            'left' => (int) ($consistency['session_summary'] ?? 0),
+            'right' => (int) ($consistency['daily_sessions'] ?? 0),
+            'difference' => (int) ($consistency['session_difference'] ?? 0),
+        ],
+        [
+            'label' => $labels['consistency_page_views'],
+            'left' => (int) ($consistency['hourly_page_views'] ?? 0),
+            'right' => (int) ($consistency['daily_page_views'] ?? 0),
+            'difference' => (int) ($consistency['page_view_difference'] ?? 0),
+        ],
+        [
+            'label' => $labels['consistency_session_rows'],
+            'left' => (int) ($consistency['session_row_page_views'] ?? 0),
+            'right' => (int) ($consistency['hourly_page_views'] ?? 0),
+            'difference' => (int) ($consistency['session_row_page_view_difference'] ?? 0),
+        ],
+    ];
+    $consistencyHtml = '<section class="panel"><h2>' . e($labels['consistency']) . '</h2><div class="table-scroll"><table><thead><tr>'
+        . '<th>' . e(t('admin.telemetry.export.check', 'Check')) . '</th>'
+        . '<th>' . e(t('admin.telemetry.export.left_value', 'Primary value')) . '</th>'
+        . '<th>' . e(t('admin.telemetry.export.right_value', 'Comparison value')) . '</th>'
+        . '<th>' . e(t('admin.telemetry.export.difference', 'Difference')) . '</th>'
+        . '</tr></thead><tbody>';
+    foreach ($consistencyRows as $row) {
+        $consistencyHtml .= '<tr><td>' . e((string) $row['label']) . '</td>'
+            . '<td>' . e(view_telemetry_report_number($row['left'])) . '</td>'
+            . '<td>' . e(view_telemetry_report_number($row['right'])) . '</td>'
+            . '<td>' . e(view_telemetry_report_number($row['difference'])) . '</td></tr>';
+    }
+    $consistencyHtml .= '</tbody></table></div><p class="muted">' . e($semanticsBoundaryText) . '</p></section>';
+
+    $storageDiagnostics = is_array($storageDiagnostics ?? null) ? $storageDiagnostics : [];
+    $storageRows = is_array($storageDiagnostics['tables'] ?? null) ? $storageDiagnostics['tables'] : [];
+    $metricCardinalityRows = is_array($storageDiagnostics['hourly_metric_cardinality'] ?? null) ? $storageDiagnostics['hourly_metric_cardinality'] : [];
+    $storageSourceText = match ((string) ($storageDiagnostics['aggregate_source_state'] ?? 'unavailable')) {
+        'hourly_within_retention' => $labels['storage_source_hourly'],
+        'daily_required_for_full_window' => $labels['storage_source_daily_required'],
+        default => t('admin.telemetry.export.storage_diagnostics_unavailable', 'Storage diagnostics are unavailable for this export.'),
+    };
+    $storageDiagnosticsHtml = '<section class="panel"><h2>' . e($labels['storage_diagnostics']) . '</h2><p class="muted">'
+        . e($labels['storage_diagnostics_note']) . ' ' . e($storageSourceText) . '</p>'
+        . view_telemetry_export_table($storageRows, [
+            ['key' => 'table_name', 'label' => $labels['table']],
+            ['key' => 'exact_rows', 'label' => $labels['exact_rows'], 'format' => fn($v) => view_telemetry_report_number($v)],
+            ['key' => 'approx_rows_per_day', 'label' => $labels['approx_rows_per_day'], 'format' => fn($v) => view_telemetry_report_number($v, 1)],
+            ['key' => 'data_bytes', 'label' => $labels['data_size'], 'format' => fn($v) => format_bytes((float) $v, 1)],
+            ['key' => 'index_bytes', 'label' => $labels['index_size'], 'format' => fn($v) => format_bytes((float) $v, 1)],
+            ['key' => 'total_bytes', 'label' => $labels['total_size'], 'format' => fn($v) => format_bytes((float) $v, 1)],
+            ['key' => 'oldest_row', 'label' => $labels['oldest_row']],
+            ['key' => 'newest_row', 'label' => $labels['newest_row']],
+            ['key' => 'retention_days', 'label' => $labels['retention_days'], 'format' => fn($v) => view_telemetry_report_number($v)],
+        ], t('admin.telemetry.export.storage_diagnostics_unavailable', 'Storage diagnostics are unavailable for this export.'))
+        . '<h3>' . e($labels['hourly_metric_cardinality']) . '</h3>'
+        . view_telemetry_export_table($metricCardinalityRows, [
+            ['key' => 'metric_name', 'label' => $labels['metric']],
+            ['key' => 'row_count', 'label' => $labels['row_count'], 'format' => fn($v) => view_telemetry_report_number($v)],
+            ['key' => 'route_cardinality', 'label' => $labels['route_cardinality'], 'format' => fn($v) => view_telemetry_report_number($v)],
+            ['key' => 'gallery_cardinality', 'label' => $labels['gallery_cardinality'], 'format' => fn($v) => view_telemetry_report_number($v)],
+            ['key' => 'image_cardinality', 'label' => $labels['image_cardinality'], 'format' => fn($v) => view_telemetry_report_number($v)],
+            ['key' => 'device_cardinality', 'label' => $labels['device_cardinality'], 'format' => fn($v) => view_telemetry_report_number($v)],
+            ['key' => 'media_variant_cardinality', 'label' => $labels['variant_cardinality'], 'format' => fn($v) => view_telemetry_report_number($v)],
+            ['key' => 'cache_cardinality', 'label' => $labels['cache_cardinality'], 'format' => fn($v) => view_telemetry_report_number($v)],
+        ], t('admin.telemetry.export.no_samples', 'No samples'))
+        . '</section>';
+
+    $rollupConsistency = is_array($rollupConsistency ?? null) ? $rollupConsistency : [];
+    $rollupRows = is_array($rollupConsistency['metrics'] ?? null) ? $rollupConsistency['metrics'] : [];
+    foreach ($rollupRows as &$rollupRow) {
+        $rollupRow['status_label'] = match ((string) ($rollupRow['status'] ?? 'unavailable')) {
+            'match' => t('admin.telemetry.export.rollup_match', 'Match'),
+            'mismatch' => t('admin.telemetry.export.rollup_mismatch', 'Mismatch'),
+            'daily_missing' => t('admin.telemetry.export.rollup_daily_missing', 'Daily rollup missing'),
+            'no_samples' => t('admin.telemetry.export.rollup_no_samples', 'No samples'),
+            default => t('admin.telemetry.export.rollup_unavailable', 'Unavailable'),
+        };
+    }
+    unset($rollupRow);
+    $rollupState = (string) ($rollupConsistency['state'] ?? 'unavailable');
+    $rollupStateText = match ($rollupState) {
+        'match' => t('admin.telemetry.export.rollup_summary_match', 'All compared metrics match between hourly and daily aggregates for the completed-day validation window.'),
+        'mismatch' => t('admin.telemetry.export.rollup_summary_mismatch', '{count} metric families differ or are missing from the daily rollup. Do not switch long-window reports to daily aggregates until the cause is resolved.', ['count' => view_telemetry_report_number($rollupConsistency['mismatch_count'] ?? 0)]),
+        'no_samples' => t('admin.telemetry.export.rollup_summary_no_samples', 'No comparable completed-day aggregate samples are available yet.'),
+        default => t('admin.telemetry.export.rollup_summary_unavailable', 'Daily rollup consistency could not be measured on this host.'),
+    };
+    $rollupConsistencyHtml = '<section class="panel"><h2>' . e($labels['daily_rollup_consistency']) . '</h2><p class="muted">'
+        . e($labels['daily_rollup_consistency_note']) . ' ' . e($rollupStateText) . '</p>'
+        . view_telemetry_export_table($rollupRows, [
+            ['key' => 'metric_name', 'label' => $labels['metric']],
+            ['key' => 'status_label', 'label' => $labels['rollup_state']],
+            ['key' => 'hourly_samples', 'label' => $labels['hourly_samples'], 'format' => fn($v) => view_telemetry_report_number($v)],
+            ['key' => 'daily_samples', 'label' => $labels['daily_samples'], 'format' => fn($v) => view_telemetry_report_number($v)],
+            ['key' => 'sample_difference', 'label' => $labels['sample_difference'], 'format' => fn($v) => view_telemetry_report_number($v)],
+            ['key' => 'hourly_events', 'label' => $labels['hourly_events'], 'format' => fn($v) => view_telemetry_report_number($v)],
+            ['key' => 'daily_events', 'label' => $labels['daily_events'], 'format' => fn($v) => view_telemetry_report_number($v)],
+            ['key' => 'event_difference', 'label' => $labels['event_difference'], 'format' => fn($v) => view_telemetry_report_number($v)],
+            ['key' => 'hourly_value_sum', 'label' => $labels['hourly_value_sum'], 'format' => fn($v) => view_telemetry_report_number($v, 4)],
+            ['key' => 'daily_value_sum', 'label' => $labels['daily_value_sum'], 'format' => fn($v) => view_telemetry_report_number($v, 4)],
+            ['key' => 'value_difference', 'label' => $labels['value_difference'], 'format' => fn($v) => view_telemetry_report_number($v, 4)],
+        ], t('admin.telemetry.export.rollup_no_samples', 'No samples'))
+        . '</section>';
+
+
+    $reportQueryProfile = is_array($reportQueryProfile ?? null) ? $reportQueryProfile : [];
+    $reportQueryProfileHtml = '<section class="panel"><h2>' . e($labels['report_query_profile']) . '</h2><p class="muted">'
+        . e($labels['report_query_profile_note']) . '</p>'
+        . view_telemetry_export_table($reportQueryProfile, [
+            ['key' => 'operation', 'label' => $labels['query_family']],
+            ['key' => 'calls', 'label' => $labels['calls'], 'format' => fn($v) => view_telemetry_report_number($v)],
+            ['key' => 'failed_calls', 'label' => $labels['failed_calls'], 'format' => fn($v) => view_telemetry_report_number($v)],
+            ['key' => 'total_ms', 'label' => $labels['total_ms'], 'format' => fn($v) => view_telemetry_report_number($v, 2)],
+            ['key' => 'avg_ms', 'label' => $labels['avg_ms'], 'format' => fn($v) => view_telemetry_report_number($v, 2)],
+            ['key' => 'max_ms', 'label' => $labels['max_ms'], 'format' => fn($v) => view_telemetry_report_number($v, 2)],
+        ], t('admin.telemetry.export.no_samples', 'No samples'))
+        . '</section>';
+
+
+    $reportQueryPlans = is_array($reportQueryPlans ?? null) ? $reportQueryPlans : [];
+    $reportQueryPlansHtml = '<section class="panel"><h2>' . e($labels['report_query_plans']) . '</h2><p class="muted">'
+        . e($labels['report_query_plans_note']) . '</p>'
+        . view_telemetry_export_table($reportQueryPlans, [
+            ['key' => 'operation', 'label' => $labels['query_family']],
+            ['key' => 'status', 'label' => $labels['plan_status']],
+            ['key' => 'select_id', 'label' => $labels['select_id'], 'format' => fn($v) => $v === null || $v === '' ? '' : view_telemetry_report_number($v)],
+            ['key' => 'select_type', 'label' => $labels['select_type']],
+            ['key' => 'table_name', 'label' => $labels['table']],
+            ['key' => 'access_type', 'label' => $labels['access_type']],
+            ['key' => 'possible_keys', 'label' => $labels['possible_keys']],
+            ['key' => 'key_used', 'label' => $labels['key_used']],
+            ['key' => 'rows_estimate', 'label' => $labels['rows_estimate'], 'format' => fn($v) => $v === null || $v === '' ? '' : view_telemetry_report_number($v)],
+            ['key' => 'filtered_percent', 'label' => $labels['filtered_percent'], 'format' => fn($v) => $v === null || $v === '' ? '' : view_telemetry_report_number($v, 1)],
+            ['key' => 'extra', 'label' => $labels['extra']],
+        ], t('admin.telemetry.export.storage_diagnostics_unavailable', 'Storage diagnostics are unavailable for this export.'))
+        . '</section>';
+
     return '<!doctype html><html lang="' . e($activeLanguage) . '"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
         . '<title>' . e(t('admin.telemetry.export_title', 'PHP Gallery telemetry report')) . '</title><style>' . $style . '</style></head><body><main>'
-        . '<header><h1>' . e(t('admin.telemetry.export_heading', 'Anonymous telemetry report')) . '</h1><p>' . e(t('admin.telemetry.generated', 'Generated')) . ' ' . e($generatedAt) . '. ' . e(t('admin.telemetry.export_description', 'Local, privacy-safe usage and performance statistics for PHP Gallery.')) . '</p><p class="section-note">' . e(t('admin.telemetry.export.report_window_note', 'Report window: last {days} days. Inspired by common analytics reporting patterns: traffic, sessions, content engagement, acquisition source, device mix, performance, errors, cache efficiency, and operational database telemetry.', ['days' => (string) $days])) . '</p></header>'
+        . '<header><h1>' . e(t('admin.telemetry.export_heading', 'Anonymous telemetry report')) . '</h1><p>' . e(t('admin.telemetry.generated', 'Generated')) . ' ' . e($generatedAt) . '. ' . e(t('admin.telemetry.export_description', 'Local, privacy-safe usage and performance statistics for PHP Gallery.')) . '</p><p class="section-note">' . e(t('admin.telemetry.export.report_window_note', 'Report window: last {days} days. Inspired by common analytics reporting patterns: traffic, sessions, content engagement, acquisition source, device mix, performance, errors, cache efficiency, and operational database telemetry.', ['days' => (string) $days])) . ' ' . e(t('admin.telemetry.export.traffic_segment_note', 'Traffic segment: {segment}. Bot classification is a technical device bucket and does not identify a person.', ['segment' => (string) $trafficSegmentLabel])) . '</p></header>'
         . '<section class="panel privacy"><h2>' . e(t('admin.telemetry.privacy_status', 'Privacy status')) . '</h2><p>' . e(t('admin.telemetry.export_privacy_text', 'This export contains aggregated anonymous telemetry only. It does not include raw IP addresses, raw browser user-agent strings, raw referrer URLs, names, email addresses, account identifiers, request bodies, or exact locations.')) . '</p><p>' . e(t('admin.telemetry.public_telemetry_is', 'Public telemetry is')) . ' ' . ($publicTelemetryEnabled ? '<strong>' . e(t('admin.common.enabled', 'enabled')) . '</strong>' : '<strong>' . e(t('admin.common.disabled', 'disabled')) . '</strong>') . '. ' . e(t('admin.telemetry.raw_events_retained_for', 'Raw events are retained for')) . ' ' . e((string) $rawRetentionDays) . ' ' . e(t('admin.common.days', 'days')) . '.</p></section>'
+        . $consistencyHtml
         . '<section class="panel"><h2>' . e($labels['executive_overview']) . '</h2><div class="grid">'
         . view_telemetry_export_metric_card($labels['anonymous_sessions'], view_telemetry_report_number($sessions), $labels['session_hashes_only'])
         . view_telemetry_export_metric_card($labels['page_views'], view_telemetry_report_number($pageViews), t('admin.telemetry.export.per_session', '{count} per session', ['count' => view_telemetry_report_number($avgPagesPerSession, 2)]))
@@ -458,8 +713,8 @@ function view_render_admin_telemetry_export_document(array $viewModel): string
         . view_telemetry_export_metric_card($labels['bounce_rate'], view_telemetry_report_number($bounceRate, 1) . ' %', t('admin.telemetry.export.single_page_sessions', '{count} single-page sessions', ['count' => view_telemetry_report_number($bouncedSessions)]))
         . view_telemetry_export_metric_card($labels['client_errors'], view_telemetry_report_number($clientErrorCount), $labels['javascript_error_events'])
         . view_telemetry_export_metric_card($labels['media_measured'], format_bytes($mediaBytes, 1), $labels['images_thumbnails_downloads'])
-        . view_telemetry_export_metric_card($labels['cache_efficiency'], view_telemetry_report_number($cacheEfficiency, 1) . ' %', t('admin.telemetry.export.cache_hits_misses', '{hits} hits, {misses} misses', ['hits' => view_telemetry_report_number($cacheHitEvents), 'misses' => view_telemetry_report_number($cacheMissEvents)]))
-        . view_telemetry_export_metric_card($labels['db_queries'], view_telemetry_report_number($dbQueryCount), t('admin.telemetry.export.db_slow_failed', '{slow} slow, {failed} failed', ['slow' => view_telemetry_report_number($dbSlowCount), 'failed' => view_telemetry_report_number($dbFailedCount)]))
+        . view_telemetry_export_metric_card($labels['cache_efficiency'], $cacheEfficiencyDisplay, t('admin.telemetry.export.cache_hits_misses', '{hits} hits, {misses} misses', ['hits' => view_telemetry_report_number($cacheHitEvents), 'misses' => view_telemetry_report_number($cacheMissEvents)]))
+        . view_telemetry_export_metric_card($labels['db_queries'], $dbQueryCountDisplay, t('admin.telemetry.export.db_slow_failed', '{slow} slow, {failed} failed', ['slow' => view_telemetry_report_number($dbSlowCount), 'failed' => view_telemetry_report_number($dbFailedCount)]))
         . '</div></section>'
         . '<section class="panel"><h2>' . e($labels['daily_trends']) . '</h2><div class="trend-grid">'
         . view_telemetry_export_trend_chart($dailyTrends, 'sessions', $labels['sessions_per_day'])
@@ -496,6 +751,28 @@ function view_render_admin_telemetry_export_document(array $viewModel): string
             ['key' => 'avg_duration_seconds', 'label' => $labels['avg_duration'], 'format' => fn($v) => view_telemetry_report_duration($v)],
         ]) . '</div></section>'
         . '<section class="panel"><h2>' . e($labels['photo_engagement']) . '</h2><div class="split"><div><h3>' . e($labels['top_viewed_photos']) . '</h3>' . view_telemetry_export_photo_table($topPhotos, 'photo_views', t('admin.telemetry.views', 'Views')) . '</div><div><h3>' . e($labels['longest_viewed_photos']) . '</h3>' . view_telemetry_export_photo_table($longestPhotos, 'avg_view_seconds', t('admin.telemetry.average_capped_seconds', 'Average capped seconds')) . '</div></div></section>'
+        . '<section class="panel"><h2>' . e($labels['photo_open_diagnostics']) . '</h2><p class="muted">' . e(t('admin.telemetry.export.photo_open_diagnostics_note', 'Session distribution uses the selected report window. Gallery and activation-origin diagnostics use only the retained raw-event window ({days} days). Historical events without the new trigger context are labelled legacy/unclassified.', ['days' => (string) $photoDiagnosticDays])) . '</p><div class="grid">'
+        . view_telemetry_export_metric_card(t('admin.telemetry.export.photo_open_sessions_above', 'Sessions above {count} opens', ['count' => (string) $photoOpenThreshold]), view_telemetry_report_number($photoOpenAnomalySummary['sessions_above_threshold'] ?? 0))
+        . view_telemetry_export_metric_card($labels['photo_open_max_session'], view_telemetry_report_number($photoOpenAnomalySummary['max_opens_per_session'] ?? 0))
+        . '</div><div class="split"><div><h3>' . e($labels['photo_open_distribution']) . '</h3>' . view_telemetry_export_table($photoOpenBuckets, [
+            ['key' => 'bucket', 'label' => $labels['photo_open_bucket'], 'format' => static fn($v) => match ((string) $v) {
+                '0' => '0', '1' => '1', '2_5' => '2–5', '6_10' => '6–10', '11_25' => '11–25',
+                '26_50' => '26–50', '51_100' => '51–100', '101_plus' => '101+', default => (string) $v,
+            }],
+            ['key' => 'sessions', 'label' => $labels['sessions'], 'format' => fn($v) => view_telemetry_report_number($v)],
+            ['key' => 'photo_opens', 'label' => $labels['photo_opens'], 'format' => fn($v) => view_telemetry_report_number($v)],
+            ['key' => 'avg_opens', 'label' => $labels['average_opens'], 'format' => fn($v) => view_telemetry_report_number($v, 2)],
+            ['key' => 'max_opens', 'label' => $labels['maximum_opens'], 'format' => fn($v) => view_telemetry_report_number($v)],
+        ]) . '</div><div><h3>' . e($labels['activation_origins']) . '</h3>' . view_telemetry_export_table($photoOpenOrigins, [
+            ['key' => 'label', 'label' => $labels['source']],
+            ['key' => 'events', 'label' => $labels['events'], 'format' => fn($v) => view_telemetry_report_number($v)],
+        ]) . '</div></div><h3>' . e($labels['galleries_by_opens_per_session']) . '</h3>' . view_telemetry_export_table($photoOpenGalleryDiagnostics, [
+            ['key' => 'title', 'label' => $labels['gallery']],
+            ['key' => 'sessions', 'label' => $labels['sessions'], 'format' => fn($v) => view_telemetry_report_number($v)],
+            ['key' => 'photo_opens', 'label' => $labels['photo_opens'], 'format' => fn($v) => view_telemetry_report_number($v)],
+            ['key' => 'avg_opens_per_session', 'label' => $labels['average_opens'], 'format' => fn($v) => view_telemetry_report_number($v, 2)],
+            ['key' => 'max_opens_per_session', 'label' => $labels['maximum_opens'], 'format' => fn($v) => view_telemetry_report_number($v)],
+        ]) . '</section>'
         . '<section class="panel split"><div><h2>' . e($labels['thumbnail_bytes_by_variant']) . '</h2>' . view_telemetry_export_table($mediaVariants, [
             ['key' => 'label', 'label' => $labels['variant']],
             ['key' => 'events', 'label' => $labels['events'], 'format' => fn($v) => view_telemetry_report_number($v)],
@@ -505,12 +782,13 @@ function view_render_admin_telemetry_export_document(array $viewModel): string
             ['key' => 'events', 'label' => $labels['events'], 'format' => fn($v) => view_telemetry_report_number($v)],
             ['key' => 'value_sum', 'label' => $labels['bytes'], 'format' => fn($v) => format_bytes((float) $v, 1)],
         ]) . '</div></section>'
-        . '<section class="panel"><h2>' . e($labels['media_byte_split']) . '</h2><div class="grid">'
+        . '<section class="panel"><h2>' . e($labels['media_byte_split']) . '</h2><p class="muted">' . e(t('admin.telemetry.export.media_scope_note', $labels['media_scope_note'])) . '</p><div class="grid">'
         . view_telemetry_export_metric_card($labels['full_images'], format_bytes($imageBytes, 1))
         . view_telemetry_export_metric_card($labels['thumbnails'], format_bytes($thumbnailBytes, 1))
         . view_telemetry_export_metric_card($labels['downloads'], format_bytes($downloadBytes, 1))
         . view_telemetry_export_metric_card($labels['all_measured_media'], format_bytes($mediaBytes, 1))
         . '</div></section>'
+        . '<section class="panel"><p class="muted">' . e(t('admin.telemetry.export.cache_scope_note', $labels['cache_scope_note'])) . '</p></section>'
         . '<section class="panel split"><div><h2>' . e($labels['thumbnail_cache_hit_events']) . '</h2>' . view_telemetry_export_table($cacheThumbnail, [
             ['key' => 'label', 'label' => $labels['cache_result']],
             ['key' => 'events', 'label' => $labels['events'], 'format' => fn($v) => view_telemetry_report_number($v)],
@@ -519,9 +797,10 @@ function view_render_admin_telemetry_export_document(array $viewModel): string
             ['key' => 'events', 'label' => $labels['events'], 'format' => fn($v) => view_telemetry_report_number($v)],
         ]) . '</div></section>'
         . '<section class="panel"><h2>' . e($labels['browser_performance']) . '</h2>' . view_telemetry_export_table($performanceMetrics, [
-            ['key' => 'metric_name', 'label' => $labels['metric']],
+            ['key' => 'metric_name', 'label' => $labels['metric'], 'format' => fn($v) => view_telemetry_performance_metric_label((string) $v)],
+            ['key' => 'metric_name', 'label' => $labels['unit'], 'format' => fn($v) => view_telemetry_performance_metric_unit((string) $v)],
             ['key' => 'samples', 'label' => $labels['samples'], 'format' => fn($v) => view_telemetry_report_number($v)],
-            ['key' => 'avg_value', 'label' => $labels['average_ms_value'], 'format' => fn($v) => view_telemetry_report_number($v, 2)],
+            ['key' => 'avg_value', 'label' => $labels['average_value'], 'format' => fn($v) => view_telemetry_report_number($v, 2)],
             ['key' => 'min_value', 'label' => $labels['minimum'], 'format' => fn($v) => view_telemetry_report_number($v, 2)],
             ['key' => 'max_value', 'label' => $labels['maximum'], 'format' => fn($v) => view_telemetry_report_number($v, 2)],
         ]) . '</section>'
@@ -531,10 +810,10 @@ function view_render_admin_telemetry_export_document(array $viewModel): string
             ['key' => 'events', 'label' => $labels['events'], 'format' => fn($v) => view_telemetry_report_number($v)],
             ['key' => 'last_seen', 'label' => $labels['last_seen']],
         ]) . '</section>'
-        . '<section class="panel"><h2>' . e($labels['database_telemetry']) . '</h2><div class="grid">'
-        . view_telemetry_export_metric_card($labels['queries'], view_telemetry_report_number($dbQueryCount))
-        . view_telemetry_export_metric_card($labels['slow_queries'], view_telemetry_report_number($dbSlowCount))
-        . view_telemetry_export_metric_card($labels['failed_queries'], view_telemetry_report_number($dbFailedCount))
+        . '<section class="panel"><h2>' . e($labels['database_telemetry']) . '</h2><p class="muted">' . e($labels['database_scope_note']) . '</p><div class="grid">'
+        . view_telemetry_export_metric_card($labels['queries'], $dbQueryCountDisplay)
+        . view_telemetry_export_metric_card($labels['slow_queries'], $dbSlowCountDisplay)
+        . view_telemetry_export_metric_card($labels['failed_queries'], $dbFailedCountDisplay)
         . '</div><h3>' . e($labels['routes_operations_tables']) . '</h3>' . view_telemetry_export_table($databaseSummary, [
             ['key' => 'route_name', 'label' => $labels['route']],
             ['key' => 'operation', 'label' => $labels['operation']],
@@ -590,6 +869,10 @@ function view_render_admin_telemetry_export_document(array $viewModel): string
             ['key' => 'retry_count', 'label' => $labels['retries'], 'format' => fn($v) => view_telemetry_report_number($v)],
             ['key' => 'error_kind', 'label' => $labels['error']],
         ]) . '</section>'
+        . $storageDiagnosticsHtml
+        . $rollupConsistencyHtml
+        . $reportQueryProfileHtml
+        . $reportQueryPlansHtml
         . '<section class="panel"><h2>' . e($labels['stored_telemetry_volume']) . '</h2><div class="grid">'
         . view_telemetry_export_metric_card($labels['raw_events'], view_telemetry_report_number(($storedCounts['telemetry_events'] ?? 0)))
         . view_telemetry_export_metric_card($labels['sessions'], view_telemetry_report_number(($storedCounts['telemetry_sessions'] ?? 0)))

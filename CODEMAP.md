@@ -363,6 +363,7 @@ The Gallery tags Theme subsection is rendered by app/controllers/admin_theme.php
 | Telemetry settings | `app/services/telemetry_settings.php` |
 | Rollups and purge | `app/services/telemetry_rollup.php` |
 | DB query metrics | `app/services/database_observer.php` |
+| Telemetry storage/cardinality/query-plan/rollup-consistency diagnostics | `app/models/telemetry.php`, `app/services/telemetry.php`, standalone export in `app/controllers/admin_telemetry.php` / `app/views/admin_telemetry.php` |
 | Browser scripts | `public/assets/telemetry.js`, `public/assets/usage.js` |
 | Tables | `telemetry_settings`, `telemetry_sessions`, `telemetry_events`, `telemetry_hourly_metrics`, `telemetry_daily_metrics`, `telemetry_db_query_metrics`, `telemetry_job_runs` |
 

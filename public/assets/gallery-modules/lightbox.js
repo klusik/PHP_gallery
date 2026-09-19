@@ -111,6 +111,7 @@ export function teardownGalleryLightbox() {
  */
 export function setupGalleryLightbox() {
     teardownGalleryLightbox();
+    window.PHPGalleryTelemetryLightboxOwner = 'native';
 
     const controller = new AbortController();
     galleryLightboxState.controller = controller;
@@ -782,6 +783,8 @@ export function setupGalleryLightbox() {
     const preloadedSources = new Set();
     // decodedLightboxImages stores reusable decoded entries keyed by source URL.
     const decodedLightboxImages = new Map();
+    // lightboxTelemetryCacheResults keeps the bounded application-cache result attached to detached decoded nodes.
+    const lightboxTelemetryCacheResults = new WeakMap();
     // lightboxPreloadQueue holds nearby preview work so opening a photo does not start all downloads at once.
     const lightboxPreloadQueue = [];
     // lightboxQueuedSources prevents duplicate queued work while still allowing cached image reuse.
@@ -1939,6 +1942,7 @@ export function setupGalleryLightbox() {
                 loadedImage.fetchPriority = options.priority;
             }
             loadedImage.onload = () => {
+                const decodeStartedAt = performance.now();
                 decodeLoadedImage(loadedImage).then(() => {
                     if (settled) {
                         return;
@@ -1960,6 +1964,18 @@ export function setupGalleryLightbox() {
                         });
                     }
                     devMarkSource(src, 'ready', 'decoded', loadedImage);
+                    if (Number.isInteger(options.telemetryIndex) && Number.isInteger(options.telemetryToken)) {
+                        const cacheResult = options.telemetryCacheResult || 'miss';
+                        lightboxTelemetryCacheResults.set(loadedImage, cacheResult);
+                        telemetryVisibleImageDecoded(
+                            options.telemetryIndex,
+                            options.telemetryToken,
+                            src,
+                            loadedImage,
+                            performance.now() - decodeStartedAt,
+                            cacheResult
+                        );
+                    }
                     resolve(loadedImage);
                 });
             };
@@ -2024,6 +2040,10 @@ export function setupGalleryLightbox() {
             return false;
         }
         decodedLightboxImages.delete(src);
+        const telemetryIndex = lightboxIndexForSource(src);
+        if (telemetryIndex >= 0) {
+            telemetryLightboxCacheEvent('cache.lightbox.evicted', telemetryIndex);
+        }
         if (galleryDevModeEnabled) {
             galleryDevModeState.evictions += 1;
             devLog(`evict:${reason}:${shortenDevUrl(src)}`);
@@ -2333,22 +2353,30 @@ export function setupGalleryLightbox() {
             return Promise.reject(new Error(i18n('lightbox.missing_image_source', 'Missing lightbox image source.')));
         }
         const cachedEntry = useDecodedLightboxImageCacheEntry(src);
+        const telemetryOwned = Number.isInteger(options.telemetryIndex) && Number.isInteger(options.telemetryToken);
         if (cachedEntry) {
             galleryDevModeState.cacheHits += galleryDevModeEnabled ? 1 : 0;
             devMarkSource(src, 'loading', 'load-hit');
+            if (telemetryOwned) {
+                telemetryLightboxCacheEvent('cache.lightbox.hit', options.telemetryIndex);
+            }
             return cachedEntry.promise.then((preloadedImage) => {
                 if (preloadedImage) {
+                    lightboxTelemetryCacheResults.set(preloadedImage, 'hit');
                     return preloadedImage;
                 }
                 // freshPromise stores state or configuration for the gallery front-end flow.
-                const freshPromise = loadFreshDecodedLightboxImage(src, options);
+                const freshPromise = loadFreshDecodedLightboxImage(src, {...options, telemetryCacheResult: 'miss'});
                 rememberDecodedLightboxImage(src, freshPromise.catch(() => null), 'load-cache-retry');
                 return freshPromise;
             });
         }
         galleryDevModeState.cacheMisses += galleryDevModeEnabled ? 1 : 0;
+        if (telemetryOwned) {
+            telemetryLightboxCacheEvent('cache.lightbox.miss', options.telemetryIndex);
+        }
         // freshPromise stores state or configuration for the gallery front-end flow.
-        const freshPromise = loadFreshDecodedLightboxImage(src, options);
+        const freshPromise = loadFreshDecodedLightboxImage(src, {...options, telemetryCacheResult: 'miss'});
         rememberDecodedLightboxImage(src, freshPromise.catch(() => null), 'load-fresh');
         return freshPromise;
     }
@@ -2831,7 +2859,7 @@ export function setupGalleryLightbox() {
             return Promise.resolve(false);
         }
         if (!(decodedImage instanceof HTMLImageElement)) {
-            return loadDecodedLightboxImage(src, {priority: 'high'})
+            return loadDecodedLightboxImage(src, {priority: 'high', telemetryIndex: index, telemetryToken: token})
                 .then((loadedImage) => showLightboxImageSource(
                     index,
                     token,
@@ -2853,22 +2881,30 @@ export function setupGalleryLightbox() {
         if (!targetMetrics || !isCurrentLightboxImageRequest(index, token)) {
             return Promise.resolve(false);
         }
+        const displayStartedAt = performance.now();
+        /** Finish one presentation attempt and emit timing only after a successful active display. */
+        const finishDisplay = (displayPromise) => Promise.resolve(displayPromise).then((wasDisplayed) => {
+            if (wasDisplayed && isCurrentLightboxImageRequest(index, token)) {
+                telemetryVisibleImageDisplayed(index, token, src, decodedImage, performance.now() - displayStartedAt);
+            }
+            return wasDisplayed;
+        });
         if (preparedForSlideshow && !immediate) {
-            return showPreparedLightboxSlideshowImage(index, token, decodedImage, src, altText);
+            return finishDisplay(showPreparedLightboxSlideshowImage(index, token, decodedImage, src, altText));
         }
         if (immediate || !stageLink || !image.getAttribute('src')) {
             activeLightboxTransitionToken += 1;
             removeTransitionImage();
-            return commitPreparedLightboxImage(index, token, decodedImage, src, altText, targetMetrics);
+            return finishDisplay(commitPreparedLightboxImage(index, token, decodedImage, src, altText, targetMetrics));
         }
         if (image.getAttribute('src') === src) {
             image.alt = altText;
             image.dataset.lightboxImageId = String(cards[index]?.dataset.imageId || index);
             applyLightboxZoomState(false, targetMetrics);
             clearLightboxNavigationPending(token);
-            return Promise.resolve(true);
+            return finishDisplay(Promise.resolve(true));
         }
-        return showPreparedLightboxTransitionImage(index, token, decodedImage, src, altText);
+        return finishDisplay(showPreparedLightboxTransitionImage(index, token, decodedImage, src, altText));
     }
 
     /**
@@ -3461,11 +3497,111 @@ export function setupGalleryLightbox() {
     }
 
         /**
+     * Return the normalized media variant for one authorized lightbox source.
+     *
+     * @param {number} index Active lightbox index.
+     * @param {string} src Authorized image source URL.
+     * @return {string} Bounded media variant label.
+     */
+    function telemetryLightboxMediaVariant(index, src) {
+        const card = cards[index];
+        if (!(card instanceof HTMLElement) || !src) {
+            return 'unknown';
+        }
+        if (String(card.dataset.fullSrc || '') === String(src)) {
+            return 'original';
+        }
+        const candidates = lightboxQualityCandidatesForCard(card);
+        const candidate = candidates.find((item) => String(item?.src || '') === String(src));
+        if (candidate?.kind === 'full' || candidate?.kind === 'original') {
+            return 'original';
+        }
+        const width = Math.max(0, Number.parseInt(String(candidate?.width || '0'), 10) || 0);
+        if (width > 0) {
+            return `thumb_${width}`;
+        }
+        return 'unknown';
+    }
+
+    /**
+     * Emit one bounded decoded-lightbox application-cache event for the active photo.
+     *
+     * This is not HTTP/browser cache telemetry. It describes only the in-memory
+     * decoded-lightbox cache owned by this module.
+     *
+     * @param {string} eventName Cache telemetry event name.
+     * @param {number} index Active lightbox index.
+     */
+    function telemetryLightboxCacheEvent(eventName, index) {
+        const card = cards[index];
+        if (!window.PHPGalleryTelemetryCacheEvent || !(card instanceof HTMLElement)) {
+            return;
+        }
+        window.PHPGalleryTelemetryCacheEvent(
+            eventName,
+            Number(card.dataset.imageId || 0),
+            Number(card.dataset.galleryId || window.PHPGalleryTelemetry?.galleryId || 0),
+            'decoded_lightbox'
+        );
+    }
+
+    /**
+     * Emit visible-image decode telemetry only while the async request still owns the active photo.
+     *
+     * @param {number} index Active lightbox index.
+     * @param {number} token Active navigation token.
+     * @param {string} src Authorized image source URL.
+     * @param {HTMLImageElement} loadedImage Decoded detached image.
+     * @param {number} elapsedMs Decode duration in milliseconds.
+     * @param {string} cacheResult Bounded decoded-lightbox cache result.
+     */
+    function telemetryVisibleImageDecoded(index, token, src, loadedImage, elapsedMs, cacheResult = 'unknown') {
+        if (!isCurrentLightboxImageRequest(index, token) || !window.PHPGalleryTelemetryImageDecoded) {
+            return;
+        }
+        const card = cards[index];
+        window.PHPGalleryTelemetryImageDecoded(
+            Number(card?.dataset.imageId || 0),
+            Number(card?.dataset.galleryId || window.PHPGalleryTelemetry?.galleryId || 0),
+            elapsedMs,
+            telemetryLightboxMediaVariant(index, src),
+            cacheResult,
+            Math.max(0, Number(stageLink?.clientWidth || image?.clientWidth || window.innerWidth || 0)),
+            Math.max(0, Number(loadedImage?.naturalWidth || 0))
+        );
+    }
+
+    /**
+     * Emit visible-image display telemetry at the successful presentation boundary.
+     *
+     * @param {number} index Active lightbox index.
+     * @param {number} token Active navigation token.
+     * @param {string} src Authorized image source URL.
+     * @param {HTMLImageElement} decodedImage Decoded detached image.
+     * @param {number} elapsedMs Presentation duration in milliseconds.
+     */
+    function telemetryVisibleImageDisplayed(index, token, src, decodedImage, elapsedMs) {
+        if (!isCurrentLightboxImageRequest(index, token) || !window.PHPGalleryTelemetryImageDisplayed) {
+            return;
+        }
+        const card = cards[index];
+        window.PHPGalleryTelemetryImageDisplayed(
+            Number(card?.dataset.imageId || 0),
+            Number(card?.dataset.galleryId || window.PHPGalleryTelemetry?.galleryId || 0),
+            elapsedMs,
+            telemetryLightboxMediaVariant(index, src),
+            lightboxTelemetryCacheResults.get(decodedImage) || 'unknown',
+            Math.max(0, Number(image?.clientWidth || stageLink?.clientWidth || window.innerWidth || 0)),
+            Math.max(0, Number(decodedImage?.naturalWidth || 0))
+        );
+    }
+
+    /**
      * Notify the optional anonymous telemetry module about a lightbox photo view.
      *
      * @param {*} card Value supplied by the caller or event context.
      */
-    function telemetryPhotoOpened(card) {
+    function telemetryPhotoOpened(card, trigger = 'unknown') {
         if (!window.PHPGalleryTelemetryPhotoOpened || !card) {
             return;
         }
@@ -3473,7 +3609,8 @@ export function setupGalleryLightbox() {
         window.PHPGalleryTelemetryPhotoOpened(
             Number(card.dataset.imageId || 0),
             Number(card.dataset.galleryId || telemetryConfig.galleryId || 0),
-            document.fullscreenElement ? 'fullscreen' : 'normal'
+            document.fullscreenElement ? 'fullscreen' : 'normal',
+            trigger
         );
     }
 
@@ -4269,7 +4406,7 @@ export function setupGalleryLightbox() {
                 if (!loaded || controller.signal.aborted || currentIndex !== normalizedIndex) {
                     return;
                 }
-                openAt(normalizedIndex);
+                openAt(normalizedIndex, options);
             });
             return;
         }
@@ -4378,14 +4515,10 @@ export function setupGalleryLightbox() {
                     if (wasDisplayed) {
                         return true;
                     }
-                    return mainSrc
-                        ? loadDecodedLightboxImage(mainSrc, {priority: 'high'}).then(showMainImage).catch(() => false)
-                        : false;
+                    return mainSrc ? showMainImage(null) : false;
                 })
                 : (mainSrc
-                    ? (shouldShowImmediately
-                        ? showMainImage(null)
-                        : loadDecodedLightboxImage(mainSrc, {priority: 'high'}).then(showMainImage))
+                    ? showMainImage(null)
                     : Promise.resolve(false)));
         Promise.resolve(initialMainPromise).then((wasDisplayed) => {
             if (!wasDisplayed || !isCurrentLightboxImageRequest(normalizedIndex, imageToken)) {
@@ -4419,7 +4552,7 @@ export function setupGalleryLightbox() {
         if (revealHud) {
             showLightboxHud();
         }
-        telemetryPhotoOpened(card);
+        telemetryPhotoOpened(card, options.telemetryTrigger || 'unknown');
     }
 
         /**
@@ -4566,6 +4699,7 @@ export function setupGalleryLightbox() {
                     revealHud: false,
                     slideshowPreparedImage: prepared.image,
                     slideshowPreparedSrc: prepared.src,
+                    telemetryTrigger: 'slideshow',
                 });
             });
         }, lightboxSlideshowVisibleDuration);
@@ -4886,7 +5020,7 @@ export function setupGalleryLightbox() {
             return;
         }
         event.preventDefault();
-        openAt(index);
+        openAt(index, {telemetryTrigger: 'click'});
     }, {signal: controller.signal});
 
     previousButtons.forEach((button) => {
@@ -4897,7 +5031,7 @@ export function setupGalleryLightbox() {
         button.addEventListener('click', (event) => {
             event.preventDefault();
             event.stopPropagation();
-            step(-1);
+            step(-1, {telemetryTrigger: 'click'});
         }, {signal: controller.signal});
     });
 
@@ -4909,7 +5043,7 @@ export function setupGalleryLightbox() {
         button.addEventListener('click', (event) => {
             event.preventDefault();
             event.stopPropagation();
-            step(1);
+            step(1, {telemetryTrigger: 'click'});
         }, {signal: controller.signal});
     });
 
@@ -4988,7 +5122,7 @@ export function setupGalleryLightbox() {
             event.preventDefault();
             const stripIndex = Number.parseInt(stripButton.dataset.lightboxStripIndex || '-1', 10);
             if (Number.isInteger(stripIndex) && stripIndex >= 0 && stripIndex < cards.length) {
-                openAt(stripIndex);
+                openAt(stripIndex, {telemetryTrigger: 'click'});
             }
             return;
         }
@@ -5103,11 +5237,11 @@ export function setupGalleryLightbox() {
         }
         if (event.key === 'ArrowLeft') {
             event.preventDefault();
-            step(event.shiftKey ? -10 : -1);
+            step(event.shiftKey ? -10 : -1, {telemetryTrigger: 'keyboard'});
         }
         if (event.key === 'ArrowRight') {
             event.preventDefault();
-            step(event.shiftKey ? 10 : 1);
+            step(event.shiftKey ? 10 : 1, {telemetryTrigger: 'keyboard'});
         }
         if (event.key === 'ArrowUp') {
             event.preventDefault();
@@ -5519,7 +5653,7 @@ export function setupGalleryLightbox() {
         mobileSwipeVisualTimer = window.setTimeout(() => {
             mobileSwipeVisualTimer = 0;
             if (!controller.signal.aborted && !overlay.hidden) {
-                step(direction, {revealHud: false});
+                step(direction, {revealHud: false, telemetryTrigger: 'swipe'});
             }
             resetMobileSwipeVisuals(false);
         }, 150);
@@ -7194,6 +7328,7 @@ export function setupGalleryLightbox() {
                         forceImmediateSwap: target.preserveMapSplit === true,
                         preserveMapSplit: target.preserveMapSplit === true,
                         mapPhotoNavigation: navigation,
+                        telemetryTrigger: 'click',
                     });
                 }
                 return;

@@ -39,6 +39,7 @@ namespace Gallery\Controllers;
 use function Gallery\Core\csrf_field;
 use function Gallery\Core\current_user;
 use function Gallery\Core\redirect_to;
+use function Gallery\Core\request_data;
 use function Gallery\Core\require_admin;
 use function Gallery\Core\url_for;
 use function Gallery\Core\verify_csrf;
@@ -55,17 +56,26 @@ use function Gallery\Services\telemetry_metric_events;
 use function Gallery\Services\telemetry_metric_sum;
 use function Gallery\Services\telemetry_public_usage_enabled;
 use function Gallery\Services\telemetry_report_client_errors;
+use function Gallery\Services\telemetry_report_consistency;
 use function Gallery\Services\telemetry_report_daily_trends;
+use function Gallery\Services\telemetry_report_daily_rollup_consistency;
 use function Gallery\Services\telemetry_report_database_fingerprints;
 use function Gallery\Services\telemetry_report_database_summary;
 use function Gallery\Services\telemetry_report_database_totals;
 use function Gallery\Services\telemetry_report_job_runs;
 use function Gallery\Services\telemetry_report_metric_distribution;
+use function Gallery\Services\telemetry_report_photo_open_session_buckets;
+use function Gallery\Services\telemetry_report_photo_open_origins;
+use function Gallery\Services\telemetry_report_photo_open_anomaly_summary;
+use function Gallery\Services\telemetry_report_gallery_photo_opens_per_session;
 use function Gallery\Services\telemetry_report_performance_metrics;
+use function Gallery\Services\telemetry_report_query_profile;
+use function Gallery\Services\telemetry_report_query_plans;
+use function Gallery\Services\telemetry_reset_report_query_profile;
 use function Gallery\Services\telemetry_report_recent_events;
 use function Gallery\Services\telemetry_report_session_distribution;
 use function Gallery\Services\telemetry_report_session_summary;
-use function Gallery\Services\telemetry_report_table_count;
+use function Gallery\Services\telemetry_report_storage_diagnostics;
 use function Gallery\Services\telemetry_report_top_galleries;
 use function Gallery\Services\telemetry_report_top_routes;
 use function Gallery\Services\telemetry_retention_days;
@@ -80,6 +90,7 @@ use function Gallery\Services\schema_inspection_is_available;
 use function Gallery\Services\schema_inspection_is_missing;
 use function Gallery\Services\schema_inspection_is_unknown;
 use function Gallery\Services\telemetry_top_photos;
+use function Gallery\Services\telemetry_traffic_segment;
 use function Gallery\Views\view_render_admin_telemetry_export_document;
 use function Gallery\Views\view_telemetry_export_bar_chart;
 use function Gallery\Views\view_telemetry_export_metric_card;
@@ -133,8 +144,9 @@ function cms_admin_telemetry(): void
     $metrics = [];
     $tables = [];
     if ($schemaReady) {
+        $sessionSummary = telemetry_report_session_summary(30);
         $metrics = [
-            ['label' => t('admin.telemetry.metric_anonymous_sessions', 'Anonymous sessions'), 'value' => (string) telemetry_metric_events('public.sessions', 30)],
+            ['label' => t('admin.telemetry.metric_anonymous_sessions', 'Anonymous sessions'), 'value' => (string) ((int) ($sessionSummary['sessions'] ?? 0))],
             ['label' => t('admin.telemetry.metric_page_views', 'Page views'), 'value' => (string) telemetry_metric_events('public.page_views', 30)],
             ['label' => t('admin.telemetry.metric_photo_opens', 'Photo opens'), 'value' => (string) telemetry_metric_events('photo.views', 30)],
             ['label' => t('admin.telemetry.metric_total_capped_photo_time', 'Total capped photo time'), 'value' => number_format(telemetry_metric_sum('photo.view_seconds', 30), 0) . ' s'],
@@ -166,7 +178,11 @@ function cms_admin_telemetry(): void
         'page_title' => t('admin.telemetry.page_title', 'Telemetry'),
         'settings_url' => admin_settings_url('privacy'),
         'logs_url' => url_for('admin_logs'),
-        'export_url' => url_for('admin_telemetry_export'),
+        'export_urls' => [
+            'all' => url_for('admin_telemetry_export', ['traffic_segment' => 'all']),
+            'non_bot' => url_for('admin_telemetry_export', ['traffic_segment' => 'non_bot']),
+            'bot' => url_for('admin_telemetry_export', ['traffic_segment' => 'bot']),
+        ],
         'dashboard_url' => url_for('admin'),
         'schema_ready' => $schemaReady,
         'schema_title' => $schemaTitle,
@@ -347,68 +363,103 @@ function cms_admin_telemetry_export(): void
     }
 
     $days = 30;
+    $query = request_data('query');
+    $trafficSegment = telemetry_traffic_segment($query['traffic_segment'] ?? 'all');
+    $trafficSegmentLabel = match ($trafficSegment) {
+        'non_bot' => t('admin.telemetry.traffic_segment_non_bot', 'Non-bot-classified traffic'),
+        'bot' => t('admin.telemetry.traffic_segment_bot', 'Bot-classified traffic'),
+        default => t('admin.telemetry.traffic_segment_all', 'All traffic'),
+    };
+    $rawRetentionDays = telemetry_retention_days('telemetry_raw_retention_days', 7, 1, 90);
+    telemetry_reset_report_query_profile();
+    $photoDiagnosticDays = min($days, $rawRetentionDays);
+    $photoOpenThreshold = 50;
     $generatedAt = date('Y-m-d H:i:s');
     $fileName = 'php-gallery-telemetry-' . date('Ymd-His') . '.html';
-    $sessionSummary = telemetry_report_session_summary($days);
-    $dailyTrends = telemetry_report_daily_trends($days);
-    $topGalleries = telemetry_report_top_galleries($days, 25);
-    $topRoutes = telemetry_report_top_routes($days, 25);
-    $browserSessions = telemetry_report_session_distribution('browser_family', $days, 12);
-    $osSessions = telemetry_report_session_distribution('os_family', $days, 12);
-    $deviceSessions = telemetry_report_session_distribution('device_type', $days, 12);
-    $viewportSessions = telemetry_report_session_distribution('viewport_class', $days, 12);
-    $entryReferrers = telemetry_report_session_distribution('entry_referrer_category', $days, 12);
-    $landingRoutes = telemetry_report_session_distribution('first_route_name', $days, 20);
-    $exitRoutes = telemetry_report_session_distribution('exit_route_name', $days, 20);
-    $pageKinds = telemetry_report_metric_distribution('page_kind', $days, 'public.page_views', 12);
-    $mediaVariants = telemetry_report_metric_distribution('media_variant', $days, 'media.thumbnail.bytes', 20);
-    $imageVariants = telemetry_report_metric_distribution('media_variant', $days, 'media.image.bytes', 20);
-    $cacheThumbnail = telemetry_report_metric_distribution('cache_result', $days, 'cache.thumbnail.hit', 12);
-    $cacheMisses = telemetry_report_metric_distribution('cache_result', $days, 'cache.thumbnail.miss', 12);
-    $performanceMetrics = telemetry_report_performance_metrics($days);
-    $clientErrors = telemetry_report_client_errors($days, 25);
-    $recentEvents = telemetry_report_recent_events($days, 80);
+    $sessionSummary = telemetry_report_session_summary($days, $trafficSegment);
+    $dailyTrends = telemetry_report_daily_trends($days, $trafficSegment);
+    $consistency = telemetry_report_consistency($days, $sessionSummary, $dailyTrends, $trafficSegment);
+    $topGalleries = telemetry_report_top_galleries($days, 25, $trafficSegment);
+    $topRoutes = telemetry_report_top_routes($days, 25, $trafficSegment);
+    $browserSessions = telemetry_report_session_distribution('browser_family', $days, 12, $trafficSegment);
+    $osSessions = telemetry_report_session_distribution('os_family', $days, 12, $trafficSegment);
+    $deviceSessions = telemetry_report_session_distribution('device_type', $days, 12, $trafficSegment);
+    $viewportSessions = telemetry_report_session_distribution('viewport_class', $days, 12, $trafficSegment);
+    $entryReferrers = telemetry_report_session_distribution('entry_referrer_category', $days, 12, $trafficSegment);
+    $landingRoutes = telemetry_report_session_distribution('first_route_name', $days, 20, $trafficSegment);
+    $exitRoutes = telemetry_report_session_distribution('exit_route_name', $days, 20, $trafficSegment);
+    $pageKinds = telemetry_report_metric_distribution('page_kind', $days, 'public.page_views', 12, $trafficSegment);
+    $mediaVariants = telemetry_report_metric_distribution('media_variant', $days, 'media.thumbnail.bytes', 20, $trafficSegment);
+    $imageVariants = telemetry_report_metric_distribution('media_variant', $days, 'media.image.bytes', 20, $trafficSegment);
+    $cacheThumbnail = telemetry_report_metric_distribution('cache_result', $days, 'cache.thumbnail.hit', 12, $trafficSegment);
+    $cacheMisses = telemetry_report_metric_distribution('cache_result', $days, 'cache.thumbnail.miss', 12, $trafficSegment);
+    $performanceMetrics = telemetry_report_performance_metrics($days, $trafficSegment);
+    $photoOpenBuckets = telemetry_report_photo_open_session_buckets($days, $trafficSegment);
+    $photoOpenAnomalySummary = telemetry_report_photo_open_anomaly_summary($days, $photoOpenThreshold, $trafficSegment);
+    $photoOpenGalleryDiagnostics = telemetry_report_gallery_photo_opens_per_session($photoDiagnosticDays, 3, 20, $trafficSegment);
+    $photoOpenOrigins = telemetry_report_photo_open_origins($photoDiagnosticDays, $trafficSegment);
+    $clientErrors = telemetry_report_client_errors($days, 25, $trafficSegment);
+    $recentEvents = telemetry_report_recent_events($days, 80, $trafficSegment);
     $databaseSummary = telemetry_report_database_summary($days, 40);
     $databaseFingerprints = telemetry_report_database_fingerprints($days, 30);
     $jobRuns = telemetry_report_job_runs($days, 40);
 
     $sessions = (float) ($sessionSummary['sessions'] ?? 0);
-    $pageViews = (float) ($sessionSummary['page_views'] ?? 0);
+    $pageViews = (float) telemetry_metric_events('public.page_views', $days, $trafficSegment);
     $photoViews = (float) ($sessionSummary['photo_views'] ?? 0);
     $durationSeconds = (float) ($sessionSummary['duration_seconds'] ?? 0);
     $bouncedSessions = (float) ($sessionSummary['bounced_sessions'] ?? 0);
     $bounceRate = $sessions > 0 ? ($bouncedSessions / $sessions) * 100 : 0;
-    $avgPagesPerSession = (float) ($sessionSummary['avg_pages_per_session'] ?? 0);
+    $avgPagesPerSession = $sessions > 0 ? $pageViews / $sessions : 0.0;
     $avgPhotosPerSession = (float) ($sessionSummary['avg_photos_per_session'] ?? 0);
     $avgDurationSeconds = (float) ($sessionSummary['avg_duration_seconds'] ?? 0);
-    $mediaBytes = telemetry_metric_sum('media.image.bytes', $days) + telemetry_metric_sum('media.thumbnail.bytes', $days) + telemetry_metric_sum('media.download.bytes', $days);
-    $thumbnailBytes = telemetry_metric_sum('media.thumbnail.bytes', $days);
-    $imageBytes = telemetry_metric_sum('media.image.bytes', $days);
-    $downloadBytes = telemetry_metric_sum('media.download.bytes', $days);
-    $clientErrorCount = telemetry_metric_events('client.errors', $days);
-    $photoSeconds = telemetry_metric_sum('photo.view_seconds', $days);
-    $cacheHitEvents = telemetry_metric_events('cache.thumbnail.hit', $days) + telemetry_metric_events('cache.lightbox.hit', $days);
-    $cacheMissEvents = telemetry_metric_events('cache.thumbnail.miss', $days) + telemetry_metric_events('cache.lightbox.miss', $days);
-    $cacheEfficiency = ($cacheHitEvents + $cacheMissEvents) > 0 ? ($cacheHitEvents / ($cacheHitEvents + $cacheMissEvents)) * 100 : 0;
+    $mediaBytes = telemetry_metric_sum('media.image.bytes', $days, $trafficSegment) + telemetry_metric_sum('media.thumbnail.bytes', $days, $trafficSegment) + telemetry_metric_sum('media.download.bytes', $days, $trafficSegment);
+    $thumbnailBytes = telemetry_metric_sum('media.thumbnail.bytes', $days, $trafficSegment);
+    $imageBytes = telemetry_metric_sum('media.image.bytes', $days, $trafficSegment);
+    $downloadBytes = telemetry_metric_sum('media.download.bytes', $days, $trafficSegment);
+    $clientErrorCount = telemetry_metric_events('client.errors', $days, $trafficSegment);
+    $photoSeconds = telemetry_metric_sum('photo.view_seconds', $days, $trafficSegment);
+    $cacheHitEvents = telemetry_metric_events('cache.lightbox.hit', $days, $trafficSegment);
+    $cacheMissEvents = telemetry_metric_events('cache.lightbox.miss', $days, $trafficSegment);
+    $cacheSampleCount = $cacheHitEvents + $cacheMissEvents;
+    $telemetryMasterEnabled = telemetry_setting_enabled('telemetry_enabled', '0');
+    $cacheTelemetryEnabled = $telemetryMasterEnabled && telemetry_setting_enabled('telemetry_cache_enabled', '1');
+    $cacheEmptyText = !$cacheTelemetryEnabled
+        ? t('admin.telemetry.export.disabled', 'Disabled')
+        : t('admin.telemetry.export.no_cache_samples', 'No cache samples');
+    $cacheEfficiency = $cacheSampleCount > 0 ? ($cacheHitEvents / $cacheSampleCount) * 100 : 0;
+    $cacheEfficiencyDisplay = $cacheSampleCount > 0
+        ? view_telemetry_report_number($cacheEfficiency, 1) . ' %'
+        : $cacheEmptyText;
     // $databaseTotals stores aggregate DB telemetry counters prepared by the service layer.
     $databaseTotals = telemetry_report_database_totals($days);
     $dbQueryCount = (float) ($databaseTotals['query_count'] ?? 0);
     $dbSlowCount = (float) ($databaseTotals['slow_count'] ?? 0);
     $dbFailedCount = (float) ($databaseTotals['failed_count'] ?? 0);
+    $databaseTelemetryEnabled = $telemetryMasterEnabled && telemetry_setting_enabled('telemetry_database_enabled', '1');
+    $dbTelemetryHasSamples = $dbQueryCount > 0;
+    $dbEmptyText = !$databaseTelemetryEnabled
+        ? t('admin.telemetry.export.disabled', 'Disabled')
+        : t('admin.telemetry.export.no_samples', 'No samples');
+    $dbQueryCountDisplay = $dbTelemetryHasSamples ? view_telemetry_report_number($dbQueryCount) : $dbEmptyText;
+    $dbSlowCountDisplay = $dbTelemetryHasSamples ? view_telemetry_report_number($dbSlowCount) : $dbEmptyText;
+    $dbFailedCountDisplay = $dbTelemetryHasSamples ? view_telemetry_report_number($dbFailedCount) : $dbEmptyText;
 
     $activeLanguage = translation_active_language();
     $publicTelemetryEnabled = telemetry_public_usage_enabled();
-    $rawRetentionDays = telemetry_retention_days('telemetry_raw_retention_days', 7, 1, 90);
-    $topPhotos = telemetry_top_photos($days, 25);
-    $longestPhotos = telemetry_longest_viewed_photos($days, 25);
-    $storedCounts = [
-        'telemetry_events' => telemetry_report_table_count('telemetry_events'),
-        'telemetry_sessions' => telemetry_report_table_count('telemetry_sessions'),
-        'telemetry_hourly_metrics' => telemetry_report_table_count('telemetry_hourly_metrics'),
-        'telemetry_daily_metrics' => telemetry_report_table_count('telemetry_daily_metrics'),
-        'telemetry_db_query_metrics' => telemetry_report_table_count('telemetry_db_query_metrics'),
-        'telemetry_job_runs' => telemetry_report_table_count('telemetry_job_runs'),
-    ];
+    $topPhotos = telemetry_top_photos($days, 25, $trafficSegment);
+    $longestPhotos = telemetry_longest_viewed_photos($days, 25, $trafficSegment);
+    $storageDiagnostics = telemetry_report_storage_diagnostics($days);
+    $rollupConsistency = telemetry_report_daily_rollup_consistency(min(7, max(1, $days - 1)), $trafficSegment);
+    $reportQueryProfile = telemetry_report_query_profile();
+    $reportQueryPlans = telemetry_report_query_plans($days, $trafficSegment);
+    $storedCounts = [];
+    foreach ((array) ($storageDiagnostics['tables'] ?? []) as $row) {
+        $tableName = (string) ($row['table_name'] ?? '');
+        if ($tableName !== '') {
+            $storedCounts[$tableName] = max(0, (int) ($row['exact_rows'] ?? 0));
+        }
+    }
     $html = view_render_admin_telemetry_export_document(get_defined_vars());
 
     header('Content-Type: text/html; charset=utf-8');

@@ -203,6 +203,33 @@ function thumbnail_metadata_model_upsert_variant(array $fields): void
     $stmt->execute(array_values($fields));
 }
 
+/**
+ * Return an aggregate inventory of registered legacy JPEG thumbnail variants.
+ *
+ * @return array{registered_variant_count:int,valid_variant_count:int,affected_image_count:int,registered_bytes:int,missing_status_count:int,non_valid_status_count:int}
+ */
+function thumbnail_metadata_model_legacy_jpg_inventory(): array
+{
+    $stmt = db()->query(
+        "SELECT COUNT(*) AS registered_variant_count,"
+        . " SUM(CASE WHEN status = 'valid' THEN 1 ELSE 0 END) AS valid_variant_count,"
+        . " COUNT(DISTINCT image_id) AS affected_image_count,"
+        . " COALESCE(SUM(CASE WHEN status = 'valid' THEN COALESCE(file_size, 0) ELSE 0 END), 0) AS registered_bytes,"
+        . " SUM(CASE WHEN status = 'missing' THEN 1 ELSE 0 END) AS missing_status_count,"
+        . " SUM(CASE WHEN status <> 'valid' THEN 1 ELSE 0 END) AS non_valid_status_count"
+        . " FROM image_thumbnail_variants WHERE format = 'jpg'"
+    );
+    $row = $stmt->fetch() ?: [];
+    return [
+        'registered_variant_count' => max(0, (int) ($row['registered_variant_count'] ?? 0)),
+        'valid_variant_count' => max(0, (int) ($row['valid_variant_count'] ?? 0)),
+        'affected_image_count' => max(0, (int) ($row['affected_image_count'] ?? 0)),
+        'registered_bytes' => max(0, (int) ($row['registered_bytes'] ?? 0)),
+        'missing_status_count' => max(0, (int) ($row['missing_status_count'] ?? 0)),
+        'non_valid_status_count' => max(0, (int) ($row['non_valid_status_count'] ?? 0)),
+    ];
+}
+
 /** @return array{row_count:int,status_counts:array<string,int>} */
 function thumbnail_metadata_model_storage_counts(): array
 {

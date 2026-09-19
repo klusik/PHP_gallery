@@ -57,9 +57,8 @@
     let flushTimer = null;
     let currentPhotoId = null;
     let currentPhotoGalleryId = null;
-    let currentPhotoStartedAt = 0;
-    let lastPhotoOpenedAt = 0;
-    let lastPhotoOpenedId = null;
+    let currentPhotoStartedAt = null;
+    let currentPhotoMode = 'normal';
     let sessionStarted = sessionStorage.getItem(sessionKey + '_started') === '1';
 
     /**
@@ -281,6 +280,20 @@
         return '1201_plus';
     }
 
+    /** Return the bounded browser-performance sampling rate. */
+    function performanceSamplingRate() {
+        return Math.min(1, Math.max(0, Number(config.performanceSampleRate ?? 0.25)));
+    }
+
+    /** Return whether one optional browser-performance observation should be emitted. */
+    function performanceTelemetrySampled() {
+        if (config.performanceEnabled === false) {
+            return false;
+        }
+        const sampleRate = performanceSamplingRate();
+        return sampleRate >= 1 || Math.random() <= sampleRate;
+    }
+
     /**
      * Start page events.
      *
@@ -295,33 +308,71 @@
         enqueue(baseEvent(config.pageKind === 'gallery' ? 'public.gallery.viewed' : 'public.page.viewed'));
     }
 
-    window.PHPGalleryTelemetryPhotoOpened = function (imageId, galleryId, mode) {
+    /**
+     * Normalize the bounded origin bucket for one semantic photo activation.
+     *
+     * This value is intentionally low-cardinality and must never contain DOM
+     * selectors, URLs, free-form labels, or user-provided content.
+     *
+     * @param {*} trigger Candidate activation origin.
+     * @return {string} Privacy-safe activation origin bucket.
+     */
+    function photoOpenTrigger(trigger) {
+        const normalized = String(trigger || 'unknown').toLowerCase();
+        return ['click', 'keyboard', 'swipe', 'slideshow', 'history', 'direct', 'fallback', 'unknown'].includes(normalized)
+            ? normalized
+            : 'unknown';
+    }
+
+    /**
+     * Start one semantic photo activation.
+     *
+     * Repeated observations of the same currently active image are no-ops. A
+     * true A -> B transition closes A exactly once before B is opened.
+     *
+     * @param {*} imageId Image identifier.
+     * @param {*} galleryId Gallery identifier.
+     * @param {*} mode Lightbox display mode.
+     * @param {*} trigger Privacy-safe activation origin bucket.
+     * @return {boolean} True when a new semantic activation was emitted.
+     */
+    window.PHPGalleryTelemetryPhotoOpened = function (imageId, galleryId, mode, trigger) {
         const normalizedImageId = Number(imageId || 0);
-        const openedAt = performance.now();
-        if (normalizedImageId > 0 && lastPhotoOpenedId === normalizedImageId && openedAt - lastPhotoOpenedAt < 500) {
-            return;
+        if (!Number.isFinite(normalizedImageId) || normalizedImageId <= 0) {
+            return false;
         }
-        lastPhotoOpenedId = normalizedImageId;
-        lastPhotoOpenedAt = openedAt;
+        if (currentPhotoId === normalizedImageId && currentPhotoStartedAt !== null) {
+            return false;
+        }
         window.PHPGalleryTelemetryPhotoClosed();
         currentPhotoId = normalizedImageId;
         currentPhotoGalleryId = galleryId || config.galleryId || null;
         currentPhotoStartedAt = performance.now();
+        currentPhotoMode = mode === 'fullscreen' ? 'fullscreen' : 'normal';
         const event = baseEvent('public.photo.opened');
         event.image_id = normalizedImageId;
         event.gallery_id = currentPhotoGalleryId;
         event.page_kind = 'photo';
-        event.context = {lightbox_mode: mode || 'normal'};
+        event.context = {
+            lightbox_mode: currentPhotoMode,
+            trigger: photoOpenTrigger(trigger),
+        };
         enqueue(event);
         flush();
+        return true;
     };
 
+    /**
+     * Close the current semantic photo activation once and flush capped time.
+     *
+     * @return {boolean} True when an active interval was closed.
+     */
     window.PHPGalleryTelemetryPhotoClosed = function () {
-        if (!currentPhotoId || !currentPhotoStartedAt) {
-            return;
+        if (currentPhotoId === null || currentPhotoStartedAt === null) {
+            return false;
         }
         const durationMs = Math.min(
-            Math.round(performance.now() - currentPhotoStartedAt),
+            Math.max(0, Math.round(performance.now() - currentPhotoStartedAt)),
             Number(config.maxPhotoViewSeconds || 900) * 1000
         );
         const event = baseEvent('public.photo.visible_time');
@@ -329,15 +380,20 @@
         event.gallery_id = currentPhotoGalleryId;
         event.page_kind = 'photo';
         event.duration_ms = durationMs;
-        event.context = {lightbox_mode: document.fullscreenElement ? 'fullscreen' : 'normal'};
+        event.context = {lightbox_mode: currentPhotoMode};
         enqueue(event);
         flush();
         currentPhotoId = null;
         currentPhotoGalleryId = null;
-        currentPhotoStartedAt = 0;
+        currentPhotoStartedAt = null;
+        currentPhotoMode = 'normal';
+        return true;
     };
 
-    window.PHPGalleryTelemetryImageDecoded = function (imageId, galleryId, elapsedMs, mediaVariant, cacheResult, displayWidth) {
+    window.PHPGalleryTelemetryImageDecoded = function (imageId, galleryId, elapsedMs, mediaVariant, cacheResult, displayWidth, naturalWidth) {
+        if (!performanceTelemetrySampled()) {
+            return false;
+        }
         const event = baseEvent('client.performance.image_decode');
         event.image_id = imageId || null;
         event.gallery_id = galleryId || config.galleryId || null;
@@ -345,16 +401,48 @@
         event.value_ms = Math.max(0, Math.round(elapsedMs || 0));
         event.media_variant = mediaVariant || 'unknown';
         event.cache_result = cacheResult || 'unknown';
-        event.context = {display_width_bucket: visibleWidthBucket(displayWidth)};
+        event.context = {
+            display_width_bucket: visibleWidthBucket(displayWidth),
+            natural_width_bucket: visibleWidthBucket(naturalWidth),
+        };
+        event.sampled_rate = performanceSamplingRate();
         enqueue(event);
+        return true;
+    };
+
+    window.PHPGalleryTelemetryImageDisplayed = function (imageId, galleryId, elapsedMs, mediaVariant, cacheResult, displayWidth, naturalWidth) {
+        if (!performanceTelemetrySampled()) {
+            return false;
+        }
+        const event = baseEvent('client.performance.image_display');
+        event.image_id = imageId || null;
+        event.gallery_id = galleryId || config.galleryId || null;
+        event.page_kind = 'photo';
+        event.value_ms = Math.max(0, Math.round(elapsedMs || 0));
+        event.media_variant = mediaVariant || 'unknown';
+        event.cache_result = cacheResult || 'unknown';
+        event.context = {
+            display_width_bucket: visibleWidthBucket(displayWidth),
+            natural_width_bucket: visibleWidthBucket(naturalWidth),
+        };
+        event.sampled_rate = performanceSamplingRate();
+        enqueue(event);
+        return true;
     };
 
     window.PHPGalleryTelemetryCacheEvent = function (eventName, imageId, galleryId, sourceKind) {
+        if (config.cacheEnabled === false) {
+            return false;
+        }
         const event = baseEvent(eventName);
         event.image_id = imageId || null;
         event.gallery_id = galleryId || config.galleryId || null;
+        event.cache_result = eventName === 'cache.lightbox.hit'
+            ? 'hit'
+            : (eventName === 'cache.lightbox.miss' ? 'miss' : (eventName === 'cache.lightbox.evicted' ? 'evicted' : 'unknown'));
         event.context = {source_kind: sourceKind || 'unknown'};
         enqueue(event);
+        return true;
     };
 
 
@@ -383,6 +471,9 @@
      */
     function setupLightboxFallbackObservers() {
         document.addEventListener('click', function (event) {
+            if (window.PHPGalleryTelemetryLightboxOwner === 'native') {
+                return;
+            }
             const card = cardFromTelemetryClick(event);
             if (!card) {
                 return;
@@ -394,12 +485,13 @@
             window.PHPGalleryTelemetryPhotoOpened(
                 imageId,
                 Number(card.dataset.galleryId || config.galleryId || 0),
-                document.fullscreenElement ? 'fullscreen' : 'normal'
+                document.fullscreenElement ? 'fullscreen' : 'normal',
+                'fallback'
             );
         }, true);
 
         document.addEventListener('click', function (event) {
-            if (!(event.target instanceof Element)) {
+            if (window.PHPGalleryTelemetryLightboxOwner === 'native' || !(event.target instanceof Element)) {
                 return;
             }
             if (event.target.closest('[data-lightbox-action="close"]')) {
@@ -412,7 +504,7 @@
             return;
         }
         const observer = new MutationObserver(function () {
-            if (overlay.hidden) {
+            if (window.PHPGalleryTelemetryLightboxOwner !== 'native' && overlay.hidden) {
                 window.PHPGalleryTelemetryPhotoClosed();
             }
         });
@@ -429,13 +521,12 @@
         if (!navigation) {
             return;
         }
-        const sampleRate = Number(config.performanceSampleRate || 0.25);
-        if (sampleRate < 1 && Math.random() > sampleRate) {
+        if (!performanceTelemetrySampled()) {
             return;
         }
         const event = baseEvent('client.performance.page_load');
         event.value_ms = Math.max(0, Math.round(navigation.loadEventEnd || navigation.duration || 0));
-        event.sampled_rate = sampleRate;
+        event.sampled_rate = performanceSamplingRate();
         enqueue(event);
     }
 

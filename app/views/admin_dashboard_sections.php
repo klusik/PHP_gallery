@@ -39,6 +39,7 @@ namespace Gallery\Views;
 use function Gallery\Core\csrf_field;
 use function Gallery\Core\csrf_token;
 use function Gallery\Core\e;
+use function Gallery\Core\format_bytes;
 use function Gallery\Core\url_for;
 use function Gallery\Services\t;
 
@@ -720,6 +721,7 @@ function view_render_admin_dashboard_thumbnail_card(array $model, string $classN
         $compatibilityMode = 'modern';
     }
     $lastThumbnailCheck = is_array($model['thumbnail_maintenance_last_check'] ?? null) ? $model['thumbnail_maintenance_last_check'] : [];
+    $legacyJpgInventory = is_array($model['thumbnail_legacy_jpg_inventory'] ?? null) ? $model['thumbnail_legacy_jpg_inventory'] : [];
 
     echo '<article class="' . e($className) . ' admin-thumbnail-maintenance-card">';
     echo '<strong>' . e(t('admin.dashboard.thumbnail_maintenance', 'Thumbnail maintenance')) . '</strong>';
@@ -782,6 +784,23 @@ function view_render_admin_dashboard_thumbnail_card(array $model, string $classN
     echo '<label class="admin-compact-toggle"><input type="radio" name="thumbnail_compatibility_mode" value="legacy"' . ($compatibilityMode === 'legacy' ? ' checked' : '') . '> <span><strong>' . e(t('admin.thumbnails.compatibility_legacy_short', 'Legacy')) . '</strong> ' . e(t('admin.thumbnails.compatibility_legacy_help', 'Generate JPG fallback thumbnails plus WebP thumbnails.')) . '</span></label>';
     echo '<button type="submit" class="secondary">' . e(t('admin.thumbnails.save_compatibility_mode', 'Save thumbnail mode')) . '</button></form>';
 
+    if (!empty($legacyJpgInventory['available'])) {
+        $legacyVariantCount = max(0, (int) ($legacyJpgInventory['registered_variant_count'] ?? 0));
+        $legacyAffectedImages = max(0, (int) ($legacyJpgInventory['affected_image_count'] ?? 0));
+        $legacyBytes = max(0, (int) ($legacyJpgInventory['registered_bytes'] ?? 0));
+        echo '<div class="admin-thumbnail-check-result" data-legacy-jpg-inventory>';
+        echo '<span><strong>' . e(t('admin.thumbnails.legacy_inventory_title', 'Legacy JPEG thumbnail inventory')) . '</strong></span>';
+        echo '<span data-legacy-jpg-inventory-summary>' . e(t('admin.thumbnails.legacy_inventory_summary', '{variants} registered JPEG variant(s) across {images} image(s), approximately {bytes}.', [
+            'variants' => (string) $legacyVariantCount,
+            'images' => (string) $legacyAffectedImages,
+            'bytes' => format_bytes($legacyBytes),
+        ])) . '</span>';
+        if (!empty($legacyJpgInventory['cleanup_recommended']) && $legacyVariantCount > 0) {
+            echo '<span class="muted" data-legacy-jpg-inventory-recommendation>' . e(t('admin.thumbnails.legacy_inventory_recommendation', 'Modern mode is active. The existing manual cleanup can reclaim approximately this registered JPEG thumbnail space; opening this page does not delete anything.')) . '</span>';
+        }
+        echo '</div>';
+    }
+
     echo '<form method="post" action="' . e(url_for('admin_delete_legacy_jpg_thumbnails')) . '" class="admin-thumbnail-legacy-cleanup-form" data-delete-legacy-jpg-thumbnails-form>' . csrf_field();
     echo '<span>' . e(t('admin.thumbnails.legacy_cleanup_hint', 'Remove generated JPG thumbnails after switching to Modern mode. Original photos, WebP thumbnails, and DNG display masters are not touched.')) . '</span>';
     echo '<button type="submit" class="secondary danger" data-delete-legacy-jpg-thumbnails data-confirm-message="' . e(t('admin.thumbnails.legacy_cleanup_confirm', 'Delete generated legacy JPG thumbnails? Original photos and WebP files will be kept.')) . '">' . e(t('admin.thumbnails.delete_legacy_jpg_thumbnails', 'Remove legacy JPG thumbnails')) . '</button>';
@@ -837,6 +856,8 @@ function view_render_admin_dashboard_site_maintenance_card(array $model, string 
     $status = view_admin_dashboard_array($model, 'site_maintenance_status');
     $state = is_array($status['state'] ?? null) ? $status['state'] : [];
     $lastResult = is_array($status['last_result'] ?? null) ? $status['last_result'] : [];
+    $lastSuccess = is_array($status['last_success'] ?? null) ? $status['last_success'] : [];
+    $lastFailure = is_array($status['last_failure'] ?? null) ? $status['last_failure'] : [];
     $totals = is_array($state['totals'] ?? null) ? $state['totals'] : [];
     $lastStep = is_array($state['last_step_summary'] ?? null) ? $state['last_step_summary'] : [];
     $enabled = !empty($status['enabled']);
@@ -891,6 +912,24 @@ function view_render_admin_dashboard_site_maintenance_card(array $model, string 
 
     if ($lastCompletedDate !== '') {
         echo '<span class="admin-site-maintenance-note">' . e(t('admin.site_maintenance.last_completed_date', 'Last scheduled UTC date: {date}', ['date' => $lastCompletedDate])) . '</span>';
+    }
+
+    if (!empty($lastSuccess)) {
+        $successAt = (string) ($lastSuccess['occurred_at'] ?? '');
+        $successDurationMs = max(0, (int) ($lastSuccess['duration_ms'] ?? 0));
+        echo '<span class="admin-site-maintenance-note">' . e(t('admin.site_maintenance.last_success_summary', 'Most recent successful maintenance: {time} UTC, duration {duration} ms.', [
+            'time' => $successAt !== '' ? $successAt : '?',
+            'duration' => (string) $successDurationMs,
+        ])) . '</span>';
+    }
+
+    if (!empty($lastFailure)) {
+        echo '<span class="admin-site-maintenance-note is-warning">' . e(t('admin.site_maintenance.last_failure_summary', 'Most recent maintenance failure: {time} UTC, operation {operation}, code {code}, class {class}.', [
+            'time' => (string) ($lastFailure['occurred_at'] ?? '?'),
+            'operation' => (string) ($lastFailure['operation'] ?? 'maintenance'),
+            'code' => (string) ($lastFailure['error_code'] ?? 'unknown'),
+            'class' => (string) ($lastFailure['exception_class'] ?? 'unknown'),
+        ])) . '</span>';
     }
 
     if (!empty($lastResult['busy'])) {

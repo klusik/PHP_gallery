@@ -42,10 +42,19 @@ use function Gallery\Services\thumbnail_compatibility_mode_normalize;
 use function Gallery\Services\thumbnail_formats_for_compatibility_policy;
 use function Gallery\Services\thumbnail_policy_format_allowed;
 use function Gallery\Services\thumbnail_policy_requested_formats;
+use function Gallery\Services\thumbnail_legacy_jpg_inventory;
 
 $GLOBALS['thumbnail_compatibility_test_settings'] = [];
 $GLOBALS['thumbnail_compatibility_test_root'] = '';
 $GLOBALS['thumbnail_compatibility_test_metadata_deletes'] = [];
+$GLOBALS['thumbnail_compatibility_test_legacy_inventory'] = [
+    'registered_variant_count' => 3,
+    'valid_variant_count' => 2,
+    'affected_image_count' => 2,
+    'registered_bytes' => 4096,
+    'missing_status_count' => 1,
+    'non_valid_status_count' => 1,
+];
 
 /**
  * Minimal translation stub used by this standalone test.
@@ -188,6 +197,12 @@ assert_thumbnail_compatibility_same(true, thumbnail_policy_format_allowed('jpg')
 assert_thumbnail_compatibility_same(['jpg', 'webp'], thumbnail_formats_for_compatibility_policy('/tmp/photo.jpg', 'image/jpeg', true), 'legacy mode keeps JPG and WebP');
 
 set_thumbnail_compatibility_mode('modern');
+$inventory = thumbnail_legacy_jpg_inventory();
+assert_thumbnail_compatibility_same(true, (bool) $inventory['available'], 'legacy JPEG inventory is available when thumbnail metadata is ready');
+assert_thumbnail_compatibility_same(3, (int) $inventory['registered_variant_count'], 'legacy JPEG inventory preserves registered variant count');
+assert_thumbnail_compatibility_same(2, (int) $inventory['affected_image_count'], 'legacy JPEG inventory preserves affected image count');
+assert_thumbnail_compatibility_same(4096, (int) $inventory['registered_bytes'], 'legacy JPEG inventory preserves metadata-backed bytes');
+assert_thumbnail_compatibility_same(true, (bool) $inventory['cleanup_recommended'], 'modern mode recommends explicit cleanup when legacy variants exist');
 assert_thumbnail_compatibility_same(['webp'], thumbnail_formats_for_compatibility_policy('/tmp/photo.jpg', 'image/jpeg', true), 'modern mode uses WebP when available');
 assert_thumbnail_compatibility_same([], thumbnail_formats_for_compatibility_policy('/tmp/photo.jpg', 'image/jpeg', false), 'modern mode does not silently create legacy JPG thumbnails when WebP is unavailable');
 assert_thumbnail_compatibility_same(['webp'], thumbnail_formats_for_compatibility_policy('/tmp/raw.dng', 'image/x-adobe-dng', true), 'modern DNG thumbnails use WebP only');

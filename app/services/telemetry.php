@@ -53,16 +53,27 @@ use function Gallery\Models\telemetry_model_longest_viewed_photos;
 use function Gallery\Models\telemetry_model_metric_events;
 use function Gallery\Models\telemetry_model_metric_sum;
 use function Gallery\Models\telemetry_model_report_client_errors;
+use function Gallery\Models\telemetry_model_report_daily_sessions;
 use function Gallery\Models\telemetry_model_report_daily_trends;
+use function Gallery\Models\telemetry_model_report_daily_rollup_consistency;
 use function Gallery\Models\telemetry_model_report_database_fingerprints;
 use function Gallery\Models\telemetry_model_report_database_summary;
 use function Gallery\Models\telemetry_model_report_database_totals;
 use function Gallery\Models\telemetry_model_report_job_runs;
 use function Gallery\Models\telemetry_model_report_metric_distribution;
+use function Gallery\Models\telemetry_model_report_gallery_photo_opens_per_session;
+use function Gallery\Models\telemetry_model_report_photo_open_session_buckets;
+use function Gallery\Models\telemetry_model_report_photo_open_origins;
+use function Gallery\Models\telemetry_model_report_photo_open_anomaly_summary;
 use function Gallery\Models\telemetry_model_report_performance_metrics;
+use function Gallery\Models\telemetry_model_report_query_profile;
+use function Gallery\Models\telemetry_model_report_query_plans;
+use function Gallery\Models\telemetry_model_reset_report_query_profile;
 use function Gallery\Models\telemetry_model_report_recent_events;
 use function Gallery\Models\telemetry_model_report_session_distribution;
 use function Gallery\Models\telemetry_model_report_session_summary;
+use function Gallery\Models\telemetry_model_report_hourly_metric_cardinality;
+use function Gallery\Models\telemetry_model_report_storage_diagnostics;
 use function Gallery\Models\telemetry_model_report_table_count;
 use function Gallery\Models\telemetry_model_report_top_galleries;
 use function Gallery\Models\telemetry_model_report_top_routes;
@@ -149,6 +160,7 @@ function telemetry_event_name(mixed $eventName): ?string
         'client.performance.image_display',
         'client.error.javascript',
         'media.image.served',
+        'media.thumbnail.served',
         'media.download.served',
         'cache.thumbnail.hit',
         'cache.thumbnail.miss',
@@ -158,6 +170,20 @@ function telemetry_event_name(mixed $eventName): ?string
         'cache.lightbox.evicted',
     ];
     return in_array($eventName, $allowedEventNames, true) ? $eventName : null;
+}
+
+/**
+ * Return the page-view increment contributed by one telemetry event.
+ *
+ * Session lifecycle events deliberately do not count as page views. Only the
+ * explicit public page/gallery view events advance the session page counter.
+ *
+ * @param string $eventName Event name value.
+ * @return int Either zero or one.
+ */
+function telemetry_session_page_increment_for_event(string $eventName): int
+{
+    return in_array($eventName, ['public.page.viewed', 'public.gallery.viewed'], true) ? 1 : 0;
 }
 
 /**
@@ -185,6 +211,9 @@ function telemetry_metric_name_for_event(string $eventName, array $event): ?stri
         // $metric stores the web vital metric name sent by the client.
         $metric = strtolower((string) ($event['metric'] ?? 'unknown'));
         return in_array($metric, ['lcp', 'cls', 'inp', 'fcp', 'ttfb'], true) ? 'web_vital.' . $metric : null;
+    }
+    if ($eventName === 'client.performance.page_load') {
+        return 'client.page_load_ms';
     }
     if (str_starts_with($eventName, 'client.performance.image_')) {
         return str_replace('client.performance.', 'client.', $eventName) . '_ms';
@@ -234,6 +263,8 @@ function telemetry_record_event(array $event): void
     $imageId = telemetry_nullable_positive_int($event['image_id'] ?? null);
     // $referrerCategory stores a normalized referrer category.
     $referrerCategory = telemetry_enum($event['referrer_category'] ?? telemetry_referrer_category(request_data('server')['HTTP_REFERER'] ?? null), ['direct', 'internal', 'search', 'social', 'external', 'unknown'], 'unknown');
+
+    telemetry_ensure_current_semantics_marker();
 
     try {
         telemetry_model_insert_event([
@@ -303,7 +334,7 @@ function telemetry_touch_session(?string $sessionHash, string $eventName, array 
     // $routeName stores the normalized current route.
     $routeName = telemetry_short_identifier($event['route_name'] ?? (request_data('query')['page'] ?? 'unknown'), 80);
     // $pageIncrement stores whether this event should count as a page view.
-    $pageIncrement = in_array($eventName, ['public.session.started', 'public.page.viewed', 'public.gallery.viewed'], true) ? 1 : 0;
+    $pageIncrement = telemetry_session_page_increment_for_event($eventName);
     // $photoIncrement stores whether this event should count as a photo view.
     $photoIncrement = $eventName === 'public.photo.opened' ? 1 : 0;
     // $durationSeconds stores capped visible seconds for session totals.
@@ -338,6 +369,63 @@ function telemetry_touch_session(?string $sessionHash, string $eventName, array 
 }
 
 /**
+ * Normalize hourly aggregate dimensions to those that are meaningful for one metric.
+ *
+ * The hourly table has one wide composite key shared by unrelated metric families.
+ * Persisting every request dimension for every metric creates high-cardinality rows
+ * without improving the reports that consume them. This helper keeps only dimensions
+ * used by the current reporting contract and always preserves device_type so the
+ * all/non-bot-classified/bot-classified segment remains available. Unknown future
+ * metrics deliberately retain every supplied dimension until they receive an explicit
+ * contract here.
+ *
+ * @param string $metricName Aggregate metric name.
+ * @param array<string,mixed> $dimensions Normalized candidate dimensions.
+ * @return array<string,mixed> Dimensions safe for the shared hourly aggregate key.
+ */
+function telemetry_hourly_metric_dimensions(string $metricName, array $dimensions): array
+{
+    $defaults = [
+        'route_name' => '',
+        'page_kind' => 'unknown',
+        'gallery_id' => 0,
+        'image_id' => 0,
+        'browser_family' => 'unknown',
+        'os_family' => 'unknown',
+        'device_type' => 'unknown',
+        'viewport_class' => 'unknown',
+        'country_code' => '',
+        'referrer_category' => 'unknown',
+        'media_variant' => 'unknown',
+        'cache_result' => 'unknown',
+    ];
+    $normalized = array_merge($defaults, $dimensions);
+
+    if ($metricName === 'public.sessions' || $metricName === 'public.page_views') {
+        $allowed = ['route_name', 'page_kind', 'gallery_id', 'device_type'];
+    } elseif ($metricName === 'photo.views' || $metricName === 'photo.view_seconds') {
+        $allowed = ['route_name', 'gallery_id', 'image_id', 'device_type'];
+    } elseif ($metricName === 'client.errors') {
+        $allowed = ['route_name', 'device_type'];
+    } elseif (str_starts_with($metricName, 'web_vital.') || in_array($metricName, ['client.page_load_ms', 'client.image_decode_ms', 'client.image_display_ms'], true)) {
+        $allowed = ['route_name', 'page_kind', 'device_type'];
+    } elseif (str_starts_with($metricName, 'media.')) {
+        $allowed = ['route_name', 'gallery_id', 'device_type', 'media_variant'];
+    } elseif (str_starts_with($metricName, 'cache.')) {
+        $allowed = ['device_type', 'cache_result'];
+    } else {
+        return $normalized;
+    }
+
+    foreach (array_keys($defaults) as $name) {
+        if (!in_array($name, $allowed, true)) {
+            $normalized[$name] = $defaults[$name];
+        }
+    }
+    return $normalized;
+}
+
+/**
  * Record one immediate hourly metric for dashboard responsiveness.
  *
  * @param string $eventName Event name value.
@@ -369,21 +457,36 @@ function telemetry_record_hourly_metric(string $eventName, array $event, ?int $g
     }
     // $bucketStart stores the current hour boundary for aggregate writes.
     $bucketStart = date('Y-m-d H:00:00');
+    // $dimensions removes dimensions that have no reporting meaning for this metric family.
+    $dimensions = telemetry_hourly_metric_dimensions($metricName, [
+        'route_name' => telemetry_short_identifier($event['route_name'] ?? (request_data('query')['page'] ?? ''), 80) ?? '',
+        'page_kind' => telemetry_enum($event['page_kind'] ?? 'unknown', ['home', 'gallery', 'subgallery', 'photo', 'media', 'admin', 'download', 'api', 'other', 'unknown'], 'unknown'),
+        'gallery_id' => $galleryId ?? 0,
+        'image_id' => $imageId ?? 0,
+        'browser_family' => $browserFamily,
+        'os_family' => $osFamily,
+        'device_type' => $deviceType,
+        'viewport_class' => $viewportClass,
+        'country_code' => '',
+        'referrer_category' => $referrerCategory,
+        'media_variant' => telemetry_enum($event['media_variant'] ?? 'unknown', ['original', 'thumb_300', 'thumb_600', 'thumb_800', 'thumb_960', 'thumb_1200', 'thumb_1280', 'thumb_1600', 'webp', 'jpg', 'unknown'], 'unknown'),
+        'cache_result' => telemetry_enum($event['cache_result'] ?? 'unknown', ['hit', 'miss', 'bypass', 'stale', 'evicted', 'discarded', 'unknown'], 'unknown'),
+    ]);
     telemetry_model_upsert_hourly_metric([
         $bucketStart,
         $metricName,
-        telemetry_short_identifier($event['route_name'] ?? (request_data('query')['page'] ?? ''), 80) ?? '',
-        telemetry_enum($event['page_kind'] ?? 'unknown', ['home', 'gallery', 'subgallery', 'photo', 'media', 'admin', 'download', 'api', 'other', 'unknown'], 'unknown'),
-        $galleryId ?? 0,
-        $imageId ?? 0,
-        $browserFamily,
-        $osFamily,
-        $deviceType,
-        $viewportClass,
-        '',
-        $referrerCategory,
-        telemetry_enum($event['media_variant'] ?? 'unknown', ['original', 'thumb_300', 'thumb_600', 'thumb_800', 'thumb_960', 'thumb_1200', 'thumb_1280', 'thumb_1600', 'webp', 'jpg', 'unknown'], 'unknown'),
-        telemetry_enum($event['cache_result'] ?? 'unknown', ['hit', 'miss', 'bypass', 'stale', 'evicted', 'discarded', 'unknown'], 'unknown'),
+        (string) $dimensions['route_name'],
+        (string) $dimensions['page_kind'],
+        (int) $dimensions['gallery_id'],
+        (int) $dimensions['image_id'],
+        (string) $dimensions['browser_family'],
+        (string) $dimensions['os_family'],
+        (string) $dimensions['device_type'],
+        (string) $dimensions['viewport_class'],
+        (string) $dimensions['country_code'],
+        (string) $dimensions['referrer_category'],
+        (string) $dimensions['media_variant'],
+        (string) $dimensions['cache_result'],
         1,
         1,
         $value,
@@ -465,6 +568,8 @@ function telemetry_public_config(array $context = []): array
         'enabled' => true,
         'endpoint' => url_for('usage_collect'),
         'sampleRate' => (float) telemetry_setting('telemetry_client_sample_rate', '1.0'),
+        'performanceEnabled' => telemetry_setting_enabled('telemetry_performance_enabled', '1'),
+        'cacheEnabled' => telemetry_setting_enabled('telemetry_cache_enabled', '1'),
         'performanceSampleRate' => (float) telemetry_setting('telemetry_performance_sample_rate', '0.25'),
         'maxPhotoViewSeconds' => (int) telemetry_setting('telemetry_max_photo_view_seconds', '900'),
         'respectDnt' => telemetry_setting_enabled('telemetry_respect_dnt', '1'),
@@ -502,18 +607,36 @@ function telemetry_append_public_script(array $context = []): void
  */
 
 /**
+ * Normalize one analytics traffic segment for report queries.
+ *
+ * The value is intentionally a small semantic enum. Model helpers own the SQL
+ * predicate and reject unsupported identifiers.
+ *
+ * @param mixed $value Candidate traffic segment.
+ * @return string One of all, non_bot, or bot.
+ */
+function telemetry_traffic_segment(mixed $value): string
+{
+    if (!is_scalar($value)) {
+        return 'all';
+    }
+    $segment = strtolower(trim((string) $value));
+    return in_array($segment, ['all', 'non_bot', 'bot'], true) ? $segment : 'all';
+}
+
+/**
  * Return one aggregate metric sum from hourly metrics.
  *
  * @param string $metricName Metric name value.
  * @param int $days Days value.
  * @return float Numeric result for the caller.
  */
-function telemetry_metric_sum(string $metricName, int $days = 30): float
+function telemetry_metric_sum(string $metricName, int $days = 30, string $trafficSegment = 'all'): float
 {
     if (!telemetry_schema_ready()) {
         return 0.0;
     }
-    return telemetry_model_metric_sum($metricName, $days);
+    return telemetry_model_metric_sum($metricName, $days, telemetry_traffic_segment($trafficSegment));
 }
 
 /**
@@ -523,12 +646,12 @@ function telemetry_metric_sum(string $metricName, int $days = 30): float
  * @param int $days Days value.
  * @return int Integer result for the caller.
  */
-function telemetry_metric_events(string $metricName, int $days = 30): int
+function telemetry_metric_events(string $metricName, int $days = 30, string $trafficSegment = 'all'): int
 {
     if (!telemetry_schema_ready()) {
         return 0;
     }
-    return telemetry_model_metric_events($metricName, $days);
+    return telemetry_model_metric_events($metricName, $days, telemetry_traffic_segment($trafficSegment));
 }
 
 /**
@@ -538,12 +661,12 @@ function telemetry_metric_events(string $metricName, int $days = 30): int
  * @param int $limit Maximum number of items.
  * @return array Structured result data for the caller.
  */
-function telemetry_top_photos(int $days = 30, int $limit = 15): array
+function telemetry_top_photos(int $days = 30, int $limit = 15, string $trafficSegment = 'all'): array
 {
     if (!telemetry_schema_ready()) {
         return [];
     }
-    return telemetry_model_top_photos($days, $limit);
+    return telemetry_model_top_photos($days, $limit, telemetry_traffic_segment($trafficSegment));
 }
 
 /**
@@ -553,12 +676,90 @@ function telemetry_top_photos(int $days = 30, int $limit = 15): array
  * @param int $limit Maximum number of items.
  * @return array Structured result data for the caller.
  */
-function telemetry_longest_viewed_photos(int $days = 30, int $limit = 15): array
+function telemetry_longest_viewed_photos(int $days = 30, int $limit = 15, string $trafficSegment = 'all'): array
 {
     if (!telemetry_schema_ready()) {
         return [];
     }
-    return telemetry_model_longest_viewed_photos($days, $limit);
+    return telemetry_model_longest_viewed_photos($days, $limit, telemetry_traffic_segment($trafficSegment));
+}
+
+
+/**
+ * Return a bounded distribution of photo opens per anonymous session.
+ *
+ * @param int $days Days value.
+ * @return array Structured result data for the caller.
+ */
+function telemetry_report_photo_open_session_buckets(int $days, string $trafficSegment = 'all'): array
+{
+    try {
+        return telemetry_model_report_photo_open_session_buckets($days, telemetry_traffic_segment($trafficSegment));
+    } catch (Throwable) {
+        return [];
+    }
+}
+
+/**
+ * Return aggregate diagnostics for unusually high photo-open session counts.
+ *
+ * @param int $days Days value.
+ * @param int $threshold Strict threshold above which a session is diagnostic.
+ * @return array Structured result data for the caller.
+ */
+function telemetry_report_photo_open_anomaly_summary(int $days, int $threshold = 50, string $trafficSegment = 'all'): array
+{
+    try {
+        return telemetry_model_report_photo_open_anomaly_summary($days, $threshold, telemetry_traffic_segment($trafficSegment));
+    } catch (Throwable) {
+        return [];
+    }
+}
+
+/**
+ * Return aggregate galleries ranked by retained raw-event opens per session.
+ *
+ * @param int $days Days value bounded by the raw-event retention window.
+ * @param int $minSessions Minimum sessions required before a gallery is shown.
+ * @param int $limit Maximum number of galleries.
+ * @return array Structured result data for the caller.
+ */
+function telemetry_report_gallery_photo_opens_per_session(int $days, int $minSessions = 3, int $limit = 20, string $trafficSegment = 'all'): array
+{
+    try {
+        return telemetry_model_report_gallery_photo_opens_per_session($days, $minSessions, telemetry_report_bound_int($limit, 1, 100), telemetry_traffic_segment($trafficSegment));
+    } catch (Throwable) {
+        return [];
+    }
+}
+
+/**
+ * Return normalized activation-origin counts from retained raw photo-open events.
+ *
+ * @param int $days Days value bounded by the raw-event retention window.
+ * @return array Structured result data for the caller.
+ */
+function telemetry_report_photo_open_origins(int $days, string $trafficSegment = 'all'): array
+{
+    try {
+        $rows = telemetry_model_report_photo_open_origins($days, telemetry_traffic_segment($trafficSegment));
+    } catch (Throwable) {
+        return [];
+    }
+    $allowed = ['click', 'keyboard', 'swipe', 'slideshow', 'history', 'direct', 'fallback', 'unknown', 'legacy_unclassified'];
+    $normalized = [];
+    foreach ($rows as $row) {
+        $label = (string) ($row['label'] ?? 'legacy_unclassified');
+        if (!in_array($label, $allowed, true)) {
+            $label = 'unknown';
+        }
+        if (!isset($normalized[$label])) {
+            $normalized[$label] = ['label' => $label, 'events' => 0];
+        }
+        $normalized[$label]['events'] += (int) ($row['events'] ?? 0);
+    }
+    usort($normalized, static fn(array $a, array $b): int => ($b['events'] <=> $a['events']) ?: strcmp($a['label'], $b['label']));
+    return array_values($normalized);
 }
 
 /**
@@ -567,12 +768,12 @@ function telemetry_longest_viewed_photos(int $days = 30, int $limit = 15): array
  * @param int $days Days value.
  * @return array Structured result data for the caller.
  */
-function telemetry_browser_mix(int $days = 30): array
+function telemetry_browser_mix(int $days = 30, string $trafficSegment = 'all'): array
 {
     if (!telemetry_schema_ready()) {
         return [];
     }
-    return telemetry_model_browser_mix($days);
+    return telemetry_model_browser_mix($days, telemetry_traffic_segment($trafficSegment));
 }
 
 /**
@@ -581,12 +782,12 @@ function telemetry_browser_mix(int $days = 30): array
  * @param int $days Days value.
  * @return array Structured result data for the caller.
  */
-function telemetry_cache_mix(int $days = 30): array
+function telemetry_cache_mix(int $days = 30, string $trafficSegment = 'all'): array
 {
     if (!telemetry_schema_ready()) {
         return [];
     }
-    return telemetry_model_cache_mix($days);
+    return telemetry_model_cache_mix($days, telemetry_traffic_segment($trafficSegment));
 }
 
 /**
@@ -618,33 +819,326 @@ function telemetry_report_table_count(string $tableName): int
 }
 
 /**
- * Return the session quality summary for the report window.
+ * Return a bounded operator-facing snapshot of telemetry storage and cardinality.
  *
- * @param int $days Days value.
- * @return array Structured result data for the caller.
+ * This is diagnostic evidence only. It does not mutate retention, indexes, or
+ * table layout. Approximate row growth is derived from the most recent seven-day
+ * row count and is intentionally labelled as an estimate rather than a capacity
+ * prediction.
+ *
+ * @param int $reportDays Selected report window in days.
+ * @return array<string,mixed> Storage, retention, and hourly metric cardinality diagnostics.
  */
-function telemetry_report_session_summary(int $days): array
+function telemetry_report_storage_diagnostics(int $reportDays = 30): array
+{
+    $reportDays = telemetry_report_bound_int($reportDays, 1, 3650);
+    $recentDays = 7;
+    $retentionByTable = [
+        'telemetry_events' => telemetry_retention_days('telemetry_raw_retention_days', 7, 1, 90),
+        'telemetry_sessions' => telemetry_retention_days('telemetry_session_retention_days', 30, 1, 365),
+        'telemetry_hourly_metrics' => telemetry_retention_days('telemetry_hourly_retention_days', 90, 7, 730),
+        'telemetry_daily_metrics' => telemetry_retention_days('telemetry_daily_retention_days', 730, 30, 3650),
+        'telemetry_db_query_metrics' => telemetry_retention_days('telemetry_hourly_retention_days', 90, 7, 730),
+        'telemetry_job_runs' => 180,
+    ];
+    try {
+        $tables = telemetry_model_report_storage_diagnostics($recentDays);
+        foreach ($tables as &$row) {
+            $tableName = (string) ($row['table_name'] ?? '');
+            $row['retention_days'] = (int) ($retentionByTable[$tableName] ?? 0);
+            $row['approx_rows_per_day'] = ((int) ($row['recent_rows'] ?? 0)) / $recentDays;
+        }
+        unset($row);
+
+        $hourlyRetentionDays = (int) $retentionByTable['telemetry_hourly_metrics'];
+        return [
+            'available' => true,
+            'recent_days' => $recentDays,
+            'report_days' => $reportDays,
+            'hourly_retention_days' => $hourlyRetentionDays,
+            'daily_retention_days' => (int) $retentionByTable['telemetry_daily_metrics'],
+            'aggregate_source_state' => $reportDays <= $hourlyRetentionDays ? 'hourly_within_retention' : 'daily_required_for_full_window',
+            'tables' => $tables,
+            'hourly_metric_cardinality' => telemetry_model_report_hourly_metric_cardinality($reportDays, 30),
+        ];
+    } catch (Throwable) {
+        return [
+            'available' => false,
+            'recent_days' => $recentDays,
+            'report_days' => $reportDays,
+            'hourly_retention_days' => (int) $retentionByTable['telemetry_hourly_metrics'],
+            'daily_retention_days' => (int) $retentionByTable['telemetry_daily_metrics'],
+            'aggregate_source_state' => 'unavailable',
+            'tables' => [],
+            'hourly_metric_cardinality' => [],
+        ];
+    }
+}
+
+
+/**
+ * Compare recent completed-day hourly aggregates with persisted daily rollups.
+ *
+ * This diagnostic validates the semantic prerequisite for a future long-window
+ * report switch. It is read-only and does not select the daily table for current
+ * reports. The current partial day is excluded so ordinary rollup lag does not
+ * create a false mismatch.
+ *
+ * @param int $completedDays Number of completed days to compare.
+ * @param string $trafficSegment Traffic segment selector.
+ * @return array<string,mixed> Rollup readiness summary and per-metric comparisons.
+ */
+function telemetry_report_daily_rollup_consistency(int $completedDays = 7, string $trafficSegment = 'all'): array
+{
+    $completedDays = telemetry_report_bound_int($completedDays, 1, 30);
+    try {
+        $sourceRows = telemetry_model_report_daily_rollup_consistency(
+            $completedDays,
+            telemetry_traffic_segment($trafficSegment)
+        );
+    } catch (Throwable) {
+        return [
+            'available' => false,
+            'completed_days' => $completedDays,
+            'state' => 'unavailable',
+            'mismatch_count' => 0,
+            'metrics' => [],
+        ];
+    }
+
+    $hourlyByMetric = [];
+    foreach ((array) ($sourceRows['hourly'] ?? []) as $row) {
+        $metricName = (string) ($row['metric_name'] ?? '');
+        if ($metricName !== '') {
+            $hourlyByMetric[$metricName] = $row;
+        }
+    }
+    $dailyByMetric = [];
+    foreach ((array) ($sourceRows['daily'] ?? []) as $row) {
+        $metricName = (string) ($row['metric_name'] ?? '');
+        if ($metricName !== '') {
+            $dailyByMetric[$metricName] = $row;
+        }
+    }
+
+    $metricNames = array_values(array_unique(array_merge(array_keys($hourlyByMetric), array_keys($dailyByMetric))));
+    sort($metricNames, SORT_STRING);
+    $metrics = [];
+    $mismatchCount = 0;
+    $sampledMetricCount = 0;
+    foreach ($metricNames as $metricName) {
+        $hourly = (array) ($hourlyByMetric[$metricName] ?? []);
+        $daily = (array) ($dailyByMetric[$metricName] ?? []);
+        $hourlySamples = max(0, (int) ($hourly['sample_count'] ?? 0));
+        $dailySamples = max(0, (int) ($daily['sample_count'] ?? 0));
+        $hourlyEvents = max(0, (int) ($hourly['event_count'] ?? 0));
+        $dailyEvents = max(0, (int) ($daily['event_count'] ?? 0));
+        $hourlyValue = (float) ($hourly['value_sum'] ?? 0.0);
+        $dailyValue = (float) ($daily['value_sum'] ?? 0.0);
+        $sampleDifference = $hourlySamples - $dailySamples;
+        $eventDifference = $hourlyEvents - $dailyEvents;
+        $valueDifference = $hourlyValue - $dailyValue;
+        $valueTolerance = max(0.0001, abs($hourlyValue) * 0.000000001);
+
+        if ($hourlySamples === 0 && $dailySamples === 0 && $hourlyEvents === 0 && $dailyEvents === 0 && abs($hourlyValue) <= $valueTolerance && abs($dailyValue) <= $valueTolerance) {
+            $status = 'no_samples';
+        } elseif (($hourlySamples > 0 || $hourlyEvents > 0 || abs($hourlyValue) > $valueTolerance)
+            && $dailySamples === 0 && $dailyEvents === 0 && abs($dailyValue) <= $valueTolerance) {
+            $status = 'daily_missing';
+            $sampledMetricCount++;
+            $mismatchCount++;
+        } else {
+            $sampledMetricCount++;
+            $matches = $sampleDifference === 0
+                && $eventDifference === 0
+                && abs($valueDifference) <= $valueTolerance;
+            $status = $matches ? 'match' : 'mismatch';
+            if (!$matches) {
+                $mismatchCount++;
+            }
+        }
+
+        $metrics[] = [
+            'metric_name' => $metricName,
+            'status' => $status,
+            'hourly_samples' => $hourlySamples,
+            'daily_samples' => $dailySamples,
+            'sample_difference' => $sampleDifference,
+            'hourly_events' => $hourlyEvents,
+            'daily_events' => $dailyEvents,
+            'event_difference' => $eventDifference,
+            'hourly_value_sum' => $hourlyValue,
+            'daily_value_sum' => $dailyValue,
+            'value_difference' => $valueDifference,
+        ];
+    }
+
+    $state = $sampledMetricCount === 0
+        ? 'no_samples'
+        : ($mismatchCount === 0 ? 'match' : 'mismatch');
+
+    return [
+        'available' => true,
+        'completed_days' => $completedDays,
+        'state' => $state,
+        'mismatch_count' => $mismatchCount,
+        'metrics' => $metrics,
+    ];
+}
+
+/** Reset request-local SQL runtime evidence before building one telemetry export. */
+function telemetry_reset_report_query_profile(): void
+{
+    telemetry_model_reset_report_query_profile();
+}
+
+/**
+ * Return request-local SQL runtime evidence for telemetry report queries.
+ *
+ * The model profiler stores timings in memory only. No SQL text, bound values,
+ * result data, or database error messages are persisted or returned here.
+ *
+ * @return array<int,array<string,mixed>> Bounded report-query timing rows.
+ */
+function telemetry_report_query_profile(): array
 {
     try {
-        return telemetry_model_report_session_summary($days);
+        return telemetry_model_report_query_profile();
     } catch (Throwable) {
         return [];
     }
 }
 
 /**
- * Return daily trend rows for common report metrics.
+ * Return sanitized optimizer plans for fixed telemetry report query families.
+ *
+ * @param int $days Report window in days.
+ * @param string $trafficSegment Normalized traffic segment.
+ * @return array<int,array<string,mixed>> Safe EXPLAIN plan rows.
+ */
+function telemetry_report_query_plans(int $days, string $trafficSegment = 'all'): array
+{
+    try {
+        return telemetry_model_report_query_plans(
+            telemetry_report_bound_int($days, 1, 3650),
+            telemetry_traffic_segment($trafficSegment)
+        );
+    } catch (Throwable) {
+        return [];
+    }
+}
+
+
+
+/**
+ * Return the session quality summary for the report window.
  *
  * @param int $days Days value.
  * @return array Structured result data for the caller.
  */
-function telemetry_report_daily_trends(int $days): array
+function telemetry_report_session_summary(int $days, string $trafficSegment = 'all'): array
 {
     try {
-        return telemetry_model_report_daily_trends($days);
+        return telemetry_model_report_session_summary($days, telemetry_traffic_segment($trafficSegment));
     } catch (Throwable) {
         return [];
     }
+}
+
+/**
+ * Merge daily aggregate metrics with canonical unique-session counts.
+ *
+ * @param array $metricRows Daily aggregate metric rows.
+ * @param array $sessionRows Daily canonical session rows.
+ * @return array Structured result data for the caller.
+ */
+function telemetry_merge_daily_trends(array $metricRows, array $sessionRows): array
+{
+    $byDate = [];
+    foreach ($metricRows as $row) {
+        $reportDate = (string) ($row['report_date'] ?? '');
+        if ($reportDate === '') {
+            continue;
+        }
+        $row['sessions'] = 0;
+        $byDate[$reportDate] = $row;
+    }
+    foreach ($sessionRows as $row) {
+        $reportDate = (string) ($row['report_date'] ?? '');
+        if ($reportDate === '') {
+            continue;
+        }
+        if (!isset($byDate[$reportDate])) {
+            $byDate[$reportDate] = [
+                'report_date' => $reportDate,
+                'page_views' => 0,
+                'photo_views' => 0,
+                'photo_seconds' => 0,
+                'client_errors' => 0,
+                'media_bytes' => 0,
+            ];
+        }
+        $byDate[$reportDate]['sessions'] = (int) ($row['sessions'] ?? 0);
+    }
+    ksort($byDate, SORT_STRING);
+    return array_values($byDate);
+}
+
+/**
+ * Return daily trend rows for common report metrics.
+ *
+ * Session counts come from telemetry_sessions, the canonical unique-session
+ * source. Event metrics continue to come from hourly aggregates.
+ *
+ * @param int $days Days value.
+ * @return array Structured result data for the caller.
+ */
+function telemetry_report_daily_trends(int $days, string $trafficSegment = 'all'): array
+{
+    $trafficSegment = telemetry_traffic_segment($trafficSegment);
+    try {
+        return telemetry_merge_daily_trends(
+            telemetry_model_report_daily_trends($days, $trafficSegment),
+            telemetry_model_report_daily_sessions($days, $trafficSegment)
+        );
+    } catch (Throwable) {
+        return [];
+    }
+}
+
+/**
+ * Return cross-source consistency diagnostics for one telemetry report window.
+ *
+ * @param int $days Days value.
+ * @param array $sessionSummary Canonical session summary.
+ * @param array $dailyTrends Daily report rows with canonical sessions.
+ * @return array Structured consistency result for presentation.
+ */
+function telemetry_report_consistency(int $days, array $sessionSummary, array $dailyTrends, string $trafficSegment = 'all'): array
+{
+    $summarySessions = (int) ($sessionSummary['sessions'] ?? 0);
+    $dailySessions = 0;
+    $dailyPageViews = 0;
+    foreach ($dailyTrends as $row) {
+        $dailySessions += (int) ($row['sessions'] ?? 0);
+        $dailyPageViews += (int) ($row['page_views'] ?? 0);
+    }
+    $hourlyPageViews = telemetry_metric_events('public.page_views', $days, telemetry_traffic_segment($trafficSegment));
+    $sessionPageViews = (int) ($sessionSummary['page_views'] ?? 0);
+
+    return [
+        'session_summary' => $summarySessions,
+        'daily_sessions' => $dailySessions,
+        'session_difference' => $summarySessions - $dailySessions,
+        'hourly_page_views' => $hourlyPageViews,
+        'daily_page_views' => $dailyPageViews,
+        'page_view_difference' => $hourlyPageViews - $dailyPageViews,
+        'session_row_page_views' => $sessionPageViews,
+        'session_row_page_view_difference' => $sessionPageViews - $hourlyPageViews,
+        'semantics_version' => TELEMETRY_SEMANTICS_VERSION,
+        'stored_semantics_version' => telemetry_semantics_version(),
+        'semantics_effective_at' => telemetry_semantics_effective_at(),
+    ];
 }
 
 /**
@@ -654,11 +1148,11 @@ function telemetry_report_daily_trends(int $days): array
  * @param int $limit Maximum number of items.
  * @return array Structured result data for the caller.
  */
-function telemetry_report_top_galleries(int $days, int $limit = 25): array
+function telemetry_report_top_galleries(int $days, int $limit = 25, string $trafficSegment = 'all'): array
 {
     $limit = telemetry_report_bound_int($limit, 1, 100);
     try {
-        return telemetry_model_report_top_galleries($days, $limit);
+        return telemetry_model_report_top_galleries($days, $limit, telemetry_traffic_segment($trafficSegment));
     } catch (Throwable) {
         return [];
     }
@@ -671,11 +1165,11 @@ function telemetry_report_top_galleries(int $days, int $limit = 25): array
  * @param int $limit Maximum number of items.
  * @return array Structured result data for the caller.
  */
-function telemetry_report_top_routes(int $days, int $limit = 25): array
+function telemetry_report_top_routes(int $days, int $limit = 25, string $trafficSegment = 'all'): array
 {
     $limit = telemetry_report_bound_int($limit, 1, 100);
     try {
-        return telemetry_model_report_top_routes($days, $limit);
+        return telemetry_model_report_top_routes($days, $limit, telemetry_traffic_segment($trafficSegment));
     } catch (Throwable) {
         return [];
     }
@@ -690,7 +1184,7 @@ function telemetry_report_top_routes(int $days, int $limit = 25): array
  * @param int $limit Maximum number of items.
  * @return array Structured result data for the caller.
  */
-function telemetry_report_metric_distribution(string $dimension, int $days, string $metricName, int $limit = 20): array
+function telemetry_report_metric_distribution(string $dimension, int $days, string $metricName, int $limit = 20, string $trafficSegment = 'all'): array
 {
     $allowed = ['page_kind', 'browser_family', 'os_family', 'device_type', 'viewport_class', 'referrer_category', 'media_variant', 'cache_result'];
     if (!in_array($dimension, $allowed, true)) {
@@ -698,7 +1192,7 @@ function telemetry_report_metric_distribution(string $dimension, int $days, stri
     }
     $limit = telemetry_report_bound_int($limit, 1, 100);
     try {
-        return telemetry_model_report_metric_distribution($dimension, $days, $metricName, $limit);
+        return telemetry_model_report_metric_distribution($dimension, $days, $metricName, $limit, telemetry_traffic_segment($trafficSegment));
     } catch (Throwable) {
         return [];
     }
@@ -712,7 +1206,7 @@ function telemetry_report_metric_distribution(string $dimension, int $days, stri
  * @param int $limit Maximum number of items.
  * @return array Structured result data for the caller.
  */
-function telemetry_report_session_distribution(string $dimension, int $days, int $limit = 20): array
+function telemetry_report_session_distribution(string $dimension, int $days, int $limit = 20, string $trafficSegment = 'all'): array
 {
     $allowed = ['entry_referrer_category', 'browser_family', 'os_family', 'device_type', 'viewport_class', 'first_route_name', 'last_route_name', 'exit_route_name'];
     if (!in_array($dimension, $allowed, true)) {
@@ -720,7 +1214,7 @@ function telemetry_report_session_distribution(string $dimension, int $days, int
     }
     $limit = telemetry_report_bound_int($limit, 1, 100);
     try {
-        return telemetry_model_report_session_distribution($dimension, $days, $limit);
+        return telemetry_model_report_session_distribution($dimension, $days, $limit, telemetry_traffic_segment($trafficSegment));
     } catch (Throwable) {
         return [];
     }
@@ -732,10 +1226,10 @@ function telemetry_report_session_distribution(string $dimension, int $days, int
  * @param int $days Days value.
  * @return array Structured result data for the caller.
  */
-function telemetry_report_performance_metrics(int $days): array
+function telemetry_report_performance_metrics(int $days, string $trafficSegment = 'all'): array
 {
     try {
-        return telemetry_model_report_performance_metrics($days);
+        return telemetry_model_report_performance_metrics($days, telemetry_traffic_segment($trafficSegment));
     } catch (Throwable) {
         return [];
     }
@@ -748,11 +1242,11 @@ function telemetry_report_performance_metrics(int $days): array
  * @param int $limit Maximum number of items.
  * @return array Structured result data for the caller.
  */
-function telemetry_report_client_errors(int $days, int $limit = 25): array
+function telemetry_report_client_errors(int $days, int $limit = 25, string $trafficSegment = 'all'): array
 {
     $limit = telemetry_report_bound_int($limit, 1, 100);
     try {
-        return telemetry_model_report_client_errors($days, $limit);
+        return telemetry_model_report_client_errors($days, $limit, telemetry_traffic_segment($trafficSegment));
     } catch (Throwable) {
         return [];
     }
@@ -765,11 +1259,11 @@ function telemetry_report_client_errors(int $days, int $limit = 25): array
  * @param int $limit Maximum number of items.
  * @return array Structured result data for the caller.
  */
-function telemetry_report_recent_events(int $days, int $limit = 80): array
+function telemetry_report_recent_events(int $days, int $limit = 80, string $trafficSegment = 'all'): array
 {
     $limit = telemetry_report_bound_int($limit, 1, 200);
     try {
-        return telemetry_model_report_recent_events($days, $limit);
+        return telemetry_model_report_recent_events($days, $limit, telemetry_traffic_segment($trafficSegment));
     } catch (Throwable) {
         return [];
     }
