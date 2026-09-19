@@ -86,6 +86,7 @@ return [
     'node_tests' => [
         'admin_mutation_completion_test.mjs' => [],
         'admin_mutation_stage4_hardening_test.mjs' => [],
+        'admin_gallery_title_completion_test.mjs' => [],
         'admin_side_panel_created_gallery_refresh_test.mjs' => [],
         'admin_side_panel_delegation_test.mjs' => [],
         'admin_side_panel_gallery_refresh_test.mjs' => [],

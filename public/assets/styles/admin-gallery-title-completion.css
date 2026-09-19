@@ -1,0 +1,76 @@
+/**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ *
+ * File: public/assets/styles/admin-gallery-title-completion.css
+ * Module Type: Stylesheet
+ *
+ * Purpose:
+ *   Styles the inline ghost-text completion used by new gallery title fields.
+ *
+ * Author:
+ *   Rudolf Klusal
+ *
+ * License:
+ *   MIT License (see LICENSE file in repository)
+ *
+ * Last Updated:
+ *   2026-09-19
+ */
+
+.admin-gallery-title-completion {
+    position: relative;
+    display: block;
+    width: 100%;
+    min-width: 0;
+}
+
+.admin-gallery-title-completion > input {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.admin-gallery-title-completion-overlay {
+    position: absolute;
+    z-index: 2;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    box-sizing: border-box;
+    border-style: solid;
+    border-color: transparent;
+    overflow: hidden;
+    white-space: pre;
+    pointer-events: none;
+}
+
+.admin-gallery-title-completion-overlay[hidden] {
+    display: none;
+}
+
+.admin-gallery-title-completion-prefix {
+    flex: 0 0 auto;
+    visibility: hidden;
+    white-space: pre;
+}
+
+.admin-gallery-title-completion-tail {
+    min-width: 0;
+    overflow: hidden;
+    color: #94a3b8;
+    text-overflow: ellipsis;
+    white-space: pre;
+    pointer-events: auto;
+    cursor: pointer;
+    transition: color 120ms ease;
+}
+
+.admin-gallery-title-completion-tail:hover {
+    color: #64748b;
+}
+
+.admin-gallery-title-completion > input:focus + .admin-gallery-title-completion-overlay .admin-gallery-title-completion-tail {
+    color: #94a3b8;
+}

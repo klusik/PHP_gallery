@@ -39,6 +39,7 @@ namespace Gallery\Services;
 
 use function Gallery\Models\gallery_model_likely_destination_id;
 use function Gallery\Models\gallery_model_picker_rows;
+use function Gallery\Models\gallery_model_title_completion_rows;
 
 /**
  * Return gallery rows formatted for the shared searchable gallery picker.
@@ -115,4 +116,32 @@ function likely_gallery_destination_id(int $sourceGalleryId): int
 function gallery_picker_source_rows(bool $secondaryTitleSort = false): array
 {
     return gallery_model_picker_rows($secondaryTitleSort);
+}
+
+/**
+ * Return compact existing-gallery titles for inline completion while creating a gallery.
+ *
+ * The browser ranks direct siblings ahead of unrelated galleries while retaining
+ * the complete title catalog as a fallback. Only presentation-safe metadata is
+ * exposed and the control remains admin-only because the containing form is.
+ *
+ * @return array<int,array<string,mixed>> Title completion candidates.
+ */
+function gallery_title_completion_candidates(): array
+{
+    $candidates = [];
+    foreach (gallery_model_title_completion_rows() as $gallery) {
+        $title = trim((string) ($gallery['title'] ?? ''));
+        if ($title === '') {
+            continue;
+        }
+        $candidates[] = [
+            'id' => (int) ($gallery['id'] ?? 0),
+            'parent_id' => (int) ($gallery['parent_id'] ?? 0),
+            'title' => $title,
+            'path' => trim((string) ($gallery['folder_path'] ?? ''), '/'),
+            'created_at' => (string) ($gallery['created_at'] ?? ''),
+        ];
+    }
+    return $candidates;
 }
