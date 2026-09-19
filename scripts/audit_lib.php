@@ -44,6 +44,35 @@ const STATUS_SKIP = 'SKIP';
 const STATUS_BLOCKED = 'BLOCKED';
 
 /**
+ * Bind release consistency to the tree actually observed before and after tests.
+ * Missing identity is blocked; content changing during a run is a release failure.
+ */
+function bind_release_source_identity(array $tasks, ?array $before, ?array $after): array
+{
+    $missing = !isset($before['fingerprint'], $after['fingerprint']);
+    if (!$missing && hash_equals($before['fingerprint'], $after['fingerprint'])) {
+        return $tasks;
+    }
+    foreach ($tasks as &$task) {
+        if ($task['id'] !== 'release-consistency') {
+            continue;
+        }
+        $message = $missing
+            ? 'Release source identity could not be captured; qualification cannot bind this audit.'
+            : 'Release inputs changed during the audit; regenerate integrity data and rerun release.';
+        if ($task['status'] !== STATUS_FAIL) {
+            $task['status'] = $missing ? STATUS_BLOCKED : STATUS_FAIL;
+        }
+        $counter = $missing ? 'blocked' : 'failed';
+        $task['counts'][$counter] = ($task['counts'][$counter] ?? 0) + 1;
+        $task['summary'] .= ' ' . $message;
+        $task['details']['problems'][] = $message;
+    }
+    unset($task);
+    return $tasks;
+}
+
+/**
  * Return the repository root for the audit tooling.
  *
  * @return string Absolute repository path.
@@ -405,14 +434,30 @@ function resolve_browser_executable(): ?string
 function run_process(array $command, string $cwd, int $timeoutSeconds = 30): array
 {
     $started = microtime(true);
+    // Windows proc_open pipes cannot reliably become nonblocking. File-backed
+    // streams prevent a verbose stderr assertion from deadlocking stdout reads.
+    $stdoutStream = tmpfile();
+    $stderrStream = tmpfile();
+    if ($stdoutStream === false || $stderrStream === false) {
+        if (is_resource($stdoutStream)) {
+            fclose($stdoutStream);
+        }
+        if (is_resource($stderrStream)) {
+            fclose($stderrStream);
+        }
+        return ['exit_code' => 127, 'stdout' => '', 'stderr' => 'Unable to allocate process capture streams.',
+            'timed_out' => false, 'duration' => microtime(true) - $started];
+    }
     $descriptors = [
         0 => ['pipe', 'r'],
-        1 => ['pipe', 'w'],
-        2 => ['pipe', 'w'],
+        1 => $stdoutStream,
+        2 => $stderrStream,
     ];
     $pipes = [];
     $process = @proc_open($command, $descriptors, $pipes, $cwd, null, ['bypass_shell' => true]);
     if (!is_resource($process)) {
+        fclose($stdoutStream);
+        fclose($stderrStream);
         return [
             'exit_code' => 127,
             'stdout' => '',
@@ -423,16 +468,10 @@ function run_process(array $command, string $cwd, int $timeoutSeconds = 30): arr
     }
 
     fclose($pipes[0]);
-    stream_set_blocking($pipes[1], false);
-    stream_set_blocking($pipes[2], false);
-    $stdout = '';
-    $stderr = '';
     $timedOut = false;
     $lastExitCode = null;
 
     while (true) {
-        $stdout .= stream_get_contents($pipes[1]) ?: '';
-        $stderr .= stream_get_contents($pipes[2]) ?: '';
         $status = proc_get_status($process);
         if (!$status['running']) {
             $lastExitCode = (int) $status['exitcode'];
@@ -451,11 +490,13 @@ function run_process(array $command, string $cwd, int $timeoutSeconds = 30): arr
         usleep(20000);
     }
 
-    $stdout .= stream_get_contents($pipes[1]) ?: '';
-    $stderr .= stream_get_contents($pipes[2]) ?: '';
-    fclose($pipes[1]);
-    fclose($pipes[2]);
     $closedCode = proc_close($process);
+    rewind($stdoutStream);
+    rewind($stderrStream);
+    $stdout = stream_get_contents($stdoutStream) ?: '';
+    $stderr = stream_get_contents($stderrStream) ?: '';
+    fclose($stdoutStream);
+    fclose($stderrStream);
     $exitCode = $timedOut ? 124 : ($lastExitCode !== null && $lastExitCode >= 0 ? $lastExitCode : $closedCode);
 
     return [
@@ -722,6 +763,18 @@ function render_markdown_report(array $report): string
     }
 
     $lines[] = '';
+    if (isset($report['manual_review_summary'])) {
+        $lines[] = '## Release qualification';
+        $lines[] = '';
+        $lines[] = 'Source before: ' . ($report['source_fingerprint_before'] ?? 'unavailable');
+        $lines[] = '';
+        $lines[] = 'Source after: ' . ($report['source_fingerprint_after'] ?? 'unavailable');
+        $lines[] = '';
+        $lines[] = $report['manual_review_summary'];
+        $lines[] = '';
+        $lines[] = 'Automated PASS is not human sign-off. Use scripts/release_qualification.php check for the artifact-bound handoff.';
+        $lines[] = '';
+    }
     $lines[] = '## Report files';
     $lines[] = '';
     $lines[] = '- JSON: `' . $report['report_files']['json'] . '`';

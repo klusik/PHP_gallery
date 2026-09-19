@@ -56,6 +56,7 @@ return [
             'version-audit',
             'php-lint',
             'js-lint',
+            'browser-map',
         ],
         'release' => [
             'php-regression',
@@ -75,6 +76,12 @@ return [
 
     // Most PHP tests are self-contained. Keep only true environment exceptions here.
     'php_test_requirements' => [
+        'gallery_workflow_integration_test.php' => [
+            'timeout' => 180,
+        ],
+        'gallery_workflow_browser_test.php' => [
+            'timeout' => 180,
+        ],
         'thumbnail_format_metadata_consistency_test.php' => [
             'extensions' => ['gd'],
             'missing_status' => 'BLOCKED',
@@ -82,11 +89,15 @@ return [
         ],
     ],
 
-    // Explicit registry is intentional. Some Node scripts need arguments and one needs a real browser.
+    // Explicit registry is intentional. Some Node scripts need arguments or a real browser.
     'node_tests' => [
         'admin_mutation_completion_test.mjs' => [],
         'admin_mutation_stage4_hardening_test.mjs' => [],
         'admin_gallery_title_completion_test.mjs' => [],
+        'admin_gallery_title_completion_browser_test.mjs' => [
+            'browser' => true,
+            'timeout' => 60,
+        ],
         'admin_side_panel_created_gallery_refresh_test.mjs' => [],
         'admin_side_panel_delegation_test.mjs' => [],
         'admin_side_panel_gallery_refresh_test.mjs' => [],
@@ -106,6 +117,7 @@ return [
             'timeout' => 60,
         ],
         'lightbox_map_navigation_test.mjs' => [],
+        'lightbox_preload_lifecycle_test.mjs' => [],
         'lightbox_zoom_model_test.mjs' => [],
         'progressive_thumbnail_renderer_test.mjs' => [],
         'public_search_progressive_test.mjs' => [],

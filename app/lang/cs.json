@@ -1,4 +1,6 @@
 {
+  "admin.gallery_title_completion.suggestion": "Navržený název: {title}.",
+  "admin.gallery_title_completion.help": "Pro návrh názvu napište alespoň dva znaky. Na konci pole přijměte návrh klávesou Tab nebo šipkou vpravo, nebo jej skryjte klávesou Escape.",
   "admin.gallery_editor.image_deleted": "Image deleted.",
   "admin.media_renamer.refresh_markup_missing": "The rename completed, but the server did not return refreshed panel markup. Reopen the tool to verify the saved result.",
   "admin.media_renamer.refresh_target_missing": "The rename completed, but its panel result could not be refreshed. Reopen the tool to verify the saved result.",

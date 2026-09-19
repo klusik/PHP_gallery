@@ -71,13 +71,17 @@ audit_test_assert(isset($profiles['quick'], $profiles['full'], $profiles['releas
 audit_test_assert(in_array('php-regression', $profiles['quick'], true), 'Quick profile must retain the complete PHP regression suite.');
 audit_test_assert(in_array('node-fast', $profiles['quick'], true), 'Quick profile must use the fast Node suite.');
 audit_test_assert(in_array('node-full', $profiles['full'], true), 'Full profile must include slow deterministic Node coverage.');
+audit_test_assert(in_array('browser-map', $profiles['full'], true), 'Full handoff must exercise available Chromium fixtures.');
+audit_test_assert(!in_array('browser-map', $profiles['quick'], true), 'Quick profile must not launch browsers.');
 audit_test_assert(in_array('browser-map', $profiles['release'], true), 'Release profile must include browser integration coverage.');
 audit_test_assert(in_array('release-consistency', $profiles['release'], true), 'Release profile must verify release metadata and documentation consistency.');
 audit_test_assert(in_array('manifest', $profiles['release'], true), 'Release profile must verify the core manifest.');
 
 audit_test_assert(!empty($registry['node_tests']['gallery_download_zip64_test.mjs']['slow']), 'ZIP64 boundary coverage must stay classified as slow.');
 audit_test_assert(!empty($registry['node_tests']['lightbox_map_browser_test.mjs']['browser']), 'The real Chromium lightbox test must stay classified as browser integration.');
+audit_test_assert(!empty($registry['node_tests']['admin_gallery_title_completion_browser_test.mjs']['browser']), 'Title completion must retain actual DOM-event browser coverage.');
 audit_test_assert(($registry['node_tests']['gallery_download_zip_test.mjs']['temporary_output'] ?? '') !== '', 'ZIP writer regression must receive a temporary output path.');
+audit_test_assert(($registry['php_test_requirements']['gallery_workflow_integration_test.php']['timeout'] ?? 0) >= 120, 'The opt-in migrated HTTP workflow needs a bounded setup-aware timeout.');
 
 $options = parse_options(['audit.php', '--profile', 'quick', '--changed', '--report=cache/custom.md']);
 audit_test_assert($options['profile'] === 'quick', 'Profile parser must accept separated option values.');
@@ -131,5 +135,28 @@ audit_test_assert($launcherPython === ['py', '-3'], 'The Windows py -3 launcher 
 
 $root = dirname(__DIR__);
 audit_test_assert(relative_path($root . '/tests/audit_runner_test.php', $root) === 'tests/audit_runner_test.php', 'Repository-relative path normalization must remain stable.');
+$noisyProcess = \PhpGallery\Audit\run_process(
+    [PHP_BINARY, '-r', 'fwrite(STDERR, str_repeat("E", 262144)); fwrite(STDOUT, str_repeat("O", 262144));'], $root, 5
+);
+audit_test_assert($noisyProcess['exit_code'] === 0 && strlen($noisyProcess['stdout']) === 262144
+    && strlen($noisyProcess['stderr']) === 262144, 'Both large output streams must drain without Windows pipe deadlocks.');
+$timedProcess = \PhpGallery\Audit\run_process([PHP_BINARY, '-r', 'usleep(3000000);'], $root, 1);
+audit_test_assert($timedProcess['timed_out'] && $timedProcess['exit_code'] === 124 && $timedProcess['duration'] < 2.5,
+    'A silent child must still observe the hard process timeout.');
+
+$releaseTask = \PhpGallery\Audit\task_result(
+    'release-consistency', 'Release consistency', 'PASS', 0.0, [], 'Consistent.'
+);
+$identity = ['fingerprint' => str_repeat('a', 64)];
+audit_test_assert(\PhpGallery\Audit\bind_release_source_identity([$releaseTask], $identity, $identity) === [$releaseTask],
+    'A frozen release tree keeps its original automated result.');
+$changedTask = \PhpGallery\Audit\bind_release_source_identity([$releaseTask], $identity, ['fingerprint' => str_repeat('b', 64)])[0];
+audit_test_assert($changedTask['status'] === 'FAIL' && $changedTask['details']['problems'] !== [],
+    'A source change during auditing invalidates release consistency.');
+$missingTask = \PhpGallery\Audit\bind_release_source_identity([$releaseTask], null, $identity)[0];
+audit_test_assert($missingTask['status'] === 'BLOCKED', 'Unavailable source identity must not qualify a release.');
+$failedTask = array_replace($releaseTask, ['status' => 'FAIL']);
+audit_test_assert(\PhpGallery\Audit\bind_release_source_identity([$failedTask], null, null)[0]['status'] === 'FAIL',
+    'Source capture failure cannot downgrade an existing release failure.');
 
 echo "Central audit runner contracts passed.\n";

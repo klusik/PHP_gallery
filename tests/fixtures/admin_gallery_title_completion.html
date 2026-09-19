@@ -1,0 +1,83 @@
+<!doctype html>
+<!-- Project: PHP Gallery; Author: Rudolf Klusal; License: MIT -->
+<html lang="en"><meta charset="utf-8"><link rel="stylesheet" href="/completion.css">
+<title>Isolated title completion fixture</title>
+<main id="panel"><div id="mount"></div></main><pre id="results">BROWSER PENDING</pre>
+<script type="module">
+import {setupAdminGalleryTitleCompletion} from '/completion.js';
+let closed = 0;
+let submissions = 0;
+document.addEventListener('keydown', event => { if (event.key === 'Escape') closed++; });
+document.addEventListener('submit', event => { event.preventDefault(); submissions++; });
+setupAdminGalleryTitleCompletion();
+setupAdminGalleryTitleCompletion();
+/** Throw with a useful assertion name. */
+function check(condition, message) { if (!condition) throw new Error(message); }
+/** Wait for a queued fixture action. */
+function wait(ms = 250) { return new Promise(resolve => setTimeout(resolve, ms)); }
+/** Insert the same control again to exercise delegated ownership. */
+function mount() {
+    document.getElementById('mount').innerHTML = '<form><select name="parent_id"><option value="42">Parent A</option><option value="7">Parent B</option></select><span data-gallery-title-completion data-gallery-title-completion-url="/suggest" data-gallery-title-completion-announcement="Suggested: {title}"><input name="title" required data-gallery-title-completion-input><span data-gallery-title-completion-overlay hidden aria-hidden="true"><span data-gallery-title-completion-prefix></span><span data-gallery-title-completion-tail></span></span><span data-gallery-title-completion-help>Tab accepts; Escape dismisses.</span><span data-gallery-title-completion-status role="status" aria-live="polite"></span></span><button>Save</button></form>';
+    return document.querySelector('input');
+}
+let requests = 0;
+let slow = false;
+window.fetch = async (url, options) => {
+    requests++;
+    const query = new URL(url).searchParams;
+    const value = query.get('q');
+    const parent = Number(query.get('parent_id'));
+    // Ignore abort deliberately: ownership must still suppress stale completions.
+    await wait(slow && value === 'We' ? 650 : 10);
+    return {ok: true, json: async () => ({ok: true, candidates: [
+        {id: 2, parent_id: parent, title: value === 'ff' ? '\ufb00light notes' : parent === 7 ? 'West alternative' : 'West recent'},
+    ]})};
+};
+/** Enter text through the production delegated handler. */
+function type(input, value) {
+    input.focus(); input.value = value; input.setSelectionRange(value.length, value.length);
+    input.dispatchEvent(new Event('input', {bubbles: true}));
+}
+/** Send a real DOM keyboard event and return its cancellation state. */
+function key(input, value, options = {}) {
+    const event = new KeyboardEvent('keydown', {key: value, bubbles: true, cancelable: true, ...options});
+    input.dispatchEvent(event);
+    return event.defaultPrevented;
+}
+try {
+    const originalUrl = location.href;
+    let input = mount();
+    type(input, 'ff'); await wait();
+    check(document.querySelector('[data-gallery-title-completion-tail]').textContent === 'light notes', 'Ligature suffix geometry');
+    check(input.getAttribute('aria-describedby') && document.querySelector('[role=status]').textContent.includes('ﬀlight'), 'Accessible help and announcement');
+    check(!key(input, 'ArrowRight', {ctrlKey: true}) && input.value === 'ff', 'Modified arrows preserved');
+    check(!key(input, 'ArrowRight', {shiftKey: true}) && input.value === 'ff', 'Selection shortcut preserved');
+    check(key(input, 'Tab') && input.value === 'ﬀlight notes', 'Tab acceptance');
+    type(input, 'We'); await wait();
+    input.setSelectionRange(0, 1);
+    check(!key(input, 'Tab') && input.value === 'We', 'Selection does not accept');
+    input.setSelectionRange(2, 2);
+    check(key(input, 'Escape') && closed === 0, 'First Escape dismisses without closing drawer');
+    key(input, 'Escape'); check(closed === 1, 'Second Escape reaches drawer');
+    input.dispatchEvent(new CompositionEvent('compositionstart', {bubbles: true}));
+    const beforeComposition = requests;
+    type(input, 'We'); await wait();
+    check(requests === beforeComposition && !key(input, 'Tab', {isComposing: true}), 'Composition suspends requests and acceptance');
+    input.dispatchEvent(new CompositionEvent('compositionend', {bubbles: true})); await wait();
+    check(key(input, 'ArrowRight') && input.value === 'West recent', 'Composition end resumes');
+    input = mount(); type(input, 'We'); await wait();
+    document.querySelector('[data-gallery-title-completion-tail]').dispatchEvent(new PointerEvent('pointerdown', {bubbles: true, cancelable: true}));
+    check(input.value === 'West recent' && document.activeElement === input, 'Pointer accepts dynamically replaced control');
+    type(input, 'We'); await wait();
+    const parent = document.querySelector('select'); parent.value = '7'; parent.dispatchEvent(new Event('change', {bubbles: true})); await wait();
+    check(key(input, 'Tab') && input.value === 'West alternative', 'Parent change reranks');
+    slow = true; type(input, 'We'); await wait(200); type(input, 'ff'); await wait(800);
+    check(document.querySelector('[data-gallery-title-completion-tail]').textContent === 'light notes', 'Out-of-order request suppressed');
+    type(input, 'We'); await wait(200); input = mount(); await wait(800);
+    check(input.value === '' && document.querySelector('[data-gallery-title-completion-overlay]').hidden, 'Detached input cannot render into replacement');
+    check(submissions === 0 && location.href === originalUrl && document.getElementById('panel'), 'Acceptance never submits/navigates');
+    document.getElementById('results').textContent = 'BROWSER PASS: Unicode, keyboard, IME, pointer, accessibility, dynamic forms, parent changes, cancellation and stale responses.';
+} catch (error) {
+    document.getElementById('results').textContent = 'BROWSER FAIL: ' + error.message;
+}
+</script></html>

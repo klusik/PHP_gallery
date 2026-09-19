@@ -37,6 +37,8 @@ const OVERLAY_SELECTOR = '[data-gallery-title-completion-overlay]';
 const PREFIX_SELECTOR = '[data-gallery-title-completion-prefix]';
 const TAIL_SELECTOR = '[data-gallery-title-completion-tail]';
 const MIN_COMPLETION_CHARACTERS = 2;
+const completionRequests = new WeakMap();
+let completionControlId = 0;
 
 /**
  * Normalize a gallery title fragment for case-insensitive prefix matching.
@@ -45,7 +47,38 @@ const MIN_COMPLETION_CHARACTERS = 2;
  * @returns {string} Normalized search text.
  */
 export function normalizeGalleryTitleCompletionText(value) {
-    return String(value ?? '').normalize('NFKC').toLocaleLowerCase();
+    return String(value ?? '').normalize('NFKC').toLowerCase();
+}
+
+/**
+ * Map a normalized prefix back to a whole grapheme boundary in the original title.
+ * A partial ligature/combining sequence is not a safe inline completion.
+ *
+ * @param {string} title Candidate title.
+ * @param {string} typed Entered prefix.
+ * @returns {string|null} Visible suffix, or null when no safe completion exists.
+ */
+export function galleryTitleCompletionSuffix(title, typed) {
+    const normalized = normalizeGalleryTitleCompletionText(typed);
+    if (!normalized || !normalizeGalleryTitleCompletionText(title).startsWith(normalized)) {
+        return null;
+    }
+    // Printable ASCII has identical raw/normalized boundaries; avoid segmenter
+    // construction for this common case without weakening Unicode handling.
+    if (/^[\x20-\x7e]*$/.test(title + typed)) {
+        return title.length > typed.length ? title.slice(typed.length) : null;
+    }
+    if (typeof Intl.Segmenter !== 'function') {
+        // Old browsers retain plain ASCII completion; decline unsafe Unicode geometry.
+        return null;
+    }
+    for (const segment of new Intl.Segmenter('en', {granularity: 'grapheme'}).segment(title)) {
+        const end = segment.index + segment.segment.length;
+        if (normalizeGalleryTitleCompletionText(title.slice(0, end)) === normalized) {
+            return end < title.length ? title.slice(end) : null;
+        }
+    }
+    return null;
 }
 
 /**
@@ -86,24 +119,93 @@ function compareGalleryTitleCompletionCandidates(left, right, parentId) {
  */
 export function findGalleryTitleCompletion(candidates, inputValue, parentId = 0) {
     const typedValue = String(inputValue ?? '');
-    if (typedValue.length < MIN_COMPLETION_CHARACTERS || typedValue.trim() === '') {
+    if ([...typedValue].length < MIN_COMPLETION_CHARACTERS || typedValue.trim() === '') {
         return '';
     }
 
     const normalizedTypedValue = normalizeGalleryTitleCompletionText(typedValue);
     const matches = (Array.isArray(candidates) ? candidates : []).filter((candidate) => {
         const title = String(candidate?.title || '');
-        if (title.length <= typedValue.length) {
-            return false;
-        }
-        return normalizeGalleryTitleCompletionText(title).startsWith(normalizedTypedValue);
+        return normalizeGalleryTitleCompletionText(title).startsWith(normalizedTypedValue)
+            && galleryTitleCompletionSuffix(title, typedValue) !== null;
     });
     if (matches.length === 0) {
         return '';
     }
 
-    matches.sort((left, right) => compareGalleryTitleCompletionCandidates(left, right, Number(parentId || 0)));
-    return String(matches[0]?.title || '');
+    const best = matches.reduce((winner, row) =>
+        !winner || compareGalleryTitleCompletionCandidates(row, winner, Number(parentId || 0)) < 0 ? row : winner, null);
+    return String(best?.title || '');
+}
+
+/** Return the single request owner for a title control, assigning accessible IDs on demand. */
+function completionRequestState(input) {
+    if (!completionRequests.has(input)) {
+        completionRequests.set(input, {generation: 0, timer: 0, controller: null, composing: false, dismissed: false});
+        const control = input.closest(COMPLETION_SELECTOR);
+        const help = control?.querySelector('[data-gallery-title-completion-help]');
+        if (help instanceof HTMLElement) {
+            if (!help.id) help.id = 'gallery-title-help-client-' + (++completionControlId);
+            input.setAttribute('aria-describedby', help.id);
+        }
+    }
+    return completionRequests.get(input);
+}
+
+/** Cancel queued and active work before a newer intent, blur, or disposal takes ownership. */
+function cancelCompletionRequest(input) {
+    const state = completionRequestState(input);
+    state.generation += 1;
+    clearTimeout(state.timer);
+    state.timer = 0;
+    state.controller?.abort();
+    state.controller = null;
+}
+
+/** Fetch only bounded results after typing settles; stale and detached controls never render. */
+function requestGalleryTitleCompletion(input) {
+    const control = input.closest(COMPLETION_SELECTOR);
+    if (!(control instanceof HTMLElement)) return;
+    cancelCompletionRequest(input);
+    hideGalleryTitleCompletion(control);
+    const state = completionRequestState(input);
+    state.dismissed = false;
+    if (state.composing || !caretAllowsGalleryTitleCompletion(input) || [...input.value].length < 2 || [...input.value].length > 255) return;
+    const endpoint = control.dataset.galleryTitleCompletionUrl;
+    if (!endpoint) {
+        updateGalleryTitleCompletion(input);
+        return;
+    }
+    control.__galleryTitleCompletionCandidates = [];
+    const generation = state.generation;
+    const value = input.value;
+    const parentId = selectedParentGalleryId(input);
+    state.timer = window.setTimeout(async () => {
+        state.timer = 0;
+        const controller = new AbortController();
+        state.controller = controller;
+        const timeout = window.setTimeout(() => controller.abort(), 5000);
+        try {
+            const url = new URL(endpoint, window.location.href);
+            // Keep credentials on the active origin, including local host aliases.
+            url.protocol = window.location.protocol;
+            url.host = window.location.host;
+            url.searchParams.set('q', value);
+            url.searchParams.set('parent_id', String(parentId));
+            const response = await fetch(url, {credentials: 'same-origin', cache: 'no-store', signal: controller.signal, headers: {Accept: 'application/json'}});
+            if (!response.ok) return;
+            const result = await response.json();
+            if (!result.ok || generation !== state.generation || !input.isConnected
+                || document.activeElement !== input || input.value !== value || selectedParentGalleryId(input) !== parentId) return;
+            control.__galleryTitleCompletionCandidates = Array.isArray(result.candidates) ? result.candidates.slice(0, 8) : [];
+            updateGalleryTitleCompletion(input);
+        } catch {
+            // Completion is optional. The ordinary required title field remains available.
+        } finally {
+            clearTimeout(timeout);
+            if (state.controller === controller) state.controller = null;
+        }
+    }, 180);
 }
 
 /**
@@ -182,6 +284,8 @@ function hideGalleryTitleCompletion(control) {
         tail.textContent = '';
     }
     control.dataset.galleryTitleCompletionValue = '';
+    const status = control.querySelector('[data-gallery-title-completion-status]');
+    if (status instanceof HTMLElement) status.textContent = '';
 }
 
 /**
@@ -192,6 +296,10 @@ function hideGalleryTitleCompletion(control) {
 function updateGalleryTitleCompletion(input) {
     const control = input.closest(COMPLETION_SELECTOR);
     if (!(control instanceof HTMLElement)) {
+        return;
+    }
+    if (completionRequestState(input).composing || completionRequestState(input).dismissed || !caretAllowsGalleryTitleCompletion(input)) {
+        hideGalleryTitleCompletion(control);
         return;
     }
 
@@ -212,12 +320,21 @@ function updateGalleryTitleCompletion(input) {
         return;
     }
 
-    const typedLength = input.value.length;
+    const suffix = galleryTitleCompletionSuffix(suggestion, input.value);
+    if (suffix === null) {
+        hideGalleryTitleCompletion(control);
+        return;
+    }
     prefix.textContent = input.value;
-    tail.textContent = suggestion.slice(typedLength);
+    tail.textContent = suffix;
     control.dataset.galleryTitleCompletionValue = suggestion;
     syncCompletionOverlayMetrics(input, overlay);
     overlay.hidden = false;
+    const status = control.querySelector('[data-gallery-title-completion-status]');
+    if (status instanceof HTMLElement) {
+        const announcement = (control.dataset.galleryTitleCompletionAnnouncement || '{title}').replace('{title}', suggestion);
+        if (status.textContent !== announcement) status.textContent = announcement;
+    }
 }
 
 /**
@@ -232,10 +349,12 @@ function acceptGalleryTitleCompletion(input) {
         return false;
     }
     const suggestion = String(control.dataset.galleryTitleCompletionValue || '');
-    if (suggestion === '') {
+    if (suggestion === '' || completionRequestState(input).composing || !caretAllowsGalleryTitleCompletion(input)
+        || galleryTitleCompletionSuffix(suggestion, input.value) === null) {
         return false;
     }
 
+    cancelCompletionRequest(input);
     input.value = suggestion;
     input.setSelectionRange(suggestion.length, suggestion.length);
     hideGalleryTitleCompletion(control);
@@ -268,14 +387,14 @@ export function setupAdminGalleryTitleCompletion() {
     document.addEventListener('input', (event) => {
         const input = event.target instanceof HTMLInputElement && event.target.matches(INPUT_SELECTOR) ? event.target : null;
         if (input) {
-            updateGalleryTitleCompletion(input);
+            requestGalleryTitleCompletion(input);
         }
     });
 
     document.addEventListener('focusin', (event) => {
         const input = event.target instanceof HTMLInputElement && event.target.matches(INPUT_SELECTOR) ? event.target : null;
         if (input) {
-            updateGalleryTitleCompletion(input);
+            requestGalleryTitleCompletion(input);
         }
     });
 
@@ -284,6 +403,7 @@ export function setupAdminGalleryTitleCompletion() {
         if (!input) {
             return;
         }
+        cancelCompletionRequest(input);
         window.setTimeout(() => {
             if (document.activeElement === input) {
                 return;
@@ -302,7 +422,7 @@ export function setupAdminGalleryTitleCompletion() {
         }
         const input = parent.closest('form')?.querySelector(INPUT_SELECTOR);
         if (input instanceof HTMLInputElement) {
-            updateGalleryTitleCompletion(input);
+            requestGalleryTitleCompletion(input);
         }
     });
 
@@ -318,23 +438,52 @@ export function setupAdminGalleryTitleCompletion() {
         if (!input) {
             return;
         }
+        if (event.isComposing || event.keyCode === 229 || completionRequestState(input).composing
+            || event.ctrlKey || event.altKey || event.metaKey) return;
 
         if (event.key === 'Escape') {
             const control = input.closest(COMPLETION_SELECTOR);
             if (control instanceof HTMLElement) {
+                const state = completionRequestState(input);
+                const handled = Boolean(control.dataset.galleryTitleCompletionValue || state.timer || state.controller);
+                state.dismissed = true;
+                cancelCompletionRequest(input);
                 hideGalleryTitleCompletion(control);
+                if (handled) {
+                    event.preventDefault();
+                    event.stopImmediatePropagation();
+                }
             }
             return;
         }
 
         const acceptsWithTab = event.key === 'Tab' && !event.shiftKey;
-        const acceptsWithArrow = event.key === 'ArrowRight';
+        const acceptsWithArrow = event.key === 'ArrowRight' && !event.shiftKey;
         if (!(acceptsWithTab || acceptsWithArrow) || !caretAllowsGalleryTitleCompletion(input)) {
             return;
         }
         if (acceptGalleryTitleCompletion(input)) {
             event.preventDefault();
         }
+    }, true);
+
+    document.addEventListener('compositionstart', (event) => {
+        const input = event.target;
+        if (!(input instanceof HTMLInputElement) || !input.matches(INPUT_SELECTOR)) return;
+        completionRequestState(input).composing = true;
+        cancelCompletionRequest(input);
+        const control = input.closest(COMPLETION_SELECTOR);
+        if (control) hideGalleryTitleCompletion(control);
+    });
+    document.addEventListener('compositionend', (event) => {
+        const input = event.target;
+        if (!(input instanceof HTMLInputElement) || !input.matches(INPUT_SELECTOR)) return;
+        completionRequestState(input).composing = false;
+        requestGalleryTitleCompletion(input);
+    });
+    document.addEventListener('selectionchange', () => {
+        const input = document.activeElement;
+        if (input instanceof HTMLInputElement && input.matches(INPUT_SELECTOR)) updateGalleryTitleCompletion(input);
     });
 
     document.addEventListener('pointerdown', (event) => {

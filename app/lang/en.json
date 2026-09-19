@@ -1,4 +1,6 @@
 {
+  "admin.gallery_title_completion.suggestion": "Suggested title: {title}.",
+  "admin.gallery_title_completion.help": "Type at least two characters for a title suggestion. At the end of the field, press Tab or Right Arrow to accept it, or Escape to dismiss it.",
   "admin.gallery_editor.image_deleted": "Image deleted.",
   "admin.media_renamer.refresh_markup_missing": "The rename completed, but the server did not return refreshed panel markup. Reopen the tool to verify the saved result.",
   "admin.media_renamer.refresh_target_missing": "The rename completed, but its panel result could not be refreshed. Reopen the tool to verify the saved result.",

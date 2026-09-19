@@ -28,6 +28,7 @@ declare(strict_types=1);
 
 $sourcePath = dirname(__DIR__) . '/public/assets/gallery-modules/lightbox.js';
 $source = file_get_contents($sourcePath);
+$preloadSource = (string) file_get_contents(dirname(__DIR__) . '/public/assets/gallery-modules/lightbox-preload-lifecycle.js');
 if (!is_string($source)) {
     fwrite(STDERR, "Unable to read lightbox.js\n");
     exit(1);
@@ -141,12 +142,16 @@ $resetEnd = strpos($source, 'function clearLightboxHiddenCleanupTimer(', $resetS
 lightbox_resource_assert($resetStart !== false && $resetEnd !== false, 'Nearby preload reset helper is missing.');
 $resetSource = substr($source, (int) $resetStart, (int) $resetEnd - (int) $resetStart);
 lightbox_resource_assert(
+    str_contains($resetSource, 'preloadedSources.clear();') && str_contains($resetSource, 'lightboxPreloads.reset(options);'),
+    'Viewer reset must clear diagnostic bookkeeping and delegate lifecycle options to the queue owner.'
+);
+$resetSource = lightbox_resource_function_source($preloadSource, 'resetLightboxPreloadQueue', 'queueDecodedLightboxPreload');
+lightbox_resource_assert(
     str_contains($resetSource, 'const abortActive = options.abortActive !== false;')
         && str_contains($resetSource, 'if (abortActive) {'),
     'Nearby preload reset must support queue-only invalidation without weakening hard cancellation paths.'
 );
 foreach ([
-    'preloadedSources.clear();',
     'lightboxPreloadQueue.length = 0;',
     'lightboxQueuedSources.clear();',
     'lightboxPreloadAbortController.abort();',

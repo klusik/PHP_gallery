@@ -17,6 +17,7 @@
 import {
     findGalleryTitleCompletion,
     normalizeGalleryTitleCompletionText,
+    galleryTitleCompletionSuffix,
 } from '../public/assets/gallery-modules/admin-gallery-title-completion.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -69,6 +70,12 @@ assert(
     'Fallback matching must work when the selected parent has no matching sibling.'
 );
 assert(findGalleryTitleCompletion(candidates, 'w', 42) === '', 'One-character fragments must not produce noisy completion.');
+assert(galleryTitleCompletionSuffix('\ufb00light notes', 'ff') === 'light notes', 'A ligature consumes one original character, not two.');
+assert(galleryTitleCompletionSuffix('Cafe\u0301 trip', 'Café') === ' trip', 'A decomposed grapheme maps to its complete original boundary.');
+assert(galleryTitleCompletionSuffix('\ufb00light', 'f') === null, 'A partial compatibility ligature must not be offered.');
+assert(galleryTitleCompletionSuffix('👩‍🚀 flight', '👩') === null, 'An emoji grapheme must not be split.');
+assert(galleryTitleCompletionSuffix('Åland', 'åland') === null, 'An exact normalized match has no suffix.');
+assert(findGalleryTitleCompletion([{title: '\ufb00light notes'}], 'ff') === '\ufb00light notes', 'Length-changing normalization is valid for selection.');
 assert(
     findGalleryTitleCompletion(candidates, 'Westbound Tour Leg: 02 Bristol to Inverness', 42) === '',
     'An already complete title must not render a redundant suggestion.'
@@ -84,5 +91,6 @@ assert(browserSource.includes("event.key === 'ArrowRight'"), 'ArrowRight must re
 assert(browserSource.includes("document.addEventListener('pointerdown'"), 'Pointer acceptance must remain delegated for dynamically injected forms.');
 assert(entrypointSource.includes('setupAdminGalleryTitleCompletion();'), 'The gallery browser entrypoint must boot title completion.');
 assert(viewSource.includes('data-gallery-title-completion-candidates='), 'Create-gallery forms must carry title completion candidates.');
+assert(/<input name="title"[^>]*aria-label=/.test(viewSource), 'Suggestion announcements must not alter the title input accessible name.');
 
 console.log('admin_gallery_title_completion_test: OK');

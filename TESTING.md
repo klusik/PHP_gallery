@@ -33,7 +33,17 @@ php scripts/audit.php --profile=full
 php scripts/audit.php --profile=release
 ```
 
-`quick` keeps the complete PHP regression suite but omits intentionally slow/browser-only work and prefers Git-changed PHP/JavaScript syntax targets. If Git metadata is unavailable, changed-file linting safely falls back to the full source tree. `full` runs all deterministic source checks, including the slow ZIP64 boundary fixture and full PHP/JavaScript syntax validation. `release` adds Chromium map integration when the host can safely provide a browser, `app/core-manifest.json` freshness, and `git diff --check` when checkout metadata is available.
+`quick` keeps the complete PHP regression suite but omits registered Node browser fixtures and intentionally slow Node work, and prefers Git-changed syntax targets. If Git metadata is unavailable, changed-file linting safely falls back to the full source tree. `full` runs all deterministic source checks, the slow ZIP64 boundary fixture, full PHP/JavaScript syntax validation, and available Chromium fixtures (map integration and actual title-completion DOM events). `release` adds release consistency, source-fingerprint binding, `app/core-manifest.json` freshness, and `git diff --check` when checkout metadata is available. The historical browser suite ID remains `browser-map`; its label is now Chromium browser integration.
+
+### Recovery, real workflows, and release evidence
+
+- [Recovery assurance](docs/RECOVERY_ASSURANCE.md) describes the read-only recovery evidence CLI and synthetic corruption/omission drill. [Off-host recovery](docs/RECOVERY_OFF_HOST.md) records the required hosting/operator checks. Fixture PASS does not prove production recovery.
+- [Isolated workflows](docs/GALLERY_WORKFLOWS.md) describes the generated MySQL database, disposable application copy, real HTTP/browser journeys, and mandatory MySQL/MariaDB CI job. The opt-in PHP workflows and existing concurrency test run through the central audit; absent local prerequisites are explicit SKIPs, while required CI coverage cannot skip. Never configure these tests against the Gallery database.
+- [Title completion](docs/TITLE_COMPLETION.md) documents server budgets, matching behavior and synthetic measurements. The real DOM-event fixture covers IME, Unicode, selection, modified keys, two-stage Escape, pointer acceptance, replaced forms and stale responses. Human assistive-technology review remains separate.
+- [Browser lifecycle](docs/BROWSER_LIFECYCLE.md) defines the single nearby-preview queue owner and its reset/disposal contracts. Runtime seam tests cover both thumbnail renderer labels and repeated owner replacement.
+- [Release qualification](docs/RELEASE_QUALIFICATION.md) binds human review and central release reports to exact source/PDF bytes. Automated PASS never marks PDF or manual browser checks approved.
+
+The central process runner captures stdout/stderr in temporary file-backed streams, preventing verbose failing assertions from blocking Windows pipes and bypassing timeouts. Registered PHP fixtures may declare a bounded setup-aware timeout; ordinary tests retain the default. Disposable workflow runners only provision/clean fixtures around the same central audit, not a parallel test suite.
 
 The runner captures subprocess stdout/stderr instead of streaming passing-test noise. Its console output is deliberately compact, but it prints and flushes a `RUN` line before every suite and that suite's normalized result immediately after completion, so long Windows process-spawn phases never look like a hung command. Normal persisted output is:
 

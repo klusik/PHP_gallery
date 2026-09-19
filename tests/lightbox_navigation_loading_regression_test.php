@@ -31,6 +31,7 @@ declare(strict_types=1);
 
 $root = dirname(__DIR__);
 $lightboxSource = (string) file_get_contents($root . '/public/assets/gallery-modules/lightbox.js');
+$preloadSource = (string) file_get_contents($root . '/public/assets/gallery-modules/lightbox-preload-lifecycle.js');
 $lightboxStyles = (string) file_get_contents($root . '/public/assets/styles/lightbox.css');
 
 /**
@@ -64,6 +65,14 @@ $resetStart = strpos($lightboxSource, 'function resetLightboxPreloadQueue(option
 $resetEnd = strpos($lightboxSource, 'function clearLightboxHiddenCleanupTimer()', $resetStart === false ? 0 : $resetStart);
 lightbox_navigation_loading_assert($resetStart !== false && $resetEnd !== false, 'Preload reset helper with lifecycle options is missing.');
 $resetSource = substr($lightboxSource, (int) $resetStart, (int) $resetEnd - (int) $resetStart);
+lightbox_navigation_loading_assert(
+    str_contains($resetSource, 'lightboxPreloads.reset(options);'),
+    'Viewer reset must forward lifecycle options to the extracted queue owner.'
+);
+$resetStart = strpos($preloadSource, 'function resetLightboxPreloadQueue(options = {})');
+$resetEnd = strpos($preloadSource, 'function queueDecodedLightboxPreload(', $resetStart === false ? 0 : $resetStart);
+lightbox_navigation_loading_assert($resetStart !== false && $resetEnd !== false, 'Extracted preload reset helper is missing.');
+$resetSource = substr($preloadSource, (int) $resetStart, (int) $resetEnd - (int) $resetStart);
 lightbox_navigation_loading_assert(
     str_contains($resetSource, 'const abortActive = options.abortActive !== false;')
         && str_contains($resetSource, 'if (abortActive) {')
