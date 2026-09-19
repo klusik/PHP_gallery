@@ -208,9 +208,17 @@ function view_should_load_admin_assets(string $bodyClass, ?array $user, bool $an
  */
 function view_stylesheet_files_for_context(string $bodyClass, ?array $user, bool $anonymousPreview): array
 {
-    return view_should_load_admin_assets($bodyClass, $user, $anonymousPreview)
-        ? view_admin_stylesheet_files()
-        : view_public_stylesheet_files();
+    if (!view_should_load_admin_assets($bodyClass, $user, $anonymousPreview)) {
+        return view_public_stylesheet_files();
+    }
+
+    $files = view_admin_stylesheet_files();
+    if ($bodyClass !== 'admin-page' && $user !== null && !$anonymousPreview && !in_array('assets/styles/public-shared.css', $files, true)) {
+        $lightboxIndex = array_search('assets/styles/lightbox.css', $files, true);
+        $insertAt = $lightboxIndex === false ? 2 : ((int) $lightboxIndex + 1);
+        array_splice($files, $insertAt, 0, ['assets/styles/public-shared.css']);
+    }
+    return $files;
 }
 
 /**

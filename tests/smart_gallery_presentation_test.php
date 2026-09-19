@@ -134,6 +134,7 @@ namespace Gallery\Services {
         'lightbox_modes' => true,
         'downloads' => true,
         'image_voting' => true,
+        'gallery_maps' => true,
     ];
 
     $defaults = smart_gallery_presentation_defaults();
@@ -141,6 +142,8 @@ namespace Gallery\Services {
     smart_gallery_presentation_assert($defaults['thumbnail_rendering_mode'] === 'progressive', 'Smart Gallery defaults inherit the current site thumbnail renderer.');
 smart_gallery_presentation_assert($defaults['card_layout'] === 'horizontal', 'Smart Gallery defaults inherit the canonical Theme gallery-card layout.');
     smart_gallery_presentation_assert($defaults['lightbox_browsing_mode'] === 'carousel', 'Smart Gallery defaults inherit the current Theme lightbox mode.');
+    smart_gallery_presentation_assert($defaults['source_gallery_visible'] === true, 'Smart Gallery source-gallery context is visible by default.');
+    smart_gallery_presentation_assert($defaults['map_enabled'] === true, 'Smart Gallery aggregate GPS maps are enabled by default before capability suppression.');
 
     $emptyEffective = smart_gallery_effective_presentation(['presentation_json' => null]);
     smart_gallery_presentation_assert($emptyEffective['grid_columns'] === 5 && $emptyEffective['items_per_page'] === 35, 'Missing presentation data inherits the site defaults.');
@@ -162,6 +165,8 @@ smart_gallery_presentation_assert($defaults['card_layout'] === 'horizontal', 'Sm
         'thumbnail_rendering_mode' => 'responsive',
         'card_layout' => 'vertical',
         'metadata_visible' => false,
+        'source_gallery_visible' => false,
+        'map_enabled' => false,
         'lightbox_enabled' => true,
         'lightbox_browsing_mode' => 'picture_strip',
         'slideshow_enabled' => false,
@@ -169,7 +174,7 @@ smart_gallery_presentation_assert($defaults['card_layout'] === 'horizontal', 'Sm
         'voting_enabled' => true,
     ]);
     smart_gallery_presentation_assert($normalized['grid_columns'] === 8 && $normalized['grid_rows'] === 9, 'Explicit grid overrides are preserved.');
-    smart_gallery_presentation_assert($normalized['pagination_enabled'] === false && $normalized['metadata_visible'] === false, 'Explicit false booleans remain explicit overrides.');
+    smart_gallery_presentation_assert($normalized['pagination_enabled'] === false && $normalized['metadata_visible'] === false && $normalized['source_gallery_visible'] === false && $normalized['map_enabled'] === false, 'Explicit false booleans remain explicit overrides.');
 smart_gallery_presentation_assert($normalized['card_layout'] === 'vertical', 'Explicit canonical gallery-card layout overrides are preserved.');
     smart_gallery_presentation_assert($normalized['thumbnail_min_size'] === 600 && $normalized['thumbnail_max_size'] === 1200, 'Reversed thumbnail bounds are normalized safely.');
 
@@ -206,6 +211,7 @@ smart_gallery_presentation_assert($badValues['card_layout'] === 'horizontal', 'I
     $storedLocalPreferences = [
         'presentation_json' => json_encode([
             'version' => 1,
+            'map_enabled' => true,
             'lightbox_enabled' => true,
             'slideshow_enabled' => true,
             'download_enabled' => true,
@@ -216,14 +222,17 @@ smart_gallery_presentation_assert($badValues['card_layout'] === 'horizontal', 'I
         'lightbox_modes' => false,
         'downloads' => false,
         'image_voting' => false,
+        'gallery_maps' => false,
     ];
     $storedPreferencesWhileMastersOff = smart_gallery_presentation_preferences($storedLocalPreferences);
+    smart_gallery_presentation_assert($storedPreferencesWhileMastersOff['map_enabled'], 'Editor preference state must preserve a stored local map ON preference while the global master is OFF.');
     smart_gallery_presentation_assert($storedPreferencesWhileMastersOff['lightbox_enabled'], 'Editor preference state must preserve a stored local Lightbox ON preference while the global master is OFF.');
     smart_gallery_presentation_assert($storedPreferencesWhileMastersOff['slideshow_enabled'], 'Editor preference state must preserve a stored local slideshow ON preference while the global Lightbox master is OFF.');
     smart_gallery_presentation_assert($storedPreferencesWhileMastersOff['download_enabled'], 'Editor preference state must preserve a stored local Downloads ON preference while the global master is OFF.');
     smart_gallery_presentation_assert($storedPreferencesWhileMastersOff['voting_enabled'], 'Editor preference state must preserve a stored local Voting ON preference while the global master is OFF.');
 
     $mastersOff = smart_gallery_effective_presentation($storedLocalPreferences);
+    smart_gallery_presentation_assert(!$mastersOff['map_enabled'], 'Global EXIF GPS Gallery Maps master must override a stored Smart Gallery local ON preference.');
     smart_gallery_presentation_assert(!$mastersOff['lightbox_enabled'], 'Global Lightbox master must override a stored Smart Gallery local ON preference.');
     smart_gallery_presentation_assert(!$mastersOff['slideshow_enabled'], 'Smart Gallery slideshow must become ineffective while its Lightbox master is OFF.');
     smart_gallery_presentation_assert(!$mastersOff['download_enabled'], 'Global Downloads master must override a stored Smart Gallery local ON preference.');
@@ -233,8 +242,10 @@ smart_gallery_presentation_assert($badValues['card_layout'] === 'horizontal', 'I
         'lightbox_modes' => true,
         'downloads' => true,
         'image_voting' => true,
+        'gallery_maps' => true,
     ];
     $mastersRestored = smart_gallery_effective_presentation($storedLocalPreferences);
+    smart_gallery_presentation_assert($mastersRestored['map_enabled'], 'Re-enabling EXIF GPS Gallery Maps must restore the stored Smart Gallery map preference.');
     smart_gallery_presentation_assert($mastersRestored['lightbox_enabled'], 'Re-enabling the Lightbox master must restore the stored Smart Gallery local preference.');
     smart_gallery_presentation_assert($mastersRestored['slideshow_enabled'], 'Re-enabling the Lightbox master must restore the stored Smart Gallery slideshow preference.');
     smart_gallery_presentation_assert($mastersRestored['download_enabled'], 'Re-enabling Downloads must restore the stored Smart Gallery local preference.');

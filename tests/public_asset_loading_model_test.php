@@ -111,6 +111,7 @@ foreach (view_admin_stylesheet_files() as $styleFile) {
 
 $loggedInUser = ['id' => 1, 'username' => 'admin'];
 $loggedInPublicStyles = view_stylesheet_files_for_context('public-page', $loggedInUser, false);
+assert_public_asset_contains('assets/styles/public-shared.css', $loggedInPublicStyles, 'logged-in public styles keep shared visitor presentation CSS');
 assert_public_asset_contains('assets/styles/admin.css', $loggedInPublicStyles, 'logged-in public styles keep admin CSS');
 assert_public_asset_contains('assets/styles/side-panel.css', $loggedInPublicStyles, 'logged-in public styles keep side panel CSS');
 assert_public_asset_contains('assets/styles/admin-duplicate-photo-detector.css', $loggedInPublicStyles, 'logged-in public styles include duplicate detector CSS');

@@ -188,9 +188,10 @@ use function Gallery\Services\admin_log_event;
  * @param bool $votingAllowed Voting allowed value.
  * @param ?int $lightboxIndex Lightbox index value.
  * @param ?array $thumbnailBundle Optional request-local thumbnail bundle.
+ * @param ?array $sourceGalleryContext Optional Smart Gallery physical-source context.
  * @return string Text result for the caller.
  */
-function lightbox_image_data_attributes(array $image, array $gallery, string $mediaUrl, string $previewUrl, string $imagePageUrl, string $displayTitle, int $score, int $vote, ?array $imageMapPoint, string $sourceAttribute, bool $votingAllowed = true, ?int $lightboxIndex = null, ?array $thumbnailBundle = null): string
+function lightbox_image_data_attributes(array $image, array $gallery, string $mediaUrl, string $previewUrl, string $imagePageUrl, string $displayTitle, int $score, int $vote, ?array $imageMapPoint, string $sourceAttribute, bool $votingAllowed = true, ?int $lightboxIndex = null, ?array $thumbnailBundle = null, ?array $sourceGalleryContext = null): string
 {
     // $qualityCandidates stores only already-authorized thumbnail/media URLs with bounded source dimensions.
     $qualityCandidates = lightbox_zoom_quality_candidates($image, $previewUrl, $mediaUrl, $thumbnailBundle);
@@ -212,6 +213,10 @@ function lightbox_image_data_attributes(array $image, array $gallery, string $me
         'image_height' => (int) ($image['height'] ?? 0),
         'voting_allowed' => $votingAllowed,
         'map_point' => $imageMapPoint,
+        'source_gallery_id' => (int) ($sourceGalleryContext['id'] ?? 0),
+        'source_gallery_title' => (string) ($sourceGalleryContext['title'] ?? ''),
+        'source_gallery_breadcrumb' => (string) ($sourceGalleryContext['breadcrumb'] ?? $sourceGalleryContext['title'] ?? ''),
+        'source_gallery_url' => (string) ($sourceGalleryContext['url'] ?? ''),
     ]);
 }
 

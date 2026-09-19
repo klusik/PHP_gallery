@@ -356,6 +356,63 @@ function smart_gallery_model_query_images(array $rules, array $accessibleGallery
     return $stmt->fetchAll();
 }
 
+
+/** Count GPS-capable rows in one canonical Smart Gallery result scope. */
+function smart_gallery_model_count_map_images(array $rules, array $accessibleGalleryIds, bool $publicOnly, bool $allowNsfw): int
+{
+    $query = smart_gallery_model_result_query($rules, $accessibleGalleryIds, $publicOnly, $allowNsfw, 'capture_date', 'desc');
+    $stmt = db()->prepare(
+        'SELECT COUNT(*) FROM images i INNER JOIN galleries g ON g.id=i.gallery_id WHERE '
+        . $query['where']
+        . ' AND i.gps_lat IS NOT NULL AND i.gps_lng IS NOT NULL'
+    );
+    $stmt->execute($query['params']);
+    return (int) $stmt->fetchColumn();
+}
+
+/**
+ * Query a bounded GPS-only projection from the canonical Smart Gallery result set.
+ *
+ * The projection deliberately avoids SELECT * because aggregate maps need only
+ * route/title/GPS fields. Canonical result ordering is preserved for deterministic
+ * payloads and future Smart Gallery-context marker navigation.
+ */
+function smart_gallery_model_query_map_images(array $rules, array $accessibleGalleryIds, bool $publicOnly, bool $allowNsfw, string $sortMode, string $sortDirection, int $limit): array
+{
+    $query = smart_gallery_model_result_query($rules, $accessibleGalleryIds, $publicOnly, $allowNsfw, $sortMode, $sortDirection);
+    $limit = max(1, $limit);
+    $sql = 'SELECT i.id, i.gallery_id, i.filename, i.url_slug, i.title, i.description, i.content_language, i.gps_lat, i.gps_lng '
+        . 'FROM images i INNER JOIN galleries g ON g.id=i.gallery_id WHERE '
+        . $query['where']
+        . ' AND i.gps_lat IS NOT NULL AND i.gps_lng IS NOT NULL '
+        . 'ORDER BY ' . $query['order'] . ' LIMIT ' . $limit;
+    $stmt = db()->prepare($sql);
+    $stmt->execute($query['params']);
+    return $stmt->fetchAll();
+}
+
+/**
+ * Return grouped physical-source counts for one canonical Smart Gallery result scope.
+ *
+ * Grouping remains model-owned so PHP never materializes all Smart Gallery image rows
+ * merely to discover provenance counts. The canonical result predicate supplies rules,
+ * gallery authorization, public visibility, and NSFW policy exactly as for the grid.
+ *
+ * @return array<int,array{gallery_id:int,image_count:int}>
+ */
+function smart_gallery_model_source_summary_rows(array $rules, array $accessibleGalleryIds, bool $publicOnly, bool $allowNsfw): array
+{
+    $query = smart_gallery_model_result_query($rules, $accessibleGalleryIds, $publicOnly, $allowNsfw, 'capture_date', 'desc');
+    $stmt = db()->prepare(
+        'SELECT i.gallery_id, COUNT(*) AS image_count '
+        . 'FROM images i INNER JOIN galleries g ON g.id=i.gallery_id WHERE '
+        . $query['where']
+        . ' GROUP BY i.gallery_id ORDER BY image_count DESC, i.gallery_id ASC'
+    );
+    $stmt->execute($query['params']);
+    return $stmt->fetchAll();
+}
+
 /**
  * Return whether one image remains a member of one normalized Smart Gallery result set.
  *
@@ -631,11 +688,10 @@ function smart_gallery_model_result_query(array $rules, array $accessibleGallery
     return ['where' => $where, 'params' => $params, 'order' => $order];
 }
 
-/** Return a hardcoded safe ORDER BY expression for one supported mode. */
-function smart_gallery_model_order_sql(string $mode, string $direction): string
+/** Return the hardcoded safe primary sort expression for one supported mode. */
+function smart_gallery_model_order_column_sql(string $mode): string
 {
-    $directionSql = $direction === 'asc' ? 'ASC' : 'DESC';
-    $column = match ($mode) {
+    return match ($mode) {
         'filename' => 'i.filename',
         'created_at' => 'i.created_at',
         'title' => "COALESCE(NULLIF(i.title,''),i.filename)",
@@ -643,7 +699,64 @@ function smart_gallery_model_order_sql(string $mode, string $direction): string
         'default' => 'i.sort_order',
         default => 'i.exif_taken_at',
     };
+}
+
+/** Return a hardcoded safe ORDER BY expression for one supported mode. */
+function smart_gallery_model_order_sql(string $mode, string $direction): string
+{
+    $directionSql = $direction === 'asc' ? 'ASC' : 'DESC';
+    $column = smart_gallery_model_order_column_sql($mode);
     return $column . ' ' . $directionSql . ', i.id ' . $directionSql;
+}
+
+/**
+ * Return the zero-based canonical Smart Gallery position of one authorized image.
+ *
+ * The query mirrors MySQL/MariaDB NULL ordering without window functions so the
+ * project remains compatible with MySQL 5.7 and MariaDB 10.2. The stable image-id
+ * tie breaker is identical to smart_gallery_model_order_sql().
+ */
+function smart_gallery_model_image_position(array $rules, array $accessibleGalleryIds, bool $publicOnly, bool $allowNsfw, string $sortMode, string $sortDirection, int $imageId): int
+{
+    if ($imageId <= 0) return -1;
+    $query = smart_gallery_model_result_query($rules, $accessibleGalleryIds, $publicOnly, $allowNsfw, $sortMode, $sortDirection);
+    $sortExpression = smart_gallery_model_order_column_sql($sortMode);
+
+    $targetParams = $query['params'];
+    $targetParams[] = $imageId;
+    $targetStmt = db()->prepare(
+        'SELECT ' . $sortExpression . ' AS smart_gallery_sort_value FROM images i INNER JOIN galleries g ON g.id=i.gallery_id WHERE '
+        . $query['where'] . ' AND i.id = ? LIMIT 1'
+    );
+    $targetStmt->execute($targetParams);
+    $target = $targetStmt->fetch(\PDO::FETCH_ASSOC);
+    if (!is_array($target)) return -1;
+
+    $targetValue = $target['smart_gallery_sort_value'] ?? null;
+    $directionAsc = $sortDirection === 'asc';
+    $beforeParams = $query['params'];
+    if ($targetValue === null) {
+        $beforeSql = $directionAsc
+            ? '(' . $sortExpression . ' IS NULL AND i.id < ?)'
+            : '((' . $sortExpression . ' IS NOT NULL) OR (' . $sortExpression . ' IS NULL AND i.id > ?))';
+        $beforeParams[] = $imageId;
+    } else {
+        $comparison = $directionAsc ? '<' : '>';
+        $tieComparison = $directionAsc ? '<' : '>';
+        $beforeSql = $directionAsc
+            ? '((' . $sortExpression . ' IS NULL) OR (' . $sortExpression . ' ' . $comparison . ' ?) OR ((' . $sortExpression . ' <=> ?) AND i.id ' . $tieComparison . ' ?))'
+            : '((' . $sortExpression . ' ' . $comparison . ' ?) OR ((' . $sortExpression . ' <=> ?) AND i.id ' . $tieComparison . ' ?))';
+        $beforeParams[] = $targetValue;
+        $beforeParams[] = $targetValue;
+        $beforeParams[] = $imageId;
+    }
+
+    $stmt = db()->prepare(
+        'SELECT COUNT(*) FROM images i INNER JOIN galleries g ON g.id=i.gallery_id WHERE '
+        . $query['where'] . ' AND ' . $beforeSql
+    );
+    $stmt->execute($beforeParams);
+    return (int) $stmt->fetchColumn();
 }
 
 /** Normalize a list of positive integer identifiers. */

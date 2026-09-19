@@ -42,6 +42,48 @@ Each endpoint request is capped at 80 metadata records and uses the same access 
 
 When the Smart Gallery presentation disables slideshow, slideshow controls are omitted and the `S` shortcut becomes a no-op for that viewer instance. Normal galleries retain slideshow behavior by default.
 
+## Source-gallery provenance and temporary source filtering
+
+Every Smart Gallery result remains a physical image owned by exactly one physical source gallery. The public controller resolves those physical gallery rows in one request-cached lookup and passes localized source context into the card/lightbox view model. No Smart Gallery-specific provenance table or duplicated source identifier is persisted.
+
+When `source_gallery_visible` is enabled, public photo cards show a keyboard-focusable source-gallery context chip and initial/lazy lightbox metadata expose the same localized source title, structural breadcrumb, and canonical physical-gallery URL. Breadcrumbs follow the normal physical-gallery hierarchy and are resolved from the request-cached gallery inventory, with ancestor translations loaded in one batch. Cards use the final two breadcrumb segments for compact context such as `Friedrichshafen › DEN 01`; the lightbox and map can display the complete path. The shared lightbox only renders this provenance when the active item supplies it, so ordinary physical galleries do not acquire a redundant self-reference. Source-chip clicks are excluded from the image-card lightbox interception path and therefore navigate directly to the physical gallery.
+
+Logged-in public pages load the same `public-shared.css` visitor presentation layer as anonymous public pages in addition to their Admin tooling styles. This keeps Smart Gallery provenance, source filters, lightbox source context, and other shared visitor-facing components visually consistent while preserving Admin-only styles for inline controls.
+
+The source summary is computed with one model-owned `GROUP BY i.gallery_id` projection over the canonical Smart Gallery predicate. It reports the complete authorized source distribution without loading all result images into PHP. A temporary `source_gallery_id` query parameter can refine the public grid. This filter is request/view state only: it is never persisted in `rules_json` or `presentation_json`. The service applies it by narrowing the already-authorized physical gallery-id scope, so count, grid pagination, lazy lightbox, image-position lookup, map availability, and aggregate map payload all continue to use the same canonical result-query compiler.
+
+The source filter intentionally does not change Smart Gallery download semantics. Downloads continue to represent the persisted Smart Gallery definition rather than an incidental public-view filter.
+
+## Aggregate GPS maps
+
+Smart Gallery maps are aggregate views over the complete authorized Smart Gallery result set, independent from grid pagination. `smart_gallery_map_query_context()` starts from the same physical-gallery access scope used by the normal result query, then restricts that scope to source galleries whose effective inherited GPS-map policy allows disclosure. The resulting gallery-id set is passed back through `smart_gallery_query_semantics()` and the canonical model predicate.
+
+The map endpoint never broadens source-gallery disclosure. A point is eligible only when all of the following are true:
+
+- the Smart Gallery itself is publicly addressable and its effective `map_enabled` presentation is true;
+- the physical source gallery is public/listed and accessible to the current visitor;
+- the physical source gallery's effective inherited GPS-map policy allows maps;
+- the image remains a member of the canonical Smart Gallery rule result after public image visibility and NSFW policy;
+- both GPS coordinates are present.
+
+A source gallery with GPS maps disabled therefore contributes zero aggregate markers even when its images match the Smart Gallery. Private, unpublished, password/share-inaccessible, or otherwise unauthorized physical galleries likewise contribute neither result rows nor map points to an anonymous visitor. Authenticated viewer access may widen only through the existing `visitor_can_access_gallery()` policy. Admin preview uses the separate `publicOnly = false` result semantics and does not weaken the public map endpoint.
+
+The initial HTML card path and lazy lightbox metadata path both call the same physical-gallery GPS authorization before exposing an individual `map_point`, preventing first-page/lazy-window privacy drift.
+
+The aggregate endpoint returns a bounded DTO with `total_images`, `gps_images`, `point_limit`, `truncated`, and `points`. GPS count and marker projection are model-owned projections over the canonical result query. Marker projection deliberately avoids `SELECT *`. Source-gallery rows are request-cached and reused for inherited GPS-policy walking and marker provenance, avoiding per-marker source-gallery queries. Popup thumbnails are lazy public thumbnail URLs and are not generated eagerly by the map query itself.
+
+The current hard cap is 10,000 markers. Existing Leaflet rendering is retained until real measurements justify clustering. If clustering is added later, the point DTO should remain stable where possible; any server-side spatial aggregation that changes point semantics requires an explicit payload version.
+
+Map popup actions preserve Smart Gallery ordering. The browser sends the authoritative `target_image_id`; the server resolves its exact zero-based position through the canonical order including the image-id tie breaker. The client never guesses a global index from the current page DOM. The position query intentionally avoids SQL window functions to preserve the MySQL 5.7+/MariaDB 10.2+ compatibility floor. A separate popup link opens the physical source gallery and intentionally leaves Smart Gallery context.
+
+## Diagnostics and performance verification
+
+Admin Test Run records a bounded `smart_gallery` component for Smart Gallery page requests. In addition to page/count/pagination information it records source-context coverage and aggregate-map counts: whether source context is enabled, how many rendered page cards carry source context, source-summary counts, selected source filter state, whether the map is enabled/available, GPS-image count, number of GPS-policy-eligible source galleries, point cap, and truncation state. These diagnostics contain counts and identifiers only; they do not persist GPS coordinates, filesystem paths, credentials, or marker payloads.
+
+The normal Smart Gallery page obtains map availability from the same count-only map diagnostic path. It does not materialize marker rows or popup thumbnails before the visitor opens the map. Admin Test Run's existing SQL fingerprint analysis remains the authoritative way to detect repeated-query/N+1 regressions. Expected source-gallery behavior is one request-cached physical-gallery inventory rather than a query per result image or map marker.
+
+Source badges, source-filter links, native `<summary>` disclosure, and the map action are native anchors/buttons with visible focus styling. The source controls retain wrapping/ellipsis behavior on narrow layouts, and coarse-pointer sizing must preserve a practical touch target without changing the underlying keyboard semantics.
+
 ## Presentation overrides
 
 Migration `202608170001_smart_gallery_presentation.php` adds nullable `smart_galleries.presentation_json`. The document is versioned independently from the rule document. Missing, malformed, unknown-version, or invalid values inherit current site and Theme defaults rather than becoming unsafe or hardcoded presentation state.
@@ -54,6 +96,8 @@ Supported overrides are:
 - responsive or progressive thumbnail rendering
 - vertical or horizontal gallery-card layout for placed Smart Gallery cards
 - metadata overlay visibility
+- source-gallery provenance visibility
+- aggregate GPS map enabled
 - lightbox enabled
 - lightbox browsing mode
 - slideshow enabled

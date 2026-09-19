@@ -145,6 +145,7 @@ try {
     assert_url_rewrite_same('disabled', $disabled['status'], 'manual disabled status');
     assert_url_rewrite_same(false, url_rewrite_should_emit_clean_urls(), 'manual disabled emit clean URLs');
     assert_url_rewrite_same('https://example.test/index.php?page=tag&slug=friedrichshafen', url_for('tag', ['slug' => 'friedrichshafen']), 'manual disabled tag fallback URL');
+    assert_url_rewrite_same('https://example.test/index.php?page=smart_gallery&slug=aviation&source_gallery_id=17', url_for('smart_gallery', ['slug' => 'aviation', 'source_gallery_id' => 17]), 'manual disabled Smart Gallery source-filter fallback URL');
     assert_url_rewrite_same('https://example.test/index.php?page=upload_automation_upload', url_for('upload_automation_upload'), 'manual disabled upload automation fallback URL');
     $gallery = ['url_path' => 'Trips/Prague', 'folder_path' => 'Trips/Prague', 'slug' => 'prague'];
     $image = [
@@ -169,6 +170,8 @@ try {
     $_SERVER['SCRIPT_NAME'] = '/index.php';
     assert_url_rewrite_same(true, url_rewrite_should_emit_clean_urls(), 'default enabled emit clean URLs');
     assert_url_rewrite_same('https://example.test/tag/friedrichshafen', url_for('tag', ['slug' => 'friedrichshafen']), 'default enabled tag clean URL');
+    assert_url_rewrite_same('https://example.test/smart/aviation?source_gallery_id=17', url_for('smart_gallery', ['slug' => 'aviation', 'source_gallery_id' => 17]), 'default enabled Smart Gallery clean URL preserves source filter query state');
+    assert_url_rewrite_same('https://example.test/smart/aviation/3?source_gallery_id=17', url_for('smart_gallery', ['slug' => 'aviation', 'photo_page' => 3, 'source_gallery_id' => 17]), 'default enabled Smart Gallery pagination keeps source filter query state');
     assert_url_rewrite_same('https://example.test/index.php?page=upload_automation_upload', url_for('upload_automation_upload'), 'upload automation keeps portable canonical query endpoint when rewrite is enabled');
     assert_url_rewrite_same('https://example.test/gallery/Trips/Prague/evening-flight/', image_public_url($image, $gallery), 'default enabled image clean URL');
     assert_url_rewrite_same('https://example.test/gallery/Trips/Prague/evening-flight/media?v=' . $assetVersion, image_public_media_url($image, $gallery), 'default enabled media clean URL');

@@ -56,6 +56,10 @@ function feature_capability_multi_route_requirements(): array
             'type' => 'all_of',
             'capabilities' => ['smart_galleries', 'lightbox_modes'],
         ],
+        'smart_gallery_map_data' => [
+            'type' => 'all_of',
+            'capabilities' => ['smart_galleries', 'gallery_maps'],
+        ],
         'download_smart_gallery_start' => [
             'type' => 'all_of',
             'capabilities' => ['smart_galleries', 'downloads'],

@@ -320,6 +320,12 @@ export function setupGalleryLightbox() {
         }
         card.dataset.pageUrl = String(item.page_url || '');
         card.dataset.galleryUrl = String(item.gallery_url || '');
+        if (String(item.source_gallery_title || '').trim() !== '' && String(item.source_gallery_url || '').trim() !== '') {
+            card.dataset.sourceGalleryId = String(item.source_gallery_id ?? '');
+            card.dataset.sourceGalleryTitle = String(item.source_gallery_title || '');
+            card.dataset.sourceGalleryBreadcrumb = String(item.source_gallery_breadcrumb || item.source_gallery_title || '');
+            card.dataset.sourceGalleryUrl = String(item.source_gallery_url || '');
+        }
         card.dataset.title = String(item.title || '');
         card.dataset.description = String(item.description || '');
         card.dataset.score = String(item.score ?? '0');
@@ -737,6 +743,7 @@ export function setupGalleryLightbox() {
     const title = overlay.querySelector('[data-lightbox-title]');
     // Variable `description` stores this steps working value.
     const description = overlay.querySelector('[data-lightbox-description]');
+    const sourceGallery = overlay.querySelector('[data-lightbox-source-gallery]');
     // lightboxHelpPanel stores the optional keyboard shortcut help panel.
     const lightboxHelpPanel = overlay.querySelector('[data-lightbox-help-panel]');
     // lightboxHelpButtons stores every shortcut help toggle button.
@@ -4455,6 +4462,35 @@ export function setupGalleryLightbox() {
         const descriptionText = (card.dataset.description || '').trim();
         description.textContent = descriptionText;
         description.hidden = descriptionText === '';
+        if (sourceGallery instanceof HTMLElement) {
+            const sourceGalleryTitle = (card.dataset.sourceGalleryTitle || '').trim();
+            const sourceGalleryBreadcrumb = (card.dataset.sourceGalleryBreadcrumb || sourceGalleryTitle).trim();
+            const sourceGalleryUrl = (card.dataset.sourceGalleryUrl || '').trim();
+            sourceGallery.replaceChildren();
+            if (sourceGalleryTitle !== '' && sourceGalleryUrl !== '') {
+                const sourceGalleryLink = document.createElement('a');
+                sourceGalleryLink.href = sourceGalleryUrl;
+                sourceGalleryLink.title = sourceGalleryBreadcrumb;
+                const sourceGalleryIcon = document.createElement('span');
+                sourceGalleryIcon.className = 'lightbox-source-gallery-icon';
+                sourceGalleryIcon.setAttribute('aria-hidden', 'true');
+                sourceGalleryIcon.textContent = '📁';
+                const sourceGalleryPath = document.createElement('span');
+                sourceGalleryPath.className = 'lightbox-source-gallery-path';
+                sourceGalleryPath.textContent = sourceGalleryBreadcrumb;
+                const sourceGalleryOpen = document.createElement('span');
+                sourceGalleryOpen.className = 'lightbox-source-gallery-open';
+                sourceGalleryOpen.setAttribute('aria-hidden', 'true');
+                sourceGalleryOpen.textContent = '↗';
+                sourceGalleryLink.append(sourceGalleryIcon, sourceGalleryPath, sourceGalleryOpen);
+                const sourceGalleryLabel = (sourceGallery.dataset.sourceGalleryLabel || 'Source gallery').trim();
+                sourceGalleryLink.setAttribute('aria-label', `${sourceGalleryLabel}: ${sourceGalleryBreadcrumb}`);
+                sourceGallery.append(sourceGalleryLink);
+                sourceGallery.hidden = false;
+            } else {
+                sourceGallery.hidden = true;
+            }
+        }
         updateLightboxCounters(`${normalizedIndex + 1} / ${cards.length}`);
         overlay.dataset.currentImageId = card.dataset.imageId || '';
         overlay.dataset.currentTitle = card.dataset.title || '';
@@ -5007,7 +5043,7 @@ export function setupGalleryLightbox() {
         if (!(card instanceof HTMLElement)) {
             return;
         }
-        if (event.target.closest('form, [data-admin-inline-editor], [data-public-admin-card-action], [data-gallery-side-panel-link], [data-photo-map], [data-gallery-map-url]')) {
+        if (event.target.closest('form, [data-admin-inline-editor], [data-public-admin-card-action], [data-gallery-side-panel-link], [data-photo-map], [data-gallery-map-url], [data-smart-gallery-source-link]')) {
             return;
         }
         refreshLightboxOrderFromDom();
@@ -7265,7 +7301,7 @@ export function setupGalleryLightbox() {
      * Snapshot one map popup photo target before Leaflet is allowed to tear down the popup DOM.
      *
      * @param {Element} mapPhotoLink Popup link carrying image and gallery metadata.
-     * @return {{imageId: number, galleryId: number, pageUrl: string, viewerOpen: boolean, preserveMapSplit: boolean}} Stable navigation target.
+     * @return {{imageId: number, galleryId: number, pageUrl: string, smartGalleryContext: boolean, viewerOpen: boolean, preserveMapSplit: boolean}} Stable navigation target.
      */
     function mapPhotoNavigationTarget(mapPhotoLink) {
         const viewerOpen = overlay instanceof HTMLElement && !overlay.hidden && cards.length > 0;
@@ -7273,6 +7309,7 @@ export function setupGalleryLightbox() {
             imageId: Number.parseInt(mapPhotoLink.dataset.mapOpenPhoto || '0', 10),
             galleryId: Number.parseInt(mapPhotoLink.dataset.mapPhotoGalleryId || '0', 10),
             pageUrl: String(mapPhotoLink.dataset.mapPhotoPageUrl || mapPhotoLink.getAttribute('href') || '').trim(),
+            smartGalleryContext: mapPhotoLink.dataset.mapSmartGalleryContext === '1',
             viewerOpen,
             preserveMapSplit: Boolean(
                 viewerOpen && isLightboxFullscreen()
@@ -7289,7 +7326,7 @@ export function setupGalleryLightbox() {
      * Fullscreen split maps remain mounted and the selected photo is committed directly
      * into the existing photo pane, without rebuilding the map or exposing the stage.
      *
-     * @param {{imageId: number, galleryId: number, pageUrl: string, viewerOpen: boolean, preserveMapSplit: boolean}} target Stable popup target.
+     * @param {{imageId: number, galleryId: number, pageUrl: string, smartGalleryContext: boolean, viewerOpen: boolean, preserveMapSplit: boolean}} target Stable popup target.
      * @param {AbortController} navigation Selection owner, invalidated on close or supersession.
      * @return {Promise<void>} Resolves after navigation, genuine-failure fallback, or silent cancellation.
      */
@@ -7303,11 +7340,12 @@ export function setupGalleryLightbox() {
         let targetIndex = -1;
 
         try {
-            if (imageId > 0 && overlay instanceof HTMLElement && !overlay.hidden) {
+            const smartGalleryTarget = target?.smartGalleryContext === true;
+            if (imageId > 0 && overlay instanceof HTMLElement && (!overlay.hidden || smartGalleryTarget)) {
                 // cards owns both visible and detached metadata for the active ordered result set.
                 targetIndex = cards.findIndex((candidate) => candidate && String(candidate.dataset.imageId || '') === String(imageId));
                 const activeGalleryId = Number.parseInt(String(cards[currentIndex]?.dataset.galleryId || '0'), 10);
-                if (targetIndex < 0 && galleryId > 0 && activeGalleryId === galleryId) {
+                if (targetIndex < 0 && (smartGalleryTarget || (galleryId > 0 && activeGalleryId === galleryId))) {
                     targetIndex = await fetchLightboxTargetIndex(imageId, navigation.signal);
                 }
             }
@@ -7396,10 +7434,18 @@ export function setupGalleryLightbox() {
         const imageId = Number.parseInt(String(point.id || '0'), 10);
         // galleryId distinguishes current-gallery photos from recursive subgallery markers.
         const galleryId = Number.parseInt(String(point.gallery_id || point.galleryId || '0'), 10);
-        const image = photoPageUrl
-            ? `<p><a href="${escapeAttribute(photoPageUrl)}" data-map-photo-page-url="${escapeAttribute(photoPageUrl)}"${imageId > 0 ? ` data-map-open-photo="${imageId}" data-map-photo-gallery-id="${galleryId > 0 ? galleryId : 0}"` : ''}>${escapeHtml(i18n('lightbox.open_photo', 'Open photo'))}</a></p>`
+        // smartGalleryId marks aggregate Smart Gallery points whose photo action must retain the current virtual-gallery ordering.
+        const smartGalleryId = Number.parseInt(String(point.smart_gallery_id || point.smartGalleryId || '0'), 10);
+        const sourceGalleryTitle = String(point.source_gallery_title || point.sourceGalleryTitle || '').trim();
+        const sourceGalleryBreadcrumb = String(point.source_gallery_breadcrumb || point.sourceGalleryBreadcrumb || sourceGalleryTitle).trim();
+        const sourceGalleryUrl = String(point.source_gallery_url || point.sourceGalleryUrl || '').trim();
+        const sourceGallery = sourceGalleryTitle !== '' && sourceGalleryUrl !== ''
+            ? `<p class="map-popup-source-gallery">&#128193; <a href="${escapeAttribute(sourceGalleryUrl)}" title="${escapeAttribute(sourceGalleryBreadcrumb)}">${escapeHtml(sourceGalleryBreadcrumb)}</a></p>`
             : '';
-        return `<div class="map-popup">${thumb}<h3>${title}</h3>${description}${image}</div>`;
+        const image = photoPageUrl
+            ? `<p><a href="${escapeAttribute(photoPageUrl)}" data-map-photo-page-url="${escapeAttribute(photoPageUrl)}"${imageId > 0 ? ` data-map-open-photo="${imageId}" data-map-photo-gallery-id="${galleryId > 0 ? galleryId : 0}"${smartGalleryId > 0 ? ' data-map-smart-gallery-context="1"' : ''}` : ''}>${escapeHtml(i18n('lightbox.open_photo', 'Open photo'))}</a></p>`
+            : '';
+        return `<div class="map-popup">${thumb}<h3>${title}</h3>${description}${sourceGallery}${image}</div>`;
     }
 
     // Function `escapeHtml` executes this focused behavior.

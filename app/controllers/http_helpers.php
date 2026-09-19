@@ -59,7 +59,7 @@ const NSFW_GUARD_SCHEMA_UNAVAILABLE_EVENT = 'security.nsfw_schema_inspection_una
  */
 function public_schema_unavailable_response_format(string $page): string
 {
-    if (in_array($page, ['gallery_lightbox_data', 'gallery_map_data', 'public_search'], true)) {
+    if (in_array($page, ['gallery_lightbox_data', 'smart_gallery_lightbox_data', 'smart_gallery_map_data', 'gallery_map_data', 'public_search'], true)) {
         return 'json';
     }
     if (in_array($page, ['media', 'thumb', 'public_media', 'public_thumb', 'thumbnail_warmup', 'gallery_cover_asset', 'gallery_branding_asset', 'download_gallery', 'sitemap', 'robots'], true)) {
