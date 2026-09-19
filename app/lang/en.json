@@ -4043,6 +4043,7 @@
   "lightbox.help_shortcuts": "←/→ photos, Shift+←/→ ±10 photos, +/− zoom, 0 reset, F fullscreen, M map, S slideshow, X close",
   "lightbox.help_title": "Controls",
   "lightbox.image_load_failed": "Lightbox image load failed.",
+  "lightbox.image_loading": "Loading image...",
   "lightbox.initial_loader": "Preparing gallery...",
   "lightbox.initial_loader_count": "Preparing photo {current} of {total}",
   "lightbox.quality_loading": "Loading full-quality image...",

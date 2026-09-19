@@ -27,7 +27,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-09-06
+ *   2026-09-19
  */
 
 /**
@@ -739,6 +739,8 @@ export function setupGalleryLightbox() {
     let pendingLightboxNavigationTimer = 0;
     // pendingLightboxNavigationToken owns the delayed busy indicator for the latest requested image.
     let pendingLightboxNavigationToken = 0;
+    // lightboxNavigationFailureToken owns the recoverable presentation-failure notice for the current navigation.
+    let lightboxNavigationFailureToken = 0;
     // Variable `title` stores this steps working value.
     const title = overlay.querySelector('[data-lightbox-title]');
     // Variable `description` stores this steps working value.
@@ -855,6 +857,10 @@ export function setupGalleryLightbox() {
         currentIndex: -1,
         currentSource: '',
         currentSourceKind: '',
+        navigationToken: 0,
+        navigationTarget: '',
+        navigationStage: 'idle',
+        navigationFailure: '',
         sourceStats: new Map(),
         eventLog: [],
         samples: [],
@@ -975,6 +981,7 @@ export function setupGalleryLightbox() {
         activeLightboxImageToken += 1;
         activeLightboxTransitionToken += 1;
         clearLightboxNavigationPending();
+        clearLightboxNavigationFailure();
         resetMobileSwipeVisuals(false);
         stopLightboxSlideshow(false);
         removeTransitionImage();
@@ -1096,6 +1103,60 @@ export function setupGalleryLightbox() {
         setLightboxQualityLoading(false);
     }
 
+
+    /**
+     * Report whether a quality request still owns the shared quality-loading state.
+     *
+     * @param {number} qualityToken Quality generation captured when the request started.
+     * @param {AbortController} qualityAbortController Controller created for the request.
+     * @param {string} source Expected pending quality source.
+     * @return {boolean} True only while this request owns shared quality state.
+     */
+    function ownsLightboxQualityRequest(qualityToken, qualityAbortController, source) {
+        return qualityToken === activeLightboxQualityRequestToken
+            && activeLightboxQualityAbortController === qualityAbortController
+            && pendingLightboxQualitySource === source;
+    }
+
+    /**
+     * Finalize quality-loading state only when the completing request still owns it.
+     *
+     * @param {number} qualityToken Quality generation captured when the request started.
+     * @param {AbortController} qualityAbortController Controller created for the request.
+     * @param {string} source Expected pending quality source.
+     * @return {boolean} True when the current quality owner was finalized.
+     */
+    function finalizeLightboxQualityRequest(qualityToken, qualityAbortController, source) {
+        if (!ownsLightboxQualityRequest(qualityToken, qualityAbortController, source)) {
+            return false;
+        }
+        pendingLightboxQualitySource = '';
+        activeLightboxQualityAbortController = null;
+        setLightboxQualityLoading(false);
+        return true;
+    }
+
+    /**
+     * Update byte progress only while the tracked request still owns the active photo quality state.
+     *
+     * @param {number} index Active lightbox index.
+     * @param {number} imageToken Navigation generation captured by openAt().
+     * @param {number} qualityToken Quality generation captured when the request started.
+     * @param {AbortController} qualityAbortController Controller created for the request.
+     * @param {string} source Expected pending quality source.
+     * @param {number} loadedBytes Number of response bytes received so far.
+     * @param {number} totalBytes Total response size when known.
+     */
+    function setOwnedLightboxQualityProgress(index, imageToken, qualityToken, qualityAbortController, source, loadedBytes, totalBytes) {
+        if (
+            !isCurrentLightboxImageRequest(index, imageToken)
+            || !ownsLightboxQualityRequest(qualityToken, qualityAbortController, source)
+        ) {
+            return;
+        }
+        setLightboxQualityProgress(loadedBytes, totalBytes);
+    }
+
     /**
      * Format a byte-transfer pair with one shared dynamically selected unit.
      *
@@ -1159,10 +1220,12 @@ export function setupGalleryLightbox() {
      */
     function setLightboxQualityLoading(loading) {
         const isLoading = Boolean(loading && !overlay.hidden);
+        const navigationLoading = overlay.classList.contains('is-navigation-loading');
+        const navigationError = overlay.classList.contains('is-navigation-error');
         overlay.classList.toggle('is-quality-loading', isLoading);
         if (qualityProgress instanceof HTMLElement) {
-            qualityProgress.hidden = !isLoading;
-            if (!isLoading) {
+            qualityProgress.hidden = !(isLoading || navigationLoading || navigationError);
+            if (!isLoading && !navigationLoading && !navigationError) {
                 setLightboxQualityProgress(0, 0);
             }
         }
@@ -1174,12 +1237,62 @@ export function setupGalleryLightbox() {
                 if (zoomAnnouncement instanceof HTMLElement) {
                     zoomAnnouncement.textContent = label;
                 }
-            } else {
+            } else if (!navigationLoading && !navigationError) {
                 stageLink.removeAttribute('aria-busy');
                 delete stageLink.dataset.qualityLoadingLabel;
+                delete stageLink.dataset.navigationLoadingLabel;
                 if (zoomAnnouncement instanceof HTMLElement) {
                     zoomAnnouncement.textContent = '';
                 }
+            }
+        }
+    }
+
+    /**
+     * Reuse the shared progress bar as an indeterminate navigation indicator.
+     *
+     * Preview images are loaded through HTMLImageElement, which does not expose
+     * response byte counts. The bar therefore stays explicitly indeterminate until
+     * the decoded preview is ready, instead of falling back to the legacy spinner.
+     *
+     * @param {boolean} loading Whether navigation is waiting for the target preview.
+     */
+    function setLightboxNavigationLoading(loading) {
+        const isLoading = Boolean(loading && !overlay.hidden);
+        const qualityLoading = overlay.classList.contains('is-quality-loading');
+        const navigationError = overlay.classList.contains('is-navigation-error');
+        overlay.classList.toggle('is-navigation-loading', isLoading);
+        if (qualityProgress instanceof HTMLElement) {
+            qualityProgress.hidden = !(isLoading || qualityLoading || navigationError);
+        }
+        if (isLoading && !qualityLoading) {
+            if (qualityProgressPercent instanceof HTMLElement) {
+                qualityProgressPercent.textContent = '...';
+            }
+            if (qualityProgressBytes instanceof HTMLElement) {
+                qualityProgressBytes.textContent = i18n('lightbox.image_loading', 'Loading image...');
+            }
+        } else if (!isLoading && !qualityLoading && !navigationError) {
+            setLightboxQualityProgress(0, 0);
+        }
+        if (!(stageLink instanceof HTMLElement)) {
+            return;
+        }
+        if (isLoading && !qualityLoading) {
+            const label = i18n('lightbox.image_loading', 'Loading image...');
+            stageLink.setAttribute('aria-busy', 'true');
+            stageLink.dataset.navigationLoadingLabel = label;
+            if (zoomAnnouncement instanceof HTMLElement) {
+                zoomAnnouncement.textContent = label;
+            }
+            return;
+        }
+        if (!isLoading && !qualityLoading && !navigationError) {
+            stageLink.removeAttribute('aria-busy');
+            delete stageLink.dataset.navigationLoadingLabel;
+            delete stageLink.dataset.qualityLoadingLabel;
+            if (zoomAnnouncement instanceof HTMLElement) {
+                zoomAnnouncement.textContent = '';
             }
         }
     }
@@ -1209,7 +1322,7 @@ export function setupGalleryLightbox() {
             pendingLightboxNavigationTimer = 0;
         }
         pendingLightboxNavigationToken = 0;
-        overlay.classList.remove('is-navigation-loading');
+        setLightboxNavigationLoading(false);
     }
 
         /**
@@ -1222,15 +1335,153 @@ export function setupGalleryLightbox() {
     function scheduleLightboxNavigationPending(index, token, targetSrc) {
         clearLightboxNavigationPending();
         pendingLightboxNavigationToken = token;
-        if (!targetSrc || image.getAttribute('src') === targetSrc) {
+        if (targetSrc && image.getAttribute('src') === targetSrc) {
             return;
         }
         pendingLightboxNavigationTimer = window.setTimeout(() => {
             pendingLightboxNavigationTimer = 0;
-            if (isCurrentLightboxImageRequest(index, token) && image.getAttribute('src') !== targetSrc) {
-                overlay.classList.add('is-navigation-loading');
+            if (
+                isCurrentLightboxImageRequest(index, token)
+                && (!targetSrc || image.getAttribute('src') !== targetSrc)
+            ) {
+                setLightboxNavigationLoading(true);
             }
         }, 140);
+    }
+
+    /**
+     * Clear a recoverable navigation failure only when the caller owns it.
+     *
+     * @param {number|null} token Optional navigation token that must own the failure state.
+     */
+    function clearLightboxNavigationFailure(token = null) {
+        if (token !== null && lightboxNavigationFailureToken !== token) {
+            return;
+        }
+        lightboxNavigationFailureToken = 0;
+        overlay.classList.remove('is-navigation-error');
+        if (!overlay.classList.contains('is-navigation-loading') && !overlay.classList.contains('is-quality-loading')) {
+            if (qualityProgress instanceof HTMLElement) {
+                qualityProgress.hidden = true;
+            }
+            setLightboxQualityProgress(0, 0);
+        }
+    }
+
+    /**
+     * Expose a terminal image-presentation failure without blocking later navigation.
+     *
+     * @param {number} index Requested lightbox index.
+     * @param {number} token Navigation token that owns the failure.
+     * @param {string} reason Bounded diagnostic reason.
+     */
+    function showLightboxNavigationFailure(index, token, reason) {
+        if (!isCurrentLightboxImageRequest(index, token)) {
+            return;
+        }
+        lightboxNavigationFailureToken = token;
+        overlay.classList.add('is-navigation-error');
+        const label = i18n('lightbox.image_load_failed', 'Lightbox image load failed.');
+        if (qualityProgress instanceof HTMLElement) {
+            qualityProgress.hidden = false;
+        }
+        if (qualityProgressPercent instanceof HTMLElement) {
+            qualityProgressPercent.textContent = '!';
+        }
+        if (qualityProgressBytes instanceof HTMLElement) {
+            qualityProgressBytes.textContent = label;
+        }
+        if (stageLink instanceof HTMLElement) {
+            stageLink.removeAttribute('aria-busy');
+            delete stageLink.dataset.navigationLoadingLabel;
+            delete stageLink.dataset.qualityLoadingLabel;
+        }
+        if (zoomAnnouncement instanceof HTMLElement) {
+            zoomAnnouncement.textContent = label;
+        }
+        markLightboxNavigationDiagnostic(index, token, 'failed', reason);
+    }
+
+    /**
+     * Record compact ownership state for the DEV overlay without treating historical source readiness as current presentation success.
+     *
+     * @param {number} index Requested lightbox index.
+     * @param {number} token Navigation transaction token.
+     * @param {string} stage Current navigation stage.
+     * @param {string} reason Optional terminal or wait reason.
+     */
+    function markLightboxNavigationDiagnostic(index, token, stage, reason = '') {
+        const card = cards[index] || null;
+        galleryDevModeState.navigationToken = Number(token) || 0;
+        galleryDevModeState.navigationTarget = String(card?.dataset.imageId || `index:${index}`);
+        galleryDevModeState.navigationStage = String(stage || 'idle').slice(0, 32);
+        galleryDevModeState.navigationFailure = String(reason || '').slice(0, 64);
+    }
+
+    /**
+     * Return one bounded diagnostic label for a synchronous/asynchronous navigation exception.
+     *
+     * @param {string} phase Navigation phase that raised the exception.
+     * @param {*} error Thrown or rejected value.
+     * @return {string} Bounded diagnostic reason safe for the development overlay.
+     */
+    function lightboxNavigationExceptionReason(phase, error) {
+        const errorName = error instanceof Error && error.name ? error.name : 'Error';
+        const errorMessage = error instanceof Error ? error.message : String(error || 'unknown');
+        return `${phase}:${errorName}:${errorMessage}`.replace(/\s+/g, ' ').slice(0, 64);
+    }
+
+    /**
+     * Start one navigation transaction before metadata, image, transition, or quality work can become stale.
+     *
+     * @param {number} index Requested lightbox index.
+     * @return {number} Navigation token owned by this intent.
+     */
+    function beginLightboxNavigationTransaction(index) {
+        currentIndex = index;
+        galleryDevModeState.currentIndex = index;
+        activeLightboxImageToken += 1;
+        activeLightboxTransitionToken += 1;
+        clearLightboxNavigationPending();
+        clearLightboxNavigationFailure();
+        clearPendingLightboxQualityUpgrade();
+        activeLightboxQualitySource = '';
+        removeTransitionImage();
+        // Drop stale queued neighbors, but keep already-running nearby previews alive.
+        resetLightboxPreloadQueue({abortActive: false});
+        sweepDecodedLightboxImageCache();
+        markLightboxNavigationDiagnostic(index, activeLightboxImageToken, 'intent');
+        return activeLightboxImageToken;
+    }
+
+    /**
+     * Terminate the current preview/main transaction on every settled outcome.
+     *
+     * @param {number} index Requested lightbox index.
+     * @param {number} token Navigation transaction token.
+     * @param {boolean} wasDisplayed Whether target pixels became the live image.
+     * @param {string} failureReason Diagnostic reason used only when presentation failed.
+     * @return {boolean} True when the current transaction displayed successfully.
+     */
+    function finalizeLightboxNavigationTransaction(index, token, wasDisplayed, failureReason = 'presentation') {
+        if (!isCurrentLightboxImageRequest(index, token)) {
+            return false;
+        }
+        clearLightboxNavigationPending(token);
+        hideInitialLightboxLoader();
+        if (!wasDisplayed) {
+            activeLightboxTransitionToken += 1;
+            removeTransitionImage();
+            showLightboxNavigationFailure(index, token, failureReason);
+            return false;
+        }
+        clearLightboxNavigationFailure(token);
+        markLightboxNavigationDiagnostic(index, token, 'displayed');
+        // Give rapid manual navigation a short coalescing window before downloading
+        // a larger source that would otherwise be aborted by the next arrow/key press.
+        scheduleLightboxQualityUpgrade();
+        scheduleLightboxSlideshowNext();
+        return true;
     }
 
         /**
@@ -1648,6 +1899,7 @@ export function setupGalleryLightbox() {
             `events preload ${galleryDevModeState.preloadStarted} | load ${galleryDevModeState.loadStarted} | hit ${galleryDevModeState.cacheHits} | miss ${galleryDevModeState.cacheMisses} | evict ${galleryDevModeState.evictions}`,
             `decoded estimate ${formatBytes(decodedBytes)} | ${devBrowserMemoryLine()} | frame ${galleryDevModeState.frameMs.toFixed(1)} ms`,
             `network ${devConnectionLine()} | active ${shortenDevUrl(galleryDevModeState.currentSource)}`,
+            `nav t${galleryDevModeState.navigationToken} target ${galleryDevModeState.navigationTarget || '-'} | ${galleryDevModeState.navigationStage}${galleryDevModeState.navigationFailure ? `:${galleryDevModeState.navigationFailure}` : ''}`,
             `window ${devCurrentWindowSummary()}`,
             `recent ${galleryDevModeState.eventLog.slice(0, 3).join(' | ') || 'none'}`,
         ];
@@ -2047,7 +2299,7 @@ export function setupGalleryLightbox() {
             return false;
         }
         decodedLightboxImages.delete(src);
-        const telemetryIndex = lightboxIndexForSource(src);
+        const telemetryIndex = devFindSourceIndex(src);
         if (telemetryIndex >= 0) {
             telemetryLightboxCacheEvent('cache.lightbox.evicted', telemetryIndex);
         }
@@ -2240,13 +2492,16 @@ export function setupGalleryLightbox() {
         /**
      * Cancel queued nearby-image preload work that has not started yet.
      */
-    function resetLightboxPreloadQueue() {
+    function resetLightboxPreloadQueue(options = {}) {
+        const abortActive = options.abortActive !== false;
         lightboxPreloadGeneration += 1;
         preloadedSources.clear();
         lightboxPreloadQueue.length = 0;
         lightboxQueuedSources.clear();
-        lightboxPreloadAbortController.abort();
-        lightboxPreloadAbortController = new AbortController();
+        if (abortActive) {
+            lightboxPreloadAbortController.abort();
+            lightboxPreloadAbortController = new AbortController();
+        }
         if (!lightboxPreloadDrainHandle) {
             return;
         }
@@ -2339,8 +2594,19 @@ export function setupGalleryLightbox() {
                 continue;
             }
             activeLightboxPreloads += 1;
-            devMarkSource(item.src, 'preloading', item.reason || 'queued-preview');
-            preloadDecodedLightboxImage(item.src, {signal: lightboxPreloadAbortController.signal}).finally(() => {
+            let preloadPromise = null;
+            try {
+                devMarkSource(item.src, 'preloading', item.reason || 'queued-preview');
+                preloadPromise = preloadDecodedLightboxImage(item.src, {signal: lightboxPreloadAbortController.signal});
+            } catch (error) {
+                activeLightboxPreloads = Math.max(0, activeLightboxPreloads - 1);
+                if (galleryDevModeEnabled) {
+                    const errorName = error instanceof Error ? error.name : 'Error';
+                    devLog(`preload:sync-error:${errorName}:${shortenDevUrl(item.src)}`);
+                }
+                continue;
+            }
+            Promise.resolve(preloadPromise).finally(() => {
                 activeLightboxPreloads = Math.max(0, activeLightboxPreloads - 1);
                 if (lightboxPreloadQueue.length > 0) {
                     scheduleLightboxPreloadDrain();
@@ -2884,8 +3150,12 @@ export function setupGalleryLightbox() {
                     return false;
                 });
         }
+        if (!isCurrentLightboxImageRequest(index, token)) {
+            return Promise.resolve(false);
+        }
+        markLightboxNavigationDiagnostic(index, token, 'presenting');
         const targetMetrics = prepareDecodedLightboxGeometry(decodedImage);
-        if (!targetMetrics || !isCurrentLightboxImageRequest(index, token)) {
+        if (!targetMetrics) {
             return Promise.resolve(false);
         }
         const displayStartedAt = performance.now();
@@ -3023,49 +3293,44 @@ export function setupGalleryLightbox() {
         return loadTrackedDecodedLightboxImage(desired.src, {
             priority: 'high',
             signal: qualityAbortController.signal,
-            onProgress: setLightboxQualityProgress,
+            onProgress: (loadedBytes, totalBytes) => setOwnedLightboxQualityProgress(
+                index,
+                imageToken,
+                qualityToken,
+                qualityAbortController,
+                desired.src,
+                loadedBytes,
+                totalBytes,
+            ),
         }).then((loadedImage) => {
             if (
                 !isCurrentLightboxImageRequest(index, imageToken)
-                || qualityToken !== activeLightboxQualityRequestToken
-                || pendingLightboxQualitySource !== desired.src
+                || !ownsLightboxQualityRequest(qualityToken, qualityAbortController, desired.src)
             ) {
+                finalizeLightboxQualityRequest(qualityToken, qualityAbortController, desired.src);
                 return false;
             }
-            pendingLightboxQualitySource = '';
             return installDecodedLightboxQualityImage(loadedImage, desired.src, card.dataset.title || '', imageId).then((installed) => {
                 if (
                     !installed
                     || !isCurrentLightboxImageRequest(index, imageToken)
-                    || qualityToken !== activeLightboxQualityRequestToken
+                    || !ownsLightboxQualityRequest(qualityToken, qualityAbortController, desired.src)
                     || image.dataset.lightboxImageId !== imageId
                 ) {
-                    if (qualityToken === activeLightboxQualityRequestToken) {
-                        if (activeLightboxQualityAbortController === qualityAbortController) {
-                            activeLightboxQualityAbortController = null;
-                        }
-                        setLightboxQualityLoading(false);
-                    }
+                    finalizeLightboxQualityRequest(qualityToken, qualityAbortController, desired.src);
                     return false;
                 }
                 updateNormalLightboxStageSizeFromLoadedImage(loadedImage);
                 applyLightboxZoomState(false);
-                if (activeLightboxQualityAbortController === qualityAbortController) {
-                    activeLightboxQualityAbortController = null;
-                }
-                setLightboxQualityLoading(false);
+                finalizeLightboxQualityRequest(qualityToken, qualityAbortController, desired.src);
                 return true;
             });
         }).catch((error) => {
-            if (activeLightboxQualityAbortController === qualityAbortController) {
-                activeLightboxQualityAbortController = null;
-            }
-            if (qualityToken === activeLightboxQualityRequestToken) {
-                pendingLightboxQualitySource = '';
+            if (ownsLightboxQualityRequest(qualityToken, qualityAbortController, desired.src)) {
                 if (error?.name !== 'AbortError') {
                     failedLightboxQualitySources.add(failureKey);
                 }
-                setLightboxQualityLoading(false);
+                finalizeLightboxQualityRequest(qualityToken, qualityAbortController, desired.src);
             }
             return false;
         });
@@ -3150,56 +3415,50 @@ export function setupGalleryLightbox() {
         loadTrackedDecodedLightboxImage(fullSrc, {
             priority: 'high',
             signal: qualityAbortController.signal,
-            onProgress: setLightboxQualityProgress,
+            onProgress: (loadedBytes, totalBytes) => setOwnedLightboxQualityProgress(
+                index,
+                imageToken,
+                qualityToken,
+                qualityAbortController,
+                fullSrc,
+                loadedBytes,
+                totalBytes,
+            ),
         }).then((loadedImage) => {
             if (
                 !isCurrentLightboxImageRequest(index, imageToken)
-                || qualityToken !== activeLightboxQualityRequestToken
-                || pendingLightboxQualitySource !== fullSrc
+                || !ownsLightboxQualityRequest(qualityToken, qualityAbortController, fullSrc)
                 || image.dataset.lightboxImageId !== imageId
             ) {
+                finalizeLightboxQualityRequest(qualityToken, qualityAbortController, fullSrc);
                 return false;
             }
-            pendingLightboxQualitySource = '';
             return installDecodedLightboxQualityImage(loadedImage, fullSrc, card.dataset.title || '', imageId).then((installed) => {
                 if (
                     !installed
                     || !isCurrentLightboxImageRequest(index, imageToken)
-                    || qualityToken !== activeLightboxQualityRequestToken
+                    || !ownsLightboxQualityRequest(qualityToken, qualityAbortController, fullSrc)
                     || image.dataset.lightboxImageId !== imageId
                 ) {
-                    if (qualityToken === activeLightboxQualityRequestToken) {
-                        pendingLightboxQualitySource = '';
-                        if (activeLightboxQualityAbortController === qualityAbortController) {
-                            activeLightboxQualityAbortController = null;
-                        }
-                        setLightboxQualityLoading(false);
-                    }
+                    finalizeLightboxQualityRequest(qualityToken, qualityAbortController, fullSrc);
                     return false;
                 }
                 image.dataset.lightboxExplicitZoomQuality = imageId;
                 updateNormalLightboxStageSizeFromLoadedImage(loadedImage);
                 applyLightboxZoomState(false);
                 devMarkSource(fullSrc, 'ready', 'zoom-tracked-original', image);
-                if (activeLightboxQualityAbortController === qualityAbortController) {
-                    activeLightboxQualityAbortController = null;
-                }
-                setLightboxQualityLoading(false);
+                finalizeLightboxQualityRequest(qualityToken, qualityAbortController, fullSrc);
                 return true;
             });
         }).catch((error) => {
-            if (activeLightboxQualityAbortController === qualityAbortController) {
-                activeLightboxQualityAbortController = null;
-            }
-            if (qualityToken !== activeLightboxQualityRequestToken) {
+            if (!ownsLightboxQualityRequest(qualityToken, qualityAbortController, fullSrc)) {
                 return;
             }
-            pendingLightboxQualitySource = '';
             delete image.dataset.lightboxExplicitZoomQuality;
             if (error?.name !== 'AbortError') {
                 failedLightboxQualitySources.add(failureKey);
             }
-            setLightboxQualityLoading(false);
+            finalizeLightboxQualityRequest(qualityToken, qualityAbortController, fullSrc);
         });
         return true;
     }
@@ -3544,12 +3803,19 @@ export function setupGalleryLightbox() {
         if (!window.PHPGalleryTelemetryCacheEvent || !(card instanceof HTMLElement)) {
             return;
         }
-        window.PHPGalleryTelemetryCacheEvent(
-            eventName,
-            Number(card.dataset.imageId || 0),
-            Number(card.dataset.galleryId || window.PHPGalleryTelemetry?.galleryId || 0),
-            'decoded_lightbox'
-        );
+        try {
+            window.PHPGalleryTelemetryCacheEvent(
+                eventName,
+                Number(card.dataset.imageId || 0),
+                Number(card.dataset.galleryId || window.PHPGalleryTelemetry?.galleryId || 0),
+                'decoded_lightbox'
+            );
+        } catch (error) {
+            if (galleryDevModeEnabled) {
+                const errorName = error instanceof Error ? error.name : 'Error';
+                devLog(`telemetry:cache-error:${errorName}`);
+            }
+        }
     }
 
     /**
@@ -4399,7 +4665,16 @@ export function setupGalleryLightbox() {
         const preserveMapSplit = options.preserveMapSplit === true;
         clearLightboxSlideshowTimer();
         const normalizedIndex = ((index % cards.length) + cards.length) % cards.length;
-        resetLightboxZoom(false);
+        const requestedResumeToken = Number.parseInt(String(options.navigationIntentToken || ''), 10);
+        const resumesCurrentNavigation = Number.isInteger(requestedResumeToken)
+            && isCurrentLightboxImageRequest(normalizedIndex, requestedResumeToken);
+        if (!resumesCurrentNavigation) {
+            resetLightboxZoom(false);
+        }
+        // Every navigation intent owns a token before sparse metadata or image work begins.
+        const imageToken = resumesCurrentNavigation
+            ? requestedResumeToken
+            : beginLightboxNavigationTransaction(normalizedIndex);
         // Variable `card` stores this steps working value.
         const card = cards[normalizedIndex];
         const isInitialPhotoOpen = overlay.hidden || !image.getAttribute('src') || overlay.classList.contains('is-initial-loading');
@@ -4407,13 +4682,21 @@ export function setupGalleryLightbox() {
             showInitialLightboxLoader(normalizedIndex, estimateInitialLightboxProgress(normalizedIndex));
         }
         if (!card) {
-            currentIndex = normalizedIndex;
-            galleryDevModeState.currentIndex = normalizedIndex;
+            markLightboxNavigationDiagnostic(normalizedIndex, imageToken, 'metadata');
+            if (!isInitialPhotoOpen) {
+                scheduleLightboxNavigationPending(normalizedIndex, imageToken, '');
+            }
             fetchLightboxWindowAround(normalizedIndex).then((loaded) => {
-                if (!loaded || controller.signal.aborted || currentIndex !== normalizedIndex) {
+                if (!isCurrentLightboxImageRequest(normalizedIndex, imageToken)) {
                     return;
                 }
-                openAt(normalizedIndex, options);
+                if (!loaded || !(cards[normalizedIndex] instanceof HTMLElement)) {
+                    finalizeLightboxNavigationTransaction(normalizedIndex, imageToken, false, 'metadata');
+                    return;
+                }
+                openAt(normalizedIndex, {...options, navigationIntentToken: imageToken});
+            }).catch(() => {
+                finalizeLightboxNavigationTransaction(normalizedIndex, imageToken, false, 'metadata-rejected');
             });
             return;
         }
@@ -4422,17 +4705,7 @@ export function setupGalleryLightbox() {
             hideInitialLightboxLoader();
         }
         hideLightboxHelpPanel();
-        currentIndex = normalizedIndex;
-        galleryDevModeState.currentIndex = normalizedIndex;
-        activeLightboxImageToken += 1;
-        activeLightboxTransitionToken += 1;
-        clearPendingLightboxQualityUpgrade();
-        activeLightboxQualitySource = '';
-        removeTransitionImage();
-        resetLightboxPreloadQueue();
-        sweepDecodedLightboxImageCache();
-        // imageToken stores state or configuration for the gallery front-end flow.
-        const imageToken = activeLightboxImageToken;
+        markLightboxNavigationDiagnostic(normalizedIndex, imageToken, 'source-selection');
         // pageUrl stores state or configuration for the gallery front-end flow.
         const pageUrl = card.dataset.pageUrl || '';
         // galleryUrl stores the page that should be restored when the lightbox closes.
@@ -4514,7 +4787,15 @@ export function setupGalleryLightbox() {
             scheduleLightboxNavigationPending(normalizedIndex, imageToken, previewSrc || mainSrc);
         }
         if (!slideshowPreparedImage) {
-            preloadCardLightboxImages(card, false, {reason: 'current-preview'});
+            try {
+                preloadCardLightboxImages(card, false, {reason: 'current-preview'});
+            } catch (error) {
+                // Current-card preloading is only an optimization. A synchronous
+                // cache/telemetry failure must not abandon the foreground navigation.
+                if (galleryDevModeEnabled) {
+                    devLog(`preview:preload-sync-error:${lightboxNavigationExceptionReason('preload', error)}`);
+                }
+            }
         }
         /**
          * Handle show lightweight preview image before the full media source.
@@ -4541,30 +4822,44 @@ export function setupGalleryLightbox() {
             loadedImage,
             loadedImage === slideshowPreparedImage,
         );
-        const initialMainPromise = slideshowPreparedImage
-            ? showMainImage(slideshowPreparedImage)
-            : (previewSrc
-                ? showPreviewFirst().then((wasDisplayed) => {
-                    if (!isCurrentLightboxImageRequest(normalizedIndex, imageToken)) {
-                        return false;
-                    }
-                    if (wasDisplayed) {
-                        return true;
-                    }
-                    return mainSrc ? showMainImage(null) : false;
-                })
-                : (mainSrc
-                    ? showMainImage(null)
-                    : Promise.resolve(false)));
-        Promise.resolve(initialMainPromise).then((wasDisplayed) => {
-            if (!wasDisplayed || !isCurrentLightboxImageRequest(normalizedIndex, imageToken)) {
-                return;
-            }
-            clearLightboxNavigationPending(imageToken);
-            hideInitialLightboxLoader();
-            scheduleLightboxQualityUpgrade(0);
-            scheduleLightboxSlideshowNext();
-        });
+        let initialMainPromise = null;
+        let presentationFailureReason = 'presentation-false';
+        try {
+            initialMainPromise = slideshowPreparedImage
+                ? showMainImage(slideshowPreparedImage)
+                : (previewSrc
+                    ? showPreviewFirst().then((wasDisplayed) => {
+                        if (!isCurrentLightboxImageRequest(normalizedIndex, imageToken)) {
+                            return false;
+                        }
+                        if (wasDisplayed) {
+                            return true;
+                        }
+                        return mainSrc ? showMainImage(null) : false;
+                    })
+                    : (mainSrc
+                        ? showMainImage(null)
+                        : Promise.resolve(false)));
+        } catch (error) {
+            presentationFailureReason = lightboxNavigationExceptionReason('source-setup', error);
+            markLightboxNavigationDiagnostic(normalizedIndex, imageToken, 'setup-failed', presentationFailureReason);
+            initialMainPromise = Promise.resolve(false);
+        }
+        Promise.resolve(initialMainPromise)
+            .then((wasDisplayed) => finalizeLightboxNavigationTransaction(
+                normalizedIndex,
+                imageToken,
+                Boolean(wasDisplayed),
+                presentationFailureReason,
+            ))
+            .catch((error) => {
+                finalizeLightboxNavigationTransaction(
+                    normalizedIndex,
+                    imageToken,
+                    false,
+                    lightboxNavigationExceptionReason('presentation-rejected', error),
+                );
+            });
         syncPictureStrip(normalizedIndex);
         if (lightboxMapSplit && !lightboxMapSplit.hidden && !preserveMapSplit) {
             if (!sharedLightboxMapUiAvailable() || !isLightboxFullscreen()) {
@@ -4846,6 +5141,7 @@ export function setupGalleryLightbox() {
         activeLightboxImageToken += 1;
         activeLightboxTransitionToken += 1;
         clearLightboxNavigationPending();
+        clearLightboxNavigationFailure();
         resetMobileSwipeVisuals(false);
         overlay.classList.remove('is-ui-visible', 'is-picture-strip-animating');
         if (pictureStripTrack instanceof HTMLElement) {
@@ -4875,6 +5171,10 @@ export function setupGalleryLightbox() {
         galleryDevModeState.currentSource = '';
         galleryDevModeState.currentSourceKind = '';
         galleryDevModeState.currentIndex = -1;
+        galleryDevModeState.navigationToken = 0;
+        galleryDevModeState.navigationTarget = '';
+        galleryDevModeState.navigationStage = 'idle';
+        galleryDevModeState.navigationFailure = '';
         document.documentElement.classList.remove('has-lightbox', 'has-mobile-lightbox');
         document.body.classList.remove('has-lightbox');
         if (lightboxHistoryActive && lightboxReturnUrl && window.history && window.history.replaceState) {

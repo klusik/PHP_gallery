@@ -519,29 +519,8 @@
 .lightbox.is-navigation-loading .lightbox-stage-link {
     cursor: progress;
 }
-.lightbox.is-navigation-loading:not(.is-initial-loading) .lightbox-stage-link::after {
-    content: '';
-    grid-area: 1 / 1;
-    width: 2.6rem;
-    height: 2.6rem;
-    border: 0.22rem solid rgba(255, 255, 255, 0.28);
-    border-top-color: rgba(255, 255, 255, 0.92);
-    border-radius: 999px;
-    box-shadow: 0 0.7rem 2.2rem rgba(0, 0, 0, 0.42);
-    pointer-events: none;
-    z-index: 6;
-    animation: lightbox-navigation-spinner 0.82s linear infinite;
-}
-@keyframes lightbox-navigation-spinner {
-    to {
-        transform: rotate(360deg);
-    }
-}
-@media (prefers-reduced-motion: reduce) {
-    .lightbox.is-navigation-loading:not(.is-initial-loading) .lightbox-stage-link::after {
-        animation: none;
-    }
-}
+/* Navigation and quality promotion share one progress surface. Fast stepping therefore
+   never falls back to the old center spinner while an adjacent preview is decoding. */
 .lightbox-quality-progress {
     position: absolute;
     left: 50%;
@@ -563,8 +542,18 @@
 .lightbox-quality-progress[hidden] {
     display: none !important;
 }
-.lightbox.is-quality-loading:not(.is-initial-loading):not(.is-navigation-loading) .lightbox-quality-progress {
+.lightbox.is-quality-loading:not(.is-initial-loading) .lightbox-quality-progress,
+.lightbox.is-navigation-loading:not(.is-initial-loading) .lightbox-quality-progress,
+.lightbox.is-navigation-error:not(.is-initial-loading) .lightbox-quality-progress {
     display: grid;
+}
+.lightbox.is-navigation-error .lightbox-quality-progress-track {
+    opacity: 0.42;
+}
+.lightbox.is-navigation-error .lightbox-quality-progress-fill {
+    width: 100%;
+    transform: scaleX(0);
+    animation: none;
 }
 .lightbox-quality-progress-track {
     width: 100%;
@@ -582,6 +571,27 @@
     transform: scaleX(0);
     transform-origin: left center;
     will-change: transform;
+}
+.lightbox.is-navigation-loading:not(.is-quality-loading) .lightbox-quality-progress-fill {
+    width: 34%;
+    transform: translateX(-125%);
+    transform-origin: center;
+    animation: lightbox-navigation-progress 1.05s ease-in-out infinite;
+}
+@keyframes lightbox-navigation-progress {
+    0% {
+        transform: translateX(-125%);
+    }
+    100% {
+        transform: translateX(395%);
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .lightbox.is-navigation-loading:not(.is-quality-loading) .lightbox-quality-progress-fill {
+        width: 45%;
+        transform: translateX(0);
+        animation: none;
+    }
 }
 .lightbox-quality-progress-metrics {
     display: flex;

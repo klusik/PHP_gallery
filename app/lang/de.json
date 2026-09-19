@@ -4043,6 +4043,7 @@
   "lightbox.help_shortcuts": "←/→ Fotos, Shift+←/→ ±10 Fotos, +/− Zoom, 0 zurücksetzen, F Vollbild, M Karte, S Diashow, X Schließen",
   "lightbox.help_title": "Steuerung",
   "lightbox.image_load_failed": "Bild konnte in der Lightbox nicht geladen werden.",
+  "lightbox.image_loading": "Bild wird geladen...",
   "lightbox.initial_loader": "Galerie wird vorbereitet...",
   "lightbox.initial_loader_count": "Foto {current} von {total} wird vorbereitet",
   "lightbox.quality_loading": "Bild in voller Qualität wird geladen...",

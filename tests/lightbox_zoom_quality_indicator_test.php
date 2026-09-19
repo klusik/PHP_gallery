@@ -47,7 +47,7 @@ lightbox_zoom_quality_indicator_assert(
     'The quality indicator must become active immediately before the tracked background download starts.'
 );
 lightbox_zoom_quality_indicator_assert(
-    substr_count($lightboxSource, 'setLightboxQualityLoading(false);') >= 3,
+    substr_count($lightboxSource, 'finalizeLightboxQualityRequest(qualityToken, qualityAbortController') >= 6,
     'Success, failure, and cancellation paths must clear the quality indicator.'
 );
 lightbox_zoom_quality_indicator_assert(
@@ -74,13 +74,14 @@ lightbox_zoom_quality_indicator_assert(
     str_contains($lightboxSource, "qualityProgress.className = 'lightbox-quality-progress';")
         && str_contains($lightboxSource, 'qualityProgress.hidden = true;')
         && str_contains($lightboxSource, "qualityProgress.setAttribute('aria-hidden', 'true');")
-        && str_contains($lightboxSource, 'qualityProgress.hidden = !isLoading;'),
-    'The lightbox must expose one dedicated, decorative byte-progress element that toggles with the loading state.'
+        && str_contains($lightboxSource, 'qualityProgress.hidden = !(isLoading || navigationLoading || navigationError);'),
+    'The lightbox must expose one dedicated, decorative progress element shared by quality and navigation loading states.'
 );
 lightbox_zoom_quality_indicator_assert(
-    str_contains($lightboxStyles, '.lightbox.is-quality-loading:not(.is-initial-loading):not(.is-navigation-loading) .lightbox-quality-progress')
+    str_contains($lightboxStyles, '.lightbox.is-quality-loading:not(.is-initial-loading) .lightbox-quality-progress')
+        && str_contains($lightboxStyles, '.lightbox.is-navigation-loading:not(.is-initial-loading) .lightbox-quality-progress')
         && str_contains($lightboxStyles, '.lightbox-quality-progress[hidden]'),
-    'The byte-progress bar must be available in both lightbox modes and stay hidden through the [hidden] attribute otherwise.'
+    'The shared progress bar must be available for both quality promotion and navigation while respecting the [hidden] attribute.'
 );
 
 echo "Lightbox zoom quality indicator checks passed.\n";

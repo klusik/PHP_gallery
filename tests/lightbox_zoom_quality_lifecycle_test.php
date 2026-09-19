@@ -104,7 +104,7 @@ lightbox_zoom_quality_lifecycle_assert(
 );
 lightbox_zoom_quality_lifecycle_assert(
     str_contains($lightboxSource, 'loadTrackedDecodedLightboxImage(desired.src')
-        && str_contains($lightboxSource, 'qualityToken !== activeLightboxQualityRequestToken')
+        && str_contains($lightboxSource, 'ownsLightboxQualityRequest(qualityToken, qualityAbortController')
         && str_contains($lightboxSource, '!isCurrentLightboxImageRequest(index, imageToken)'),
     'Passive high-resolution decode must stay transient and reject stale image generations.'
 );
@@ -155,13 +155,13 @@ lightbox_zoom_quality_lifecycle_assert(
     str_contains($lightboxSource, 'image.dataset.lightboxImageId = imageId;')
         && substr_count($lightboxSource, 'String(cards[index]?.dataset.imageId || index)') >= 3
         && str_contains($lightboxSource, 'image.dataset.lightboxImageId !== imageId')
-        && str_contains($lightboxSource, 'qualityToken !== activeLightboxQualityRequestToken'),
+        && str_contains($lightboxSource, 'ownsLightboxQualityRequest(qualityToken, qualityAbortController'),
     'Preview and full-quality phases must retain per-photo ownership across repeated navigation.'
 );
 $qualityInstallPosition = strpos($lightboxSource, 'return installDecodedLightboxQualityImage(loadedImage, desired.src');
 $qualityReadyPosition = $qualityInstallPosition === false
     ? false
-    : strpos($lightboxSource, 'setLightboxQualityLoading(false);', $qualityInstallPosition + 1);
+    : strpos($lightboxSource, 'finalizeLightboxQualityRequest(', $qualityInstallPosition + 1);
 lightbox_zoom_quality_lifecycle_assert(
     $qualityInstallPosition !== false
         && $qualityReadyPosition !== false
@@ -174,8 +174,8 @@ lightbox_zoom_quality_lifecycle_assert(
     'Teardown, navigation, and close must invalidate pending quality work.'
 );
 lightbox_zoom_quality_lifecycle_assert(
-    str_contains($publicEntrypointSource, 'map-popup-viewer-navigation-v2')
-        && str_contains($authenticatedEntrypointSource, 'map-popup-viewer-navigation-v2')
+    str_contains($publicEntrypointSource, '20260919-lightbox-navigation-transaction-v1')
+        && str_contains($authenticatedEntrypointSource, '20260919-lightbox-navigation-transaction-v1')
         && str_contains($lightboxSource, 'lightbox-zoom-model.js?v=20260817-lightbox-zoom-centered-frame-v5'),
     'All public lightbox module paths must invalidate stale browser caches together.'
 );
