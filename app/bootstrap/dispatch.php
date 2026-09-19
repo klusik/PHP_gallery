@@ -178,6 +178,7 @@ function cms_dispatch_page(string $page): void
         'admin_discover' => '\\Gallery\\Controllers\\cms_admin_discover',
         'admin_import' => '\\Gallery\\Controllers\\cms_admin_import',
         'admin_new_gallery' => '\\Gallery\\Controllers\\cms_admin_new_gallery',
+        'admin_gallery_title_completion' => '\\Gallery\\Controllers\\cms_admin_gallery_title_completion',
         'admin_upload' => '\\Gallery\\Controllers\\cms_admin_upload',
         'admin_upload_settings' => '\\Gallery\\Controllers\\cms_admin_upload_settings',
         'admin_upload_browser_batch' => '\\Gallery\\Controllers\\cms_admin_upload_browser_batch',

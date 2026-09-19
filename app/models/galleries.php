@@ -260,11 +260,36 @@ function gallery_model_picker_rows(bool $secondaryTitleSort = false): array
  * Newer galleries are returned first so a repeated naming scheme naturally
  * proposes the most recent sibling before older entries with the same prefix.
  *
+ * Scope and cursor are semantic inputs; matching remains service-owned. The
+ * hard limit includes one optional lookahead row. Never load the whole catalog.
+ *
+ * @param int $parentGalleryId Selected parent, or zero for root galleries.
+ * @param bool $siblings True for siblings, false for the disjoint fallback scope.
+ * @param int $limit Requested page size, hard-capped at 513 including lookahead.
+ * @param ?array{id:int,created_at:string} $before Exclusive descending keyset cursor.
  * @return array<int,array<string,mixed>> Gallery title completion rows.
  */
-function gallery_model_title_completion_rows(): array
+function gallery_model_title_completion_rows(int $parentGalleryId = 0, bool $siblings = true, int $limit = 512, ?array $before = null): array
 {
-    return db()->query('SELECT id, parent_id, title, folder_path, created_at FROM galleries ORDER BY created_at DESC, id DESC')->fetchAll();
+    $limit = max(1, min(513, $limit));
+    $params = [];
+    if ($parentGalleryId > 0) {
+        $scope = $siblings ? 'parent_id = ?' : '(parent_id IS NULL OR parent_id <> ?)';
+        $params[] = $parentGalleryId;
+    } else {
+        $scope = $siblings ? '(parent_id IS NULL OR parent_id = 0)' : 'parent_id > 0';
+    }
+    $sql = 'SELECT id, parent_id, title, created_at FROM galleries WHERE ' . $scope;
+    if ($before !== null) {
+        $sql .= ' AND (created_at < ? OR (created_at = ? AND id < ?))';
+        $params[] = (string) $before['created_at'];
+        $params[] = (string) $before['created_at'];
+        $params[] = (int) $before['id'];
+    }
+    $sql .= ' ORDER BY created_at DESC, id DESC LIMIT ' . $limit;
+    $stmt = db()->prepare($sql);
+    $stmt->execute($params);
+    return $stmt->fetchAll(\PDO::FETCH_ASSOC);
 }
 
 /**

@@ -1,0 +1,65 @@
+name: Isolated gallery workflows
+
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-database-browser:
+    name: Real workflows (${{ matrix.database }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        database: ['mysql:8.4', 'mariadb:11.4']
+    services:
+      database:
+        image: ${{ matrix.database }}
+        # Ephemeral service only: no host data mount, no installation config, no production secrets.
+        env:
+          MYSQL_ROOT_PASSWORD: gallery-workflow-disposable-ci-only
+          MYSQL_ROOT_HOST: '%'
+        ports:
+          - 13316:3306
+        options: --hostname gallery-workflow-ci
+    env:
+      GALLERY_WORKFLOW_ENABLE: disposable-only
+      GALLERY_WORKFLOW_DB_HOST: 127.0.0.1
+      GALLERY_WORKFLOW_DB_PORT: '13316'
+      GALLERY_WORKFLOW_DB_USER: gallery_workflow_runner
+      GALLERY_WORKFLOW_REQUIRED: '1'
+      GALLERY_WORKFLOW_CI_ROOT_PASSWORD: gallery-workflow-disposable-ci-only
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_mysql, curl, gd, zip, dom, mbstring
+          coverage: none
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Require installed Chromium
+        shell: bash
+        run: |
+          browser_path="$(command -v google-chrome || command -v chromium || true)"
+          test -n "$browser_path" || { echo 'BLOCKED gallery workflow Chromium unavailable'; exit 1; }
+          echo "GALLERY_WORKFLOW_BROWSER=$browser_path" >> "$GITHUB_ENV"
+      - name: Central audit with mandatory real workflows and database races
+        run: php scripts/gallery_workflow_ci.php
+      - name: Upload compact audit reports only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gallery-workflows-${{ strategy.job-index }}
+          path: |
+            cache/test-audit/latest.json
+            cache/test-audit/latest.md
+          if-no-files-found: ignore
+          retention-days: 7

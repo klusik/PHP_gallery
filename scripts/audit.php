@@ -105,8 +105,8 @@ Environment overrides:
 
 Profiles:
   quick    Full PHP regression plus fast Node/Python/contracts and changed-file syntax checks.
-  full     Complete deterministic source audit, including slow ZIP64 coverage and full syntax checks.
-  release  Full audit plus browser integration, release consistency, manifest freshness, and Git validation.
+  full     Complete source audit, including slow ZIP64, syntax, and available Chromium fixtures.
+  release  Full audit plus release consistency, manifest freshness, and Git validation.
 TEXT
     );
     exit(0);
@@ -300,12 +300,13 @@ function audit_run_php_regression(array $registry): array
             continue;
         }
 
-        $process = run_process([PHP_BINARY, $file], $root, 45);
+        $timeout = max(1, min(600, (int) ($requirement['timeout'] ?? 45)));
+        $process = run_process([PHP_BINARY, $file], $root, $timeout);
         audit_record_slow_check('PHP ' . $name, (float) $process['duration']);
         $output = audit_process_output($process);
         if ($process['timed_out']) {
             $counts['failed']++;
-            $message = $name . ': timed out after 45 seconds.';
+            $message = $name . ': timed out after ' . $timeout . ' seconds.';
             $problems[] = $message;
             $log[] = '[FAIL] ' . $name . ' ' . format_duration((float) $process['duration']) . ' - timeout';
             $log[] = $output;
@@ -728,7 +729,7 @@ function audit_suite_console_label(string $suiteId): string
         'mvc-boundaries' => 'MVC layer boundaries',
         'node-fast' => 'Node regression (fast)',
         'node-full' => 'Node regression',
-        'browser-map' => 'Chromium map integration',
+        'browser-map' => 'Chromium browser integration',
         'winapp' => 'WinApp regression',
         'mutation-contracts' => 'Admin mutation contracts',
         'version-audit' => 'Runtime hardening audit',
@@ -741,6 +742,20 @@ function audit_suite_console_label(string $suiteId): string
         'git-diff-check' => 'Git whitespace check',
         default => $suiteId,
     };
+}
+
+$releaseSnapshotBefore = null;
+$releaseSnapshotAfter = null;
+$manualReviewSummary = null;
+if ($profileLabel === 'release') {
+    try {
+        require_once __DIR__ . '/release_qualification_lib.php';
+        $releaseSnapshotBefore = \PhpGallery\ReleaseQualification\snapshot(
+            $root, \PhpGallery\Release\detect_cms_version($root)
+        );
+    } catch (Throwable) {
+        // Continue useful diagnostics; the consistency task is blocked below.
+    }
 }
 
 $suiteCount = count($suiteIds);
@@ -759,7 +774,7 @@ foreach ($suiteIds as $suiteIndex => $suiteId) {
         'mvc-boundaries' => audit_run_mvc_boundaries(),
         'node-fast' => audit_run_node_suite('node-fast', 'Node regression (fast)', audit_select_node_tests($registry, false), $node),
         'node-full' => audit_run_node_suite('node-full', 'Node regression', audit_select_node_tests($registry, true), $node),
-        'browser-map' => audit_run_node_suite('browser-map', 'Chromium map integration', audit_select_node_tests($registry, true, true), $node, $browser),
+        'browser-map' => audit_run_node_suite('browser-map', 'Chromium browser integration', audit_select_node_tests($registry, true, true), $node, $browser),
         'release-consistency' => audit_run_php_command('release-consistency', 'Release consistency', 'scripts/check_release.php', ['--quiet'], 30),
         'winapp' => audit_run_winapp($python),
         'mutation-contracts' => audit_run_php_command('mutation-contracts', 'Admin mutation contracts', 'scripts/check_admin_mutation_contracts.php'),
@@ -780,6 +795,26 @@ foreach ($suiteIds as $suiteIndex => $suiteId) {
         . format_duration((float) $task['duration_seconds']) . '  ' . $task['summary'] . "\n"
     );
     fflush(STDOUT);
+}
+
+if ($profileLabel === 'release') {
+    try {
+        $releaseSnapshotAfter = \PhpGallery\ReleaseQualification\snapshot(
+            $root, \PhpGallery\Release\detect_cms_version($root)
+        );
+        $record = \PhpGallery\ReleaseQualification\load_record($root, $releaseSnapshotAfter);
+        $qualification = \PhpGallery\ReleaseQualification\qualification_status(
+            $record ?? \PhpGallery\ReleaseQualification\empty_record($releaseSnapshotAfter),
+            'pre-publication', $record !== null
+        );
+        $manualReviewSummary = 'Outstanding pre-publication manual checks: '
+            . ($qualification['unresolved'] === [] ? 'none' : implode(', ', $qualification['unresolved']))
+            . '. Post-publication checks: '
+            . ($qualification['later'] === [] ? 'none' : implode(', ', $qualification['later'])) . '.';
+    } catch (Throwable) {
+        $manualReviewSummary = 'Manual qualification evidence unavailable; no human approval is implied.';
+    }
+    $tasks = \PhpGallery\Audit\bind_release_source_identity($tasks, $releaseSnapshotBefore, $releaseSnapshotAfter);
 }
 
 usort(
@@ -816,6 +851,12 @@ $report = [
     ],
 ];
 
+if ($profileLabel === 'release') {
+    $report['source_fingerprint_before'] = $releaseSnapshotBefore['fingerprint'] ?? null;
+    $report['source_fingerprint_after'] = $releaseSnapshotAfter['fingerprint'] ?? null;
+    $report['manual_review_summary'] = $manualReviewSummary;
+}
+
 if ($persistReports) {
     $runJsonPath = $runDirectory . '/report.json';
     $runMarkdownPath = $runDirectory . '/report.md';
@@ -832,6 +873,9 @@ if ($persistReports) {
 
 fwrite(STDOUT, str_repeat('-', 72) . "\n");
 fwrite(STDOUT, 'Result: ' . $status . ' | Profile: ' . $profileLabel . ' | Duration: ' . format_duration($duration) . "\n");
+if ($manualReviewSummary !== null) {
+    fwrite(STDOUT, $manualReviewSummary . "\nAutomated results are separate from manual qualification; use scripts/release_qualification.php check.\n");
+}
 if ($persistReports) {
     fwrite(STDOUT, 'Report: ' . relative_path($markdownPath, $root) . "\n");
 } else {

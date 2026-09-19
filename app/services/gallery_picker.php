@@ -121,27 +121,123 @@ function gallery_picker_source_rows(bool $secondaryTitleSort = false): array
 /**
  * Return compact existing-gallery titles for inline completion while creating a gallery.
  *
- * The browser ranks direct siblings ahead of unrelated galleries while retaining
- * the complete title catalog as a fallback. Only presentation-safe metadata is
- * exposed and the control remains admin-only because the containing form is.
+ * Scan siblings before a disjoint fallback scope, newest first in each scope.
+ * These optional suggestions are deliberately incomplete once a budget is hit.
+ * No catalog is embedded in the form and no database collation approximates NFKC.
  *
- * @return array<int,array<string,mixed>> Title completion candidates.
+ * @return array{ok:bool,candidates:array,normalization:string,truncated:bool}
  */
-function gallery_title_completion_candidates(): array
+function gallery_title_completion_candidates(string $query = '', int $parentGalleryId = 0): array
 {
-    $candidates = [];
-    foreach (gallery_model_title_completion_rows() as $gallery) {
-        $title = trim((string) ($gallery['title'] ?? ''));
-        if ($title === '') {
-            continue;
-        }
-        $candidates[] = [
-            'id' => (int) ($gallery['id'] ?? 0),
-            'parent_id' => (int) ($gallery['parent_id'] ?? 0),
-            'title' => $title,
-            'path' => trim((string) ($gallery['folder_path'] ?? ''), '/'),
-            'created_at' => (string) ($gallery['created_at'] ?? ''),
-        ];
+    $result = gallery_title_completion_empty_result();
+    if (strlen($query) > 1024 || preg_match('//u', $query) !== 1 || $parentGalleryId < 0) {
+        throw new \InvalidArgumentException('Invalid title completion query.');
     }
-    return $candidates;
+    $characters = preg_match_all('/./us', $query);
+    if ($characters > 255) {
+        throw new \InvalidArgumentException('Invalid title completion query.');
+    }
+    if ($characters < 2 || preg_match('/\A\s*\z/u', $query) === 1) {
+        return $result;
+    }
+    $prefix = gallery_title_completion_normalize($query, $result['normalization']);
+    if ($prefix === null || $prefix === '') {
+        return $result;
+    }
+
+    $remaining = GALLERY_TITLE_COMPLETION_SCAN_BUDGET;
+    try {
+        foreach ([true, false] as $siblings) {
+            $scopeRemaining = $siblings ? min(GALLERY_TITLE_COMPLETION_SIBLING_BUDGET, $remaining) : $remaining;
+            $before = null;
+            do {
+                $pageSize = min(GALLERY_TITLE_COMPLETION_PAGE_SIZE, $scopeRemaining);
+                $rows = gallery_model_title_completion_rows($parentGalleryId, $siblings, $pageSize + 1, $before);
+                $hasMore = count($rows) > $pageSize;
+                if ($hasMore) {
+                    array_pop($rows);
+                }
+                foreach ($rows as $gallery) {
+                    $title = trim((string) ($gallery['title'] ?? ''));
+                    $id = (int) ($gallery['id'] ?? 0);
+                    $createdAt = (string) ($gallery['created_at'] ?? '');
+                    if ($id <= 0 || strlen($title) > 1024 || preg_match('/\A.{1,255}\z/us', $title) !== 1
+                        || preg_match('/\A[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}\z/', $createdAt) !== 1) {
+                        continue;
+                    }
+                    $normalized = gallery_title_completion_normalize($title, $result['normalization']);
+                    if ($normalized === null || $normalized === $prefix || !str_starts_with($normalized, $prefix)) {
+                        continue;
+                    }
+                    $result['candidates'][] = [
+                        'id' => $id,
+                        'parent_id' => max(0, (int) ($gallery['parent_id'] ?? 0)),
+                        'title' => $title,
+                        'created_at' => $createdAt,
+                    ];
+                    if (count($result['candidates']) >= GALLERY_TITLE_COMPLETION_MAX_CANDIDATES) {
+                        // Do not issue another sorted query merely to prove exhaustiveness.
+                        $result['truncated'] = true;
+                        return $result;
+                    }
+                }
+                $remaining -= count($rows);
+                $scopeRemaining -= count($rows);
+                if (!$hasMore) {
+                    break;
+                }
+                if ($scopeRemaining <= 0) {
+                    $result['truncated'] = true;
+                    if ($siblings) {
+                        // Unexamined siblings may outrank every fallback candidate.
+                        return $result;
+                    }
+                    break;
+                }
+                $last = $rows[count($rows) - 1];
+                $before = ['id' => (int) $last['id'], 'created_at' => (string) $last['created_at']];
+            } while ($scopeRemaining > 0);
+        }
+    } catch (\Throwable) {
+        // Suggestion failure must neither break creation nor reveal database details.
+        return gallery_title_completion_empty_result(false, true);
+    }
+    return $result;
+}
+
+// Fixed deployment budgets, never supplied by a browser request. At most three
+// 513-row SQL pages (including lookahead), with at most 1024 titles normalized.
+const GALLERY_TITLE_COMPLETION_MAX_CANDIDATES = 8;
+const GALLERY_TITLE_COMPLETION_SCAN_BUDGET = 1024;
+const GALLERY_TITLE_COMPLETION_SIBLING_BUDGET = 512;
+const GALLERY_TITLE_COMPLETION_PAGE_SIZE = 512;
+
+/** Return the explicit matching capability and an empty, bounded response. */
+function gallery_title_completion_empty_result(bool $ok = true, bool $truncated = false): array
+{
+    return [
+        'ok' => $ok,
+        'candidates' => [],
+        'normalization' => class_exists(\Normalizer::class) && function_exists('mb_strtolower')
+            ? 'nfkc-lowercase'
+            : 'ascii-lowercase',
+        'truncated' => $truncated,
+    ];
+}
+
+/**
+ * Match using NFKC followed by locale-independent Unicode lowercase, like the
+ * browser's normalize('NFKC').toLowerCase(). Without both extensions, only ASCII
+ * queries and titles are eligible; never claim Unicode-equivalent matching.
+ */
+function gallery_title_completion_normalize(string $text, string $normalization): ?string
+{
+    if ($normalization === 'nfkc-lowercase') {
+        $normalized = \Normalizer::normalize($text, \Normalizer::FORM_KC);
+        return is_string($normalized) ? mb_strtolower($normalized, 'UTF-8') : null;
+    }
+    if ($normalization !== 'ascii-lowercase' || preg_match('/[^\x00-\x7F]/', $text) === 1) {
+        return null;
+    }
+    return strtr($text, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz');
 }

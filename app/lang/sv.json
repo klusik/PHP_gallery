@@ -1,4 +1,6 @@
 {
+  "admin.gallery_title_completion.suggestion": "Föreslagen titel: {title}.",
+  "admin.gallery_title_completion.help": "Skriv minst två tecken för ett titelförslag. I slutet av fältet accepterar du med Tab eller högerpil, eller avvisar med Escape.",
   "admin.gallery_editor.image_deleted": "Image deleted.",
   "admin.media_renamer.refresh_markup_missing": "The rename completed, but the server did not return refreshed panel markup. Reopen the tool to verify the saved result.",
   "admin.media_renamer.refresh_target_missing": "The rename completed, but its panel result could not be refreshed. Reopen the tool to verify the saved result.",

@@ -500,6 +500,18 @@ dynamically, not test one known table identity.
 
 ## Deployment and Tooling
 
+Title completion follows `app/controllers/admin_gallery_title_completion.php` ->
+`app/services/gallery_picker.php` -> `app/models/galleries.php`. The create-form
+view model in `app/controllers/admin_gallery_form_models.php` provides an empty
+candidate list and an authenticated endpoint URL; the browser owner is
+`public/assets/gallery-modules/admin-gallery-title-completion.js`.
+See `docs/TITLE_COMPLETION.md` for budgets and normalization.
+
+Nearby lightbox preview scheduling belongs to
+`public/assets/gallery-modules/lightbox-preload-lifecycle.js`; `lightbox.js`
+retains foreground navigation, cache, media authorization inputs, quality, and
+presentation. See `docs/BROWSER_LIFECYCLE.md` for reset/disposal ownership.
+
 | Task | Files |
 | --- | --- |
 | Linux deploy | `deploy.sh`, `scripts/deploy.sh` |
@@ -511,6 +523,10 @@ dynamically, not test one known table identity.
 | Manual migration CLI | `scripts/migrate.php` |
 | Admin creation | `scripts/create_admin.php` |
 | Manifest generation | `scripts/generate_manifest.php` |
+| Recovery evidence and synthetic drill | `scripts/recovery.php`, `scripts/recovery/`, `tests/recovery_assurance_test.php`; read-only inventory/isolated-file checks, not automatic production restore. |
+| Disposable full-stack workflows | `scripts/gallery_workflow_run.php`, `scripts/gallery_workflow_mysql.php`, `scripts/gallery_workflow_ci.php`, `tests/support/gallery_workflow_*`, `.github/workflows/gallery-workflows.yml`; owned fixture provisioning around the central full or release audit. |
+| Artifact-bound release evidence | `scripts/release_qualification.php`, `scripts/release_qualification_lib.php`, `scripts/release_qualification/`, `tests/release_qualification_test.php`; source/PDF identity, explicit reviews, release-report binding, and bounded previews. |
+| Title-completion measurements | `scripts/benchmark_title_completion.php`, `scripts/benchmark_title_completion_browser.mjs`, `docs/TITLE_COMPLETION.md`; synthetic response and matcher benchmarks with explicit limits. |
 | Telemetry maintenance CLI | `scripts/telemetry_maintenance.php` |
 | Site maintenance CLI | `scripts/site_maintenance.php` |
 

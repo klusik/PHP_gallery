@@ -33,12 +33,10 @@
 /**
  * Public gallery tag suggestions, lightbox viewer, map overlays, and viewer dev diagnostics.
  *
- * This is intentionally the largest module because the lightbox, fullscreen
- * handling, adjacent image preloading, GPS split-map handling, and dev overlay
- * share one coherent viewer state. Splitting these internals further would require
- * a dedicated state object and event bus. Keeping them together makes the current
- * behavior easier to audit while still separating them from admin forms and upload
- * workflows.
+ * The lightbox, fullscreen handling, GPS split-map handling, and dev overlay
+ * share one coherent viewer state. Nearby-preview queue scheduling, concurrency,
+ * and cancellation belong to lightbox-preload-lifecycle.js; media selection,
+ * decoding, and foreground request ownership remain here.
  *
  * Example usage from the gallery entrypoint:
  *
@@ -67,6 +65,7 @@ function i18n(key, fallback, parameters = {}) {
 }
 export { setupTagSuggestions } from './tag-suggestions.js?v=20260528-tag-pills-v1';
 import { currentLightboxVoteForm, syncLightboxVote, updateLightboxVoteButtons } from './lightbox-votes.js?v=20260512-modular-lightbox-v1';
+import { createLightboxPreloadLifecycle } from './lightbox-preload-lifecycle.js?v=20260920-lightbox-preload-lifecycle-v1';
 import {
     LIGHTBOX_ZOOM_MAX_SCALE,
     LIGHTBOX_ZOOM_MIN_SCALE,
@@ -794,24 +793,25 @@ export function setupGalleryLightbox() {
     const decodedLightboxImages = new Map();
     // lightboxTelemetryCacheResults keeps the bounded application-cache result attached to detached decoded nodes.
     const lightboxTelemetryCacheResults = new WeakMap();
-    // lightboxPreloadQueue holds nearby preview work so opening a photo does not start all downloads at once.
-    const lightboxPreloadQueue = [];
-    // lightboxQueuedSources prevents duplicate queued work while still allowing cached image reuse.
-    const lightboxQueuedSources = new Set();
-    // lightboxPreloadGeneration invalidates stale queued work after fast next/previous navigation.
-    let lightboxPreloadGeneration = 0;
-    // activeLightboxPreloads tracks how many background image decodes are currently active.
-    let activeLightboxPreloads = 0;
-    // lightboxPreloadAbortController owns active nearby preview preloads for the current navigation generation.
-    let lightboxPreloadAbortController = new AbortController();
+    const lightboxPreloads = createLightboxPreloadLifecycle({
+        signal: controller.signal,
+        scheduler: window,
+        concurrency: lightboxPreloadConcurrency,
+        preload: (src, options, reason) => {
+            devMarkSource(src, 'preloading', reason);
+            return preloadDecodedLightboxImage(src, options);
+        },
+        onError: (error, src) => {
+            if (galleryDevModeEnabled) {
+                const errorName = error instanceof Error ? error.name : 'Error';
+                devLog(`preload:sync-error:${errorName}:${shortenDevUrl(src)}`);
+            }
+        },
+    });
     // activeDetachedLightboxImageLoads contains cancellation callbacks for detached image requests that have not settled yet.
     const activeDetachedLightboxImageLoads = new Set();
     // lastLightboxNavigationRequestedAt stores the last manual navigation timestamp.
     let lastLightboxNavigationRequestedAt = 0;
-    // lightboxPreloadDrainHandle stores the pending queue drain callback handle.
-    let lightboxPreloadDrainHandle = 0;
-    // lightboxPreloadDrainUsesIdleCallback tracks which browser timer API owns the drain handle.
-    let lightboxPreloadDrainUsesIdleCallback = false;
     // fullscreenHideTimer stores state or configuration for the gallery front-end flow.
     let fullscreenHideTimer = null;
     // lightboxSlideshowTimer stores the automatic advance timer while slideshow mode is active.
@@ -901,6 +901,7 @@ export function setupGalleryLightbox() {
     function lightboxBenchmarkSnapshot() {
         const currentImage = image instanceof HTMLImageElement ? image : null;
         const memory = performance && performance.memory ? performance.memory : null;
+        const preloads = lightboxPreloads.snapshot();
         return {
             recorded_at_ms: performance.now(),
             overlay_hidden: Boolean(overlay.hidden),
@@ -914,11 +915,11 @@ export function setupGalleryLightbox() {
             metadata_abort_controller_active: Boolean(lightboxMetadataAbortController && !lightboxMetadataAbortController.signal.aborted),
             decoded_image_cache_size: decodedLightboxImages.size,
             preloaded_sources_size: preloadedSources.size,
-            preload_queue_length: lightboxPreloadQueue.length,
-            queued_sources_size: lightboxQueuedSources.size,
-            active_preloads: activeLightboxPreloads,
+            preload_queue_length: preloads.queued,
+            queued_sources_size: preloads.queuedSources,
+            active_preloads: preloads.active,
             detached_image_loads: activeDetachedLightboxImageLoads.size,
-            preload_generation: lightboxPreloadGeneration,
+            preload_generation: lightboxPreloads.generation,
             slideshow_active: lightboxSlideshowActive,
             fullscreen_active: document.fullscreenElement === overlay || overlay.classList.contains('is-mobile-fullscreen'),
             image: currentImage ? {
@@ -2146,7 +2147,7 @@ export function setupGalleryLightbox() {
                     load_id: benchmarkLoadId,
                     source: benchmarkSourceLabel(src),
                     priority: String(options.priority || ''),
-                    preload_generation: lightboxPreloadGeneration,
+                    preload_generation: lightboxPreloads.generation,
                 });
             }
             // loadedImage stores state or configuration for the gallery front-end flow.
@@ -2178,7 +2179,7 @@ export function setupGalleryLightbox() {
                     recordLightboxBenchmarkEvent('image_load_abort', {
                         load_id: benchmarkLoadId,
                         source: benchmarkSourceLabel(src),
-                        preload_generation: lightboxPreloadGeneration,
+                        preload_generation: lightboxPreloads.generation,
                     });
                 }
                 const error = new Error('Lightbox image load cancelled.');
@@ -2219,7 +2220,7 @@ export function setupGalleryLightbox() {
                             source: benchmarkSourceLabel(src),
                             width: loadedImage.naturalWidth,
                             height: loadedImage.naturalHeight,
-                            preload_generation: lightboxPreloadGeneration,
+                            preload_generation: lightboxPreloads.generation,
                         });
                     }
                     devMarkSource(src, 'ready', 'decoded', loadedImage);
@@ -2249,7 +2250,7 @@ export function setupGalleryLightbox() {
                     recordLightboxBenchmarkEvent('image_load_error', {
                         load_id: benchmarkLoadId,
                         source: benchmarkSourceLabel(src),
-                        preload_generation: lightboxPreloadGeneration,
+                        preload_generation: lightboxPreloads.generation,
                     });
                 }
                 galleryDevModeState.decodeErrors += galleryDevModeEnabled ? 1 : 0;
@@ -2398,7 +2399,7 @@ export function setupGalleryLightbox() {
                 reason: String(reason || 'unknown'),
                 cache_size: decodedLightboxImages.size,
                 since_close_ms: afterClose ? Math.max(0, performance.now() - lightboxBenchmarkDiagnosticsState.lastCloseEndedAtMs) : null,
-                preload_generation: lightboxPreloadGeneration,
+                preload_generation: lightboxPreloads.generation,
             });
         }
         trimDecodedLightboxImageCache();
@@ -2468,50 +2469,11 @@ export function setupGalleryLightbox() {
     }
 
         /**
-     * Schedule a low-priority drain of the nearby-image preload queue.
-     */
-    function scheduleLightboxPreloadDrain() {
-        if (lightboxPreloadDrainHandle || controller.signal.aborted) {
-            return;
-        }
-        /** Drain the preload queue when the selected idle mechanism fires. */
-        const drain = () => {
-            lightboxPreloadDrainHandle = 0;
-            lightboxPreloadDrainUsesIdleCallback = false;
-            drainLightboxPreloadQueue();
-        };
-        if ('requestIdleCallback' in window) {
-            lightboxPreloadDrainUsesIdleCallback = true;
-            lightboxPreloadDrainHandle = window.requestIdleCallback(drain, {timeout: 350});
-            return;
-        }
-        lightboxPreloadDrainUsesIdleCallback = false;
-        lightboxPreloadDrainHandle = window.setTimeout(drain, 80);
-    }
-
-        /**
      * Cancel queued nearby-image preload work that has not started yet.
      */
     function resetLightboxPreloadQueue(options = {}) {
-        const abortActive = options.abortActive !== false;
-        lightboxPreloadGeneration += 1;
         preloadedSources.clear();
-        lightboxPreloadQueue.length = 0;
-        lightboxQueuedSources.clear();
-        if (abortActive) {
-            lightboxPreloadAbortController.abort();
-            lightboxPreloadAbortController = new AbortController();
-        }
-        if (!lightboxPreloadDrainHandle) {
-            return;
-        }
-        if (lightboxPreloadDrainUsesIdleCallback && 'cancelIdleCallback' in window) {
-            window.cancelIdleCallback(lightboxPreloadDrainHandle);
-        } else {
-            window.clearTimeout(lightboxPreloadDrainHandle);
-        }
-        lightboxPreloadDrainHandle = 0;
-        lightboxPreloadDrainUsesIdleCallback = false;
+        lightboxPreloads.reset(options);
     }
 
     /**
@@ -2567,52 +2529,7 @@ export function setupGalleryLightbox() {
             preloadDecodedLightboxImage(src);
             return;
         }
-        if (lightboxQueuedSources.has(src)) {
-            return;
-        }
-        lightboxQueuedSources.add(src);
-        lightboxPreloadQueue.push({src, reason, generation});
-        scheduleLightboxPreloadDrain();
-    }
-
-        /**
-     * Start queued nearby-image preloads within the current concurrency limit.
-     */
-    function drainLightboxPreloadQueue() {
-        if (controller.signal.aborted) {
-            resetLightboxPreloadQueue();
-            return;
-        }
-        const concurrency = lightboxPreloadConcurrency();
-        while (activeLightboxPreloads < concurrency && lightboxPreloadQueue.length > 0) {
-            const item = lightboxPreloadQueue.shift();
-            if (!item || !item.src) {
-                continue;
-            }
-            lightboxQueuedSources.delete(item.src);
-            if (item.generation !== lightboxPreloadGeneration) {
-                continue;
-            }
-            activeLightboxPreloads += 1;
-            let preloadPromise = null;
-            try {
-                devMarkSource(item.src, 'preloading', item.reason || 'queued-preview');
-                preloadPromise = preloadDecodedLightboxImage(item.src, {signal: lightboxPreloadAbortController.signal});
-            } catch (error) {
-                activeLightboxPreloads = Math.max(0, activeLightboxPreloads - 1);
-                if (galleryDevModeEnabled) {
-                    const errorName = error instanceof Error ? error.name : 'Error';
-                    devLog(`preload:sync-error:${errorName}:${shortenDevUrl(item.src)}`);
-                }
-                continue;
-            }
-            Promise.resolve(preloadPromise).finally(() => {
-                activeLightboxPreloads = Math.max(0, activeLightboxPreloads - 1);
-                if (lightboxPreloadQueue.length > 0) {
-                    scheduleLightboxPreloadDrain();
-                }
-            });
-        }
+        lightboxPreloads.enqueue(src, reason, generation);
     }
 
         /**
@@ -3613,7 +3530,7 @@ export function setupGalleryLightbox() {
             const neighborIndex = normalizeLightboxIndex(centerIndex + offset);
             const neighborCard = neighborIndex >= 0 ? cards[neighborIndex] : null;
             if (neighborCard) {
-                preloadCardLightboxImages(neighborCard, false, {queued: true, reason: 'strip-preview', generation: lightboxPreloadGeneration});
+                preloadCardLightboxImages(neighborCard, false, {queued: true, reason: 'strip-preview', generation: lightboxPreloads.generation});
             }
         }
     }
@@ -5127,8 +5044,8 @@ export function setupGalleryLightbox() {
                 current_index: currentIndex,
                 pending_metadata: lightboxPendingWindows.size,
                 decoded_cache: decodedLightboxImages.size,
-                preload_queue: lightboxPreloadQueue.length,
-                active_preloads: activeLightboxPreloads,
+                preload_queue: lightboxPreloads.snapshot().queued,
+                active_preloads: lightboxPreloads.snapshot().active,
                 detached_loads: activeDetachedLightboxImageLoads.size,
             });
         }
@@ -5186,8 +5103,8 @@ export function setupGalleryLightbox() {
             recordLightboxBenchmarkEvent('close_end', {
                 pending_metadata: lightboxPendingWindows.size,
                 decoded_cache: decodedLightboxImages.size,
-                preload_queue: lightboxPreloadQueue.length,
-                active_preloads: activeLightboxPreloads,
+                preload_queue: lightboxPreloads.snapshot().queued,
+                active_preloads: lightboxPreloads.snapshot().active,
                 detached_loads: activeDetachedLightboxImageLoads.size,
             });
         }
@@ -5211,7 +5128,7 @@ export function setupGalleryLightbox() {
         const previewSrc = card.dataset.previewSrc || '';
         // fullSrc stores state or configuration for the gallery front-end flow.
         const fullSrc = card.dataset.fullSrc || previewSrc;
-        const generation = Number.isInteger(options.generation) ? options.generation : lightboxPreloadGeneration;
+        const generation = Number.isInteger(options.generation) ? options.generation : lightboxPreloads.generation;
         const sources = [
             {src: previewSrc, reason: options.reason || 'adjacent-preview'},
             {src: includeFullImage ? fullSrc : '', reason: options.reasonFull || 'adjacent-full'},
@@ -5226,7 +5143,7 @@ export function setupGalleryLightbox() {
                 return;
             }
             devMarkSource(item.src, 'preloading', item.reason);
-            preloadDecodedLightboxImage(item.src, {signal: lightboxPreloadAbortController.signal});
+            preloadDecodedLightboxImage(item.src, {signal: lightboxPreloads.signal});
         });
     }
 
@@ -5285,7 +5202,7 @@ export function setupGalleryLightbox() {
         if (previewRadius <= 0) {
             return;
         }
-        const generation = lightboxPreloadGeneration;
+        const generation = lightboxPreloads.generation;
         // previewOffsets warms likely next steps first, then less likely previous steps.
         const previewOffsets = [];
         for (let distance = 1; distance <= previewRadius; distance += 1) {

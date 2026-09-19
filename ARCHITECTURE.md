@@ -9,7 +9,7 @@ This document is intended to help future maintainers and AI coding agents unders
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.104';
+const CMS_VERSION = '0.104.1';
 ```
 
 Update-related code uses:
@@ -100,6 +100,14 @@ Browser-assisted upload treats the checked browser-processing control as an expl
 `public/assets/gallery-modules/admin-side-panel.js` owns drawer lifecycle, dynamic form interception, workflow progress, and panel refresh callbacks. It must not hard reload, rewrite browser history, or navigate on an enhanced success path. Direct-page redirects remain independent fallback behavior. Dynamic panel forms use delegated or lifecycle-safe handlers because panel fragments may be replaced with `innerHTML`. Common source-contract regressions are checked by `php scripts/check_admin_mutation_contracts.php`.
 
 Public fragment replacement may also re-run `setupGalleryLightbox()` on parent gallery-list views that currently contain no lightbox-capable photo cards. Such a setup instance is still registered for teardown even when it returns early. Every state value referenced by its cleanup callback must therefore be initialized before cleanup registration and before the no-overlay/no-cards early return. This lifecycle invariant prevents successful create/delete mutations from being followed by a JavaScript temporal-dead-zone exception during the next fragment refresh.
+
+## Bounded title completion and browser lifecycle ownership
+
+New-gallery forms receive an empty title-candidate list and an authenticated JSON endpoint URL. The `admin_gallery_title_completion` controller owns HTTP validation and no-store responses; `gallery_picker.php` owns normalization, sibling/fallback ranking and fixed scan/result budgets; `gallery_model_title_completion_rows()` owns parameterized, limited keyset SQL. The optional endpoint never determines title uniqueness or whether gallery creation is allowed. See [the bounded completion contract](docs/TITLE_COMPLETION.md).
+
+The browser completion module owns each input's cancellable request generation, IME state, safe grapheme suffix mapping, and accessible announcement. Delegated events cover replacement forms; accepting a title does not mutate persistent data.
+
+The single lightbox delegates nearby-preview queue scheduling, generation, concurrency and cancellation to `lightbox-preload-lifecycle.js`. Authorized source selection, decoding/cache ownership, foreground navigation, zoom and presentation stay with the existing viewer. The setup controller disposes the queue; close/navigation reset it according to the documented [lifecycle contract](docs/BROWSER_LIFECYCLE.md). This is not a second viewer or refresh coordinator.
 
 ## Runtime Entry Points
 

@@ -31,6 +31,7 @@ declare(strict_types=1);
 
 $root = dirname(__DIR__);
 $source = (string) file_get_contents($root . '/public/assets/gallery-modules/lightbox.js');
+$preloadSource = (string) file_get_contents($root . '/public/assets/gallery-modules/lightbox-preload-lifecycle.js');
 
 /**
  * Throw when a decoded-cache/navigation liveness contract fails.
@@ -94,17 +95,17 @@ lightbox_cache_eviction_liveness_assert(
 );
 
 $drainSource = lightbox_cache_eviction_liveness_function(
-    $source,
+    $preloadSource,
     'drainLightboxPreloadQueue',
-    'loadDecodedLightboxImage'
+    'reportError'
 );
 lightbox_cache_eviction_liveness_assert($drainSource !== '', 'Queued preload drain helper is missing.');
 $incrementPosition = strpos($drainSource, 'activeLightboxPreloads += 1;');
 $tryPosition = strpos($drainSource, 'try {', $incrementPosition === false ? 0 : $incrementPosition);
-$preloadPosition = strpos($drainSource, 'preloadPromise = preloadDecodedLightboxImage(', $tryPosition === false ? 0 : $tryPosition);
+$preloadPosition = strpos($drainSource, 'preloadPromise = preload(', $tryPosition === false ? 0 : $tryPosition);
 $catchPosition = strpos($drainSource, '} catch (error) {', $preloadPosition === false ? 0 : $preloadPosition);
 $syncReleasePosition = strpos($drainSource, 'activeLightboxPreloads = Math.max(0, activeLightboxPreloads - 1);', $catchPosition === false ? 0 : $catchPosition);
-$finallyPosition = strpos($drainSource, 'Promise.resolve(preloadPromise).finally(() => {');
+$settlementPosition = strpos($drainSource, 'Promise.resolve(preloadPromise).then(releaseSlot, releaseSlot);');
 lightbox_cache_eviction_liveness_assert(
     $incrementPosition !== false
         && $tryPosition !== false
@@ -115,7 +116,8 @@ lightbox_cache_eviction_liveness_assert(
         && $tryPosition < $preloadPosition
         && $preloadPosition < $catchPosition
         && $catchPosition < $syncReleasePosition
-        && $finallyPosition !== false,
+        && $settlementPosition !== false
+        && str_contains($drainSource, 'function releaseSlot()'),
     'Every queued preload slot must be released for both synchronous throws and asynchronous settlement.'
 );
 

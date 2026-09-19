@@ -157,6 +157,14 @@ php scripts/generate_manifest.php
 
 Do not edit a manifest-covered source file after this step without regenerating the manifest.
 
+Initialize the artifact-bound qualification record after the final manifest is generated:
+
+```text
+php scripts/release_qualification.php init X.Y.Z
+```
+
+Retain the printed content fingerprint. Changed source, CI inputs, manual source or PDF bytes select a new all-pending record; old approvals remain historical only. See [release qualification evidence](docs/RELEASE_QUALIFICATION.md) for recording explicit reviewer/evidence text and rendering physical PDF pages into ignored cache. Rendering alone never approves a visual check.
+
 ### 7. Run the authoritative release audit
 
 Run exactly one final release profile:
@@ -166,6 +174,13 @@ php scripts/audit.php --profile=release
 ```
 
 Do not precede it with `quick` or `full`. Do not manually replay PHP, Node, WinApp, lint, contract, browser, manifest, or release-consistency checks that the profile already owns.
+
+When the disposable MySQL/Chromium prerequisites in
+[GALLERY_WORKFLOWS.md](docs/GALLERY_WORKFLOWS.md) are configured,
+`php scripts/gallery_workflow_mysql.php --release` may provision the isolated
+fixture around this same single release-profile invocation. This is the
+fixture-enabled alternative to the direct command, not an additional audit.
+It retains the central reports and refuses skipped mandatory workflow coverage.
 
 The release profile currently covers:
 
@@ -186,6 +201,15 @@ Read the compact console summary first. Open `cache/test-audit/latest.md` only w
 A `PASS` release audit with skipped environment-dependent coverage does not mean "every test passed". Report each material `SKIP` or `BLOCKED` and its reason. Prefer the precise conclusion: "The local release audit passed with the following coverage gaps..." Do not claim that the application is fully functional solely from automated local verification.
 
 If the audit finds a problem, run only the focused command needed to diagnose that reported problem. After the fix, regenerate the manifest if any manifest-covered file changed, then rerun only `--profile=release`.
+
+The release report captures source fingerprints before and after its suites. Missing identity blocks qualification; changed inputs invalidate release consistency. Its compact handoff lists outstanding human reviews separately from automated results. Attach the unchanged-tree report without rerunning tests:
+
+```text
+php scripts/release_qualification.php record-audit X.Y.Z --fingerprint=HASH
+php scripts/release_qualification.php check X.Y.Z
+```
+
+Replace HASH with the exact initialized fingerprint. An old/unbound report, a partial suite run, or a full/quick report cannot stand in for release evidence. Complete applicable PDF and browser reviews using the documented `record` command; retain skips and post-publication checks as unresolved. A qualification check returning INCOMPLETE is not permission to publish.
 
 ### 8. Build and inspect the release package
 

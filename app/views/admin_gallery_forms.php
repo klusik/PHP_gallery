@@ -249,9 +249,14 @@ function view_render_admin_new_gallery_title_input(array $formModel = []): void
         $candidateJson = '[]';
     }
 
-    echo '<span class="admin-gallery-title-completion" data-gallery-title-completion data-gallery-title-completion-candidates="' . e($candidateJson) . '">';
-    echo '<input name="title" required autocomplete="off" data-gallery-title-completion-input>';
+    echo '<span class="admin-gallery-title-completion" data-gallery-title-completion data-gallery-title-completion-candidates="' . e($candidateJson) . '" data-gallery-title-completion-url="' . e((string) ($completion['url'] ?? '')) . '" data-gallery-title-completion-announcement="' . e(t('admin.gallery_title_completion.suggestion', 'Suggested title: {title}.')) . '">';
+    $helpId = 'gallery-title-help-' . bin2hex(random_bytes(8));
+    // Keep the accessible name stable: the surrounding label also contains the
+    // help and live region, which must not become part of the field's name.
+    echo '<input name="title" required autocomplete="off" aria-label="' . e(t('admin.gallery_editor.gallery_name', 'Gallery name')) . '" aria-describedby="' . e($helpId) . '" data-gallery-title-completion-input>';
     echo '<span class="admin-gallery-title-completion-overlay" aria-hidden="true" data-gallery-title-completion-overlay hidden><span class="admin-gallery-title-completion-prefix" data-gallery-title-completion-prefix></span><span class="admin-gallery-title-completion-tail" data-gallery-title-completion-tail></span></span>';
+    echo '<span class="admin-gallery-title-completion-accessible" id="' . e($helpId) . '" data-gallery-title-completion-help>' . e(t('admin.gallery_title_completion.help', 'Type at least two characters for a title suggestion. At the end of the field, press Tab or Right Arrow to accept it, or Escape to dismiss it.')) . '</span>';
+    echo '<span class="admin-gallery-title-completion-accessible" data-gallery-title-completion-status role="status" aria-live="polite" aria-atomic="true"></span>';
     echo '</span>';
 }
 

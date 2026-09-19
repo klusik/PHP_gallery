@@ -49,8 +49,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.104}
-\newcommand{\manualdate}{19 September 2026}
+\newcommand{\version}{0.104.1}
+\newcommand{\manualdate}{20 September 2026}
 
 \hypersetup{
   colorlinks=true,
@@ -426,7 +426,11 @@ Examples include:
 
 Choose a~parent gallery when the~new collection belongs inside an~existing subject, year, place, or~client. Leave the~parent empty for~a~top-level gallery. Enter a~title, review the~proposed folder or~public path, and~add the~description, dates, and~initial visibility.
 
-As~you type at~least two characters in~the~title field, Admin may~show the~remaining text of~a~matching existing gallery as~a~faint inline suggestion. Titles under the~selected parent are~preferred, with the~newest matching sibling first; a~matching title elsewhere can~be~used when no~sibling matches. Press \codeword{Tab} or~\codeword{Right Arrow}, or~select the~suggested text, to~accept it. Continue typing or~press \codeword{Escape} to~ignore it. The~suggestion changes only the~ordinary title field and~does not~save, rename, or~modify any existing gallery.
+As~you type at~least two characters in~the~title field, Admin may~show the~remaining text of~a~matching existing gallery as~a~faint inline suggestion. Recent titles under the~selected parent are~preferred; matches elsewhere are~considered only after the~bounded sibling search is~exhausted. Older titles can~be~omitted, so~no~suggestion does~not~prove that a~title is~unique. The~form requests at~most eight candidates instead of~loading the~complete title catalog.
+
+With the~caret at~the~end and~no~text selected, press unmodified \codeword{Tab} or~\ui{Right Arrow}, or~select the~suggested text, to~accept it. Modified shortcuts and~input-method composition keep their ordinary behavior. The~first \codeword{Escape} dismisses completion; a~later press can~reach the~surrounding panel. Translated help and~a~polite announcement make suggestions discoverable without changing the~field name.
+
+Unicode matching accepts only safe whole-character boundaries. Some non-ASCII suggestions are~omitted when server extensions or~browser segmentation support are~unavailable. A~slow, failed, or~outdated lookup never prevents ordinary typing. Acceptance changes only the~title field: it~does~not~submit the~form, rename an~existing gallery, or~alter its access rules. The~same behavior applies after a~side-panel form is~replaced. See \filepath{docs/TITLE_COMPLETION.md} for~matching limits and~technical details.
 
 After saving, the~gallery becomes a~real collection in~the~gallery tree. Its folder can~receive photographs through the~browser, filesystem transfer, discovery, or~another supported upload workflow. The~database stores its descriptive and~presentation settings.
 
@@ -2147,6 +2151,65 @@ Run the~commands in~\filepath{docs/LATEX_BUILD.md}. Confirm \codeword{pdflatex} 
 \end{enumerate}
 
 Updater-created backups preserve overwritten application files for~update recovery. A~complete operational backup also includes the~database, gallery tree, local configuration, and~installation-owned assets.
+
+\subsection{Validate a~recovery set}
+\index{recovery!assurance}
+
+Keep the~database export, original photographs, local configuration, relevant
+\filepath{data/} storage, Trash contents, custom assets, and~exact application
+version together as~one coordinated recovery set. A~provider snapshot or~a~bounded
+maintenance window can~prevent writes from~splitting database and~file state.
+Store an~off-host copy and~agree how much recent work may~be~lost and~how quickly
+service must return.
+
+The~CLI entry point \filepath{scripts/recovery.php} can~inventory that set
+and~validate restored file samples and~manifest hashes in~a~separate location.
+Follow \filepath{docs/RECOVERY_ASSURANCE.md} for~the~evidence format and~commands.
+The~tool does~not~execute a~database dump, restore production, or~verify a~backup
+provider. Its synthetic corruption drill proves the~checker detects fixture
+damage, not~that your actual backup can~restore the~site.
+
+Before opening a~restored installation, isolate email, scheduled jobs,
+integrations, and~write access from~production destinations. Verify the~restored
+database, relationships, Admin login, private-media denial, and~Trash restoration.
+Record backup age, elapsed recovery time, and~the~operator's observations without
+copying secrets into reports. Use \filepath{docs/RECOVERY_OFF_HOST.md} for~the~full
+procedure. Updater file rollback still does~not~reverse database migrations.
+
+\section{Maintainer verification and~release evidence}
+\label{sec:release-evidence}
+\index{release qualification}
+\index{testing!disposable workflows}
+
+Automated regression and~operational acceptance answer different questions.
+The~central audit checks code, contracts, syntax, available browser fixtures,
+and~release consistency. The~isolated workflow fixture adds real database,
+HTTP, and~Chromium journeys using generated photographs and~accounts.
+It~requires explicit disposable-only configuration and~must never use
+the~installation's database or~media. Follow
+\filepath{docs/GALLERY_WORKFLOWS.md} for~prerequisites; a~missing environment
+is~a~coverage gap, not~proof of~a~working feature.
+
+For~release preparation, follow \filepath{RELEASE.md}: finish source
+and~documentation, rebuild and~inspect this PDF, generate the~manifest,
+and~initialize the~qualification record. Run one central release audit,
+not~a~quick/full/release sequence. With the~isolated prerequisites configured,
+\filepath{scripts/gallery_workflow_mysql.php} accepts \codeword{--release}
+to~provision its fixture around that same release audit.
+
+The~qualification tool \filepath{scripts/release_qualification.php} records
+the~exact source and~PDF fingerprint. Its \codeword{render} command produces
+bounded page previews; rendering alone does~not~approve their appearance.
+The~\codeword{record-audit} command accepts only the~matching central release
+report, not~an~older full audit. A~changed source file or~rebuilt PDF selects
+new pending evidence rather than silently reusing earlier approval.
+
+Review the~title page, contents, index, changed pages, internal links,
+and~representative browser workflows. Record what was~actually checked,
+by~whom, and~with what result. Keep unresolved checks pending and~post-publication
+updater smoke testing separate. A~green automated report is~not~permission
+to~publish, and~the~tool never commits, tags, uploads, or~publishes
+the~release. See \filepath{docs/RELEASE_QUALIFICATION.md} for~the~record commands.
 
 \section{Glossary}
 \label{sec:glossary}
