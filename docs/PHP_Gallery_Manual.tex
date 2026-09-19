@@ -49,7 +49,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.103.1}
+\newcommand{\version}{0.104}
 \newcommand{\manualdate}{19 September 2026}
 
 \hypersetup{
@@ -425,6 +425,8 @@ Examples include:
 \subsection{Create a~gallery from Admin}
 
 Choose a~parent gallery when the~new collection belongs inside an~existing subject, year, place, or~client. Leave the~parent empty for~a~top-level gallery. Enter a~title, review the~proposed folder or~public path, and~add the~description, dates, and~initial visibility.
+
+As~you type at~least two characters in~the~title field, Admin may~show the~remaining text of~a~matching existing gallery as~a~faint inline suggestion. Titles under the~selected parent are~preferred, with the~newest matching sibling first; a~matching title elsewhere can~be~used when no~sibling matches. Press \codeword{Tab} or~\codeword{Right Arrow}, or~select the~suggested text, to~accept it. Continue typing or~press \codeword{Escape} to~ignore it. The~suggestion changes only the~ordinary title field and~does not~save, rename, or~modify any existing gallery.
 
 After saving, the~gallery becomes a~real collection in~the~gallery tree. Its folder can~receive photographs through the~browser, filesystem transfer, discovery, or~another supported upload workflow. The~database stores its descriptive and~presentation settings.
 

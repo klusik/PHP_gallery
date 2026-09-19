@@ -1,5 +1,57 @@
 # Patch notes
 
+## Version 0.104
+
+Version 0.104 adds inline title completion to the Admin create-gallery workflow. Administrators can reuse established naming patterns more quickly while retaining full control of the submitted title, parent gallery, folder name, and all existing creation behavior.
+
+### Highlights
+
+#### Gallery title completion
+
+- Added ghost-text suggestions while entering a title in either the full-page or right-side-panel create-gallery form.
+- Preferred matching titles from the selected parent gallery, with newer siblings ranked first and matching titles elsewhere in the gallery tree retained as a fallback.
+- Allowed administrators to accept a visible suggestion with `Tab`, `ArrowRight`, or a pointer while keeping ordinary typing, editing, `Escape`, and form navigation available.
+- Recalculated suggestions when the selected parent changes and supported create-gallery forms injected dynamically into the Admin side panel.
+
+### Technical Details
+
+#### Backend
+
+- Added `gallery_model_title_completion_rows()` in `app/models/galleries.php` to load compact title metadata through the model layer.
+- Added `gallery_title_completion_candidates()` in `app/services/gallery_picker.php` to prepare presentation-safe candidate data for the create-gallery use case.
+- Updated `app/controllers/admin_gallery_form_models.php` to include title candidates only for new physical-gallery forms.
+- Added no database migrations, schema changes, routes, configuration keys, or stored-data rewrites.
+
+#### Frontend
+
+- Added `public/assets/gallery-modules/admin-gallery-title-completion.js` for Unicode-normalized prefix matching, sibling-aware ranking, delegated event handling, and keyboard or pointer acceptance.
+- Added `public/assets/styles/admin-gallery-title-completion.css` for the inline ghost-text presentation.
+- Updated `app/views/admin_gallery_forms.php` to render the same enhanced title control in full-page and side-panel forms while preserving the normal required `title` input contract.
+- Updated `public/assets/gallery.js` and `app/views/layout.php` to load the cache-busted module and stylesheet on the existing Admin gallery surface.
+
+#### Compatibility and integrity
+
+- Kept gallery creation server-authoritative: ignoring a suggestion or using JavaScript-disabled forms continues to submit the ordinary title field through the existing creation workflow.
+- Preserved parent selection, folder-name derivation, visibility, upload integration, CSRF/authentication checks, and direct-page fallback behavior.
+- Regenerated `app/core-manifest.json` for the complete release tree.
+
+### Tests
+
+- Added `tests/admin_gallery_title_completion_test.mjs` for case-insensitive matching, sibling priority, newest-title preference, fallback matching, minimum input length, acceptance controls, dynamic delegation, entrypoint boot, and server-rendered candidate metadata.
+- Registered the new Node contract in `scripts/audit_registry.php` so it runs through the authoritative release audit.
+- Retained the release audit as the authority for PHP and JavaScript syntax, PHP/Node/WinApp regression suites, MVC boundaries, browser integration when available, release consistency, manifest freshness, and Git whitespace.
+
+### User Impact
+
+#### For administrators
+
+- Repeated or sequential gallery names can be entered faster from either create-gallery surface without copying an older title manually.
+- Suggestions remain optional and never alter existing galleries or create a gallery until the administrator submits the normal form.
+
+#### For visitors
+
+- No public-gallery behavior, URL, access policy, media authorization, or stored content changed.
+
 ## Version 0.103.1
 
 Version 0.103.1 is a focused public-viewer maintenance release that keeps lightbox navigation responsive during rapid stepping, delayed metadata, preview failures, and decoded-image cache turnover. It also replaces the separate navigation spinner with consistent, accessible loading and recoverable-error feedback while preserving media authorization, zoom, slideshow, map, and no-JavaScript behavior.
