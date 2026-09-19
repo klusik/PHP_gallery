@@ -69,7 +69,12 @@ use function Gallery\Services\smart_gallery_normalize_presentation;
 use function Gallery\Services\smart_gallery_presentation_master_status;
 use function Gallery\Services\smart_gallery_presentation_preferences;
 use function Gallery\Services\smart_gallery_lightbox_fetch_images;
+use function Gallery\Services\smart_gallery_image_position;
+use function Gallery\Services\smart_gallery_map_payload;
+use function Gallery\Services\smart_gallery_map_diagnostics;
+use function Gallery\Services\smart_gallery_source_summary;
 use function Gallery\Services\smart_gallery_source_galleries;
+use function Gallery\Services\smart_gallery_source_contexts;
 use function Gallery\Services\smart_gallery_thumbnail_sizes;
 use function Gallery\Services\smart_gallery_query_images;
 use function Gallery\Services\smart_gallery_placement_galleries;
@@ -98,9 +103,11 @@ use function Gallery\Services\gallery_lightbox_browsing_mode_options;
 use function Gallery\Services\gallery_description_layout_options;
 use function Gallery\Services\gallery_description_layout_label;
 use function Gallery\Services\gallery_allows_gps_maps;
+use function Gallery\Services\image_has_gps;
+use function Gallery\Services\image_map_point;
+use function Gallery\Services\public_render_profile_with_thumbnail_purpose;
 use function Gallery\Services\translation_active_language;
 use function Gallery\Services\content_localize_entities;
-use function Gallery\Services\content_localize_entity;
 use function Gallery\Services\thumbnail_sizes;
 use function Gallery\Services\admin_thumbnail_bound_slider_state;
 use function Gallery\Services\thumbnail_bound_pair_from_post;
@@ -115,6 +122,7 @@ use function Gallery\Services\admin_test_run_mark;
 use function Gallery\Services\admin_test_run_record_component;
 use const Gallery\Services\SMART_GALLERY_QUERY_MAX_PAGE_SIZE;
 use const Gallery\Services\SMART_GALLERY_LIGHTBOX_MAX_WINDOW;
+use const Gallery\Services\SMART_GALLERY_MAP_MAX_POINTS;
 use const Gallery\Services\CMS_PAGINATION_MAX_COLUMNS;
 use const Gallery\Services\CMS_PAGINATION_MAX_ROWS;
 use const Gallery\Services\DOWNLOAD_CAPABILITY_RESOURCE_SMART_GALLERY;
@@ -480,6 +488,8 @@ function smart_gallery_admin_input(): array
             'thumbnail_rendering_mode' => (string) ($_POST['presentation_thumbnail_rendering_mode'] ?? ''),
             'card_layout' => (string) ($_POST['presentation_card_layout'] ?? ''),
             'metadata_visible' => isset($_POST['presentation_metadata_visible']),
+            'source_gallery_visible' => isset($_POST['presentation_source_gallery_visible']),
+            'map_enabled' => isset($_POST['presentation_map_enabled']),
             'lightbox_enabled' => isset($_POST['presentation_lightbox_enabled']),
             'lightbox_browsing_mode' => (string) ($_POST['presentation_lightbox_browsing_mode'] ?? ''),
             'slideshow_enabled' => isset($_POST['presentation_slideshow_enabled']),
@@ -725,6 +735,7 @@ function smart_gallery_presentation_controls_view_model(array $presentation, boo
         'lightbox_modes' => $lightboxModes,
         'capability_masters' => [
             'lightbox' => !empty($masterStatus['lightbox']),
+            'maps' => !empty($masterStatus['maps']),
             'downloads' => !empty($masterStatus['downloads']),
             'voting' => !empty($masterStatus['voting']),
         ],
@@ -798,10 +809,28 @@ function smart_gallery_image_cards_view_model(array $images, array $sourceGaller
         $fallbackSize = (int) ($candidateSizes[0] ?? 300);
         $voting = $interactive && !empty($presentation['voting_enabled']) && gallery_voting_allowed($source);
         $lightbox = $interactive && !empty($presentation['lightbox_enabled']);
+        $sourceGalleryVisible = !empty($presentation['source_gallery_visible']);
+        $preparedSourceContext = is_array($source['_smart_gallery_source_context'] ?? null)
+            ? $source['_smart_gallery_source_context']
+            : [
+                'id' => (int) $source['id'],
+                'title' => trim((string) ($source['title'] ?? '')),
+                'breadcrumb' => trim((string) ($source['title'] ?? '')),
+                'breadcrumb_compact' => trim((string) ($source['title'] ?? '')),
+                'url' => gallery_public_url($source),
+            ];
+        $sourceGalleryContext = $sourceGalleryVisible ? $preparedSourceContext : null;
         $attributesHtml = '';
         if ($lightbox) {
             $mediaUrl = image_public_media_url($image, $source);
             $previewUrl = thumbnail_bundle_url($bundle, 1600);
+            $imageHasPublicGps = gallery_allows_gps_maps($source) && image_has_gps($image);
+            $imageMapPoint = $imageHasPublicGps
+                ? public_render_profile_with_thumbnail_purpose(
+                    'smart gallery image card map preview 300',
+                    static fn (): array => image_map_point($image, $source, true, $bundle)
+                )
+                : null;
             $attributesHtml = ' ' . lightbox_image_data_attributes(
                 $image,
                 $source,
@@ -811,11 +840,12 @@ function smart_gallery_image_cards_view_model(array $images, array $sourceGaller
                 $title,
                 (int) ($image['score'] ?? 0),
                 (int) ($votes[$imageId] ?? 0),
-                null,
+                $imageMapPoint,
                 'data-lightbox-image',
                 $voting,
                 $offset + $index,
-                $bundle
+                $bundle,
+                $sourceGalleryContext
             );
         }
 
@@ -870,6 +900,7 @@ function smart_gallery_image_cards_view_model(array $images, array $sourceGaller
                 ? render_viewer_collection_add_control_html($imageId, $viewerCollections, 'viewer-collection-card-overlay')
                 : '',
             'vote_html' => $voteHtml,
+            'source_gallery' => $sourceGalleryContext,
             'metadata_visible' => $metadataVisible,
             'title' => $title,
             'description' => $description,
@@ -907,9 +938,17 @@ function cms_smart_gallery(): void
         return;
     }
 
+    $sourceGalleryId = max(0, (int) ($_GET['source_gallery_id'] ?? 0));
     try {
-        if ($testRunActive) admin_test_run_mark('smart_gallery_count_begin', ['smart_gallery_id' => (int) $gallery['id']]);
-        $total = smart_gallery_count_images($gallery, true);
+        if ($testRunActive) admin_test_run_mark('smart_gallery_source_summary_begin', ['smart_gallery_id' => (int) $gallery['id']]);
+        $sourceSummary = smart_gallery_source_summary($gallery, true, $sourceGalleryId);
+        if ($testRunActive) admin_test_run_mark('smart_gallery_source_summary_end', ['source_galleries' => (int) ($sourceSummary['gallery_count'] ?? 0)]);
+        if ($sourceGalleryId > 0 && empty($sourceSummary['selected_valid'])) {
+            cms_not_found();
+            return;
+        }
+        if ($testRunActive) admin_test_run_mark('smart_gallery_count_begin', ['smart_gallery_id' => (int) $gallery['id'], 'source_gallery_id' => $sourceGalleryId]);
+        $total = smart_gallery_count_images($gallery, true, $sourceGalleryId);
         if ($testRunActive) admin_test_run_mark('smart_gallery_count_end', ['total' => $total]);
         if ($testRunActive) admin_test_run_mark('smart_gallery_presentation_begin');
         $presentation = smart_gallery_effective_presentation($gallery);
@@ -923,8 +962,10 @@ function cms_smart_gallery(): void
     $rows = (int) $presentation['grid_rows'];
     $paginationRequiredForSafety = $total > SMART_GALLERY_QUERY_MAX_PAGE_SIZE;
     $usePagination = !empty($presentation['pagination_enabled']) || $paginationRequiredForSafety;
+    $paginationBaseQuery = ['page' => 'smart_gallery', 'slug' => $gallery['slug']];
+    if ($sourceGalleryId > 0) $paginationBaseQuery['source_gallery_id'] = $sourceGalleryId;
     if ($usePagination) {
-        $pagination = pagination_model($total, pagination_current_page('photo_page'), $columns, $rows, 'photo_page', ['page' => 'smart_gallery', 'slug' => $gallery['slug']]);
+        $pagination = pagination_model($total, pagination_current_page('photo_page'), $columns, $rows, 'photo_page', $paginationBaseQuery);
         $limit = (int) $pagination['limit'];
         $offset = (int) $pagination['offset'];
     } else {
@@ -934,7 +975,7 @@ function cms_smart_gallery(): void
     }
 
     if ($testRunActive) admin_test_run_mark('smart_gallery_image_query_begin', ['limit' => $limit, 'offset' => $offset]);
-    $images = $total > 0 ? smart_gallery_query_images($gallery, true, $limit, $offset) : [];
+    $images = $total > 0 ? smart_gallery_query_images($gallery, true, $limit, $offset, $sourceGalleryId) : [];
     if ($testRunActive) admin_test_run_mark('smart_gallery_image_query_end', ['images' => count($images)]);
     if ($testRunActive) admin_test_run_mark('smart_gallery_source_gallery_lookup_begin');
     $sourceGalleries = smart_gallery_source_galleries($images);
@@ -942,8 +983,15 @@ function cms_smart_gallery(): void
     $contentLanguage = translation_active_language();
     if ($testRunActive) admin_test_run_mark('smart_gallery_localization_begin', ['language' => $contentLanguage]);
     $images = content_localize_entities('image', $images, $contentLanguage);
+    $localizedSourceGalleries = [];
+    foreach (content_localize_entities('gallery', array_values($sourceGalleries), $contentLanguage) as $sourceGallery) {
+        $sourceId = (int) ($sourceGallery['id'] ?? 0);
+        if ($sourceId > 0) $localizedSourceGalleries[$sourceId] = $sourceGallery;
+    }
+    $sourceGalleries = $localizedSourceGalleries;
+    $sourceContexts = smart_gallery_source_contexts($sourceGalleries, $contentLanguage);
     foreach ($sourceGalleries as $sourceId => $sourceGallery) {
-        $sourceGalleries[$sourceId] = content_localize_entity('gallery', $sourceGallery, $contentLanguage);
+        if (isset($sourceContexts[$sourceId])) $sourceGalleries[$sourceId]['_smart_gallery_source_context'] = $sourceContexts[$sourceId];
     }
     if ($testRunActive) admin_test_run_mark('smart_gallery_localization_end');
     $imageIds = array_map(static fn (array $image): int => (int) $image['id'], $images);
@@ -961,13 +1009,34 @@ function cms_smart_gallery(): void
             view_render_pagination_controls($pagination, t('pagination.photo_pages', 'Photo pages'));
         })
         : '';
+    $mapDiagnostics = [
+        'available' => false,
+        'gps_images' => 0,
+        'map_source_gallery_count' => 0,
+        'point_limit' => SMART_GALLERY_MAP_MAX_POINTS,
+        'truncated' => false,
+    ];
+    if (!empty($presentation['map_enabled']) && $total > 0) {
+        if ($testRunActive) admin_test_run_mark('smart_gallery_map_diagnostics_begin', ['source_gallery_id' => $sourceGalleryId]);
+        $mapDiagnostics = smart_gallery_map_diagnostics($gallery, true, $sourceGalleryId);
+        if ($testRunActive) {
+            admin_test_run_mark('smart_gallery_map_diagnostics_end', [
+                'gps_images' => (int) ($mapDiagnostics['gps_images'] ?? 0),
+                'map_source_galleries' => (int) ($mapDiagnostics['map_source_gallery_count'] ?? 0),
+            ]);
+        }
+    }
+    $mapAvailable = !empty($mapDiagnostics['available']);
+    $mapParams = ['id' => (int) $gallery['id']];
+    if ($sourceGalleryId > 0) $mapParams['source_gallery_id'] = $sourceGalleryId;
+    $mapUrl = $mapAvailable ? url_for('smart_gallery_map_data', $mapParams) : '';
     $lightboxEnabled = !empty($presentation['lightbox_enabled']) && $total > 0;
     $lightboxHtml = $lightboxEnabled
-        ? smart_gallery_capture_html(static function () use ($presentation, $gallery): void {
+        ? smart_gallery_capture_html(static function () use ($presentation, $gallery, $mapAvailable, $mapUrl): void {
             render_lightbox(
                 !empty($presentation['voting_enabled']),
-                false,
-                '',
+                $mapAvailable,
+                $mapUrl,
                 (string) $gallery['title'],
                 (string) $presentation['lightbox_browsing_mode'],
                 !empty($presentation['slideshow_enabled'])
@@ -989,16 +1058,37 @@ function cms_smart_gallery(): void
         ];
     }
 
+    $sourceSummaryView = $sourceSummary;
+    $sourceSummaryView['clear_url'] = url_for('smart_gallery', ['slug' => (string) $gallery['slug']]);
+    foreach ((array) ($sourceSummaryView['items'] ?? []) as $index => $item) {
+        $filterGalleryId = (int) ($item['gallery_id'] ?? 0);
+        $sourceSummaryView['items'][$index]['filter_url'] = $filterGalleryId > 0
+            ? url_for('smart_gallery', ['slug' => (string) $gallery['slug'], 'source_gallery_id' => $filterGalleryId])
+            : '';
+    }
+    $lightboxEndpointParams = ['id' => (int) $gallery['id']];
+    if ($sourceGalleryId > 0) $lightboxEndpointParams['source_gallery_id'] = $sourceGalleryId;
+
+    $cardsViewModel = smart_gallery_image_cards_view_model($images, $sourceGalleries, $presentation, $votes, $tags, $offset, true);
+    $sourceContextCardCount = 0;
+    foreach ((array) ($cardsViewModel['cards'] ?? []) as $card) {
+        if (is_array($card['source_gallery'] ?? null)) $sourceContextCardCount++;
+    }
+
     \Gallery\Views\view_render_public_smart_gallery([
         'title' => (string) $gallery['title'],
         'description' => (string) $gallery['description'],
         'total' => $total,
         'download' => $download,
+        'map_available' => $mapAvailable,
+        'map_url' => $mapUrl,
+        'source_summary' => $sourceSummaryView,
+        'source_filter_gallery_id' => $sourceGalleryId,
         'pagination_html' => $paginationHtml,
         'lightbox_enabled' => $lightboxEnabled,
-        'lightbox_endpoint' => url_for('smart_gallery_lightbox_data', ['id' => (int) $gallery['id']]),
+        'lightbox_endpoint' => url_for('smart_gallery_lightbox_data', $lightboxEndpointParams),
         'lightbox_browsing_mode' => (string) $presentation['lightbox_browsing_mode'],
-        'cards' => smart_gallery_image_cards_view_model($images, $sourceGalleries, $presentation, $votes, $tags, $offset, true),
+        'cards' => $cardsViewModel,
         'lightbox_html' => $lightboxHtml,
     ]);
 
@@ -1013,21 +1103,69 @@ function cms_smart_gallery(): void
             'pagination_enabled' => $usePagination,
             'pagination_forced_for_safety' => $paginationRequiredForSafety,
             'source_gallery_count' => count($sourceGalleries),
+            'source_summary_gallery_count' => (int) ($sourceSummary['gallery_count'] ?? 0),
+            'source_filter_gallery_id' => $sourceGalleryId,
             'lightbox_enabled' => $lightboxEnabled,
+            'map_available' => $mapAvailable,
+            'source_context' => [
+                'enabled' => !empty($presentation['source_gallery_visible']),
+                'page_source_gallery_count' => count($sourceGalleries),
+                'page_source_context_cards' => $sourceContextCardCount,
+                'summary_gallery_count' => (int) ($sourceSummary['gallery_count'] ?? 0),
+                'summary_total_images' => (int) ($sourceSummary['total_images'] ?? 0),
+                'selected_gallery_id' => $sourceGalleryId,
+                'selected_valid' => !empty($sourceSummary['selected_valid']),
+            ],
+            'map' => [
+                'enabled' => !empty($presentation['map_enabled']),
+                'available' => $mapAvailable,
+                'gps_images' => (int) ($mapDiagnostics['gps_images'] ?? 0),
+                'map_source_gallery_count' => (int) ($mapDiagnostics['map_source_gallery_count'] ?? 0),
+                'point_limit' => (int) ($mapDiagnostics['point_limit'] ?? SMART_GALLERY_MAP_MAX_POINTS),
+                'truncated' => !empty($mapDiagnostics['truncated']),
+            ],
             'presentation' => [
                 'grid_columns' => (int) $presentation['grid_columns'],
                 'grid_rows' => (int) $presentation['grid_rows'],
                 'thumbnail_rendering_mode' => (string) ($presentation['thumbnail_rendering_mode'] ?? ''),
                 'metadata_visible' => !empty($presentation['metadata_visible']),
+                'source_gallery_visible' => !empty($presentation['source_gallery_visible']),
+                'map_enabled' => !empty($presentation['map_enabled']),
                 'voting_enabled' => !empty($presentation['voting_enabled']),
                 'slideshow_enabled' => !empty($presentation['slideshow_enabled']),
             ],
             'query_page_size_cap' => SMART_GALLERY_QUERY_MAX_PAGE_SIZE,
             'lightbox_window_cap' => SMART_GALLERY_LIGHTBOX_MAX_WINDOW,
+            'map_point_cap' => SMART_GALLERY_MAP_MAX_POINTS,
         ]);
     }
     render_footer();
     if ($testRunActive) admin_test_run_mark('smart_gallery_render_end');
+}
+
+/** Return the bounded aggregate GPS map for the entire authorized Smart Gallery result set. */
+function cms_smart_gallery_map_data(): void
+{
+    $gallery = smart_gallery_find_public_by_id(max(0, (int) ($_GET['id'] ?? 0)));
+    if (!$gallery) {
+        gallery_lightbox_json_response(['ok' => false, 'error' => 'not_found'], 404);
+        return;
+    }
+
+    try {
+        $presentation = smart_gallery_effective_presentation($gallery);
+        if (empty($presentation['map_enabled'])) {
+            gallery_lightbox_json_response(['ok' => false, 'error' => 'not_found'], 404);
+            return;
+        }
+        $sourceGalleryId = max(0, (int) ($_GET['source_gallery_id'] ?? 0));
+        $payload = smart_gallery_map_payload($gallery, true, $sourceGalleryId);
+    } catch (InvalidArgumentException) {
+        gallery_lightbox_json_response(['ok' => false, 'error' => 'not_found'], 404);
+        return;
+    }
+
+    gallery_lightbox_json_response($payload);
 }
 
 /** Return one authorized bounded metadata window for complete Smart Gallery lightbox navigation. */
@@ -1045,11 +1183,21 @@ function cms_smart_gallery_lightbox_data(): void
             gallery_lightbox_json_response(['ok' => false, 'error' => 'not_found'], 404);
             return;
         }
-        $total = smart_gallery_count_images($gallery, true);
+        $sourceGalleryId = max(0, (int) ($_GET['source_gallery_id'] ?? 0));
+        $total = smart_gallery_count_images($gallery, true, $sourceGalleryId);
         $limit = max(1, min(SMART_GALLERY_LIGHTBOX_MAX_WINDOW, (int) ($_GET['limit'] ?? 60)));
         $offset = max(0, (int) ($_GET['offset'] ?? 0));
+        $targetImageId = max(0, (int) ($_GET['target_image_id'] ?? 0));
+        $targetIndex = null;
+        if ($targetImageId > 0) {
+            $candidateIndex = smart_gallery_image_position($gallery, true, $targetImageId, $sourceGalleryId);
+            if ($candidateIndex >= 0) {
+                $targetIndex = $candidateIndex;
+                $offset = max(0, min(max(0, $total - $limit), $candidateIndex - intdiv($limit, 2)));
+            }
+        }
         if ($total > 0 && $offset >= $total) $offset = max(0, $total - $limit);
-        $images = $total > 0 ? smart_gallery_lightbox_fetch_images($gallery, true, $offset, $limit) : [];
+        $images = $total > 0 ? smart_gallery_lightbox_fetch_images($gallery, true, $offset, $limit, $sourceGalleryId) : [];
     } catch (InvalidArgumentException) {
         gallery_lightbox_json_response(['ok' => false, 'error' => 'not_found'], 404);
         return;
@@ -1071,8 +1219,15 @@ function cms_smart_gallery_lightbox_data(): void
     cms_release_gallery_lightbox_session_lock();
 
     $images = content_localize_entities('image', $images, $contentLanguage);
+    $localizedSourceGalleries = [];
+    foreach (content_localize_entities('gallery', array_values($sourceGalleries), $contentLanguage) as $sourceGallery) {
+        $sourceId = (int) ($sourceGallery['id'] ?? 0);
+        if ($sourceId > 0) $localizedSourceGalleries[$sourceId] = $sourceGallery;
+    }
+    $sourceGalleries = $localizedSourceGalleries;
+    $sourceContexts = smart_gallery_source_contexts($sourceGalleries, $contentLanguage);
     foreach ($sourceGalleries as $sourceId => $sourceGallery) {
-        $sourceGalleries[$sourceId] = content_localize_entity('gallery', $sourceGallery, $contentLanguage);
+        if (isset($sourceContexts[$sourceId])) $sourceGalleries[$sourceId]['_smart_gallery_source_context'] = $sourceContexts[$sourceId];
     }
     thumbnail_bundles_preload($images);
     $items = [];
@@ -1080,7 +1235,15 @@ function cms_smart_gallery_lightbox_data(): void
         $source = $sourceGalleries[(int) ($image['gallery_id'] ?? 0)] ?? null;
         if (!$source) continue;
         $votingAllowed = !empty($presentation['voting_enabled']) && gallery_voting_allowed($source);
-        $item = gallery_lightbox_json_item($image, $source, $offset + $rowIndex, gallery_allows_gps_maps($source), $votingAllowed, $votes);
+        $item = gallery_lightbox_json_item(
+            $image,
+            $source,
+            $offset + $rowIndex,
+            gallery_allows_gps_maps($source),
+            $votingAllowed,
+            $votes,
+            !empty($presentation['source_gallery_visible'])
+        );
         if (is_array($viewerFavouriteStates)
             && (!$viewerFavouriteRequiresSourceRecheck || viewer_source_image_can_reference((int) $image['id']))) {
             $item['viewer_favourite'] = !empty($viewerFavouriteStates[(int) $image['id']]);
@@ -1095,6 +1258,7 @@ function cms_smart_gallery_lightbox_data(): void
         'offset' => $offset,
         'limit' => $limit,
         'count' => count($items),
+        'target_index' => $targetIndex,
         'items' => $items,
     ]);
 }

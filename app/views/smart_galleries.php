@@ -207,10 +207,15 @@ function view_render_smart_gallery_presentation_controls(array $viewModel): void
     echo '</select></label>';
     echo '<p class="muted">' . e(t('smart_gallery.placed_card_layout_help', 'This layout controls the Smart Gallery card when it is placed on the homepage or beneath a physical gallery. It does not change the result photo cards.')) . '</p>';
     echo '<label class="checkbox-label"><input type="checkbox" name="presentation_metadata_visible" value="1"' . (!empty($presentation['metadata_visible']) ? ' checked' : '') . '> ' . e(t('smart_gallery.metadata_visible', 'Show photo metadata overlays')) . '</label>';
+    echo '<label class="checkbox-label"><input type="checkbox" name="presentation_source_gallery_visible" value="1"' . (!empty($presentation['source_gallery_visible']) ? ' checked' : '') . '> ' . e(t('smart_gallery.source_gallery_visible', 'Show source gallery')) . '</label>';
     echo '</div>';
 
     echo '<div class="admin-edit-card">';
     echo '<h3>' . e(t('smart_gallery.viewer_features', 'Viewer features')) . '</h3>';
+    echo '<label class="checkbox-label"><input type="checkbox" name="presentation_map_enabled" value="1"' . (!empty($presentation['map_enabled']) ? ' checked' : '') . '> ' . e(t('smart_gallery.map_enabled', 'Enable aggregate GPS map')) . '</label>';
+    if (empty($masters['maps'])) {
+        echo '<p class="muted">' . e(t('smart_gallery.map_master_suppressed', 'Currently suppressed by the site-wide EXIF GPS Gallery Maps capability. The Smart Gallery preference is preserved.')) . '</p>';
+    }
     echo '<label class="checkbox-label"><input type="checkbox" name="presentation_lightbox_enabled" value="1"' . (!empty($presentation['lightbox_enabled']) ? ' checked' : '') . '> ' . e(t('smart_gallery.lightbox_enabled', 'Enable lightbox')) . '</label>';
     if (empty($masters['lightbox'])) {
         echo '<p class="muted">' . e(t('smart_gallery.lightbox_master_suppressed', 'Currently suppressed by the site-wide Lightbox capability. The Smart Gallery preference is preserved.')) . '</p>';
@@ -246,6 +251,13 @@ function view_render_smart_gallery_image_cards(array $viewModel): void
         echo (string) ($card['favourite_html'] ?? '');
         echo (string) ($card['collection_html'] ?? '');
         echo (string) ($card['vote_html'] ?? '');
+        $sourceGallery = $card['source_gallery'] ?? null;
+        if (is_array($sourceGallery) && trim((string) ($sourceGallery['title'] ?? '')) !== '' && trim((string) ($sourceGallery['url'] ?? '')) !== '') {
+            $sourceGalleryPath = trim((string) ($sourceGallery['breadcrumb_compact'] ?? $sourceGallery['breadcrumb'] ?? $sourceGallery['title']));
+            $sourceGalleryFullPath = trim((string) ($sourceGallery['breadcrumb'] ?? $sourceGalleryPath));
+            $sourceGalleryLabel = t('smart_gallery.source_gallery_link', 'Source gallery: {title}', ['title' => $sourceGalleryFullPath]);
+            echo '<a class="smart-gallery-source-badge" href="' . e((string) $sourceGallery['url']) . '" data-smart-gallery-source-link aria-label="' . e($sourceGalleryLabel) . '" title="' . e($sourceGalleryFullPath) . '"><span class="smart-gallery-source-badge-icon" aria-hidden="true">&#128193;</span><span class="smart-gallery-source-badge-path">' . e($sourceGalleryPath) . '</span></a>';
+        }
         if (!empty($card['metadata_visible'])) {
             echo '<div class="image-meta image-meta-overlay">';
             if ((string) ($card['title'] ?? '') !== '') {
@@ -263,6 +275,69 @@ function view_render_smart_gallery_image_cards(array $viewModel): void
 }
 
 /**
+ * Render grouped source-gallery provenance and temporary source filtering.
+ *
+ * @param array<string,mixed> $summary Controller-prepared grouped source state.
+ */
+function view_render_smart_gallery_source_summary(array $summary): void
+{
+    $items = array_values(array_filter((array) ($summary['items'] ?? []), 'is_array'));
+    $galleryCount = max(0, (int) ($summary['gallery_count'] ?? count($items)));
+    $totalImages = max(0, (int) ($summary['total_images'] ?? 0));
+    if ($galleryCount <= 0 || $totalImages <= 0 || $items === []) return;
+
+    $selectedGalleryId = max(0, (int) ($summary['selected_gallery_id'] ?? 0));
+    $summaryLabel = t(
+        'smart_gallery.source_summary',
+        '{count} photos from {galleries} source galleries',
+        ['count' => $totalImages, 'galleries' => $galleryCount]
+    );
+    $selectedTitle = '';
+    foreach ($items as $item) {
+        if (!empty($item['selected'])) {
+            $selectedTitle = trim((string) ($item['breadcrumb_compact'] ?? $item['breadcrumb'] ?? $item['title'] ?? ''));
+            break;
+        }
+    }
+
+    echo '<details class="smart-gallery-source-summary"' . ($selectedGalleryId > 0 ? ' open' : '') . '>';
+    echo '<summary><span>' . e($summaryLabel) . '</span>';
+    if ($selectedTitle !== '') {
+        echo '<span class="smart-gallery-source-summary-active">' . e(t('smart_gallery.source_filter_active', 'Source: {title}', ['title' => $selectedTitle])) . '</span>';
+    }
+    echo '</summary>';
+    echo '<nav class="smart-gallery-source-filter-list" aria-label="' . e(t('smart_gallery.source_filter_label', 'Filter Smart Gallery by source gallery')) . '">';
+
+    $clearUrl = trim((string) ($summary['clear_url'] ?? ''));
+    if ($clearUrl !== '') {
+        echo '<a class="smart-gallery-source-filter-chip' . ($selectedGalleryId <= 0 ? ' is-active' : '') . '" href="' . e($clearUrl) . '"' . ($selectedGalleryId <= 0 ? ' aria-current="page"' : '') . '>';
+        echo '<span>' . e(t('smart_gallery.source_filter_all', 'All sources')) . '</span><strong>' . $totalImages . '</strong></a>';
+    }
+
+    foreach ($items as $item) {
+        $galleryId = max(0, (int) ($item['gallery_id'] ?? 0));
+        $title = trim((string) ($item['title'] ?? ''));
+        $sourcePath = trim((string) ($item['breadcrumb_compact'] ?? $item['breadcrumb'] ?? $title));
+        $sourceFullPath = trim((string) ($item['breadcrumb'] ?? $sourcePath));
+        $filterUrl = trim((string) ($item['filter_url'] ?? ''));
+        $sourceUrl = trim((string) ($item['source_url'] ?? ''));
+        $imageCount = max(0, (int) ($item['image_count'] ?? 0));
+        if ($galleryId <= 0 || $sourcePath === '' || $filterUrl === '' || $imageCount <= 0) continue;
+
+        $selected = !empty($item['selected']);
+        echo '<span class="smart-gallery-source-filter-entry">';
+        echo '<a class="smart-gallery-source-filter-chip' . ($selected ? ' is-active' : '') . '" href="' . e($filterUrl) . '"' . ($selected ? ' aria-current="page"' : '') . ' aria-label="' . e(t('smart_gallery.source_filter_one', 'Filter by source gallery: {title}', ['title' => $sourceFullPath])) . '" title="' . e($sourceFullPath) . '">';
+        echo '<span>' . e($sourcePath) . '</span><strong>' . $imageCount . '</strong></a>';
+        if ($sourceUrl !== '') {
+            echo '<a class="smart-gallery-source-filter-origin" href="' . e($sourceUrl) . '" aria-label="' . e(t('smart_gallery.source_open_gallery', 'Open source gallery: {title}', ['title' => $sourceFullPath])) . '" title="' . e(t('smart_gallery.source_open_gallery', 'Open source gallery: {title}', ['title' => $sourceFullPath])) . '">&#8599;</a>';
+        }
+        echo '</span>';
+    }
+
+    echo '</nav></details>';
+}
+
+/**
  * Render a published Smart Gallery page.
  *
  * @param array<string,mixed> $viewModel Controller-prepared public page state.
@@ -275,11 +350,16 @@ function view_render_public_smart_gallery(array $viewModel): void
     if (is_array($download)) {
         echo '<form class="public-download-legacy-form" method="post" action="' . e((string) ($download['action_url'] ?? '')) . '"><input type="hidden" name="id" value="' . (int) ($download['id'] ?? 0) . '"><input type="hidden" name="capability" value="' . e((string) ($download['capability'] ?? '')) . '"><button type="submit" class="button hero-icon-button hero-download-button" data-gallery-download data-gallery-download-start-url="' . e((string) ($download['start_url'] ?? '')) . '" aria-label="' . e((string) ($download['label'] ?? '')) . '" title="' . e((string) ($download['label'] ?? '')) . '"><span aria-hidden="true">&#10515;</span><span class="visually-hidden">' . e((string) ($download['label'] ?? '')) . '</span></button></form>';
     }
+    if (!empty($viewModel['map_available']) && trim((string) ($viewModel['map_url'] ?? '')) !== '') {
+        $mapLabel = t('smart_gallery.show_map', 'Show Smart Gallery map');
+        echo '<button type="button" class="button secondary hero-icon-button smart-gallery-map-button" data-gallery-map-url="' . e((string) $viewModel['map_url']) . '" data-gallery-map-title="' . e((string) ($viewModel['title'] ?? '')) . '" aria-label="' . e($mapLabel) . '" title="' . e($mapLabel) . '"><span aria-hidden="true">&#128205;</span><span class="visually-hidden">' . e($mapLabel) . '</span></button>';
+    }
     echo '</div></div></div></section>';
 
+    view_render_smart_gallery_source_summary((array) ($viewModel['source_summary'] ?? []));
     echo (string) ($viewModel['pagination_html'] ?? '');
     if (!empty($viewModel['lightbox_enabled'])) {
-        echo '<div data-lightbox-config data-lightbox-endpoint="' . e((string) ($viewModel['lightbox_endpoint'] ?? '')) . '" data-lightbox-total="' . (int) ($viewModel['total'] ?? 0) . '" data-lightbox-window-size="60" data-lightbox-browsing-mode="' . e((string) ($viewModel['lightbox_browsing_mode'] ?? '')) . '">';
+        echo '<div data-lightbox-config data-lightbox-endpoint="' . e((string) ($viewModel['lightbox_endpoint'] ?? '')) . '" data-lightbox-total="' . (int) ($viewModel['total'] ?? 0) . '" data-lightbox-window-size="60" data-lightbox-browsing-mode="' . e((string) ($viewModel['lightbox_browsing_mode'] ?? '')) . '" data-lightbox-maps-enabled="' . (!empty($viewModel['map_available']) ? '1' : '0') . '" data-lightbox-gallery-map-url="' . e((string) ($viewModel['map_url'] ?? '')) . '" data-lightbox-gallery-map-title="' . e((string) ($viewModel['title'] ?? '')) . '">';
     }
     view_render_smart_gallery_image_cards((array) ($viewModel['cards'] ?? []));
     if (!empty($viewModel['lightbox_enabled'])) {

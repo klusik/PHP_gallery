@@ -66,6 +66,7 @@ function request_expects_json(): bool
     if (in_array($page, [
         'gallery_lightbox_data',
         'smart_gallery_lightbox_data',
+        'smart_gallery_map_data',
         'gallery_map_data',
         'public_search',
         'admin_gallery_benchmark_status',

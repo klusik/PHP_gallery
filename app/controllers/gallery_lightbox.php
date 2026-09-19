@@ -120,9 +120,10 @@ function cms_release_gallery_lightbox_session_lock(): void
  * @param bool $mapsAllowed True when GPS metadata may be exposed for this gallery.
  * @param bool $votingAllowed True when vote controls should be available.
  * @param array<int,int> $votesById Current viewer vote state keyed by image id.
+ * @param bool $includeSourceGalleryContext Whether physical-source context should be exposed to the lightbox UI.
  * @return array<string,mixed> JSON-ready item payload.
  */
-function gallery_lightbox_json_item(array $image, array $gallery, int $index, bool $mapsAllowed, bool $votingAllowed, array $votesById): array
+function gallery_lightbox_json_item(array $image, array $gallery, int $index, bool $mapsAllowed, bool $votingAllowed, array $votesById, bool $includeSourceGalleryContext = false): array
 {
     $thumbnailBundle = public_render_profile_with_thumbnail_purpose('lazy lightbox bundle discovery', static fn (): array => thumbnail_bundle($image));
     $mediaUrl = image_public_media_url($image, $gallery);
@@ -134,7 +135,7 @@ function gallery_lightbox_json_item(array $image, array $gallery, int $index, bo
     $score = (int) ($image['score'] ?? 0);
     $vote = $votesById[$imageId] ?? 0;
 
-    return [
+    $item = [
         'id' => $imageId,
         'index' => $index,
         'gallery_id' => (int) $gallery['id'],
@@ -153,6 +154,21 @@ function gallery_lightbox_json_item(array $image, array $gallery, int $index, bo
         'voting_allowed' => $votingAllowed,
         'vote_form_html' => render_vote_form_html($imageId, $score, $vote, $votingAllowed),
     ];
+    if ($includeSourceGalleryContext) {
+        $sourceContext = is_array($gallery['_smart_gallery_source_context'] ?? null)
+            ? $gallery['_smart_gallery_source_context']
+            : [
+                'id' => (int) $gallery['id'],
+                'title' => (string) ($gallery['title'] ?? ''),
+                'breadcrumb' => (string) ($gallery['title'] ?? ''),
+                'url' => gallery_public_url($gallery),
+            ];
+        $item['source_gallery_id'] = (int) ($sourceContext['id'] ?? $gallery['id']);
+        $item['source_gallery_title'] = (string) ($sourceContext['title'] ?? $gallery['title'] ?? '');
+        $item['source_gallery_breadcrumb'] = (string) ($sourceContext['breadcrumb'] ?? $sourceContext['title'] ?? '');
+        $item['source_gallery_url'] = (string) ($sourceContext['url'] ?? gallery_public_url($gallery));
+    }
+    return $item;
 }
 
 /**

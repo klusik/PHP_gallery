@@ -37,6 +37,7 @@ const SMART_GALLERY_MAX_CONDITIONS = 50;
 const SMART_GALLERY_PRESENTATION_VERSION = 1;
 const SMART_GALLERY_QUERY_MAX_PAGE_SIZE = 200;
 const SMART_GALLERY_LIGHTBOX_MAX_WINDOW = 80;
+const SMART_GALLERY_MAP_MAX_POINTS = 10000;
 const SMART_GALLERY_ATTACHMENT_MAX_PER_PARENT = 100;
 const SMART_GALLERY_GRAPH_MAX_DEPTH = 64;
 const SMART_GALLERY_GRAPH_MAX_EXPANDED_NODES = 4096;
@@ -59,6 +60,8 @@ function smart_gallery_presentation_defaults(): array
         'thumbnail_rendering_mode' => public_thumbnail_rendering_mode(),
         'card_layout' => theme_gallery_description_layout(),
         'metadata_visible' => true,
+        'source_gallery_visible' => true,
+        'map_enabled' => true,
         'lightbox_enabled' => true,
         'lightbox_browsing_mode' => theme_lightbox_browsing_mode(),
         'slideshow_enabled' => true,
@@ -80,6 +83,7 @@ function smart_gallery_presentation_master_status(): array
 
     return [
         'lightbox' => $capabilityEnabled('lightbox_modes'),
+        'maps' => $capabilityEnabled('gallery_maps'),
         'downloads' => $capabilityEnabled('downloads'),
         'voting' => $capabilityEnabled('image_voting'),
     ];
@@ -108,7 +112,7 @@ function smart_gallery_normalize_presentation(mixed $value): array
         $rows = filter_var($value['grid_rows'], FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => CMS_PAGINATION_MAX_ROWS]]);
         if ($rows !== false) $normalized['grid_rows'] = (int) $rows;
     }
-    foreach (['pagination_enabled', 'metadata_visible', 'lightbox_enabled', 'slideshow_enabled', 'download_enabled', 'voting_enabled'] as $booleanKey) {
+    foreach (['pagination_enabled', 'metadata_visible', 'source_gallery_visible', 'map_enabled', 'lightbox_enabled', 'slideshow_enabled', 'download_enabled', 'voting_enabled'] as $booleanKey) {
         if (array_key_exists($booleanKey, $value) && $value[$booleanKey] !== null && $value[$booleanKey] !== 'inherit') {
             $normalized[$booleanKey] = filter_var($value[$booleanKey], FILTER_VALIDATE_BOOL, FILTER_NULL_ON_FAILURE);
             if ($normalized[$booleanKey] === null) unset($normalized[$booleanKey]);
@@ -162,6 +166,7 @@ function smart_gallery_effective_presentation(array $gallery): array
 
     // Global capability masters are applied after local Smart Gallery overrides.
     // Stored local preferences remain untouched and become effective again when the master is re-enabled.
+    $effective['map_enabled'] = !empty($effective['map_enabled']) && !empty($masters['maps']);
     $effective['lightbox_enabled'] = !empty($effective['lightbox_enabled']) && !empty($masters['lightbox']);
     $effective['slideshow_enabled'] = !empty($effective['slideshow_enabled']) && $effective['lightbox_enabled'];
     $effective['download_enabled'] = !empty($effective['download_enabled']) && !empty($masters['downloads']);
@@ -1076,6 +1081,23 @@ function smart_gallery_remove_from_gallery(int $smartGalleryId, int $galleryId):
     return $removed;
 }
 
+/** Load every physical source gallery once per request, keyed by id. */
+function smart_gallery_all_source_gallery_rows(): array
+{
+    $cache = &smart_gallery_graph_request_cache();
+    if (isset($cache['source_gallery_rows']) && is_array($cache['source_gallery_rows'])) {
+        return $cache['source_gallery_rows'];
+    }
+
+    $sourceGalleryRows = [];
+    foreach (\Gallery\Models\smart_gallery_model_all_source_galleries() as $sourceGallery) {
+        $galleryId = (int) ($sourceGallery['id'] ?? 0);
+        if ($galleryId > 0) $sourceGalleryRows[$galleryId] = $sourceGallery;
+    }
+    $cache['source_gallery_rows'] = $sourceGalleryRows;
+    return $sourceGalleryRows;
+}
+
 /** Return source gallery ids accessible in the current Admin or public context. */
 function smart_gallery_accessible_gallery_ids(bool $publicOnly): array
 {
@@ -1084,30 +1106,25 @@ function smart_gallery_accessible_gallery_ids(bool $publicOnly): array
     if (isset($cache[$cacheKey]) && is_array($cache[$cacheKey])) return $cache[$cacheKey];
 
     $ids = [];
-    $sourceGalleryRows = isset($cache['source_gallery_rows']) && is_array($cache['source_gallery_rows'])
-        ? $cache['source_gallery_rows']
-        : [];
-    foreach (\Gallery\Models\smart_gallery_model_all_source_galleries() as $sourceGallery) {
+    foreach (smart_gallery_all_source_gallery_rows() as $sourceGallery) {
         if ($publicOnly && (!gallery_is_public_listed($sourceGallery) || !visitor_can_access_gallery($sourceGallery))) continue;
-        $galleryId = (int) ($sourceGallery['id'] ?? 0);
-        if ($galleryId > 0) {
-            $ids[] = $galleryId;
-            $sourceGalleryRows[$galleryId] = $sourceGallery;
-        }
+        $ids[] = (int) $sourceGallery['id'];
     }
     $cache[$cacheKey] = $ids;
-    $cache['source_gallery_rows'] = $sourceGalleryRows;
     return $ids;
 }
 
 /** Return normalized semantic query inputs without exposing SQL fragments outside the model. */
-function smart_gallery_query_semantics(array $gallery, bool $publicOnly, ?array $accessibleGalleryIds = null): array
+function smart_gallery_query_semantics(array $gallery, bool $publicOnly, ?array $accessibleGalleryIds = null, int $sourceGalleryId = 0): array
 {
     if (!smart_gallery_schema_ready()) throw new InvalidArgumentException('Smart Gallery storage is unavailable.');
     smart_gallery_assert_runtime_safe($gallery);
     $rules = smart_gallery_rules_from_json((string) ($gallery['rules_json'] ?? ''));
     $ids = $accessibleGalleryIds ?? smart_gallery_accessible_gallery_ids($publicOnly);
     $ids = array_values(array_unique(array_filter(array_map('intval', $ids), static fn (int $id): bool => $id > 0)));
+    if ($sourceGalleryId > 0) {
+        $ids = in_array($sourceGalleryId, $ids, true) ? [$sourceGalleryId] : [];
+    }
     $allowNsfw = !$publicOnly || !nsfw_guard_schema_ready() || visitor_can_access_nsfw_content();
     return [
         'rules' => $rules,
@@ -1132,9 +1149,9 @@ function smart_gallery_contains_image_for_accessible_ids(array $gallery, bool $p
 }
 
 /** Count matching accessible images without loading image rows into PHP. */
-function smart_gallery_count_images(array $gallery, bool $publicOnly): int
+function smart_gallery_count_images(array $gallery, bool $publicOnly, int $sourceGalleryId = 0): int
 {
-    $semantic = smart_gallery_query_semantics($gallery, $publicOnly);
+    $semantic = smart_gallery_query_semantics($gallery, $publicOnly, null, $sourceGalleryId);
     return \Gallery\Models\smart_gallery_model_count_images(
         $semantic['rules'],
         $semantic['accessible_gallery_ids'],
@@ -1144,9 +1161,9 @@ function smart_gallery_count_images(array $gallery, bool $publicOnly): int
 }
 
 /** Query one bounded database-paginated page of matching accessible images. */
-function smart_gallery_query_images(array $gallery, bool $publicOnly, int $limit, int $offset): array
+function smart_gallery_query_images(array $gallery, bool $publicOnly, int $limit, int $offset, int $sourceGalleryId = 0): array
 {
-    $semantic = smart_gallery_query_semantics($gallery, $publicOnly);
+    $semantic = smart_gallery_query_semantics($gallery, $publicOnly, null, $sourceGalleryId);
     return \Gallery\Models\smart_gallery_model_query_images(
         $semantic['rules'],
         $semantic['accessible_gallery_ids'],
@@ -1160,9 +1177,261 @@ function smart_gallery_query_images(array $gallery, bool $publicOnly, int $limit
 }
 
 /** Query one bounded lazy-lightbox metadata window from the same authoritative result set. */
-function smart_gallery_lightbox_fetch_images(array $gallery, bool $publicOnly, int $offset, int $limit): array
+function smart_gallery_lightbox_fetch_images(array $gallery, bool $publicOnly, int $offset, int $limit, int $sourceGalleryId = 0): array
 {
-    return smart_gallery_query_images($gallery, $publicOnly, max(1, min(SMART_GALLERY_LIGHTBOX_MAX_WINDOW, $limit)), max(0, $offset));
+    return smart_gallery_query_images($gallery, $publicOnly, max(1, min(SMART_GALLERY_LIGHTBOX_MAX_WINDOW, $limit)), max(0, $offset), $sourceGalleryId);
+}
+
+/** Return one image's exact zero-based position in the canonical Smart Gallery order. */
+function smart_gallery_image_position(array $gallery, bool $publicOnly, int $imageId, int $sourceGalleryId = 0): int
+{
+    if ($imageId <= 0) return -1;
+    $semantic = smart_gallery_query_semantics($gallery, $publicOnly, null, $sourceGalleryId);
+    return \Gallery\Models\smart_gallery_model_image_position(
+        $semantic['rules'],
+        $semantic['accessible_gallery_ids'],
+        $publicOnly,
+        (bool) $semantic['allow_nsfw'],
+        (string) $semantic['sort_mode'],
+        (string) $semantic['sort_direction'],
+        $imageId
+    );
+}
+
+
+/**
+ * Return localized grouped provenance for the unfiltered canonical Smart Gallery scope.
+ *
+ * The selected source id is view state only. It marks one summary item but does not
+ * change the grouped projection, allowing the visitor to switch source filters without
+ * losing the complete provenance overview.
+ *
+ * @return array{total_images:int,gallery_count:int,selected_gallery_id:int,selected_valid:bool,items:array<int,array<string,mixed>>}
+ */
+function smart_gallery_source_summary(array $gallery, bool $publicOnly, int $selectedSourceGalleryId = 0): array
+{
+    $semantic = smart_gallery_query_semantics($gallery, $publicOnly);
+    $rows = \Gallery\Models\smart_gallery_model_source_summary_rows(
+        $semantic['rules'],
+        $semantic['accessible_gallery_ids'],
+        $publicOnly,
+        (bool) $semantic['allow_nsfw']
+    );
+
+    $allSourceGalleries = smart_gallery_all_source_gallery_rows();
+    $contentLanguage = translation_active_language();
+    $summarySourceRows = [];
+    foreach ($rows as $row) {
+        $sourceGalleryId = (int) ($row['gallery_id'] ?? 0);
+        if ($sourceGalleryId > 0 && isset($allSourceGalleries[$sourceGalleryId]) && is_array($allSourceGalleries[$sourceGalleryId])) {
+            $summarySourceRows[$sourceGalleryId] = $allSourceGalleries[$sourceGalleryId];
+        }
+    }
+    $localizedSummarySources = [];
+    foreach (content_localize_entities('gallery', array_values($summarySourceRows), $contentLanguage) as $source) {
+        $sourceGalleryId = (int) ($source['id'] ?? 0);
+        if ($sourceGalleryId > 0) $localizedSummarySources[$sourceGalleryId] = $source;
+    }
+    $sourceContexts = smart_gallery_source_contexts($localizedSummarySources, $contentLanguage);
+
+    $items = [];
+    $totalImages = 0;
+    $selectedValid = $selectedSourceGalleryId <= 0;
+    foreach ($rows as $row) {
+        $sourceGalleryId = (int) ($row['gallery_id'] ?? 0);
+        $imageCount = max(0, (int) ($row['image_count'] ?? 0));
+        $source = $localizedSummarySources[$sourceGalleryId] ?? null;
+        $sourceContext = $sourceContexts[$sourceGalleryId] ?? null;
+        if ($sourceGalleryId <= 0 || $imageCount <= 0 || !is_array($source) || !is_array($sourceContext)) continue;
+
+        $selected = $selectedSourceGalleryId > 0 && $selectedSourceGalleryId === $sourceGalleryId;
+        if ($selected) $selectedValid = true;
+        $items[] = [
+            'gallery_id' => $sourceGalleryId,
+            'title' => (string) ($sourceContext['title'] ?? ''),
+            'breadcrumb' => (string) ($sourceContext['breadcrumb'] ?? ''),
+            'breadcrumb_compact' => (string) ($sourceContext['breadcrumb_compact'] ?? ''),
+            'source_url' => (string) ($sourceContext['url'] ?? ''),
+            'image_count' => $imageCount,
+            'selected' => $selected,
+        ];
+        $totalImages += $imageCount;
+    }
+
+    return [
+        'total_images' => $totalImages,
+        'gallery_count' => count($items),
+        'selected_gallery_id' => max(0, $selectedSourceGalleryId),
+        'selected_valid' => $selectedValid,
+        'items' => $items,
+    ];
+}
+
+
+/**
+ * Resolve the authorized physical-gallery scope used by aggregate Smart Gallery maps.
+ *
+ * The same context is shared by availability checks and payload generation so the
+ * hero action cannot drift from the endpoint's authorization or inherited GPS rules.
+ * Physical gallery rows are loaded once and reused while walking inherited GPS policy.
+ *
+ * @return array{semantic:?array<string,mixed>,source_galleries:array<int,array<string,mixed>>}
+ */
+function smart_gallery_map_query_context(array $gallery, bool $publicOnly, int $sourceGalleryId = 0): array
+{
+    $accessibleIds = smart_gallery_accessible_gallery_ids($publicOnly);
+    $allSourceGalleries = smart_gallery_all_source_gallery_rows();
+    $lookup = static fn (int $galleryId): ?array => isset($allSourceGalleries[$galleryId]) && is_array($allSourceGalleries[$galleryId])
+        ? $allSourceGalleries[$galleryId]
+        : null;
+
+    $candidateIds = $sourceGalleryId > 0
+        ? (in_array($sourceGalleryId, $accessibleIds, true) ? [$sourceGalleryId] : [])
+        : $accessibleIds;
+    $mapGalleryIds = [];
+    foreach ($candidateIds as $galleryId) {
+        $source = $lookup((int) $galleryId);
+        if ($source && gallery_allows_gps_maps($source, $lookup)) $mapGalleryIds[] = (int) $galleryId;
+    }
+
+    return [
+        'semantic' => $mapGalleryIds !== [] ? smart_gallery_query_semantics($gallery, $publicOnly, $mapGalleryIds, $sourceGalleryId) : null,
+        'source_galleries' => $allSourceGalleries,
+    ];
+}
+
+/**
+ * Return bounded aggregate-map diagnostics without materializing marker rows.
+ *
+ * The diagnostic count uses the same canonical Smart Gallery predicate and inherited
+ * source-gallery GPS policy as the real payload. It is therefore safe to expose to
+ * the administrator test-run component as counts only, while avoiding thumbnail or
+ * marker generation during the normal page render.
+ *
+ * @return array{available:bool,gps_images:int,map_source_gallery_count:int,point_limit:int,truncated:bool}
+ */
+function smart_gallery_map_diagnostics(array $gallery, bool $publicOnly, int $sourceGalleryId = 0): array
+{
+    $context = smart_gallery_map_query_context($gallery, $publicOnly, $sourceGalleryId);
+    $semantic = $context['semantic'];
+    if (!is_array($semantic)) {
+        return [
+            'available' => false,
+            'gps_images' => 0,
+            'map_source_gallery_count' => 0,
+            'point_limit' => SMART_GALLERY_MAP_MAX_POINTS,
+            'truncated' => false,
+        ];
+    }
+
+    $gpsImages = \Gallery\Models\smart_gallery_model_count_map_images(
+        $semantic['rules'],
+        $semantic['accessible_gallery_ids'],
+        $publicOnly,
+        (bool) $semantic['allow_nsfw']
+    );
+
+    return [
+        'available' => $gpsImages > 0,
+        'gps_images' => $gpsImages,
+        'map_source_gallery_count' => count((array) $semantic['accessible_gallery_ids']),
+        'point_limit' => SMART_GALLERY_MAP_MAX_POINTS,
+        'truncated' => $gpsImages > SMART_GALLERY_MAP_MAX_POINTS,
+    ];
+}
+
+/** Return whether an aggregate Smart Gallery map has at least one authorized GPS point. */
+function smart_gallery_has_map_payload(array $gallery, bool $publicOnly, int $sourceGalleryId = 0): bool
+{
+    return !empty(smart_gallery_map_diagnostics($gallery, $publicOnly, $sourceGalleryId)['available']);
+}
+
+/**
+ * Build the aggregate GPS-map payload for an entire Smart Gallery result set.
+ *
+ * Source-gallery access is resolved once, then intersected with the canonical
+ * inherited GPS presentation policy before the model compiles the normal Smart
+ * Gallery rule predicate. The point query is independent from grid pagination.
+ */
+function smart_gallery_map_payload(array $gallery, bool $publicOnly, int $sourceGalleryId = 0): array
+{
+    $totalImages = smart_gallery_count_images($gallery, $publicOnly, $sourceGalleryId);
+    $context = smart_gallery_map_query_context($gallery, $publicOnly, $sourceGalleryId);
+    $semantic = $context['semantic'];
+
+    if (!is_array($semantic)) {
+        return [
+            'ok' => true,
+            'source_type' => 'smart_gallery',
+            'map_source_type' => 'exif_point',
+            'smart_gallery_id' => (int) ($gallery['id'] ?? 0),
+            'total_images' => $totalImages,
+            'gps_images' => 0,
+            'point_limit' => SMART_GALLERY_MAP_MAX_POINTS,
+            'truncated' => false,
+            'points' => [],
+        ];
+    }
+
+    $gpsImages = \Gallery\Models\smart_gallery_model_count_map_images(
+        $semantic['rules'],
+        $semantic['accessible_gallery_ids'],
+        $publicOnly,
+        (bool) $semantic['allow_nsfw']
+    );
+    $images = $gpsImages > 0
+        ? \Gallery\Models\smart_gallery_model_query_map_images(
+            $semantic['rules'],
+            $semantic['accessible_gallery_ids'],
+            $publicOnly,
+            (bool) $semantic['allow_nsfw'],
+            (string) $semantic['sort_mode'],
+            (string) $semantic['sort_direction'],
+            SMART_GALLERY_MAP_MAX_POINTS
+        )
+        : [];
+
+    $contentLanguage = translation_active_language();
+    $images = content_localize_entities('image', $images, $contentLanguage);
+    $sourceGalleries = smart_gallery_source_galleries($images);
+    $localizedSourceGalleries = [];
+    foreach (content_localize_entities('gallery', array_values($sourceGalleries), $contentLanguage) as $sourceGallery) {
+        $sourceGalleryId = (int) ($sourceGallery['id'] ?? 0);
+        if ($sourceGalleryId > 0) $localizedSourceGalleries[$sourceGalleryId] = $sourceGallery;
+    }
+    $sourceGalleries = $localizedSourceGalleries;
+    $sourceContexts = smart_gallery_source_contexts($sourceGalleries, $contentLanguage);
+
+    $points = [];
+    foreach ($images as $image) {
+        $sourceGalleryId = (int) ($image['gallery_id'] ?? 0);
+        $source = $sourceGalleries[$sourceGalleryId] ?? null;
+        $sourceContext = $sourceContexts[$sourceGalleryId] ?? null;
+        if (!$source || !is_array($sourceContext) || !image_has_gps($image)) continue;
+        $point = image_map_point($image, $source, false);
+        $point['smart_gallery_id'] = (int) ($gallery['id'] ?? 0);
+        $point['source_gallery_title'] = (string) ($sourceContext['title'] ?? '');
+        $point['source_gallery_breadcrumb'] = (string) ($sourceContext['breadcrumb'] ?? '');
+        $point['source_gallery_url'] = (string) ($sourceContext['url'] ?? '');
+        $point['thumb'] = \Gallery\Core\url_for('thumb', [
+            'id' => (int) ($image['id'] ?? 0),
+            'size' => 300,
+            'format' => thumbnail_preferred_browser_format(),
+        ]);
+        $points[] = $point;
+    }
+
+    return [
+        'ok' => true,
+        'source_type' => 'smart_gallery',
+        'map_source_type' => 'exif_point',
+        'smart_gallery_id' => (int) ($gallery['id'] ?? 0),
+        'total_images' => $totalImages,
+        'gps_images' => $gpsImages,
+        'point_limit' => SMART_GALLERY_MAP_MAX_POINTS,
+        'truncated' => $gpsImages > SMART_GALLERY_MAP_MAX_POINTS,
+        'points' => $points,
+    ];
 }
 
 /**
@@ -1250,24 +1519,102 @@ function smart_gallery_card_summaries(array $smartGalleries, bool $publicOnly): 
     return $result;
 }
 
+/** Load physical source galleries by id without N+1 lookups. */
+function smart_gallery_source_galleries_by_ids(array $ids): array
+{
+    $ids = array_values(array_unique(array_filter(array_map('intval', $ids), static fn (int $id): bool => $id > 0)));
+    if ($ids === []) return [];
+
+    $cachedRows = smart_gallery_all_source_gallery_rows();
+    $byId = [];
+    foreach ($ids as $id) {
+        if (isset($cachedRows[$id]) && is_array($cachedRows[$id])) $byId[$id] = $cachedRows[$id];
+    }
+    return $byId;
+}
+
 /** Load physical source galleries for a Smart Gallery image set without N+1 lookups. */
 function smart_gallery_source_galleries(array $images): array
 {
-    $ids = array_values(array_unique(array_filter(array_map(static fn (array $image): int => (int) ($image['gallery_id'] ?? 0), $images), static fn (int $id): bool => $id > 0)));
-    if ($ids === []) return [];
+    return smart_gallery_source_galleries_by_ids(array_map(
+        static fn (array $image): int => (int) ($image['gallery_id'] ?? 0),
+        $images
+    ));
+}
 
-    $cache = &smart_gallery_graph_request_cache();
-    $cachedRows = isset($cache['source_gallery_rows']) && is_array($cache['source_gallery_rows']) ? $cache['source_gallery_rows'] : [];
-    $missingIds = array_values(array_filter($ids, static fn (int $id): bool => !array_key_exists($id, $cachedRows)));
-    if ($missingIds !== []) {
-        $loaded = \Gallery\Models\smart_gallery_model_galleries_by_ids($missingIds);
-        foreach ($missingIds as $missingId) $cachedRows[$missingId] = $loaded[$missingId] ?? null;
-        $cache['source_gallery_rows'] = $cachedRows;
+/**
+ * Build localized physical-source provenance with structural breadcrumbs.
+ *
+ * Callers pass only source galleries that are already authorized for their current
+ * result scope. Ancestors are used for the same structural context shown by normal
+ * physical-gallery breadcrumbs; they do not widen Smart Gallery result membership.
+ * The request-cached physical-gallery inventory avoids parent lookup N+1 queries,
+ * while ancestor translations are loaded in one batch.
+ *
+ * @param array<int,array<string,mixed>> $sourceGalleries Localized source galleries keyed by id when possible.
+ * @param string $contentLanguage Active authored-content language.
+ * @return array<int,array{id:int,title:string,breadcrumb:string,breadcrumb_compact:string,url:string}> Context keyed by source gallery id.
+ */
+function smart_gallery_source_contexts(array $sourceGalleries, string $contentLanguage): array
+{
+    $localizedSources = [];
+    foreach ($sourceGalleries as $sourceGallery) {
+        if (!is_array($sourceGallery)) continue;
+        $sourceGalleryId = (int) ($sourceGallery['id'] ?? 0);
+        if ($sourceGalleryId > 0) $localizedSources[$sourceGalleryId] = $sourceGallery;
+    }
+    if ($localizedSources === []) return [];
+
+    $allSourceGalleries = smart_gallery_all_source_gallery_rows();
+    $ancestorRows = [];
+    $pathsBySource = [];
+    foreach ($localizedSources as $sourceGalleryId => $sourceGallery) {
+        $pathIds = [];
+        $seen = [];
+        $cursorId = $sourceGalleryId;
+        for ($depth = 0; $cursorId > 0 && $depth < SMART_GALLERY_GRAPH_MAX_DEPTH; $depth++) {
+            if (isset($seen[$cursorId])) break;
+            $seen[$cursorId] = true;
+            $row = $cursorId === $sourceGalleryId
+                ? $sourceGallery
+                : ($allSourceGalleries[$cursorId] ?? null);
+            if (!is_array($row)) break;
+            array_unshift($pathIds, $cursorId);
+            if ($cursorId !== $sourceGalleryId) $ancestorRows[$cursorId] = $row;
+            $cursorId = max(0, (int) ($row['parent_id'] ?? 0));
+        }
+        $pathsBySource[$sourceGalleryId] = $pathIds;
     }
 
-    $byId = [];
-    foreach ($ids as $id) if (isset($cachedRows[$id]) && is_array($cachedRows[$id])) $byId[$id] = $cachedRows[$id];
-    return $byId;
+    $localizedById = $localizedSources;
+    if ($ancestorRows !== []) {
+        foreach (content_localize_entities('gallery', array_values($ancestorRows), $contentLanguage) as $ancestor) {
+            $ancestorId = (int) ($ancestor['id'] ?? 0);
+            if ($ancestorId > 0) $localizedById[$ancestorId] = $ancestor;
+        }
+    }
+
+    $contexts = [];
+    foreach ($localizedSources as $sourceGalleryId => $sourceGallery) {
+        $titles = [];
+        foreach ((array) ($pathsBySource[$sourceGalleryId] ?? [$sourceGalleryId]) as $pathId) {
+            $pathTitle = trim((string) ($localizedById[(int) $pathId]['title'] ?? ''));
+            if ($pathTitle !== '') $titles[] = $pathTitle;
+        }
+        $sourceTitle = trim((string) ($sourceGallery['title'] ?? ''));
+        if ($titles === [] && $sourceTitle !== '') $titles[] = $sourceTitle;
+        $breadcrumb = implode(' › ', $titles);
+        $compactTitles = array_slice($titles, -2);
+        $compactBreadcrumb = implode(' › ', $compactTitles);
+        $contexts[$sourceGalleryId] = [
+            'id' => $sourceGalleryId,
+            'title' => $sourceTitle,
+            'breadcrumb' => $breadcrumb !== '' ? $breadcrumb : $sourceTitle,
+            'breadcrumb_compact' => $compactBreadcrumb !== '' ? $compactBreadcrumb : $sourceTitle,
+            'url' => \Gallery\Core\gallery_public_url($sourceGallery),
+        ];
+    }
+    return $contexts;
 }
 
 /** Convert a compatible text search into a reusable OR rule tree. */

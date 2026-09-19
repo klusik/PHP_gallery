@@ -517,6 +517,187 @@
         max-width: calc(100% - 0.7rem);
     }
 }
+/* Keeps Smart Gallery provenance visible as an in-thumbnail context chip without changing card geometry. */
+.public-page .gallery-image-grid .image-stage > .smart-gallery-source-badge {
+    position: absolute;
+    top: 0.55rem;
+    right: 0.55rem;
+    z-index: 9;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.38rem;
+    max-width: calc(100% - 1.1rem);
+    min-height: 2rem;
+    padding: 0.34rem 0.62rem;
+    border: 1px solid color-mix(in srgb, var(--panel) 45%, transparent);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--ink) 70%, transparent);
+    color: var(--panel);
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.2);
+    -webkit-backdrop-filter: blur(12px) saturate(1.2);
+    backdrop-filter: blur(12px) saturate(1.2);
+    font-size: 0.76rem;
+    font-weight: 750;
+    line-height: 1.15;
+    text-decoration: none;
+    letter-spacing: 0.01em;
+}
+
+.public-page .gallery-image-grid .image-stage > .smart-gallery-source-badge .smart-gallery-source-badge-icon {
+    flex: 0 0 auto;
+    font-size: 0.92rem;
+    line-height: 1;
+}
+
+.public-page .gallery-image-grid .image-stage > .smart-gallery-source-badge .smart-gallery-source-badge-path {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.public-page .gallery-image-grid .image-stage > .smart-gallery-source-badge:hover,
+.public-page .gallery-image-grid .image-stage > .smart-gallery-source-badge:focus-visible {
+    border-color: color-mix(in srgb, var(--panel) 72%, transparent);
+    background: color-mix(in srgb, var(--ink) 84%, transparent);
+    color: #fff;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.28);
+    outline: none;
+}
+
+.public-page .gallery-image-grid .image-stage > .smart-gallery-source-badge:focus-visible {
+    outline: 3px solid color-mix(in srgb, var(--accent) 38%, transparent);
+    outline-offset: 2px;
+}
+
+/* Groups Smart Gallery provenance without forcing the source list open by default. */
+.smart-gallery-source-summary {
+    margin: 0.9rem 0 1rem;
+    border: 1px solid var(--border, rgba(148, 163, 184, 0.35));
+    border-radius: var(--radius, 16px);
+    background: var(--panel);
+    overflow: hidden;
+}
+
+.smart-gallery-source-summary > summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.75rem 0.9rem;
+    cursor: pointer;
+    font-weight: 700;
+    list-style-position: inside;
+}
+
+.smart-gallery-source-summary-active {
+    color: var(--accent-dark);
+    font-size: 0.86rem;
+    font-weight: 700;
+}
+
+.smart-gallery-source-filter-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    padding: 0 0.9rem 0.9rem;
+}
+
+.smart-gallery-source-filter-entry {
+    display: inline-flex;
+    align-items: stretch;
+    min-width: 0;
+}
+
+.smart-gallery-source-filter-chip,
+.smart-gallery-source-filter-origin {
+    border: 1px solid var(--border, rgba(148, 163, 184, 0.35));
+    background: transparent;
+    color: inherit;
+    text-decoration: none;
+}
+
+.smart-gallery-source-filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    min-width: 0;
+    padding: 0.42rem 0.62rem;
+    border-radius: 999px;
+}
+
+.smart-gallery-source-filter-entry .smart-gallery-source-filter-chip {
+    border-radius: 999px 0 0 999px;
+}
+
+.smart-gallery-source-filter-chip span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.smart-gallery-source-filter-chip strong {
+    color: var(--muted);
+    font-size: 0.8rem;
+}
+
+.smart-gallery-source-filter-chip:hover,
+.smart-gallery-source-filter-chip:focus-visible,
+.smart-gallery-source-filter-chip.is-active {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+    color: var(--accent-dark);
+}
+
+.smart-gallery-source-filter-origin {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    border-left: 0;
+    border-radius: 0 999px 999px 0;
+    color: var(--muted);
+}
+
+.smart-gallery-source-filter-origin:hover,
+.smart-gallery-source-filter-origin:focus-visible {
+    border-color: var(--accent);
+    color: var(--accent-dark);
+}
+
+@media (max-width: 640px) {
+    .smart-gallery-source-summary > summary {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .smart-gallery-source-filter-entry,
+    .smart-gallery-source-filter-chip {
+        max-width: 100%;
+    }
+}
+
+/* Preserve practical touch targets for provenance/filter/map controls on coarse pointers. */
+@media (pointer: coarse) {
+    .smart-gallery-source-badge,
+    .smart-gallery-source-filter-chip,
+    .smart-gallery-source-filter-origin {
+        min-height: 2.75rem;
+    }
+
+    .smart-gallery-source-filter-origin {
+        width: 2.75rem;
+        min-width: 2.75rem;
+    }
+
+    .hero-actions .smart-gallery-map-button {
+        width: 2.75rem;
+        height: 2.75rem;
+        min-width: 2.75rem;
+        min-height: 2.75rem;
+    }
+}
+
 .image-vote-overlay {
     position: absolute;
     left: 0;
@@ -695,6 +876,64 @@
     margin: 0;
     color: rgba(255, 253, 248, 0.9);
     overflow-wrap: anywhere;
+}
+
+.lightbox-source-gallery {
+    display: flex;
+    justify-content: center;
+    max-width: min(52rem, 100%);
+    margin: 0.28rem auto 0;
+    font-size: 0.88rem;
+}
+
+.lightbox-source-gallery a {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.42rem;
+    max-width: 100%;
+    min-height: 2rem;
+    padding: 0.34rem 0.68rem;
+    border: 1px solid rgba(255, 253, 248, 0.22);
+    border-radius: 999px;
+    background: rgba(255, 253, 248, 0.08);
+    color: rgba(255, 253, 248, 0.94);
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.12);
+    text-decoration: none;
+    -webkit-backdrop-filter: blur(10px) saturate(1.15);
+    backdrop-filter: blur(10px) saturate(1.15);
+    transition: background 0.16s ease, border-color 0.16s ease, transform 0.16s ease;
+}
+
+.lightbox-source-gallery-icon,
+.lightbox-source-gallery-open {
+    flex: 0 0 auto;
+    line-height: 1;
+}
+
+.lightbox-source-gallery-path {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.lightbox-source-gallery-open {
+    opacity: 0.72;
+    font-size: 0.82em;
+}
+
+.lightbox-source-gallery a:hover,
+.lightbox-source-gallery a:focus-visible {
+    border-color: rgba(255, 253, 248, 0.48);
+    background: rgba(255, 253, 248, 0.15);
+    color: #fff;
+    transform: translateY(-1px);
+    outline: none;
+}
+
+.lightbox-source-gallery a:focus-visible {
+    outline: 3px solid color-mix(in srgb, var(--accent) 48%, transparent);
+    outline-offset: 2px;
 }
 .lightbox-toolbar {
     display: flex;

@@ -149,9 +149,10 @@ function gallery_gps_map_storage_value(mixed $value): ?int
  * Return the legacy recursive GPS map behavior used before inherited overrides existed.
  *
  * @param array $gallery Gallery row or gallery data.
+ * @param ?callable $galleryLookup Optional preloaded gallery lookup keyed by numeric id.
  * @return bool True when the condition matches.
  */
-function gallery_legacy_allows_gps_maps(array $gallery): bool
+function gallery_legacy_allows_gps_maps(array $gallery, ?callable $galleryLookup = null): bool
 {
     // Variable $current stores this steps working value.
     $current = $gallery;
@@ -163,7 +164,8 @@ function gallery_legacy_allows_gps_maps(array $gallery): bool
             return false;
         }
         // Variable $current stores this steps working value.
-        $current = find_gallery((int) $current['parent_id']);
+        $parentId = (int) $current['parent_id'];
+        $current = $galleryLookup !== null ? $galleryLookup($parentId) : find_gallery($parentId);
     }
     return false;
 }
@@ -176,9 +178,10 @@ function gallery_legacy_allows_gps_maps(array $gallery): bool
  * legacy boolean branch behavior is preserved to avoid unsafe NULL writes.
  *
  * @param array $gallery Gallery row or gallery data.
+ * @param ?callable $galleryLookup Optional preloaded gallery lookup keyed by numeric id.
  * @return bool True when the condition matches.
  */
-function gallery_effective_gps_map_enabled(array $gallery): bool
+function gallery_effective_gps_map_enabled(array $gallery, ?callable $galleryLookup = null): bool
 {
     if (function_exists('Gallery\\Services\\feature_capability_effective_enabled') && !feature_capability_effective_enabled('gallery_maps')) {
         return false;
@@ -187,7 +190,7 @@ function gallery_effective_gps_map_enabled(array $gallery): bool
         return false;
     }
     if (!exif_gps_override_schema_ready()) {
-        return gallery_legacy_allows_gps_maps($gallery);
+        return gallery_legacy_allows_gps_maps($gallery, $galleryLookup);
     }
 
     // Variable $current stores this steps working value.
@@ -202,7 +205,8 @@ function gallery_effective_gps_map_enabled(array $gallery): bool
             break;
         }
         // Variable $current stores this steps working value.
-        $current = find_gallery((int) $current['parent_id']);
+        $parentId = (int) $current['parent_id'];
+        $current = $galleryLookup !== null ? $galleryLookup($parentId) : find_gallery($parentId);
     }
 
     return exif_gps_default_enabled();
@@ -214,11 +218,12 @@ function gallery_effective_gps_map_enabled(array $gallery): bool
  * This wrapper preserves the public function name used by routes and renderers.
  *
  * @param array $gallery Gallery row or gallery data.
+ * @param ?callable $galleryLookup Optional preloaded gallery lookup keyed by numeric id.
  * @return bool True when the condition matches.
  */
-function gallery_allows_gps_maps(array $gallery): bool
+function gallery_allows_gps_maps(array $gallery, ?callable $galleryLookup = null): bool
 {
-    return gallery_effective_gps_map_enabled($gallery);
+    return gallery_effective_gps_map_enabled($gallery, $galleryLookup);
 }
 
 /**

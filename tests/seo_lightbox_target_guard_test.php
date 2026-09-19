@@ -78,7 +78,8 @@ namespace {
         ['public', 'gallery_lightbox_data', 'target_image_id', 200],
         ['public', 'gallery_lightbox_data', 'none', 200],
         ['public', 'gallery_lightbox_data', 'unexpected', 404],
-        ['public', 'smart_gallery_lightbox_data', 'target_image_id', 404],
+        ['public', 'smart_gallery_lightbox_data', 'target_image_id', 200],
+        ['public', 'smart_gallery_lightbox_data', 'source_gallery_id', 200],
         ['admin', 'gallery_lightbox_data', 'target_image_id', 200],
         ['admin', 'gallery_lightbox_data', 'unexpected', 200],
     ];
@@ -102,5 +103,5 @@ namespace {
             throw new RuntimeException("Unexpected guard result for $principal/$route/$parameter: $output");
         }
     }
-    echo "Lightbox target request guard: 6 public/Admin scenarios passed.\n";
+    echo "Lightbox target request guard: 7 public/Admin scenarios passed.\n";
 }
