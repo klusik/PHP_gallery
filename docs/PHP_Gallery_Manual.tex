@@ -49,7 +49,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.103.0}
+\newcommand{\version}{0.103.1}
 \newcommand{\manualdate}{19 September 2026}
 
 \hypersetup{
@@ -1186,6 +1186,8 @@ The~gallery prepares the~viewer when it~becomes useful and~obtains information f
 The~Left and~Right arrow keys move one photograph backward or~forward. \codeword{Shift+Left} and~\codeword{Shift+Right} move ten positions for~faster travel through a~large result set. The~jump follows the~same stable ordered sequence as~ordinary navigation, wraps at~the~ends, and~also works when the~active result set is~a~Smart Gallery. The~translated keyboard-help text lists these shortcuts; no~separate graphical jump buttons are~added.
 
 The~viewer usually starts with an~appropriately sized preview. A~larger or~original source can~be~used where the~action and~access policy call for~it. Nearby previews may~be~prepared quietly so~the~next photograph appears smoothly.
+
+While a~new photograph is~being prepared, the~viewer uses the~same progress area that reports full-quality loading. Rapid forward or~backward movement always gives the~newest requested photograph ownership of~that indicator, so~an~older preview or~metadata request cannot leave the~viewer permanently busy or~replace the~current selection. If~a~photograph cannot be~presented, the~progress area shows a~recoverable failure message; the~visitor can~continue with the~forward, backward, close, or~reopen controls. These loading states do~not~change gallery access, protected-media, Smart Gallery, map, slideshow, or~no-JavaScript rules.
 
 \subsection{Zooming and~panning a~photograph}
 \index{lightbox!zoom}
