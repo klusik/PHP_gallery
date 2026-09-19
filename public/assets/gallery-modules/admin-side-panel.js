@@ -42,7 +42,7 @@ import { setupAdminImageReordering } from './admin-image-reordering.js?v=2026051
 import { setupPublicGalleryPageReordering } from './admin-gallery-list.js?v=20260512-modular-admin-v1';
 import { appendUploadProgressLog, escapeHtmlAttribute, escapeHtmlText, i18n, isThumbnailSubmission, thumbnailEndpoint, updateBasicProgress, updateThumbnailProgress, ensureThumbnailProgress, updateUploadProgressMetrics } from './admin-core.js?v=20260614-upload-order-v2';
 import { browserUploadRequested, browserUploadZipSelected, runBrowserGalleryUpload } from './admin-browser-upload.js?v=20260903-oversized-single-batch-v1';
-import { setupAdminSmartGalleries } from './admin-smart-galleries.js?v=20260817-smart-gallery-cycle-placement-v2';
+import { setupAdminSmartGalleries } from './admin-smart-galleries.js?v=20260919-smart-gallery-presentation-v1';
 import { completeAdminMutation, replaceOwnedPublicGalleryFragments } from './admin-mutation-completion.js?v=20260902-create-delete-hotfix1';
 
 const adminSidePanelMotionDurationMs = 280;

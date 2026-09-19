@@ -166,7 +166,7 @@ assert.match(
 );
 assert.match(
     adminOperationsSource,
-    /admin-side-panel\.js\?v=20260913-card-visibility-refresh-v2/,
+    /admin-side-panel\.js\?v=20260919-smart-gallery-presentation-v1/,
     'admin-operations must cache-bust the changed side-panel module.'
 );
 assert.match(
@@ -176,7 +176,7 @@ assert.match(
 );
 assert.match(
     galleryEntrySource,
-    /admin-operations\.js\?v=20260913-card-visibility-refresh-v2/,
+    /admin-operations\.js\?v=20260919-smart-gallery-presentation-v1/,
     'The gallery entrypoint must cache-bust the changed admin operations module.'
 );
 

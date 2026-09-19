@@ -45,22 +45,10 @@ const SMART_GALLERY_GRAPH_MAX_EDGES = 20000;
 const SMART_GALLERY_GRAPH_MAX_SOURCE_ROWS = 50000;
 const SMART_GALLERY_CARD_SUMMARY_BATCH_SIZE = 20;
 
-/** Return true when optional Smart Gallery presentation overrides can be persisted. */
-function smart_gallery_presentation_schema_ready(): bool
-{
-    return db_column_exists('smart_galleries', 'presentation_json');
-}
-
-/** Return the canonical inherited presentation values for Smart Galleries. */
+/** Return the canonical inherited preference values for Smart Galleries before runtime capability suppression. */
 function smart_gallery_presentation_defaults(): array
 {
     $pagination = pagination_global_settings(['listing' => 'smart_gallery']);
-    $lightboxFeatureEnabled = function_exists('Gallery\\Services\\feature_capability_effective_enabled')
-        ? feature_capability_effective_enabled('lightbox_modes')
-        : (!function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('lightbox_modes'));
-    $downloadFeatureEnabled = function_exists('Gallery\\Services\\feature_capability_effective_enabled')
-        ? feature_capability_effective_enabled('downloads')
-        : (!function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('downloads'));
 
     return [
         'grid_columns' => (int) $pagination['columns'],
@@ -71,12 +59,29 @@ function smart_gallery_presentation_defaults(): array
         'thumbnail_rendering_mode' => public_thumbnail_rendering_mode(),
         'card_layout' => theme_gallery_description_layout(),
         'metadata_visible' => true,
-        'lightbox_enabled' => $lightboxFeatureEnabled,
+        'lightbox_enabled' => true,
         'lightbox_browsing_mode' => theme_lightbox_browsing_mode(),
-        'slideshow_enabled' => $lightboxFeatureEnabled,
-        'download_enabled' => $downloadFeatureEnabled,
+        'slideshow_enabled' => true,
+        'download_enabled' => true,
         'voting_enabled' => true,
         'source' => 'theme',
+    ];
+}
+
+/** Return current site-wide capability masters that may suppress Smart Gallery preferences at runtime. */
+function smart_gallery_presentation_master_status(): array
+{
+    $capabilityEnabled = static function (string $capability): bool {
+        if (function_exists('Gallery\\Services\\feature_capability_effective_enabled')) {
+            return feature_capability_effective_enabled($capability);
+        }
+        return !function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled($capability);
+    };
+
+    return [
+        'lightbox' => $capabilityEnabled('lightbox_modes'),
+        'downloads' => $capabilityEnabled('downloads'),
+        'voting' => $capabilityEnabled('image_voting'),
     ];
 }
 
@@ -133,35 +138,34 @@ function smart_gallery_normalize_presentation(mixed $value): array
     return $normalized;
 }
 
-/** Return effective Smart Gallery presentation values after explicit override precedence. */
-function smart_gallery_effective_presentation(array $gallery): array
+/** Return Smart Gallery presentation preferences without applying runtime capability masters. */
+function smart_gallery_presentation_preferences(array $gallery): array
 {
     $defaults = smart_gallery_presentation_defaults();
     $presentationValue = array_key_exists('presentation', $gallery) ? $gallery['presentation'] : ($gallery['presentation_json'] ?? []);
     $overrides = smart_gallery_normalize_presentation($presentationValue);
-    $effective = array_merge($defaults, $overrides);
-    $effective['grid_columns'] = pagination_dimension_value($effective['grid_columns'], (int) $defaults['grid_columns'], CMS_PAGINATION_MAX_COLUMNS);
-    $effective['grid_rows'] = pagination_dimension_value($effective['grid_rows'], (int) $defaults['grid_rows'], CMS_PAGINATION_MAX_ROWS);
-    $effective['items_per_page'] = (int) $effective['grid_columns'] * (int) $effective['grid_rows'];
-    $effective['grid_columns_enabled'] = true;
-    $effective['grid_source'] = $overrides === [] ? 'theme' : 'smart_gallery';
-    $effective['source'] = $effective['grid_source'];
+    $preferences = array_merge($defaults, $overrides);
+    $preferences['grid_columns'] = pagination_dimension_value($preferences['grid_columns'], (int) $defaults['grid_columns'], CMS_PAGINATION_MAX_COLUMNS);
+    $preferences['grid_rows'] = pagination_dimension_value($preferences['grid_rows'], (int) $defaults['grid_rows'], CMS_PAGINATION_MAX_ROWS);
+    $preferences['items_per_page'] = (int) $preferences['grid_columns'] * (int) $preferences['grid_rows'];
+    $preferences['grid_columns_enabled'] = true;
+    $preferences['grid_source'] = $overrides === [] ? 'theme' : 'smart_gallery';
+    $preferences['source'] = $preferences['grid_source'];
+    return $preferences;
+}
+
+/** Return effective Smart Gallery presentation values after explicit override precedence and runtime capability policy. */
+function smart_gallery_effective_presentation(array $gallery): array
+{
+    $effective = smart_gallery_presentation_preferences($gallery);
+    $masters = smart_gallery_presentation_master_status();
 
     // Global capability masters are applied after local Smart Gallery overrides.
     // Stored local preferences remain untouched and become effective again when the master is re-enabled.
-    $lightboxMasterEnabled = function_exists('Gallery\\Services\\feature_capability_effective_enabled')
-        ? feature_capability_effective_enabled('lightbox_modes')
-        : (!function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('lightbox_modes'));
-    $downloadMasterEnabled = function_exists('Gallery\\Services\\feature_capability_effective_enabled')
-        ? feature_capability_effective_enabled('downloads')
-        : (!function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('downloads'));
-    $votingMasterEnabled = function_exists('Gallery\\Services\\feature_capability_effective_enabled')
-        ? feature_capability_effective_enabled('image_voting')
-        : (!function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('image_voting'));
-    $effective['lightbox_enabled'] = !empty($effective['lightbox_enabled']) && $lightboxMasterEnabled;
+    $effective['lightbox_enabled'] = !empty($effective['lightbox_enabled']) && !empty($masters['lightbox']);
     $effective['slideshow_enabled'] = !empty($effective['slideshow_enabled']) && $effective['lightbox_enabled'];
-    $effective['download_enabled'] = !empty($effective['download_enabled']) && $downloadMasterEnabled;
-    $effective['voting_enabled'] = !empty($effective['voting_enabled']) && $votingMasterEnabled;
+    $effective['download_enabled'] = !empty($effective['download_enabled']) && !empty($masters['downloads']);
+    $effective['voting_enabled'] = !empty($effective['voting_enabled']) && !empty($masters['voting']);
 
     return $effective;
 }
@@ -188,7 +192,7 @@ function smart_gallery_thumbnail_sizes(array $presentation, array $image, array 
     return $sizes;
 }
 
-/** Inspect the complete persisted Smart Gallery capability with three-state semantics. */
+/** Inspect the Smart Gallery schema required by backward-compatible read paths. */
 function smart_gallery_schema_status(): array
 {
     return mutation_schema_tables_status('mutation.smart_galleries', [
@@ -198,7 +202,17 @@ function smart_gallery_schema_status(): array
     ]);
 }
 
-/** Return true only when Smart Gallery storage is conclusively available. */
+/** Inspect the complete schema required before a current-version Smart Gallery write. */
+function smart_gallery_mutation_schema_status(): array
+{
+    return mutation_schema_tables_status('mutation.smart_galleries.write', [
+        'smart_galleries' => ['id', 'slug', 'rules_json', 'rule_version', 'enabled', 'visibility', 'placement_mode', 'parent_gallery_id', 'sort_mode', 'sort_direction', 'presentation_json'],
+        'smart_gallery_placements' => ['smart_gallery_id', 'gallery_id', 'created_at'],
+        'images' => ['id', 'gallery_id', 'editorial_rating'],
+    ]);
+}
+
+/** Return true only when Smart Gallery storage is conclusively available for reads. */
 function smart_gallery_schema_ready(): bool
 {
     return schema_inspection_is_available(smart_gallery_schema_status());
@@ -233,7 +247,7 @@ function smart_gallery_assert_attachment_mutation_ready(string $operation): void
 function smart_gallery_assert_mutation_ready(string $operation): void
 {
     mutation_schema_assert_available(
-        smart_gallery_schema_status(),
+        smart_gallery_mutation_schema_status(),
         $operation,
         'Smart Galleries require the pending database migration.',
         'Smart Gallery storage could not be verified safely.'
@@ -922,7 +936,7 @@ function smart_gallery_save(array $input, int $id = 0): array
         'presentation_json' => $presentationJson,
         'created_at' => $now,
         'updated_at' => $now,
-    ], $id, smart_gallery_presentation_schema_ready());
+    ], $id);
     smart_gallery_graph_cache_clear();
     return smart_gallery_find($id) ?? throw new InvalidArgumentException('The Smart Gallery could not be loaded after saving.');
 }

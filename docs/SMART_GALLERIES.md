@@ -62,7 +62,9 @@ Supported overrides are:
 
 Sorting remains the existing Smart Gallery `sort_mode` and `sort_direction` fields.
 
-Presentation inheritance is `Smart Gallery override > current Theme/site default`. It intentionally does not inherit presentation from a physical parent gallery because one Smart Gallery can have several physical placements and therefore has no unambiguous parent presentation owner.
+Presentation inheritance is `Smart Gallery override > current Theme/site default`. It intentionally does not inherit presentation from a physical parent gallery because one Smart Gallery can have several physical placements and therefore has no unambiguous parent presentation owner. Admin editing resolves this preference state without applying site-wide capability masters. Lightbox, downloads, and voting masters are applied only when the public or preview runtime computes the effective presentation, so temporarily disabling a global capability cannot erase a Smart Gallery's stored local preference during an unrelated edit.
+
+Current-version Smart Gallery mutations require the `presentation_json` column to be present before persistence starts. The model always includes `presentation_json` in INSERT and UPDATE statements. An installation that has not applied the presentation migration therefore refuses the mutation instead of partially saving title, sorting, rules, or placement while silently dropping presentation changes. Read-side normalization remains defensive for legacy null, malformed, or unknown-version presentation documents.
 
 Thumbnail bounds are an additional restriction. Physical gallery/image thumbnail guardrails remain authoritative if a Smart Gallery override conflicts with them.
 
@@ -70,7 +72,7 @@ Photo-card structure, spacing, and generated JPEG/WebP encoding quality remain t
 
 ## Admin editor and preview
 
-The Smart Gallery editor works as a normal server-rendered form without JavaScript. The Admin side-panel module enhances the same forms in place. Create/edit links open the existing right-side drawer, POST submissions use the normal controller, redirects are followed with `fetch()`, the returned editor workspace is re-injected, and dynamic rules/presentation handlers are rebound without changing the browser URL.
+The Smart Gallery editor works as a normal server-rendered form without JavaScript. The Admin side-panel module enhances the same forms in place. Create/edit links open the existing right-side drawer, POST submissions use the normal controller, redirects are followed with `fetch()`, the returned editor workspace is re-injected, and dynamic rules/presentation handlers are rebound without changing the browser URL. Presentation grid columns and rows use the same bounded range-control pattern as physical galleries, including live values and items-per-page feedback. Rows are preserved while pagination is disabled and become active again when pagination is enabled; large Smart Gallery result sets may still be paginated by the server safety cap. Thumbnail minimum/maximum values reuse the canonical dual-bound slider and POST normalizer used by physical galleries.
 
 The side-panel POST path is rewritten to the current browser origin for `admin_smart_galleries`. This preserves authenticated cookies when a local installation is opened through a MAMP/Laragon host alias or port that differs from the configured canonical base URL.
 
