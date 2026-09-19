@@ -255,6 +255,19 @@ function gallery_model_picker_rows(bool $secondaryTitleSort = false): array
 }
 
 /**
+ * Return compact gallery rows used by the new-gallery title completion control.
+ *
+ * Newer galleries are returned first so a repeated naming scheme naturally
+ * proposes the most recent sibling before older entries with the same prefix.
+ *
+ * @return array<int,array<string,mixed>> Gallery title completion rows.
+ */
+function gallery_model_title_completion_rows(): array
+{
+    return db()->query('SELECT id, parent_id, title, folder_path, created_at FROM galleries ORDER BY created_at DESC, id DESC')->fetchAll();
+}
+
+/**
  * Return the first direct child gallery in normal display order.
  *
  * @param int $sourceGalleryId Source gallery identifier.

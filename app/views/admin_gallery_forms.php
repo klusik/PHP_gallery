@@ -229,6 +229,33 @@ function view_render_admin_gallery_date_range_fields(array $gallery = [], bool $
 }
 
 /**
+ * Render the gallery title field with inline completion metadata.
+ *
+ * The visible completion is client-side only. The submitted field remains the
+ * normal `title` input, so accepting or ignoring a suggestion does not alter the
+ * create-gallery request contract.
+ *
+ * @param array<string,mixed> $formModel Prepared gallery form presentation data.
+ */
+function view_render_admin_new_gallery_title_input(array $formModel = []): void
+{
+    $completion = is_array($formModel['title_completion'] ?? null) ? $formModel['title_completion'] : [];
+    $candidates = is_array($completion['candidates'] ?? null) ? $completion['candidates'] : [];
+    $candidateJson = json_encode(
+        $candidates,
+        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
+    );
+    if (!is_string($candidateJson)) {
+        $candidateJson = '[]';
+    }
+
+    echo '<span class="admin-gallery-title-completion" data-gallery-title-completion data-gallery-title-completion-candidates="' . e($candidateJson) . '">';
+    echo '<input name="title" required autocomplete="off" data-gallery-title-completion-input>';
+    echo '<span class="admin-gallery-title-completion-overlay" aria-hidden="true" data-gallery-title-completion-overlay hidden><span class="admin-gallery-title-completion-prefix" data-gallery-title-completion-prefix></span><span class="admin-gallery-title-completion-tail" data-gallery-title-completion-tail></span></span>';
+    echo '</span>';
+}
+
+/**
  * Handle view render admin new gallery fields.
  *
  * Used by server-rendered view helpers.
@@ -245,7 +272,9 @@ function view_render_admin_new_gallery_fields(int $prefillParentId, bool $panelM
         $panelHelp = $isUploadWorkflow ? t('admin.upload.gallery_identity_help', 'Create an empty gallery, or select photos and upload them immediately.') : t('admin.gallery_editor.only_gallery_created_here', 'Only the gallery is created here.');
         $panelKicker = $isUploadWorkflow ? t('admin.upload.new_child_gallery', 'New child gallery') : t('admin.gallery_editor.new_gallery_kicker', 'New gallery');
         echo '<div class="admin-side-panel-card admin-side-panel-primary-card"><div class="admin-side-panel-card-heading"><div><p class="admin-kicker">' . e($panelKicker) . '</p><h3>' . e(t('admin.gallery_editor.gallery_identity', 'Gallery identity')) . '</h3></div><p class="muted">' . e($panelHelp) . '</p></div><div class="admin-side-panel-field-grid">';
-        echo '<label class="admin-side-panel-field admin-side-panel-field-wide"><span>' . e(t('admin.gallery_editor.gallery_name', 'Gallery name')) . '</span><input name="title" required></label>';
+        echo '<label class="admin-side-panel-field admin-side-panel-field-wide"><span>' . e(t('admin.gallery_editor.gallery_name', 'Gallery name')) . '</span>';
+        view_render_admin_new_gallery_title_input($formModel);
+        echo '</label>';
         echo '<label class="admin-side-panel-field"><span>' . e(t('admin.gallery_editor.folder_name', 'Folder name')) . '</span><input name="folder_name" autocomplete="off"><small>' . e(t('admin.gallery_editor.derive_from_gallery_name', 'Leave empty to derive it from the gallery name.')) . '</small></label>';
         echo '<label class="admin-side-panel-field"><span>' . e(t('admin.gallery_editor.metric_visibility')) . '</span><select name="visibility">' . visibility_options('unpublished') . '</select></label>';
         view_render_admin_gallery_date_range_fields([], true, $formModel);
@@ -267,7 +296,9 @@ function view_render_admin_new_gallery_fields(int $prefillParentId, bool $panelM
         return;
     }
 
-    echo '<label>' . e(t('admin.gallery_editor.gallery_name', 'Gallery name')) . '<input name="title" required></label>';
+    echo '<label>' . e(t('admin.gallery_editor.gallery_name', 'Gallery name'));
+    view_render_admin_new_gallery_title_input($formModel);
+    echo '</label>';
     echo '<label>' . e(t('admin.gallery_editor.folder_name', 'Folder name')) . '<input name="folder_name" autocomplete="off"><span class="muted">' . e(t('admin.gallery_editor.derive_from_gallery_name', 'Leave empty to derive it from the gallery name.')) . '</span></label>';
     echo '<label>' . e(t('admin.gallery_editor.parent_gallery', 'Parent gallery')) . '<select name="parent_id"><option value="0"' . ($prefillParentId === 0 ? ' selected' : '') . '>' . e(t('admin.gallery_editor.no_parent', 'No parent')) . '</option>' . gallery_parent_options_for_new($prefillParentId) . '</select></label>';
     echo '<label>' . e(t('admin.gallery_editor.visibility', 'Visibility')) . '<select name="visibility">' . visibility_options('unpublished') . '</select></label>';

@@ -52,6 +52,7 @@ use function Gallery\Services\gallery_date_input_value;
 use function Gallery\Services\gallery_date_range_schema_ready;
 use function Gallery\Services\gallery_date_range_storage_label;
 use function Gallery\Services\gallery_date_schema_ready;
+use function Gallery\Services\gallery_title_completion_candidates;
 use function Gallery\Services\openai_text_assist_available;
 use function Gallery\Services\openai_text_assist_default_language;
 use function Gallery\Services\openai_text_assist_image_input_allowed;
@@ -131,6 +132,11 @@ function admin_gallery_form_view_model(string $entityType, array $entity = [], ?
         }
     }
 
+    $titleCompletionCandidates = [];
+    if ($entityType === 'gallery' && $entityId <= 0) {
+        $titleCompletionCandidates = gallery_title_completion_candidates();
+    }
+
     return [
         'localization' => [
             'enabled' => $localizationEnabled,
@@ -149,6 +155,9 @@ function admin_gallery_form_view_model(string $entityType, array $entity = [], ?
         'count_badge' => [
             'schema_ready' => $countBadgeSchemaReady,
             'options' => $countBadgeOptions,
+        ],
+        'title_completion' => [
+            'candidates' => $titleCompletionCandidates,
         ],
     ];
 }
