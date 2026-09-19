@@ -175,6 +175,13 @@ php scripts/audit.php --profile=release
 
 Do not precede it with `quick` or `full`. Do not manually replay PHP, Node, WinApp, lint, contract, browser, manifest, or release-consistency checks that the profile already owns.
 
+When the disposable MySQL/Chromium prerequisites in
+[GALLERY_WORKFLOWS.md](docs/GALLERY_WORKFLOWS.md) are configured,
+`php scripts/gallery_workflow_mysql.php --release` may provision the isolated
+fixture around this same single release-profile invocation. This is the
+fixture-enabled alternative to the direct command, not an additional audit.
+It retains the central reports and refuses skipped mandatory workflow coverage.
+
 The release profile currently covers:
 
 - PHP regression suite;

@@ -2,7 +2,7 @@
 
 A modern PHP 8.1+ gallery CMS designed for ordinary shared hosting. The application uses the filesystem as the authoritative source for gallery structure, while storing all metadata, access rules, votes, user accounts, and audit logs in MySQL or MariaDB.
 
-**Current Version:** 0.104
+**Current Version:** 0.104.1
 
 **Key Benefit:** Deploy in minutes on shared hosting. No npm, no Composer, no framework overhead. Just PHP + MySQL.
 
@@ -13,6 +13,7 @@ A modern PHP 8.1+ gallery CMS designed for ordinary shared hosting. The applicat
 - **Nested galleries** - Create gallery hierarchies with unlimited depth
 - **Gallery discovery** - Automatically detect and import new folders
 - **Manual creation** - Create empty gallery folders from the admin interface
+- **Optional title completion** - Reuse recent gallery titles through a bounded Admin-only lookup, with Unicode-safe suffixes, keyboard/pointer acceptance, and accessible help in full-page and side-panel create forms; see [title completion](docs/TITLE_COMPLETION.md)
 - **Bulk operations** - Rename, delete, move, reorder, or change visibility for multiple galleries at once
 - **Gallery metadata** - Title, description, optional date range, cover image, custom slug, and safe external links with local brand icons or cached site favicons
 - **Folder management** - Moving galleries physically relocates the folder tree on disk
@@ -889,6 +890,8 @@ php scripts/audit.php --profile=full
 The tracked `tests/` tree is the authoritative framework-free suite, and `php scripts/audit.php` is its canonical orchestration entrypoint. Use `--profile=quick` during edit cycles, `--profile=full` for complete deterministic source verification, and `--profile=release` before publishing. The runner executes PHP, explicitly registered Node, WinApp Python, syntax, contract, and release-specific checks without streaming successful child output into the agent context. It writes a compact `cache/test-audit/latest.md`, a machine-readable `latest.json`, and per-suite drill-down logs. Direct focused PHP/Node commands are for diagnosis, not the default full-suite workflow. `php tests/run.php` remains a PHP-suite compatibility wrapper. Production deployment packages exclude tests by default. For a local source-review ZIP, use `./deploy.sh --mode local --deploy-folder deploy --upload-media false --make-zip-deploy true --include-tests true` (PowerShell: `scripts/deploy.ps1 -Mode local -DeployFolder deploy -UploadMedia false -MakeZipDeploy true -IncludeTests true`). The opt-in is refused for FTP deployment.
 
 ### Release preparation
+
+Recovery and qualification have separate evidence requirements. The [recovery CLI](docs/RECOVERY_ASSURANCE.md) validates isolated recovery files; the [off-host runbook](docs/RECOVERY_OFF_HOST.md) explains the real restore exercise it cannot replace. [Disposable workflow testing](docs/GALLERY_WORKFLOWS.md) exercises generated data without using the live installation. The [qualification ledger](docs/RELEASE_QUALIFICATION.md) binds audit reports and explicit manual reviews to exact source/PDF bytes; automated PASS alone is not publication approval.
 
 `RELEASE.md` is the authoritative release playbook. Start by comparing the worktree with the exact previous release tag, then run `php scripts/prepare_release.php <version>` to update only registered mechanical version markers and create a patch-note scaffold when needed. Complete release notes/documentation, rebuild and inspect the manual, then run `php scripts/generate_manifest.php` followed by exactly one `php scripts/audit.php --profile=release`. Release profiles are not a quick/full/release staircase. The release audit includes `scripts/check_release.php`, manifest freshness, browser integration when available, and Git whitespace validation. Use `php scripts/check_release.php` independently only while diagnosing/preparing consistency. Inspect skipped/blocked coverage and the final package before publication. Release tooling never creates commits, tags, pushes, or hosted releases unless those actions are explicitly requested.
 

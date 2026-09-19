@@ -59,6 +59,20 @@ viewer_phase07_mysql_concurrency_test.php. It is not a replacement audit runner.
 The central audit's compact reports remain in cache/test-audit. No release
 preparation, manifest refresh, publication, or production migration is implied.
 
+For release preparation, finish the version, documentation, manual, and manifest
+steps in `RELEASE.md` and initialize the qualification fingerprint first. Then
+use the same prerequisite environment with:
+
+~~~text
+php scripts/gallery_workflow_mysql.php --release
+~~~
+
+This provisions the owned fixture around exactly one
+`php scripts/audit.php --profile=release` invocation; it does not run `full`
+beforehand. Both central modes require the same three workflow/concurrency PASS
+records and preserve the central reports. An independently provisioned disposable
+service can likewise use `scripts/gallery_workflow_run.php --release`.
+
 The local daemon launcher uses MySQL 8 initialization flags. A MariaDB executable
 is not interchangeable with it; MariaDB coverage uses the CI service below.
 

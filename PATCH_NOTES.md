@@ -1,5 +1,142 @@
 # Patch notes
 
+## Version 0.104.1
+
+Version 0.104.1 is a broad reliability and maintenance release built around six areas: safer and more accessible gallery-title completion, bounded suggestion lookup for large collections, explicit lightbox preload ownership, repeatable recovery assurance, isolated end-to-end workflow testing, and release evidence tied to the exact files being reviewed. It improves the title-completion feature introduced in 0.104 without changing how galleries are stored or created, and adds substantial operational tooling without turning automated test success into a claim of production restore readiness.
+
+### Highlights
+
+#### More predictable title completion
+
+- Fixed suffix calculation for Unicode text whose normalized representation has a different length from its stored spelling. Compatibility ligatures, fullwidth letters, and composed/decomposed accents now use a safe boundary in the original title instead of slicing that title at an unrelated normalized offset.
+- Prevented incomplete grapheme matches from producing broken ghost text. Suggestions are omitted when the typed prefix ends inside a ligature, combining sequence, or other indivisible displayed character; ordinary typing remains available.
+- Preserved input-method composition, modified keyboard shortcuts, selections, and editing in the middle of a title. Unmodified `Tab` or `ArrowRight` accepts a suggestion only at an eligible end-of-input caret; acceptance changes the title without submitting the form.
+- Added two-stage `Escape` behavior in the Admin drawer: the first press dismisses a suggestion or pending completion, while a subsequent press can reach the surrounding panel's existing dismissal behavior.
+- Added translated help, a stable accessible field name, and polite suggestion announcements in English, Czech, German, and Swedish. Newly injected or replaced create forms receive the same behavior through delegated handling.
+
+#### Small suggestion responses instead of a complete embedded catalog
+
+- Replaced the gallery-title catalog previously embedded in each create form with an authenticated, on-demand JSON lookup. Full-page and side-panel forms start with an empty candidate list rather than querying and serializing every title.
+- Retained recent-sibling priority for the selected parent, followed by recent matches elsewhere when the sibling scope has been exhausted. The lookup returns at most eight candidates and does not expose gallery folder paths.
+- Added bounded work, debounced requests, cancellation, timeouts, and stale-response rejection so an older input value, parent selection, or detached form cannot overwrite the current suggestion.
+- Made the limits explicit: older matches may be omitted when a scan budget is reached, and an empty result is not proof that a title is unique. Suggestions remain optional; failed lookup does not disable normal title entry or gallery creation.
+
+#### A single owner for nearby lightbox preloads
+
+- Extracted the nearby-preview queue into `public/assets/gallery-modules/lightbox-preload-lifecycle.js`, giving queue generations, scheduling, deduplication, concurrency, cancellation, reset, and disposal one explicit owner.
+- Preserved already-running preview work during a soft reset while allowing hard reset and disposal to cancel obsolete work. Late completions and scheduled callbacks cannot revive an abandoned queue or interfere with a reopened viewer.
+- Kept foreground navigation, decoded-image cache, authorized media selection, active-image quality, zoom, slideshow, and viewer markup under their existing owners. This is a lifecycle improvement, not a second viewer or a new original-image prefetch policy.
+
+#### Recovery assurance with honest limits
+
+- Added `scripts/recovery.php` to inventory a recovery set and validate restored files in an explicitly isolated location, including original-file hash samples, release-manifest hashes, required components, and operator-supplied evidence.
+- Added a synthetic drill covering intact, corrupted, and incomplete recovery sets, relationship evidence, and a recoverable Trash file round trip. A successful synthetic drill is clearly distinguished from restoring a real installation.
+- Added permanent guidance for coordinated database/filesystem snapshots, off-host storage, restored-service isolation, backup age, recovery duration, and agreed recovery-time/data-loss objectives.
+- Kept the tool read-only with respect to recovery source files. It does not execute a SQL dump, contact a backup provider, automatically restore production, or prove network isolation on the operator's behalf.
+
+#### Real workflows in disposable installations
+
+- Added generated application copies, migrated MySQL schemas, synthetic photographs, and real HTTP/browser journeys for critical Admin workflows. Existing local or production configuration, media, and databases are not test fixtures.
+- Exercised create, edit, multipart upload, prepared-upload retry, visibility changes, media authorization, recoverable subtree deletion, and Trash restore with database, sidecar, original-file, relationship, and ledger postconditions.
+- Added browser assertions that panel mutations leave the URL unchanged, keep the panel open, and continue working after dynamic fragment replacement. Coverage includes immediate double-clicks, stale editor responses, and mutations attempted after logout invalidates the session.
+- Added independent MySQL 8.4 and MariaDB 11.4 CI service jobs with mandatory workflow coverage. Hosted execution remains separate from local verification; adding the workflow is not a claim that a hosted run has already succeeded.
+
+#### Release approval attached to exact artifacts
+
+- Added `scripts/release_qualification.php` with `init`, `check`, `record`, `record-audit`, and `render` commands. Records distinguish automated results from pending, passed, and failed manual checks for a specific version and content fingerprint.
+- Bound release evidence to actual source and PDF bytes rather than a Git revision, timestamp, or unverified manifest alone. Changed inputs select a new pending record while preserving previous evidence as history.
+- Added repeatable PDF page previews and explicit title, contents, index, changed-page, links/layout, browser-smoke, and post-publication checks. Rendering a page or passing an automated audit does not automatically approve a visual or operational review.
+
+### Technical Details
+
+#### Backend and request boundaries
+
+- Added the `admin_gallery_title_completion` route in `app/bootstrap/dispatch.php`, its loader entry in `app/controllers.php`, and the controller in `app/controllers/admin_gallery_title_completion.php`.
+- Kept strict responsibility boundaries: the controller owns authentication, GET/input validation, headers, and response status; `app/services/gallery_picker.php` owns normalization, budgets, and ranking; `app/models/galleries.php` owns parameterized persistence queries.
+- Added a consistent JSON envelope with `ok`, `candidates`, `normalization`, and `truncated`. Successful searches return `200`; invalid input returns `400`; anonymous or viewer callers receive `401` rather than a login-page redirect; unsupported administrator methods return `405` with `Allow: GET`; lookup/authentication failures return a bounded `503` response.
+- Applied `Cache-Control: private, no-store, max-age=0`, `X-Content-Type-Options: nosniff`, and `X-Robots-Tag: noindex, nofollow`. Candidate fields are limited to `id`, `parent_id`, `title`, and `created_at`; responses do not include paths, access tokens, or raw database exceptions.
+- Validated UTF-8 queries against 255 code points and 1,024 bytes and accepted only representable nonnegative decimal parent IDs. Too-short or whitespace-only input returns an empty success without querying titles.
+
+#### Query budgets and normalization
+
+- Limited normalized candidate work to 1,024 titles overall and 512 siblings, using 512-row pages plus one lookahead row, at most three SQL page queries, at most 1,027 materialized rows, and a 16 KiB encoded response cap.
+- Used exclusive `(created_at,id)` keyset continuation rather than `OFFSET`. Stopped before fallback when the sibling scope is truncated, because an unexamined sibling could outrank every non-sibling candidate.
+- Applied NFKC followed by locale-independent lowercase when PHP `intl` and `mbstring` are available. Without either extension, limited matching to ASCII queries and titles rather than claiming unsafe Unicode equivalence.
+- Retained a browser-side normalization/boundary check because PHP, ICU, and browser Unicode tables can differ. Browsers without `Intl.Segmenter` conservatively decline non-ASCII suffix mapping.
+- Added no persisted normalized-title index and made no database-engine scan-time guarantee: `LIMIT` bounds returned rows, not every row the engine might inspect or sort.
+
+#### Frontend integration and compatibility
+
+- Updated `public/assets/gallery-modules/admin-gallery-title-completion.js` with per-input request state, a 180 ms debounce, a five-second timeout, same-origin/no-store fetches, bounded results, and generation checks covering input, parent, focus, and form lifetime.
+- Updated `app/views/admin_gallery_forms.php` and `public/assets/styles/admin-gallery-title-completion.css` for discoverable completion help and accessible announcements. An explicit translated field label prevents nested help/live text from changing the input's accessible name.
+- Replaced per-keystroke sorting of all matches with best-match selection over the small returned set. Preserved pointer acceptance, normal form validation, folder-name derivation, and server-authoritative creation.
+- Refreshed the affected import chain in `public/assets/gallery.js`, `public/assets/public-gallery.js`, `public/assets/gallery-modules/admin-side-panel.js`, and `public/assets/gallery-modules/admin-operations.js`, and included the new preload module in layout asset-version inputs.
+- Preserved both `progressive` and `responsive` thumbnail pipelines, public media authorization, the existing 100-400% zoom contract, immediate authorized active-original promotion above 100%, and no-JavaScript navigation and creation.
+
+#### Recovery and fixture safety
+
+- Split recovery CLI parsing, contracts, I/O, validation, and fixtures into `scripts/recovery/` behind the compatibility entry point. Rejected active-install overlap, broad or traversing paths, symlinks/junction aliases, hardlinks, unsafe JSON, and evidence-output overwrites.
+- Added `scripts/gallery_workflow_run.php`, `scripts/gallery_workflow_mysql.php`, and `scripts/gallery_workflow_ci.php` with explicit `disposable-only` opt-in, literal loopback addresses, nondefault ports, dedicated credentials, and randomly generated database identities.
+- Verified the private MySQL instance's actual data directory before account creation and before shutdown. Cleanup targets only owned generated schemas, marked temporary directories, and exact child-process handles.
+- Added `--release` to the disposable launchers so release preparation can provision the fixture around one `php scripts/audit.php --profile=release` invocation. Existing `--audit` continues to select `full`; release mode does not first run a duplicate full audit.
+- Kept fixture code in the source-checkout testing workflow; production packages continue to exclude `tests/`, and fixture launchers refuse to operate without their test support.
+
+#### Audit and qualification internals
+
+- Updated `scripts/audit.php`, `scripts/audit_lib.php`, and `scripts/audit_registry.php` to register the new fixtures, include available standalone Chromium coverage in `full` as well as `release`, and apply explicit workflow timeouts.
+- Fixed a Windows child-process deadlock exposed by verbose Node failures: temporary file-backed stdout/stderr capture now lets process-status polling and hard timeouts continue independently of output volume.
+- Added before/after source fingerprints to release reports. Missing identity blocks qualification; changed inputs invalidate release consistency instead of leaving a misleading green result.
+- Split qualification fingerprinting, CLI handling, evidence records, report import, and previews into `scripts/release_qualification/`. Stored local evidence under ignored `cache/release-qualification/`, excluded runtime data and compiler intermediates, and refused linked source inputs.
+- Required a complete central `release` report for audit attachment, including matching before/after fingerprints, suite registry, result schema, and timing. Preserved skips and refused stale, partial, `quick`, or `full` reports as release evidence.
+
+#### Database, configuration, and upgrade behavior
+
+- Added no migration, table, column, index, stored-data rewrite, production configuration key, or capability toggle. Existing gallery IDs, files, settings, visibility, passwords, share links, and Trash records retain their established meaning.
+- Preserved existing schema-inspection, destructive-mutation preflight, and security-policy behavior; this release does not redefine `available`, `missing`, `unknown`, or feature-disabled policy.
+- Preserved the distinction between unpublished galleries, which may remain directly addressable, and private/password-protected galleries, whose media access must be denied without authorization.
+- Left general server-side replay protection for create and classic multipart upload unchanged. Browser double-click suppression and prepared-batch retry coverage do not make every repeated POST idempotent; replaying a completed create request can still create a suffixed copy.
+- Prepared consistent 0.104.1 runtime, documentation, release-metadata, manual, and manifest versions. No commit, tag, package publication, or production migration is implied by release preparation.
+
+#### Measurements and permanent documentation
+
+- Added `scripts/benchmark_title_completion.php` and `scripts/benchmark_title_completion_browser.mjs` with synthetic 100-, 1,000-, and 10,000-title fixtures and documented measurement boundaries.
+- Measured a 749-byte common-prefix JSON response at 10,000 synthetic titles against 1,957,789 bytes in the reconstructed former escaped catalog. The measured SQLite service/controller median was 2.057 ms for that case; a bounded miss took longer. These are not whole-page or production MySQL timings.
+- Measured the old 10,000-title browser matcher at 0.7914 ms per lookup and the eight-candidate matcher at 0.0020 ms in the documented Chromium fixture. Excluded rendering, network latency, and debounce time from those CPU measurements.
+- Documented that the preload extraction reduced the main module's source size but increased combined gzip size by approximately 1.2 KiB. No unmeasured startup improvement, phone performance result, or speculative lazy-loading benefit was claimed.
+- Added `docs/TITLE_COMPLETION.md`, `docs/BROWSER_LIFECYCLE.md`, `docs/GALLERY_WORKFLOWS.md`, `docs/RECOVERY_ASSURANCE.md`, `docs/RECOVERY_OFF_HOST.md`, and `docs/RELEASE_QUALIFICATION.md`; updated architecture, testing, release, source-map, and administrator documentation.
+- Preserved the original review and implementation evidence in `docs/GALLERY_IMPROVEMENT_HISTORY.md` instead of shipping the temporary root-level roadmap as current instructions.
+
+### Tests
+
+#### Completion and lifecycle regressions
+
+- Expanded `tests/admin_gallery_title_completion_test.mjs` and added `tests/admin_gallery_title_completion_browser_test.mjs` with a real DOM fixture for Unicode boundaries, IME guards, modifiers, selected text, dismissal, pointer acceptance, parent changes, detached controls, and out-of-order replies.
+- Added `tests/gallery_title_completion_service_test.php` and its fixture for actual model/service/controller behavior, input and response limits, authorization statuses, sibling/fallback ordering, normalization fallback, bounded query counts, and larger catalogs.
+- Added `tests/lightbox_preload_lifecycle_test.mjs` with 12 runtime cases, including repeated teardown/reopen cycles, cancellation races, rejected and synchronously failing work, zero-valued timer handles, and concurrency accounting.
+- Updated existing lightbox navigation, resource, cache, zoom-quality, map, Smart Gallery, and Admin panel contracts for the new lifecycle owner and deployed cache revisions.
+
+#### Real workflows, recovery, and release evidence
+
+- Added `tests/gallery_workflow_integration_test.php`, `tests/gallery_workflow_browser_test.php`, and `tests/gallery_workflow_safety_test.php` with isolated support fixtures and explicit refusal tests for unsafe connection identities and cleanup targets.
+- Kept the existing real-MySQL concurrency test in the same provisioned central run. CI requires all three workflow/concurrency PASS records instead of accepting an absent or skipped integration test.
+- Added `tests/recovery_assurance_test.php` for recovery contracts and safety, and `tests/release_qualification_test.php` for fingerprints, artifact changes, evidence states, audit binding, and preview behavior.
+- Expanded `tests/audit_runner_test.php` with large simultaneous stdout/stderr output and a silent-child timeout regression; added release-profile forwarding checks to the fixture safety contract.
+- Retained the central release audit as the authority for regression, complete PHP/JavaScript syntax, MVC boundaries, mutation contracts, hardening, browser fixtures, release consistency, manifest freshness, and Git whitespace. Automated coverage does not replace a real off-host restore, assistive-technology review, or post-publication updater smoke test.
+
+### User Impact
+
+#### For administrators
+
+- Improved optional title reuse in both create-gallery surfaces without forcing a suggestion, changing existing galleries, or adding a new setting. Ordinary typing and submission remain available if JavaScript, Unicode support, or the suggestion endpoint is unavailable.
+- Removed the complete title catalog from each create form and reduced browser matching work while making the deliberate older-match cutoff explicit. No database migration or manual conversion is required for an upgrade from 0.104.
+- Added practical recovery and release-evidence tools for maintainers, with clear boundaries between checked files, tested workflows, actual operational recovery, and outstanding manual sign-off.
+- Kept backups, recovery objectives, production query plans, physical-device/IME/screen-reader review, and hosted CI results as evidence that must be obtained in the relevant environment rather than inferred from local fixtures.
+
+#### For visitors
+
+- Improved the internal lifecycle of nearby lightbox preview work without changing gallery URLs, public access rules, the chosen thumbnail renderer, or the established viewer controls.
+- Preserved password/private-gallery protection, authorized media and metadata, slideshow, fullscreen, zoom, and no-JavaScript access. The new title endpoint and operational tooling are not public browsing features.
+
 ## Version 0.104
 
 Version 0.104 adds inline title completion to the Admin create-gallery workflow. Administrators can reuse established naming patterns more quickly while retaining full control of the submitted title, parent gallery, folder name, and all existing creation behavior.

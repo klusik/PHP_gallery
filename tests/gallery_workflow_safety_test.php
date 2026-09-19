@@ -60,4 +60,16 @@ try {
     removeFixture($directory, $token);
 }
 check(!is_dir($directory), 'Owned fixture cleanup incomplete.');
-echo "PASS gallery workflow opt-in connection identity and cleanup guards\n";
+$runnerSource = (string) file_get_contents(dirname(__DIR__) . '/scripts/gallery_workflow_run.php');
+$mysqlSource = (string) file_get_contents(dirname(__DIR__) . '/scripts/gallery_workflow_mysql.php');
+foreach ([$runnerSource, $mysqlSource] as $source) {
+    check(str_contains($source, "['--development', '--audit', '--release']"), 'Explicit release mode missing.');
+}
+check(str_contains($runnerSource, "\$profile = \$argv[1] === '--release' ? 'release' : 'full';"),
+    'Release mode must select release without a preceding full audit.');
+check(str_contains($runnerSource, "'--profile=' . \$profile"),
+    'Selected profile must flow to the authoritative audit.');
+check(str_contains($mysqlSource, "\$argv[1] === '--development' ? 480 : 1320"),
+    'Both central audit modes require the full timeout budget.');
+
+echo "PASS gallery workflow opt-in connection identity cleanup and audit-profile guards\n";

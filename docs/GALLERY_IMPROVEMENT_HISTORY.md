@@ -1,4 +1,13 @@
-# Gallery improvement priorities
+# Gallery improvement review and implementation history
+
+This permanent archive preserves the original review, implementation progress,
+and unresolved operational choices requested by the maintainer. It replaces
+`TEMP_GALLERY_IMPROVEMENT_PLAN.md` for the 0.104.1 release; nothing from the
+original review was discarded. Statements below about pending commits or
+version 0.104 describe the implementation handoff, not the current release.
+Current behavior belongs to the linked permanent guides. Current release
+evidence belongs to `cache/release-qualification/0.104.1/` and is not inferred
+from the historical full audit recorded here.
 
 ## Implementation progress - 20 September 2026
 
@@ -19,11 +28,11 @@ Work log: repository began clean. The original review below is retained for back
 
 ### Permanent implementation references
 
-- Recovery: [CLI/evidence contract](docs/RECOVERY_ASSURANCE.md), [off-host procedure](docs/RECOVERY_OFF_HOST.md).
-- Isolated workflow/CI setup: [GALLERY_WORKFLOWS.md](docs/GALLERY_WORKFLOWS.md).
-- Completion budgets, normalization and measurements: [TITLE_COMPLETION.md](docs/TITLE_COMPLETION.md).
-- Viewer ownership and honest compression accounting: [BROWSER_LIFECYCLE.md](docs/BROWSER_LIFECYCLE.md).
-- Qualification commands and artifact invalidation: [RELEASE_QUALIFICATION.md](docs/RELEASE_QUALIFICATION.md), [RELEASE.md](RELEASE.md).
+- Recovery: [CLI/evidence contract](RECOVERY_ASSURANCE.md), [off-host procedure](RECOVERY_OFF_HOST.md).
+- Isolated workflow/CI setup: [GALLERY_WORKFLOWS.md](GALLERY_WORKFLOWS.md).
+- Completion budgets, normalization and measurements: [TITLE_COMPLETION.md](TITLE_COMPLETION.md).
+- Viewer ownership and honest compression accounting: [BROWSER_LIFECYCLE.md](BROWSER_LIFECYCLE.md).
+- Qualification commands and artifact invalidation: [RELEASE_QUALIFICATION.md](RELEASE_QUALIFICATION.md), [RELEASE.md](../RELEASE.md).
 
 ### Verification history
 
@@ -31,10 +40,10 @@ Work log: repository began clean. The original review below is retained for back
 - Initial central quick run (`20260919-223451-22492`): integration failed on stale import-version assertions and missing source documentation. A verbose Node assertion also exposed a Windows pipe deadlock; only that owned stalled child was stopped. The runner now uses temporary file-backed output streams and tests large dual-stream output plus hard timeouts.
 - Second quick run (`20260919-224402-45624`): 187 PHP passed / one header failure / three environment skips; 17 Node and 36 WinApp tests passed; MVC, mutation contracts and syntax passed. The remaining size-helper header was corrected. Skips were the two opt-in disposable workflow tests and the existing database concurrency test.
 - First isolated full audit (`20260919-230210-48240`): PASS, 191 PHP / 18 Node / 36 WinApp / two standalone Chromium fixtures, zero skips; real workflow and database-concurrency coverage ran. The disposable database, application copy and private MySQL directory were cleaned. Final markup review then added an explicit translated input label so the nested live region cannot change the field's accessible name.
-- Final isolated full audit (`20260919-230636-38872`): PASS after that correction, all nine suites, 191 PHP / 18 Node / 36 WinApp / two standalone Chromium fixtures, zero skips or failures. PHP syntax: 771 files; JavaScript syntax: 90 files. MVC: zero strict violations, with 27 existing advisory review candidates. Duration 145.34 seconds. [Immutable final report](cache/test-audit/20260919-230636-38872/report.md).
+- Final isolated full audit (`20260919-230636-38872`): PASS after that correction, all nine suites, 191 PHP / 18 Node / 36 WinApp / two standalone Chromium fixtures, zero skips or failures. PHP syntax: 771 files; JavaScript syntax: 90 files. MVC: zero strict violations, with 27 existing advisory review candidates. Duration 145.34 seconds. [Immutable final report](../cache/test-audit/20260919-230636-38872/report.md).
 - Final managed source changes were followed by manifest generation and `--check`: current version 0.104, 672 managed files. No release metadata, Git staging, commit, tag, push or publication was performed. Existing site configuration, media and database were not modified.
 - The final fixture owner reported successful cleanup of the generated database/application copy and shutdown/removal of the private MySQL instance. These were synthetic, regenerable test data only.
-- Initialized actual 0.104 qualification evidence for source fingerprint `bb1716a7958381b559933784e28d0d31674fe746ecada988f7d4e031a9bb5b9d`. [Local record](cache/release-qualification/0.104/bb1716a7958381b559933784e28d0d31674fe746ecada988f7d4e031a9bb5b9d/record.json). Qualification correctly remains INCOMPLETE: all human checks are pending and this implementation's full audit is not substituted for a release audit.
+- Initialized actual 0.104 qualification evidence for source fingerprint `bb1716a7958381b559933784e28d0d31674fe746ecada988f7d4e031a9bb5b9d`. [Local record](../cache/release-qualification/0.104/bb1716a7958381b559933784e28d0d31674fe746ecada988f7d4e031a9bb5b9d/record.json). Qualification correctly remains INCOMPLETE: all human checks are pending and this implementation's full audit is not substituted for a release audit.
 
 - Browser CPU measurement: the same newest ASCII title was selected at all fixture sizes. In Chromium 153, the old 10,000-title matcher took 0.7914 ms per lookup versus 0.0020 ms with eight returned candidates. This excludes rendering, debounce and HTTP latency. See the permanent completion guide and ignored `cache/benchmarks/title-completion-browser.json`.
 
