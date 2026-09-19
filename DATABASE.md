@@ -1,6 +1,8 @@
 # PHP Gallery Database Documentation
 
-This document describes the database schema used by PHP Gallery as of application version 0.104. Version 0.97 adds the recoverable gallery-trash state machine through migrations `202609070001_gallery_trash_bin.php` and `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6 introduced no schema changes. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
+This document describes the database schema used by PHP Gallery as of application version 0.104.1. Version 0.97 adds the recoverable gallery-trash state machine through migrations `202609070001_gallery_trash_bin.php` and `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6 introduced no schema changes. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
+
+Version 0.104.1 introduces no schema migration, table, column, index, or stored-data conversion. Title completion reads existing gallery metadata through bounded keyset queries and performs normalization in the service layer; it adds no persisted normalized-title storage. Disposable workflow databases belong only to isolated test fixtures, not to the installation's application schema.
 
 ## Database Engine
 

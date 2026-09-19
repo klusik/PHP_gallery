@@ -2,7 +2,7 @@
 /**
  * Project: PHP Gallery
  * Author: Rudolf Klusal
- * Start a private MySQL 8 data directory and run only new workflow development checks.
+ * Start a private MySQL 8 data directory for workflow development or a central audit.
  * Never reads my.ini, connects to port 3306, or uses an existing server data directory.
  */
 declare(strict_types=1);
@@ -54,7 +54,7 @@ $serverVerified = false;
 $exit = 0;
 $stage = 'local MySQL prerequisites';
 try {
-    check(in_array($argv[1] ?? '', ['--development', '--audit'], true), 'Choose development checks or the central audit.');
+    check(in_array($argv[1] ?? '', ['--development', '--audit', '--release'], true), 'Choose development checks or a central audit profile.');
     check(getenv('GALLERY_WORKFLOW_ENABLE') === 'disposable-only', 'Explicit disposable opt-in required.');
     $binary = (string) getenv('GALLERY_WORKFLOW_MYSQL_BIN');
     check(is_file($binary) && in_array(strtolower(basename($binary)), ['mysqld.exe', 'mysqld'], true), 'A MySQL 8 server executable is required.');
@@ -94,9 +94,9 @@ try {
     $environment = array_merge(getenv(), ['GALLERY_WORKFLOW_DB_HOST' => '127.0.0.1', 'GALLERY_WORKFLOW_DB_PORT' => (string) $port,
         'GALLERY_WORKFLOW_DB_USER' => 'gallery_workflow_runner', 'GALLERY_WORKFLOW_DB_PASSWORD' => $password]);
     echo "PASS gallery workflow private MySQL initialized with dedicated account\n";
-    $stage = $argv[1] === '--audit' ? 'central audit with disposable database' : 'new workflow development checks';
+    $stage = $argv[1] === '--development' ? 'new workflow development checks' : 'central audit with disposable database';
     gallery_workflow_mysql_child([PHP_BINARY, __DIR__ . '/gallery_workflow_run.php', $argv[1]], $directory, $environment,
-        $argv[1] === '--audit' ? 1320 : 480, true);
+        $argv[1] === '--development' ? 480 : 1320, true);
 } catch (Throwable $exception) {
     fwrite(STDERR, 'FAIL gallery workflow ' . $stage . ' at line ' . $exception->getLine() . ' code ' . (string) $exception->getCode() . "\n");
     $exit = 1;

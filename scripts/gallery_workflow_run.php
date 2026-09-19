@@ -23,7 +23,7 @@ $fixture = null;
 $exit = 0;
 $stage = 'prerequisites';
 try {
-    check(in_array($argv[1] ?? '', ['--development', '--audit'], true), 'Choose development checks or the central audit.');
+    check(in_array($argv[1] ?? '', ['--development', '--audit', '--release'], true), 'Choose development checks or a central audit profile.');
     $fixture = new Fixture(dirname(__DIR__), getenv());
     $stage = 'provisioning';
     $fixture->start();
@@ -36,8 +36,9 @@ try {
     } else {
         // The existing PHP regression suite discovers the PHP workflow tests and the real DB races.
         // No parallel test orchestrator and no direct invocation of the existing concurrency suite.
-        $stage = 'central full audit';
-        $fixture->run([PHP_BINARY, __DIR__ . '/audit.php', '--profile=full'], 1200, $stage);
+        $profile = $argv[1] === '--release' ? 'release' : 'full';
+        $stage = 'central ' . $profile . ' audit';
+        $fixture->run([PHP_BINARY, __DIR__ . '/audit.php', '--profile=' . $profile], 1200, $stage);
         $report = json_decode((string) file_get_contents(dirname(__DIR__) . '/cache/test-audit/latest.json'), true, 512, JSON_THROW_ON_ERROR);
         $regression = array_values(array_filter($report['tasks'] ?? [], static fn (array $task): bool => $task['id'] === 'php-regression'))[0] ?? [];
         $logPath = (string) ($regression['log'] ?? '');
@@ -47,7 +48,7 @@ try {
         foreach (['gallery_workflow_integration_test.php', 'gallery_workflow_browser_test.php', 'viewer_phase07_mysql_concurrency_test.php'] as $test) {
             check(preg_match('/^\[PASS\] ' . preg_quote($test, '/') . ' /m', $evidence) === 1, 'Mandatory integration coverage was skipped or unregistered.');
         }
-        echo "PASS gallery workflow central full audit completed\n";
+        echo 'PASS gallery workflow central ' . $profile . " audit completed\n";
     }
 } catch (Throwable $exception) {
     fwrite(STDERR, 'FAIL gallery workflow ' . $stage . ' at ' . basename($exception->getFile()) . ' line ' . $exception->getLine() . "\n");
