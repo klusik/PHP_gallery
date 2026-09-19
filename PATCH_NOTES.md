@@ -1,5 +1,69 @@
 # Patch notes
 
+## Version 0.103.0
+
+Version 0.103.0 extends Smart Galleries with secure source-gallery context, GPS/map presentation, and richer public lightbox metadata. The release preserves the existing physical-gallery ownership model and authorization boundaries while making provenance and geographic context available through the established MVC and browser workflows.
+
+### Highlights
+
+#### Smart Gallery source context
+
+- Added source-gallery provenance to Smart Gallery presentation so visitors and administrators can understand which physical gallery owns each matching photograph.
+- Added safe source-gallery navigation context to Smart Gallery cards and lightbox payloads without creating a second ownership relation.
+- Preserved the canonical `images.gallery_id` relationship as the only source of physical-gallery ownership.
+
+#### GPS and map presentation
+
+- Added map-ready context for authorized Smart Gallery results with source-gallery GPS privacy enforcement.
+- Added aggregate map context independent of the currently paginated card page.
+- Preserved the rule that map data is exposed only for authorized matching images with valid GPS coordinates and source galleries that allow maps.
+
+#### Public lightbox and presentation
+
+- Extended public and Smart Gallery lightbox context with source-gallery and metadata information while preserving existing navigation and media authorization.
+- Added responsive source/map presentation styling and localized labels in Czech, German, English, and Swedish.
+- Improved URL, rewrite, SEO target, and public-context handling for safe lightbox navigation.
+
+### Technical Details
+
+#### Backend
+
+- Updated `app/services/smart_galleries.php`, `app/models/smart_galleries.php`, and related controllers and views to batch source-gallery context and prepare bounded presentation data.
+- Added request, dispatcher, early-runtime, feature-policy, EXIF, and SEO guard integration while keeping SQL and persistence ownership in the model layer.
+- Preserved strict MVC ownership and avoided N+1 source-gallery lookups.
+- Added no database migrations, new tables, columns, or destructive data rewrites.
+- Missing or invalid optional context is omitted safely; authorization and GPS privacy checks remain mandatory before source or map data is exposed.
+
+#### Frontend
+
+- Updated `public/assets/gallery-modules/lightbox.js` for source-context and map-aware lightbox behavior.
+- Updated `public/assets/styles/public-shared.css` for responsive context and map presentation.
+- Updated public and Smart Gallery views, layout integration, URL handling, and localized strings without weakening no-JavaScript fallbacks or protected media routes.
+
+#### Documentation and integrity
+
+- Updated `docs/SMART_GALLERIES.md` with the permanent source-context, provenance, GPS, map, and authorization behavior.
+- Removed the temporary implementation roadmap after incorporating its durable requirements into documentation and automated contracts.
+- Regenerated `app/core-manifest.json` for the release tree.
+
+### Tests
+
+- Added `tests/smart_gallery_source_map_hardening_test.php` for provenance, authorization, GPS privacy, aggregate-map, and source-context safety.
+- Expanded Smart Gallery presentation and public-contract coverage.
+- Updated SEO lightbox target, URL rewrite, public asset-loading, and lightbox-related regression coverage.
+- The release audit remains authoritative for PHP and Node regression suites, syntax validation, MVC boundaries, browser integration, manifest freshness, release consistency, and Git whitespace.
+
+### User Impact
+
+#### For visitors
+
+- Smart Gallery results can provide clearer physical-source context and, where permitted, useful map/GPS context.
+- Public lightbox navigation and metadata are richer while protected galleries, GPS privacy, authorization checks, and existing fallback behavior remain enforced.
+
+#### For administrators
+
+- Smart Gallery presentation more clearly connects dynamic results with their physical source galleries and supported map context.
+- No schema migration or manual data conversion is required for this release.
 ## Version 0.102.0
 
 Version 0.102.0 is a feature and hardening release that expands administrator telemetry and diagnostics, improves Smart Galleries presentation, strengthens public media authorization and download resilience, and makes strict MVC boundaries an enforced release requirement. It adds broad regression coverage while preserving existing routes, stored gallery data, and supported compatibility paths.
