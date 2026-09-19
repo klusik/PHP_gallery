@@ -195,37 +195,49 @@ function admin_gallery_report_data_path_summary(): array
         $path['total_bytes'] = admin_gallery_report_disk_total_bytes((string) $path['path']);
     }
     unset($path);
-    return ['paths' => $paths];
+    $legacyDownloadCache = function_exists(__NAMESPACE__ . '\\legacy_download_artifact_cache_status')
+        ? legacy_download_artifact_cache_status(true)
+        : [
+            'legacy_server_build_capable' => false,
+            'reason' => 'health_probe_unavailable',
+            'configured_path' => (string) ($config['zip_cache_path'] ?? ''),
+            'artifact_root' => '',
+            'state_dir' => '',
+            'coordination_dir' => '',
+            'free_space_known' => false,
+            'free_bytes' => null,
+        ];
+    return ['paths' => $paths, 'legacy_download_cache' => $legacyDownloadCache];
 }
 
 /**
  * Return free disk bytes for a path when available.
  *
  * @param string $path Filesystem path.
- * @return int Free bytes.
+ * @return ?int Free bytes, or null when the host does not expose capacity.
  */
-function admin_gallery_report_disk_free_bytes(string $path): int
+function admin_gallery_report_disk_free_bytes(string $path): ?int
 {
     if ($path === '' || !\function_exists('disk_free_space')) {
-        return 0;
+        return null;
     }
     $probe = is_dir($path) ? $path : dirname($path);
     $bytes = @\disk_free_space($probe);
-    return is_float($bytes) ? (int) $bytes : 0;
+    return is_float($bytes) ? (int) $bytes : null;
 }
 
 /**
  * Return total disk bytes for a path when available.
  *
  * @param string $path Filesystem path.
- * @return int Total bytes.
+ * @return ?int Total bytes, or null when the host does not expose capacity.
  */
-function admin_gallery_report_disk_total_bytes(string $path): int
+function admin_gallery_report_disk_total_bytes(string $path): ?int
 {
     if ($path === '' || !\function_exists('disk_total_space')) {
-        return 0;
+        return null;
     }
     $probe = is_dir($path) ? $path : dirname($path);
     $bytes = @\disk_total_space($probe);
-    return is_float($bytes) ? (int) $bytes : 0;
+    return is_float($bytes) ? (int) $bytes : null;
 }

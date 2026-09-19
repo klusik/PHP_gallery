@@ -9,7 +9,7 @@ This document is intended to help future maintainers and AI coding agents unders
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.101.2';
+const CMS_VERSION = '0.102.0';
 ```
 
 Update-related code uses:
@@ -52,7 +52,9 @@ The long-term application flow is `Bootstrap/Router -> Controller -> Service -> 
 - `app/views/` owns HTML presentation. Views receive prepared presentation data and may use presentation-only helpers such as escaping and translation. Views must not inspect request/session globals, query persistence, decide domain authorization/feature policy, mutate state, or emit response headers.
 - Bootstrap, routing, migrations, CLI scripts, and `app/database.php` remain infrastructure boundaries. Feature-specific persistence must not be hidden there to bypass MVC.
 
-The contract is enforced by `scripts/check_mvc_boundaries.php`. `scripts/mvc_boundary_baseline.json` is retained as an always-empty assertion with `violation_count: 0`, not as a legacy allowlist. Any detected SQL/PDO/request/transport/presentation/upward-dependency signature fails immediately. `tests/mvc_layer_contract_test.php` protects the checker semantics, the Stage 7-13 boundary tests protect the intermediate ownership contracts, and all central audit profiles run the boundary checker.
+The contract is enforced by `scripts/check_mvc_boundaries.php`. `scripts/mvc_boundary_baseline.json` is retained as an always-empty assertion with `violation_count: 0`, not as a legacy allowlist. Any detected SQL/PDO/request/transport/presentation/upward-dependency signature inside the canonical MVC roots fails immediately. `tests/mvc_layer_contract_test.php` protects the checker semantics, the Stage 7-13 boundary tests protect the intermediate ownership contracts, and all central audit profiles run the boundary checker.
+
+The same checker also performs a non-executing whole-runtime architecture inventory. It tokenizes every first-party PHP web-runtime file under `app/` plus the supported public/setup entrypoints, classifies each file by architecture role, and records bounded evidence for SQL/PDO access, request/session globals, HTTP response APIs, filesystem mutations, presentation output, includes, and cross-layer dependencies. These historical `review_candidates` are advisory until their ownership is reviewed; the strict zero-baseline MVC contract remains the hard gate. During the central audit the machine-readable result is stored as `<run-directory>/mvc-architecture.json`, and the compact suite summary reports both strict violations and the number of historical review candidates. Once a reviewed candidate class reaches zero, it can be promoted into strict enforcement without introducing a legacy baseline.
 
 When adding a new feature, use the strict vertical slice directly. Do not first place SQL in a controller/service or policy in a view with the intention of moving it later.
 
@@ -989,6 +991,40 @@ require verified settings storage. Daily rollup and retention purge may no-op fo
 confirmed pre-telemetry schema, but an `unknown` reporting schema raises the Phase
 11 policy boundary instead of silently reporting successful maintenance.
 
+The audit-remediation telemetry contract additionally makes the semantic owners
+explicit. `telemetry_sessions` is the canonical unique-session source, while
+`public.page_views` is an explicit aggregate event rather than a side effect of
+session start. Semantics version `2` records the transition boundary so historical
+session-row counters are not silently presented as corrected data. Photo activation
+is owned by one browser state machine shared byte-for-byte by `usage.js` and the
+compatibility `telemetry.js`; preloading does not create photo-open events and
+activation origin is restricted to a bounded technical vocabulary. Traffic reports
+may be segmented as all, bot-classified, or non-bot-classified without treating the
+classification as a human identity signal.
+
+Performance/media/cache/database observability is deliberately scoped. Page-load,
+visible-image decode/display, PHP-observed media bytes, decoded-lightbox in-memory
+cache events, and bounded PDO execution aggregates each identify their measurement
+layer in the Admin export. Query text and bound values are never telemetry payloads.
+The database observer buffers request-local aggregates and suppresses re-entrant
+telemetry writes. Hourly aggregate writes normalize irrelevant dimensions per metric
+family to reduce row/index cardinality without changing report meaning.
+
+Stage 6 storage tuning is evidence-driven. The authenticated telemetry export can
+report exact rows, data/index bytes, oldest/newest rows, approximate recent row
+growth, configured retention, and bounded per-metric dimension cardinality. The same
+export also records request-local SQL execution timings for fixed report-query
+families and sanitized `EXPLAIN` metadata for a fixed source-owned subset of
+representative telemetry report queries. SQL text, bound values, result payloads,
+and raw database errors never enter this evidence layer, and EXPLAIN probes run only
+after the runtime timing snapshot has been captured. The export also compares recent
+completed-day hourly totals with persisted daily rollups by metric, excluding the
+current partial day, and reports exact match, mismatch, missing daily data, or no
+samples. These diagnostics do not change indexes or retention. The current 30-day
+export remains inside the default hourly-retention horizon; any future report window
+beyond hourly retention must use daily rollups only after this consistency evidence
+shows that their corrected semantics match the hourly source.
+
 #### Lazy System Health and cache budget
 
 `presentation_schema_health_definitions()` stores callable resolvers, not eager
@@ -1779,9 +1815,9 @@ After any structural change, update these docs in the same patch.
 
 Complete Smart Gallery lightbox traversal reuses the normal-gallery sparse-cache design. Public cards contain global result indexes and the Smart Gallery page emits the full authorized result count plus `smart_gallery_lightbox_data`. That endpoint caps one request at 80 metadata rows and queries the same canonical membership/order definition. The browser can therefore cross page boundaries while retaining existing lightbox pending-request and stale-response protection, keyboard/touch navigation, fullscreen, zoom, and slideshow lifecycle behavior. Original files are still requested only by the existing authorized media path when needed.
 
-Migration `202608170001_smart_gallery_presentation.php` adds nullable `presentation_json`. Presentation version 1 normalizes optional Smart Gallery overrides, then resolves `Smart Gallery override > Theme/site default`. Missing, malformed, unknown-version, and invalid keys inherit defaults. The override model also reuses the canonical Theme gallery-card layout normalization for placed Smart Gallery cards. There is intentionally no physical-parent presentation inheritance because one Smart Gallery can have multiple placements. Physical gallery/image thumbnail bounds remain authoritative if Smart Gallery bounds conflict.
+Migration `202608170001_smart_gallery_presentation.php` adds nullable `presentation_json`. Presentation version 1 normalizes optional Smart Gallery overrides, then resolves `Smart Gallery override > Theme/site default`. Missing, malformed, unknown-version, and invalid keys inherit defaults. Editable preference resolution is deliberately separate from runtime capability suppression: the Admin editor reads the stored/local Lightbox, download, slideshow, and voting preferences, while effective public/preview presentation applies the current site-wide capability masters afterward. This prevents a temporarily disabled master capability from rewriting a Smart Gallery's local preference during an unrelated save. Current-version mutations include `presentation_json` in the Smart Gallery schema readiness contract and the model writes it unconditionally, so a missing migration causes the whole mutation to fail before persistence instead of permitting a partial save. The override model also reuses the canonical Theme gallery-card layout normalization for placed Smart Gallery cards. There is intentionally no physical-parent presentation inheritance because one Smart Gallery can have multiple placements. Physical gallery/image thumbnail bounds remain authoritative if Smart Gallery bounds conflict.
 
-The public renderer and Admin preview share `smart_gallery_render_image_cards()`. The Admin controller remains the non-JavaScript form owner. `admin-side-panel.js` enhances the same Smart Gallery links and forms in the existing drawer, uses the current browser origin for local-host aliases, submits through the normal POST route, follows redirects, extracts `data-smart-gallery-editor-workspace`, and rebinds rules/presentation behavior without changing the browser URL.
+The public renderer and Admin preview share `smart_gallery_render_image_cards()`. The Admin controller remains the non-JavaScript form owner. `admin-side-panel.js` enhances the same Smart Gallery links and forms in the existing drawer, uses the current browser origin for local-host aliases, submits through the normal POST route, follows redirects, extracts `data-smart-gallery-editor-workspace`, and rebinds rules/presentation behavior without changing the browser URL. Smart Gallery columns/rows reuse the bounded Admin range-control pattern and expose live items-per-page feedback. Rows remain stored while visible pagination is off. Thumbnail min/max settings reuse the canonical dual-bound slider and POST normalizer.
 
 Cycle safety is centralized in `app/services/smart_galleries.php`. The request-local relationship snapshot contains physical-parent-to-attached-Smart-Gallery edges plus Smart-Gallery-to-physical-gallery edges for rule branches that can positively include that gallery. The current or proposed physical hierarchy is used to expand `under` rules to the referenced gallery plus its descendants; `equals` remains an exact edge and does not accidentally inherit descendant semantics. The current rule schema has no direct Smart-Gallery-reference field. Proposed rule edits, attachment replacements, single gallery moves, complete Admin drag-and-drop parent maps, filesystem parent synchronization, and public-path hierarchy repair are validated before their first new hierarchy mutation. Existing unrelated cycles do not block a repair elsewhere; the validator compares current and proposed relationships and rejects newly introduced invalid paths. Every committed physical hierarchy change invalidates the request-local graph cache. A drag-and-drop request validates its complete final parent map once and moves folders through an explicit prevalidated batch path, deferring hierarchy synchronization until the final tree exists so temporary intermediate states cannot invalidate an otherwise valid batch.
 

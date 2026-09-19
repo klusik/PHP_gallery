@@ -181,6 +181,13 @@ final class LegacyDownloadBuildCapacityException extends LegacyDownloadBuildExce
 {
 }
 
+/**
+ * Stable legacy-build refusal when the configured server ZIP fallback is unavailable.
+ */
+final class LegacyDownloadBuildUnavailableException extends LegacyDownloadBuildException
+{
+}
+
 /** Return a stable reason for generic physical-gallery legacy ZIP failures. */
 function gallery_zip_failure_reason(Throwable $exception): string
 {
@@ -798,6 +805,17 @@ function zip_cache_dir(): string
  */
 function legacy_download_build_state_dir(): string
 {
+    if (function_exists(__NAMESPACE__ . '\\legacy_download_artifact_cache_status')) {
+        $status = legacy_download_artifact_cache_status();
+        if (empty($status['legacy_server_build_capable'])) {
+            throw new LegacyDownloadBuildUnavailableException(
+                legacy_download_artifact_health_exception_reason((string) ($status['reason'] ?? 'unavailable')),
+                t('download.progress.legacy_unavailable', 'The server ZIP fallback is unavailable. Open the gallery in a modern browser and use Download gallery there.')
+            );
+        }
+        return (string) ($status['coordination_dir'] ?? '');
+    }
+
     $path = zip_cache_dir() . DIRECTORY_SEPARATOR . '.legacy-build-state';
     if (!is_dir($path) && !@mkdir($path, 0775, true) && !is_dir($path)) {
         throw new LegacyDownloadBuildException(

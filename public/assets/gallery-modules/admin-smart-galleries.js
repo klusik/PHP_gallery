@@ -122,11 +122,70 @@ function renderEditor(editor) {
     synchronize(editor);
 }
 
+/** Initialize Smart Gallery presentation controls using the same range semantics as physical galleries. */
+function setupSmartGalleryPresentation(form) {
+    const presentationToggle = form.querySelector('[data-smart-gallery-presentation-toggle]');
+    const presentationFields = form.querySelector('[data-smart-gallery-presentation-fields]');
+    const columns = form.querySelector('[data-smart-gallery-grid-columns]');
+    const rows = form.querySelector('[data-smart-gallery-grid-rows]');
+    const columnsDisplay = form.querySelector('[data-gallery-grid-columns-display]');
+    const rowsDisplay = form.querySelector('[data-gallery-grid-rows-display]');
+    const paginationToggle = form.querySelector('[data-smart-gallery-pagination-toggle]');
+    const rowsControl = form.querySelector('[data-smart-gallery-rows-control]');
+    const itemsPerPage = form.querySelector('[data-smart-gallery-items-per-page]');
+    const activeStatus = form.querySelector('[data-smart-gallery-pagination-active-status]');
+    const inactiveStatus = form.querySelector('[data-smart-gallery-pagination-inactive-status]');
+
+    /** Synchronize the optional Smart Gallery presentation fieldset with its override toggle. */
+    const synchronizePresentationVisibility = () => {
+        if (presentationToggle instanceof HTMLInputElement && presentationFields instanceof HTMLElement) {
+            presentationFields.hidden = !presentationToggle.checked;
+        }
+    };
+
+    /** Synchronize range readouts and the derived page-size preview. */
+    const synchronizeGrid = () => {
+        if (columns instanceof HTMLInputElement && columnsDisplay instanceof HTMLElement) {
+            columnsDisplay.textContent = columns.value;
+        }
+        if (rows instanceof HTMLInputElement && rowsDisplay instanceof HTMLElement) {
+            rowsDisplay.textContent = rows.value;
+        }
+        if (columns instanceof HTMLInputElement && rows instanceof HTMLInputElement && itemsPerPage instanceof HTMLElement) {
+            const columnCount = Math.max(1, parseInt(columns.value, 10) || 1);
+            const rowCount = Math.max(1, parseInt(rows.value, 10) || 1);
+            itemsPerPage.textContent = String(columnCount * rowCount);
+        }
+    };
+
+    /** Make the Rows per page dependency explicit without disabling its submitted value. */
+    const synchronizePaginationDependency = () => {
+        const paginationEnabled = paginationToggle instanceof HTMLInputElement && paginationToggle.checked;
+        if (rowsControl instanceof HTMLElement) {
+            rowsControl.classList.toggle('is-inactive', !paginationEnabled);
+            rowsControl.setAttribute('aria-disabled', paginationEnabled ? 'false' : 'true');
+        }
+        if (activeStatus instanceof HTMLElement) activeStatus.hidden = !paginationEnabled;
+        if (inactiveStatus instanceof HTMLElement) inactiveStatus.hidden = paginationEnabled;
+        synchronizeGrid();
+    };
+
+    presentationToggle?.addEventListener('change', synchronizePresentationVisibility);
+    columns?.addEventListener('input', synchronizeGrid);
+    columns?.addEventListener('change', synchronizeGrid);
+    rows?.addEventListener('input', synchronizeGrid);
+    rows?.addEventListener('change', synchronizeGrid);
+    paginationToggle?.addEventListener('change', synchronizePaginationDependency);
+    synchronizePresentationVisibility();
+    synchronizePaginationDependency();
+}
+
 /** Initialize all currently rendered Smart Gallery editors. */
 export function setupAdminSmartGalleries(root = document) {
     root.querySelectorAll('[data-smart-gallery-editor]').forEach((form) => {
         if (form.dataset.smartGalleryReady === '1') return;
         form.dataset.smartGalleryReady = '1';
+        setupSmartGalleryPresentation(form);
         const hidden = form.querySelector('[data-smart-gallery-rules]');
         const builder = form.querySelector('[data-smart-rule-builder]');
         if (!(hidden instanceof HTMLInputElement) || !(builder instanceof HTMLElement)) return;
@@ -134,15 +193,5 @@ export function setupAdminSmartGalleries(root = document) {
         try { documentRules = JSON.parse(hidden.value); } catch { documentRules = {version: 1, root: {type: 'group', operator: 'AND', children: []}}; }
         const editor = {form, hidden, root: builder, rules: documentRules.root, catalog: JSON.parse(form.dataset.smartGalleryCatalog), tags: JSON.parse(form.dataset.smartGalleryTags), galleries: JSON.parse(form.dataset.smartGalleryGalleries)};
         renderEditor(editor);
-        const presentationToggle = form.querySelector('[data-smart-gallery-presentation-toggle]');
-        const presentationFields = form.querySelector('[data-smart-gallery-presentation-fields]');
-        /** Synchronize the optional Smart Gallery presentation fieldset with its override toggle. */
-        const synchronizePresentationVisibility = () => {
-            if (presentationToggle instanceof HTMLInputElement && presentationFields instanceof HTMLElement) {
-                presentationFields.hidden = !presentationToggle.checked;
-            }
-        };
-        presentationToggle?.addEventListener('change', synchronizePresentationVisibility);
-        synchronizePresentationVisibility();
     });
 }

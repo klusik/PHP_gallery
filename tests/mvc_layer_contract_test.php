@@ -23,8 +23,11 @@ declare(strict_types=1);
 
 require_once dirname(__DIR__) . '/scripts/check_mvc_boundaries.php';
 
+use function PhpGallery\MvcBoundary\architecture_review_candidates;
+use function PhpGallery\MvcBoundary\architecture_role_for_path;
 use function PhpGallery\MvcBoundary\compare_with_baseline;
 use function PhpGallery\MvcBoundary\read_baseline;
+use function PhpGallery\MvcBoundary\scan_architecture_source;
 use function PhpGallery\MvcBoundary\scan_project;
 use function PhpGallery\MvcBoundary\scan_source;
 
@@ -130,6 +133,29 @@ function good_view(array $viewModel): void
 }
 PHP;
 mvc_layer_contract_assert(scan_source($allowedView, 'app/views/fixture.php') === [], 'Translation-only view dependency must remain allowed.');
+
+$legacyHelper = <<<'PHP'
+<?php
+function legacy_helper_probe(): void
+{
+    $stmt = db()->prepare('SELECT id FROM galleries WHERE id = ?');
+    $_SESSION['probe'] = true;
+    file_put_contents('/tmp/probe', 'x');
+}
+PHP;
+$legacyRecord = scan_architecture_source($legacyHelper, 'app/helpers_legacy_probe.php');
+mvc_layer_contract_assert(($legacyRecord['role'] ?? '') === 'helper', 'Whole-runtime inventory must classify legacy helper files.');
+mvc_layer_contract_assert((int) ($legacyRecord['signals']['direct_db']['count'] ?? 0) === 1, 'Whole-runtime inventory must detect direct db() access.');
+mvc_layer_contract_assert((int) ($legacyRecord['signals']['sql_literal']['count'] ?? 0) === 1, 'Whole-runtime inventory must detect SQL literals.');
+mvc_layer_contract_assert((int) ($legacyRecord['signals']['session_global']['count'] ?? 0) === 1, 'Whole-runtime inventory must detect session state.');
+mvc_layer_contract_assert((int) ($legacyRecord['signals']['filesystem_mutation']['count'] ?? 0) === 1, 'Whole-runtime inventory must detect filesystem mutations.');
+$legacyCandidates = architecture_review_candidates($legacyRecord);
+mvc_layer_contract_assert(mvc_layer_contract_has_rule($legacyCandidates, 'architecture.persistence_outside_model'), 'Legacy helper persistence must become a review candidate.');
+mvc_layer_contract_assert(mvc_layer_contract_has_rule($legacyCandidates, 'architecture.session_state_outside_http_boundary'), 'Legacy helper session state must become a review candidate.');
+mvc_layer_contract_assert(mvc_layer_contract_has_rule($legacyCandidates, 'architecture.filesystem_mutation_outside_service'), 'Legacy helper filesystem mutation must become a review candidate.');
+mvc_layer_contract_assert(architecture_role_for_path('app/bootstrap/request.php') === 'bootstrap', 'Bootstrap files must be classified separately from MVC layers.');
+mvc_layer_contract_assert(architecture_role_for_path('app/database.php') === 'infrastructure', 'Database infrastructure must be classified explicitly.');
+mvc_layer_contract_assert(architecture_role_for_path('public/index.php') === 'entrypoint', 'Public entrypoint must be classified explicitly.');
 
 $root = dirname(__DIR__);
 $current = scan_project($root);

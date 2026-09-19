@@ -1,6 +1,6 @@
 # PHP Gallery Database Documentation
 
-This document describes the database schema used by PHP Gallery as of application version 0.101.2. Version 0.97 adds the recoverable gallery-trash state machine through migrations `202609070001_gallery_trash_bin.php` and `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6 introduced no schema changes. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
+This document describes the database schema used by PHP Gallery as of application version 0.102.0. Version 0.97 adds the recoverable gallery-trash state machine through migrations `202609070001_gallery_trash_bin.php` and `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6 introduced no schema changes. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
 
 ## Database Engine
 
@@ -881,7 +881,11 @@ Stores telemetry preferences and limits.
 
 ### `telemetry_sessions`
 
-Stores anonymous session hashes and coarse session metadata.
+Stores anonymous session hashes and coarse session metadata. It is the canonical
+source for unique-session counts. `page_view_count` is retained as session-local
+state and historical rows may contain legacy semantics from before telemetry
+semantics version 2; report-wide canonical page-view totals come from the explicit
+`public.page_views` aggregate metric instead.
 
 ### `telemetry_events`
 
@@ -899,19 +903,50 @@ Common concepts:
 
 ### `telemetry_hourly_metrics`
 
-Aggregated hourly metrics.
+Aggregated hourly metrics. The table has one intentionally wide shared key, but new
+writes apply metric-specific dimension normalization before the upsert. Irrelevant
+dimensions are stored at neutral values rather than multiplying rows for report
+dimensions that are never queried. `device_type` remains available where required
+for all/non-bot-classified/bot-classified report segmentation. Unknown future metric
+families retain their supplied dimensions until an explicit normalization contract
+is defined.
 
 ### `telemetry_daily_metrics`
 
-Aggregated daily metrics.
+Aggregated daily metrics produced from hourly rows. Daily storage is the long-window
+retention layer; short report windows may continue to read hourly data while they are
+fully covered by hourly retention. Do not switch a report to daily data unless the
+rollup semantics have been validated against the corrected hourly metric contract.
 
 ### `telemetry_db_query_metrics`
 
-Aggregated database query timing and fingerprint metrics.
+Aggregated database query timing and fingerprint metrics. The central PDO observer
+stores only bounded operation/table/route/timing/row-count/fingerprint dimensions,
+buffers equivalent executions per request, and suppresses observer recursion. Raw
+SQL, bound values, DSNs, credentials, and database exception messages are not
+telemetry fields.
 
 ### `telemetry_job_runs`
 
 Tracks telemetry maintenance and rollup jobs.
+
+### Telemetry storage diagnostics
+
+The authenticated telemetry export may query `information_schema.tables` for the
+six telemetry data tables and combine those sizes with exact row counts,
+oldest/newest timestamps, approximate seven-day row growth, configured retention,
+and bounded hourly metric dimension cardinality. The export also records request-local
+SQL execution timings for fixed report query families and may run sanitized `EXPLAIN`
+probes for a fixed source-owned subset of representative report queries. Timing and
+optimizer-plan evidence is never persisted to telemetry storage and never includes
+SQL text, bound values, result payloads, or raw database errors. The runtime snapshot
+is captured before EXPLAIN probes so diagnostic overhead does not contaminate the
+reported query timings. A completed-day rollup consistency probe separately compares
+`sample_count`, `event_count`, and `value_sum` per metric between hourly and daily
+storage while excluding the current partial day. Missing or mismatched daily data is
+reported explicitly and blocks any future long-window source switch. This is
+read-only operator evidence for index/retention decisions. It is not a migration and
+must not automatically change table structure or retention policy.
 
 ## Maps, SimBrief and Navigation Data
 

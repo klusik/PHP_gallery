@@ -103,6 +103,27 @@ namespace Gallery\Services {
             'format' => $format,
         ];
     }
+
+    /** Report durable thumbnail metadata as available in this isolated fixture. */
+    function thumbnail_metadata_schema_ready(): bool
+    {
+        return true;
+    }
+}
+
+namespace Gallery\Models {
+    /** Return the deterministic legacy JPEG inventory configured by the fixture. */
+    function thumbnail_metadata_model_legacy_jpg_inventory(): array
+    {
+        return $GLOBALS['thumbnail_compatibility_test_legacy_inventory'] ?? [
+            'registered_variant_count' => 0,
+            'valid_variant_count' => 0,
+            'affected_image_count' => 0,
+            'registered_bytes' => 0,
+            'missing_status_count' => 0,
+            'non_valid_status_count' => 0,
+        ];
+    }
 }
 
 namespace Gallery\Core {

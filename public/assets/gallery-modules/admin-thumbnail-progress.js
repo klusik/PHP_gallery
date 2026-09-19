@@ -394,6 +394,7 @@ async function runLegacyJpegThumbnailCleanup(form) {
             updateLegacyJpegCleanupProgress(progress, result.processed || 0, total, deleted, freedBytes, i18n('admin.thumbnails.legacy_cleanup_running', 'Removing legacy JPG thumbnails...'));
             if (result.done) {
                 updateLegacyJpegCleanupProgress(progress, total, total, deleted, freedBytes, i18n('admin.thumbnails.legacy_cleanup_complete', 'Legacy JPG cleanup complete.'));
+                refreshLegacyJpegInventory(result.legacy_inventory);
                 break;
             }
         }
@@ -403,6 +404,37 @@ async function runLegacyJpegThumbnailCleanup(form) {
         buttons.forEach((button) => {
             button.disabled = false;
         });
+    }
+}
+
+/**
+ * Replace the visible legacy JPEG inventory from a fresh authoritative server snapshot.
+ *
+ * @param {Record<string, *>|null} inventory Fresh metadata-backed inventory.
+ */
+function refreshLegacyJpegInventory(inventory) {
+    if (!inventory || typeof inventory !== 'object' || !inventory.available) {
+        return;
+    }
+    const root = document.querySelector('[data-legacy-jpg-inventory]');
+    if (!(root instanceof HTMLElement)) {
+        return;
+    }
+    const summary = root.querySelector('[data-legacy-jpg-inventory-summary]');
+    if (summary instanceof HTMLElement) {
+        summary.textContent = i18n(
+            'admin.thumbnails.legacy_inventory_summary',
+            '{variants} registered JPEG variant(s) across {images} image(s), approximately {bytes}.',
+            {
+                variants: Math.max(0, Number(inventory.registered_variant_count) || 0),
+                images: Math.max(0, Number(inventory.affected_image_count) || 0),
+                bytes: formatBytes(Math.max(0, Number(inventory.registered_bytes) || 0)),
+            }
+        );
+    }
+    const recommendation = root.querySelector('[data-legacy-jpg-inventory-recommendation]');
+    if (recommendation instanceof HTMLElement) {
+        recommendation.hidden = !inventory.cleanup_recommended || !(Number(inventory.registered_variant_count) > 0);
     }
 }
 

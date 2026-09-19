@@ -268,10 +268,12 @@ namespace Gallery\Core {
 
     $smartGallerySource = (string) file_get_contents($root . '/app/services/smart_galleries.php');
     feature_policy_inventory_assert(
-        str_contains($smartGallerySource, "feature_capability_effective_enabled('lightbox_modes')")
-            && str_contains($smartGallerySource, "feature_capability_effective_enabled('downloads')")
-            && str_contains($smartGallerySource, "feature_capability_effective_enabled('image_voting')")
-            && str_contains($smartGallerySource, '$effective[\'download_enabled\'] = !empty($effective[\'download_enabled\']) && $downloadMasterEnabled;'),
+        str_contains($smartGallerySource, 'function smart_gallery_presentation_master_status(): array')
+            && str_contains($smartGallerySource, 'feature_capability_effective_enabled($capability)')
+            && str_contains($smartGallerySource, "'lightbox' => \$capabilityEnabled('lightbox_modes')")
+            && str_contains($smartGallerySource, "'downloads' => \$capabilityEnabled('downloads')")
+            && str_contains($smartGallerySource, "'voting' => \$capabilityEnabled('image_voting')")
+            && str_contains($smartGallerySource, '$effective[\'download_enabled\'] = !empty($effective[\'download_enabled\']) && !empty($masters[\'downloads\']);'),
         'Smart Gallery local presentation overrides must remain subordinate to the global capability masters.'
     );
 

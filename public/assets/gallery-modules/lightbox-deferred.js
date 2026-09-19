@@ -278,6 +278,7 @@ function scheduleIdleLightboxActivation(setupToken) {
  */
 export function setupGalleryLightbox() {
     teardownGalleryLightbox();
+    window.PHPGalleryTelemetryLightboxOwner = 'native';
 
     if (!document.querySelector('[data-lightbox-image], [data-lightbox-source], [data-photo-map], [data-gallery-map-url]')) {
         return;

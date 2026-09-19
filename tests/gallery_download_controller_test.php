@@ -27,6 +27,13 @@ namespace Gallery\Services {
     /** Minimal capability-validation exception used by the controller fixture. */
     final class DownloadCapabilityException extends \RuntimeException {}
 
+    /** Fixture legacy-fallback health refusal with the production reason contract. */
+    final class LegacyDownloadBuildUnavailableException extends \RuntimeException
+    {
+        /** Return the stable fixture reason. */
+        public function reason(): string { return 'legacy_cache_unavailable'; }
+    }
+
     const DOWNLOAD_CAPABILITY_RESOURCE_GALLERY = 'gallery';
     const DOWNLOAD_CAPABILITY_RESOURCE_SMART_GALLERY = 'smart_gallery';
     const DOWNLOAD_CAPABILITY_SCOPE_PROGRESSIVE = 'progressive';
@@ -47,6 +54,7 @@ namespace Gallery\Services {
 /** Test double for gallery_download_manifest(). */
     function gallery_download_manifest(array $gallery): array
     {
+        $GLOBALS['gallery_download_controller_manifest_calls']++;
         if (!empty($GLOBALS['gallery_download_controller_manifest_error'])) {
             throw new GalleryDownloadManifestException('manifest failed safely');
         }
@@ -64,6 +72,14 @@ namespace Gallery\Services {
     function gallery_download_authorized_source(int $galleryId, int $imageId): ?array
     {
         return $GLOBALS['gallery_download_controller_sources'][$galleryId . ':' . $imageId] ?? null;
+    }
+
+/** Test double for the legacy-only cache capability gate. */
+    function legacy_download_artifact_require_build_capability(): void
+    {
+        if (empty($GLOBALS['gallery_download_controller_legacy_available'])) {
+            throw new LegacyDownloadBuildUnavailableException('legacy unavailable safely');
+        }
     }
 
 /** Test double for build_legacy_gallery_zip(). */
@@ -218,6 +234,8 @@ namespace Gallery\Tests {
         'total_bytes' => 4,
     ];
     $GLOBALS['gallery_download_controller_manifest_error'] = false;
+    $GLOBALS['gallery_download_controller_manifest_calls'] = 0;
+    $GLOBALS['gallery_download_controller_legacy_available'] = true;
     $GLOBALS['gallery_download_controller_sources'] = [];
     $GLOBALS['gallery_download_controller_build_calls'] = 0;
     $GLOBALS['gallery_download_controller_send_calls'] = 0;
@@ -237,7 +255,27 @@ namespace Gallery\Tests {
     $decoded = json_decode($body, true, flags: JSON_THROW_ON_ERROR);
     expect(($decoded['ok'] ?? false) === true && ($decoded['total_bytes'] ?? -1) === 4, 'Authorized manifest JSON must be returned intact.');
 
+    $GLOBALS['gallery_download_controller_legacy_available'] = false;
+    $_SERVER['REQUEST_METHOD'] = 'GET';
+    $_GET = ['id' => '1', 'capability' => 'valid-capability'];
+    [$status, $body] = runRequest(static fn () => cms_download_gallery_manifest());
+    expect($status === 200, 'Progressive manifest capability must remain available when only the legacy ZIP cache is unhealthy.');
+    expect((json_decode($body, true, flags: JSON_THROW_ON_ERROR)['ok'] ?? false) === true, 'Progressive manifest response must remain intact when legacy fallback is unavailable.');
+
+    $manifestCallsBeforeLegacyRefusal = $GLOBALS['gallery_download_controller_manifest_calls'];
+    $_SERVER['REQUEST_METHOD'] = 'POST';
+    $_POST = ['id' => '1', 'capability' => 'valid-capability'];
+    $_GET = [];
+    [$status, $body] = runRequest(static fn () => cms_download_gallery());
+    expect($status === 503, 'Unavailable legacy server ZIP fallback must return a controlled 503 response.');
+    expect(str_contains($body, 'legacy unavailable safely'), 'Unavailable legacy response must remain visitor-safe and bounded.');
+    expect($GLOBALS['gallery_download_controller_manifest_calls'] === $manifestCallsBeforeLegacyRefusal, 'Legacy cache health must fail before manifest enumeration.');
+    expect($GLOBALS['gallery_download_controller_build_calls'] === 0, 'Unavailable legacy fallback must fail before ZIP construction.');
+    $GLOBALS['gallery_download_controller_legacy_available'] = true;
+
     $GLOBALS['gallery_download_controller_manifest_error'] = true;
+    $_SERVER['REQUEST_METHOD'] = 'GET';
+    $_POST = [];
     $_GET = ['id' => '1', 'capability' => 'valid-capability'];
     [$status, $body] = runRequest(static fn () => cms_download_gallery_manifest());
     expect($status === 422 && str_contains($body, 'manifest failed safely'), 'Manifest preparation failure must return bounded 422 JSON.');

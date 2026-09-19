@@ -194,15 +194,15 @@ namespace {
     );
 
     $databaseObserverSource = (string) file_get_contents($root . '/app/services/database_observer.php');
-    $databaseTelemetryStart = strpos($databaseObserverSource, 'function telemetry_record_db_query(');
+    $databaseTelemetryStart = strpos($databaseObserverSource, 'function telemetry_database_observer_enabled(): bool');
     $databaseTelemetryGate = $databaseTelemetryStart === false ? false : strpos($databaseObserverSource, "feature_capability_effective_enabled('telemetry')", $databaseTelemetryStart);
-    $databaseTelemetrySchema = $databaseTelemetryStart === false ? false : strpos($databaseObserverSource, 'telemetry_settings_schema_ready()', $databaseTelemetryStart);
+    $databaseTelemetrySchema = $databaseTelemetryStart === false ? false : strpos($databaseObserverSource, 'telemetry_schema_ready()', $databaseTelemetryStart);
     feature_policy_stage13_assert(
         $databaseTelemetryStart !== false
             && $databaseTelemetryGate !== false
             && $databaseTelemetrySchema !== false
             && $databaseTelemetryGate < $databaseTelemetrySchema,
-        'Telemetry master OFF must stop database-observer metrics before telemetry schema work.'
+        'Telemetry master OFF must stop the buffered database observer before telemetry schema work.'
     );
 
     $telemetryRollupSource = (string) file_get_contents($root . '/app/services/telemetry_rollup.php');

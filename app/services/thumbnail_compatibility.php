@@ -42,6 +42,7 @@ use RuntimeException;
 use Throwable;
 use function Gallery\Core\is_dng_image_path;
 use function Gallery\Core\path_inside;
+use function Gallery\Models\thumbnail_metadata_model_legacy_jpg_inventory;
 
 const THUMBNAIL_COMPATIBILITY_SETTING = 'thumbnail_compatibility_mode';
 const THUMBNAIL_COMPATIBILITY_MODERN = 'modern';
@@ -245,6 +246,50 @@ function thumbnail_compatibility_format_bytes(int $bytes): string
         $index++;
     }
     return ($index === 0 ? number_format($value, 0) : number_format($value, 1)) . ' ' . $units[$index];
+}
+
+/**
+ * Return a non-destructive inventory of registered legacy JPEG thumbnail variants.
+ *
+ * The byte total comes from durable thumbnail metadata and is therefore an estimate
+ * of reclaimable storage until the explicit cleanup action verifies filesystem state.
+ * Opening the Admin page or complete overview report never deletes a derivative.
+ *
+ * @return array<string,mixed> Legacy JPEG inventory and cleanup recommendation state.
+ */
+function thumbnail_legacy_jpg_inventory(): array
+{
+    $base = [
+        'available' => false,
+        'registered_variant_count' => 0,
+        'valid_variant_count' => 0,
+        'affected_image_count' => 0,
+        'registered_bytes' => 0,
+        'missing_status_count' => 0,
+        'non_valid_status_count' => 0,
+        'cleanup_available' => false,
+        'cleanup_recommended' => false,
+        'mode' => thumbnail_compatibility_mode(),
+        'source' => 'thumbnail_metadata',
+    ];
+
+    if (!function_exists(__NAMESPACE__ . '\\thumbnail_metadata_schema_ready') || !thumbnail_metadata_schema_ready()) {
+        return $base;
+    }
+    try {
+        $inventory = thumbnail_metadata_model_legacy_jpg_inventory();
+    } catch (Throwable) {
+        return $base;
+    }
+
+    $base['available'] = true;
+    foreach (['registered_variant_count', 'valid_variant_count', 'affected_image_count', 'registered_bytes', 'missing_status_count', 'non_valid_status_count'] as $key) {
+        $base[$key] = max(0, (int) ($inventory[$key] ?? 0));
+    }
+    $base['cleanup_available'] = true;
+    $base['cleanup_recommended'] = $base['mode'] === THUMBNAIL_COMPATIBILITY_MODERN
+        && (int) $base['registered_variant_count'] > 0;
+    return $base;
 }
 
 /**

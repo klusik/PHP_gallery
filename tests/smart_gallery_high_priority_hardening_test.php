@@ -45,10 +45,10 @@ $adminOperations = (string) file_get_contents($root . '/public/assets/gallery-mo
 $sidePanel = (string) file_get_contents($root . '/public/assets/gallery-modules/admin-side-panel.js');
 
 smart_gallery_high_priority_assert(
-    str_contains($galleryJs, 'admin-smart-galleries.js?v=20260817-smart-gallery-cycle-placement-v2')
-    && str_contains($galleryJs, 'admin-operations.js?v=20260913-card-visibility-refresh-v2')
-    && str_contains($adminOperations, 'admin-side-panel.js?v=20260913-card-visibility-refresh-v2')
-    && str_contains($sidePanel, 'admin-smart-galleries.js?v=20260817-smart-gallery-cycle-placement-v2'),
+    str_contains($galleryJs, 'admin-smart-galleries.js?v=20260919-smart-gallery-presentation-v1')
+    && str_contains($galleryJs, 'admin-operations.js?v=20260919-smart-gallery-presentation-v1')
+    && str_contains($adminOperations, 'admin-side-panel.js?v=20260919-smart-gallery-presentation-v1')
+    && str_contains($sidePanel, 'admin-smart-galleries.js?v=20260919-smart-gallery-presentation-v1'),
     'Every Admin import edge uses the current cache-busting revision of the module it imports.'
 );
 smart_gallery_high_priority_assert(

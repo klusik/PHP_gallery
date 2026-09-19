@@ -66,6 +66,8 @@ use function Gallery\Services\smart_gallery_find_public;
 use function Gallery\Services\smart_gallery_find_public_by_id;
 use function Gallery\Services\smart_gallery_effective_presentation;
 use function Gallery\Services\smart_gallery_normalize_presentation;
+use function Gallery\Services\smart_gallery_presentation_master_status;
+use function Gallery\Services\smart_gallery_presentation_preferences;
 use function Gallery\Services\smart_gallery_lightbox_fetch_images;
 use function Gallery\Services\smart_gallery_source_galleries;
 use function Gallery\Services\smart_gallery_thumbnail_sizes;
@@ -100,6 +102,8 @@ use function Gallery\Services\translation_active_language;
 use function Gallery\Services\content_localize_entities;
 use function Gallery\Services\content_localize_entity;
 use function Gallery\Services\thumbnail_sizes;
+use function Gallery\Services\admin_thumbnail_bound_slider_state;
+use function Gallery\Services\thumbnail_bound_pair_from_post;
 use function Gallery\Services\pagination_photo_thumbnail_sizes_attribute;
 use function Gallery\Services\viewer_favourites_for_image_ids;
 use function Gallery\Services\viewer_favourites_storage_available;
@@ -111,6 +115,8 @@ use function Gallery\Services\admin_test_run_mark;
 use function Gallery\Services\admin_test_run_record_component;
 use const Gallery\Services\SMART_GALLERY_QUERY_MAX_PAGE_SIZE;
 use const Gallery\Services\SMART_GALLERY_LIGHTBOX_MAX_WINDOW;
+use const Gallery\Services\CMS_PAGINATION_MAX_COLUMNS;
+use const Gallery\Services\CMS_PAGINATION_MAX_ROWS;
 use const Gallery\Services\DOWNLOAD_CAPABILITY_RESOURCE_SMART_GALLERY;
 use const Gallery\Services\DOWNLOAD_CAPABILITY_SCOPE_LEGACY;
 
@@ -464,12 +470,13 @@ function smart_gallery_admin_input(): array
 {
     $presentation = [];
     if (isset($_POST['presentation_override_enabled'])) {
+        [$thumbnailMinSize, $thumbnailMaxSize] = thumbnail_bound_pair_from_post('presentation_thumbnail', $_POST);
         $presentation = [
             'grid_columns' => $_POST['presentation_grid_columns'] ?? null,
             'grid_rows' => $_POST['presentation_grid_rows'] ?? null,
             'pagination_enabled' => isset($_POST['presentation_pagination_enabled']),
-            'thumbnail_min_size' => $_POST['presentation_thumbnail_min_size'] ?? null,
-            'thumbnail_max_size' => $_POST['presentation_thumbnail_max_size'] ?? null,
+            'thumbnail_min_size' => $thumbnailMinSize,
+            'thumbnail_max_size' => $thumbnailMaxSize,
             'thumbnail_rendering_mode' => (string) ($_POST['presentation_thumbnail_rendering_mode'] ?? ''),
             'card_layout' => (string) ($_POST['presentation_card_layout'] ?? ''),
             'metadata_visible' => isset($_POST['presentation_metadata_visible']),
@@ -573,7 +580,9 @@ function smart_gallery_admin_editor_view_model(array $gallery, ?int $previewCoun
     $presentationOverrides = smart_gallery_normalize_presentation(
         array_key_exists('presentation', $gallery) ? $gallery['presentation'] : ($gallery['presentation_json'] ?? [])
     );
-    $presentation = smart_gallery_effective_presentation($gallery);
+    $presentationPreferences = smart_gallery_presentation_preferences($gallery);
+    $effectivePresentation = smart_gallery_effective_presentation($gallery);
+    $presentationMasters = smart_gallery_presentation_master_status();
     $galleryId = (int) ($gallery['id'] ?? 0);
     $formAction = url_for(
         'admin_smart_galleries',
@@ -630,11 +639,11 @@ function smart_gallery_admin_editor_view_model(array $gallery, ?int $previewCoun
         'placement_modes' => $placementModes,
         'sort_modes' => $sortModes,
         'enabled' => !array_key_exists('enabled', $gallery) || !empty($gallery['enabled']),
-        'presentation_controls' => smart_gallery_presentation_controls_view_model($presentation, $presentationOverrides !== []),
+        'presentation_controls' => smart_gallery_presentation_controls_view_model($presentationPreferences, $presentationOverrides !== [], $presentationMasters),
         'rules_json' => $rulesJson,
         'preview_count' => $previewCount,
         'preview_cards' => $previewCount !== null && $previewImages !== []
-            ? smart_gallery_image_cards_view_model($previewImages, smart_gallery_source_galleries($previewImages), $presentation, [], [], 0, false)
+            ? smart_gallery_image_cards_view_model($previewImages, smart_gallery_source_galleries($previewImages), $effectivePresentation, [], [], 0, false)
             : null,
         'placements' => $placements,
         'public_url' => $galleryId > 0 && ($gallery['visibility'] ?? '') === 'public' && !empty($gallery['enabled'])
@@ -658,10 +667,12 @@ function smart_gallery_render_editor(array $gallery, ?int $previewCount, array $
 /**
  * Build canonical Smart Gallery presentation-control state.
  *
- * @param array<string,mixed> $presentation Effective Smart Gallery presentation.
+ * @param array<string,mixed> $presentation Stored/inherited Smart Gallery presentation preferences.
+ * @param bool $hasOverride Whether the Smart Gallery owns explicit presentation overrides.
+ * @param ?array<string,bool> $masterStatus Site-wide capability masters that may suppress runtime behavior.
  * @return array<string,mixed> Controller-prepared control state.
  */
-function smart_gallery_presentation_controls_view_model(array $presentation, bool $hasOverride): array
+function smart_gallery_presentation_controls_view_model(array $presentation, bool $hasOverride, ?array $masterStatus = null): array
 {
     $thumbnailModes = [];
     foreach (public_thumbnail_rendering_modes() as $mode) {
@@ -692,13 +703,31 @@ function smart_gallery_presentation_controls_view_model(array $presentation, boo
         ];
     }
 
+    $thumbnailBoundState = admin_thumbnail_bound_slider_state(
+        isset($presentation['thumbnail_min_size']) ? (int) $presentation['thumbnail_min_size'] : null,
+        isset($presentation['thumbnail_max_size']) ? (int) $presentation['thumbnail_max_size'] : null
+    );
+    $masterStatus ??= smart_gallery_presentation_master_status();
+
     return [
         'presentation' => $presentation,
         'has_override' => $hasOverride,
+        'source_label' => $hasOverride
+            ? t('smart_gallery.presentation_source_override', 'Smart Gallery override')
+            : t('smart_gallery.presentation_source_theme', 'Theme/site defaults'),
+        'max_columns' => CMS_PAGINATION_MAX_COLUMNS,
+        'max_rows' => CMS_PAGINATION_MAX_ROWS,
+        'items_per_page' => (int) ($presentation['grid_columns'] ?? 1) * (int) ($presentation['grid_rows'] ?? 1),
+        'pagination_safety_limit' => SMART_GALLERY_QUERY_MAX_PAGE_SIZE,
         'thumbnail_modes' => $thumbnailModes,
         'card_layouts' => $cardLayouts,
-        'thumbnail_sizes' => thumbnail_sizes(),
+        'thumbnail_bounds' => $thumbnailBoundState,
         'lightbox_modes' => $lightboxModes,
+        'capability_masters' => [
+            'lightbox' => !empty($masterStatus['lightbox']),
+            'downloads' => !empty($masterStatus['downloads']),
+            'voting' => !empty($masterStatus['voting']),
+        ],
     ];
 }
 

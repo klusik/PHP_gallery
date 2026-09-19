@@ -1,6 +1,6 @@
 # Testing Guide
 
-This guide applies to PHP Gallery Version 0.101.2. Release verification uses the central audit runner's `release` profile as the single authoritative automated qualification pass, plus any material environment-dependent/manual coverage reported by that profile and the retained Version 0.97 coverage: recoverable gallery-subtree deletion, restore, manual purge, bounded Empty Trash, crash reconciliation, optional retention-based automatic purge, persistent protected trash storage, and fail-closed schema readiness; recursive, resumable gallery migration with bounded ZIP packages and imported child-tree reconstruction; canonical map-marker photo-page fallbacks and in-viewer map navigation across physical-gallery pagination, fullscreen split-map persistence, the canonical Admin side-panel mutation envelope and completion coordinator, multi-context postcondition verification, stale/out-of-order suppression, browser upload pipeline safeguards, opened-gallery branch image counters and their Theme/per-gallery visibility policy, progressive thumbnail dimension detection and responsive compatibility, the Version 0.93 request-budget/TTFB behavior, request-local database caching, resumable updater safety, updater server-policy reconciliation, Admin test-run diagnostics, public media concurrency and cache invalidation, clean-home URL handling, upload auto-renaming and inventory behavior, the redesigned Windows uploader, the Windows HTTP monitor schedules/protocol snapshots/report ZIPs, deployment exclusion rules, lightbox detached-image cleanup, decoded-cache ownership, preload-generation invalidation, teardown/reopen cycles, public lightbox zoom and progressive quality promotion, Shift+Left/Right ten-photo navigation, public Smart Gallery visibility, presentation settings, cycle-safe placement/order evaluation, viewer account privacy/access, collection sharing, bounded gallery benchmark diagnostics, access intersection and pagination; multilingual gallery/photo content and fallbacks; browser-local ZIP imports; progressive gallery and Smart Gallery ZIP downloads; browser download symbol rendering; ordered migration upgrades; complete deployment packaging; updater safety; the configurable public language selector; hourly automatic-update throttling; and the supported English, Czech, German, and Swedish catalogs.
+This guide applies to PHP Gallery Version 0.102.0. Release verification uses the central audit runner's `release` profile as the single authoritative automated qualification pass, plus any material environment-dependent/manual coverage reported by that profile and the retained Version 0.97 coverage: recoverable gallery-subtree deletion, restore, manual purge, bounded Empty Trash, crash reconciliation, optional retention-based automatic purge, persistent protected trash storage, and fail-closed schema readiness; recursive, resumable gallery migration with bounded ZIP packages and imported child-tree reconstruction; canonical map-marker photo-page fallbacks and in-viewer map navigation across physical-gallery pagination, fullscreen split-map persistence, the canonical Admin side-panel mutation envelope and completion coordinator, multi-context postcondition verification, stale/out-of-order suppression, browser upload pipeline safeguards, opened-gallery branch image counters and their Theme/per-gallery visibility policy, progressive thumbnail dimension detection and responsive compatibility, the Version 0.93 request-budget/TTFB behavior, request-local database caching, resumable updater safety, updater server-policy reconciliation, Admin test-run diagnostics, public media concurrency and cache invalidation, clean-home URL handling, upload auto-renaming and inventory behavior, the redesigned Windows uploader, the Windows HTTP monitor schedules/protocol snapshots/report ZIPs, deployment exclusion rules, lightbox detached-image cleanup, decoded-cache ownership, preload-generation invalidation, teardown/reopen cycles, public lightbox zoom and progressive quality promotion, Shift+Left/Right ten-photo navigation, public Smart Gallery visibility, presentation settings, cycle-safe placement/order evaluation, viewer account privacy/access, collection sharing, bounded gallery benchmark diagnostics, access intersection and pagination; multilingual gallery/photo content and fallbacks; browser-local ZIP imports; progressive gallery and Smart Gallery ZIP downloads; browser download symbol rendering; ordered migration upgrades; complete deployment packaging; updater safety; the configurable public language selector; hourly automatic-update throttling; and the supported English, Czech, German, and Swedish catalogs.
 
 ## Purpose
 This project is a plain PHP gallery CMS without a formal browser automation stack. Automated verification is centralized through `scripts/audit.php`; focused commands documented later are diagnostic and manual-acceptance tools, not a second test plan that agents should execute in addition to the audit.
@@ -24,7 +24,7 @@ Do not enumerate `tests/`, do not create shell/PowerShell loops over test files,
 
 The central runner intentionally suppresses passing child stdout to protect agent context. Read the console summary first; read `cache/test-audit/latest.md` only when needed; open raw suite logs only for `FAIL`, `BLOCKED`, or a materially relevant `SKIP`. A successful suite does not justify reading its raw log.
 
-The MVC boundary suite is a zero-baseline contract. `scripts/mvc_boundary_baseline.json` contains no reviewed legacy occurrences; therefore every scanner finding is new and must fail the audit. Do not add exemptions or repopulate the baseline to make a change pass. Refactor the ownership violation instead.
+The MVC boundary suite is a zero-baseline contract. `scripts/mvc_boundary_baseline.json` contains no reviewed legacy occurrences; therefore every strict scanner finding is new and must fail the audit. Do not add exemptions or repopulate the baseline to make a change pass. Refactor the ownership violation instead. The same suite now writes `<run-directory>/mvc-architecture.json`, a machine-readable whole-runtime inventory produced with `token_get_all()` without including or executing the inspected PHP files. Its `runtime_inventory.review_candidates` section is advisory historical debt, not a pass/fail baseline; the compact audit summary reports the candidate count so it can be driven toward zero and later promoted into hard rules.
 
 
 ```bash
@@ -42,6 +42,7 @@ cache/test-audit/latest.md
 cache/test-audit/latest.json
 cache/test-audit/<run-id>/report.md
 cache/test-audit/<run-id>/report.json
+cache/test-audit/<run-id>/mvc-architecture.json
 cache/test-audit/<run-id>/*.log
 ```
 
@@ -829,6 +830,47 @@ aligned across English/Czech/German/Swedish, all changed PHP files to pass `php 
 all changed JavaScript modules and Node fixtures to parse and pass, the integrity
 manifest to be current, the administrator manual to be rebuilt and visually verified,
 and no temporary implementation roadmap to remain in the repository or release package.
+
+### Gallery audit remediation regression ownership
+
+The audit-remediation program is protected by focused tests registered in the normal
+PHP/Node regression suites. Automated agents should use `scripts/audit.php` according
+to `AGENTS.md`; the list below documents ownership and is not an instruction to replay
+the tests manually after a successful central audit.
+
+- authorization/media ownership: `public_media_authorization_contract_test.php`;
+- corrected session/page-view semantics: `telemetry_semantics_contract_test.php` and
+  `telemetry_semantics_fixture_test.php`;
+- photo activation lifecycle/privacy: `telemetry_photo_lifecycle_test.mjs` and
+  `telemetry_photo_privacy_contract_test.php`;
+- traffic segmentation: `telemetry_traffic_segment_contract_test.php`;
+- page/image/media/cache/database observability: the `telemetry_*observability*`,
+  `telemetry_page_load_metric_contract_test.php`, and
+  `telemetry_database_observer_contract_test.php` fixtures;
+- cardinality/storage evidence: `telemetry_dimension_normalization_contract_test.php`,
+  `telemetry_dimension_normalization_workload_test.php`,
+  `telemetry_storage_diagnostics_contract_test.php`,
+  `telemetry_daily_rollup_consistency_test.php`,
+  `telemetry_report_query_profile_contract_test.php`, and
+  `telemetry_report_query_plan_contract_test.php`;
+- legacy server-ZIP cache health: `legacy_download_cache_health_test.php` plus the
+  download controller/service tests;
+- legacy JPEG inventory and explicit cleanup: `thumbnail_compatibility_model_test.php`;
+- complete-report semantics: `admin_gallery_report_semantics_contract_test.php`;
+- maintenance failure isolation/redaction: `site_maintenance_diagnostics_contract_test.php`;
+- final cross-stage integration: `gallery_audit_remediation_stage11_contract_test.php`.
+
+Stage 6 has an intentional production-evidence boundary. The code can reduce new
+hourly aggregate dimensionality and expose exact operator diagnostics, but index or
+retention changes require representative hosting measurements first. When reviewing
+those measurements, compare exact table rows, data/index bytes, approximate recent
+rows/day, oldest/newest rows, retention horizons, per-metric dimension cardinality,
+request-local report-query timings, sanitized EXPLAIN plans, and completed-day
+hourly-vs-daily rollup consistency. The representative normalization workload also
+proves that irrelevant page-view dimensions collapse materially while image-level
+photo metrics keep their required cardinality. Do not infer an index change solely
+from table size, and do not move long-window reports to daily storage while rollup
+consistency reports a mismatch or missing daily data.
 
 ### 2.1 Release preparation and handoff
 

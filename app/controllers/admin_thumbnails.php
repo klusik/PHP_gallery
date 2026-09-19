@@ -76,6 +76,7 @@ use function Gallery\Services\t;
 use function Gallery\Services\thumbnail_compatibility_format_bytes;
 use function Gallery\Services\thumbnail_compatibility_mode_label;
 use function Gallery\Services\thumbnail_compatibility_mode_normalize;
+use function Gallery\Services\thumbnail_legacy_jpg_inventory;
 use function Gallery\Services\thumbnail_inventory_fingerprint;
 use function Gallery\Services\thumbnail_maintenance_check_batch;
 use function Gallery\Services\thumbnail_maintenance_check_report;
@@ -1242,6 +1243,7 @@ function cms_admin_delete_legacy_jpg_thumbnails_batch(): void
             'files_deleted' => (int) $result['files_deleted'],
             'bytes_deleted' => (int) $result['bytes_deleted'],
             'done' => $done,
+            'legacy_inventory' => $done ? thumbnail_legacy_jpg_inventory() : null,
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     } catch (Throwable $exception) {
         $discardedOutput = (string) ob_get_clean();

@@ -158,40 +158,78 @@ function view_render_smart_gallery_editor(array $viewModel): void
 function view_render_smart_gallery_presentation_controls(array $viewModel): void
 {
     $presentation = (array) ($viewModel['presentation'] ?? []);
+    $thumbnailBounds = (array) ($viewModel['thumbnail_bounds'] ?? []);
+    $masters = (array) ($viewModel['capability_masters'] ?? []);
+    $paginationEnabled = !empty($presentation['pagination_enabled']);
+    $itemsPerPage = (int) ($viewModel['items_per_page'] ?? 1);
+
     echo '<fieldset class="admin-smart-gallery-presentation"><legend>' . e(t('smart_gallery.presentation', 'Presentation')) . '</legend>';
     echo '<label class="admin-smart-gallery-presentation-toggle"><input type="checkbox" name="presentation_override_enabled" value="1" data-smart-gallery-presentation-toggle' . (!empty($viewModel['has_override']) ? ' checked' : '') . '> ' . e(t('smart_gallery.presentation_override', 'Override Theme defaults for this Smart Gallery')) . '</label>';
     echo '<p class="muted">' . e(t('smart_gallery.presentation_help', 'When disabled, the Smart Gallery inherits the current Theme and site defaults. Because one Smart Gallery can have multiple placements, presentation never inherits from a physical parent gallery.')) . '</p>';
-    echo '<div class="admin-smart-gallery-presentation-grid" data-smart-gallery-presentation-fields>';
-    echo '<label>' . e(t('smart_gallery.grid_columns', 'Columns')) . '<input type="number" min="1" max="12" name="presentation_grid_columns" value="' . (int) ($presentation['grid_columns'] ?? 3) . '"></label>';
-    echo '<label>' . e(t('smart_gallery.grid_rows', 'Rows per page')) . '<input type="number" min="1" max="50" name="presentation_grid_rows" value="' . (int) ($presentation['grid_rows'] ?? 4) . '"></label>';
-    echo '<label><input type="checkbox" name="presentation_pagination_enabled" value="1"' . (!empty($presentation['pagination_enabled']) ? ' checked' : '') . '> ' . e(t('smart_gallery.pagination_enabled', 'Use pagination')) . '</label>';
+    echo '<p class="muted"><strong>' . e(t('smart_gallery.presentation_source', 'Presentation source:')) . '</strong> ' . e((string) ($viewModel['source_label'] ?? '')) . '</p>';
+
+    echo '<div class="admin-edit-card-grid admin-smart-gallery-presentation-fields" data-smart-gallery-presentation-fields>';
+    echo '<div class="admin-edit-card is-wide">';
+    echo '<h3>' . e(t('smart_gallery.display_grid', 'Display grid')) . '</h3>';
+    echo '<div class="admin-edit-range-grid">';
+    echo '<label>' . e(t('smart_gallery.grid_columns', 'Columns')) . ' <span class="muted" data-gallery-grid-columns-display>' . (int) ($presentation['grid_columns'] ?? 1) . '</span><input type="range" min="1" max="' . (int) ($viewModel['max_columns'] ?? 1) . '" name="presentation_grid_columns" value="' . (int) ($presentation['grid_columns'] ?? 1) . '" data-gallery-grid-columns data-smart-gallery-grid-columns></label>';
+    echo '<label class="admin-smart-gallery-pagination-dependent' . ($paginationEnabled ? '' : ' is-inactive') . '" data-smart-gallery-rows-control aria-disabled="' . ($paginationEnabled ? 'false' : 'true') . '">' . e(t('smart_gallery.grid_rows', 'Rows per page')) . ' <span class="muted" data-gallery-grid-rows-display>' . (int) ($presentation['grid_rows'] ?? 1) . '</span><input type="range" min="1" max="' . (int) ($viewModel['max_rows'] ?? 1) . '" name="presentation_grid_rows" value="' . (int) ($presentation['grid_rows'] ?? 1) . '" data-gallery-grid-rows data-smart-gallery-grid-rows></label>';
+    echo '</div>';
+    echo '<label class="checkbox-label"><input type="checkbox" name="presentation_pagination_enabled" value="1" data-smart-gallery-pagination-toggle' . ($paginationEnabled ? ' checked' : '') . '> ' . e(t('smart_gallery.pagination_enabled', 'Use pagination')) . '</label>';
+    echo '<p class="muted" data-smart-gallery-pagination-active-status' . ($paginationEnabled ? '' : ' hidden') . '>' . e(t('smart_gallery.items_per_page', 'Items per page:')) . ' <strong data-smart-gallery-items-per-page>' . $itemsPerPage . '</strong></p>';
+    echo '<p class="muted" data-smart-gallery-pagination-inactive-status' . ($paginationEnabled ? ' hidden' : '') . '>' . e(t('smart_gallery.rows_inactive_help', 'Rows per page is stored but does not limit results until pagination is enabled.')) . '</p>';
+    echo '<p class="muted">' . e(t('smart_gallery.pagination_safety_help', 'Large result sets are paginated automatically for safety above {limit} matching images.', ['limit' => (string) ($viewModel['pagination_safety_limit'] ?? 200)])) . '</p>';
+    echo '</div>';
+
+    echo '<div class="admin-edit-card is-wide">';
+    render_admin_thumbnail_bound_slider(
+        'presentation_thumbnail',
+        (array) ($thumbnailBounds['values'] ?? []),
+        (int) ($thumbnailBounds['min_index'] ?? 0),
+        (int) ($thumbnailBounds['max_index'] ?? 0),
+        t('smart_gallery.thumbnail_quality_bounds', 'Responsive thumbnail quality bounds'),
+        t('smart_gallery.thumbnail_quality_bounds_help', 'Optional additional guardrails for automatic thumbnail selection. Leave the bounds at their outer positions to keep the inherited candidate range.')
+    );
+    echo '<p class="muted">' . e(t('smart_gallery.thumbnail_source_guardrails', 'Smart Gallery bounds can only narrow the available thumbnail candidates. Source-gallery and individual-photo bounds remain authoritative.')) . '</p>';
+    echo '</div>';
+
+    echo '<div class="admin-edit-card">';
+    echo '<h3>' . e(t('smart_gallery.rendering', 'Rendering')) . '</h3>';
     echo '<label>' . e(t('smart_gallery.thumbnail_renderer', 'Thumbnail renderer')) . '<select name="presentation_thumbnail_rendering_mode">';
     foreach ((array) ($viewModel['thumbnail_modes'] ?? []) as $option) {
         echo '<option value="' . e((string) ($option['value'] ?? '')) . '"' . (!empty($option['selected']) ? ' selected' : '') . '>' . e((string) ($option['label'] ?? '')) . '</option>';
     }
     echo '</select></label>';
-    echo '<label>' . e(t('admin.gallery_editor.description_layout_label', 'Card layout')) . '<select name="presentation_card_layout">';
+    echo '<label>' . e(t('smart_gallery.placed_card_layout', 'Placed Smart Gallery card layout')) . '<select name="presentation_card_layout">';
     foreach ((array) ($viewModel['card_layouts'] ?? []) as $option) {
         echo '<option value="' . e((string) ($option['value'] ?? '')) . '"' . (!empty($option['selected']) ? ' selected' : '') . '>' . e((string) ($option['label'] ?? '')) . '</option>';
     }
     echo '</select></label>';
-    foreach (['thumbnail_min_size' => 'Minimum thumbnail size', 'thumbnail_max_size' => 'Maximum thumbnail size'] as $key => $fallback) {
-        echo '<label>' . e(t('smart_gallery.' . $key, $fallback)) . '<select name="presentation_' . e($key) . '"><option value="0">' . e(t('smart_gallery.thumbnail_auto', 'Auto')) . '</option>';
-        foreach ((array) ($viewModel['thumbnail_sizes'] ?? []) as $size) {
-            echo '<option value="' . (int) $size . '"' . ((int) ($presentation[$key] ?? 0) === (int) $size ? ' selected' : '') . '>' . (int) $size . ' px</option>';
-        }
-        echo '</select></label>';
+    echo '<p class="muted">' . e(t('smart_gallery.placed_card_layout_help', 'This layout controls the Smart Gallery card when it is placed on the homepage or beneath a physical gallery. It does not change the result photo cards.')) . '</p>';
+    echo '<label class="checkbox-label"><input type="checkbox" name="presentation_metadata_visible" value="1"' . (!empty($presentation['metadata_visible']) ? ' checked' : '') . '> ' . e(t('smart_gallery.metadata_visible', 'Show photo metadata overlays')) . '</label>';
+    echo '</div>';
+
+    echo '<div class="admin-edit-card">';
+    echo '<h3>' . e(t('smart_gallery.viewer_features', 'Viewer features')) . '</h3>';
+    echo '<label class="checkbox-label"><input type="checkbox" name="presentation_lightbox_enabled" value="1"' . (!empty($presentation['lightbox_enabled']) ? ' checked' : '') . '> ' . e(t('smart_gallery.lightbox_enabled', 'Enable lightbox')) . '</label>';
+    if (empty($masters['lightbox'])) {
+        echo '<p class="muted">' . e(t('smart_gallery.lightbox_master_suppressed', 'Currently suppressed by the site-wide Lightbox capability. The Smart Gallery preference is preserved.')) . '</p>';
     }
-    echo '<label><input type="checkbox" name="presentation_metadata_visible" value="1"' . (!empty($presentation['metadata_visible']) ? ' checked' : '') . '> ' . e(t('smart_gallery.metadata_visible', 'Show photo metadata overlays')) . '</label>';
-    echo '<label><input type="checkbox" name="presentation_lightbox_enabled" value="1"' . (!empty($presentation['lightbox_enabled']) ? ' checked' : '') . '> ' . e(t('smart_gallery.lightbox_enabled', 'Enable lightbox')) . '</label>';
     echo '<label>' . e(t('smart_gallery.lightbox_mode', 'Lightbox browsing mode')) . '<select name="presentation_lightbox_browsing_mode">';
     foreach ((array) ($viewModel['lightbox_modes'] ?? []) as $option) {
         echo '<option value="' . e((string) ($option['value'] ?? '')) . '"' . (!empty($option['selected']) ? ' selected' : '') . '>' . e((string) ($option['label'] ?? '')) . '</option>';
     }
     echo '</select></label>';
-    echo '<label><input type="checkbox" name="presentation_slideshow_enabled" value="1"' . (!empty($presentation['slideshow_enabled']) ? ' checked' : '') . '> ' . e(t('smart_gallery.slideshow_enabled', 'Enable slideshow controls')) . '</label>';
-    echo '<label><input type="checkbox" name="presentation_voting_enabled" value="1"' . (!empty($presentation['voting_enabled']) ? ' checked' : '') . '> ' . e(t('smart_gallery.voting_enabled', 'Enable visitor voting where the source gallery allows it')) . '</label>';
-    echo '<label><input type="checkbox" name="presentation_download_enabled" value="1"' . (!empty($presentation['download_enabled']) ? ' checked' : '') . '> ' . e(t('smart_gallery.download_enabled', 'Allow Smart Gallery download when site downloads are enabled')) . '</label>';
+    echo '<label class="checkbox-label"><input type="checkbox" name="presentation_slideshow_enabled" value="1"' . (!empty($presentation['slideshow_enabled']) ? ' checked' : '') . '> ' . e(t('smart_gallery.slideshow_enabled', 'Enable slideshow controls')) . '</label>';
+    echo '<label class="checkbox-label"><input type="checkbox" name="presentation_voting_enabled" value="1"' . (!empty($presentation['voting_enabled']) ? ' checked' : '') . '> ' . e(t('smart_gallery.voting_enabled', 'Enable visitor voting where the source gallery allows it')) . '</label>';
+    if (empty($masters['voting'])) {
+        echo '<p class="muted">' . e(t('smart_gallery.voting_master_suppressed', 'Currently suppressed by the site-wide Image Voting capability. The Smart Gallery preference is preserved.')) . '</p>';
+    }
+    echo '<label class="checkbox-label"><input type="checkbox" name="presentation_download_enabled" value="1"' . (!empty($presentation['download_enabled']) ? ' checked' : '') . '> ' . e(t('smart_gallery.download_enabled', 'Allow Smart Gallery download when site downloads are enabled')) . '</label>';
+    if (empty($masters['downloads'])) {
+        echo '<p class="muted">' . e(t('smart_gallery.download_master_suppressed', 'Currently suppressed by the site-wide Downloads capability. The Smart Gallery preference is preserved.')) . '</p>';
+    }
+    echo '</div>';
     echo '</div></fieldset>';
 }
 

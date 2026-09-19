@@ -30,7 +30,7 @@
  *   - SQL/PDO access belongs in app/models/public_search.php.
  *
  * Last Updated:
- *   2026-09-13
+ *   2026-09-19
  */
 
 declare(strict_types=1);
@@ -157,6 +157,37 @@ function public_search_listing_requires_listed(): bool
 }
 
 /**
+ * Return whether one gallery may be exposed by public search to this visitor.
+ *
+ * Search is a discovery surface, so direct-URL reachability is not sufficient:
+ * the gallery must be publicly listed and the current visitor must satisfy the
+ * same inherited password, share-link, and NSFW policy as the gallery page.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @return bool True when the gallery may appear in public search results.
+ */
+function public_search_gallery_visible_to_current_visitor(array $gallery): bool
+{
+    return gallery_is_public_listed($gallery) && visitor_can_access_gallery($gallery);
+}
+
+/**
+ * Return whether one image may be exposed by public search to this visitor.
+ *
+ * The gallery must remain publicly listed, while image visibility, inherited
+ * gallery authorization, and image/gallery NSFW policy are delegated to the
+ * canonical public-image authorization helper.
+ *
+ * @param array $image Image row or image data.
+ * @param array $gallery Owning gallery row or gallery data.
+ * @return bool True when the image may appear in public search results.
+ */
+function public_search_image_visible_to_current_visitor(array $image, array $gallery): bool
+{
+    return gallery_is_public_listed($gallery) && public_image_visible_to_current_visitor($image, $gallery);
+}
+
+/**
  * Return whether local AI metadata may participate in public search.
  *
  * The capability master is checked before schema inspection so disabling local
@@ -196,6 +227,13 @@ function public_search_gallery_results(string $query, int $limit, ?array $contex
         $contentLanguage,
         $limit
     );
+    $authorizedGalleryRows = [];
+    foreach ($galleryRows as $gallery) {
+        if (public_search_gallery_visible_to_current_visitor($gallery)) {
+            $authorizedGalleryRows[] = $gallery;
+        }
+    }
+    $galleryRows = $authorizedGalleryRows;
     if ($localizedGallerySearchReady) {
         $galleryRows = content_localize_entities('gallery', $galleryRows, $contentLanguage);
     }
@@ -255,13 +293,36 @@ function public_search_image_results(string $query, int $limit, ?array $contextG
         $contentLanguage,
         $limit
     );
-    $rows = content_localize_entities('image', $rows, $contentLanguage);
+
+    // Re-fetch canonical gallery rows before exposing image metadata. The legacy
+    // compatibility query intentionally projects only a bounded gallery subset,
+    // which is not sufficient for inherited NSFW/password authorization.
+    $authorizedRows = [];
     $galleries = [];
     foreach ($rows as $row) {
-        $gallery = public_search_gallery_from_image_row($row);
-        $galleries[(int) ($gallery['id'] ?? 0)] = $gallery;
+        $galleryId = (int) ($row['matched_gallery_id'] ?? 0);
+        if ($galleryId <= 0) {
+            continue;
+        }
+        if (!array_key_exists($galleryId, $galleries)) {
+            $galleries[$galleryId] = find_gallery($galleryId);
+        }
+        $gallery = $galleries[$galleryId] ?? null;
+        if (!is_array($gallery) || !public_search_image_visible_to_current_visitor($row, $gallery)) {
+            continue;
+        }
+        $authorizedRows[] = $row;
     }
-    $localizedGalleries = content_localize_entities('gallery', array_values($galleries), $contentLanguage);
+    $rows = content_localize_entities('image', $authorizedRows, $contentLanguage);
+
+    $authorizedGalleries = [];
+    foreach ($galleries as $galleryId => $gallery) {
+        if (!is_array($gallery) || !public_search_gallery_visible_to_current_visitor($gallery)) {
+            continue;
+        }
+        $authorizedGalleries[(int) $galleryId] = $gallery;
+    }
+    $localizedGalleries = content_localize_entities('gallery', array_values($authorizedGalleries), $contentLanguage);
     $galleries = [];
     foreach ($localizedGalleries as $localizedGallery) {
         $galleries[(int) ($localizedGallery['id'] ?? 0)] = $localizedGallery;

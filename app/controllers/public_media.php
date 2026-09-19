@@ -65,6 +65,7 @@ use function Gallery\Services\thumbnail_ensure_image_thumbnail_variant_file;
 use function Gallery\Services\thumbnail_response_file_geometry_status;
 use function Gallery\Views\view_render_sitemap_xml;
 use function Gallery\Services\thumbnail_sizes;
+use function Gallery\Services\telemetry_record_media_served_event;
 use function Gallery\Services\visitor_can_access_gallery;
 use function Gallery\Services\visitor_can_access_nsfw_content;
 
@@ -215,6 +216,19 @@ function cms_thumb(): void
     header('Content-Length: ' . $bytes);
     gallery_benchmark_media_request_mark($benchmarkMediaRequest, 'stream_begin');
     $readBytes = readfile($path);
+    if (is_int($readBytes) && $readBytes > 0) {
+        telemetry_record_media_served_event(
+            $image,
+            $gallery,
+            'media.thumbnail.served',
+            $readBytes,
+            'thumb_' . $size,
+            'unknown',
+            (string) ($_GET['page'] ?? 'thumb'),
+            isset($_SERVER['HTTP_REFERER']) ? (string) $_SERVER['HTTP_REFERER'] : null,
+            http_response_code() ?: 200
+        );
+    }
     gallery_benchmark_media_request_mark($benchmarkMediaRequest, 'stream_end', [
         'readfile_bytes' => is_int($readBytes) ? $readBytes : null,
         'http_status' => http_response_code() ?: 200,
@@ -297,6 +311,19 @@ function cms_public_thumb(): void
     header('Content-Length: ' . $bytes);
     gallery_benchmark_media_request_mark($benchmarkMediaRequest, 'stream_begin');
     $readBytes = readfile($path);
+    if (is_int($readBytes) && $readBytes > 0) {
+        telemetry_record_media_served_event(
+            $image,
+            $gallery,
+            'media.thumbnail.served',
+            $readBytes,
+            'thumb_' . $size,
+            'unknown',
+            (string) ($_GET['page'] ?? 'thumb'),
+            isset($_SERVER['HTTP_REFERER']) ? (string) $_SERVER['HTTP_REFERER'] : null,
+            http_response_code() ?: 200
+        );
+    }
     gallery_benchmark_media_request_mark($benchmarkMediaRequest, 'stream_end', [
         'readfile_bytes' => is_int($readBytes) ? $readBytes : null,
         'http_status' => http_response_code() ?: 200,
@@ -364,22 +391,22 @@ function cms_public_media(): void
         'private_cache' => $privateCache,
     ]);
     send_conditional_file_headers($path, $cacheControl);
-    if (function_exists('telemetry_record_media_served_event')) {
-        \telemetry_record_media_served_event(
+    header('Content-Length: ' . $bytes);
+    gallery_benchmark_media_request_mark($benchmarkMediaRequest, 'stream_begin');
+    $readBytes = readfile($path);
+    if (is_int($readBytes) && $readBytes > 0) {
+        telemetry_record_media_served_event(
             $image,
             $gallery,
             'media.image.served',
-            $bytes,
+            $readBytes,
             (string) $displayFile['variant'],
-            'miss',
+            'unknown',
             (string) ($_GET['page'] ?? 'media'),
             isset($_SERVER['HTTP_REFERER']) ? (string) $_SERVER['HTTP_REFERER'] : null,
             http_response_code() ?: 200
         );
     }
-    header('Content-Length: ' . $bytes);
-    gallery_benchmark_media_request_mark($benchmarkMediaRequest, 'stream_begin');
-    $readBytes = readfile($path);
     gallery_benchmark_media_request_mark($benchmarkMediaRequest, 'stream_end', [
         'readfile_bytes' => is_int($readBytes) ? $readBytes : null,
         'http_status' => http_response_code() ?: 200,
@@ -574,22 +601,22 @@ function cms_media(): void
         'private_cache' => $privateCache,
     ]);
     send_conditional_file_headers($path, $cacheControl);
-    if (function_exists('telemetry_record_media_served_event')) {
-        \telemetry_record_media_served_event(
+    header('Content-Length: ' . $bytes);
+    gallery_benchmark_media_request_mark($benchmarkMediaRequest, 'stream_begin');
+    $readBytes = readfile($path);
+    if (is_int($readBytes) && $readBytes > 0) {
+        telemetry_record_media_served_event(
             $image,
             $gallery,
             'media.image.served',
-            $bytes,
+            $readBytes,
             (string) $displayFile['variant'],
-            'miss',
+            'unknown',
             (string) ($_GET['page'] ?? 'media'),
             isset($_SERVER['HTTP_REFERER']) ? (string) $_SERVER['HTTP_REFERER'] : null,
             http_response_code() ?: 200
         );
     }
-    header('Content-Length: ' . $bytes);
-    gallery_benchmark_media_request_mark($benchmarkMediaRequest, 'stream_begin');
-    $readBytes = readfile($path);
     gallery_benchmark_media_request_mark($benchmarkMediaRequest, 'stream_end', [
         'readfile_bytes' => is_int($readBytes) ? $readBytes : null,
         'http_status' => http_response_code() ?: 200,

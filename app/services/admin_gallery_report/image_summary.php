@@ -162,6 +162,7 @@ function admin_gallery_report_accumulate_image_row(array &$summary, array $row):
             $orientation = 'square';
             $summary['square_count'] = (int) ($summary['square_count'] ?? 0) + 1;
         } elseif ($ratio >= 2.0) {
+            // panorama_count remains a compatibility counter. Aspect ratio alone proves only a wide image.
             $orientation = 'panorama';
             $summary['panorama_count'] = (int) ($summary['panorama_count'] ?? 0) + 1;
         } elseif ($ratio > 1.0) {
@@ -171,7 +172,8 @@ function admin_gallery_report_accumulate_image_row(array &$summary, array $row):
             $orientation = 'portrait';
             $summary['portrait_count'] = (int) ($summary['portrait_count'] ?? 0) + 1;
         }
-        admin_gallery_report_add_group($summary['dimension_groups'], 'orientation-' . $orientation, ucfirst($orientation), 1, 0, []);
+        $orientationLabel = $orientation === 'panorama' ? 'Wide (>= 2:1)' : ucfirst($orientation);
+        admin_gallery_report_add_group($summary['dimension_groups'], 'orientation-' . $orientation, $orientationLabel, 1, 0, []);
     } else {
         $summary['unknown_dimensions_count'] = (int) ($summary['unknown_dimensions_count'] ?? 0) + 1;
     }

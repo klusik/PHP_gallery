@@ -163,10 +163,9 @@ function smart_gallery_model_find_public_by_id(int $id): ?array
  *
  * @param array<string,mixed> $definition Normalized service-owned fields.
  * @param int $id Existing identifier or zero for insert.
- * @param bool $presentationReady Whether presentation_json is available.
  * @return int Saved identifier.
  */
-function smart_gallery_model_save(array $definition, int $id, bool $presentationReady): int
+function smart_gallery_model_save(array $definition, int $id): int
 {
     $values = [
         (string) $definition['title'],
@@ -180,25 +179,16 @@ function smart_gallery_model_save(array $definition, int $id, bool $presentation
         null,
         (string) $definition['sort_mode'],
         (string) $definition['sort_direction'],
+        (string) $definition['presentation_json'],
     ];
     if ($id > 0) {
-        if ($presentationReady) {
-            $stmt = db()->prepare('UPDATE smart_galleries SET title=?, slug=?, description=?, rules_json=?, rule_version=?, enabled=?, visibility=?, placement_mode=?, parent_gallery_id=?, sort_mode=?, sort_direction=?, presentation_json=?, updated_at=? WHERE id=?');
-            $stmt->execute(array_merge($values, [(string) $definition['presentation_json'], (string) $definition['updated_at'], $id]));
-        } else {
-            $stmt = db()->prepare('UPDATE smart_galleries SET title=?, slug=?, description=?, rules_json=?, rule_version=?, enabled=?, visibility=?, placement_mode=?, parent_gallery_id=?, sort_mode=?, sort_direction=?, updated_at=? WHERE id=?');
-            $stmt->execute(array_merge($values, [(string) $definition['updated_at'], $id]));
-        }
+        $stmt = db()->prepare('UPDATE smart_galleries SET title=?, slug=?, description=?, rules_json=?, rule_version=?, enabled=?, visibility=?, placement_mode=?, parent_gallery_id=?, sort_mode=?, sort_direction=?, presentation_json=?, updated_at=? WHERE id=?');
+        $stmt->execute(array_merge($values, [(string) $definition['updated_at'], $id]));
         return $id;
     }
 
-    if ($presentationReady) {
-        $stmt = db()->prepare('INSERT INTO smart_galleries (title,slug,description,rules_json,rule_version,enabled,visibility,placement_mode,parent_gallery_id,sort_mode,sort_direction,presentation_json,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
-        $stmt->execute(array_merge($values, [(string) $definition['presentation_json'], (string) $definition['created_at'], (string) $definition['updated_at']]));
-    } else {
-        $stmt = db()->prepare('INSERT INTO smart_galleries (title,slug,description,rules_json,rule_version,enabled,visibility,placement_mode,parent_gallery_id,sort_mode,sort_direction,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)');
-        $stmt->execute(array_merge($values, [(string) $definition['created_at'], (string) $definition['updated_at']]));
-    }
+    $stmt = db()->prepare('INSERT INTO smart_galleries (title,slug,description,rules_json,rule_version,enabled,visibility,placement_mode,parent_gallery_id,sort_mode,sort_direction,presentation_json,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+    $stmt->execute(array_merge($values, [(string) $definition['created_at'], (string) $definition['updated_at']]));
     return (int) db()->lastInsertId();
 }
 

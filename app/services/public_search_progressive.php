@@ -31,7 +31,7 @@
  *   - Do not add image-table joins to the primary gallery candidate query.
  *
  * Last Updated:
- *   2026-09-13
+ *   2026-09-19
  */
 
 declare(strict_types=1);
@@ -334,6 +334,17 @@ function public_search_hydrate_primary_gallery_candidates(array $candidates): ar
     }
 
     $galleryRows = public_search_model_gallery_rows_by_ids($ids);
+    $authorizedGalleryRows = [];
+    $authorizedGalleryIds = [];
+    foreach ($galleryRows as $gallery) {
+        $id = (int) ($gallery['id'] ?? 0);
+        if ($id <= 0 || !public_search_gallery_visible_to_current_visitor($gallery)) {
+            continue;
+        }
+        $authorizedGalleryRows[] = $gallery;
+        $authorizedGalleryIds[] = $id;
+    }
+    $galleryRows = $authorizedGalleryRows;
     if (content_localization_enabled() && content_localization_schema_ready('gallery')) {
         $galleryRows = content_localize_entities('gallery', $galleryRows, translation_active_language());
     }
@@ -347,7 +358,7 @@ function public_search_hydrate_primary_gallery_candidates(array $candidates): ar
     }
 
     $tagNamesByGalleryId = [];
-    foreach (public_search_model_gallery_tag_name_rows($ids) as $row) {
+    foreach (public_search_model_gallery_tag_name_rows($authorizedGalleryIds) as $row) {
         $galleryId = (int) ($row['gallery_id'] ?? 0);
         if ($galleryId > 0) {
             $tagNamesByGalleryId[$galleryId] = trim((string) ($row['gallery_tag_names'] ?? ''));
@@ -629,12 +640,7 @@ function public_search_hydrate_media_image_candidates(array $candidates, ?array 
         $contextGallery
     );
 
-    $contentLanguage = translation_active_language();
-    if (content_localization_enabled() && content_localization_schema_ready('image')) {
-        $imageRows = content_localize_entities('image', $imageRows, $contentLanguage);
-    }
-
-    $imagesById = [];
+    $rawImagesById = [];
     $galleryIds = [];
     foreach ($imageRows as $row) {
         $id = (int) ($row['id'] ?? 0);
@@ -642,14 +648,62 @@ function public_search_hydrate_media_image_candidates(array $candidates, ?array 
         if ($id <= 0 || $galleryId <= 0) {
             continue;
         }
-        $imagesById[$id] = $row;
+        $rawImagesById[$id] = $row;
         $galleryIds[$galleryId] = $galleryId;
     }
-    if ($imagesById === [] || $galleryIds === []) {
+    if ($rawImagesById === [] || $galleryIds === []) {
         return [];
     }
 
-    $galleryRows = public_search_model_gallery_rows_by_ids(array_values($galleryIds));
+    $rawGalleryRows = public_search_model_gallery_rows_by_ids(array_values($galleryIds));
+    $rawGalleriesById = [];
+    foreach ($rawGalleryRows as $gallery) {
+        $galleryId = (int) ($gallery['id'] ?? 0);
+        if ($galleryId > 0) {
+            $rawGalleriesById[$galleryId] = $gallery;
+        }
+    }
+
+    $authorizedImageRows = [];
+    $authorizedImageIds = [];
+    $authorizedGalleryIds = [];
+    foreach ($ids as $id) {
+        $row = $rawImagesById[$id] ?? null;
+        if (!is_array($row)) {
+            continue;
+        }
+        $galleryId = (int) ($row['gallery_id'] ?? 0);
+        $gallery = $rawGalleriesById[$galleryId] ?? null;
+        if (!is_array($gallery) || !public_search_image_visible_to_current_visitor($row, $gallery)) {
+            continue;
+        }
+        $authorizedImageRows[] = $row;
+        $authorizedImageIds[] = $id;
+        $authorizedGalleryIds[$galleryId] = $galleryId;
+    }
+    if ($authorizedImageRows === []) {
+        return [];
+    }
+
+    $contentLanguage = translation_active_language();
+    if (content_localization_enabled() && content_localization_schema_ready('image')) {
+        $authorizedImageRows = content_localize_entities('image', $authorizedImageRows, $contentLanguage);
+    }
+    $imagesById = [];
+    foreach ($authorizedImageRows as $row) {
+        $id = (int) ($row['id'] ?? 0);
+        if ($id > 0) {
+            $imagesById[$id] = $row;
+        }
+    }
+
+    $galleryRows = [];
+    foreach ($authorizedGalleryIds as $galleryId) {
+        $gallery = $rawGalleriesById[$galleryId] ?? null;
+        if (is_array($gallery)) {
+            $galleryRows[] = $gallery;
+        }
+    }
     if (content_localization_enabled() && content_localization_schema_ready('gallery')) {
         $galleryRows = content_localize_entities('gallery', $galleryRows, $contentLanguage);
     }
@@ -662,7 +716,7 @@ function public_search_hydrate_media_image_candidates(array $candidates, ?array 
     }
 
     $tagNamesByImageId = [];
-    foreach (public_search_model_image_tag_name_rows($ids) as $row) {
+    foreach (public_search_model_image_tag_name_rows($authorizedImageIds) as $row) {
         $imageId = (int) ($row['image_id'] ?? 0);
         if ($imageId > 0) {
             $tagNamesByImageId[$imageId] = trim((string) ($row['image_tag_names'] ?? ''));

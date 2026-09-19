@@ -82,6 +82,19 @@ function admin_gallery_report_bytes(mixed $bytes): string
 }
 
 /**
+ * Format bytes while preserving the distinction between an actual zero and unavailable host data.
+ *
+ * @param mixed $bytes Nullable byte value.
+ * @return string Human-readable bytes or an explicit unavailable label.
+ */
+function admin_gallery_report_optional_bytes(mixed $bytes): string
+{
+    return $bytes === null
+        ? t('admin.gallery_report.export.unavailable', 'Unavailable')
+        : admin_gallery_report_bytes($bytes);
+}
+
+/**
  * Format physical server memory information.
  *
  * @param array $memory Memory summary.
@@ -203,6 +216,9 @@ function view_render_admin_gallery_report_export_html(array $report): string
     $telemetry = is_array($report['telemetry'] ?? null) ? $report['telemetry'] : [];
     $logs = is_array($report['logs'] ?? null) ? $report['logs'] : [];
     $presentation = is_array($report['presentation'] ?? null) ? $report['presentation'] : [];
+    $dataPaths = is_array($report['data_paths'] ?? null) ? $report['data_paths'] : [];
+    $legacyDownloadCache = is_array($dataPaths['legacy_download_cache'] ?? null) ? $dataPaths['legacy_download_cache'] : [];
+    $legacyThumbnailInventory = is_array($report['thumbnail_legacy_inventory'] ?? null) ? $report['thumbnail_legacy_inventory'] : [];
     $gpsAreaKm = max(1.0, (float) ($presentation['gps_area_km'] ?? 20.0));
     $title = t('admin.gallery_report.export.title', 'PHP Gallery complete overview report');
 
@@ -212,14 +228,14 @@ function view_render_admin_gallery_report_export_html(array $report): string
     $html .= '<section class="panel"><h2>' . admin_gallery_report_h(t('admin.gallery_report.export.executive_overview', 'Executive overview')) . '</h2><div class="grid">'
         . admin_gallery_report_metric_card(t('admin.gallery_report.export.version', 'Version'), (string) ($site['version'] ?? ''), (string) ($site['site_name'] ?? 'PHP Gallery'))
         . admin_gallery_report_metric_card(t('admin.gallery_report.export.galleries', 'Galleries'), admin_gallery_report_n($galleries['total'] ?? 0), t('admin.gallery_report.export.root_nested', '{root} root, {nested} nested', ['root' => admin_gallery_report_n($galleries['root_count'] ?? 0), 'nested' => admin_gallery_report_n($galleries['nested_count'] ?? 0)]))
-        . admin_gallery_report_metric_card(t('admin.gallery_report.export.images', 'Images'), admin_gallery_report_n($images['image_count'] ?? 0), t('admin.gallery_report.export.public_images', '{count} public', ['count' => admin_gallery_report_n($images['public_count'] ?? 0)]))
+        . admin_gallery_report_metric_card(t('admin.gallery_report.export.images', 'Images'), admin_gallery_report_n($images['image_count'] ?? 0), t('admin.gallery_report.export.public_image_rows', '{count} image rows marked public', ['count' => admin_gallery_report_n($images['public_count'] ?? 0)]))
         . admin_gallery_report_metric_card(t('admin.gallery_report.export.source_photos', 'Source photos'), admin_gallery_report_bytes($storage['original_bytes'] ?? 0), t('admin.gallery_report.export.average_size', 'Average {size}', ['size' => admin_gallery_report_bytes($storage['average_original_bytes'] ?? 0)]))
         . admin_gallery_report_metric_card(t('admin.gallery_report.export.generated_media', 'Generated media'), admin_gallery_report_bytes($storage['generated_bytes'] ?? 0), t('admin.gallery_report.export.thumbnail_count', '{count} thumbnails', ['count' => admin_gallery_report_n($storage['generated_thumbnail_count'] ?? 0)]))
         . admin_gallery_report_metric_card(t('admin.gallery_report.export.database', 'Database'), admin_gallery_report_bytes((int) ($database['usage']['total_bytes'] ?? 0)), (string) ($database['database_name'] ?? ''))
         . admin_gallery_report_metric_card(t('admin.gallery_report.export.exif_date', 'EXIF date'), admin_gallery_report_percent($images['exif_date_count'] ?? 0, $images['image_count'] ?? 0), t('admin.gallery_report.export.image_count', '{count} images', ['count' => admin_gallery_report_n($images['exif_date_count'] ?? 0)]))
         . admin_gallery_report_metric_card(t('admin.gallery_report.export.gps', 'GPS'), admin_gallery_report_percent($images['gps_count'] ?? 0, $images['image_count'] ?? 0), t('admin.gallery_report.export.image_count', '{count} images', ['count' => admin_gallery_report_n($images['gps_count'] ?? 0)]))
         . admin_gallery_report_metric_card(t('admin.gallery_report.export.telemetry_window', 'Telemetry window'), t('admin.gallery_report.export.day_count', '{count} days', ['count' => admin_gallery_report_n($telemetry['days'] ?? 0)]), !empty($telemetry['available']) ? t('admin.gallery_report.export.available', 'available') : t('admin.gallery_report.export.not_available', 'not available'))
-        . '</div></section>';
+        . '</div><p class="muted">' . admin_gallery_report_h(t('admin.gallery_report.export.image_access_policy_note', 'Image-row visibility is not an anonymous-access decision. Effective source access also depends on gallery visibility, password/share-token policy, ancestor restrictions, and NSFW policy.')) . '</p></section>';
 
     $html .= '<section class="panel"><h2>' . admin_gallery_report_h(t('admin.gallery_report.export.generation_runtime', 'Generation and runtime')) . '</h2><div class="split"><div>'
         . admin_gallery_report_definition_list([
@@ -252,14 +268,51 @@ function view_render_admin_gallery_report_export_html(array $report): string
         . admin_gallery_report_metric_card(t('admin.gallery_report.export.total_picture_storage', 'Total picture storage'), admin_gallery_report_bytes($storage['total_picture_bytes'] ?? 0), t('admin.gallery_report.export.generated_original_ratio', 'Generated/original {percent} %', ['percent' => admin_gallery_report_n($storage['generated_to_original_percent'] ?? 0, 1)]))
         . admin_gallery_report_metric_card(t('admin.gallery_report.export.largest_source', 'Largest source'), admin_gallery_report_bytes($storage['largest_original_bytes'] ?? 0), (string) ($storage['largest_original_name'] ?? ''))
         . admin_gallery_report_metric_card(t('admin.gallery_report.export.scan_errors', 'Scan errors'), admin_gallery_report_n($storage['thumbnail_scan_errors'] ?? 0), !empty($storage['thumbnail_metadata_used']) ? t('admin.gallery_report.export.thumbnail_metadata_used', 'thumbnail metadata used') : t('admin.gallery_report.export.filesystem_checks_used', 'filesystem checks used'))
+        . (!empty($legacyThumbnailInventory['available'])
+            ? admin_gallery_report_metric_card(
+                t('admin.gallery_report.export.legacy_jpeg_variants', 'Legacy JPEG variants'),
+                admin_gallery_report_n($legacyThumbnailInventory['registered_variant_count'] ?? 0),
+                t('admin.gallery_report.export.legacy_jpeg_inventory_hint', '{images} image(s), approximately {bytes} registered; manual cleanup {cleanup}.', [
+                    'images' => admin_gallery_report_n($legacyThumbnailInventory['affected_image_count'] ?? 0),
+                    'bytes' => admin_gallery_report_bytes($legacyThumbnailInventory['registered_bytes'] ?? 0),
+                    'cleanup' => !empty($legacyThumbnailInventory['cleanup_available']) ? t('admin.gallery_report.export.available', 'available') : t('admin.gallery_report.export.unavailable', 'unavailable'),
+                ])
+            )
+            : '')
         . '</div><div class="split"><div><h3>' . admin_gallery_report_h(t('admin.gallery_report.export.source_types', 'Source types')) . '</h3>' . admin_gallery_report_bar_table($storage['type_rows'] ?? [], 'count', 'bytes') . '</div><div><h3>' . admin_gallery_report_h(t('admin.gallery_report.export.generated_media_types', 'Generated media types')) . '</h3>' . admin_gallery_report_bar_table($storage['generated_type_rows'] ?? [], 'count', 'bytes') . '</div></div><h3>' . admin_gallery_report_h(t('admin.gallery_report.export.configured_data_paths', 'Configured data paths')) . '</h3>' . admin_gallery_report_table($report['data_paths']['paths'] ?? [], [
             ['key' => 'label', 'label' => t('admin.gallery_report.export.path', 'Path')],
             ['key' => 'path', 'label' => t('admin.gallery_report.export.filesystem_value', 'Filesystem value')],
             ['key' => 'exists', 'label' => t('admin.gallery_report.export.exists', 'Exists')],
             ['key' => 'readable', 'label' => t('admin.gallery_report.export.readable', 'Readable')],
             ['key' => 'writable', 'label' => t('admin.gallery_report.export.writable', 'Writable')],
-            ['key' => 'free_bytes', 'label' => t('admin.gallery_report.export.free', 'Free'), 'format' => fn($v): string => admin_gallery_report_bytes($v)],
-            ['key' => 'total_bytes', 'label' => t('admin.gallery_report.export.total', 'Total'), 'format' => fn($v): string => admin_gallery_report_bytes($v)],
+            ['key' => 'free_bytes', 'label' => t('admin.gallery_report.export.free', 'Free'), 'format' => fn($v): string => admin_gallery_report_optional_bytes($v)],
+            ['key' => 'total_bytes', 'label' => t('admin.gallery_report.export.total', 'Total'), 'format' => fn($v): string => admin_gallery_report_optional_bytes($v)],
+        ])
+        . '<h3>' . admin_gallery_report_h(t('admin.gallery_report.export.legacy_zip_health', 'Legacy server ZIP fallback')) . '</h3>'
+        . '<div class="grid">'
+        . admin_gallery_report_metric_card(
+            t('admin.gallery_report.export.capability', 'Capability'),
+            !empty($legacyDownloadCache['legacy_server_build_capable'])
+                ? t('admin.gallery_report.export.available', 'available')
+                : t('admin.gallery_report.export.unavailable', 'unavailable'),
+            (string) ($legacyDownloadCache['reason'] ?? 'unknown')
+        )
+        . admin_gallery_report_metric_card(
+            t('admin.gallery_report.export.free_space', 'Free space'),
+            !empty($legacyDownloadCache['free_space_known'])
+                ? admin_gallery_report_bytes($legacyDownloadCache['free_bytes'] ?? 0)
+                : t('admin.gallery_report.export.unknown', 'unknown'),
+            !empty($legacyDownloadCache['free_space_known'])
+                ? t('admin.gallery_report.export.measured', 'measured')
+                : t('admin.gallery_report.export.free_space_unknown_hint', 'filesystem free-space API did not return a value')
+        )
+        . '</div>'
+        . admin_gallery_report_definition_list([
+            t('admin.gallery_report.export.reason_code', 'Reason code') => (string) ($legacyDownloadCache['reason'] ?? 'unknown'),
+            t('admin.gallery_report.export.configured_cache_path', 'Configured cache path') => (string) ($legacyDownloadCache['configured_path'] ?? ''),
+            t('admin.gallery_report.export.artifact_root', 'Artifact root') => (string) ($legacyDownloadCache['artifact_root'] ?? ''),
+            t('admin.gallery_report.export.artifact_state_dir', 'Artifact state directory') => (string) ($legacyDownloadCache['state_dir'] ?? ''),
+            t('admin.gallery_report.export.coordination_dir', 'Coordination directory') => (string) ($legacyDownloadCache['coordination_dir'] ?? ''),
         ]) . '</section>';
 
     $html .= '<section class="panel"><h2>' . admin_gallery_report_h(t('admin.gallery_report.export.database_overview', 'Database overview')) . '</h2><div class="grid">'
@@ -284,7 +337,9 @@ function view_render_admin_gallery_report_export_html(array $report): string
         ]) . '</section>';
 
     $html .= '<section class="panel"><h2>' . admin_gallery_report_h(t('admin.gallery_report.export.gallery_structure', 'Gallery structure')) . '</h2><div class="split"><div><h3>' . admin_gallery_report_h(t('admin.gallery_report.export.visibility', 'Visibility')) . '</h3>' . admin_gallery_report_bar_table($galleries['visibility_rows'] ?? [], 'count') . '</div><div><h3>' . admin_gallery_report_h(t('admin.gallery_report.export.access_mode', 'Access mode')) . '</h3>' . admin_gallery_report_bar_table($galleries['access_rows'] ?? [], 'count') . '</div></div><div class="grid">'
-        . admin_gallery_report_metric_card(t('admin.gallery_report.export.empty_galleries', 'Empty galleries'), admin_gallery_report_n($galleries['empty_count'] ?? 0), t('admin.gallery_report.export.empty_galleries_hint', 'direct image count is zero'))
+        . admin_gallery_report_metric_card(t('admin.gallery_report.export.zero_direct_image_galleries', 'Galleries with no direct images'), admin_gallery_report_n($galleries['zero_direct_image_count'] ?? $galleries['empty_count'] ?? 0), t('admin.gallery_report.export.zero_direct_image_galleries_hint', 'may still contain child galleries'))
+        . admin_gallery_report_metric_card(t('admin.gallery_report.export.empty_leaf_galleries', 'Empty leaf galleries'), admin_gallery_report_n($galleries['empty_leaf_count'] ?? 0), t('admin.gallery_report.export.empty_leaf_galleries_hint', 'no direct images and no child galleries'))
+        . admin_gallery_report_metric_card(t('admin.gallery_report.export.structural_container_galleries', 'Structural containers'), admin_gallery_report_n($galleries['structural_container_count'] ?? 0), t('admin.gallery_report.export.structural_container_galleries_hint', 'no direct images but one or more child galleries'))
         . admin_gallery_report_metric_card(t('admin.gallery_report.export.deepest_nesting', 'Deepest nesting'), admin_gallery_report_n($galleries['deepest_depth'] ?? 0), t('admin.gallery_report.export.parent_chain_depth', 'parent chain depth'))
         . admin_gallery_report_metric_card(t('admin.gallery_report.export.dated_galleries', 'Dated galleries'), admin_gallery_report_n($galleries['dated_gallery_count'] ?? 0), t('admin.gallery_report.export.manual_date_range_present', 'manual date range present'))
         . '</div><h3>' . admin_gallery_report_h(t('admin.gallery_report.export.largest_galleries', 'Largest galleries')) . '</h3>' . admin_gallery_report_table($galleries['largest_rows'] ?? [], [

@@ -74,10 +74,12 @@ use Gallery\Services\GalleryZipBuildException;
 use Gallery\Services\LegacyDownloadBuildBusyException;
 use Gallery\Services\LegacyDownloadBuildCapacityException;
 use Gallery\Services\LegacyDownloadBuildException;
+use Gallery\Services\LegacyDownloadBuildUnavailableException;
 use Gallery\Services\SmartGalleryZipBuildException;
 use function Gallery\Services\build_legacy_smart_gallery_zip;
 use function Gallery\Services\build_selected_images_zip;
 use function Gallery\Services\download_stream_descriptor;
+use function Gallery\Services\legacy_download_artifact_require_build_capability;
 use function Gallery\Services\legacy_download_artifact_stream_descriptor;
 use function Gallery\Services\legacy_download_artifact_stream_release;
 use function Gallery\Services\smart_gallery_effective_presentation;
@@ -85,6 +87,7 @@ use function Gallery\Services\smart_gallery_find_public_by_id;
 use function Gallery\Services\smart_gallery_zip_failure_reason;
 use function Gallery\Services\request_client_ip;
 use function Gallery\Services\telemetry_request_id;
+use function Gallery\Services\telemetry_record_media_served_event;
 use function Gallery\Services\viewer_security_fingerprint;
 use function Gallery\Views\view_render_download_legacy_confirmation;
 use const Gallery\Services\DOWNLOAD_CAPABILITY_RESOURCE_GALLERY;
@@ -242,6 +245,15 @@ function cms_download_legacy_busy_response(LegacyDownloadBuildBusyException $exc
 function cms_download_legacy_capacity_response(LegacyDownloadBuildCapacityException $exception): void
 {
     http_response_code(507);
+    header('Content-Type: text/plain; charset=utf-8');
+    header('Cache-Control: private, no-store');
+    echo $exception->getMessage();
+}
+
+/** Return a controlled response when the configured legacy server ZIP fallback is unavailable. */
+function cms_download_legacy_unavailable_response(LegacyDownloadBuildUnavailableException $exception): void
+{
+    http_response_code(503);
     header('Content-Type: text/plain; charset=utf-8');
     header('Cache-Control: private, no-store');
     echo $exception->getMessage();
@@ -740,8 +752,12 @@ function cms_download_gallery(): void
         return;
     }
 
-    $failureStage = 'manifest';
+    $failureStage = 'capability';
     try {
+        // Fail before manifest enumeration when the optional server-side fallback storage is unhealthy.
+        // Progressive browser downloads do not pass through this legacy-only capability check.
+        legacy_download_artifact_require_build_capability();
+        $failureStage = 'manifest';
         // Direct/no-JavaScript requests retain a deliberately bounded legacy path.
         $manifest = gallery_download_manifest($gallery);
         if (!gallery_download_legacy_manifest_is_safe($manifest)) {
@@ -774,6 +790,18 @@ function cms_download_gallery(): void
         cms_download_legacy_busy_response($exception);
     } catch (LegacyDownloadBuildCapacityException $exception) {
         cms_download_legacy_capacity_response($exception);
+    } catch (LegacyDownloadBuildUnavailableException $exception) {
+        $context = ['gallery_id' => (int) $gallery['id']]
+            + cms_download_failure_request_context('download_gallery', 'capability', $exception->reason(), $exception);
+        admin_log_event('warning', 'gallery.download_legacy_unavailable', 'Legacy gallery ZIP fallback is unavailable.', $context, [
+            'category' => 'security',
+            'severity' => 'warning',
+            'request_id' => (string) $context['request_id'],
+            'route_name' => 'download_gallery',
+            'subject_type' => 'gallery',
+            'subject_id' => (int) $gallery['id'],
+        ]);
+        cms_download_legacy_unavailable_response($exception);
     } catch (Throwable $exception) {
         $reason = $failureStage === 'manifest'
             ? 'manifest_unexpected_failure'
@@ -900,7 +928,20 @@ function cms_stream_progressive_download_source(array $resolved, string $resourc
     header('Cache-Control: private, no-store, no-transform');
     header('Content-Disposition: attachment; filename="' . $safeName . '"; filename*=UTF-8\'\'' . rawurlencode((string) $resolved['filename']));
     header('Content-Length: ' . (int) $resolved['size']);
-    readfile((string) $resolved['path']);
+    $readBytes = readfile((string) $resolved['path']);
+    if (is_int($readBytes) && $readBytes > 0 && is_array($resolved['image'] ?? null) && is_array($resolved['gallery'] ?? null)) {
+        telemetry_record_media_served_event(
+            $resolved['image'],
+            $resolved['gallery'],
+            'media.download.served',
+            $readBytes,
+            'original',
+            'unknown',
+            'download_source',
+            isset($_SERVER['HTTP_REFERER']) ? (string) $_SERVER['HTTP_REFERER'] : null,
+            http_response_code() ?: 200
+        );
+    }
 }
 
 
@@ -943,8 +984,11 @@ function cms_download_smart_gallery(): void
         return;
     }
 
-    $failureStage = 'manifest';
+    $failureStage = 'capability';
     try {
+        // Keep optional server ZIP health isolated from the progressive Smart Gallery path.
+        legacy_download_artifact_require_build_capability();
+        $failureStage = 'manifest';
         // Direct/no-JavaScript requests retain only the same bounded legacy ZIP path
         // as physical galleries. Normal Smart Gallery clicks use the browser manifest.
         $manifest = smart_gallery_download_manifest($gallery);
@@ -978,6 +1022,18 @@ function cms_download_smart_gallery(): void
         cms_download_legacy_busy_response($exception);
     } catch (LegacyDownloadBuildCapacityException $exception) {
         cms_download_legacy_capacity_response($exception);
+    } catch (LegacyDownloadBuildUnavailableException $exception) {
+        $context = ['smart_gallery_id' => (int) $gallery['id']]
+            + cms_download_failure_request_context('download_smart_gallery', 'capability', $exception->reason(), $exception);
+        admin_log_event('warning', 'smart_gallery.download_legacy_unavailable', 'Legacy Smart Gallery ZIP fallback is unavailable.', $context, [
+            'category' => 'security',
+            'severity' => 'warning',
+            'request_id' => (string) $context['request_id'],
+            'route_name' => 'download_smart_gallery',
+            'subject_type' => 'smart_gallery',
+            'subject_id' => (int) $gallery['id'],
+        ]);
+        cms_download_legacy_unavailable_response($exception);
     } catch (Throwable $exception) {
         $reason = $failureStage === 'manifest'
             ? 'manifest_unexpected_failure'

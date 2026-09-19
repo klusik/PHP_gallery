@@ -217,6 +217,12 @@ smart_gallery_presentation_assert($badValues['card_layout'] === 'horizontal', 'I
         'downloads' => false,
         'image_voting' => false,
     ];
+    $storedPreferencesWhileMastersOff = smart_gallery_presentation_preferences($storedLocalPreferences);
+    smart_gallery_presentation_assert($storedPreferencesWhileMastersOff['lightbox_enabled'], 'Editor preference state must preserve a stored local Lightbox ON preference while the global master is OFF.');
+    smart_gallery_presentation_assert($storedPreferencesWhileMastersOff['slideshow_enabled'], 'Editor preference state must preserve a stored local slideshow ON preference while the global Lightbox master is OFF.');
+    smart_gallery_presentation_assert($storedPreferencesWhileMastersOff['download_enabled'], 'Editor preference state must preserve a stored local Downloads ON preference while the global master is OFF.');
+    smart_gallery_presentation_assert($storedPreferencesWhileMastersOff['voting_enabled'], 'Editor preference state must preserve a stored local Voting ON preference while the global master is OFF.');
+
     $mastersOff = smart_gallery_effective_presentation($storedLocalPreferences);
     smart_gallery_presentation_assert(!$mastersOff['lightbox_enabled'], 'Global Lightbox master must override a stored Smart Gallery local ON preference.');
     smart_gallery_presentation_assert(!$mastersOff['slideshow_enabled'], 'Smart Gallery slideshow must become ineffective while its Lightbox master is OFF.');

@@ -36,6 +36,10 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+const TELEMETRY_SEMANTICS_VERSION = '2';
+const TELEMETRY_SEMANTICS_VERSION_KEY = 'telemetry_semantics_version';
+const TELEMETRY_SEMANTICS_EFFECTIVE_AT_KEY = 'telemetry_semantics_v2_effective_at';
+
 use Throwable;
 use RuntimeException;
 use function Gallery\Core\now_sql;
@@ -171,4 +175,57 @@ function telemetry_retention_days(string $key, int $default, int $minimum, int $
     // $days stores the bounded retention duration in days.
     $days = (int) telemetry_setting($key, (string) $default);
     return max($minimum, min($maximum, $days));
+}
+
+
+/**
+ * Return the stored telemetry semantics version.
+ *
+ * Installations without a marker are treated as legacy version 1 until the
+ * first event is accepted by the corrected version 2 producer.
+ *
+ * @return string Version identifier.
+ */
+function telemetry_semantics_version(): string
+{
+    $version = trim((string) telemetry_setting(TELEMETRY_SEMANTICS_VERSION_KEY, '1'));
+    return $version !== '' ? $version : '1';
+}
+
+/**
+ * Return the first recorded timestamp for telemetry semantics version 2.
+ *
+ * @return ?string SQL timestamp or null when the boundary has not been recorded.
+ */
+function telemetry_semantics_effective_at(): ?string
+{
+    $value = trim((string) telemetry_setting(TELEMETRY_SEMANTICS_EFFECTIVE_AT_KEY, ''));
+    return $value !== '' ? $value : null;
+}
+
+/**
+ * Persist the version 2 telemetry semantics boundary once per request.
+ *
+ * Marker persistence is diagnostic metadata only. Failure to write the marker
+ * must never make an otherwise valid anonymous telemetry event fail.
+ */
+function telemetry_ensure_current_semantics_marker(): void
+{
+    static $attempted = false;
+    if ($attempted || !telemetry_settings_schema_ready()) {
+        return;
+    }
+    $attempted = true;
+
+    try {
+        $effectiveAt = telemetry_semantics_effective_at();
+        if ($effectiveAt === null) {
+            telemetry_set_setting(TELEMETRY_SEMANTICS_EFFECTIVE_AT_KEY, now_sql());
+        }
+        if (telemetry_semantics_version() !== TELEMETRY_SEMANTICS_VERSION) {
+            telemetry_set_setting(TELEMETRY_SEMANTICS_VERSION_KEY, TELEMETRY_SEMANTICS_VERSION);
+        }
+    } catch (Throwable) {
+        // The event ingestion path deliberately continues without the marker.
+    }
 }
