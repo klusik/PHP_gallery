@@ -75,7 +75,7 @@ $openEnd = strpos($source, 'function step(offset, options = {})', $openStart ===
 slideshow_preload_assert($openStart !== false && $openEnd !== false, 'Lightbox navigation function is missing.');
 $openSource = substr($source, (int) $openStart, (int) $openEnd - (int) $openStart);
 slideshow_preload_assert(str_contains($openSource, 'options.slideshowPreparedImage instanceof HTMLImageElement'), 'Prepared full images must be explicitly slideshow-only.');
-slideshow_preload_assert(str_contains($openSource, 'const initialMainPromise = slideshowPreparedImage'), 'Prepared slideshow images must bypass the preview-first branch.');
+slideshow_preload_assert(str_contains($openSource, 'initialMainPromise = slideshowPreparedImage'), 'Prepared slideshow images must bypass the preview-first branch.');
 slideshow_preload_assert(str_contains($openSource, '? showMainImage(slideshowPreparedImage)'), 'Prepared slideshow images must enter the existing decoded-image transition path directly.');
 
 $clearStart = strpos($source, 'function clearLightboxSlideshowTimer()');

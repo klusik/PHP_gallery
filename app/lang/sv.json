@@ -4043,6 +4043,7 @@
   "lightbox.help_shortcuts": "←/→ foton, Shift+←/→ ±10 foton, +/− zoom, 0 återställ, F helskärm, M karta, S bildspel, X stäng",
   "lightbox.help_title": "Kontroller",
   "lightbox.image_load_failed": "Inläsning av lightbox-bilden misslyckades.",
+  "lightbox.image_loading": "Läser in bild...",
   "lightbox.initial_loader": "Förbereder galleri...",
   "lightbox.initial_loader_count": "Förbereder foto {current} av {total}",
   "lightbox.quality_loading": "Läser in bild i full kvalitet...",

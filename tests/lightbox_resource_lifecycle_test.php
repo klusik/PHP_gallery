@@ -136,10 +136,15 @@ lightbox_resource_assert(
     'LRU trimming must choose settled entries instead of orphaning active image work.'
 );
 
-$resetStart = strpos($source, 'function resetLightboxPreloadQueue()');
+$resetStart = strpos($source, 'function resetLightboxPreloadQueue(');
 $resetEnd = strpos($source, 'function clearLightboxHiddenCleanupTimer(', $resetStart === false ? 0 : $resetStart);
 lightbox_resource_assert($resetStart !== false && $resetEnd !== false, 'Nearby preload reset helper is missing.');
 $resetSource = substr($source, (int) $resetStart, (int) $resetEnd - (int) $resetStart);
+lightbox_resource_assert(
+    str_contains($resetSource, 'const abortActive = options.abortActive !== false;')
+        && str_contains($resetSource, 'if (abortActive) {'),
+    'Nearby preload reset must support queue-only invalidation without weakening hard cancellation paths.'
+);
 foreach ([
     'preloadedSources.clear();',
     'lightboxPreloadQueue.length = 0;',
