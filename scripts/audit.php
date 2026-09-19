@@ -527,6 +527,61 @@ function audit_run_php_command(string $id, string $label, string $relativeScript
 }
 
 /**
+ * Run strict MVC enforcement plus the machine-readable whole-runtime architecture inventory.
+ *
+ * The strict checker remains the pass/fail gate. Historical runtime candidates are
+ * reported as bounded advisory data so existing debt can be removed deliberately
+ * and later promoted into hard architecture rules without hiding it in a baseline.
+ *
+ * @return array Normalized task result.
+ */
+function audit_run_mvc_boundaries(): array
+{
+    global $root, $runDirectory;
+    $reportPath = $runDirectory . '/mvc-architecture.json';
+    $task = audit_run_php_command(
+        'mvc-boundaries',
+        'MVC layer boundaries',
+        'scripts/check_mvc_boundaries.php',
+        ['--quiet', '--report-json=' . $reportPath],
+        45
+    );
+
+    if (!is_file($reportPath)) {
+        if (($task['status'] ?? '') === STATUS_PASS) {
+            $task['status'] = STATUS_FAIL;
+            $task['summary'] = 'Checker passed but did not produce mvc-architecture.json.';
+            $task['details']['problems'][] = 'Machine-readable MVC architecture report is missing.';
+        }
+        return $task;
+    }
+
+    $decoded = json_decode((string) file_get_contents($reportPath), true);
+    if (!is_array($decoded)) {
+        $task['status'] = STATUS_FAIL;
+        $task['summary'] = 'MVC architecture report is invalid JSON.';
+        $task['details']['problems'][] = 'Unable to decode ' . relative_path($reportPath, $root) . '.';
+        return $task;
+    }
+
+    $strict = is_array($decoded['strict_mvc'] ?? null) ? $decoded['strict_mvc'] : [];
+    $runtime = is_array($decoded['runtime_inventory'] ?? null) ? $decoded['runtime_inventory'] : [];
+    $strictCount = (int) ($strict['current_violation_count'] ?? 0);
+    $candidateCount = (int) ($runtime['review_candidate_count'] ?? 0);
+    $runtimeFiles = (int) ($runtime['scanned_files'] ?? 0);
+    $task['counts'] = [
+        'strict_violations' => $strictCount,
+        'review_candidates' => $candidateCount,
+        'runtime_files' => $runtimeFiles,
+    ];
+    if (($task['status'] ?? '') === STATUS_PASS) {
+        $task['summary'] = $strictCount . ' strict violations; ' . $candidateCount . ' review candidates / ' . $runtimeFiles . ' runtime PHP files';
+    }
+    $task['details']['artifacts']['architecture_json'] = relative_path($reportPath, $root);
+    return $task;
+}
+
+/**
  * Return lint targets for full-repository or Git-changed mode.
  *
  * @param array $extensions File extensions without dots.
@@ -701,7 +756,7 @@ foreach ($suiteIds as $suiteIndex => $suiteId) {
 
     $task = match ($suiteId) {
         'php-regression' => audit_run_php_regression($registry),
-        'mvc-boundaries' => audit_run_php_command('mvc-boundaries', 'MVC layer boundaries', 'scripts/check_mvc_boundaries.php', ['--quiet'], 30),
+        'mvc-boundaries' => audit_run_mvc_boundaries(),
         'node-fast' => audit_run_node_suite('node-fast', 'Node regression (fast)', audit_select_node_tests($registry, false), $node),
         'node-full' => audit_run_node_suite('node-full', 'Node regression', audit_select_node_tests($registry, true), $node),
         'browser-map' => audit_run_node_suite('browser-map', 'Chromium map integration', audit_select_node_tests($registry, true, true), $node, $browser),

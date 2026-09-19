@@ -16,6 +16,8 @@
  *   - Detect forbidden cross-layer dependencies and responsibility leakage
  *   - Compare current violations with a reviewed, explicit legacy baseline
  *   - Reject every new violation and require resolved baseline entries to be removed
+ *   - Inventory the complete first-party PHP runtime for historical architecture hotspots
+ *   - Emit a bounded machine-readable JSON report for follow-up remediation
  *   - Provide controlled baseline creation and reduction workflows
  *
  * Author:
@@ -33,7 +35,7 @@
  *   - --refresh-baseline may only remove resolved entries. It refuses new violations.
  *
  * Last Updated:
- *   2026-09-13
+ *   2026-09-19
  */
 
 declare(strict_types=1);
@@ -355,6 +357,403 @@ function mvc_php_files(string $root): array
     return $files;
 }
 
+
+/**
+ * Return every first-party PHP file that participates in the web runtime.
+ *
+ * Tests, CLI-only scripts, migration definitions under database/migrations, and
+ * configuration examples are intentionally excluded. They have different
+ * architectural ownership rules and are audited by their dedicated suites.
+ *
+ * @param string $root Project root.
+ * @return array<int, string> Absolute PHP runtime paths.
+ */
+function runtime_php_files(string $root): array
+{
+    $files = [];
+    $appDirectory = $root . '/app';
+    if (is_dir($appDirectory)) {
+        $iterator = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($appDirectory, \FilesystemIterator::SKIP_DOTS));
+        foreach ($iterator as $file) {
+            if ($file->isFile() && strtolower($file->getExtension()) === 'php') {
+                $files[] = $file->getPathname();
+            }
+        }
+    }
+
+    foreach (['index.php', 'install.php', 'reset.php', 'setup-gallery.php', 'public/index.php'] as $relativePath) {
+        $path = $root . '/' . $relativePath;
+        if (is_file($path)) {
+            $files[] = $path;
+        }
+    }
+
+    $files = array_values(array_unique($files));
+    sort($files, SORT_STRING);
+    return $files;
+}
+
+/**
+ * Classify one runtime file into a coarse architecture role.
+ *
+ * The role is descriptive. Only the canonical MVC roots are currently hard
+ * enforcement boundaries; the other roles feed the machine-readable historical
+ * inventory so legacy responsibilities can be migrated without guessing.
+ *
+ * @param string $relativePath Project-relative path.
+ * @return string Stable architecture role.
+ */
+function architecture_role_for_path(string $relativePath): string
+{
+    $relativePath = str_replace('\\', '/', $relativePath);
+    $layer = layer_for_path($relativePath);
+    if ($layer !== null) {
+        return rtrim($layer, 's');
+    }
+    if (str_starts_with($relativePath, 'app/bootstrap/') || $relativePath === 'app/bootstrap.php' || $relativePath === 'app/early_runtime.php') {
+        return 'bootstrap';
+    }
+    if (in_array($relativePath, ['app/database.php', 'app/migrations.php', 'app/migration_definitions.php', 'app/migration_repairs.php'], true)) {
+        return 'infrastructure';
+    }
+    if (in_array($relativePath, ['app/models.php', 'app/services.php', 'app/controllers.php', 'app/views.php'], true)) {
+        return 'loader';
+    }
+    if ($relativePath === 'app/request_data.php' || $relativePath === 'app/helpers_request.php') {
+        return 'request_adapter';
+    }
+    if ($relativePath === 'app/security.php') {
+        return 'security_compatibility';
+    }
+    if (str_starts_with($relativePath, 'app/helpers')) {
+        return 'helper';
+    }
+    if (str_starts_with($relativePath, 'app/diagnostics/')) {
+        return 'diagnostics';
+    }
+    if (str_starts_with($relativePath, 'app/lang/')) {
+        return 'localization';
+    }
+    if ($relativePath === 'public/index.php' || $relativePath === 'index.php') {
+        return 'entrypoint';
+    }
+    if (in_array($relativePath, ['install.php', 'reset.php', 'setup-gallery.php'], true)) {
+        return 'setup';
+    }
+    if (str_starts_with($relativePath, 'app/')) {
+        return 'core';
+    }
+    return 'other';
+}
+
+/**
+ * Record one bounded architecture signal occurrence.
+ *
+ * @param array<string, array{count:int,evidence:array<int,array{line:int,snippet:string}>}> $signals Signal accumulator.
+ * @param string $name Stable signal name.
+ * @param int $line Source line.
+ * @param string $snippet Human-readable source excerpt.
+ * @param int $evidenceLimit Maximum retained evidence rows per signal.
+ */
+function record_architecture_signal(array &$signals, string $name, int $line, string $snippet, int $evidenceLimit = 8): void
+{
+    if (!isset($signals[$name])) {
+        $signals[$name] = ['count' => 0, 'evidence' => []];
+    }
+    $signals[$name]['count']++;
+    if (count($signals[$name]['evidence']) < $evidenceLimit) {
+        $signals[$name]['evidence'][] = [
+            'line' => $line,
+            'snippet' => normalize_snippet($snippet),
+        ];
+    }
+}
+
+/**
+ * Return the count of one architecture signal.
+ *
+ * @param array<string, array{count:int,evidence:array<int,array{line:int,snippet:string}>}> $signals Signal map.
+ * @param string $name Signal name.
+ * @return int Occurrence count.
+ */
+function architecture_signal_count(array $signals, string $name): int
+{
+    return (int) ($signals[$name]['count'] ?? 0);
+}
+
+/**
+ * Inspect one runtime PHP source as text/tokens and return architecture signals.
+ *
+ * This function never includes or executes the inspected file. It deliberately
+ * captures neutral evidence rather than trying to infer every historical intent.
+ * Strict MVC enforcement remains in scan_source(); these signals provide the
+ * broader dataset used to find and prioritize legacy responsibilities.
+ *
+ * @param string $source PHP source.
+ * @param string $relativePath Project-relative path.
+ * @return array<string, mixed> File inventory record.
+ */
+function scan_architecture_source(string $source, string $relativePath): array
+{
+    $tokens = token_get_all($source);
+    $lines = source_lines($source);
+    $signals = [];
+    $requestGlobals = ['$_GET', '$_POST', '$_REQUEST', '$_FILES', '$_COOKIE', '$_SERVER'];
+    $responseFunctions = ['header', 'http_response_code', 'setcookie', 'setrawcookie'];
+    $filesystemMutationFunctions = ['file_put_contents', 'unlink', 'rename', 'copy', 'mkdir', 'rmdir', 'chmod', 'chown', 'touch', 'symlink', 'link'];
+    $pdoMethods = ['prepare', 'query', 'exec', 'beginTransaction', 'commit', 'rollBack'];
+    $nameTokenIds = [T_STRING];
+    if (defined('T_NAME_QUALIFIED')) {
+        $nameTokenIds[] = T_NAME_QUALIFIED;
+    }
+    if (defined('T_NAME_FULLY_QUALIFIED')) {
+        $nameTokenIds[] = T_NAME_FULLY_QUALIFIED;
+    }
+
+    foreach ($tokens as $index => $token) {
+        if (!is_array($token)) {
+            continue;
+        }
+        [$tokenId, $value, $line] = $token;
+        $snippet = $lines[$line] ?? $value;
+
+        if ($tokenId === T_VARIABLE) {
+            if (in_array($value, $requestGlobals, true)) {
+                record_architecture_signal($signals, 'request_global', $line, $snippet);
+            } elseif ($value === '$_SESSION') {
+                record_architecture_signal($signals, 'session_global', $line, $snippet);
+            }
+        }
+
+        if ($tokenId === T_STRING && token_is_function_call($tokens, $index)) {
+            $name = strtolower($value);
+            if ($name === 'db') {
+                record_architecture_signal($signals, 'direct_db', $line, $snippet);
+            }
+            if (in_array($name, $responseFunctions, true)) {
+                record_architecture_signal($signals, 'http_response', $line, $snippet);
+            }
+            if (in_array($name, $filesystemMutationFunctions, true)) {
+                record_architecture_signal($signals, 'filesystem_mutation', $line, $snippet);
+            }
+        }
+
+        if ($tokenId === T_STRING && in_array($value, $pdoMethods, true)) {
+            for ($cursor = $index - 1; $cursor >= 0; $cursor--) {
+                $previous = $tokens[$cursor];
+                if (is_array($previous) && in_array($previous[0], [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT], true)) {
+                    continue;
+                }
+                if ($previous === '->' || (is_array($previous) && $previous[0] === T_OBJECT_OPERATOR)) {
+                    record_architecture_signal($signals, 'pdo_method', $line, $snippet);
+                }
+                break;
+            }
+        }
+
+        if (in_array($tokenId, [T_CONSTANT_ENCAPSED_STRING, T_ENCAPSED_AND_WHITESPACE], true) && looks_like_sql($value)) {
+            record_architecture_signal($signals, 'sql_literal', $line, $snippet);
+        }
+
+        if ($tokenId === T_ECHO || $tokenId === T_PRINT || $tokenId === T_INLINE_HTML) {
+            if ($tokenId !== T_INLINE_HTML || trim($value) !== '') {
+                record_architecture_signal($signals, 'presentation_output', $line, $snippet);
+            }
+        }
+
+        if (in_array($tokenId, [T_REQUIRE, T_REQUIRE_ONCE, T_INCLUDE, T_INCLUDE_ONCE], true)) {
+            record_architecture_signal($signals, 'include_require', $line, $snippet);
+        }
+
+        if (in_array($tokenId, $nameTokenIds, true)) {
+            $qualified = ltrim($value, '\\');
+            if (preg_match('/^Gallery\\\\Models\\\\/i', $qualified) === 1) {
+                record_architecture_signal($signals, 'dependency_model', $line, $snippet);
+            } elseif (preg_match('/^Gallery\\\\Services\\\\/i', $qualified) === 1) {
+                record_architecture_signal($signals, 'dependency_service', $line, $snippet);
+            } elseif (preg_match('/^Gallery\\\\Controllers\\\\/i', $qualified) === 1) {
+                record_architecture_signal($signals, 'dependency_controller', $line, $snippet);
+            } elseif (preg_match('/^Gallery\\\\Views\\\\/i', $qualified) === 1) {
+                record_architecture_signal($signals, 'dependency_view', $line, $snippet);
+            }
+        }
+    }
+
+    ksort($signals, SORT_STRING);
+    $score = 0;
+    foreach ($signals as $signal) {
+        $score += (int) ($signal['count'] ?? 0);
+    }
+
+    return [
+        'path' => str_replace('\\', '/', $relativePath),
+        'role' => architecture_role_for_path($relativePath),
+        'lines' => count($lines),
+        'signal_count' => $score,
+        'signals' => $signals,
+    ];
+}
+
+/**
+ * Convert neutral per-file signals into bounded architecture review candidates.
+ *
+ * Review candidates are deliberately advisory. They cover historical runtime
+ * areas that do not yet have hard ownership rules in scan_source(). Once the
+ * project is cleaned, individual candidate rules can be promoted to strict
+ * enforcement without changing the evidence collector.
+ *
+ * @param array<string, mixed> $record File inventory record.
+ * @return array<int, array<string, mixed>> Candidate rows.
+ */
+function architecture_review_candidates(array $record): array
+{
+    $path = (string) ($record['path'] ?? '');
+    $role = (string) ($record['role'] ?? 'other');
+    $signals = is_array($record['signals'] ?? null) ? $record['signals'] : [];
+    $candidates = [];
+
+    $append = static function (string $rule, string $signal, string $reason) use (&$candidates, $path, $role, $signals): void {
+        $count = architecture_signal_count($signals, $signal);
+        if ($count <= 0) {
+            return;
+        }
+        if (!isset($candidates[$rule])) {
+            $candidates[$rule] = [
+                'path' => $path,
+                'role' => $role,
+                'rule' => $rule,
+                'count' => 0,
+                'reason' => $reason,
+                'signals' => [],
+            ];
+        }
+        $candidates[$rule]['count'] += $count;
+        $candidates[$rule]['signals'][$signal] = [
+            'count' => $count,
+            'evidence' => array_values($signals[$signal]['evidence'] ?? []),
+        ];
+    };
+
+    if (!in_array($role, ['model', 'infrastructure', 'setup'], true)) {
+        foreach (['direct_db', 'pdo_method', 'sql_literal'] as $signal) {
+            $append('architecture.persistence_outside_model', $signal, 'Persistence syntax exists outside the canonical model/infrastructure ownership boundary.');
+        }
+    }
+    if (in_array($role, ['service', 'view', 'helper', 'security_compatibility', 'core', 'diagnostics'], true)) {
+        $append('architecture.request_outside_http_boundary', 'request_global', 'Request globals are read outside controller/bootstrap/request-adapter ownership.');
+    }
+    if (in_array($role, ['model', 'service', 'view', 'helper', 'security_compatibility', 'core', 'diagnostics'], true)) {
+        $append('architecture.session_state_outside_http_boundary', 'session_global', 'Session state is accessed outside the canonical HTTP boundary and should be reviewed for adapter/controller extraction.');
+    }
+    if (in_array($role, ['model', 'controller', 'view', 'helper', 'security_compatibility', 'core', 'diagnostics'], true)) {
+        $append('architecture.filesystem_mutation_outside_service', 'filesystem_mutation', 'Filesystem mutation exists outside service/infrastructure ownership.');
+    }
+    if (in_array($role, ['model', 'service', 'view', 'helper', 'core', 'diagnostics'], true)) {
+        $append('architecture.response_outside_controller', 'http_response', 'HTTP response manipulation exists outside controller/bootstrap ownership.');
+    }
+    if (in_array($role, ['model', 'service', 'helper', 'security_compatibility', 'core', 'diagnostics'], true)) {
+        $append('architecture.presentation_outside_view', 'presentation_output', 'Presentation output exists outside view/controller response ownership.');
+    }
+
+    return array_values($candidates);
+}
+
+/**
+ * Scan the complete first-party PHP web runtime without executing source files.
+ *
+ * @param string $root Project root.
+ * @return array{files:array<int,array<string,mixed>>,candidates:array<int,array<string,mixed>>,roles:array<string,int>,signals:array<string,int>}
+ */
+function scan_runtime_architecture(string $root): array
+{
+    $normalizedRoot = rtrim(str_replace('\\', '/', realpath($root) ?: $root), '/');
+    $records = [];
+    $candidates = [];
+    $roles = [];
+    $signalTotals = [];
+
+    foreach (runtime_php_files($normalizedRoot) as $absolutePath) {
+        $normalizedPath = str_replace('\\', '/', $absolutePath);
+        $relativePath = ltrim(substr($normalizedPath, strlen($normalizedRoot)), '/');
+        $source = file_get_contents($absolutePath);
+        if ($source === false) {
+            throw new RuntimeException('Unable to read runtime source: ' . $relativePath);
+        }
+        $record = scan_architecture_source($source, $relativePath);
+        $records[] = $record;
+        $role = (string) $record['role'];
+        $roles[$role] = ($roles[$role] ?? 0) + 1;
+        foreach (($record['signals'] ?? []) as $signal => $definition) {
+            $signalTotals[$signal] = ($signalTotals[$signal] ?? 0) + (int) ($definition['count'] ?? 0);
+        }
+        array_push($candidates, ...architecture_review_candidates($record));
+    }
+
+    usort($records, static fn(array $left, array $right): int => [$right['signal_count'], $left['path']] <=> [$left['signal_count'], $right['path']]);
+    usort($candidates, static fn(array $left, array $right): int => [$right['count'], $left['path'], $left['rule']] <=> [$left['count'], $right['path'], $right['rule']]);
+    ksort($roles, SORT_STRING);
+    ksort($signalTotals, SORT_STRING);
+
+    return [
+        'files' => $records,
+        'candidates' => $candidates,
+        'roles' => $roles,
+        'signals' => $signalTotals,
+    ];
+}
+
+/**
+ * Write the machine-readable strict-MVC and historical-runtime report.
+ *
+ * @param string $path Destination path.
+ * @param string $root Project root.
+ * @param array<int,array<string,mixed>> $current Current strict violations.
+ * @param array<int,array<string,mixed>> $baseline Reviewed strict baseline.
+ * @param array{new:array<int,array<string,mixed>>,resolved:array<int,array<string,mixed>>} $comparison Strict comparison.
+ */
+function write_architecture_report(string $path, string $root, array $current, array $baseline, array $comparison): void
+{
+    $runtime = scan_runtime_architecture($root);
+    $hotspots = array_values(array_filter(
+        array_slice($runtime['files'], 0, 100),
+        static fn(array $record): bool => (int) ($record['signal_count'] ?? 0) > 0
+    ));
+    $payload = [
+        'schema_version' => 1,
+        'generated_at' => date(DATE_ATOM),
+        'scope' => 'first-party PHP web runtime; source is tokenized and never included/executed',
+        'strict_mvc' => [
+            'scanned_files' => count(mvc_php_files($root)),
+            'current_violation_count' => count($current),
+            'baseline_violation_count' => count($baseline),
+            'new_violation_count' => count($comparison['new']),
+            'resolved_baseline_count' => count($comparison['resolved']),
+            'violations' => array_values($current),
+            'new' => array_values($comparison['new']),
+            'resolved' => array_values($comparison['resolved']),
+        ],
+        'runtime_inventory' => [
+            'scanned_files' => count($runtime['files']),
+            'review_candidate_count' => count($runtime['candidates']),
+            'roles' => $runtime['roles'],
+            'signal_totals' => $runtime['signals'],
+            'review_candidates' => array_values($runtime['candidates']),
+            'hotspots' => $hotspots,
+        ],
+    ];
+    $json = json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    if ($json === false) {
+        throw new RuntimeException('Unable to encode architecture report JSON.');
+    }
+    $directory = dirname($path);
+    if (!is_dir($directory) && !mkdir($directory, 0775, true) && !is_dir($directory)) {
+        throw new RuntimeException('Unable to create architecture report directory: ' . $directory);
+    }
+    if (file_put_contents($path, $json . "\n") === false) {
+        throw new RuntimeException('Unable to write architecture report: ' . $path);
+    }
+}
+
 /**
  * Scan the project MVC layer roots.
  *
@@ -511,6 +910,7 @@ function main(array $argv): int
     $quiet = false;
     $createBaseline = false;
     $refreshBaseline = false;
+    $reportJsonPath = null;
 
     foreach (array_slice($argv, 1) as $argument) {
         if ($argument === '--quiet') {
@@ -526,8 +926,17 @@ function main(array $argv): int
         } elseif (str_starts_with($argument, '--baseline=')) {
             $baselineArgument = substr($argument, strlen('--baseline='));
             $baselinePath = str_starts_with($baselineArgument, '/') ? $baselineArgument : rtrim($root, '/\\') . '/' . $baselineArgument;
+        } elseif (str_starts_with($argument, '--report-json=')) {
+            $reportArgument = substr($argument, strlen('--report-json='));
+            if ($reportArgument === '') {
+                fwrite(STDERR, "--report-json requires a path.\n");
+                return 2;
+            }
+            $reportJsonPath = str_starts_with($reportArgument, '/') || preg_match('/^[A-Za-z]:[\\\\\/]/', $reportArgument) === 1
+                ? $reportArgument
+                : rtrim($root, '/\\') . '/' . $reportArgument;
         } elseif ($argument === '--help' || $argument === '-h') {
-            fwrite(STDOUT, "Usage: php scripts/check_mvc_boundaries.php [--quiet] [--create-baseline|--refresh-baseline] [--root=PATH] [--baseline=PATH]\n");
+            fwrite(STDOUT, "Usage: php scripts/check_mvc_boundaries.php [--quiet] [--create-baseline|--refresh-baseline] [--root=PATH] [--baseline=PATH] [--report-json=PATH]\n");
             return 0;
         } else {
             fwrite(STDERR, 'Unknown argument: ' . $argument . "\n");
@@ -554,6 +963,9 @@ function main(array $argv): int
 
         $baseline = read_baseline($baselinePath);
         $comparison = compare_with_baseline($current, $baseline);
+        if ($reportJsonPath !== null) {
+            write_architecture_report($reportJsonPath, $root, $current, $baseline, $comparison);
+        }
 
         if ($refreshBaseline) {
             if ($comparison['new'] !== []) {

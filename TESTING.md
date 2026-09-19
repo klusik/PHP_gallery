@@ -24,7 +24,7 @@ Do not enumerate `tests/`, do not create shell/PowerShell loops over test files,
 
 The central runner intentionally suppresses passing child stdout to protect agent context. Read the console summary first; read `cache/test-audit/latest.md` only when needed; open raw suite logs only for `FAIL`, `BLOCKED`, or a materially relevant `SKIP`. A successful suite does not justify reading its raw log.
 
-The MVC boundary suite is a zero-baseline contract. `scripts/mvc_boundary_baseline.json` contains no reviewed legacy occurrences; therefore every scanner finding is new and must fail the audit. Do not add exemptions or repopulate the baseline to make a change pass. Refactor the ownership violation instead.
+The MVC boundary suite is a zero-baseline contract. `scripts/mvc_boundary_baseline.json` contains no reviewed legacy occurrences; therefore every strict scanner finding is new and must fail the audit. Do not add exemptions or repopulate the baseline to make a change pass. Refactor the ownership violation instead. The same suite now writes `<run-directory>/mvc-architecture.json`, a machine-readable whole-runtime inventory produced with `token_get_all()` without including or executing the inspected PHP files. Its `runtime_inventory.review_candidates` section is advisory historical debt, not a pass/fail baseline; the compact audit summary reports the candidate count so it can be driven toward zero and later promoted into hard rules.
 
 
 ```bash
@@ -42,6 +42,7 @@ cache/test-audit/latest.md
 cache/test-audit/latest.json
 cache/test-audit/<run-id>/report.md
 cache/test-audit/<run-id>/report.json
+cache/test-audit/<run-id>/mvc-architecture.json
 cache/test-audit/<run-id>/*.log
 ```
 
