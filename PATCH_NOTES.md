@@ -1,5 +1,61 @@
 # Patch notes
 
+## Version 0.103.1
+
+Version 0.103.1 is a focused public-viewer maintenance release that keeps lightbox navigation responsive during rapid stepping, delayed metadata, preview failures, and decoded-image cache turnover. It also replaces the separate navigation spinner with consistent, accessible loading and recoverable-error feedback while preserving media authorization, zoom, slideshow, map, and no-JavaScript behavior.
+
+### Highlights
+
+#### Reliable lightbox navigation
+
+- Made each navigation intent own its complete metadata, preview, transition, quality-promotion, and completion lifecycle.
+- Prevented stale requests from clearing loading state, replacing the active photograph, or scheduling slideshow work after a newer navigation intent.
+- Kept foreground navigation live when optional preload, cache telemetry, decoded-cache eviction, or image-source setup fails.
+- Preserved nearby in-flight preview work during rapid stepping while discarding stale queued preload requests.
+
+#### Loading and failure feedback
+
+- Replaced the standalone center spinner with the existing lightbox progress surface for consistent navigation and full-quality loading feedback.
+- Added localized `Loading image...` text in English, Czech, German, and Swedish, with matching `aria-busy` and live-announcement behavior.
+- Added a recoverable image-load failure state that identifies the failed navigation without blocking the next, previous, close, or reopen action.
+- Added bounded navigation ownership and failure details to administrator-only development diagnostics.
+
+### Technical Details
+
+#### Frontend
+
+- Updated `public/assets/gallery-modules/lightbox.js` with explicit navigation transactions covering sparse metadata lookup, source selection, decoded presentation, terminal failure, quality promotion, and slideshow continuation.
+- Scoped quality-transfer progress and finalization to the request that still owns the active source, preventing stale completions from changing current loading state.
+- Hardened decoded-image cache eviction, preload concurrency accounting, optional telemetry, and synchronous or rejected image setup so optimization failures cannot strand the viewer.
+- Updated `public/assets/styles/lightbox.css` to share one progress surface between navigation and quality promotion, including reduced-motion behavior and a recoverable error presentation.
+- Refreshed the lightbox dependency revisions in `public/assets/gallery.js`, `public/assets/public-gallery.js`, and `public/assets/gallery-modules/admin-side-panel.js` so deployed browsers load the corrected module.
+
+#### Backend and compatibility
+
+- Added no database migrations, schema changes, configuration changes, route changes, or stored-data rewrites.
+- Preserved both supported public thumbnail renderers, protected-media authorization, Smart Gallery metadata loading, map navigation, voting, slideshow, fullscreen, zoom, and no-JavaScript fallbacks.
+- Regenerated `app/core-manifest.json` for the complete release tree.
+
+### Tests
+
+- Added `tests/lightbox_navigation_loading_regression_test.php` for shared loading-state ownership and translated progress behavior.
+- Added `tests/lightbox_navigation_transaction_liveness_test.php` for metadata, presentation, failure, slideshow, and stale-request settlement.
+- Added `tests/lightbox_cache_eviction_liveness_test.php` for cache eviction, telemetry isolation, synchronous preload failures, and foreground source setup.
+- Expanded lightbox resource-lifecycle, slideshow-preload, zoom integration, zoom-quality, and map-marker contracts.
+- Retained the central release audit as the authoritative verification for PHP and JavaScript syntax, regression suites, browser integration when available, manifest freshness, release consistency, MVC boundaries, and Git whitespace.
+
+### User Impact
+
+#### For visitors
+
+- Rapid next/previous navigation no longer leaves the lightbox indefinitely loading when metadata, previews, cache work, or optional telemetry completes out of order or fails.
+- Loading and failure states are clearer and accessible, and a failed photograph does not prevent continuing through the gallery.
+
+#### For administrators
+
+- Development diagnostics now expose bounded navigation transaction state to help investigate viewer-loading problems without logging private paths, raw media credentials, or authorization tokens.
+- No migration, configuration update, or manual data conversion is required.
+
 ## Version 0.103.0
 
 Version 0.103.0 extends Smart Galleries with secure source-gallery context, GPS/map presentation, and richer public lightbox metadata. The release preserves the existing physical-gallery ownership model and authorization boundaries while making provenance and geographic context available through the established MVC and browser workflows.
