@@ -1,5 +1,72 @@
 # Patch notes
 
+## Version 0.102.0
+
+Version 0.102.0 is a feature and hardening release that expands administrator telemetry and diagnostics, improves Smart Galleries presentation, strengthens public media authorization and download resilience, and makes strict MVC boundaries an enforced release requirement. It adds broad regression coverage while preserving existing routes, stored gallery data, and supported compatibility paths.
+
+### Highlights
+
+#### Telemetry and diagnostics
+
+- Added richer Admin telemetry reports for traffic segments, daily rollups, photo-open behavior, query profiles, storage health, database observers, and consistency diagnostics.
+- Improved telemetry dimension normalization, privacy handling, media-served accounting, and bounded diagnostic logging.
+- Added actionable dashboard and gallery-report summaries for maintenance, compatibility, and data-quality conditions.
+
+#### Smart Galleries presentation
+
+- Improved Smart Gallery presentation controls, inherited versus overridden settings, safe thumbnail bounds, pagination limits, and capability-master status.
+- Improved Admin side-panel refresh behavior for dynamically created and updated galleries.
+- Updated responsive gallery rendering, localized administrator messages, and public Smart Gallery contract handling.
+
+#### Public authorization and downloads
+
+- Strengthened visibility and access enforcement for public search results, media, thumbnails, metadata, and downloads.
+- Added explicit handling and diagnostics for unavailable legacy server-side ZIP fallback storage while keeping progressive downloads independent of that optional path.
+- Preserved protected-gallery behavior, authorized media streaming, and lightbox quality/lifecycle behavior.
+
+#### Strict MVC release enforcement
+
+- Expanded the MVC boundary checker and made zero-violation MVC validation part of the central audit and release qualification.
+- Added contract coverage for controller, service, model, and view ownership rules.
+
+### Technical Details
+
+#### Backend
+
+- Updated telemetry, database-observer, site-maintenance, download-cache, thumbnail-compatibility, public-search, Smart Gallery, and gallery-report services and models.
+- Kept SQL and persistence logic in models, reusable policy and orchestration in services, HTTP flow in controllers, and presentation in views.
+- Preserved schema capability semantics: confirmed `available` enables normal behavior, confirmed `missing` uses only documented compatibility or bootstrap paths, `unknown` blocks security-sensitive and mutation-sensitive operations, and `disabled` suppresses only real configurable capabilities.
+- Added no database migrations and made no destructive data rewrites.
+
+#### Frontend
+
+- Updated Admin telemetry and Smart Galleries views, localized strings, shared gallery styles, lightbox lifecycle behavior, telemetry assets, usage reporting, and cache-busted Admin modules.
+- Kept Admin side-panel mutations and refreshes in the existing in-place workflow with direct-page compatibility fallbacks.
+
+#### Documentation and release integrity
+
+- Updated `ARCHITECTURE.md`, `CODEMAP.md`, `DATABASE.md`, `TESTING.md`, `docs/SMART_GALLERIES.md`, and `docs/PHP_Gallery_Manual.tex` for the release behavior and enforced contracts.
+- Refreshed `app/core-manifest.json` after the final source and documentation edits.
+- Removed temporary remediation roadmaps after incorporating their lasting requirements into permanent documentation and automated contracts.
+
+### Tests
+
+- Added or expanded contracts for telemetry semantics, normalization, query plans, rollups, storage diagnostics, media and image observability, photo lifecycle, public authorization, download health, maintenance diagnostics, Smart Galleries presentation, side-panel refresh, lightbox lifecycle, thumbnail compatibility, and MVC boundaries.
+- The release audit covers PHP and JavaScript syntax, PHP and Node regression suites, WinApp checks when available, mutation contracts, runtime hardening, MVC boundaries, manifest freshness, release consistency, browser integration when available, and Git whitespace validation.
+
+### User Impact
+
+#### For visitors
+
+- Public search and media routes now apply stricter, centralized authorization checks, reducing the risk of exposing content from protected or unavailable galleries.
+- Public media, thumbnails, downloads, and lightbox behavior remain available through their existing URLs and supported no-JavaScript fallbacks.
+
+#### For administrators
+
+- Telemetry and System Health provide more useful, bounded diagnostics for traffic, storage, query performance, media delivery, maintenance, and consistency issues.
+- Smart Gallery presentation settings are clearer about inherited defaults and explicit overrides, with safer bounds and more reliable side-panel refreshes.
+- Release audits now fail on new MVC ownership violations instead of allowing them to accumulate as baseline debt.
+
 ## Version 0.101.2
 
 Version 0.101.2 is a focused maintenance release that makes the administrator Complete Report reliable for large image libraries and constrained shared-hosting environments. It reduces the number of browser requests, retries transient hosting failures, bounds high-cardinality report state, and returns the completed HTML export without retaining a second large copy in the server-side job session.
