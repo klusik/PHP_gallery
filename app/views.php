@@ -88,6 +88,7 @@ require_once __DIR__ . '/views/admin_telemetry.php';
 require_once __DIR__ . '/views/admin_integrity.php';
 require_once __DIR__ . '/views/admin_database_usage.php';
 require_once __DIR__ . '/views/admin_database_maintenance.php';
+require_once __DIR__ . '/views/admin_maintenance_center.php';
 require_once __DIR__ . '/views/admin_dashboard_sections.php';
 require_once __DIR__ . '/views/admin_dashboard.php';
 require_once __DIR__ . '/views/admin_trash.php';

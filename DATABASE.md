@@ -1,6 +1,6 @@
 # PHP Gallery Database Documentation
 
-This document describes the database schema used by PHP Gallery as of application version 0.105.1. Version 0.97 adds the recoverable gallery-trash state machine through migrations `202609070001_gallery_trash_bin.php` and `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6 introduced no schema changes. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
+This document describes the database schema used by PHP Gallery as of application version 0.106. Version 0.97 adds the recoverable gallery-trash state machine through migrations `202609070001_gallery_trash_bin.php` and `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6 introduced no schema changes. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
 
 Version 0.105 adds three integrity structures. Migration `202609200001_gallery_image_move_journal.php` records durable image-move intent and recovery state; `202609200002_gallery_edit_revision.php` adds the application-owned `galleries.edit_revision` concurrency value; and `202609200003_admin_operation_keys.php` stores actor-bound replay outcomes for gallery creation and classic uploads. The edit-revision migration is a column-only alteration: it creates no trigger, routine, function, or server-global setting and requires no `SUPER`-style privilege. A retry after an interrupted attempt that already added the column is accepted and records the migration normally.
 
@@ -1183,6 +1183,29 @@ The only repository-proven obsolete schema objects are the legacy pre-compaction
 ### Statistics and physical storage
 
 `ANALYZE TABLE` is a selected-table action that refreshes optimizer statistics. It does not reclaim table files. `OPTIMIZE TABLE` is a different selected-table action with a separate `OPTIMIZE` confirmation. Before that confirmation, the Admin workflow can generate a selected-table dry-run plan showing operation type, allocated bytes, reclaimable-byte estimate, engine, and warnings without executing any table statement. It may lock or rebuild tables and may be expensive on shared hosting. `information_schema.DATA_FREE` is an engine estimate, not a guaranteed number of bytes that the hosting filesystem will return. Inspection and logical cleanup never invoke `OPTIMIZE TABLE`. Schema repair also has a fresh, non-mutating dry-run that reports the pending migration and exact legacy objects before any DDL is applied.
+
+## Maintenance Center Job State
+
+### `maintenance_jobs`
+
+`maintenance_jobs` stores the bounded durable state for the browser-driven Admin Maintenance Center. It intentionally uses one job row with bounded plan/state JSON instead of a high-cardinality per-step ledger.
+
+Important columns:
+
+- `actor_id`: administrator that owns the review/execution surface.
+- `status`: explicit state-machine value such as `analyzing`, `ready`, `running`, `paused`, `completed`, `failed`, or `cancelled`.
+- `phase`: current analysis/execution task identifier.
+- `plan_json`, `plan_hash`: immutable reviewed plan and its SHA-256 binding.
+- `state_json`: bounded task checkpoints, activity, warnings, execution metrics, and final verification report.
+- `app_version`, `schema_revision`, `registry_revision`: stale-plan protection inputs.
+- `progress_done`, `progress_total`, `progress_percent`: server-authoritative weighted progress.
+- `cancel_requested`: cooperative cancellation flag checked before the next bounded operation.
+- `lock_key`: nullable durable central mutation claim. The unique index permits many historical rows with `NULL` while allowing at most one active `central` owner.
+- `error_category`, `error_message`: bounded operator-safe failure evidence without raw SQL, credentials, paths, or traces.
+
+The application acquires a short-lived MySQL advisory lock only while advancing one specific job request. That lock is not the durable ownership mechanism. Running and paused jobs retain the unique `central` claim across browser reloads and disconnected requests. Automatic site maintenance checks that claim before mutation and yields when it is present.
+
+Normal Maintenance Center retention removes old terminal rows in bounded batches. The table is registered as known Maintenance/system state in database-maintenance policy: generic logical cleanup does not infer ownership, while manual/central physical maintenance still passes through the ordinary protected-table eligibility checks.
 
 ## Data Integrity Rules
 

@@ -127,7 +127,7 @@ function view_render_admin_dashboard_overview_panel(array $model): void
     view_render_admin_dashboard_manage_galleries_card();
     view_render_admin_dashboard_upload_card();
     view_render_admin_dashboard_discover_card();
-    view_render_admin_dashboard_open_maintenance_card();
+    view_render_admin_dashboard_open_maintenance_card($model);
     echo '</div></section>';
     view_render_admin_design_spec_panel();
 }
@@ -234,9 +234,29 @@ function view_render_admin_dashboard_discover_card(): void
 /**
  * Render the overview card that points to grouped maintenance tools.
  */
-function view_render_admin_dashboard_open_maintenance_card(): void
+function view_render_admin_dashboard_open_maintenance_card(array $model): void
 {
-    echo '<article class="admin-action-card"><strong>' . e(t('admin.dashboard.open_maintenance_title', 'Maintenance tools')) . '</strong><span>' . e(t('admin.dashboard.open_maintenance_hint', 'Open grouped settings, cache tools, navdata, logs, updates, and diagnostics.')) . '</span><div class="nav"><a class="button secondary" href="' . e(url_for('admin') . '#admin-tab-maintenance') . '">' . e(t('admin.dashboard.open_maintenance', 'Open maintenance')) . '</a></div></article>';
+    $status = is_array($model['maintenance_center_status'] ?? null) ? $model['maintenance_center_status'] : [];
+    $available = !empty($status['available']);
+    $resumable = !empty($status['resumable']);
+    $active = !empty($status['active']);
+    $jobStatus = (string) ($status['active_status'] ?? '');
+    $percent = max(0.0, min(100.0, (float) ($status['active_progress_percent'] ?? 0)));
+    $lastCompleted = trim((string) ($status['last_completed_at'] ?? ''));
+    $actionLabel = $resumable
+        ? t('admin.maintenance_center.resume', 'Resume maintenance')
+        : ($active ? t('admin.maintenance_center.view_running', 'View running maintenance') : t('admin.maintenance_center.analyze', 'Analyze & optimize'));
+    echo '<article class="admin-action-card admin-maintenance-center-card"><strong>' . e(t('admin.maintenance_center.title', 'Maintenance Center')) . '</strong>';
+    if (!$available) {
+        echo '<span>' . e(t('admin.maintenance_center.dashboard_schema_missing', 'Database migration required before central maintenance can run.')) . '</span>';
+    } elseif ($resumable || $active) {
+        echo '<span>' . e(t('admin.maintenance_center.dashboard_active', 'Persisted job:')) . ' ' . e($jobStatus !== '' ? $jobStatus : t('admin.common.unknown', 'Unknown')) . ' · ' . e(number_format($percent, 1)) . '%</span>';
+    } elseif ($lastCompleted !== '') {
+        echo '<span>' . e(t('admin.maintenance_center.last_completed', 'Last completed central maintenance:')) . ' ' . e($lastCompleted) . '</span>';
+    } else {
+        echo '<span>' . e(t('admin.maintenance_center.dashboard_idle', 'Analyze the installation, review the plan, then run bounded resumable maintenance.')) . '</span>';
+    }
+    echo '<div class="nav"><a class="button secondary" href="' . e(url_for('admin_maintenance_center')) . '">' . e($actionLabel) . '</a><a class="button secondary" href="' . e(url_for('admin') . '#admin-tab-maintenance') . '">' . e(t('admin.dashboard.open_maintenance', 'Open maintenance')) . '</a></div></article>';
 }
 
 /**

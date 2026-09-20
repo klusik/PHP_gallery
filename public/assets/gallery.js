@@ -75,6 +75,7 @@ import { setupAdminGalleryTitleCompletion } from './gallery-modules/admin-galler
 import { setupAdminDuplicatePhotoDetector } from './gallery-modules/admin-duplicate-photo-detector.js?v=20260902-mutation-stage3-v2';
 import { setupAdminStorageStatistics } from './gallery-modules/admin-storage-statistics.js?v=20260608-storage-statistics-v1';
 import { setupAdminGalleryReport } from './gallery-modules/admin-gallery-report.js?v=20260920-admin-gallery-report-policy-v3';
+import { setupAdminMaintenanceCenter } from './gallery-modules/admin-maintenance-center.js?v=20260920-maintenance-center-v1';
 import { setupAdminGalleryBenchmark } from './gallery-modules/admin-gallery-benchmark.js?v=20260820-benchmark-diagnostics-v4.2';
 import { setupAdminSearchDiagnostics } from './gallery-modules/admin-search-diagnostics.js?v=20260913-search-diagnostics-v1';
 import { setupAdminTestRun } from './gallery-modules/admin-test-run.js?v=20260821-admin-test-run-v1.1.3';
@@ -151,6 +152,7 @@ function bootGalleryBrowserFeatures() {
     setupAdminDuplicatePhotoDetector();
     setupAdminStorageStatistics();
     setupAdminGalleryReport();
+    setupAdminMaintenanceCenter();
     setupAdminGalleryBenchmark();
     setupAdminSearchDiagnostics();
     setupAdminTestRun();

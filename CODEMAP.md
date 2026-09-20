@@ -391,6 +391,26 @@ The Gallery tags Theme subsection is rendered by app/controllers/admin_theme.php
 | Archive protection | `data/admin-log-archives/.htaccess` |
 | Table | `admin_logs` |
 
+## Maintenance Center
+
+| Task | Files |
+| --- | --- |
+| Persisted maintenance jobs and central mutation claim | `app/models/maintenance_center.php`, `database/migrations/202609200004_maintenance_center.php` |
+| Task registry and dependency/state-machine policy | `app/services/maintenance_center/registry.php` |
+| Read-only plan analysis and stale-plan revision capture | `app/services/maintenance_center/analysis.php` |
+| Bounded execution, resume/cancel, one-table physical DB steps, verification/reporting | `app/services/maintenance_center/execution.php` |
+| Admin/dashboard status view-models and bounded lifecycle logging | `app/services/maintenance_center/status.php` |
+| Admin HTTP/CSRF/JSON endpoints | `app/controllers/admin_maintenance_center.php` |
+| Dedicated Admin page | `app/views/admin_maintenance_center.php` |
+| Dashboard entry | `app/controllers/admin_dashboard.php`, `app/views/admin_dashboard_sections.php` |
+| Admin navigation | `app/views/admin_chrome.php` |
+| Browser step orchestration and progress | `public/assets/gallery-modules/admin-maintenance-center.js` |
+| Maintenance Center styling | `public/assets/styles/admin-maintenance-center.css` |
+| Existing subsystem adapters | `app/services/telemetry_rollup.php`, `app/services/admin_log_archives.php`, `app/services/site_maintenance.php`, `app/services/database_maintenance.php` |
+| Focused source/pure-policy regression | `tests/maintenance_center_test.php` |
+
+The Maintenance Center is core Admin functionality. Existing optional capabilities are respected at analysis and execution time rather than being re-enabled by the orchestrator. Specialized maintenance pages remain available for diagnostics and targeted operations.
+
 ## Updates and GitHub Integration
 
 | Task | Files | Notes |
