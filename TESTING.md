@@ -150,6 +150,23 @@ were never split, including JavaScript paths, so a shared source helper used for
 mixed file types can route every read through them. The current split modules are
 listed under "Split Modules" in `ARCHITECTURE.md`.
 
+## Maintenance Center Regression and Manual Verification
+
+`tests/maintenance_center_test.php` is the focused no-database contract for the central Maintenance Center. The central PHP regression suite executes it automatically. It covers registry keys/dependencies, deterministic pipeline order, state-machine transitions, optional deep-media selection, weighted monotonic progress, persistence/lock schema, read-only Analyze boundaries, stale-plan revision inputs, one-table-per-step ANALYZE/OPTIMIZE wiring, current eligibility rechecks, cooperative cancellation evidence, automatic site-maintenance lock precedence, POST/CSRF/Admin mutation-envelope contracts, route wiring, browser continuation without reload, Dashboard/navigation integration, and Maintenance Center translation-key parity across English, Czech, German, and Swedish.
+
+A real MySQL/MariaDB physical rebuild is environment-dependent and is not proven by the source-level fixture. On a disposable migrated installation, manually verify:
+
+1. Open **Maintenance > Maintenance Center**, start Analyze, and confirm the UI explicitly states that analysis is read-only. Reload during analysis and confirm the same job continues from its persisted task index.
+2. Review the ready plan. Confirm deep thumbnail verification is not selected by default and large/protected/unknown database tables are not silently scheduled. Change an application/schema/registry revision on a disposable instance and confirm an old ready plan is rejected as stale.
+3. Start maintenance, reload during normal cleanup, close/reopen the Admin page, and confirm progress resumes without restarting completed tasks. Open a second tab and confirm it cannot advance the same job concurrently or start a conflicting central mutation job.
+4. Trigger ordinary automatic `site_maintenance` while the central job owns its mutation claim and confirm the automatic run yields before telemetry or other mutations. Public read-only gallery traffic should remain available.
+5. Request cancellation during bounded cleanup and confirm it takes effect before the next operation without claiming rollback. If cancelling while an `OPTIMIZE TABLE` call is already running, confirm the current atomic statement returns first and cancellation applies before the following table.
+6. Force a browser/network interruption immediately after a physical table request. Confirm persisted `atomic_inflight` evidence prevents automatic replay of that same table on the next request and records the outcome as client-visible unknown instead.
+7. Complete a run and verify the report separates logical rows removed, files removed, tables analyzed, tables optimized, skips/warnings/errors, and physical DB before/after bytes only when inventory data actually supports the claim.
+8. Verify the Admin Dashboard card shows idle, resumable/running, and last-completed states correctly, including a central job owned by another administrator.
+
+Final automated handoff still uses exactly one `php scripts/audit.php --profile=full`; use the focused test directly only while developing it or diagnosing a central-audit failure.
+
 ## Test Layers
 
 ### 1. Syntax Checks

@@ -1693,6 +1693,32 @@ public/assets/usage.js
 
 Telemetry tables store sessions, events, hourly rollups, daily rollups, database query metrics and maintenance job runs. Privacy helpers bucket or hash sensitive values.
 
+## Maintenance Center Orchestration
+
+The Admin Maintenance Center is the central browser-driven orchestrator above the existing specialized maintenance owners. It deliberately does not replace Telemetry, Trash, Logs, Database Maintenance, or thumbnail diagnostics. The main module is split to keep policy and workflow readable:
+
+```text
+app/models/maintenance_center.php
+app/services/maintenance_center.php
+app/services/maintenance_center/registry.php
+app/services/maintenance_center/analysis.php
+app/services/maintenance_center/execution.php
+app/services/maintenance_center/status.php
+app/controllers/admin_maintenance_center.php
+app/views/admin_maintenance_center.php
+public/assets/gallery-modules/admin-maintenance-center.js
+public/assets/styles/admin-maintenance-center.css
+database/migrations/202609200004_maintenance_center.php
+```
+
+The lifecycle is persisted as `analyzing -> ready -> running <-> paused -> completed|failed|cancelled`. Analysis writes only its own job checkpoint while inspecting the installation read-only. A finalized plan binds the application version, applied migration revision, and Maintenance Center registry revision. The browser may review and change selectable plan options, but execution authorization and dependency expansion are recalculated from the server registry.
+
+`maintenance_jobs.lock_key` is a nullable unique durable mutation claim. Only a running or paused central job owns `lock_key=central`; analyzed plans do not block ordinary maintenance. A short-lived MySQL advisory lock serializes individual browser steps for the same job, which prevents two tabs from advancing one checkpoint concurrently. Automatic `site_maintenance` checks the durable claim before its first mutation slice and yields while the central job owns it. Existing subsystem locks remain authoritative inside their own owners.
+
+Execution is bounded and checkpointed. Telemetry follows its existing `has_more` contract, Trash uses bounded purge/reconciliation, thumbnail orphan metadata is deleted in bounded batches, logical database cleanup delegates to its resumable owner, and physical database maintenance executes at most one server-selected table per HTTP request. Before an indivisible `ANALYZE TABLE` or `OPTIMIZE TABLE`, the table cursor and an `atomic_inflight` marker are persisted. If the browser response is lost after the statement commits, the same table is not blindly replayed on retry. Large or currently ineligible tables are skipped after an immediate server-side inventory/policy recheck.
+
+Cancellation is cooperative and takes effect between bounded operations. It does not roll back already committed cleanup and cannot interrupt a currently executing MySQL table operation. Completion requires the registry `verify` task to finish and stores a bounded before/after report in the job state. Terminal job history is retained for operator diagnostics and removed in bounded batches after the configured central retention period.
+
 ## Logging and Diagnostics
 
 Admin logs are stored in `admin_logs` and handled by:

@@ -45,10 +45,13 @@ use function Gallery\Core\absolute_public_url;
 use function Gallery\Core\now_sql;
 use function Gallery\Core\pending_migrations_exist;
 use function Gallery\Core\url_for;
+use function Gallery\Models\site_maintenance_model_count_thumbnail_variants_missing_galleries;
+use function Gallery\Models\site_maintenance_model_count_thumbnail_variants_missing_images;
 use function Gallery\Models\site_maintenance_model_delete_thumbnail_variants_missing_galleries;
 use function Gallery\Models\site_maintenance_model_delete_thumbnail_variants_missing_images;
 use function Gallery\Models\site_maintenance_model_source_images_after_id;
 use function Gallery\Models\site_maintenance_model_total_source_image_count;
+use function Gallery\Models\maintenance_center_model_mutation_owner;
 
 const SITE_MAINTENANCE_STATE_SETTING = 'site_maintenance_run_state';
 const SITE_MAINTENANCE_LAST_RESULT_SETTING = 'site_maintenance_last_result';
@@ -1007,6 +1010,21 @@ function site_maintenance_run(array $options = []): array
 
     @set_time_limit(max(30, $timeBudgetSeconds + SITE_MAINTENANCE_RUNTIME_RESERVE_SECONDS));
 
+    // A durable Maintenance Center job owns the installation-wide mutation claim
+    // across browser-driven requests. Scheduled/manual legacy maintenance must
+    // yield before telemetry or any other mutation slice begins.
+    $centralOwner = maintenance_center_model_mutation_owner();
+    if (is_array($centralOwner)) {
+        return [
+            'ok' => true,
+            'busy' => true,
+            'skipped' => true,
+            'reason' => 'central_maintenance_active',
+            'central_job_id' => max(0, (int) ($centralOwner['id'] ?? 0)),
+            'central_phase' => (string) ($centralOwner['phase'] ?? ''),
+        ];
+    }
+
     // Retention has its own lock, throttle, checkpoint and failure evidence.
     // Run it even when thumbnail work is busy, failed or outside its time window.
     $telemetryStarted = microtime(true);
@@ -1655,27 +1673,29 @@ function site_maintenance_process_cleanup_step(array &$state, float $deadline): 
 /**
  * Remove thumbnail metadata rows that no longer have matching image or gallery rows.
  *
+ * @param ?int $limitPerRelation Optional per-relation deletion bound for browser-driven maintenance slices.
  * @return int Integer result for the caller.
  */
-function site_maintenance_delete_orphan_thumbnail_metadata(): int
+function site_maintenance_delete_orphan_thumbnail_metadata(?int $limitPerRelation = null): int
 {
-    if (!function_exists('Gallery\\Services\\db_table_exists') || !db_table_exists('image_thumbnail_variants')) {
+    if (!function_exists('Gallery\Services\db_table_exists') || !db_table_exists('image_thumbnail_variants')) {
         return 0;
     }
 
+    $limitPerRelation = $limitPerRelation === null ? null : max(1, $limitPerRelation);
     $deleted = 0;
     try {
-        $deleted += site_maintenance_model_delete_thumbnail_variants_missing_images();
+        $deleted += site_maintenance_model_delete_thumbnail_variants_missing_images($limitPerRelation);
     } catch (Throwable) {
         return $deleted;
     }
 
-    if (!function_exists('Gallery\\Services\\db_column_exists') || !db_column_exists('image_thumbnail_variants', 'gallery_id')) {
+    if (!function_exists('Gallery\Services\db_column_exists') || !db_column_exists('image_thumbnail_variants', 'gallery_id')) {
         return $deleted;
     }
 
     try {
-        $deleted += site_maintenance_model_delete_thumbnail_variants_missing_galleries();
+        $deleted += site_maintenance_model_delete_thumbnail_variants_missing_galleries($limitPerRelation);
     } catch (Throwable) {
         return $deleted;
     }
@@ -1791,4 +1811,32 @@ function site_maintenance_log_event(string $level, string $eventKey, string $mes
     ], $options);
 
     admin_log_event($level, $eventKey, $message, $context, $options);
+}
+
+
+/**
+ * Count safe orphan thumbnail metadata without deleting rows.
+ *
+ * @return array{available:bool,missing_images:int,missing_galleries:int,total:int}
+ */
+function site_maintenance_thumbnail_orphan_analysis(): array
+{
+    if (!function_exists('Gallery\\Services\\db_table_exists') || !db_table_exists('image_thumbnail_variants')) {
+        return ['available' => false, 'missing_images' => 0, 'missing_galleries' => 0, 'total' => 0];
+    }
+    try {
+        $missingImages = site_maintenance_model_count_thumbnail_variants_missing_images();
+        $missingGalleries = 0;
+        if (function_exists('Gallery\\Services\\db_column_exists') && db_column_exists('image_thumbnail_variants', 'gallery_id')) {
+            $missingGalleries = site_maintenance_model_count_thumbnail_variants_missing_galleries();
+        }
+        return [
+            'available' => true,
+            'missing_images' => $missingImages,
+            'missing_galleries' => $missingGalleries,
+            'total' => $missingImages + $missingGalleries,
+        ];
+    } catch (Throwable) {
+        return ['available' => false, 'missing_images' => 0, 'missing_galleries' => 0, 'total' => 0];
+    }
 }

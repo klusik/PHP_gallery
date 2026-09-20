@@ -108,3 +108,53 @@ function telemetry_maintenance_model_finish_job(int $jobId, string $status, stri
     $stmt = db()->prepare('UPDATE telemetry_job_runs SET status = ?, finished_at = ?, duration_ms = ?, item_count = ?, error_kind = ? WHERE id = ?');
     $stmt->execute([$status, $now, min(4294967295, max(0, $durationMs)), min(4294967295, max(0, $itemCount)), $errorKind, $jobId]);
 }
+
+
+/**
+ * Count retention-eligible telemetry rows without mutating telemetry state.
+ *
+ * Cutoffs are semantic timestamps prepared by the owning telemetry service.
+ * The table/column pairs remain fixed here so callers cannot inject identifiers.
+ *
+ * @param array<string,string> $cutoffs SQL/date exclusive cutoffs by telemetry storage kind.
+ * @param ?string $hourlyBefore Optional rollup checkpoint bounding hourly deletion eligibility.
+ * @return array<string,int> Eligible rows per retention-owned telemetry table.
+ */
+function telemetry_maintenance_model_retention_counts(array $cutoffs, ?string $hourlyBefore): array
+{
+    $queries = [
+        'telemetry_events' => ['occurred_at', (string) ($cutoffs['telemetry_events'] ?? '')],
+        'telemetry_sessions' => ['last_seen_at', (string) ($cutoffs['telemetry_sessions'] ?? '')],
+        'telemetry_daily_metrics' => ['bucket_date', (string) ($cutoffs['telemetry_daily_metrics'] ?? '')],
+        'telemetry_db_query_metrics' => ['bucket_start', (string) ($cutoffs['telemetry_db_query_metrics'] ?? '')],
+        'telemetry_job_runs' => ['started_at', (string) ($cutoffs['telemetry_job_runs'] ?? '')],
+    ];
+    if ($hourlyBefore !== null && $hourlyBefore !== '') {
+        $queries['telemetry_hourly_metrics'] = ['bucket_start', (string) ($cutoffs['telemetry_hourly_metrics'] ?? '')];
+    }
+
+    $result = [];
+    foreach ($queries as $table => [$column, $cutoff]) {
+        if ($cutoff === '') {
+            $result[$table] = 0;
+            continue;
+        }
+        if ($table === 'telemetry_hourly_metrics') {
+            $stmt = db()->prepare('SELECT COUNT(*) FROM telemetry_hourly_metrics WHERE bucket_start < ? AND bucket_start < ?');
+            $stmt->execute([$cutoff, $hourlyBefore]);
+        } else {
+            $sql = match ($table) {
+                'telemetry_events' => 'SELECT COUNT(*) FROM telemetry_events WHERE occurred_at < ?',
+                'telemetry_sessions' => 'SELECT COUNT(*) FROM telemetry_sessions WHERE last_seen_at < ?',
+                'telemetry_daily_metrics' => 'SELECT COUNT(*) FROM telemetry_daily_metrics WHERE bucket_date < ?',
+                'telemetry_db_query_metrics' => 'SELECT COUNT(*) FROM telemetry_db_query_metrics WHERE bucket_start < ?',
+                'telemetry_job_runs' => 'SELECT COUNT(*) FROM telemetry_job_runs WHERE started_at < ?',
+                default => throw new RuntimeException('Unsupported telemetry retention counter.'),
+            };
+            $stmt = db()->prepare($sql);
+            $stmt->execute([$cutoff]);
+        }
+        $result[$table] = max(0, (int) $stmt->fetchColumn());
+    }
+    return $result;
+}

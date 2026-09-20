@@ -45,6 +45,7 @@ use function Gallery\Core\request_data;
 use function Gallery\Models\admin_log_archive_model_day_snapshot;
 use function Gallery\Models\admin_log_archive_model_delete_verified_batch;
 use function Gallery\Models\admin_log_archive_model_oldest_eligible_created_at;
+use function Gallery\Models\admin_log_archive_model_eligible_summary;
 use function Gallery\Models\admin_log_archive_model_remaining_rows;
 use function Gallery\Models\admin_log_archive_model_row_batch;
 use DateTimeImmutable;
@@ -1419,5 +1420,43 @@ function admin_log_archive_status(): array
         'last_result' => is_array($state['last_result'] ?? null) ? $state['last_result'] : [],
         'inventory' => admin_log_archive_inventory(),
         'zip_available' => class_exists(ZipArchive::class),
+    ];
+}
+
+
+/**
+ * Return a concrete read-only summary of Admin log live-retention backlog.
+ *
+ * Archive ZIP creation and row deletion remain exclusively in
+ * admin_log_archive_maintenance_run().
+ *
+ * @return array<string,mixed> Eligible row/day counts and configured policy.
+ */
+function admin_log_archive_maintenance_analysis(): array
+{
+    $retentionDays = admin_log_archive_retention_days();
+    if ($retentionDays === 0) {
+        return ['available' => true, 'enabled' => false, 'retention_days' => 0, 'eligible_rows' => 0, 'eligible_days' => 0, 'oldest_date' => null, 'has_work' => false];
+    }
+    if (!admin_log_schema_ready()) {
+        return ['available' => false, 'enabled' => true, 'retention_days' => $retentionDays, 'eligible_rows' => 0, 'eligible_days' => 0, 'oldest_date' => null, 'has_work' => false, 'reason' => 'schema_unavailable'];
+    }
+    $eligibleBefore = admin_log_archive_eligible_before($retentionDays);
+    if ($eligibleBefore === '') {
+        return ['available' => true, 'enabled' => false, 'retention_days' => $retentionDays, 'eligible_rows' => 0, 'eligible_days' => 0, 'oldest_date' => null, 'has_work' => false];
+    }
+    $summary = \Gallery\Models\admin_log_archive_model_eligible_summary($eligibleBefore);
+    $oldest = isset($summary['oldest_created_at']) && is_string($summary['oldest_created_at'])
+        ? substr($summary['oldest_created_at'], 0, 10)
+        : null;
+    return [
+        'available' => true,
+        'enabled' => true,
+        'retention_days' => $retentionDays,
+        'eligible_before' => $eligibleBefore,
+        'eligible_rows' => max(0, (int) ($summary['rows'] ?? 0)),
+        'eligible_days' => max(0, (int) ($summary['days'] ?? 0)),
+        'oldest_date' => $oldest,
+        'has_work' => (int) ($summary['rows'] ?? 0) > 0,
     ];
 }

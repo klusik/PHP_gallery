@@ -52,6 +52,8 @@ require_once __DIR__ . '/models/database_helpers.php';
 require_once __DIR__ . '/models/database_maintenance.php';
 require_once __DIR__ . '/models/schema_inspection.php';
 require_once __DIR__ . '/models/site_maintenance.php';
+// Load persisted Maintenance Center job state before service-layer orchestration.
+require_once __DIR__ . '/models/maintenance_center.php';
 require_once __DIR__ . '/models/galleries.php';
 require_once __DIR__ . '/models/gallery_picker_search.php';
 require_once __DIR__ . '/models/images.php';

@@ -1,0 +1,283 @@
+/**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ *
+ * File: public/assets/styles/admin-maintenance-center.css
+ * Module Type: Stylesheet
+ *
+ * Purpose:
+ *   Provides native Admin presentation for the central Maintenance Center workflow.
+ *
+ * Responsibilities:
+ *   - Present weighted progress, review task groups, activity, and result metrics
+ *   - Keep responsive Maintenance Center surfaces aligned with the existing Admin visual language
+ *
+ * Author:
+ *   Rudolf Klusal
+ *
+ * Contact:
+ *   https://github.com/klusik
+ *
+ * License:
+ *   MIT License (see LICENSE file in repository)
+ *
+ * Notes:
+ *   - Presentation only; maintenance state and policy remain server-owned.
+ *
+ * Last Updated:
+ *   2026-09-20
+ */
+
+.admin-maintenance-center-hero,
+.maintenance-center-status-heading,
+.maintenance-center-section-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.admin-maintenance-center {
+    display: grid;
+    gap: 1rem;
+}
+
+.maintenance-center-status-card {
+    overflow: hidden;
+}
+
+.maintenance-center-status-badge {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid var(--border-color, rgba(127, 127, 127, .32));
+    border-radius: 999px;
+    padding: .35rem .7rem;
+    font-size: .78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+
+.maintenance-center-status-badge[data-status="running"],
+.maintenance-center-status-badge[data-status="analyzing"] {
+    border-color: var(--accent, currentColor);
+}
+
+.maintenance-center-status-badge[data-status="failed"] {
+    border-color: var(--danger, #b42318);
+}
+
+.maintenance-center-progress {
+    height: .75rem;
+    margin-top: 1rem;
+    overflow: hidden;
+    border-radius: 999px;
+    background: color-mix(in srgb, currentColor 10%, transparent);
+}
+
+.maintenance-center-progress > span {
+    display: block;
+    width: 0;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--accent, currentColor);
+    transition: width .18s ease;
+}
+
+.maintenance-center-progress-meta,
+.maintenance-center-current {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem 1.25rem;
+    margin-top: .65rem;
+}
+
+.maintenance-center-progress-meta {
+    justify-content: space-between;
+}
+
+.maintenance-center-current {
+    padding: .75rem 0;
+    border-top: 1px solid var(--border-color, rgba(127, 127, 127, .2));
+    border-bottom: 1px solid var(--border-color, rgba(127, 127, 127, .2));
+}
+
+.maintenance-center-actions {
+    margin-top: .9rem;
+}
+
+.maintenance-center-cancel-note {
+    margin: .7rem 0 0;
+}
+
+.maintenance-center-plan-totals {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: .6rem;
+}
+
+.maintenance-center-plan-totals > span,
+.maintenance-center-task-facts > span {
+    display: grid;
+    gap: .05rem;
+    min-width: 7rem;
+    padding: .45rem .6rem;
+    border: 1px solid var(--border-color, rgba(127, 127, 127, .22));
+    border-radius: .6rem;
+}
+
+.maintenance-center-plan-totals small,
+.maintenance-center-task-facts small {
+    opacity: .72;
+}
+
+.maintenance-center-task-groups {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 26rem), 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.maintenance-center-task-group {
+    display: grid;
+    align-content: start;
+    gap: .55rem;
+    padding: .85rem;
+    border: 1px solid var(--border-color, rgba(127, 127, 127, .22));
+    border-radius: .85rem;
+}
+
+.maintenance-center-task-group h3 {
+    margin: 0 0 .2rem;
+}
+
+.maintenance-center-task {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: start;
+    gap: .7rem;
+    padding: .75rem;
+    border-radius: .7rem;
+    background: color-mix(in srgb, currentColor 4%, transparent);
+}
+
+.maintenance-center-task.is-unavailable {
+    opacity: .58;
+}
+
+.maintenance-center-task > input {
+    margin-top: .25rem;
+}
+
+.maintenance-center-task-body,
+.maintenance-center-task-facts,
+.maintenance-center-task-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem;
+}
+
+.maintenance-center-task-body {
+    display: grid;
+}
+
+.maintenance-center-task-title {
+    font-weight: 700;
+}
+
+.maintenance-center-task-badges small {
+    padding: .15rem .45rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, currentColor 9%, transparent);
+}
+
+.maintenance-center-task-facts > span {
+    min-width: 6.2rem;
+    padding: .35rem .45rem;
+}
+
+.maintenance-center-full-optimize {
+    margin-top: 1rem;
+}
+
+.maintenance-center-lower-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(18rem, .8fr);
+    gap: 1rem;
+}
+
+.maintenance-center-activity {
+    display: grid;
+    gap: .4rem;
+    max-height: 24rem;
+    margin: 0;
+    padding: 0;
+    overflow: auto;
+    list-style: none;
+}
+
+.maintenance-center-activity li {
+    display: grid;
+    grid-template-columns: 5.4rem minmax(0, 1fr);
+    gap: .6rem;
+    padding: .42rem .5rem;
+    border-bottom: 1px solid var(--border-color, rgba(127, 127, 127, .16));
+}
+
+.maintenance-center-activity time {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    opacity: .65;
+}
+
+.maintenance-center-activity .is-warning {
+    font-weight: 600;
+}
+
+.maintenance-center-history-note {
+    margin-top: 1rem;
+}
+
+.admin-maintenance-center-card span {
+    min-height: 2.5em;
+}
+
+
+.maintenance-center-report-breakdown {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+    gap: .8rem;
+    margin-top: 1rem;
+}
+
+.maintenance-center-report-breakdown section {
+    padding: .75rem;
+    border: 1px solid var(--border-color, rgba(127, 127, 127, .2));
+    border-radius: .7rem;
+}
+
+.maintenance-center-report-breakdown h3 {
+    margin: 0 0 .5rem;
+    font-size: .95rem;
+}
+
+.maintenance-center-report-breakdown ul {
+    margin: 0;
+    padding-left: 1.2rem;
+}
+
+@media (max-width: 820px) {
+    .admin-maintenance-center-hero,
+    .maintenance-center-status-heading,
+    .maintenance-center-section-heading {
+        display: grid;
+    }
+
+    .maintenance-center-plan-totals {
+        justify-content: flex-start;
+    }
+
+    .maintenance-center-lower-grid {
+        grid-template-columns: 1fr;
+    }
+}

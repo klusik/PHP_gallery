@@ -44,6 +44,7 @@ use function Gallery\Models\telemetry_maintenance_model_release_lock;
 use function Gallery\Models\telemetry_maintenance_model_next_rollup_day;
 use function Gallery\Models\telemetry_maintenance_model_start_job;
 use function Gallery\Models\telemetry_maintenance_model_finish_job;
+use function Gallery\Models\telemetry_maintenance_model_retention_counts;
 
 /**
  * Persist the first hourly date not yet archived as a complete stable day.
@@ -356,4 +357,67 @@ function telemetry_maintenance_retention_days(string $key, int $default, int $mi
 {
     $stored = telemetry_model_setting($key);
     return max($minimum, min($maximum, $stored === false ? $default : (int) $stored));
+}
+
+
+/**
+ * Build a read-only telemetry maintenance plan summary.
+ *
+ * This helper deliberately performs no rollup, checkpoint write, throttle write,
+ * retention delete, or maintenance-job write. It exists for Maintenance Center
+ * analysis and other diagnostics that need concrete backlog counts.
+ *
+ * @return array<string,mixed> Read-only telemetry backlog summary.
+ */
+function telemetry_maintenance_analysis(): array
+{
+    if (function_exists(__NAMESPACE__ . '\\feature_capability_effective_enabled') && !feature_capability_effective_enabled('telemetry')) {
+        return ['available' => false, 'reason' => 'disabled', 'eligible_rows' => 0, 'rollup_days' => 0, 'has_work' => false];
+    }
+    $schemaStatus = presentation_telemetry_schema_status();
+    if (!schema_inspection_is_available($schemaStatus)) {
+        return ['available' => false, 'reason' => schema_inspection_is_missing($schemaStatus) ? 'schema_missing' : 'schema_unknown', 'eligible_rows' => 0, 'rollup_days' => 0, 'has_work' => false];
+    }
+
+    $now = time();
+    $days = [
+        'telemetry_events' => telemetry_maintenance_retention_days('telemetry_raw_retention_days', 7, 1, 90),
+        'telemetry_sessions' => telemetry_maintenance_retention_days('telemetry_session_retention_days', 30, 1, 365),
+        'telemetry_daily_metrics' => telemetry_maintenance_retention_days('telemetry_daily_retention_days', 730, 30, 3650),
+        'telemetry_db_query_metrics' => telemetry_maintenance_retention_days('telemetry_hourly_retention_days', 90, 7, 730),
+        'telemetry_job_runs' => 180,
+        'telemetry_hourly_metrics' => telemetry_maintenance_retention_days('telemetry_hourly_retention_days', 90, 7, 730),
+    ];
+    $cutoffs = [];
+    foreach ($days as $table => $retentionDays) {
+        $timestamp = $now - max(1, (int) $retentionDays) * 86400;
+        $cutoffs[$table] = $table === 'telemetry_daily_metrics'
+            ? date('Y-m-d', $timestamp)
+            : date('Y-m-d H:i:s', $timestamp);
+    }
+
+    $checkpoint = telemetry_rollup_checkpoint();
+    $closedBefore = date('Y-m-d', $now - 86400);
+    $nextDay = telemetry_maintenance_model_next_rollup_day($checkpoint, $closedBefore);
+    $rollupDays = 0;
+    if ($nextDay !== null && $nextDay < $closedBefore) {
+        $start = new \DateTimeImmutable($nextDay);
+        $end = new \DateTimeImmutable($closedBefore);
+        $rollupDays = max(1, (int) $start->diff($end)->days);
+    }
+    $counts = telemetry_maintenance_model_retention_counts($cutoffs, $checkpoint);
+    $eligibleRows = array_sum($counts);
+
+    return [
+        'available' => true,
+        'reason' => '',
+        'retention_days' => $days,
+        'eligible_by_table' => $counts,
+        'eligible_rows' => $eligibleRows,
+        'rollup_checkpoint' => $checkpoint,
+        'rollup_closed_before' => $closedBefore,
+        'next_rollup_day' => $nextDay,
+        'rollup_days' => $rollupDays,
+        'has_work' => $eligibleRows > 0 || $nextDay !== null,
+    ];
 }

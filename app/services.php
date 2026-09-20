@@ -229,6 +229,8 @@ require_once __DIR__ . '/services/flight_maps.php';
 require_once __DIR__ . '/services/exif.php';
 require_once __DIR__ . '/services/admin_gallery_report.php';
 require_once __DIR__ . '/services/gallery_migration.php';
+// Load central browser-driven maintenance after all subsystem maintenance owners.
+require_once __DIR__ . '/services/maintenance_center.php';
 
 // Load the centralized Admin Settings ownership registry after all setting providers.
 require_once __DIR__ . '/services/admin_settings_registry.php';

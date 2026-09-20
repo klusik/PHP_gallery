@@ -105,3 +105,24 @@ function admin_log_archive_model_delete_verified_batch(array $manifest, int $lim
     ]);
     return max(0, (int) $stmt->rowCount());
 }
+
+
+/**
+ * Count complete-day Admin log archival backlog before one exclusive boundary.
+ *
+ * @return array{rows:int,days:int,oldest_created_at:?string} Read-only backlog summary.
+ */
+function admin_log_archive_model_eligible_summary(string $eligibleBefore): array
+{
+    $stmt = db()->prepare(
+        'SELECT COUNT(*) AS row_count, COUNT(DISTINCT DATE(created_at)) AS day_count, MIN(created_at) AS oldest_created_at'
+        . ' FROM admin_logs WHERE created_at < ?'
+    );
+    $stmt->execute([$eligibleBefore]);
+    $row = $stmt->fetch();
+    return [
+        'rows' => max(0, (int) ($row['row_count'] ?? 0)),
+        'days' => max(0, (int) ($row['day_count'] ?? 0)),
+        'oldest_created_at' => isset($row['oldest_created_at']) && is_string($row['oldest_created_at']) ? $row['oldest_created_at'] : null,
+    ];
+}

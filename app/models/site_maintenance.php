@@ -54,17 +54,70 @@ function site_maintenance_model_source_images_after_id(int $cursorImageId, int $
 }
 
 /** Delete thumbnail metadata rows whose source image no longer exists. */
-function site_maintenance_model_delete_thumbnail_variants_missing_images(): int
+function site_maintenance_model_delete_thumbnail_variants_missing_images(?int $limit = null): int
 {
-    $stmt = db()->prepare('DELETE v FROM image_thumbnail_variants v LEFT JOIN images i ON i.id = v.image_id WHERE i.id IS NULL');
+    if ($limit === null) {
+        $stmt = db()->prepare('DELETE v FROM image_thumbnail_variants v LEFT JOIN images i ON i.id = v.image_id WHERE i.id IS NULL');
+        $stmt->execute();
+        return $stmt->rowCount();
+    }
+
+    $stmt = db()->prepare(
+        'DELETE FROM image_thumbnail_variants
+         WHERE id IN (
+             SELECT id FROM (
+                 SELECT v.id
+                 FROM image_thumbnail_variants v
+                 LEFT JOIN images i ON i.id = v.image_id
+                 WHERE i.id IS NULL
+                 ORDER BY v.id
+                 LIMIT ?
+             ) orphan_ids
+         )'
+    );
+    $stmt->bindValue(1, max(1, $limit), PDO::PARAM_INT);
     $stmt->execute();
     return $stmt->rowCount();
 }
 
 /** Delete thumbnail metadata rows whose gallery no longer exists. */
-function site_maintenance_model_delete_thumbnail_variants_missing_galleries(): int
+function site_maintenance_model_delete_thumbnail_variants_missing_galleries(?int $limit = null): int
 {
-    $stmt = db()->prepare('DELETE v FROM image_thumbnail_variants v LEFT JOIN galleries g ON g.id = v.gallery_id WHERE g.id IS NULL');
+    if ($limit === null) {
+        $stmt = db()->prepare('DELETE v FROM image_thumbnail_variants v LEFT JOIN galleries g ON g.id = v.gallery_id WHERE g.id IS NULL');
+        $stmt->execute();
+        return $stmt->rowCount();
+    }
+
+    $stmt = db()->prepare(
+        'DELETE FROM image_thumbnail_variants
+         WHERE id IN (
+             SELECT id FROM (
+                 SELECT v.id
+                 FROM image_thumbnail_variants v
+                 LEFT JOIN galleries g ON g.id = v.gallery_id
+                 WHERE g.id IS NULL
+                 ORDER BY v.id
+                 LIMIT ?
+             ) orphan_ids
+         )'
+    );
+    $stmt->bindValue(1, max(1, $limit), PDO::PARAM_INT);
     $stmt->execute();
     return $stmt->rowCount();
+}
+
+
+/** Return thumbnail metadata rows whose source image no longer exists. */
+function site_maintenance_model_count_thumbnail_variants_missing_images(): int
+{
+    $stmt = db()->query('SELECT COUNT(*) FROM image_thumbnail_variants v LEFT JOIN images i ON i.id = v.image_id WHERE i.id IS NULL');
+    return max(0, (int) $stmt->fetchColumn());
+}
+
+/** Return thumbnail metadata rows whose gallery no longer exists. */
+function site_maintenance_model_count_thumbnail_variants_missing_galleries(): int
+{
+    $stmt = db()->query('SELECT COUNT(*) FROM image_thumbnail_variants v LEFT JOIN galleries g ON g.id = v.gallery_id WHERE g.id IS NULL');
+    return max(0, (int) $stmt->fetchColumn());
 }
