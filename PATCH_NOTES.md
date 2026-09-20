@@ -1,5 +1,94 @@
 # Patch notes
 
+## Version 0.106
+
+Version 0.106 introduces the Admin Maintenance Center: a durable, browser-driven workflow that analyzes an installation, presents a reviewable maintenance plan, executes selected work in bounded checkpoints, and verifies the result. It coordinates existing specialist maintenance owners without replacing their safety policies, keeps public gallery traffic available, and is designed to resume cleanly across reloads, disconnected browsers, and shared-hosting request limits.
+
+### Highlights
+
+#### Unified Analyze, Review, Execute, and Verify workflow
+
+- Added **Maintenance > Maintenance Center** as the central entry point for routine application care.
+- Added a read-only Analyze phase that inspects maintenance needs and records only its own resumable job checkpoint.
+- Added a Review phase with server-defined required, optional, and default tasks. Optional deep media verification remains unselected unless an administrator explicitly chooses it.
+- Added bounded Execute and Verify phases with weighted progress, recent activity, warnings, skips, errors, before/after evidence, pause, resume, and cooperative cancellation.
+- Added a dashboard summary for idle, resumable, running, and last-completed maintenance states, including clear ownership when another administrator controls the active job.
+
+#### Durable and replay-safe maintenance jobs
+
+- Persisted every central job so analysis and execution survive page reloads, closed browser tabs, and interrupted requests without restarting completed work.
+- Bound each reviewed plan to the application version, applied migration revision, Maintenance Center registry revision, and SHA-256 plan content. Stale plans are rejected and must be analyzed again.
+- Added a unique durable central mutation claim for running or paused jobs and a short-lived per-job database advisory lock so two browser tabs cannot advance the same checkpoint concurrently.
+- Made automatic Site Maintenance yield before its first mutation slice while a central job owns the mutation claim; read-only public gallery traffic remains available.
+- Added atomic database-operation checkpoints so a lost response after `ANALYZE TABLE` or `OPTIMIZE TABLE` cannot blindly replay the same table.
+
+#### Existing subsystem ownership preserved
+
+- Reused the established telemetry rollup and retention, Admin-log archival, Gallery Trash reconciliation and expiry purge, security/viewer retention, download/cache cleanup, thumbnail-orphan metadata cleanup, logical database cleanup, and physical database-maintenance owners.
+- Kept generic central maintenance from applying migrations, running schema repair, installing updates, deleting archive ZIPs, emptying Gallery Trash indiscriminately, regenerating media, or performing speculative orphan cleanup.
+- Revalidated task availability and database-table eligibility immediately before execution. Protected, unknown, unclassified, oversized, or newly ineligible tables are skipped rather than optimized.
+- Limited physical database maintenance to one server-selected eligible table per browser step; cancellation takes effect between bounded operations and never claims to roll back already committed work.
+
+#### Localized and transparent administration
+
+- Added complete English, Czech, German, and Swedish Maintenance Center interfaces and runtime status messages.
+- Added explicit, bounded outcome categories for rows and files removed, tables analyzed or optimized, skipped work, warnings, errors, and physical storage differences only when before/after inventory supports the claim.
+- Kept logged and browser-visible errors bounded to safe task, state, and operator guidance; raw SQL, database exceptions, credentials, tokens, private paths, and stack traces are not exposed.
+
+### Technical Details
+
+#### Backend and strict MVC ownership
+
+- Added `app/models/maintenance_center.php` for Maintenance Center persistence, job claims, checkpoints, and bounded history queries; SQL remains model-owned.
+- Added `app/services/maintenance_center.php` with focused modules under `app/services/maintenance_center/` for registry policy, read-only analysis, bounded execution, verification, status models, and lifecycle logging.
+- Added `app/controllers/admin_maintenance_center.php` for authenticated Admin routes, POST plus CSRF mutation boundaries, normalized input, canonical Admin mutation envelopes, and no-store JSON responses.
+- Added `app/views/admin_maintenance_center.php` and integrated the prepared view model with Admin navigation and dashboard presentation.
+- Updated existing telemetry, Admin-log archive, site-maintenance, database-maintenance, and thumbnail-metadata owners only where bounded central orchestration required an adapter or checkpoint contract.
+
+#### Database and upgrade behavior
+
+- Added migration `database/migrations/202609200004_maintenance_center.php` and the `maintenance_jobs` table for durable plan/state JSON, plan hashes and revisions, progress, cancellation, bounded failure evidence, history timestamps, and a nullable unique central mutation claim.
+- Kept the migration compatible with the ordinary Gallery migration action. It requires normal table-creation authority but no trigger, stored function, stored procedure, `SUPER` privilege, or global database-server setting.
+- Treated confirmed missing Maintenance Center storage as an upgrade-required state and refused to start a job until migrations are applied. An unknown inspection or persistence state also refuses mutation rather than guessing that execution is safe.
+- Kept feature-disabled specialist subsystems unavailable within the central plan without probing or re-enabling them unnecessarily. Maintenance Center itself is core Admin functionality rather than a second feature toggle.
+- Retained completed, failed, and cancelled job history for 90 days and removed old terminal rows in bounded batches. Running and paused jobs are never removed by history retention.
+
+#### Frontend
+
+- Added `public/assets/gallery-modules/admin-maintenance-center.js` for dynamic Analyze, Review, Execute, Verify, pause, resume, cancel, polling, and persisted reload behavior without full-page navigation.
+- Added `public/assets/styles/admin-maintenance-center.css` for the dedicated plan, progress, activity, warning, report, and responsive layouts.
+- Updated `public/assets/gallery.js` so deployed browsers load the new module with the current cache-busting revision.
+- Preserved the current Admin URL during in-place actions and kept dynamically rendered controls under delegated event handling.
+
+#### Documentation and release integrity
+
+- Updated `ARCHITECTURE.md`, `CODEMAP.md`, `DATABASE.md`, `TESTING.md`, and the administrator manual with the permanent orchestration, schema, safety, recovery, and acceptance contracts.
+- Removed the temporary Maintenance Center implementation record after transferring its durable information into permanent documentation.
+- Refreshed the updater-managed manifest and Version 0.106 release metadata after the final source and documentation edits.
+
+### Tests
+
+#### Automated coverage
+
+- Added `tests/maintenance_center_test.php` for registry keys and dependencies, deterministic task order, state transitions, optional selection, weighted monotonic progress, migration schema, persistence and lock contracts, read-only Analyze boundaries, stale-plan revisions, one-table physical database steps, current eligibility rechecks, cancellation evidence, automatic-maintenance conflict protection, authenticated POST/CSRF routes, canonical JSON mutation envelopes, browser continuation, navigation, dashboard integration, and translation parity.
+- Registered the new PHP and browser-facing source contracts with the central audit and retained strict MVC, declaration documentation, source-header, syntax, runtime-hardening, and Admin mutation checks.
+- Documented disposable MariaDB acceptance for a real `OPTIMIZE TABLE` rebuild and interruption testing; source-level contracts alone do not claim that a hosting engine physically reclaimed storage.
+
+### User Impact
+
+#### For administrators
+
+- Routine maintenance can now be analyzed, reviewed, run, paused, resumed, cancelled, and verified from one Admin page without keeping a single long browser request open.
+- Existing specialist maintenance pages remain available for targeted diagnostics and repair. The central workflow does not silently broaden permissions or turn optional features on.
+- After upgrading, administrators apply the single pending migration through the normal Gallery migration page, then open **Maintenance > Maintenance Center** and run Analyze. No command line, manual SQL, new credential, or database-server configuration is required.
+- A completed report distinguishes confirmed work from skipped, unavailable, interrupted, or uncertain outcomes instead of presenting partial maintenance as complete.
+
+#### For visitors and hosting environments
+
+- Public gallery, media, authentication, download, and presentation behavior is unchanged.
+- Maintenance is divided into bounded browser requests for shared-hosting compatibility. Individual database engine operations can still take time and cannot be interrupted mid-statement, so large or unsafe tables are excluded from ordinary central execution.
+- Existing access controls, schema inspection policy, protected-table rules, subsystem locks, and non-destructive feature-disabled behavior remain authoritative.
+
 ## Version 0.105.1
 
 Version 0.105.1 is a focused telemetry reliability and observability release built on the Version 0.105 administration hardening. It repairs retention scheduling, archival checkpoints, database observations, traffic classification, page-load timing, decoded-cache accounting, and Admin telemetry presentation without changing gallery access rules or requiring a database migration. The release is designed for ordinary shared hosting: maintenance remains bounded and cooperative, failures are explicit, and no raw visitor identifiers or database exception text are exposed.

@@ -45,6 +45,10 @@
 \setlength{\parskip}{0.65em}
 \setcounter{tocdepth}{3}
 \setcounter{secnumdepth}{3}
+\makeatletter
+% Keep two-digit subsection numbers separated from their table-of-contents titles.
+\renewcommand*\l@subsection{\@dottedtocline{2}{1.5em}{4.1em}}
+\makeatother
 \setlist{itemsep=0.3em,topsep=0.45em}
 \renewcommand{\arraystretch}{1.2}
 
@@ -57,7 +61,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.105.1}
+\newcommand{\version}{0.106}
 \newcommand{\manualdate}{20 September 2026}
 
 \hypersetup{
@@ -1681,7 +1685,7 @@ normally reduces repeated metadata queries, but~a~migration can~change the~answe
 after schema-changing statements and~after successful repair callbacks. A~post-migration check then reads the~new database catalog instead of~reusing an~answer from before the~migration. Ordinary data-only migration statements do~not~clear the~readiness cache because they cannot create or~remove a~table,
 field, or~index.
 
-Version~\version{} adds the~image-move journal, gallery edit revision, and~administrator operation-key ledger through ordinary table/column migrations. Run them from the~Gallery administration page as~usual. They require the~installation's normal schema-change authority, but~do~not~require database triggers, stored routines, \codeword{SUPER}, a~global server-variable change, or~separate database-administrator intervention. If~an~interrupted attempt already added the~revision column without recording the~migration, using the~same Gallery migration action again completes the~ledger safely.
+Version~\version{} adds the~\codeword{maintenance\_jobs} table through an~ordinary migration. Run it~from the~Gallery administration page as~usual. It~requires the~installation's normal table-creation authority, but~does~not~require database triggers, stored routines, \codeword{SUPER}, a~global server-variable change, or~separate database-administrator intervention. Until the~migration is~available and~verified, the~Maintenance Center refuses to~start a~job instead of~attempting maintenance without durable checkpoints.
 
 \subsection{How the~gallery checks database readiness}
 \index{database!readiness}
@@ -1708,6 +1712,20 @@ The~main Trash switch controls future gallery deletes and~is~enabled by~default.
 Migrations \filepath{202609070001_gallery_trash_bin.php} and~\filepath{202609070002_gallery_trash_state_machine.php} add the~durable operation records. When Trash is~enabled, deletion checks this schema before the~first filesystem move or~database-row deletion. Confirmed missing or~unknown storage stops recoverable deletion and~directs the~administrator to~apply/check migrations; it~does not~silently fall through to~permanent deletion. Scheduled Site Maintenance reconciles stale in-progress operations conservatively and~runs expired auto-purge work only when both Trash and~automatic purge are~enabled.
 
 Trash payloads live in~protected persistent \filepath{data/gallery-trash/} storage rather than~the~cache or~live gallery tree. Deployment packages carry the~directory's access-policy file but~exclude stored trash contents. Include that runtime directory and~the~database in~backup and~restore planning; neither half alone is~a~complete recoverable entry.
+
+\subsection{Maintenance Center}
+\index{Maintenance Center}
+\index{maintenance!central workflow}
+
+Open \ui{Maintenance > Maintenance Center} for~a~guided \ui{Analyze}, \ui{Review}, \ui{Execute}, and~\ui{Verify} workflow across routine maintenance owners. Analyze is~read-only for~gallery, telemetry, log, Trash, cache, thumbnail, and~database content; it~writes only the~durable Maintenance Center checkpoint needed to~resume the~inspection. The~Review step shows required, default, and~optional tasks before any selected cleanup begins. Deep media verification is~optional and~is~not~selected automatically.
+
+The~reviewed plan is~bound to~the~current application version, applied migration revision, Maintenance Center registry revision, and~plan content. If~one of~those inputs changes, execution refuses the~stale plan and~asks for~a~new analysis. The~server rechecks task dependencies, capability state, and~database-table eligibility at~execution time; browser checkboxes are~presentation input rather than~authorization.
+
+Execution advances through bounded checkpoints, so~you can~reload or~close the~page and~resume the~same job later. Only one running or~paused central job owns the~durable mutation claim, and~two browser tabs cannot advance one job concurrently. Automatic Site Maintenance yields before its~first mutation while that claim is~held. Public read-only gallery requests remain available.
+
+Pause and~Cancel are~cooperative: they take effect between bounded operations and~do~not~undo work already committed. A~database \codeword{ANALYZE TABLE} or~\codeword{OPTIMIZE TABLE} already running must~return before cancellation can~continue. The~center processes at~most one currently eligible table per~browser step, skips protected, unknown, oversized, or~newly ineligible tables, and~records an~uncertain atomic outcome instead of~blindly replaying a~table after a~lost response.
+
+The~final report separates removed rows and~files, analyzed or~optimized tables, skips, warnings, and~errors. It~reports physical before/after storage only when inventory evidence supports that conclusion. The~generic workflow never applies migrations, performs schema repair, installs updates, deletes Admin-log archives, empties all Trash entries, or~regenerates media; use the~specialist pages for~those deliberate operations.
 
 \subsection{Thumbnail maintenance}
 
@@ -1845,7 +1863,8 @@ Storage statistics & On-demand source/generated-media scan, file-type/size distr
 Complete report & Self-contained HTML export covering storage, database, gallery/image/EXIF/GPS statistics, feature/settings state, telemetry, logs, and~runtime diagnostics, with bounded image/generated-media processing, transient-request retries, and~bounded high-cardinality summaries.\\
 Telemetry & Optional privacy-controlled anonymous usage/performance/cache/database measurements, DNT respect, administrator exclusion, bounded view time, raw/hourly/daily retention, rollups/purge, Admin dashboard, and~HTML export.\\
 Admin logs & Structured events, filters/status, repeated-event grouping with member expansion, bounded exports/ZIP export, configurable live retention, protected daily JSON+HTML archives, resume/recovery state, and~archive download/view tools.\\
-Scheduled site maintenance & Daily UTC window, optional request-triggered continuation, bounded image batch/time budget, CLI/web-cron support, run-one-slice action, interrupted-state reset, rotatable hidden web-cron token, thumbnail/metadata/cleanup/telemetry/log-archive tasks.\\
+Maintenance Center & Durable Analyze--Review--Execute--Verify workflow, server-authorized task plan, bounded checkpoints, pause/resume/cancel, central mutation claim, one-table physical database steps, and~verified before/after report.\\
+Scheduled site maintenance & Daily UTC window, optional request-triggered continuation, bounded image batch/time budget, CLI/web-cron support, run-one-slice action, interrupted-state reset, rotatable hidden web-cron token, thumbnail/metadata/cleanup/telemetry/log-archive tasks, and~yielding while the~Maintenance Center owns the~central mutation claim.\\
 Runtime diagnostics & PHP/hosting/database readiness, GD/Imagick/ImageMagick/format support, DNG policy, copyable support summary, administrator-only development diagnostics for~viewer preload/cache/memory/network/frame timing, and~development-only benchmark entry points.\\
 Integrity & Installed core-manifest hash verification for~managed application files plus release-time manifest generation/validation; separate from~user-data backup.\\
 Gallery benchmark & Development-only authenticated browser benchmark that uses anonymous preview loads, same-origin hidden frames, server render counters and~navigation timing, then exports JSON for~before/after comparisons.\\
