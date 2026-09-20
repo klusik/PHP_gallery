@@ -1,5 +1,81 @@
 # Patch notes
 
+## Version 0.106.1
+
+Version 0.106.1 is a focused Maintenance Center reliability release. It fixes a production-only failure where an unavailable legacy download-artifact cache could stop the entire central maintenance job during the `downloads.cache` phase, even though the other independent cache owners were healthy. The corrected workflow isolates each cache owner, preserves completed cleanup, reports a bounded warning, and continues safely without exposing hosting paths or raw exception details.
+
+### Highlights
+
+#### Independent cache cleanup checkpoints
+
+- Split Maintenance Center download/cache work into three explicit server-owned operations: download-manifest cleanup, legacy download-artifact cleanup, and generated-ZIP cache cleanup.
+- Limited each browser execution step to one cache owner so shared-hosting request time remains bounded and persisted progress identifies the exact current sub-operation.
+- Preserved repeated bounded manifest-cache slices while `scan_truncated` reports more work, with the existing ten-slice ceiling and an explicit continuation warning.
+- Preserved files and rows already removed by a completed owner when a later independent cache owner is unavailable.
+
+#### Production failure isolation
+
+- Changed an unavailable or failing optional cache owner from a terminal Maintenance Center job failure into a localized warning and skipped sub-operation.
+- Allowed unrelated Maintenance Center tasks to continue after a hosting-specific legacy ZIP fallback/cache failure.
+- Kept unexpected required-task failures terminal while enriching their lifecycle event with safe machine-readable classification.
+- Bumped the Maintenance Center registry revision to `2026-09-20.2`, causing plans analyzed under the earlier execution contract to be rejected as stale and analyzed again.
+
+#### Privacy-safe diagnostics
+
+- Added the bounded cache operation, exception class, stable error code, status, and elapsed milliseconds to Maintenance Center lifecycle diagnostics.
+- Accepted only strict machine-readable reason codes from application exceptions and classified ordinary PDO, filesystem iterator, JSON, runtime, PHP, and unknown failures into stable categories.
+- Continued to exclude raw exception messages, SQL, database exceptions, credentials, tokens, private filesystem paths, and stack traces from browser state and Admin lifecycle logs.
+- Added complete English, Czech, German, and Swedish runtime messages for individual cache slices, skipped owners, truncation limits, and successful completion.
+
+### Technical Details
+
+#### Backend
+
+- Updated `app/services/maintenance_center.php` with `maintenance_center_exception_diagnostic()` and the new registry revision.
+- Updated `app/services/maintenance_center/execution.php` with `maintenance_center_run_download_cleanup_operation()`, explicit operation checkpoints, per-owner diagnostics, stable warning keys, and bounded terminal-failure context.
+- Reused the existing download-manifest, legacy download-artifact, and generated-ZIP cleanup services without moving their filesystem or persistence responsibilities into the central orchestrator.
+- Kept progress monotonic across repeated manifest slices and across the three independent owners.
+
+#### Database and compatibility
+
+- Added no database migration, table, column, index, trigger, stored routine, configuration key, or server-privilege requirement.
+- Reused the `maintenance_jobs` state introduced in Version 0.106. Existing installations need only the normal application-file update; they do not need to rerun an already applied migration.
+- Stored the current operation index and bounded diagnostics inside the existing job state. A fresh analysis creates a plan with the new registry revision.
+- Preserved the existing schema policy: confirmed missing Maintenance Center storage requires the Version 0.106 migration, unknown storage refuses central mutation, and available storage follows the corrected workflow.
+
+#### Frontend and administration
+
+- Required no new route, page, browser module, stylesheet, or client-side setting.
+- Returned existing Maintenance Center status envelopes with a more precise `current_subtask`, warning code, activity description, and persisted operation progress.
+- Kept the Admin page in place throughout execution and preserved pause, resume, cancellation, reload, and multi-tab serialization behavior.
+
+#### Documentation and release integrity
+
+- Updated the architecture, testing guide, administrator manual, runtime version markers, release metadata, and updater-managed manifest for Version 0.106.1.
+- Removed the temporary implementation and production-hotfix record after transferring its durable behavior, safety, and verification information into permanent documentation and these release notes.
+
+### Tests
+
+#### Automated coverage
+
+- Extended `tests/maintenance_center_test.php` to verify strict reason-code handling, generic exception classification, raw-message redaction, cache-owner failure isolation, explicit operation order, bounded lifecycle logging, current-subtask reporting, and localized key parity.
+- Retained the central contracts for strict MVC ownership, declaration documentation, Admin mutation envelopes, source headers, runtime hardening, PHP/JavaScript syntax, manifest freshness, and release consistency.
+- Qualified the release against the disposable migrated MariaDB and isolated Chromium workflow rather than claiming source-only coverage for production database behavior.
+
+### User Impact
+
+#### For administrators
+
+- Maintenance Center no longer stops the entire job merely because the hosting environment does not support or cannot access the optional legacy download-artifact cache.
+- The affected cache operation is shown as skipped with a stable reason, while healthy cache owners and later maintenance tasks continue.
+- Open or ready plans from Version 0.106 must be analyzed again because their registry revision is intentionally stale. Completed work is not rolled back.
+- No manual SQL, migration, command-line repair, new credential, or database-server configuration is required.
+
+#### For visitors
+
+- Public galleries, media authorization, downloads, authentication, rendering, and cache-serving behavior are unchanged.
+- The fix affects only administrator-triggered Maintenance Center cleanup orchestration and its bounded diagnostics.
+
 ## Version 0.106
 
 Version 0.106 introduces the Admin Maintenance Center: a durable, browser-driven workflow that analyzes an installation, presents a reviewable maintenance plan, executes selected work in bounded checkpoints, and verifies the result. It coordinates existing specialist maintenance owners without replacing their safety policies, keeps public gallery traffic available, and is designed to resume cleanly across reloads, disconnected browsers, and shared-hosting request limits.

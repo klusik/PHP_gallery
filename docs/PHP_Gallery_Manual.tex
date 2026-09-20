@@ -61,7 +61,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.106}
+\newcommand{\version}{0.106.1}
 \newcommand{\manualdate}{20 September 2026}
 
 \hypersetup{
@@ -1685,7 +1685,7 @@ normally reduces repeated metadata queries, but~a~migration can~change the~answe
 after schema-changing statements and~after successful repair callbacks. A~post-migration check then reads the~new database catalog instead of~reusing an~answer from before the~migration. Ordinary data-only migration statements do~not~clear the~readiness cache because they cannot create or~remove a~table,
 field, or~index.
 
-Version~\version{} adds the~\codeword{maintenance\_jobs} table through an~ordinary migration. Run it~from the~Gallery administration page as~usual. It~requires the~installation's normal table-creation authority, but~does~not~require database triggers, stored routines, \codeword{SUPER}, a~global server-variable change, or~separate database-administrator intervention. Until the~migration is~available and~verified, the~Maintenance Center refuses to~start a~job instead of~attempting maintenance without durable checkpoints.
+Version~0.106 added the~\codeword{maintenance\_jobs} table through an~ordinary migration. Run it~from the~Gallery administration page as~usual if~it~has~not~already been applied. It~requires the~installation's normal table-creation authority, but~does~not~require database triggers, stored routines, \codeword{SUPER}, a~global server-variable change, or~separate database-administrator intervention. Until the~migration is~available and~verified, the~Maintenance Center refuses to~start a~job instead of~attempting maintenance without durable checkpoints. Version~\version{} adds no~database migration.
 
 \subsection{How the~gallery checks database readiness}
 \index{database!readiness}
@@ -1726,6 +1726,8 @@ Execution advances through bounded checkpoints, so~you can~reload or~close the~p
 Pause and~Cancel are~cooperative: they take effect between bounded operations and~do~not~undo work already committed. A~database \codeword{ANALYZE TABLE} or~\codeword{OPTIMIZE TABLE} already running must~return before cancellation can~continue. The~center processes at~most one currently eligible table per~browser step, skips protected, unknown, oversized, or~newly ineligible tables, and~records an~uncertain atomic outcome instead of~blindly replaying a~table after a~lost response.
 
 The~final report separates removed rows and~files, analyzed or~optimized tables, skips, warnings, and~errors. It~reports physical before/after storage only when inventory evidence supports that conclusion. The~generic workflow never applies migrations, performs schema repair, installs updates, deletes Admin-log archives, empties all Trash entries, or~regenerates media; use the~specialist pages for~those deliberate operations.
+
+Download/cache cleanup advances through the~manifest cache, legacy download-artifact cache, and~generated-ZIP cache as~separate bounded steps. These caches are~independent optimizations: if~one is~unavailable on~the~current host, the~center preserves cleanup already completed, records a~safe warning, and~continues with the~other owners and~later tasks. The~warning can~identify the~operation and~a~stable error category, but~does~not~expose a~raw exception message, SQL, credential, private path, or~stack trace. After an~update changes this execution contract, an~older ready plan is~intentionally stale; run Analyze again before continuing.
 
 \subsection{Thumbnail maintenance}
 
