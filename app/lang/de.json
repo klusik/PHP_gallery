@@ -5582,5 +5582,10 @@
     "admin.maintenance_center.runtime.verify_completed": "Die Nachbedingungsprüfung ist abgeschlossen; der Vorher-/Nachher-Bericht ist bereit.",
     "admin.maintenance_center.runtime.task_skipped_disabled": "Deaktivierte Aufgabe übersprungen: {task}.",
     "admin.maintenance_center.runtime.task_skipped_failed": "Fehlgeschlagene optionale Aufgabe übersprungen: {task}.",
-    "admin.maintenance_center.runtime.task_completed": "Aufgabe abgeschlossen: {task}."
+    "admin.maintenance_center.runtime.task_completed": "Aufgabe abgeschlossen: {task}.",
+    "admin.maintenance_center.runtime.cache_completed": "Bereinigung des Download-Caches abgeschlossen.",
+    "admin.maintenance_center.runtime.cache_suboperation_failed": "Die Cache-Bereinigung {operation} war nicht verfügbar und wurde übersprungen ({error_code}).",
+    "admin.maintenance_center.runtime.cache_manifest_slice": "Die Bereinigung des Download-Manifest-Caches entfernte {files} Dateiartefakt(e).",
+    "admin.maintenance_center.runtime.cache_legacy_slice": "Die Bereinigung veralteter Download-Artefakte entfernte {files} Artefakt(e).",
+    "admin.maintenance_center.runtime.cache_zip_slice": "Die Bereinigung des generierten ZIP-Caches entfernte {files} Datei(en) und {rows} Cache-Zeile(n)."
 }

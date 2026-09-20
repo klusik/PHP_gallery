@@ -38,9 +38,10 @@ namespace Gallery\Services;
 
 use JsonException;
 use RuntimeException;
+use Throwable;
 
 /** Registry revision bound into every analyzed plan. */
-const MAINTENANCE_CENTER_REGISTRY_REVISION = '2026-09-20.1';
+const MAINTENANCE_CENTER_REGISTRY_REVISION = '2026-09-20.2';
 /** Terminal job history retained by normal maintenance. */
 const MAINTENANCE_CENTER_HISTORY_RETENTION_DAYS = 90;
 /** Conservative web-maintenance classification threshold for one physical DB table operation. */
@@ -140,6 +141,47 @@ function maintenance_center_error(array &$state, string $code, string $message):
     $errors = is_array($state['errors'] ?? null) ? $state['errors'] : [];
     $errors[] = ['code' => mb_substr($code, 0, 64), 'message' => mb_substr(trim($message), 0, 255)];
     $state['errors'] = array_slice($errors, -20);
+}
+
+/**
+ * Return bounded machine-readable exception diagnostics for Admin maintenance logs.
+ *
+ * Raw exception messages and traces are intentionally excluded because PDO and
+ * filesystem exceptions may contain SQL, private paths, or hosting details.
+ * Application exceptions exposing a stable reason() contract may contribute that
+ * already-bounded reason without parsing localized text.
+ *
+ * @return array{exception_class:string,error_code:string}
+ */
+function maintenance_center_exception_diagnostic(Throwable $exception): array
+{
+    $errorCode = '';
+    if (method_exists($exception, 'reason')) {
+        try {
+            $candidate = $exception->reason();
+            if (is_string($candidate) && preg_match('/^[a-z0-9_.-]{1,80}$/D', $candidate) === 1) {
+                $errorCode = $candidate;
+            }
+        } catch (Throwable) {
+            $errorCode = '';
+        }
+    }
+
+    if ($errorCode === '') {
+        $errorCode = match (true) {
+            $exception instanceof \PDOException => 'database_exception',
+            $exception instanceof \UnexpectedValueException => 'filesystem_iterator_exception',
+            $exception instanceof \JsonException => 'json_exception',
+            $exception instanceof \RuntimeException => 'runtime_exception',
+            $exception instanceof \Error => 'php_error',
+            default => 'unclassified_exception',
+        };
+    }
+
+    return [
+        'exception_class' => substr(get_class($exception), 0, 160),
+        'error_code' => substr($errorCode, 0, 80),
+    ];
 }
 
 require_once __DIR__ . '/maintenance_center/registry.php';

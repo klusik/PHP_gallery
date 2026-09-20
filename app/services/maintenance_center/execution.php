@@ -332,16 +332,18 @@ function maintenance_center_execution_step_unlocked(int $jobId, int $actorId): a
             throw new RuntimeException('Maintenance task returned invalid progress.');
         }
     } catch (Throwable $exception) {
+        $diagnostic = maintenance_center_exception_diagnostic($exception);
         if (empty($task['mutates']) && empty($task['required'])) {
             maintenance_center_warning($state, 'task_failed.' . str_replace('.', '_', $key), maintenance_center_runtime_text('admin.maintenance_center.runtime.optional_task_failed', 'Optional read-only task {task} failed and was skipped.', ['task' => $key]));
-            $execution['task_states'][$key] = $taskState + ['done' => true, 'skipped' => true, 'reason' => 'task_failed'];
+            maintenance_center_log_lifecycle('warning', 'maintenance_center.task_skipped_failed', 'Optional Maintenance Center task failed and was skipped.', $jobId, ['task' => $key] + $diagnostic);
+            $execution['task_states'][$key] = $taskState + ['done' => true, 'skipped' => true, 'reason' => 'task_failed', 'diagnostic' => $diagnostic];
             return maintenance_center_advance_completed_task($row, $state, $execution, $planTask, $key, maintenance_center_runtime_text('admin.maintenance_center.runtime.task_skipped_failed', 'Skipped failed optional task: {task}.', ['task' => $key]));
         }
         // The executor may have persisted an atomic cursor before the failing call.
         // Reload so failure bookkeeping cannot overwrite that newer checkpoint with
         // the stale state captured at the beginning of this HTTP request.
         $failedRow = maintenance_center_model_job($jobId) ?? $row;
-        return maintenance_center_fail_job($failedRow, 'task_failed', 'Maintenance task failed: ' . $key . '.', $key);
+        return maintenance_center_fail_job($failedRow, 'task_failed', 'Maintenance task failed: ' . $key . '.', $key, $diagnostic);
     }
 
     $execution['task_states'][$key] = is_array($result['task_state'] ?? null) ? $result['task_state'] : $taskState;
@@ -353,7 +355,11 @@ function maintenance_center_execution_step_unlocked(int $jobId, int $actorId): a
     }
     $state['execution'] = $execution;
     if (!empty($result['warning'])) {
-        maintenance_center_warning($state, 'task_warning.' . str_replace('.', '_', $key) . '.' . max(0, (int) ($execution['task_index'] ?? 0)), (string) $result['warning']);
+        $warningCode = trim((string) ($result['warning_code'] ?? ''));
+        if ($warningCode === '' || preg_match('/^[a-z0-9_.-]{1,64}$/D', $warningCode) !== 1) {
+            $warningCode = 'task_warning.' . str_replace('.', '_', $key) . '.' . max(0, (int) ($execution['task_index'] ?? 0));
+        }
+        maintenance_center_warning($state, $warningCode, (string) $result['warning']);
     }
     $activity = trim((string) ($result['activity'] ?? ''));
     if ($activity !== '') {
@@ -504,7 +510,7 @@ function maintenance_center_persist_atomic_attempt(array $context, string $opera
 }
 
 /** Fail a job safely and release the durable central claim. */
-function maintenance_center_fail_job(array $row, string $category, string $message, string $task = ''): array
+function maintenance_center_fail_job(array $row, string $category, string $message, string $task = '', array $diagnostic = []): array
 {
     $jobId = (int) ($row['id'] ?? 0);
     $actorId = (int) ($row['actor_id'] ?? 0);
@@ -520,7 +526,13 @@ function maintenance_center_fail_job(array $row, string $category, string $messa
         $state['execution']['metrics'] = maintenance_center_merge_metrics($state['execution']['metrics'], ['task_failures' => [$task]]);
     }
     maintenance_center_model_finish_job($jobId, $actorId, 'failed', 'failed', maintenance_center_json_encode($state), (float) ($row['progress_percent'] ?? 0), now_sql(), $category, $displayMessage);
-    maintenance_center_log_lifecycle('error', 'maintenance_center.failed', 'Maintenance Center job failed.', $jobId, ['category' => $category, 'task' => $task]);
+    $logContext = ['category' => $category, 'task' => $task];
+    foreach ($diagnostic as $key => $value) {
+        if ((is_scalar($value) || $value === null) && count($logContext) < 10) {
+            $logContext[(string) $key] = $value;
+        }
+    }
+    maintenance_center_log_lifecycle('error', 'maintenance_center.failed', 'Maintenance Center job failed.', $jobId, $logContext);
     return maintenance_center_job_status($jobId, $actorId);
 }
 
@@ -663,31 +675,154 @@ function maintenance_center_execute_security(array $context): array
     ];
 }
 
-/** Run cache/download cleanup owners. */
+/**
+ * Run one optional download/cache cleanup owner with bounded failure isolation.
+ *
+ * Cache subsystems are independent maintenance optimizations. A production host
+ * may intentionally not support the legacy server-ZIP fallback, so one cleanup
+ * owner failing must not abort unrelated central maintenance. The failure is
+ * still logged with a stable operation, exception class, and reason/error code.
+ *
+ * @return array{ok:bool,value:array<string,mixed>,diagnostic:array<string,mixed>}
+ */
+function maintenance_center_run_download_cleanup_operation(int $jobId, string $operation, callable $callback): array
+{
+    $startedAt = microtime(true);
+    try {
+        $value = $callback();
+        return [
+            'ok' => true,
+            'value' => is_array($value) ? $value : [],
+            'diagnostic' => [
+                'operation' => $operation,
+                'status' => 'completed',
+                'duration_ms' => max(0, (int) round((microtime(true) - $startedAt) * 1000)),
+            ],
+        ];
+    } catch (Throwable $exception) {
+        $diagnostic = [
+            'operation' => $operation,
+            'status' => 'failed',
+            'duration_ms' => max(0, (int) round((microtime(true) - $startedAt) * 1000)),
+        ] + maintenance_center_exception_diagnostic($exception);
+        maintenance_center_log_lifecycle(
+            'warning',
+            'maintenance_center.task_suboperation_failed',
+            'Maintenance Center cache cleanup sub-operation failed and was skipped.',
+            $jobId,
+            ['task' => 'downloads.cache'] + $diagnostic
+        );
+        return ['ok' => false, 'value' => [], 'diagnostic' => $diagnostic];
+    }
+}
+
+/** Run exactly one cache/download cleanup owner slice per browser request. */
 function maintenance_center_execute_downloads(array $context): array
 {
-    $manifest = cleanup_download_manifest_cache();
-    $legacy = cleanup_legacy_download_artifact_cache();
-    $zip = cleanup_expired_zip_cache();
-    $files = max(0, (int) ($manifest['files_deleted'] ?? 0))
-        + max(0, (int) ($manifest['partials_deleted'] ?? 0))
-        + max(0, (int) ($legacy['artifacts_deleted'] ?? 0))
-        + max(0, (int) ($legacy['partials_deleted'] ?? 0))
-        + max(0, (int) ($zip['files'] ?? 0));
-    $rows = max(0, (int) ($zip['rows'] ?? 0));
-    $hasMore = !empty($manifest['scan_truncated']);
+    $jobId = max(0, (int) (($context['job']['id'] ?? 0)));
     $taskState = (array) $context['task_state'];
-    $slices = max(0, (int) ($taskState['slices'] ?? 0)) + 1;
-    if ($slices >= 10) {
-        $hasMore = false;
+    $operationIndex = max(0, (int) ($taskState['operation_index'] ?? 0));
+    $operations = ['download_manifests', 'legacy_download_artifacts', 'zip_cache'];
+    if (!isset($operations[$operationIndex])) {
+        return [
+            'done' => true,
+            'fraction' => 1.0,
+            'task_state' => $taskState + ['operation_index' => count($operations)],
+            'activity' => maintenance_center_runtime_text('admin.maintenance_center.runtime.cache_completed', 'Download/cache cleanup completed.'),
+        ];
     }
+
+    $operation = $operations[$operationIndex];
+    $warning = '';
+    $files = 0;
+    $rows = 0;
+    $advance = true;
+    $activity = '';
+
+    if ($operation === 'download_manifests') {
+        $result = maintenance_center_run_download_cleanup_operation($jobId, $operation, static fn (): array => cleanup_download_manifest_cache());
+        $manifest = $result['value'];
+        $files = max(0, (int) ($manifest['files_deleted'] ?? 0)) + max(0, (int) ($manifest['partials_deleted'] ?? 0));
+        $manifestSlices = max(0, (int) ($taskState['manifest_slices'] ?? 0)) + 1;
+        $taskState['manifest_slices'] = $manifestSlices;
+        if (!empty($result['ok']) && !empty($manifest['scan_truncated']) && $manifestSlices < 10) {
+            $advance = false;
+        }
+        if (!empty($result['ok']) && !empty($manifest['scan_truncated']) && $manifestSlices >= 10) {
+            $warning = maintenance_center_runtime_text('admin.maintenance_center.runtime.cache_cap', 'Manifest cache cleanup remained truncated after ten bounded slices; later maintenance can continue it.');
+        }
+        if (empty($result['ok'])) {
+            $warning = maintenance_center_runtime_text(
+                'admin.maintenance_center.runtime.cache_suboperation_failed',
+                'Cache cleanup operation {operation} was unavailable and was skipped ({error_code}).',
+                ['operation' => $operation, 'error_code' => (string) ($result['diagnostic']['error_code'] ?? 'unclassified_exception')]
+            );
+        }
+        $activity = maintenance_center_runtime_text(
+            'admin.maintenance_center.runtime.cache_manifest_slice',
+            'Download manifest cache cleanup removed {files} file artifact(s).',
+            ['files' => $files]
+        );
+        $taskState['manifest'] = $manifest;
+        $taskState['diagnostics'][$operation] = $result['diagnostic'];
+    } elseif ($operation === 'legacy_download_artifacts') {
+        $result = maintenance_center_run_download_cleanup_operation($jobId, $operation, static fn (): array => cleanup_legacy_download_artifact_cache());
+        $legacy = $result['value'];
+        $files = max(0, (int) ($legacy['artifacts_deleted'] ?? 0)) + max(0, (int) ($legacy['partials_deleted'] ?? 0));
+        if (empty($result['ok'])) {
+            $warning = maintenance_center_runtime_text(
+                'admin.maintenance_center.runtime.cache_suboperation_failed',
+                'Cache cleanup operation {operation} was unavailable and was skipped ({error_code}).',
+                ['operation' => $operation, 'error_code' => (string) ($result['diagnostic']['error_code'] ?? 'unclassified_exception')]
+            );
+        }
+        $activity = maintenance_center_runtime_text(
+            'admin.maintenance_center.runtime.cache_legacy_slice',
+            'Legacy download artifact cleanup removed {files} artifact(s).',
+            ['files' => $files]
+        );
+        $taskState['legacy'] = $legacy;
+        $taskState['diagnostics'][$operation] = $result['diagnostic'];
+    } else {
+        $result = maintenance_center_run_download_cleanup_operation($jobId, $operation, static fn (): array => cleanup_expired_zip_cache());
+        $zip = $result['value'];
+        $files = max(0, (int) ($zip['files'] ?? 0));
+        $rows = max(0, (int) ($zip['rows'] ?? 0));
+        if (empty($result['ok'])) {
+            $warning = maintenance_center_runtime_text(
+                'admin.maintenance_center.runtime.cache_suboperation_failed',
+                'Cache cleanup operation {operation} was unavailable and was skipped ({error_code}).',
+                ['operation' => $operation, 'error_code' => (string) ($result['diagnostic']['error_code'] ?? 'unclassified_exception')]
+            );
+        }
+        $activity = maintenance_center_runtime_text(
+            'admin.maintenance_center.runtime.cache_zip_slice',
+            'Generated ZIP cache cleanup removed {files} file(s) and {rows} cache row(s).',
+            ['files' => $files, 'rows' => $rows]
+        );
+        $taskState['zip'] = $zip;
+        $taskState['diagnostics'][$operation] = $result['diagnostic'];
+    }
+
+    if ($advance) {
+        $operationIndex++;
+    }
+    $taskState['operation_index'] = $operationIndex;
+    $done = $operationIndex >= count($operations);
+    $fraction = $done ? 1.0 : min(0.99, max(0.05, $operationIndex / count($operations)));
+    if (!$advance && $operation === 'download_manifests') {
+        $fraction = min(0.32, max(0.05, ((int) ($taskState['manifest_slices'] ?? 1) / 10) * 0.32));
+    }
+
     return [
-        'done' => !$hasMore,
-        'fraction' => $hasMore ? min(0.9, $slices / 10) : 1.0,
-        'task_state' => ['slices' => $slices, 'manifest' => $manifest, 'legacy' => $legacy, 'zip' => $zip],
+        'done' => $done,
+        'fraction' => $fraction,
+        'task_state' => $taskState,
         'metrics' => ['files_removed' => $files, 'rows_removed' => ['download_cache' => $rows]],
-        'warning' => $slices >= 10 && !empty($manifest['scan_truncated']) ? maintenance_center_runtime_text('admin.maintenance_center.runtime.cache_cap', 'Manifest cache cleanup remained truncated after ten bounded slices; later maintenance can continue it.') : '',
-        'activity' => maintenance_center_runtime_text('admin.maintenance_center.runtime.cache_slice', 'Download/cache cleanup removed {files} file artifact(s) and {rows} cache row(s).', ['files' => $files, 'rows' => $rows]),
+        'current_subtask' => $operation,
+        'warning' => $warning,
+        'warning_code' => $warning !== '' ? 'downloads_cache.' . $operation : '',
+        'activity' => $activity,
     ];
 }
 

@@ -5582,5 +5582,10 @@
     "admin.maintenance_center.runtime.verify_completed": "Ověření následných podmínek bylo dokončeno; report před/po je připraven.",
     "admin.maintenance_center.runtime.task_skipped_disabled": "Přeskočena vypnutá úloha: {task}.",
     "admin.maintenance_center.runtime.task_skipped_failed": "Přeskočena neúspěšná volitelná úloha: {task}.",
-    "admin.maintenance_center.runtime.task_completed": "Dokončena úloha: {task}."
+    "admin.maintenance_center.runtime.task_completed": "Dokončena úloha: {task}.",
+    "admin.maintenance_center.runtime.cache_completed": "Čištění cache stahování bylo dokončeno.",
+    "admin.maintenance_center.runtime.cache_suboperation_failed": "Operace čištění cache {operation} nebyla dostupná a byla přeskočena ({error_code}).",
+    "admin.maintenance_center.runtime.cache_manifest_slice": "Čištění cache manifestů stahování odstranilo {files} souborových artefaktů.",
+    "admin.maintenance_center.runtime.cache_legacy_slice": "Čištění legacy artefaktů stahování odstranilo {files} artefaktů.",
+    "admin.maintenance_center.runtime.cache_zip_slice": "Čištění cache generovaných ZIPů odstranilo {files} souborů a {rows} řádků cache."
 }
