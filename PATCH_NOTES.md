@@ -1,5 +1,144 @@
 # Patch notes
 
+## Version 0.105
+
+Version 0.105 is a substantial reliability, safety, and maintainability release for gallery administration. It protects catalog and filesystem ownership during concurrent or interrupted work, makes gallery editing conflict-aware, makes create and classic-upload retries replay-safe, strengthens the Admin side-panel lifecycle, bounds image decoding and gallery lookup work, and expands operational diagnostics and release qualification. Public gallery features and URLs remain compatible; the main changes are safer behavior behind existing administrator workflows.
+
+### Highlights
+
+#### Gallery catalog and filesystem preservation
+
+- Stopped ordinary gallery creation from deleting or silently replacing an existing catalog row when its expected folder is missing, displaced, or cannot be observed conclusively. The operation now preserves the existing identity and returns a typed conflict for explicit reconciliation.
+- Added a durable image-move journal that records source/destination ownership, file identities, and the database commit marker before recovery decisions are made. Interrupted moves can be finished or compensated without inferring success from whether the browser received a response.
+- Used exclusive file placement and positive identity checks so an existing destination is never overwritten by rename semantics. Unknown, changed, cross-filesystem, or otherwise unverifiable files are retained for operator review.
+- Added bounded read-only pending-move health to System Health and Runtime Diagnostics, plus `scripts/reconcile_image_moves.php` for explicit inspection and recovery. Diagnostics omit private paths, file hashes, manifests, raw SQL, and database exception text.
+
+#### Conflict-aware gallery editing
+
+- Added an application-owned `galleries.edit_revision` value to every complete editor form. A save reserves the exact submitted revision before filesystem, sidecar, relationship, or metadata side effects begin.
+- Added one shared gallery-writer ownership boundary around editing, scanning, uploads, WebDAV, Trash, image moves/copies, Media Renamer, migration installation, thumbnail-bound changes, covers, and other workflows that can observe or change mutable gallery state.
+- Advanced the revision explicitly in every supported application model update. The migration uses an ordinary column alteration only: it creates no trigger or stored routine, changes no global database variable, and requires no `SUPER`-style privilege.
+- Returned typed stale/busy conflicts without discarding entered non-secret fields. Administrators can compare the latest saved values, preserve their draft, and deliberately reapply changes instead of an older form silently overwriting newer work.
+- Made interrupted migration replay safe when the revision column already exists but the migration ledger entry does not. Running migrations again from the Gallery administration page records the migration without requiring database-server administration.
+
+#### Replay-safe create and classic upload
+
+- Added 256-bit operation keys to empty-gallery creation, classic upload, and combined create/upload forms. Replaying the same authenticated actor, key, operation, and semantic payload returns the original bounded response and stable entity IDs.
+- Kept intentional duplicates available: a freshly rendered operation key represents a new intent and retains the established suffix-selection behavior. Operation keys do not deduplicate titles or filenames and are not authentication, CSRF, or access tokens.
+- Bound claims to the current administrator, operation kind, normalized payload, and streamed file identities. Authentication, authorization, CSRF, schema readiness, and result ownership are rechecked before a stored response is replayed.
+- Preserved uncertain work as `pending` or `needs_reconciliation` instead of stealing an old claim or rerunning its target mutation. Added `scripts/reconcile_admin_operations.php` for bounded read-only inspection and separately authorized reconciliation.
+
+#### Safer, steadier Admin side panels
+
+- Added generation and cancellation ownership for dynamic side-panel loads so late responses cannot replace a newer panel or revive a closed workflow.
+- Added bounded in-memory drafts for non-secret fields, an inline unsaved-work guard, native keyboard focus containment, and restoration of focus to the control that opened the panel.
+- Kept persistent panel actions in place through the canonical JSON mutation envelope and shared completion coordinator. Successful actions keep the panel open, preserve the browser URL, avoid page reloads, refresh only owned fragments/contexts, and suppress stale or out-of-order responses.
+- Kept dynamically replaced controls active through delegated event handling and acknowledged a saved gallery revision on the submitting form before delayed context refresh work.
+
+#### Bounded ingestion and gallery selection
+
+- Centralized raster admission and decode-memory policy for GD and optional Imagick paths. Classic uploads, prepared browser uploads, thumbnails, and related pipelines reject unsafe dimensions or budgets before committing target files.
+- Clarified request-body and temporary-file ownership for Mobile WebDAV and Gallery Migration. Each workflow cleans up only files it allocated, while a recoverable staged body/package remains available when a late schema refusal prevents target mutation.
+- Added bounded server-side gallery-picker search with a 30-result ceiling, selected-gallery context, stale-response suppression, and a no-JavaScript ID directory. Large installations no longer need to embed the complete gallery tree in every picker.
+- Added fresh under-lock reads and stale-plan checks across scanning, renaming, Trash, copy/move, migration, and thumbnail-related workflows so earlier request snapshots cannot authorize later filesystem changes.
+
+#### Operational clarity and maintainability
+
+- Added shared runtime-support guidance for PHP compatibility versus maintained deployment branches, with the same bounded status used by the dashboard, System Health, Runtime Diagnostics, README, and installation guidance.
+- Separated caller-owned session/job compartments for complete reports, discovery, duplicate detection, Google OAuth, and Viewer anti-automation work. Services receive explicit state instead of selecting unrelated session namespaces.
+- Centralized newly introduced immutable operational limits in `app/policy_constants.php` and browser policy modules, with units, scope, consumers, rationale, and compatibility/security notes. Whole-tree inventories remain explicit about legacy findings rather than treating them as silently accepted debt.
+- Enforced Rudolf Klusal source attribution, meaningful declaration documentation, and Controller-Service-Model ownership for changed first-party source. Added permanent architecture documents and source-contract gates without weakening the zero-violation strict MVC baseline.
+
+### Technical Details
+
+#### Backend and ownership boundaries
+
+- Added `app/services/gallery_creation_safety.php` to distinguish healthy reusable storage from missing, conflicting, and unknown catalog ownership before creation.
+- Added `app/models/gallery_image_move_journal.php` and `app/services/gallery_image_move_journal.php` for durable image-move state, connection locks, exact file identity validation, commit marking, recovery, and bounded diagnostics.
+- Added `app/models/gallery_edit_concurrency.php` and `app/services/gallery_edit_concurrency.php` for revision reservation and the reentrant application writer lease. Controllers continue to own HTTP conflict responses; models own PDO/SQL; services own concurrency and filesystem policy.
+- Added `app/models/admin_operation_keys.php` and `app/services/admin_operation_keys.php` for durable claim, replay, response projection, diagnostic, and reconciliation behavior. Exact primary-key shape is verified before a request can claim storage.
+- Added `app/services/image_decode_policy.php` and `app/services/runtime_support.php` as shared policy owners rather than duplicating decode arithmetic or runtime advice in controllers and views.
+- Extended `app/services/mutation_schema_policy.php` with `mutation.gallery_image_move_journal` and registered `mutation_gallery_edit` and `mutation_gallery_move` health through the shared Admin mutation-health model.
+
+#### Database and upgrade behavior
+
+- Added migration `202609200001_gallery_image_move_journal.php`. The new `gallery_image_move_journal` table stores a 32-character operation identity, source/destination gallery IDs, lifecycle state, same-transaction database-commit marker, private manifest JSON, safe error category, timestamps, and bounded pending/source/destination indexes. It intentionally has no cascading gallery foreign key that could erase recovery evidence.
+- Added migration `202609200002_gallery_edit_revision.php`. It adds unsigned `galleries.edit_revision` with default `1` through one portable `ALTER TABLE` statement. It does not create triggers, routines, functions, events, or privileged server configuration.
+- Added migration `202609200003_admin_operation_keys.php`. The `admin_operation_keys` ledger uses the composite primary key `(actor_id, key_hash)` and stores operation/payload/owner hashes, lifecycle state, the original bounded canonical response, and timestamps.
+- Required confirmed `available` schema before gallery edits, durable image moves, or operation-key claims begin target work. Confirmed `missing` and inspection `unknown` both refuse these mutations before the first irreversible file/database effect; there is no unsafe execution fallback and no feature-disabled state for these mandatory integrity boundaries.
+- Kept the migration runner as the documented bootstrap path. A confirmed missing migration ledger can be created by the migration workflow, and a duplicate-column replay for `edit_revision` can complete after an interrupted earlier attempt. Unknown metadata inspection still refuses mutation.
+- Kept administrator-facing migration failures bounded and localized. Raw SQL, PDO messages, database credentials, tokens, manifests, and private filesystem paths are not exposed through System Health, Runtime Diagnostics, or browser error envelopes.
+- Added no requirement to grant `TRIGGER`, `SUPER`, `ALL PRIVILEGES`, or authority to change `log_bin_trust_function_creators`. Existing installations upgrade through the Gallery page's normal migration action.
+
+#### Frontend and interaction lifecycle
+
+- Added `public/assets/gallery-modules/admin-operation-keys.js` for one-key-per-intent ownership across direct forms, dynamic panel forms, and retry/replay behavior.
+- Added `public/assets/gallery-modules/admin-panel-lifecycle.js`, `admin-panel-drafts.js`, and `admin-panel-policy.js` for generations, cancellation, draft capture, focus handling, and bounded interaction state.
+- Added `public/assets/gallery-modules/admin-interaction-policy.js` for documented browser-side retry, timing, and lifecycle constants without exposing server configuration or credentials.
+- Updated `public/assets/gallery-modules/admin-side-panel.js` to use delegated dynamic handling, canonical mutation completion, and stale-response suppression across replaced fragments.
+- Reworked `public/assets/gallery-modules/searchable-gallery-picker.js` around bounded server results, selected context, cancellation, and parent-frame integration; added server-rendered fallback behavior when JavaScript is unavailable.
+- Refreshed the deployed `public/assets/gallery.js` import chain and relevant asset-version inputs so upgraded browsers do not retain older panel, picker, or operation-key handlers.
+
+#### Image, upload, and temporary-file safety
+
+- Validated dimensions, pixel counts, estimated decode memory, runtime limits, and supported format before raster decoding. Optional Imagick handling refuses unsafe input and falls back only where the documented policy permits it.
+- Applied the same admission boundary to classic and prepared uploads, generated derivatives, and upload-pipeline tests rather than trusting MIME metadata or compressed file size alone.
+- Made `app/controllers/mobile_webdav.php` own the inbound request stream while `app/services/mobile_webdav.php` owns only the staging file it allocates. Late missing/unknown schema keeps recoverable staged bytes instead of partially registering the upload.
+- Added `app/services/gallery_migration/temporary_files.php` so request-owned transfer files have explicit allocation/release rules and migration jobs never delete caller-owned or resumable package state accidentally.
+
+#### Diagnostics, documentation, and source contracts
+
+- Added `docs/ADMIN_OPERATION_KEYS.md`, `docs/ADMIN_PANEL_LIFECYCLE.md`, `docs/GALLERY_CATALOG_RECONCILIATION.md`, `docs/GALLERY_EDIT_CONCURRENCY.md`, `docs/GALLERY_PICKER.md`, `docs/IMAGE_DECODE_POLICY.md`, `docs/IMAGE_MOVE_RECOVERY.md`, `docs/MOBILE_WEBDAV_BODY.md`, and `docs/RUNTIME_SUPPORT.md`.
+- Added `docs/CODE_DOCUMENTATION.md`, `docs/FRONTEND_OPERATIONAL_POLICY.md`, and `docs/SOURCE_CONTRACT_INVENTORY.md` to define declaration, data-shape, source-header, policy-literal, and inventory expectations.
+- Added `scripts/check_policy_constants.php` and `scripts/check_source_documentation.php`, integrated their changed-source gates into `scripts/audit.php`, and kept complete-tree inventories visible as advisory migration work rather than a hidden baseline.
+- Expanded `scripts/check_mvc_boundaries.php` and source-reading helpers so split modules, generic helpers, request/session access, SQL/PDO ownership, and moved filesystem responsibilities remain covered without adding an MVC baseline exemption.
+
+### Tests
+
+#### Database, concurrency, and recovery
+
+- Added disposable-MySQL coverage for exact edit revisions, simultaneous sessions, writer ownership, stale snapshots, explicit runtime revision increments, and pre-activation schema enforcement.
+- Reproduced the interrupted upgrade case where `galleries.edit_revision` exists but `schema_migrations` does not yet contain the migration, then verified that rerunning the normal migration records it exactly once without trigger privileges.
+- Added process-interruption tests for image moves before file work, during movement, and after the database commit marker. Recovery tests verify rollback/finalization, unchanged-file identity, no overwrite, and safe retention of ambiguous state.
+- Added operation-key service, HTTP, browser, primary-key, diagnostics, and maintenance tests covering concurrent claims, exact replay, changed payloads, actor isolation, lost acknowledgements, bounded stored responses, and intentional fresh-key duplicates.
+
+#### Browser, ingestion, and request lifecycle
+
+- Added real Chromium panel-lifecycle coverage for focus containment/restoration, stale load suppression, unsaved drafts, dynamic replacement, URL stability, and continued interception without whole-page rebinding.
+- Added PHP and browser gallery-picker tests with a 10,000-row fixture, bounded search/response work, selected context, parent integration, cancellation, no-JavaScript fallback, and stale-result refusal.
+- Added image-decode policy, pipeline, upload-pipeline, and Imagick fallback tests for malformed metadata, overflow, memory budgets, supported formats, and cleanup before persistence.
+- Added WebDAV body, Gallery Migration temporary-file, upload writer-ownership, report/discovery/duplicate/OAuth context, Viewer anti-automation context, and authenticated session-contention regressions.
+
+#### Architecture and release assurance
+
+- Expanded the central audit registry across PHP, Node, WinApp, Chromium, complete PHP/JavaScript syntax, strict MVC, mutation contracts, source headers, declaration documentation, policy constants, and source-boundary inventories.
+- Added deterministic disposable MySQL and browser workflow coverage while reducing fixture database authority. The fixture does not require `TRIGGER`, `SUPER`, global-variable changes, or access to an existing installation.
+- Preserved both progressive and responsive public thumbnail renderers, existing lightbox authorization/zoom/navigation contracts, no-JavaScript behavior, updater safety, and deployment exclusions.
+- The pre-release full-profile integration run completed 234 PHP tests, 22 Node tests, 36 WinApp tests, five Chromium integration checks, 857 PHP syntax checks, and 105 JavaScript syntax checks with zero failures, skips, or blockers. Version 0.105 release qualification is performed separately against the final release files and manifest.
+
+### User Impact
+
+#### For administrators
+
+- Existing create, edit, move, upload, WebDAV, migration, Trash, renaming, and side-panel workflows remain in their familiar locations, but now refuse stale or unverifiable state before destructive work instead of guessing.
+- Retrying the same create/classic-upload intent after an ambiguous response returns the original outcome when it completed. Starting from a fresh form still permits an intentional duplicate.
+- Concurrent gallery edits now produce a reviewable conflict instead of silently overwriting another save. Non-secret draft fields remain available; passwords and file inputs must be re-entered or reselected deliberately.
+- Database migrations continue to run from the Gallery administration page on ordinary shared hosting. No database trigger privilege, `SUPER` access, global setting change, or separate DBA operation is required.
+- System Health and Runtime Diagnostics provide bounded action-oriented status for revision storage, durable moves, runtime support, and unresolved operations without disclosing sensitive database or filesystem details.
+- Apply all pending migrations before resuming gallery edits, image moves, or create/classic-upload work. Include the database, gallery tree, and persistent `data/` state in coordinated backup and recovery planning.
+
+#### For visitors
+
+- Public gallery URLs, access controls, translations, thumbnail renderer choices, lightbox behavior, downloads, maps, voting, and no-JavaScript navigation retain their established contracts.
+- Visitors benefit indirectly from fewer inconsistent catalog/filesystem states, safer administrator concurrency, and more reliable post-save refreshes. Version 0.105 does not add a new visitor-facing feature or weaken media authorization.
+
+#### Compatibility and operational limits
+
+- PHP 8.1 remains the syntax compatibility minimum; deployments should use a maintained PHP branch as documented in `docs/RUNTIME_SUPPORT.md`.
+- Image-move journaling covers image moves only; uploads, gallery-folder moves, deletion, and off-host recovery keep their own mutation/recovery owners.
+- Operation keys provide replay safety, not a cross-system transaction. Ambiguous interrupted ingestion is retained for explicit reconciliation and is never guessed complete from a similar title, filename, or elapsed time.
+- Source-policy and documentation inventories expose remaining legacy cleanup candidates. Their changed-source enforcement prevents new undocumented declarations or unexplained operational literals without claiming that every historic file was mechanically rewritten.
+
 ## Version 0.104.1
 
 Version 0.104.1 is a broad reliability and maintenance release built around six areas: safer and more accessible gallery-title completion, bounded suggestion lookup for large collections, explicit lightbox preload ownership, repeatable recovery assurance, isolated end-to-end workflow testing, and release evidence tied to the exact files being reviewed. It improves the title-completion feature introduced in 0.104 without changing how galleries are stored or created, and adds substantial operational tooling without turning automated test success into a claim of production restore readiness.

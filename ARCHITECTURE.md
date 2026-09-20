@@ -9,7 +9,7 @@ This document is intended to help future maintainers and AI coding agents unders
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.104.1';
+const CMS_VERSION = '0.105';
 ```
 
 Update-related code uses:
@@ -1756,8 +1756,8 @@ preserved, never overwritten. See [image move recovery](docs/IMAGE_MOVE_RECOVERY
 
 Base-gallery edits use a dedicated decimal revision, a short atomic reservation
 and connection-owned operation lock spanning subsequent side effects. Database
-triggers advance revisions for all explicit gallery updates; filesystem-first
-writers must acquire the same outer lock before touching targets. The migration
+model writers advance revisions explicitly for all supported gallery updates;
+filesystem-first writers must acquire the same outer lock before touching targets. The migration
 and deployment prerequisite are documented in
 [edit concurrency](docs/GALLERY_EDIT_CONCURRENCY.md). This does not version every
 independent tag, translation or Smart Gallery entity.
