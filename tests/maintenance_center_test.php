@@ -30,8 +30,10 @@
 declare(strict_types=1);
 
 namespace {
+    use function Gallery\Services\maintenance_center_exception_diagnostic;
     use function Gallery\Services\maintenance_center_expand_selection;
     use function Gallery\Services\maintenance_center_monotonic_percent;
+    use function Gallery\Services\maintenance_center_run_download_cleanup_operation;
     use function Gallery\Services\maintenance_center_registry_order;
     use function Gallery\Services\maintenance_center_task_registry;
     use function Gallery\Services\maintenance_center_transition_allowed;
@@ -102,6 +104,26 @@ namespace {
     maintenance_center_test_assert(maintenance_center_monotonic_percent(68.0, 10, 100) === 68.0, 'Progress percentage must never regress.');
     maintenance_center_test_assert(maintenance_center_monotonic_percent(10.0, 75, 100) === 75.0, 'Progress percentage must advance from work units.');
 
+    $runtimeDiagnostic = maintenance_center_exception_diagnostic(new RuntimeException('private path must not be logged'));
+    maintenance_center_test_assert(($runtimeDiagnostic['exception_class'] ?? '') === RuntimeException::class, 'Maintenance diagnostics must preserve the bounded exception class.');
+    maintenance_center_test_assert(($runtimeDiagnostic['error_code'] ?? '') === 'runtime_exception', 'Maintenance diagnostics must classify generic runtime failures without persisting raw exception text.');
+    maintenance_center_test_assert(!in_array('private path must not be logged', $runtimeDiagnostic, true), 'Maintenance diagnostics must not contain raw exception messages.');
+    $reasonDiagnostic = maintenance_center_exception_diagnostic(new class('safe localized text') extends RuntimeException {
+        /** Return a stable synthetic reason for bounded-diagnostic regression coverage. */
+        public function reason(): string
+        {
+            return 'legacy_cache_not_writable';
+        }
+    });
+    maintenance_center_test_assert(($reasonDiagnostic['error_code'] ?? '') === 'legacy_cache_not_writable', 'Stable application exception reasons must survive bounded maintenance diagnostics.');
+
+    $isolatedCleanup = maintenance_center_run_download_cleanup_operation(0, 'test_owner', static function (): array {
+        throw new RuntimeException('private cleanup detail');
+    });
+    maintenance_center_test_assert(empty($isolatedCleanup['ok']), 'Optional download/cache owner failures must be isolated instead of escaping the browser step.');
+    maintenance_center_test_assert(($isolatedCleanup['diagnostic']['operation'] ?? '') === 'test_owner', 'Isolated cache failures must identify the exact sub-operation.');
+    maintenance_center_test_assert(($isolatedCleanup['diagnostic']['error_code'] ?? '') === 'runtime_exception', 'Isolated cache failures must carry a stable diagnostic code.');
+
     $migration = maintenance_center_test_source($root, 'database/migrations/202609200004_maintenance_center.php');
     foreach (['plan_json', 'state_json', 'plan_hash', 'registry_revision', 'progress_done', 'progress_total', 'cancel_requested', 'error_category', 'lock_key'] as $field) {
         maintenance_center_test_assert(str_contains($migration, $field), 'Maintenance Center persistence migration must include field: ' . $field);
@@ -129,6 +151,10 @@ namespace {
     maintenance_center_test_assert(str_contains($executionSource, 'database_maintenance_optimize_tables([$table])'), 'OPTIMIZE orchestration must pass exactly one server-selected table per step.');
     maintenance_center_test_assert(str_contains($executionSource, 'maintenance_center_physical_table_allowed($currentTable)'), 'Physical DB execution must re-check current server-side eligibility immediately before mutation.');
     maintenance_center_test_assert(str_contains($executionSource, "['has_more']"), 'Telemetry/resumable execution must honor subsystem has_more checkpoints.');
+    maintenance_center_test_assert(str_contains($executionSource, "['download_manifests', 'legacy_download_artifacts', 'zip_cache']"), 'Download/cache cleanup must keep independent server-owned sub-operations explicit.');
+    maintenance_center_test_assert(str_contains($executionSource, 'maintenance_center_run_download_cleanup_operation'), 'Download/cache owner failures must be isolated and logged with bounded diagnostics.');
+    maintenance_center_test_assert(str_contains($executionSource, "'maintenance_center.task_suboperation_failed'"), 'Download/cache sub-operation failures must emit a diagnosable Admin log event.');
+    maintenance_center_test_assert(str_contains($executionSource, 'current_subtask'), 'Download/cache progress must expose the current bounded sub-operation.');
     maintenance_center_test_assert(str_contains($executionSource, 'cancel_requested'), 'Execution must cooperatively check persisted cancellation.');
 
     $siteMaintenanceSource = maintenance_center_test_source($root, 'app/services/site_maintenance.php');

@@ -5582,5 +5582,10 @@
     "admin.maintenance_center.runtime.verify_completed": "Postcondition verification completed; before/after report is ready.",
     "admin.maintenance_center.runtime.task_skipped_disabled": "Skipped disabled task: {task}.",
     "admin.maintenance_center.runtime.task_skipped_failed": "Skipped failed optional task: {task}.",
-    "admin.maintenance_center.runtime.task_completed": "Completed task: {task}."
+    "admin.maintenance_center.runtime.task_completed": "Completed task: {task}.",
+    "admin.maintenance_center.runtime.cache_completed": "Download/cache cleanup completed.",
+    "admin.maintenance_center.runtime.cache_suboperation_failed": "Cache cleanup operation {operation} was unavailable and was skipped ({error_code}).",
+    "admin.maintenance_center.runtime.cache_manifest_slice": "Download manifest cache cleanup removed {files} file artifact(s).",
+    "admin.maintenance_center.runtime.cache_legacy_slice": "Legacy download artifact cleanup removed {files} artifact(s).",
+    "admin.maintenance_center.runtime.cache_zip_slice": "Generated ZIP cache cleanup removed {files} file(s) and {rows} cache row(s)."
 }

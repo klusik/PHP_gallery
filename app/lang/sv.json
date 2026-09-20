@@ -5582,5 +5582,10 @@
     "admin.maintenance_center.runtime.verify_completed": "Verifieringen av eftervillkor är klar; före-/efterrapporten är redo.",
     "admin.maintenance_center.runtime.task_skipped_disabled": "Inaktiverad uppgift hoppades över: {task}.",
     "admin.maintenance_center.runtime.task_skipped_failed": "Misslyckad valfri uppgift hoppades över: {task}.",
-    "admin.maintenance_center.runtime.task_completed": "Uppgift slutförd: {task}."
+    "admin.maintenance_center.runtime.task_completed": "Uppgift slutförd: {task}.",
+    "admin.maintenance_center.runtime.cache_completed": "Rensning av nedladdningscache slutfördes.",
+    "admin.maintenance_center.runtime.cache_suboperation_failed": "Cache-rensningen {operation} var inte tillgänglig och hoppades över ({error_code}).",
+    "admin.maintenance_center.runtime.cache_manifest_slice": "Rensning av nedladdningsmanifestets cache tog bort {files} filartefakt(er).",
+    "admin.maintenance_center.runtime.cache_legacy_slice": "Rensning av äldre nedladdningsartefakter tog bort {files} artefakt(er).",
+    "admin.maintenance_center.runtime.cache_zip_slice": "Rensning av genererad ZIP-cache tog bort {files} fil(er) och {rows} cacherad(er)."
 }
