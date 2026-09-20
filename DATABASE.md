@@ -1,6 +1,8 @@
 # PHP Gallery Database Documentation
 
-This document describes the database schema used by PHP Gallery as of application version 0.104.1. Version 0.97 adds the recoverable gallery-trash state machine through migrations `202609070001_gallery_trash_bin.php` and `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6 introduced no schema changes. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
+This document describes the database schema used by PHP Gallery as of application version 0.105. Version 0.97 adds the recoverable gallery-trash state machine through migrations `202609070001_gallery_trash_bin.php` and `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6 introduced no schema changes. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
+
+Version 0.105 adds three integrity structures. Migration `202609200001_gallery_image_move_journal.php` records durable image-move intent and recovery state; `202609200002_gallery_edit_revision.php` adds the application-owned `galleries.edit_revision` concurrency value; and `202609200003_admin_operation_keys.php` stores actor-bound replay outcomes for gallery creation and classic uploads. The edit-revision migration is a column-only alteration: it creates no trigger, routine, function, or server-global setting and requires no `SUPER`-style privilege. A retry after an interrupted attempt that already added the column is accepted and records the migration normally.
 
 Version 0.104.1 introduces no schema migration, table, column, index, or stored-data conversion. Title completion reads existing gallery metadata through bounded keyset queries and performs normalization in the service layer; it adds no persisted normalized-title storage. Disposable workflow databases belong only to isolated test fixtures, not to the installation's application schema.
 
@@ -95,7 +97,12 @@ Current migration sequence:
 | `202608180005_viewer_invitation_admin_management.php` | Adds nullable administrator-visible `viewer_invitations.target_email` metadata while retaining the existing HMAC email fingerprint as invitation authorization authority. |
 | `202608180006_viewer_admin_account_management.php` | Adds `viewer_accounts.must_change_password` with a default of `0`, allowing administrator-provisioned temporary passwords to be replaced before a normal viewer principal is established while preserving existing account login behavior. |
 | `202608200001_viewer_registration_verification_tokens.php` | Adds bounded child verification authorities for explicit registration resend without replacing the existing Phase 4.1 primary verification token. Stores only token hashes and cascades with the owning staged registration request. |
+| `202608200002_public_thumbnail_progressive_default.php` | Makes `progressive` the effective selected-gallery thumbnail default while retaining `responsive` as a supported selectable renderer and advancing the public content revision. |
 | `202608300001_link_favicon_cache.php` | Adds hostname-keyed metadata for bounded gallery-description favicon discovery, including success/failure state, validated cached-file metadata, and retry timing. |
+| `202608310001_reconcile_updater_server_policy_files.php` | Reconciles application-owned web-server policy files during the first compatible updater transition; otherwise remains an idempotent no-op. |
+| `202609200001_gallery_image_move_journal.php` | Adds durable image-move intent, same-transaction database commit markers, private recovery manifests, and bounded pending/source/destination indexes. |
+| `202609200002_gallery_edit_revision.php` | Adds unsigned `galleries.edit_revision` with default `1` for application-owned edit conflict detection. Uses ordinary column DDL only. |
+| `202609200003_admin_operation_keys.php` | Adds the actor/key-bound replay ledger for gallery creation and classic upload, including payload/owner hashes, lifecycle state, bounded original response, and pending-state index. |
 
 ## Entity Relationship Overview
 
@@ -103,6 +110,7 @@ Current migration sequence:
 users
   -> image_votes.user_id
   -> admin_logs.user_id
+  -> admin_operation_keys.actor_id (logical actor identity; no cascading foreign key)
   -> password_reset_tokens.user_id
   -> gallery_upload_tokens.created_by_user_id
   -> navigation_data_accounts.user_id
@@ -137,6 +145,7 @@ viewer_collections
 galleries
   -> galleries.parent_id
   -> images.gallery_id
+  -> gallery_image_move_journal.source_gallery_id / destination_gallery_id (logical recovery identities; no cascading foreign keys)
   -> gallery_tags.gallery_id
   -> zip_archives.gallery_id
   -> picture_game_votes.gallery_id
@@ -280,7 +289,44 @@ Important columns:
 | `banner_image_path` | Gallery banner asset path. |
 | `logo_image_path` | Gallery logo asset path. |
 | `separator_image_path` | Gallery separator asset path. |
+| `edit_revision` | Unsigned application-owned concurrency value. Supported gallery model updates increment it explicitly; complete editors submit the exact value they rendered. |
 | `created_at`, `updated_at` | Audit timestamps. |
+
+### `gallery_image_move_journal`
+
+Durable recovery evidence for image moves between physical galleries. One row is created before target files change and is retained independently of the gallery rows so unrelated deletion cannot erase an unresolved move.
+
+Important columns:
+
+| Column | Meaning |
+| --- | --- |
+| `operation_id` | Random 32-character hexadecimal primary identity. |
+| `source_gallery_id`, `destination_gallery_id` | Logical gallery identities used for ownership and bounded diagnostics. They intentionally have no cascading foreign key. |
+| `state` | Move lifecycle such as `prepared`, `moving`, `db_committed`, `finalized`, `rolled_back`, or `needs_reconciliation`. |
+| `database_committed` | Set in the same transaction as image ownership and cover changes; browser-response delivery is never treated as commit evidence. |
+| `manifest_json` | Private versioned recovery manifest containing relative source/destination identities and file evidence. It is not exposed by Admin diagnostics. |
+| `last_error_code` | Nullable allow-listed recovery category rather than a raw exception or filesystem path. |
+| `created_at`, `updated_at` | Lifecycle timestamps used by bounded pending-state inspection. |
+
+The `gallery_image_move_journal_pending` index supports state/age inspection. Source and destination indexes support gallery-scoped ownership checks. Confirmed missing or unknown journal schema blocks a new image move before file mutation; it does not fall back to an unjournaled move. Recovery is explicit through `scripts/reconcile_image_moves.php` and retains unverifiable files.
+
+### `admin_operation_keys`
+
+Durable replay protection for administrator gallery creation, classic upload, and combined create/upload. A row binds one administrator, one random operation key, one operation kind, and one semantic payload. It is not a title/filename uniqueness table and does not prevent intentional duplicates started with a fresh key.
+
+Important columns:
+
+| Column | Meaning |
+| --- | --- |
+| `actor_id`, `key_hash` | Composite primary identity. The actor is reauthenticated on every retry; plaintext operation keys are not stored. |
+| `operation_name` | Closed workflow kind, separating create, upload, and combined operations. |
+| `payload_hash` | Hash of normalized semantic fields and streamed file identities. |
+| `owner_hash` | Internal claim-owner identity used to prevent a second worker from taking active work. |
+| `state` | Durable `pending`, `completed`, or `needs_reconciliation` lifecycle. |
+| `response_json` | Nullable bounded canonical mutation response returned unchanged after current authorization and result-ownership checks. |
+| `created_at`, `updated_at` | Claim and lifecycle timestamps. |
+
+The exact primary-key order and uniqueness are inspected before claims are accepted. Confirmed missing or unknown storage refuses the operation before target work; requests never create or repair the ledger themselves. Uncertain rows are retained for explicit `scripts/reconcile_admin_operations.php` investigation instead of being expired, stolen, or rerun automatically.
 
 ### `gallery_trash_entries`
 

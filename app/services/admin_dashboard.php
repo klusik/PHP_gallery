@@ -481,7 +481,7 @@ function admin_mutation_schema_health_statuses(): array
         'mutation_gallery_edit' => [
             'resolver' =>
                 /**
-                 * Resolve exact revision-trigger protection through its bounded schema adapter.
+                 * Resolve exact application-owned revision protection through its bounded schema adapter.
                  * @return array{state:string,requirements:list<array{state:string,table:string,object:string,object_type:string}>} Verified protection state and fixed affected column identity.
                  */
                 static fn (): array => admin_gallery_edit_schema_status(),
