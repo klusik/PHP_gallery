@@ -270,7 +270,7 @@ function telemetry_datetime_from_event(mixed $value): string
  * Return a privacy-safe JSON context for one event name.
  *
  * @param string $eventName Event name value.
- * @param mixed $context Context value.
+ * @param array<string,mixed>|scalar|object|resource|null $context Context value.
  * @return ?string Text result for the caller.
  */
 function telemetry_context_json(string $eventName, mixed $context): ?string
@@ -285,14 +285,22 @@ function telemetry_context_json(string $eventName, mixed $context): ?string
         'client.performance.image_decode' => ['display_width_bucket', 'natural_width_bucket'],
         'client.performance.image_display' => ['display_width_bucket', 'natural_width_bucket'],
         'client.error.javascript' => ['component'],
-        'cache.lightbox.hit' => ['source_kind'],
-        'cache.lightbox.miss' => ['source_kind'],
-        'cache.lightbox.evicted' => ['source_kind'],
+        'cache.lightbox.hit' => ['source_kind', 'lookup_phase'],
+        'cache.lightbox.miss' => ['source_kind', 'lookup_phase'],
+        'cache.lightbox.evicted' => ['source_kind', 'lookup_phase'],
     ];
     // $safeContext stores only allowlisted scalar context values.
     $safeContext = [];
     foreach (($allowedKeys[$eventName] ?? []) as $key) {
         if (!array_key_exists($key, $context) || !is_scalar($context[$key])) {
+            continue;
+        }
+        if ($key === 'source_kind') {
+            $safeContext[$key] = telemetry_enum($context[$key], ['decoded_lightbox', 'unknown'], 'unknown');
+            continue;
+        }
+        if ($key === 'lookup_phase') {
+            $safeContext[$key] = telemetry_enum($context[$key], ['current_preview', 'current_full', 'eviction', 'unknown'], 'unknown');
             continue;
         }
         if ($key === 'trigger') {
@@ -310,4 +318,43 @@ function telemetry_context_json(string $eventName, mixed $context): ?string
         $safeContext[$key] = substr((string) $context[$key], 0, 80);
     }
     return $safeContext ? json_encode($safeContext, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : null;
+}
+
+/**
+ * Classify server media requests into coarse technical buckets, not identities.
+ *
+ * This heuristic is not proof of human traffic. Empty/custom clients remain
+ * unknown, and historical unknown rows are never retroactively guessed. The
+ * bounded raw UA is consumed transiently and is never included in the result.
+ * @param string $userAgent Request user-agent text, used in memory only.
+ * @return array{device_type:string,browser_family:string,os_family:string} Buckets.
+ */
+function telemetry_user_agent_buckets(string $userAgent): array
+{
+    $ua = strtolower(substr($userAgent, 0, 1024));
+    $browser = match (true) {
+        str_contains($ua, 'edg') => 'edge',
+        str_contains($ua, 'opr/') || str_contains($ua, 'opera') => 'opera',
+        str_contains($ua, 'firefox') || str_contains($ua, 'fxios') => 'firefox',
+        str_contains($ua, 'chrome') || str_contains($ua, 'crios') => 'chrome',
+        str_contains($ua, 'safari') => 'safari',
+        default => 'unknown',
+    };
+    $os = match (true) {
+        str_contains($ua, 'android') => 'android',
+        str_contains($ua, 'iphone') || str_contains($ua, 'ipad') || str_contains($ua, 'ipod') => 'ios',
+        str_contains($ua, 'windows') => 'windows',
+        str_contains($ua, 'macintosh') || str_contains($ua, 'mac os') => 'macos',
+        str_contains($ua, 'linux') => 'linux',
+        default => 'unknown',
+    };
+    $device = match (true) {
+        preg_match('/bot|crawler|spider|slurp|headlesschrome|phantomjs/i', $ua) === 1 => 'bot',
+        str_contains($ua, 'ipad') || str_contains($ua, 'tablet')
+            || (str_contains($ua, 'android') && !str_contains($ua, 'mobile')) => 'tablet',
+        str_contains($ua, 'mobile') || str_contains($ua, 'iphone') || str_contains($ua, 'ipod') => 'phone',
+        $browser !== 'unknown' => 'desktop',
+        default => 'unknown',
+    };
+    return ['device_type' => $device, 'browser_family' => $browser, 'os_family' => $os];
 }

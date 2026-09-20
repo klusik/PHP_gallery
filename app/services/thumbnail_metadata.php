@@ -253,6 +253,12 @@ function thumbnail_metadata_table_columns(string $table, bool $refresh = false):
     if (!in_array($table, ['image_thumbnail_variants', 'images'], true)) {
         return [];
     }
+    if (!$refresh && function_exists(__NAMESPACE__ . '\\schema_inspection_table_snapshot_cache')) {
+        $snapshots = schema_inspection_table_snapshot_cache();
+        if (array_key_exists($table, $snapshots)) {
+            return array_fill_keys(array_keys($snapshots[$table]['columns']), true);
+        }
+    }
     if ($refresh) {
         unset($cache[$table]);
     }

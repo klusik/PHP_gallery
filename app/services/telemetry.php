@@ -233,7 +233,8 @@ function telemetry_metric_name_for_event(string $eventName, array $event): ?stri
 /**
  * Record one telemetry event after strict normalization.
  *
- * @param array $event Browser or application event.
+ * @param array<string,mixed> $event Browser or application event.
+ * @return void No return value; effects are recorded in the owned state.
  */
 function telemetry_record_event(array $event): void
 {
@@ -243,6 +244,10 @@ function telemetry_record_event(array $event): void
     // $eventName stores the normalized event name from the allowlist.
     $eventName = telemetry_event_name($event['event_name'] ?? null);
     if ($eventName === null) {
+        return;
+    }
+    if ($eventName === 'client.performance.page_load'
+        && (!is_numeric($event['value_ms'] ?? null) || !is_finite((float) $event['value_ms']) || (float) $event['value_ms'] <= 0)) {
         return;
     }
     // $sessionHash stores the anonymized browser session hash.
@@ -500,12 +505,16 @@ function telemetry_record_hourly_metric(string $eventName, array $event, ?int $g
 /**
  * Record one served public media response for anonymous telemetry.
  *
- * @param array $image Image row or image data.
- * @param array $gallery Gallery row or gallery data.
+ * @param array<string,mixed> $image Image row or image data.
+ * @param array<string,mixed> $gallery Gallery row or gallery data.
  * @param string $eventName Event name value.
  * @param int $bytes Bytes value.
  * @param string $mediaVariant Media variant value.
  * @param string $cacheResult Cache result value.
+ * @param string $routeName Normalized route owning this response.
+ * @param ?string $referrer Transient referrer reduced to a coarse category.
+ * @param int $httpStatus HTTP status of the observed response.
+ * @return void No return value; effects are recorded in the owned state.
  */
 function telemetry_record_media_served_event(
     array $image,
@@ -535,7 +544,7 @@ function telemetry_record_media_served_event(
         'media_variant' => $mediaVariant,
         'cache_result' => $cacheResult,
         'http_status' => max(100, min(599, $httpStatus)),
-    ]);
+    ] + telemetry_user_agent_buckets((string) (request_data('server')['HTTP_USER_AGENT'] ?? '')));
 }
 
 /**
@@ -612,8 +621,8 @@ function telemetry_append_public_script(array $context = []): void
  * The value is intentionally a small semantic enum. Model helpers own the SQL
  * predicate and reject unsupported identifiers.
  *
- * @param mixed $value Candidate traffic segment.
- * @return string One of all, non_bot, or bot.
+ * @param scalar|array<array-key,mixed>|object|resource|null $value Candidate traffic segment.
+ * @return string One of all, non_bot, bot, or unknown.
  */
 function telemetry_traffic_segment(mixed $value): string
 {
@@ -621,7 +630,7 @@ function telemetry_traffic_segment(mixed $value): string
         return 'all';
     }
     $segment = strtolower(trim((string) $value));
-    return in_array($segment, ['all', 'non_bot', 'bot'], true) ? $segment : 'all';
+    return in_array($segment, ['all', 'non_bot', 'bot', 'unknown'], true) ? $segment : 'all';
 }
 
 /**
@@ -705,12 +714,17 @@ function telemetry_report_photo_open_session_buckets(int $days, string $trafficS
  *
  * @param int $days Days value.
  * @param int $threshold Strict threshold above which a session is diagnostic.
- * @return array Structured result data for the caller.
+ * @return array<string,mixed> Structured result data for the caller.
+ * @param string $trafficSegment Normalized technical traffic segment, not proof of a human visitor.
  */
 function telemetry_report_photo_open_anomaly_summary(int $days, int $threshold = 50, string $trafficSegment = 'all'): array
 {
     try {
-        return telemetry_model_report_photo_open_anomaly_summary($days, $threshold, telemetry_traffic_segment($trafficSegment));
+        $row = telemetry_model_report_photo_open_anomaly_summary($days, $threshold, telemetry_traffic_segment($trafficSegment));
+        $total = max(0, (int) ($row['photo_opens'] ?? 0));
+        $maximum = max(0, (int) ($row['max_opens_per_session'] ?? 0));
+        $row['largest_session_share_percent'] = $total > 0 ? 100 * $maximum / $total : 0.0;
+        return $row;
     } catch (Throwable) {
         return [];
     }
@@ -737,15 +751,19 @@ function telemetry_report_gallery_photo_opens_per_session(int $days, int $minSes
  * Return normalized activation-origin counts from retained raw photo-open events.
  *
  * @param int $days Days value bounded by the raw-event retention window.
- * @return array Structured result data for the caller.
+ * @return list<array{label:string,events:int}> Structured result data for the caller.
+ * @param string $trafficSegment Normalized technical traffic segment, not proof of a human visitor.
+ * @param ?bool $available Set false on query failure and true only after successful execution.
  */
-function telemetry_report_photo_open_origins(int $days, string $trafficSegment = 'all'): array
+function telemetry_report_photo_open_origins(int $days, string $trafficSegment = 'all', ?bool &$available = null): array
 {
+    $available = false;
     try {
         $rows = telemetry_model_report_photo_open_origins($days, telemetry_traffic_segment($trafficSegment));
     } catch (Throwable) {
         return [];
     }
+    $available = true;
     $allowed = ['click', 'keyboard', 'swipe', 'slideshow', 'history', 'direct', 'fallback', 'unknown', 'legacy_unclassified'];
     $normalized = [];
     foreach ($rows as $row) {
@@ -842,7 +860,7 @@ function telemetry_report_storage_diagnostics(int $reportDays = 30): array
         'telemetry_job_runs' => 180,
     ];
     try {
-        $tables = telemetry_model_report_storage_diagnostics($recentDays);
+        $tables = telemetry_model_report_storage_diagnostics($recentDays, $retentionByTable);
         foreach ($tables as &$row) {
             $tableName = (string) ($row['table_name'] ?? '');
             $row['retention_days'] = (int) ($retentionByTable[$tableName] ?? 0);
@@ -1307,13 +1325,14 @@ function telemetry_report_database_totals(int $days): array
  *
  * @param int $days Days value.
  * @param int $limit Maximum number of items.
- * @return array Structured result data for the caller.
+ * @return array<string,mixed> Structured result data for the caller.
+ * @param string $ranking One of slow, volume or failed; invalid values use the slow ordering.
  */
-function telemetry_report_database_fingerprints(int $days, int $limit = 30): array
+function telemetry_report_database_fingerprints(int $days, int $limit = 30, string $ranking = 'slow'): array
 {
     $limit = telemetry_report_bound_int($limit, 1, 100);
     try {
-        return telemetry_model_report_database_fingerprints($days, $limit);
+        return telemetry_model_report_database_fingerprints($days, $limit, $ranking);
     } catch (Throwable) {
         return [];
     }

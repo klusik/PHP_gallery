@@ -189,5 +189,7 @@ return [
         'public_search_progressive_test.mjs' => [],
         'telemetry_image_observability_test.mjs' => [],
         'telemetry_photo_lifecycle_test.mjs' => [],
+        'telemetry_navigation_timing_test.mjs' => [],
+        'telemetry_cache_accounting_test.mjs' => [],
     ],
 ];

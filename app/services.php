@@ -204,6 +204,7 @@ require_once __DIR__ . '/services/viewer_maintenance.php';
 require_once __DIR__ . '/services/telemetry_settings.php';
 require_once __DIR__ . '/services/telemetry_privacy.php';
 require_once __DIR__ . '/services/telemetry.php';
+require_once __DIR__ . '/services/telemetry_diagnostics.php';
 require_once __DIR__ . '/services/telemetry_rollup.php';
 require_once __DIR__ . '/services/database_observer.php';
 // Load the GitHub API gateway before update services perform remote checks.

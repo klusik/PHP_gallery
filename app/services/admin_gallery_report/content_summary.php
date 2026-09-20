@@ -195,7 +195,7 @@ function admin_gallery_report_telemetry_section(int $days): array
     }
     $windows = [];
     foreach (ADMIN_GALLERY_REPORT_TELEMETRY_COMPARISON_WINDOWS as $windowDays) {
-        $sessions = function_exists('Gallery\\Services\\telemetry_report_session_summary') ? telemetry_report_session_summary($windowDays) : [];
+        $sessions = function_exists('Gallery\\Services\\telemetry_report_canonical_summary') ? telemetry_report_canonical_summary($windowDays) : [];
         $databaseTotals = function_exists('Gallery\\Services\\telemetry_report_database_totals') ? telemetry_report_database_totals($windowDays) : [];
         $windows[] = [
             'days' => $windowDays,
@@ -213,7 +213,7 @@ function admin_gallery_report_telemetry_section(int $days): array
         'days' => $days,
         'public_enabled' => function_exists('Gallery\\Services\\telemetry_public_usage_enabled') && telemetry_public_usage_enabled(),
         'windows' => $windows,
-        'session_summary' => function_exists('Gallery\\Services\\telemetry_report_session_summary') ? telemetry_report_session_summary($days) : [],
+        'session_summary' => function_exists('Gallery\\Services\\telemetry_report_canonical_summary') ? telemetry_report_canonical_summary($days) : [],
         'daily_trends' => function_exists('Gallery\\Services\\telemetry_report_daily_trends') ? telemetry_report_daily_trends($days) : [],
         'top_galleries' => function_exists('Gallery\\Services\\telemetry_report_top_galleries') ? telemetry_report_top_galleries($days, ADMIN_GALLERY_REPORT_ROW_LIMITS['telemetry_top']) : [],
         'top_routes' => function_exists('Gallery\\Services\\telemetry_report_top_routes') ? telemetry_report_top_routes($days, ADMIN_GALLERY_REPORT_ROW_LIMITS['telemetry_top']) : [],

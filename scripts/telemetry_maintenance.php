@@ -46,8 +46,9 @@ require __DIR__ . '/../app/bootstrap.php';
 try {
     // $result stores the rollup and retention cleanup summary.
     $result = telemetry_run_maintenance();
-    echo json_encode(['ok' => true, 'result' => $result], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . PHP_EOL;
+    echo json_encode(['ok' => !empty($result['ok']), 'result' => $result], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . PHP_EOL;
+    exit(!empty($result['ok']) ? 0 : 1);
 } catch (Throwable $exception) {
-    fwrite(STDERR, json_encode(['ok' => false, 'error' => $exception->getMessage()], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . PHP_EOL);
+    fwrite(STDERR, json_encode(['ok' => false, 'error' => 'telemetry_maintenance_unavailable'], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . PHP_EOL);
     exit(1);
 }

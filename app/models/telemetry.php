@@ -43,10 +43,23 @@ use InvalidArgumentException;
 use function Gallery\Core\db;
 
 /**
+ * Bound the compatibility retention helper when no batch size is passed.
+ * Type: integer.
+ * Units: rows per DELETE statement.
+ * Scope: telemetry retention model default only.
+ * Consumers: telemetry_model_delete_older_than compatibility callers.
+ * Rationale: legacy callers must remain bounded; the scheduled service supplies its configured limit.
+ */
+const TELEMETRY_MODEL_DEFAULT_DELETE_BATCH = 2000;
+
+/**
  * Return a constrained SQL predicate for telemetry traffic segmentation.
  *
  * Controllers/services pass only semantic segment names. SQL stays owned here
  * and the qualified device_type column is restricted to known report aliases.
+ * @param string $trafficSegment Normalized technical traffic segment, not proof of a human visitor.
+ * @param string $deviceColumn Model-owned validated device column identifier.
+ * @return string Result of the documented operation.
  */
 function telemetry_model_traffic_segment_condition(string $trafficSegment, string $deviceColumn = 'device_type'): string
 {
@@ -55,8 +68,9 @@ function telemetry_model_traffic_segment_condition(string $trafficSegment, strin
     }
     return match ($trafficSegment) {
         'all' => '',
-        'non_bot' => ' AND ' . $deviceColumn . " <> 'bot'",
+        'non_bot' => ' AND ' . $deviceColumn . " IN ('desktop', 'tablet', 'phone')",
         'bot' => ' AND ' . $deviceColumn . " = 'bot'",
+        'unknown' => ' AND ' . $deviceColumn . " = 'unknown'",
         default => throw new InvalidArgumentException('Unsupported telemetry traffic segment.'),
     };
 }
@@ -70,8 +84,9 @@ function telemetry_model_traffic_segment_condition(string $trafficSegment, strin
  * telemetry writes or increasing persistent telemetry cardinality.
  *
  * @param \PDOStatement $statement Prepared statement to execute.
- * @param array<int,mixed> $params Bound statement parameters.
+ * @param array<array-key,mixed> $params Bound statement parameters.
  * @param string $profileKey Bounded source-owned report operation identifier.
+ * @return void No return value; effects are recorded in the owned state.
  */
 function telemetry_model_profiled_report_execute(\PDOStatement $statement, array $params, string $profileKey): void
 {
@@ -98,6 +113,11 @@ function telemetry_model_profiled_report_execute(\PDOStatement $statement, array
         'database_totals',
         'database_fingerprints',
         'job_runs',
+        'rollup_consistency_hourly',
+        'rollup_consistency_daily',
+        'photo_open_origins',
+        'database_fingerprints_volume',
+        'cache_phases',
     ];
     if (!in_array($profileKey, $allowedKeys, true)) {
         throw new InvalidArgumentException('Unsupported telemetry report query profile key.');
@@ -444,7 +464,9 @@ function telemetry_model_report_gallery_photo_opens_per_session(int $days, int $
 /**
  * Return privacy-safe photo-open activation-origin counts from retained raw events.
  *
- * @return array<int,array<string,mixed>>
+ * @return array<string,mixed>
+ * @param int $days Report lookback or configured retention age in days.
+ * @param string $trafficSegment Normalized technical traffic segment, not proof of a human visitor.
  */
 function telemetry_model_report_photo_open_origins(int $days, string $trafficSegment = 'all'): array
 {
@@ -456,8 +478,8 @@ function telemetry_model_report_photo_open_origins(int $days, string $trafficSeg
     $stmt = db()->prepare('SELECT ' . $originSql . " AS label, COUNT(*) AS events
         FROM telemetry_events
         WHERE occurred_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
-          AND event_name = 'public.photo.opened'" . $segmentSql . '\n        GROUP BY ' . $originSql . '\n        ORDER BY events DESC, label ASC');
-    $stmt->execute([$days]);
+          AND event_name = 'public.photo.opened'" . $segmentSql . "\n        GROUP BY " . $originSql . "\n        ORDER BY events DESC, label ASC");
+    telemetry_model_profiled_report_execute($stmt, [$days], 'photo_open_origins');
     return $stmt->fetchAll();
 }
 
@@ -515,9 +537,10 @@ function telemetry_model_report_table_count(string $tableName): int
  * duplicate table scans merely to show storage metadata.
  *
  * @param int $recentDays Recent growth window in days.
- * @return array<int,array<string,mixed>> Storage diagnostics keyed as rows for presentation.
+ * @return array<string,mixed> Storage diagnostics keyed as rows for presentation.
+ * @param array<string,int> $retentionByTable Configured retention days keyed by the bounded telemetry table names.
  */
-function telemetry_model_report_storage_diagnostics(int $recentDays = 7): array
+function telemetry_model_report_storage_diagnostics(int $recentDays = 7, array $retentionByTable = []): array
 {
     $recentDays = max(1, min(30, $recentDays));
     $tableColumns = [
@@ -549,14 +572,16 @@ function telemetry_model_report_storage_diagnostics(int $recentDays = 7): array
 
     $rows = [];
     foreach ($tableColumns as $tableName => $timestampColumn) {
+        $retentionDays = max(1, min(3650, (int) ($retentionByTable[$tableName] ?? 3650)));
         $stmt = db()->prepare(
             'SELECT COUNT(*) AS exact_rows,'
             . ' MIN(' . $timestampColumn . ') AS oldest_row,'
             . ' MAX(' . $timestampColumn . ') AS newest_row,'
             . ' COALESCE(SUM(CASE WHEN ' . $timestampColumn . ' >= DATE_SUB(NOW(), INTERVAL ? DAY) THEN 1 ELSE 0 END), 0) AS recent_rows'
+            . ', COALESCE(SUM(CASE WHEN ' . $timestampColumn . ' < DATE_SUB(NOW(), INTERVAL ? DAY) THEN 1 ELSE 0 END), 0) AS overdue_rows'
             . ' FROM ' . $tableName
         );
-        telemetry_model_profiled_report_execute($stmt, [$recentDays], 'storage_table_scan');
+        telemetry_model_profiled_report_execute($stmt, [$recentDays, $retentionDays], 'storage_table_scan');
         $row = $stmt->fetch() ?: [];
         $dataBytes = (int) ($sizes[$tableName]['data_bytes'] ?? 0);
         $indexBytes = (int) ($sizes[$tableName]['index_bytes'] ?? 0);
@@ -564,6 +589,7 @@ function telemetry_model_report_storage_diagnostics(int $recentDays = 7): array
             'table_name' => $tableName,
             'exact_rows' => max(0, (int) ($row['exact_rows'] ?? 0)),
             'recent_rows' => max(0, (int) ($row['recent_rows'] ?? 0)),
+            'overdue_rows' => max(0, (int) ($row['overdue_rows'] ?? 0)),
             'oldest_row' => $row['oldest_row'] ?? null,
             'newest_row' => $row['newest_row'] ?? null,
             'data_bytes' => max(0, $dataBytes),
@@ -921,7 +947,9 @@ function telemetry_model_report_session_distribution(string $dimension, int $day
 /**
  * Return performance metric report rows.
  *
- * @return array<int,array<string,mixed>>
+ * @return array<string,mixed>
+ * @param int $days Report lookback or configured retention age in days.
+ * @param string $trafficSegment Normalized technical traffic segment, not proof of a human visitor.
  */
 function telemetry_model_report_performance_metrics(int $days, string $trafficSegment = 'all'): array
 {
@@ -933,7 +961,8 @@ function telemetry_model_report_performance_metrics(int $days, string $trafficSe
         MAX(value_max) AS max_value
         FROM telemetry_hourly_metrics
         WHERE bucket_start >= DATE_SUB(NOW(), INTERVAL ? DAY)
-          AND (metric_name LIKE \'web_vital.%\' OR metric_name IN (\'client.page_load_ms\', \'client.image_decode_ms\', \'client.image_display_ms\'))' . $segmentSql . '
+          AND (metric_name LIKE \'web_vital.%\' OR metric_name IN (\'client.page_load_ms\', \'client.image_decode_ms\', \'client.image_display_ms\'))
+          AND (metric_name <> \'client.page_load_ms\' OR value_min > 0)' . $segmentSql . '
         GROUP BY metric_name
         ORDER BY metric_name ASC');
     telemetry_model_profiled_report_execute($stmt, [$days], 'performance_metrics');
@@ -1010,14 +1039,16 @@ function telemetry_model_report_database_summary(int $days, int $limit): array
 /**
  * Return total database telemetry counters for a report window.
  *
- * @return array{query_count:float,slow_count:float,failed_count:float}
+ * @return array{query_count:float,slow_count:float,failed_count:float,first_bucket:?string,last_bucket:?string}
+ * @param int $days Report lookback or configured retention age in days.
  */
 function telemetry_model_report_database_totals(int $days): array
 {
     $stmt = db()->prepare('SELECT
         COALESCE(SUM(query_count), 0) AS query_count,
         COALESCE(SUM(slow_count), 0) AS slow_count,
-        COALESCE(SUM(failed_count), 0) AS failed_count
+        COALESCE(SUM(failed_count), 0) AS failed_count,
+        MIN(bucket_start) AS first_bucket, MAX(bucket_start) AS last_bucket
         FROM telemetry_db_query_metrics
         WHERE bucket_start >= DATE_SUB(NOW(), INTERVAL ? DAY)');
     telemetry_model_profiled_report_execute($stmt, [$days], 'database_totals');
@@ -1026,29 +1057,42 @@ function telemetry_model_report_database_totals(int $days): array
         'query_count' => (float) ($row['query_count'] ?? 0),
         'slow_count' => (float) ($row['slow_count'] ?? 0),
         'failed_count' => (float) ($row['failed_count'] ?? 0),
+        'first_bucket' => $row['first_bucket'] ?? null,
+        'last_bucket' => $row['last_bucket'] ?? null,
     ];
 }
 
 /**
  * Return database query-fingerprint hot spots.
  *
- * @return array<int,array<string,mixed>>
+ * @return list<array<string,mixed>>
+ * @param int $days Report lookback or configured retention age in days.
+ * @param int $limit Maximum rows or items processed by this call.
+ * @param string $ranking One of slow, volume or failed; unsupported values are rejected.
  */
-function telemetry_model_report_database_fingerprints(int $days, int $limit): array
+function telemetry_model_report_database_fingerprints(int $days, int $limit, string $ranking = 'slow'): array
 {
     $limit = max(1, min(100, $limit));
+    $order = match ($ranking) {
+        'slow' => 'slow_count DESC, avg_latency_ms DESC, query_count DESC',
+        'volume' => 'query_count DESC, total_latency_ms DESC',
+        'failed' => 'failed_count DESC, query_count DESC',
+        default => throw new InvalidArgumentException('Unsupported fingerprint ranking.'),
+    };
+    $having = $ranking === 'failed' ? ' HAVING SUM(failed_count) > 0' : '';
     $stmt = db()->prepare('SELECT query_fingerprint, route_name, operation, table_name,
         SUM(query_count) AS query_count,
         SUM(failed_count) AS failed_count,
         SUM(slow_count) AS slow_count,
+        SUM(latency_ms_sum) AS total_latency_ms,
         SUM(latency_ms_sum) / NULLIF(SUM(query_count), 0) AS avg_latency_ms,
         MAX(latency_ms_max) AS max_latency_ms
         FROM telemetry_db_query_metrics
         WHERE bucket_start >= DATE_SUB(NOW(), INTERVAL ? DAY)
-        GROUP BY query_fingerprint, route_name, operation, table_name
-        ORDER BY slow_count DESC, avg_latency_ms DESC, query_count DESC
+        GROUP BY query_fingerprint, route_name, operation, table_name' . $having . '
+        ORDER BY ' . $order . ', query_fingerprint ASC
         LIMIT ' . $limit);
-    telemetry_model_profiled_report_execute($stmt, [$days], 'database_fingerprints');
+    telemetry_model_profiled_report_execute($stmt, [$days], $ranking === 'volume' ? 'database_fingerprints_volume' : 'database_fingerprints');
     return $stmt->fetchAll();
 }
 
@@ -1100,8 +1144,20 @@ function telemetry_model_rollup_daily(string $fromDate, string $toDate, string $
 
 /**
  * Delete telemetry rows older than the supplied day count from a constrained table/column pair.
+ * @param string $tableName Allowlisted telemetry table.
+ * @param string $columnName Allowlisted timestamp column for that table.
+ * @param int $days Report lookback or configured retention age in days.
+ * @param int $limit Maximum rows or items processed by this call.
+ * @param ?string $before Exclusive date boundary already covered by durable daily rollup.
+ * @return int Result of the documented operation.
+ * The default batch bounds one DELETE when a compatibility caller omits a limit.
+ * Type: integer.
+ * Units: rows per statement.
+ * Scope: one allowlisted telemetry retention target.
+ * Consumers: bounded maintenance and the compatibility purge helper.
+ * Rationale: cap row-lock work while allowing catch-up over repeated slices.
  */
-function telemetry_model_delete_older_than(string $tableName, string $columnName, int $days): int
+function telemetry_model_delete_older_than(string $tableName, string $columnName, int $days, int $limit = TELEMETRY_MODEL_DEFAULT_DELETE_BATCH, ?string $before = null): int
 {
     $safeTables = [
         'telemetry_events' => ['occurred_at'],
@@ -1114,8 +1170,22 @@ function telemetry_model_delete_older_than(string $tableName, string $columnName
     if (!isset($safeTables[$tableName]) || !in_array($columnName, $safeTables[$tableName], true)) {
         throw new InvalidArgumentException('Unsupported telemetry retention target.');
     }
-    $stmt = db()->prepare('DELETE FROM ' . $tableName . ' WHERE ' . $columnName . ' < DATE_SUB(NOW(), INTERVAL ? DAY)');
-    $stmt->execute([$days]);
+    $limit = max(1, min(10000, $limit));
+    // Never delete an hourly bucket unless a durable completed-day checkpoint
+    // proves it was rolled up. Partial deletion must not be re-aggregated later.
+    if ($tableName === 'telemetry_hourly_metrics' && $before === null) {
+        return 0;
+    }
+    $params = [$days];
+    $where = '';
+    if ($before !== null) {
+        $where = ' AND ' . $columnName . ' < ?';
+        $params[] = $before;
+    }
+    $stmt = db()->prepare('DELETE FROM ' . $tableName . ' WHERE ' . $columnName
+        . ' < DATE_SUB(NOW(), INTERVAL ? DAY)' . $where
+        . ' ORDER BY ' . $columnName . ' ASC LIMIT ' . $limit);
+    $stmt->execute($params);
     return $stmt->rowCount();
 }
 

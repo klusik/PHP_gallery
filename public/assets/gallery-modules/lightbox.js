@@ -106,7 +106,7 @@ export function teardownGalleryLightbox() {
  *
  * Used by browser-side gallery behavior.
  *
- * @return {object} Object result for the caller.
+ * @return {void} Installs the single viewer lifecycle without returning a second viewer.
  */
 export function setupGalleryLightbox() {
     teardownGalleryLightbox();
@@ -2535,8 +2535,9 @@ export function setupGalleryLightbox() {
         /**
      * Handles load decoded lightbox image behavior for the gallery UI.
      *
-     * @param {*} src Value supplied by the caller or event context.
-     * @return {*} Result of the UI operation, when a value is produced.
+     * @param {string} src Authorized source URL.
+     * @param {Object<string, unknown>} options Decode controls and optional navigation ownership.
+     * @return {Promise<HTMLImageElement>} A decoded image or a rejected source load.
      */
     function loadDecodedLightboxImage(src, options = {}) {
         if (!src) {
@@ -2545,16 +2546,26 @@ export function setupGalleryLightbox() {
         const cachedEntry = useDecodedLightboxImageCacheEntry(src);
         const telemetryOwned = Number.isInteger(options.telemetryIndex) && Number.isInteger(options.telemetryToken);
         if (cachedEntry) {
-            galleryDevModeState.cacheHits += galleryDevModeEnabled ? 1 : 0;
             devMarkSource(src, 'loading', 'load-hit');
-            if (telemetryOwned) {
-                telemetryLightboxCacheEvent('cache.lightbox.hit', options.telemetryIndex);
-            }
-            return cachedEntry.promise.then((preloadedImage) => {
+            return cachedEntry.promise.then(
+                /**
+                 * Count only a resolved usable cache image for the active navigation.
+                 * @param {HTMLImageElement|null} preloadedImage Decoded image or a failed preload sentinel.
+                 * @return {HTMLImageElement|Promise<HTMLImageElement>} Cached image or a fresh recovery load.
+                 */
+                (preloadedImage) => {
                 if (preloadedImage) {
+                    galleryDevModeState.cacheHits += galleryDevModeEnabled ? 1 : 0;
+                    if (telemetryOwned && isCurrentLightboxImageRequest(options.telemetryIndex, options.telemetryToken)) {
+                        telemetryLightboxCacheEvent('cache.lightbox.hit', options.telemetryIndex, src);
+                    }
                     lightboxTelemetryCacheResults.set(preloadedImage, 'hit');
                     return preloadedImage;
                 }
+                if (telemetryOwned && isCurrentLightboxImageRequest(options.telemetryIndex, options.telemetryToken)) {
+                    telemetryLightboxCacheEvent('cache.lightbox.miss', options.telemetryIndex, src);
+                }
+                galleryDevModeState.cacheMisses += galleryDevModeEnabled ? 1 : 0;
                 // freshPromise stores state or configuration for the gallery front-end flow.
                 const freshPromise = loadFreshDecodedLightboxImage(src, {...options, telemetryCacheResult: 'miss'});
                 rememberDecodedLightboxImage(src, freshPromise.catch(() => null), 'load-cache-retry');
@@ -2562,8 +2573,8 @@ export function setupGalleryLightbox() {
             });
         }
         galleryDevModeState.cacheMisses += galleryDevModeEnabled ? 1 : 0;
-        if (telemetryOwned) {
-            telemetryLightboxCacheEvent('cache.lightbox.miss', options.telemetryIndex);
+        if (telemetryOwned && isCurrentLightboxImageRequest(options.telemetryIndex, options.telemetryToken)) {
+            telemetryLightboxCacheEvent('cache.lightbox.miss', options.telemetryIndex, src);
         }
         // freshPromise stores state or configuration for the gallery front-end flow.
         const freshPromise = loadFreshDecodedLightboxImage(src, {...options, telemetryCacheResult: 'miss'});
@@ -3714,8 +3725,10 @@ export function setupGalleryLightbox() {
      *
      * @param {string} eventName Cache telemetry event name.
      * @param {number} index Active lightbox index.
+     * @param {string} src Lookup source used only to derive a bounded phase label.
+     * @return {void} Emits a privacy-safe observation when the active card is valid.
      */
-    function telemetryLightboxCacheEvent(eventName, index) {
+    function telemetryLightboxCacheEvent(eventName, index, src = '') {
         const card = cards[index];
         if (!window.PHPGalleryTelemetryCacheEvent || !(card instanceof HTMLElement)) {
             return;
@@ -3725,7 +3738,9 @@ export function setupGalleryLightbox() {
                 eventName,
                 Number(card.dataset.imageId || 0),
                 Number(card.dataset.galleryId || window.PHPGalleryTelemetry?.galleryId || 0),
-                'decoded_lightbox'
+                'decoded_lightbox',
+                eventName === 'cache.lightbox.evicted' ? 'eviction'
+                    : (src ? (telemetryLightboxMediaVariant(index, src) === 'original' ? 'current_full' : 'current_preview') : 'unknown')
             );
         } catch (error) {
             if (galleryDevModeEnabled) {

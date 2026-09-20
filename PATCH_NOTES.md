@@ -1,5 +1,113 @@
 # Patch notes
 
+## Version 0.105.1
+
+Version 0.105.1 is a focused telemetry reliability and observability release built on the Version 0.105 administration hardening. It repairs retention scheduling, archival checkpoints, database observations, traffic classification, page-load timing, decoded-cache accounting, and Admin telemetry presentation without changing gallery access rules or requiring a database migration. The release is designed for ordinary shared hosting: maintenance remains bounded and cooperative, failures are explicit, and no raw visitor identifiers or database exception text are exposed.
+
+### Highlights
+
+#### Independent telemetry retention and recovery
+
+- Added an independent telemetry maintenance worker with its own non-blocking database lock, schedule, time budget, bounded deletion batches, retry interval, and durable job evidence.
+- Scheduled telemetry retention before thumbnail maintenance so a busy thumbnail worker, a thumbnail lock, or an unrelated maintenance phase cannot silently prevent telemetry cleanup.
+- Added interruption-aware daily archival checkpoints. A completed day is upserted before its checkpoint advances; malformed or unavailable checkpoints refuse replay and hourly deletion instead of restarting from an unsafe boundary.
+- Reconciled abandoned started jobs only after exclusive lock admission and distinguished a completed bounded slice from an empty historical backlog through the `has_more` result.
+- Preserved non-destructive behavior when telemetry is disabled and kept retention ages separate from the observed count of overdue rows.
+
+#### Correct telemetry measurements
+
+- Fixed activation-origin SQL construction and distinguished query failure from an empty result.
+- Allowed both daily-consistency query families through the profiler allowlist and corrected affected-row semantics so metadata statements and failed executions are not counted as affected data.
+- Added positive page-load timing collection after the page-load event, including collectors loaded after the document is already complete. Invalid, non-finite, zero, or superseded samples are excluded rather than rewritten as zero.
+- Corrected decoded-cache accounting for preview and full-source phases. Only a resolved usable cached image produces a hit; failed preloads that fall back to a fresh load produce one miss, and stale navigation cannot attribute a late result to a newer image.
+- Preserved the historical high-open session as annotated evidence, including its share of the selected cohort; the repair does not heuristically delete or reinterpret it.
+
+#### Privacy-safe traffic and media reporting
+
+- Separated all traffic, non-bot desktop/tablet/phone, bot-classified, and unclassified segments so unknown classification is not presented as a person or a bot.
+- Added bounded server-side media device/browser/OS buckets without storing the raw user agent and without retroactively assigning historical unknown media to people or bots.
+- Corrected Complete Overview and standalone exports to use canonical page/photo event counts while retaining legacy session, duration, bounce, and cohort semantics with explicit labels.
+- Added query fingerprints ranked by count and failures, observed database coverage, first/last hourly buckets, and bounded report diagnostics without exposing SQL, credentials, raw IPs, session identifiers, or private paths.
+
+#### Better Admin maintenance visibility
+
+- Added bounded telemetry diagnostic and maintenance services under the existing Controller-Service-Model boundary.
+- Added localized English, Czech, German, and Swedish messages for maintenance outcomes, unavailable states, retention evidence, overdue counts, traffic segments, and repair diagnostics.
+- Added explicit POST plus CSRF handling for the Admin telemetry maintenance action; no mutable GET maintenance link or new server token is required.
+- Preserved the distinction between configured retention, observed overdue data, completed work, interrupted work, failed work, and remaining work.
+
+### Technical Details
+
+#### Backend and maintenance ownership
+
+- Added `app/services/telemetry_diagnostics.php` and `app/models/telemetry_diagnostics.php` for bounded database-observation and report aggregation ownership.
+- Added `app/services/telemetry_maintenance.php` and `app/models/telemetry_maintenance.php` for lock admission, retention planning, checkpoint validation, deletion, archival, job lifecycle, and interruption recovery.
+- Refined `app/services/telemetry.php`, `app/services/telemetry_privacy.php`, and `app/services/telemetry_rollup.php` so collection, privacy classification, daily rollup, retention, and reporting remain separate responsibilities.
+- Updated `app/controllers/admin_telemetry.php` and `app/views/admin_telemetry.php` to prepare and render view-model data without moving SQL or domain policy into presentation code.
+- Updated `app/services/site_maintenance.php` to invoke the telemetry slice independently before thumbnail maintenance while retaining bounded execution and lock ownership.
+- Updated `scripts/telemetry_maintenance.php` as a bounded CLI entry point. A failed slice exits nonzero; `has_more: true` requires another scheduled invocation.
+
+#### Database and compatibility
+
+- Added no migration, table, column, index, stored procedure, trigger, or production configuration requirement.
+- Reused the existing telemetry tables and `telemetry_job_runs` lifecycle. Raw events are removed only according to configured retention and a valid exclusive archival checkpoint.
+- Refused destructive retention when retention settings, checkpoint dates, schema inspection, or required reads are missing or unknown. There is no unsafe default that turns an inspection failure into deletion.
+- Kept telemetry master OFF non-destructive. Presentation/reporting may show an unavailable or empty state, while mutation-sensitive retention still requires conclusive schema and policy readiness.
+- Kept the existing collector compatibility copy byte-identical to `usage.js` and refreshed the effective asset revisions for the lightbox and telemetry collectors.
+
+#### Frontend and localized Admin behavior
+
+- Updated `public/assets/telemetry.js` and `public/assets/usage.js` for positive finalized navigation timing and late collector initialization.
+- Updated `public/assets/gallery-modules/lightbox.js` so decoded-cache observations remain scoped to the current navigation owner and image phase.
+- Added bounded cache-accounting, navigation-timing, privacy-bucket, query, maintenance, and repair semantics contracts under `tests/`.
+- Updated all four language catalogs together so new telemetry statuses and failure summaries have consistent fallback behavior.
+
+#### Configuration and policy
+
+- Added documented defaults in `app/configuration_defaults.php` for telemetry maintenance time budget, deletion batch size, deletion batch count, rollup-day limit, retry interval, and normal completion interval.
+- These values are cooperative ceilings and scheduling defaults, not database query cancellation guarantees. InnoDB filesystem allocation is not promised to shrink immediately after row deletion.
+- Preserved centralized policy ownership and bounded output rules; diagnostics do not disclose raw SQL, PDO messages, raw user agents, IP addresses, credentials, tokens, or private filesystem paths.
+
+#### Permanent documentation
+
+- Added and retained `docs/TELEMETRY_0105_REPAIR.md` as the technical reference for maintenance, measurement, privacy, deployment, and acceptance boundaries.
+- Updated the former temporary telemetry checkpoint into permanent documentation before removing the temporary file from the release tree.
+- Updated the manual, database/runtime markers, testing guide, architecture references, source manifest, and localized catalogs for Version 0.105.1.
+
+### Tests
+
+#### Deterministic regression coverage
+
+- Added `tests/telemetry_maintenance_recovery_test.php` for lock/throttle behavior, completed-day checkpoint advancement, interrupted job reconciliation, late-event refresh, bounded deletion, `has_more`, and telemetry-disabled paths.
+- Added `tests/telemetry_repair_queries_test.php` and `tests/telemetry_repair_semantics_test.php` for SQL construction, profiler admission, canonical counts, affected-row semantics, schema-readiness refusal, traffic segmentation, privacy buckets, and anomalous-session reporting.
+- Added `tests/telemetry_cache_accounting_test.mjs` and `tests/telemetry_navigation_timing_test.mjs` for cache-hit/miss ownership, stale navigation suppression, late collector loading, invalid timing values, and finalized positive measurements.
+- Extended feature-policy, audit-remediation, image-observability, and traffic-segment contracts and registered the new fixtures in `scripts/audit_registry.php`.
+
+#### Verification boundary
+
+- The central audit remains the authoritative verification interface. The source handoff audit recorded no executed regression failures, but its environment was blocked by unavailable SQLite, ZIP, GD, browser, and live database prerequisites.
+- Production query-volume reduction, live MariaDB maintenance behavior, real browser acceptance, and hosting-side ZIP-cache permissions remain operational acceptance work; this release does not claim those checks were performed locally.
+
+### User Impact
+
+#### For administrators
+
+- Telemetry maintenance now provides clearer progress, remaining-work, interrupted-work, and failure information. A successful bounded slice may still report more work, and regular cron/maintenance invocations remain necessary.
+- Admin reports show canonical page/photo activity, explicit legacy session semantics, four privacy-safe traffic segments, observed overdue rows, query coverage, and decoded-cache phase details.
+- Run `php scripts/telemetry_maintenance.php` or the existing scheduled maintenance entry point to process another bounded slice. No manual SQL deletion, new credential, or live configuration migration is required.
+- Existing retention settings continue to control deletion. A disabled telemetry master remains non-destructive.
+
+#### For visitors
+
+- No public gallery route, media authorization rule, gallery access rule, thumbnail renderer, lightbox permission, or visitor-facing URL changes in this patch.
+- Page-load and media observations are more accurate and remain privacy-bounded; raw visitor identifiers and raw user agents are not introduced.
+
+#### Limitations and upgrade notes
+
+- Version 0.105.1 contains no schema migration and does not require a special database privilege or server-variable change.
+- Telemetry cleanup is cooperative and bounded. It must be invoked regularly, and a `has_more` result is expected when historical work exceeds one slice.
+- The supplied source-level audit is not a substitute for isolated MariaDB integration, real browser/device acceptance, production query measurement, or hosting permission investigation.
+
 ## Version 0.105
 
 Version 0.105 is a substantial reliability, safety, and maintainability release for gallery administration. It protects catalog and filesystem ownership during concurrent or interrupted work, makes gallery editing conflict-aware, makes create and classic-upload retries replay-safe, strengthens the Admin side-panel lifecycle, bounds image decoding and gallery lookup work, and expands operational diagnostics and release qualification. Public gallery features and URLs remain compatible; the main changes are safer behavior behind existing administrator workflows.

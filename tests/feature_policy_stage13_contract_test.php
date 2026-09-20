@@ -207,9 +207,9 @@ namespace {
     );
 
     $telemetryRollupSource = (string) file_get_contents($root . '/app/services/telemetry_rollup.php');
-    $telemetryMaintenanceStart = strpos($telemetryRollupSource, 'function telemetry_run_maintenance(): array');
+    $telemetryMaintenanceStart = strpos($telemetryRollupSource, 'function telemetry_run_maintenance(array $options = []): array');
     $telemetryMaintenanceGate = $telemetryMaintenanceStart === false ? false : strpos($telemetryRollupSource, "feature_capability_effective_enabled('telemetry')", $telemetryMaintenanceStart);
-    $telemetryMaintenanceRollup = $telemetryMaintenanceStart === false ? false : strpos($telemetryRollupSource, 'telemetry_rollup_daily()', $telemetryMaintenanceStart);
+    $telemetryMaintenanceRollup = $telemetryMaintenanceStart === false ? false : strpos($telemetryRollupSource, 'telemetry_rollup_daily(', $telemetryMaintenanceStart);
     feature_policy_stage13_assert(
         $telemetryMaintenanceStart !== false
             && $telemetryMaintenanceGate !== false
@@ -227,7 +227,7 @@ namespace {
     feature_policy_stage13_assert(substr_count($benchmarkSource, "feature_capability_effective_enabled('development_diagnostics')") >= 5, 'Development Diagnostics OFF must skip profiler and benchmark work.');
     feature_policy_stage13_assert(substr_count($faviconSource, "feature_capability_effective_enabled('remote_favicon_discovery')") >= 2, 'Remote favicon OFF must skip outbound discovery work.');
     feature_policy_stage13_assert(strpos($warmupSource, 'if (!thumbnail_warmup_enabled())') < strpos($warmupSource, '@fopen(thumbnail_warmup_lock_path()'), 'Thumbnail warmup OFF must exit before worker-lock/file work.');
-    feature_policy_stage13_assert(str_contains($maintenanceSource, "feature_capability_effective_enabled('telemetry')"), 'Scheduled maintenance must skip telemetry maintenance while telemetry is OFF.');
+    feature_policy_stage13_assert(str_contains($maintenanceSource, "telemetry_run_scheduled_maintenance()") && str_contains($telemetryRollupSource, "feature_capability_effective_enabled('telemetry')"), 'Scheduled maintenance must delegate its master-OFF guard to the independent telemetry service.');
     $galleryReportTelemetryStart = strpos($galleryReportContentSource, 'function admin_gallery_report_telemetry_section(');
     $galleryReportTelemetryGate = $galleryReportTelemetryStart === false ? false : strpos($galleryReportContentSource, "feature_capability_effective_enabled('telemetry')", $galleryReportTelemetryStart);
     $galleryReportTelemetrySchema = $galleryReportTelemetryStart === false ? false : strpos($galleryReportContentSource, 'telemetry_schema_ready()', $galleryReportTelemetryStart);

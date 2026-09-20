@@ -428,7 +428,7 @@ function view_render_admin_gallery_report_export_html(array $report): string
 /**
  * Render telemetry section.
  *
- * @param array $telemetry Telemetry data.
+ * @param array<string,mixed> $telemetry Telemetry data.
  * @return string HTML fragment.
  */
 function admin_gallery_report_render_telemetry_section(array $telemetry): string
@@ -440,7 +440,7 @@ function admin_gallery_report_render_telemetry_section(array $telemetry): string
         return '<section class="panel"><h2>' . admin_gallery_report_h(t('admin.gallery_report.export.telemetry', 'Telemetry')) . '</h2><p class="muted">' . admin_gallery_report_h(t('admin.gallery_report.export.telemetry_unavailable', 'Telemetry is not available on this installation or the schema is not migrated yet.')) . '</p></section>';
     }
     $session = is_array($telemetry['session_summary'] ?? null) ? $telemetry['session_summary'] : [];
-    $html = '<section class="panel"><h2>' . admin_gallery_report_h(t('admin.gallery_report.export.telemetry_usage', 'Telemetry and usage')) . '</h2><p class="muted">' . admin_gallery_report_h(t('admin.gallery_report.export.telemetry_window_note', 'Telemetry window: last {days} days. Public telemetry is {state}.', ['days' => (string) ($telemetry['days'] ?? 0), 'state' => !empty($telemetry['public_enabled']) ? t('admin.gallery_report.export.enabled', 'enabled') : t('admin.gallery_report.export.disabled', 'disabled')])) . '</p><div class="grid">'
+    $html = '<section class="panel"><h2>' . admin_gallery_report_h(t('admin.gallery_report.export.telemetry_usage', 'Telemetry and usage')) . '</h2><p class="muted">' . admin_gallery_report_h(t('admin.gallery_report.export.telemetry_window_note', 'Telemetry window: last {days} days. Public telemetry is {state}.', ['days' => (string) ($telemetry['days'] ?? 0), 'state' => !empty($telemetry['public_enabled']) ? t('admin.gallery_report.export.enabled', 'enabled') : t('admin.gallery_report.export.disabled', 'disabled')])) . '</p><p class="muted">' . admin_gallery_report_h(t('admin.telemetry.export.canonical_note')) . '</p><div class="grid">'
         . admin_gallery_report_metric_card(t('admin.gallery_report.export.sessions', 'Sessions'), admin_gallery_report_n($session['sessions'] ?? 0), t('admin.gallery_report.export.anonymous_session_hashes', 'anonymous session hashes'))
         . admin_gallery_report_metric_card(t('admin.gallery_report.export.page_views', 'Page views'), admin_gallery_report_n($session['page_views'] ?? 0), t('admin.gallery_report.export.per_session', '{count} per session', ['count' => admin_gallery_report_n($session['avg_pages_per_session'] ?? 0, 2)]))
         . admin_gallery_report_metric_card(t('admin.gallery_report.export.photo_views', 'Photo views'), admin_gallery_report_n($session['photo_views'] ?? 0), t('admin.gallery_report.export.per_session', '{count} per session', ['count' => admin_gallery_report_n($session['avg_photos_per_session'] ?? 0, 2)]))

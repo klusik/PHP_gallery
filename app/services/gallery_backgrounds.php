@@ -61,11 +61,8 @@ use function Gallery\Models\gallery_model_background_source_column_exists;
  */
 function gallery_background_source_schema_ready(): bool
 {
-    static $ready = null;
-    if ($ready !== null) {
-        return $ready;
-    }
-    return $ready = gallery_model_background_source_column_exists();
+    // Reuse the canonical request snapshot and its migration invalidation.
+    return schema_inspection_is_available(schema_inspection_column('galleries', 'background_source'));
 }
 
 /**

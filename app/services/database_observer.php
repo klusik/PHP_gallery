@@ -74,7 +74,8 @@ function telemetry_sql_table_name(string $sql): string
     // $normalizedSql stores a compact query shape used only for table extraction.
     $normalizedSql = preg_replace('/\s+/', ' ', strtolower(trim($sql))) ?? '';
     foreach (['from', 'into', 'update', 'table'] as $marker) {
-        if (preg_match('/\b' . preg_quote($marker, '/') . '\s+`?([a-z0-9_]+)`?/i', $normalizedSql, $match) === 1) {
+        $optionalClause = $marker === 'table' ? '(?:if\\s+(?:not\\s+)?exists\\s+)?' : '';
+        if (preg_match('/\b' . preg_quote($marker, '/') . '\s+' . $optionalClause . '`?([a-z0-9_]+)`?/i', $normalizedSql, $match) === 1) {
             return substr((string) $match[1], 0, 80);
         }
     }
@@ -175,6 +176,7 @@ function telemetry_database_observer_internal_table(string $tableName): bool
  * @param bool $ok Whether execution succeeded.
  * @param int $rowCount Driver rowCount() value. SELECT values are intentionally ignored.
  * @param ?string $error Optional execution error. Never persisted.
+ * @return void No return value; effects are recorded in the owned state.
  */
 function telemetry_observe_db_query(string $sql, float $latencyMs, bool $ok, int $rowCount = 0, ?string $error = null): void
 {
@@ -194,7 +196,7 @@ function telemetry_observe_db_query(string $sql, float $latencyMs, bool $ok, int
     $state = &telemetry_database_observer_state();
     $latencyRounded = max(0, (int) round($latencyMs));
     $slow = $latencyRounded >= (int) ($state['slow_threshold_ms'] ?? 250) ? 1 : 0;
-    $rowsAffected = $operation === 'select' ? 0 : max(0, $rowCount);
+    $rowsAffected = $ok && in_array($operation, ['insert', 'update', 'delete', 'replace'], true) ? max(0, $rowCount) : 0;
 
     $key = implode('|', [$routeName, $operation, $tableName, $fingerprint]);
     if (!isset($state['buffer'][$key])) {

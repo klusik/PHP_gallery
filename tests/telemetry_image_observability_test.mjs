@@ -157,7 +157,7 @@ assert.deepEqual(
     'Display context must contain only bounded width classes.'
 );
 assert.equal(cacheMiss.cache_result, 'miss', 'Cache miss event must carry the bounded miss result.');
-assert.deepEqual(cacheMiss.context, {source_kind: 'decoded_lightbox'}, 'Cache event must identify only the bounded application-cache layer.');
+assert.deepEqual(cacheMiss.context, {source_kind: 'decoded_lightbox', lookup_phase: 'unknown'}, 'Cache event must identify only the bounded application-cache layer.');
 assert.ok(!JSON.stringify(events).includes('4032'), 'Exact natural width must not enter transported telemetry payloads.');
 assert.ok(!JSON.stringify(events).includes('https://'), 'Image observability payloads must not contain source URLs.');
 
