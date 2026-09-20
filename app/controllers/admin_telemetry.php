@@ -60,6 +60,7 @@ use function Gallery\Services\telemetry_report_consistency;
 use function Gallery\Services\telemetry_report_daily_trends;
 use function Gallery\Services\telemetry_report_daily_rollup_consistency;
 use function Gallery\Services\telemetry_report_database_fingerprints;
+use function Gallery\Services\telemetry_report_cache_phases;
 use function Gallery\Services\telemetry_report_database_summary;
 use function Gallery\Services\telemetry_report_database_totals;
 use function Gallery\Services\telemetry_report_job_runs;
@@ -121,6 +122,7 @@ function render_telemetry_metric_card(string $label, string $value, string $hint
 
 /**
  * Render the main anonymous telemetry dashboard.
+ * @return void No return value; effects are recorded in the owned state.
  */
 function cms_admin_telemetry(): void
 {
@@ -182,6 +184,7 @@ function cms_admin_telemetry(): void
             'all' => url_for('admin_telemetry_export', ['traffic_segment' => 'all']),
             'non_bot' => url_for('admin_telemetry_export', ['traffic_segment' => 'non_bot']),
             'bot' => url_for('admin_telemetry_export', ['traffic_segment' => 'bot']),
+            'unknown' => url_for('admin_telemetry_export', ['traffic_segment' => 'unknown']),
         ],
         'dashboard_url' => url_for('admin'),
         'schema_ready' => $schemaReady,
@@ -344,6 +347,7 @@ function telemetry_export_trend_chart(array $rows, string $valueKey, string $lab
 
 /**
  * Download a standalone anonymous telemetry HTML report.
+ * @return void No return value; effects are recorded in the owned state.
  */
 function cms_admin_telemetry_export(): void
 {
@@ -368,6 +372,7 @@ function cms_admin_telemetry_export(): void
     $trafficSegmentLabel = match ($trafficSegment) {
         'non_bot' => t('admin.telemetry.traffic_segment_non_bot', 'Non-bot-classified traffic'),
         'bot' => t('admin.telemetry.traffic_segment_bot', 'Bot-classified traffic'),
+        'unknown' => t('admin.telemetry.traffic_segment_unknown', 'Unclassified traffic'),
         default => t('admin.telemetry.traffic_segment_all', 'All traffic'),
     };
     $rawRetentionDays = telemetry_retention_days('telemetry_raw_retention_days', 7, 1, 90);
@@ -397,21 +402,25 @@ function cms_admin_telemetry_export(): void
     $photoOpenBuckets = telemetry_report_photo_open_session_buckets($days, $trafficSegment);
     $photoOpenAnomalySummary = telemetry_report_photo_open_anomaly_summary($days, $photoOpenThreshold, $trafficSegment);
     $photoOpenGalleryDiagnostics = telemetry_report_gallery_photo_opens_per_session($photoDiagnosticDays, 3, 20, $trafficSegment);
-    $photoOpenOrigins = telemetry_report_photo_open_origins($photoDiagnosticDays, $trafficSegment);
+    $photoOpenOriginsAvailable = null;
+    $photoOpenOrigins = telemetry_report_photo_open_origins($photoDiagnosticDays, $trafficSegment, $photoOpenOriginsAvailable);
+    $cachePhases = telemetry_report_cache_phases($photoDiagnosticDays, $trafficSegment);
     $clientErrors = telemetry_report_client_errors($days, 25, $trafficSegment);
     $recentEvents = telemetry_report_recent_events($days, 80, $trafficSegment);
     $databaseSummary = telemetry_report_database_summary($days, 40);
     $databaseFingerprints = telemetry_report_database_fingerprints($days, 30);
+    $databaseFingerprintsVolume = telemetry_report_database_fingerprints($days, 30, 'volume');
+    $databaseFingerprintsFailed = telemetry_report_database_fingerprints($days, 30, 'failed');
     $jobRuns = telemetry_report_job_runs($days, 40);
 
     $sessions = (float) ($sessionSummary['sessions'] ?? 0);
     $pageViews = (float) telemetry_metric_events('public.page_views', $days, $trafficSegment);
-    $photoViews = (float) ($sessionSummary['photo_views'] ?? 0);
+    $photoViews = (float) telemetry_metric_events('photo.views', $days, $trafficSegment);
     $durationSeconds = (float) ($sessionSummary['duration_seconds'] ?? 0);
     $bouncedSessions = (float) ($sessionSummary['bounced_sessions'] ?? 0);
     $bounceRate = $sessions > 0 ? ($bouncedSessions / $sessions) * 100 : 0;
     $avgPagesPerSession = $sessions > 0 ? $pageViews / $sessions : 0.0;
-    $avgPhotosPerSession = (float) ($sessionSummary['avg_photos_per_session'] ?? 0);
+    $avgPhotosPerSession = $sessions > 0 ? $photoViews / $sessions : 0.0;
     $avgDurationSeconds = (float) ($sessionSummary['avg_duration_seconds'] ?? 0);
     $mediaBytes = telemetry_metric_sum('media.image.bytes', $days, $trafficSegment) + telemetry_metric_sum('media.thumbnail.bytes', $days, $trafficSegment) + telemetry_metric_sum('media.download.bytes', $days, $trafficSegment);
     $thumbnailBytes = telemetry_metric_sum('media.thumbnail.bytes', $days, $trafficSegment);
@@ -512,10 +521,17 @@ function cms_admin_telemetry_settings(): void
 
 /**
  * Run telemetry rollup and purge from the admin UI.
+ * @return void No return value; effects are recorded in the owned state.
  */
 function cms_admin_telemetry_maintenance(): void
 {
     require_admin();
+    if (strtoupper((string) (request_data('server')['REQUEST_METHOD'] ?? 'GET')) !== 'POST') {
+        http_response_code(405);
+        header('Allow: POST');
+        return;
+    }
+    verify_csrf();
     $schemaStatus = presentation_telemetry_schema_status();
     if (!schema_inspection_is_available($schemaStatus)) {
         if (schema_inspection_is_unknown($schemaStatus)) {
@@ -527,7 +543,15 @@ function cms_admin_telemetry_maintenance(): void
         redirect_to(url_for('admin_telemetry'));
     }
     $result = telemetry_run_maintenance();
+    $status = empty($result['ok']) ? 'failed' : (!empty($result['skipped']) ? 'skipped' : (!empty($result['has_more']) ? 'pending' : 'completed'));
+    $statusMessage = match ($status) {
+        'failed' => t('admin.telemetry.maintenance_failed', 'Maintenance failed. Inspect the bounded result and job log.'),
+        'pending' => t('admin.telemetry.maintenance_pending', 'One bounded maintenance slice completed. More work remains; subsequent scheduled slices will continue.'),
+        'skipped' => t('admin.telemetry.maintenance_skipped', 'No maintenance slice ran. See the reason below.'),
+        default => t('admin.telemetry.maintenance_completed', 'Rollup and retention cleanup completed.'),
+    };
     \Gallery\Views\view_render_admin_telemetry_maintenance([
+        'status_message' => $statusMessage,
         'title' => t('admin.telemetry.maintenance_title', 'Telemetry maintenance'),
         'back_url' => url_for('admin_telemetry'),
         'result_json' => (string) json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),

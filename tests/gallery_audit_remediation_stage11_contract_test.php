@@ -83,7 +83,7 @@ gallery_audit_stage11_assert(
 
 // Stage 4/5: traffic segmentation and the completed performance/media/cache/database observability paths stay wired.
 gallery_audit_stage11_assert(
-    str_contains($telemetry, "['all', 'non_bot', 'bot']")
+    str_contains($telemetry, "['all', 'non_bot', 'bot', 'unknown']")
         && str_contains($telemetry, 'client.image_decode_ms')
         && str_contains($telemetry, 'client.image_display_ms')
         && str_contains($telemetry, "'media.thumbnail.served'")

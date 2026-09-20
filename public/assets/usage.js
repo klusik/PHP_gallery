@@ -30,7 +30,11 @@
  *   2026-05-04
  */
 
-(function () {
+(/**
+ * Install one privacy-safe usage collector for the current document.
+ * @return {void} Registers bounded event collectors only when telemetry is enabled.
+ */
+function () {
     'use strict';
 
     const config = window.PHPGalleryTelemetry || {};
@@ -148,7 +152,7 @@
      */
     function deviceType() {
         const userAgent = navigator.userAgent.toLowerCase();
-        if (userAgent.includes('bot') || userAgent.includes('crawler') || userAgent.includes('spider')) {
+        if (/bot|crawler|spider|slurp|headlesschrome|phantomjs/.test(userAgent)) {
             return 'bot';
         }
         if (userAgent.includes('ipad') || userAgent.includes('tablet')) {
@@ -430,7 +434,16 @@
         return true;
     };
 
-    window.PHPGalleryTelemetryCacheEvent = function (eventName, imageId, galleryId, sourceKind) {
+    /**
+     * Enqueue a decoded-cache observation without persisting media URLs.
+     * @param {string} eventName Canonical cache event name.
+     * @param {number|null} imageId Active image identity.
+     * @param {number|null} galleryId Active gallery identity.
+     * @param {string} sourceKind Bounded decoded-cache source kind.
+     * @param {string|undefined} lookupPhase Preview, full-source or eviction phase.
+     * @return {boolean} Whether cache telemetry is enabled and the event was queued.
+     */
+    window.PHPGalleryTelemetryCacheEvent = function (eventName, imageId, galleryId, sourceKind, lookupPhase) {
         if (config.cacheEnabled === false) {
             return false;
         }
@@ -440,7 +453,10 @@
         event.cache_result = eventName === 'cache.lightbox.hit'
             ? 'hit'
             : (eventName === 'cache.lightbox.miss' ? 'miss' : (eventName === 'cache.lightbox.evicted' ? 'evicted' : 'unknown'));
-        event.context = {source_kind: sourceKind || 'unknown'};
+        event.context = {
+            source_kind: sourceKind === 'decoded_lightbox' ? sourceKind : 'unknown',
+            lookup_phase: ['current_preview', 'current_full', 'eviction'].includes(lookupPhase) ? lookupPhase : 'unknown',
+        };
         enqueue(event);
         return true;
     };
@@ -515,6 +531,7 @@
      * Collect performance navigation.
      *
      * Used by browser-side gallery behavior.
+     * @return {void} Queues only positive finalized navigation timings.
      */
     function collectPerformanceNavigation() {
         const navigation = performance.getEntriesByType ? performance.getEntriesByType('navigation')[0] : null;
@@ -525,7 +542,12 @@
             return;
         }
         const event = baseEvent('client.performance.page_load');
-        event.value_ms = Math.max(0, Math.round(navigation.loadEventEnd || navigation.duration || 0));
+        const elapsed = Number(navigation.loadEventEnd) - Number(navigation.startTime || 0);
+        // A missing/unfinished navigation entry is not a measured zero-ms load.
+        if (!Number.isFinite(elapsed) || elapsed <= 0) {
+            return;
+        }
+        event.value_ms = Math.max(1, Math.round(elapsed));
         event.sampled_rate = performanceSamplingRate();
         enqueue(event);
     }
@@ -551,8 +573,33 @@
 
     startPageEvents();
     setupLightboxFallbackObservers();
-    window.addEventListener('load', function () {
-        collectPerformanceNavigation();
-        window.setTimeout(flush, 500);
-    });
+    /**
+     * Schedule after load handlers settle, including scripts loaded after window.load.
+     * @return {void} Queues measurement and the existing delayed batch flush.
+     */
+    function schedulePerformanceNavigation() {
+        // Defer measurement until all handlers for the current load event finish.
+        // Type: integer. Units: milliseconds. Scope: one document navigation.
+        // Consumers: finalized navigation timing collector.
+        // Rationale: the next task sees loadEventEnd after the load handler returns.
+        window.setTimeout(
+            /**
+             * Measure a finalized navigation and schedule its ordinary telemetry batch.
+             * @return {void} Queues a measurement and its delayed flush.
+             */
+            function () {
+                collectPerformanceNavigation();
+                // Keep the existing batch delay rather than send an extra immediate request.
+                // Type: integer. Units: milliseconds. Scope: the queued telemetry batch.
+                // Consumers: the collector flush callback.
+                // Rationale: a short batching interval coalesces initial page and timing events.
+                window.setTimeout(flush, 500);
+            }, 0);
+
+    }
+    if (document.readyState === 'complete') {
+        schedulePerformanceNavigation();
+    } else {
+        window.addEventListener('load', schedulePerformanceNavigation, {once: true});
+    }
 })();

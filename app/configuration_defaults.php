@@ -37,6 +37,15 @@ declare(strict_types=1);
 
 return [
     'runtime_limits' => [
+        // Independent telemetry maintenance. Large historical backlogs resume
+        // across bounded slices instead of blocking on thumbnail processing.
+        'telemetry.maintenance_time_budget_seconds' => 3,
+        'telemetry.maintenance_delete_batch_size' => 2000,
+        'telemetry.maintenance_delete_batches' => 4,
+        'telemetry.maintenance_rollup_days' => 7,
+        'telemetry.maintenance_retry_seconds' => 300,
+        'telemetry.maintenance_interval_seconds' => 3600,
+
         // Shared server-side raster decode admission. Unlimited PHP memory still uses
         // this request ceiling; invalid overrides cannot disable positive bounds.
         'image_decode.max_dimension' => 32768,

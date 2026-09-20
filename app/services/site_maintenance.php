@@ -992,8 +992,8 @@ function site_maintenance_register_request_trigger(string $page): void
  * configured UTC time only decides when a new daily cycle may start. Active work
  * continues across later calls until all phases complete.
  *
- * @param array $options Optional behavior flags.
- * @return array<string mixed>.
+ * @param array{force?:bool,source?:string,time_budget_seconds?:int,chain?:bool} $options Optional behavior flags.
+ * @return array<string,mixed>.
  */
 function site_maintenance_run(array $options = []): array
 {
@@ -1007,6 +1007,12 @@ function site_maintenance_run(array $options = []): array
 
     @set_time_limit(max(30, $timeBudgetSeconds + SITE_MAINTENANCE_RUNTIME_RESERVE_SECONDS));
 
+    // Retention has its own lock, throttle, checkpoint and failure evidence.
+    // Run it even when thumbnail work is busy, failed or outside its time window.
+    $telemetryStarted = microtime(true);
+    $telemetry = function_exists(__NAMESPACE__ . '\\telemetry_run_scheduled_maintenance')
+        ? telemetry_run_scheduled_maintenance() : ['skipped' => true];
+    $timeBudgetSeconds = max(1, $timeBudgetSeconds - (int) ceil(microtime(true) - $telemetryStarted));
     $result = site_maintenance_with_lock(static function () use ($force, $source, $timeBudgetSeconds): array {
         if (!site_maintenance_enabled() && !$force) {
             return [
@@ -1116,6 +1122,7 @@ function site_maintenance_run(array $options = []): array
         }
     });
 
+    $result['telemetry'] = $telemetry;
     if ($chain && site_maintenance_should_chain_after_result($result)) {
         $result['continuation_queued'] = site_maintenance_queue_next_chained_slice();
     }
@@ -1555,9 +1562,9 @@ function site_maintenance_record_interrupted_thumbnail_attempt(array &$state): v
 /**
  * Run lightweight cleanup tasks after thumbnail processing finishes.
  *
- * @param array $state State value.
+ * @param array<string,mixed> $state State value.
  * @param float $deadline Deadline value.
- * @return array<string mixed>.
+ * @return array<string,mixed>.
  */
 function site_maintenance_process_cleanup_step(array &$state, float $deadline): array
 {
@@ -1623,9 +1630,7 @@ function site_maintenance_process_cleanup_step(array &$state, float $deadline): 
         $run('gallery_trash', static fn() => purge_expired_gallery_trash());
     }
 
-    if (function_exists(__NAMESPACE__ . '\\telemetry_run_maintenance') && (!function_exists(__NAMESPACE__ . '\\feature_capability_effective_enabled') || feature_capability_effective_enabled('telemetry'))) {
-        $run('telemetry', static fn() => telemetry_run_maintenance());
-    }
+    // Telemetry now runs independently before the site-maintenance lock/thumbnail phase.
 
     if (function_exists('Gallery\Services\thumbnail_metadata_schema_ready') && thumbnail_metadata_schema_ready()) {
         $run('thumbnail_metadata_orphans_deleted', static fn() => site_maintenance_delete_orphan_thumbnail_metadata());

@@ -58,6 +58,7 @@ function cms_initialize_request(): string
     foreach ($route['params'] as $name => $value) {
         $_GET[$name] = $value;
     }
+    cms_prime_gallery_schema_cache($page);
     if (function_exists('Gallery\\Services\\seo_request_guard_enforcement_decision')) {
         $seoDecision = seo_request_guard_enforcement_decision(
             $page,
@@ -207,4 +208,28 @@ function cms_request_trace_mark(string $name, array $context = []): void
     if (function_exists('Gallery\\Services\\gallery_benchmark_trace_mark')) {
         \Gallery\Services\gallery_benchmark_trace_mark($name, $context);
     }
+}
+
+/**
+ * Prime common public page schema once, without resolving optional feature policy.
+ *
+ * This is an observation-only snapshot. Failed inspection is not cached as
+ * absence: the shared inspector retains its normal three-state fallback. The
+ * existing mutation/migration invalidation also clears these request snapshots.
+ * Media requests keep their separate post-session-unlock priming path.
+ * @param string $page Canonical route selected by the request bootstrap.
+ * @return void No return value; effects are recorded in the owned state.
+ */
+function cms_prime_gallery_schema_cache(string $page): void
+{
+    if (!in_array($page, ['home', 'gallery', 'smart_gallery', 'gallery_lightbox_data',
+        'smart_gallery_lightbox_data', 'tag', 'public_search'], true)
+        || !function_exists('Gallery\\Services\\schema_inspection_prime_table_snapshots')) {
+        return;
+    }
+    \Gallery\Services\schema_inspection_prime_table_snapshots([
+        'galleries', 'images', 'image_thumbnail_variants', 'users', 'admin_remember_tokens',
+        'gallery_translations', 'image_translations', 'tags', 'gallery_tags', 'image_tags',
+        'image_votes', 'smart_galleries',
+    ]);
 }

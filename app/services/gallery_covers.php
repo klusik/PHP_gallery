@@ -80,17 +80,14 @@ function gallery_cover_path(array $gallery): ?string
 }
 
 /**
- * Handles gallery cover asset schema ready logic for the gallery application.
+ * Return whether the shared schema observation confirms cover-asset storage.
  *
- * @return mixed Result produced by this operation.
+ * @return bool Result produced by this operation.
  */
 function gallery_cover_asset_schema_ready(): bool
 {
-    static $ready = null;
-    if ($ready !== null) {
-        return $ready;
-    }
-    return $ready = gallery_model_cover_image_path_column_exists();
+    // Reuse the canonical request snapshot and its migration invalidation.
+    return schema_inspection_is_available(schema_inspection_column('galleries', 'cover_image_path'));
 }
 
 /**

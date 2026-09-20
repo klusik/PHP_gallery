@@ -57,6 +57,8 @@ require_once __DIR__ . '/models/gallery_picker_search.php';
 require_once __DIR__ . '/models/images.php';
 require_once __DIR__ . '/models/duplicate_photo_ledger.php';
 require_once __DIR__ . '/models/telemetry.php';
+require_once __DIR__ . '/models/telemetry_maintenance.php';
+require_once __DIR__ . '/models/telemetry_diagnostics.php';
 require_once __DIR__ . '/models/upload_automation.php';
 require_once __DIR__ . '/models/mobile_webdav.php';
 require_once __DIR__ . '/models/app_settings.php';

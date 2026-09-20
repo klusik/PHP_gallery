@@ -46,13 +46,15 @@ require_once $root . '/app/services/telemetry.php';
 telemetry_traffic_segment_contract_assert(telemetry_traffic_segment('all') === 'all', 'All-traffic segment must remain available.');
 telemetry_traffic_segment_contract_assert(telemetry_traffic_segment('non_bot') === 'non_bot', 'Non-bot-classified segment must remain available.');
 telemetry_traffic_segment_contract_assert(telemetry_traffic_segment('bot') === 'bot', 'Bot-classified segment must remain available.');
+telemetry_traffic_segment_contract_assert(telemetry_traffic_segment('unknown') === 'unknown', 'Unclassified traffic must be a distinct segment.');
+telemetry_traffic_segment_contract_assert(telemetry_model_traffic_segment_condition('unknown') === " AND device_type = 'unknown'", 'Unknown must not be folded into non-bot traffic.');
 telemetry_traffic_segment_contract_assert(telemetry_traffic_segment('HUMAN') === 'all', 'Unsupported identity-like segment names must fall back to all traffic.');
 telemetry_traffic_segment_contract_assert(telemetry_traffic_segment(['bot']) === 'all', 'Non-scalar segment input must fall back to all traffic.');
 
 telemetry_traffic_segment_contract_assert(telemetry_model_traffic_segment_condition('all') === '', 'All traffic must not add a device predicate.');
 telemetry_traffic_segment_contract_assert(
-    telemetry_model_traffic_segment_condition('non_bot') === " AND device_type <> 'bot'",
-    'Non-bot-classified traffic must exclude only the explicit bot device bucket.'
+    telemetry_model_traffic_segment_condition('non_bot') === " AND device_type IN ('desktop', 'tablet', 'phone')",
+    'Non-bot-classified traffic must exclude bots AND unclassified historical media.'
 );
 telemetry_traffic_segment_contract_assert(
     telemetry_model_traffic_segment_condition('bot', 'm.device_type') === " AND m.device_type = 'bot'",
@@ -103,7 +105,7 @@ telemetry_traffic_segment_contract_assert(
     'Operational database telemetry must remain independent of visitor traffic segmentation.'
 );
 telemetry_traffic_segment_contract_assert(
-    str_contains($serviceSource, "['all', 'non_bot', 'bot']")
+    str_contains($serviceSource, "['all', 'non_bot', 'bot', 'unknown']")
         && str_contains($viewSource, "traffic_segment_note")
         && str_contains($viewSource, "export_non_bot_traffic"),
     'Service and presentation layers must expose the constrained segmentation contract.'
