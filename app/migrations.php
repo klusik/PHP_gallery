@@ -81,7 +81,7 @@ function migration_reset_app_settings_cache(): void
  * is validated before execution starts, and each migration records its version
  * only after every SQL statement and repair callback succeeds.
  *
- * @return array Structured result data for the caller.
+ * @return array<int,string> Applied migration version basenames in execution order.
  */
 function run_migrations(): array
 {

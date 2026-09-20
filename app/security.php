@@ -293,29 +293,12 @@ function current_user(): ?array
         }
     }
 
-    // Email is optional for an already authenticated session. Confirmed missing or
-    // operationally unknown email metadata must not be converted by catching an
-    // arbitrary PDO failure from the full user query. Use the verified capability
-    // when available and the authentication-minimal row shape otherwise.
-    $emailSchemaStatus = function_exists('Gallery\Services\auth_user_email_schema_status')
-        ? auth_user_email_schema_status()
-        : ['state' => 'missing'];
-    if (function_exists('Gallery\Services\schema_inspection_is_unknown') && schema_inspection_is_unknown($emailSchemaStatus)) {
-        auth_log_schema_unavailable('auth_user_email', 'current_user_optional_email');
-    }
-
-    // Variable $stmt stores this steps working value.
-    $stmt = db()->prepare(
-        function_exists('Gallery\Services\schema_inspection_is_available') && schema_inspection_is_available($emailSchemaStatus)
-            ? 'SELECT id, username, email, role FROM users WHERE id = ?'
-            : 'SELECT id, username, role FROM users WHERE id = ?'
-    );
-    $stmt->execute([(int) $_SESSION['user_id']]);
-    // Variable $user stores this steps working value.
-    $user = $stmt->fetch();
-    if ($user && !array_key_exists('email', $user)) {
-        $user['email'] = null;
-    }
+    // HTTP/session extraction stays here; optional-email policy and row persistence
+    // belong to the existing account service/model owners.
+    // Preserve standalone callers of this historical Core entry point.
+    require_once __DIR__ . '/models/auth.php';
+    require_once __DIR__ . '/services/auth_accounts.php';
+    $user = \Gallery\Services\auth_account_session_user((int) $_SESSION['user_id']);
 
     // $cache stores an intermediate value used by the surrounding gallery workflow.
     $cache = true;
@@ -442,7 +425,8 @@ function verify_vote_rate_limit(int $imageId): void
  */
 function cms_setup_is_locked(): bool
 {
-    return is_file(dirname(__DIR__) . '/config.php') && is_file(dirname(__DIR__) . '/cache/installed.lock');
+    require_once __DIR__ . '/services/auth_accounts.php';
+    return \Gallery\Services\auth_setup_is_locked();
 }
 
 /**
@@ -452,22 +436,17 @@ function cms_setup_is_locked(): bool
  */
 function cms_admin_user_exists(): bool
 {
-    try {
-        return (bool) db()->query("SELECT 1 FROM users WHERE role = 'admin' LIMIT 1")->fetchColumn();
-    } catch (Throwable) {
-        return false;
-    }
+    require_once __DIR__ . '/models/auth.php';
+    require_once __DIR__ . '/services/auth_accounts.php';
+    return \Gallery\Services\auth_account_admin_exists();
 }
 
 /**
  * Create the one-way installation lock file after the first successful setup.
+ * @return void Delegates fixed-path storage to the setup domain service; a storage refusal propagates to the request boundary.
  */
 function cms_write_setup_lock(): void
 {
-    // $path stores an intermediate value used by the surrounding gallery workflow.
-    $path = dirname(__DIR__) . '/cache/installed.lock';
-    if (!is_dir(dirname($path))) {
-        mkdir(dirname($path), 0775, true);
-    }
-    file_put_contents($path, 'installed=' . gmdate('c') . PHP_EOL, LOCK_EX);
+    require_once __DIR__ . '/services/auth_accounts.php';
+    \Gallery\Services\auth_setup_write_lock();
 }

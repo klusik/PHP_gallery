@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Regression Test
+ * Purpose: Protect administrator authentication presentation boundaries.
+ * Responsibilities:
+ *   - Reject HTML or persistence responsibilities leaking into the wrong MVC layer.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/admin_auth_mvc_boundary_test.php

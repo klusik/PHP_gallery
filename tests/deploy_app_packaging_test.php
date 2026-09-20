@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Regression Test
+ * Purpose: Protect application deployment package composition.
+ * Responsibilities:
+ *   - Check required source inclusion and excluded runtime/test artifacts.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/deploy_app_packaging_test.php

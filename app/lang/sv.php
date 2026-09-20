@@ -33,6 +33,21 @@
  */
 
 return [
+    'admin.operation.client_capacity' => 'Formuläret är för stort för säker spårning av återförsök på sidan. Behåll det ursprungliga formuläret och granska dess indata.',
+    'admin.operation.client_key_required' => 'Ladda om ett genererat formulär för att skapa ett galleri eller ladda upp innan du startar den här operationen.',
+    'admin.operation.client_unresolved' => 'Resultatet av ett tidigare uppdrag att skapa ett galleri eller ladda upp är fortfarande oklart. Behåll formuläret med dess ursprungliga indata och filer. Försök vid behov igen efter ny inloggning, eller utred resultatet innan du börjar med annat arbete.',
+    'admin.operation.client_changed' => 'Indata för att skapa galleriet eller ladda upp har ändrats. Återställ ursprungliga indata och filer innan du försöker igen med det olösta uppdraget.',
+    'admin.operation.client_keep_form' => 'Behåll det här formuläret för att skapa ett galleri eller ladda upp öppet: resultatet är fortfarande oklart. Försök igen med det ursprungliga uppdraget här. Om inloggningen har gått ut, logga först in på en annan flik. Starta ingen ersättningsoperation innan du har granskat det ursprungliga resultatet.',
+    'admin.gallery_editor.edit_busy' => 'En annan galleriåtgärd pågår fortfarande. Dina inmatningar har behållits. Försök igen när den är klar.',
+    'admin.gallery_editor.edit_conflict' => 'Galleriet har ändrats sedan formuläret öppnades. Dina inmatningar har behållits. Öppna den senaste versionen och granska dina ändringar innan du sparar.',
+    'admin.gallery_editor.edit_schema_missing' => 'Galleriredigering kräver revisionsmigreringen. Kör databasmigreringarna från den här gallerisidan och öppna sedan formuläret igen.',
+    'admin.gallery_editor.edit_schema_unknown' => 'Skyddet mot samtidiga galleriändringar kunde inte verifieras. Behåll dina inmatningar och försök igen när databasdiagnostiken har åtgärdats.',
+    'admin.gallery_editor.edit_connection_lost' => 'Anslutningen avbröts under galleriåtgärden. Öppna galleriet igen och kontrollera dess tillstånd innan du försöker på nytt.',
+    'admin.gallery_editor.edit_review_title' => 'Granska galleriändringar',
+    'admin.gallery_editor.edit_review_draft' => 'Dina inmatade värden',
+    'admin.gallery_editor.edit_review_latest' => 'Senast lagrade värden',
+    'admin.gallery_editor.edit_review_open' => 'Öppna den senaste redigeraren i en ny flik',
+    'admin.gallery_editor.edit_review_help' => 'Behåll den här sidan medan du granskar den senaste redigeraren. Kopiera de ändringar du vill behålla. Ange lösenord igen och välj uppladdningar på nytt; de visas inte nedan. Åtkomstinställningar slås aldrig samman automatiskt.',
     'public.service_unavailable_title' => 'Tillfälligt otillgängligt',
     'public.schema_temporarily_unavailable' => 'Galleriet är tillfälligt otillgängligt. Försök igen senare.',
     'public.request_reference' => 'Referens: {request_id}',

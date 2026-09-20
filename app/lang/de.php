@@ -33,6 +33,21 @@
  */
 
 return [
+    'admin.operation.client_capacity' => 'Dieses Formular ist zu groß, um Wiederholungsversuche auf dieser Seite sicher zu verfolgen. Behalten Sie das ursprüngliche Formular und prüfen Sie seine Eingaben.',
+    'admin.operation.client_key_required' => 'Laden Sie ein erzeugtes Formular zum Erstellen einer Galerie oder zum Hochladen neu, bevor Sie diese Operation starten.',
+    'admin.operation.client_unresolved' => 'Das Ergebnis eines früheren Erstellungs- oder Upload-Auftrags ist ungeklärt. Behalten Sie dieses Formular mit seinen ursprünglichen Eingaben und Dateien. Wiederholen Sie den Auftrag bei Bedarf nach erneuter Anmeldung oder klären Sie sein Ergebnis, bevor Sie andere Arbeiten beginnen.',
+    'admin.operation.client_changed' => 'Die Eingaben für die Erstellung oder den Upload wurden geändert. Stellen Sie die ursprünglichen Eingaben und Dateien wieder her, bevor Sie den ungeklärten Auftrag wiederholen.',
+    'admin.operation.client_keep_form' => 'Lassen Sie dieses Erstellungs- oder Upload-Formular geöffnet: Sein Ergebnis ist noch ungeklärt. Wiederholen Sie hier den ursprünglichen Auftrag. Falls die Anmeldung abgelaufen ist, melden Sie sich zuerst in einem anderen Tab an. Starten Sie keine Ersatzoperation, bevor Sie das ursprüngliche Ergebnis geprüft haben.',
+    'admin.gallery_editor.edit_busy' => 'Eine andere Galerieoperation läuft noch. Ihre Eingaben wurden beibehalten. Versuchen Sie es nach deren Abschluss erneut.',
+    'admin.gallery_editor.edit_conflict' => 'Diese Galerie wurde seit dem Öffnen des Formulars geändert. Ihre Eingaben wurden beibehalten. Öffnen Sie die aktuelle Version und prüfen Sie Ihre Änderungen vor dem Speichern.',
+    'admin.gallery_editor.edit_schema_missing' => 'Das Bearbeiten der Galerie erfordert die Revisionsmigration. Führen Sie die Datenbankmigrationen auf dieser Galerie-Seite aus und öffnen Sie das Formular erneut.',
+    'admin.gallery_editor.edit_schema_unknown' => 'Der Schutz vor gleichzeitigen Galerieänderungen konnte nicht verifiziert werden. Behalten Sie Ihre Eingaben und versuchen Sie es nach Klärung der Datenbankdiagnose erneut.',
+    'admin.gallery_editor.edit_connection_lost' => 'Die Verbindung wurde während der Galerieoperation unterbrochen. Öffnen Sie die Galerie erneut und prüfen Sie ihren Zustand vor einem weiteren Versuch.',
+    'admin.gallery_editor.edit_review_title' => 'Galerieänderungen prüfen',
+    'admin.gallery_editor.edit_review_draft' => 'Ihre eingegebenen Werte',
+    'admin.gallery_editor.edit_review_latest' => 'Aktuell gespeicherte Werte',
+    'admin.gallery_editor.edit_review_open' => 'Aktuellen Editor in einem neuen Tab öffnen',
+    'admin.gallery_editor.edit_review_help' => 'Lassen Sie diese Seite geöffnet, während Sie den aktuellen Editor prüfen. Kopieren Sie die gewünschten Änderungen. Geben Sie Passwörter erneut ein und wählen Sie Uploads erneut aus; sie werden unten nicht aufgeführt. Zugriffseinstellungen werden niemals automatisch zusammengeführt.',
     'public.service_unavailable_title' => 'Vorübergehend nicht verfügbar',
     'public.schema_temporarily_unavailable' => 'Die Galerie ist vorübergehend nicht verfügbar. Bitte versuchen Sie es später erneut.',
     'public.request_reference' => 'Referenz: {request_id}',

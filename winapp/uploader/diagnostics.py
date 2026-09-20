@@ -1,4 +1,8 @@
 # Project: PHP Gallery
+# Module Type: Windows Tooling
+# Purpose: Prepare redacted uploader diagnostic details.
+# Responsibilities:
+#   - Remove sensitive data from support output and copyable activity information.
 # Repository: https://github.com/klusik/PHP_gallery
 #
 # File: winapp/uploader/diagnostics.py

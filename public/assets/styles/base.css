@@ -2,7 +2,7 @@
  * Project: PHP Gallery
  * Repository: https://github.com/klusik/PHP_gallery
  *
- * File: public/assets/styles.css
+ * File: public/assets/styles/base.css
  * Module Type: Stylesheet
  *
  * Purpose:
@@ -132,4 +132,3 @@ select,
 textarea {
     line-height: var(--type-body-line-height, 1.5);
 }
-

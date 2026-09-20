@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Database Migration
+ * Purpose: Add optional source-language and translated gallery/image content storage.
+ * Responsibilities:
+ *   - Preserve original content while making translations independently addressable.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: database/migrations/202608150001_multilingual_content.php

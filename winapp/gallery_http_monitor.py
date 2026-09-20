@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 # Project: PHP Gallery
+# Module Type: Windows Tooling
+# Purpose: Monitor first-party HTTP timing and intermittent response failures.
+# Responsibilities:
+#   - Collect bounded GET diagnostics and redact cookies while preserving reproducible anomaly evidence.
 # Repository: https://github.com/klusik/PHP_gallery
 #
 # File: winapp/gallery_http_monitor.py

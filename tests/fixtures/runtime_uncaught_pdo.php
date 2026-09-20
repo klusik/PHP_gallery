@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Test Fixture
+ * Purpose: Expose a synthetic database exception to runtime error handling.
+ * Responsibilities:
+ *   - Check that database failure details do not leak through the public response.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/fixtures/runtime_uncaught_pdo.php

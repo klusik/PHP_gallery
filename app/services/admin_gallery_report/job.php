@@ -26,7 +26,7 @@
  *
  * Notes:
  *   - Loaded by app/services/admin_gallery_report.php; do not require this file directly.
- *   - Shared constants for this module live in app/services/admin_gallery_report.php.
+ *   - The entry point loads immutable Core policy before this part.
  *   - Keep comments and docstrings intact when modifying this file.
  *
  * Last Updated:
@@ -36,8 +36,14 @@
 declare(strict_types=1);
 
 namespace Gallery\Services;
+use const Gallery\Core\ADMIN_GALLERY_REPORT_TELEMETRY_DEFAULT_DAYS;
+use const Gallery\Core\ADMIN_GALLERY_REPORT_TELEMETRY_MAX_DAYS;
+use const Gallery\Core\ADMIN_GALLERY_REPORT_ROW_LIMITS;
 
 use Throwable;
+use const Gallery\Core\ADMIN_GALLERY_REPORT_DEFAULT_BATCH_SIZE;
+use const Gallery\Core\ADMIN_GALLERY_REPORT_MAX_BATCH_SIZE;
+use const Gallery\Core\ADMIN_GALLERY_REPORT_GPS_AREA_KM;
 use function Gallery\Core\cms_config;
 use function Gallery\Core\cms_current_version;
 use function Gallery\Core\db;
@@ -45,12 +51,13 @@ use function Gallery\Core\db;
 /**
  * Start a browser-driven gallery overview report job.
  *
+ * @param array<string,mixed>|null $checkpoint Caller-owned current job; replaced only after a complete start snapshot is ready.
  * @param int $telemetryDays Telemetry window in days.
  * @return array<string, mixed> Structured job state.
  */
-function admin_gallery_report_start_job(int $telemetryDays = 30): array
+function admin_gallery_report_start_job(?array &$checkpoint, int $telemetryDays = ADMIN_GALLERY_REPORT_TELEMETRY_DEFAULT_DAYS): array
 {
-    $telemetryDays = max(1, min(3650, $telemetryDays));
+    $telemetryDays = max(1, min(ADMIN_GALLERY_REPORT_TELEMETRY_MAX_DAYS, $telemetryDays));
     $totalImages = admin_gallery_report_image_count();
     $job = [
         'job_id' => admin_gallery_report_job_id(),
@@ -74,7 +81,7 @@ function admin_gallery_report_start_job(int $telemetryDays = 30): array
         'features' => admin_gallery_report_feature_summary(),
         'logs' => admin_gallery_report_admin_log_summary(),
         'telemetry' => admin_gallery_report_telemetry_section($telemetryDays),
-        'top_images' => admin_gallery_report_largest_images(200),
+        'top_images' => admin_gallery_report_largest_images(ADMIN_GALLERY_REPORT_ROW_LIMITS['top_images']),
         'image_summary' => admin_gallery_report_initial_image_summary(),
         'storage_source' => function_exists('Gallery\\Services\\admin_storage_statistics_source_summary') ? admin_storage_statistics_source_summary([]) : [],
         'storage_generated' => function_exists('Gallery\\Services\\admin_storage_statistics_initial_generated_summary') ? admin_storage_statistics_initial_generated_summary() : [],
@@ -83,22 +90,23 @@ function admin_gallery_report_start_job(int $telemetryDays = 30): array
     ];
 
     if ($totalImages <= 0) {
-        return admin_gallery_report_finish_job($job);
+        return admin_gallery_report_finish_job($job, $checkpoint);
     }
 
-    admin_gallery_report_job_write($job);
+    admin_gallery_report_job_write($checkpoint, $job);
     return admin_gallery_report_public_state($job);
 }
 
 /**
  * Process one bounded report generation batch.
  *
+ * @param array<string,mixed>|null $checkpoint Caller-owned current job, updated after a completed batch or cleared at finish.
  * @param int $batchSize Number of image rows to inspect.
  * @return array<string, mixed> Structured job state.
  */
-function admin_gallery_report_process_job(int $batchSize = ADMIN_GALLERY_REPORT_DEFAULT_BATCH_SIZE): array
+function admin_gallery_report_process_job(?array &$checkpoint, int $batchSize = ADMIN_GALLERY_REPORT_DEFAULT_BATCH_SIZE): array
 {
-    $job = admin_gallery_report_job_read();
+    $job = admin_gallery_report_job_read($checkpoint);
     if ($job === null || (string) ($job['status'] ?? '') !== 'running') {
         return [
             'ok' => false,
@@ -140,20 +148,21 @@ function admin_gallery_report_process_job(int $batchSize = ADMIN_GALLERY_REPORT_
     $job['updated_at'] = time();
 
     if ($rows === [] || $processed >= (int) ($job['total'] ?? 0)) {
-        return admin_gallery_report_finish_job($job);
+        return admin_gallery_report_finish_job($job, $checkpoint);
     }
 
-    admin_gallery_report_job_write($job);
+    admin_gallery_report_job_write($checkpoint, $job);
     return admin_gallery_report_public_state($job);
 }
 
 /**
  * Finish a report job and return the final HTML in the response only.
  *
- * @param array $job Job data.
+ * @param array<string,mixed> $job Accumulated report: counts, timestamps, image/storage summaries and prepared report sections.
+ * @param array<string,mixed>|null $checkpoint Caller-owned checkpoint; cleared before final logging and presentation preparation.
  * @return array<string, mixed> Public state.
  */
-function admin_gallery_report_finish_job(array $job): array
+function admin_gallery_report_finish_job(array $job, ?array &$checkpoint): array
 {
     $job['status'] = 'complete';
     $job['processed'] = (int) ($job['total'] ?? $job['processed'] ?? 0);
@@ -164,13 +173,13 @@ function admin_gallery_report_finish_job(array $job): array
     $job['storage'] = admin_gallery_report_storage_snapshot($job);
 
     $filename = 'php-gallery-complete-overview-' . gmdate('Ymd-His') . '.html';
-    admin_gallery_report_job_clear();
+    admin_gallery_report_job_clear($checkpoint);
 
     if (function_exists('Gallery\\Services\\admin_log_event')) {
         admin_log_event('info', 'admin_report.generated', 'Admin generated a complete gallery overview report.', [
             'images' => (int) ($job['total'] ?? 0),
             'duration_seconds' => (int) ($job['duration_seconds'] ?? 0),
-            'telemetry_days' => (int) ($job['telemetry_days'] ?? 30),
+            'telemetry_days' => (int) ($job['telemetry_days'] ?? ADMIN_GALLERY_REPORT_TELEMETRY_DEFAULT_DAYS),
         ], ['category' => 'admin', 'severity' => 'notice', 'route_name' => 'admin_gallery_report']);
     }
 
@@ -225,30 +234,35 @@ function admin_gallery_report_job_id(): string
 }
 
 /**
- * Read the current report job from the PHP session.
+ * Read a normalized report checkpoint supplied by the request boundary.
  *
- * @return array<string, mixed>|null Job data or null.
+ * @param array<string,mixed>|null $checkpoint Caller-owned report snapshot, or no active job.
+ * @return array<string,mixed>|null Same snapshot; this service does not read session transport.
  */
-function admin_gallery_report_job_read(): ?array
+function admin_gallery_report_job_read(?array $checkpoint): ?array
 {
-    $job = $_SESSION[ADMIN_GALLERY_REPORT_JOB_KEY] ?? null;
-    return is_array($job) ? $job : null;
+    return $checkpoint;
 }
 
 /**
- * Store the current report job in the PHP session.
+ * Publish a complete batch snapshot into the caller-owned report checkpoint.
  *
- * @param array $job Job data.
+ * @param array<string,mixed>|null $checkpoint Caller-owned current snapshot, replaced by reference.
+ * @param array<string,mixed> $job Fully accumulated job including cursor, progress and report sections.
+ * @return void The caller remains responsible for its chosen storage transport.
  */
-function admin_gallery_report_job_write(array $job): void
+function admin_gallery_report_job_write(?array &$checkpoint, array $job): void
 {
-    $_SESSION[ADMIN_GALLERY_REPORT_JOB_KEY] = $job;
+    $checkpoint = $job;
 }
 
 /**
- * Remove the transient report job from the PHP session.
+ * Clear the completed report checkpoint without retaining exported report contents.
+ *
+ * @param array<string,mixed>|null $checkpoint Caller-owned snapshot, reset by reference.
+ * @return void The controller removes the corresponding session entry.
  */
-function admin_gallery_report_job_clear(): void
+function admin_gallery_report_job_clear(?array &$checkpoint): void
 {
-    unset($_SESSION[ADMIN_GALLERY_REPORT_JOB_KEY]);
+    $checkpoint = null;
 }

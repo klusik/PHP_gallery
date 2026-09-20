@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Controller
+ * Purpose: Expose Smart Gallery administration, preview, public listing and rating endpoints.
+ * Responsibilities:
+ *   - Normalize requests and coordinate existing rule, access and presentation services.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: app/controllers/smart_galleries.php

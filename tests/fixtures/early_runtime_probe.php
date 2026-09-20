@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Test Fixture
+ * Purpose: Probe the early-runtime response boundary in a disposable request.
+ * Responsibilities:
+ *   - Load the early guard without bootstrapping installation configuration.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/fixtures/early_runtime_probe.php

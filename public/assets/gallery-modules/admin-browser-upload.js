@@ -33,6 +33,19 @@
  */
 
 import { appendUploadProgressLog, i18n, updateBasicProgress, updateUploadProgressMetrics } from './admin-core.js?v=20260614-upload-original-diagnostics-v1';
+import {adminOperationBody, assertAdminOperationCurrent} from './admin-operation-keys.js?v=20260920-operation-keys-v1';
+
+/**
+ * Prepared uploader's existing session retained only for the current document's explicit retries.
+ * @typedef {Object} PreparedUploadAttempt
+ * @property {File[]} files Expanded immutable originals in upload order; no duplicate file-byte copy.
+ * @property {ReturnType<typeof browserUploadConfig>} processingConfig Frozen-by-ownership preparation settings from the original attempt.
+ * @property {ReturnType<typeof createBrowserProgressState>} progressState Pre-upload progress snapshot; byte counters use bytes.
+ * @property {string} uploadSessionId Existing prepared-batch replay identity, not a classic operation key or credential.
+ * @property {Awaited<ReturnType<typeof createBrowserBatcher>>} batcher Original package owner and acknowledged-cleanup callbacks.
+ * @property {Array<{index: number, blob: Blob, itemCount: number, cleanup: function(): Promise<void>}>} batches Original indexed ZIP blobs and their existing cleanup callbacks.
+ * @property {boolean} serverSideStarted Whether server work may have started and automatic package abandonment is unsafe.
+ */
 
 const workerScriptUrl = new URL('./browser-image-worker.js?v=20260815-upload-zip-import-v1', import.meta.url);
 const tempDatabaseName = 'php_gallery_browser_uploads';
@@ -54,9 +67,10 @@ export function browserUploadRequested(form) {
  *
  * @param {HTMLFormElement} form Upload form.
  * @param {HTMLElement} progress Progress container.
+ * @param {import('./admin-operation-keys.js').AdminOperationIntent} operation Original form intent; retains this uploader's own session/batches after uncertainty.
  * @return {Promise<Record<string, *> | {fallback: true, reason: string} >} Upload result or fallback request.
  */
-export async function runBrowserGalleryUpload(form, progress) {
+export async function runBrowserGalleryUpload(form, progress, operation) {
     const config = browserUploadConfig(form);
     const selectedFiles = selectedBrowserUploadFiles(form);
     const archiveSelected = selectedFiles.some(isBrowserUploadZipFile);
@@ -73,54 +87,60 @@ export async function runBrowserGalleryUpload(form, progress) {
         throw new Error(browserUploadStrictCapabilityMessage(capability.reason));
     }
 
-    const processingConfig = {
+    const processingConfig = operation.prepared?.processingConfig || {
         ...config,
         thumbnailSizes: prepareThumbnails ? config.thumbnailSizes : [],
         thumbnailFormats: prepareThumbnails ? config.thumbnailFormats : [],
     };
 
     updateBasicProgress(progress, 1, archiveSelected ? i18n('admin.browser_upload.extracting_archives', 'Inspecting selected ZIP archives in the browser...') : i18n('admin.browser_upload.preparing', 'Preparing images in the browser...'));
-    const expanded = await expandBrowserUploadArchives(selectedFiles, processingConfig, progress);
+    const expanded = operation.prepared || await expandBrowserUploadArchives(selectedFiles, processingConfig, progress);
     const files = expanded.files;
     if (files.length === 0) throw new Error(i18n('admin.browser_upload.zip_no_supported_images', 'No supported images were found in the selected ZIP archives.'));
-    const progressState = createBrowserProgressState(files);
+    const progressState = operation.prepared ? {...operation.prepared.progressState} : createBrowserProgressState(files);
     updateBasicProgress(progress, 1, i18n('admin.browser_upload.preparing', 'Preparing images in the browser...'));
     updateUploadProgressMetrics(progress, browserProgressMetrics(progressState));
     appendUploadProgressLog(progress, i18n('admin.browser_upload.log_selected', 'Selected {count} image(s), {bytes} original data.', {count: files.length, bytes: formatFileSize(progressState.totalOriginalBytes)}));
-    const uploadSessionId = browserUploadSessionId();
-    let batcher = null;
-    let serverSideStarted = false;
+    const uploadSessionId = operation.prepared?.uploadSessionId || browserUploadSessionId();
+    let batcher = operation.prepared?.batcher || null;
+    let serverSideStarted = operation.prepared?.serverSideStarted || false;
 
     try {
-        batcher = await createBrowserBatcher(processingConfig, uploadSessionId, {
-            onBatchPackaging: (batchIndex, itemCount, byteCount) => {
-                appendUploadProgressLog(progress, i18n('admin.browser_upload.log_packaging_batch', 'Packaging ZIP {index}: {count} image(s), estimated {bytes}.', {index: batchIndex + 1, count: itemCount, bytes: formatFileSize(byteCount)}));
-            },
-            onBatchReady: (batch) => {
-                appendUploadProgressLog(progress, i18n('admin.browser_upload.log_packaged_batch', 'ZIP {index} ready: {count} image(s), {bytes}.', {index: batch.index + 1, count: batch.itemCount || 0, bytes: formatFileSize(batch.blob?.size || 0)}));
-            },
-        });
-        await processFilesWithWorkerPool(files, processingConfig, async (item, completed, total) => {
-            const prepared = await batcher.addItem(item);
-            progressState.preparedFiles = completed;
-            progressState.preparedOriginalBytes += Number(item.originalSize || 0);
-            progressState.preparedPackageBytes += Number(prepared.itemBytes || 0);
-            if (item.clientExif && typeof item.clientExif === 'object') {
-                progressState.exifFiles++;
-                if (clientExifHasGps(item.clientExif)) {
-                    progressState.gpsFiles++;
+        if (!operation.prepared) {
+            batcher = await createBrowserBatcher(processingConfig, uploadSessionId, {
+                onBatchPackaging: (batchIndex, itemCount, byteCount) => {
+                    appendUploadProgressLog(progress, i18n('admin.browser_upload.log_packaging_batch', 'Packaging ZIP {index}: {count} image(s), estimated {bytes}.', {index: batchIndex + 1, count: itemCount, bytes: formatFileSize(byteCount)}));
+                },
+                onBatchReady: (batch) => {
+                    appendUploadProgressLog(progress, i18n('admin.browser_upload.log_packaged_batch', 'ZIP {index} ready: {count} image(s), {bytes}.', {index: batch.index + 1, count: batch.itemCount || 0, bytes: formatFileSize(batch.blob?.size || 0)}));
+                },
+            });
+            await processFilesWithWorkerPool(files, processingConfig, async (item, completed, total) => {
+                const prepared = await batcher.addItem(item);
+                progressState.preparedFiles = completed;
+                progressState.preparedOriginalBytes += Number(item.originalSize || 0);
+                progressState.preparedPackageBytes += Number(prepared.itemBytes || 0);
+                if (item.clientExif && typeof item.clientExif === 'object') {
+                    progressState.exifFiles++;
+                    if (clientExifHasGps(item.clientExif)) {
+                        progressState.gpsFiles++;
+                    }
                 }
+                updateBasicProgress(progress, Math.max(2, Math.round((completed / total) * 45)), i18n('admin.browser_upload.prepared_count', 'Prepared {count} of {total} image(s) in the browser.', {count: completed, total}));
+                updateUploadProgressMetrics(progress, browserProgressMetrics(progressState));
+                appendUploadProgressLog(progress, i18n('admin.browser_upload.log_prepared_image', 'Prepared {current}/{total}: {name}, source {source}, package {packageSize}.', {current: completed, total, name: String(item.originalName || ''), source: formatFileSize(item.originalSize || 0), packageSize: formatFileSize(prepared.itemBytes || 0)}));
+            });
+            updateBasicProgress(progress, 46, i18n('admin.browser_upload.packaging', 'Packaging prepared images into upload ZIP batches...'));
+            appendUploadProgressLog(progress, i18n('admin.browser_upload.log_packaging_started', 'All images are prepared. Building upload ZIP files now.'));
+            const batches = await batcher.finish();
+            if (batches.length === 0) {
+                throw new Error(i18n('admin.browser_upload.strict_empty_batches', 'Browser-side processing produced no upload batches. No files were uploaded; the server-side fallback was not started.'));
             }
-            updateBasicProgress(progress, Math.max(2, Math.round((completed / total) * 45)), i18n('admin.browser_upload.prepared_count', 'Prepared {count} of {total} image(s) in the browser.', {count: completed, total}));
-            updateUploadProgressMetrics(progress, browserProgressMetrics(progressState));
-            appendUploadProgressLog(progress, i18n('admin.browser_upload.log_prepared_image', 'Prepared {current}/{total}: {name}, source {source}, package {packageSize}.', {current: completed, total, name: String(item.originalName || ''), source: formatFileSize(item.originalSize || 0), packageSize: formatFileSize(prepared.itemBytes || 0)}));
-        });
-        updateBasicProgress(progress, 46, i18n('admin.browser_upload.packaging', 'Packaging prepared images into upload ZIP batches...'));
-        appendUploadProgressLog(progress, i18n('admin.browser_upload.log_packaging_started', 'All images are prepared. Building upload ZIP files now.'));
-        const batches = await batcher.finish();
-        if (batches.length === 0) {
-            throw new Error(i18n('admin.browser_upload.strict_empty_batches', 'Browser-side processing produced no upload batches. No files were uploaded; the server-side fallback was not started.'));
+            // Keep the existing prepared session and exact ZIP blobs for an explicit
+            // retry. Never generate a second session after an uncertain batch response.
+            operation.prepared = {files, processingConfig, progressState: {...progressState}, uploadSessionId, batcher, batches, serverSideStarted: false};
         }
+        const {batches} = operation.prepared;
         progressState.totalBatches = batches.length;
         progressState.totalZipBytes = batches.reduce((sum, batch) => sum + Number(batch.blob?.size || 0), 0);
         updateUploadProgressMetrics(progress, browserProgressMetrics(progressState));
@@ -131,8 +151,10 @@ export async function runBrowserGalleryUpload(form, progress) {
         if (!galleryId) {
             updateBasicProgress(progress, 48, i18n('admin.browser_upload.creating_gallery', 'Creating gallery before uploading prepared batches...'));
             appendUploadProgressLog(progress, i18n('admin.browser_upload.log_creating_gallery', 'Creating target gallery before uploading ZIP files.'));
+            assertAdminOperationCurrent(operation);
             serverSideStarted = true;
-            gallerySeed = await createGalleryForBrowserUpload(form);
+            operation.prepared.serverSideStarted = true;
+            gallerySeed = await createGalleryForBrowserUpload(form, operation);
             galleryId = Number(gallerySeed.gallery_id || 0);
             appendServerUploadEvents(progress, gallerySeed.upload_events || []);
             if (!galleryId) {
@@ -150,7 +172,10 @@ export async function runBrowserGalleryUpload(form, progress) {
             updateBasicProgress(progress, 50 + Math.round((index / batches.length) * 45), i18n('admin.browser_upload.uploading_batch', 'Uploading prepared ZIP batch {current} of {total}...', {current: index + 1, total: batches.length}));
             updateUploadProgressMetrics(progress, browserProgressMetrics(progressState));
             appendUploadProgressLog(progress, i18n('admin.browser_upload.log_uploading_batch', 'Uploading ZIP {current}/{total}: {count} image(s), {bytes}.', {current: index + 1, total: batches.length, count: batch.itemCount || 0, bytes: formatFileSize(batch.blob?.size || 0)}));
+            assertAdminOperationCurrent(operation);
             serverSideStarted = true;
+            operation.prepared.serverSideStarted = true;
+            operation.unresolved = true;
             const result = await uploadPreparedBatchWithRetry(form, processingConfig, galleryId, uploadSessionId, batch, index, batches.length, prepareThumbnails, (event) => {
                 if (event.lengthComputable && event.total > 0) {
                     const ratio = Math.max(0, Math.min(1, event.loaded / event.total));
@@ -191,8 +216,9 @@ export async function runBrowserGalleryUpload(form, progress) {
         }
         return aggregate;
     } catch (error) {
-        if (batcher) {
+        if (batcher && !serverSideStarted) {
             await batcher.abort();
+            operation.prepared = null;
         }
         if (!serverSideStarted && !archiveSelected) {
             const reason = error instanceof Error ? error.message : String(error || 'preparation_failed');
@@ -952,12 +978,14 @@ function indexedDbRequest(database, mode, operation) {
  * Send the create-gallery form without files before browser batch upload.
  *
  * @param {HTMLFormElement} form Upload form.
+ * @param {import('./admin-operation-keys.js').AdminOperationIntent} operation Original create intent; zero is its stable bootstrap request key.
  * @return {Promise<Record<string, *>>} Server response.
  */
-async function createGalleryForBrowserUpload(form) {
+async function createGalleryForBrowserUpload(form, operation) {
     const body = new FormData(form);
     body.delete('images[]');
     body.set('ajax', '1');
+    adminOperationBody(operation, 0, body);
     const response = await fetch(form.action || window.location.href, {
         method: 'POST',
         body,
@@ -965,7 +993,7 @@ async function createGalleryForBrowserUpload(form) {
         headers: {'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest'},
     });
     const result = await readJsonResponseSafely(response, i18n('admin.browser_upload.gallery_create_failed', 'Gallery creation failed.'));
-    if (!response.ok || result.ok === false) {
+    if (!response.ok || result.ok !== true || !result.mutation || !Array.isArray(result.contexts)) {
         throw new Error(result.error || i18n('admin.browser_upload.gallery_create_failed', 'Gallery creation failed.'));
     }
     return result;
@@ -1031,21 +1059,21 @@ function uploadPreparedBatch(form, config, galleryId, uploadSessionId, batch, ba
         body.set('source_url', sourceUrl);
     }
     body.append('zip_batch', batch.blob, `browser-upload-${uploadSessionId}-${batch.index}.zip`);
-    return new Promise((resolve, reject) => {
+    return new Promise(/** Send one prepared batch and preserve its existing retry classification. @param {function(Record<string, unknown>): void} resolve Accept the canonical server acknowledgment. @param {function(Error): void} reject Report transport, parser or server refusal. @return {void} Installs request-local handlers and starts this XHR only. */ (resolve, reject) => {
         const xhr = new XMLHttpRequest();
         xhr.open('POST', String(config.endpoint));
         xhr.withCredentials = true;
         xhr.setRequestHeader('Accept', 'application/json');
         xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
         xhr.upload.addEventListener('progress', progressHandler);
-        xhr.addEventListener('load', async () => {
+        xhr.addEventListener('load', /** Validate one prepared acknowledgment before allowing cleanup or key rotation. @return {Promise<void>} Resolves the request promise or rejects with the existing retry classification. */ async () => {
             try {
                 const response = new Response(xhr.responseText || '', {
                     status: xhr.status,
                     headers: {'Content-Type': xhr.getResponseHeader('Content-Type') || ''},
                 });
                 const result = await readJsonResponseSafely(response, i18n('admin.browser_upload.batch_failed', 'Prepared batch upload failed.'));
-                if (xhr.status < 200 || xhr.status >= 300 || result.ok === false) {
+                if (xhr.status < 200 || xhr.status >= 300 || result.ok !== true || !result.mutation || typeof result.mutation !== 'object' || !Array.isArray(result.contexts)) {
                     const message = browserUploadServerErrorMessage(result, i18n('admin.browser_upload.batch_failed', 'Prepared batch upload failed.'));
                     const failure = new Error(message);
                     failure.httpStatus = xhr.status;
@@ -1165,11 +1193,11 @@ async function readJsonResponseSafely(response, fallbackMessage) {
  * @return {number} Gallery id or zero.
  */
 function selectedBrowserGalleryId(form) {
-    const select = form.querySelector('select[name="gallery_id"]');
+    const select = form.querySelector('select[name="gallery_id"]:enabled');
     if (select instanceof HTMLSelectElement) {
         return Number(select.value || 0);
     }
-    const hidden = form.querySelector('input[name="gallery_id"]');
+    const hidden = form.querySelector('input[type="hidden"][name="gallery_id"]:enabled');
     if (hidden instanceof HTMLInputElement) {
         return Number(hidden.value || 0);
     }

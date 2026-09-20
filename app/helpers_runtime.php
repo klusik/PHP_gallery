@@ -256,33 +256,26 @@ function slugify(string $text): string
 
 /**
  * Generate a unique gallery slug, optionally excluding an existing gallery ID.
+ *
+ * Compatibility wrapper; domain suffix policy and database access use their
+ * canonical service/model owners, including caller-supplied connections.
+ *
+ * @param PDO $pdo Caller-owned connection preserved for setup/tool compatibility.
+ * @param string $title Human-readable title or requested slug.
+ * @param ?int $excludeGalleryId Optional existing gallery excluded from collisions.
+ * @return string Unique normalized gallery slug.
  */
 function unique_slug(PDO $pdo, string $title, ?int $excludeGalleryId = null): string
 {
-    // Variable $base stores this steps working value.
-    $base = slugify($title);
-    // Variable $slug stores this steps working value.
-    $slug = $base;
-    // Variable $counter stores this steps working value.
-    $counter = 2;
-    while (true) {
-        // Variable $sql stores this steps working value.
-        $sql = 'SELECT id FROM galleries WHERE slug = ?';
-        // Variable $params stores this steps working value.
-        $params = [$slug];
-        if ($excludeGalleryId !== null) {
-            $sql .= ' AND id <> ?';
-            $params[] = $excludeGalleryId;
-        }
-        // Variable $stmt stores this steps working value.
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute($params);
-        if (!$stmt->fetch()) {
-            return $slug;
-        }
-        // Variable $slug stores this steps working value.
-        $slug = $base . '-' . $counter;
-        $counter++;
-    }
+    require_once __DIR__ . '/models/galleries.php';
+    require_once __DIR__ . '/services/gallery_editor_mutations.php';
+    return \Gallery\Services\gallery_editor_unique_slug($title, $excludeGalleryId ?? 0,
+        /**
+         * Ask the model about one candidate on the historical caller's connection.
+         *
+         * @param string $candidate Normalized slug proposed by domain suffix policy.
+         * @return bool Whether the candidate is already owned.
+         */
+        static fn (string $candidate): bool => \Gallery\Models\gallery_model_slug_exists_on_connection($pdo, $candidate, $excludeGalleryId)
+    );
 }
-

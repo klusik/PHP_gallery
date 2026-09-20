@@ -405,10 +405,12 @@ assert_duplicate_detector_same(false, preg_match('/\b(?:UPDATE|DELETE\s+FROM|INS
 assert_duplicate_detector_true(str_contains($modelSource, 'INNER JOIN galleries child'), 'local detector model resolves descendant galleries from the selected branch root');
 assert_duplicate_detector_true(str_contains($modelSource, "child.folder_path LIKE CONCAT(root.folder_path, '/%')"), 'local detector model includes nested subgallery folder paths');
 assert_duplicate_detector_true(str_contains($serviceSource, 'duplicate_photo_model_fetch_batch($galleryIds, $cursor, $maxImageId, $batchSize)') && str_contains($modelSource, 'gallery_id IN ('), 'local image batches pass the immutable gallery-branch id snapshot into model-owned persistence');
-assert_duplicate_detector_true(str_contains($serviceSource, 'DUPLICATE_PHOTO_DETECTOR_MAX_BATCH_SIZE = 300'), 'server caps one detector metadata batch at 300 rows');
-assert_duplicate_detector_true(str_contains($serviceSource, 'DUPLICATE_PHOTO_DETECTOR_JOB_TTL_SECONDS = 3600'), 'detector jobs expire after one hour');
-assert_duplicate_detector_true(str_contains($serviceSource, 'DUPLICATE_PHOTO_DETECTOR_MAX_SESSION_JOBS = 3'), 'administrator sessions retain at most three detector jobs');
-assert_duplicate_detector_true(str_contains($serviceSource, 'DUPLICATE_PHOTO_DETECTOR_MAX_PAIR_REFERENCES = 10000'), 'result pair expansion has a hard reference bound');
+$policySource = (string) file_get_contents(__DIR__ . '/../app/policy_constants.php');
+assert_duplicate_detector_true(str_contains($policySource, 'DUPLICATE_PHOTO_DETECTOR_MAX_BATCH_SIZE = 300'), 'server caps one detector metadata batch at 300 rows');
+assert_duplicate_detector_true(str_contains($policySource, 'DUPLICATE_PHOTO_DETECTOR_JOB_TTL_SECONDS = 3600'), 'detector jobs expire after one hour');
+assert_duplicate_detector_true(str_contains($policySource, 'DUPLICATE_PHOTO_DETECTOR_MAX_SESSION_JOBS = 3'), 'pre-start pruning retains the three newest existing jobs');
+assert_duplicate_detector_true(str_contains($policySource, 'DUPLICATE_PHOTO_DETECTOR_MAX_PAIR_REFERENCES = 10000'), 'result pair expansion has a hard reference bound');
+assert_duplicate_detector_true(!preg_match('/const\s+DUPLICATE_PHOTO_DETECTOR_/', $serviceSource), 'detector module does not shadow immutable Core policy');
 
 $viewSource = file_get_contents(__DIR__ . '/../app/views/admin_duplicate_photos.php');
 if (!is_string($viewSource)) {
@@ -433,7 +435,7 @@ if (!is_string($controllerSource)) {
     throw new RuntimeException('Could not read duplicate detector controller source for delete integration assertions.');
 }
 assert_duplicate_detector_true(str_contains($controllerSource, 'delete_gallery_images($imageGalleryId, [$imageId])'), 'duplicate detector deletion reuses the existing gallery image deletion service');
-assert_duplicate_detector_true(str_contains($controllerSource, 'duplicate_photo_detector_remove_image_from_job($token, $imageId)'), 'successful deletion prunes the image from the persisted detector job');
+assert_duplicate_detector_true(str_contains($controllerSource, 'duplicate_photo_detector_remove_image_from_job($token, $imageId, admin_duplicate_photos_job_store())'), 'successful deletion prunes the image from the caller-owned detector job');
 assert_duplicate_detector_true(str_contains($controllerSource, 'duplicate_photo_detector_job_allows_gallery($job, $imageGalleryId)'), 'delete controller revalidates current gallery membership against immutable detector scope');
 assert_duplicate_detector_true(str_contains($controllerSource, 'duplicate_photo_ledger_add_pair($adminUserId, $leftImageId, $rightImageId)'), 'ignore-pair controller persists the canonical reviewed relationship');
 assert_duplicate_detector_true(str_contains($controllerSource, 'duplicate_photo_ledger_add_gallery($adminUserId, $ignoredGalleryId)'), 'ignore-gallery controller persists the server-derived exact gallery id');

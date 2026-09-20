@@ -12,7 +12,7 @@
  *
  * Responsibilities:
  *   - Issue and validate short-lived server-signed form and challenge tickets
- *   - Bind anonymous anti-automation authority to the current PHP session without creating viewer identity
+ *   - Bind anonymous anti-automation authority to explicit caller-owned ticket context without creating viewer identity
  *   - Enforce bounded one-time/replay state, server-measured form age, and randomized honeypots
  *   - Reuse the existing viewer rate-limit subsystem for local repeated-request escalation and hard suppression
  *   - Issue and verify bounded first-party SHA-256 proof-of-work challenges with an accessible no-JavaScript fallback
@@ -42,22 +42,24 @@ namespace Gallery\Services;
 
 use InvalidArgumentException;
 use Throwable;
+use const Gallery\Core\VIEWER_ANTI_AUTOMATION_ACTION_REGISTER;
+use const Gallery\Core\VIEWER_ANTI_AUTOMATION_ACTION_RESEND;
+use const Gallery\Core\VIEWER_ANTI_AUTOMATION_RESULT_ALLOW;
+use const Gallery\Core\VIEWER_ANTI_AUTOMATION_RESULT_CHALLENGE_REQUIRED;
+use const Gallery\Core\VIEWER_ANTI_AUTOMATION_RESULT_SUPPRESS;
+use const Gallery\Core\VIEWER_ANTI_AUTOMATION_RESULT_INVALID;
+use const Gallery\Core\VIEWER_ANTI_AUTOMATION_KIND_FORM;
+use const Gallery\Core\VIEWER_ANTI_AUTOMATION_KIND_CHALLENGE;
+use const Gallery\Core\VIEWER_ANTI_AUTOMATION_OUTSTANDING_CAP;
+use const Gallery\Core\VIEWER_ANTI_AUTOMATION_CHALLENGE_LIFETIME_SECONDS;
+use const Gallery\Core\VIEWER_ANTI_AUTOMATION_FALLBACK_MIN_AGE_SECONDS;
+use const Gallery\Core\VIEWER_ANTI_AUTOMATION_MAX_COUNTER;
+use const Gallery\Core\VIEWER_ANTI_AUTOMATION_TICKET_MAX_BYTES;
+use const Gallery\Core\VIEWER_ANTI_AUTOMATION_HONEYPOT_MAX_BYTES;
+use const Gallery\Core\VIEWER_ANTI_AUTOMATION_PRUNE_CANDIDATE_CAP;
 
-const VIEWER_ANTI_AUTOMATION_SESSION_NAMESPACE = 'viewer_anti_automation';
-const VIEWER_ANTI_AUTOMATION_ACTION_REGISTER = 'register';
-const VIEWER_ANTI_AUTOMATION_ACTION_RESEND = 'resend';
-const VIEWER_ANTI_AUTOMATION_RESULT_ALLOW = 'allow';
-const VIEWER_ANTI_AUTOMATION_RESULT_CHALLENGE_REQUIRED = 'challenge_required';
-const VIEWER_ANTI_AUTOMATION_RESULT_SUPPRESS = 'suppress';
-const VIEWER_ANTI_AUTOMATION_RESULT_INVALID = 'invalid';
-const VIEWER_ANTI_AUTOMATION_KIND_FORM = 'form';
-const VIEWER_ANTI_AUTOMATION_KIND_CHALLENGE = 'challenge';
-const VIEWER_ANTI_AUTOMATION_OUTSTANDING_CAP = 12;
-const VIEWER_ANTI_AUTOMATION_CHALLENGE_LIFETIME_SECONDS = 180;
-const VIEWER_ANTI_AUTOMATION_FALLBACK_MIN_AGE_SECONDS = 3;
-const VIEWER_ANTI_AUTOMATION_MAX_COUNTER = 1048575;
-const VIEWER_ANTI_AUTOMATION_TICKET_MAX_BYTES = 1024;
-const VIEWER_ANTI_AUTOMATION_HONEYPOT_MAX_BYTES = 256;
+require_once dirname(__DIR__) . '/policy_constants.php';
+
 
 /**
  * Return whether first-party viewer anti-automation protection is enabled.
@@ -67,16 +69,6 @@ const VIEWER_ANTI_AUTOMATION_HONEYPOT_MAX_BYTES = 256;
 function viewer_anti_automation_enabled(): bool
 {
     return !empty(viewer_accounts_config()['anti_automation_enabled']);
-}
-
-/**
- * Return the isolated PHP-session namespace used only by pre-auth anti-automation state.
- *
- * @return string Dedicated session key.
- */
-function viewer_anti_automation_session_namespace_key(): string
-{
-    return VIEWER_ANTI_AUTOMATION_SESSION_NAMESPACE;
 }
 
 /**
@@ -189,19 +181,29 @@ function viewer_anti_automation_nonce_fingerprint(string $nonce): string
 }
 
 /**
- * Opportunistically normalize and prune expired anti-automation session entries.
+ * Opportunistically normalize and prune expired caller-owned anti-automation entries.
  *
+ * Canonical ticket context: array{entries:array<string,array{kind:string,action:string,
+ *   issued_at:int,expires_at:int,difficulty:int}>}. Keys are private 64-hex scoped HMAC
+ * nonce fingerprints, never browser nonces or PHP session IDs. kind is form/challenge;
+ * action is register/resend. Times are Unix seconds; expires_at <= now is expired.
+ * difficulty is zero for forms or the signed proof-bit target for challenges. Malformed
+ * legacy rows are dropped; up to 64 valid candidates enter stable age ordering and
+ * the newest twelve among those candidates survive retention.
+ * The controller owns storage and must not send this context to a view, log or browser.
+ *
+ * @param array<string,mixed> $ticketContext Borrowed private ticket namespace, modified by reference;
+ *   normalized entries follow the canonical context shape at context_prune(). Persist changes even on refusal/exception.
  * @param ?int $nowTimestamp Optional deterministic timestamp for tests.
+ * @return void Publish normalized ticket entries into the caller's context only.
  */
-function viewer_anti_automation_session_cleanup(?int $nowTimestamp = null): void
+function viewer_anti_automation_context_prune(array &$ticketContext, ?int $nowTimestamp = null): void
 {
     $now = $nowTimestamp ?? time();
-    $key = viewer_anti_automation_session_namespace_key();
-    $state = $_SESSION[$key] ?? [];
-    $entries = is_array($state) && is_array($state['entries'] ?? null) ? $state['entries'] : [];
+    $entries = is_array($ticketContext['entries'] ?? null) ? $ticketContext['entries'] : [];
     $normalized = [];
     foreach ($entries as $fingerprint => $entry) {
-        if (count($normalized) >= 64 || !is_string($fingerprint) || preg_match('/^[a-f0-9]{64}$/D', $fingerprint) !== 1 || !is_array($entry)) {
+        if (count($normalized) >= VIEWER_ANTI_AUTOMATION_PRUNE_CANDIDATE_CAP || !is_string($fingerprint) || preg_match('/^[a-f0-9]{64}$/D', $fingerprint) !== 1 || !is_array($entry)) {
             continue;
         }
         $kind = (string) ($entry['kind'] ?? '');
@@ -224,26 +226,37 @@ function viewer_anti_automation_session_cleanup(?int $nowTimestamp = null): void
             'difficulty' => $difficulty,
         ];
     }
-    uasort($normalized, static function (array $left, array $right): int {
-        return ((int) $left['issued_at']) <=> ((int) $right['issued_at']);
-    });
+    uasort($normalized,
+        /**
+         * Order retained authorities oldest first; equal timestamps retain their insertion order.
+         * @param array{issued_at:int} $left First normalized ticket entry.
+         * @param array{issued_at:int} $right Second normalized ticket entry.
+         * @return int Ordering used to evict oldest entries above the outstanding-authority cap.
+         */
+        static function (array $left, array $right): int {
+            return ((int) $left['issued_at']) <=> ((int) $right['issued_at']);
+        });
     while (count($normalized) > VIEWER_ANTI_AUTOMATION_OUTSTANDING_CAP) {
         array_shift($normalized);
     }
-    $_SESSION[$key] = ['entries' => $normalized];
+    $ticketContext = ['entries' => $normalized];
 }
 
 /**
- * Register one issued ticket nonce in bounded server-side session state.
+ * Register one issued ticket nonce in bounded caller-owned state.
  *
+ * @param array<string,mixed> $ticketContext Borrowed private ticket namespace, modified by reference;
+ *   normalized entries follow the canonical context shape at context_prune(). Persist changes even on refusal/exception.
  * @param string $nonce Public ticket nonce.
  * @param string $kind Ticket kind.
  * @param string $action Protected action.
  * @param int $issuedAt Authoritative issue timestamp.
  * @param int $expiresAt Authoritative expiry timestamp.
  * @param int $difficulty Signed proof difficulty for challenges, otherwise zero.
+ * @return void Publish normalized ticket entries into the caller's context only.
  */
-function viewer_anti_automation_session_register(
+function viewer_anti_automation_context_register(
+    array &$ticketContext,
     string $nonce,
     string $kind,
     string $action,
@@ -251,14 +264,12 @@ function viewer_anti_automation_session_register(
     int $expiresAt,
     int $difficulty = 0
 ): void {
-    viewer_anti_automation_session_cleanup($issuedAt);
+    viewer_anti_automation_context_prune($ticketContext, $issuedAt);
     $fingerprint = viewer_anti_automation_nonce_fingerprint($nonce);
     if ($fingerprint === '') {
         throw new InvalidArgumentException('Viewer anti-automation nonce is invalid.');
     }
-    $key = viewer_anti_automation_session_namespace_key();
-    $state = $_SESSION[$key] ?? ['entries' => []];
-    $entries = is_array($state['entries'] ?? null) ? $state['entries'] : [];
+    $entries = is_array($ticketContext['entries'] ?? null) ? $ticketContext['entries'] : [];
     $entries[$fingerprint] = [
         'kind' => $kind,
         'action' => $action,
@@ -266,13 +277,15 @@ function viewer_anti_automation_session_register(
         'expires_at' => $expiresAt,
         'difficulty' => $difficulty,
     ];
-    $_SESSION[$key] = ['entries' => $entries];
-    viewer_anti_automation_session_cleanup($issuedAt);
+    $ticketContext = ['entries' => $entries];
+    viewer_anti_automation_context_prune($ticketContext, $issuedAt);
 }
 
 /**
- * Consume one issued ticket nonce exactly once from the current session.
+ * Consume one issued ticket nonce exactly once from the supplied private context.
  *
+ * @param array<string,mixed> $ticketContext Borrowed private ticket namespace, modified by reference;
+ *   normalized entries follow the canonical context shape at context_prune(). Persist changes even on refusal/exception.
  * @param string $nonce Public ticket nonce.
  * @param string $kind Expected ticket kind.
  * @param string $action Expected action.
@@ -280,9 +293,10 @@ function viewer_anti_automation_session_register(
  * @param int $expiresAt Signed expiry timestamp.
  * @param int $difficulty Signed challenge difficulty or zero for forms.
  * @param ?int $nowTimestamp Optional deterministic timestamp for tests.
- * @return bool True only when matching current-session state existed and was consumed.
+ * @return bool True only when all signed metadata matched a retained entry, which is removed before returning.
  */
-function viewer_anti_automation_session_consume(
+function viewer_anti_automation_context_consume(
+    array &$ticketContext,
     string $nonce,
     string $kind,
     string $action,
@@ -292,10 +306,9 @@ function viewer_anti_automation_session_consume(
     ?int $nowTimestamp = null
 ): bool {
     $now = $nowTimestamp ?? time();
-    viewer_anti_automation_session_cleanup($now);
+    viewer_anti_automation_context_prune($ticketContext, $now);
     $fingerprint = viewer_anti_automation_nonce_fingerprint($nonce);
-    $key = viewer_anti_automation_session_namespace_key();
-    $entries = is_array($_SESSION[$key]['entries'] ?? null) ? $_SESSION[$key]['entries'] : [];
+    $entries = is_array($ticketContext['entries'] ?? null) ? $ticketContext['entries'] : [];
     $entry = $entries[$fingerprint] ?? null;
     if (!is_array($entry)) {
         return false;
@@ -309,7 +322,7 @@ function viewer_anti_automation_session_consume(
         return false;
     }
     unset($entries[$fingerprint]);
-    $_SESSION[$key] = ['entries' => $entries];
+    $ticketContext = ['entries' => $entries];
     return true;
 }
 
@@ -398,6 +411,11 @@ function viewer_anti_automation_ticket_payload_validate(
 /**
  * Decode, authenticate, validate, and optionally consume one signed ticket.
  *
+ * consume=false inspects signed payload only, without checking the caller's context;
+ * it is not authorization. The submission gate always requests one-use consumption.
+ *
+ * @param array<string,mixed> $ticketContext Borrowed private ticket namespace, modified by reference;
+ *   normalized entries follow the canonical context shape at context_prune(). Persist changes even on refusal/exception.
  * @param string $ticket Browser-carried signed ticket.
  * @param string $expectedKind Required ticket kind.
  * @param string $expectedAction Required action.
@@ -406,6 +424,7 @@ function viewer_anti_automation_ticket_payload_validate(
  * @return ?array<string,mixed> Normalized authenticated state or null.
  */
 function viewer_anti_automation_ticket_validate(
+    array &$ticketContext,
     string $ticket,
     string $expectedKind,
     string $expectedAction,
@@ -420,7 +439,8 @@ function viewer_anti_automation_ticket_validate(
     if ($normalized === null) {
         return null;
     }
-    if ($consume && !viewer_anti_automation_session_consume(
+    if ($consume && !viewer_anti_automation_context_consume(
+        $ticketContext,
         (string) $normalized['nonce'],
         $expectedKind,
         $expectedAction,
@@ -437,11 +457,13 @@ function viewer_anti_automation_ticket_validate(
 /**
  * Issue one short-lived action-bound form ticket and randomized honeypot field.
  *
+ * @param array<string,mixed> $ticketContext Borrowed private ticket namespace, modified by reference;
+ *   normalized entries follow the canonical context shape at context_prune(). Persist changes even on refusal/exception.
  * @param string $action Protected action.
  * @param ?int $nowTimestamp Optional deterministic timestamp for tests.
  * @return array{ticket:string,honeypot_field:string,issued_at:int,expires_at:int} Form state.
  */
-function viewer_anti_automation_form_issue(string $action, ?int $nowTimestamp = null): array
+function viewer_anti_automation_form_issue(array &$ticketContext, string $action, ?int $nowTimestamp = null): array
 {
     if (!viewer_anti_automation_action_is_allowed($action)) {
         throw new InvalidArgumentException('Viewer anti-automation action is invalid.');
@@ -460,7 +482,7 @@ function viewer_anti_automation_form_issue(string $action, ?int $nowTimestamp = 
         'e' => $expiresAt,
         'h' => $honeypot,
     ];
-    viewer_anti_automation_session_register($nonce, VIEWER_ANTI_AUTOMATION_KIND_FORM, $action, $now, $expiresAt);
+    viewer_anti_automation_context_register($ticketContext, $nonce, VIEWER_ANTI_AUTOMATION_KIND_FORM, $action, $now, $expiresAt);
     return [
         'ticket' => viewer_anti_automation_ticket_encode($payload),
         'honeypot_field' => $honeypot,
@@ -509,12 +531,14 @@ function viewer_anti_automation_difficulty_for_signals(int $ageSeconds, int $ipA
 /**
  * Issue one action-bound first-party proof challenge with bounded lifetime and difficulty.
  *
+ * @param array<string,mixed> $ticketContext Borrowed private ticket namespace, modified by reference;
+ *   normalized entries follow the canonical context shape at context_prune(). Persist changes even on refusal/exception.
  * @param string $action Protected action.
  * @param int $difficulty Requested leading-zero-bit target.
  * @param ?int $nowTimestamp Optional deterministic timestamp for tests.
  * @return array{ticket:string,challenge:string,difficulty:int,issued_at:int,expires_at:int,max_counter:int} Challenge state.
  */
-function viewer_anti_automation_challenge_issue(string $action, int $difficulty, ?int $nowTimestamp = null): array
+function viewer_anti_automation_challenge_issue(array &$ticketContext, string $action, int $difficulty, ?int $nowTimestamp = null): array
 {
     if (!viewer_anti_automation_action_is_allowed($action)) {
         throw new InvalidArgumentException('Viewer anti-automation action is invalid.');
@@ -536,7 +560,8 @@ function viewer_anti_automation_challenge_issue(string $action, int $difficulty,
         'e' => $expiresAt,
         'd' => $difficulty,
     ];
-    viewer_anti_automation_session_register(
+    viewer_anti_automation_context_register(
+        $ticketContext,
         $nonce,
         VIEWER_ANTI_AUTOMATION_KIND_CHALLENGE,
         $action,
@@ -735,13 +760,16 @@ function viewer_anti_automation_event(
  * Challenge state is consumed before proof/fallback evaluation so a failed submitted proof cannot
  * be replayed as a cheap server-side brute-force oracle.
  *
+ * @param array<string,mixed> $ticketContext Borrowed private ticket namespace, modified by reference;
+ *   normalized entries follow the canonical context shape at context_prune(). Persist changes even on refusal/exception.
  * @param string $action Protected action.
  * @param array<string,mixed> $post Submitted POST data.
  * @param string $clientIp Resolved client IP.
  * @param ?int $nowTimestamp Optional deterministic timestamp for tests.
- * @return array<string,mixed> Fixed result plus optional replacement challenge state.
+ * @return array{result:string,reason:string,challenge?:array{ticket:string,challenge:string,difficulty:int,issued_at:int,expires_at:int,max_counter:int}} Decision; replacement challenge is browser-safe signed state, never the private context.
  */
 function viewer_anti_automation_authorize_challenge(
+    array &$ticketContext,
     string $action,
     array $post,
     string $clientIp,
@@ -752,6 +780,7 @@ function viewer_anti_automation_authorize_challenge(
         ? (string) $post['viewer_aa_challenge_ticket']
         : '';
     $state = viewer_anti_automation_ticket_validate(
+        $ticketContext,
         $ticket,
         VIEWER_ANTI_AUTOMATION_KIND_CHALLENGE,
         $action,
@@ -778,7 +807,7 @@ function viewer_anti_automation_authorize_challenge(
     if ($fallbackRequested) {
         $ageSeconds = max(0, $now - (int) $state['issued_at']);
         if ($ageSeconds < VIEWER_ANTI_AUTOMATION_FALLBACK_MIN_AGE_SECONDS) {
-            $challenge = viewer_anti_automation_challenge_issue($action, (int) $state['difficulty'], $now);
+            $challenge = viewer_anti_automation_challenge_issue($ticketContext, $action, (int) $state['difficulty'], $now);
             viewer_anti_automation_event('viewer.automation_challenge_required', 'required', $action, 'fallback_too_fast');
             return [
                 'result' => VIEWER_ANTI_AUTOMATION_RESULT_CHALLENGE_REQUIRED,
@@ -803,7 +832,7 @@ function viewer_anti_automation_authorize_challenge(
         return ['result' => VIEWER_ANTI_AUTOMATION_RESULT_ALLOW, 'reason' => 'proof_of_work'];
     }
 
-    $challenge = viewer_anti_automation_challenge_issue($action, (int) $state['difficulty'], $now);
+    $challenge = viewer_anti_automation_challenge_issue($ticketContext, $action, (int) $state['difficulty'], $now);
     viewer_anti_automation_event('viewer.automation_challenge_failed', 'failed', $action, 'proof_invalid');
     return [
         'result' => VIEWER_ANTI_AUTOMATION_RESULT_CHALLENGE_REQUIRED,
@@ -815,13 +844,16 @@ function viewer_anti_automation_authorize_challenge(
 /**
  * Authorize one anonymous protected submission before registration/resend or mail work begins.
  *
+ * @param array<string,mixed> $ticketContext Borrowed private ticket namespace, modified by reference;
+ *   normalized entries follow the canonical context shape at context_prune(). Persist changes even on refusal/exception.
  * @param string $action Protected action.
  * @param array<string,mixed> $post Submitted POST data.
  * @param string $clientIp Resolved client IP.
  * @param ?int $nowTimestamp Optional deterministic timestamp for tests.
- * @return array<string,mixed> One of allow, challenge_required, suppress, or invalid.
+ * @return array{result:string,reason:string,difficulty?:int,challenge?:array{ticket:string,challenge:string,difficulty:int,issued_at:int,expires_at:int,max_counter:int}} allow/challenge_required/suppress/invalid; no Viewer/Admin identity is created.
  */
 function viewer_anti_automation_authorize_submission(
+    array &$ticketContext,
     string $action,
     array $post,
     string $clientIp,
@@ -834,12 +866,13 @@ function viewer_anti_automation_authorize_submission(
         return ['result' => VIEWER_ANTI_AUTOMATION_RESULT_ALLOW, 'reason' => 'disabled'];
     }
     if (isset($post['viewer_aa_challenge_ticket'])) {
-        return viewer_anti_automation_authorize_challenge($action, $post, $clientIp, $nowTimestamp);
+        return viewer_anti_automation_authorize_challenge($ticketContext, $action, $post, $clientIp, $nowTimestamp);
     }
 
     $now = $nowTimestamp ?? time();
     $ticket = is_string($post['viewer_aa_form_ticket'] ?? null) ? (string) $post['viewer_aa_form_ticket'] : '';
     $state = viewer_anti_automation_ticket_validate(
+        $ticketContext,
         $ticket,
         VIEWER_ANTI_AUTOMATION_KIND_FORM,
         $action,
@@ -874,7 +907,7 @@ function viewer_anti_automation_authorize_submission(
         return $decision;
     }
     if ($decision['result'] === VIEWER_ANTI_AUTOMATION_RESULT_CHALLENGE_REQUIRED) {
-        $challenge = viewer_anti_automation_challenge_issue($action, (int) $decision['difficulty'], $now);
+        $challenge = viewer_anti_automation_challenge_issue($ticketContext, $action, (int) $decision['difficulty'], $now);
         viewer_anti_automation_event(
             'viewer.automation_challenge_required',
             'required',

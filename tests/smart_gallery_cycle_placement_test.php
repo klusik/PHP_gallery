@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Regression Test
+ * Purpose: Protect Smart Gallery relationship and ordering rules.
+ * Responsibilities:
+ *   - Reject placement cycles and preserve deterministic per-parent order.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/smart_gallery_cycle_placement_test.php

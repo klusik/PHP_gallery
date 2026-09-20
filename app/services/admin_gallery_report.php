@@ -13,9 +13,9 @@
  * Responsibilities:
  *   - Collect gallery, image, EXIF, GPS, storage, database, telemetry, and runtime diagnostics
  *   - Process image-heavy checks in browser-driven batches to avoid shared-hosting timeouts
- *   - Render a single self-contained HTML report without saving the generated output on the server
+ *   - Prepare report sections for controller-selected HTML presentation without saving an export on the server
  *   - Keep GPS place clustering approximate and exclude probable simulator/game captures where possible
- *   - Own the shared module constants and load the part files below in dependency order
+ *   - Load the centralized immutable policy and the part files below in dependency order
  *
  * Author:
  *   Rudolf Klusal
@@ -40,18 +40,10 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
-const ADMIN_GALLERY_REPORT_JOB_KEY = 'admin_gallery_report_job_v1';
-const ADMIN_GALLERY_REPORT_DEFAULT_BATCH_SIZE = 250;
-const ADMIN_GALLERY_REPORT_MAX_BATCH_SIZE = 500;
-// Keep high-cardinality EXIF aggregates small enough for shared-hosting session storage.
-const ADMIN_GALLERY_REPORT_MAX_GROUPS = 500;
-const ADMIN_GALLERY_REPORT_GPS_AREA_KM = 20.0;
-// Bound the browser-job session state and the cost of approximate GPS matching on large libraries.
-const ADMIN_GALLERY_REPORT_MAX_GPS_CLUSTERS = 500;
-const ADMIN_GALLERY_REPORT_PLACE_MATCH_DEFAULT_RADIUS_KM = 35.0;
+require_once dirname(__DIR__) . '/policy_constants.php';
 
 // This module is split into focused part files under app/services/admin_gallery_report/.
-// Shared constants stay above so every part resolves them in this namespace.
+// Each part imports its own required constants from the loaded Core policy owner.
 // Job lifecycle and persisted batch state for the browser-driven report.
 require_once __DIR__ . '/admin_gallery_report/job.php';
 // Incremental image statistics accumulated across report batches.

@@ -1,5 +1,9 @@
 /**
  * Project: PHP Gallery
+ * Module Type: Stylesheet
+ * Purpose: Style the reusable nested Admin subtab component.
+ * Responsibilities:
+ *   - Present selected tabs and nested panels consistently across workflows.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: public/assets/styles/admin-subtabs.css

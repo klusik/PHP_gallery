@@ -80,6 +80,7 @@ namespace Gallery\Core {
     }
 
     $root = dirname(__DIR__);
+    require_once __DIR__ . '/support/module_source.php';
     require_once $root . '/app/services/feature_flags.php';
 
     $definitions = \Gallery\Services\feature_flag_definitions();
@@ -373,8 +374,8 @@ namespace Gallery\Core {
     );
     $smartGalleryAdminSources = implode("\n", [
         (string) file_get_contents($root . '/app/views/admin_chrome.php'),
-        (string) file_get_contents($root . '/app/controllers/admin_galleries_edit_page/tab_identity.php'),
-        (string) file_get_contents($root . '/app/controllers/admin_galleries_edit_page/post_actions.php'),
+        module_source($root . '/app/controllers/admin_galleries_edit_page.php'),
+        module_source($root . '/app/controllers/admin_galleries_edit_actions.php'),
         (string) file_get_contents($root . '/app/controllers/admin_public_inline.php'),
     ]);
     feature_policy_inventory_assert(
@@ -423,7 +424,7 @@ namespace Gallery\Core {
 
     $galleryDateSources = implode("\n", [
         (string) file_get_contents($root . '/app/controllers/admin_gallery_form_models.php'),
-        (string) file_get_contents($root . '/app/services/admin_dashboard.php'),
+        module_source($root . '/app/services/admin_dashboard.php'),
         (string) file_get_contents($root . '/app/views/admin_gallery_forms.php'),
         (string) file_get_contents($root . '/app/views/admin_dashboard.php'),
         (string) file_get_contents($root . '/app/controllers/admin_galleries_edit_page/post_actions.php'),
@@ -442,7 +443,7 @@ namespace Gallery\Core {
         (string) file_get_contents($root . '/app/views/admin_chrome.php'),
         (string) file_get_contents($root . '/app/views/admin_dashboard_sections.php'),
         (string) file_get_contents($root . '/app/controllers/shared_layout.php'),
-        (string) file_get_contents($root . '/app/services/admin_dashboard.php'),
+        module_source($root . '/app/services/admin_dashboard.php'),
     ]);
     feature_policy_inventory_assert(
         substr_count($reportNavigationSources, "'feature' => 'complete_gallery_report'") >= 1
@@ -533,7 +534,7 @@ namespace Gallery\Core {
 
     $pictureGameSources = [
         (string) file_get_contents($root . '/app/controllers/admin_galleries_edit_actions.php'),
-        (string) file_get_contents($root . '/app/services/admin_dashboard.php'),
+        module_source($root . '/app/services/admin_dashboard.php'),
     ];
     feature_policy_inventory_assert(
         !str_contains(implode("\n", $pictureGameSources), "feature_flag_enabled('picture_game') && feature_flag_enabled('image_voting')")

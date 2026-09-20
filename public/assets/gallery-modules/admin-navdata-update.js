@@ -30,6 +30,8 @@
  *   2026-05-21
  */
 
+import { ADMIN_NAVDATA_SUBMIT_FEEDBACK_MS } from './admin-interaction-policy.js?v=20260920-admin-interaction-policy-v1';
+
 /**
  * Attach progress feedback to the flight-map navdata update form.
  *
@@ -37,15 +39,21 @@
  * be hostile to long AJAX requests and streamed progress. This helper gives the
  * administrator immediate confirmation that the request has started, then lets
  * the existing PHP controller perform the database update and redirect back.
+ *
+ * @return {void} Binds each newly discovered form once; preserves ordinary POST semantics.
  */
 export function setupAdminNavdataUpdateFeedback() {
-    document.querySelectorAll('[data-navdata-update-form]').forEach((form) => {
+    document.querySelectorAll('[data-navdata-update-form]').forEach(
+        /** Bind an uninitialized navigation-data form once. @param {Element} form Discovered form candidate. @return {void} Installs local submit feedback. */
+        (form) => {
         if (!(form instanceof HTMLFormElement) || form.dataset.navdataFeedbackReady === '1') {
             return;
         }
         form.dataset.navdataFeedbackReady = '1';
 
-        form.addEventListener('submit', (event) => {
+        form.addEventListener('submit',
+            /** Confirm this import and paint busy feedback before the ordinary POST. @param {SubmitEvent} event Form submission intent. @return {void} Preserves the existing confirmation and POST path. */
+            (event) => {
             if (form.dataset.navdataSubmitting === '1') {
                 return;
             }
@@ -57,11 +65,15 @@ export function setupAdminNavdataUpdateFeedback() {
             }
 
             showNavdataSubmittingState(form);
-            requestAnimationFrame(() => {
-                requestAnimationFrame(() => {
+            requestAnimationFrame(
+                /** Allow the busy-state layout frame to begin. @return {void} Schedules the existing second paint opportunity. */
+                () => {
+                requestAnimationFrame(
+                    /** Wait until the second paint frame before queuing the POST delay. @return {void} Queues the unchanged short submission delay. */
+                    () => {
                     window.setTimeout(() => {
                         HTMLFormElement.prototype.submit.call(form);
-                    }, 250);
+                    }, ADMIN_NAVDATA_SUBMIT_FEEDBACK_MS);
                 });
             });
         });

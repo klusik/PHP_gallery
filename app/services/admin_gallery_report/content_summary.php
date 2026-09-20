@@ -26,7 +26,7 @@
  *
  * Notes:
  *   - Loaded by app/services/admin_gallery_report.php; do not require this file directly.
- *   - Shared constants for this module live in app/services/admin_gallery_report.php.
+ *   - The module entry point loads immutable Core policy; consuming parts import their required definitions.
  *   - Keep comments and docstrings intact when modifying this file.
  *
  * Last Updated:
@@ -36,6 +36,8 @@
 declare(strict_types=1);
 
 namespace Gallery\Services;
+use const Gallery\Core\ADMIN_GALLERY_REPORT_TELEMETRY_COMPARISON_WINDOWS;
+use const Gallery\Core\ADMIN_GALLERY_REPORT_ROW_LIMITS;
 
 use function Gallery\Core\cms_config;
 use function Gallery\Core\cms_current_version;
@@ -192,7 +194,7 @@ function admin_gallery_report_telemetry_section(int $days): array
         return ['available' => false, 'days' => $days, 'message' => 'Telemetry schema is not available.'];
     }
     $windows = [];
-    foreach ([7, 30, 90, 365] as $windowDays) {
+    foreach (ADMIN_GALLERY_REPORT_TELEMETRY_COMPARISON_WINDOWS as $windowDays) {
         $sessions = function_exists('Gallery\\Services\\telemetry_report_session_summary') ? telemetry_report_session_summary($windowDays) : [];
         $databaseTotals = function_exists('Gallery\\Services\\telemetry_report_database_totals') ? telemetry_report_database_totals($windowDays) : [];
         $windows[] = [
@@ -213,19 +215,19 @@ function admin_gallery_report_telemetry_section(int $days): array
         'windows' => $windows,
         'session_summary' => function_exists('Gallery\\Services\\telemetry_report_session_summary') ? telemetry_report_session_summary($days) : [],
         'daily_trends' => function_exists('Gallery\\Services\\telemetry_report_daily_trends') ? telemetry_report_daily_trends($days) : [],
-        'top_galleries' => function_exists('Gallery\\Services\\telemetry_report_top_galleries') ? telemetry_report_top_galleries($days, 60) : [],
-        'top_routes' => function_exists('Gallery\\Services\\telemetry_report_top_routes') ? telemetry_report_top_routes($days, 60) : [],
-        'page_kinds' => function_exists('Gallery\\Services\\telemetry_report_metric_distribution') ? telemetry_report_metric_distribution('page_kind', $days, 'public.page_views', 20) : [],
-        'browsers' => function_exists('Gallery\\Services\\telemetry_report_session_distribution') ? telemetry_report_session_distribution('browser_family', $days, 20) : [],
-        'operating_systems' => function_exists('Gallery\\Services\\telemetry_report_session_distribution') ? telemetry_report_session_distribution('os_family', $days, 20) : [],
-        'devices' => function_exists('Gallery\\Services\\telemetry_report_session_distribution') ? telemetry_report_session_distribution('device_type', $days, 20) : [],
-        'referrers' => function_exists('Gallery\\Services\\telemetry_report_session_distribution') ? telemetry_report_session_distribution('entry_referrer_category', $days, 20) : [],
+        'top_galleries' => function_exists('Gallery\\Services\\telemetry_report_top_galleries') ? telemetry_report_top_galleries($days, ADMIN_GALLERY_REPORT_ROW_LIMITS['telemetry_top']) : [],
+        'top_routes' => function_exists('Gallery\\Services\\telemetry_report_top_routes') ? telemetry_report_top_routes($days, ADMIN_GALLERY_REPORT_ROW_LIMITS['telemetry_top']) : [],
+        'page_kinds' => function_exists('Gallery\\Services\\telemetry_report_metric_distribution') ? telemetry_report_metric_distribution('page_kind', $days, 'public.page_views', ADMIN_GALLERY_REPORT_ROW_LIMITS['telemetry_distribution']) : [],
+        'browsers' => function_exists('Gallery\\Services\\telemetry_report_session_distribution') ? telemetry_report_session_distribution('browser_family', $days, ADMIN_GALLERY_REPORT_ROW_LIMITS['telemetry_distribution']) : [],
+        'operating_systems' => function_exists('Gallery\\Services\\telemetry_report_session_distribution') ? telemetry_report_session_distribution('os_family', $days, ADMIN_GALLERY_REPORT_ROW_LIMITS['telemetry_distribution']) : [],
+        'devices' => function_exists('Gallery\\Services\\telemetry_report_session_distribution') ? telemetry_report_session_distribution('device_type', $days, ADMIN_GALLERY_REPORT_ROW_LIMITS['telemetry_distribution']) : [],
+        'referrers' => function_exists('Gallery\\Services\\telemetry_report_session_distribution') ? telemetry_report_session_distribution('entry_referrer_category', $days, ADMIN_GALLERY_REPORT_ROW_LIMITS['telemetry_distribution']) : [],
         'performance' => function_exists('Gallery\\Services\\telemetry_report_performance_metrics') ? telemetry_report_performance_metrics($days) : [],
-        'client_errors' => function_exists('Gallery\\Services\\telemetry_report_client_errors') ? telemetry_report_client_errors($days, 60) : [],
-        'database_summary' => function_exists('Gallery\\Services\\telemetry_report_database_summary') ? telemetry_report_database_summary($days, 80) : [],
-        'database_fingerprints' => function_exists('Gallery\\Services\\telemetry_report_database_fingerprints') ? telemetry_report_database_fingerprints($days, 60) : [],
-        'job_runs' => function_exists('Gallery\\Services\\telemetry_report_job_runs') ? telemetry_report_job_runs($days, 80) : [],
-        'recent_events' => function_exists('Gallery\\Services\\telemetry_report_recent_events') ? telemetry_report_recent_events($days, 120) : [],
+        'client_errors' => function_exists('Gallery\\Services\\telemetry_report_client_errors') ? telemetry_report_client_errors($days, ADMIN_GALLERY_REPORT_ROW_LIMITS['telemetry_top']) : [],
+        'database_summary' => function_exists('Gallery\\Services\\telemetry_report_database_summary') ? telemetry_report_database_summary($days, ADMIN_GALLERY_REPORT_ROW_LIMITS['telemetry_database']) : [],
+        'database_fingerprints' => function_exists('Gallery\\Services\\telemetry_report_database_fingerprints') ? telemetry_report_database_fingerprints($days, ADMIN_GALLERY_REPORT_ROW_LIMITS['telemetry_top']) : [],
+        'job_runs' => function_exists('Gallery\\Services\\telemetry_report_job_runs') ? telemetry_report_job_runs($days, ADMIN_GALLERY_REPORT_ROW_LIMITS['telemetry_jobs']) : [],
+        'recent_events' => function_exists('Gallery\\Services\\telemetry_report_recent_events') ? telemetry_report_recent_events($days, ADMIN_GALLERY_REPORT_ROW_LIMITS['telemetry_events']) : [],
     ];
 }
 
@@ -235,7 +237,7 @@ function admin_gallery_report_telemetry_section(int $days): array
  * @param int $limit Maximum number of rows.
  * @return array<int, array<string, mixed>> Image rows.
  */
-function admin_gallery_report_largest_images(int $limit = 200): array
+function admin_gallery_report_largest_images(int $limit = ADMIN_GALLERY_REPORT_ROW_LIMITS['top_images']): array
 {
     return admin_gallery_report_model_largest_images($limit);
 }

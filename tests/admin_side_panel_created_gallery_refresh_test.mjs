@@ -1,5 +1,9 @@
 /**
  * Project: PHP Gallery
+ * Module Type: Regression Test
+ * Purpose: Verify public refresh after panel-driven gallery creation.
+ * Responsibilities:
+ *   - Check that successful creation refreshes the affected context in place.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/admin_side_panel_created_gallery_refresh_test.mjs
@@ -166,17 +170,17 @@ assert.match(
 );
 assert.match(
     adminOperationsSource,
-    /admin-side-panel\.js\?v=20260920-lightbox-preload-lifecycle-v1/,
+    /admin-side-panel\.js\?v=20260920-panel-lifecycle-v1/,
     'admin-operations must cache-bust the changed side-panel module.'
 );
 assert.match(
     sidePanelSource,
-    /admin-browser-upload\.js\?v=20260903-oversized-single-batch-v1/,
+    /admin-browser-upload\.js\?v=20260920-operation-keys-v1/,
     'The side-panel module must cache-bust the changed browser-upload module.'
 );
 assert.match(
     galleryEntrySource,
-    /admin-operations\.js\?v=20260920-lightbox-preload-lifecycle-v1/,
+    /admin-operations\.js\?v=20260920-panel-lifecycle-interaction-policy-v2/,
     'The gallery entrypoint must cache-bust the changed admin operations module.'
 );
 

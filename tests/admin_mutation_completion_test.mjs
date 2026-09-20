@@ -1,5 +1,9 @@
 /**
  * Project: PHP Gallery
+ * Module Type: Regression Test
+ * Purpose: Verify canonical browser mutation completion.
+ * Responsibilities:
+ *   - Exercise envelope handling, public-context refresh and stale-operation suppression.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/admin_mutation_completion_test.mjs

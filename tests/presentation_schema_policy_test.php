@@ -227,7 +227,7 @@ namespace {
     presentation_policy_assert(!str_contains($bulkGallerySource, 'admin_feature_schema_ready()'), 'Picture-game bulk mutation must not depend on unrelated legacy readiness booleans.');
     presentation_policy_assert(str_contains($bulkGallerySource, 'presentation_picture_game_schema_status'), 'Picture-game bulk mutation must use the exact Phase 11 capability status.');
 
-    $dashboardSource = file_get_contents(__DIR__ . '/../app/services/admin_dashboard.php') ?: '';
+    $dashboardSource = module_source(__DIR__ . '/../app/services/admin_dashboard.php');
     $diagnosticsSource = file_get_contents(__DIR__ . '/../app/controllers/admin_diagnostics.php') ?: '';
     presentation_policy_assert(str_contains($dashboardSource, 'admin_presentation_schema_health_statuses'), 'System Health must include the Phase 11 presentation registry.');
     presentation_policy_assert(str_contains($diagnosticsSource, 'Optional presentation and reporting database status'), 'Runtime Diagnostics copy report must include Phase 11 readiness.');

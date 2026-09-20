@@ -49,7 +49,13 @@ use function Gallery\Services\t;
 /**
  * Render the Admin dashboard page from a controller-provided model.
  *
- * @param array $model Model value.
+ * Health badges use the prepared runtime policy's action_required boolean and
+ * capability-keyed schema states; rendering does not discover runtime or journal state.
+ *
+ * @param array<string,mixed> $model Dashboard read model from admin_dashboard_view_model(),
+ *   including gallery rows/counts, feature booleans and canonical nested health records.
+ * @return void Emit the dashboard, action badges and deferred Maintenance placeholder.
+ * @see \Gallery\Services\admin_dashboard_view_model()
  */
 function view_render_admin_dashboard(array $model): void
 {
@@ -78,7 +84,9 @@ function view_render_admin_dashboard(array $model): void
     $securitySchemaStatuses = is_array($model['security_schema_statuses'] ?? null) ? $model['security_schema_statuses'] : [];
     // Destructive/ingestion schema health uses the same badge so paused mutations are visible immediately.
     $mutationSchemaStatuses = is_array($model['mutation_schema_statuses'] ?? null) ? $model['mutation_schema_statuses'] : [];
-    $systemHealthActionRequired = false;
+    $runtimeSupport = is_array($model['runtime_support_status'] ?? null) ? $model['runtime_support_status'] : [];
+    $systemHealthActionRequired = !empty($runtimeSupport['policy']['action_required']);
+    $systemHealthActionRequired = $systemHealthActionRequired || !empty($model['image_move_pending_status']['action_required']);
     foreach (array_merge($securitySchemaStatuses, $mutationSchemaStatuses) as $schemaStatus) {
         if (is_array($schemaStatus) && in_array((string) ($schemaStatus['state'] ?? 'unknown'), ['missing', 'unknown'], true)) {
             $systemHealthActionRequired = true;

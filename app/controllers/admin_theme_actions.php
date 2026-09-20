@@ -280,6 +280,7 @@ function admin_theme_download_language_pack(): void
  *
  * @param bool $gpsMapsFeatureEnabled Whether GPS map appearance settings are enabled.
  * @param bool $lightboxModesFeatureEnabled Whether lightbox mode settings are enabled.
+ * @return void Sends the existing redirect after applying the authenticated form; domain refusals propagate to the request boundary.
  */
 function admin_theme_process_post(bool $gpsMapsFeatureEnabled, bool $lightboxModesFeatureEnabled): void
 {
@@ -348,10 +349,7 @@ function admin_theme_process_post(bool $gpsMapsFeatureEnabled, bool $lightboxMod
         redirect_to(url_for('admin_theme', ['saved' => 1]) . '#admin-theme-tab-language');
     }
     if (!empty($_POST['reset_custom_css'])) {
-        if (is_file(custom_css_path())) {
-            unlink(custom_css_path());
-        }
-        set_app_setting('custom_css_preset', '');
+        \Gallery\Services\custom_css_reset();
     } elseif (!empty($_POST['reset_favicon'])) {
         remove_stored_favicon();
     } elseif (!empty($_POST['reset_theme_background'])) {
@@ -366,15 +364,7 @@ function admin_theme_process_post(bool $gpsMapsFeatureEnabled, bool $lightboxMod
         set_app_setting('theme_background_optimized_max_side', (string) $backgroundMaxSide);
         theme_background_regenerate_optimized($backgroundMaxSide);
     } elseif (!empty($_POST['delete_theme_background_optimized'])) {
-        // $optimizedPath stores the generated derivative so the original upload can stay untouched.
-        $optimizedPath = theme_background_optimized_path();
-        if ($optimizedPath !== null) {
-            $optimizedAbsolute = dirname(__DIR__, 2) . '/' . ltrim($optimizedPath, '/');
-            if (is_file($optimizedAbsolute)) {
-                @unlink($optimizedAbsolute);
-            }
-        }
-        set_app_setting('theme_background_optimized_path', '');
+        \Gallery\Services\theme_background_delete_optimized();
     } elseif (!empty($_POST['reset_theme_branding_banner'])) {
         delete_theme_branding_asset('banner');
     } elseif (!empty($_POST['reset_theme_branding_separator'])) {
@@ -402,29 +392,11 @@ function admin_theme_process_post(bool $gpsMapsFeatureEnabled, bool $lightboxMod
         $themeControlsChanged = (string) ($_POST['theme_controls_changed'] ?? '') === '1';
         // Variable $preset stores the posted skin selector value.
         $preset = (string) ($_POST['custom_css_preset'] ?? '');
-        // $currentPreset stores the previously active preset. Saving unrelated
-        // Theme controls must not re-copy the same skin and trigger a reset of
-        // visual overrides on every submit.
-        $currentPreset = (string) app_setting('custom_css_preset', '');
-        // Variable $presetPath stores this steps working value.
-        $presetPath = custom_css_preset_path($preset);
-        // $customCssChanged stores an intermediate value used by the surrounding gallery workflow.
-        $customCssChanged = false;
-        if ($presetPath !== null && $preset !== $currentPreset) {
-            copy($presetPath, custom_css_path());
-            set_app_setting('custom_css_preset', $preset);
-            // $customCssChanged stores an intermediate value used by the surrounding gallery workflow.
-            $customCssChanged = true;
-        }
-        if (!empty($_FILES['custom_css']['tmp_name']) && is_uploaded_file($_FILES['custom_css']['tmp_name'])) {
-            // Variable $name stores this steps working value.
-            $name = strtolower((string) ($_FILES['custom_css']['name'] ?? ''));
-            if (str_ends_with($name, '.css')) {
-                move_uploaded_file($_FILES['custom_css']['tmp_name'], custom_css_path());
-                set_app_setting('custom_css_preset', 'uploaded');
-                // $customCssChanged stores an intermediate value used by the surrounding gallery workflow.
-                $customCssChanged = true;
-            }
+        // Saving unrelated Theme controls must not re-copy the same skin and
+        // trigger a reset of visual overrides on every submit.
+        $customCssChanged = \Gallery\Services\custom_css_apply_preset($preset);
+        if (isset($_FILES['custom_css']) && is_array($_FILES['custom_css'])) {
+            $customCssChanged = \Gallery\Services\custom_css_store_uploaded($_FILES['custom_css']) || $customCssChanged;
         }
         if (!empty($_FILES['favicon_source']['tmp_name']) && is_uploaded_file($_FILES['favicon_source']['tmp_name'])) {
             // $name stores an intermediate value used by the surrounding gallery workflow.

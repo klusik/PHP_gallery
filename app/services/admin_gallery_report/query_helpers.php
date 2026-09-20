@@ -26,7 +26,7 @@
  *
  * Notes:
  *   - Loaded by app/services/admin_gallery_report.php; do not require this file directly.
- *   - Shared constants for this module live in app/services/admin_gallery_report.php.
+ *   - The module entry point loads immutable Core policy; consuming parts import their required definitions.
  *   - Keep comments and docstrings intact when modifying this file.
  *
  * Last Updated:
@@ -36,6 +36,8 @@
 declare(strict_types=1);
 
 namespace Gallery\Services;
+use const Gallery\Core\ADMIN_GALLERY_REPORT_MAX_GROUPS;
+use const Gallery\Core\ADMIN_GALLERY_REPORT_ROW_LIMITS;
 
 
 /**
@@ -177,14 +179,22 @@ function admin_gallery_report_add_group(array &$groups, string $key, string $lab
 /**
  * Finalize group rows sorted by count or bytes.
  *
- * @param array $groups Group accumulator.
+ * @param array<array-key,array<string,mixed>|scalar|null> $groups Aggregate rows, ignoring non-array entries.
  * @param string $sortKey Sort key.
  * @param int $limit Maximum rows.
  * @return array<int, array<string, mixed>> Final rows.
  */
-function admin_gallery_report_finalize_group_rows(array $groups, string $sortKey = 'count', int $limit = 80): array
+function admin_gallery_report_finalize_group_rows(array $groups, string $sortKey = 'count', int $limit = ADMIN_GALLERY_REPORT_ROW_LIMITS['groups']): array
 {
-    $rows = array_values(array_filter($groups, static fn ($row): bool => is_array($row)));
+    $rows = array_values(array_filter($groups,
+        /** Keep valid aggregate rows only. @param array<string,mixed>|scalar|null $row Candidate aggregate. @return bool Whether a row can be ranked. */
+        static fn ($row): bool => is_array($row)));
+    /**
+     * Order aggregates by descending numeric rank and stable ascending label.
+     * @param array<string,mixed> $a First aggregate with optional count/bytes/label fields.
+     * @param array<string,mixed> $b Second aggregate with optional count/bytes/label fields.
+     * @return int Negative, zero or positive comparator result.
+     */
     usort($rows, static function (array $a, array $b) use ($sortKey): int {
         $primary = ((int) ($b[$sortKey] ?? 0)) <=> ((int) ($a[$sortKey] ?? 0));
         if ($primary !== 0) {

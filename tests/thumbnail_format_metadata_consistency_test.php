@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Regression Test
+ * Purpose: Protect thumbnail format metadata consistency.
+ * Responsibilities:
+ *   - Verify format policy across public media metadata boundaries.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/thumbnail_format_metadata_consistency_test.php

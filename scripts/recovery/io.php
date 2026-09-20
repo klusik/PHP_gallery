@@ -2,6 +2,8 @@
 
 /**
  * Project: PHP Gallery
+ * Responsibilities:
+ *   - Reject unsafe aliases and keep evidence I/O within the selected scope.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: scripts/recovery/io.php

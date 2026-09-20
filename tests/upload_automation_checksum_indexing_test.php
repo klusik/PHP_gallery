@@ -2,6 +2,8 @@
 
 /**
  * Project: PHP Gallery
+ * Responsibilities:
+ *   - Protect watcher deduplication against images missing indexed SHA-256 metadata.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/upload_automation_checksum_indexing_test.php

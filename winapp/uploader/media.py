@@ -1,4 +1,8 @@
 # Project: PHP Gallery
+# Module Type: Windows Tooling
+# Purpose: Inspect local image decoder and thumbnail capabilities.
+# Responsibilities:
+#   - Report supported media processing paths to the uploader.
 # Repository: https://github.com/klusik/PHP_gallery
 #
 # File: winapp/uploader/media.py

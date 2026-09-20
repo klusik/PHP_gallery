@@ -36,6 +36,7 @@ declare(strict_types=1);
 
 namespace Gallery\Controllers;
 
+use Gallery\Services\MobileWebdavBodyException;
 use Gallery\Services\MutationSchemaUnavailableException;
 use Throwable;
 use function Gallery\Core\base_url;
@@ -54,14 +55,13 @@ use function Gallery\Services\mobile_webdav_absolute_url;
 use function Gallery\Services\mobile_webdav_authenticated_token;
 use function Gallery\Services\mobile_webdav_create_token;
 use function Gallery\Services\mobile_webdav_delete_token;
-use function Gallery\Services\mobile_webdav_filename_from_path;
 use function Gallery\Services\mobile_webdav_ready;
 use function Gallery\Services\mobile_webdav_schema_status;
 use function Gallery\Services\schema_inspection_is_missing;
 use function Gallery\Services\schema_inspection_is_unknown;
 use function Gallery\Services\mutation_schema_assert_available;
 use function Gallery\Services\upload_ingestion_schema_status;
-use function Gallery\Services\mobile_webdav_store_put;
+use function Gallery\Services\mobile_webdav_store_put_stream;
 use function Gallery\Services\mobile_webdav_tokens;
 use function Gallery\Services\t;
 use function Gallery\Services\admin_log_event;
@@ -173,6 +173,8 @@ function render_mobile_webdav_token_list(array $tokens): void
 
 /**
  * Handle a minimal shared-hosting WebDAV endpoint for mobile upload clients.
+ *
+ * @return void Emits the authenticated protocol response; opens and closes only the transport input stream.
  */
 function cms_mobile_webdav(): void
 {
@@ -238,35 +240,27 @@ function cms_mobile_webdav(): void
         return;
     }
 
-    $tmpPath = tempnam(sys_get_temp_dir(), 'pg-webdav-');
-    if (!is_string($tmpPath)) {
-        http_response_code(500);
-        echo t('mobile_webdav.error_temp_file', 'Could not create temporary upload file.');
-        return;
-    }
-    $input = fopen('php://input', 'rb');
-    $output = fopen($tmpPath, 'wb');
-    if (!is_resource($input) || !is_resource($output)) {
-        @unlink($tmpPath);
+    $input = @fopen('php://input', 'rb');
+    if (!is_resource($input)) {
         http_response_code(500);
         echo t('mobile_webdav.error_read_body', 'Could not read upload body.');
         return;
     }
-    stream_copy_to_stream($input, $output);
-    fclose($input);
-    fclose($output);
 
     try {
-        $filename = mobile_webdav_filename_from_path($targetPath);
-        mobile_webdav_store_put($token, $filename, $tmpPath);
+        mobile_webdav_store_put_stream($token, $targetPath, $input);
         http_response_code(201);
+    } catch (MobileWebdavBodyException $exception) {
+        http_response_code(500);
+        echo $exception->getMessage();
     } catch (Throwable $exception) {
-        @unlink($tmpPath);
         admin_log_event('warning', 'mobile_webdav.upload_failed', 'Mobile WebDAV upload failed.', [
             'schema_state' => $exception instanceof MutationSchemaUnavailableException ? $exception->state : 'not_schema_policy',
         ]);
         http_response_code($exception instanceof MutationSchemaUnavailableException && $exception->state === 'unknown' ? 503 : 422);
         echo $exception->getMessage();
+    } finally {
+        fclose($input);
     }
 }
 

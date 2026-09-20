@@ -43,8 +43,10 @@ const createControllerSource = fs.readFileSync(createControllerPath, 'utf8');
 /**
  * Extract a named function declaration from JavaScript source.
  *
- * The targeted functions intentionally contain no regular-expression literals,
- * so a lightweight balanced-brace scan is sufficient for this focused contract.
+ * The targeted functions intentionally contain no regular-expression literals.
+ * Ignore line/block comments before interpreting quotes or braces: callback
+ * docstrings can contain type braces and apostrophes that are not JavaScript.
+ * Quoted literals retain their contents, including apparent comment delimiters.
  *
  * @param {string} source Complete JavaScript source.
  * @param {string} name Function name.
@@ -66,8 +68,21 @@ function extractFunction(source, name) {
     let depth = 0;
     let quote = '';
     let escaped = false;
+    let comment = '';
     for (let index = braceStart; index < source.length; index++) {
         const character = source[index];
+        const nextCharacter = source[index + 1];
+        if (comment === 'line') {
+            if (character === '\n' || character === '\r') comment = '';
+            continue;
+        }
+        if (comment === 'block') {
+            if (character === '*' && nextCharacter === '/') {
+                comment = '';
+                index++;
+            }
+            continue;
+        }
         if (quote !== '') {
             if (escaped) {
                 escaped = false;
@@ -80,6 +95,11 @@ function extractFunction(source, name) {
             if (character === quote) {
                 quote = '';
             }
+            continue;
+        }
+        if (character === '/' && (nextCharacter === '/' || nextCharacter === '*')) {
+            comment = nextCharacter === '/' ? 'line' : 'block';
+            index++;
             continue;
         }
         if (character === '"' || character === "'" || character === '`') {
@@ -109,18 +129,32 @@ function evaluateFunction(declaration, context = {}) {
     return vm.runInNewContext(`(${declaration})`, context);
 }
 
-// The server-side create route must persist first, then return the existing JSON
-// result contract consumed by the browser side-panel workflow.
-assert.match(createControllerSource, /\$gallery\s*=\s*admin_create_gallery_from_input\(\$_POST\);/);
-assert.match(createControllerSource, /if \(admin_wants_json\(\)\)[\s\S]*admin_new_gallery_success_response\(\$gallery\)/);
+// A callback docstring's unmatched punctuation is not executable syntax. Keep
+// literal comment markers intact, and stop before the next function declaration.
+const commentBraceFixture = [
+    'function documentedCallback() {',
+    "    const callback = /** The owner's { unmatched type/quote text. */ () => '/* literal */ // literal';",
+    "    // Do not count this callback's unbalanced } or quote.",
+    '    return callback();',
+    '}',
+    'function unrelatedFunction() {}',
+].join('\n');
+const extractedCommentFixture = extractFunction(commentBraceFixture, 'documentedCallback');
+assert.equal(extractedCommentFixture, commentBraceFixture.slice(0, commentBraceFixture.indexOf('\nfunction unrelatedFunction')));
+assert.equal(evaluateFunction(extractedCommentFixture)(), '/* literal */ // literal');
+
+// Claim before target creation; a replay must select the original response, while
+// new work records the canonical result durably before either transport sends it.
+assert.match(createControllerSource, /admin_operation_begin\([\s\S]*?if \(!empty\(\$operationClaim\['replay'\]\)\) \{[\s\S]*?\$response = \$operationClaim\['response'\];[\s\S]*?\} else \{[\s\S]*?admin_create_gallery_from_input\(\$input\)/);
+assert.match(createControllerSource, /admin_operation_complete\(\$operationClaim, admin_new_gallery_success_response\(\$gallery\)\);[\s\S]*?if \(admin_wants_json\(\)\)[\s\S]*?echo json_encode\(\$response\)/);
 assert.match(createControllerSource, /'gallery_id'\s*=>\s*\(int\) \$gallery\['id'\]/);
 assert.match(createControllerSource, /admin_mutation_public_gallery_context\([\s\S]*admin_mutation_gallery_membership_postcondition\(/);
 
 // Create and edit submissions are delegated at document level, so forms injected
 // by a later panel refresh are intercepted without rebinding the whole page.
-assert.match(sidePanelSource, /document\.addEventListener\('submit', async \(event\) => \{[\s\S]*?\[data-gallery-panel-create-form\][\s\S]*?submitAdminGalleryPanelCreateForm\(form\)/);
-assert.match(sidePanelSource, /document\.addEventListener\('submit', async \(event\) => \{[\s\S]*?\[data-admin-panel-edit-form\][\s\S]*?submitAdminPanelEditForm\(form,/);
-assert.match(sidePanelSource, /body\.innerHTML = sidePanelContentFromHtml\(html, workflow\);[\s\S]*prepareAdminSidePanelLoadedContent\(body, workflow,/);
+assert.match(sidePanelSource, /document\.addEventListener\('submit', (?:\/\*[\s\S]*?\*\/\s*)?async \(event\) => \{[\s\S]*?\[data-gallery-panel-create-form\][\s\S]*?submitAdminGalleryPanelCreateForm\(form\)/);
+assert.match(sidePanelSource, /document\.addEventListener\('submit', (?:\/\*[\s\S]*?\*\/\s*)?async \(event\) => \{[\s\S]*?\[data-admin-panel-edit-form\][\s\S]*?submitAdminPanelEditForm\(form,/);
+assert.match(sidePanelSource, /const content = sidePanelContentFromHtml\(html, workflow\);[\s\S]*if \(!owner\.isCurrent\(\)\) return;[\s\S]*body\.innerHTML = content;[\s\S]*prepareAdminSidePanelLoadedContent\(body, workflow,/);
 
 // Bind the real delegated setup once, then create form objects afterwards to model
 // controls arriving through a later body.innerHTML panel refresh. Both fresh forms
@@ -234,6 +268,6 @@ assert.doesNotMatch(canonicalRefreshSource, /window\.location\.(?:href\s*=|reloa
 assert.doesNotMatch(canonicalRefreshSource, /history\.(?:pushState|replaceState)\s*\(/, 'completeCoreGalleryMutationInCurrentView must not rewrite the URL');
 
 // Changing the side-panel module must also change its import cache key.
-assert.match(operationsSource, /admin-side-panel\.js\?v=20260920-lightbox-preload-lifecycle-v1/);
+assert.match(operationsSource, /admin-side-panel\.js\?v=20260920-panel-lifecycle-v1/);
 
 console.log('PASS admin_side_panel_gallery_refresh_test');

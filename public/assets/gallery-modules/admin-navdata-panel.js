@@ -31,6 +31,10 @@
  */
 
 import { i18n } from './admin-core.js?v=20260512-modular-admin-v1';
+import {
+    ADMIN_NAVDATA_COPY_FEEDBACK_MS,
+    ADMIN_NAVDATA_LOOKUP_MIN_CHARACTERS,
+} from './admin-interaction-policy.js?v=20260920-admin-interaction-policy-v1';
 
 /**
  * Attach navigation-data page helpers.
@@ -131,6 +135,7 @@ async function copyNavigationDataText(value) {
  *
  * @param {HTMLButtonElement} button Copy button.
  * @param {boolean} copied Whether copying succeeded.
+ * @return {void} Restores the existing button label after its feedback interval.
  */
 function showNavigationDataButtonFeedback(button, copied) {
     const originalText = button.dataset.originalText || button.textContent || '';
@@ -138,7 +143,7 @@ function showNavigationDataButtonFeedback(button, copied) {
     button.textContent = copied ? i18n('admin.navdata.copy_copied', 'Copied') : i18n('admin.navdata.copy_failed', 'Copy failed');
     window.setTimeout(() => {
         button.textContent = originalText;
-    }, 1600);
+    }, ADMIN_NAVDATA_COPY_FEEDBACK_MS);
 }
 
 /**
@@ -162,6 +167,7 @@ function setupNavigationDataLookupForms() {
  * Run one navigation-data lookup and render the JSON result in a compact view.
  *
  * @param {HTMLFormElement} form Lookup form.
+ * @return {Promise<void>} Updates this form's result after validation or one diagnostic request.
  */
 async function runNavigationDataLookup(form) {
     const result = form.querySelector('[data-admin-navdata-lookup-result]');
@@ -171,7 +177,7 @@ async function runNavigationDataLookup(form) {
     }
 
     const ident = input.value.trim();
-    if (ident.length < 2) {
+    if (ident.length < ADMIN_NAVDATA_LOOKUP_MIN_CHARACTERS) {
         result.textContent = i18n('admin.navdata.lookup_min_chars', 'Enter at least two characters.');
         result.classList.add('is-error');
         return;

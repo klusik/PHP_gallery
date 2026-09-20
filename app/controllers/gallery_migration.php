@@ -62,6 +62,7 @@ use function Gallery\Services\gallery_migration_current_version;
 use function Gallery\Services\gallery_migration_endpoint_url;
 use function Gallery\Services\gallery_migration_http_get_json;
 use function Gallery\Services\gallery_migration_http_get_to_file;
+use function Gallery\Services\gallery_migration_release_temporary_file;
 use function Gallery\Services\gallery_migration_http_post_file_json;
 use function Gallery\Services\gallery_migration_http_post_form_json;
 use function Gallery\Services\gallery_migration_http_post_form_to_file;
@@ -217,6 +218,7 @@ function cms_gallery_migration_asset(): void
 
 /**
  * Build and stream one source ZIP package authorized by the supplied API key.
+ * @return void Streams the authorized attachment or bounded protocol response, then releases its request-owned transfer file.
  */
 function cms_gallery_migration_package(): void
 {
@@ -242,7 +244,7 @@ function cms_gallery_migration_package(): void
         gallery_migration_json(['ok' => false, 'error' => $exception->getMessage()], 422);
     } finally {
         if ($zipPath !== '') {
-            @unlink($zipPath);
+            gallery_migration_release_temporary_file($zipPath);
         }
     }
 }
@@ -515,7 +517,7 @@ function gallery_migration_admin_pull_manifest(int $targetGalleryId): array
  * Pull one source asset into the local target gallery.
  *
  * @param int $targetGalleryId Target gallery id identifier.
- * @return array Structured result data for the caller.
+ * @return array{ok:bool,job_id:string,asset_key:string,target_gallery_id:int,result:array<string,mixed>,received:int,total_assets:int} Installed asset result after service-owned download staging and cleanup.
  */
 function gallery_migration_admin_pull_asset(int $targetGalleryId): array
 {
@@ -538,7 +540,7 @@ function gallery_migration_admin_pull_asset(int $targetGalleryId): array
     try {
         return gallery_migration_install_asset_file((string) ($_POST['job_id'] ?? ''), $targetGalleryId, $request, $tmp);
     } finally {
-        @unlink($tmp);
+        gallery_migration_release_temporary_file($tmp);
     }
 }
 
@@ -546,7 +548,7 @@ function gallery_migration_admin_pull_asset(int $targetGalleryId): array
  * Pull one source ZIP package and install it into the prepared local target tree.
  *
  * @param int $targetGalleryId Receiving parent gallery id.
- * @return array Structured result data for the caller.
+ * @return array<string,mixed> Package installation result with durable receipt/progress fields from the migration service; the private transfer path is not returned.
  */
 function gallery_migration_admin_pull_package(int $targetGalleryId): array
 {
@@ -575,7 +577,7 @@ function gallery_migration_admin_pull_package(int $targetGalleryId): array
     try {
         return gallery_migration_install_package_file($jobId, $targetGalleryId, $packageId, $tmp);
     } finally {
-        @unlink($tmp);
+        gallery_migration_release_temporary_file($tmp);
     }
 }
 
@@ -661,7 +663,7 @@ function gallery_migration_admin_push_asset(int $sourceGalleryId): array
  * Build one local source ZIP package and push it to the remote target job.
  *
  * @param int $sourceGalleryId Source root gallery id.
- * @return array Structured result data for the caller.
+ * @return array<string,mixed> Decoded target-protocol response after transport and explicit error checks; downstream completion adapts its mutation context.
  */
 function gallery_migration_admin_push_package(int $sourceGalleryId): array
 {
@@ -680,7 +682,7 @@ function gallery_migration_admin_push_package(int $sourceGalleryId): array
             'package_id' => (string) ($_POST['package_id'] ?? ''),
         ], $zipPath, 'php-gallery-migration-package.zip', 'application/zip', $targetApiKey, gallery_migration_request_timeout_seconds(), 'package');
     } finally {
-        @unlink($zipPath);
+        gallery_migration_release_temporary_file($zipPath);
     }
 }
 

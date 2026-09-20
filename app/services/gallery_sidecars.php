@@ -52,6 +52,9 @@ use function Gallery\Models\gallery_model_insert;
 use function Gallery\Models\gallery_model_prepend_sort_order;
 use function Gallery\Models\gallery_model_unique_slug;
 
+require_once __DIR__ . '/gallery_creation_safety.php';
+require_once __DIR__ . '/gallery_edit_concurrency.php';
+
 /**
 Gallery discovery and sidecar metadata helpers.
  *
@@ -178,8 +181,29 @@ function discover_gallery_candidates(): array
 
 /**
  * Normalize tag values inside every gallery.json sidecar under the configured gallery root.
+ *
+ * @return void
  */
 function normalize_gallery_sidecar_tags_recursive(): void
+{
+    $writerLock = gallery_edit_writer_begin();
+    try {
+        normalize_gallery_sidecar_tags_recursive_owned();
+    } finally {
+        gallery_edit_writer_end($writerLock);
+    }
+}
+
+/**
+ * Normalize gallery sidecar tags under stable catalog ownership.
+ *
+ * Internal implementation: enter through normalize_gallery_sidecar_tags_recursive() so
+ * reads, early returns and failure cleanup remain inside the same writer lease.
+ *
+ * @return void
+ * @author Rudolf Klusal
+ */
+function normalize_gallery_sidecar_tags_recursive_owned(): void
 {
     if (!function_exists('Gallery\\Services\\galleries_root') || !function_exists('normalize_tag_name')) {
         return;
@@ -194,6 +218,12 @@ function normalize_gallery_sidecar_tags_recursive(): void
         $iterator = new RecursiveIteratorIterator(
             new RecursiveCallbackFilterIterator(
                 new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS),
+                /**
+                 * Traverse source galleries while excluding hidden/internal and derivative directories.
+                 * @param SplFileInfo $file Candidate file or directory below the gallery root.
+                 * @return bool Whether the iterator may yield or descend into this entry.
+                 * @author Rudolf Klusal
+                 */
                 static function (SplFileInfo $file): bool {
                     if (!$file->isDir()) {
                         return true;
@@ -322,9 +352,10 @@ function public_gallery_metadata(array $gallery): array
 /**
  * Persist editable gallery metadata back into gallery.json.
  *
- * @param array $gallery Gallery row or gallery data.
+ * @param array<string,mixed> $gallery Persisted gallery projection, requiring id, folder_path, title and description; optional presentation/access fields are serialized through their existing policies.
+ * @return bool Whether the sidecar was written; existing callers may ignore the result.
  */
-function write_gallery_sidecar(array $gallery): void
+function write_gallery_sidecar(array $gallery): bool
 {
     // Variable $data stores this steps working value.
     $data = [
@@ -388,7 +419,7 @@ function write_gallery_sidecar(array $gallery): void
     }
     if (!empty($gallery['cover_image_id'])) {
         // Variable $cover stores this steps working value.
-        $cover = find_image((int) $gallery['cover_image_id']);
+        $cover = find_image((int) $gallery['cover_image_id'], true);
         if ($cover) {
             $data['cover'] = $cover['relative_path'];
         }
@@ -405,7 +436,7 @@ function write_gallery_sidecar(array $gallery): void
             }
         }
     }
-    write_gallery_sidecar_for_path((string) $gallery['folder_path'], $data);
+    return write_gallery_sidecar_for_path((string) $gallery['folder_path'], $data);
 }
 
 /**
@@ -467,9 +498,25 @@ function gallery_folder_candidate_metadata(string $folderPath): array
  * unless gallery.json says otherwise, and images are scanned only by the caller.
  *
  * @param string $folderPath Folder path filesystem path.
- * @return ?array Structured result data for the caller.
+ * @return array<string,mixed>|null Indexed gallery row (id, title and folder_path plus schema fields), or null for an absent/empty path.
  */
 function create_gallery_row_for_folder(string $folderPath): ?array
+{
+    $writerLock = gallery_edit_writer_begin();
+    try {
+        return create_gallery_row_for_folder_owned($folderPath);
+    } finally {
+        gallery_edit_writer_end($writerLock);
+    }
+}
+
+/**
+ * Perform create gallery row for folder while the caller owns the gallery writer lease.
+ *
+ * @param string $folderPath Normalized relative folder to index.
+ * @return array<string,mixed>|null Indexed gallery row, or null when the requested folder cannot be indexed.
+ */
+function create_gallery_row_for_folder_owned(string $folderPath): ?array
 {
     // Variable $folderPath stores this steps working value.
     $folderPath = normalize_relative_path($folderPath);
@@ -589,7 +636,7 @@ function create_gallery_row_for_folder(string $folderPath): ?array
     }
 
     // Variable $gallery stores this steps working value.
-    $gallery = find_gallery($createdGalleryId);
+    $gallery = find_gallery($createdGalleryId, true);
     if ($gallery) {
         write_gallery_sidecar($gallery);
     }
@@ -615,14 +662,29 @@ function next_gallery_prepend_sort_order(int $parentId): int
 }
 
 /**
- * Create empty gallery.
+ * Create an empty physical gallery without erasing existing catalog ownership.
  *
- * Part of the related application service.
- *
- * @param array $input Input value.
- * @return array Structured result data for the caller.
+ * @param array<string,mixed> $input Prepared title, folder_name, parent_id and optional editorial/display fields.
+ * @return array<string,mixed> Created gallery row including its stable id and relative folder_path.
+ * @throws GalleryCatalogConflict When missing/unknown storage is still owned by an existing catalog.
  */
 function create_empty_gallery(array $input): array
+{
+    $writerLock = gallery_edit_writer_begin();
+    try {
+        return create_empty_gallery_owned($input);
+    } finally {
+        gallery_edit_writer_end($writerLock);
+    }
+}
+
+/**
+ * Perform create empty gallery while the caller owns the gallery writer lease.
+ *
+ * @param array<string,mixed> $input Normalized creation fields.
+ * @return array<string,mixed> Created row with id, title and relative folder_path plus supported schema fields.
+ */
+function create_empty_gallery_owned(array $input): array
 {
     // $title stores an intermediate value used by the surrounding gallery workflow.
     $title = trim((string) ($input['title'] ?? ''));
@@ -665,7 +727,7 @@ function create_empty_gallery(array $input): array
     // $parentId stores an intermediate value used by the surrounding gallery workflow.
     $parentId = (int) ($input['parent_id'] ?? 0);
     // $parent stores an intermediate value used by the surrounding gallery workflow.
-    $parent = $parentId > 0 ? find_gallery($parentId) : null;
+    $parent = $parentId > 0 ? find_gallery($parentId, true) : null;
     if ($parentId > 0 && !$parent) {
         throw new RuntimeException('Selected parent gallery does not exist.');
     }
@@ -674,17 +736,17 @@ function create_empty_gallery(array $input): array
     $folderName = trim((string) ($input['folder_name'] ?? ''));
     // $requestedFolderPath stores the preferred folder path before suffix fallback is applied.
     $requestedFolderPath = gallery_child_folder_path($parent, $folderName !== '' ? $folderName : $title);
-    if (!is_dir(gallery_target_abs_path($requestedFolderPath)) && function_exists('Gallery\Services\delete_missing_gallery_database_subtree_by_folder_path')) {
-        delete_missing_gallery_database_subtree_by_folder_path($requestedFolderPath);
-    }
+    gallery_creation_assert_catalog_preserved($requestedFolderPath);
     // $folderPath stores an intermediate value used by the surrounding gallery workflow.
     $folderPath = unique_gallery_child_folder_path($parent, $folderName !== '' ? $folderName : $title);
     // $target stores an intermediate value used by the surrounding gallery workflow.
     $target = gallery_target_abs_path($folderPath);
+    gallery_creation_assert_catalog_preserved($folderPath);
     if (file_exists($target)) {
         throw new RuntimeException('Gallery folder already exists.');
     }
-    if (!mkdir($target, 0775, true)) {
+    // The verified parent must still exist; never recreate missing ancestors here.
+    if (!mkdir($target, \Gallery\Core\GALLERY_DIRECTORY_PERMISSIONS)) {
         throw new RuntimeException('Could not create gallery folder.');
     }
 

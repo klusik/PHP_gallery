@@ -81,6 +81,33 @@ function application_update_assert_activation_schema_known(string $operation): v
 }
 
 /**
+ * Require installed revision storage before activating code that needs it.
+ *
+ * The ordinary column migration is applied through the existing Gallery migration
+ * page. It does not create triggers, alter server variables, or require elevated
+ * database privileges. This observation never executes DDL itself.
+ * Old rollback snapshots without this feature remain eligible for recovery.
+ *
+ * @param string $sourceRoot Validated extracted release or rollback source directory.
+ * @return void
+ * @throws RuntimeException When required enforcement is missing or unobservable.
+ */
+function application_update_assert_gallery_edit_enforcement(string $sourceRoot): void
+{
+    if (!is_file($sourceRoot . '/app/services/gallery_edit_concurrency.php')) {
+        return;
+    }
+    require_once __DIR__ . '/gallery_edit_concurrency.php';
+    if (gallery_edit_schema_state() !== 'available') {
+        throw new RuntimeException(
+            'Update activation requires the gallery edit revision migration. '
+            . 'Run database migrations from the Gallery administration page, then retry. '
+            . 'Prepared files remain outside the active installation.'
+        );
+    }
+}
+
+/**
  * Return a cached update check for small UI badges.
  *
  * @param int $ttlSeconds Ttl seconds value.

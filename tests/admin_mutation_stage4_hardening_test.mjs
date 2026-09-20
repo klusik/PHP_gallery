@@ -1,5 +1,9 @@
 /**
  * Project: PHP Gallery
+ * Module Type: Regression Test
+ * Purpose: Protect hardened in-place Admin mutation behavior.
+ * Responsibilities:
+ *   - Check completion state and response ordering across browser mutation paths.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/admin_mutation_stage4_hardening_test.mjs

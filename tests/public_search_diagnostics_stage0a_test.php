@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Regression Test
+ * Purpose: Protect progressive-search diagnostics ownership.
+ * Responsibilities:
+ *   - Check Admin diagnostic fields and their MVC boundaries.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/public_search_diagnostics_stage0a_test.php

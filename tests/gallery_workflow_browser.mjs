@@ -1,5 +1,11 @@
 /**
  * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ * File: tests/gallery_workflow_browser.mjs
+ * Module Type: Regression Test
+ * Purpose: Provide a standalone Chromium workflow fixture mechanism.
+ * Responsibilities:
+ *   - Launch isolated browser journeys without adding an interactive runtime dependency.
  * Author: Rudolf Klusal
  * Standalone Chromium fixture mechanism; no interactive browser runtime or dependency framework.
  */

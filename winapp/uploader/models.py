@@ -1,4 +1,8 @@
 # Project: PHP Gallery
+# Module Type: Windows Tooling
+# Purpose: Define uploader import and activity data models.
+# Responsibilities:
+#   - Represent local job state and activity records shared by uploader workflows.
 # Repository: https://github.com/klusik/PHP_gallery
 #
 # File: winapp/uploader/models.py

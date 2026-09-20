@@ -1,4 +1,12 @@
 % PHP Gallery Complete Product Documentation
+% Project: PHP Gallery
+% Repository: https://github.com/klusik/PHP_gallery
+% File: docs/PHP_Gallery_Manual.tex
+% Module Type: LaTeX Product Manual
+% Purpose: Explain administrator workflows, operation and maintenance of PHP Gallery.
+% Responsibilities:
+%   - Maintain the usage guide and technical reference while preserving reproducible PDF typography.
+% Author: Rudolf Klusal
 % Build from this directory with:
 %   pdflatex PHP_Gallery_Manual.tex
 %   makeindex PHP_Gallery_Manual.idx
@@ -49,7 +57,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.104.1}
+\newcommand{\version}{0.105}
 \newcommand{\manualdate}{20 September 2026}
 
 \hypersetup{
@@ -434,6 +442,8 @@ Unicode matching accepts only safe whole-character boundaries. Some non-ASCII su
 
 After saving, the~gallery becomes a~real collection in~the~gallery tree. Its folder can~receive photographs through the~browser, filesystem transfer, discovery, or~another supported upload workflow. The~database stores its descriptive and~presentation settings.
 
+Each generated create or~classic-upload form also carries a~private operation identity. If~a~connection fails after the~server may~have finished the~work, retry the~same form instead of~opening a~new one: the~same administrator, operation, and~content receive the~original completed result. A~freshly opened form represents a~new intentional operation and~can~still create a~deliberate duplicate. This identity is~not~a~password or~a~replacement for~sign-in and~CSRF protection.
+
 \subsubsection{Creation sequence}
 
 \begin{enumerate}
@@ -453,6 +463,8 @@ After saving, the~gallery becomes a~real collection in~the~gallery tree. Its fol
 \index{date range}
 
 The~editor lets you improve a~gallery over time. Titles and~descriptions can~change as~a~collection develops. Date fields can~represent a~single day, a~trip, a~season, or~a~longer historical period. EXIF date suggestions can~examine photographs and~descendants, then offer an~editable range for~approval.
+
+The~complete editor records the~exact gallery revision that supplied its fields. If~another tab, administrator, upload, move, scan, or~maintenance workflow changes the~gallery first, an~older save is~refused instead of~silently overwriting the~newer state. The~conflict view preserves entered non-secret text and~shows a~safe current comparison. Review and~copy the~intended changes into the~latest editor; re-enter passwords and~reselect files because private values are~never copied into conflict details.
 
 Use date suggestions as~a~helpful starting point. Scanned photographs, screenshots, edited exports, and~cameras with an~incorrect clock can~produce dates that deserve human review.\footnote{Applying an~EXIF-derived suggestion updates the~proposed gallery fields through the~existing editor workflow. The~administrator remains responsible for~the~final dates shown to~visitors.}
 
@@ -525,6 +537,8 @@ Gallery branding can~provide a~logo, banner, background, separator, or~presentat
 \index{gallery!reordering}
 
 Moving a~gallery changes its place in~the~hierarchy and~can~affect inherited access or~presentation. Review the~destination before confirming the~move. Reordering changes the~sequence shown among siblings and~supports a~curated reading order.
+
+Moving photographs between galleries uses a~durable operation journal. If~a~worker or~connection stops partway through, System Health and~Runtime Diagnostics show a~bounded action state without exposing private paths. Stop competing storage work, preserve a~backup, and~follow \filepath{docs/IMAGE_MOVE_RECOVERY.md}; recovery retains changed or~unverifiable files instead of~overwriting them.
 
 Ordering may~be~chronological, geographical, narrative, alphabetical, or~manually featured. Within one parent gallery, keep the~choice consistent enough that visitors can~anticipate the~next item.
 
@@ -828,6 +842,8 @@ The~gallery tree supports per-branch expand/collapse plus \ui{Collapse all} and~
 
 When JavaScript is~available, a~persistent action started in~the~Admin right-side panel completes in~that panel. The~drawer stays mounted and~open, the~address in~the~browser remains unchanged, and~the~page is~not~reloaded merely to~show the~result. This applies to~gallery create/edit/move/delete, image upload/edit/delete/move/reorder/visibility/NSFW/cover actions, scan/import, EXIF date suggestions, thumbnail creation, Media Renamer, Metadata Organizer, Duplicate Photo Detector review/deletion actions, Upload Automation credentials, Gallery Migration target pulls, tag edits, and~Smart Gallery create/edit/placement/detach/duplicate/delete actions. A~standalone Admin page and~ordinary POST/redirect behavior remain available when JavaScript is~disabled or~the~route is~opened directly.
 
+Only the~newest panel-open request may~replace its contents; closing or~opening another item cancels ownership by~an~older response. Keyboard focus remains inside the~open drawer and~returns to~the~control that opened it. Unsaved ordinary text can~be~held in~bounded browser memory for~the~current page and~restored when the~same form returns. Passwords, tokens, API keys, file inputs, operation identities, and~other private values are~excluded, and~nothing is~persisted in~browser storage.
+
 The~saved database/filesystem state remains authoritative. After persistence, the~server describes the~changed entity, the~panel fragment that may~need re-rendering, and~every affected public context. Stable gallery, image, tag, and~Smart Gallery identifiers are~used instead of~assuming that the~old URL still names the~saved object. This matters after a~gallery folder/slug rename, gallery reparenting, or~tag slug change: the~application can~fetch the~new canonical render source while leaving the~visible browser address untouched. Source and~destination galleries are~both described for~moves; old/new parents and~the~moved gallery are~described for~reparenting; Smart Gallery placement changes describe every affected root or~physical parent context.
 
 A~successful fragment request is~not~by~itself proof that the~change is~visible. The~refreshed server-rendered HTML must satisfy an~operation-specific observable condition where one exists. Examples include gallery/card presence or~absence and~full counts, exact effective visibility, saved gallery revision, image absence/visibility/NSFW state, gallery-wide image revision for~off-page changes, cover image identity, persisted image order, tag identity, and~Smart Gallery placement/order. Pagination-aware checks accept a~directly visible matching card before using aggregate counts, while an~off-page result still waits for~the~authoritative total to~converge. Thumbnail cache repair is~the~intentional exception: it~refreshes affected contexts but~has no~stable database-backed public-HTML condition.
@@ -950,6 +966,8 @@ During discovery and~missing-parent repair, PHP Gallery can~read supported value
 \securitynote{The~\ui{Delete from disk} action on~the~discovery screen is~a~real recursive filesystem deletion for~unmanaged candidate folders. Review the~selected relative paths before confirming it. The~guard against known imported gallery paths is~an~additional safety boundary, not~a~replacement for~a~backup.}
 
 Browser upload is~the~friendliest choice for~routine work. It~can~upload into an~existing gallery or~create a~child gallery and~upload optional photographs in~the~same side-panel workflow. Select the~destination, choose files, and~follow the~progress display. The~application checks the~destination and~file information before accepting each result.
+
+Compressed file size alone does~not~prove that an~image is~safe to~decode. Before GD or~optional Imagick allocates a~full raster, PHP Gallery checks the~format, dimensions, pixel arithmetic, configured/runtime memory budget, and~pipeline limits. A~file that cannot~be~admitted safely is~refused before its original or~generated derivatives are~committed to~the~target gallery. This policy applies to~classic and~browser-prepared ingestion; it~does not~claim that every external RAW decoder has~the~same in-process memory model.
 
 The~upload settings distinguish the~ordinary server path from~browser-assisted preparation. \ui{Allow all server-supported formats} leaves the~picker aligned with~the~server's detected capabilities. \ui{Prefer phone-rendered JPG/PNG/WebP, no RAW/DNG} asks mobile browsers for~a~rendered image representation when possible, which is~useful when an~iPhone ProRAW/DNG workflow produces unsuitable color. The~browser hint is~not~a~guaranteed transcoder, so~the~server still validates the~actual uploaded media.
 
@@ -1663,6 +1681,8 @@ normally reduces repeated metadata queries, but~a~migration can~change the~answe
 after schema-changing statements and~after successful repair callbacks. A~post-migration check then reads the~new database catalog instead of~reusing an~answer from before the~migration. Ordinary data-only migration statements do~not~clear the~readiness cache because they cannot create or~remove a~table,
 field, or~index.
 
+Version~\version{} adds the~image-move journal, gallery edit revision, and~administrator operation-key ledger through ordinary table/column migrations. Run them from the~Gallery administration page as~usual. They require the~installation's normal schema-change authority, but~do~not~require database triggers, stored routines, \codeword{SUPER}, a~global server-variable change, or~separate database-administrator intervention. If~an~interrupted attempt already added the~revision column without recording the~migration, using the~same Gallery migration action again completes the~ledger safely.
+
 \subsection{How the~gallery checks database readiness}
 \index{database!readiness}
 \index{schema inspection}
@@ -1733,6 +1753,8 @@ The~telemetry subsystem is~designed not~to~store raw IP addresses, raw browser u
 \index{gallery benchmark}
 
 \ui{Runtime diagnostics} provides a~copyable environment and~support view for~PHP, database-readiness classes, hosting limits, GD, Imagick/ImageMagick, and~relevant media-format support. It~also exposes the~DNG conversion policy described earlier. The~readiness panels separate presentation/reporting dependencies, authentication/security dependencies, and~mutation-sensitive dependencies so~an~administrator can~distinguish an~optional missing capability from~a~condition that must~block a~write.
+
+The~same bounded model reports gallery edit-revision readiness and~unresolved image moves. A~missing or~unknown required schema is~an~action state and~stops the~affected mutation before target files or~rows change. Pending-move summaries contain only capped operation/gallery identities and~safe state categories; use the~documented command-line recovery workflow for~an~explicit operation rather than~expecting the~diagnostics page to~move files.
 
 The~separate \ui{Development diagnostics} switch is~administrator-only. When enabled for~a~signed-in administrator it~adds viewer instrumentation for~preload, cache, memory, network, and~frame-timing work in~the~public/lightbox/fullscreen experience. It~does not~turn those diagnostics on~for~ordinary anonymous visitors. Keep it~off during normal ownership unless you~are~investigating rendering or~performance behavior; the~gallery benchmark also depends on~this development-diagnostics context.
 
@@ -2129,7 +2151,7 @@ Confirm the~matching JavaScript module loaded, delegated handlers recognized the
 
 \subsection{Migration fails}
 
-Record the~exact migration filename, database error, server version, existing schema state, and~migration audit rows. Use available dry-run or~inspection tools. Preserve the~database before repair and~follow the~migration’s idempotent compatibility path.
+Keep a~verified database backup and~record the~migration filename, Gallery version, database-server version, bounded on-screen message, request reference, and~existing schema/ledger state. Retry through the~Gallery administration page so~the~normal idempotent compatibility path can~finish an~interrupted migration. Version~\version{} does~not~need triggers, stored routines, \codeword{SUPER}, \codeword{log\_bin\_trust\_function\_creators}, or~a~global database change. If~the~bounded error remains, inspect Runtime Diagnostics and~give the~request reference to~the~maintainer or~hosting provider; do~not~paste database credentials or~raw production data into a~support report.
 
 \subsection{PDF manual compilation fails}
 

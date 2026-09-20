@@ -33,12 +33,14 @@
 
 import { i18n } from './admin-core.js?v=20260512-modular-admin-v1';
 
-const DEFAULT_RECONNECT_SECONDS = 30;
-const MIN_RECONNECT_SECONDS = 5;
-const MAX_RECONNECT_SECONDS = 300;
-const MAX_PACKAGE_RETRIES = 6;
-const STATUS_PROBE_COUNT = 4;
-const STATUS_PROBE_DELAY_MS = 1500;
+import {
+    GALLERY_MIGRATION_DEFAULT_RECONNECT_SECONDS,
+    GALLERY_MIGRATION_MIN_RECONNECT_SECONDS,
+    GALLERY_MIGRATION_MAX_RECONNECT_SECONDS,
+    GALLERY_MIGRATION_PACKAGE_ATTEMPT_LIMIT,
+    GALLERY_MIGRATION_STATUS_PROBE_LIMIT,
+    GALLERY_MIGRATION_STATUS_PROBE_DELAY_MS,
+} from './gallery-migration-policy.js?v=20260920-gallery-migration-policy-v1';
 
 /**
  * Error type used when the browser deliberately refreshes a long transfer request.
@@ -239,7 +241,7 @@ function dispatchGalleryMigrationMutationResult(form, result, source, options = 
  */
 async function transferPackageWithReconnect(form, mode, action, packageDescriptor, jobId, reconnectSeconds) {
     let lastError = null;
-    for (let attempt = 1; attempt <= MAX_PACKAGE_RETRIES; attempt += 1) {
+    for (let attempt = 1; attempt <= GALLERY_MIGRATION_PACKAGE_ATTEMPT_LIMIT; attempt += 1) {
         if (form.dataset.galleryMigrationCancelled === '1') {
             throw new Error(i18n('admin.gallery_migration.cancelled', 'Migration cancelled by user.'));
         }
@@ -257,10 +259,10 @@ async function transferPackageWithReconnect(form, mode, action, packageDescripto
                 return status;
             }
 
-            if (attempt >= MAX_PACKAGE_RETRIES) {
+            if (attempt >= GALLERY_MIGRATION_PACKAGE_ATTEMPT_LIMIT) {
                 break;
             }
-            appendMigrationLog(form, i18n('admin.gallery_migration.retrying_package', 'Retrying ZIP package, attempt {attempt}/{total}.', {attempt: attempt + 1, total: MAX_PACKAGE_RETRIES}));
+            appendMigrationLog(form, i18n('admin.gallery_migration.retrying_package', 'Retrying ZIP package, attempt {attempt}/{total}.', {attempt: attempt + 1, total: GALLERY_MIGRATION_PACKAGE_ATTEMPT_LIMIT}));
         }
     }
 
@@ -306,9 +308,9 @@ async function confirmPackageOnReconnect(form, mode, packageDescriptor, jobId, r
     let lastStatus = null;
     let lastError = null;
 
-    for (let probe = 1; probe <= STATUS_PROBE_COUNT; probe += 1) {
+    for (let probe = 1; probe <= GALLERY_MIGRATION_STATUS_PROBE_LIMIT; probe += 1) {
         if (probe > 1) {
-            await sleep(STATUS_PROBE_DELAY_MS);
+            await sleep(GALLERY_MIGRATION_STATUS_PROBE_DELAY_MS);
         }
         try {
             lastStatus = await requestMigrationStatus(form, mode, jobId, reconnectSeconds);
@@ -481,7 +483,7 @@ function versionMessage(compatibility) {
 function getReconnectSeconds(form) {
     const control = form.elements.namedItem('reconnect_seconds');
     if (!(control instanceof HTMLInputElement)) {
-        return DEFAULT_RECONNECT_SECONDS;
+        return GALLERY_MIGRATION_DEFAULT_RECONNECT_SECONDS;
     }
 
     return clampReconnectSeconds(Number.parseInt(control.value, 10));
@@ -495,9 +497,9 @@ function getReconnectSeconds(form) {
  */
 function clampReconnectSeconds(value) {
     if (!Number.isFinite(value)) {
-        return DEFAULT_RECONNECT_SECONDS;
+        return GALLERY_MIGRATION_DEFAULT_RECONNECT_SECONDS;
     }
-    return Math.max(MIN_RECONNECT_SECONDS, Math.min(MAX_RECONNECT_SECONDS, Math.round(value)));
+    return Math.max(GALLERY_MIGRATION_MIN_RECONNECT_SECONDS, Math.min(GALLERY_MIGRATION_MAX_RECONNECT_SECONDS, Math.round(value)));
 }
 
 /**

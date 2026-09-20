@@ -36,7 +36,15 @@ declare(strict_types=1);
 
 namespace Gallery\Core;
 
-const CMS_VERSION = '0.104.1';
+/**
+ * Identify the installed application release for compatibility and update checks.
+ *
+ * @var string
+ * Units: dotted release identifier. Scope: installation-wide application identity.
+ * Consumers: runtime diagnostics, release checks, updater compatibility, public assets and documentation.
+ * Rationale: keep one canonical machine-readable version synchronized by the release preparation workflow.
+ */
+const CMS_VERSION = '0.105';
 const CMS_GITHUB_REPOSITORY = 'klusik/PHP_gallery';
 const CMS_UPDATE_BRANCHES = ['main', 'master'];
 

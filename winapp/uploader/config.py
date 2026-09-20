@@ -1,4 +1,8 @@
 # Project: PHP Gallery
+# Module Type: Windows Tooling
+# Purpose: Migrate and normalize versioned uploader configuration.
+# Responsibilities:
+#   - Preserve existing preferences while applying supported configuration defaults.
 # Repository: https://github.com/klusik/PHP_gallery
 #
 # File: winapp/uploader/config.py

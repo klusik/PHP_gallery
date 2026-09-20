@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Regression Test
+ * Purpose: Protect relational-feature persistence ownership.
+ * Responsibilities:
+ *   - Reject SQL/PDO leakage from tags, Smart Galleries, localization and voting services.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/stage5_relational_features_persistence_boundary_test.php

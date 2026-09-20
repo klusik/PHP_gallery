@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Regression Test
+ * Purpose: Protect lightbox resource lifetime and cleanup.
+ * Responsibilities:
+ *   - Detect detached media or stale work surviving viewer teardown.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/lightbox_resource_lifecycle_test.php

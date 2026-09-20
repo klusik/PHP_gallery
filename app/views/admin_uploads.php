@@ -80,7 +80,12 @@ function view_render_admin_upload_browser_checkbox(array $viewModel): void
     echo '<label class="' . e((string) ($viewModel['class_name'] ?? 'browser-upload-toggle')) . '"><input type="checkbox" name="browser_client_upload" value="1" data-browser-upload-toggle data-browser-upload-config="' . e((string) ($viewModel['encoded_config'] ?? '{}')) . '"' . ($disabled ? '' : ' checked') . ($disabled ? ' disabled' : '') . '> <span>' . e(t('admin.upload.browser_client_upload_label', 'Prepare thumbnails and ZIP batches in this browser')) . '</span><span class="muted">' . e(t('admin.upload.browser_client_upload_help', 'Checked by default. When selected photos are present, browser-side processing is strict: preparation failures stop the upload instead of silently switching thumbnail generation to PHP. Uncheck this option to use the standard server-side path.')) . '</span><span class="muted">' . e(t('admin.upload.browser_zip_help', 'You may also select ZIP archives. Supported images are extracted locally; other entries are skipped. ZIP import never uses the PHP fallback.')) . '</span></label>';
 }
 
-/** @param array<string,mixed> $viewModel Controller-prepared existing-gallery upload form. */
+/**
+ * Render an existing-gallery upload form from prepared URLs, markup and replay identity.
+ *
+ * @param array{panel_mode?:bool,action_url?:string,csrf_html?:string,operation_key?:string,gallery_id?:int,target_title?:string,gallery_options_html?:string,accept_value?:string,browser_checkbox_html?:string} $viewModel Controller-prepared target context and presentation fragments.
+ * @return void Emit the native/AJAX-compatible form without resolving domain policy.
+ */
 function view_render_admin_upload_existing_gallery_form(array $viewModel): void
 {
     $panelMode = !empty($viewModel['panel_mode']);
@@ -91,6 +96,7 @@ function view_render_admin_upload_existing_gallery_form(array $viewModel): void
         echo '<section class="panel"><h2>' . e(t('admin.upload.upload_existing_title', 'Upload into existing gallery')) . '</h2><form method="post" action="' . e((string) ($viewModel['action_url'] ?? '')) . '" enctype="multipart/form-data" class="form-grid" data-gallery-upload-form>' . (string) ($viewModel['csrf_html'] ?? '');
     }
     echo '<input type="hidden" name="upload_mode" value="existing">';
+    echo '<input type="hidden" name="operation_key" value="' . e((string) ($viewModel['operation_key'] ?? '')) . '" data-admin-operation-key>';
     if ($panelMode && (int) ($viewModel['gallery_id'] ?? 0) > 0) {
         echo '<input type="hidden" name="gallery_id" value="' . (int) $viewModel['gallery_id'] . '">';
         echo '<div class="admin-side-panel-target"><span>' . e(t('admin.upload.target_gallery', 'Target gallery')) . '</span><strong>' . e((string) ($viewModel['target_title'] ?? '')) . '</strong></div>';

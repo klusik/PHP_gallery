@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Regression Test
+ * Purpose: Protect recoverable gallery trash behavior.
+ * Responsibilities:
+ *   - Verify retention, path/token rules, fixture file moves and schema refusal.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/gallery_trash_model_test.php

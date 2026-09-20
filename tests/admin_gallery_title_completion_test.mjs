@@ -1,5 +1,9 @@
 /**
  * Project: PHP Gallery
+ * Module Type: Regression Test
+ * Purpose: Verify the title-completion browser model and input behavior.
+ * Responsibilities:
+ *   - Exercise matching, suffix selection and stale-result handling.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/admin_gallery_title_completion_test.mjs

@@ -93,8 +93,10 @@ disposable service when these explicit environment variables are supplied:
 There is no accepted input database name or arbitrary DSN. The runner chooses
 gallery_workflow_ followed by 24 random hex characters, uses CREATE DATABASE
 without IF NOT EXISTS, and drops only a database it successfully created.
-The account needs CREATE/DROP and application migration permissions for that
-prefix only. Never repurpose an administrator or production account.
+The account needs only schema-local `SELECT`, `INSERT`, `UPDATE`, `DELETE`,
+`CREATE`, `ALTER`, `DROP`, `INDEX`, and `REFERENCES` permissions for that prefix.
+It does not need `TRIGGER`, `SUPER`, an `ALL PRIVILEGES` grant, or authority over
+server-global settings. Never repurpose an administrator or production account.
 
 .github/workflows/gallery-workflows.yml creates independent MySQL 8.4 and
 MariaDB 11.4 service containers on port 13316, without host data volumes.
@@ -105,6 +107,28 @@ random-password runner account. The root credential is removed from child
 environments. CI requires all three real-workflow/concurrency PASS records from
 the central regression log; an absent, skipped or unregistered test cannot qualify.
 Only compact audit Markdown/JSON reports are uploaded as artifacts.
+
+After verifying the disposable service identity, the CI bootstrap creates the
+runner with exactly that schema-local grant. It neither reads nor changes binary
+logging policy or any other server-global setting. The revision migration is
+ordinary portable table DDL: interrupted installation may leave the revision
+column present without its migration ledger row, and replay must accept that
+duplicate column without requiring any additional database authority.
+
+The actual MySQL concurrency fixture verifies that the application advances a
+gallery revision explicitly before side effects, rejects stale editor forms, and
+keeps every registered filesystem writer behind the shared busy-lock wrapper.
+Database-trigger interception and ad hoc SQL issued outside those application
+boundaries are not part of the product contract. Local source-policy tests or
+private MySQL runs do not establish that either CI container image has executed
+successfully.
+
+`tests/gallery_workflow_ci_trigger_policy_test.php` exercises the actual
+bootstrap statements with inert PDO/environment adapters. The historical filename
+now guards removal of trigger-era authority: it covers ownership refusal before
+account changes, the exact schema-local grant, absence of server-global SQL, and
+root credential removal. It opens no database connection and does not invoke CI
+or the central audit.
 
 ## Assertions and present limits
 

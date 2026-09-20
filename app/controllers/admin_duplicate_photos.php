@@ -36,6 +36,7 @@
 declare(strict_types=1);
 
 namespace Gallery\Controllers;
+use const Gallery\Core\DUPLICATE_PHOTO_DETECTOR_DEFAULT_BATCH_SIZE;
 
 use InvalidArgumentException;
 use Throwable;
@@ -78,6 +79,19 @@ use function Gallery\Services\admin_log_event;
 use function Gallery\Services\t;
 use function Gallery\Services\thumbnail_url;
 use function Gallery\Views\view_render_admin_duplicate_photo_detector;
+
+/**
+ * Normalize the detector-only session compartment at the HTTP boundary.
+ *
+ * @return array<string,array<string,mixed>> Caller-owned checkpoint map by reference; no authentication/session secrets are passed to the service.
+ */
+function &admin_duplicate_photos_job_store(): array
+{
+    if (!isset($_SESSION['admin_duplicate_photo_detector_jobs']) || !is_array($_SESSION['admin_duplicate_photo_detector_jobs'])) {
+        $_SESSION['admin_duplicate_photo_detector_jobs'] = [];
+    }
+    return $_SESSION['admin_duplicate_photo_detector_jobs'];
+}
 
 /**
  * Send one duplicate detector JSON response using the Admin AJAX convention.
@@ -276,6 +290,7 @@ function admin_duplicate_photos_csrf_valid(): bool
  * Handle a detector POST action and answer as JSON or normal redirect.
  *
  * @param bool $csrfVerified Whether the JSON entrypoint already validated CSRF.
+ * @return void Emits the canonical in-place result or direct-page fallback; service checkpoints remain scoped to the authenticated caller.
  */
 function admin_duplicate_photos_handle_post(bool $csrfVerified = false): void
 {
@@ -288,7 +303,7 @@ function admin_duplicate_photos_handle_post(bool $csrfVerified = false): void
 
     if (in_array($action, ['ignore_pair', 'ignore_gallery', 'clear_ledger'], true)) {
         $token = (string) ($_POST['job_token'] ?? '');
-        $job = $token !== '' ? duplicate_photo_detector_read_job($token) : null;
+        $job = $token !== '' ? duplicate_photo_detector_read_job($token, admin_duplicate_photos_job_store()) : null;
         $page = max(1, (int) ($_POST['results_page'] ?? 1));
         $galleryId = $job !== null
             ? (int) ($job['gallery_id'] ?? 0)
@@ -449,7 +464,7 @@ function admin_duplicate_photos_handle_post(bool $csrfVerified = false): void
 
     if ($action === 'delete') {
         $token = (string) ($_POST['job_token'] ?? '');
-        $job = duplicate_photo_detector_read_job($token);
+        $job = duplicate_photo_detector_read_job($token, admin_duplicate_photos_job_store());
         if ($job === null) {
             $message = t('admin.duplicate_photos.error_job_missing', 'The duplicate detector session expired. Start a new scan.');
             if ($wantsJson) {
@@ -485,7 +500,7 @@ function admin_duplicate_photos_handle_post(bool $csrfVerified = false): void
 
         $image = find_image($imageId);
         if ($image === null) {
-            $updatedJob = duplicate_photo_detector_remove_image_from_job($token, $imageId);
+            $updatedJob = duplicate_photo_detector_remove_image_from_job($token, $imageId, admin_duplicate_photos_job_store());
             $message = t('admin.duplicate_photos.delete_already_removed', 'The photo was already removed. The duplicate results were refreshed.');
             if ($wantsJson) {
                 admin_duplicate_photos_json_response(true, $message, [
@@ -517,7 +532,7 @@ function admin_duplicate_photos_handle_post(bool $csrfVerified = false): void
                 throw new InvalidArgumentException(t('admin.duplicate_photos.delete_unavailable', 'This photo is no longer available in the duplicate detector results.'));
             }
 
-            $updatedJob = duplicate_photo_detector_remove_image_from_job($token, $imageId);
+            $updatedJob = duplicate_photo_detector_remove_image_from_job($token, $imageId, admin_duplicate_photos_job_store());
             if ($updatedJob === null) {
                 $updatedJob = $job;
             }
@@ -576,7 +591,7 @@ function admin_duplicate_photos_handle_post(bool $csrfVerified = false): void
 
     if ($action === 'step') {
         $token = (string) ($_POST['job_token'] ?? '');
-        $job = duplicate_photo_detector_read_job($token);
+        $job = duplicate_photo_detector_read_job($token, admin_duplicate_photos_job_store());
         if ($job === null) {
             $message = t('admin.duplicate_photos.error_job_missing', 'The duplicate detector session expired. Start a new scan.');
             if ($wantsJson) {
@@ -600,7 +615,7 @@ function admin_duplicate_photos_handle_post(bool $csrfVerified = false): void
 
         $batchSize = (int) ($_POST['batch_size'] ?? 0);
         try {
-            $state = duplicate_photo_detector_process_job($token, $batchSize > 0 ? $batchSize : 200);
+            $state = duplicate_photo_detector_process_job($token, admin_duplicate_photos_job_store(), $batchSize > 0 ? $batchSize : DUPLICATE_PHOTO_DETECTOR_DEFAULT_BATCH_SIZE);
         } catch (Throwable $exception) {
             $message = t('admin.duplicate_photos.error_scan_failed', 'Duplicate scan failed: {error}', ['error' => $exception->getMessage()]);
             if ($wantsJson) {
@@ -614,7 +629,7 @@ function admin_duplicate_photos_handle_post(bool $csrfVerified = false): void
         if ($wantsJson) {
             $payload = $state;
             if (!empty($state['done'])) {
-                $completedJob = duplicate_photo_detector_read_job((string) ($state['job_token'] ?? $token));
+                $completedJob = duplicate_photo_detector_read_job((string) ($state['job_token'] ?? $token), admin_duplicate_photos_job_store());
                 $payload['panel_html'] = admin_duplicate_photos_panel_html($gallery, $completedJob, 1, $adminUserId);
             }
             admin_duplicate_photos_json_response(true, t('admin.duplicate_photos.scan_progress_message', 'Duplicate scan progress updated.'), $payload);
@@ -653,7 +668,7 @@ function admin_duplicate_photos_handle_post(bool $csrfVerified = false): void
     }
 
     try {
-        $state = duplicate_photo_detector_start_job($scope);
+        $state = duplicate_photo_detector_start_job($scope, admin_duplicate_photos_job_store());
     } catch (Throwable $exception) {
         $message = t('admin.duplicate_photos.error_scan_failed', 'Duplicate scan failed: {error}', ['error' => $exception->getMessage()]);
         if ($wantsJson) {
@@ -667,7 +682,7 @@ function admin_duplicate_photos_handle_post(bool $csrfVerified = false): void
     if ($wantsJson) {
         $payload = $state;
         if (!empty($state['done']) && is_array($gallery)) {
-            $completedJob = duplicate_photo_detector_read_job((string) ($state['job_token'] ?? ''));
+            $completedJob = duplicate_photo_detector_read_job((string) ($state['job_token'] ?? ''), admin_duplicate_photos_job_store());
             $payload['panel_html'] = admin_duplicate_photos_panel_html($gallery, $completedJob, 1, $adminUserId);
         }
         admin_duplicate_photos_json_response(true, t('admin.duplicate_photos.scan_started', 'Duplicate scan started.'), $payload);
@@ -679,6 +694,7 @@ function admin_duplicate_photos_handle_post(bool $csrfVerified = false): void
 
 /**
  * Handle the Admin duplicate photo detector page and side-panel fragment source.
+ * @return void Authorizes the route and renders a prepared detector model or delegates its persistent action.
  */
 function cms_admin_duplicate_photos(): void
 {
@@ -718,7 +734,7 @@ function cms_admin_duplicate_photos(): void
     }
 
     $jobToken = (string) ($_GET['job_token'] ?? '');
-    $job = $jobToken !== '' ? duplicate_photo_detector_read_job($jobToken) : null;
+    $job = $jobToken !== '' ? duplicate_photo_detector_read_job($jobToken, admin_duplicate_photos_job_store()) : null;
     $galleryId = $job !== null ? (int) ($job['gallery_id'] ?? 0) : (int) ($_GET['gallery_id'] ?? $_GET['id'] ?? 0);
     $gallery = $galleryId > 0 ? find_gallery($galleryId, true) : null;
     if ($gallery === null) {

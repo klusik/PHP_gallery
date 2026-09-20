@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Regression Test
+ * Purpose: Protect hardened persistent mutation boundaries.
+ * Responsibilities:
+ *   - Check shared completion contracts and in-place workflow guarantees.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/stage4_mutation_hardening_contract_test.php
@@ -128,8 +132,8 @@ stage4_expect(str_contains($sidePanel, 'completionGuard.isCurrent()'), 'Side-pan
 stage4_expect(str_contains($sidePanel, 'admin-mutation-completion.js?v=20260902-create-delete-hotfix1'), 'Side-panel module must load the current coordinator cache version.');
 
 $operations = stage4_source('public/assets/gallery-modules/admin-operations.js');
-stage4_expect(str_contains($operations, 'admin-side-panel.js?v=20260920-lightbox-preload-lifecycle-v1'), 'Admin operations must load the current side-panel cache version.');
+stage4_expect(str_contains($operations, 'admin-side-panel.js?v=20260920-panel-lifecycle-v1'), 'Admin operations must load the current side-panel cache version.');
 $galleryJs = stage4_source('public/assets/gallery.js');
-stage4_expect(str_contains($galleryJs, 'admin-operations.js?v=20260920-lightbox-preload-lifecycle-v1'), 'Gallery entrypoint must load the current admin-operations cache version.');
+stage4_expect(str_contains($galleryJs, 'admin-operations.js?v=20260920-panel-lifecycle-interaction-policy-v2'), 'Gallery entrypoint must load the current admin-operations cache version.');
 
 echo "Stage 4 mutation hardening contracts passed.\n";

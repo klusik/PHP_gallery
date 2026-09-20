@@ -1,6 +1,10 @@
 @echo off
 
 rem Project: PHP Gallery
+rem Module Type: Windows Tooling
+rem Purpose: Install Windows uploader dependencies and launch shortcuts.
+rem Responsibilities:
+rem   - Bind shortcuts to the selected Python runtime and uploader entrypoint.
 rem Repository: https://github.com/klusik/PHP_gallery
 rem
 rem File: winapp/install.bat

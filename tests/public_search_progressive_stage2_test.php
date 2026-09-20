@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Regression Test
+ * Purpose: Protect fast primary progressive-search behavior.
+ * Responsibilities:
+ *   - Check the initial search phase and its bounded result contracts.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/public_search_progressive_stage2_test.php

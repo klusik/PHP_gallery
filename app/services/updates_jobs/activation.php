@@ -125,7 +125,8 @@ function application_update_activation_gate_clear(string $jobId): void
 /**
  * Verify every pre-activation prerequisite immediately before the critical section.
  *
- * @param array $job Job state.
+ * @param array<string,mixed> $job Durable update job with id, status and checkpoints for prepared source, backup and verification; no raw request data.
+ * @return void Refuses activation when package, backup, runtime or gallery-write enforcement is not verified.
  */
 function application_update_job_assert_ready(array $job): void
 {
@@ -143,6 +144,7 @@ function application_update_job_assert_ready(array $job): void
         }
     }
     application_update_assert_activation_schema_known('application_update.job_activation_ready');
+    application_update_assert_gallery_edit_enforcement((string) ($job['checkpoints']['source_root'] ?? ''));
 }
 
 /**

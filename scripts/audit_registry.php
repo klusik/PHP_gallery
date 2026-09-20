@@ -40,6 +40,9 @@ return [
         'quick' => [
             'php-regression',
             'mvc-boundaries',
+            'source-contract-inventory',
+            'source-documentation-changed',
+            'source-policy-changed',
             'node-fast',
             'winapp',
             'mutation-contracts',
@@ -50,6 +53,9 @@ return [
         'full' => [
             'php-regression',
             'mvc-boundaries',
+            'source-contract-inventory',
+            'source-documentation-changed',
+            'source-policy-changed',
             'node-full',
             'winapp',
             'mutation-contracts',
@@ -61,6 +67,9 @@ return [
         'release' => [
             'php-regression',
             'mvc-boundaries',
+            'source-contract-inventory',
+            'source-documentation-changed',
+            'source-policy-changed',
             'node-full',
             'winapp',
             'mutation-contracts',
@@ -76,6 +85,46 @@ return [
 
     // Most PHP tests are self-contained. Keep only true environment exceptions here.
     'php_test_requirements' => [
+        'gallery_migration_temporary_files_test.php' => [
+            'extensions' => ['zip'],
+            'missing_status' => 'BLOCKED',
+            'reason' => 'Outgoing migration transfer allocation requires the ZIP extension.',
+        ],
+        'core_persistence_delegation_test.php' => [
+            'extensions' => ['pdo_sqlite'],
+            'missing_status' => 'BLOCKED',
+            'reason' => 'Core delegation contracts use an isolated in-memory SQLite database.',
+        ],
+        'session_contention_test.php' => [
+            'timeout' => 90,
+        ],
+        'session_route_contention_test.php' => [
+            'timeout' => 180,
+        ],
+        'gallery_image_move_crash_test.php' => [
+            'timeout' => 180,
+        ],
+        'gallery_edit_concurrency_mysql_test.php' => [
+            'timeout' => 180,
+        ],
+        'admin_operation_keys_http_test.php' => [
+            'timeout' => 180,
+        ],
+        'image_decode_pipeline_test.php' => [
+            'extensions' => ['gd'],
+            'missing_status' => 'BLOCKED',
+            'reason' => 'The image decode pipeline fixture requires PHP GD.',
+        ],
+        'image_decode_upload_pipeline_test.php' => [
+            'extensions' => ['gd'],
+            'missing_status' => 'BLOCKED',
+            'reason' => 'The classic/prepared server-completion decode fixture requires PHP GD.',
+        ],
+        'image_decode_imagick_fallback_test.php' => [
+            'extensions' => ['gd', 'exif'],
+            'missing_status' => 'BLOCKED',
+            'reason' => 'The admitted GD/optional-Imagick fallback fixture requires GD and EXIF.',
+        ],
         'gallery_workflow_integration_test.php' => [
             'timeout' => 180,
         ],
@@ -91,6 +140,23 @@ return [
 
     // Explicit registry is intentional. Some Node scripts need arguments or a real browser.
     'node_tests' => [
+        'admin_panel_lifecycle_browser_test.mjs' => [
+            'browser' => true,
+            'timeout' => 60,
+        ],
+        'gallery_picker_browser_test.mjs' => [],
+        'frontend_operational_policy_test.mjs' => [],
+        'gallery_migration_policy_test.mjs' => [],
+        'gallery_report_policy_test.mjs' => [],
+        'admin_operation_keys_browser_test.mjs' => [
+            'browser' => true,
+            'timeout' => 60,
+        ],
+        'gallery_picker_parent_integration_browser_test.mjs' => [
+            'browser' => true,
+            'php_argument' => true,
+            'timeout' => 60,
+        ],
         'admin_mutation_completion_test.mjs' => [],
         'admin_mutation_stage4_hardening_test.mjs' => [],
         'admin_gallery_title_completion_test.mjs' => [],

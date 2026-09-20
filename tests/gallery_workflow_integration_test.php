@@ -1,6 +1,12 @@
 <?php
 /**
  * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ * File: tests/gallery_workflow_integration_test.php
+ * Module Type: Regression Test
+ * Purpose: Exercise authenticated workflows against disposable application data.
+ * Responsibilities:
+ *   - Verify HTTP outcomes against database and original-file postconditions.
  * Author: Rudolf Klusal
  * Real authenticated HTTP journeys with database and original-file postconditions.
  */
@@ -34,7 +40,8 @@ try {
     $csrf = $admin->login($seed);
     $baseline = countRows($pdo, 'galleries');
     $fields = ['csrf_token' => $csrf, 'title' => 'HTTP workflow', 'folder_name' => 'http-workflow',
-        'parent_id' => $seed['root_id'], 'visibility' => 'public', 'panel' => '1'];
+        'parent_id' => $seed['root_id'], 'visibility' => 'public', 'panel' => '1',
+        'operation_key' => $admin->operationKey('/index.php?page=admin_new_gallery&panel=1')];
     check($anonymous->request('/index.php?page=admin_new_gallery', $fields, true)['status'] === 401, 'Anonymous creation must fail.');
     check($admin->request('/index.php?page=admin_new_gallery', array_replace($fields, ['csrf_token' => 'invalid']), true)['status'] === 400,
         'Invalid CSRF creation must fail.');
@@ -54,7 +61,8 @@ try {
     $stage = 'classic multipart upload';
     $sample = $directory . '/galleries/seed/sample-1.jpg';
     $upload = ['csrf_token' => $csrf, 'gallery_id' => (string) $id, 'upload_mode' => 'existing',
-        'images[]' => new CURLFile($sample, 'image/jpeg', 'uploaded.jpg')];
+        'images[]' => new CURLFile($sample, 'image/jpeg', 'uploaded.jpg'),
+        'operation_key' => $admin->operationKey('/index.php?page=admin_upload&gallery_id=' . $id)];
     $beforeImages = countRows($pdo, 'images');
     check($anonymous->request('/index.php?page=admin_upload', $upload, true)['status'] === 401, 'Anonymous upload must fail.');
     check($admin->request('/index.php?page=admin_upload', array_replace($upload, ['csrf_token' => 'invalid']), true)['status'] === 400,
@@ -66,6 +74,35 @@ try {
     $original = $folder . '/' . $image['relative_path'];
     check(is_file($original) && hash_file('sha256', $original) === hash_file('sha256', $sample), 'Uploaded original hash mismatch.');
     echo "PASS gallery workflow multipart upload metadata and original hash\n";
+
+    $stage = 'missing-folder catalog preservation';
+    $childFields = array_replace($fields, ['title' => 'HTTP nested', 'folder_name' => 'nested', 'parent_id' => $id,
+        'operation_key' => $admin->operationKey('/index.php?page=admin_new_gallery&panel=1')]);
+    $childId = (int) envelope($admin->request('/index.php?page=admin_new_gallery', $childFields, true), 'Child')['gallery_id'];
+    $catalogBefore = row($pdo, 'SELECT * FROM galleries WHERE id = ?', [$id]);
+    $childBefore = row($pdo, 'SELECT * FROM galleries WHERE id = ?', [$childId]);
+    $imageBefore = row($pdo, 'SELECT * FROM images WHERE id = ?', [$image['id']]);
+    $galleryCountBefore = countRows($pdo, 'galleries');
+    // Both paths are beneath the validated disposable fixture; never touch the live site.
+    $displaced = $directory . '/displaced-gallery';
+    check(!file_exists($displaced) && rename($folder, $displaced), 'Could not displace the owned fixture folder.');
+    try {
+        $conflict = $admin->request('/index.php?page=admin_new_gallery', array_replace($fields, [
+            'operation_key' => $admin->operationKey('/index.php?page=admin_new_gallery&panel=1'),
+        ]), true);
+        $conflictBody = json_decode($conflict['body'], true, 512, JSON_THROW_ON_ERROR);
+        check($conflict['status'] === 409 && empty($conflictBody['ok'])
+            && ($conflictBody['error_code'] ?? '') === 'gallery_catalog_conflict', 'Missing-folder create must return a typed conflict.');
+        check(row($pdo, 'SELECT * FROM galleries WHERE id = ?', [$id]) === $catalogBefore
+            && row($pdo, 'SELECT * FROM galleries WHERE id = ?', [$childId]) === $childBefore
+            && row($pdo, 'SELECT * FROM images WHERE id = ?', [$image['id']]) === $imageBefore
+            && countRows($pdo, 'galleries') === $galleryCountBefore, 'Refused creation changed the original catalog subtree.');
+        check(!is_dir($folder) && hash_file('sha256', $displaced . '/' . $image['relative_path']) === hash_file('sha256', $sample),
+            'Refused creation changed storage or lost the recoverable original.');
+    } finally {
+        check(!file_exists($folder) && rename($displaced, $folder), 'Could not restore the owned fixture folder.');
+    }
+    echo "PASS gallery workflow missing-folder create preserves subtree and original\n";
 
     $stage = 'prepared upload lost response retry';
     $session = 'workflow-' . $token;
@@ -94,7 +131,8 @@ try {
 
     $stage = 'edit visibility and protected media';
     $edit = ['csrf_token' => $csrf, 'id' => $id, 'title' => 'HTTP edited', 'description' => 'Persisted workflow description',
-        'parent_id' => $seed['root_id'], 'slug' => $gallery['slug'], 'visibility' => 'unpublished'];
+        'parent_id' => $seed['root_id'], 'slug' => $gallery['slug'], 'visibility' => 'unpublished',
+        'edit_revision' => (string) row($pdo, 'SELECT edit_revision FROM galleries WHERE id = ?', [$id])['edit_revision']];
     check($anonymous->request('/index.php?page=admin_edit_gallery&id=' . $id, $edit, true)['status'] === 401, 'Anonymous edit must fail.');
     check($admin->request('/index.php?page=admin_edit_gallery&id=' . $id, array_replace($edit, ['csrf_token' => 'invalid']), true)['status'] === 400,
         'Invalid CSRF edit must fail.');
@@ -108,6 +146,7 @@ try {
     // Unpublished is intentionally unlisted but accessible by direct URL in this CMS.
     check($anonymous->request('/index.php?page=media&id=' . $image['id'])['status'] === 200, 'Unpublished direct-access compatibility changed.');
     $edit['visibility'] = 'private';
+    $edit['edit_revision'] = (string) $updated['edit_revision'];
     envelope($admin->request('/index.php?page=admin_edit_gallery&id=' . $id, $edit, true), 'Private');
     check(row($pdo, 'SELECT visibility FROM galleries WHERE id = ?', [$id])['visibility'] === 'private', 'Private visibility was not persisted.');
     check($anonymous->request('/index.php?page=media&id=' . $image['id'])['status'] === 404, 'Private original exposed.');
@@ -117,14 +156,13 @@ try {
         check(in_array($denied['status'], [302, 403, 404], true), 'Protected media did not deny anonymous access.');
     }
     $edit['visibility'] = 'public';
+    $edit['edit_revision'] = (string) row($pdo, 'SELECT edit_revision FROM galleries WHERE id = ?', [$id])['edit_revision'];
     envelope($admin->request('/index.php?page=admin_edit_gallery&id=' . $id, $edit, true), 'Publish');
     $public = $anonymous->request('/index.php?page=media&id=' . $image['id']);
     check($public['status'] === 200 && hash('sha256', $public['body']) === hash_file('sha256', $original), 'Published original unavailable or incorrect.');
     echo "PASS gallery workflow edit publish unpublish and protected media authorization\n";
 
     $stage = 'recoverable subtree delete and restore';
-    $childFields = array_replace($fields, ['title' => 'HTTP nested', 'folder_name' => 'nested', 'parent_id' => $id]);
-    $childId = (int) envelope($admin->request('/index.php?page=admin_new_gallery', $childFields, true), 'Child')['gallery_id'];
     $beforeDelete = countRows($pdo, 'galleries');
     $delete = ['csrf_token' => $csrf, 'gallery_ids' => [$id], 'action' => 'delete'];
     check($admin->request('/index.php?page=admin_bulk_galleries', array_replace($delete, ['csrf_token' => 'invalid']), true)['status'] === 400,

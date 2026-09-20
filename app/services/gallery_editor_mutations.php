@@ -36,6 +36,8 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+require_once __DIR__ . '/gallery_edit_concurrency.php';
+
 use function Gallery\Core\now_sql;
 use function Gallery\Core\slugify;
 use function Gallery\Models\gallery_model_clear_background_sources;
@@ -47,14 +49,15 @@ use function Gallery\Models\gallery_model_update_fields;
  *
  * @param string $value User supplied slug or title fallback.
  * @param int $excludeGalleryId Existing gallery identifier excluded from collisions.
+ * @param ?callable(string):bool $collision Optional model-read adapter for a legacy caller-owned connection.
  * @return string Unique normalized gallery slug.
  */
-function gallery_editor_unique_slug(string $value, int $excludeGalleryId = 0): string
+function gallery_editor_unique_slug(string $value, int $excludeGalleryId = 0, ?callable $collision = null): string
 {
     $base = slugify($value);
     $candidate = $base;
     $counter = 2;
-    while (gallery_model_slug_exists($candidate, $excludeGalleryId)) {
+    while ($collision !== null ? $collision($candidate) : gallery_model_slug_exists($candidate, $excludeGalleryId)) {
         $candidate = $base . '-' . $counter;
         $counter++;
     }
@@ -77,16 +80,44 @@ function gallery_editor_update_fields(int $galleryId, array $fields): void
  *
  * @param int $galleryId Gallery identifier.
  * @param int $coverImageId Image identifier used as title picture.
- * @param array<string,mixed> $fallbackGallery Existing gallery row used if reload fails.
- * @return array<string,mixed> Refreshed or fallback gallery row.
+ * @param array<string,mixed> $fallbackGallery Legacy caller snapshot retained for signature compatibility, never used for filesystem writes.
+ * @return array<string,mixed> Authoritatively reloaded gallery row.
  */
 function gallery_editor_set_cover_image(int $galleryId, int $coverImageId, array $fallbackGallery): array
 {
-    gallery_model_update_fields($galleryId, ['cover_image_id' => $coverImageId], now_sql());
-    $updated = find_gallery($galleryId, true) ?: find_gallery($galleryId) ?: $fallbackGallery;
-    if ($updated) {
-        write_gallery_sidecar($updated);
+    $writerLock = gallery_edit_writer_begin();
+    try {
+        return gallery_editor_set_cover_image_owned($galleryId, $coverImageId, $fallbackGallery);
+    } finally {
+        gallery_edit_writer_end($writerLock);
     }
+}
+
+/**
+ * Persist a gallery cover and publish its refreshed sidecar.
+ *
+ * Internal implementation: enter through gallery_editor_set_cover_image() so
+ * reads, early returns and failure cleanup remain inside the same writer lease.
+ *
+ * @param int $galleryId Gallery identifier.
+ * @param int $coverImageId Image identifier selected as title picture.
+ * @param array<string,mixed> $fallbackGallery Legacy snapshot retained only for signature compatibility; never used to choose a filesystem path.
+ * @return array<string,mixed> Fresh gallery row after the cover update; missing rows or changed image ownership raise a conflict.
+ * @author Rudolf Klusal
+ */
+function gallery_editor_set_cover_image_owned(int $galleryId, int $coverImageId, array $fallbackGallery): array
+{
+    $gallery = find_gallery($galleryId, true);
+    $image = find_image($coverImageId, true);
+    if (!$gallery || !$image || (int) ($image['gallery_id'] ?? 0) !== $galleryId) {
+        throw new GalleryEditConflict(gallery_edit_comparison($gallery ?? []));
+    }
+    gallery_model_update_fields($galleryId, ['cover_image_id' => $coverImageId], now_sql());
+    $updated = find_gallery($galleryId, true);
+    if (!$updated) {
+        throw new GalleryEditConflict([]);
+    }
+    write_gallery_sidecar($updated);
     return $updated;
 }
 

@@ -267,11 +267,11 @@ function gallery_migration_http_post_file_json(string $url, array $fields, strin
 /**
  * POST form fields to a remote endpoint and stream the binary response to a temporary file.
  *
- * @param string $url URL used by this workflow.
- * @param array $fields Form fields.
- * @param string $apiKey API key value.
- * @param ?int $timeoutSeconds Timeout seconds value.
- * @return string Temporary file path.
+ * @param string $url Prepared source migration endpoint.
+ * @param array<string,string> $fields Encoded asset manifest and descendant-scope form fields, never local paths.
+ * @param string $apiKey Source API credential, used only by the existing authenticated transport.
+ * @param ?int $timeoutSeconds Requested timeout in seconds, normalized by the migration policy.
+ * @return string Request-owned binary transfer path; release after installation through this module.
  */
 function gallery_migration_http_post_form_to_file(string $url, array $fields, string $apiKey, ?int $timeoutSeconds = null): string
 {
@@ -279,19 +279,16 @@ function gallery_migration_http_post_form_to_file(string $url, array $fields, st
     if (!function_exists('curl_init')) {
         throw new RuntimeException(gallery_migration_t('gallery_migration.error.curl_required', 'PHP cURL is required for gallery migration ZIP transfer.'));
     }
-    $tmp = tempnam(sys_get_temp_dir(), 'php_gallery_migration_package_');
-    if ($tmp === false) {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.temp_failed', 'Could not create a temporary migration file.'));
-    }
+    $tmp = gallery_migration_allocate_temporary_file('package');
     $out = fopen($tmp, 'wb');
     if ($out === false) {
-        @unlink($tmp);
+        gallery_migration_release_temporary_file($tmp);
         throw new RuntimeException(gallery_migration_t('gallery_migration.error.temp_failed', 'Could not create a temporary migration file.'));
     }
     $handle = curl_init($url);
     if ($handle === false) {
         fclose($out);
-        @unlink($tmp);
+        gallery_migration_release_temporary_file($tmp);
         throw new RuntimeException(gallery_migration_t('gallery_migration.error.http_init_failed', 'Could not initialize HTTP client.'));
     }
     curl_setopt_array($handle, [
@@ -322,7 +319,7 @@ function gallery_migration_http_post_form_to_file(string $url, array $fields, st
         if (is_array($decoded)) {
             $remoteMessage = (string) ($decoded['error'] ?? $decoded['message'] ?? '');
         }
-        @unlink($tmp);
+        gallery_migration_release_temporary_file($tmp);
         throw new RuntimeException($remoteMessage !== '' ? $remoteMessage : ($error !== '' ? $error : 'Remote migration ZIP download failed with status ' . $status . '.'));
     }
     return $tmp;
@@ -339,21 +336,18 @@ function gallery_migration_http_post_form_to_file(string $url, array $fields, st
 function gallery_migration_http_get_to_file(string $url, string $apiKey, ?int $timeoutSeconds = null): string
 {
     $timeout = gallery_migration_timeout_seconds($timeoutSeconds);
-    $tmp = tempnam(sys_get_temp_dir(), 'php_gallery_migration_');
-    if ($tmp === false) {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.temp_failed', 'Could not create a temporary migration file.'));
-    }
+    $tmp = gallery_migration_allocate_temporary_file('asset');
 
     if (function_exists('curl_init')) {
         $out = fopen($tmp, 'wb');
         if ($out === false) {
-            @unlink($tmp);
+            gallery_migration_release_temporary_file($tmp);
             throw new RuntimeException(gallery_migration_t('gallery_migration.error.temp_failed', 'Could not create a temporary migration file.'));
         }
         $handle = curl_init($url);
         if ($handle === false) {
             fclose($out);
-            @unlink($tmp);
+            gallery_migration_release_temporary_file($tmp);
             throw new RuntimeException(gallery_migration_t('gallery_migration.error.http_init_failed', 'Could not initialize HTTP client.'));
         }
         curl_setopt_array($handle, [
@@ -376,7 +370,7 @@ function gallery_migration_http_get_to_file(string $url, string $apiKey, ?int $t
         curl_close($handle);
         fclose($out);
         if ($ok === false || $status >= 400) {
-            @unlink($tmp);
+            gallery_migration_release_temporary_file($tmp);
             throw new RuntimeException($error !== '' ? $error : 'Remote migration asset download failed with status ' . $status . '.');
         }
         return $tmp;
@@ -390,7 +384,7 @@ function gallery_migration_http_get_to_file(string $url, string $apiKey, ?int $t
         file_put_contents($tmp, $body);
         return $tmp;
     } catch (Throwable $exception) {
-        @unlink($tmp);
+        gallery_migration_release_temporary_file($tmp);
         throw $exception;
     }
 }

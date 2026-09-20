@@ -41,15 +41,17 @@ use function Gallery\Models\duplicate_photo_model_gallery_branch_ids;
 use function Gallery\Models\duplicate_photo_model_images_by_ids;
 use function Gallery\Models\duplicate_photo_model_scope_snapshot;
 
-const DUPLICATE_PHOTO_DETECTOR_DEFAULT_BATCH_SIZE = 200;
-const DUPLICATE_PHOTO_DETECTOR_MAX_BATCH_SIZE = 300;
-const DUPLICATE_PHOTO_DETECTOR_JOB_TTL_SECONDS = 3600;
-const DUPLICATE_PHOTO_DETECTOR_MAX_SESSION_JOBS = 3;
-const DUPLICATE_PHOTO_DETECTOR_GROUPS_PER_PAGE = 10;
-const DUPLICATE_PHOTO_DETECTOR_MAX_GROUP_MEMBERS = 30;
-const DUPLICATE_PHOTO_DETECTOR_PAIRS_PER_PAGE = 10;
-const DUPLICATE_PHOTO_DETECTOR_MAX_PAIR_REFERENCES = 10000;
-const DUPLICATE_PHOTO_DETECTOR_MIN_EXIF_COMPONENTS = 4;
+require_once dirname(__DIR__) . '/policy_constants.php';
+use const Gallery\Core\DUPLICATE_PHOTO_DETECTOR_DEFAULT_BATCH_SIZE;
+use const Gallery\Core\DUPLICATE_PHOTO_DETECTOR_MAX_BATCH_SIZE;
+use const Gallery\Core\DUPLICATE_PHOTO_DETECTOR_JOB_TTL_SECONDS;
+use const Gallery\Core\DUPLICATE_PHOTO_DETECTOR_MAX_SESSION_JOBS;
+use const Gallery\Core\DUPLICATE_PHOTO_DETECTOR_GROUPS_PER_PAGE;
+use const Gallery\Core\DUPLICATE_PHOTO_DETECTOR_MAX_GROUP_MEMBERS;
+use const Gallery\Core\DUPLICATE_PHOTO_DETECTOR_PAIRS_PER_PAGE;
+use const Gallery\Core\DUPLICATE_PHOTO_DETECTOR_MAX_PAIR_REFERENCES;
+use const Gallery\Core\DUPLICATE_PHOTO_DETECTOR_MIN_EXIF_COMPONENTS;
+use const Gallery\Core\DUPLICATE_PHOTO_DETECTOR_TOKEN_BYTES;
 
 /**
  * Resolve and validate the server-side duplicate detector scope.
@@ -683,21 +685,22 @@ function duplicate_photo_detector_prune_image_from_job(array $job, int $imageId)
 }
 
 /**
- * Remove one deleted image from a persisted detector session job.
+ * Remove one deleted image from a caller-owned detector checkpoint.
  *
  * @param string $token Opaque detector job token.
  * @param int $imageId Deleted image identifier.
+ * @param array<string,array<string,mixed>> $jobs Caller-owned detector map, updated by reference after pruning.
  * @return array<string,mixed>|null Updated job, or null when the job expired.
  */
-function duplicate_photo_detector_remove_image_from_job(string $token, int $imageId): ?array
+function duplicate_photo_detector_remove_image_from_job(string $token, int $imageId, array &$jobs): ?array
 {
-    $job = duplicate_photo_detector_read_job($token);
+    $job = duplicate_photo_detector_read_job($token, $jobs);
     if ($job === null) {
         return null;
     }
 
     $job = duplicate_photo_detector_prune_image_from_job($job, $imageId);
-    duplicate_photo_detector_write_job($job);
+    duplicate_photo_detector_write_job($job, $jobs);
     return $job;
 }
 
@@ -748,19 +751,20 @@ function duplicate_photo_detector_scope_snapshot(array $scope, array $galleryIds
 }
 
 /**
- * Start one bounded duplicate-photo detector job in the administrator session.
+ * Start one bounded duplicate-photo detector job in the caller-owned map.
  *
  * @param array{gallery_id:int,search_all:bool} $scope Resolved immutable detector scope.
+ * @param array<string,array<string,mixed>> $jobs Caller-owned checkpoints, expired/pruned before the new job is published.
  * @return array<string,mixed> Public detector job state.
  */
-function duplicate_photo_detector_start_job(array $scope): array
+function duplicate_photo_detector_start_job(array $scope, array &$jobs): array
 {
-    duplicate_photo_detector_cleanup_jobs();
+    duplicate_photo_detector_cleanup_jobs($jobs);
     $galleryIds = !empty($scope['search_all'])
         ? []
         : duplicate_photo_detector_gallery_branch_ids((int) $scope['gallery_id']);
     $snapshot = duplicate_photo_detector_scope_snapshot($scope, $galleryIds);
-    $token = bin2hex(random_bytes(16));
+    $token = bin2hex(random_bytes(DUPLICATE_PHOTO_DETECTOR_TOKEN_BYTES));
     $job = [
         'token' => $token,
         'status' => 'running',
@@ -784,7 +788,7 @@ function duplicate_photo_detector_start_job(array $scope): array
         $job = duplicate_photo_detector_finalize_job($job);
     }
 
-    duplicate_photo_detector_write_job($job);
+    duplicate_photo_detector_write_job($job, $jobs);
     return duplicate_photo_detector_public_state($job);
 }
 
@@ -792,12 +796,13 @@ function duplicate_photo_detector_start_job(array $scope): array
  * Process one bounded detector batch using only the immutable server-side job scope.
  *
  * @param string $token Session job token supplied by the browser.
+ * @param array<string,array<string,mixed>> $jobs Caller-owned checkpoints; only the selected live job is advanced.
  * @param int $batchSize Maximum rows to inspect in this request.
  * @return array<string,mixed> Public detector job state.
  */
-function duplicate_photo_detector_process_job(string $token, int $batchSize = DUPLICATE_PHOTO_DETECTOR_DEFAULT_BATCH_SIZE): array
+function duplicate_photo_detector_process_job(string $token, array &$jobs, int $batchSize = DUPLICATE_PHOTO_DETECTOR_DEFAULT_BATCH_SIZE): array
 {
-    $job = duplicate_photo_detector_read_job($token);
+    $job = duplicate_photo_detector_read_job($token, $jobs);
     if ($job === null) {
         return duplicate_photo_detector_missing_state();
     }
@@ -821,7 +826,7 @@ function duplicate_photo_detector_process_job(string $token, int $batchSize = DU
         $job = duplicate_photo_detector_finalize_job($job);
     }
 
-    duplicate_photo_detector_write_job($job);
+    duplicate_photo_detector_write_job($job, $jobs);
     return duplicate_photo_detector_public_state($job);
 }
 
@@ -902,21 +907,22 @@ function duplicate_photo_detector_missing_state(): array
 }
 
 /**
- * Read one duplicate detector job from the administrator session.
+ * Read one duplicate detector job from the caller's bounded checkpoint map.
  *
  * @param string $token Browser-supplied opaque token.
+ * @param array<string,array<string,mixed>> $jobs Caller-owned checkpoints; a selected expired entry is removed.
  * @return array<string,mixed>|null Detector job, or null when missing/expired.
  */
-function duplicate_photo_detector_read_job(string $token): ?array
+function duplicate_photo_detector_read_job(string $token, array &$jobs): ?array
 {
     $token = preg_replace('/[^A-Fa-f0-9]/', '', $token) ?: '';
-    if ($token === '' || empty($_SESSION['admin_duplicate_photo_detector_jobs'][$token]) || !is_array($_SESSION['admin_duplicate_photo_detector_jobs'][$token])) {
+    if ($token === '' || empty($jobs[$token]) || !is_array($jobs[$token])) {
         return null;
     }
 
-    $job = $_SESSION['admin_duplicate_photo_detector_jobs'][$token];
+    $job = $jobs[$token];
     if (time() - (int) ($job['updated_at'] ?? $job['started_at'] ?? 0) > DUPLICATE_PHOTO_DETECTOR_JOB_TTL_SECONDS) {
-        unset($_SESSION['admin_duplicate_photo_detector_jobs'][$token]);
+        unset($jobs[$token]);
         return null;
     }
 
@@ -924,45 +930,42 @@ function duplicate_photo_detector_read_job(string $token): ?array
 }
 
 /**
- * Persist one duplicate detector job in the administrator session.
+ * Publish one complete detector checkpoint into the caller-owned map.
  *
  * @param array<string,mixed> $job Detector job state.
+ * @param array<string,array<string,mixed>> $jobs Caller-owned map, updated by the normalized token key.
+ * @return void Invalid/empty tokens do not replace any checkpoint.
  */
-function duplicate_photo_detector_write_job(array $job): void
+function duplicate_photo_detector_write_job(array $job, array &$jobs): void
 {
     $token = preg_replace('/[^A-Fa-f0-9]/', '', (string) ($job['token'] ?? '')) ?: '';
     if ($token === '') {
         return;
     }
 
-    if (!isset($_SESSION['admin_duplicate_photo_detector_jobs']) || !is_array($_SESSION['admin_duplicate_photo_detector_jobs'])) {
-        $_SESSION['admin_duplicate_photo_detector_jobs'] = [];
-    }
-    $_SESSION['admin_duplicate_photo_detector_jobs'][$token] = $job;
+    $jobs[$token] = $job;
 }
 
 /**
- * Remove expired and excess duplicate detector jobs from the admin session.
+ * Remove expired and excess checkpoints from one caller's detector map.
+ *
+ * @param array<string,array<string,mixed>> $jobs Caller-owned checkpoints, pruned by reference in newest-first order.
+ * @return void Leaves all live jobs when within the retention cap.
  */
-function duplicate_photo_detector_cleanup_jobs(): void
+function duplicate_photo_detector_cleanup_jobs(array &$jobs): void
 {
-    if (empty($_SESSION['admin_duplicate_photo_detector_jobs']) || !is_array($_SESSION['admin_duplicate_photo_detector_jobs'])) {
-        $_SESSION['admin_duplicate_photo_detector_jobs'] = [];
-        return;
-    }
-
-    foreach ($_SESSION['admin_duplicate_photo_detector_jobs'] as $token => $job) {
+    foreach ($jobs as $token => $job) {
         if (!is_array($job) || time() - (int) ($job['updated_at'] ?? $job['started_at'] ?? 0) > DUPLICATE_PHOTO_DETECTOR_JOB_TTL_SECONDS) {
-            unset($_SESSION['admin_duplicate_photo_detector_jobs'][$token]);
+            unset($jobs[$token]);
         }
     }
 
-    if (count($_SESSION['admin_duplicate_photo_detector_jobs']) <= DUPLICATE_PHOTO_DETECTOR_MAX_SESSION_JOBS) {
+    if (count($jobs) <= DUPLICATE_PHOTO_DETECTOR_MAX_SESSION_JOBS) {
         return;
     }
 
-    uasort($_SESSION['admin_duplicate_photo_detector_jobs'], 'Gallery\\Services\\duplicate_photo_detector_job_recency_compare');
-    $_SESSION['admin_duplicate_photo_detector_jobs'] = array_slice($_SESSION['admin_duplicate_photo_detector_jobs'], 0, DUPLICATE_PHOTO_DETECTOR_MAX_SESSION_JOBS, true);
+    uasort($jobs, 'Gallery\\Services\\duplicate_photo_detector_job_recency_compare');
+    $jobs = array_slice($jobs, 0, DUPLICATE_PHOTO_DETECTOR_MAX_SESSION_JOBS, true);
 }
 
 /**

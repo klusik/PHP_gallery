@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Regression Test
+ * Purpose: Protect gallery download HTTP authorization and response flow.
+ * Responsibilities:
+ *   - Exercise controllers with isolated dependencies and deterministic request inputs.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/gallery_download_controller_test.php

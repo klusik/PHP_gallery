@@ -36,7 +36,11 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+require_once __DIR__ . '/gallery_edit_concurrency.php';
+
 use RuntimeException;
+use const Gallery\Core\MOBILE_WEBDAV_TEMPORARY_PREFIX;
+use const Gallery\Core\MOBILE_WEBDAV_TEMPORARY_PORTABLE_PREFIX;
 use function Gallery\Core\absolute_public_url;
 use function Gallery\Core\base_url;
 use function Gallery\Core\now_sql;
@@ -45,6 +49,11 @@ use function Gallery\Models\mobile_webdav_model_delete_token;
 use function Gallery\Models\mobile_webdav_model_find_active_by_path_token;
 use function Gallery\Models\mobile_webdav_model_mark_used;
 use function Gallery\Models\mobile_webdav_model_tokens;
+
+/** A body-staging failure with a translated, path-free message; HTTP mapping belongs to the controller. */
+final class MobileWebdavBodyException extends RuntimeException
+{
+}
 
 /**
  * Return whether the WebDAV token table is available.
@@ -231,14 +240,111 @@ function mobile_webdav_filename_from_path(string $path): string
 }
 
 /**
+ * Stage a caller-owned body stream and install it through the guarded WebDAV use case.
+ *
+ * Only the freshly allocated file belongs to this request. Ordinary failures
+ * remove that file if its identity still matches; schema refusals retain it for
+ * recovery in the existing OS temporary directory. No caller-supplied path can
+ * authorize cleanup. The caller must close its input stream in finally.
+ *
+ * @param array{id:int|string,gallery_id:int|string} $token Authenticated credential identity and destination.
+ * @param string $targetPath Requested WebDAV resource path, sanitized by the existing filename policy.
+ * @param resource $input Readable request-body stream, already opened by the transport controller.
+ * @return array{filename:string,scanned:int,image_ids:list<int>,renamed:int,rename_warnings:list<string>,rename_failures:list<string>} Existing installation result; never a temporary path.
+ * @throws MobileWebdavBodyException On temporary-storage or body-copy failure, before gallery mutation.
+ * @throws MutationSchemaUnavailableException On schema refusal; a staged body remains available where hosting permits.
+ * @author Rudolf Klusal
+ */
+function mobile_webdav_store_put_stream(array $token, string $targetPath, mixed $input): array
+{
+    if (!is_resource($input) || get_resource_type($input) !== 'stream') {
+        throw new MobileWebdavBodyException(t('mobile_webdav.error_read_body', 'Could not read upload body.'));
+    }
+    $temporaryDirectory = realpath(sys_get_temp_dir());
+    $temporaryPath = $temporaryDirectory === false ? false : @tempnam($temporaryDirectory, MOBILE_WEBDAV_TEMPORARY_PREFIX);
+    if (!is_string($temporaryPath)
+        || realpath(dirname($temporaryPath)) !== $temporaryDirectory
+        // Windows tempnam() keeps only the first three prefix characters.
+        || !str_starts_with(basename($temporaryPath), MOBILE_WEBDAV_TEMPORARY_PORTABLE_PREFIX)
+        || is_link($temporaryPath)
+        || !is_file($temporaryPath)
+    ) {
+        throw new MobileWebdavBodyException(t('mobile_webdav.error_temp_file', 'Could not create temporary upload file.'));
+    }
+    $identity = @lstat($temporaryPath);
+    if (!is_array($identity)) {
+        // Unverified ownership cannot authorize deletion, even on staging failure.
+        throw new MobileWebdavBodyException(t('mobile_webdav.error_temp_file', 'Could not create temporary upload file.'));
+    }
+    $output = null;
+    $retainBody = false;
+    try {
+        $output = @fopen($temporaryPath, 'r+b');
+        if (!is_resource($output)) {
+            throw new MobileWebdavBodyException(t('mobile_webdav.error_read_body', 'Could not read upload body.'));
+        }
+        $openedIdentity = fstat($output);
+        if (!is_array($openedIdentity) || $openedIdentity['dev'] !== $identity['dev'] || $openedIdentity['ino'] !== $identity['ino']) {
+            throw new MobileWebdavBodyException(t('mobile_webdav.error_read_body', 'Could not read upload body.'));
+        }
+        $copied = @stream_copy_to_stream($input, $output);
+        if ($copied === false || !feof($input) || !@fflush($output)) {
+            throw new MobileWebdavBodyException(t('mobile_webdav.error_read_body', 'Could not read upload body.'));
+        }
+        fclose($output);
+        $output = null;
+        return mobile_webdav_store_put($token, mobile_webdav_filename_from_path($targetPath), $temporaryPath);
+    } catch (MutationSchemaUnavailableException $exception) {
+        // Both missing and unknown schema are recoverable refusals, not bad input.
+        $retainBody = true;
+        throw $exception;
+    } finally {
+        if (is_resource($output)) {
+            fclose($output);
+        }
+        if (!$retainBody) {
+            clearstatcache(true, $temporaryPath);
+            $currentIdentity = @lstat($temporaryPath);
+            if (is_array($currentIdentity) && !is_link($temporaryPath) && is_file($temporaryPath)
+                && $currentIdentity['dev'] === $identity['dev'] && $currentIdentity['ino'] === $identity['ino']
+            ) {
+                @unlink($temporaryPath);
+            }
+        }
+    }
+}
+
+/**
  * Store one WebDAV PUT body into the token destination gallery.
  *
- * @param array $token Token value.
- * @param string $filename Filename value.
- * @param string $sourcePath Source filesystem path.
- * @return array Structured result data for the caller.
+ * @param array{id:int|string,gallery_id:int|string} $token Authenticated credential identity and destination, never a raw token.
+ * @param string $filename Requested original filename.
+ * @param string $sourcePath Temporary request-body file consumed on successful installation.
+ * @return array{filename:string,scanned:int,image_ids:list<int>,renamed:int,rename_warnings:list<string>,rename_failures:list<string>} Stored name and registration/rename outcomes.
  */
 function mobile_webdav_store_put(array $token, string $filename, string $sourcePath): array
+{
+    $writerLock = gallery_edit_writer_begin();
+    try {
+        return mobile_webdav_store_put_owned($token, $filename, $sourcePath);
+    } finally {
+        gallery_edit_writer_end($writerLock);
+    }
+}
+
+/**
+ * Install a WebDAV original and refresh its destination gallery.
+ *
+ * Internal implementation: enter through mobile_webdav_store_put() so
+ * reads, early returns and failure cleanup remain inside the same writer lease.
+ *
+ * @param array{id:int|string,gallery_id:int|string} $token Authenticated credential identity and destination; no credential material is serialized.
+ * @param string $filename Requested original filename.
+ * @param string $sourcePath Temporary source asset path.
+ * @return array{filename:string,scanned:int,image_ids:list<int>,renamed:int,rename_warnings:list<string>,rename_failures:list<string>} Stored name and registration/rename outcomes.
+ * @author Rudolf Klusal
+ */
+function mobile_webdav_store_put_owned(array $token, string $filename, string $sourcePath): array
 {
     mutation_schema_assert_available(
         mobile_webdav_schema_status(),
@@ -263,7 +369,7 @@ function mobile_webdav_store_put(array $token, string $filename, string $sourceP
     if ($info === false || empty($info['mime']) || !str_starts_with((string) $info['mime'], 'image/')) {
         throw new RuntimeException(t('upload.error.invalid_image', 'One uploaded file is not a valid image.'));
     }
-    $gallery = find_gallery((int) $token['gallery_id']);
+    $gallery = find_gallery((int) $token['gallery_id'], true);
     if (!$gallery) {
         throw new RuntimeException(t('gallery.error.not_found', 'Gallery not found.'));
     }

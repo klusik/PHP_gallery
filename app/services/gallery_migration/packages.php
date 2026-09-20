@@ -243,9 +243,9 @@ function gallery_migration_job_package(array $job, string $packageId): ?array
  * Build a store-only ZIP package from authorized source assets.
  *
  * @param int $rootGalleryId API-key authorized root gallery.
- * @param array $assets Asset descriptors requested by the receiver.
- * @param bool $includeSubgalleries Include descendants value.
- * @return string Temporary ZIP path.
+ * @param list<array<string,mixed>> $assets Protocol asset descriptors, validated by asset key/source authorization; optional file_size and checksum_sha256 constrain source identity.
+ * @param bool $includeSubgalleries Whether authorized source lookup may include descendants of the root.
+ * @return string Request-owned temporary ZIP path; release through gallery_migration_release_temporary_file() after transfer.
  */
 function gallery_migration_build_package_file(int $rootGalleryId, array $assets, bool $includeSubgalleries): string
 {
@@ -256,16 +256,12 @@ function gallery_migration_build_package_file(int $rootGalleryId, array $assets,
         throw new RuntimeException(gallery_migration_t('gallery_migration.error.package_invalid', 'Migration ZIP package request is invalid.'));
     }
 
-    $tmp = tempnam(sys_get_temp_dir(), 'php_gallery_migration_zip_');
-    if ($tmp === false) {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.temp_failed', 'Could not create a temporary migration file.'));
-    }
-    $zipPath = $tmp . '.zip';
-    @unlink($tmp);
+    // ZipArchive accepts the reserved temporary name; do not unlink it merely to append an extension.
+    $zipPath = gallery_migration_allocate_temporary_file('source_package');
 
     $zip = new ZipArchive();
     if ($zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
-        @unlink($zipPath);
+        gallery_migration_release_temporary_file($zipPath);
         throw new RuntimeException(gallery_migration_t('gallery_migration.error.package_create_failed', 'Could not create migration ZIP package.'));
     }
 
@@ -300,12 +296,12 @@ function gallery_migration_build_package_file(int $rootGalleryId, array $assets,
         }
     } catch (Throwable $exception) {
         $zip->close();
-        @unlink($zipPath);
+        gallery_migration_release_temporary_file($zipPath);
         throw $exception;
     }
 
     if (!$zip->close()) {
-        @unlink($zipPath);
+        gallery_migration_release_temporary_file($zipPath);
         throw new RuntimeException(gallery_migration_t('gallery_migration.error.package_create_failed', 'Could not create migration ZIP package.'));
     }
 
@@ -347,6 +343,29 @@ function gallery_migration_package_assets_from_json(string $json): array
  * @return array<string,mixed> Package installation result.
  */
 function gallery_migration_install_package_file(string $jobId, int $targetGalleryId, string $packageId, string $zipPath): array
+{
+    $writerLock = gallery_edit_writer_begin();
+    try {
+        return gallery_migration_install_package_file_owned($jobId, $targetGalleryId, $packageId, $zipPath);
+    } finally {
+        gallery_edit_writer_end($writerLock);
+    }
+}
+
+/**
+ * Install a migration package and persist received-asset progress.
+ *
+ * Internal implementation: enter through gallery_migration_install_package_file() so
+ * reads, early returns and failure cleanup remain inside the same writer lease.
+ *
+ * @param string $jobId Resumable migration job identifier.
+ * @param int $targetGalleryId Receiving parent gallery identifier.
+ * @param string $packageId Manifest package identifier.
+ * @param string $zipPath Received package path.
+ * @return array{ok:bool,job_id:string,package_id:string,asset_keys:list<string>,received:int,total_assets:int} Accepted asset keys and current durable receipt totals for the package's job.
+ * @author Rudolf Klusal
+ */
+function gallery_migration_install_package_file_owned(string $jobId, int $targetGalleryId, string $packageId, string $zipPath): array
 {
     if (!class_exists(ZipArchive::class)) {
         throw new RuntimeException(gallery_migration_t('gallery_migration.error.zip_unavailable', 'PHP ZipArchive is required for gallery migration ZIP packages.'));

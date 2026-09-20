@@ -2,6 +2,8 @@
 
 /**
  * Project: PHP Gallery
+ * Responsibilities:
+ *   - Keep restored installation bootstrap and credentials outside the CLI workflow.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: scripts/recovery.php

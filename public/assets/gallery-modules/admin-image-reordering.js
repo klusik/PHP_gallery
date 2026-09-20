@@ -32,6 +32,7 @@
 
 import { createTableDragGhost, createTableDragPlaceholder, moveTableDragGhostY } from './admin-table-drag-ghost.js?v=20260519-drag-ghost-v1';
 import { i18n } from './admin-core.js?v=20260512-modular-admin-v1';
+import {captureAdminPanelOwner} from './admin-panel-lifecycle.js?v=20260920-panel-lifecycle-v1';
 
 /**
  * Enables visible pointer ordering for the Admin edit-gallery image table.
@@ -278,10 +279,14 @@ export function setupAdminImageReordering() {
         }
     }
 
-        /**
+    /**
      * Sends the current row order to PHP and persists sort_order in the database.
+     * Capture the originating drawer before network work so completion cannot own a later editor.
+     *
+     * @return {Promise<void>} Resolves after the existing save/completion event or error status.
      */
     async function saveOrder() {
+        const panelOwner = captureAdminPanelOwner(form.closest('[data-admin-side-panel]'));
         if (saveController) {
             saveController.abort();
         }
@@ -313,6 +318,7 @@ export function setupAdminImageReordering() {
                 detail: {
                     galleryId: galleryInput.value,
                     result,
+                    panelOwner,
                 },
             }));
         } catch (error) {

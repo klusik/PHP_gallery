@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Database Migration
+ * Purpose: Add explicit root, physical-child and unlisted Smart Gallery placement.
+ * Responsibilities:
+ *   - Persist the placement choices used by public gallery navigation.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: database/migrations/202608140002_smart_gallery_placement.php

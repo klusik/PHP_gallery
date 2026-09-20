@@ -28,7 +28,7 @@
  *   - Path note: this file lives one directory deeper than the module entry file,
  *     so project-root paths must use dirname(__DIR__, 3), not dirname(__DIR__, 2).
  *   - Loaded by app/services/admin_gallery_report.php; do not require this file directly.
- *   - Shared constants for this module live in app/services/admin_gallery_report.php.
+ *   - The module entry point loads immutable Core policy; consuming parts import their required definitions.
  *   - Keep comments and docstrings intact when modifying this file.
  *
  * Last Updated:

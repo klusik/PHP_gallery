@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Regression Test
+ * Purpose: Verify Smart Gallery rule validation and compilation.
+ * Responsibilities:
+ *   - Check allowlisted predicates and safe parameterized query construction.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/smart_gallery_rules_test.php

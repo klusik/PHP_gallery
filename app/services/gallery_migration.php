@@ -41,6 +41,9 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+require_once dirname(__DIR__) . '/policy_constants.php';
+require_once __DIR__ . '/gallery_edit_concurrency.php';
+
 const GALLERY_MIGRATION_PROTOCOL_VERSION = 2;
 const GALLERY_MIGRATION_TIMEOUT_SECONDS = 45;
 const GALLERY_MIGRATION_RECONNECT_SECONDS = 30;
@@ -50,6 +53,8 @@ const GALLERY_MIGRATION_PACKAGE_MAX_ASSETS = 2048;
 // Shared constants stay above so every part resolves them in this namespace.
 // Protocol compatibility, timeouts, and instance identity.
 require_once __DIR__ . '/gallery_migration/versions.php';
+// Request-owned transfer staging and cleanup; never accepts a browser-selected deletion path.
+require_once __DIR__ . '/gallery_migration/temporary_files.php';
 // Resumable job identity, persistence, and status reporting.
 require_once __DIR__ . '/gallery_migration/jobs.php';
 // Gallery and image metadata serialization.

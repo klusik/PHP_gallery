@@ -1,5 +1,9 @@
 /**
  * Project: PHP Gallery
+ * Module Type: Stylesheet
+ * Purpose: Style Admin media tools and thumbnail/NSFW overlays.
+ * Responsibilities:
+ *   - Keep editing controls and maintenance feedback visible on media surfaces.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: public/assets/styles/admin-media-tools.css

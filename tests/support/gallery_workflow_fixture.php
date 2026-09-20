@@ -1,6 +1,12 @@
 <?php
 /**
  * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ * File: tests/support/gallery_workflow_fixture.php
+ * Module Type: Test Fixture
+ * Purpose: Own disposable workflow database and application-copy lifecycle.
+ * Responsibilities:
+ *   - Create and clean only explicitly isolated fixture resources.
  * Author: Rudolf Klusal
  * Own the lifecycle of a disposable database and application copy.
  */

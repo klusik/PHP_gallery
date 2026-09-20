@@ -1,5 +1,9 @@
 ﻿/**
  * Project: PHP Gallery
+ * Module Type: Stylesheet
+ * Purpose: Provide shared utility and public Admin reordering styles.
+ * Responsibilities:
+ *   - Support reusable display helpers and visible-page card ordering feedback.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: public/assets/styles/utilities.css

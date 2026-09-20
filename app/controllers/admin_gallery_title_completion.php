@@ -2,6 +2,9 @@
 
 /**
  * Project: PHP Gallery
+ * Purpose: Provide administrator-only title completion for create-gallery forms.
+ * Responsibilities:
+ *   - Validate HTTP inputs and frame JSON while delegating matching and SQL.
  * Repository: https://github.com/klusik/PHP_gallery
  * File: app/controllers/admin_gallery_title_completion.php
  * Module Type: Controller

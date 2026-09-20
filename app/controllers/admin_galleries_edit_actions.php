@@ -36,6 +36,16 @@ declare(strict_types=1);
 
 namespace Gallery\Controllers;
 
+require_once dirname(__DIR__) . '/services/gallery_edit_concurrency.php';
+
+use Gallery\Services\GalleryEditConflict;
+use Gallery\Services\GalleryEditUnavailable;
+use function Gallery\Services\gallery_edit_begin;
+use function Gallery\Services\gallery_edit_end;
+use function Gallery\Services\gallery_edit_review_draft;
+use function Gallery\Services\gallery_edit_revision;
+use function Gallery\Services\smart_gallery_assign_children_to_gallery;
+use function Gallery\Services\smart_gallery_validate_children_assignment;
 use RuntimeException;
 use Throwable;
 use const Gallery\Services\CMS_PAGINATION_DEFAULT_COLUMNS;
@@ -313,10 +323,12 @@ function admin_return_tab_from_post(string $fallback = ''): string
 /**
  * Build the JSON payload consumed after a gallery is saved in side-panel mode.
  *
- * @param array $gallery Gallery row or gallery data.
- * @param string $notice Notice value.
- * @param string $returnTab Return tab value.
- * @return array Structured result data for the caller.
+ * @param array<string,mixed> $gallery Freshly persisted gallery row, including its exact edit_revision.
+ * @param string $notice Translated save outcome displayed by the originating panel.
+ * @param string $returnTab Validated editor tab retained by the refresh URL.
+ * @param array{original_gallery?:array<string,mixed>,old_parent_id?:int,original_gallery_url?:string} $saveResult Pre-save identity used to invalidate the old route and parent context.
+ * @return array<string,mixed> Canonical mutation envelope plus public identity fields and decimal edit_revision; no credential columns are serialized.
+ * @author Rudolf Klusal
  */
 function admin_edit_gallery_success_response(array $gallery, string $notice, string $returnTab, array $saveResult = []): array
 {
@@ -422,6 +434,8 @@ function admin_edit_gallery_success_response(array $gallery, string $notice, str
         'type' => 'gallery',
         'gallery_id' => $galleryId,
         'gallery_title' => (string) ($gallery['title'] ?? ''),
+        // Advance only the originating form from this persisted row, before awaiting refresh.
+        'edit_revision' => gallery_edit_revision($gallery),
         'gallery_url' => $galleryUrl,
         'edit_url' => $editUrl,
         'refresh_url' => $galleryUrl,
@@ -737,15 +751,46 @@ function admin_gallery_checkbox_input(array $input, string $key, bool $defaultWh
 /**
  * Persist gallery edits through the shared admin edit implementation.
  *
- * @param array $gallery Gallery row or gallery data.
- * @param array $input Input value.
- * @param array $files Files value.
- * @param string $returnTab Return tab value.
- * @param bool $completeForm Complete form value.
- * @return array Structured result data for the caller.
+ * @param array<string,mixed> $gallery Request snapshot identifying the gallery; replaced by the reserved row before writing.
+ * @param array<string,mixed> $input Submitted editor fields, including edit_revision for complete forms.
+ * @param array<string,array<string,mixed>> $files PHP upload descriptors indexed by editor asset field.
+ * @param string $returnTab Validated editor tab retained after saving.
+ * @param bool $completeForm True for full-form checkbox semantics and mandatory submitted revision.
+ * @return array{gallery:array<string,mixed>,notice:string,return_tab:string,moved:bool,original_gallery:array<string,mixed>,original_gallery_url:string,old_parent_id:int} Persisted row and before/after identity for completion.
+ * @author Rudolf Klusal
  */
 function admin_save_gallery_from_input(array $gallery, array $input, array $files, string $returnTab, bool $completeForm = true): array
 {
+    $lease = gallery_edit_begin($gallery, $input['edit_revision'] ?? null, $completeForm);
+    try {
+        // Ownership spans folder/assets, dependent writes and the final sidecar.
+        return admin_save_gallery_owned_input($lease['gallery'], $input, $files, $returnTab, $completeForm);
+    } finally {
+        gallery_edit_end($lease);
+    }
+}
+
+/**
+ * Apply the authenticated request after the service reserved its edit revision.
+ *
+ * @param array<string,mixed> $gallery Current row returned by the reservation.
+ * @param array<string,mixed> $input Submitted transport fields.
+ * @param array<string,mixed> $files PHP upload descriptors.
+ * @param string $returnTab Validated editor tab.
+ * @param bool $completeForm True for the full editor, false for a partial action.
+ * @return array<string,mixed> Save details; caller retains ownership until return.
+ */
+function admin_save_gallery_owned_input(array $gallery, array $input, array $files, string $returnTab, bool $completeForm): array
+{
+    $smartGalleriesEnabled = !function_exists('Gallery\\Services\\feature_capability_effective_enabled')
+        || feature_capability_effective_enabled('smart_galleries');
+    $smartGalleryChildrenInput = (array) ($input['smart_gallery_children'] ?? []);
+    $updateSmartChildren = $completeForm && $smartGalleriesEnabled && isset($input['smart_gallery_children_present']);
+    if ($updateSmartChildren) {
+        $proposedSmartGalleryParentId = (int) ($input['parent_id'] ?? 0);
+        if ($proposedSmartGalleryParentId > 0 && !find_gallery($proposedSmartGalleryParentId)) $proposedSmartGalleryParentId = 0;
+        smart_gallery_validate_children_assignment((int) $gallery['id'], $smartGalleryChildrenInput, $proposedSmartGalleryParentId > 0 ? $proposedSmartGalleryParentId : null, true);
+    }
     $shouldUpdateLocalization = content_localization_enabled()
         && (array_key_exists('content_language', $input) || array_key_exists('translations', $input));
     if ($shouldUpdateLocalization && !content_localization_schema_ready('gallery')) {
@@ -1173,6 +1218,9 @@ function admin_save_gallery_from_input(array $gallery, array $input, array $file
     if ($completeForm || array_key_exists('tags', $input)) {
         sync_entity_tags('gallery', $galleryId, (string) ($input['tags'] ?? ''));
     }
+    if ($updateSmartChildren) {
+        smart_gallery_assign_children_to_gallery($galleryId, $smartGalleryChildrenInput);
+    }
     // Variable $gallery stores this steps working value.
     $gallery = find_gallery($galleryId, true) ?: $gallery;
     if ($gallery) {
@@ -1213,6 +1261,50 @@ function admin_save_gallery_from_input(array $gallery, array $input, array $file
         'original_gallery_url' => $originalGalleryUrl,
         'old_parent_id' => $oldParentId,
     ];
+}
+
+/**
+ * Return a typed edit refusal without redirecting or replacing an entered browser draft.
+ *
+ * @param GalleryEditConflict|GalleryEditUnavailable $exception Bounded domain refusal.
+ * @param int $galleryId Authorized gallery identity.
+ * @param string $returnTab Validated editor tab.
+ * @param array<string,mixed> $input Original input, projected before no-JavaScript rendering.
+ * @return void
+ */
+function admin_gallery_edit_conflict_response(GalleryEditConflict|GalleryEditUnavailable $exception, int $galleryId, string $returnTab, array $input): void
+{
+    $conflict = $exception instanceof GalleryEditConflict;
+    http_response_code($conflict ? 409 : 503);
+    header('Cache-Control: private, no-store');
+    $reloadUrl = admin_edit_gallery_tab_url($galleryId, $returnTab);
+    $latest = $conflict ? $exception->latest : [];
+    if (admin_wants_json()) {
+        header('Content-Type: application/json; charset=utf-8');
+        $payload = admin_mutation_error_envelope($exception->getMessage(), $conflict ? 'gallery_edit_conflict' : 'gallery_edit_unavailable');
+        $payload['conflict'] = [
+            'gallery_id' => $galleryId,
+            'busy' => $conflict && $exception->busy,
+            'latest' => $latest,
+            'reload_url' => $reloadUrl,
+        ];
+        echo json_encode($payload, JSON_THROW_ON_ERROR);
+        return;
+    }
+    \Gallery\Core\render_header(t('admin.gallery_editor.edit_review_title', 'Review gallery changes'));
+    \Gallery\Views\view_render_admin_gallery_edit_conflict([
+        'message' => $exception->getMessage(),
+        'reload_url' => $reloadUrl,
+        'latest' => $latest,
+        'draft' => gallery_edit_review_draft($input),
+        'labels' => [
+            'draft' => t('admin.gallery_editor.edit_review_draft', 'Your entered values'),
+            'latest' => t('admin.gallery_editor.edit_review_latest', 'Latest stored values'),
+            'open' => t('admin.gallery_editor.edit_review_open', 'Open the latest editor in a new tab'),
+            'help' => t('admin.gallery_editor.edit_review_help', 'Keep this page while reviewing the latest editor. Copy the changes you still want. Re-enter passwords and reselect uploads; they are not included below. Access settings are never merged automatically.'),
+        ],
+    ]);
+    \Gallery\Core\render_footer();
 }
 
 /**

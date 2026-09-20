@@ -1,6 +1,12 @@
 <?php
 /**
  * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ * File: tests/gallery_workflow_safety_test.php
+ * Module Type: Regression Test
+ * Purpose: Verify disposable-workflow ownership and opt-in guards.
+ * Responsibilities:
+ *   - Reject unsafe fixture configurations before any database connection.
  * Author: Rudolf Klusal
  * Execute disposable-fixture guards without opening a database connection.
  */
@@ -63,9 +69,9 @@ check(!is_dir($directory), 'Owned fixture cleanup incomplete.');
 $runnerSource = (string) file_get_contents(dirname(__DIR__) . '/scripts/gallery_workflow_run.php');
 $mysqlSource = (string) file_get_contents(dirname(__DIR__) . '/scripts/gallery_workflow_mysql.php');
 foreach ([$runnerSource, $mysqlSource] as $source) {
-    check(str_contains($source, "['--development', '--audit', '--release']"), 'Explicit release mode missing.');
+    check(str_contains($source, "['--development', '--quick', '--audit', '--release']"), 'Explicit central profile modes missing.');
 }
-check(str_contains($runnerSource, "\$profile = \$argv[1] === '--release' ? 'release' : 'full';"),
+check(str_contains($runnerSource, "'--release' => 'release'") && str_contains($runnerSource, "'--quick' => 'quick'"),
     'Release mode must select release without a preceding full audit.');
 check(str_contains($runnerSource, "'--profile=' . \$profile"),
     'Selected profile must flow to the authoritative audit.');

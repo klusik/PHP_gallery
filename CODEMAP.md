@@ -6,7 +6,7 @@ This file maps features to source files. It is optimized for fast maintenance an
 
 1. Find the feature area below.
 2. Open the listed controller first when the change is request/response related.
-3. Open the listed service first when the change is business logic`app/services/browser_uploads/`, `app/services/gallery_migration/`, `app/services/updates_jobs/`, `app/controllers/admin_galleries_edit_page/`storage, validation or shared behavior.
+3. Open the listed service first when the change is business logic, storage, validation or shared behavior.
 4. Open the listed migration only to understand schema history. Add a new migration for changes.
 5. Open public assets only for browser-side behavior or styling.
 
@@ -41,14 +41,26 @@ Repository enforcement lives in `scripts/check_mvc_boundaries.php`, with `script
 | Bootstrap coordinator and version constants | `app/bootstrap.php` |
 | Pre-bootstrap fatal handling and updater activation gate | `app/early_runtime.php`, `public/index.php`, `install.php` |
 | Configuration bootstrap | `app/bootstrap/configuration.php`, `app/configuration_defaults.php` for merged local config and centralized operational runtime-limit defaults |
+| Immutable runtime policy | `app/policy_constants.php`; documented protocol/security/format invariants, never administrator-editable defaults |
+| Gallery catalog preservation | `app/services/gallery_creation_safety.php` and `gallery_sidecars.php`; semantic ownership lookup in `app/models/galleries.php` |
+| Durable image moves | `app/services/gallery_image_move_journal.php`, `app/models/gallery_image_move_journal.php`, `scripts/reconcile_image_moves.php` |
+| Gallery edit concurrency | `app/services/gallery_edit_concurrency.php` and its model; ordinary revision-column migration, explicit model revision writes, editor response and writer-lock contracts |
+| Replay-safe Admin operations | `app/services/admin_operation_keys.php` and its model; actor/payload-bound creation/classic-upload completion ledger |
+| Bounded gallery destination search | `gallery_picker.php` service, `gallery_picker_search.php` model, `admin_gallery_picker_search.php` controller, existing picker asset |
+| Source ownership/documentation inventory | `scripts/source_contracts/`, `check_source_documentation.php`, `check_policy_constants.php`; central audit records whole-tree debt separately from strict changed-declaration and bounded changed-runtime-policy gates |
 | Request and security-header lifecycle | `app/bootstrap/request.php` |
 | Session lifecycle | `app/bootstrap/session.php` |
+| Caller-owned domain session state | Discovery controller/service job map; OAuth controller/service state map; report controller/service checkpoint; duplicate-detector controller/service job map; Viewer controller/anti-automation private ticket context. Services receive explicit context and do not select session compartments. |
+| Setup marker storage | `app/security.php` compatibility facades delegate to `app/services/auth_accounts.php`; setup readiness combines the configuration file and installed marker. |
+| Migration transfer-file lifetime | `app/services/gallery_migration/temporary_files.php` via its module entry; only request-allocated transfers can be released. |
+| WebDAV input staging | `app/controllers/mobile_webdav.php` opens/closes the request stream; `mobile_webdav_store_put_stream()` in the existing service allocates, copies and cleans up only its own temporary body, retaining staged bytes on late schema refusal. |
+| Complete-report operational limits | `app/policy_constants.php` supplies report batch ceilings, telemetry windows and bounded section rows; browser policy lives in `admin-interaction-policy.js` and does not override server batch defaults. |
 | Public-path and query routing | `app/bootstrap/routing.php` |
 | Scheduled-maintenance request hooks | `app/bootstrap/maintenance.php` |
 | Route table and controller dispatch | `app/bootstrap/dispatch.php` |
 | Controller loader | `app/controllers.php` |
 | Service loader | `app/services.php` |
-| Split modules | `app/services/admin_gallery_report/`, `app/services/admin_test_runs/`, `app/services/admin_test_run_analysis/`, `app/services/browser_uploads/`, `app/services/gallery_migration/`, `app/services/updates_jobs/`, `app/controllers/admin_galleries_edit_page/` hold the part files of the module named by their directory; the same-named `.php` file beside each directory stays the entry point and keeps the shared constants and the `require_once` list. See "Split Modules" in `ARCHITECTURE.md`. |
+| Split modules | `app/services/admin_dashboard/`, `app/services/admin_operation_keys/`, `app/services/admin_gallery_report/`, `app/services/admin_test_runs/`, `app/services/admin_test_run_analysis/`, `app/services/browser_uploads/`, `app/services/gallery_migration/`, `app/services/updates_jobs/`, `app/controllers/admin_galleries_edit_page/` hold the part files of the module named by their directory; the same-named `.php` file beside each directory stays the entry point, loads shared immutable Core policy where required and owns the ordered `require_once` list. See "Split Modules" in `ARCHITECTURE.md`. |
 | Whole-module source reading for contract tests | `tests/support/module_source.php`, `contract_file()` in `scripts/check_admin_mutation_contracts.php` |
 | View loader | `app/views.php` |
 | Database connection | `app/database.php` |

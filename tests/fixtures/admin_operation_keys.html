@@ -1,0 +1,352 @@
+<!doctype html>
+<!--
+Project: PHP Gallery
+Repository: https://github.com/klusik/PHP_gallery
+File: tests/fixtures/admin_operation_keys.html
+Module Type: Browser Test Fixture
+Purpose: Exercise actual create/classic/prepared client requests against synthetic replay responses.
+Responsibilities:
+  - Keep all data, generated images and lost-response injection within one disposable browser.
+Author: Rudolf Klusal
+License: MIT
+-->
+<html lang="en"><meta charset="utf-8"><title>Disposable operation-key fixture</title>
+<main><h1>Operation-key fixture</h1></main>
+<section data-admin-side-panel data-admin-side-panel-workflow="create">
+    <p data-admin-side-panel-status></p><div data-admin-side-panel-body></div>
+</section>
+<pre id="results">BROWSER PENDING</pre>
+<script type="module">
+import {setupGalleryUploadProgress, setupAdminGallerySidePanel} from '/public/assets/gallery-modules/admin-side-panel.js';
+import {allowAdminOperationTransition, adminOperationIsRunning} from '/public/assets/gallery-modules/admin-operation-keys.js?v=20260920-operation-keys-v1';
+import {adminPanelHasUnsavedText} from '/public/assets/gallery-modules/admin-panel-drafts.js?v=20260920-operation-keys-v1';
+
+/** Original native fetch is used only for confined fixture/module assets. */
+const nativeFetch = window.fetch.bind(window);
+/** Synthetic durable replay ledger: never an application/database connection. */
+const ledger = new Map();
+/** Synthetic request records contain only disposable fixture values. */
+const records = [];
+/** Configured lost acknowledgments after the synthetic ledger has committed. */
+let fault = null;
+/** Release callback for one explicitly delayed synthetic acknowledgment. */
+let releaseHeld = null;
+let nextGallery = 20;
+let nextImage = 200;
+let assertions = 0;
+let completions = 0;
+const originalUrl = location.href;
+const panel = document.querySelector('[data-admin-side-panel]');
+
+/**
+ * Record one concrete browser invariant without printing request bodies/keys.
+ * @param {boolean} condition Expected invariant.
+ * @param {string} message Bounded fixture-only assertion description.
+ * @return {void} Throws on failure.
+ */
+function check(condition, message) {
+    assertions++;
+    if (!condition) throw new Error(message);
+}
+
+/**
+ * Wait for a bounded browser predicate rather than assuming network timing.
+ * @param {function(): boolean} predicate Observable completion predicate.
+ * @return {Promise<void>} Resolves or fails within the fixture deadline.
+ */
+async function until(predicate) {
+    const deadline = Date.now() + 10000;
+    while (!predicate()) {
+        if (Date.now() > deadline) throw new Error('Fixture predicate timed out');
+        await new Promise(/** Yield before rechecking a bounded browser predicate. @param {function(): void} resolve Continue the fixture wait. @return {number} Browser timer ID ignored by the executor. */ resolve => setTimeout(resolve, 15));
+    }
+}
+
+/**
+ * Model payload-bound replay using actual multipart bytes, never filename deduplication.
+ * @param {FormData} body Production-generated multipart request.
+ * @param {string} endpoint Confined synthetic endpoint.
+ * @return {Promise<{status: number, result: Object}>} Synthetic canonical HTTP response.
+ */
+async function respond(body, endpoint) {
+    const prepared = endpoint === '/fixture-prepared';
+    const key = prepared ? `${body.get('upload_session_id')}:${body.get('batch_index')}` : body.get('operation_key');
+    const files = [];
+    const values = [];
+    for (const [name, value] of body) {
+        if (['csrf_token', 'operation_key', 'ajax', 'panel'].includes(name)) continue;
+        if (value instanceof File) {
+            const digest = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', await value.arrayBuffer())), /** Encode one disposable file-digest byte for exact payload comparison. @param {number} byte Digest byte. @return {string} Two hexadecimal characters. */ byte => byte.toString(16).padStart(2, '0')).join('');
+            files.push(value.name);
+            values.push([name, value.name, value.size, digest]);
+        } else values.push([name, value]);
+    }
+    const fingerprint = JSON.stringify(values);
+    records.push({key, endpoint, files, fingerprint, csrf: body.get('csrf_token'), mode: body.get('upload_mode'), gallery: body.get('gallery_id'), operationKey: body.get('operation_key')});
+    if (!prepared && !/^[a-f0-9]{64}$/.test(key || '')) return {status: 409, result: {ok: false, error: 'operation_key_required'}};
+    if (fault?.status && fault.remaining > 0 && fault.endpoint === endpoint) {
+        fault.remaining--;
+        return {status: fault.status, result: {ok: false, error: 'Fixture authentication or busy refusal'}};
+    }
+    const prior = ledger.get(key);
+    if (prior && prior.fingerprint !== fingerprint) return {status: 409, result: {ok: false, error: 'operation_payload_conflict'}};
+    let result = prior?.result;
+    if (!result) {
+        const created = endpoint === '/fixture-create' || body.get('upload_mode') === 'new';
+        const gallery = created ? ++nextGallery : Number(body.get('gallery_id'));
+        const images = files.length ? [++nextImage] : [];
+        result = {ok: true, message: 'Fixture success', mutation: {type: created ? 'gallery.create_with_upload' : 'image.upload', entity: created ? 'gallery' : 'image', action: created ? 'create' : 'upload', entity_ids: created ? [gallery] : images},
+            contexts: [], panel: null, fallback: {}, gallery_id: gallery, created_gallery: created, image_ids: images, uploaded: images.length, scanned: images.length, thumbnails: 0};
+        ledger.set(key, {fingerprint, result});
+    }
+    if (fault && fault.remaining > 0 && fault.endpoint === endpoint && (!fault.file || files.includes(fault.file))) {
+        fault.remaining--;
+        if (fault.hold) await new Promise(/** Hold only the configured synthetic acknowledgment. @param {function(): void} resolve Release this response when the fixture requests it. @return {void} Stores the bounded release callback. */ resolve => { releaseHeld = resolve; });
+        else if (fault.incomplete) return {status: 200, result: {ok: true}};
+        else throw new Error('Fixture lost acknowledgment after commit');
+    }
+    return {status: 200, result};
+}
+
+/**
+ * Intercept synthetic operation endpoints while leaving confined asset fetches native.
+ * @param {string|URL} input Fixture request URL.
+ * @param {RequestInit} options Production fetch options, including its current multipart body.
+ * @return {Promise<Response>} Payload-bound synthetic response or native fixture asset response.
+ */
+async function fetchOperationFixture(input, options = {}) {
+    const url = new URL(String(input), location.href);
+    if (!url.pathname.startsWith('/fixture-')) return nativeFetch(input, options);
+    const response = await respond(options.body, url.pathname);
+    return new Response(JSON.stringify(response.result), {status: response.status, headers: {'Content-Type': 'application/json'}});
+}
+window.fetch = fetchOperationFixture;
+
+/**
+ * Production classic/prepared XHR surface with deterministic lost acknowledgments.
+ * Each instance owns one synthetic request and its event targets; it never reaches a live endpoint.
+ * @property {EventTarget} upload Request-local upload progress event target.
+ * @property {string} endpoint Confined endpoint pathname, assigned by open().
+ * @property {number} status Synthetic HTTP status, assigned before the load event.
+ * @property {string} responseText Synthetic response JSON, assigned before the load event.
+ */
+class FixtureXHR extends EventTarget {
+    /** Initialize fresh isolated request and upload event targets. @return {FixtureXHR} Newly constructed synthetic XHR. */
+    constructor() { super(); this.upload = new EventTarget(); }
+    /** Capture the confined target without opening a real connection. @param {string} method HTTP method. @param {string} url Confined endpoint. @return {void} Stores only the endpoint pathname. */
+    open(method, url) { this.endpoint = new URL(url, location.href).pathname; }
+    /** Accept the production header API without granting synthetic authorization. @param {string} name Header name. @param {string} value Header value. @return {void} No credentials are persisted by the fixture. */
+    setRequestHeader(name, value) { /* Fixture server does not authorize from headers. */ }
+    /** Expose the response format consumed by production JSON parsing. @param {string} name Requested header name. @return {string} Synthetic JSON content type. */
+    getResponseHeader(name) { return 'application/json'; }
+    /** Deliver one deterministic response or injected transport error. @param {FormData} body Actual browser multipart. @return {void} Starts only the synthetic ledger request. */
+    send(body) {
+        respond(body, this.endpoint).then(/** Publish the committed synthetic result through the XHR load contract. @param {Awaited<ReturnType<typeof respond>>} response Synthetic HTTP status and canonical body. @return {void} Assigns response fields before dispatch. */ response => {
+            this.status = response.status;
+            this.responseText = JSON.stringify(response.result);
+            this.dispatchEvent(new Event('load'));
+        }, /** Model a lost acknowledgment through the existing XHR error path. @return {boolean} Whether the synthetic error event remained uncancelled. */ () => this.dispatchEvent(new Event('error')));
+    }
+}
+window.XMLHttpRequest = FixtureXHR;
+setupAdminGallerySidePanel();
+
+/**
+ * Mount a fresh production-shaped form with one server-style random operation key.
+ * @param {string} mode Create, new classic or existing classic workflow.
+ * @param {File[]} files Disposable selected images.
+ * @param {boolean} prepared Whether to run the real worker/ZIP pipeline.
+ * @return {HTMLFormElement} Connected form with its normal production handler.
+ */
+function mount(mode, files = [], prepared = false) {
+    const form = document.createElement('form');
+    const create = mode === 'create';
+    form.action = create ? '/fixture-create' : '/fixture-upload';
+    if (create) form.dataset.galleryPanelCreateForm = '1';
+    else { form.dataset.galleryUploadForm = '1'; form.dataset.galleryPanelCloseOnSuccess = '1'; }
+    form.innerHTML = `<input type="hidden" name="operation_key" value="${crypto.randomUUID().replaceAll('-', '') + crypto.randomUUID().replaceAll('-', '')}" data-admin-operation-key>
+        <input type="hidden" name="csrf_token" value="fixture-current-csrf"><input type="hidden" name="parent_id" value="0">
+        <input type="hidden" name="upload_mode" value="${mode === 'existing' ? 'existing' : 'new'}">
+        <input type="hidden" name="gallery_id" value="${mode === 'existing' ? '10' : '0'}">
+        <select name="gallery_id" disabled><option value="0">Disabled legacy fallback</option></select>
+        <input name="title" value="Fixture title"><textarea name="description">Fixture description</textarea>
+        <input type="checkbox" name="create_thumbnails" value="1"><input type="file" name="images[]" multiple>
+        <input type="checkbox" data-browser-upload-toggle><button>Submit fixture intent</button>`;
+    const selected = new DataTransfer();
+    files.forEach(/** Populate the actual browser file selection with disposable originals. @param {File} file Fixture-generated image. @return {DataTransferItem|null} Browser item added to the selection. */ file => selected.items.add(file));
+    form.querySelector('[type="file"]').files = selected.files;
+    const toggle = form.querySelector('[data-browser-upload-toggle]');
+    toggle.checked = prepared;
+    toggle.dataset.browserUploadConfig = JSON.stringify({enabled: true, endpoint: '/fixture-prepared', worker_count: 1, max_items_per_batch: 1, thumbnail_formats: ['jpg'], thumbnail_sizes: [32], upload_limit_bytes: 1048576});
+    form.addEventListener('php-gallery:side-panel-success', /** Observe one canonical completion while retaining the submitting form for rotation checks. @param {CustomEvent} event Production source/result payload. @return {void} Counts completion and isolates this fixture from public-refresh testing. */ event => {
+        // Completion itself is covered by the lifecycle/full-stack suites; keep this
+        // submitting form mounted to test deliberate subsequent intents and rotation.
+        event.stopPropagation();
+        form.fixtureResult = event.detail.result;
+        completions++;
+    });
+    panel.querySelector('[data-admin-side-panel-body]').replaceChildren(form);
+    setupGalleryUploadProgress();
+    return form;
+}
+
+/**
+ * Explicitly submit once and await the normal handler's release; never auto-retry here.
+ * @param {HTMLFormElement} form Connected production-shaped form.
+ * @return {Promise<void>} Resolves after success or controlled failure.
+ */
+async function submit(form) {
+    form.requestSubmit(form.querySelector('button'));
+    await until(/** Observe normal handler release after this explicit submission. @return {boolean} Whether the intent and submit control are idle. */ () => !adminOperationIsRunning(form) && !form.querySelector('button').disabled);
+}
+
+try {
+    const canvas = document.createElement('canvas'); canvas.width = 4; canvas.height = 4;
+    canvas.getContext('2d').fillRect(0, 0, 4, 4);
+    const blob = await new Promise(/** Produce a small disposable original using the browser encoder. @param {function(Blob|null): void} resolve Encoded PNG consumer. @return {void} Schedules canvas encoding without reading external files. */ resolve => canvas.toBlob(resolve, 'image/png'));
+    const files = [new File([blob], 'photo-1.png', {type: 'image/png'}), new File([blob], 'photo-2.png', {type: 'image/png'})];
+    let form = mount('create');
+    let key = form.elements.operation_key.value;
+    fault = {endpoint: '/fixture-create', remaining: 1};
+    const galleryBefore = nextGallery;
+    await submit(form);
+    check(nextGallery === galleryBefore + 1 && form.elements.operation_key.value === key, 'Lost create acknowledgment retains the original key after commit');
+    check(!allowAdminOperationTransition(panel) && document.activeElement.matches('[data-admin-operation-unresolved]'), 'Inline unknown-outcome guard retains original form/key and focuses its notice');
+    check(adminPanelHasUnsavedText(panel), 'Unrelated mutation refresh is guarded even when an unresolved form has no text-draft baseline');
+    form.elements.title.value = 'Changed unresolved title';
+    const requestsBeforeChange = records.length;
+    await submit(form);
+    check(records.length === requestsBeforeChange && form.elements.operation_key.value === key, 'Changed unresolved creation does not silently mint a new operation');
+    form.elements.title.value = 'Fixture title';
+    form.elements.csrf_token.value = 'fixture-reauthenticated-csrf';
+    await submit(form);
+    check(nextGallery === galleryBefore + 1 && records.at(-1).key === key && records.at(-1).csrf === 'fixture-reauthenticated-csrf', 'Explicit create retry preserves identity and uses current CSRF after reauthentication');
+    check(form.elements.operation_key.value !== key && allowAdminOperationTransition(panel), 'Confirmed create rotates retained form and releases context guard');
+    await submit(form);
+    check(nextGallery === galleryBefore + 2, 'Fresh deliberate create permits a duplicate title');
+
+    form = mount('existing', files);
+    key = form.elements.operation_key.value;
+    const imageBefore = nextImage;
+    const classicStart = records.length;
+    fault = {endpoint: '/fixture-upload', file: 'photo-2.png', remaining: 1};
+    await submit(form);
+    const firstPass = records.slice(classicStart);
+    check(firstPass.length === 2 && firstPass[0].key === key && firstPass[1].key !== key, 'Classic multipart chunks have distinct stable keys starting with original form key');
+    check(nextImage === imageBefore + 2 && form.elements.operation_key.value === key, 'Lost second chunk acknowledgment does not rotate or duplicate');
+    await submit(form);
+    const retried = records.slice(classicStart + 2);
+    check(retried.length === 2 && retried.every(/** Compare each replay against its corresponding original classic request. @param {{key: string, fingerprint: string}} record Retried fixture request. @param {number} index Zero-based chunk index. @return {boolean} Whether identity and exact payload agree. */ (record, index) => record.key === firstPass[index].key && record.fingerprint === firstPass[index].fingerprint), 'Whole classic retry reuses the exact key and payload of every chunk');
+    check(nextImage === imageBefore + 2 && form.fixtureResult.image_ids.length === 2, 'Classic replay preserves unique image IDs through canonical aggregation');
+    check(form.elements.operation_key.value !== key, 'Only confirmed complete multi-chunk intent rotates root key');
+    await submit(form);
+    check(nextImage === imageBefore + 4, 'Fresh deliberate upload of same files is not filename deduplication');
+
+    form = mount('new', files);
+    const combinedStart = records.length;
+    const combinedGallery = nextGallery;
+    fault = {endpoint: '/fixture-upload', file: 'photo-2.png', remaining: 1};
+    await submit(form); await submit(form);
+    const combined = records.slice(combinedStart);
+    check(combined.length === 4 && combined[0].mode === 'new' && combined[1].mode === 'existing' && combined[1].gallery === String(combinedGallery + 1), 'Combined first chunk creates exactly one target; later chunks use returned ID');
+    check(nextGallery === combinedGallery + 1 && combined[0].key === combined[2].key && combined[1].key === combined[3].key, 'Combined retry cannot create a second gallery or alias different chunk fingerprints');
+
+    form = mount('new', files, true);
+    key = form.elements.operation_key.value;
+    const preparedStart = records.length;
+    const preparedGallery = nextGallery;
+    fault = {endpoint: '/fixture-upload', remaining: 1};
+    await submit(form);
+    check(nextGallery === preparedGallery + 1 && records.at(-1).key === key && records.at(-1).files.length === 0, 'Prepared create bootstrap forwards original key and excludes selected files');
+    await submit(form);
+    const preparedRecords = records.slice(preparedStart);
+    check(preparedRecords[0].key === preparedRecords[1].key && nextGallery === preparedGallery + 1, 'Prepared retry recovers the same created target');
+    const preparedBatches = preparedRecords.filter(/** Separate real-worker batch requests from their create bootstrap. @param {{endpoint: string}} record Synthetic request routing projection. @return {boolean} Whether it targets prepared upload. */ record => record.endpoint === '/fixture-prepared');
+    check(preparedBatches.length === 2 && preparedBatches.every(/** Verify prepared identity is not replaced by the classic ledger key. @param {{operationKey: string|null}} record Captured operation-key field. @return {boolean} Whether that field is absent. */ record => record.operationKey === null) && preparedBatches[0].key !== preparedBatches[1].key, 'Actual worker ZIP batches retain independent session/batch keys, not ledger operation keys');
+    check(form.elements.operation_key.value !== key && form.fixtureResult.image_ids.length === 2, 'Prepared full completion rotates only after all batches succeed');
+
+    form = mount('existing', files, true);
+    key = form.elements.operation_key.value;
+    const preparedRetryStart = records.length;
+    const preparedImageBefore = nextImage;
+    fault = {endpoint: '/fixture-prepared', remaining: 3};
+    await submit(form);
+    check(form.elements.operation_key.value === key && records.length === preparedRetryStart + 3, 'Exhausted prepared retries preserve root key and bounded existing retry count');
+    await submit(form);
+    const preparedRetry = records.slice(preparedRetryStart);
+    check(preparedRetry.every(/** Confirm each prepared retry retains the enabled hidden target. @param {{gallery: string}} record Captured target projection. @return {boolean} Whether it is the selected fixture gallery. */ record => record.gallery === '10'), 'Prepared existing target uses enabled hidden gallery ID, not disabled legacy select');
+    check(preparedRetry.slice(0, 4).every(/** Compare bounded and explicit retries with the original prepared batch bytes. @param {{key: string, fingerprint: string}} record Captured batch identity. @return {boolean} Whether session/index and multipart fingerprint are unchanged. */ record => record.key === preparedRetry[0].key && record.fingerprint === preparedRetry[0].fingerprint), 'Explicit prepared retry retains original session, batch index and exact ZIP bytes');
+    check(nextImage === preparedImageBefore + 2 && form.fixtureResult.image_ids.length === 2, 'Prepared explicit retry does not duplicate a committed batch');
+    check(location.href === originalUrl && completions === 7, 'Actual client actions remain in place with one success event per completed intent');
+
+    form = mount('new');
+    key = form.elements.operation_key.value;
+    const emptyStart = records.length;
+    await submit(form);
+    check(records.length === emptyStart + 1 && records.at(-1).key === key && records.at(-1).files.length === 0
+        && form.elements.operation_key.value !== key, 'Empty create-with-upload forwards and confirms its original operation key');
+
+    form = mount('create');
+    key = form.elements.operation_key.value;
+    fault = {endpoint: '/fixture-create', remaining: 1, incomplete: true};
+    await submit(form);
+    check(form.elements.operation_key.value === key, 'HTTP success without the canonical envelope cannot rotate an uncertain key');
+    await submit(form);
+    check(records.at(-1).key === key && form.elements.operation_key.value !== key, 'Explicit retry recovers an incomplete acknowledgment with original key');
+
+    form = mount('create');
+    form.elements.operation_key.value = 'INVALID';
+    const invalidStart = records.length;
+    await submit(form);
+    check(records.length === invalidStart && form.elements.operation_key.value === 'INVALID', 'Missing/malformed generated key is refused, never silently replaced');
+
+    form = mount('existing', files);
+    key = form.elements.operation_key.value;
+    const originalSelection = form.querySelector('[type="file"]').files;
+    const changedStart = records.length;
+    fault = {endpoint: '/fixture-upload', file: 'photo-1.png', remaining: 1};
+    await submit(form);
+    const changedSelection = new DataTransfer(); changedSelection.items.add(new File([blob], 'changed.png', {type: 'image/png'}));
+    form.querySelector('[type="file"]').files = changedSelection.files;
+    await submit(form);
+    check(records.length === changedStart + 1 && form.elements.operation_key.value === key, 'Changed file sequence cannot replace an unresolved upload intent');
+    form.querySelector('[type="file"]').files = originalSelection;
+    form.elements.create_thumbnails.checked = true;
+    await submit(form);
+    check(records.length === changedStart + 1 && form.elements.operation_key.value === key, 'Changed thumbnail policy cannot mint retry authority');
+    form.elements.create_thumbnails.checked = false;
+    await submit(form);
+    check(records.length === changedStart + 3 && records[changedStart].key === records[changedStart + 1].key, 'Restoring exact original inputs resumes stable chunk identities');
+
+    form = mount('create');
+    key = form.elements.operation_key.value;
+    fault = {endpoint: '/fixture-create', remaining: 1, hold: true};
+    const detachedStart = records.length;
+    form.requestSubmit(form.querySelector('button'));
+    await until(/** Wait until the synthetic server has committed and held this response. @return {boolean} Whether the release callback is available. */ () => releaseHeld !== null);
+    form.requestSubmit(form.querySelector('button'));
+    check(records.length === detachedStart + 1, 'A second programmatic submit cannot start a concurrent create intent');
+    const oldForm = form;
+    form = mount('create');
+    const replacementKey = form.elements.operation_key.value;
+    releaseHeld(); releaseHeld = null;
+    await until(/** Wait for the detached original handler without consulting the replacement form. @return {boolean} Whether its own operation has been released. */ () => !adminOperationIsRunning(oldForm));
+    check(oldForm.elements.operation_key.value === key && form.elements.operation_key.value === replacementKey, 'Late detached success cannot rotate another form or its original disconnected control');
+    check(location.href === originalUrl, 'Every tested retry and delayed completion preserves the document URL');
+    form = mount('create');
+    key = form.elements.operation_key.value;
+    const refusedGallery = nextGallery;
+    fault = {endpoint: '/fixture-create', remaining: 1, status: 409};
+    await submit(form);
+    check(nextGallery === refusedGallery && form.elements.operation_key.value === key, 'Busy HTTP 409 retains the original key without creating a target');
+    fault = {endpoint: '/fixture-create', remaining: 1, status: 403};
+    await submit(form);
+    check(nextGallery === refusedGallery && form.elements.operation_key.value === key, 'Authentication refusal cannot rotate the unresolved intent');
+    form.elements.csrf_token.value = 'fixture-new-session-csrf';
+    await submit(form);
+    check(nextGallery === refusedGallery + 1 && records.at(-1).key === key && records.at(-1).csrf === 'fixture-new-session-csrf', 'Explicit authorized retry completes the original busy/auth-refused intent');
+    document.getElementById('results').textContent = `BROWSER PASS: ${assertions} operation-key assertions; actual create/classic handlers and prepared worker ZIP batches, ${records.length} synthetic requests.`;
+} catch (error) {
+    document.getElementById('results').textContent = `BROWSER FAIL: ${error.message}\n${error.stack}`;
+}
+</script></html>

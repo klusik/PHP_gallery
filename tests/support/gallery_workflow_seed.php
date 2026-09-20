@@ -1,6 +1,12 @@
 <?php
 /**
  * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ * File: tests/support/gallery_workflow_seed.php
+ * Module Type: Test Fixture
+ * Purpose: Seed synthetic galleries and photographs using real migrations.
+ * Responsibilities:
+ *   - Prepare disposable application data for workflow verification.
  * Author: Rudolf Klusal
  * Apply actual migrations and generate synthetic galleries and photographs.
  */

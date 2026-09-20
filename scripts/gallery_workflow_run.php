@@ -1,6 +1,12 @@
 <?php
 /**
  * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ * File: scripts/gallery_workflow_run.php
+ * Module Type: CLI Tool
+ * Purpose: Run workflows against a disposable real-database application.
+ * Responsibilities:
+ *   - Own the isolated application lifecycle and pass checks to the central audit.
  * Author: Rudolf Klusal
  * Run a disposable real-database application through development checks or the central audit.
  */
@@ -23,7 +29,7 @@ $fixture = null;
 $exit = 0;
 $stage = 'prerequisites';
 try {
-    check(in_array($argv[1] ?? '', ['--development', '--audit', '--release'], true), 'Choose development checks or a central audit profile.');
+    check(in_array($argv[1] ?? '', ['--development', '--quick', '--audit', '--release'], true), 'Choose development checks or a central audit profile.');
     $fixture = new Fixture(dirname(__DIR__), getenv());
     $stage = 'provisioning';
     $fixture->start();
@@ -36,7 +42,11 @@ try {
     } else {
         // The existing PHP regression suite discovers the PHP workflow tests and the real DB races.
         // No parallel test orchestrator and no direct invocation of the existing concurrency suite.
-        $profile = $argv[1] === '--release' ? 'release' : 'full';
+        $profile = match ($argv[1]) {
+            '--release' => 'release',
+            '--quick' => 'quick',
+            default => 'full',
+        };
         $stage = 'central ' . $profile . ' audit';
         $fixture->run([PHP_BINARY, __DIR__ . '/audit.php', '--profile=' . $profile], 1200, $stage);
         $report = json_decode((string) file_get_contents(dirname(__DIR__) . '/cache/test-audit/latest.json'), true, 512, JSON_THROW_ON_ERROR);
@@ -45,7 +55,7 @@ try {
         check(str_starts_with($logPath, 'cache/test-audit/') && !str_contains($logPath, '..'), 'Central regression evidence missing.');
         $evidence = (string) file_get_contents(dirname(__DIR__) . '/' . $logPath);
         // These exact PASS records must come from the central runner, including the existing race suite.
-        foreach (['gallery_workflow_integration_test.php', 'gallery_workflow_browser_test.php', 'viewer_phase07_mysql_concurrency_test.php'] as $test) {
+        foreach (['gallery_workflow_integration_test.php', 'gallery_workflow_browser_test.php', 'gallery_image_move_crash_test.php', 'viewer_phase07_mysql_concurrency_test.php'] as $test) {
             check(preg_match('/^\[PASS\] ' . preg_quote($test, '/') . ' /m', $evidence) === 1, 'Mandatory integration coverage was skipped or unregistered.');
         }
         echo 'PASS gallery workflow central ' . $profile . " audit completed\n";

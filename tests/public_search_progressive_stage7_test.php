@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Regression Test
+ * Purpose: Protect stabilized progressive-search interaction behavior.
+ * Responsibilities:
+ *   - Check final UX and MVC contracts across search phases.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/public_search_progressive_stage7_test.php

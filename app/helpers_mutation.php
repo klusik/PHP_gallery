@@ -107,9 +107,16 @@ function admin_mutation_panel_metadata(string $workflow, string $refreshUrl = ''
  * The supported vocabulary is deliberately small. Add a new type only when a real
  * persisted mutation requires a new observable server-rendered invariant.
  *
+ * IDs are stable catalog identifiers, not names or access tokens. image_id=0
+ * means no cover only for cover_image; other IDs must be positive. Counts and
+ * placement_order are nonnegative integers. updated_at is an exact rendered
+ * timestamp string, while revision is an opaque PUBLIC refresh fingerprint,
+ * never the editor's write precondition. present/enabled are booleans; placement
+ * is top/bottom. Missing optional fields mean no assertion for that field.
+ *
  * @param string $type Supported postcondition type.
  * @param array<string, mixed> $data Type-specific values.
- * @return array<string, mixed>
+ * @return array{type:string,gallery_id?:int,tag_id?:int,smart_gallery_id?:int,image_id?:int,image_ids?:list<int>,visibility?:string,updated_at?:string,revision?:string,enabled?:bool,present?:bool,count?:int,placement?:string,placement_order?:int} Observable fields admitted by the closed vocabulary.
  */
 function admin_mutation_postcondition(string $type, array $data = []): array
 {
@@ -227,15 +234,7 @@ function admin_mutation_postcondition(string $type, array $data = []): array
  */
 function admin_mutation_gallery_context_count(int $parentGalleryId): int
 {
-    if ($parentGalleryId > 0) {
-        $stmt = db()->prepare('SELECT COUNT(*) FROM galleries WHERE parent_id = ?');
-        $stmt->execute([$parentGalleryId]);
-        return max(0, (int) $stmt->fetchColumn());
-    }
-
-    $listingCondition = \Gallery\Services\public_gallery_listing_sql_fragment('g');
-    $stmt = db()->query('SELECT COUNT(*) FROM galleries g WHERE g.parent_id IS NULL AND ' . $listingCondition);
-    return max(0, (int) $stmt->fetchColumn());
+    return \Gallery\Services\gallery_mutation_context_count($parentGalleryId);
 }
 
 /**
@@ -285,7 +284,7 @@ function admin_mutation_gallery_membership_postcondition(int $galleryId, int $pa
  * @param string $renderUrl Authoritative server-render URL for this context.
  * @param ?array<string, mixed> $postcondition Optional observable completion invariant.
  * @param string $renderMode preserve_view keeps pagination/filter state; canonical forces render_url.
- * @return array<string, mixed>
+ * @return array{type:string,gallery_id:?int,render_url:string,render_mode:string,postcondition:?array<string,mixed>} Root uses gallery_index/null; physical gallery uses gallery/positive ID. Null postcondition means no observable assertion was supplied.
  */
 function admin_mutation_public_gallery_context(int $galleryId, string $renderUrl, ?array $postcondition = null, string $renderMode = 'preserve_view'): array
 {
@@ -310,7 +309,7 @@ function admin_mutation_public_gallery_context(int $galleryId, string $renderUrl
  * @param string $renderUrl Authoritative server-render URL for this context.
  * @param ?array<string, mixed> $postcondition Optional observable completion invariant.
  * @param string $renderMode preserve_view keeps the current URL; canonical forces render_url.
- * @return array<string, mixed>
+ * @return array{type:string,tag_id:?int,render_url:string,render_mode:string,postcondition:?array<string,mixed>} Stable tag identity plus canonical render metadata; an invalid ID maps to null, not another tag.
  */
 function admin_mutation_public_tag_context(int $tagId, string $renderUrl, ?array $postcondition = null, string $renderMode = 'preserve_view'): array
 {
@@ -328,12 +327,19 @@ function admin_mutation_public_tag_context(int $tagId, string $renderUrl, ?array
 /**
  * Build the canonical success envelope used by enhanced Admin mutation workflows.
  *
+ * This builder preserves prepared descriptors rather than validating domain
+ * authorization. Controllers must authorize first and use the typed builders
+ * above. A null panel means no owned fragment refresh; an empty contexts list
+ * means no public render target was specified. fallback is for direct-page use,
+ * never authority for a JavaScript panel to navigate or reload. No credentials,
+ * private filesystem paths or native database diagnostics belong in this record.
+ *
  * @param string $message Human-readable success message.
  * @param array<string, mixed> $mutation Typed mutation descriptor.
  * @param ?array<string, mixed> $panel Side-panel refresh metadata.
  * @param array<int, array<string, mixed>> $contexts Affected public render contexts.
  * @param array<string, mixed> $fallback Direct-page fallback metadata such as redirect_url.
- * @return array<string, mixed>
+ * @return array{ok:true,message:string,mutation:array<string,mixed>,panel:?array<string,mixed>,contexts:list<array<string,mixed>>,fallback:array<string,mixed>} Canonical completion consumed unchanged by the shared coordinator.
  */
 function admin_mutation_success_envelope(string $message, array $mutation, ?array $panel = null, array $contexts = [], array $fallback = []): array
 {
@@ -357,7 +363,7 @@ function admin_mutation_success_envelope(string $message, array $mutation, ?arra
  * @param string $errorCode Stable bounded error category.
  * @param ?array<string, mixed> $mutation Optional mutation descriptor when known.
  * @param array<string, mixed> $fallback Direct-page fallback metadata when useful.
- * @return array<string, mixed>
+ * @return array{ok:false,message:string,error:string,error_code:string,mutation:?array<string,mixed>,panel:null,contexts:array{},fallback:array<string,mixed>} Refusal never requests a success refresh; message/error are the same safe human explanation.
  */
 function admin_mutation_error_envelope(string $message, string $errorCode = 'mutation_failed', ?array $mutation = null, array $fallback = []): array
 {

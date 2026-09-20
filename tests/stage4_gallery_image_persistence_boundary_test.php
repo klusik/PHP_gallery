@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Regression Test
+ * Purpose: Protect gallery/image service-to-model ownership.
+ * Responsibilities:
+ *   - Reject SQL, direct database access and PDO transaction logic in domain services.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/stage4_gallery_image_persistence_boundary_test.php

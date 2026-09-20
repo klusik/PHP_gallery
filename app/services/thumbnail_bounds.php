@@ -37,6 +37,8 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+require_once __DIR__ . '/gallery_edit_concurrency.php';
+
 use function Gallery\Core\e;
 use function Gallery\Core\normalize_relative_path;
 use function Gallery\Core\now_sql;
@@ -135,7 +137,7 @@ function thumbnail_bound_gallery_branch_ids(array $gallery): array
 /**
  * Apply gallery thumbnail bounds to one gallery or its whole descendant branch.
  *
- * @param array $gallery Gallery row or gallery data.
+ * @param array{id:int|string} $gallery Target identity; the current branch is reloaded after acquiring ownership.
  * @param ?int $minSize Min size value.
  * @param ?int $maxSize Max size value.
  * @param bool $recursive Recursive value.
@@ -143,7 +145,36 @@ function thumbnail_bound_gallery_branch_ids(array $gallery): array
  */
 function save_gallery_thumbnail_bounds(array $gallery, ?int $minSize, ?int $maxSize, bool $recursive): int
 {
+    $writerLock = gallery_edit_writer_begin();
+    try {
+        return save_gallery_thumbnail_bounds_owned($gallery, $minSize, $maxSize, $recursive);
+    } finally {
+        gallery_edit_writer_end($writerLock);
+    }
+}
+
+/**
+ * Persist gallery thumbnail bounds and refresh affected sidecars.
+ *
+ * Internal implementation: enter through save_gallery_thumbnail_bounds() so
+ * reads, early returns and failure cleanup remain inside the same writer lease.
+ *
+ * @param array{id:int|string} $gallery Target gallery identity; recursive paths are refreshed under ownership.
+ * @param ?int $minSize Optional minimum thumbnail size.
+ * @param ?int $maxSize Optional maximum thumbnail size.
+ * @param bool $recursive Whether the current descendant branch is included.
+ * @return int Number of changed gallery rows.
+ * @author Rudolf Klusal
+ */
+function save_gallery_thumbnail_bounds_owned(array $gallery, ?int $minSize, ?int $maxSize, bool $recursive): int
+{
     if (!thumbnail_bounds_schema_ready()) {
+        return 0;
+    }
+    // A caller can retain a row across requests; resolve the current branch
+    // only after ownership so an old folder path cannot select other galleries.
+    $gallery = find_gallery((int) ($gallery['id'] ?? 0), true);
+    if (!$gallery) {
         return 0;
     }
     $galleryIds = $recursive ? thumbnail_bound_gallery_branch_ids($gallery) : [(int) $gallery['id']];

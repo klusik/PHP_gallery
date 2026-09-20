@@ -42,6 +42,9 @@ use function Gallery\Models\admin_dashboard_model_parent_sync_fingerprint_row;
 use Throwable;
 use function Gallery\Core\pending_migrations_exist;
 
+require_once dirname(__DIR__) . '/policy_constants.php';
+require_once __DIR__ . '/admin_dashboard/maintenance_health.php';
+
 /**
  * Return the total byte size of imported original gallery files.
  *
@@ -111,7 +114,21 @@ function admin_dashboard_parent_sync_fingerprint(): string
 /**
  * Build the full read model consumed by the Admin dashboard view.
  *
- * @return array<string mixed>.
+ * The runtime_support_status record follows runtime_support_health_status();
+ * image_move_pending_status follows admin_image_move_pending_health_status().
+ * The security_schema_statuses, mutation_schema_statuses and
+ * presentation_schema_statuses maps are keyed by capability and contain the
+ * bounded state/affected_objects/request_id records from their shared owners.
+ * Gallery rows, integer totals, feature booleans and prepared Settings URLs feed
+ * the overview; deferred maintenance inventories remain empty or explicitly deferred.
+ *
+ * @param bool $includeMaintenance Opt in to bounded maintenance queries and inventories;
+ *   false leaves image-move row discovery deferred without probing its journal rows.
+ * @return array<string,mixed> Dashboard presentation map with the nested health records
+ *   above, gallery hierarchy data, maintenance summaries and localized status labels.
+ * @see runtime_support_health_status()
+ * @see admin_image_move_pending_health_status()
+ * @see admin_mutation_schema_health_statuses()
  */
 function admin_dashboard_view_model(bool $includeMaintenance = false): array
 {
@@ -294,9 +311,11 @@ function admin_dashboard_view_model(bool $includeMaintenance = false): array
         'filename_display_ready' => $filenameDisplayReady,
         'gallery_date_range_ready' => $galleryDateRangeReady,
         'migration_pending' => $migrationPending,
+        'runtime_support_status' => runtime_support_health_status(),
         'nsfw_schema_status' => $nsfwSchemaStatus,
         'security_schema_statuses' => $securitySchemaStatuses,
         'mutation_schema_statuses' => $mutationSchemaStatuses,
+        'image_move_pending_status' => admin_image_move_pending_health_status($mutationSchemaStatuses['mutation_gallery_move'] ?? [], $includeMaintenance),
         'presentation_schema_statuses' => $presentationSchemaStatuses,
         'access_ready' => $accessReady,
         'background_source_ready' => $backgroundSourceReady,
@@ -453,16 +472,36 @@ function admin_security_schema_health_statuses(): array
  * means metadata inspection itself failed, so the affected mutation is paused before
  * files, rows, credentials, migration state, or active application files are changed.
  *
- * @return array<string,array{state:string,feature:string,request_id:string,affected_objects:array<int,string>,suggested_checks:array<int,string>}>
+ * @return array<string,array{state:string,feature:string,request_id:string,affected_objects:array<int,string>,suggested_checks:array<int,string>,title?:string,message?:string}>
  */
 function admin_mutation_schema_health_statuses(): array
 {
     $requestId = function_exists('Gallery\Services\telemetry_request_id') ? telemetry_request_id() : '';
     $definitions = [
+        'mutation_gallery_edit' => [
+            'resolver' =>
+                /**
+                 * Resolve exact application-owned revision protection through its bounded schema adapter.
+                 * @return array{state:string,requirements:list<array{state:string,table:string,object:string,object_type:string}>} Verified protection state and fixed affected column identity.
+                 */
+                static fn (): array => admin_gallery_edit_schema_status(),
+            'flag' => '',
+            'title' => t('admin.health_gallery_edit.title', 'Gallery edit protection'),
+            'messages' => [
+                'available' => t('admin.health_gallery_edit.available', 'The gallery revision column is available and application-owned edit protection is ready.'),
+                'missing' => t('admin.health_gallery_edit.missing', 'The gallery revision column is missing. Run database migrations from the Gallery administration page, then reload this page. Gallery editing remains paused until the migration completes.'),
+                'unknown' => t('admin.health_gallery_edit.unknown', 'Gallery edit protection could not be verified. Retry the database migration from this Gallery page, then review Runtime diagnostics if the problem continues. Gallery editing remains paused; no raw database errors are shown.'),
+            ],
+        ],
         'mutation_gallery_delete' => ['resolver' => static fn (): array => gallery_deletion_schema_status(), 'flag' => ''],
         // Trash recovery remains intentionally available while the soft-delete master is OFF.
         'mutation_gallery_trash' => ['resolver' => static fn (): array => gallery_trash_schema_status(), 'flag' => ''],
-        'mutation_gallery_move' => ['resolver' => static fn (): array => gallery_move_schema_status(), 'flag' => ''],
+        'mutation_gallery_move' => ['resolver' =>
+            /**
+             * Include durable move-journal readiness before reporting mutation availability.
+             * @return array<string,mixed> Aggregate state and schema requirements from the journal policy owner; no pending-row discovery.
+             */
+            static fn (): array => gallery_image_move_journal_schema_status(), 'flag' => ''],
         'mutation_duplicate_photo_ledger' => ['resolver' => static fn (): array => duplicate_photo_ledger_schema_status(), 'flag' => 'duplicate_photo_detector'],
         'mutation_upload_ingestion' => ['resolver' => static fn (): array => upload_ingestion_schema_status(), 'flag' => ''],
         'mutation_upload_automation' => ['resolver' => static fn (): array => upload_automation_schema_status(), 'flag' => 'upload_api'],
@@ -491,6 +530,10 @@ function admin_mutation_schema_health_statuses(): array
             true,
             schema_inspection_is_unknown($schemaStatus) ? $requestId : ''
         );
+        if (isset($definition['title'], $definition['messages'])) {
+            $statuses[$feature]['title'] = $definition['title'];
+            $statuses[$feature]['message'] = $definition['messages'][$statuses[$feature]['state']];
+        }
     }
     return $statuses;
 }

@@ -2,6 +2,11 @@
 
 /**
  * Project: PHP Gallery
+ * File: tests/admin_side_panel_gallery_mutation_test.php
+ * Module Type: Regression Test
+ * Purpose: Exercise real create-gallery controller mutation responses with isolated stubs.
+ * Responsibilities:
+ *   - Verify POST normalization and canonical JSON completion without a live database.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * Focused regression coverage for the gallery side-panel create mutation.
@@ -38,40 +43,16 @@ namespace Gallery\Core {
         return 'POST';
     }
 
-    /** Return the minimal database facade needed by Stage 4 membership-count metadata. */
-    function db(): object
+    require_once __DIR__ . '/support/admin_operation_fixture.php';
+
+    /**
+     * Authenticated fixture identity, independent of the operation key.
+     *
+     * @return array<string,mixed> Authenticated fixture identity, independent of the operation key.
+     */
+    function current_user(): array
     {
-        return new class {
-            /** Return a deterministic row-count result for direct count queries. */
-            public function query(string $sql): object
-            {
-                return new class {
-                    /** Return the deterministic count expected by this fixture. */
-                    public function fetchColumn(): int
-                    {
-                        return 1;
-                    }
-                };
-            }
-
-            /** Return a deterministic prepared-statement facade for count queries. */
-            public function prepare(string $sql): object
-            {
-                return new class {
-                    /** Accept fixture parameters without external database access. */
-                    public function execute(array $params = []): bool
-                    {
-                        return true;
-                    }
-
-                    /** Return the deterministic count expected by this fixture. */
-                    public function fetchColumn(): int
-                    {
-                        return 1;
-                    }
-                };
-            }
-        };
+        return ['id' => 1, 'role' => 'admin'];
     }
 
     /** Build deterministic public URLs for assertions. */
@@ -138,14 +119,27 @@ namespace Gallery\Core {
 namespace Gallery\Services {
     const ADMIN_GALLERY_DISCOVERY_DEFAULT_BATCH_SIZE = 10;
     const ADMIN_GALLERY_DISCOVERY_MAX_BATCH_SIZE = 100;
-
-    /** Simulate the shared persistence service used by the production mutation. */
+    /**
+     * The single public root result in this fixture.
+     *
+     * @param int $parentGalleryId Public gallery context.
+     * @return int The single public root result in this fixture.
+     */
+    function gallery_mutation_context_count(int $parentGalleryId): int
+    {
+        return 1;
+    }
+    /**
+     * Simulate creation once and retain the resulting catalog row for replay validation.
+     * @param array<string,mixed> $input Normalized controller creation fields captured for assertions.
+     * @return array{id:int,parent_id:int,title:string,slug:string,folder_path:string} Stable fixture gallery identity and public metadata.
+     */
     function create_empty_gallery(array $input): array
     {
         $GLOBALS['side_panel_test_create_calls'] = ($GLOBALS['side_panel_test_create_calls'] ?? 0) + 1;
         $GLOBALS['side_panel_test_create_input'] = $input;
 
-        return [
+        return $GLOBALS['operation_fixture_galleries'][77] = [
             'id' => 77,
             'parent_id' => (int) ($input['parent_id'] ?? 0),
             'title' => (string) ($input['title'] ?? ''),
@@ -172,10 +166,16 @@ namespace Gallery\Services {
         return $visibility;
     }
 
-    /** No parent row is required when the test creates a root gallery. */
+    /**
+     * Retained fixture result for replay validation.
+     *
+     * @param int $galleryId Original result identity.
+     * @param bool $includeNonPublic Fresh administrative lookup.
+     * @return array<string,mixed>|null Retained fixture result for replay validation.
+     */
     function find_gallery(int $galleryId, bool $includeNonPublic = false): ?array
     {
-        return null;
+        return $GLOBALS['operation_fixture_galleries'][$galleryId] ?? null;
     }
 
     /** Keep translation calls deterministic while preserving their call sites. */
@@ -244,8 +244,18 @@ namespace Gallery\Controllers {
         }
     }
 
+    $GLOBALS['operation_fixture_db'] = new \Gallery\Core\AdminOperationFixtureDatabase();
+    $GLOBALS['operation_fixture_galleries'] = [];
+    /**
+     * Verified fixture schema; no production database is inspected.
+     *
+     * @return bool Verified fixture schema; no production database is inspected.
+     */
+    function side_panel_operation_schema_probe(): bool { return true; }
+    \Gallery\Services\schema_inspection_set_query_executor_for_tests(__NAMESPACE__ . '\\side_panel_operation_schema_probe');
     $_GET = [];
     $_POST = [
+        'operation_key' => \Gallery\Services\admin_operation_new_key(),
         'ajax' => '1',
         'panel' => '1',
         'title' => 'New Panel Gallery',
@@ -279,5 +289,12 @@ namespace Gallery\Controllers {
     side_panel_test_expect((int) ($payload['contexts'][0]['postcondition']['count'] ?? -1) === 1, 'Create response must carry the authoritative full root gallery count.');
     side_panel_test_expect(($payload['fallback']['redirect_url'] ?? '') !== '', 'Classic redirect must remain fallback metadata.');
 
+    ob_start();
+    cms_admin_new_gallery();
+    $replayed = json_decode((string) ob_get_clean(), true, 512, JSON_THROW_ON_ERROR);
+    side_panel_test_expect($replayed === $payload, 'Same-key retry did not return the original canonical response.');
+    side_panel_test_expect($GLOBALS['side_panel_test_create_calls'] === 1, 'Same-key retry executed gallery creation again.');
+    side_panel_test_expect($GLOBALS['side_panel_test_require_admin_calls'] === 2 && $GLOBALS['side_panel_test_verify_csrf_calls'] === 2, 'Replay skipped current authorization or CSRF checks.');
+    side_panel_test_expect($GLOBALS['operation_fixture_db']->locks === [], 'Create or replay leaked ledger ownership.');
     fwrite(STDOUT, "PASS admin_side_panel_gallery_mutation_test\n");
 }

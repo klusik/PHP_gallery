@@ -42,11 +42,16 @@ use PDO;
 use Throwable;
 use function Gallery\Core\db;
 
-/** Repair picture-game enabled galleries so image voting is also enabled. */
+/**
+ * Repair Picture Game galleries so voting is enabled and revisions advance.
+ *
+ * @param string $now Shared SQL timestamp assigned to each repaired gallery.
+ * @return int Number of gallery rows changed by the repair.
+ */
 function picture_game_model_sync_voting_state(string $now): int
 {
     $stmt = db()->prepare(
-        'UPDATE galleries SET voting_enabled = 1, updated_at = ? WHERE picture_game_enabled = 1 AND voting_enabled = 0'
+        'UPDATE galleries SET voting_enabled = 1, updated_at = ?, edit_revision = edit_revision + 1 WHERE picture_game_enabled = 1 AND voting_enabled = 0'
     );
     $stmt->execute([$now]);
     return $stmt->rowCount();

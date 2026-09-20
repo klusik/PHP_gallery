@@ -45,13 +45,17 @@ use function Gallery\Core\require_admin;
 use function Gallery\Services\feature_capability_effective_enabled;
 use function Gallery\Services\find_gallery;
 use function Gallery\Services\gallery_images;
+use function Gallery\Services\gallery_edit_revision;
 use function Gallery\Services\media_renamer_normalize_pattern;
 use function Gallery\Services\t;
 use function Gallery\Views\view_render_admin_gallery_editor_form_close;
 use function Gallery\Views\view_render_admin_gallery_editor_form_open;
 
 /**
- * Handles cms admin edit gallery logic for the gallery application.
+ * Authenticate the editor request and render fields and revision from the same gallery snapshot.
+ *
+ * @return void Emits a complete editor or delegates its POST/panel response.
+ * @author Rudolf Klusal
  */
 function cms_admin_edit_gallery(): void
 {
@@ -86,6 +90,7 @@ function cms_admin_edit_gallery(): void
     view_render_admin_gallery_editor_form_open([
         'csrf_html' => csrf_field(),
         'gallery_id' => (int) $gallery['id'],
+        'edit_revision' => gallery_edit_revision($gallery),
     ]);
     admin_edit_gallery_render_identity_tab($gallery, $activeEditTab);
     admin_edit_gallery_render_access_tab($gallery, $activeEditTab, $capabilities);

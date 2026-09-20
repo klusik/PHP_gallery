@@ -1,5 +1,11 @@
 /**
  * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ * File: tests/support/lightbox_lifecycle_size.mjs
+ * Module Type: Test Fixture
+ * Purpose: Measure lightbox source and compression size reproducibly.
+ * Responsibilities:
+ *   - Report source accounting without presenting it as browser performance.
  * Author: Rudolf Klusal
  * Reproducible source/compression accounting, not a browser benchmark.
  */

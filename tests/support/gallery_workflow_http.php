@@ -1,6 +1,12 @@
 <?php
 /**
  * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ * File: tests/support/gallery_workflow_http.php
+ * Module Type: Test Fixture
+ * Purpose: Provide cookie-isolated workflow HTTP assertions.
+ * Responsibilities:
+ *   - Compare responses with persistence outcomes in disposable application state.
  * Author: Rudolf Klusal
  * Cookie-isolated HTTP and persistence assertions for disposable workflows.
  */
@@ -50,6 +56,24 @@ final class Http
         check(is_string($body), 'Isolated HTTP transport failed.');
         return ['status' => (int) curl_getinfo($this->handle, CURLINFO_RESPONSE_CODE), 'body' => $body,
             'headers' => $headers, 'json' => json_decode($body, true)];
+    }
+
+    /**
+     * Read a fresh replay-safe operation key from a real rendered create/upload form.
+     *
+     * @param string $route Authenticated form route under the disposable origin.
+     * @return string Explicit key for one intended operation; reuse only for its exact retry.
+     */
+    public function operationKey(string $route): string
+    {
+        $response = $this->request($route);
+        check($response['status'] === 200, 'Operation-key form must load successfully.');
+        $document = new \DOMDocument();
+        @$document->loadHTML($response['body']);
+        $field = (new \DOMXPath($document))->query('//input[@name="operation_key"]')->item(0);
+        check($field instanceof \DOMElement && preg_match('/^[a-f0-9]{64}$/D', $field->getAttribute('value')) === 1,
+            'Operation key missing from actual form.');
+        return $field->getAttribute('value');
     }
 
     /** Parse the CSRF token from a real rendered form. */

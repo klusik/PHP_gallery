@@ -2,6 +2,9 @@
 
 /**
  * Project: PHP Gallery
+ * Purpose: Measure title-completion queries and ranking on disposable SQLite catalogs.
+ * Responsibilities:
+ *   - Generate synthetic catalog sizes and report query/matching costs without live configuration.
  * Repository: https://github.com/klusik/PHP_gallery
  * File: scripts/benchmark_title_completion.php
  * Module Type: Synthetic Benchmark

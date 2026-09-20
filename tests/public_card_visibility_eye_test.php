@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Regression Test
+ * Purpose: Protect public-card visibility indicator behavior.
+ * Responsibilities:
+ *   - Check rendering and in-place mutation wiring for visibility controls.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/public_card_visibility_eye_test.php

@@ -42,6 +42,8 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+require_once __DIR__ . '/gallery_edit_concurrency.php';
+
 const BROWSER_UPLOAD_BATCH_POLICY_LIMIT_RATIO = 'upload_limit_ratio';
 
 // This module is split into focused part files under app/services/browser_uploads/.

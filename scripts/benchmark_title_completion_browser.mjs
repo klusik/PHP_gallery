@@ -1,5 +1,11 @@
 /**
  * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ * File: scripts/benchmark_title_completion_browser.mjs
+ * Module Type: CLI Tool
+ * Purpose: Measure production title matching in a disposable Chromium document.
+ * Responsibilities:
+ *   - Report CPU work independently from end-to-end input and network latency.
  * Author: Rudolf Klusal
  * Measure pure title-matching CPU work in a disposable real Chromium document.
  * This is not a phone benchmark or an end-to-end input/network latency test.
@@ -20,6 +26,7 @@ if (!executable || !/^[A-Za-z0-9][A-Za-z0-9/_.-]*$/.test(baseline)) {
 const relative = 'public/assets/gallery-modules/admin-gallery-title-completion.js';
 const oldSource = execFileSync('git', ['show', baseline + ':' + relative], {cwd: root, encoding: 'utf8', windowsHide: true});
 const currentSource = await readFile(path.join(root, relative), 'utf8');
+const currentPolicySource = await readFile(path.join(root, 'public/assets/gallery-modules/admin-interaction-policy.js'), 'utf8');
 const revision = execFileSync('git', ['rev-parse', '--verify', baseline], {cwd: root, encoding: 'utf8', windowsHide: true}).trim();
 const token = randomBytes(16).toString('hex');
 let resolveResult;
@@ -57,7 +64,14 @@ try {
     await fetch('/result/${token}', {method:'POST', body:JSON.stringify({ok:false})});
 }
 </script>`;
-const server = createServer(async (request, response) => {
+const server = createServer(
+    /**
+     * Serve allowlisted benchmark assets and accept the bounded synthetic result.
+     * @param {import('node:http').IncomingMessage} request Local fixture request.
+     * @param {import('node:http').ServerResponse} response Fixture response stream.
+     * @return {Promise<void>} Completes one request without application bootstrap.
+     */
+    async (request, response) => {
     const route = new URL(request.url, 'http://localhost').pathname;
     if (request.method === 'POST' && route === '/result/' + token) {
         let body = '';
@@ -69,11 +83,12 @@ const server = createServer(async (request, response) => {
         response.writeHead(204).end();
         return;
     }
-    if (request.method !== 'GET' || !['/', '/legacy.js', '/current.js'].includes(route)) {
+    if (request.method !== 'GET' || !['/', '/legacy.js', '/current.js', '/admin-interaction-policy.js'].includes(route)) {
         response.writeHead(404).end(); return;
     }
     response.setHeader('Content-Type', route === '/' ? 'text/html; charset=utf-8' : 'text/javascript; charset=utf-8');
-    response.end(route === '/' ? html : route === '/legacy.js' ? oldSource : currentSource);
+    response.end(route === '/' ? html : route === '/legacy.js' ? oldSource
+        : route === '/admin-interaction-policy.js' ? currentPolicySource : currentSource);
 });
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 await mkdir(path.join(root, 'cache'), {recursive:true});
@@ -94,6 +109,7 @@ try {
     const report = {
         recorded_at:new Date().toISOString(), baseline:revision,
         current_sha256:createHash('sha256').update(currentSource).digest('hex'),
+        current_policy_sha256:createHash('sha256').update(currentPolicySource).digest('hex'),
         scope:'Synchronous matcher CPU only. No DOM painting, debounce, HTTP latency, full-page cost, or phone claim.',
         ...result,
     };

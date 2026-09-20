@@ -230,16 +230,17 @@ function application_update_extracted_root(string $extractDir): string
 /**
  * Copy update files, backing up overwritten files and preserving local data.
  *
- * @param string $sourceRoot Source root value.
- * @param string $destinationRoot Destination root value.
- * @param string $backupPath Backup path filesystem path.
- * @param bool $cleanUnexpectedFiles Clean unexpected files value.
- * @return array Structured result data for the caller.
+ * @param string $sourceRoot Prepared release root, validated before staging.
+ * @param string $destinationRoot Installed project root; protected local paths are preserved.
+ * @param string $backupPath Caller-selected rollback ZIP path.
+ * @param bool $cleanUnexpectedFiles Whether reviewed obsolete-path cleanup may include unexpected managed files.
+ * @return array{files_copied:int,removed_paths:list<string>,removed_count:int} Committed file count and relative paths backed up before removal; throws on incomplete staging/activation.
  */
 function application_update_copy_files(string $sourceRoot, string $destinationRoot, string $backupPath, bool $cleanUnexpectedFiles = false): array
 {
     application_update_assert_project_root($destinationRoot);
     application_update_assert_source_root($sourceRoot);
+    application_update_assert_gallery_edit_enforcement($sourceRoot);
 
     // $backup stores the rollback archive for overwritten and removed files.
     $backup = new ZipArchive();

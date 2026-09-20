@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Test Fixture
+ * Purpose: Trigger a missing-include failure in the runtime fixture.
+ * Responsibilities:
+ *   - Exercise fatal bootstrap failure handling without installation data.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/fixtures/runtime_missing_require.php

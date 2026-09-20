@@ -26,7 +26,7 @@
  *
  * Notes:
  *   - Loaded by app/services/admin_gallery_report.php; do not require this file directly.
- *   - Shared constants for this module live in app/services/admin_gallery_report.php.
+ *   - The module entry point loads immutable Core policy; consuming parts import their required definitions.
  *   - Keep comments and docstrings intact when modifying this file.
  *
  * Last Updated:
@@ -36,6 +36,9 @@
 declare(strict_types=1);
 
 namespace Gallery\Services;
+use const Gallery\Core\ADMIN_GALLERY_REPORT_MAX_GPS_CLUSTERS;
+use const Gallery\Core\ADMIN_GALLERY_REPORT_GPS_AREA_KM;
+use const Gallery\Core\ADMIN_GALLERY_REPORT_PLACE_MATCH_DEFAULT_RADIUS_KM;
 
 use Throwable;
 use function Gallery\Core\cms_config;

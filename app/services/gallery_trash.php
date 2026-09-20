@@ -40,6 +40,8 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+require_once __DIR__ . '/gallery_edit_concurrency.php';
+
 use FilesystemIterator;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
@@ -947,6 +949,27 @@ function gallery_trash_cover_relative_path(array $gallery): ?string
  */
 function move_gallery_subtrees_to_trash(array $galleryIds, array $options = []): array
 {
+    $writerLock = gallery_edit_writer_begin();
+    try {
+        return move_gallery_subtrees_to_trash_owned($galleryIds, $options);
+    } finally {
+        gallery_edit_writer_end($writerLock);
+    }
+}
+
+/**
+ * Move selected gallery trees into recoverable Trash.
+ *
+ * Internal implementation: enter through move_gallery_subtrees_to_trash() so
+ * reads, early returns and failure cleanup remain inside the same writer lease.
+ *
+ * @param list<int|string> $galleryIds Selected gallery roots; nested selections are collapsed.
+ * @param array{user_id?:int,deleted_from?:string} $options Deleting administrator identity and bounded origin label.
+ * @return array{requested_root_count:int,root_count:int,row_count:int,image_count:int,missing_folders:int,failed_root_count:int,entries:list<string>,failures:list<array<string,mixed>>} Successful Trash tokens and independent per-root failure details.
+ * @author Rudolf Klusal
+ */
+function move_gallery_subtrees_to_trash_owned(array $galleryIds, array $options = []): array
+{
     // $rootIds stores the unique positive gallery ids selected for deletion.
     $rootIds = array_values(array_unique(array_filter(array_map('intval', $galleryIds))));
     if (!$rootIds) {
@@ -991,7 +1014,14 @@ function move_gallery_subtrees_to_trash(array $galleryIds, array $options = []):
         // $subtreeRows stores one stable view of the live subtree used by this operation.
         $subtreeRows = gallery_subtree_rows((int) $rootGallery['id']);
         // $subtreeIds stores every gallery row id inside this root subtree.
-        $subtreeIds = array_map(static fn (array $row): int => (int) $row['id'], $subtreeRows);
+        $subtreeIds = array_map(
+            /**
+             * Capture the stable subtree row IDs before moving its filesystem payload.
+             * @param array{id:int|string} $row Current gallery row inside the selected subtree.
+             * @return int Gallery ID included in the deletion snapshot.
+             * @author Rudolf Klusal
+             */
+            static fn (array $row): int => (int) $row['id'], $subtreeRows);
         // $payloadPresent records whether recoverable files exist for this entry.
         $payloadPresent = is_dir($absolutePath);
         // $trashToken stores the unique identity of this attempted trash entry.
@@ -1391,6 +1421,27 @@ function gallery_trash_refresh_after_structure_change(): void
  */
 function restore_gallery_trash_entry(string $trashToken, array $options = []): array
 {
+    $writerLock = gallery_edit_writer_begin();
+    try {
+        return restore_gallery_trash_entry_owned($trashToken, $options);
+    } finally {
+        gallery_edit_writer_end($writerLock);
+    }
+}
+
+/**
+ * Restore a Trash entry and rebuild its live metadata.
+ *
+ * Internal implementation: enter through restore_gallery_trash_entry() so
+ * reads, early returns and failure cleanup remain inside the same writer lease.
+ *
+ * @param string $trashToken Existing Trash entry identifier.
+ * @param array<string,mixed> $options Reserved restore options; currently ignored.
+ * @return array{gallery_count:int,image_count:int,root_gallery_id:int,folder_path:string,metadata_only:bool,ancestor_shells_created:int} Restored live identity and metadata/payload recovery counts.
+ * @author Rudolf Klusal
+ */
+function restore_gallery_trash_entry_owned(string $trashToken, array $options = []): array
+{
     gallery_trash_assert_available('gallery.trash_restore');
     mutation_schema_assert_available(
         gallery_move_schema_status(),
@@ -1490,7 +1541,15 @@ function restore_gallery_trash_entry(string $trashToken, array $options = []): a
         $galleryIdsByPath = [];
         // $galleryRecords stores snapshot gallery records ordered parent-first.
         $galleryRecords = $snapshot['galleries'];
-        usort($galleryRecords, static fn (array $left, array $right): int => strlen((string) $left['folder_path']) <=> strlen((string) $right['folder_path']));
+        usort($galleryRecords,
+            /**
+             * Restore shorter ancestor paths before their descendant rows.
+             * @param array{folder_path:string} $left First snapshotted gallery record.
+             * @param array{folder_path:string} $right Second snapshotted gallery record.
+             * @return int Negative/zero/positive comparison of path lengths.
+             * @author Rudolf Klusal
+             */
+            static fn (array $left, array $right): int => strlen((string) $left['folder_path']) <=> strlen((string) $right['folder_path']));
 
         // Recreate only ancestors that are neither live nor represented by another active trash entry.
         $ancestorShellIds = ensure_gallery_ancestors_for_path($folderPath);
@@ -2093,6 +2152,33 @@ function reconcile_gallery_trash_transitional_entries(int $limit = 10): array
  */
 function gallery_trash_reconcile_entry(array $entry): string
 {
+    $writerLock = gallery_edit_writer_begin();
+    try {
+        return gallery_trash_reconcile_entry_owned($entry);
+    } finally {
+        gallery_edit_writer_end($writerLock);
+    }
+}
+
+/**
+ * Reconcile abandoned Trash state against live storage.
+ *
+ * Internal implementation: enter through gallery_trash_reconcile_entry() so
+ * reads, early returns and failure cleanup remain inside the same writer lease.
+ *
+ * @param array{trash_token:string,status:string} $entry Candidate identity and expected lifecycle state; current payload metadata is reloaded under ownership.
+ * @return string Recovery outcome bucket for the maintenance caller.
+ * @author Rudolf Klusal
+ */
+function gallery_trash_reconcile_entry_owned(array $entry): string
+{
+    // Maintenance selected this candidate before acquiring ownership. Never act
+    // on its old lifecycle state after a restore, purge or another recovery.
+    $currentEntry = gallery_trash_entry((string) ($entry['trash_token'] ?? ''));
+    if (!$currentEntry || (string) ($currentEntry['status'] ?? '') !== (string) ($entry['status'] ?? '')) {
+        throw new RuntimeException('This trash entry changed before reconciliation. Retry maintenance.');
+    }
+    $entry = $currentEntry;
     // $token stores the validated filesystem/DB identity.
     $token = (string) ($entry['trash_token'] ?? '');
     gallery_trash_assert_token($token);

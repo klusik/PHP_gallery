@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Regression Test
+ * Purpose: Verify bounded gallery download manifest construction.
+ * Responsibilities:
+ *   - Check authorized entry metadata and manifest limits on synthetic data.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/gallery_download_manifest_test.php

@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Regression Test
+ * Purpose: Verify strict MVC scanner behavior and baseline handling.
+ * Responsibilities:
+ *   - Exercise ownership violations and ensure new findings cannot be baselined away.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/mvc_layer_contract_test.php

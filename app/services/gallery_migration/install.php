@@ -57,11 +57,34 @@ use function Gallery\Models\image_model_migration_upsert;
  *
  * @param string $jobId Job id identifier.
  * @param int $targetGalleryId Receiving parent gallery id.
- * @param array $request Request data.
+ * @param array<string,int|string> $request Semantic asset reference matched against the persisted job manifest.
  * @param string $sourcePath Source filesystem path.
- * @return array Structured result data for the caller.
+ * @return array{ok:bool,job_id:string,asset_key:string,target_gallery_id:int,result:array<string,mixed>,received:int,total_assets:int} Installed asset identity/result and durable receipt counts.
  */
 function gallery_migration_install_asset_file(string $jobId, int $targetGalleryId, array $request, string $sourcePath): array
+{
+    $writerLock = gallery_edit_writer_begin();
+    try {
+        return gallery_migration_install_asset_file_owned($jobId, $targetGalleryId, $request, $sourcePath);
+    } finally {
+        gallery_edit_writer_end($writerLock);
+    }
+}
+
+/**
+ * Install a migration asset and persist its ownership metadata.
+ *
+ * Internal implementation: enter through gallery_migration_install_asset_file() so
+ * reads, early returns and failure cleanup remain inside the same writer lease.
+ *
+ * @param string $jobId Resumable migration job identifier.
+ * @param int $targetGalleryId Receiving parent gallery identifier.
+ * @param array<string,int|string> $request Required semantic asset reference matched against the persisted job manifest.
+ * @param string $sourcePath Temporary source asset path.
+ * @return array{ok:bool,job_id:string,asset_key:string,target_gallery_id:int,result:array<string,mixed>,received:int,total_assets:int} Installed asset identity/result and durable receipt counts.
+ * @author Rudolf Klusal
+ */
+function gallery_migration_install_asset_file_owned(string $jobId, int $targetGalleryId, array $request, string $sourcePath): array
 {
     mutation_schema_assert_available(
         gallery_migration_schema_status(),
@@ -122,12 +145,38 @@ function gallery_migration_install_asset_file(string $jobId, int $targetGalleryI
  * before the browser received the JSON response. This function lets the target
  * answer from real state instead of relying only on the browser response.
  *
- * @param array $job Job value.
+ * @param array{job_id:string,target_gallery_id:int} $job Job identity and expected destination; stale receipt/manifest fields are never trusted.
  * @return array<string,mixed> Updated job state.
  */
 function gallery_migration_sync_received_assets(array $job): array
 {
+    $writerLock = gallery_edit_writer_begin();
+    try {
+        return gallery_migration_sync_received_assets_owned($job);
+    } finally {
+        gallery_edit_writer_end($writerLock);
+    }
+}
+
+/**
+ * Recover already stored migration assets into job metadata.
+ *
+ * Internal implementation: enter through gallery_migration_sync_received_assets() so
+ * reads, early returns and failure cleanup remain inside the same writer lease.
+ *
+ * @param array{job_id:string,target_gallery_id:int} $job Job identity and expected target; mutable state is reloaded under ownership.
+ * @return array<string,mixed> Durable job with current manifest, gallery/image maps and recovered assets_received entries; existing progress is preserved.
+ * @author Rudolf Klusal
+ */
+function gallery_migration_sync_received_assets_owned(array $job): array
+{
     $targetGalleryId = (int) ($job['target_gallery_id'] ?? 0);
+    // Status callers may have loaded this array before another request accepted
+    // an asset. Reload the durable job; never overwrite progress from that array.
+    $job = gallery_migration_load_job((string) ($job['job_id'] ?? ''));
+    if ($targetGalleryId <= 0 || (int) ($job['target_gallery_id'] ?? 0) !== $targetGalleryId) {
+        throw new RuntimeException(gallery_migration_t('gallery_migration.error.job_target_mismatch', 'Migration job does not belong to this target gallery.'));
+    }
     $manifest = (array) ($job['manifest'] ?? []);
     if ($targetGalleryId <= 0 || !$manifest) {
         return $job;
@@ -410,13 +459,15 @@ function gallery_migration_image_visibility(string $visibility): string
  *
  * @param int $targetGalleryId Target gallery id identifier.
  * @param int $imageId Image identifier.
- * @param array $asset Asset value.
+ * @param array{size:int,format:string,checksum_sha256?:string} $asset Manifest thumbnail dimensions/format and optional integrity hash.
  * @param string $sourcePath Source filesystem path.
+ * @return void Installs the validated derivative under the caller's writer lease and records its metadata.
+ * @author Rudolf Klusal
  */
 function gallery_migration_install_thumbnail(int $targetGalleryId, int $imageId, array $asset, string $sourcePath): void
 {
     $gallery = find_gallery($targetGalleryId, true) ?: find_gallery($targetGalleryId);
-    $image = find_image($imageId);
+    $image = find_image($imageId, true);
     if (!$gallery || !$image || (int) ($image['gallery_id'] ?? 0) !== $targetGalleryId) {
         throw new RuntimeException(gallery_migration_t('gallery_migration.error.image_missing', 'Requested source image was not found.'));
     }

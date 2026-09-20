@@ -37,8 +37,11 @@ declare(strict_types=1);
 namespace Gallery\Controllers;
 
 use Throwable;
-use const Gallery\Services\ADMIN_GALLERY_REPORT_DEFAULT_BATCH_SIZE;
-use const Gallery\Services\ADMIN_GALLERY_REPORT_MAX_BATCH_SIZE;
+use const Gallery\Core\ADMIN_GALLERY_REPORT_DEFAULT_BATCH_SIZE;
+use const Gallery\Core\ADMIN_GALLERY_REPORT_MAX_BATCH_SIZE;
+use const Gallery\Core\ADMIN_GALLERY_REPORT_JOB_KEY;
+use const Gallery\Core\ADMIN_GALLERY_REPORT_TELEMETRY_DEFAULT_DAYS;
+use const Gallery\Core\ADMIN_GALLERY_REPORT_TELEMETRY_MAX_DAYS;
 use function Gallery\Core\flash_message;
 use function Gallery\Core\request_method;
 use function Gallery\Core\require_admin;
@@ -61,6 +64,7 @@ function cms_admin_gallery_report(): void
 
 /**
  * Process browser-driven complete gallery overview report generation requests.
+ * @return void Emits progress JSON or final report HTML; checkpoint storage is retained through exceptions and cleared after completion.
  */
 function cms_admin_gallery_report_generate(): void
 {
@@ -71,16 +75,18 @@ function cms_admin_gallery_report_generate(): void
     }
 
     $bufferLevel = ob_get_level();
+    $checkpoint = is_array($_SESSION[ADMIN_GALLERY_REPORT_JOB_KEY] ?? null)
+        ? $_SESSION[ADMIN_GALLERY_REPORT_JOB_KEY] : null;
     ob_start();
     try {
         verify_csrf();
         $action = (string) ($_POST['action'] ?? 'step');
         if ($action === 'start') {
-            $telemetryDays = max(1, min(3650, (int) ($_POST['telemetry_days'] ?? 30)));
-            $state = admin_gallery_report_start_job($telemetryDays);
+            $telemetryDays = max(1, min(ADMIN_GALLERY_REPORT_TELEMETRY_MAX_DAYS, (int) ($_POST['telemetry_days'] ?? ADMIN_GALLERY_REPORT_TELEMETRY_DEFAULT_DAYS)));
+            $state = admin_gallery_report_start_job($checkpoint, $telemetryDays);
         } else {
             $batchSize = max(1, min(ADMIN_GALLERY_REPORT_MAX_BATCH_SIZE, (int) ($_POST['batch_size'] ?? ADMIN_GALLERY_REPORT_DEFAULT_BATCH_SIZE)));
-            $state = admin_gallery_report_process_job($batchSize);
+            $state = admin_gallery_report_process_job($checkpoint, $batchSize);
         }
 
         while (ob_get_level() > $bufferLevel) {
@@ -109,6 +115,12 @@ function cms_admin_gallery_report_generate(): void
             'status' => 'error',
             'error' => $exception->getMessage(),
         ]);
+    } finally {
+        if ($checkpoint === null) {
+            unset($_SESSION[ADMIN_GALLERY_REPORT_JOB_KEY]);
+        } else {
+            $_SESSION[ADMIN_GALLERY_REPORT_JOB_KEY] = $checkpoint;
+        }
     }
 }
 

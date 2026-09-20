@@ -56,6 +56,8 @@ use function Gallery\Views\view_render_content_localization_fields;
  *
  * @param array<string, mixed> $gallery Gallery row being edited.
  * @param string $activeEditTab Currently selected editor tab.
+ * @return void Emits Identity markup with the bounded parent picker and prepared feature controls.
+ * @author Rudolf Klusal
  */
 function admin_edit_gallery_render_identity_tab(array $gallery, string $activeEditTab): void
 {
@@ -98,7 +100,7 @@ function admin_edit_gallery_render_identity_tab(array $gallery, string $activeEd
         ],
         'gallery' => $gallery,
         'folder_name' => gallery_folder_name_from_path((string) $gallery['folder_path']),
-        'parent_options_html' => gallery_parent_options($gallery),
+        'parent_picker_html' => render_gallery_parent_picker((int) ($gallery['parent_id'] ?? 0), (int) $gallery['id']),
         'tags' => tag_names_for_entity('gallery', (int) $gallery['id']),
         'tag_suggestions_attribute' => admin_weighted_tag_suggestions_attribute((int) $gallery['id']),
         'date_fields_html' => $dateFieldsHtml,

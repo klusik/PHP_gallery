@@ -1,4 +1,8 @@
 # Project: PHP Gallery
+# Module Type: Windows Tooling
+# Purpose: Persist uploader state and job/activity history atomically.
+# Responsibilities:
+#   - Read and publish local state without exposing partially written records.
 # Repository: https://github.com/klusik/PHP_gallery
 #
 # File: winapp/uploader/state_store.py

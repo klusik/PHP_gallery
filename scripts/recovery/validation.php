@@ -2,6 +2,8 @@
 
 /**
  * Project: PHP Gallery
+ * Responsibilities:
+ *   - Report recovery mismatches without loading restored credentials or application code.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: scripts/recovery/validation.php
