@@ -1,10 +1,11 @@
-# Telemetry repair on the 0.105 source baseline
+# Telemetry repair included in Version 0.105.1
 
 Author: Rudolf Klusal
 
 Source baseline: `php-gallery-deploy(20260920-092837).zip`.
-This is a source patch, not a new release. It does not bump the version, change
-production configuration, or require a new database migration.
+This document is the permanent technical reference for the Version 0.105.1
+telemetry repair. It changes no production configuration and requires no new
+database migration.
 
 ## Independent retention and archival
 
