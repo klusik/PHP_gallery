@@ -31,12 +31,54 @@
  *   2026-09-19
  */
 
+import {
+    GALLERY_TITLE_COMPLETION_MIN_CHARACTERS,
+    GALLERY_TITLE_COMPLETION_MAX_CHARACTERS,
+    GALLERY_TITLE_COMPLETION_RESULT_LIMIT,
+    GALLERY_TITLE_COMPLETION_DEBOUNCE_MS,
+    GALLERY_TITLE_COMPLETION_REQUEST_TIMEOUT_MS,
+} from './admin-interaction-policy.js?v=20260920-admin-interaction-policy-v1';
+
+/**
+ * Locate the server-rendered title completion owner and its accessible children.
+ * @var {string}
+ * Units: CSS selector string. Scope: this module's title-control markup contract.
+ * Consumers: admin-gallery-title-completion.js.
+ * Rationale: keep private element roles beside their event/presentation owner, not in global operational policy.
+ */
 const COMPLETION_SELECTOR = '[data-gallery-title-completion]';
+/**
+ * Recognize delegated events from title inputs, including injected forms.
+ * @var {string}
+ * Units: CSS selector string. Scope: this module's title-control markup contract.
+ * Consumers: admin-gallery-title-completion.js.
+ * Rationale: keep private element roles beside their event/presentation owner, not in global operational policy.
+ */
 const INPUT_SELECTOR = '[data-gallery-title-completion-input]';
+/**
+ * Locate the presentation-only ghost overlay without changing the submitted field.
+ * @var {string}
+ * Units: CSS selector string. Scope: this module's title-control markup contract.
+ * Consumers: admin-gallery-title-completion.js.
+ * Rationale: keep private element roles beside their event/presentation owner, not in global operational policy.
+ */
 const OVERLAY_SELECTOR = '[data-gallery-title-completion-overlay]';
+/**
+ * Locate the already-entered prefix span used for ghost-text alignment.
+ * @var {string}
+ * Units: CSS selector string. Scope: this module's title-control markup contract.
+ * Consumers: admin-gallery-title-completion.js.
+ * Rationale: keep private element roles beside their event/presentation owner, not in global operational policy.
+ */
 const PREFIX_SELECTOR = '[data-gallery-title-completion-prefix]';
+/**
+ * Locate the actionable suggested suffix for pointer acceptance and presentation.
+ * @var {string}
+ * Units: CSS selector string. Scope: this module's title-control markup contract.
+ * Consumers: admin-gallery-title-completion.js.
+ * Rationale: keep private element roles beside their event/presentation owner, not in global operational policy.
+ */
 const TAIL_SELECTOR = '[data-gallery-title-completion-tail]';
-const MIN_COMPLETION_CHARACTERS = 2;
 const completionRequests = new WeakMap();
 let completionControlId = 0;
 
@@ -119,7 +161,7 @@ function compareGalleryTitleCompletionCandidates(left, right, parentId) {
  */
 export function findGalleryTitleCompletion(candidates, inputValue, parentId = 0) {
     const typedValue = String(inputValue ?? '');
-    if ([...typedValue].length < MIN_COMPLETION_CHARACTERS || typedValue.trim() === '') {
+    if ([...typedValue].length < GALLERY_TITLE_COMPLETION_MIN_CHARACTERS || typedValue.trim() === '') {
         return '';
     }
 
@@ -162,7 +204,11 @@ function cancelCompletionRequest(input) {
     state.controller = null;
 }
 
-/** Fetch only bounded results after typing settles; stale and detached controls never render. */
+/**
+ * Fetch only bounded results after typing settles; stale and detached controls never render.
+ * @param {HTMLInputElement} input Title control owning its pending request and debounce timer.
+ * @return {void} Queues optional work without changing the submitted title.
+ */
 function requestGalleryTitleCompletion(input) {
     const control = input.closest(COMPLETION_SELECTOR);
     if (!(control instanceof HTMLElement)) return;
@@ -170,7 +216,9 @@ function requestGalleryTitleCompletion(input) {
     hideGalleryTitleCompletion(control);
     const state = completionRequestState(input);
     state.dismissed = false;
-    if (state.composing || !caretAllowsGalleryTitleCompletion(input) || [...input.value].length < 2 || [...input.value].length > 255) return;
+    if (state.composing || !caretAllowsGalleryTitleCompletion(input)
+        || [...input.value].length < GALLERY_TITLE_COMPLETION_MIN_CHARACTERS
+        || [...input.value].length > GALLERY_TITLE_COMPLETION_MAX_CHARACTERS) return;
     const endpoint = control.dataset.galleryTitleCompletionUrl;
     if (!endpoint) {
         updateGalleryTitleCompletion(input);
@@ -180,11 +228,13 @@ function requestGalleryTitleCompletion(input) {
     const generation = state.generation;
     const value = input.value;
     const parentId = selectedParentGalleryId(input);
-    state.timer = window.setTimeout(async () => {
+    state.timer = window.setTimeout(
+        /** Request one settled title intent; generation checks prevent stale rendering. @return {Promise<void>} Completes optional suggestions or silent failure. */
+        async () => {
         state.timer = 0;
         const controller = new AbortController();
         state.controller = controller;
-        const timeout = window.setTimeout(() => controller.abort(), 5000);
+        const timeout = window.setTimeout(() => controller.abort(), GALLERY_TITLE_COMPLETION_REQUEST_TIMEOUT_MS);
         try {
             const url = new URL(endpoint, window.location.href);
             // Keep credentials on the active origin, including local host aliases.
@@ -197,7 +247,8 @@ function requestGalleryTitleCompletion(input) {
             const result = await response.json();
             if (!result.ok || generation !== state.generation || !input.isConnected
                 || document.activeElement !== input || input.value !== value || selectedParentGalleryId(input) !== parentId) return;
-            control.__galleryTitleCompletionCandidates = Array.isArray(result.candidates) ? result.candidates.slice(0, 8) : [];
+            control.__galleryTitleCompletionCandidates = Array.isArray(result.candidates)
+                ? result.candidates.slice(0, GALLERY_TITLE_COMPLETION_RESULT_LIMIT) : [];
             updateGalleryTitleCompletion(input);
         } catch {
             // Completion is optional. The ordinary required title field remains available.
@@ -205,7 +256,7 @@ function requestGalleryTitleCompletion(input) {
             clearTimeout(timeout);
             if (state.controller === controller) state.controller = null;
         }
-    }, 180);
+    }, GALLERY_TITLE_COMPLETION_DEBOUNCE_MS);
 }
 
 /**
@@ -236,7 +287,7 @@ function completionCandidates(control) {
  */
 function selectedParentGalleryId(input) {
     const form = input.closest('form');
-    const parent = form?.querySelector('select[name="parent_id"]');
+    const parent = form?.querySelector('input[type="hidden"][name="parent_id"]:enabled, select[name="parent_id"]:enabled');
     return Number(parent?.value || 0);
 }
 
@@ -377,6 +428,7 @@ function caretAllowsGalleryTitleCompletion(input) {
  *
  * Delegation is required because the create-gallery form can be fetched and
  * injected into the side panel after the main browser bundle has already booted.
+ * @return {void} Installs document-owned handlers once without changing submitted title values.
  */
 export function setupAdminGalleryTitleCompletion() {
     if (document.documentElement.dataset.galleryTitleCompletionReady === '1') {
@@ -404,6 +456,7 @@ export function setupAdminGalleryTitleCompletion() {
             return;
         }
         cancelCompletionRequest(input);
+        // A next-task focus check, not a tunable waiting period: let focus settle first.
         window.setTimeout(() => {
             if (document.activeElement === input) {
                 return;
@@ -415,8 +468,11 @@ export function setupAdminGalleryTitleCompletion() {
         }, 0);
     });
 
-    document.addEventListener('change', (event) => {
-        const parent = event.target instanceof HTMLSelectElement && event.target.matches('select[name="parent_id"]') ? event.target : null;
+    document.addEventListener('change',
+        /** Refresh suggestions only for an enabled parent control in the same form. @param {Event} event Delegated change. @return {void} Schedules optional title work. */
+        (event) => {
+        const parent = (event.target instanceof HTMLSelectElement || event.target instanceof HTMLInputElement)
+            && event.target.matches('input[type="hidden"][name="parent_id"]:enabled, select[name="parent_id"]:enabled') ? event.target : null;
         if (!parent) {
             return;
         }

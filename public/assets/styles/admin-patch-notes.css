@@ -1,5 +1,9 @@
 /**
  * Project: PHP Gallery
+ * Module Type: Stylesheet
+ * Purpose: Style the Admin patch-notes viewer.
+ * Responsibilities:
+ *   - Present release-note text and navigation within the Admin layout.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: public/assets/styles/admin-patch-notes.css

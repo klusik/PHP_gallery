@@ -155,6 +155,8 @@ function view_render_admin_gallery_access_fields(array $viewModel): void
  * Render the Identity tab from controller-prepared presentation data.
  *
  * @param array<string, mixed> $viewModel Controller-prepared values and trusted legacy fragments.
+ * @return void Emits Identity fields and the controller-prepared parent picker fragment.
+ * @author Rudolf Klusal
  */
 function view_render_admin_gallery_identity_tab(array $viewModel): void
 {
@@ -175,7 +177,7 @@ function view_render_admin_gallery_identity_tab(array $viewModel): void
     echo '</div>';
 
     echo '<div class="admin-edit-card"><label>' . e((string) ($labels['slug'] ?? 'Slug')) . '<input name="slug" value="' . e((string) ($gallery['slug'] ?? '')) . '" autocomplete="off" required><span class="muted">' . e((string) ($labels['slug_help'] ?? '')) . '</span></label><label>' . e((string) ($labels['folder_name'] ?? 'Folder name')) . '<input name="folder_name" value="' . e((string) ($viewModel['folder_name'] ?? '')) . '" autocomplete="off" required><span class="muted">' . e((string) ($labels['folder_rename_help'] ?? '')) . '</span></label></div>';
-    echo '<div class="admin-edit-card"><label>' . e((string) ($labels['parent_gallery'] ?? 'Parent gallery')) . '<select name="parent_id"><option value="0">' . e((string) ($labels['no_parent'] ?? 'No parent')) . '</option>' . (string) ($viewModel['parent_options_html'] ?? '') . '</select></label><label>' . e((string) ($labels['sort_order'] ?? 'Sort order')) . '<input name="sort_order" type="number" value="' . (int) ($gallery['sort_order'] ?? 0) . '"></label></div>';
+    echo '<div class="admin-edit-card"><div>' . e((string) ($labels['parent_gallery'] ?? 'Parent gallery')) . (string) ($viewModel['parent_picker_html'] ?? '') . '</div><label>' . e((string) ($labels['sort_order'] ?? 'Sort order')) . '<input name="sort_order" type="number" value="' . (int) ($gallery['sort_order'] ?? 0) . '"></label></div>';
     echo '<div class="admin-edit-card is-wide"><label>' . e((string) ($labels['tags'] ?? 'Tags')) . '<input name="tags" value="' . e((string) ($viewModel['tags'] ?? '')) . '" list="tag-suggestions" data-tag-input' . (string) ($viewModel['tag_suggestions_attribute'] ?? '') . '><span class="muted">' . e((string) ($labels['tags_help'] ?? '')) . '</span></label></div>';
     if (is_array($smartAttachments)) {
         view_render_admin_gallery_smart_attachments($smartAttachments);
@@ -393,12 +395,15 @@ function view_render_admin_gallery_images_tab(array $viewModel): void
 /**
  * Render the opening tag and hidden transport fields for the shared gallery editor form.
  *
- * @param array<string, mixed> $viewModel Controller-prepared form state.
+ * @param array{csrf_html?:string,gallery_id?:int,edit_revision?:string} $viewModel Transport fields from the same snapshot as the rendered editor values.
+ * @return void Emits the multipart form opening and hidden identity/revision fields.
+ * @author Rudolf Klusal
  */
 function view_render_admin_gallery_editor_form_open(array $viewModel): void
 {
     echo '<form method="post" enctype="multipart/form-data" class="admin-edit-gallery-form" autocomplete="off">' . (string) ($viewModel['csrf_html'] ?? '');
     echo '<input type="hidden" name="id" value="' . (int) ($viewModel['gallery_id'] ?? 0) . '">';
+    echo '<input type="hidden" name="edit_revision" value="' . e((string) ($viewModel['edit_revision'] ?? '')) . '">';
     echo '<input type="hidden" name="return_tab" value="admin-edit-identity">';
 }
 
@@ -411,6 +416,27 @@ function view_render_admin_gallery_editor_form_close(array $viewModel): void
 {
     echo '<div class="admin-edit-gallery-savebar"><button type="submit">' . e((string) ($viewModel['save_label'] ?? 'Save gallery')) . '</button><span class="muted">' . e((string) ($viewModel['help'] ?? '')) . '</span></div>';
     echo '</form>';
+}
+
+/**
+ * Render a no-JavaScript conflict review without merging or resubmitting stale settings.
+ *
+ * @param array{message:string,reload_url:string,latest:array,draft:array,labels:array<string,string>} $viewModel Prepared secret-free comparison and entered draft.
+ * @return void
+ */
+function view_render_admin_gallery_edit_conflict(array $viewModel): void
+{
+    $labels = $viewModel['labels'];
+    echo '<section class="admin-edit-card" data-gallery-edit-conflict><p role="alert">' . e($viewModel['message']) . '</p>';
+    echo '<p>' . e($labels['help']) . '</p><a class="button" href="' . e($viewModel['reload_url']) . '" target="_blank" rel="noopener">' . e($labels['open']) . '</a>';
+    foreach (['draft', 'latest'] as $section) {
+        echo '<h2>' . e($labels[$section]) . '</h2>';
+        foreach ($viewModel[$section] as $field => $value) {
+            $text = is_array($value) ? (string) json_encode($value, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) : (string) $value;
+            echo '<label>' . e((string) $field) . '<textarea readonly rows="3">' . e($text) . '</textarea></label>';
+        }
+    }
+    echo '</section>';
 }
 
 /**

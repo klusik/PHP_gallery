@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Regression Test
+ * Purpose: Verify read-only public media releases the session lock.
+ * Responsibilities:
+ *   - Protect concurrent media responses without weakening access preflight.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/public_media_session_release_test.php

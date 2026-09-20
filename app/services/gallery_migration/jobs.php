@@ -246,10 +246,32 @@ function gallery_migration_job_status_payload(array $job, ?array $asset = null):
  *
  * @param string $jobId Migration job id.
  * @param int $targetGalleryId Target gallery id.
- * @param ?array $request Request data.
- * @return array<string mixed> JSON-safe status payload.
+ * @param array<string,int|string>|null $request Optional manifest asset reference whose receipt state is requested.
+ * @return array<string,mixed> JSON-safe synchronized job status and optional selected asset receipt state.
  */
 function gallery_migration_job_status_response(string $jobId, int $targetGalleryId, ?array $request = null): array
+{
+    $writerLock = gallery_edit_writer_begin();
+    try {
+        return gallery_migration_job_status_response_owned($jobId, $targetGalleryId, $request);
+    } finally {
+        gallery_edit_writer_end($writerLock);
+    }
+}
+
+/**
+ * Read and synchronize resumable job state within one writer boundary.
+ *
+ * Internal implementation: enter through gallery_migration_job_status_response() so
+ * reads, early returns and failure cleanup remain inside the same writer lease.
+ *
+ * @param string $jobId Resumable migration job identifier.
+ * @param int $targetGalleryId Receiving parent gallery identifier.
+ * @param array<string,int|string>|null $request Optional manifest asset reference whose receipt state is requested.
+ * @return array<string,mixed> JSON-safe synchronized job status and optional selected asset receipt state.
+ * @author Rudolf Klusal
+ */
+function gallery_migration_job_status_response_owned(string $jobId, int $targetGalleryId, ?array $request = null): array
 {
     $job = gallery_migration_load_job($jobId);
     if ((int) ($job['target_gallery_id'] ?? 0) !== $targetGalleryId) {
@@ -271,9 +293,30 @@ function gallery_migration_job_status_response(string $jobId, int $targetGallery
  *
  * @param string $jobId Job id identifier.
  * @param int $targetGalleryId Receiving parent gallery id.
- * @return array Structured result data for the caller.
+ * @return array{ok:bool,job_id:string,target_gallery_id:int,target_parent_gallery_id:int,imported_root_gallery_id:int,gallery_ids:list<int>,assets_received:int,total_assets:int,gallery_url:string,edit_url:string} Completed import identities, receipt totals and navigation URLs.
  */
 function gallery_migration_complete_job(string $jobId, int $targetGalleryId): array
+{
+    $writerLock = gallery_edit_writer_begin();
+    try {
+        return gallery_migration_complete_job_owned($jobId, $targetGalleryId);
+    } finally {
+        gallery_edit_writer_end($writerLock);
+    }
+}
+
+/**
+ * Complete a migration and refresh its gallery-derived metadata.
+ *
+ * Internal implementation: enter through gallery_migration_complete_job() so
+ * reads, early returns and failure cleanup remain inside the same writer lease.
+ *
+ * @param string $jobId Resumable migration job identifier.
+ * @param int $targetGalleryId Receiving parent gallery identifier.
+ * @return array{ok:bool,job_id:string,target_gallery_id:int,target_parent_gallery_id:int,imported_root_gallery_id:int,gallery_ids:list<int>,assets_received:int,total_assets:int,gallery_url:string,edit_url:string} Completed import identities, receipt totals and navigation URLs.
+ * @author Rudolf Klusal
+ */
+function gallery_migration_complete_job_owned(string $jobId, int $targetGalleryId): array
 {
     mutation_schema_assert_available(
         gallery_migration_schema_status(),

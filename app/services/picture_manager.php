@@ -37,6 +37,8 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+require_once __DIR__ . '/gallery_edit_concurrency.php';
+
 use RuntimeException;
 use Throwable;
 use function Gallery\Core\normalize_relative_path;
@@ -83,7 +85,7 @@ function picture_manager_owned_images_for_selection(int $sourceGalleryId, array 
     $images = [];
     foreach ($imageIds as $imageId) {
         // $image stores one selected database row.
-        $image = find_image((int) $imageId);
+        $image = find_image((int) $imageId, true);
         if (!$image || (int) ($image['gallery_id'] ?? 0) !== $sourceGalleryId) {
             $failures[] = 'Image #' . (int) $imageId . ' is not part of the source gallery.';
             continue;
@@ -121,6 +123,28 @@ function picture_manager_owned_images_for_selection(int $sourceGalleryId, array 
  * @return array{requested:int,copied:int,skipped:int,originals_copied:int,derivatives_copied:int,failures:array<int,string>,skipped_existing:array<int,string>,created_image_ids:array<int,int>,destination_cover_image_id:int|null} Structured result data for the caller.
  */
 function copy_gallery_images(int $sourceGalleryId, int $destinationGalleryId, array $imageIds): array
+{
+    $writerLock = gallery_edit_writer_begin();
+    try {
+        return copy_gallery_images_owned($sourceGalleryId, $destinationGalleryId, $imageIds);
+    } finally {
+        gallery_edit_writer_end($writerLock);
+    }
+}
+
+/**
+ * Copy selected originals and synchronize destination metadata.
+ *
+ * Internal implementation: enter through copy_gallery_images() so
+ * reads, early returns and failure cleanup remain inside the same writer lease.
+ *
+ * @param int $sourceGalleryId Source gallery identifier.
+ * @param int $destinationGalleryId Destination gallery identifier.
+ * @param list<int|string> $imageIds Explicit source image selection, validated against current ownership.
+ * @return array{requested:int,copied:int,skipped:int,originals_copied:int,derivatives_copied:int,failures:list<string>,skipped_existing:list<string>,created_image_ids:list<int>,destination_cover_image_id:int|null} Copy counts, duplicate explanations and newly persisted destination identities.
+ * @author Rudolf Klusal
+ */
+function copy_gallery_images_owned(int $sourceGalleryId, int $destinationGalleryId, array $imageIds): array
 {
     mutation_schema_assert_available(
         gallery_move_schema_status(),
@@ -343,9 +367,23 @@ function copy_gallery_images(int $sourceGalleryId, int $destinationGalleryId, ar
     }
 
     // $originalsCopied stores copied original media files.
-    $originalsCopied = count(array_filter($copiedFiles, static fn (array $entry): bool => (string) $entry['kind'] === 'original'));
+    $originalsCopied = count(array_filter($copiedFiles,
+        /**
+         * Count copied originals independently from regenerated or copied derivatives.
+         * @param array{kind:string} $entry Successfully copied file-manifest entry.
+         * @return bool Whether this entry represents an original image.
+         * @author Rudolf Klusal
+         */
+        static fn (array $entry): bool => (string) $entry['kind'] === 'original'));
     // $derivativesCopied stores copied generated files.
-    $derivativesCopied = count(array_filter($copiedFiles, static fn (array $entry): bool => (string) $entry['kind'] === 'derivative'));
+    $derivativesCopied = count(array_filter($copiedFiles,
+        /**
+         * Count copied derivatives separately for the operation result.
+         * @param array{kind:string} $entry Successfully copied file-manifest entry.
+         * @return bool Whether this entry represents a generated derivative.
+         * @author Rudolf Klusal
+         */
+        static fn (array $entry): bool => (string) $entry['kind'] === 'derivative'));
 
     return [
         'requested' => count($normalizedIds),
@@ -574,6 +612,28 @@ function picture_manager_assert_destination_outside_gallery_selection(int $desti
  */
 function picture_manager_copy_gallery_subtrees(int $sourceGalleryId, int $destinationGalleryId, array $galleryIds): array
 {
+    $writerLock = gallery_edit_writer_begin();
+    try {
+        return picture_manager_copy_gallery_subtrees_owned($sourceGalleryId, $destinationGalleryId, $galleryIds);
+    } finally {
+        gallery_edit_writer_end($writerLock);
+    }
+}
+
+/**
+ * Copy selected gallery trees and register their descendants.
+ *
+ * Internal implementation: enter through picture_manager_copy_gallery_subtrees() so
+ * reads, early returns and failure cleanup remain inside the same writer lease.
+ *
+ * @param int $sourceGalleryId Source gallery identifier.
+ * @param int $destinationGalleryId Destination gallery identifier.
+ * @param list<int|string> $galleryIds Explicit gallery subtree selection below the source gallery.
+ * @return array{requested:int,copied_roots:int,copied_rows:int,scanned_images:int,created_gallery_ids:list<int>} Registered clone identities and copied/scanned counts.
+ * @author Rudolf Klusal
+ */
+function picture_manager_copy_gallery_subtrees_owned(int $sourceGalleryId, int $destinationGalleryId, array $galleryIds): array
+{
     // $galleryIds stores a de-duplicated physical gallery selection.
     $galleryIds = picture_manager_normalize_gallery_ids($galleryIds);
     if (!$galleryIds) {
@@ -673,7 +733,15 @@ function picture_manager_copy_gallery_subtrees(int $sourceGalleryId, int $destin
 
             // Parents must be created before children so parent_id discovery follows the copied tree.
             $rows = (array) $plan['rows'];
-            usort($rows, static fn (array $left, array $right): int => strlen((string) ($left['folder_path'] ?? '')) <=> strlen((string) ($right['folder_path'] ?? '')));
+            usort($rows,
+                /**
+                 * Register copied ancestors before descendants to preserve parent discovery.
+                 * @param array{folder_path?:string} $left First gallery row in the source subtree.
+                 * @param array{folder_path?:string} $right Second gallery row in the source subtree.
+                 * @return int Negative/zero/positive comparison of path lengths.
+                 * @author Rudolf Klusal
+                 */
+                static fn (array $left, array $right): int => strlen((string) ($left['folder_path'] ?? '')) <=> strlen((string) ($right['folder_path'] ?? '')));
             foreach ($rows as $row) {
                 // $rowPath stores the original indexed gallery path.
                 $rowPath = normalize_relative_path((string) $row['folder_path']);

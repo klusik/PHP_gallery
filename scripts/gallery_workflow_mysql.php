@@ -1,6 +1,12 @@
 <?php
 /**
  * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ * File: scripts/gallery_workflow_mysql.php
+ * Module Type: CLI Tool
+ * Purpose: Start a private MySQL data directory for workflow verification.
+ * Responsibilities:
+ *   - Keep the fixture server independent from existing server configuration and data.
  * Author: Rudolf Klusal
  * Start a private MySQL 8 data directory for workflow development or a central audit.
  * Never reads my.ini, connects to port 3306, or uses an existing server data directory.
@@ -54,7 +60,7 @@ $serverVerified = false;
 $exit = 0;
 $stage = 'local MySQL prerequisites';
 try {
-    check(in_array($argv[1] ?? '', ['--development', '--audit', '--release'], true), 'Choose development checks or a central audit profile.');
+    check(in_array($argv[1] ?? '', ['--development', '--quick', '--audit', '--release'], true), 'Choose development checks or a central audit profile.');
     check(getenv('GALLERY_WORKFLOW_ENABLE') === 'disposable-only', 'Explicit disposable opt-in required.');
     $binary = (string) getenv('GALLERY_WORKFLOW_MYSQL_BIN');
     check(is_file($binary) && in_array(strtolower(basename($binary)), ['mysqld.exe', 'mysqld'], true), 'A MySQL 8 server executable is required.');

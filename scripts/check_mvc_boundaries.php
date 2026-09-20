@@ -196,6 +196,74 @@ function source_lines(string $source): array
 }
 
 /**
+ * Identify compatibility helpers/security modules whose persistence was migrated.
+ * Split parts share the entrypoint rule; HTTP/session adapters remain allowed.
+ * @param string $relativePath Repository-relative PHP path.
+ * @return bool Whether direct SQL/PDO is forbidden at this compatibility boundary.
+ */
+function core_persistence_boundary_path(string $relativePath): bool
+{
+    return preg_match('~^app/(?:security|helpers(?:_[a-z0-9_]+)?)(?:\.php$|/)~', str_replace('\\', '/', $relativePath)) === 1;
+}
+
+/**
+ * Reject persistence hidden in compatibility helpers without flagging HTTP work.
+ * This narrow promotion reuses the established SQL classifier and fingerprints.
+ * It does not interpret request/session/response behavior as a persistence fault.
+ * @param string $source PHP source; inspected without execution.
+ * @param string $relativePath Repository-relative helper/security source path.
+ * @return array<int,array<string,mixed>> Strict database/SQL findings plus converted security filesystem writes.
+ */
+function scan_core_persistence_source(string $source, string $relativePath): array
+{
+    $tokens = token_get_all($source);
+    $lines = source_lines($source);
+    $violations = [];
+    $pdoMethods = ['prepare', 'query', 'exec', 'begintransaction', 'commit', 'rollback'];
+    $securityFilesystemMutations = ['file_put_contents', 'unlink', 'rename', 'copy', 'mkdir', 'rmdir', 'chmod', 'chown', 'touch', 'symlink', 'link', 'move_uploaded_file'];
+    foreach ($tokens as $index => $token) {
+        if (!is_array($token)) {
+            continue;
+        }
+        [$id, $value, $line] = $token;
+        $previous = null;
+        for ($cursor = $index - 1; $cursor >= 0; $cursor--) {
+            if (is_array($tokens[$cursor]) && in_array($tokens[$cursor][0], [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT], true)) {
+                continue;
+            }
+            $previous = $tokens[$cursor];
+            break;
+        }
+        $previousId = is_array($previous) ? $previous[0] : null;
+        $memberAccess = in_array($previousId, [T_OBJECT_OPERATOR, T_NULLSAFE_OBJECT_OPERATOR, T_DOUBLE_COLON], true);
+        $name = strtolower((string) preg_replace('~^.*\\\\~', '', $value));
+        if (in_array($id, [T_STRING, T_NAME_QUALIFIED, T_NAME_FULLY_QUALIFIED, T_NAME_RELATIVE], true)) {
+            if (preg_match('~^app/security(?:\.php$|/)~', $relativePath) === 1 && !$memberAccess
+                && in_array($name, $securityFilesystemMutations, true) && token_is_function_call($tokens, $index)) {
+                add_violation($violations, $relativePath, 'core.security_filesystem_mutation', $line, $lines[$line] ?? '');
+            }
+            if ($name === 'db' && !$memberAccess && token_is_function_call($tokens, $index)) {
+                add_violation($violations, $relativePath, 'core.direct_db', $line, $lines[$line] ?? '');
+            }
+            if ($name === 'pdo' && $previousId === T_NEW) {
+                add_violation($violations, $relativePath, 'core.pdo_construction', $line, $lines[$line] ?? '');
+            }
+            if ($memberAccess && in_array($name, $pdoMethods, true) && token_is_function_call($tokens, $index)) {
+                add_violation($violations, $relativePath, 'core.pdo_method', $line, $lines[$line] ?? '');
+            }
+        }
+        if (in_array($id, [T_CONSTANT_ENCAPSED_STRING, T_ENCAPSED_AND_WHITESPACE], true) && looks_like_sql($value)) {
+            add_violation($violations, $relativePath, 'core.sql_literal', $line, $lines[$line] ?? '');
+        }
+    }
+    foreach ($violations as &$violation) {
+        unset($violation['_dedupe']);
+    }
+    unset($violation);
+    return $violations;
+}
+
+/**
  * Inspect one PHP source file for MVC boundary violations.
  *
  * @param string $source PHP source.
@@ -206,7 +274,7 @@ function scan_source(string $source, string $relativePath): array
 {
     $layer = layer_for_path($relativePath);
     if ($layer === null) {
-        return [];
+        return core_persistence_boundary_path($relativePath) ? scan_core_persistence_source($source, $relativePath) : [];
     }
 
     $tokens = token_get_all($source);
@@ -228,12 +296,40 @@ function scan_source(string $source, string $relativePath): array
         $snippet = $lines[$line] ?? $value;
 
         if ($tokenId === T_VARIABLE) {
+            if ($value === '$_SESSION'
+                && preg_match('~^app/services/(admin_gallery_discovery|google_auth|admin_gallery_report/job|duplicate_photo_detector|viewer_anti_automation)(?:\.php$|/)~', $relativePath, $sessionOwner) === 1) {
+                $sessionRule = match ($sessionOwner[1]) {
+                    'google_auth' => 'services.google_auth_session_global',
+                    'admin_gallery_report/job' => 'services.report_job_session_global',
+                    'duplicate_photo_detector' => 'services.duplicate_detector_session_global',
+                    'viewer_anti_automation' => 'services.viewer_anti_automation_session_global',
+                    default => 'services.discovery_session_global',
+                };
+                add_violation($violations, $relativePath, $sessionRule, $line, $snippet);
+            }
             $forbiddenGlobals = $layer === 'views' ? $viewGlobals : $requestGlobals;
             if (($layer === 'models' || $layer === 'services' || $layer === 'views') && in_array($value, $forbiddenGlobals, true)) {
                 add_violation($violations, $relativePath, $layer . '.request_global', $line, $snippet);
             }
         }
 
+        if (preg_match('~^app/controllers/mobile_webdav(?:\.php$|/)~', $relativePath) === 1
+            && in_array($tokenId, [T_STRING, T_NAME_FULLY_QUALIFIED], true)
+            && in_array(strtolower(ltrim($value, '\\')), $filesystemMutationFunctions, true)
+            && token_is_function_call($tokens, $index)) {
+            $memberCall = false;
+            for ($cursor = $index - 1; $cursor >= 0; $cursor--) {
+                $previous = $tokens[$cursor];
+                if (is_array($previous) && in_array($previous[0], [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT], true)) {
+                    continue;
+                }
+                $memberCall = is_array($previous) && in_array($previous[0], [T_OBJECT_OPERATOR, T_NULLSAFE_OBJECT_OPERATOR, T_DOUBLE_COLON], true);
+                break;
+            }
+            if (!$memberCall) {
+                add_violation($violations, $relativePath, 'controllers.mobile_webdav_filesystem_mutation', $line, $snippet);
+            }
+        }
         if ($tokenId === T_STRING && token_is_function_call($tokens, $index)) {
             $name = strtolower($value);
             if (($layer === 'services' || $layer === 'controllers' || $layer === 'views') && $name === 'db') {
@@ -333,7 +429,7 @@ function scan_source(string $source, string $relativePath): array
 }
 
 /**
- * Return every PHP file under the MVC layer roots.
+ * Return PHP files under MVC roots and the reviewed core persistence boundary.
  *
  * @param string $root Project root.
  * @return array<int, string> Absolute file paths.
@@ -353,6 +449,14 @@ function mvc_php_files(string $root): array
             }
         }
     }
+    $normalizedRoot = rtrim(str_replace('\\', '/', realpath($root) ?: $root), '/');
+    foreach (runtime_php_files($normalizedRoot) as $path) {
+        $relative = ltrim(substr(str_replace('\\', '/', $path), strlen($normalizedRoot)), '/');
+        if (core_persistence_boundary_path($relative)) {
+            $files[] = $path;
+        }
+    }
+    $files = array_values(array_unique($files));
     sort($files, SORT_STRING);
     return $files;
 }

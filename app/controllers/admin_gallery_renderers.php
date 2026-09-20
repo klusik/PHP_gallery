@@ -41,7 +41,10 @@ use function Gallery\Services\find_gallery;
 use function Gallery\Services\gallery_editor_unique_slug;
 use function Gallery\Services\gallery_cover_choices;
 use function Gallery\Services\gallery_images;
-use function Gallery\Services\gallery_search_picker_rows;
+use function Gallery\Services\gallery_picker_search_page;
+use function Gallery\Services\gallery_picker_empty_page;
+use function Gallery\Services\gallery_picker_destination_hint;
+use function Gallery\Core\url_for;
 use function Gallery\Services\gallery_picker_source_rows;
 use function Gallery\Services\gallery_visibility_label;
 use function Gallery\Services\gallery_visibility_values;
@@ -52,6 +55,7 @@ use function Gallery\Views\view_render_admin_select_options;
 use function Gallery\Views\view_render_gallery_search_picker;
 use function Gallery\Views\view_render_tag_datalist;
 use function Gallery\Views\view_render_weighted_tag_suggestions_attribute;
+use const Gallery\Core\GALLERY_PICKER_HTML_MAX_BYTES;
 
 /**
  * Handles visibility options logic for the gallery application.
@@ -168,16 +172,28 @@ function gallery_parent_options_for_new(int $selectedGalleryId = 0): string
  * @param string $fieldName Submitted hidden input name. Use an empty string for JSON-only widgets.
  * @param int $selectedGalleryId Initial committed gallery ID, usually zero for safe bulk actions.
  * @param int $excludedGalleryId Gallery that must not be selected as a destination.
- * @param array $options Optional behavior flags.
+ * @param array<string,mixed> $options Root/branch policy, input ID, optional hint and hidden data attributes.
  * @return string Complete HTML for the picker.
  */
 function render_gallery_search_picker(string $fieldName, int $selectedGalleryId = 0, int $excludedGalleryId = 0, array $options = []): string
 {
     $pickerId = preg_replace('/[^a-zA-Z0-9_-]+/', '-', (string) ($options['id'] ?? ('gallery-picker-' . $fieldName . '-' . uniqid('', false))));
-    $rows = gallery_search_picker_rows($selectedGalleryId, $excludedGalleryId);
+    $excludeDescendants = !empty($options['exclude_descendants']);
+    $allowRoot = !empty($options['allow_root']);
+    try {
+        $page = gallery_picker_search_page('', 0, $selectedGalleryId, $excludedGalleryId, $excludeDescendants);
+    } catch (\Throwable) {
+        $page = gallery_picker_empty_page();
+    }
+    $rows = $page['rows'];
     $prefillGalleryId = (int) ($options['prefill_gallery_id'] ?? 0);
     $prefillEnabled = empty($options['disable_prefill']);
-    $selectedRow = null;
+    $selectedRow = $page['selected'];
+    if (!$page['ok'] && $selectedGalleryId > 0 && $selectedGalleryId !== $excludedGalleryId) {
+        // A failed optional search must not silently clear an existing parent.
+        $selectedRow = ['id' => $selectedGalleryId,
+            'label' => t('gallery_picker.selected_unavailable', 'Selected gallery') . ' (#' . $selectedGalleryId . ')'];
+    }
     $prefillRow = null;
     foreach ($rows as $row) {
         if ((int) $row['id'] === $selectedGalleryId) {
@@ -187,8 +203,18 @@ function render_gallery_search_picker(string $fieldName, int $selectedGalleryId 
             $prefillRow = $row;
         }
     }
+    if ($prefillEnabled && !$excludeDescendants && $prefillGalleryId > 0 && $prefillRow === null && $selectedRow === null) {
+        try {
+            $prefillRow = gallery_picker_destination_hint($prefillGalleryId, $excludedGalleryId);
+        } catch (\Throwable) {
+            // Optional hints never block an explicit destination selection.
+        }
+    }
     if ($prefillEnabled && $prefillRow === null && $selectedRow === null && $rows !== []) {
         $prefillRow = $rows[0];
+    }
+    if ($allowRoot && $selectedGalleryId === 0) {
+        $selectedRow = ['id' => 0, 'label' => t('admin.gallery_editor.no_parent', 'No parent')];
     }
     $preparedRows = [];
     foreach ($rows as $row) {
@@ -198,7 +224,7 @@ function render_gallery_search_picker(string $fieldName, int $selectedGalleryId 
             : t('gallery_picker.root_gallery', 'Root gallery');
         $preparedRows[] = $prepared;
     }
-    return view_render_gallery_search_picker([
+    $html = view_render_gallery_search_picker([
         'field_name' => $fieldName,
         'picker_id' => $pickerId,
         'list_id' => $pickerId . '-list',
@@ -210,7 +236,49 @@ function render_gallery_search_picker(string $fieldName, int $selectedGalleryId 
         'clear_label' => t('gallery_picker.clear', 'Clear selected gallery'),
         'empty_label' => t('gallery_picker.no_results', 'No matching galleries found.'),
         'help_label' => t('gallery_picker.help', 'Type to search, then press Enter or click a result to select it.'),
+        'search_url' => url_for('admin_gallery_picker_search', [
+            'excluded_id' => $excludedGalleryId,
+            'exclude_descendants' => $excludeDescendants ? 1 : 0,
+            'allow_root' => $allowRoot ? 1 : 0,
+        ]),
+        'lookup_url' => url_for('admin_gallery_picker_search', [
+            'format' => 'html',
+            'excluded_id' => $excludedGalleryId,
+            'exclude_descendants' => $excludeDescendants ? 1 : 0,
+            'allow_root' => $allowRoot ? 1 : 0,
+        ]),
+        'allow_root' => $allowRoot,
+        'root_label' => t('admin.gallery_editor.no_parent', 'No parent'),
+        'more_label' => t('gallery_picker.more', 'Next results'),
+        'loading_label' => t('gallery_picker.loading', 'Searching galleries...'),
+        'error_label' => t('gallery_picker.error', 'Search is unavailable. Try again or use the directory lookup.'),
+        'lookup_label' => t('gallery_picker.lookup', 'Look up a gallery ID in a new tab'),
+        'fallback_label' => t('gallery_picker.fallback', 'Gallery ID: use the directory lookup, then enter the chosen ID here.'),
+        'more' => $page['more'],
+        'next_after_id' => $page['next_after_id'],
+        'page_size' => $page['page_size'],
         'rows' => $preparedRows,
+    ]);
+    if (strlen($html) > GALLERY_PICKER_HTML_MAX_BYTES) {
+        throw new \LengthException('Gallery picker markup exceeds its budget.');
+    }
+    return $html;
+}
+
+/**
+ * Prepare the parent picker used by create/edit forms without a catalog select.
+ *
+ * @param int $selectedGalleryId Committed parent ID, with zero meaning root.
+ * @param int $sourceGalleryId Existing gallery being moved, zero while creating.
+ * @param string $fieldName Existing form parameter expected by the mutation owner.
+ * @return string Bounded parent control with root and no-JavaScript lookup.
+ */
+function render_gallery_parent_picker(int $selectedGalleryId = 0, int $sourceGalleryId = 0, string $fieldName = 'parent_id'): string
+{
+    return render_gallery_search_picker($fieldName, $selectedGalleryId, $sourceGalleryId, [
+        'allow_root' => true,
+        'exclude_descendants' => true,
+        'disable_prefill' => true,
     ]);
 }
 

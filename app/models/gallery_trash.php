@@ -48,7 +48,13 @@ final class GalleryTrashCommitOutcomeUnknownException extends RuntimeException
 {
 }
 
-/** Refresh purge deadlines for entries that may return to TRASHED. */
+/**
+ * Refresh purge deadlines for entries that may return to the trashed state.
+ *
+ * @param string $deadline SQL timestamp used as the new retention deadline.
+ * @param string $now SQL timestamp recording when the lifecycle rows changed.
+ * @return void
+ */
 function gallery_trash_model_rearm_retention_deadlines(string $deadline, string $now): void
 {
     $stmt = db()->prepare(
@@ -76,7 +82,12 @@ function gallery_trash_model_image_relative_path(int $imageId): ?string
     return is_string($value) && $value !== '' ? $value : null;
 }
 
-/** Insert one PREPARING lifecycle row. */
+/**
+ * Insert one fully prepared trash lifecycle record before filesystem movement.
+ *
+ * @param array<string,mixed> $row Validated persistence fields for the new preparing entry.
+ * @return void
+ */
 function gallery_trash_model_insert_preparing(array $row): void
 {
     $stmt = db()->prepare(
@@ -115,7 +126,18 @@ function gallery_trash_model_delete_preparing(string $trashToken): void
     $stmt->execute([$trashToken]);
 }
 
-/** Transition one trash lifecycle row inside an existing transaction. */
+/**
+ * Transition one trash lifecycle row inside an existing transaction.
+ *
+ * @param string $trashToken Opaque identity of the lifecycle entry.
+ * @param string $fromStatus Required current lifecycle state.
+ * @param string $toStatus Destination lifecycle state.
+ * @param bool $clearSnapshot Whether stored recovery snapshot fields are cleared.
+ * @param string|null $errorCode Bounded failure identity retained on the entry.
+ * @param string $timestamp Shared SQL timestamp for transition fields.
+ * @return void
+ * @throws RuntimeException When no transaction is active or the compare-and-swap transition loses.
+ */
 function gallery_trash_model_transition_in_transaction(string $trashToken, string $fromStatus, string $toStatus, bool $clearSnapshot, ?string $errorCode, string $timestamp): void
 {
     $pdo = db();
@@ -245,7 +267,15 @@ function gallery_trash_model_finalize_preparing_delete(string $trashToken, array
     return $deletedRows;
 }
 
-/** Compare-and-swap one recoverable/problem entry into a transitional state. */
+/**
+ * Compare-and-swap one recoverable/problem entry into a transitional state.
+ *
+ * @param string $trashToken Opaque identity of the lifecycle entry.
+ * @param string $targetStatus Transitional state to claim.
+ * @param string $fromStatus Required recoverable current state.
+ * @param string $timestamp SQL timestamp used for claim and update fields.
+ * @return bool True only when this request claimed exactly one entry.
+ */
 function gallery_trash_model_claim(string $trashToken, string $targetStatus, string $fromStatus, string $timestamp): bool
 {
     $stmt = db()->prepare(
@@ -257,7 +287,16 @@ function gallery_trash_model_claim(string $trashToken, string $targetStatus, str
     return $stmt->rowCount() === 1;
 }
 
-/** Release one transitional claim. */
+/**
+ * Release one transitional claim through an exact-state compare-and-swap.
+ *
+ * @param string $trashToken Opaque identity of the lifecycle entry.
+ * @param string $claimedStatus Required transitional state owned by the caller.
+ * @param string|null $errorCode Bounded failure identity, or null after successful recovery.
+ * @param string $returnStatus Stable state restored after releasing the claim.
+ * @param string $timestamp SQL timestamp recording the release.
+ * @return bool True only when the claimed row was released.
+ */
 function gallery_trash_model_release_claim(string $trashToken, string $claimedStatus, ?string $errorCode, string $returnStatus, string $timestamp): bool
 {
     $stmt = db()->prepare(
@@ -285,7 +324,13 @@ function gallery_trash_model_folder_path_by_slug(string $slug): ?string
     return is_string($value) && $value !== '' ? $value : null;
 }
 
-/** Return one active trash row for an exact original folder path. */
+/**
+ * Return the newest active trash entry for an exact original folder path.
+ *
+ * @param string $folderPath Normalized original gallery-relative folder path.
+ * @param string $excludeToken Trash identity omitted from collision detection.
+ * @return array{trash_token:string,title:string,original_folder_path:string,status:string}|null Matching bounded entry, or null.
+ */
 function gallery_trash_model_active_entry_for_path(string $folderPath, string $excludeToken): ?array
 {
     $stmt = db()->prepare(
@@ -301,7 +346,12 @@ function gallery_trash_model_active_entry_for_path(string $folderPath, string $e
     return is_array($row) ? $row : null;
 }
 
-/** @return array<int,int> */
+/**
+ * Return live gallery row IDs at or below one normalized folder path.
+ *
+ * @param string $folderPath Normalized gallery-relative root path.
+ * @return array<int,int> Unique positive IDs ordered deepest-first by the query.
+ */
 function gallery_trash_model_live_row_ids_for_path(string $folderPath): array
 {
     $prefix = $folderPath . '/';
@@ -335,10 +385,17 @@ function gallery_trash_model_update_image_metadata(int $imageId, array $record, 
     gallery_trash_model_update_metadata_row('images', $imageId, $record, $confirmedColumns, $allowed, $timestamp);
 }
 
-/** Set one restored gallery title-picture reference. */
+/**
+ * Set one restored gallery title-picture reference and advance its edit revision.
+ *
+ * @param int $galleryId Positive restored gallery identifier.
+ * @param int $imageId Positive image identifier already validated for the gallery.
+ * @param string $timestamp SQL timestamp recording the restored cover assignment.
+ * @return void
+ */
 function gallery_trash_model_set_cover_image(int $galleryId, int $imageId, string $timestamp): void
 {
-    $stmt = db()->prepare('UPDATE galleries SET cover_image_id = ?, updated_at = ? WHERE id = ?');
+    $stmt = db()->prepare('UPDATE galleries SET cover_image_id = ?, updated_at = ?, edit_revision = edit_revision + 1 WHERE id = ?');
     $stmt->execute([$imageId, $timestamp, $galleryId]);
 }
 
@@ -373,7 +430,13 @@ function gallery_trash_model_expired_tokens(string $now, int $limit): array
     return array_map('strval', $stmt->fetchAll(PDO::FETCH_COLUMN) ?: []);
 }
 
-/** @return array<int,array<string,mixed>> */
+/**
+ * Return bounded stale transitional entries eligible for recovery inspection.
+ *
+ * @param string $cutoff SQL timestamp at or before which an operation is stale.
+ * @param int $limit Requested result ceiling; normalized to the model safety range.
+ * @return array<int,array<string,mixed>> Persistence rows ordered by operation age.
+ */
 function gallery_trash_model_stale_transitional_entries(string $cutoff, int $limit): array
 {
     $limit = max(1, min(100, $limit));
@@ -421,7 +484,12 @@ function gallery_trash_model_entries(string $status, int $limit): array
     return $stmt->fetchAll() ?: [];
 }
 
-/** Return the raw trash summary aggregate. */
+/**
+ * Return the raw aggregate used to prepare bounded Trash health and count summaries.
+ *
+ * @param string $now SQL timestamp separating expired from retained entries.
+ * @return array<string,int|string|null> Aggregate counts, bytes and next purge timestamp.
+ */
 function gallery_trash_model_summary(string $now): array
 {
     $stmt = db()->prepare(
@@ -442,7 +510,18 @@ function gallery_trash_model_summary(string $now): array
     return $stmt->fetch() ?: [];
 }
 
-/** Apply a bounded set of metadata columns to one gallery/image row. */
+/**
+ * Apply schema-confirmed, allowlisted restore metadata to one gallery or image row.
+ *
+ * @param string $table Fixed target table name: galleries or images.
+ * @param int $id Positive target row identifier.
+ * @param array<string,mixed> $record Snapshot values keyed by candidate column name.
+ * @param array<int,string> $confirmedColumns Columns confirmed available by schema policy.
+ * @param array<int,string> $allowedColumns Domain allowlist for this restore target.
+ * @param string $timestamp SQL timestamp appended to the restored row.
+ * @return void
+ * @throws RuntimeException When the fixed table owner is unsupported.
+ */
 function gallery_trash_model_update_metadata_row(string $table, int $id, array $record, array $confirmedColumns, array $allowedColumns, string $timestamp): void
 {
     if (!in_array($table, ['galleries','images'], true)) {
@@ -464,6 +543,9 @@ function gallery_trash_model_update_metadata_row(string $table, int $id, array $
     }
     $assignments[] = '`updated_at` = ?';
     $values[] = $timestamp;
+    if ($table === 'galleries') {
+        $assignments[] = '`edit_revision` = `edit_revision` + 1';
+    }
     $values[] = $id;
     $stmt = db()->prepare('UPDATE `' . $table . '` SET ' . implode(', ', $assignments) . ' WHERE id = ?');
     $stmt->execute($values);

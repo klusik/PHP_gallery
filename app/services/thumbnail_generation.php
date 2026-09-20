@@ -44,6 +44,8 @@ use function Gallery\Models\gallery_model_ids_by_folder_path;
 use function Gallery\Models\image_model_all_direct_ids_ordered;
 use function Gallery\Models\image_model_direct_ids_for_galleries;
 
+require_once __DIR__ . '/image_decode_policy.php';
+
 /**
  * Return the JPEG quality used by generated thumbnail files.
  *
@@ -324,13 +326,41 @@ function create_image_thumbnails(array $image, array $gallery): int
 }
 
 /**
- * Handles create image thumbnails result logic for the gallery application.
+ * Return a failed derivative result without deleting the accepted source image.
  *
- * @param mixed $image Input used by this operation.
- * @param mixed $gallery Input used by this operation.
- * @param ?array $requestedSizes Requested sizes value.
- * @param array $options Optional behavior flags.
- * @return mixed Result produced by this operation.
+ * @param array<string,mixed> $status Closed decode-policy status, including safe explanation.
+ * @param array<string,mixed> $context Existing target counts and thumbnail policy details.
+ * @return array<string,mixed> Compatible thumbnail result plus structured decode diagnostics.
+ */
+function thumbnail_source_decode_failure_result(array $status, array $context = []): array
+{
+    return array_replace([
+        'created' => 0,
+        'skipped' => 0,
+        'webp_skipped' => 0,
+        'failed' => 1,
+        'errors' => [$status['reason'] === 'processing_failed' ? 'source_decode_failed' : 'source_decode_' . $status['reason']],
+        'message' => $status['message'],
+        'decode_status' => $status,
+        'created_files' => [],
+        'target_formats' => [],
+        'thumbnail_policy' => null,
+        'invalid_geometry_deleted' => 0,
+        'invalid_geometry_files' => [],
+    ], $context);
+}
+
+/**
+ * Reuse valid derivatives or generate missing raster variants after shared decode admission.
+ *
+ * RAW display derivatives retain their separate converter. Raster refusal keeps
+ * the accepted original and defers invalid-cache cleanup until decode succeeds.
+ *
+ * @param array<string,mixed> $image Stored image identity and relative source metadata.
+ * @param array<string,mixed> $gallery Authorized owning gallery and storage context.
+ * @param list<int>|null $requestedSizes Standard target sides to generate, or null for all configured sizes.
+ * @param array{prefer_imagick_webp_exif?:bool} $options Whether the optional metadata-preserving writer may be attempted.
+ * @return array{created:int,skipped:int,webp_skipped:int,failed:int,errors:list<string>,created_files:list<string>,target_formats:list<string>,thumbnail_policy:array<string,mixed>|null,invalid_geometry_deleted?:int,invalid_geometry_files?:list<string>,decode_status?:array<string,mixed>,message?:string} Derivative counts, bounded decode evidence and per-target diagnostics.
  */
 function create_image_thumbnails_result(array $image, array $gallery, ?array $requestedSizes = null, array $options = []): array
 {
@@ -343,14 +373,14 @@ function create_image_thumbnails_result(array $image, array $gallery, ?array $re
         }
         return ['created' => 0, 'skipped' => 0, 'webp_skipped' => 0, 'failed' => 0, 'errors' => [], 'created_files' => [], 'target_formats' => [], 'thumbnail_policy' => null];
     }
-    gallery_thumbs_dir($gallery, true);
     if (image_uses_dng_display_derivatives($image)) {
+        gallery_thumbs_dir($gallery, true);
         return create_dng_image_derivatives_result($image, $gallery, $sourcePath, $requestedSizes);
     }
     // Variable $info stores this steps working value.
     $info = @getimagesize($sourcePath);
     if ($info === false || empty($info['mime'])) {
-        return ['created' => 0, 'skipped' => 0, 'webp_skipped' => 0, 'failed' => 0, 'errors' => [], 'created_files' => [], 'target_formats' => [], 'thumbnail_policy' => null];
+        return thumbnail_source_decode_failure_result(image_decode_status('metadata_unavailable'));
     }
     // $mime stores the source MIME value used by the scanner and generator format decision.
     $mime = (string) $info['mime'];
@@ -374,6 +404,8 @@ function create_image_thumbnails_result(array $image, array $gallery, ?array $re
     $invalidGeometryDeleted = 0;
     // $invalidGeometryFiles stores removed cache filenames for diagnostics.
     $invalidGeometryFiles = [];
+    // Delay removal until decode admission succeeds, keeping existing cache files on refusal.
+    $invalidGeometryTargets = [];
     // Variable $webpSkipped stores this steps working value.
     $webpSkipped = thumbnail_intentionally_skipped_webp_count($sourcePath, $mime);
     // $sizes stores the generated thumbnail sizes requested by this operation. Null means the full standard set.
@@ -402,12 +434,7 @@ function create_image_thumbnails_result(array $image, array $gallery, ?array $re
                     $skipped++;
                     continue;
                 }
-                $invalidGeometryDeleted++;
-                $invalidGeometryFiles[] = basename($targetPath);
-                thumbnail_delete_invalid_geometry_file($targetPath);
-                if (function_exists('Gallery\\Services\\thumbnail_metadata_delete_variant')) {
-                    thumbnail_metadata_delete_variant($image, (int) $size, $format);
-                }
+                $invalidGeometryTargets[] = ['path' => $targetPath, 'size' => (int) $size, 'format' => $format];
             }
             $targets[$size][$format] = $targetPath;
         }
@@ -420,12 +447,45 @@ function create_image_thumbnails_result(array $image, array $gallery, ?array $re
     if (!extension_loaded('gd')) {
         return ['created' => 0, 'skipped' => $skipped, 'webp_skipped' => $webpSkipped, 'failed' => $targetCount, 'errors' => ['gd_extension_missing'], 'created_files' => [], 'target_formats' => $formats, 'thumbnail_policy' => $thumbnailPolicy, 'invalid_geometry_deleted' => $invalidGeometryDeleted, 'invalid_geometry_files' => $invalidGeometryFiles];
     }
+    // Reserve the largest sequential target and any EXIF orientation surface before GD decoding.
+    $decodeResult = image_decode_gd_path_result(
+        $sourcePath,
+        $mime,
+        (int) max(array_keys($targets)),
+        $mime === 'image/jpeg' && thumbnail_jpeg_exif_orientation($sourcePath, $mime) !== 1
+    );
     // Variable $source stores this steps working value.
-    $source = image_create_from_path($sourcePath, (string) $info['mime']);
+    $source = $decodeResult['image'];
     if (!$source) {
-        return ['created' => 0, 'skipped' => $skipped, 'webp_skipped' => $webpSkipped, 'failed' => $targetCount, 'errors' => ['source_decode_failed'], 'created_files' => [], 'target_formats' => $formats, 'thumbnail_policy' => $thumbnailPolicy, 'invalid_geometry_deleted' => $invalidGeometryDeleted, 'invalid_geometry_files' => $invalidGeometryFiles];
+        return thumbnail_source_decode_failure_result($decodeResult['status'], [
+            'skipped' => $skipped,
+            'webp_skipped' => $webpSkipped,
+            'failed' => $targetCount,
+            'target_formats' => $formats,
+            'thumbnail_policy' => $thumbnailPolicy,
+        ]);
     }
-    $source = thumbnail_apply_gd_exif_orientation($sourcePath, $source, $mime);
+    try {
+        $source = thumbnail_apply_gd_exif_orientation($sourcePath, $source, $mime);
+    } catch (Throwable) {
+        imagedestroy($source);
+        return thumbnail_source_decode_failure_result(image_decode_status('processing_failed'), [
+            'skipped' => $skipped,
+            'webp_skipped' => $webpSkipped,
+            'failed' => $targetCount,
+            'target_formats' => $formats,
+            'thumbnail_policy' => $thumbnailPolicy,
+        ]);
+    }
+    gallery_thumbs_dir($gallery, true);
+    foreach ($invalidGeometryTargets as $invalidTarget) {
+        $invalidGeometryDeleted++;
+        $invalidGeometryFiles[] = basename($invalidTarget['path']);
+        thumbnail_delete_invalid_geometry_file($invalidTarget['path']);
+        if (function_exists('Gallery\\Services\\thumbnail_metadata_delete_variant')) {
+            thumbnail_metadata_delete_variant($image, $invalidTarget['size'], $invalidTarget['format']);
+        }
+    }
     // $workingWidth stores the real width after any EXIF orientation transform.
     $workingWidth = imagesx($source);
     // $workingHeight stores the real height after any EXIF orientation transform.
@@ -766,21 +826,19 @@ function thumbnail_publish_temporary_target(string $temporaryPath, string $targe
 }
 
 /**
- * Handles image create from path logic for the gallery application.
+ * Decode an authorized raster only after dimensions and working-memory admission.
  *
- * @param mixed $path Input used by this operation.
- * @param mixed $mime Input used by this operation.
- * @return mixed Result produced by this operation.
+ * Legacy two-argument callers reserve full-size target and intermediate surfaces.
+ *
+ * @param string $path Already-authorized local source path.
+ * @param string $mime Expected source MIME, verified before native decode.
+ * @param int|null $targetMaxSide Largest target side, or null for a full-size target.
+ * @param bool $mayRotate Whether a full-size intermediate surface may be needed.
+ * @return GdImage|false Decoded source, or false for refused/failed decoding.
  */
-function image_create_from_path(string $path, string $mime): GdImage|false
+function image_create_from_path(string $path, string $mime, ?int $targetMaxSide = null, bool $mayRotate = true): GdImage|false
 {
-    return match ($mime) {
-        'image/jpeg' => imagecreatefromjpeg($path),
-        'image/png' => imagecreatefrompng($path),
-        'image/gif' => imagecreatefromgif($path),
-        'image/webp' => function_exists('imagecreatefromwebp') ? imagecreatefromwebp($path) : false,
-        default => false,
-    };
+    return image_decode_gd_path_result($path, $mime, $targetMaxSide, $mayRotate)['image'];
 }
 
 /**
@@ -832,17 +890,17 @@ function image_source_has_exif(string $sourcePath, string $mime): bool
 }
 
 /**
- * Handles write resized webp preserving exif when needed logic for the gallery application.
+ * Prefer admitted EXIF-preserving Imagick output, then reuse the supplied GD source on refusal.
  *
- * @param mixed $sourcePath Input used by this operation.
- * @param mixed $source Input used by this operation.
- * @param mixed $width Input used by this operation.
- * @param mixed $height Input used by this operation.
- * @param mixed $maxSide Input used by this operation.
- * @param mixed $targetPath Input used by this operation.
- * @param mixed $mime Input used by this operation.
- * @param bool $preferImagickExif Prefer imagick exif value.
- * @return mixed Result produced by this operation.
+ * @param string $sourcePath Authorized original used for EXIF inspection and optional Imagick decode.
+ * @param GdImage $source Already admitted GD surface retained throughout this writer.
+ * @param int $width Actual width of the supplied GD surface.
+ * @param int $height Actual height of the supplied GD surface.
+ * @param int $maxSide Largest output side in pixels; no upscaling is performed.
+ * @param string $targetPath Caller-owned derivative staging path.
+ * @param string $mime Observed source MIME controlling EXIF preference.
+ * @param bool $preferImagickExif Whether to attempt the heavier metadata-preserving writer.
+ * @return bool True when a WebP writer succeeds; false when neither path produces output.
  */
 function write_resized_webp_preserving_exif_when_needed(string $sourcePath, GdImage $source, int $width, int $height, int $maxSide, string $targetPath, string $mime, bool $preferImagickExif = true): bool
 {
@@ -851,7 +909,7 @@ function write_resized_webp_preserving_exif_when_needed(string $sourcePath, GdIm
     }
     if ($preferImagickExif && image_source_has_exif($sourcePath, $mime) && thumbnail_imagick_webp_available()) {
         // $imagickWritten stores whether the preferred metadata-preserving writer succeeded.
-        $imagickWritten = write_resized_webp_with_imagick_exif($sourcePath, $maxSide, $targetPath);
+        $imagickWritten = write_resized_webp_with_imagick_exif($sourcePath, $maxSide, $targetPath, true);
         if ($imagickWritten) {
             return true;
         }
@@ -910,16 +968,24 @@ function write_resized_webp_with_gd(GdImage $source, int $width, int $height, in
 }
 
 /**
- * Handles write resized webp with imagick exif logic for the gallery application.
+ * Admit an optional JPEG decode before producing an EXIF-preserving Imagick WebP derivative.
  *
- * @param mixed $sourcePath Input used by this operation.
- * @param mixed $maxSide Input used by this operation.
- * @param mixed $targetPath Input used by this operation.
- * @return mixed Result produced by this operation.
+ * @param string $sourcePath Authorized local JPEG whose metadata is freshly verified.
+ * @param int $maxSide Maximum target width or height in pixels.
+ * @param string $targetPath Caller-owned derivative staging path; untouched on admission refusal.
+ * @param bool $retainGdSource Include the already-decoded GD source in admission estimates.
+ * @return bool True for written output; false for unavailable Imagick, refused admission or ordinary processing failure.
  */
-function write_resized_webp_with_imagick_exif(string $sourcePath, int $maxSide, string $targetPath): bool
+function write_resized_webp_with_imagick_exif(string $sourcePath, int $maxSide, string $targetPath, bool $retainGdSource = false): bool
 {
     if (!thumbnail_imagick_webp_available()) {
+        return false;
+    }
+
+    // Imagick must not bypass the shared budget while the first GD source remains alive.
+    // A refusal returns to the existing GD writer without decoding the source again.
+    $admission = image_decode_path_admission($sourcePath, 'image/jpeg', $maxSide, true, 'imagick', $retainGdSource);
+    if (!$admission['allowed']) {
         return false;
     }
 

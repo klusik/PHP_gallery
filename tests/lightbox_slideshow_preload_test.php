@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Regression Test
+ * Purpose: Protect slideshow and preload coordination.
+ * Responsibilities:
+ *   - Check bounded neighboring preview work across slideshow state changes.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/lightbox_slideshow_preload_test.php

@@ -208,20 +208,21 @@ namespace {
     use function Gallery\Services\viewer_anti_automation_form_issue;
     use function Gallery\Services\viewer_anti_automation_policy_decision;
     use function Gallery\Services\viewer_anti_automation_pow_verify;
-    use function Gallery\Services\viewer_anti_automation_session_cleanup;
+    use function Gallery\Services\viewer_anti_automation_context_prune;
     use function Gallery\Services\viewer_anti_automation_ticket_decode;
     use function Gallery\Services\viewer_anti_automation_ticket_validate;
     use function Gallery\Services\viewer_anti_automation_base64url_encode;
-    use const Gallery\Services\VIEWER_ANTI_AUTOMATION_ACTION_REGISTER;
-    use const Gallery\Services\VIEWER_ANTI_AUTOMATION_ACTION_RESEND;
-    use const Gallery\Services\VIEWER_ANTI_AUTOMATION_KIND_CHALLENGE;
-    use const Gallery\Services\VIEWER_ANTI_AUTOMATION_KIND_FORM;
-    use const Gallery\Services\VIEWER_ANTI_AUTOMATION_MAX_COUNTER;
-    use const Gallery\Services\VIEWER_ANTI_AUTOMATION_OUTSTANDING_CAP;
-    use const Gallery\Services\VIEWER_ANTI_AUTOMATION_RESULT_ALLOW;
-    use const Gallery\Services\VIEWER_ANTI_AUTOMATION_RESULT_CHALLENGE_REQUIRED;
-    use const Gallery\Services\VIEWER_ANTI_AUTOMATION_RESULT_INVALID;
-    use const Gallery\Services\VIEWER_ANTI_AUTOMATION_RESULT_SUPPRESS;
+    use const Gallery\Core\VIEWER_ANTI_AUTOMATION_SESSION_NAMESPACE;
+    use const Gallery\Core\VIEWER_ANTI_AUTOMATION_ACTION_REGISTER;
+    use const Gallery\Core\VIEWER_ANTI_AUTOMATION_ACTION_RESEND;
+    use const Gallery\Core\VIEWER_ANTI_AUTOMATION_KIND_CHALLENGE;
+    use const Gallery\Core\VIEWER_ANTI_AUTOMATION_KIND_FORM;
+    use const Gallery\Core\VIEWER_ANTI_AUTOMATION_MAX_COUNTER;
+    use const Gallery\Core\VIEWER_ANTI_AUTOMATION_OUTSTANDING_CAP;
+    use const Gallery\Core\VIEWER_ANTI_AUTOMATION_RESULT_ALLOW;
+    use const Gallery\Core\VIEWER_ANTI_AUTOMATION_RESULT_CHALLENGE_REQUIRED;
+    use const Gallery\Core\VIEWER_ANTI_AUTOMATION_RESULT_INVALID;
+    use const Gallery\Core\VIEWER_ANTI_AUTOMATION_RESULT_SUPPRESS;
 
     $root = dirname(__DIR__);
     $GLOBALS['viewer_phase43_config'] = [
@@ -237,6 +238,7 @@ namespace {
     $GLOBALS['viewer_phase43_events'] = [];
     $GLOBALS['viewer_phase43_registration_begin_calls'] = 0;
     $GLOBALS['viewer_phase43_resend_prepare_calls'] = 0;
+    $ticketContext = [];
     $_SESSION = [];
 
     require_once $root . '/app/services/viewer_anti_automation.php';
@@ -303,17 +305,17 @@ namespace {
     }
 
     // Form-ticket issuance, bounded expiry, randomness, action binding, and randomized honeypot metadata.
-    $formA = viewer_anti_automation_form_issue(VIEWER_ANTI_AUTOMATION_ACTION_REGISTER, 1000);
-    $formB = viewer_anti_automation_form_issue(VIEWER_ANTI_AUTOMATION_ACTION_REGISTER, 1000);
+    $formA = viewer_anti_automation_form_issue($ticketContext, VIEWER_ANTI_AUTOMATION_ACTION_REGISTER, 1000);
+    $formB = viewer_anti_automation_form_issue($ticketContext, VIEWER_ANTI_AUTOMATION_ACTION_REGISTER, 1000);
     viewer_phase43_assert($formA['ticket'] !== $formB['ticket'], 'Form tickets must contain cryptographic randomness.');
     viewer_phase43_assert($formA['honeypot_field'] !== $formB['honeypot_field'], 'Honeypot field identifiers must vary per form.');
     viewer_phase43_assert($formA['expires_at'] - $formA['issued_at'] === 600, 'Form ticket expiry must be bounded by normalized configuration.');
     viewer_phase43_assert(
-        viewer_anti_automation_ticket_validate($formA['ticket'], VIEWER_ANTI_AUTOMATION_KIND_FORM, VIEWER_ANTI_AUTOMATION_ACTION_REGISTER, false, 1001) !== null,
+        viewer_anti_automation_ticket_validate($ticketContext, $formA['ticket'], VIEWER_ANTI_AUTOMATION_KIND_FORM, VIEWER_ANTI_AUTOMATION_ACTION_REGISTER, false, 1001) !== null,
         'Fresh registration form ticket must validate in its issuing session.'
     );
     viewer_phase43_assert(
-        viewer_anti_automation_ticket_validate($formA['ticket'], VIEWER_ANTI_AUTOMATION_KIND_FORM, VIEWER_ANTI_AUTOMATION_ACTION_RESEND, false, 1001) === null,
+        viewer_anti_automation_ticket_validate($ticketContext, $formA['ticket'], VIEWER_ANTI_AUTOMATION_KIND_FORM, VIEWER_ANTI_AUTOMATION_ACTION_RESEND, false, 1001) === null,
         'Registration form ticket must not authorize resend.'
     );
 
@@ -329,6 +331,7 @@ namespace {
     ] as $field => $value) {
         viewer_phase43_assert(
             viewer_anti_automation_ticket_validate(
+                $ticketContext,
                 viewer_phase43_tamper_ticket($formA['ticket'], $field, $value),
                 VIEWER_ANTI_AUTOMATION_KIND_FORM,
                 VIEWER_ANTI_AUTOMATION_ACTION_REGISTER,
@@ -340,33 +343,33 @@ namespace {
     }
 
     // Session binding and replay protection do not expose or require a session id inside the ticket.
-    $bound = viewer_anti_automation_form_issue(VIEWER_ANTI_AUTOMATION_ACTION_REGISTER, 1100);
-    $issuingSession = $_SESSION;
-    $_SESSION = [];
+    $bound = viewer_anti_automation_form_issue($ticketContext, VIEWER_ANTI_AUTOMATION_ACTION_REGISTER, 1100);
+    $issuingContext = $ticketContext;
+    $ticketContext = [];
     viewer_phase43_assert(
-        viewer_anti_automation_ticket_validate($bound['ticket'], VIEWER_ANTI_AUTOMATION_KIND_FORM, VIEWER_ANTI_AUTOMATION_ACTION_REGISTER, true, 1101) === null,
+        viewer_anti_automation_ticket_validate($ticketContext, $bound['ticket'], VIEWER_ANTI_AUTOMATION_KIND_FORM, VIEWER_ANTI_AUTOMATION_ACTION_REGISTER, true, 1101) === null,
         'Ticket issued in one PHP session must not authorize another session.'
     );
-    $_SESSION = $issuingSession;
+    $ticketContext = $issuingContext;
     viewer_phase43_assert(!str_contains($bound['ticket'], 'session'), 'Browser ticket must not expose a PHP session identifier field.');
     viewer_phase43_assert(
-        viewer_anti_automation_ticket_validate($bound['ticket'], VIEWER_ANTI_AUTOMATION_KIND_FORM, VIEWER_ANTI_AUTOMATION_ACTION_REGISTER, true, 1101) !== null,
+        viewer_anti_automation_ticket_validate($ticketContext, $bound['ticket'], VIEWER_ANTI_AUTOMATION_KIND_FORM, VIEWER_ANTI_AUTOMATION_ACTION_REGISTER, true, 1101) !== null,
         'Matching issuing session must consume a valid ticket once.'
     );
     viewer_phase43_assert(
-        viewer_anti_automation_ticket_validate($bound['ticket'], VIEWER_ANTI_AUTOMATION_KIND_FORM, VIEWER_ANTI_AUTOMATION_ACTION_REGISTER, true, 1101) === null,
+        viewer_anti_automation_ticket_validate($ticketContext, $bound['ticket'], VIEWER_ANTI_AUTOMATION_KIND_FORM, VIEWER_ANTI_AUTOMATION_ACTION_REGISTER, true, 1101) === null,
         'Consumed form ticket must not replay.'
     );
 
     // Outstanding session authority stays bounded and expired entries are removed opportunistically.
-    $_SESSION = [];
+    $ticketContext = [];
     for ($index = 0; $index < 40; $index++) {
-        viewer_anti_automation_form_issue(VIEWER_ANTI_AUTOMATION_ACTION_REGISTER, 1200 + $index);
+        viewer_anti_automation_form_issue($ticketContext, VIEWER_ANTI_AUTOMATION_ACTION_REGISTER, 1200 + $index);
     }
-    $entries = $_SESSION['viewer_anti_automation']['entries'] ?? [];
+    $entries = $ticketContext['entries'] ?? [];
     viewer_phase43_assert(is_array($entries) && count($entries) <= VIEWER_ANTI_AUTOMATION_OUTSTANDING_CAP, 'Session ticket state must remain bounded.');
-    viewer_anti_automation_session_cleanup(2000);
-    viewer_phase43_assert(($_SESSION['viewer_anti_automation']['entries'] ?? []) === [], 'Expired session ticket entries must be removed.');
+    viewer_anti_automation_context_prune($ticketContext, 2000);
+    viewer_phase43_assert(($ticketContext['entries'] ?? []) === [], 'Expired session ticket entries must be removed.');
 
     // Server-measured form age is an escalation signal, not a browser-supplied timer.
     $neutralSignals = ['allowed' => true, 'reason' => 'ok', 'ip_attempts' => 1, 'subnet_attempts' => 1, 'retry_after_seconds' => 0];
@@ -379,15 +382,15 @@ namespace {
         'Implausibly fast server-measured submission must escalate rather than permanently deny.'
     );
     viewer_phase43_assert(
-        viewer_anti_automation_ticket_validate($formA['ticket'], VIEWER_ANTI_AUTOMATION_KIND_FORM, VIEWER_ANTI_AUTOMATION_ACTION_REGISTER, false, 1700) === null,
+        viewer_anti_automation_ticket_validate($ticketContext, $formA['ticket'], VIEWER_ANTI_AUTOMATION_KIND_FORM, VIEWER_ANTI_AUTOMATION_ACTION_REGISTER, false, 1700) === null,
         'Expired form state must not authorize expensive work.'
     );
 
     // Populated randomized honeypot short-circuits before limiter/database-backed downstream work.
-    $_SESSION = [];
+    $ticketContext = [];
     viewer_phase43_reset_limits();
-    $trap = viewer_anti_automation_form_issue(VIEWER_ANTI_AUTOMATION_ACTION_REGISTER, 2000);
-    $trapDecision = viewer_anti_automation_authorize_submission(VIEWER_ANTI_AUTOMATION_ACTION_REGISTER, [
+    $trap = viewer_anti_automation_form_issue($ticketContext, VIEWER_ANTI_AUTOMATION_ACTION_REGISTER, 2000);
+    $trapDecision = viewer_anti_automation_authorize_submission($ticketContext, VIEWER_ANTI_AUTOMATION_ACTION_REGISTER, [
         'viewer_aa_form_ticket' => $trap['ticket'],
         $trap['honeypot_field'] => 'filled-by-automation',
     ], '192.0.2.10', 2005);
@@ -395,12 +398,12 @@ namespace {
     viewer_phase43_assert($GLOBALS['viewer_phase43_limiter_calls'] === [], 'Honeypot suppression must occur before even local rate-limit work.');
 
     // Clean first attempts pass, repeated local attempts escalate, and hard local limits suppress.
-    $_SESSION = [];
+    $ticketContext = [];
     viewer_phase43_reset_limits();
     $lastDecision = null;
     for ($attempt = 1; $attempt <= 3; $attempt++) {
-        $form = viewer_anti_automation_form_issue(VIEWER_ANTI_AUTOMATION_ACTION_REGISTER, 3000 + ($attempt * 10));
-        $lastDecision = viewer_anti_automation_authorize_submission(VIEWER_ANTI_AUTOMATION_ACTION_REGISTER, [
+        $form = viewer_anti_automation_form_issue($ticketContext, VIEWER_ANTI_AUTOMATION_ACTION_REGISTER, 3000 + ($attempt * 10));
+        $lastDecision = viewer_anti_automation_authorize_submission($ticketContext, VIEWER_ANTI_AUTOMATION_ACTION_REGISTER, [
             'viewer_aa_form_ticket' => $form['ticket'],
             $form['honeypot_field'] => '',
         ], '192.0.2.20', 3005 + ($attempt * 10));
@@ -422,6 +425,7 @@ namespace {
         'viewer_aa_pow_counter' => $validCounter,
     ];
     $challengePass = viewer_anti_automation_authorize_submission(
+        $ticketContext,
         VIEWER_ANTI_AUTOMATION_ACTION_REGISTER,
         $challengePost,
         '192.0.2.20',
@@ -429,6 +433,7 @@ namespace {
     );
     viewer_phase43_assert($challengePass['result'] === VIEWER_ANTI_AUTOMATION_RESULT_ALLOW, 'One valid local proof must authorize continuation only.');
     $challengeReplay = viewer_anti_automation_authorize_submission(
+        $ticketContext,
         VIEWER_ANTI_AUTOMATION_ACTION_REGISTER,
         $challengePost,
         '192.0.2.20',
@@ -436,11 +441,11 @@ namespace {
     );
     viewer_phase43_assert($challengeReplay['result'] === VIEWER_ANTI_AUTOMATION_RESULT_INVALID, 'Consumed challenge must not replay.');
 
-    $_SESSION = [];
+    $ticketContext = [];
     viewer_phase43_reset_limits();
-    $hardLimitedForm = viewer_anti_automation_form_issue(VIEWER_ANTI_AUTOMATION_ACTION_REGISTER, 3060);
+    $hardLimitedForm = viewer_anti_automation_form_issue($ticketContext, VIEWER_ANTI_AUTOMATION_ACTION_REGISTER, 3060);
     $GLOBALS['viewer_phase43_force_limiter_denial'] = true;
-    $hardLimitedDecision = viewer_anti_automation_authorize_submission(VIEWER_ANTI_AUTOMATION_ACTION_REGISTER, [
+    $hardLimitedDecision = viewer_anti_automation_authorize_submission($ticketContext, VIEWER_ANTI_AUTOMATION_ACTION_REGISTER, [
         'viewer_aa_form_ticket' => $hardLimitedForm['ticket'],
         $hardLimitedForm['honeypot_field'] => '',
     ], '192.0.2.21', 3065);
@@ -448,14 +453,15 @@ namespace {
     viewer_phase43_reset_limits();
 
     // Challenge authority is action-bound, expiry-bound, difficulty-bound, and counter-bounded.
-    $_SESSION = [];
-    $challengeState = viewer_anti_automation_challenge_issue(VIEWER_ANTI_AUTOMATION_ACTION_RESEND, 10, 4000);
+    $ticketContext = [];
+    $challengeState = viewer_anti_automation_challenge_issue($ticketContext, VIEWER_ANTI_AUTOMATION_ACTION_RESEND, 10, 4000);
     viewer_phase43_assert(
-        viewer_anti_automation_ticket_validate($challengeState['ticket'], VIEWER_ANTI_AUTOMATION_KIND_CHALLENGE, VIEWER_ANTI_AUTOMATION_ACTION_REGISTER, false, 4001) === null,
+        viewer_anti_automation_ticket_validate($ticketContext, $challengeState['ticket'], VIEWER_ANTI_AUTOMATION_KIND_CHALLENGE, VIEWER_ANTI_AUTOMATION_ACTION_REGISTER, false, 4001) === null,
         'Resend challenge must not authorize registration.'
     );
     viewer_phase43_assert(
         viewer_anti_automation_ticket_validate(
+            $ticketContext,
             viewer_phase43_tamper_ticket($challengeState['ticket'], 'd', 12),
             VIEWER_ANTI_AUTOMATION_KIND_CHALLENGE,
             VIEWER_ANTI_AUTOMATION_ACTION_RESEND,
@@ -466,6 +472,7 @@ namespace {
     );
     viewer_phase43_assert(
         viewer_anti_automation_ticket_validate(
+            $ticketContext,
             viewer_phase43_tamper_ticket($challengeState['ticket'], 'n', str_repeat('B', 32)),
             VIEWER_ANTI_AUTOMATION_KIND_CHALLENGE,
             VIEWER_ANTI_AUTOMATION_ACTION_RESEND,
@@ -474,15 +481,15 @@ namespace {
         ) === null,
         'Tampered challenge nonce must fail signature validation.'
     );
-    $challengeIssuingSession = $_SESSION;
-    $_SESSION = [];
+    $challengeIssuingContext = $ticketContext;
+    $ticketContext = [];
     viewer_phase43_assert(
-        viewer_anti_automation_ticket_validate($challengeState['ticket'], VIEWER_ANTI_AUTOMATION_KIND_CHALLENGE, VIEWER_ANTI_AUTOMATION_ACTION_RESEND, true, 4001) === null,
+        viewer_anti_automation_ticket_validate($ticketContext, $challengeState['ticket'], VIEWER_ANTI_AUTOMATION_KIND_CHALLENGE, VIEWER_ANTI_AUTOMATION_ACTION_RESEND, true, 4001) === null,
         'Challenge issued in one PHP session must not authorize another session.'
     );
-    $_SESSION = $challengeIssuingSession;
+    $ticketContext = $challengeIssuingContext;
     viewer_phase43_assert(
-        viewer_anti_automation_ticket_validate($challengeState['ticket'], VIEWER_ANTI_AUTOMATION_KIND_CHALLENGE, VIEWER_ANTI_AUTOMATION_ACTION_RESEND, false, 4181) === null,
+        viewer_anti_automation_ticket_validate($ticketContext, $challengeState['ticket'], VIEWER_ANTI_AUTOMATION_KIND_CHALLENGE, VIEWER_ANTI_AUTOMATION_ACTION_RESEND, false, 4181) === null,
         'Expired challenge must not authorize continuation.'
     );
     viewer_phase43_assert(
@@ -490,23 +497,23 @@ namespace {
         'Counter beyond the hard bound must be rejected before proof acceptance.'
     );
     // Wrong submitted proof is one-shot and results in a fresh challenge rather than server-side brute force.
-    $_SESSION = [];
-    $wrongProofChallenge = viewer_anti_automation_challenge_issue(VIEWER_ANTI_AUTOMATION_ACTION_REGISTER, 10, 5000);
+    $ticketContext = [];
+    $wrongProofChallenge = viewer_anti_automation_challenge_issue($ticketContext, VIEWER_ANTI_AUTOMATION_ACTION_REGISTER, 10, 5000);
     $wrongCounter = viewer_phase43_find_invalid_pow_counter(
         VIEWER_ANTI_AUTOMATION_ACTION_REGISTER,
         (string) $wrongProofChallenge['challenge'],
         (int) $wrongProofChallenge['difficulty']
     );
-    $wrongProof = viewer_anti_automation_authorize_submission(VIEWER_ANTI_AUTOMATION_ACTION_REGISTER, [
+    $wrongProof = viewer_anti_automation_authorize_submission($ticketContext, VIEWER_ANTI_AUTOMATION_ACTION_REGISTER, [
         'viewer_aa_challenge_ticket' => $wrongProofChallenge['ticket'],
         'viewer_aa_pow_counter' => $wrongCounter,
     ], '192.0.2.30', 5001);
     viewer_phase43_assert($wrongProof['result'] === VIEWER_ANTI_AUTOMATION_RESULT_CHALLENGE_REQUIRED, 'Wrong proof must not authorize downstream work.');
     viewer_phase43_assert(is_array($wrongProof['challenge'] ?? null), 'Wrong proof should require fresh one-time challenge state.');
 
-    $_SESSION = [];
+    $ticketContext = [];
     viewer_phase43_reset_limits();
-    $challengeLimited = viewer_anti_automation_challenge_issue(VIEWER_ANTI_AUTOMATION_ACTION_REGISTER, 10, 5050);
+    $challengeLimited = viewer_anti_automation_challenge_issue($ticketContext, VIEWER_ANTI_AUTOMATION_ACTION_REGISTER, 10, 5050);
     $challengeLimitedCounter = viewer_phase43_find_pow_counter(
         VIEWER_ANTI_AUTOMATION_ACTION_REGISTER,
         (string) $challengeLimited['challenge'],
@@ -514,7 +521,7 @@ namespace {
     );
     $GLOBALS['viewer_phase43_force_limiter_denial'] = true;
     viewer_phase43_assert(
-        viewer_anti_automation_authorize_submission(VIEWER_ANTI_AUTOMATION_ACTION_REGISTER, [
+        viewer_anti_automation_authorize_submission($ticketContext, VIEWER_ANTI_AUTOMATION_ACTION_REGISTER, [
             'viewer_aa_challenge_ticket' => $challengeLimited['ticket'],
             'viewer_aa_pow_counter' => $challengeLimitedCounter,
         ], '192.0.2.31', 5051)['result'] === VIEWER_ANTI_AUTOMATION_RESULT_SUPPRESS,
@@ -522,14 +529,15 @@ namespace {
     );
 
     // First-party no-JavaScript fallback remains short-lived, session-bound, single-use, age-gated, and rate-limited.
-    $_SESSION = [];
+    $ticketContext = [];
     viewer_phase43_reset_limits();
-    $fallbackChallenge = viewer_anti_automation_challenge_issue(VIEWER_ANTI_AUTOMATION_ACTION_RESEND, 10, 6000);
+    $fallbackChallenge = viewer_anti_automation_challenge_issue($ticketContext, VIEWER_ANTI_AUTOMATION_ACTION_RESEND, 10, 6000);
     $fallbackPost = [
         'viewer_aa_challenge_ticket' => $fallbackChallenge['ticket'],
         'viewer_aa_fallback' => '1',
     ];
     $fallbackPass = viewer_anti_automation_authorize_submission(
+        $ticketContext,
         VIEWER_ANTI_AUTOMATION_ACTION_RESEND,
         $fallbackPost,
         '192.0.2.40',
@@ -538,15 +546,15 @@ namespace {
     viewer_phase43_assert($fallbackPass['result'] === VIEWER_ANTI_AUTOMATION_RESULT_ALLOW, 'Aged first-party fallback must permit bounded continuation.');
     viewer_phase43_assert(count($GLOBALS['viewer_phase43_limiter_calls']) === 2, 'Fallback must consume existing IP and subnet limiter dimensions.');
     viewer_phase43_assert(
-        viewer_anti_automation_authorize_submission(VIEWER_ANTI_AUTOMATION_ACTION_RESEND, $fallbackPost, '192.0.2.40', 6004)['result'] === VIEWER_ANTI_AUTOMATION_RESULT_INVALID,
+        viewer_anti_automation_authorize_submission($ticketContext, VIEWER_ANTI_AUTOMATION_ACTION_RESEND, $fallbackPost, '192.0.2.40', 6004)['result'] === VIEWER_ANTI_AUTOMATION_RESULT_INVALID,
         'Fallback challenge must remain single-use.'
     );
-    $_SESSION = [];
+    $ticketContext = [];
     viewer_phase43_reset_limits();
-    $fallbackLimited = viewer_anti_automation_challenge_issue(VIEWER_ANTI_AUTOMATION_ACTION_RESEND, 10, 6100);
+    $fallbackLimited = viewer_anti_automation_challenge_issue($ticketContext, VIEWER_ANTI_AUTOMATION_ACTION_RESEND, 10, 6100);
     $GLOBALS['viewer_phase43_force_limiter_denial'] = true;
     viewer_phase43_assert(
-        viewer_anti_automation_authorize_submission(VIEWER_ANTI_AUTOMATION_ACTION_RESEND, [
+        viewer_anti_automation_authorize_submission($ticketContext, VIEWER_ANTI_AUTOMATION_ACTION_RESEND, [
             'viewer_aa_challenge_ticket' => $fallbackLimited['ticket'],
             'viewer_aa_fallback' => '1',
         ], '192.0.2.41', 6104)['result'] === VIEWER_ANTI_AUTOMATION_RESULT_SUPPRESS,
@@ -592,10 +600,11 @@ namespace {
     require_once $root . '/app/controllers/viewer_accounts.php';
 
     $_SERVER['REQUEST_METHOD'] = 'POST';
-    $_SESSION = [];
+    $ticketContext = [];
     viewer_phase43_reset_limits();
     $GLOBALS['viewer_phase43_registration_begin_calls'] = 0;
-    $registerTrap = viewer_anti_automation_form_issue(VIEWER_ANTI_AUTOMATION_ACTION_REGISTER, time());
+    $registerTrap = viewer_anti_automation_form_issue($ticketContext, VIEWER_ANTI_AUTOMATION_ACTION_REGISTER, time());
+    $_SESSION = [VIEWER_ANTI_AUTOMATION_SESSION_NAMESPACE => $ticketContext];
     $_POST = [
         'viewer_csrf_token' => 'phase43-csrf',
         'email' => 'person@example.test',
@@ -608,10 +617,11 @@ namespace {
     viewer_phase43_assert($GLOBALS['viewer_phase43_registration_begin_calls'] === 0, 'Hard registration suppression must not reach viewer_registration_request_begin().');
     viewer_phase43_assert(str_contains($registerSuppressedOutput, 'If the registration request can be accepted'), 'Hard registration suppression must retain the generic public completion wording.');
 
-    $_SESSION = [];
+    $ticketContext = [];
     viewer_phase43_reset_limits();
     $GLOBALS['viewer_phase43_resend_prepare_calls'] = 0;
-    $resendTrap = viewer_anti_automation_form_issue(VIEWER_ANTI_AUTOMATION_ACTION_RESEND, time());
+    $resendTrap = viewer_anti_automation_form_issue($ticketContext, VIEWER_ANTI_AUTOMATION_ACTION_RESEND, time());
+    $_SESSION = [VIEWER_ANTI_AUTOMATION_SESSION_NAMESPACE => $ticketContext];
     $_POST = [
         'viewer_csrf_token' => 'phase43-csrf',
         'email' => 'person@example.test',
@@ -648,6 +658,7 @@ namespace {
     }
     $antiSource = (string) file_get_contents($root . '/app/services/viewer_anti_automation.php');
     viewer_phase43_assert(str_contains($antiSource, "viewer_rate_limit_consume('viewer_automation_ip'") && str_contains($antiSource, "viewer_rate_limit_consume('viewer_automation_subnet'"), 'Phase 4.3 must reuse viewer_rate_limit_consume() rather than a controller/session-only limiter.');
+    viewer_phase43_assert(!str_contains($antiSource, '$_SESSION'), 'Ticket services must use explicit caller context, never session globals.');
     viewer_phase43_assert(!preg_match('/INSERT\s+INTO|UPDATE\s+viewer_registration|DELETE\s+FROM\s+viewer_registration|SELECT\s+.*viewer_registration/is', $antiSource), 'Anti-automation service must not own registration/verification SQL.');
 
     // The local solver is dependency-free, native-Web-Crypto-only, bounded, and fingerprint-free.

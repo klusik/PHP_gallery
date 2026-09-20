@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Service
+ * Purpose: Coordinate Smart Gallery rules, placement, access-aware results and presentation policy.
+ * Responsibilities:
+ *   - Validate persisted rule data and orchestrate the existing model query boundary.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: app/services/smart_galleries.php

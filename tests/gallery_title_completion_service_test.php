@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Regression Test
+ * Purpose: Verify bounded title matching and administrator JSON output.
+ * Responsibilities:
+ *   - Exercise the production model/service boundary with disposable catalog data.
  * Repository: https://github.com/klusik/PHP_gallery
  * File: tests/gallery_title_completion_service_test.php
  * Author: Rudolf Klusal
@@ -47,6 +51,10 @@ namespace {
     use function Gallery\Services\gallery_title_completion_empty_result;
     use function Gallery\Services\gallery_title_completion_normalize;
     use function Gallery\Tests\title_completion_fixture_rows;
+    use const Gallery\Core\GALLERY_TITLE_COMPLETION_MAX_CANDIDATES;
+    use const Gallery\Core\GALLERY_TITLE_COMPLETION_SCAN_BUDGET;
+    use const Gallery\Core\GALLERY_TITLE_COMPLETION_SIBLING_BUDGET;
+    use const Gallery\Core\GALLERY_TITLE_COMPLETION_PAGE_SIZE;
 
     /** Fail the standalone regression test when a runtime contract is violated. */
     function completion_assert(bool $condition, string $message): void
@@ -72,6 +80,12 @@ namespace {
         completion_assert(!str_contains($body, 'secret') && !str_contains($body, 'password='), 'No private exception text.');
         return $result;
     }
+
+    completion_assert([GALLERY_TITLE_COMPLETION_MAX_CANDIDATES, GALLERY_TITLE_COMPLETION_SCAN_BUDGET,
+        GALLERY_TITLE_COMPLETION_SIBLING_BUDGET, GALLERY_TITLE_COMPLETION_PAGE_SIZE] === [8, 1024, 512, 512],
+        'Core immutable title budgets retain the exact existing values.');
+    completion_assert(!defined('Gallery\\Services\\GALLERY_TITLE_COMPLETION_MAX_CANDIDATES'),
+        'The service imports the Core owner without a duplicate namespace definition.');
 
     if (!in_array('sqlite', PDO::getAvailableDrivers(), true)) {
         fwrite(STDOUT, "SKIP: title completion runtime fixtures require pdo_sqlite.\n");

@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Regression Test
+ * Purpose: Protect Smart Gallery hierarchy and archive hardening.
+ * Responsibilities:
+ *   - Verify mutation preflight, invalidation and serialized atomic ZIP publication.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/smart_gallery_medium_hardening_test.php
@@ -24,6 +28,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/support/module_source.php';
+
 /** Fail this standalone test with one concise contract message. */
 function smart_gallery_medium_hardening_assert(bool $condition, string $message): void
 {
@@ -34,7 +40,7 @@ function smart_gallery_medium_hardening_assert(bool $condition, string $message)
 }
 
 $root = dirname(__DIR__);
-$mutations = (string) file_get_contents($root . '/app/services/gallery_mutations.php');
+$mutations = module_source($root . '/app/services/gallery_mutations.php');
 $mutationModel = (string) file_get_contents($root . '/app/models/gallery_mutations.php');
 $publicPaths = (string) file_get_contents($root . '/app/services/public_paths.php');
 $publicPathModel = (string) file_get_contents($root . '/app/models/public_paths.php');
@@ -75,11 +81,23 @@ smart_gallery_medium_hardening_assert(
     && str_contains($repairSource, 'public_path_model_apply_parent_assignments($rows, $assignments, $pdo)')
     && strpos($repairSource, 'smart_gallery_validate_gallery_parent_map($assignments);') < strpos($repairSource, 'public_path_model_apply_parent_assignments($rows, $assignments, $pdo)')
     && str_contains($repairSource, 'smart_gallery_graph_cache_clear();')
-    && str_contains($publicPathModel, 'UPDATE galleries SET parent_id = ? WHERE id = ?'),
+    && str_contains($publicPathModel, 'UPDATE galleries SET parent_id = ?, edit_revision = edit_revision + 1 WHERE id = ?'),
     'Public-path parent repair validates before model-owned writes and invalidates the Smart Gallery graph after a committed hierarchy change.'
 );
 
-$moveStart = strpos($mutations, 'function move_gallery_folder_to_parent');
+$moveWrapperStart = strpos($mutations, 'function move_gallery_folder_to_parent(');
+$moveWrapperEnd = strpos($mutations, '/**', $moveWrapperStart === false ? 0 : $moveWrapperStart + 1);
+$moveWrapper = $moveWrapperStart !== false
+    ? substr($mutations, $moveWrapperStart, $moveWrapperEnd !== false ? $moveWrapperEnd - $moveWrapperStart : null)
+    : '';
+smart_gallery_medium_hardening_assert(
+    str_contains($moveWrapper, 'gallery_edit_writer_begin()')
+    && str_contains($moveWrapper, 'return move_gallery_folder_to_parent_owned($galleryId, $parentId, $folderName, $smartGalleryGraphPrevalidated);')
+    && str_contains($moveWrapper, 'finally')
+    && str_contains($moveWrapper, 'gallery_edit_writer_end($writerLock);'),
+    'The physical-move boundary retains writer ownership and forwards the explicit prevalidated-batch decision unchanged.'
+);
+$moveStart = strpos($mutations, 'function move_gallery_folder_to_parent_owned(');
 $moveEnd = strpos($mutations, '/**', $moveStart === false ? 0 : $moveStart + 1);
 $moveSource = $moveStart !== false
     ? substr($mutations, $moveStart, $moveEnd !== false ? $moveEnd - $moveStart : null)

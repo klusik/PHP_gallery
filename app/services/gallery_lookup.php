@@ -480,13 +480,14 @@ function find_parent_gallery_for_path(string $folderPath): ?array
  * Fetch one image by numeric ID.
  *
  * @param int $id Identifier value.
+ * @param bool $fresh Bypass cached ownership after a same-process mutation.
  * @return ?array Structured result data for the caller.
  */
-function find_image(int $id): ?array
+function find_image(int $id, bool $fresh = false): ?array
 {
     static $cache = [];
 
-    if (array_key_exists($id, $cache)) {
+    if (!$fresh && array_key_exists($id, $cache)) {
         return $cache[$id];
     }
 
@@ -542,4 +543,22 @@ function public_home_physical_galleries(): array
     gallery_visibility_assert_public_policy_available();
     gallery_access_assert_public_policy_available();
     return gallery_model_public_root_rows(gallery_access_schema_ready());
+}
+
+/**
+ * Resolve physical-card context policy before requesting its model-owned count.
+ *
+ * @param int $parentGalleryId Positive parent ID, or zero for public root cards.
+ * @return int Full physical gallery count for canonical mutation postconditions.
+ */
+function gallery_mutation_context_count(int $parentGalleryId): int
+{
+    if ($parentGalleryId <= 0) {
+        gallery_visibility_assert_public_policy_available();
+        gallery_access_assert_public_policy_available();
+    }
+    return \Gallery\Models\gallery_model_mutation_context_count(
+        $parentGalleryId,
+        $parentGalleryId <= 0 && gallery_access_schema_ready()
+    );
 }

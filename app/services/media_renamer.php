@@ -37,6 +37,8 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+require_once __DIR__ . '/gallery_edit_concurrency.php';
+
 use RuntimeException;
 use Throwable;
 use function Gallery\Core\normalize_relative_path;
@@ -447,6 +449,9 @@ function media_renamer_plan_for_gallery_selection(int $galleryId, array $imageId
         'summary' => media_renamer_summarize_items($items),
         'context_base' => $contextBase,
         'pattern' => $pattern,
+        // Capture the exact semantic selection, including hidden no-op images.
+        // An empty stored selection must never later expand to newly added rows.
+        'selected_image_ids' => array_map('intval', array_keys($selectedImageIds)),
     ];
 }
 
@@ -910,6 +915,27 @@ function media_renamer_summarize_items(array $items): array
  */
 function media_renamer_execute_gallery(int $galleryId, string $pattern = ''): array
 {
+    $writerLock = gallery_edit_writer_begin();
+    try {
+        return media_renamer_execute_gallery_owned($galleryId, $pattern);
+    } finally {
+        gallery_edit_writer_end($writerLock);
+    }
+}
+
+/**
+ * Plan and execute one gallery rename under stable ownership.
+ *
+ * Internal implementation: enter through media_renamer_execute_gallery() so
+ * reads, early returns and failure cleanup remain inside the same writer lease.
+ *
+ * @param int $galleryId Gallery identifier.
+ * @param string $pattern Requested filename pattern.
+ * @return array<string,int|list<string>|list<array<string,mixed>>> Gallery identity, rename/derivative counters, per-image details, warnings and failures.
+ * @author Rudolf Klusal
+ */
+function media_renamer_execute_gallery_owned(int $galleryId, string $pattern = ''): array
+{
     return media_renamer_execute_plan(media_renamer_plan_for_gallery($galleryId, $pattern));
 }
 
@@ -927,7 +953,36 @@ function media_renamer_execute_gallery(int $galleryId, string $pattern = ''): ar
  */
 function media_renamer_execute_gallery_image_batch(int $galleryId, array $imageIds, string $pattern = ''): array
 {
-    $requested = array_values(array_unique(array_filter(array_map('intval', $imageIds), static fn (int $id): bool => $id > 0)));
+    $writerLock = gallery_edit_writer_begin();
+    try {
+        return media_renamer_execute_gallery_image_batch_owned($galleryId, $imageIds, $pattern);
+    } finally {
+        gallery_edit_writer_end($writerLock);
+    }
+}
+
+/**
+ * Plan and execute selected image renames under stable ownership.
+ *
+ * Internal implementation: enter through media_renamer_execute_gallery_image_batch() so
+ * reads, early returns and failure cleanup remain inside the same writer lease.
+ *
+ * @param int $galleryId Gallery identifier.
+ * @param list<int|string> $imageIds Explicit image selection; no positive IDs means no work.
+ * @param string $pattern Requested filename pattern.
+ * @return array<string,int|list<string>|list<array<string,mixed>>> Selected-image rename counters, details, warnings and failures; empty selection yields the zero aggregate.
+ * @author Rudolf Klusal
+ */
+function media_renamer_execute_gallery_image_batch_owned(int $galleryId, array $imageIds, string $pattern = ''): array
+{
+    $requested = array_values(array_unique(array_filter(array_map('intval', $imageIds),
+        /**
+         * Retain only positive semantic image identifiers in this explicit batch.
+         * @param int $id Integer-normalized submitted image ID.
+         * @return bool Whether the ID can identify a persisted image.
+         * @author Rudolf Klusal
+         */
+        static fn (int $id): bool => $id > 0)));
     if (!$requested) {
         return media_renamer_empty_execution_result(0);
     }
@@ -947,7 +1002,35 @@ function media_renamer_execute_gallery_image_batch(int $galleryId, array $imageI
  */
 function media_renamer_execute_image_batch(array $imageIds, string $pattern = ''): array
 {
-    $ids = array_values(array_unique(array_filter(array_map('intval', $imageIds), static fn (int $id): bool => $id > 0)));
+    $writerLock = gallery_edit_writer_begin();
+    try {
+        return media_renamer_execute_image_batch_owned($imageIds, $pattern);
+    } finally {
+        gallery_edit_writer_end($writerLock);
+    }
+}
+
+/**
+ * Resolve image ownership and execute the grouped rename batch.
+ *
+ * Internal implementation: enter through media_renamer_execute_image_batch() so
+ * reads, early returns and failure cleanup remain inside the same writer lease.
+ *
+ * @param list<int|string> $imageIds Explicit image selection grouped by current gallery ownership.
+ * @param string $pattern Requested filename pattern.
+ * @return array<string,int|list<string>|list<array<string,mixed>>> Gallery/request counters, merged per-image details, warnings and independent gallery failures.
+ * @author Rudolf Klusal
+ */
+function media_renamer_execute_image_batch_owned(array $imageIds, string $pattern = ''): array
+{
+    $ids = array_values(array_unique(array_filter(array_map('intval', $imageIds),
+        /**
+         * Exclude nonpositive selection IDs before querying current image ownership.
+         * @param int $id Integer-normalized submitted image ID.
+         * @return bool Whether the ID belongs in the ownership lookup.
+         * @author Rudolf Klusal
+         */
+        static fn (int $id): bool => $id > 0)));
     $result = media_renamer_empty_execution_result(0);
     if (!$ids) {
         return $result;
@@ -1037,6 +1120,27 @@ function media_renamer_merge_execution_result(array &$target, array $source): vo
  */
 function media_renamer_execute_galleries(array $galleryIds, string $pattern = ''): array
 {
+    $writerLock = gallery_edit_writer_begin();
+    try {
+        return media_renamer_execute_galleries_owned($galleryIds, $pattern);
+    } finally {
+        gallery_edit_writer_end($writerLock);
+    }
+}
+
+/**
+ * Resolve and execute gallery rename plans under stable ownership.
+ *
+ * Internal implementation: enter through media_renamer_execute_galleries() so
+ * reads, early returns and failure cleanup remain inside the same writer lease.
+ *
+ * @param list<int|string> $galleryIds Explicit gallery selection; missing galleries are omitted by the canonical resolver.
+ * @param string $pattern Requested filename pattern.
+ * @return array<string,int|list<string>|list<array<string,mixed>>> Gallery/request counters, merged per-image details, warnings and independent gallery failures.
+ * @author Rudolf Klusal
+ */
+function media_renamer_execute_galleries_owned(array $galleryIds, string $pattern = ''): array
+{
     $result = media_renamer_empty_execution_result(count($galleryIds));
 
     foreach (media_renamer_existing_gallery_ids($galleryIds) as $galleryId) {
@@ -1057,18 +1161,46 @@ function media_renamer_execute_galleries(array $galleryIds, string $pattern = ''
 /**
  * Execute one precomputed plan with physical file renames and database updates.
  *
- * @param array $plan Plan value.
+ * @param array{gallery:array<string,mixed>,selected_image_ids:list<int>,items:list<array<string,mixed>>,pattern:string,summary:array<string,int>} $plan Canonical selection plan; full gallery and item snapshots are revalidated under writer ownership.
  * @return array<string,mixed> Structured result data for the caller.
  */
 function media_renamer_execute_plan(array $plan): array
 {
+    $writerLock = gallery_edit_writer_begin();
+    try {
+        return media_renamer_execute_plan_owned($plan);
+    } finally {
+        gallery_edit_writer_end($writerLock);
+    }
+}
+
+/**
+ * Execute a rename plan while retaining filesystem and metadata ownership.
+ *
+ * Internal implementation: enter through media_renamer_execute_plan() so
+ * reads, early returns and failure cleanup remain inside the same writer lease.
+ *
+ * @param array{gallery:array<string,mixed>,selected_image_ids:list<int>,items:list<array<string,mixed>>,pattern:string,summary:array<string,int>} $plan Canonical selection plan; changed gallery or item snapshots cause a conflict before filesystem work.
+ * @return array<string,int|list<string>|list<array<string,mixed>>> Gallery identity, physical rename/derivative counters, per-image details, warnings and failures.
+ * @author Rudolf Klusal
+ */
+function media_renamer_execute_plan_owned(array $plan): array
+{
+    $plan = media_renamer_refresh_execution_plan($plan);
     $gallery = (array) ($plan['gallery'] ?? []);
     $galleryId = (int) ($gallery['id'] ?? 0);
     if ($galleryId <= 0) {
         throw new RuntimeException(t('admin.media_renamer.error_gallery_missing', 'Gallery was not found.'));
     }
 
-    $items = array_values(array_filter((array) ($plan['items'] ?? []), static fn (array $item): bool => !empty($item['can_rename']) && (string) ($item['status'] ?? '') === 'rename'));
+    $items = array_values(array_filter((array) ($plan['items'] ?? []),
+        /**
+         * Select only executable rename entries from the revalidated plan.
+         * @param array{can_rename?:bool,status?:string} $item Planned image outcome and eligibility.
+         * @return bool Whether this entry requires a physical rename.
+         * @author Rudolf Klusal
+         */
+        static fn (array $item): bool => !empty($item['can_rename']) && (string) ($item['status'] ?? '') === 'rename'));
     $summary = (array) ($plan['summary'] ?? []);
     $result = [
         'gallery_id' => $galleryId,
@@ -1144,8 +1276,22 @@ function media_renamer_execute_plan(array $plan): array
 
     $result['renamed'] = count($items);
     $result['titles_updated'] = (int) ($databaseResult['titles_updated'] ?? 0);
-    $result['details'] = media_renamer_execution_details_for_plan($plan, array_map(static fn (array $item): int => (int) ($item['image_id'] ?? 0), $items));
-    $result['derivatives_moved'] = count(array_filter($finalFiles, static fn (array $entry): bool => (string) ($entry['kind'] ?? '') === 'derivative'));
+    $result['details'] = media_renamer_execution_details_for_plan($plan, array_map(
+        /**
+         * Identify the successfully renamed image for the completion detail table.
+         * @param array{image_id?:int|string} $item Executed rename entry.
+         * @return int Persisted image ID, or zero for an invalid entry.
+         * @author Rudolf Klusal
+         */
+        static fn (array $item): int => (int) ($item['image_id'] ?? 0), $items));
+    $result['derivatives_moved'] = count(array_filter($finalFiles,
+        /**
+         * Count generated derivatives separately from moved originals.
+         * @param array{kind?:string} $entry Successfully finalized file-manifest entry.
+         * @return bool Whether the file is a generated derivative.
+         * @author Rudolf Klusal
+         */
+        static fn (array $entry): bool => (string) ($entry['kind'] ?? '') === 'derivative'));
     $result['derivatives_cleaned'] = (int) ($cleanupResult['cleaned'] ?? 0);
     $result['derivative_failures'] += (int) ($cleanupResult['failures'] ?? 0);
     foreach ((array) ($cleanupResult['warnings'] ?? []) as $warning) {
@@ -1169,6 +1315,49 @@ function media_renamer_execute_plan(array $plan): array
     }
 
     return $result;
+}
+
+/**
+ * Reload a plan's semantic identities and refuse changed gallery/image snapshots.
+ *
+ * Called only while execute_plan() retains writer ownership. Full-row equality
+ * also protects pre-revision installations; it is not a timestamp comparison.
+ * Rebuilding from explicit image IDs rechecks ownership, paths and collisions.
+ * Changed plans are refused, never silently merged or expanded to all images.
+ *
+ * @param array<string,mixed> $plan Plan returned by the canonical selection planner.
+ * @return array<string,mixed> Freshly rebuilt equivalent plan, safe for file execution.
+ * @throws GalleryEditConflict If the gallery, selection or source/target plan changed.
+ * @author Rudolf Klusal
+ */
+function media_renamer_refresh_execution_plan(array $plan): array
+{
+    $snapshot = (array) ($plan['gallery'] ?? []);
+    $galleryId = (int) ($snapshot['id'] ?? 0);
+    $gallery = $galleryId > 0 ? find_gallery($galleryId, true) : null;
+    if (!$gallery || $gallery !== $snapshot || !is_array($plan['selected_image_ids'] ?? null)) {
+        throw new GalleryEditConflict(gallery_edit_comparison($gallery ?? []));
+    }
+    $imageIds = array_values(array_unique(array_filter(array_map('intval', $plan['selected_image_ids']),
+        /**
+         * Keep the explicit positive selection without expanding an empty plan.
+         * @param int $id Integer-normalized planned image ID.
+         * @return bool Whether this ID is eligible for plan reconstruction.
+         * @author Rudolf Klusal
+         */
+        static fn (int $id): bool => $id > 0)));
+    if (!$imageIds) {
+        if (($plan['items'] ?? []) !== []) {
+            throw new GalleryEditConflict(gallery_edit_comparison($gallery));
+        }
+        $plan['gallery'] = $gallery;
+        return $plan;
+    }
+    $fresh = media_renamer_plan_for_gallery_selection($galleryId, $imageIds, (string) ($plan['pattern'] ?? ''));
+    if ($fresh['items'] !== ($plan['items'] ?? null)) {
+        throw new GalleryEditConflict(gallery_edit_comparison($gallery));
+    }
+    return $fresh;
 }
 
 /**

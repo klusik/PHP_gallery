@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Regression Test
+ * Purpose: Protect retained audit-hardening source contracts.
+ * Responsibilities:
+ *   - Check deterministic guards without database access or destructive operations.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/version_094_audit_hardening.php

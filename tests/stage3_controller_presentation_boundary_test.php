@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Regression Test
+ * Purpose: Protect controller-to-view presentation ownership.
+ * Responsibilities:
+ *   - Reject document markup in controllers while retaining protocol response boundaries.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/stage3_controller_presentation_boundary_test.php

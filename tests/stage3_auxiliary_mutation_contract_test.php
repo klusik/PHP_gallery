@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Regression Test
+ * Purpose: Protect auxiliary Admin mutation completion paths.
+ * Responsibilities:
+ *   - Check the shared response and refresh contract for secondary workflows.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/stage3_auxiliary_mutation_contract_test.php
@@ -98,7 +102,9 @@ $pictureManager = stage3_source('public/assets/gallery-modules/picture-manager.j
 stage3_expect(str_contains($pictureManager, 'window.location.href = refreshUrl'), 'Picture Manager standalone navigation is an intentional public-toolbar exception.');
 
 $sidePanel = stage3_source('public/assets/gallery-modules/admin-side-panel.js');
-stage3_expect(str_contains($sidePanel, "document.addEventListener('submit', async (event) => {"), 'Dynamic panel forms must remain intercepted by delegation.');
+$delegatedSubmitPattern = '~document\.addEventListener\(\s*[\'"]submit[\'"]\s*,\s*(?:/\*.*?\*/\s*)?async\s*\(event\)\s*=>\s*\{~s';
+stage3_expect(preg_match($delegatedSubmitPattern, $sidePanel) === 1, 'Dynamic panel forms must remain intercepted by delegation, with or without attached callback documentation.');
+stage3_expect(preg_match($delegatedSubmitPattern, "form.addEventListener('submit', async (event) => {") === 0, 'Direct form binding must not satisfy delegated document ownership.');
 stage3_expect(str_contains($sidePanel, "document.addEventListener('php-gallery:auxiliary-mutation-success'"), 'Auxiliary durable mutations must converge on one side-panel completion bridge.');
 stage3_expect(str_contains($sidePanel, 'completeAdminMutation(result,'), 'Side-panel completion bridge must call the canonical coordinator.');
 stage3_expect(!str_contains($sidePanel, 'history.replaceState('), 'Side-panel synchronization must not rewrite history.');

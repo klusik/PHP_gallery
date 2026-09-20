@@ -33,6 +33,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/support/module_source.php';
+
 require_once __DIR__ . '/../app/services/admin_dashboard.php';
 
 use function Gallery\Services\admin_schema_health_model;
@@ -111,7 +113,7 @@ security_health_assert_same('', $disabled['request_id'], 'disabled request suppr
 $invalidFeature = admin_schema_health_model(['state' => 'available', 'requirements' => []], 'unsafe feature/password', true, 'unused');
 security_health_assert_same('schema_capability', $invalidFeature['feature'], 'invalid feature bounded fallback');
 
-$serviceSource = (string) file_get_contents(__DIR__ . '/../app/services/admin_dashboard.php');
+$serviceSource = module_source(__DIR__ . '/../app/services/admin_dashboard.php');
 foreach (['gallery_access', 'gallery_visibility', 'gallery_share_token', 'nsfw_guard', 'auth_persistent_login', 'auth_password_reset', 'auth_external_identity'] as $feature) {
     security_health_assert_same(true, str_contains($serviceSource, "'" . $feature . "' =>"), 'System Health registration ' . $feature);
 }

@@ -38,28 +38,165 @@ import { setupPictureManager, teardownPictureManager } from './picture-manager.j
 import { setupResponsiveThumbnailSizes, teardownResponsiveThumbnailSizes } from './responsive-thumbnails.js?v=20260510-lazy-map-v1';
 import { activateAdminTabInRoot, activeAdminTabId, setupAdminTabsInRoot } from './admin-tabs.js?v=20260812-deferred-maintenance-v2';
 import { setupAdminNestedTabs } from './admin-nested-tabs.js?v=20260608-admin-cinematic-v1';
-import { setupAdminImageReordering } from './admin-image-reordering.js?v=20260512-modular-admin-v1';
+import { setupAdminImageReordering } from './admin-image-reordering.js?v=20260920-panel-lifecycle-v1';
 import { setupPublicGalleryPageReordering } from './admin-gallery-list.js?v=20260512-modular-admin-v1';
 import { appendUploadProgressLog, escapeHtmlAttribute, escapeHtmlText, i18n, isThumbnailSubmission, thumbnailEndpoint, updateBasicProgress, updateThumbnailProgress, ensureThumbnailProgress, updateUploadProgressMetrics } from './admin-core.js?v=20260614-upload-order-v2';
-import { browserUploadRequested, browserUploadZipSelected, runBrowserGalleryUpload } from './admin-browser-upload.js?v=20260903-oversized-single-batch-v1';
+import { browserUploadRequested, browserUploadZipSelected, runBrowserGalleryUpload } from './admin-browser-upload.js?v=20260920-operation-keys-v1';
 import { setupAdminSmartGalleries } from './admin-smart-galleries.js?v=20260919-smart-gallery-presentation-v1';
 import { completeAdminMutation, replaceOwnedPublicGalleryFragments } from './admin-mutation-completion.js?v=20260902-create-delete-hotfix1';
+import {ADMIN_PANEL_MOTION_MS as adminSidePanelMotionDurationMs} from './admin-panel-policy.js?v=20260920-panel-lifecycle-v1';
+import {beginAdminPanelOpen, captureAdminPanelOwner, rememberAdminPanelMutation, adminPanelMutationOwner, combineAdminPanelGuards, activateAdminPanelModal, deactivateAdminPanel, focusAdminPanelContent, preserveAdminPanelFocus} from './admin-panel-lifecycle.js?v=20260920-panel-lifecycle-v1';
+import {prepareAdminPanelDrafts, allowAdminPanelTransition, adminPanelHasUnsavedText, submittedAdminPanelDraft, acknowledgeAdminPanelDraft, beginAdminPanelSave, acknowledgeAdminPanelSave} from './admin-panel-drafts.js?v=20260920-operation-keys-v1';
+import {beginAdminOperation, adminOperationBody, finishAdminOperation, adminOperationIsRunning} from './admin-operation-keys.js?v=20260920-operation-keys-v1';
 
-const adminSidePanelMotionDurationMs = 280;
+/**
+ * Presentation metadata resolved from an enhanced link; refreshes need only name.
+ * @typedef {Object} AdminPanelWorkflow
+ * @property {string} name Form-binding and editor-selection identity.
+ * @property {string} [kicker] Localized small heading for a newly opened workflow.
+ * @property {string} [title] Localized main heading for a newly opened workflow.
+ * @property {string} [loadingMessage] Initial GET progress text.
+ * @property {string} [loadErrorMessage] Initial GET failure text.
+ */
+
+/**
+ * Cancellation projection accepted from the panel lifecycle and completion owner.
+ * This module composes these guards; it does not allocate coordinator generations.
+ * @typedef {Object} AdminPanelCompletionGuard
+ * @property {function(): boolean} [isCurrent] Whether this operation may still affect the drawer.
+ * @property {AbortSignal|null} [signal] Optional cancellation signal for its editor GET.
+ */
+
+/**
+ * Consumer-side view of an unmodified server completion context.
+ * All additional context/postcondition fields pass through to the canonical owner.
+ * @typedef {ReturnType<typeof import('./admin-mutation-completion.js').normalizeAdminMutationEnvelope>['contexts'][number]} AdminPanelMutationContext
+ */
+
+/**
+ * JSON response transport bag, not proof of a successful mutation.
+ * Callers validate HTTP status and ok; upload aggregation also requires mutation
+ * and contexts. The canonical coordinator owns full envelope normalization.
+ * This local projection describes only fields consumed here and may carry other
+ * server fields unchanged; it must never be treated as a draft/storage allowlist.
+ * @typedef {Object} AdminPanelResponse
+ * @property {boolean} [ok] Endpoint success indication.
+ * @property {string} [message] Endpoint presentation message.
+ * @property {string} [error] Endpoint failure description.
+ * @property {string} [action] Token action discriminator.
+ * @property {number} [token_id] Newly created token row identifier, not the token.
+ * @property {string} [edit_revision] Decimal revision of the just-saved row.
+ * @property {{type?: string, entity?: string, action?: string, entity_ids?: number[]}} [mutation] Server mutation metadata, preserved rather than reconstructed.
+ * @property {{refresh_url?: string}|null} [panel] Server-selected panel refresh metadata.
+ * @property {AdminPanelMutationContext[]} [contexts] Public contexts and observable postconditions passed through unchanged.
+ * @property {{redirect_url?: string}} [fallback] Direct-page destination, not the panel refresh authority.
+ * @property {number|string} [gallery_id] Affected gallery row identifier.
+ * @property {number[]} [gallery_ids] Aggregate uploaded gallery identifiers.
+ * @property {string} [gallery_title] Persisted gallery heading.
+ * @property {string} [gallery_url] Affected gallery's public URL.
+ * @property {string} [edit_url] Gallery editor destination.
+ * @property {string} [public_url] Saved tag's public URL.
+ * @property {string} [redirect_url] Direct-page upload fallback URL.
+ * @property {string} [refresh_url] Workflow-provided editor/context hint.
+ * @property {number} [refresh_gallery_id] Public context gallery identifier.
+ * @property {number} [parent_gallery_id] Parent gallery identifier after creation.
+ * @property {string} [parent_gallery_url] Parent public URL after creation.
+ * @property {boolean} [created_gallery] Whether upload created its target gallery.
+ * @property {string} [bulk_action] Completed gallery-image bulk action.
+ * @property {string} [destination_gallery_url] Move destination for the result notice.
+ * @property {boolean} [gallery_visibility_changed] Whether persisted visibility changed.
+ * @property {string} [gallery_visibility] Persisted visibility vocabulary.
+ * @property {string} [gallery_visibility_label] Public card marker label.
+ * @property {string} [gallery_visibility_hint] Public card marker help text.
+ * @property {number|string} [image_id] Saved image row identifier.
+ * @property {number[]} [image_ids] Persisted images returned by upload.
+ * @property {string} [image_url] Saved image's public URL.
+ * @property {string} [image_title] Persisted image title for bounded card updates.
+ * @property {string} [image_description] Persisted image description for bounded card updates.
+ * @property {string} [image_visibility] Persisted admin image-row visibility.
+ * @property {number} [image_sort_order] Persisted admin image-row order.
+ * @property {number} [uploaded] Uploaded source count.
+ * @property {number} [scanned] Registered source count.
+ * @property {number} [thumbnails] Created derivative count across uploaded files.
+ * @property {number} [thumbnail_skipped] Skipped derivative count across files.
+ * @property {number} [thumbnail_failed] Failed derivative count across files.
+ * @property {string[]} [thumbnail_errors] Deduplicated derivative diagnostics.
+ * @property {number} [total_files] Selected source count for progress.
+ * @property {AdminPanelUploadEvent[]} [upload_events] Server upload progress messages.
+ * @property {number} [total] Thumbnail job image count.
+ * @property {number} [next_offset] Next server thumbnail-job offset.
+ * @property {number} [created] Derivatives created in one thumbnail response.
+ * @property {number} [skipped] Derivatives skipped in one thumbnail response.
+ * @property {number} [failed] Derivatives failed in one thumbnail response.
+ * @property {string[]} [errors] Thumbnail response diagnostics.
+ * @property {boolean} [done] Whether the server thumbnail job has finished.
+ */
+
+/**
+ * Observable subset of the coordinator result read by panel callers.
+ * The original result (including diagnostics and per-context outcomes) is returned
+ * untouched; this alias does not establish a competing completion contract.
+ * @typedef {Awaited<ReturnType<typeof completeAdminMutation>>} AdminPanelSynchronization
+ */
+
+/**
+ * Optional panel-only customization; public refresh/retry stays coordinator-owned.
+ * @typedef {Object} AdminPanelCompletionOverrides
+ * @property {function({refresh_url?: string}|null, AdminPanelResponse, AdminPanelCompletionGuard): Promise<boolean>} [refreshPanel] Refresh only while the supplied combined guard is current.
+ */
+
+/**
+ * Stable card identity captured before visibility mutation replaces its DOM.
+ * @typedef {Object} AdminPanelVisibilityTarget
+ * @property {'gallery'|'image'} kind Selector namespace for the row identifier.
+ * @property {number} id Positive row identifier, or zero for an invalid target.
+ * @property {HTMLElement|null} card Original card, used only for pending/failure feedback.
+ */
+
+/**
+ * Mutable source progress for sequential classic multipart requests.
+ * Multipart loaded/total is projected onto source bytes, not treated as exact wire bytes.
+ * @typedef {Object} AdminPanelClassicProgress
+ * @property {number} totalFiles Selected source-file count.
+ * @property {number} totalBytes Selected source-byte sum.
+ * @property {number} uploadedFiles Fully acknowledged source-file count.
+ * @property {number} uploadedBytes Acknowledged plus estimated current source bytes.
+ * @property {number} currentFileIndex One-based source position, initially zero.
+ * @property {number} currentFileBytes Current source size in bytes.
+ * @property {number} currentFileUploadedBytes Estimated source bytes transferred for the current request.
+ */
+
+/**
+ * One upload progress record provided by the server.
+ * @typedef {Object} AdminPanelUploadEvent
+ * @property {string} [message] Progress text appended through the existing log helper.
+ * @property {number} [elapsed_ms] Optional elapsed server time in milliseconds.
+ */
+
+/**
+ * Accumulated derivative outcome for one acknowledged upload's image identifiers.
+ * @typedef {Object} AdminPanelThumbnailResult
+ * @property {number} created Created derivative count.
+ * @property {number} skipped Skipped derivative count.
+ * @property {number} failed Failed derivative count; at least one for a refused job.
+ * @property {string[]} errors Deduplicated server diagnostics.
+ */
 
 // Function `setupGalleryUploadProgress` executes this focused behavior.
 /**
- * Handle setup gallery upload progress.
+ * Bind each currently mounted upload form once, including newly injected forms.
  *
- * Used by browser-side gallery behavior.
+ * The per-form listener intercepts navigation and delegates replay/ownership to the
+ * existing upload workflow; calling setup again does not duplicate submissions.
+ * @return {void} Marks forms bound and installs their submit listener.
  */
 export function setupGalleryUploadProgress() {
-    document.querySelectorAll('[data-gallery-upload-form]').forEach((form) => {
+    document.querySelectorAll('[data-gallery-upload-form]').forEach(/** Bind each mounted upload form at most once. @param {Element} form Candidate upload form. @return {void} Marks valid forms bound before installing submission handling. */ (form) => {
         if (!(form instanceof HTMLFormElement) || form.dataset.galleryUploadProgressBound === '1') {
             return;
         }
         form.dataset.galleryUploadProgressBound = '1';
-        form.addEventListener('submit', (event) => {
+        form.addEventListener('submit', /** Keep the original upload form in its AJAX workflow. @param {SubmitEvent} event Original form submission. @return {void} Cancels native navigation and starts the upload owner. */ (event) => {
             event.preventDefault();
             runGalleryUpload(form);
         });
@@ -68,20 +205,26 @@ export function setupGalleryUploadProgress() {
 
 // Function `runGalleryUpload` executes this focused behavior.
 /**
- * Run gallery upload.
+ * Execute one explicit upload intent and retain uncertain requests for exact retry.
  *
- * Used by browser-side gallery behavior.
- *
- * @param {HTMLFormElement} form Form value.
+ * Captures the drawer owner before network work; canonical success retires the key
+ * before completion dispatch. A failed/uncertain request keeps its original form,
+ * files and keys. Prepared ZIP batching remains owned by the upload module. Panel
+ * completion never navigates; only direct-page forms use the redirect fallback.
+ * @param {HTMLFormElement} form Original upload form with current transport controls.
+ * @return {Promise<void>} Restores original controls after completion or a recoverable error.
  */
 async function runGalleryUpload(form) {
+    if (adminOperationIsRunning(form)) return;
+    let operation = null;
+    const owner = captureAdminPanelOwner(form.closest('[data-admin-side-panel]'));
     // progress stores state or configuration for the gallery front-end flow.
     const progress = ensureThumbnailProgress(form);
     revealPanelUploadProgress(form, progress);
     form.classList.add('is-uploading');
     // buttons stores state or configuration for the gallery front-end flow.
     const buttons = Array.from(form.querySelectorAll('button, input[type="submit"]'));
-    buttons.forEach((button) => {
+    buttons.forEach(/** Update a control captured from this submitted form, never from a replacement workflow. @param {HTMLButtonElement|HTMLInputElement} button Original form control. @return {void} Sets or restores its pending state and optional progress label. */ (button) => {
         button.disabled = true;
         if (button instanceof HTMLButtonElement) {
             button.dataset.originalText = button.dataset.originalText || button.textContent || '';
@@ -97,16 +240,19 @@ async function runGalleryUpload(form) {
         if (browserUploadZipSelected(form) && !useBrowserUpload) {
             throw new Error(i18n('admin.browser_upload.zip_browser_required', 'ZIP import requires the browser-assisted upload path and a compatible browser.'));
         }
+        operation = beginAdminOperation(form, useBrowserUpload ? 'prepared' : 'classic', selectedGalleryUploadFiles(form));
         if (useBrowserUpload) {
-            result = await runBrowserGalleryUpload(form, progress);
+            result = await runBrowserGalleryUpload(form, progress, operation);
         }
         // Checked browser preparation is a strict execution choice whenever files
         // are selected. The browser helper may ask for the classic path only for an
         // empty create-gallery submission where there is no media to prepare. Never
         // silently switch selected photos to server-side thumbnail generation.
         if (!useBrowserUpload || result?.fallback === true) {
-            result = await runGalleryUploadFiles(form, progress, createThumbnails);
+            result = await runGalleryUploadFiles(form, progress, createThumbnails, operation);
         }
+        requireCanonicalUploadMutationResult(result);
+        finishAdminOperation(operation, true);
         if (createThumbnails) {
             const failed = Number(result.thumbnail_failed || 0);
             const message = failed > 0 ? i18n('admin.operations.upload_thumbnail_failed', 'Upload finished, but {count} thumbnail or DNG display derivative(s) failed.', {count: failed}) : i18n('admin.operations.upload_complete', 'Upload and thumbnail job complete.');
@@ -115,19 +261,26 @@ async function runGalleryUpload(form) {
             updateBasicProgress(progress, 100, i18n('admin.operations.uploaded_scanning_complete', 'Uploaded {count} images. Scanning complete.', {count: result.uploaded || 0}));
         }
         if (galleryUploadCompletesInSidePanel(form)) {
+            rememberAdminPanelMutation(result, owner);
             dispatchAdminSidePanelSuccess(form, result);
+            return;
+        }
+        if (form.dataset.galleryPanelCloseOnSuccess === '1') {
+            rememberAdminPanelMutation(result, owner);
+            await completeCoreGalleryMutationInCurrentView(result);
             return;
         }
         window.location.href = result.redirect_url || adminUrlWithParams({uploaded: result.uploaded || 0, scanned: result.scanned || 0, thumbnails: result.thumbnails || 0});
     } catch (error) {
         updateBasicProgress(progress, 100, error.message || i18n('admin.operations.upload_failed', 'Upload failed.'));
     } finally {
+        finishAdminOperation(operation);
         form.classList.remove('is-uploading');
         const panel = form.closest('[data-admin-side-panel]');
         if (panel instanceof HTMLElement) {
             panel.classList.remove('is-uploading');
         }
-        buttons.forEach((button) => {
+        buttons.forEach(/** Update a control captured from this submitted form, never from a replacement workflow. @param {HTMLButtonElement|HTMLInputElement} button Original form control. @return {void} Sets or restores its pending state and optional progress label. */ (button) => {
             button.disabled = false;
             if (button instanceof HTMLButtonElement && button.dataset.originalText) {
                 button.textContent = button.dataset.originalText;
@@ -141,6 +294,7 @@ async function runGalleryUpload(form) {
  *
  * @param {HTMLFormElement} form Upload form currently being submitted.
  * @param {HTMLElement} progress Progress element used by the upload workflow.
+ * @return {void} Marks the original drawer uploading and brings its progress container into view.
  */
 function revealPanelUploadProgress(form, progress) {
     const panel = form.closest('[data-admin-side-panel]');
@@ -170,7 +324,8 @@ function galleryUploadCompletesInSidePanel(form) {
  * Notify the side-panel controller that an embedded workflow finished.
  *
  * @param {HTMLFormElement} form Completed form.
- * @param {Record<string, *>} result Server response plus client-side aggregate upload data.
+ * @param {AdminPanelResponse} result Server response plus client-side aggregate upload data.
+ * @return {void} Dispatches a bubbling synchronous event; its listener owns asynchronous completion.
  */
 function dispatchAdminSidePanelSuccess(form, result) {
     form.dispatchEvent(new CustomEvent('php-gallery:side-panel-success', {
@@ -188,6 +343,7 @@ function dispatchAdminSidePanelSuccess(form, result) {
  * Direct links remain unchanged for browsers without JavaScript. The enhanced path
  * fetches the existing create-gallery page as a fragment and lets the existing
  * create/upload endpoints handle all mutations.
+ * @return {void} Installs delegated handlers once, including dynamically rendered panel forms.
  */
 export function setupAdminGallerySidePanel() {
     if (document.body?.dataset.adminGallerySidePanelBound === '1') {
@@ -197,49 +353,54 @@ export function setupAdminGallerySidePanel() {
         document.body.dataset.adminGallerySidePanelBound = '1';
     }
 
-    document.addEventListener('php-gallery:admin-image-order-saved', async (event) => {
+    document.addEventListener('php-gallery:admin-image-order-saved', /** Forward image-order completion with its captured drawer owner. @param {CustomEvent} event Canonical result and originating panelOwner from the reorder module. @return {Promise<void>} Delegates public/panel synchronization to the canonical coordinator. */ async (event) => {
         const panel = document.querySelector('[data-admin-side-panel]:not([hidden])');
         if (!(panel instanceof HTMLElement)) {
             return;
         }
         const result = event.detail?.result || {};
+        rememberAdminPanelMutation(result, event.detail?.panelOwner || captureAdminPanelOwner(event.target instanceof Element ? event.target.closest('[data-admin-side-panel]') : null));
         await completeCoreGalleryMutationInCurrentView(result);
     });
 
-    document.addEventListener('php-gallery:metadata-organizer-applied', async (event) => {
+    document.addEventListener('php-gallery:metadata-organizer-applied', /** Complete organizer changes without adopting another open workflow. @param {CustomEvent} event Canonical result, panelOwner and mutable handled marker. @return {Promise<void>} Synchronizes publicly while guarding drawer status and refresh. */ async (event) => {
         const detail = event.detail || {};
         const result = detail.result || {};
+        const owner = detail.panelOwner || captureAdminPanelOwner(event.target instanceof Element ? event.target.closest('[data-admin-side-panel]') : null);
+        rememberAdminPanelMutation(result, owner);
         const panel = document.querySelector('[data-admin-side-panel]:not([hidden])');
         if (panel instanceof HTMLElement) {
             detail.handled = true;
-            writeAdminGallerySidePanelStatus(panel, i18n('admin.metadata_organizer.refreshing', 'Refreshing gallery view...'), false);
+            if (owner.isCurrent()) writeAdminGallerySidePanelStatus(panel, i18n('admin.metadata_organizer.refreshing', 'Refreshing gallery view...'), false);
             await completeCoreGalleryMutationInCurrentView(result);
         }
     });
 
-    document.addEventListener('php-gallery:auxiliary-mutation-success', async (event) => {
+    document.addEventListener('php-gallery:auxiliary-mutation-success', /** Route an auxiliary result through the shared completion owner. @param {CustomEvent} event Canonical result, captured panelOwner and optional refresh/status intent. @return {Promise<void>} Applies only current-owner panel effects after synchronization. */ async (event) => {
         const detail = event.detail || {};
         const result = detail.result || {};
+        const owner = detail.panelOwner || captureAdminPanelOwner(event.target instanceof Element ? event.target.closest('[data-admin-side-panel]') : null);
+        rememberAdminPanelMutation(result, owner);
         const shouldRefreshPanel = detail.refreshPanel === true;
         const syncResult = await completeCoreGalleryMutationInCurrentView(result, {
             refreshPanel: shouldRefreshPanel
-                ? async (panelMetadata, _envelope, completionGuard) => {
+                ? /** Refresh the auxiliary editor only under the combined owner guard. @param {{refresh_url?: string}|null} panelMetadata Canonical editor destination. @param {AdminPanelResponse} _envelope Unmodified completion response. @param {AdminPanelCompletionGuard} completionGuard Combined cancellation scope. @return {Promise<boolean>} True after refresh; throws on an unavailable editor. */ async (panelMetadata, _envelope, completionGuard) => {
                     const refreshed = await refreshAdminSidePanelFromServer(String(panelMetadata?.refresh_url || ''), completionGuard);
                     if (!refreshed) {
                         throw new Error(i18n('admin.side_panel.refresh_failed_after_success', 'The server change was kept, but the refreshed editor could not be loaded.'));
                     }
                     return true;
                 }
-                : async () => true,
+                : /** Retain the auxiliary workflow's existing panel fragment. @return {Promise<boolean>} Marks panel handling complete without issuing a GET. */ async () => true,
         });
         const panel = document.querySelector('[data-admin-side-panel]');
         const statusMessage = String(detail.statusMessage || '');
-        if (syncResult.synchronized && statusMessage !== '' && panel instanceof HTMLElement) {
+        if (owner.isCurrent() && syncResult.synchronized && statusMessage !== '' && panel instanceof HTMLElement) {
             writeAdminGallerySidePanelStatus(panel, statusMessage, detail.statusError === true);
         }
     });
 
-    document.addEventListener('click', async (event) => {
+    document.addEventListener('click', /** Open an enhanced link through the guarded reusable modal when supported. @param {MouseEvent} event Captured click narrowed to an enhanced anchor. @return {Promise<void>} Cancels native navigation and awaits the open intent, leaving unrelated links native. */ async (event) => {
         if (!(event.target instanceof Element)) {
             return;
         }
@@ -257,7 +418,7 @@ export function setupAdminGallerySidePanel() {
 
 
 
-    document.addEventListener('submit', (event) => {
+    document.addEventListener('submit', /** Apply the existing public-delete confirmation before enhanced deletion handling. @param {SubmitEvent} event Captured public-delete form submission. @return {void} Cancels submission if the existing confirmation is declined. */ (event) => {
         if (!(event.target instanceof HTMLFormElement)) {
             return;
         }
@@ -280,19 +441,19 @@ export function setupAdminGallerySidePanel() {
                 autoPurgeEnabled
                     ? i18n('js.admin.inline.trash_gallery_detail', 'It leaves the live gallery immediately and can be restored for {days} day(s).', {days: retentionDays})
                     : i18n('js.admin.inline.trash_gallery_detail_manual', 'It leaves the live gallery immediately and stays in the trash until you restore or permanently delete it.')
-            ].filter((line) => line !== '').join('\n')
+            ].filter(/** Omit empty lines from the existing confirmation prompt. @param {string} line Prepared message line. @return {boolean} Whether the line contributes prompt text. */ (line) => line !== '').join('\n')
             : [
                 `Remove this ${kind} from CMS?`,
                 name ? `Item: ${name}` : '',
                 '',
                 'This removes the CMS record. Continue?'
-            ].filter((line) => line !== '').join('\n');
+            ].filter(/** Omit empty lines from the existing confirmation prompt. @param {string} line Prepared message line. @return {boolean} Whether the line contributes prompt text. */ (line) => line !== '').join('\n');
         if (!window.confirm(message)) {
             event.preventDefault();
         }
     }, true);
 
-    document.addEventListener('submit', async (event) => {
+    document.addEventListener('submit', /** Intercept confirmed public gallery-card deletion when AJAX rendering is available. @param {SubmitEvent} event Delegated submission narrowed to the owned form. @return {Promise<void>} Awaits the selected workflow after cancelling native submission; unrelated or already-handled forms are left to their owner. */ async (event) => {
         const form = event.target;
         if (!(form instanceof HTMLFormElement)
             || !form.matches('.public-admin-delete-form-card[data-public-admin-delete-form][data-public-admin-delete-kind="gallery"]')
@@ -310,7 +471,7 @@ export function setupAdminGallerySidePanel() {
         await submitPublicGalleryCardDelete(form);
     }, true);
 
-    document.addEventListener('submit', async (event) => {
+    document.addEventListener('submit', /** Intercept confirmed public image-card deletion in its owning gallery context. @param {SubmitEvent} event Delegated submission narrowed to the owned form. @return {Promise<void>} Awaits the selected workflow after cancelling native submission; unrelated or already-handled forms are left to their owner. */ async (event) => {
         const form = event.target;
         if (!(form instanceof HTMLFormElement)
             || !form.matches('.public-admin-delete-form-card[data-public-admin-delete-form][data-public-admin-delete-kind="photo"]')
@@ -328,7 +489,7 @@ export function setupAdminGallerySidePanel() {
         await submitPublicImageCardDelete(form);
     }, true);
 
-    document.addEventListener('submit', async (event) => {
+    document.addEventListener('submit', /** Intercept a public card visibility option for in-place completion. @param {SubmitEvent} event Delegated submission narrowed to the owned form. @return {Promise<void>} Awaits the selected workflow after cancelling native submission; unrelated or already-handled forms are left to their owner. */ async (event) => {
         const form = event.target;
         if (!(form instanceof HTMLFormElement)
             || !form.matches('[data-public-admin-visibility-form]')
@@ -346,7 +507,7 @@ export function setupAdminGallerySidePanel() {
         await submitPublicCardVisibility(form);
     }, true);
 
-    document.addEventListener('click', (event) => {
+    document.addEventListener('click', /** Request closure from the close button or scrim through the draft/unresolved-intent guard. @param {MouseEvent} event Delegated click narrowed before using its target. @return {void} Changes only the indicated menu, closure request or submitter bookkeeping. */ (event) => {
         if (!(event.target instanceof Element)) {
             return;
         }
@@ -360,29 +521,29 @@ export function setupAdminGallerySidePanel() {
         }
     });
 
-    document.addEventListener('keydown', (event) => {
+    document.addEventListener('keydown', /** Close visibility menus without claiming the drawer's nested-widget Escape. @param {KeyboardEvent} event Document keyboard event. @return {void} Removes only menu open attributes for Escape. */ (event) => {
         if (event.key !== 'Escape') {
             return;
         }
-        document.querySelectorAll('[data-public-admin-visibility-menu][open]').forEach((menu) => {
+        document.querySelectorAll('[data-public-admin-visibility-menu][open]').forEach(/** Close one public visibility menu without claiming drawer/picker Escape. @param {Element} menu Open visibility menu. @return {void} Removes its open attribute. */ (menu) => {
             menu.removeAttribute('open');
         });
-        const panel = document.querySelector('[data-admin-side-panel]:not([hidden])');
-        if (panel instanceof HTMLElement) {
-            closeAdminGallerySidePanel(panel);
-        }
     });
 
-    document.addEventListener('click', (event) => {
+    document.addEventListener('php-gallery:panel-request-close', /** Send an unclaimed modal Escape through the ordinary draft/operation close guard. @param {CustomEvent} event Originating drawer shell as target. @return {void} Requests closure without bypassing unsaved state. */ (event) => {
+        if (event.target instanceof HTMLElement) closeAdminGallerySidePanel(event.target);
+    });
+
+    document.addEventListener('click', /** Dismiss public visibility menus when a click occurs outside those menus. @param {MouseEvent} event Delegated click narrowed before using its target. @return {void} Changes only the indicated menu, closure request or submitter bookkeeping. */ (event) => {
         if (event.target instanceof Element && event.target.closest('[data-public-admin-visibility-menu]')) {
             return;
         }
-        document.querySelectorAll('[data-public-admin-visibility-menu][open]').forEach((menu) => {
+        document.querySelectorAll('[data-public-admin-visibility-menu][open]').forEach(/** Close one public visibility menu without claiming drawer/picker Escape. @param {Element} menu Open visibility menu. @return {void} Removes its open attribute. */ (menu) => {
             menu.removeAttribute('open');
         });
     });
 
-    document.addEventListener('submit', async (event) => {
+    document.addEventListener('submit', /** Route a newly mounted create form to the operation-key owner. @param {SubmitEvent} event Delegated submission narrowed to the owned form. @return {Promise<void>} Awaits the selected workflow after cancelling native submission; unrelated or already-handled forms are left to their owner. */ async (event) => {
         const form = event.target;
         if (!(form instanceof HTMLFormElement) || !form.matches('[data-gallery-panel-create-form]')) {
             return;
@@ -391,14 +552,14 @@ export function setupAdminGallerySidePanel() {
         await submitAdminGalleryPanelCreateForm(form);
     });
 
-    document.addEventListener('click', (event) => {
+    document.addEventListener('click', /** Capture the clicked Smart Gallery submitter as a fallback for SubmitEvent.submitter. @param {MouseEvent} event Delegated click narrowed before using its target. @return {void} Changes only the indicated menu, closure request or submitter bookkeeping. */ (event) => {
         const submitter = event.target instanceof Element ? event.target.closest('button, input[type="submit"]') : null;
         if (!(submitter instanceof HTMLElement)) return;
         const form = submitter.closest('form[data-smart-gallery-panel-form]');
         if (form instanceof HTMLFormElement) form.__adminSmartGallerySubmitter = submitter;
     }, true);
 
-    document.addEventListener('submit', async (event) => {
+    document.addEventListener('submit', /** Claim mounted Smart Gallery submissions before generic handlers and preserve the captured submitter. @param {SubmitEvent} event Delegated submission narrowed to the owned form. @return {Promise<void>} Awaits the selected workflow after cancelling native submission; unrelated or already-handled forms are left to their owner. */ async (event) => {
         const form = event.target;
         if (!(form instanceof HTMLFormElement) || !form.matches('[data-smart-gallery-panel-form]') || !form.closest('[data-admin-side-panel]')) {
             return;
@@ -410,7 +571,7 @@ export function setupAdminGallerySidePanel() {
         await submitAdminSmartGalleryPanelForm(form, event.submitter || form.__adminSmartGallerySubmitter || null);
     }, true);
 
-    document.addEventListener('submit', async (event) => {
+    document.addEventListener('submit', /** Route mounted gallery/image/tag edits through the revision-aware save owner. @param {SubmitEvent} event Delegated submission narrowed to the owned form. @return {Promise<void>} Awaits the selected workflow after cancelling native submission; unrelated or already-handled forms are left to their owner. */ async (event) => {
         const form = event.target;
         if (!(form instanceof HTMLFormElement) || !form.matches('[data-admin-panel-edit-form]')) {
             return;
@@ -419,7 +580,7 @@ export function setupAdminGallerySidePanel() {
         await submitAdminPanelEditForm(form, event.submitter instanceof HTMLElement ? event.submitter : null);
     });
 
-    document.addEventListener('submit', async (event) => {
+    document.addEventListener('submit', /** Claim drawer scan-images submissions before generic handlers can navigate. @param {SubmitEvent} event Delegated submission narrowed to the owned form. @return {Promise<void>} Awaits the selected workflow after cancelling native submission; unrelated or already-handled forms are left to their owner. */ async (event) => {
         const form = event.target;
         if (!(form instanceof HTMLFormElement) || !form.matches('[data-admin-panel-scan-images-form]') || !form.closest('[data-admin-side-panel]')) {
             return;
@@ -432,7 +593,7 @@ export function setupAdminGallerySidePanel() {
         await submitAdminPanelAuxiliaryMutation(form, event.submitter instanceof HTMLElement ? event.submitter : null);
     }, true);
 
-    document.addEventListener('submit', async (event) => {
+    document.addEventListener('submit', /** Apply the existing AI reprocess confirmation and keep accepted work in the drawer. @param {SubmitEvent} event Delegated submission narrowed to the owned form. @return {Promise<void>} Awaits the selected workflow after cancelling native submission; unrelated or already-handled forms are left to their owner. */ async (event) => {
         const form = event.target;
         if (!(form instanceof HTMLFormElement) || !form.matches('[data-admin-panel-ai-reprocess-form]') || !form.closest('[data-admin-side-panel]')) {
             return;
@@ -454,7 +615,7 @@ export function setupAdminGallerySidePanel() {
         await submitAdminPanelAuxiliaryMutation(form, event.submitter instanceof HTMLElement ? event.submitter : null);
     }, true);
 
-    document.addEventListener('submit', async (event) => {
+    document.addEventListener('submit', /** Claim upload-automation token forms only when mounted in the drawer. @param {SubmitEvent} event Delegated submission narrowed to the owned form. @return {Promise<void>} Awaits the selected workflow after cancelling native submission; unrelated or already-handled forms are left to their owner. */ async (event) => {
         const form = event.target;
         if (!(form instanceof HTMLFormElement) || !form.matches('[data-admin-upload-automation-token-form]')) {
             return;
@@ -470,7 +631,7 @@ export function setupAdminGallerySidePanel() {
         await submitAdminPanelUploadAutomationTokenForm(form);
     }, true);
 
-    document.addEventListener('click', (event) => {
+    document.addEventListener('click', /** Capture the clicked image-bulk submitter without claiming a future thumbnail action. @param {MouseEvent} event Delegated click narrowed before using its target. @return {void} Changes only the indicated menu, closure request or submitter bookkeeping. */ (event) => {
         const submitter = event.target instanceof Element ? event.target.closest('button, input[type="submit"]') : null;
         if (!(submitter instanceof HTMLElement)) {
             return;
@@ -481,7 +642,7 @@ export function setupAdminGallerySidePanel() {
         }
     }, true);
 
-    document.addEventListener('submit', async (event) => {
+    document.addEventListener('submit', /** Route gallery image bulk actions in place; leave thumbnail submissions to their existing owner. @param {SubmitEvent} event Delegated submission narrowed to the owned form. @return {Promise<void>} Awaits the selected workflow after cancelling native submission; unrelated or already-handled forms are left to their owner. */ async (event) => {
         const form = event.target;
         if (!(form instanceof HTMLFormElement) || !form.matches('[data-admin-panel-bulk-form]')) {
             return;
@@ -498,41 +659,46 @@ export function setupAdminGallerySidePanel() {
         await submitAdminPanelImageBulkForm(form, submitter);
     }, true);
 
-    document.addEventListener('php-gallery:side-panel-success', (event) => {
+    document.addEventListener('php-gallery:side-panel-success', /** Route one successful panel mutation according to its captured owner and workflow. @param {CustomEvent} event Canonical result and stable source workflow. @return {void} Starts the existing reflection task without awaiting event dispatch. */ (event) => {
         const panel = event.target instanceof Element ? event.target.closest('[data-admin-side-panel]') : document.querySelector('[data-admin-side-panel]');
         const source = String(event.detail?.source || '');
         const result = event.detail?.result || {};
+        const owner = adminPanelMutationOwner(result, panel);
+        if (!owner.isCurrent()) {
+            runAdminSidePanelSuccessTask(null, /** Synchronize a detached mutation publicly without taking ownership of the current drawer. @return {Promise<Record<string, unknown>>} Canonical coordinator synchronization outcome. */ () => completeCoreGalleryMutationInCurrentView(result));
+            return;
+        }
         const shouldKeepPanelOpen = adminSidePanelMutationKeepsPanelOpen(source);
         if (panel instanceof HTMLElement && !shouldKeepPanelOpen) {
             closeAdminGallerySidePanel(panel);
         }
         if (source === 'gallery-image-bulk') {
-            runAdminSidePanelSuccessTask(panel, () => reflectGalleryImageBulkInCurrentView(result));
+            runAdminSidePanelSuccessTask(panel, /** Reflect this acknowledged gallery image bulk result through its existing synchronization path. @return {Promise<void>} The enclosing success task handles reflection rejection after persistence. */ () => reflectGalleryImageBulkInCurrentView(result));
             if (panel instanceof HTMLElement && shouldKeepPanelOpen) {
                 writeAdminGallerySidePanelStatus(panel, String(result.message || i18n('admin.side_panel.title_picture_saved', 'Gallery title picture saved.')), false);
             }
             return;
         }
         if (source === 'gallery-edit') {
-            runAdminSidePanelSuccessTask(panel, () => reflectSavedGalleryInCurrentView(result));
+            runAdminSidePanelSuccessTask(panel, /** Reflect this acknowledged gallery save result through its existing synchronization path. @return {Promise<void>} The enclosing success task handles reflection rejection after persistence. */ () => reflectSavedGalleryInCurrentView(result));
             return;
         }
         if (source === 'image-edit') {
-            runAdminSidePanelSuccessTask(panel, () => reflectSavedImageInCurrentView(result));
+            runAdminSidePanelSuccessTask(panel, /** Reflect this acknowledged image save result through its existing synchronization path. @return {Promise<void>} The enclosing success task handles reflection rejection after persistence. */ () => reflectSavedImageInCurrentView(result));
             return;
         }
         if (source === 'tag-edit') {
-            runAdminSidePanelSuccessTask(panel, () => reflectSavedTagInCurrentView(result));
+            runAdminSidePanelSuccessTask(panel, /** Reflect this acknowledged tag save result through its existing synchronization path. @return {Promise<void>} The enclosing success task handles reflection rejection after persistence. */ () => reflectSavedTagInCurrentView(result));
             return;
         }
         if (source === 'upload') {
             if (panel instanceof HTMLElement) {
                 writeAdminGallerySidePanelStatus(panel, String(result.message || i18n('admin.side_panel.upload_complete', 'Upload complete.')), false);
             }
-            runAdminSidePanelSuccessTask(panel, () => reflectUploadedGalleryInCurrentView(result));
+            runAdminSidePanelSuccessTask(panel, /** Reflect this acknowledged upload result through its existing synchronization path. @return {Promise<void>} The enclosing success task handles reflection rejection after persistence. */ () => reflectUploadedGalleryInCurrentView(result));
             return;
         }
-        runAdminSidePanelSuccessTask(panel, () => reflectCreatedGalleryInCurrentView(result));
+        runAdminSidePanelSuccessTask(panel, /** Reflect this acknowledged gallery creation result through its existing synchronization path. @return {Promise<void>} The enclosing success task handles reflection rejection after persistence. */ () => reflectCreatedGalleryInCurrentView(result));
     });
 }
 
@@ -547,12 +713,14 @@ export function setupAdminGallerySidePanel() {
  *
  * @param {HTMLElement|null} panel Active side-panel root.
  * @param {() => Promise<void>} task Asynchronous success reflection task.
+ * @return {void} Starts a handled asynchronous task; persistence has already succeeded.
  */
 function runAdminSidePanelSuccessTask(panel, task) {
+    const owner = captureAdminPanelOwner(panel);
     Promise.resolve()
         .then(task)
-        .catch((error) => {
-            if (panel instanceof HTMLElement) {
+        .catch(/** Report synchronization failure only to the drawer that launched this task. @param {unknown} error Rejected reflection error, never a new mutation request. @return {void} Preserves saved state and suppresses unhandled rejection. */ (error) => {
+            if (panel instanceof HTMLElement && owner.isCurrent()) {
                 writeAdminGallerySidePanelStatus(
                     panel,
                     i18n('admin.side_panel.sync_failed_after_success', 'The gallery was saved, but the refreshed public view could not be verified. The server change was kept; continue working or reopen the page later.'),
@@ -566,9 +734,9 @@ function runAdminSidePanelSuccessTask(panel, task) {
 /**
  * Return whether a completed side-panel mutation owns an in-place gallery workflow.
  *
- * Gallery create/edit/bulk/upload operations must leave the drawer mounted while
- * the server-rendered background fragment is refreshed. Image/tag editors retain
- * their existing completion behavior because they are separate workflows.
+ * Gallery create/edit/bulk/upload and image/tag editor completions leave the
+ * drawer mounted while their server-rendered contexts refresh. The stable source
+ * identifier chooses this policy; it does not grant ownership of another drawer.
  *
  * @param {string} source Side-panel success source identifier.
  * @return {boolean} True when the active side panel must remain open.
@@ -581,6 +749,7 @@ function adminSidePanelMutationKeepsPanelOpen(source) {
  * Open the reusable side panel and fill it from an admin workflow.
  *
  * @param {HTMLAnchorElement} link Enhanced admin workflow link.
+ * @return {Promise<void>} Resolves after this open intent loads, fails or is superseded; never applies stale HTML.
  */
 async function openAdminGallerySidePanel(link) {
     const panel = ensureAdminGallerySidePanel();
@@ -589,40 +758,47 @@ async function openAdminGallerySidePanel(link) {
         window.location.href = link.href;
         return;
     }
+    if (!allowAdminPanelTransition(panel, /** Resume this explicit open only after the draft/context guard permits it. @return {Promise<void>} Loads the requested workflow without submitting the old form. */ () => openAdminGallerySidePanel(link))) return;
+    const owner = beginAdminPanelOpen(panel, link);
     const workflow = sidePanelWorkflowFromLink(link);
     setAdminGallerySidePanelHeading(panel, workflow.kicker, workflow.title);
     panel.dataset.adminSidePanelWorkflow = workflow.name;
     panel.dataset.adminSidePanelSourceUrl = '';
     panel.classList.toggle('is-edit-panel', workflow.name !== 'create');
+    panel.classList.remove('is-uploading');
     openAdminGallerySidePanelShell(panel);
     writeAdminGallerySidePanelStatus(panel, workflow.loadingMessage, false);
     body.innerHTML = `<div class="admin-side-panel-loading" role="status">${escapeHtmlText(workflow.loadingMessage)}</div>`;
+    prepareAdminPanelDrafts(panel);
 
     try {
         const url = new URL(link.dataset.gallerySidePanelUrl || link.href, window.location.href);
         url.searchParams.set('panel', '1');
         const response = await fetch(url.toString(), {
             credentials: 'same-origin',
+            signal: owner.signal,
             headers: {
                 'Accept': 'text/html',
                 'X-Requested-With': 'XMLHttpRequest',
             },
         });
         const html = await response.text();
+        if (!owner.isCurrent()) return;
         if (!response.ok || html.trim() === '') {
             throw new Error(workflow.loadErrorMessage);
         }
-        body.innerHTML = sidePanelContentFromHtml(html, workflow);
+        const content = sidePanelContentFromHtml(html, workflow);
+        if (!owner.isCurrent()) return;
+        body.innerHTML = content;
         panel.dataset.adminSidePanelSourceUrl = response.url || url.toString();
         prepareAdminSidePanelLoadedContent(body, workflow, response.url || url.toString());
         writeAdminGallerySidePanelStatus(panel, '', false);
-        const firstField = body.querySelector('input:not([type="hidden"]), select, textarea, button');
-        if (firstField instanceof HTMLElement) {
-            firstField.focus({preventScroll: true});
-        }
+        if (owner.isCurrent()) focusAdminPanelContent(panel);
     } catch (error) {
+        if (!owner.isCurrent() || error?.name === 'AbortError') return;
         writeAdminGallerySidePanelStatus(panel, error.message || workflow.loadErrorMessage, true);
         body.innerHTML = `<div class="notice is-alert">${escapeHtmlText(workflow.loadErrorMessage)} ${escapeHtmlText(i18n('admin.side_panel.use_normal_page_prefix', 'Use the normal admin page instead:'))} <a href="${escapeHtmlAttribute(link.href)}">${escapeHtmlText(i18n('admin.side_panel.open_directly', 'open directly'))}</a>.</div>`;
+        focusAdminPanelContent(panel);
     }
 }
 
@@ -630,7 +806,7 @@ async function openAdminGallerySidePanel(link) {
  * Read side-panel workflow metadata from an enhanced link.
  *
  * @param {HTMLAnchorElement} link Enhanced admin workflow link.
- * @return {{name: string, kicker: string, title: string, loadingMessage: string, loadErrorMessage: string} } Workflow configuration.
+ * @return {AdminPanelWorkflow} Resolved workflow identity and complete initial-open presentation labels.
  */
 function sidePanelWorkflowFromLink(link) {
     const name = String(link.dataset.adminSidePanelWorkflow || 'create');
@@ -703,6 +879,7 @@ function sidePanelWorkflowFromLink(link) {
  * @param {HTMLElement} panel Side-panel root.
  * @param {string} kicker Small heading label.
  * @param {string} title Main heading text.
+ * @return {void} Replaces heading text only in the supplied drawer.
  */
 function setAdminGallerySidePanelHeading(panel, kicker, title) {
     const kickerNode = panel.querySelector('[data-admin-side-panel-kicker]');
@@ -716,11 +893,13 @@ function setAdminGallerySidePanelHeading(panel, kicker, title) {
 }
 
 /**
- * Extract usable panel content from either a fragment response or a full admin page.
+ * Extract a workflow fragment from a trusted same-origin server-rendered response.
  *
- * @param {string} html Server-rendered HTML.
- * @param {*} workflow Workflow value.
- * @return {string} HTML safe to inject into the panel body.
+ * This is layout extraction, not an HTML sanitizer. It removes the development panel
+ * from full-page responses but relies on server view escaping and authorization.
+ * @param {string} html Authorized server-rendered fragment or complete Admin page.
+ * @param {AdminPanelWorkflow} workflow Editor identity used to select the workspace.
+ * @return {string} Server HTML to mount after the caller rechecks its open/refresh owner.
  */
 function sidePanelContentFromHtml(html, workflow) {
     const trimmed = html.trim();
@@ -753,8 +932,9 @@ function sidePanelContentFromHtml(html, workflow) {
  * Prepare forms and dynamic controls after admin content is injected into the panel.
  *
  * @param {HTMLElement} body Side-panel body element.
- * @param {*} workflow Workflow value.
+ * @param {AdminPanelWorkflow} workflow Prepared form-binding identity; initial opens also provide presentation text.
  * @param {string} sourceUrl URL that produced the loaded content.
+ * @return {void} Binds injected controls and establishes the ordinary form's text baseline.
  */
 function prepareAdminSidePanelLoadedContent(body, workflow, sourceUrl) {
     setupGalleryUploadProgress();
@@ -777,18 +957,20 @@ function prepareAdminSidePanelLoadedContent(body, workflow, sourceUrl) {
         prepareAdminPanelEditForm(tagForm, workflow.name, sourceUrl);
     } else if (workflow.name === 'smart-gallery') {
         setupAdminSmartGalleries(body);
-        body.querySelectorAll('[data-smart-gallery-panel-form]').forEach((form) => {
+        body.querySelectorAll('[data-smart-gallery-panel-form]').forEach(/** Mark injected Smart Gallery forms for delegated panel handling. @param {Element} form Candidate server-rendered form. @return {void} Sets binding metadata on valid forms. */ (form) => {
             if (form instanceof HTMLFormElement) form.dataset.adminSmartGalleryPanelForm = 'true';
         });
     } else if (workflow.name === 'upload') {
         const uploadForms = body.querySelectorAll('[data-gallery-upload-form]');
-        uploadForms.forEach((uploadForm) => {
+        uploadForms.forEach(/** Establish the injected upload form's workflow and current public source. @param {Element} uploadForm Candidate server-rendered upload form. @return {void} Sets workflow metadata and its hidden source URL. */ (uploadForm) => {
             if (uploadForm instanceof HTMLFormElement) {
                 uploadForm.dataset.adminPanelWorkflow = 'upload';
                 ensureUploadSourceUrlField(uploadForm);
             }
         });
     }
+    const panel = body.closest('[data-admin-side-panel]');
+    if (panel instanceof HTMLElement) prepareAdminPanelDrafts(panel);
 }
 
 /**
@@ -796,6 +978,7 @@ function prepareAdminSidePanelLoadedContent(body, workflow, sourceUrl) {
  * refresh the same paginated gallery view instead of falling back to page one.
  *
  * @param {HTMLFormElement} form Upload form rendered inside the side panel.
+ * @return {void} Creates or updates the transport-only hidden source_url control.
  */
 function ensureUploadSourceUrlField(form) {
     let field = form.querySelector('input[name="source_url"]');
@@ -814,6 +997,7 @@ function ensureUploadSourceUrlField(form) {
  * @param {Element|null} formCandidate Loaded form candidate.
  * @param {string} workflowName Active workflow name.
  * @param {string} sourceUrl URL that should receive the POST.
+ * @return {void} Sets panel ownership/action metadata on a valid form and its containing drawer.
  */
 function prepareAdminPanelEditForm(formCandidate, workflowName, sourceUrl) {
     if (!(formCandidate instanceof HTMLFormElement)) {
@@ -833,6 +1017,7 @@ function prepareAdminPanelEditForm(formCandidate, workflowName, sourceUrl) {
  * Mark the gallery image bulk form as side-panel owned while keeping its original action route.
  *
  * @param {Element|null} formCandidate Loaded bulk form candidate.
+ * @return {void} Sets interception and refresh metadata without changing the form's action route.
  */
 function prepareAdminPanelBulkForm(formCandidate) {
     if (!(formCandidate instanceof HTMLFormElement)) {
@@ -852,13 +1037,14 @@ function prepareAdminPanelBulkForm(formCandidate) {
  * Keep gallery grid range labels synchronized inside dynamically loaded panel content.
  *
  * @param {HTMLElement} root Side-panel body element.
+ * @return {void} Binds each unbound grid slider and synchronizes its initial label.
  */
 function setupAdminPanelRangeDisplays(root) {
     const pairs = [
         ['[data-gallery-grid-columns]', '[data-gallery-grid-columns-display]'],
         ['[data-gallery-grid-rows]', '[data-gallery-grid-rows-display]'],
     ];
-    pairs.forEach(([controlSelector, displaySelector]) => {
+    pairs.forEach(/** Bind a grid slider and its label as an idempotent pair. @param {[string, string]} selectors Tuple destructured into control and display selectors. @return {void} Binds input/change once and synchronizes the initial label. */ ([controlSelector, displaySelector]) => {
         const control = root.querySelector(controlSelector);
         const display = root.querySelector(displaySelector);
         if (!(control instanceof HTMLInputElement) || !(display instanceof HTMLElement) || control.dataset.adminPanelRangeBound === '1') {
@@ -867,15 +1053,15 @@ function setupAdminPanelRangeDisplays(root) {
         control.dataset.adminPanelRangeBound = '1';
         const override = root.querySelector('[data-gallery-grid-override-enabled]');
         /**
-         * Synchronize sync.
+         * Copy the grid slider value to its associated text label.
+         * @return {void} Updates presentation text without submitting the form.
          */
         const sync = () => {
             display.textContent = control.value;
         };
         /**
-         * Handle mark custom.
-         *
-         * Used by browser-side gallery behavior.
+         * Mark a user-adjusted grid dimension as an explicit override and refresh its label.
+         * @return {void} Checks the override control when present and synchronizes its display.
          */
         const markCustom = () => {
             if (override instanceof HTMLInputElement) {
@@ -893,17 +1079,18 @@ function setupAdminPanelRangeDisplays(root) {
  * Keep thumbnail-bound slider pairs synchronized inside dynamically loaded panel content.
  *
  * @param {HTMLElement} root Side-panel body element.
+ * @return {void} Binds valid slider pairs once and synchronizes labels, hidden pixel values and CSS track bounds.
  */
 function setupAdminPanelThumbnailBoundControls(root) {
-    root.querySelectorAll('[data-thumbnail-bound-control]').forEach((controlRoot) => {
+    root.querySelectorAll('[data-thumbnail-bound-control]').forEach(/** Bind a thumbnail range pair after validating its controls and size vocabulary. @param {Element} controlRoot Candidate thumbnail-bound widget. @return {void} Marks it bound and initializes valid paired controls. */ (controlRoot) => {
         if (!(controlRoot instanceof HTMLElement) || controlRoot.dataset.adminPanelThumbnailBound === '1') {
             return;
         }
         controlRoot.dataset.adminPanelThumbnailBound = '1';
         const values = String(controlRoot.getAttribute('data-thumbnail-bound-values') || '0')
             .split(',')
-            .map((value) => parseInt(value, 10))
-            .filter((value) => Number.isFinite(value));
+            .map(/** Parse a server-rendered thumbnail size token. @param {string} value Decimal pixel-size entry. @return {number} Pixel size or NaN for the next filter to exclude. */ (value) => parseInt(value, 10))
+            .filter(/** Reject nonnumeric thumbnail size entries. @param {number} value Parsed pixel-size candidate. @return {boolean} Whether the candidate is finite. */ (value) => Number.isFinite(value));
         const minIndexControl = controlRoot.querySelector('[data-thumbnail-bound-min-index]');
         const maxIndexControl = controlRoot.querySelector('[data-thumbnail-bound-max-index]');
         const minValueControl = controlRoot.querySelector('[data-thumbnail-bound-min-value]');
@@ -915,19 +1102,17 @@ function setupAdminPanelThumbnailBoundControls(root) {
             return;
         }
         /**
-         * Format size.
-         *
-         * Used by browser-side gallery behavior.
-         *
-         * @param {*} value Value to process.
-         * @param {*} side Side value.
-         * @return {*} Result value for the caller.
+         * Format a thumbnail bound for its paired slider labels.
+         * @param {number} value Pixel size; zero denotes automatic sizing.
+         * @param {'min'|'max'} side Bound whose automatic label is used.
+         * @return {string} Automatic label or pixel-suffixed size.
          */
         const formatSize = (value, side) => value === 0 ? (side === 'min' ? 'Auto min' : 'Auto max') : `${value}px`;
         /**
-         * Synchronize sync.
-         *
-         * @param {*} changedControl Changed control value.
+         * Clamp slider indices and preserve min <= max after an adjustment.
+         * Writes both indices, hidden pixel values, track CSS and text summaries.
+         * @param {HTMLInputElement|null} changedControl Changed slider, or null for initialization.
+         * @return {void} Synchronizes local bounds without submitting or generating thumbnails.
          */
         const sync = (changedControl = null) => {
             let minIndex = parseInt(minIndexControl.value, 10) || 0;
@@ -966,10 +1151,10 @@ function setupAdminPanelThumbnailBoundControls(root) {
             }
             summary.textContent = `${minLabel} to ${maxLabel}`;
         };
-        minIndexControl.addEventListener('input', () => sync(minIndexControl));
-        minIndexControl.addEventListener('change', () => sync(minIndexControl));
-        maxIndexControl.addEventListener('input', () => sync(maxIndexControl));
-        maxIndexControl.addEventListener('change', () => sync(maxIndexControl));
+        minIndexControl.addEventListener('input', /** Apply this slider's changed index while keeping the pair ordered. @return {void} Updates local pixel values, track CSS and labels. */ () => sync(minIndexControl));
+        minIndexControl.addEventListener('change', /** Apply this slider's changed index while keeping the pair ordered. @return {void} Updates local pixel values, track CSS and labels. */ () => sync(minIndexControl));
+        maxIndexControl.addEventListener('input', /** Apply this slider's changed index while keeping the pair ordered. @return {void} Updates local pixel values, track CSS and labels. */ () => sync(maxIndexControl));
+        maxIndexControl.addEventListener('change', /** Apply this slider's changed index while keeping the pair ordered. @return {void} Updates local pixel values, track CSS and labels. */ () => sync(maxIndexControl));
         sync();
     });
 }
@@ -997,7 +1182,7 @@ function ensureAdminGallerySidePanel() {
                     <p class="admin-kicker" data-admin-side-panel-kicker>Admin shortcut</p>
                     <h2 id="admin-side-panel-title" data-admin-side-panel-title>Add gallery here</h2>
                 </div>
-                <button type="button" class="button secondary" data-admin-side-panel-close>Close</button>
+                <button type="button" class="button secondary" data-admin-side-panel-close>${escapeHtmlText(i18n('admin.side_panel.close', 'Close'))}</button>
             </header>
             <div class="admin-side-panel-status visually-hidden" data-admin-side-panel-status aria-live="polite"></div>
             <div class="admin-side-panel-body" data-admin-side-panel-body></div>
@@ -1010,14 +1195,17 @@ function ensureAdminGallerySidePanel() {
  * Make the side panel visible while keeping the current page in place.
  *
  * @param {HTMLElement} panel Side-panel root.
+ * @return {void} Activates loading-state modality before the guarded animation frame.
  */
 function openAdminGallerySidePanelShell(panel) {
+    const owner = captureAdminPanelOwner(panel);
     panel.hidden = false;
     panel.classList.remove('is-closing');
     panel.setAttribute('aria-hidden', 'false');
     document.body.classList.add('has-admin-side-panel');
-    window.requestAnimationFrame(() => {
-        panel.classList.add('is-open');
+    activateAdminPanelModal(panel);
+    window.requestAnimationFrame(/** Apply the opening class only for the still-current open intent. @return {void} Leaves a superseding close/open animation untouched. */ () => {
+        if (owner.isCurrent()) panel.classList.add('is-open');
     });
 }
 
@@ -1025,14 +1213,17 @@ function openAdminGallerySidePanelShell(panel) {
  * Hide the side panel and clear its transient status.
  *
  * @param {HTMLElement} panel Side-panel root.
+ * @return {void} Requests inline draft protection, then restores focus and schedules guarded exit hiding.
  */
 function closeAdminGallerySidePanel(panel) {
+    if (!allowAdminPanelTransition(panel, /** Resume the requested close after an explicit safe draft choice. @return {void} Does not submit or silently discard unresolved operation state. */ () => closeAdminGallerySidePanel(panel))) return;
+    const stillClosing = deactivateAdminPanel(panel);
     panel.classList.remove('is-open');
     panel.classList.add('is-closing');
     panel.setAttribute('aria-hidden', 'true');
     document.body.classList.remove('has-admin-side-panel');
-    window.setTimeout(() => {
-        if (!panel.classList.contains('is-open')) {
+    window.setTimeout(/** Hide only the exact close generation that started this exit transition. @return {void} Cannot hide a reopened drawer. */ () => {
+        if (stillClosing()) {
             panel.hidden = true;
             panel.classList.remove('is-closing');
         }
@@ -1046,6 +1237,7 @@ function closeAdminGallerySidePanel(panel) {
  * @param {HTMLElement} panel Side-panel root.
  * @param {string} message Status text.
  * @param {boolean} isError Whether the message should be styled as an error.
+ * @return {void} Updates plain status text and visibility/error classes if the status node exists.
  */
 function writeAdminGallerySidePanelStatus(panel, message, isError) {
     const status = panel.querySelector('[data-admin-side-panel-status]');
@@ -1062,20 +1254,26 @@ function writeAdminGallerySidePanelStatus(panel, message, isError) {
  * Submit the empty-gallery side-panel form to the existing create endpoint.
  *
  * @param {HTMLFormElement} form Side-panel create form.
+ * @return {Promise<void>} Resolves after canonical success or retention of the original uncertain intent.
  */
 async function submitAdminGalleryPanelCreateForm(form) {
+    if (adminOperationIsRunning(form)) return;
+    let operation = null;
     const panel = form.closest('[data-admin-side-panel]');
     if (!(panel instanceof HTMLElement)) {
         HTMLFormElement.prototype.submit.call(form);
         return;
     }
+    const owner = captureAdminPanelOwner(panel);
+    const submittedDraft = submittedAdminPanelDraft(form);
     const buttons = Array.from(form.querySelectorAll('button, input[type="submit"]'));
-    buttons.forEach((button) => {
+    buttons.forEach(/** Update a control captured from this submitted form, never from a replacement workflow. @param {HTMLButtonElement|HTMLInputElement} button Original form control. @return {void} Sets or restores its pending state and optional progress label. */ (button) => {
         button.disabled = true;
     });
     writeAdminGallerySidePanelStatus(panel, 'Creating gallery...', false);
     try {
-        const body = new FormData(form);
+        operation = beginAdminOperation(form, 'create');
+        const body = adminOperationBody(operation, 0, new FormData(form));
         body.set('ajax', '1');
         body.set('panel', '1');
         const response = await fetch(renderedFormActionRequestUrl(form), {
@@ -1087,6 +1285,14 @@ async function submitAdminGalleryPanelCreateForm(form) {
         if (!response.ok || !result.ok) {
             throw new Error(result.error || i18n('admin.side_panel.gallery_creation_failed', 'Gallery creation failed.'));
         }
+        requireCanonicalUploadMutationResult(result);
+        finishAdminOperation(operation, true);
+        rememberAdminPanelMutation(result, owner);
+        acknowledgeAdminPanelDraft(panel, submittedDraft, result);
+        if (!form.isConnected) {
+            await completeCoreGalleryMutationInCurrentView(result);
+            return;
+        }
         form.dispatchEvent(new CustomEvent('php-gallery:side-panel-success', {
             bubbles: true,
             detail: {
@@ -1095,9 +1301,10 @@ async function submitAdminGalleryPanelCreateForm(form) {
             },
         }));
     } catch (error) {
-        writeAdminGallerySidePanelStatus(panel, error.message || i18n('admin.side_panel.gallery_creation_failed', 'Gallery creation failed.'), true);
+        if (owner.isCurrent()) writeAdminGallerySidePanelStatus(panel, error.message || i18n('admin.side_panel.gallery_creation_failed', 'Gallery creation failed.'), true);
     } finally {
-        buttons.forEach((button) => {
+        finishAdminOperation(operation);
+        buttons.forEach(/** Update a control captured from this submitted form, never from a replacement workflow. @param {HTMLButtonElement|HTMLInputElement} button Original form control. @return {void} Sets or restores its pending state and optional progress label. */ (button) => {
             button.disabled = false;
         });
     }
@@ -1110,6 +1317,7 @@ async function submitAdminGalleryPanelCreateForm(form) {
  * admin side panel must stay mounted and refresh only its editor content.
  *
  * @param {HTMLFormElement} form API-key create or revoke form.
+ * @return {Promise<void>} Resolves after its owned fragment update or a guarded error notice.
  */
 async function submitAdminPanelUploadAutomationTokenForm(form) {
     const panel = form.closest('[data-admin-side-panel]');
@@ -1117,8 +1325,9 @@ async function submitAdminPanelUploadAutomationTokenForm(form) {
         HTMLFormElement.prototype.submit.call(form);
         return;
     }
+    const owner = captureAdminPanelOwner(panel);
     const buttons = Array.from(form.querySelectorAll('button, input[type="submit"]'));
-    buttons.forEach((button) => {
+    buttons.forEach(/** Update a control captured from this submitted form, never from a replacement workflow. @param {HTMLButtonElement|HTMLInputElement} button Original form control. @return {void} Sets or restores its pending state and optional progress label. */ (button) => {
         button.disabled = true;
     });
     writeAdminGallerySidePanelStatus(panel, i18n('admin.side_panel.updating_api_key', 'Updating API key...'), false);
@@ -1154,7 +1363,9 @@ async function submitAdminPanelUploadAutomationTokenForm(form) {
         if (String(result.action || 'create') === 'create' && Number(result.token_id || 0) <= 0) {
             throw new Error(i18n('admin.side_panel.api_key_created_missing', 'API key update failed. The server did not report a created API key.'));
         }
+        rememberAdminPanelMutation(result, owner);
         const syncResult = await completeCoreGalleryMutationInCurrentView(result, {
+            /** Reload the API-key fragment after persistence without exposing its contents to another drawer. @param {{refresh_url?: string}|null} panelMetadata Canonical refresh destination. @param {AdminPanelResponse} _envelope Unmodified server response. @param {AdminPanelCompletionGuard} completionGuard Combined ownership and cancellation scope. @return {Promise<boolean>} True after refresh; throws a saved-but-refresh-failed error otherwise. */
             refreshPanel: async (panelMetadata, _envelope, completionGuard) => {
                 const refreshed = await refreshAdminSidePanelFromServer(String(panelMetadata?.refresh_url || result.refresh_url || refreshUrl || ''), completionGuard);
                 if (!refreshed) {
@@ -1163,13 +1374,13 @@ async function submitAdminPanelUploadAutomationTokenForm(form) {
                 return true;
             },
         });
-        if (syncResult.synchronized) {
+        if (owner.isCurrent() && syncResult.synchronized) {
             writeAdminGallerySidePanelStatus(panel, String(result.message || i18n('admin.side_panel.api_key_updated', 'API key updated.')), false);
         }
     } catch (error) {
-        writeAdminGallerySidePanelStatus(panel, error.message || i18n('admin.side_panel.api_key_failed', 'API key update failed.'), true);
+        if (owner.isCurrent()) writeAdminGallerySidePanelStatus(panel, error.message || i18n('admin.side_panel.api_key_failed', 'API key update failed.'), true);
     } finally {
-        buttons.forEach((button) => {
+        buttons.forEach(/** Update a control captured from this submitted form, never from a replacement workflow. @param {HTMLButtonElement|HTMLInputElement} button Original form control. @return {void} Sets or restores its pending state and optional progress label. */ (button) => {
             button.disabled = false;
         });
     }
@@ -1213,6 +1424,7 @@ function uploadAutomationTokenRequestUrl(form) {
  *
  * @param {HTMLFormElement} form Smart Gallery form rendered in the side panel.
  * @param {HTMLElement|null} submitter Submit button whose name/value must be included in the POST.
+ * @return {Promise<void>} Resolves after owned preview rendering or canonical persistent completion, preserving later workflows.
  */
 async function submitAdminSmartGalleryPanelForm(form, submitter) {
     const panel = form.closest('[data-admin-side-panel]');
@@ -1221,6 +1433,7 @@ async function submitAdminSmartGalleryPanelForm(form, submitter) {
         HTMLFormElement.prototype.submit.call(form);
         return;
     }
+    const owner = captureAdminPanelOwner(panel);
     const formData = new FormData(form);
     if (submitter instanceof HTMLElement) {
         const name = String(submitter.getAttribute('name') || '');
@@ -1234,7 +1447,7 @@ async function submitAdminSmartGalleryPanelForm(form, submitter) {
     }
 
     const buttons = Array.from(form.querySelectorAll('button, input[type="submit"]'));
-    buttons.forEach((button) => { button.disabled = true; });
+    buttons.forEach(/** Update a control captured from this submitted form, never from a replacement workflow. @param {HTMLButtonElement|HTMLInputElement} button Original form control. @return {void} Sets or restores its pending state and optional progress label. */ (button) => { button.disabled = true; });
     writeAdminGallerySidePanelStatus(panel, i18n('smart_gallery.panel_saving', 'Updating Smart Gallery...'), false);
     try {
         const actionUrl = new URL(form.getAttribute('action') || form.action || window.location.href, window.location.href);
@@ -1262,6 +1475,7 @@ async function submitAdminSmartGalleryPanelForm(form, submitter) {
 
         if (!persistentAction) {
             const html = await response.text();
+            if (!owner.isCurrent()) return;
             if (!response.ok || html.trim() === '') {
                 throw new Error(i18n('smart_gallery.panel_save_failed', 'The Smart Gallery update failed.'));
             }
@@ -1272,6 +1486,7 @@ async function submitAdminSmartGalleryPanelForm(form, submitter) {
                 loadingMessage: i18n('smart_gallery.panel_loading', 'Loading Smart Gallery editor...'),
                 loadErrorMessage: i18n('smart_gallery.panel_load_failed', 'The Smart Gallery editor could not be loaded.'),
             };
+            const restoreFocus = preserveAdminPanelFocus(panel);
             bodyElement.innerHTML = sidePanelContentFromHtml(html, workflow);
             panel.dataset.adminSidePanelSourceUrl = response.url || actionUrl.toString();
             prepareAdminSidePanelLoadedContent(bodyElement, workflow, response.url || actionUrl.toString());
@@ -1280,6 +1495,7 @@ async function submitAdminSmartGalleryPanelForm(form, submitter) {
                 setAdminGallerySidePanelHeading(panel, workflow.kicker, titleInput.value.trim());
             }
             writeAdminGallerySidePanelStatus(panel, '', false);
+            restoreFocus();
             return;
         }
 
@@ -1287,10 +1503,12 @@ async function submitAdminSmartGalleryPanelForm(form, submitter) {
         if (!response.ok || !result.ok) {
             throw new Error(result.error || result.message || i18n('smart_gallery.panel_save_failed', 'The Smart Gallery update failed.'));
         }
+        rememberAdminPanelMutation(result, owner);
         await completeCoreGalleryMutationInCurrentView(result, {
+            /** Reload only the owning Smart Gallery editor and update its current heading. @param {{refresh_url?: string}|null} panelMetadata Canonical editor refresh metadata. @param {Record<string, unknown>} _envelope Unmodified canonical response. @param {{isCurrent?: function(): boolean, signal?: AbortSignal}} completionGuard Coordinator generation and cancellation signal. @return {Promise<boolean>} Whether the owned editor refresh completed. */
             refreshPanel: async (panelMetadata, _envelope, completionGuard) => {
                 const refreshed = await refreshAdminSidePanelFromServer(String(panelMetadata?.refresh_url || ''), completionGuard);
-                if (refreshed) {
+                if (refreshed && owner.isCurrent() && (!completionGuard?.isCurrent || completionGuard.isCurrent())) {
                     const refreshedBody = panel.querySelector('[data-admin-side-panel-body]');
                     const titleInput = refreshedBody?.querySelector?.('[data-smart-gallery-editor] input[name="title"]');
                     const title = titleInput instanceof HTMLInputElement ? titleInput.value.trim() : '';
@@ -1304,9 +1522,9 @@ async function submitAdminSmartGalleryPanelForm(form, submitter) {
             },
         });
     } catch (error) {
-        writeAdminGallerySidePanelStatus(panel, error.message || i18n('smart_gallery.panel_save_failed', 'The Smart Gallery update failed.'), true);
+        if (owner.isCurrent()) writeAdminGallerySidePanelStatus(panel, error.message || i18n('smart_gallery.panel_save_failed', 'The Smart Gallery update failed.'), true);
     } finally {
-        buttons.forEach((button) => { button.disabled = false; });
+        buttons.forEach(/** Update a control captured from this submitted form, never from a replacement workflow. @param {HTMLButtonElement|HTMLInputElement} button Original form control. @return {void} Sets or restores its pending state and optional progress label. */ (button) => { button.disabled = false; });
     }
 }
 
@@ -1314,6 +1532,10 @@ async function submitAdminSmartGalleryPanelForm(form, submitter) {
  * Submit an existing admin edit form through the side-panel JSON path.
  *
  * The side panel stays open while the existing admin save route returns JSON.
+ * The same form/submission generation acknowledges its just-saved revision before
+ * completion dispatch, so a later save need not await an older editor GET. No
+ * server response merges privacy fields or overwrites text typed during the POST;
+ * another writer's stale revision remains a server-side conflict.
  *
  * @param {HTMLFormElement} form Side-panel edit form.
  * @param {HTMLElement|null} submitter Submit button that selected a named action.
@@ -1326,8 +1548,10 @@ async function submitAdminPanelEditForm(form, submitter = null) {
         return;
     }
     const workflowName = String(form.dataset.adminPanelWorkflow || 'edit');
+    const owner = captureAdminPanelOwner(panel);
+    const submission = beginAdminPanelSave(form, owner);
     const buttons = Array.from(form.querySelectorAll('button, input[type="submit"]'));
-    buttons.forEach((button) => {
+    buttons.forEach(/** Update a control captured from this submitted form, never from a replacement workflow. @param {HTMLButtonElement|HTMLInputElement} button Original form control. @return {void} Sets or restores its pending state and optional progress label. */ (button) => {
         button.disabled = true;
     });
     writeAdminGallerySidePanelStatus(panel, workflowName === 'image-edit' ? i18n('admin.side_panel.saving_photo', 'Saving photo...') : (workflowName === 'tag-edit' ? i18n('admin.side_panel.saving_tag', 'Saving tag...') : i18n('admin.side_panel.saving_gallery', 'Saving gallery...')), false);
@@ -1351,6 +1575,14 @@ async function submitAdminPanelEditForm(form, submitter = null) {
         if (!response.ok || !result.ok) {
             throw new Error(result.error || result.message || i18n('admin.side_panel.save_failed', 'Save failed.'));
         }
+        rememberAdminPanelMutation(result, owner);
+        // Accept only this form's just-saved revision before dispatch starts the
+        // independent refresh; later server writers must still reject stale edits.
+        acknowledgeAdminPanelSave(submission, result);
+        if (!form.isConnected) {
+            await completeCoreGalleryMutationInCurrentView(result);
+            return;
+        }
         form.dispatchEvent(new CustomEvent('php-gallery:side-panel-success', {
             bubbles: true,
             detail: {
@@ -1359,9 +1591,9 @@ async function submitAdminPanelEditForm(form, submitter = null) {
             },
         }));
     } catch (error) {
-        writeAdminGallerySidePanelStatus(panel, error.message || i18n('admin.side_panel.save_failed', 'Save failed.'), true);
+        if (owner.isCurrent()) writeAdminGallerySidePanelStatus(panel, error.message || i18n('admin.side_panel.save_failed', 'Save failed.'), true);
     } finally {
-        buttons.forEach((button) => {
+        buttons.forEach(/** Update a control captured from this submitted form, never from a replacement workflow. @param {HTMLButtonElement|HTMLInputElement} button Original form control. @return {void} Sets or restores its pending state and optional progress label. */ (button) => {
             button.disabled = false;
         });
     }
@@ -1380,8 +1612,9 @@ async function submitAdminPanelAuxiliaryMutation(form, submitter = null) {
         HTMLFormElement.prototype.submit.call(form);
         return;
     }
+    const owner = captureAdminPanelOwner(panel);
     const buttons = Array.from(form.querySelectorAll('button, input[type="submit"]'));
-    buttons.forEach((button) => { button.disabled = true; });
+    buttons.forEach(/** Update a control captured from this submitted form, never from a replacement workflow. @param {HTMLButtonElement|HTMLInputElement} button Original form control. @return {void} Sets or restores its pending state and optional progress label. */ (button) => { button.disabled = true; });
     writeAdminGallerySidePanelStatus(panel, i18n('admin.side_panel.processing', 'Processing...'), false);
     try {
         const body = new FormData(form);
@@ -1404,11 +1637,12 @@ async function submitAdminPanelAuxiliaryMutation(form, submitter = null) {
         if (!response.ok || !result.ok) {
             throw new Error(result.error || result.message || i18n('admin.side_panel.mutation_failed', 'The operation failed.'));
         }
+        rememberAdminPanelMutation(result, owner);
         await completeCoreGalleryMutationInCurrentView(result);
     } catch (error) {
-        writeAdminGallerySidePanelStatus(panel, error.message || i18n('admin.side_panel.mutation_failed', 'The operation failed.'), true);
+        if (owner.isCurrent()) writeAdminGallerySidePanelStatus(panel, error.message || i18n('admin.side_panel.mutation_failed', 'The operation failed.'), true);
     } finally {
-        buttons.forEach((button) => { button.disabled = false; });
+        buttons.forEach(/** Update a control captured from this submitted form, never from a replacement workflow. @param {HTMLButtonElement|HTMLInputElement} button Original form control. @return {void} Sets or restores its pending state and optional progress label. */ (button) => { button.disabled = false; });
     }
 }
 
@@ -1417,6 +1651,7 @@ async function submitAdminPanelAuxiliaryMutation(form, submitter = null) {
  *
  * @param {HTMLFormElement} form Loaded gallery image bulk form.
  * @param {HTMLElement|null} submitter Button or control that triggered the submit.
+ * @return {Promise<void>} Resolves after canonical bulk completion or an original-owner error notice.
  */
 async function submitAdminPanelImageBulkForm(form, submitter) {
     const panel = form.closest('[data-admin-side-panel]');
@@ -1424,6 +1659,7 @@ async function submitAdminPanelImageBulkForm(form, submitter) {
         HTMLFormElement.prototype.submit.call(form);
         return;
     }
+    const owner = captureAdminPanelOwner(panel);
     const selectedInputs = Array.from(form.querySelectorAll('input[name="image_ids[]"]:checked'));
     const actionControl = form.querySelector('[name="action"]');
     let action = actionControl instanceof HTMLSelectElement || actionControl instanceof HTMLInputElement ? String(actionControl.value || '') : '';
@@ -1440,7 +1676,7 @@ async function submitAdminPanelImageBulkForm(form, submitter) {
     }
 
     const buttons = Array.from(form.querySelectorAll('button, input[type="submit"]'));
-    buttons.forEach((button) => {
+    buttons.forEach(/** Update a control captured from this submitted form, never from a replacement workflow. @param {HTMLButtonElement|HTMLInputElement} button Original form control. @return {void} Sets or restores its pending state and optional progress label. */ (button) => {
         button.disabled = true;
     });
     writeAdminGallerySidePanelStatus(panel, action === 'cover' ? i18n('admin.side_panel.saving_title_picture', 'Saving title picture...') : i18n('admin.side_panel.applying_photo_action', 'Applying photo action...'), false);
@@ -1466,10 +1702,10 @@ async function submitAdminPanelImageBulkForm(form, submitter) {
             }
         }
         if (action === 'move_new') {
-            const newGalleryParent = form.querySelector('select[name="new_gallery_parent_id"]');
+            const newGalleryParent = form.querySelector('select[name="new_gallery_parent_id"]:enabled, input[type="hidden"][name="new_gallery_parent_id"]:enabled');
             const newGalleryTitle = form.querySelector('input[name="new_gallery_title"]');
             const newGalleryFolderName = form.querySelector('input[name="new_gallery_folder_name"]');
-            if (newGalleryParent instanceof HTMLSelectElement) {
+            if (newGalleryParent instanceof HTMLSelectElement || newGalleryParent instanceof HTMLInputElement) {
                 body.set('new_gallery_parent_id', newGalleryParent.value);
             }
             if (newGalleryTitle instanceof HTMLInputElement) {
@@ -1479,7 +1715,7 @@ async function submitAdminPanelImageBulkForm(form, submitter) {
                 body.set('new_gallery_folder_name', newGalleryFolderName.value);
             }
         }
-        selectedInputs.forEach((input) => {
+        selectedInputs.forEach(/** Serialize only selected image identifiers from the original bulk form. @param {Element} input Checked image-ID control. @return {void} Appends the ID only when the candidate is an input. */ (input) => {
             if (input instanceof HTMLInputElement) {
                 body.append('image_ids[]', input.value);
             }
@@ -1501,6 +1737,11 @@ async function submitAdminPanelImageBulkForm(form, submitter) {
         if (!response.ok || !result.ok) {
             throw new Error(result.error || result.message || i18n('admin.side_panel.photo_action_failed', 'Photo action failed.'));
         }
+        rememberAdminPanelMutation(result, owner);
+        if (!form.isConnected) {
+            await completeCoreGalleryMutationInCurrentView(result);
+            return;
+        }
         form.dispatchEvent(new CustomEvent('php-gallery:side-panel-success', {
             bubbles: true,
             detail: {
@@ -1509,9 +1750,9 @@ async function submitAdminPanelImageBulkForm(form, submitter) {
             },
         }));
     } catch (error) {
-        writeAdminGallerySidePanelStatus(panel, error.message || i18n('admin.side_panel.photo_action_failed', 'Photo action failed.'), true);
+        if (owner.isCurrent()) writeAdminGallerySidePanelStatus(panel, error.message || i18n('admin.side_panel.photo_action_failed', 'Photo action failed.'), true);
     } finally {
-        buttons.forEach((button) => {
+        buttons.forEach(/** Update a control captured from this submitted form, never from a replacement workflow. @param {HTMLButtonElement|HTMLInputElement} button Original form control. @return {void} Sets or restores its pending state and optional progress label. */ (button) => {
             button.disabled = false;
         });
     }
@@ -1520,7 +1761,8 @@ async function submitAdminPanelImageBulkForm(form, submitter) {
 /**
  * Reflect a completed gallery image bulk action in the visible edit table and public context.
  *
- * @param {Record<string, *>} result Server response for the image bulk action.
+ * @param {AdminPanelResponse} result Server response for the image bulk action.
+ * @return {Promise<void>} Delegates refresh to the coordinator, then appends a public result notice.
  */
 async function reflectGalleryImageBulkInCurrentView(result) {
     const action = String(result.bulk_action || '');
@@ -1539,11 +1781,11 @@ async function reflectGalleryImageBulkInCurrentView(result) {
 /**
  * Reflect a saved tag after editing it from the side panel.
  *
- * Tag slugs can change, so the visible public tag page is refreshed from the
- * returned public URL and the browser URL is updated without opening a separate
- * full admin page.
+ * Tag slugs can change; the canonical coordinator owns the refreshed public
+ * context. The returned public URL is used only for the result notice link here.
  *
- * @param {Record<string, *>} result Server response for the saved tag.
+ * @param {AdminPanelResponse} result Server response for the saved tag.
+ * @return {Promise<void>} Completes canonical synchronization, then appends a link to the saved tag.
  */
 async function reflectSavedTagInCurrentView(result) {
     await completeCoreGalleryMutationInCurrentView(result);
@@ -1558,12 +1800,12 @@ async function reflectSavedTagInCurrentView(result) {
  *
  * The side panel save workflow refreshes visible title and notice state after JSON save.
  *
- * @param {Record<string, *>} result Server response for the saved gallery.
+ * @param {AdminPanelResponse} result Server response for the saved gallery.
  * @return {Promise<void>} Resolves after the visible gallery state is refreshed.
  */
 async function reflectSavedGalleryInCurrentView(result) {
     const panel = document.querySelector('[data-admin-side-panel]');
-    if (panel instanceof HTMLElement) {
+    if (panel instanceof HTMLElement && adminPanelMutationOwner(result, panel).isCurrent()) {
         // Persistence has already succeeded at this point. Do not leave the drawer
         // saying "Saving gallery..." while the independent public GET converges.
         writeAdminGallerySidePanelStatus(panel, String(result.message || i18n('admin.side_panel.gallery_saved', 'Gallery saved.')), false);
@@ -1588,7 +1830,8 @@ async function reflectSavedGalleryInCurrentView(result) {
  * The server-provided mutation result owns the scalar state and the shared mutation
  * coordinator still refreshes the complete parent fragment from PHP immediately after.
  *
- * @param {Record<string, *>} result Canonical gallery-save result.
+ * @param {AdminPanelResponse} result Canonical gallery-save result.
+ * @return {void} Updates an existing matching card's scalar marker only; complete rendering stays coordinator-owned.
  */
 function updatePublicGalleryCardVisibilityFromResult(result) {
     if (result?.gallery_visibility_changed !== true) {
@@ -1630,7 +1873,8 @@ function updatePublicGalleryCardVisibilityFromResult(result) {
 /**
  * Reflect a saved image in the current page without forcing a full navigation.
  *
- * @param {Record<string, *>} result Server response for the saved image.
+ * @param {AdminPanelResponse} result Server response for the saved image.
+ * @return {Promise<void>} Applies bounded image metadata updates before canonical synchronization and a result notice.
  */
 async function reflectSavedImageInCurrentView(result) {
     const imageId = String(result.image_id || '');
@@ -1662,7 +1906,8 @@ function currentVisiblePageRefreshUrl() {
 /**
  * Reflect an uploaded gallery batch in the current page without forcing a hard redirect.
  *
- * @param {Record<string, *>} result Server response for the upload operation.
+ * @param {AdminPanelResponse} result Server response for the upload operation.
+ * @return {Promise<void>} Synchronizes public state and requests an owner-guarded editor transition.
  */
 async function reflectUploadedGalleryInCurrentView(result) {
     if (Boolean(result.created_gallery)) {
@@ -1671,6 +1916,7 @@ async function reflectUploadedGalleryInCurrentView(result) {
     }
 
     await completeCoreGalleryMutationInCurrentView(result, {
+        /** Move the acknowledged upload into its editor only while the combined owner is current. @param {{refresh_url?: string}|null} _panelMetadata Canonical panel metadata, superseded here by the upload editor destination. @param {AdminPanelResponse} _envelope Unmodified completion response. @param {AdminPanelCompletionGuard} completionGuard Combined open/completion cancellation scope. @return {Promise<boolean>} Whether the editor transition was handled or safely suppressed. */
         refreshPanel: async (_panelMetadata, _envelope, completionGuard) => switchAdminSidePanelToGalleryEditor(result, completionGuard),
     });
     showAdminGallerySidePanelResultNotice(
@@ -1680,30 +1926,43 @@ async function reflectUploadedGalleryInCurrentView(result) {
 }
 
 /**
- * Complete a canonical gallery/image mutation through the shared coordinator.
+ * Delegate one canonical mutation's public and panel synchronization to its owner.
  *
- * @param {Record<string, *>} result Canonical mutation response.
- * @param {Record<string, *>} overrides Optional workflow-specific completion callbacks.
- * @return {Promise<Record<string, *>>} Coordinator synchronization result.
+ * Open-intent and completion guards are composed before any editor GET. Workflow
+ * overrides may customize only that guarded panel refresh; public fetch, stale-read
+ * retry, postcondition verification and replacement sequencing remain exclusively
+ * in admin-mutation-completion.js. Detached results cannot adopt the new drawer.
+ * @param {AdminPanelResponse} result Unmodified canonical response with its remembered panel owner.
+ * @param {AdminPanelCompletionOverrides} overrides Optional owner-guarded panel refresh implementation.
+ * @return {Promise<AdminPanelSynchronization>} Original coordinator outcome, not a new mutation response.
  */
 async function completeCoreGalleryMutationInCurrentView(result, overrides = {}) {
     const panel = document.querySelector('[data-admin-side-panel]');
+    const owner = adminPanelMutationOwner(result, panel);
     const syncResult = await completeAdminMutation(result, {
         documentRoot: document,
         currentUrl: currentVisiblePageRefreshUrl(),
-        refreshPanel: typeof overrides.refreshPanel === 'function'
-            ? overrides.refreshPanel
-            : async (panelMetadata, _envelope, completionGuard) => refreshAdminSidePanelFromServer(String(panelMetadata?.refresh_url || ''), completionGuard),
+        /** Compose the open-intent guard with the canonical completion generation before refreshing. @param {{refresh_url?: string}|null} panelMetadata Canonical editor destination. @param {Record<string, unknown>} envelope Unmodified canonical completion response. @param {{isCurrent?: function(): boolean, signal?: AbortSignal}} completionGuard Coordinator-owned refresh scope. @return {Promise<boolean>} Whether the guarded refresh was handled. */
+        refreshPanel: async (panelMetadata, envelope, completionGuard) => {
+            const guard = combineAdminPanelGuards(owner, completionGuard);
+            if (!guard.isCurrent()) return true;
+            return typeof overrides.refreshPanel === 'function'
+                ? overrides.refreshPanel(panelMetadata, envelope, guard)
+                : refreshAdminSidePanelFromServer(String(panelMetadata?.refresh_url || ''), guard);
+        },
+        /** Install only coordinator-verified public fragments and release old bindings first. @param {Document} parsed Detached server document already checked by the canonical coordinator. @return {boolean} Whether at least one owned public fragment was replaced. */
         replacePublicContext: (parsed) => replaceOwnedPublicGalleryFragments(parsed, {
             documentRoot: document,
             beforeReplace: teardownPublicGalleryLifecycleBeforeRefresh,
         }),
+        /** Notify dependent modules and rebind controls after canonical public replacement. @return {void} Dispatches the public-content lifecycle event and restores public bindings. */
         afterPublicReplace: () => {
             document.dispatchEvent(new CustomEvent('php-gallery:public-content-replaced'));
             rebindPublicGalleryLifecycleAfterRefresh();
         },
+        /** Report an unverified public refresh only while this mutation still owns the drawer. @return {void} Keeps the successful mutation distinct from refresh failure. */
         reportSynchronizationError: () => {
-            if (panel instanceof HTMLElement) {
+            if (panel instanceof HTMLElement && owner.isCurrent()) {
                 writeAdminGallerySidePanelStatus(
                     panel,
                     i18n('admin.side_panel.sync_failed_after_success', 'The gallery was saved, but the refreshed public view could not be verified. The server change was kept; continue working or reopen the page later.'),
@@ -1712,7 +1971,7 @@ async function completeCoreGalleryMutationInCurrentView(result, overrides = {}) 
             }
         },
     });
-    if (panel instanceof HTMLElement && syncResult.synchronized) {
+    if (panel instanceof HTMLElement && owner.isCurrent() && syncResult.synchronized) {
         writeAdminGallerySidePanelStatus(panel, String(result.message || ''), false);
     }
     return syncResult;
@@ -1829,7 +2088,7 @@ async function submitPublicImageCardDelete(form) {
  * server-rendered card for the completion animation.
  *
  * @param {HTMLFormElement} form Visibility option form.
- * @return {{kind:string,id:number,card:HTMLElement|null}} Target metadata.
+ * @return {AdminPanelVisibilityTarget} Stable identity plus the original card for pending feedback.
  */
 function publicCardVisibilityMutationTarget(form) {
     const kind = form.dataset.publicAdminVisibilityKind === 'image' ? 'image' : 'gallery';
@@ -1843,7 +2102,11 @@ function publicCardVisibilityMutationTarget(form) {
     };
 }
 
-/** Find the fresh server-rendered card for one completed visibility mutation. */
+/**
+ * Find the fresh server-rendered card by its captured stable kind/id, not the old node.
+ * @param {AdminPanelVisibilityTarget|null|undefined} target Identity captured before submission and optional original card.
+ * @return {HTMLElement|null} Current matching card, or null for an invalid/missing identity.
+ */
 function publicCardForVisibilityTarget(target) {
     if (!target || target.id <= 0) return null;
     const selector = target.kind === 'image'
@@ -1853,7 +2116,11 @@ function publicCardForVisibilityTarget(target) {
     return card instanceof HTMLElement ? card : null;
 }
 
-/** Mark one card as actively saving a visibility change. */
+/**
+ * Mark the original card busy while its visibility request is outstanding.
+ * @param {AdminPanelVisibilityTarget|null|undefined} target Identity captured before submission and optional original card.
+ * @return {void} Clears the previous success pulse and sets pending CSS/aria-busy on the original node.
+ */
 function beginPublicCardVisibilityFeedback(target) {
     const card = target?.card;
     if (!(card instanceof HTMLElement)) return;
@@ -1862,7 +2129,11 @@ function beginPublicCardVisibilityFeedback(target) {
     card.setAttribute('aria-busy', 'true');
 }
 
-/** Clear pending feedback from the original card after a failed or unsynchronized request. */
+/**
+ * Clear pending visibility feedback only from the still-connected original card.
+ * @param {AdminPanelVisibilityTarget|null|undefined} target Identity captured before submission and optional original card.
+ * @return {void} Removes pending CSS/aria-busy without altering a replacement card.
+ */
 function cancelPublicCardVisibilityFeedback(target) {
     const card = target?.card;
     if (!(card instanceof HTMLElement) || !card.isConnected) return;
@@ -1870,7 +2141,11 @@ function cancelPublicCardVisibilityFeedback(target) {
     card.removeAttribute('aria-busy');
 }
 
-/** Pulse the fresh card after the server-rendered visibility state was verified. */
+/**
+ * Pulse the freshly rendered card after canonical visibility verification.
+ * @param {AdminPanelVisibilityTarget|null|undefined} target Identity captured before submission and optional original card.
+ * @return {void} Restarts the success animation on the current card and schedules class cleanup.
+ */
 function completePublicCardVisibilityFeedback(target) {
     const card = publicCardForVisibilityTarget(target);
     if (!(card instanceof HTMLElement)) return;
@@ -1879,7 +2154,7 @@ function completePublicCardVisibilityFeedback(target) {
     // Force a style boundary so repeated changes on the same card replay the confirmation animation.
     void card.offsetWidth;
     card.classList.add('is-visibility-updated');
-    window.setTimeout(() => {
+    window.setTimeout(/** End the visibility confirmation pulse only on the captured still-connected card. @return {void} Removes its success class without looking up a replacement node. */ () => {
         if (card.isConnected) card.classList.remove('is-visibility-updated');
     }, 700);
 }
@@ -1934,19 +2209,25 @@ async function submitPublicCardVisibility(form) {
  * Re-render the visible admin side-panel workflow from the current server response.
  *
  * This keeps the side panel open while refreshing counts, table rows, upload forms,
- * and other gallery metadata without a full navigation reload.
+ * and other gallery metadata without a full navigation reload. Current ownership
+ * and unsaved text/unresolved operation protection are checked before the GET and
+ * again before replacement. Superseded or protected work counts as handled (true),
+ * not a reason to retry a mutation; false reports an unavailable/failed editor GET.
  *
  * @param {string} sourceUrl Optional panel source URL. Falls back to the active form or current page.
- * @param {{isCurrent?:Function,signal?:*}|null} completionGuard Optional coordinator generation guard.
- * @return {Promise<boolean>} True when the current admin editor was refreshed.
+ * @param {AdminPanelCompletionGuard|null} completionGuard Optional coordinator generation/abort scope, composed with the captured drawer owner.
+ * @return {Promise<boolean>} True for refreshed or deliberately suppressed work; false for a missing/failed editor response.
  */
 async function refreshAdminSidePanelFromServer(sourceUrl = '', completionGuard = null) {
+    const panelOwner = captureAdminPanelOwner(document.querySelector('[data-admin-side-panel]'));
+    completionGuard = combineAdminPanelGuards(panelOwner, completionGuard);
     try {
         if (completionGuard?.isCurrent && !completionGuard.isCurrent()) {
             return true;
         }
         const panel = document.querySelector('[data-admin-side-panel]');
         const body = panel instanceof HTMLElement ? panel.querySelector('[data-admin-side-panel-body]') : null;
+        if (panel instanceof HTMLElement && adminPanelHasUnsavedText(panel)) return true;
         const workflowName = panel instanceof HTMLElement ? String(panel.dataset.adminSidePanelWorkflow || 'create') : 'create';
         const panelDialog = panel instanceof HTMLElement ? panel.querySelector('.admin-side-panel-dialog') : null;
         const panelScrollTop = panelDialog instanceof HTMLElement ? panelDialog.scrollTop : 0;
@@ -1973,16 +2254,20 @@ async function refreshAdminSidePanelFromServer(sourceUrl = '', completionGuard =
         if (!response.ok || html.trim() === '') {
             return false;
         }
+        if (adminPanelHasUnsavedText(panel)) return true;
+        const restoreFocus = preserveAdminPanelFocus(panel);
         body.innerHTML = sidePanelContentFromHtml(html, {name: workflowName});
+        panel.dataset.adminSidePanelSourceUrl = resolvedUrl;
         prepareAdminSidePanelLoadedContent(body, {name: workflowName}, resolvedUrl);
         if (activeTabId) {
             activateAdminTabInRoot(body, activeTabId);
         }
+        restoreFocus();
         if (panel instanceof HTMLElement) {
             panel.dataset.adminSidePanelSourceUrl = resolvedUrl;
         }
         if (panelDialog instanceof HTMLElement) {
-            requestAnimationFrame(() => {
+            requestAnimationFrame(/** Restore drawer scroll only if this refresh still owns its completion generation. @return {void} Restores the captured scroll offset, or keeps uploading progress at the top. */ () => {
                 if (!completionGuard?.isCurrent || completionGuard.isCurrent()) {
                     panelDialog.scrollTop = panel.classList.contains('is-uploading') ? 0 : panelScrollTop;
                 }
@@ -2066,10 +2351,11 @@ function sameSitePathForPost(urlValue) {
  * Update admin image table rows that are already visible behind the panel.
  *
  * @param {string} imageId Saved image id.
- * @param {Record<string, *>} result Server response for the saved image.
+ * @param {AdminPanelResponse} result Server response for the saved image.
+ * @return {void} Updates matching existing rows' visibility text and numeric sort metadata.
  */
 function updateAdminImageRowsFromResult(imageId, result) {
-    document.querySelectorAll(`[data-admin-image-order-row][data-image-id="${CSS.escape(imageId)}"]`).forEach((row) => {
+    document.querySelectorAll(`[data-admin-image-order-row][data-image-id="${CSS.escape(imageId)}"]`).forEach(/** Apply acknowledged visibility/order scalars to a matching existing admin image row. @param {Element} row Existing row for the saved image ID. @return {void} Updates text and numeric order metadata without rendering a replacement table. */ (row) => {
         if (!(row instanceof HTMLElement)) {
             return;
         }
@@ -2088,10 +2374,11 @@ function updateAdminImageRowsFromResult(imageId, result) {
  * Update public image cards that are already visible behind the panel.
  *
  * @param {string} imageId Saved image id.
- * @param {Record<string, *>} result Server response for the saved image.
+ * @param {AdminPanelResponse} result Server response for the saved image.
+ * @return {void} Updates matching cards' text-only title/description overlays and lightbox metadata.
  */
 function updatePublicImageCardsFromResult(imageId, result) {
-    document.querySelectorAll(`[data-lightbox-image][data-image-id="${CSS.escape(imageId)}"]`).forEach((card) => {
+    document.querySelectorAll(`[data-lightbox-image][data-image-id="${CSS.escape(imageId)}"]`).forEach(/** Apply acknowledged text metadata to an existing matching public image card. @param {Element} card Existing lightbox-enabled card for the saved image ID. @return {void} Updates dataset values and text-only overlay nodes, leaving canonical rendering to the coordinator. */ (card) => {
         if (!(card instanceof HTMLElement)) {
             return;
         }
@@ -2150,11 +2437,12 @@ function adminSidePanelSamePageUrl(left, right) {
 /**
  * Switch the open side panel from create/upload mode to the editor for the newly created gallery.
  *
- * @param {Record<string, *>} result Server response containing the created gallery edit URL.
- * @param {{isCurrent?:Function,signal?:*}|null} completionGuard Optional coordinator generation guard.
- * @return {Promise<boolean>} True when the editor was loaded into the side panel.
+ * @param {AdminPanelResponse} result Server response containing the created gallery edit URL.
+ * @param {AdminPanelCompletionGuard|null} completionGuard Optional coordinator generation/abort scope, composed with the captured drawer owner.
+ * @return {Promise<boolean>} True for a loaded or owner/draft-suppressed transition; false for an unavailable/failed editor.
  */
 async function switchAdminSidePanelToGalleryEditor(result, completionGuard = null) {
+    completionGuard = combineAdminPanelGuards(adminPanelMutationOwner(result, document.querySelector('[data-admin-side-panel]')), completionGuard);
     if (completionGuard?.isCurrent && !completionGuard.isCurrent()) {
         return true;
     }
@@ -2163,6 +2451,7 @@ async function switchAdminSidePanelToGalleryEditor(result, completionGuard = nul
     if (!(panel instanceof HTMLElement) || editUrl === '') {
         return false;
     }
+    if (adminPanelHasUnsavedText(panel)) return true;
     if (completionGuard?.isCurrent && !completionGuard.isCurrent()) {
         return true;
     }
@@ -2184,10 +2473,11 @@ async function switchAdminSidePanelToGalleryEditor(result, completionGuard = nul
  * The persisted server render remains the source of truth for ordering, covers,
  * image counts, admin controls, and pagination after side-panel creation.
  *
- * @param {Record<string, *>} result Server response for the created gallery.
+ * @param {AdminPanelResponse} result Server response for the created gallery.
  * @return {Promise<void>} Resolves after the current page context is refreshed.
  */
 async function reflectCreatedGalleryInCurrentView(result) {
+    const owner = adminPanelMutationOwner(result, document.querySelector('[data-admin-side-panel]'));
     const galleryUrl = String(result.gallery_url || '');
     const galleryTitle = String(result.gallery_title || i18n('admin.side_panel.new_gallery', 'New gallery'));
     const galleryId = String(result.gallery_id || '');
@@ -2199,23 +2489,29 @@ async function reflectCreatedGalleryInCurrentView(result) {
     const syncResult = await completeAdminMutation(result, {
         documentRoot: document,
         currentUrl: currentVisiblePageRefreshUrl(),
+        /** Switch to the created gallery only when both open and completion owners remain current. @param {{refresh_url?: string}|null} panelMetadata Canonical editor destination. @param {Record<string, unknown>} _envelope Unmodified canonical response. @param {{isCurrent?: function(): boolean, signal?: AbortSignal}} completionGuard Canonical generation and abort scope. @return {Promise<boolean>} Whether the created-gallery editor refresh was handled. */
         refreshPanel: async (panelMetadata, _envelope, completionGuard) => {
+            completionGuard = combineAdminPanelGuards(owner, completionGuard);
+            if (!completionGuard.isCurrent()) return true;
             if (String(panelMetadata?.refresh_url || '') === '') {
                 return false;
             }
             return switchAdminSidePanelToGalleryEditor(result, completionGuard);
         },
+        /** Install the coordinator-verified parent/gallery fragments after releasing their old bindings. @param {Document} parsed Detached server document already checked for the create mutation's postconditions. @return {boolean} Whether an owned public fragment was replaced. */
         replacePublicContext: (parsed) => replaceOwnedPublicGalleryFragments(parsed, {
             documentRoot: document,
             beforeReplace: teardownPublicGalleryLifecycleBeforeRefresh,
         }),
+        /** Notify dependents and rebind public controls after the created gallery's context is replaced. @return {void} Dispatches the replacement event and restores public gallery bindings. */
         afterPublicReplace: () => {
             document.dispatchEvent(new CustomEvent('php-gallery:public-content-replaced'));
             rebindPublicGalleryLifecycleAfterRefresh();
         },
+        /** Leave a bounded synchronization notice only on the originating create workflow. @return {void} Does not change another open panel or undo creation. */
         reportSynchronizationError: () => {
             const panel = document.querySelector('[data-admin-side-panel]');
-            if (panel instanceof HTMLElement) {
+            if (panel instanceof HTMLElement && owner.isCurrent()) {
                 writeAdminGallerySidePanelStatus(
                     panel,
                     i18n('admin.side_panel.sync_failed_after_success', 'The gallery was saved, but the refreshed public view could not be verified. The server change was kept; continue working or reopen the page later.'),
@@ -2234,6 +2530,7 @@ async function reflectCreatedGalleryInCurrentView(result) {
 
 /**
  * Releases browser-side public gallery bindings before server-rendered content is replaced.
+ * @return {void} Releases public viewer, picture, sizing and scroll bindings before owned fragment replacement.
  */
 function teardownPublicGalleryLifecycleBeforeRefresh() {
     teardownPictureManager();
@@ -2244,6 +2541,7 @@ function teardownPublicGalleryLifecycleBeforeRefresh() {
 
 /**
  * Recreates browser-side public gallery bindings after server-rendered content is replaced.
+ * @return {void} Binds the replaced public markup, including gallery ordering, after coordinator-owned replacement.
  */
 function rebindPublicGalleryLifecycleAfterRefresh() {
     setupPictureManager();
@@ -2257,6 +2555,7 @@ function rebindPublicGalleryLifecycleAfterRefresh() {
  * Scroll the newly created gallery card into view after fragment replacement.
  *
  * @param {string} galleryId Newly created gallery id.
+ * @return {void} Scrolls an existing matching card into view without moving keyboard focus.
  */
 function focusCreatedGalleryCard(galleryId) {
     if (!galleryId) {
@@ -2274,6 +2573,7 @@ function focusCreatedGalleryCard(galleryId) {
  *
  * @param {string} message Message value.
  * @param {string} targetUrl Target url URL.
+ * @return {void} Prepends escaped message/link markup to the public main region when present.
  */
 function showAdminGallerySidePanelResultNotice(message, targetUrl) {
     const main = document.querySelector('main.site-main');
@@ -2290,10 +2590,9 @@ function showAdminGallerySidePanelResultNotice(message, targetUrl) {
 
 
 /**
- * Return a readable byte count for upload progress text.
- *
- * @param {*} value Byte count value.
- * @return {string} Human-readable byte count.
+ * Format a nonnegative byte count for upload progress using binary size thresholds.
+ * @param {number|string|null|undefined} value Source-byte count; empty values default to zero.
+ * @return {string} Rounded B/KB/MB/GB/TB label for presentation only.
  */
 function formatFileSize(value) {
     const bytes = Math.max(0, Number(value || 0));
@@ -2315,12 +2614,12 @@ function formatFileSize(value) {
  * Return source-file totals for the classic upload path.
  *
  * @param {File[]} files Selected files.
- * @return {Record<string, number>} Progress state.
+ * @return {AdminPanelClassicProgress} New zeroed counters and selected source totals.
  */
 function createClassicUploadProgressState(files) {
     return {
         totalFiles: files.length,
-        totalBytes: files.reduce((sum, file) => sum + Number(file.size || 0), 0),
+        totalBytes: files.reduce(/** Sum source sizes independently of multipart framing overhead. @param {number} sum Source-byte total accumulated so far. @param {File} file Selected source. @return {number} Total including this source's byte size. */ (sum, file) => sum + Number(file.size || 0), 0),
         uploadedFiles: 0,
         uploadedBytes: 0,
         currentFileIndex: 0,
@@ -2332,7 +2631,7 @@ function createClassicUploadProgressState(files) {
 /**
  * Return a compact progress metrics string for classic uploads.
  *
- * @param {Record<string, number>} state Progress state.
+ * @param {AdminPanelClassicProgress} state Acknowledged counts plus estimated current source-byte progress.
  * @return {string} Metrics label.
  */
 function classicUploadProgressMetrics(state) {
@@ -2350,13 +2649,14 @@ function classicUploadProgressMetrics(state) {
  * Append server-reported upload events to the rolling progress log.
  *
  * @param {HTMLElement} progress Progress container.
- * @param {Array<Record<string, *>>} events Server events.
+ * @param {AdminPanelUploadEvent[]|null|undefined} events Server progress records; nonarrays are ignored.
+ * @return {void} Appends nonempty server progress records and optional elapsed milliseconds.
  */
 function appendServerUploadEvents(progress, events) {
     if (!Array.isArray(events)) {
         return;
     }
-    events.forEach((event) => {
+    events.forEach(/** Append one nonempty server progress message and its optional elapsed time. @param {AdminPanelUploadEvent} event Server progress record. @return {void} Adds presentation text to the original upload log. */ (event) => {
         const message = String(event.message || '').trim();
         if (message === '') {
             return;
@@ -2367,10 +2667,12 @@ function appendServerUploadEvents(progress, events) {
 }
 
 /**
- * Handles selected gallery upload files behavior for the gallery UI.
+ * Snapshot selected File references in deterministic folder/name order.
  *
- * @param {*} form Value supplied by the caller or event context.
- * @return {*} Result of the UI operation, when a value is produced.
+ * The original browser File objects are retained, not copied into text drafts or
+ * persisted in browser storage. Missing/empty file controls yield an empty array.
+ * @param {HTMLFormElement} form Original upload form containing images[].
+ * @return {File[]} Sorted source references used by classic chunk indices and intent comparison.
  */
 function selectedGalleryUploadFiles(form) {
     // fileInput stores state or configuration for the gallery front-end flow.
@@ -2379,7 +2681,7 @@ function selectedGalleryUploadFiles(form) {
         return [];
     }
     return Array.from(fileInput.files)
-        .filter((file) => file instanceof File)
+        .filter(/** Retain only actual browser File references for upload ordering. @param {File} file FileList entry. @return {boolean} Whether the source has the required File identity. */ (file) => file instanceof File)
         .sort(compareGalleryUploadFilesByDefaultFolderOrder);
 }
 
@@ -2426,15 +2728,19 @@ function galleryUploadFileNameCollator() {
 }
 
 /**
- * Handles gallery upload base body behavior for the gallery UI.
+ * Build a fresh multipart body from enabled scalar controls on the original form.
  *
- * @param {*} form Value supplied by the caller or event context.
- * @return {*} Result of the UI operation, when a value is produced.
+ * Reads current transport fields, including CSRF, on each explicit request. Files
+ * and unchecked checkbox/radio controls are excluded; this is request serialization,
+ * not the allowlisted in-memory text-draft projection. The caller assigns the stable
+ * operation key for its particular chunk after this base body is constructed.
+ * @param {HTMLFormElement} form Original form whose enabled controls supply POST fields.
+ * @return {FormData} New multipart body with ajax=1 and no source files.
  */
 function galleryUploadBaseBody(form) {
     // body stores state or configuration for the gallery front-end flow.
     const body = new FormData();
-    Array.from(form.elements).forEach((field) => {
+    Array.from(form.elements).forEach(/** Serialize enabled named scalar controls, excluding files and unchecked choices. @param {Element} field Original form control candidate; transport fields are read afresh. @return {void} Appends eligible values to this request body, not to draft storage. */ (field) => {
         if (!(field instanceof HTMLInputElement || field instanceof HTMLSelectElement || field instanceof HTMLTextAreaElement)) {
             return;
         }
@@ -2451,12 +2757,11 @@ function galleryUploadBaseBody(form) {
 }
 
 /**
- * Handles clone gallery upload body behavior for the gallery UI.
- *
- * @param {*} form Value supplied by the caller or event context.
- * @param {*} files Value supplied by the caller or event context.
- * @param {*} galleryId Value supplied by the caller or event context.
- * @return {*} Result of the UI operation, when a value is produced.
+ * Build one classic upload body and select its acknowledged target gallery.
+ * @param {HTMLFormElement} form Original form supplying current scalar transport fields.
+ * @param {File[]} files Original source references to attach to this request.
+ * @param {number} galleryId Positive acknowledged gallery ID, or zero before creation.
+ * @return {FormData} New body with images[] and optional existing-gallery targeting; caller owns its operation key.
  */
 function cloneGalleryUploadBody(form, files, galleryId) {
     // body stores state or configuration for the gallery front-end flow.
@@ -2465,21 +2770,22 @@ function cloneGalleryUploadBody(form, files, galleryId) {
         body.set('upload_mode', 'existing');
         body.set('gallery_id', String(galleryId));
     }
-    files.forEach((file) => {
+    files.forEach(/** Attach an original source under the endpoint's images[] multipart field. @param {File} file Source reference assigned to this chunk. @return {void} Appends the File with its original filename. */ (file) => {
         body.append('images[]', file, file.name);
     });
     return body;
 }
 
 /**
- * Handles run gallery upload files behavior for the gallery UI.
+ * Upload or explicitly replay the selected classic chunks under stable per-request keys.
  *
- * @param {*} form Value supplied by the caller or event context.
- * @param {*} progress Value supplied by the caller or event context.
- * @param {*} createThumbnails Value supplied by the caller or event context.
- * @return {*} Result of the UI operation, when a value is produced.
+ * @param {HTMLFormElement} form Original create/upload form with current transport controls.
+ * @param {HTMLElement} progress Existing upload progress container.
+ * @param {boolean} createThumbnails Whether the existing thumbnail job follows each acknowledged chunk.
+ * @param {import('./admin-operation-keys.js').AdminOperationIntent} operation Original create/upload intent with stable per-request keys.
+ * @return {Promise<Record<string, unknown>>} Canonical server envelopes aggregated with unique image/gallery IDs and upload counters; throws on an uncertain or refused chunk.
  */
-async function runGalleryUploadFiles(form, progress, createThumbnails) {
+async function runGalleryUploadFiles(form, progress, createThumbnails, operation) {
     // files stores state or configuration for the gallery front-end flow.
     const files = selectedGalleryUploadFiles(form);
     const allowEmptyPanelGallery = form.dataset.galleryPanelCloseOnSuccess === '1' && String(form.querySelector('input[name="upload_mode"]')?.value || '') === 'new';
@@ -2489,7 +2795,7 @@ async function runGalleryUploadFiles(form, progress, createThumbnails) {
 
     if (files.length === 0 && allowEmptyPanelGallery) {
         updateBasicProgress(progress, 20, i18n('admin.side_panel.creating_gallery', 'Creating gallery...'));
-        const emptyResult = requireCanonicalUploadMutationResult(await sendGalleryUploadChunk(form, galleryUploadBaseBody(form), () => {}));
+        const emptyResult = requireCanonicalUploadMutationResult(await sendGalleryUploadChunk(form, adminOperationBody(operation, 0, galleryUploadBaseBody(form)), /** Empty-gallery creation has no source-byte progress to display. @return {void} Intentionally leaves the existing creation status unchanged. */ () => {}));
         const emptyGalleryId = Number(emptyResult.gallery_id || 0);
         updateBasicProgress(progress, 100, i18n('admin.side_panel.gallery_created', 'Gallery created.'));
         return {
@@ -2502,7 +2808,7 @@ async function runGalleryUploadFiles(form, progress, createThumbnails) {
                 entity_ids: emptyGalleryId ? [emptyGalleryId] : [],
             },
             panel: emptyResult.panel && typeof emptyResult.panel === 'object' ? {...emptyResult.panel} : null,
-            contexts: emptyResult.contexts.map((context) => ({...context})),
+            contexts: emptyResult.contexts.map(/** Shallow-copy a server-authored context without rebuilding its postcondition. @param {AdminPanelMutationContext} context Canonical context from this acknowledged chunk. @return {AdminPanelMutationContext} Independent outer record with unchanged nested completion metadata. */ (context) => ({...context})),
             fallback: emptyResult.fallback && typeof emptyResult.fallback === 'object' ? {...emptyResult.fallback} : {},
             image_ids: [],
             uploaded: 0,
@@ -2532,7 +2838,7 @@ async function runGalleryUploadFiles(form, progress, createThumbnails) {
     // thumbnailErrors stores concise diagnostics returned by the server.
     const thumbnailErrors = [];
     // galleryId stores state or configuration for the gallery front-end flow.
-    let galleryId = Number(form.querySelector('select[name="gallery_id"]')?.value || 0);
+    let galleryId = Number(form.querySelector('select[name="gallery_id"]:enabled, input[type="hidden"][name="gallery_id"]:enabled')?.value || 0);
     // redirectUrl stores state or configuration for the gallery front-end flow.
     let redirectUrl = '';
     // galleryIds stores state or configuration for the gallery front-end flow.
@@ -2574,7 +2880,7 @@ async function runGalleryUploadFiles(form, progress, createThumbnails) {
         updateUploadProgressMetrics(progress, classicUploadProgressMetrics(progressState));
         appendUploadProgressLog(progress, i18n('admin.side_panel.upload_log_uploading_file', 'Uploading picture {current}/{total}: {name}, {bytes}.', {current: humanIndex, total: files.length, name: file.name, bytes: formatFileSize(file.size || 0)}));
         // uploadResult stores state or configuration for the gallery front-end flow.
-        const uploadResult = requireCanonicalUploadMutationResult(await sendGalleryUploadChunk(form, cloneGalleryUploadBody(form, [file], galleryId), (event) => {
+        const uploadResult = requireCanonicalUploadMutationResult(await sendGalleryUploadChunk(form, adminOperationBody(operation, fileIndex, cloneGalleryUploadBody(form, [file], galleryId)), /** Project current multipart transfer progress onto the selected source's byte size. @param {ProgressEvent<XMLHttpRequestEventTarget>} event Current chunk upload progress; indeterminate events preserve completed-file progress. @return {void} Updates only the original progress state, labels and metrics. */ (event) => {
             if (!event.lengthComputable) {
                 updateBasicProgress(progress, Math.round((fileIndex / files.length) * 100), `Uploading ${humanIndex} of ${files.length}: ${file.name}`);
                 updateUploadProgressMetrics(progress, classicUploadProgressMetrics(progressState));
@@ -2604,7 +2910,7 @@ async function runGalleryUploadFiles(form, progress, createThumbnails) {
         if (galleryId && !galleryIds.includes(galleryId)) {
             galleryIds.push(galleryId);
         }
-        (Array.isArray(uploadResult.image_ids) ? uploadResult.image_ids : []).forEach((imageId) => {
+        (Array.isArray(uploadResult.image_ids) ? uploadResult.image_ids : []).forEach(/** Accumulate positive unique image identifiers from an acknowledged upload. @param {number|string} imageId Server-reported image identifier. @return {void} Appends the normalized ID once to the aggregate mutation identities. */ (imageId) => {
             const normalizedId = Number(imageId || 0);
             if (normalizedId > 0 && !imageIds.includes(normalizedId)) {
                 imageIds.push(normalizedId);
@@ -2627,7 +2933,7 @@ async function runGalleryUploadFiles(form, progress, createThumbnails) {
         if (mutation === null || (!createdGallery && !resultCreatedGallery)) {
             mutation = {...uploadResult.mutation};
             panel = uploadResult.panel && typeof uploadResult.panel === 'object' ? {...uploadResult.panel} : null;
-            contexts = uploadResult.contexts.map((context) => ({...context}));
+            contexts = uploadResult.contexts.map(/** Shallow-copy a server-authored context without rebuilding its postcondition. @param {AdminPanelMutationContext} context Canonical context from this acknowledged chunk. @return {AdminPanelMutationContext} Independent outer record with unchanged nested completion metadata. */ (context) => ({...context}));
             fallback = uploadResult.fallback && typeof uploadResult.fallback === 'object' ? {...uploadResult.fallback} : {};
         }
         createdGallery = createdGallery || resultCreatedGallery;
@@ -2641,7 +2947,7 @@ async function runGalleryUploadFiles(form, progress, createThumbnails) {
             thumbnailSkipped += Number(thumbResult.skipped || 0);
             thumbnailFailed += Number(thumbResult.failed || 0);
             if (Array.isArray(thumbResult.errors)) {
-                thumbResult.errors.forEach((message) => thumbnailErrors.push(String(message)));
+                thumbResult.errors.forEach(/** Collect derivative diagnostics across acknowledged upload chunks. @param {string} message Server thumbnail diagnostic. @return {number} New aggregate error count from push; the iterator ignores it. */ (message) => thumbnailErrors.push(String(message)));
             }
         }
     }
@@ -2690,8 +2996,8 @@ async function runGalleryUploadFiles(form, progress, createThumbnails) {
  * persistent AJAX upload must carry its server-authored mutation, context, and
  * postcondition metadata through the client batching layer unchanged.
  *
- * @param {Record<string, *>} result Server JSON response.
- * @return {Record<string, *>} Canonical successful response.
+ * @param {AdminPanelResponse} result Server JSON response.
+ * @return {AdminPanelResponse} The original response unchanged; rejects if ok/mutation/contexts are absent.
  */
 function requireCanonicalUploadMutationResult(result) {
     if (!result || result.ok !== true || !result.mutation || typeof result.mutation !== 'object' || !Array.isArray(result.contexts)) {
@@ -2701,14 +3007,15 @@ function requireCanonicalUploadMutationResult(result) {
 }
 
 /**
- * Handles append upload result params behavior for the gallery UI.
+ * Add aggregate upload counters to the direct-page fallback destination.
  *
- * @param {*} urlValue Value supplied by the caller or event context.
- * @param {*} uploaded Value supplied by the caller or event context.
- * @param {*} scanned Value supplied by the caller or event context.
- * @param {*} thumbnails Value supplied by the caller or event context.
- * @param {*} thumbnailFailed Thumbnail failed value.
- * @return {*} Result of the UI operation, when a value is produced.
+ * Constructs a URL only; it does not navigate or select a panel refresh context.
+ * @param {string} urlValue Server fallback destination, or empty for the current page.
+ * @param {number} uploaded Acknowledged source count.
+ * @param {number} scanned Registered source count.
+ * @param {number} thumbnails Created derivative count.
+ * @param {number} thumbnailFailed Failed derivative count, omitted from the URL when zero.
+ * @return {string} Absolute fallback URL with aggregate counters.
  */
 function appendUploadResultParams(urlValue, uploaded, scanned, thumbnails, thumbnailFailed = 0) {
     // url stores state or configuration for the gallery front-end flow.
@@ -2723,11 +3030,14 @@ function appendUploadResultParams(urlValue, uploaded, scanned, thumbnails, thumb
 }
 
 /**
- * Handles send gallery upload chunk behavior for the gallery UI.
+ * Read one response body and parse the endpoint's JSON transport value.
  *
- * @param {Response} response Response data.
- * @param {string} fallbackMessage Fallback message value.
- * @return {*} Result of the UI operation, when a value is produced.
+ * Does not validate HTTP success or the canonical envelope; callers own those checks.
+ * Non-JSON upload-limit and HTML failures receive targeted diagnostics; other parse
+ * failures use the existing bounded response prefix or the caller fallback message.
+ * @param {Response} response Fetch response or XHR adapter whose body is consumed once.
+ * @param {string} fallbackMessage Workflow-specific failure text for an unusable body.
+ * @return {Promise<AdminPanelResponse>} Expected endpoint object (empty body becomes {}); parsing errors reject.
  */
 async function readJsonResponseSafely(response, fallbackMessage) {
     // contentType stores state or configuration for the gallery front-end flow.
@@ -2750,21 +3060,25 @@ async function readJsonResponseSafely(response, fallbackMessage) {
 }
 
 /**
- * Handles send gallery upload chunk behavior for the gallery UI.
+ * Send one classic multipart request and expose its upload progress to the caller.
  *
- * @param {*} form Value supplied by the caller or event context.
- * @param {*} body Value supplied by the caller or event context.
- * @param {*} progressHandler Value supplied by the caller or event context.
- * @return {*} Result of the UI operation, when a value is produced.
+ * This transport performs no retry, key rotation, or public/panel refresh. A network
+ * failure rejects with an uncertain outcome; the original operation owner retains
+ * the same request key for the next explicit retry. Resolving here is not canonical
+ * acknowledgement: the caller must still require mutation/context metadata.
+ * @param {HTMLFormElement} form Original form supplying the POST destination.
+ * @param {FormData} body Request body already assigned its stable per-chunk operation key.
+ * @param {function(ProgressEvent<XMLHttpRequestEventTarget>): void} progressHandler Callback updating only the original upload progress UI.
+ * @return {Promise<AdminPanelResponse>} Parsed 2xx ok result, or rejection for transport/endpoint failure.
  */
 function sendGalleryUploadChunk(form, body, progressHandler) {
-    return new Promise((resolve, reject) => {
+    return new Promise(/** Start exactly one keyed multipart request; explicit retry remains the operation owner's responsibility. @param {function(AdminPanelResponse): void} resolve Accept a parsed successful endpoint response. @param {function(unknown): void} reject Report transport, parsing or endpoint failure without rotating its key. @return {void} Installs request listeners and sends the supplied body once. */ (resolve, reject) => {
         // xhr stores state or configuration for the gallery front-end flow.
         const xhr = new XMLHttpRequest();
         xhr.open('POST', form.action || window.location.href);
         xhr.setRequestHeader('Accept', 'application/json');
         xhr.upload.addEventListener('progress', progressHandler);
-        xhr.addEventListener('load', async () => {
+        xhr.addEventListener('load', /** Adapt the completed XHR into the shared JSON reader and settle its request promise. @return {Promise<void>} Resolves or rejects the outer request; canonical validation remains with the upload caller. */ async () => {
             try {
                 // response stores state or configuration for the gallery front-end flow.
                 const response = new Response(xhr.responseText || '', {
@@ -2781,7 +3095,7 @@ function sendGalleryUploadChunk(form, body, progressHandler) {
                 reject(error);
             }
         });
-        xhr.addEventListener('error', () => {
+        xhr.addEventListener('error', /** Reject an uncertain transport failure without starting another request or clearing intent state. @return {void} Leaves exact-retry recovery to the original operation owner. */ () => {
             reject(new Error(i18n('admin.side_panel.upload_failed', 'Upload failed.')));
         });
         xhr.send(body);
@@ -2789,17 +3103,21 @@ function sendGalleryUploadChunk(form, body, progressHandler) {
 }
 
 /**
- * Handles run uploaded image thumbnail job behavior for the gallery UI.
+ * Advance the server thumbnail job for images from one acknowledged upload chunk.
  *
- * @param {*} form Value supplied by the caller or event context.
- * @param {*} progress Value supplied by the caller or event context.
- * @param {*} imageIds Value supplied by the caller or event context.
- * @param {*} fileIndex Value supplied by the caller or event context.
- * @param {*} totalFiles Value supplied by the caller or event context.
- * @param {*} filename Value supplied by the caller or event context.
- * @param {*} createdBefore Value supplied by the caller or event context.
- * @param {*} skippedBefore Value supplied by the caller or event context.
- * @return {*} Result of the UI operation, when a value is produced.
+ * Posts sequential offsets with the current form CSRF, updates original progress,
+ * and aggregates derivative diagnostics. This is derivative-job continuation, not
+ * a second upload intent or canonical public-refresh retry pipeline. A refused job
+ * returns failed counts; transport or JSON parsing failures propagate to the caller.
+ * @param {HTMLFormElement} form Original upload form supplying endpoint and transport fields.
+ * @param {HTMLElement} progress Original upload progress container.
+ * @param {number[]} imageIds Persisted image identifiers from the acknowledged chunk.
+ * @param {number} fileIndex One-based uploaded source-file position.
+ * @param {number} totalFiles Selected source-file count.
+ * @param {string} filename Current source filename used in progress text.
+ * @param {number} createdBefore Derivative count accumulated before this source.
+ * @param {number} skippedBefore Skipped count accumulated before this source.
+ * @return {Promise<AdminPanelThumbnailResult>} This source's derivative counts and deduplicated errors.
  */
 async function runUploadedImageThumbnailJob(form, progress, imageIds, fileIndex, totalFiles, filename, createdBefore, skippedBefore) {
     if (!imageIds.length) {
@@ -2827,7 +3145,7 @@ async function runUploadedImageThumbnailJob(form, progress, imageIds, fileIndex,
         body.set('offset', String(offset));
         body.set('batch_size', '1');
         body.set('gallery_id', String(Number(form.querySelector('select[name="gallery_id"]')?.value || 0)));
-        imageIds.forEach((imageId) => {
+        imageIds.forEach(/** Restrict this thumbnail continuation to images returned by the acknowledged upload. @param {number} imageId Persisted image identifier. @return {void} Appends the image ID to this derivative-job request. */ (imageId) => {
             body.append('image_ids[]', String(imageId));
         });
         // response stores state or configuration for the gallery front-end flow.
@@ -2855,7 +3173,7 @@ async function runUploadedImageThumbnailJob(form, progress, imageIds, fileIndex,
         skipped += result.skipped || 0;
         failed += result.failed || 0;
         if (Array.isArray(result.errors)) {
-            result.errors.forEach((message) => errors.push(String(message)));
+            result.errors.forEach(/** Accumulate this source's derivative diagnostics before final deduplication. @param {string} message Server thumbnail diagnostic. @return {number} New local error count from push; the iterator ignores it. */ (message) => errors.push(String(message)));
         }
         updateThumbnailProgress(progress, fileIndex, totalFiles, createdBefore + created, skippedBefore + skipped, `Uploaded ${fileIndex} of ${totalFiles}: ${filename}. Creating thumbnails ${Math.min(offset, total)} of ${total}...`);
         if (result.done) {

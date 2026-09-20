@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Regression Test
+ * Purpose: Verify multilingual content normalization and fallback.
+ * Responsibilities:
+ *   - Exercise batching and cache behavior without changing source-content authority.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/content_localization_model_test.php

@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Regression Test
+ * Purpose: Protect active lightbox metadata lifecycle boundaries.
+ * Responsibilities:
+ *   - Check metadata ownership and stale navigation response handling.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/lightbox_metadata_lifecycle_test.php

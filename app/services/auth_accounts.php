@@ -14,6 +14,7 @@
  *   - Keep password hashing and verification outside controllers and models
  *   - Orchestrate password-reset persistence through semantic model operations
  *   - Preserve optional email-column behavior without exposing SQL to callers
+ *   - Own the completed-setup filesystem marker used by the compatibility security facade
  *
  * Author:
  *   Rudolf Klusal
@@ -35,6 +36,8 @@
 declare(strict_types=1);
 
 namespace Gallery\Services;
+require_once dirname(__DIR__) . '/policy_constants.php';
+use const Gallery\Core\SETUP_LOCK_DIRECTORY_PERMISSIONS;
 
 use function Gallery\Core\now_sql;
 use function Gallery\Models\auth_model_account_row;
@@ -50,6 +53,80 @@ use function Gallery\Models\auth_model_update_user_password;
 use function Gallery\Models\auth_model_upsert_setup_admin;
 use function Gallery\Models\auth_model_user_password_hash;
 use function Gallery\Models\auth_model_username_taken;
+
+/**
+ * Observe the historical in-application setup lock condition without reading configuration contents.
+ *
+ * The standalone installer deliberately has its own earlier OR guard. This
+ * compatibility condition remains config-file AND completion-marker existence.
+ *
+ * @return bool Whether both the fixed configuration file and setup marker exist.
+ */
+function auth_setup_is_locked(): bool
+{
+    $root = dirname(__DIR__, 2);
+    return is_file($root . '/config.php') && is_file($root . '/cache/installed.lock');
+}
+
+/**
+ * Persist the setup-completion marker after the controller has verified successful setup.
+ *
+ * No submitted path, credential or configuration contents enter the marker.
+ * A storage failure refuses with a bounded error instead of implying completion.
+ *
+ * @return void Creates the cache directory if needed and writes the existing UTC marker format.
+ * @throws \RuntimeException When the fixed marker location cannot be prepared or written.
+ */
+function auth_setup_write_lock(): void
+{
+    $directory = dirname(__DIR__, 2) . '/cache';
+    if (!is_dir($directory) && !@mkdir($directory, SETUP_LOCK_DIRECTORY_PERMISSIONS, true) && !is_dir($directory)) {
+        throw new \RuntimeException('The setup completion marker directory could not be prepared.');
+    }
+    if (@file_put_contents($directory . '/installed.lock', 'installed=' . gmdate('c') . PHP_EOL, LOCK_EX) === false) {
+        throw new \RuntimeException('The setup completion marker could not be written.');
+    }
+}
+
+/**
+ * Validate an existing session identity using the safe optional-email schema policy.
+ *
+ * Confirmed missing or unknown email metadata uses the authentication-minimal
+ * projection. Unknown metadata remains a bounded logged capability observation;
+ * it is never inferred from catching an arbitrary full-row query failure.
+ *
+ * @param int $userId Identifier supplied by the authenticated request/session adapter.
+ * @return array{id:mixed,username:string,role:string,email:?string}|null Non-credential user projection.
+ */
+function auth_account_session_user(int $userId): ?array
+{
+    $emailSchemaStatus = function_exists('Gallery\Services\auth_user_email_schema_status')
+        ? auth_user_email_schema_status() : ['state' => 'missing'];
+    if (function_exists('Gallery\Services\schema_inspection_is_unknown') && schema_inspection_is_unknown($emailSchemaStatus)) {
+        auth_log_schema_unavailable('auth_user_email', 'current_user_optional_email');
+    }
+    $emailAvailable = function_exists('Gallery\Services\schema_inspection_is_available')
+        && schema_inspection_is_available($emailSchemaStatus);
+    $user = \Gallery\Models\auth_model_session_user($userId, $emailAvailable);
+    if ($user && !array_key_exists('email', $user)) {
+        $user['email'] = null;
+    }
+    return $user;
+}
+
+/**
+ * Preserve setup's historical best-effort administrator-existence observation.
+ *
+ * @return bool False on unavailable setup storage; creation still owns its schema preflight.
+ */
+function auth_account_admin_exists(): bool
+{
+    try {
+        return \Gallery\Models\auth_model_admin_exists();
+    } catch (\Throwable) {
+        return false;
+    }
+}
 
 /**
  * Normalize an optional Admin account email value before validation or storage.

@@ -1,5 +1,7 @@
 /**
  * Project: PHP Gallery
+ * Responsibilities:
+ *   - Execute the real scenario through its finally cleanup path.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/gallery_benchmark_runtime_scope_test.mjs

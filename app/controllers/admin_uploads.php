@@ -82,6 +82,21 @@ use function Gallery\Views\view_render_admin_upload_settings_page;
 use function Gallery\Views\view_render_admin_upload_support_panel;
 use function Gallery\Services\admin_log_event;
 use function Gallery\Services\admin_settings_url;
+use Gallery\Services\AdminOperationRefusal;
+use function Gallery\Services\admin_operation_begin;
+use function Gallery\Services\admin_operation_complete;
+use function Gallery\Services\admin_operation_fail;
+use function Gallery\Services\admin_operation_fingerprint;
+use function Gallery\Services\admin_operation_form_key;
+use function Gallery\Services\admin_operation_refresh_url;
+use function Gallery\Services\admin_operation_require_key;
+use function Gallery\Services\gallery_edit_writer_begin;
+use function Gallery\Services\gallery_edit_writer_end;
+use function Gallery\Services\mutation_schema_assert_available;
+use function Gallery\Services\upload_ingestion_schema_status;
+use function Gallery\Services\thumbnail_metadata_preflight_write_schema;
+
+require_once dirname(__DIR__) . '/services/admin_operation_keys.php';
 
 /**
  * Admin upload controller model.
@@ -410,9 +425,10 @@ function cms_admin_upload_browser_batch(): void
 }
 
 /**
- * Handle cms admin upload.
+ * Authenticate and dispatch replay-protected classic uploads or render their forms.
  *
  * Used by HTTP controller routing for this workflow.
+ * @return void Send JSON, redirect after confirmed completion, or render a recoverable form error.
  */
 function cms_admin_upload(): void
 {
@@ -440,6 +456,9 @@ function cms_admin_upload(): void
         if ($wantsJson) {
             ob_start();
         }
+        $operationClaim = null;
+        $writerLock = null;
+        header('Cache-Control: private, no-store');
         try {
             if (!empty($_POST['update_upload_preferences'])) {
                 admin_upload_save_general_settings($_POST);
@@ -451,16 +470,62 @@ function cms_admin_upload(): void
             }
             // $mode stores an intermediate value used by the surrounding gallery workflow.
             $mode = (string) ($_POST['upload_mode'] ?? 'existing');
+            $operationKey = admin_operation_require_key($_POST['operation_key'] ?? null);
+            if (!in_array($mode, ['new', 'existing'], true)) {
+                throw new AdminOperationRefusal('operation_payload_invalid', 'The upload workflow is invalid.');
+            }
             // $entries stores an intermediate value used by the surrounding gallery workflow.
             $entries = $mode === 'new' ? gallery_upload_entries_or_empty($_FILES['images'] ?? null) : gallery_upload_entries($_FILES['images'] ?? null);
-            if ($mode === 'new') {
-                // $gallery stores an intermediate value used by the shared create-gallery workflow.
-                $gallery = admin_create_gallery_from_input($_POST);
-            } else {
+            if ($mode !== 'new') {
                 // $gallery stores an intermediate value used by the surrounding gallery workflow.
                 $gallery = find_gallery((int) ($_POST['gallery_id'] ?? 0));
                 if (!$gallery) {
                     throw new RuntimeException(t('admin.upload.error_choose_existing_gallery', 'Choose an existing gallery.'));
+                }
+            }
+
+            $operation = $mode === 'new' ? 'gallery.create_upload' : 'image.classic_upload';
+            $operationInput = [
+                'gallery' => $mode === 'new' ? admin_new_gallery_input_from_array($_POST) : null,
+                'gallery_id' => $mode === 'existing' ? (int) $gallery['id'] : 0,
+                'create_thumbnails' => !empty($_POST['create_thumbnails']),
+            ];
+            $operationClaim = admin_operation_begin((int) $user['id'], $operationKey, $operation, admin_operation_fingerprint($operation, $operationInput, $entries));
+            if (!empty($operationClaim['replay'])) {
+                $response = $operationClaim['response'];
+                if ($wantsJson) {
+                    if (ob_get_level() > 0) {
+                        ob_end_clean();
+                    }
+                    header('Content-Type: application/json');
+                    echo json_encode($response);
+                    return;
+                }
+                redirect_to((string) $response['fallback']['redirect_url']);
+            }
+            if ($entries) {
+                // Combined creation must verify every ingestion dependency before
+                // creating its folder; the upload service repeats its own boundary.
+                mutation_schema_assert_available(
+                    upload_ingestion_schema_status(),
+                    'upload.operation_preflight',
+                    'Image upload requires the current gallery/image database schema. Run pending migrations first.',
+                    'Image upload is temporarily unavailable because its required database schema could not be verified. No target file was changed.'
+                );
+                thumbnail_metadata_preflight_write_schema('upload.operation_thumbnail_preflight');
+            }
+            // The create service takes a nested reentrant lease; this outer lease also
+            // covers file ingestion, metadata/thumbnail writes, and durable completion.
+            $writerLock = gallery_edit_writer_begin();
+            if ($mode === 'new') {
+                // $gallery stores an intermediate value used by the shared create-gallery workflow.
+                $gallery = admin_create_gallery_from_input($_POST);
+            } else {
+                // The pre-claim lookup normalized identity only. Its cached row
+                // cannot authorize paths or metadata after another writer finished.
+                $gallery = find_gallery((int) $operationInput['gallery_id'], true);
+                if (!$gallery) {
+                    throw new AdminOperationRefusal('operation_result_unavailable', 'The upload destination no longer exists. No replacement gallery was created.');
                 }
             }
 
@@ -481,6 +546,7 @@ function cms_admin_upload(): void
             $thumbnailFailed = 0;
             // $thumbnailErrors stores concise diagnostics for failed thumbnail generation.
             $thumbnailErrors = [];
+            $thumbnailFailedFilenames = [];
             if (!$wantsJson && !empty($_POST['create_thumbnails'])) {
                 foreach ((array) ($stored['image_ids'] ?? []) as $imageId) {
                     // $image stores the just-uploaded database image row.
@@ -492,6 +558,9 @@ function cms_admin_upload(): void
                     $thumbnailResult = create_image_thumbnails_result($image, $gallery);
                     $thumbnails += (int) ($thumbnailResult['created'] ?? 0);
                     $thumbnailFailed += (int) ($thumbnailResult['failed'] ?? 0);
+                    if ((int) ($thumbnailResult['failed'] ?? 0) > 0) {
+                        $thumbnailFailedFilenames[] = (string) ($image['filename'] ?? $image['relative_path'] ?? '');
+                    }
                     foreach ((array) ($thumbnailResult['errors'] ?? []) as $thumbnailError) {
                         $thumbnailErrors[] = (string) $thumbnailError;
                     }
@@ -530,7 +599,7 @@ function cms_admin_upload(): void
             $callerRefreshUrl = admin_upload_safe_refresh_url($_POST['source_url'] ?? '');
             if ($mode !== 'new' && $callerRefreshUrl !== '') {
                 // Existing-gallery uploads should refresh the exact page the admin was viewing, including photo_page or clean pagination paths.
-                $refreshUrl = $callerRefreshUrl;
+                $refreshUrl = admin_operation_refresh_url($refreshUrl, $callerRefreshUrl);
             }
             // $editUrl stores the gallery editor target used after upload so the admin can continue managing photos immediately.
             $editUrl = url_for('admin_edit_gallery', ['id' => $gallery['id'], 'uploaded' => (int) $stored['uploaded'], 'scanned' => (int) $stored['scanned'], 'tab' => 'admin-edit-images']) . '#admin-edit-images';
@@ -587,6 +656,7 @@ function cms_admin_upload(): void
                 'thumbnail_failed' => $thumbnailFailed,
                 'thumbnail_errors' => array_values(array_unique(array_filter($thumbnailErrors))),
                 'scan_failed' => count($scanFailedFilenames),
+                'thumbnail_failed_filenames' => $thumbnailFailedFilenames,
                 'scan_failed_filenames' => $scanFailedFilenames,
                 'renamed' => (int) ($stored['renamed'] ?? 0),
                 'rename_warnings' => array_values((array) ($stored['rename_warnings'] ?? [])),
@@ -594,6 +664,9 @@ function cms_admin_upload(): void
                 'upload_events' => array_values((array) ($stored['upload_events'] ?? [])),
                 'redirect_url' => $redirectUrl,
             ]);
+            $response = admin_operation_complete($operationClaim, $response);
+            gallery_edit_writer_end($writerLock);
+            $writerLock = null;
             if ($wantsJson) {
                 if (ob_get_level() > 0) {
                     ob_end_clean();
@@ -604,32 +677,50 @@ function cms_admin_upload(): void
             }
             redirect_to($response['redirect_url']);
         } catch (Throwable $exception) {
+            admin_operation_fail($operationClaim);
+            if ($writerLock !== null) {
+                try {
+                    gallery_edit_writer_end($writerLock);
+                } catch (Throwable) {
+                    // The original failure remains bounded; connection exit releases its lease.
+                }
+                $writerLock = null;
+            }
+            if ($operationClaim && empty($operationClaim['replay']) && !$exception instanceof AdminOperationRefusal && !$exception instanceof \Gallery\Services\GalleryCatalogConflict) {
+                $exception = new AdminOperationRefusal('operation_outcome_unknown', 'The upload may have stored files. Retain its key and reconcile the original attempt before starting another upload.');
+            }
             admin_log_event('error', 'gallery.upload_failed', 'Admin image upload failed.', ['error' => $exception->getMessage()]);
+            $operationRefusal = $exception instanceof AdminOperationRefusal;
+            $catalogConflict = $exception instanceof \Gallery\Services\GalleryCatalogConflict;
+            $status = $operationRefusal ? admin_operation_refusal_status($exception) : ($catalogConflict ? \Gallery\Core\HTTP_STATUS_CONFLICT : \Gallery\Core\HTTP_STATUS_UNPROCESSABLE_ENTITY);
+            http_response_code($status);
             if ($wantsJson) {
-                http_response_code(422);
+                if (ob_get_level() > 0) {
+                    ob_end_clean();
+                }
                 header('Content-Type: application/json');
                 echo json_encode(admin_mutation_error_envelope(
                     $exception->getMessage(),
-                    'gallery_upload_failed',
+                    $operationRefusal ? $exception->reason : ($catalogConflict ? 'gallery_catalog_conflict' : 'gallery_upload_failed'),
                     admin_mutation_descriptor('image.upload', 'image', 'upload')
                 ));
                 return;
             }
             $_SESSION['admin_upload_error'] = $exception->getMessage();
-            redirect_to(url_for('admin_upload'));
+            // Render the failed form with its original key; a redirect would mint a new intent.
         }
     }
 
     // $prefillGalleryId stores the gallery that should be pre-selected when upload is opened from a public gallery page.
-    $prefillGalleryId = selected_gallery_id_from_query('gallery_id');
+    $prefillGalleryId = request_method() === 'POST' ? max(0, (int) ($_POST['gallery_id'] ?? 0)) : selected_gallery_id_from_query('gallery_id');
     // $prefillParentId stores the parent gallery for the create-and-upload workflow.
-    $prefillParentId = selected_gallery_id_from_query('parent_id');
+    $prefillParentId = request_method() === 'POST' ? max(0, (int) ($_POST['parent_id'] ?? 0)) : selected_gallery_id_from_query('parent_id');
     // $prefillGallery stores the validated gallery record used for contextual helper text.
     $prefillGallery = $prefillGalleryId > 0 ? find_gallery($prefillGalleryId) : null;
     // $prefillParentGallery stores the validated parent row for create-and-upload helper text.
     $prefillParentGallery = $prefillParentId > 0 ? find_gallery($prefillParentId) : null;
     // $requestedUploadMode stores whether this screen should show existing-upload or create-and-upload UI.
-    $requestedUploadMode = (string) ($_GET['upload_mode'] ?? 'existing');
+    $requestedUploadMode = (string) (request_method() === 'POST' ? ($_POST['upload_mode'] ?? 'existing') : ($_GET['upload_mode'] ?? 'existing'));
     // $error stores an intermediate value used by the surrounding gallery workflow.
     $error = (string) ($_SESSION['admin_upload_error'] ?? '');
     unset($_SESSION['admin_upload_error']);
@@ -770,6 +861,7 @@ function admin_browser_upload_accept_value(): string
  *
  * @param int $prefillGalleryId Prefill gallery id identifier.
  * @param bool $panelMode Panel mode value.
+ * @return void Emit prepared upload markup with the target context and operation key.
  */
 function render_admin_upload_existing_gallery_form(int $prefillGalleryId, bool $panelMode = false): void
 {
@@ -778,6 +870,7 @@ function render_admin_upload_existing_gallery_form(int $prefillGalleryId, bool $
         'panel_mode' => $panelMode,
         'action_url' => url_for('admin_upload'),
         'csrf_html' => csrf_field(),
+        'operation_key' => admin_operation_form_key($_POST['operation_key'] ?? null),
         'gallery_id' => $panelMode ? $prefillGalleryId : 0,
         'target_title' => is_array($targetGallery) ? (string) ($targetGallery['title'] ?? ('#' . $prefillGalleryId)) : '',
         'gallery_options_html' => $panelMode && $prefillGalleryId > 0 ? '' : gallery_options_for_select($prefillGalleryId),

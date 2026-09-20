@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Test Fixture
+ * Purpose: Provide disposable title-completion catalogs and query measurements.
+ * Responsibilities:
+ *   - Create isolated SQLite data for bounded matching and service contracts.
  * Repository: https://github.com/klusik/PHP_gallery
  * File: tests/support/gallery_title_completion_fixture.php
  * Author: Rudolf Klusal

@@ -1,5 +1,9 @@
 /**
  * Project: PHP Gallery
+ * Module Type: Regression Test
+ * Purpose: Exercise the real lightbox map in installed headless Chromium.
+ * Responsibilities:
+ *   - Use local synthetic media to verify browser-only map and viewer interactions.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/lightbox_map_browser_test.mjs

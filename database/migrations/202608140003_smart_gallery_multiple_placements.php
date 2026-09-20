@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Database Migration
+ * Purpose: Support Smart Gallery attachment beneath multiple physical galleries.
+ * Responsibilities:
+ *   - Introduce the relationship storage used by per-parent placement.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: database/migrations/202608140003_smart_gallery_multiple_placements.php

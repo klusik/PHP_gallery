@@ -2,6 +2,8 @@
 
 /**
  * Project: PHP Gallery
+ * Responsibilities:
+ *   - Check redaction, accessible controls and registry-driven presentation.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/admin_settings_rendering_contract_test.php

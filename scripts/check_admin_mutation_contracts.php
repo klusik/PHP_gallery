@@ -213,7 +213,10 @@ contract_require($security, "'error_code' => 'security.invalid_csrf'", 'AJAX CSR
 contract_forbid($sidePanel, 'window.location.reload', 'Side-panel module contains a hard reload.', $failures, $checks);
 contract_forbid($sidePanel, 'history.replaceState', 'Side-panel module contains history.replaceState().', $failures, $checks);
 contract_count($sidePanel, 'window.location.href =', 2, 'Unexpected side-panel window.location assignment count.', $failures, $checks);
-contract_require($sidePanel, "if (galleryUploadCompletesInSidePanel(form)) {\n            dispatchAdminSidePanelSuccess(form, result);\n            return;\n        }\n        window.location.href =", 'Direct upload redirect is no longer guarded by panel completion ownership.', $failures, $checks);
+$uploadCompletion = contract_section($sidePanel, 'if (galleryUploadCompletesInSidePanel(form)) {', 'window.location.href =');
+contract_require($uploadCompletion, "dispatchAdminSidePanelSuccess(form, result);\n            return;", 'Direct upload redirect is no longer guarded by panel completion ownership.', $failures, $checks);
+contract_require($uploadCompletion, "await completeCoreGalleryMutationInCurrentView(result);\n            return;", 'Inline upload completion can fall through into direct-page navigation.', $failures, $checks);
+contract_require_before($uploadCompletion, 'rememberAdminPanelMutation(result, owner);', 'dispatchAdminSidePanelSuccess(form, result);', 'Upload completion lost its initiating panel owner.', $failures, $checks);
 contract_require($sidePanel, "if (!(body instanceof HTMLElement)) {\n        window.location.href = link.href;", 'Panel-mount failure navigation fallback changed or disappeared.', $failures, $checks);
 contract_forbid($sidePanel, 'refreshCurrentGalleryContextFromServer', 'Obsolete duplicate gallery refresh helper is still present.', $failures, $checks);
 contract_forbid($sidePanel, 'replaceAdminEditorMainFromParsedDocument', 'Obsolete full editor replacement helper is still present.', $failures, $checks);

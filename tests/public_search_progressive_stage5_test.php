@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Regression Test
+ * Purpose: Protect deferred descriptive and deep-search work.
+ * Responsibilities:
+ *   - Verify phase separation and browser scheduling of expensive follow-up search.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/public_search_progressive_stage5_test.php

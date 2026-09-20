@@ -51,10 +51,15 @@ function exif_model_gallery_gps_override_rows(): array
     return db()->query('SELECT * FROM galleries WHERE gps_map_enabled IS NOT NULL ORDER BY folder_path')->fetchAll() ?: [];
 }
 
-/** Reset every explicit gallery GPS-map override. */
+/**
+ * Reset every explicit gallery GPS-map override and advance each changed row's revision.
+ *
+ * @param string $now Shared SQL timestamp assigned to each changed gallery.
+ * @return int Number of gallery rows changed by the reset.
+ */
 function exif_model_reset_gallery_gps_overrides(string $now): int
 {
-    $stmt = db()->prepare('UPDATE galleries SET gps_map_enabled = NULL, updated_at = ? WHERE gps_map_enabled IS NOT NULL');
+    $stmt = db()->prepare('UPDATE galleries SET gps_map_enabled = NULL, updated_at = ?, edit_revision = edit_revision + 1 WHERE gps_map_enabled IS NOT NULL');
     $stmt->execute([$now]);
     return $stmt->rowCount();
 }

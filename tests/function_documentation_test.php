@@ -22,6 +22,8 @@
 
 declare(strict_types=1);
 
+require_once dirname(__DIR__) . '/scripts/check_source_documentation.php';
+
 /**
  * Return source files with one of the requested extensions.
  *
@@ -32,51 +34,13 @@ declare(strict_types=1);
 function function_documentation_source_files(string $root, array $extensions): array
 {
     $files = [];
-    $iterator = new RecursiveIteratorIterator(
-        new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS)
-    );
-    foreach ($iterator as $item) {
-        if (!$item->isFile()) {
-            continue;
-        }
-        $path = str_replace('\\', '/', $item->getPathname());
-        $relative = substr($path, strlen(str_replace('\\', '/', $root)) + 1);
-        if (str_starts_with($relative, '.git/')
-            || str_starts_with($relative, '.claude/')
-            || str_starts_with($relative, 'cache/')
-            || str_starts_with($relative, 'data/')
-            || str_starts_with($relative, 'galleries/')
-            || str_starts_with($relative, 'deploy/')) {
-            continue;
-        }
-        if (in_array(strtolower(pathinfo($path, PATHINFO_EXTENSION)), $extensions, true)) {
-            $files[] = $path;
+    foreach (\PhpGallery\SourceContracts\inventory($root)['files'] as $relative => $extension) {
+        if (in_array($extension, $extensions, true)) {
+            $files[] = $root . '/' . $relative;
         }
     }
     sort($files, SORT_STRING);
     return $files;
-}
-
-/**
- * Return whether the named PHP declaration has an immediately preceding PHPDoc block.
- *
- * @param array<int,mixed> $tokens Tokenized PHP source.
- * @param int $functionIndex Index of the T_FUNCTION token.
- */
-function function_documentation_php_has_docblock(array $tokens, int $functionIndex): bool
-{
-    $modifiers = [T_PUBLIC, T_PROTECTED, T_PRIVATE, T_STATIC, T_FINAL, T_ABSTRACT];
-    if (defined('T_READONLY')) {
-        $modifiers[] = constant('T_READONLY');
-    }
-    for ($index = $functionIndex - 1; $index >= 0; $index--) {
-        $token = $tokens[$index];
-        if (is_array($token) && ($token[0] === T_WHITESPACE || in_array($token[0], $modifiers, true))) {
-            continue;
-        }
-        return is_array($token) && $token[0] === T_DOC_COMMENT;
-    }
-    return false;
 }
 
 /**
@@ -92,29 +56,14 @@ function function_documentation_audit_php(string $root, array $files): array
     $missing = [];
     foreach ($files as $file) {
         $source = (string) file_get_contents($file);
-        $tokens = token_get_all($source);
-        $count = count($tokens);
-        for ($index = 0; $index < $count; $index++) {
-            $token = $tokens[$index];
-            if (!is_array($token) || $token[0] !== T_FUNCTION) {
-                continue;
-            }
-            $nameIndex = $index + 1;
-            while ($nameIndex < $count) {
-                $candidate = $tokens[$nameIndex];
-                if ((is_array($candidate) && $candidate[0] === T_WHITESPACE) || $candidate === '&') {
-                    $nameIndex++;
-                    continue;
-                }
-                break;
-            }
-            if ($nameIndex >= $count || !is_array($tokens[$nameIndex]) || $tokens[$nameIndex][0] !== T_STRING) {
+        foreach (\PhpGallery\SourceContracts\php_declarations($source) as $record) {
+            if ($record['kind'] !== 'callable') {
                 continue;
             }
             $total++;
-            if (!function_documentation_php_has_docblock($tokens, $index)) {
+            if ($record['doc'] === '') {
                 $relative = substr(str_replace('\\', '/', $file), strlen(str_replace('\\', '/', $root)) + 1);
-                $missing[] = $relative . ':' . $token[2] . ':' . $tokens[$nameIndex][1];
+                $missing[] = $relative . ':' . $record['line'] . ':' . $record['name'];
             }
         }
     }
@@ -126,11 +75,12 @@ function function_documentation_audit_php(string $root, array $files): array
  *
  * @param string $source Complete JavaScript source.
  * @param int $offset Declaration byte offset.
+ * @return bool Whether the nearest completed comment is an attached JSDoc.
  */
 function function_documentation_js_has_docblock(string $source, int $offset): bool
 {
     $prefix = rtrim(substr($source, 0, $offset));
-    return preg_match('#/\*\*[\s\S]*?\*/\s*$#', $prefix) === 1;
+    return preg_match('#/\*\*(?:(?!\*/)[\s\S])*\*/\s*$#', $prefix) === 1;
 }
 
 /**
@@ -181,17 +131,28 @@ function function_documentation_audit_javascript(string $root, array $files): ar
     return ['total' => $total, 'missing' => $missing];
 }
 
-$root = dirname(__DIR__);
-$php = function_documentation_audit_php($root, function_documentation_source_files($root, ['php']));
-$javascript = function_documentation_audit_javascript($root, function_documentation_source_files($root, ['js']));
-$missing = array_merge($php['missing'], $javascript['missing']);
-
-if ($missing !== []) {
-    fwrite(STDERR, "Undocumented named functions/methods:\n" . implode("\n", $missing) . "\n");
-    fwrite(STDERR, 'PHP declarations: ' . $php['total'] . '; JavaScript declarations: ' . $javascript['total'] . '; missing: ' . count($missing) . "\n");
-    exit(1);
+/**
+ * Enforce the historical named-callable gate using shared source discovery.
+ * Broader classes, callbacks, shapes and module variants remain visible through
+ * scripts/check_source_documentation.php; this gate does not certify those.
+ * @return int Zero when the historical contract passes; one for missing PHPDoc/JSDoc.
+ */
+function function_documentation_main(): int
+{
+    $root = dirname(__DIR__);
+    $php = function_documentation_audit_php($root, function_documentation_source_files($root, ['php']));
+    $javascript = function_documentation_audit_javascript($root, function_documentation_source_files($root, ['js']));
+    $missing = array_merge($php['missing'], $javascript['missing']);
+    if ($missing !== []) {
+        fwrite(STDERR, "Undocumented named functions/methods:\n" . implode("\n", $missing) . "\n");
+        fwrite(STDERR, 'PHP declarations: ' . $php['total'] . '; JavaScript declarations: ' . $javascript['total'] . '; missing: ' . count($missing) . "\n");
+        return 1;
+    }
+    echo 'Function documentation checks passed: '
+        . $php['total'] . ' PHP and '
+        . $javascript['total'] . " JavaScript named declarations documented (presence gate only).\n";
+    return 0;
 }
-
-echo 'Function documentation checks passed: '
-    . $php['total'] . ' PHP and '
-    . $javascript['total'] . " JavaScript named declarations documented.\n";
+if (PHP_SAPI === 'cli' && realpath((string) ($_SERVER['SCRIPT_FILENAME'] ?? '')) === __FILE__) {
+    exit(function_documentation_main());
+}

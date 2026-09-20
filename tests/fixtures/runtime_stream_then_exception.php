@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Test Fixture
+ * Purpose: Raise an exception after a fixture response has begun streaming.
+ * Responsibilities:
+ *   - Check that runtime failure handling does not append an HTML error body.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/fixtures/runtime_stream_then_exception.php

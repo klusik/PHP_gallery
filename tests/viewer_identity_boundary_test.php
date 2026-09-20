@@ -81,7 +81,14 @@ $sessionBootstrap = (string) file_get_contents($root . '/app/bootstrap/session.p
 
 $currentUser = viewer_identity_function_source($security, 'current_user');
 viewer_identity_assert(str_contains($currentUser, "\$_SESSION['user_id']"), 'current_user() must continue using the historical admin session key.');
-viewer_identity_assert(str_contains($currentUser, 'FROM users WHERE id = ?'), 'current_user() must continue loading only the existing users table.');
+$adminSessionService = viewer_identity_function_source((string) file_get_contents($root . '/app/services/auth_accounts.php'), 'auth_account_session_user');
+$adminSessionModel = viewer_identity_function_source((string) file_get_contents($root . '/app/models/auth.php'), 'auth_model_session_user');
+viewer_identity_assert(str_contains($currentUser, 'auth_account_session_user(')
+    && str_contains($adminSessionService, 'auth_model_session_user(')
+    && str_contains($adminSessionModel, 'FROM users WHERE id = ?')
+    && !str_contains($adminSessionModel, 'viewer_')
+    && !str_contains($adminSessionModel, 'password_hash'),
+    'current_user() must use the Admin-only non-credential model projection through its account service.');
 viewer_identity_assert(stripos($currentUser, 'viewer') === false, 'current_user() must never inspect viewer session/account state.');
 
 $currentViewer = viewer_identity_function_source($viewerAccounts, 'current_viewer');

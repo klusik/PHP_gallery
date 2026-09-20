@@ -1,4 +1,8 @@
 # Project: PHP Gallery
+# Module Type: Windows Tooling
+# Purpose: Watch a local folder and upload stable images to PHP Gallery.
+# Responsibilities:
+#   - Coordinate local observation, multipart transport and retry state while PHP owns authorization and storage.
 # Repository: https://github.com/klusik/PHP_gallery
 #
 # File: winapp/gallery_watch_upload.pyw

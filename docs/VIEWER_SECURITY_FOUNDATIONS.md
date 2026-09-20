@@ -1208,3 +1208,20 @@ After Phase 4, the following remain intentionally unavailable:
 - any rule that grants gallery/media access merely because `current_viewer()` is non-null, an image is favourited, an image is in a collection, or a collection share grant exists.
 
 Viewer identity, Admin identity, gallery authorization, and collection-share authority remain separate domains.
+
+## Anti-automation context ownership
+
+Ticket issue, pruning, signature validation and one-use consumption accept an
+explicit private context from the controller; the service does not select or
+modify PHP session globals. Only the controller publishes that compartment.
+Publication uses `finally` so consumed authority does not reappear after a
+challenge-signing failure or downstream refusal. Unchanged/disabled checks leave
+an absent compartment absent, and unrelated identity, CSRF and language state
+remain untouched.
+
+Context entries are keyed by scoped nonce HMACs and carry kind, action, issue and
+exclusive-expiry timestamps plus challenge difficulty. They are never view-model,
+log or browser payloads. Immutable enums and limits have centralized Core
+definitions; configured anti-automation preferences keep their existing owner.
+The isolated context fixture covers both protected controllers and does not
+change authentication, authorization, mail policy or production session closing.

@@ -476,11 +476,13 @@ contract and load order are preserved.
 
 | Module entry point | Part directory | Parts |
 | --- | --- | --- |
+| `app/services/admin_dashboard.php` | `app/services/admin_dashboard/` | `maintenance_health.php` (bounded gallery-edit and lazy pending-image-move health) |
+| `app/services/admin_operation_keys.php` | `app/services/admin_operation_keys/` | `diagnostics.php`, `maintenance.php` (bounded replay outcome projection and explicit operator reconciliation) |
 | `app/services/admin_gallery_report.php` | `app/services/admin_gallery_report/` | `job.php`, `image_summary.php`, `gps.php`, `system_summary.php`, `database_section.php`, `content_summary.php`, `query_helpers.php`, `format.php`, `render.php` |
 | `app/services/admin_test_runs.php` | `app/services/admin_test_runs/` | `paths.php`, `storage.php`, `context.php`, `snapshot.php`, `lifecycle.php`, `recording.php`, `summary.php`, `panel.php` |
 | `app/services/admin_test_run_analysis.php` | `app/services/admin_test_run_analysis/` | `sql_analysis.php`, `sanitization.php`, `browser.php`, `cache_analysis.php`, `maintenance_analysis.php`, `request_analysis.php`, `flags.php` |
 | `app/services/browser_uploads.php` | `app/services/browser_uploads/` | `exception.php`, `settings.php`, `zip_parsing.php`, `batch_state.php`, `payload_validation.php`, `manifest.php`, `pipeline.php` |
-| `app/services/gallery_migration.php` | `app/services/gallery_migration/` | `versions.php`, `jobs.php`, `metadata.php`, `assets.php`, `manifest.php`, `packages.php`, `target_setup.php`, `install.php`, `recovery.php`, `http.php` |
+| `app/services/gallery_migration.php` | `app/services/gallery_migration/` | `versions.php`, `temporary_files.php`, `jobs.php`, `metadata.php`, `assets.php`, `manifest.php`, `packages.php`, `target_setup.php`, `install.php`, `recovery.php`, `http.php` |
 | `app/models/public_search_progressive.php` | `app/models/public_search_progressive/` | `deferred.php` |
 | `app/services/public_search_progressive.php` | `app/services/public_search_progressive/` | `deferred.php` |
 | `app/services/feature_flags.php` | `app/services/feature_flags/` | `registry.php`, `adapters.php`, `policy.php`, `admin.php`, `routes.php` |
@@ -1720,9 +1722,52 @@ Keep JavaScript vanilla unless the project explicitly adopts a front-end depende
 
 ## Centralized Operational Configuration
 
-`app/configuration_defaults.php` is the canonical source for deployment-tunable numeric runtime policy used by the public download hardening and browser upload/rebuild pipelines. `app/bootstrap/configuration.php` merges those defaults underneath the local `config.php`, so an update can introduce a new safe limit without forcing administrators to rewrite existing configuration files. Feature modules read these values through `cms_runtime_limit(<stable dotted key>)` instead of redeclaring their own numeric defaults. Local installations may override selected `runtime_limits` keys in `config.php`; protocol/schema versions, enum values, ZIP format constants, and other non-tuning invariants remain close to their owning module.
+`app/configuration_defaults.php` is the canonical source for deployment-tunable numeric runtime policy used by public downloads, browser uploads/rebuilds and shared raster decoding. `app/bootstrap/configuration.php` merges those defaults underneath local `config.php`; modules use `cms_runtime_limit(<stable dotted key>)`. Existing installations need no configuration rewrite.
+
+`app/policy_constants.php` is the dependency-free immutable PHP policy owner in
+the `Gallery\Core` namespace. Protocol/schema vocabulary, security invariants and
+non-tuning hard bounds must not become writable settings. Consumers explicitly
+load/import the required definitions; module entry points retain compatibility
+imports, shared types and ordered part loading. This supersedes the older
+recommendation to scatter immutable runtime policy beside individual features.
+Historical standalone migrations retain frozen protocol literals where replay
+must not depend on later application definitions; document that relationship.
+Do not invent constants for syntax, loop initialization or arbitrary fixture data.
+
+Browser code receives only its reviewed public policy subset, through prepared
+view-model data or focused immutable asset policy modules. Never serialize server
+configuration wholesale. Independent CLI/early-runtime tools must not acquire an
+application-bootstrap or database dependency just to read an invariant.
+Each definition explains type, units, scope, consumers, rationale and relevant
+compatibility/security limits. Equal numbers with unrelated meanings remain
+separate policies. The source-contract inventory records remaining migrations;
+its successful scan is not a claim that the whole legacy tree is normalized.
 
 The same merged configuration exposes an optional `download_security.capability_secret`. It is blank by default. Stage 2 capability signing therefore derives a purpose-separated HMAC key from the existing stable `visitor_vote_secret` (falling back to `setup_key` only for legacy/manual configurations), which keeps existing installations update-compatible and avoids a repository-shared secret.
+
+## Gallery mutation and editor integrity
+
+Ordinary creation preserves existing catalog ownership when storage is missing or
+unobservable; reconciliation is explicit. See
+[catalog reconciliation](docs/GALLERY_CATALOG_RECONCILIATION.md).
+Image moves persist intent and an ownership-transaction commit marker before
+recovery decides whether to finish or compensate. Uncertain identities are
+preserved, never overwritten. See [image move recovery](docs/IMAGE_MOVE_RECOVERY.md).
+
+Base-gallery edits use a dedicated decimal revision, a short atomic reservation
+and connection-owned operation lock spanning subsequent side effects. Database
+triggers advance revisions for all explicit gallery updates; filesystem-first
+writers must acquire the same outer lock before touching targets. The migration
+and deployment prerequisite are documented in
+[edit concurrency](docs/GALLERY_EDIT_CONCURRENCY.md). This does not version every
+independent tag, translation or Smart Gallery entity.
+
+The Admin panel composes open-generation ownership with the existing mutation
+completion coordinator. Drafts are bounded in memory and exclude private fields;
+the submitting form receives its acknowledged revision before delayed refresh.
+See [panel lifecycle](docs/ADMIN_PANEL_LIFECYCLE.md) and the bounded
+[gallery picker](docs/GALLERY_PICKER.md). The responsive and progressive public
+thumbnail pipelines remain supported.
 
 ## Public Download Capabilities
 
@@ -1979,6 +2024,17 @@ Each active challenge POST remains subject to the same local anti-automation IP/
 JavaScript and Web Crypto are progressive enhancement rather than an identity prerequisite. When Web Crypto is unavailable, JavaScript fails, or JavaScript is disabled, the same signed challenge provides an explicit first-party fallback. The fallback is Viewer-CSRF protected, session-bound, single-use, short-lived, requires at least 3 seconds of server-measured challenge age, and consumes the existing anti-automation IP/subnet limiter dimensions before allowing continuation. No image/audio CAPTCHA, browser fingerprint, canvas/font/device probe, remote script, remote reputation request, Composer/npm package, Redis/Memcached dependency, queue, worker, or additional PHP extension is introduced.
 
 Public anti-enumeration semantics remain unchanged. A hard honeypot or anti-automation limit suppression for a syntactically valid CSRF-valid request returns the existing generic registration/resend completion wording without entering registration/resend or mail authorization. Challenge pages reveal only that this browser/request needs an additional local verification step and never disclose account, registration, invitation, origin, limiter, or mail state. Phase 4.2 primary token A and sibling verification authorities are untouched by challenge handling; scanner-safe verification GET remains inspection-only; first-confirmed-token-wins behavior and current-mode revalidation remain authoritative. Phase 4.3 adds no migration or persistent schema.
+
+## Explicit Viewer anti-automation ticket context
+
+The anti-automation service receives only its caller-owned private ticket map.
+The Viewer controller selects the session compartment and publishes changed state
+in `finally` before rendering, refusal or downstream registration/resend work.
+Disabled and no-op checks do not manufacture a session compartment. Consumption
+remains one-use across challenge replacement, signing failures and business
+exceptions; the map contains scoped nonce fingerprints, not raw nonces or identity.
+Ticket/action enums and immutable retention/input limits belong to
+`app/policy_constants.php`. No production session-close behavior changed.
 
 ## Phase 4.4 Viewer Registration Security Operations and Phase 4 Closure
 

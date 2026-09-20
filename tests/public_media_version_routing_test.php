@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Regression Test
+ * Purpose: Verify canonical versioned full-media route identity.
+ * Responsibilities:
+ *   - Check URL normalization across supported rewrite modes.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/public_media_version_routing_test.php

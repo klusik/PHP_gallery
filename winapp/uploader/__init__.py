@@ -1,4 +1,8 @@
 # Project: PHP Gallery
+# Module Type: Windows Tooling
+# Purpose: Expose testable support modules for the Windows uploader.
+# Responsibilities:
+#   - Keep deterministic persistence, discovery, media and job helpers separate from the Tkinter launcher.
 # Repository: https://github.com/klusik/PHP_gallery
 #
 # File: winapp/uploader/__init__.py

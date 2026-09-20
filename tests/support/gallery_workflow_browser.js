@@ -1,5 +1,11 @@
 /**
  * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ * File: tests/support/gallery_workflow_browser.js
+ * Module Type: Test Fixture
+ * Purpose: Run the same-origin browser journey inside a disposable application.
+ * Responsibilities:
+ *   - Exercise real workflow controls and capture observable browser postconditions.
  * Author: Rudolf Klusal
  * Real same-origin application journey executed by a standalone headless Chromium fixture.
  */

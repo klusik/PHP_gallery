@@ -167,6 +167,31 @@ function theme_background_optimized_path(): ?string
 }
 
 /**
+ * Remove only the owned optimized background, preserving the original upload.
+ * @return void Clears the derivative setting after verified removal or absence.
+ * @throws \RuntimeException When stored identity escapes the owned directory or removal fails.
+ */
+function theme_background_delete_optimized(): void
+{
+    $relative = theme_background_optimized_path();
+    if ($relative !== null) {
+        $path = dirname(__DIR__, 2) . '/' . ltrim($relative, '/');
+        $resolved = realpath($path);
+        $storage = realpath(dirname(__DIR__, 2) . '/cache/theme-background');
+        $original = theme_background_original_path();
+        $originalPath = $original !== null ? realpath(dirname(__DIR__, 2) . '/' . ltrim($original, '/')) : false;
+        if (is_link($path) || $resolved === false || $storage === false
+            || dirname($resolved) !== $storage || $resolved === $originalPath) {
+            throw new \RuntimeException('The optimized background identity could not be verified.');
+        }
+        if (!unlink($path)) {
+            throw new \RuntimeException('The optimized background could not be removed.');
+        }
+    }
+    set_app_setting('theme_background_optimized_path', '');
+}
+
+/**
  * Resolve a saved theme background path only when the file still exists.
  *
  * @param string $path Filesystem path.

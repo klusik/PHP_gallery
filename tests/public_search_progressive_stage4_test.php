@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Regression Test
+ * Purpose: Protect lightweight media-search eligibility.
+ * Responsibilities:
+ *   - Check bounded Stage 4 matching and source-access boundaries.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/public_search_progressive_stage4_test.php

@@ -1,5 +1,9 @@
 /**
  * Project: PHP Gallery
+ * Module Type: Stylesheet
+ * Purpose: Own compact-screen public gallery and lightbox presentation.
+ * Responsibilities:
+ *   - Apply mobile layout rules without changing the desktop viewer structure.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: public/assets/styles/mobile-gallery.css

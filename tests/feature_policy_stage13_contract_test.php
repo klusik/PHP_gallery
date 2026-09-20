@@ -80,6 +80,7 @@ namespace Gallery\Services {
 }
 
 namespace {
+    require_once __DIR__ . '/support/module_source.php';
     use function Gallery\Services\feature_capability_admin_health_snapshot;
     use function Gallery\Services\feature_capability_configured_enabled;
     use function Gallery\Services\feature_capability_definitions;
@@ -302,7 +303,7 @@ namespace {
         'Admin Logs must not advertise the Telemetry route while Telemetry is effectively disabled.'
     );
 
-    $dashboardSource = (string) file_get_contents($root . '/app/services/admin_dashboard.php');
+    $dashboardSource = module_source($root . '/app/services/admin_dashboard.php');
     foreach ([
         ["feature_capability_effective_enabled('picture_game')", "picture_game_schema_ready()", 'Picture Game'],
         ["feature_capability_effective_enabled('gallery_maps')", "exif_gps_schema_ready()", 'Gallery Maps'],

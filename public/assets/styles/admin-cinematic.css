@@ -1,5 +1,9 @@
 /**
  * Project: PHP Gallery
+ * Module Type: Stylesheet
+ * Purpose: Style shared Admin cinematic page and side-panel primitives.
+ * Responsibilities:
+ *   - Align controls and surfaces across standalone and injected Admin content.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: public/assets/styles/admin-cinematic.css

@@ -1,6 +1,12 @@
 <?php
 /**
  * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ * File: tests/support/gallery_workflow_safety.php
+ * Module Type: Test Fixture
+ * Purpose: Enforce workflow fixture ownership and opt-in guards.
+ * Responsibilities:
+ *   - Reject unsafe paths and configuration before fixture side effects.
  * Author: Rudolf Klusal
  * Disposable integration-fixture ownership and opt-in guards.
  */

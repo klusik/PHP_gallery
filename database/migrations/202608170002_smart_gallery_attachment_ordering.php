@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Database Migration
+ * Purpose: Add per-parent Smart Gallery placement area and ordering.
+ * Responsibilities:
+ *   - Persist deterministic attachment order within each parent context.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: database/migrations/202608170002_smart_gallery_attachment_ordering.php

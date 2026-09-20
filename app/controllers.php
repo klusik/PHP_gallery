@@ -71,6 +71,7 @@ require_once __DIR__ . '/controllers/admin_media_renamer.php';
 require_once __DIR__ . '/controllers/admin_galleries.php';
 require_once __DIR__ . '/controllers/admin_gallery_form_models.php';
 require_once __DIR__ . '/controllers/admin_gallery_title_completion.php';
+require_once __DIR__ . '/controllers/admin_gallery_picker_search.php';
 require_once __DIR__ . '/controllers/admin_trash.php';
 require_once __DIR__ . '/controllers/admin_gallery_dates.php';
 require_once __DIR__ . '/controllers/admin_duplicate_photos.php';

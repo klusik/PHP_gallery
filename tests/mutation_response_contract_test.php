@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Regression Test
+ * Purpose: Protect canonical Admin mutation response envelopes.
+ * Responsibilities:
+ *   - Validate entity, context, postcondition and fallback metadata contracts.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/mutation_response_contract_test.php

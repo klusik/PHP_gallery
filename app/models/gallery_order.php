@@ -64,7 +64,7 @@ function gallery_order_model_save_tree(array $submittedEntries, string $now): ar
     $pdo = db();
     try {
         $pdo->beginTransaction();
-        $stmt = $pdo->prepare('UPDATE galleries SET sort_order = ?, updated_at = ? WHERE id = ?');
+        $stmt = $pdo->prepare('UPDATE galleries SET sort_order = ?, updated_at = ?, edit_revision = edit_revision + 1 WHERE id = ?');
         $siblingPositionByParent = [];
         $nextSortOrderById = [];
         foreach ($submittedEntries as $entry) {
@@ -92,13 +92,14 @@ function gallery_order_model_save_tree(array $submittedEntries, string $now): ar
  * @param int $parentGalleryId Parent gallery identifier.
  * @param array<int,int> $orderedIds Complete direct-child gallery identifiers.
  * @param string $now Shared SQL timestamp for all touched rows.
+ * @return void
  */
 function gallery_order_model_save_children(int $parentGalleryId, array $orderedIds, string $now): void
 {
     $pdo = db();
     try {
         $pdo->beginTransaction();
-        $stmt = $pdo->prepare('UPDATE galleries SET sort_order = ?, updated_at = ? WHERE id = ? AND parent_id = ?');
+        $stmt = $pdo->prepare('UPDATE galleries SET sort_order = ?, updated_at = ?, edit_revision = edit_revision + 1 WHERE id = ? AND parent_id = ?');
         foreach ($orderedIds as $index => $galleryId) {
             $sortOrder = ($index + 1) * 10;
             $stmt->execute([$sortOrder, $now, $galleryId, $parentGalleryId]);

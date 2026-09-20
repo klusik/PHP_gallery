@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Regression Test
+ * Purpose: Protect identity/authentication layer boundaries.
+ * Responsibilities:
+ *   - Keep durable credential persistence in models and request/session transport in adapters.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/stage6_identity_auth_boundary_test.php

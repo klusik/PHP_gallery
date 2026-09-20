@@ -59,15 +59,21 @@ use function Gallery\Services\set_app_setting;
 use function Gallery\Services\t;
 use function Gallery\Services\admin_log_event;
 use function Gallery\Services\admin_mutation_schema_health_statuses;
+use function Gallery\Services\admin_image_move_pending_health_status;
 use function Gallery\Services\admin_presentation_schema_health_statuses;
 use function Gallery\Services\admin_nsfw_schema_health_status;
 use function Gallery\Services\admin_security_schema_health_statuses;
+use function Gallery\Services\runtime_support_health_status;
 use function Gallery\Views\view_render_admin_diagnostics_page;
 
 /**
- * Handle cms admin diagnostics.
+ * Authenticate and prepare the runtime, shared schema-health, and conversion report.
  *
- * Used by HTTP controller routing for this workflow.
+ * GET observes bounded maintenance state without recovering pending mutations.
+ * POST verifies CSRF before persisting the selected DNG conversion policies.
+ * Raw schema exceptions and journal paths never enter the prepared health cards.
+ *
+ * @return void Render the prepared diagnostics page, or redirect after a policy update.
  */
 function cms_admin_diagnostics(): void
 {
@@ -87,6 +93,7 @@ function cms_admin_diagnostics(): void
         redirect_to(url_for('admin_diagnostics', ['saved' => 1]));
     }
 
+    $runtimeSupport = runtime_support_health_status();
     $imagickLoaded = class_exists('Imagick');
     $imagickFormats = [];
     if ($imagickLoaded) {
@@ -125,6 +132,7 @@ function cms_admin_diagnostics(): void
     $securitySchemaHealth = admin_security_schema_health_statuses();
     // $mutationSchemaHealth stores Phase 10 destructive/ingestion readiness using the same bounded models.
     $mutationSchemaHealth = admin_mutation_schema_health_statuses();
+    $imageMovePending = admin_image_move_pending_health_status($mutationSchemaHealth['mutation_gallery_move'] ?? [], true);
     // $presentationSchemaHealth stores Phase 11 optional presentation/reporting readiness.
     $presentationSchemaHealth = admin_presentation_schema_health_statuses();
     // Preserve the established NSFW variable for compatibility with diagnostics tests and extensions.
@@ -212,7 +220,10 @@ function cms_admin_diagnostics(): void
             static fn (string $check): string => $schemaSuggestedCheckLabels[$check] ?? $check,
             array_map('strval', (array) ($schemaHealth['suggested_checks'] ?? []))
         ));
-        $reportLines[] = ($schemaFeatureLabels[$feature] ?? $feature) . ': ' . (string) ($schemaHealth['state'] ?? 'unknown');
+        $reportLines[] = ($schemaHealth['title'] ?? $schemaFeatureLabels[$feature] ?? $feature) . ': ' . (string) ($schemaHealth['state'] ?? 'unknown');
+        if (isset($schemaHealth['message'])) {
+            $reportLines[] = '  ' . $schemaHealth['message'];
+        }
         $reportLines[] = '  Affected objects: ' . implode(', ', array_map('strval', (array) ($schemaHealth['affected_objects'] ?? [])));
         $reportLines[] = '  Suggested checks: ' . implode(', ', $suggestedChecks);
         if ((string) ($schemaHealth['request_id'] ?? '') !== '') {
@@ -265,10 +276,14 @@ function cms_admin_diagnostics(): void
             $reportLines[] = (string) $label . ': ' . (string) $value;
         }
     }
+    $reportLines = array_merge($reportLines, [''], $runtimeSupport['report_lines']);
+    $reportLines = array_merge($reportLines, [''], $imageMovePending['report_lines']);
     $reportText = implode("\n", $reportLines);
 
     $viewModel = [
         'diagnostics' => $diagnostics,
+        'runtime_support_status' => $runtimeSupport,
+        'image_move_pending_status' => $imageMovePending,
         'dng_policy' => $dngPolicy,
         'security_schema_health' => $securitySchemaHealth,
         'mutation_schema_health' => $mutationSchemaHealth,

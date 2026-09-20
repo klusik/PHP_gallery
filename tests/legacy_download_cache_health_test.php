@@ -2,6 +2,9 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Regression Test
+ * Responsibilities:
+ *   - Check diagnostic state without enabling an unavailable cache path.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/legacy_download_cache_health_test.php

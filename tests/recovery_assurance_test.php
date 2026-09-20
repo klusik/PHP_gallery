@@ -2,6 +2,8 @@
 
 /**
  * Project: PHP Gallery
+ * Responsibilities:
+ *   - Detect corruption and unsafe CLI requests without restored credentials.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/recovery_assurance_test.php

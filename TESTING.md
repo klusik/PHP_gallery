@@ -66,6 +66,28 @@ WinApp tests that exercise optional host integrations must remain isolated from 
 
 `php tests/run.php` is retained only for compatibility and delegates to `scripts/audit.php --suite=php-regression --no-report`. It is not an agent entrypoint. Focused commands elsewhere in this document are reproduction/diagnostic references or manual acceptance steps only; the global agent execution rule above takes precedence over them. Do not pre-run focused tests "just in case", and do not replay them after a successful central audit. Duplicate runs are justified only while investigating a concrete failure or validating a new test before registry integration.
 
+## Gallery integrity and panel integration
+
+Use the central audit for these checks, not a second manual test loop. The
+disposable MySQL workflow wrapper accepts `--quick` during implementation and
+`--audit` for the final full profile. Explicit fixture opt-in and validated
+MySQL/browser executable paths remain mandatory; it must never reuse live
+configuration, galleries or database state.
+
+The registered regression tree now includes displaced-folder catalog
+preservation, owned-worker image-move interruption/recovery, independent-session
+edit revisions, trigger replay, pre-activation enforcement refusal, replay-safe
+operation keys, raster decode admission and bounded destination search.
+Full-profile browser fixtures cover panel load ownership, native keyboard focus,
+in-memory drafts and parent-picker integration. A passing Node seam test is not
+reported as real browser interaction.
+
+The source contract task stores complete value-free inventories under the
+individual audit run directory. Its PASS means discovery succeeded; the console
+still reports remaining documentation/policy findings. Header/declaration/MVC
+contracts remain distinct enforcement checks. Manual mobile, Firefox/WebKit and
+assistive-technology acceptance are not inferred from Chromium results.
+
 ## Canonical Feature Capability Policy
 
 The optional-feature architecture is protected by five focused PHP contracts that are registered in the normal PHP regression suite:
@@ -1502,6 +1524,35 @@ Read-only/privacy assertions require the operations service to contain no regist
 Manual qualification should open **Admin -> Viewer accounts** as an administrator and confirm the new **Viewer security status** panel follows the existing three-state registration selector. Verify status/capacity sections, rolling 24-hour/7-day counts, the seven-day table, fixed limiter-family pressure, and both global-day budget rows. Confirm no identity dimension is shown in those new metrics. Disable or make one backing capability unavailable in a test/staging environment and confirm the affected subsection reports unavailable/unknown rather than zero while the rest of the Admin page remains usable. Repeatedly reload the page and confirm limiter attempts, verification authorities, staged registrations, and Phase 4.3 session challenge authority do not change because of observation.
 
 Phase 4 is considered complete when this focused regression plus the historical Viewer, telemetry, translation, migration, packaging, complete PHP, and Node suites pass.
+
+## Explicit caller contexts and temporary-file ownership
+
+Every profile also runs `source-documentation-changed` and
+`source-policy-changed` against read-only Git HEAD. The first enforces declaration
+contracts; the second checks documented uppercase definitions, recognized
+operational numeric assignments and direct timer literals in runtime PHP/JS.
+Missing history or failed parsing blocks the relevant gate. The policy artifact
+explicitly lists unparsed formats, embedded scripts and map-entry review gaps;
+passing this bounded gate does not mean the complete codebase has no magic values.
+Whole-tree documentation/policy inventory remains an advisory artifact with
+remaining counts, not an accepted-debt baseline.
+
+The central audit discovers `viewer_anti_automation_context_test.php` and its
+isolated support fixture. They execute actual registration/resend controllers and
+ticket services with controlled identity, limiter, signing and mail seams:
+cross-owner refusal, one-use consumption, exclusive expiry, retention, no-op
+storage, challenge replacement and exception-safe publication. This does not
+establish real HTTP session-handler concurrency or mail delivery.
+
+`mobile_webdav_body_test.php` covers the actual controller/service staging path
+with disposable files, stream faults and fake persistence. Late missing/unknown
+schema retains staged bytes; ordinary failures clean up only the owned file.
+`gallery_migration_temporary_files_test.php` checks request-owned transfer release
+and ZIP contents, requiring ZIP support. Neither test uses live gallery storage.
+
+`gallery_report_policy_test.php` exercises integer query bounds and stable output
+ranking; the registered Node counterpart checks server-owned batch defaults and
+browser retries. Run these through the central audit, not a separate test loop.
 
 ## Browser upload oversized-single-image batching
 

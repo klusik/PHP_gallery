@@ -76,10 +76,16 @@ audit_test_assert(!in_array('browser-map', $profiles['quick'], true), 'Quick pro
 audit_test_assert(in_array('browser-map', $profiles['release'], true), 'Release profile must include browser integration coverage.');
 audit_test_assert(in_array('release-consistency', $profiles['release'], true), 'Release profile must verify release metadata and documentation consistency.');
 audit_test_assert(in_array('manifest', $profiles['release'], true), 'Release profile must verify the core manifest.');
+foreach (['quick', 'full', 'release'] as $profile) {
+    audit_test_assert(in_array('source-contract-inventory', $profiles[$profile], true), 'Every central profile must expose source documentation and policy debt.');
+    audit_test_assert(in_array('source-documentation-changed', $profiles[$profile], true), 'Every central profile must enforce added and materially changed declaration documentation.');
+    audit_test_assert(in_array('source-policy-changed', $profiles[$profile], true), 'Every central profile must enforce recognized new or materially changed runtime policy sites.');
+}
 
 audit_test_assert(!empty($registry['node_tests']['gallery_download_zip64_test.mjs']['slow']), 'ZIP64 boundary coverage must stay classified as slow.');
 audit_test_assert(!empty($registry['node_tests']['lightbox_map_browser_test.mjs']['browser']), 'The real Chromium lightbox test must stay classified as browser integration.');
 audit_test_assert(!empty($registry['node_tests']['admin_gallery_title_completion_browser_test.mjs']['browser']), 'Title completion must retain actual DOM-event browser coverage.');
+audit_test_assert(!empty($registry['node_tests']['gallery_picker_parent_integration_browser_test.mjs']['php_argument']), 'PHP-rendered picker browser fixture must receive the current PHP binary even outside PATH.');
 audit_test_assert(($registry['node_tests']['gallery_download_zip_test.mjs']['temporary_output'] ?? '') !== '', 'ZIP writer regression must receive a temporary output path.');
 audit_test_assert(($registry['php_test_requirements']['gallery_workflow_integration_test.php']['timeout'] ?? 0) >= 120, 'The opt-in migrated HTTP workflow needs a bounded setup-aware timeout.');
 

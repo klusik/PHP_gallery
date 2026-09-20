@@ -1,5 +1,7 @@
 /**
  * Project: PHP Gallery
+ * Responsibilities:
+ *   - Normalize translated search terms and reveal matching settings destinations.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: public/assets/gallery-modules/admin-settings-search.js
@@ -12,12 +14,25 @@
  *   Rudolf Klusal
 */
 
+import {
+    ADMIN_SETTINGS_SEARCH_RESULT_LIMIT,
+    ADMIN_SETTINGS_SEARCH_PREFIX_SCORE,
+    ADMIN_SETTINGS_SEARCH_WORD_SCORE,
+    ADMIN_SETTINGS_SEARCH_SUBSTRING_SCORE,
+    ADMIN_SETTINGS_SEARCH_KEYWORD_SCORE,
+    ADMIN_SETTINGS_SEARCH_HIGHLIGHT_MS,
+} from './admin-interaction-policy.js?v=20260920-admin-interaction-policy-v1';
+
 /** Normalize searchable text while keeping matching friendly across translated accents. */
 function normalizeSettingsSearchText(value) {
     return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase().trim();
 }
 
-/** Attach one Settings search instance. */
+/**
+ * Attach one Settings search instance and its local ranking/activation handlers.
+ * @param {HTMLElement} root Server-rendered Settings search owner.
+ * @return {void} Marks a valid unbound control and installs its listeners once.
+ */
 function setupAdminSettingsSearchRoot(root) {
     if (!(root instanceof HTMLElement) || root.dataset.adminSettingsSearchBound === '1') {
         return;
@@ -57,16 +72,28 @@ function setupAdminSettingsSearchRoot(root) {
         input.setAttribute('aria-activedescendant', visibleItems[activeIndex].id);
         visibleItems[activeIndex].scrollIntoView({block: 'nearest'});
     };
-    /** Score one registry item against normalized search tokens. */
+    /**
+     * Score one registry item against normalized search tokens.
+     * @param {HTMLElement} item Server-rendered Settings registry result.
+     * @param {string[]} tokens Nonempty normalized query tokens.
+     * @return {number} Additive relevance score, or -1 when any token is absent.
+     */
     const scoreItem = (item, tokens) => {
         const text = normalizeSettingsSearchText(item.dataset.searchText);
         const label = normalizeSettingsSearchText(item.dataset.searchLabel);
         if (!tokens.every((token) => text.includes(token))) {
             return -1;
         }
-        return tokens.reduce((score, token) => score + (label.startsWith(token) ? 100 : label.includes(` ${token}`) ? 70 : label.includes(token) ? 50 : 10), 0);
+        return tokens.reduce(
+            /** Accumulate label relevance without changing token order or match classes. @param {number} score Running relevance. @param {string} token Normalized query word. @return {number} Updated additive score. */
+            (score, token) => score + (label.startsWith(token) ? ADMIN_SETTINGS_SEARCH_PREFIX_SCORE
+            : label.includes(` ${token}`) ? ADMIN_SETTINGS_SEARCH_WORD_SCORE
+            : label.includes(token) ? ADMIN_SETTINGS_SEARCH_SUBSTRING_SCORE : ADMIN_SETTINGS_SEARCH_KEYWORD_SCORE), 0);
     };
-    /** Recompute and render results for the current query. */
+    /**
+     * Recompute and render results for the current query.
+     * @return {void} Replaces the bounded visible result set and its accessible active row.
+     */
     const update = () => {
         const query = normalizeSettingsSearchText(input.value);
         const tokens = query.split(/\s+/).filter(Boolean);
@@ -81,7 +108,7 @@ function setupAdminSettingsSearchRoot(root) {
         visibleItems = items.map((item) => ({item, score: scoreItem(item, tokens)}))
             .filter((match) => match.score >= 0)
             .sort((left, right) => right.score - left.score || String(left.item.dataset.searchLabel).localeCompare(String(right.item.dataset.searchLabel)))
-            .slice(0, 12)
+            .slice(0, ADMIN_SETTINGS_SEARCH_RESULT_LIMIT)
             .map((match) => match.item);
         visibleItems.forEach((item) => { item.hidden = false; });
         status.textContent = visibleItems.length
@@ -91,7 +118,11 @@ function setupAdminSettingsSearchRoot(root) {
         input.setAttribute('aria-expanded', 'true');
         setActive(visibleItems.length ? 0 : -1);
     };
-    /** Open and highlight the settings control represented by a result link. */
+    /**
+     * Open and highlight the settings control represented by a result link.
+     * @param {HTMLAnchorElement} item Selected Settings registry result.
+     * @return {void} Activates the local tab, or follows the existing link when its target is absent.
+     */
     const activate = (item) => {
         if (!(item instanceof HTMLAnchorElement)) {
             return;
@@ -102,7 +133,9 @@ function setupAdminSettingsSearchRoot(root) {
             tab.click();
         }
         closeResults();
-        window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(
+            /** Focus and briefly highlight the destination after its Settings tab opens. @return {void} Falls back to the existing link only when no local target exists. */
+            () => {
             const target = document.getElementById(item.dataset.searchTarget || '');
             if (!(target instanceof HTMLElement)) {
                 window.location.href = item.href;
@@ -111,7 +144,7 @@ function setupAdminSettingsSearchRoot(root) {
             target.scrollIntoView({behavior: 'smooth', block: 'center'});
             target.focus({preventScroll: true});
             target.classList.add('is-search-highlighted');
-            window.setTimeout(() => target.classList.remove('is-search-highlighted'), 1800);
+            window.setTimeout(() => target.classList.remove('is-search-highlighted'), ADMIN_SETTINGS_SEARCH_HIGHLIGHT_MS);
         });
     };
 

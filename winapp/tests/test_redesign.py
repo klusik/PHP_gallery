@@ -1,4 +1,8 @@
 # Project: PHP Gallery
+# Module Type: Windows Tooling
+# Purpose: Verify deterministic Windows uploader redesign behavior.
+# Responsibilities:
+#   - Exercise import, state and interface helpers without a live gallery server.
 # Repository: https://github.com/klusik/PHP_gallery
 #
 # File: winapp/tests/test_redesign.py

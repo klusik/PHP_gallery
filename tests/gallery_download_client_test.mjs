@@ -1,5 +1,9 @@
 /**
  * Project: PHP Gallery
+ * Module Type: Regression Test
+ * Purpose: Verify the progressive gallery download browser client.
+ * Responsibilities:
+ *   - Exercise manifest handling, progress and download lifecycle behavior.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/gallery_download_client_test.mjs

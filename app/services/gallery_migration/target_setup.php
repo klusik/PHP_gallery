@@ -62,11 +62,33 @@ use function Gallery\Models\gallery_model_update_fields;
  * idempotent when the same migration job is resumed.
  *
  * @param int $targetGalleryId Receiving parent gallery id.
- * @param array $manifest Manifest value.
- * @param string $mode Mode value.
- * @return array Structured result data for the caller.
+ * @param array<string,mixed> $manifest Transfer manifest with protocol/app versions, source_gallery_id, gallery/image metadata and asset references; validated before target creation.
+ * @param string $mode Requested migration transport mode recorded in the resumable job.
+ * @return array<string,mixed> Prepared job_id, target/imported-root identities, manifest/packages/assets, compatibility, counts and synchronized status.
  */
 function gallery_migration_prepare_target_job(int $targetGalleryId, array $manifest, string $mode): array
+{
+    $writerLock = gallery_edit_writer_begin();
+    try {
+        return gallery_migration_prepare_target_job_owned($targetGalleryId, $manifest, $mode);
+    } finally {
+        gallery_edit_writer_end($writerLock);
+    }
+}
+
+/**
+ * Prepare a resumable migration and its target gallery tree.
+ *
+ * Internal implementation: enter through gallery_migration_prepare_target_job() so
+ * reads, early returns and failure cleanup remain inside the same writer lease.
+ *
+ * @param int $targetGalleryId Receiving parent gallery identifier.
+ * @param array<string,mixed> $manifest Transfer manifest; this boundary validates its protocol, source hierarchy and metadata before target writes.
+ * @param string $mode Requested migration transport mode.
+ * @return array<string,mixed> Prepared job_id, target/imported-root identities, manifest/packages/assets, compatibility, counts and synchronized status.
+ * @author Rudolf Klusal
+ */
+function gallery_migration_prepare_target_job_owned(int $targetGalleryId, array $manifest, string $mode): array
 {
     mutation_schema_assert_available(
         gallery_migration_schema_status(),
@@ -117,6 +139,12 @@ function gallery_migration_prepare_target_job(int $targetGalleryId, array $manif
     $counts = (array) ($manifest['counts'] ?? []);
     $counts['galleries'] = (int) ($counts['galleries'] ?? count(gallery_migration_manifest_galleries($manifest)));
     $counts['images'] = (int) ($counts['images'] ?? array_sum(array_map(
+        /**
+         * Count manifest images per source gallery for the preparation summary.
+         * @param array{images?:list<array<string,mixed>>} $entry Validated source gallery manifest entry.
+         * @return int Number of images represented by this gallery entry.
+         * @author Rudolf Klusal
+         */
         static fn (array $entry): int => count((array) ($entry['images'] ?? [])),
         gallery_migration_manifest_galleries($manifest)
     )));

@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Regression Test
+ * Purpose: Protect SEO lightbox target resolution.
+ * Responsibilities:
+ *   - Reject invalid target navigation without bypassing gallery access checks.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/seo_lightbox_target_guard_test.php

@@ -1,5 +1,9 @@
 /**
  * Project: PHP Gallery
+ * Module Type: Regression Test
+ * Purpose: Exercise stored and Deflate ZIP extraction in the browser worker.
+ * Responsibilities:
+ *   - Verify extracted bytes and failure handling for synthetic archive inputs.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/browser_upload_zip_worker_test.mjs

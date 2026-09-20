@@ -31,6 +31,31 @@
  */
 
 import { i18n } from './admin-core.js?v=20260512-modular-admin-v2';
+import {
+    ADMIN_GALLERY_REPORT_DEFAULT_TELEMETRY_DAYS,
+    ADMIN_GALLERY_REPORT_MIN_TELEMETRY_DAYS,
+    ADMIN_GALLERY_REPORT_MAX_TELEMETRY_DAYS,
+    ADMIN_GALLERY_REPORT_REQUEST_ATTEMPT_LIMIT,
+    ADMIN_GALLERY_REPORT_RETRY_BASE_DELAY_MS,
+    ADMIN_GALLERY_REPORT_RETRY_BACKOFF_FACTOR,
+    ADMIN_GALLERY_REPORT_RETRYABLE_HTTP_STATUSES,
+} from './admin-interaction-policy.js?v=20260920-admin-interaction-policy-report-v2';
+
+/**
+ * Expected report response fields consumed by progress and download rendering.
+ * JSON decoding does not validate this shape; the job runner checks completion before creating a download.
+ * @typedef {Object} AdminGalleryReportPayload
+ * @property {boolean} [ok] Explicit false marks a failed report action.
+ * @property {'running'|'complete'|'error'|'missing'} [status] Server-owned report job state.
+ * @property {number} [processed] Image database rows processed so far.
+ * @property {number} [total] Total image database rows in the report job.
+ * @property {number} [percent] Completion percentage; absent or zero uses the existing count-derived fallback.
+ * @property {string} [message] Human-readable progress or error description.
+ * @property {string} [error] Error description preferred over message on failure.
+ * @property {string} [report_html] Complete downloadable HTML, required for successful completion.
+ * @property {string} [filename] Suggested download name; absent values use the existing fallback.
+ * @property {number} [report_bytes] Server byte count; a nonpositive value uses the generated Blob size.
+ */
 
 const reportObjectUrls = new WeakMap();
 
@@ -105,28 +130,33 @@ async function runAdminGalleryReport(panel, button) {
  * Read the selected telemetry window.
  *
  * @param {HTMLElement} panel Report control panel.
- * @return {number} Number of days to request.
+ * @return {number} Finite days clamped to browser policy; existing fractional values are not rounded.
  */
 function readTelemetryDays(panel) {
     const input = panel.querySelector('[data-admin-gallery-report-telemetry-days]');
-    const value = input instanceof HTMLSelectElement ? Number(input.value || 30) : 30;
-    return Math.max(1, Math.min(3650, Number.isFinite(value) ? value : 30));
+    const value = input instanceof HTMLSelectElement
+        ? Number(input.value || ADMIN_GALLERY_REPORT_DEFAULT_TELEMETRY_DAYS)
+        : ADMIN_GALLERY_REPORT_DEFAULT_TELEMETRY_DAYS;
+    return Math.max(ADMIN_GALLERY_REPORT_MIN_TELEMETRY_DAYS, Math.min(
+        ADMIN_GALLERY_REPORT_MAX_TELEMETRY_DAYS,
+        Number.isFinite(value) ? value : ADMIN_GALLERY_REPORT_DEFAULT_TELEMETRY_DAYS
+    ));
 }
 
 /**
  * POST one report generation action to the server.
+ * Omit batch_size so the server's Core default controls work per step.
  *
  * @param {string} endpoint Ajax endpoint URL.
  * @param {string} csrfToken CSRF token emitted by the server.
- * @param {string} action Action name.
+ * @param {'start'|'step'} action Report action name.
  * @param {number} telemetryDays Telemetry window in days.
- * @return {Promise<Object<string, *> | null>} Parsed JSON payload.
+ * @return {Promise<AdminGalleryReportPayload|null>} Expected JSON payload or completed HTML adapter; rejects HTTP and JSON decoding failures.
  */
 async function postGalleryReportAction(endpoint, csrfToken, action, telemetryDays) {
     const body = new FormData();
     body.set('csrf_token', csrfToken);
     body.set('action', action);
-    body.set('batch_size', '250');
     body.set('telemetry_days', String(telemetryDays));
 
     const response = await fetchGalleryReportWithRetry(endpoint, body);
@@ -156,15 +186,25 @@ async function postGalleryReportAction(endpoint, csrfToken, action, telemetryDay
  *
  * @param {string} endpoint Ajax endpoint URL.
  * @param {FormData} body Request body.
- * @return {Promise<Response>} Completed response.
+ * @return {Promise<Response>} Successful, non-retryable or final HTTP response; final transport errors reject unchanged.
  */
 async function fetchGalleryReportWithRetry(endpoint, body) {
-    const retryableStatuses = new Set([408, 429, 500, 502, 503, 504]);
+    const retryableStatuses = new Set(ADMIN_GALLERY_REPORT_RETRYABLE_HTTP_STATUSES);
     let lastError = null;
 
-    for (let attempt = 0; attempt < 4; attempt += 1) {
+    for (let attempt = 0; attempt < ADMIN_GALLERY_REPORT_REQUEST_ATTEMPT_LIMIT; attempt += 1) {
         if (attempt > 0) {
-            await new Promise((resolve) => window.setTimeout(resolve, 750 * (2 ** (attempt - 1))));
+            await new Promise(
+                /**
+                 * Resume this action after its bounded retry delay without scheduling another request directly.
+                 * @param {function():void} resolve Continue the awaiting retry loop.
+                 * @return {void} Schedules one backoff timer; the initial attempt bypasses this callback.
+                 */
+                (resolve) => {
+                    window.setTimeout(resolve, ADMIN_GALLERY_REPORT_RETRY_BASE_DELAY_MS
+                        * (ADMIN_GALLERY_REPORT_RETRY_BACKOFF_FACTOR ** (attempt - 1)));
+                }
+            );
         }
         try {
             const response = await fetch(endpoint, {
@@ -172,13 +212,14 @@ async function fetchGalleryReportWithRetry(endpoint, body) {
                 body,
                 headers: {'Accept': 'application/json'},
             });
-            if (response.ok || !retryableStatuses.has(response.status) || attempt === 3) {
+            if (response.ok || !retryableStatuses.has(response.status)
+                || attempt === ADMIN_GALLERY_REPORT_REQUEST_ATTEMPT_LIMIT - 1) {
                 return response;
             }
             lastError = new Error(`HTTP ${response.status}`);
         } catch (error) {
             lastError = error;
-            if (attempt === 3) {
+            if (attempt === ADMIN_GALLERY_REPORT_REQUEST_ATTEMPT_LIMIT - 1) {
                 throw error;
             }
         }
@@ -191,7 +232,7 @@ async function fetchGalleryReportWithRetry(endpoint, body) {
  * Update progress controls from an Ajax payload.
  *
  * @param {HTMLElement} panel Report control panel.
- * @param {Object<string, *> | null} payload Parsed JSON payload.
+ * @param {AdminGalleryReportPayload|null} payload Expected server progress or completed-report fields.
  * @param {string} fallbackLabel Fallback label.
  */
 function setGalleryReportProgressFromPayload(panel, payload, fallbackLabel) {

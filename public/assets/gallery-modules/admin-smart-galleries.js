@@ -1,5 +1,9 @@
 /**
  * Project: PHP Gallery
+ * Module Type: Browser Module
+ * Purpose: Edit nested Smart Gallery rule documents through server-provided choices.
+ * Responsibilities:
+ *   - Synchronize the visual rule tree with the canonical hidden JSON form field.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: public/assets/gallery-modules/admin-smart-galleries.js

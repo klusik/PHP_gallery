@@ -36,6 +36,8 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+require_once __DIR__ . '/gallery_edit_concurrency.php';
+
 use DirectoryIterator;
 use Throwable;
 use function Gallery\Core\is_dng_image_path;
@@ -621,8 +623,28 @@ function scan_gallery_refresh_after_changes(array $gallery, int $count, array $o
  */
 function scan_gallery_images(int $galleryId): int
 {
+    $writerLock = gallery_edit_writer_begin();
+    try {
+        return scan_gallery_images_owned($galleryId);
+    } finally {
+        gallery_edit_writer_end($writerLock);
+    }
+}
+
+/**
+ * Scan a gallery and refresh its derived metadata.
+ *
+ * Internal implementation: enter through scan_gallery_images() so
+ * reads, early returns and failure cleanup remain inside the same writer lease.
+ *
+ * @param int $galleryId Gallery identifier.
+ * @return int Number of changed image rows.
+ * @author Rudolf Klusal
+ */
+function scan_gallery_images_owned(int $galleryId): int
+{
     // Variable $gallery stores this steps working value.
-    $gallery = find_gallery($galleryId);
+    $gallery = find_gallery($galleryId, true);
     if (!$gallery) {
         return 0;
     }
@@ -659,12 +681,33 @@ function scan_gallery_images(int $galleryId): int
  * dimensions, and SHA-256 hashes for the whole gallery after every batch.
  *
  * @param int $galleryId Gallery identifier.
- * @param array $relativePaths Gallery-relative source image paths.
+ * @param list<string> $relativePaths Gallery-relative originals explicitly selected for scanning.
  * @return int Number of changed image rows.
  */
 function scan_gallery_selected_images(int $galleryId, array $relativePaths): int
 {
-    $gallery = find_gallery($galleryId);
+    $writerLock = gallery_edit_writer_begin();
+    try {
+        return scan_gallery_selected_images_owned($galleryId, $relativePaths);
+    } finally {
+        gallery_edit_writer_end($writerLock);
+    }
+}
+
+/**
+ * Scan selected originals and refresh their gallery metadata.
+ *
+ * Internal implementation: enter through scan_gallery_selected_images() so
+ * reads, early returns and failure cleanup remain inside the same writer lease.
+ *
+ * @param int $galleryId Gallery identifier.
+ * @param list<string> $relativePaths Selected gallery-relative original paths; an empty selection scans nothing.
+ * @return int Number of changed image rows.
+ * @author Rudolf Klusal
+ */
+function scan_gallery_selected_images_owned(int $galleryId, array $relativePaths): int
+{
+    $gallery = find_gallery($galleryId, true);
     if (!$gallery) {
         return 0;
     }
@@ -711,13 +754,35 @@ function scan_gallery_selected_images(int $galleryId, array $relativePaths): int
  * so slow shared hosting does not spend upload time on maintenance-grade scans.
  *
  * @param int $galleryId Gallery identifier.
- * @param array $relativePaths Gallery-relative source image paths.
- * @param array $metadataByRelativePath Optional source metadata keyed by relative path.
+ * @param list<string> $relativePaths Gallery-relative originals explicitly selected for upload registration.
+ * @param array<string,array<string,mixed>> $metadataByRelativePath Prepared dimensions and source metadata keyed by selected relative path.
  * @return int Number of changed image rows.
  */
 function scan_gallery_selected_uploaded_images(int $galleryId, array $relativePaths, array $metadataByRelativePath = []): int
 {
-    $gallery = find_gallery($galleryId);
+    $writerLock = gallery_edit_writer_begin();
+    try {
+        return scan_gallery_selected_uploaded_images_owned($galleryId, $relativePaths, $metadataByRelativePath);
+    } finally {
+        gallery_edit_writer_end($writerLock);
+    }
+}
+
+/**
+ * Register uploaded originals and refresh their gallery metadata.
+ *
+ * Internal implementation: enter through scan_gallery_selected_uploaded_images() so
+ * reads, early returns and failure cleanup remain inside the same writer lease.
+ *
+ * @param int $galleryId Gallery identifier.
+ * @param list<string> $relativePaths Selected gallery-relative original paths; an empty selection scans nothing.
+ * @param array<string,array<string,mixed>> $metadataByRelativePath Prepared dimensions and source metadata keyed by selected relative path.
+ * @return int Number of changed image rows.
+ * @author Rudolf Klusal
+ */
+function scan_gallery_selected_uploaded_images_owned(int $galleryId, array $relativePaths, array $metadataByRelativePath = []): int
+{
+    $gallery = find_gallery($galleryId, true);
     if (!$gallery) {
         return 0;
     }

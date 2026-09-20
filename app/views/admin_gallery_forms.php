@@ -36,7 +36,6 @@ declare(strict_types=1);
 
 namespace Gallery\Views;
 
-use function Gallery\Controllers\gallery_parent_options_for_new;
 use function Gallery\Controllers\visibility_options;
 use function Gallery\Core\csrf_field;
 use function Gallery\Core\csrf_token;
@@ -261,16 +260,19 @@ function view_render_admin_new_gallery_title_input(array $formModel = []): void
 }
 
 /**
- * Handle view render admin new gallery fields.
+ * Render shared creation fields using the controller's parent picker and operation key.
  *
  * Used by server-rendered view helpers.
  *
  * @param int $prefillParentId Prefill parent id identifier.
  * @param bool $panelMode Panel mode value.
  * @param string $workflow Workflow value.
+ * @param array{operation_key?:string,parent_picker_html?:string,count_badge?:array{schema_ready?:bool,options?:list<array{value:string,label:string}>},...} $formModel Prepared replay identity, picker markup and optional editor presentation models passed to field renderers.
+ * @return void Emit creation fields without looking up galleries or generating operation keys.
  */
 function view_render_admin_new_gallery_fields(int $prefillParentId, bool $panelMode, string $workflow = 'create', array $formModel = []): void
 {
+    echo '<input type="hidden" name="operation_key" value="' . e((string) ($formModel['operation_key'] ?? '')) . '" data-admin-operation-key>';
     if ($panelMode) {
         echo '<input type="hidden" name="panel" value="1">';
         $isUploadWorkflow = $workflow === 'upload';
@@ -283,7 +285,7 @@ function view_render_admin_new_gallery_fields(int $prefillParentId, bool $panelM
         echo '<label class="admin-side-panel-field"><span>' . e(t('admin.gallery_editor.folder_name', 'Folder name')) . '</span><input name="folder_name" autocomplete="off"><small>' . e(t('admin.gallery_editor.derive_from_gallery_name', 'Leave empty to derive it from the gallery name.')) . '</small></label>';
         echo '<label class="admin-side-panel-field"><span>' . e(t('admin.gallery_editor.metric_visibility')) . '</span><select name="visibility">' . visibility_options('unpublished') . '</select></label>';
         view_render_admin_gallery_date_range_fields([], true, $formModel);
-        echo '<label class="admin-side-panel-field admin-side-panel-field-wide"><span>' . e(t('admin.gallery_editor.parent_gallery', 'Parent gallery')) . '</span><select name="parent_id"><option value="0"' . ($prefillParentId === 0 ? ' selected' : '') . '>' . e(t('admin.gallery_editor.no_parent', 'No parent')) . '</option>' . gallery_parent_options_for_new($prefillParentId) . '</select></label>';
+        echo (string) ($formModel['parent_picker_html'] ?? '');
         echo '<label class="admin-side-panel-field admin-side-panel-field-wide"><span>' . e(t('admin.gallery_editor.description', 'Description')) . '</span><textarea name="description" rows="4"></textarea></label>';
         view_render_gallery_description_formatting_hint();
         echo '</div><div class="admin-side-panel-toggle-row">';
@@ -305,7 +307,7 @@ function view_render_admin_new_gallery_fields(int $prefillParentId, bool $panelM
     view_render_admin_new_gallery_title_input($formModel);
     echo '</label>';
     echo '<label>' . e(t('admin.gallery_editor.folder_name', 'Folder name')) . '<input name="folder_name" autocomplete="off"><span class="muted">' . e(t('admin.gallery_editor.derive_from_gallery_name', 'Leave empty to derive it from the gallery name.')) . '</span></label>';
-    echo '<label>' . e(t('admin.gallery_editor.parent_gallery', 'Parent gallery')) . '<select name="parent_id"><option value="0"' . ($prefillParentId === 0 ? ' selected' : '') . '>' . e(t('admin.gallery_editor.no_parent', 'No parent')) . '</option>' . gallery_parent_options_for_new($prefillParentId) . '</select></label>';
+    echo (string) ($formModel['parent_picker_html'] ?? '');
     echo '<label>' . e(t('admin.gallery_editor.visibility', 'Visibility')) . '<select name="visibility">' . visibility_options('unpublished') . '</select></label>';
     view_render_admin_gallery_date_range_fields([], false, $formModel);
     echo '<label><input type="checkbox" name="voting_enabled" value="1"> ' . e(t('admin.gallery_editor.enable_image_voting', 'Enable image voting for this gallery')) . '</label>';

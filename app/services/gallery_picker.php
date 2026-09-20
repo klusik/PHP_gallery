@@ -40,6 +40,20 @@ namespace Gallery\Services;
 use function Gallery\Models\gallery_model_likely_destination_id;
 use function Gallery\Models\gallery_model_picker_rows;
 use function Gallery\Models\gallery_model_title_completion_rows;
+use function Gallery\Models\gallery_picker_model_search;
+use function Gallery\Models\gallery_picker_model_selection;
+use const Gallery\Core\GALLERY_PICKER_SEARCH_PAGE_SIZE;
+use const Gallery\Core\GALLERY_PICKER_QUERY_MAX_BYTES;
+use const Gallery\Core\GALLERY_PICKER_TITLE_MAX_BYTES;
+use const Gallery\Core\GALLERY_PICKER_PATH_MAX_BYTES;
+use const Gallery\Core\GALLERY_PICKER_TITLE_MAX_CHARACTERS;
+use const Gallery\Core\GALLERY_PICKER_PATH_MAX_CHARACTERS;
+use const Gallery\Core\GALLERY_TITLE_COMPLETION_MAX_CANDIDATES;
+use const Gallery\Core\GALLERY_TITLE_COMPLETION_SCAN_BUDGET;
+use const Gallery\Core\GALLERY_TITLE_COMPLETION_SIBLING_BUDGET;
+use const Gallery\Core\GALLERY_TITLE_COMPLETION_PAGE_SIZE;
+
+require_once dirname(__DIR__) . '/policy_constants.php';
 
 /**
  * Return gallery rows formatted for the shared searchable gallery picker.
@@ -50,43 +64,132 @@ use function Gallery\Models\gallery_model_title_completion_rows;
  *
  * @param int $selectedGalleryId Gallery that may be marked as committed initially.
  * @param int $excludedGalleryId Gallery that must not be selectable as a destination.
- * @return array<int array<string, mixed>> Searchable gallery option rows.
+ * @return array<int,array<string,mixed>> At most thirty options with selection pinned.
  */
 function gallery_search_picker_rows(int $selectedGalleryId = 0, int $excludedGalleryId = 0): array
 {
-    // $rows stores normalized gallery choices for text-search widgets.
-    $rows = [];
-    // $galleries stores the canonical gallery list ordered by hierarchy path.
-    $galleries = gallery_model_picker_rows();
-    foreach ($galleries as $gallery) {
-        // $galleryId stores the numeric destination ID used by backend forms.
-        $galleryId = (int) ($gallery['id'] ?? 0);
-        if ($galleryId <= 0 || ($excludedGalleryId > 0 && $galleryId === $excludedGalleryId)) {
-            continue;
-        }
-        // $folderPath stores the normalized public path used for hierarchy and search.
-        $folderPath = trim((string) ($gallery['folder_path'] ?? ''), '/');
-        // $depth stores the nesting depth used by both the old select and new picker.
-        $depth = $folderPath === '' ? 0 : max(0, substr_count($folderPath, '/'));
-        // $title stores the human gallery title shown before the path hint.
-        $title = (string) ($gallery['title'] ?? '');
-        // $pathSuffix stores a short filesystem-style hint for duplicate titles.
-        $pathSuffix = $folderPath !== '' ? ' /' . $folderPath : '';
-        // $label stores the committed input text and visible option title.
-        $label = $title . $pathSuffix;
-        // $searchText stores all searchable terms in one lowercase-friendly string.
-        $searchText = trim($title . ' ' . $folderPath . ' ' . str_replace(['/', '-', '_'], ' ', $folderPath));
-        $rows[] = [
-            'id' => $galleryId,
-            'title' => $title,
-            'path' => $folderPath,
-            'depth' => $depth,
-            'label' => $label,
-            'search' => $searchText,
-            'selected' => $galleryId === $selectedGalleryId,
-        ];
+    $page = gallery_picker_search_page('', 0, $selectedGalleryId, $excludedGalleryId);
+    $rows = $page['rows'];
+    if ($page['selected'] !== null && !in_array($selectedGalleryId, array_column($rows, 'id'), true)) {
+        // Compatibility callers receive a bounded page with the selection pinned.
+        array_pop($rows);
+        array_unshift($rows, $page['selected']);
     }
     return $rows;
+}
+
+/**
+ * Normalize one compact gallery into the destination presentation contract.
+ *
+ * @param array<string,mixed> $gallery Compact model row.
+ * @param int $selectedGalleryId Explicitly committed gallery identifier.
+ * @return array<string,mixed> Safe bounded label with full relative ancestry.
+ */
+function gallery_picker_option(array $gallery, int $selectedGalleryId = 0): array
+{
+    $id = (int) ($gallery['id'] ?? 0);
+    $title = (string) ($gallery['title'] ?? '');
+    $path = trim((string) ($gallery['folder_path'] ?? ''), '/');
+    if ($id <= 0 || strlen($title) > GALLERY_PICKER_TITLE_MAX_BYTES
+        || strlen($path) > GALLERY_PICKER_PATH_MAX_BYTES
+        || preg_match('//u', $title . $path) !== 1
+        || preg_match_all('/./us', $title) > GALLERY_PICKER_TITLE_MAX_CHARACTERS
+        || preg_match_all('/./us', $path) > GALLERY_PICKER_PATH_MAX_CHARACTERS) {
+        throw new \UnexpectedValueException('Invalid destination data.');
+    }
+    return [
+        'id' => $id,
+        'title' => $title,
+        'path' => $path,
+        'depth' => substr_count($path, '/'),
+        'label' => $title . ($path !== '' ? ' /' . $path : '') . ' (#' . $id . ')',
+        'selected' => $id === $selectedGalleryId,
+    ];
+}
+
+/**
+ * Resolve an optional photo-destination hint without committing a form value.
+ *
+ * Parent-move controls deliberately disable hints; their branch policy and
+ * committed selection remain owned by gallery_picker_search_page().
+ *
+ * @param int $galleryId Suggested child gallery identifier.
+ * @param int $excludedGalleryId Source gallery that cannot receive its own photos.
+ * @return ?array<string,mixed> One bounded label, or null for an invalid hint.
+ */
+function gallery_picker_destination_hint(int $galleryId, int $excludedGalleryId = 0): ?array
+{
+    if ($galleryId <= 0 || $galleryId === $excludedGalleryId) {
+        return null;
+    }
+    $gallery = gallery_picker_model_selection($galleryId);
+    return $gallery === null ? null : gallery_picker_option($gallery);
+}
+
+/**
+ * Return an empty response with the same shape on every endpoint status.
+ *
+ * @param bool $ok Whether the destination search succeeded.
+ * @return array<string,mixed> Empty bounded search envelope.
+ */
+function gallery_picker_empty_page(bool $ok = false): array
+{
+    return ['ok' => $ok, 'rows' => [], 'selected' => null, 'next_after_id' => null,
+        'more' => false, 'page_size' => GALLERY_PICKER_SEARCH_PAGE_SIZE];
+}
+
+/**
+ * Search physical destinations with independent committed-selection context.
+ *
+ * This is discovery only: existing move/create services still validate arbitrary
+ * submitted IDs, physical self/descendant relationships and Smart Gallery cycles
+ * immediately before mutation. No graph is loaded for each search candidate.
+ *
+ * @param string $query Literal title/path substring, blank to browse by ID.
+ * @param int $afterId Exclusive keyset cursor, zero for the first page.
+ * @param int $selectedGalleryId Existing committed selection, zero for none/root.
+ * @param int $excludedGalleryId Source gallery omitted from results and selection.
+ * @param bool $excludeDescendants Omit its physical branch for parent moves only.
+ * @return array<string,mixed> At most thirty results and one selected context row.
+ */
+function gallery_picker_search_page(string $query = '', int $afterId = 0, int $selectedGalleryId = 0, int $excludedGalleryId = 0, bool $excludeDescendants = false): array
+{
+    if (strlen($query) > GALLERY_PICKER_QUERY_MAX_BYTES || preg_match('//u', $query) !== 1
+        || preg_match_all('/./us', $query) > GALLERY_PICKER_TITLE_MAX_CHARACTERS
+        || min($afterId, $selectedGalleryId, $excludedGalleryId) < 0) {
+        throw new \InvalidArgumentException('Invalid destination search.');
+    }
+    $excludedPath = null;
+    if ($excludeDescendants && $excludedGalleryId > 0) {
+        $source = gallery_picker_model_selection($excludedGalleryId);
+        if ($source === null) {
+            throw new \InvalidArgumentException('Invalid source gallery.');
+        }
+        $excludedPath = gallery_picker_option($source)['path'];
+        if ($excludedPath === '') {
+            throw new \InvalidArgumentException('Invalid source gallery.');
+        }
+    }
+    $result = gallery_picker_empty_page(true);
+    if ($selectedGalleryId > 0 && $selectedGalleryId !== $excludedGalleryId) {
+        $selection = gallery_picker_model_selection($selectedGalleryId);
+        if ($selection !== null) {
+            $option = gallery_picker_option($selection, $selectedGalleryId);
+            if ($excludedPath === null || ($option['path'] !== $excludedPath
+                && !str_starts_with($option['path'] . '/', $excludedPath . '/'))) {
+                $result['selected'] = $option;
+            }
+        }
+    }
+    foreach (gallery_picker_model_search(trim($query), $afterId, $excludedGalleryId, $excludedPath) as $gallery) {
+        $result['rows'][] = gallery_picker_option($gallery, $selectedGalleryId);
+    }
+    // A full page permits continuation; the final continuation can be empty.
+    $result['more'] = count($result['rows']) === GALLERY_PICKER_SEARCH_PAGE_SIZE;
+    if ($result['more']) {
+        $result['next_after_id'] = $result['rows'][count($result['rows']) - 1]['id'];
+    }
+    return $result;
 }
 
 /**
@@ -125,7 +228,9 @@ function gallery_picker_source_rows(bool $secondaryTitleSort = false): array
  * These optional suggestions are deliberately incomplete once a budget is hit.
  * No catalog is embedded in the form and no database collation approximates NFKC.
  *
- * @return array{ok:bool,candidates:array,normalization:string,truncated:bool}
+ * @param string $query Literal entered prefix, validated before any title query.
+ * @param int $parentGalleryId Nonnegative committed parent ID; zero groups root siblings.
+ * @return array{ok:bool,candidates:list<array{id:int,parent_id:int,title:string,created_at:string}>,normalization:string,truncated:bool} Optional bounded suggestions and explicit incompleteness.
  */
 function gallery_title_completion_candidates(string $query = '', int $parentGalleryId = 0): array
 {
@@ -204,13 +309,6 @@ function gallery_title_completion_candidates(string $query = '', int $parentGall
     }
     return $result;
 }
-
-// Fixed deployment budgets, never supplied by a browser request. At most three
-// 513-row SQL pages (including lookahead), with at most 1024 titles normalized.
-const GALLERY_TITLE_COMPLETION_MAX_CANDIDATES = 8;
-const GALLERY_TITLE_COMPLETION_SCAN_BUDGET = 1024;
-const GALLERY_TITLE_COMPLETION_SIBLING_BUDGET = 512;
-const GALLERY_TITLE_COMPLETION_PAGE_SIZE = 512;
 
 /** Return the explicit matching capability and an empty, bounded response. */
 function gallery_title_completion_empty_result(bool $ok = true, bool $truncated = false): array

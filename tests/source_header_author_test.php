@@ -11,8 +11,8 @@
  *   Protects the repository-wide first-party source attribution header contract.
  *
  * Responsibilities:
- *   - Require the standard PHP Gallery project marker on first-party source files
- *   - Require Author attribution to Rudolf Klusal in every audited source header
+ *   - Require project, repository, file identity, module type, purpose and responsibilities
+ *   - Require exact Author attribution to Rudolf Klusal in the leading native header
  *   - Exclude runtime, third-party, generated, and agent-local directories
  *
  * Author:
@@ -30,65 +30,21 @@
 
 declare(strict_types=1);
 
-$root = dirname(__DIR__);
-$extensions = ['php', 'js', 'mjs', 'css', 'py', 'pyw', 'sh', 'bat', 'cmd', 'ps1'];
-$excludedFiles = [
-    'config.php',
-];
-$excludedDirectories = [
-    '.git',
-    '.claude',
-    '.codex',
-    '.agent',
-    '.agent-local',
-    'cache',
-    'galleries',
-    'data',
-    'node_modules',
-    'vendor',
-];
+require_once dirname(__DIR__) . '/scripts/source_contracts/inventory.php';
 
+$root = dirname(__DIR__);
 $failures = [];
 $audited = 0;
-$iterator = new RecursiveIteratorIterator(
-    new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS)
-);
-
-foreach ($iterator as $fileInfo) {
-    if (!$fileInfo instanceof SplFileInfo || !$fileInfo->isFile()) {
-        continue;
-    }
-
-    $extension = strtolower($fileInfo->getExtension());
-    if (!in_array($extension, $extensions, true)) {
-        continue;
-    }
-
-    $path = $fileInfo->getPathname();
-    $relative = str_replace('\\', '/', substr($path, strlen($root) + 1));
-    if (in_array($relative, $excludedFiles, true)) {
-        continue;
-    }
-    $parts = explode('/', $relative);
-    if (array_intersect($excludedDirectories, $parts) !== []) {
-        continue;
-    }
-
-    $source = file_get_contents($path);
+foreach (\PhpGallery\SourceContracts\inventory($root)['files'] as $relative => $extension) {
+    $source = file_get_contents($root . '/' . $relative);
     if (!is_string($source)) {
         $failures[] = $relative . ': unable to read source file';
         continue;
     }
 
     $audited++;
-    $header = substr($source, 0, 6000);
-    if (!str_contains($header, 'Project: PHP Gallery')) {
-        $failures[] = $relative . ': missing Project: PHP Gallery header';
-        continue;
-    }
-
-    if (!preg_match('/Author:\s*(?:\R\s*(?:\*|#|rem\b)?\s*)?Rudolf Klusal\b/i', $header)) {
-        $failures[] = $relative . ': missing Author: Rudolf Klusal attribution';
+    foreach (\PhpGallery\SourceContracts\header_issues($source, $relative) as $rule) {
+        $failures[] = $relative . ': ' . $rule . ' missing from the leading native header';
     }
 }
 
@@ -97,4 +53,4 @@ if ($failures !== []) {
     exit(1);
 }
 
-echo 'PASS source_header_author: audited ' . $audited . " first-party source files\n";
+echo 'PASS source_header_author: complete native headers in ' . $audited . " first-party source files.\n";

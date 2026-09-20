@@ -37,6 +37,13 @@ declare(strict_types=1);
 
 return [
     'runtime_limits' => [
+        // Shared server-side raster decode admission. Unlimited PHP memory still uses
+        // this request ceiling; invalid overrides cannot disable positive bounds.
+        'image_decode.max_dimension' => 32768,
+        'image_decode.max_pixels' => 60000000,
+        'image_decode.max_memory_bytes' => 512 * 1024 * 1024,
+        'image_decode.memory_reserve_bytes' => 16 * 1024 * 1024,
+
         // Public download manifest and bounded legacy-server fallback policy.
         'download.manifest_max_files' => 20000,
         'download.manifest_max_galleries' => 5000,

@@ -37,6 +37,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/support/module_source.php';
+
 $root = dirname(__DIR__);
 $serviceFiles = [
     'app/services/logs.php',
@@ -132,8 +134,8 @@ foreach ($serviceFiles as $relativePath) {
         $violations[] = 'Stage 8 service is unavailable: ' . $relativePath;
         continue;
     }
-    $source = file_get_contents($path);
-    if ($source === false) {
+    $source = module_source($path);
+    if ($source === '') {
         $violations[] = 'Unable to read Stage 8 service: ' . $relativePath;
         continue;
     }

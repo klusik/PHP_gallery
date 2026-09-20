@@ -517,6 +517,8 @@ function render_admin_migration_notice(string $message): void
 
 /**
  * Run pending database migrations from the Admin dashboard.
+ *
+ * @return void
  */
 function cms_admin_run_migrations(): void
 {
@@ -534,8 +536,8 @@ function cms_admin_run_migrations(): void
         flash_message('admin_notice', '' . e(t('admin.dashboard.notice_database_current', 'Database is already current.')) . '');
         redirect_to(url_for('admin'));
     } catch (Throwable $exception) {
-        admin_log_event('error', 'migrations.failed', 'Admin migration run failed.', ['exception' => $exception->getMessage()]);
-        flash_message('admin_notice', '' . e(t('admin.dashboard.notice_migration_failed', 'Migration failed:')) . ' ' . $exception->getMessage());
+        admin_log_event('error', 'migrations.failed', 'Admin migration run failed.', ['exception_type' => get_debug_type($exception)]);
+        flash_message('admin_notice', e(t('admin.dashboard.notice_migration_failed', 'Database migration could not be completed. Retry from this page; if it still fails, review Runtime diagnostics.')));
         redirect_to(url_for('admin'));
     }
 }

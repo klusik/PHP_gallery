@@ -161,7 +161,7 @@ function public_path_model_apply_parent_assignments(array $rows, array $parentAs
         $connection->beginTransaction();
     }
     try {
-        $updateParent = $connection->prepare('UPDATE galleries SET parent_id = ? WHERE id = ?');
+        $updateParent = $connection->prepare('UPDATE galleries SET parent_id = ?, edit_revision = edit_revision + 1 WHERE id = ?');
         $changed = 0;
         foreach ($rows as $row) {
             $galleryId = (int) ($row['id'] ?? 0);
@@ -215,9 +215,9 @@ function public_path_model_apply_gallery_regeneration(
         $parentChanged = public_path_model_apply_parent_assignments($rows, $parentAssignments, $connection);
 
         // Clear old values first so path swaps cannot collide with the unique hash index.
-        $connection->exec('UPDATE galleries SET url_slug = NULL, url_path = NULL, url_path_hash = NULL');
+        $connection->exec('UPDATE galleries SET url_slug = NULL, url_path = NULL, url_path_hash = NULL, edit_revision = edit_revision + 1');
         $updatePath = $connection->prepare(
-            'UPDATE galleries SET url_slug = ?, url_path = ?, url_path_hash = ?, updated_at = ? WHERE id = ?'
+            'UPDATE galleries SET url_slug = ?, url_path = ?, url_path_hash = ?, updated_at = ?, edit_revision = edit_revision + 1 WHERE id = ?'
         );
         foreach ($pathAssignments as $galleryId => $assignment) {
             $path = (string) ($assignment['path'] ?? '');

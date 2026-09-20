@@ -48,6 +48,8 @@ use function Gallery\Models\image_model_existing_ids_for_gallery;
 use function Gallery\Models\image_model_find_by_path_hash;
 use function Gallery\Models\image_model_relative_paths_for_gallery_ids;
 
+require_once __DIR__ . '/gallery_edit_concurrency.php';
+
 /**
  * Upload service model.
  *
@@ -838,19 +840,38 @@ function gallery_upload_progress_event(float $startedAt, string $message, array 
 }
 
 /**
- * Handles store uploaded gallery images logic for the gallery application.
+ * Store and register classic upload originals under reentrant global writer ownership.
  *
- * @param mixed $galleryId Input used by this operation.
- * @param mixed $entries Input used by this operation.
- * @param ?bool $renameOnUpload Rename on upload value.
- * @return mixed Result produced by this operation.
+ * @param int $galleryId Destination gallery reloaded after writer acquisition.
+ * @param list<array{name:string,tmp_name:string,size?:int,type?:string,error?:int}> $entries Validated temporary upload entries in original request order.
+ * @param bool|null $renameOnUpload Explicit rename preference, or null for the stored domain policy.
+ * @return array{uploaded:int,filenames:list<string>,image_ids:list<int>,scanned:int,scan_failed_filenames:list<string>,renamed:int,rename_warnings:list<string>,rename_failures:list<string>,upload_events:list<array{time:string,elapsed_ms:int,message:string,context:array<string,mixed>}>} Stored/scanned identities and processing diagnostics; partial failures remain visible.
  */
 function store_uploaded_gallery_images(int $galleryId, array $entries, ?bool $renameOnUpload = null): array
+{
+    $writerLock = gallery_edit_writer_begin();
+    try {
+        return store_uploaded_gallery_images_owned($galleryId, $entries, $renameOnUpload);
+    } finally {
+        gallery_edit_writer_end($writerLock);
+    }
+}
+
+/**
+ * Store and scan originals while the caller retains the global gallery writer lease.
+ *
+ * @param int $galleryId Existing target gallery identity.
+ * @param list<array<string,mixed>> $entries Validated temporary upload entries.
+ * @param bool|null $renameOnUpload Explicit rename preference, or the domain default.
+ * @return array{uploaded:int,filenames:list<string>,image_ids:list<int>,scanned:int,scan_failed_filenames:list<string>,renamed:int,rename_warnings:list<string>,rename_failures:list<string>,upload_events:list<array{time:string,elapsed_ms:int,message:string,context:array<string,mixed>}>} Stable image identities, final relative filenames and scan/rename outcomes.
+ * @internal Call only through store_uploaded_gallery_images(), including nested editor/upload use.
+ */
+function store_uploaded_gallery_images_owned(int $galleryId, array $entries, ?bool $renameOnUpload = null): array
 {
     $startedAt = microtime(true);
     $events = [gallery_upload_progress_event($startedAt, 'PHP accepted classic upload request with ' . count($entries) . ' file entr' . (count($entries) === 1 ? 'y' : 'ies') . '.')];
     // $gallery stores an intermediate value used by the surrounding gallery workflow.
-    $gallery = find_gallery($galleryId);
+    $gallery = find_gallery($galleryId, true);
     if (!$gallery) {
         throw new RuntimeException(t('gallery.error.not_found', 'Gallery not found.'));
     }
@@ -1079,16 +1100,34 @@ function uploaded_gallery_image_ids(int $galleryId, array $filenames): array
 }
 
 /**
- * Handles store uploaded gallery cover logic for the gallery application.
+ * Replace a gallery cover and its catalog path while retaining global writer ownership.
  *
- * @param mixed $galleryId Input used by this operation.
- * @param mixed $file Input used by this operation.
- * @return mixed Result produced by this operation.
+ * @param int $galleryId Destination gallery reloaded under the writer lease.
+ * @param array{tmp_name:string,name?:string,type?:string,size?:int,error?:int} $file Validated uploaded cover descriptor; pixels still require shared decode admission.
+ * @return string Gallery-relative cover path after file and catalog completion.
  */
 function store_uploaded_gallery_cover(int $galleryId, array $file): string
 {
+    $writerLock = gallery_edit_writer_begin();
+    try {
+        return store_uploaded_gallery_cover_owned($galleryId, $file);
+    } finally {
+        gallery_edit_writer_end($writerLock);
+    }
+}
+
+/**
+ * Replace the cover and persist its path under the caller's global writer lease.
+ *
+ * @param int $galleryId Existing target gallery identity.
+ * @param array<string,mixed> $file Uploaded cover descriptor.
+ * @return string Gallery-relative stored cover path.
+ * @internal Call only through store_uploaded_gallery_cover().
+ */
+function store_uploaded_gallery_cover_owned(int $galleryId, array $file): string
+{
     // $gallery stores an intermediate value used by the surrounding gallery workflow.
-    $gallery = find_gallery($galleryId);
+    $gallery = find_gallery($galleryId, true);
     if (!$gallery) {
         throw new RuntimeException(t('gallery.error.not_found', 'Gallery not found.'));
     }
@@ -1141,17 +1180,36 @@ function store_uploaded_gallery_cover(int $galleryId, array $file): string
 /**
  * Store one uploaded gallery branding asset inside the gallery folder.
  *
- * @param mixed $galleryId Input used by this operation.
- * @param mixed $kind Input used by this operation.
- * @param mixed $file Input used by this operation.
- * @return mixed Result produced by this operation.
+ * @param int $galleryId Destination gallery reloaded under the writer lease.
+ * @param string $kind Branding category validated by the existing branding owner.
+ * @param array{tmp_name:string,name?:string,type?:string,size?:int,error?:int} $file Validated temporary branding upload descriptor.
+ * @return string Gallery-relative branding path after storage and catalog completion.
  */
 function store_uploaded_gallery_branding_asset(int $galleryId, string $kind, array $file): string
+{
+    $writerLock = gallery_edit_writer_begin();
+    try {
+        return store_uploaded_gallery_branding_asset_owned($galleryId, $kind, $file);
+    } finally {
+        gallery_edit_writer_end($writerLock);
+    }
+}
+
+/**
+ * Stage, replace and register one branding asset under the caller's writer lease.
+ *
+ * @param int $galleryId Existing target gallery identity.
+ * @param string $kind Domain branding asset kind.
+ * @param array<string,mixed> $file Uploaded branding descriptor.
+ * @return string Gallery-relative stored branding asset path.
+ * @internal Call only through store_uploaded_gallery_branding_asset().
+ */
+function store_uploaded_gallery_branding_asset_owned(int $galleryId, string $kind, array $file): string
 {
     // $kind stores an intermediate value used by the surrounding gallery workflow.
     $kind = gallery_branding_asset_kind($kind);
     // $gallery stores an intermediate value used by the surrounding gallery workflow.
-    $gallery = find_gallery($galleryId);
+    $gallery = find_gallery($galleryId, true);
     if (!$gallery) {
         throw new RuntimeException(t('gallery.error.not_found', 'Gallery not found.'));
     }

@@ -1,3 +1,12 @@
+# Project: PHP Gallery
+# Repository: https://github.com/klusik/PHP_gallery
+# File: .github/workflows/gallery-workflows.yml
+# Module Type: Continuous Integration Workflow
+# Purpose: Run isolated database and browser workflows across supported runtime combinations.
+# Responsibilities:
+#   - Provision disposable services and execute the central audit with required runtime capabilities.
+# Author: Rudolf Klusal
+# Runtime lifecycle policy: docs/RUNTIME_SUPPORT.md.
 name: Isolated gallery workflows
 
 on:
@@ -11,13 +20,17 @@ permissions:
 
 jobs:
   real-database-browser:
-    name: Real workflows (${{ matrix.database }})
+    name: PHP ${{ matrix.php }} workflows (${{ matrix.database }}, Unicode)
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
-        database: ['mysql:8.4', 'mariadb:11.4']
+        include:
+          - php: '8.3'
+            database: 'mysql:8.4'
+          - php: '8.5'
+            database: 'mariadb:11.4'
     services:
       database:
         image: ${{ matrix.database }}
@@ -35,12 +48,15 @@ jobs:
       GALLERY_WORKFLOW_DB_USER: gallery_workflow_runner
       GALLERY_WORKFLOW_REQUIRED: '1'
       GALLERY_WORKFLOW_CI_ROOT_PASSWORD: gallery-workflow-disposable-ci-only
+      GALLERY_RUNTIME_NORMALIZATION: unicode
+      GALLERY_SESSION_REQUIRED: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.3'
-          extensions: pdo_mysql, curl, gd, zip, dom, mbstring
+          php-version: ${{ matrix.php }}
+          extensions: pdo_mysql, pdo_sqlite, curl, gd, zip, dom, mbstring, intl
+          ini-values: error_reporting=E_ALL, display_errors=On
           coverage: none
       - uses: actions/setup-node@v4
         with:
@@ -58,6 +74,47 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: gallery-workflows-${{ strategy.job-index }}
+          path: |
+            cache/test-audit/latest.json
+            cache/test-audit/latest.md
+          if-no-files-found: ignore
+          retention-days: 7
+
+  runtime-compatibility:
+    name: PHP ${{ matrix.php }} source (${{ matrix.normalization }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - php: '8.1'
+            normalization: unicode
+            extensions: 'pdo_mysql, pdo_sqlite, curl, gd, zip, dom, mbstring, intl'
+          - php: '8.5'
+            normalization: ascii
+            extensions: 'pdo_mysql, pdo_sqlite, curl, gd, zip, dom, mbstring, :intl'
+    env:
+      GALLERY_RUNTIME_NORMALIZATION: ${{ matrix.normalization }}
+      GALLERY_SESSION_REQUIRED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: ${{ matrix.extensions }}
+          ini-values: error_reporting=E_ALL, display_errors=On
+          coverage: none
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Central source audit
+        run: php scripts/audit.php --profile=full
+      - name: Upload compact audit reports only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-source-${{ strategy.job-index }}
           path: |
             cache/test-audit/latest.json
             cache/test-audit/latest.md

@@ -109,13 +109,37 @@ function browser_upload_image_rows_by_ids(array $imageIds): array
  * Store one browser-prepared ZIP package in a target gallery.
  *
  * @param int $galleryId Gallery identifier.
- * @param array $uploadedZip Uploaded zip value.
+ * @param array{error?:int,tmp_name?:string,size?:int,name?:string,type?:string} $uploadedZip PHP descriptor for the prepared ZIP, validated before installation.
  * @param string $sessionId Session id identifier.
  * @param int $batchIndex Batch index value.
  * @param bool $preparedThumbnailsRequired Require a complete browser-generated thumbnail matrix.
- * @return array<string mixed>.
+ * @return array<string,mixed> Batch response with image_ids, uploaded/scanned/thumbnail counters, rename outcomes and upload_events; cached retries add cached=true.
  */
 function browser_upload_store_prepared_zip_batch(int $galleryId, array $uploadedZip, string $sessionId, int $batchIndex, bool $preparedThumbnailsRequired = false): array
+{
+    $writerLock = gallery_edit_writer_begin();
+    try {
+        return browser_upload_store_prepared_zip_batch_owned($galleryId, $uploadedZip, $sessionId, $batchIndex, $preparedThumbnailsRequired);
+    } finally {
+        gallery_edit_writer_end($writerLock);
+    }
+}
+
+/**
+ * Install a prepared upload batch and its gallery metadata.
+ *
+ * Internal implementation: enter through browser_upload_store_prepared_zip_batch() so
+ * reads, early returns and failure cleanup remain inside the same writer lease.
+ *
+ * @param int $galleryId Gallery identifier.
+ * @param array{error?:int,tmp_name?:string,size?:int,name?:string,type?:string} $uploadedZip Received prepared ZIP upload descriptor.
+ * @param string $sessionId Upload session identifier.
+ * @param int $batchIndex Zero-based upload batch index.
+ * @param bool $preparedThumbnailsRequired Whether complete prepared thumbnail coverage is required.
+ * @return array<string,mixed> Registered batch response with image_ids, filenames, upload/scan/thumbnail counters, rename outcomes and upload_events; replay may add cached=true.
+ * @author Rudolf Klusal
+ */
+function browser_upload_store_prepared_zip_batch_owned(int $galleryId, array $uploadedZip, string $sessionId, int $batchIndex, bool $preparedThumbnailsRequired = false): array
 {
     $startedAt = microtime(true);
     $events = [browser_upload_progress_event($startedAt, 'PHP received prepared ZIP request for batch ' . ($batchIndex + 1) . '.')];
@@ -140,7 +164,7 @@ function browser_upload_store_prepared_zip_batch(int $galleryId, array $uploaded
     );
     thumbnail_metadata_preflight_write_schema('browser_upload.thumbnail_metadata_preflight');
 
-    $gallery = find_gallery($galleryId);
+    $gallery = find_gallery($galleryId, true);
     if (!$gallery) {
         throw new RuntimeException(t('gallery.error.not_found', 'Gallery not found.'));
     }

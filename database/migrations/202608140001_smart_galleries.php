@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Database Migration
+ * Purpose: Add persisted Smart Gallery definitions and private editorial image ratings.
+ * Responsibilities:
+ *   - Create versioned rule storage without copying dynamic image membership.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: database/migrations/202608140001_smart_galleries.php

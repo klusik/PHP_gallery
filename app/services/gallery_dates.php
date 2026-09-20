@@ -37,6 +37,8 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+require_once __DIR__ . '/gallery_edit_concurrency.php';
+
 use DateTimeImmutable;
 use InvalidArgumentException;
 use RuntimeException;
@@ -282,11 +284,33 @@ function gallery_date_range_matches(mixed $currentStart, mixed $currentEnd, mixe
  * Persist a validated gallery date range and refresh its sidecar metadata.
  *
  * @param int $galleryId Gallery identifier.
- * @param mixed $startValue Start value value.
- * @param mixed $endValue End value value.
+ * @param string|null $startValue Inclusive YYYY-MM-DD start; blank/null clears it.
+ * @param string|null $endValue Inclusive YYYY-MM-DD end; blank/null clears it.
  * @return array{gallery:array<string,mixed>,start:?string,end:?string} Structured result data for the caller.
  */
 function gallery_date_save_range(int $galleryId, mixed $startValue, mixed $endValue): array
+{
+    $writerLock = gallery_edit_writer_begin();
+    try {
+        return gallery_date_save_range_owned($galleryId, $startValue, $endValue);
+    } finally {
+        gallery_edit_writer_end($writerLock);
+    }
+}
+
+/**
+ * Persist gallery dates and publish the refreshed sidecar.
+ *
+ * Internal implementation: enter through gallery_date_save_range() so
+ * reads, early returns and failure cleanup remain inside the same writer lease.
+ *
+ * @param int $galleryId Gallery identifier.
+ * @param string|null $startValue Inclusive YYYY-MM-DD start, validated before persistence.
+ * @param string|null $endValue Inclusive YYYY-MM-DD end, not earlier than a supplied start.
+ * @return array{gallery:array<string,mixed>,start:?string,end:?string} Refreshed gallery and normalized dates; blank inputs become null.
+ * @author Rudolf Klusal
+ */
+function gallery_date_save_range_owned(int $galleryId, mixed $startValue, mixed $endValue): array
 {
     if (!gallery_date_schema_ready()) {
         throw new RuntimeException(t('admin.gallery_dates.requires_migration', 'Gallery date maintenance will be available after the database migration is applied.'));

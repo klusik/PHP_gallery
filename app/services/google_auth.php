@@ -40,9 +40,7 @@ namespace Gallery\Services;
 use RuntimeException;
 use function Gallery\Core\absolute_public_url;
 use function Gallery\Core\cms_config;
-use function Gallery\Core\current_user;
 use function Gallery\Core\now_sql;
-use function Gallery\Core\sanitize_login_return_target;
 use function Gallery\Core\url_for;
 use function Gallery\Models\google_auth_model_disconnect_account;
 use function Gallery\Models\google_auth_model_link_account;
@@ -50,9 +48,12 @@ use function Gallery\Models\google_auth_model_linked_account;
 use function Gallery\Models\google_auth_model_touch_login;
 use function Gallery\Models\google_auth_model_user_by_subject;
 
-const CMS_GOOGLE_AUTH_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth';
-const CMS_GOOGLE_TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token';
-const CMS_GOOGLE_JWKS_ENDPOINT = 'https://www.googleapis.com/oauth2/v3/certs';
+require_once dirname(__DIR__) . '/policy_constants.php';
+use const Gallery\Core\CMS_GOOGLE_AUTH_ENDPOINT;
+use const Gallery\Core\CMS_GOOGLE_TOKEN_ENDPOINT;
+use const Gallery\Core\CMS_GOOGLE_JWKS_ENDPOINT;
+use const Gallery\Core\GOOGLE_AUTH_STATE_TTL_SECONDS;
+use const Gallery\Core\GOOGLE_AUTH_STATE_RANDOM_BYTES;
 
 /**
  * Return Google login configuration merged with safe defaults.
@@ -156,34 +157,34 @@ function google_auth_schema_operation_available(string $operation, bool $missing
 }
 
 /**
- * Return a Google authorization URL and remember its state in the session.
+ * Prepare a Google authorization URL and add state to the caller-owned OAuth map.
  *
- * @param string $mode Mode value.
- * @param string $returnTarget Return target value.
- * @return string Text result for the caller.
+ * @param string $mode Link mode or login fallback; the controller must authorize linking first.
+ * @param string $returnTarget Local return target already normalized by the HTTP controller.
+ * @param array<string,array<string,mixed>> $states Only this caller's OAuth states, pruned and extended by reference.
+ * @param ?int $userId Current Admin identity supplied by the controller, or null for an anonymous login.
+ * @return string Provider authorization URL; no credential, session ID or client secret is included.
  */
-function google_auth_authorization_url(string $mode, string $returnTarget = ''): string
+function google_auth_authorization_url(string $mode, string $returnTarget, array &$states, ?int $userId): string
 {
     // $config stores normalized Google auth settings.
     $config = google_auth_config();
     // $state stores the CSRF value returned by Google.
-    $state = bin2hex(random_bytes(24));
-    // $states stores pending Google OAuth states for this admin session.
-    $states = is_array($_SESSION['google_oauth_states'] ?? null) ? $_SESSION['google_oauth_states'] : [];
+    $state = bin2hex(random_bytes(GOOGLE_AUTH_STATE_RANDOM_BYTES));
+    // $states contains only pending OAuth entries supplied by the HTTP owner.
 
     foreach ($states as $key => $entry) {
-        if (!is_array($entry) || (time() - (int) ($entry['created_at'] ?? 0)) > 900) {
+        if (!is_array($entry) || (time() - (int) ($entry['created_at'] ?? 0)) > GOOGLE_AUTH_STATE_TTL_SECONDS) {
             unset($states[$key]);
         }
     }
 
     $states[$state] = [
         'mode' => $mode === 'link' ? 'link' : 'login',
-        'return' => sanitize_login_return_target($returnTarget, url_for('admin')),
-        'user_id' => current_user() ? (int) current_user()['id'] : null,
+        'return' => $returnTarget,
+        'user_id' => $userId,
         'created_at' => time(),
     ];
-    $_SESSION['google_oauth_states'] = $states;
 
     // $query stores the Google authorization request parameters.
     $query = [
@@ -204,13 +205,13 @@ function google_auth_authorization_url(string $mode, string $returnTarget = ''):
 /**
  * Consume and validate one stored Google OAuth state value.
  *
- * @param string $state State value.
- * @return ?array Structured result data for the caller.
+ * @param string $state Provider-returned opaque challenge; exact map lookup prevents substitution.
+ * @param array<string,array<string,mixed>> $states Caller-owned OAuth entries; the selected entry is consumed before expiry validation.
+ * @return array{mode:string,return:string,user_id:?int,created_at:int}|null Original intent, or null when absent/expired. Timestamp is Unix seconds.
  */
-function google_auth_consume_state(string $state): ?array
+function google_auth_consume_state(string $state, array &$states): ?array
 {
-    // $states stores pending Google OAuth states for this admin session.
-    $states = is_array($_SESSION['google_oauth_states'] ?? null) ? $_SESSION['google_oauth_states'] : [];
+    // State storage belongs to the caller; only this selected challenge is consumed.
     if ($state === '' || empty($states[$state]) || !is_array($states[$state])) {
         return null;
     }
@@ -218,9 +219,8 @@ function google_auth_consume_state(string $state): ?array
     // $entry stores the pending state metadata.
     $entry = $states[$state];
     unset($states[$state]);
-    $_SESSION['google_oauth_states'] = $states;
 
-    if ((time() - (int) ($entry['created_at'] ?? 0)) > 900) {
+    if ((time() - (int) ($entry['created_at'] ?? 0)) > GOOGLE_AUTH_STATE_TTL_SECONDS) {
         return null;
     }
 

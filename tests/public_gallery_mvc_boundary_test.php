@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Regression Test
+ * Purpose: Protect public gallery presentation ownership.
+ * Responsibilities:
+ *   - Keep controls, cards and root-index markup behind prepared view data.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/public_gallery_mvc_boundary_test.php

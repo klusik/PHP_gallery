@@ -102,7 +102,7 @@ use function Gallery\Services\admin_log_status_label;
 use function Gallery\Services\admin_log_status_options;
 use function Gallery\Services\admin_log_update_group_status;
 use function Gallery\Services\admin_log_update_status;
-use const Gallery\Services\ADMIN_LOG_GROUP_MEMBER_PAGE_SIZE;
+use const Gallery\Core\ADMIN_LOG_GROUP_MEMBER_PAGE_SIZE;
 
 /**
  * Administrative log controller model.
@@ -1442,6 +1442,7 @@ function cms_admin_log_export(): void
 
 /**
  * Export all admin logs as a ZIP containing matching CSV and JSON data files.
+ * @return void Streams the authenticated attachment and releases its request-owned temporary archive.
  */
 function cms_admin_logs_export_zip(): void
 {
@@ -1460,12 +1461,10 @@ function cms_admin_logs_export_zip(): void
         header('Content-Length: ' . (int) $download['size']);
         header('X-Content-Type-Options: nosniff');
         readfile((string) $download['path']);
-        @unlink((string) $download['path']);
+        \Gallery\Services\admin_log_export_release((string) $download['path']);
         return;
     } catch (Throwable $exception) {
-        if ($filePath !== '' && is_file($filePath)) {
-            @unlink($filePath);
-        }
+        \Gallery\Services\admin_log_export_release($filePath);
         admin_log_event('error', 'admin_log.export_zip_failed', 'Admin log ZIP export failed.', [
             'error' => $exception->getMessage(),
         ], [

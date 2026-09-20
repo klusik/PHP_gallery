@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Regression Test
+ * Purpose: Verify public tag-page Theme overrides.
+ * Responsibilities:
+ *   - Check prepared Theme values and fallback behavior for tag presentation.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/tag_page_theme_model_test.php

@@ -1,5 +1,9 @@
 /**
  * Project: PHP Gallery
+ * Module Type: Stylesheet
+ * Purpose: Style gallery ordering controls and drag feedback.
+ * Responsibilities:
+ *   - Distinguish draggable items, drop targets and active ordering states.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: public/assets/styles/admin-reordering.css

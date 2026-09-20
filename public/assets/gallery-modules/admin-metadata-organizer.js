@@ -32,6 +32,7 @@
  */
 
 import {escapeHtmlAttribute, escapeHtmlText, i18n} from './admin-core.js?v=20260614-upload-order-v2';
+import {captureAdminPanelOwner} from './admin-panel-lifecycle.js?v=20260920-panel-lifecycle-v1';
 
 let metadataOrganizerReady = false;
 
@@ -161,8 +162,10 @@ async function previewMetadataOrganizerDraft(form, submitter) {
  *
  * @param {HTMLFormElement} form Apply form.
  * @param {HTMLElement|null} submitter Submit button.
+ * @return {Promise<void>} Resolves after refusal or bounded batches and their original-owner completion event.
  */
 async function applyMetadataOrganizerDraft(form, submitter) {
+    const panelOwner = captureAdminPanelOwner(form.closest('[data-admin-side-panel]'));
     const confirmInput = form.querySelector('input[name="confirm_metadata_organizer"]');
     if (confirmInput instanceof HTMLInputElement && !confirmInput.checked) {
         setProgress(rootForForm(form), 100, i18n('admin.metadata_organizer.confirm_required', 'Confirm that you reviewed the organizer draft before moving files.'));
@@ -249,7 +252,7 @@ async function applyMetadataOrganizerDraft(form, submitter) {
         setProgress(root, 100, applySummaryText(aggregate));
         appendLog(root, i18n('admin.metadata_organizer.log_apply_done', 'Apply completed. Refreshing the gallery view now.'));
         renderApplySummary(root, aggregate);
-        refreshAfterApply(root, aggregate);
+        refreshAfterApply(root, aggregate, panelOwner);
     } catch (error) {
         setProgress(root, 100, error instanceof Error ? error.message : String(error));
         appendLog(root, error instanceof Error ? error.message : String(error));
@@ -770,8 +773,10 @@ function mergeApplyMutationEnvelope(target, payload) {
  *
  * @param {HTMLElement|null} root Organizer root.
  * @param {Record<string, *>} aggregate Apply aggregate.
+ * @param {{isCurrent: function(): boolean, signal?: AbortSignal}} panelOwner Drawer scope captured before the first apply batch.
+ * @return {void} Delivers the canonical result without creating another refresh/retry path.
  */
-function refreshAfterApply(root, aggregate) {
+function refreshAfterApply(root, aggregate, panelOwner) {
     if (!aggregate.mutation_envelope) {
         throw new Error(i18n('admin.metadata_organizer.mutation_contract_missing', 'The organizer saved changes, but the server did not return the required mutation completion contract.'));
     }
@@ -779,6 +784,7 @@ function refreshAfterApply(root, aggregate) {
     const detail = {
         handled: false,
         result: aggregate.mutation_envelope,
+        panelOwner,
     };
     document.dispatchEvent(new CustomEvent('php-gallery:metadata-organizer-applied', {
         bubbles: true,

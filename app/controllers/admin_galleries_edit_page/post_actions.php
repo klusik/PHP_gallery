@@ -38,6 +38,8 @@ declare(strict_types=1);
 namespace Gallery\Controllers;
 
 use Throwable;
+use Gallery\Services\GalleryEditConflict;
+use Gallery\Services\GalleryEditUnavailable;
 use function Gallery\Core\admin_mutation_descriptor;
 use function Gallery\Core\admin_mutation_error_envelope;
 use function Gallery\Core\admin_mutation_panel_metadata;
@@ -318,24 +320,17 @@ function admin_edit_gallery_handle_media_rename(array $gallery, bool $mediaRenam
  *
  * @param array<string, mixed> $gallery Gallery row being edited.
  * @param string $returnTab Tab fragment to return to after saving.
+ * @return void Emits the save/conflict response or redirects the non-JavaScript success.
+ * @author Rudolf Klusal
  */
 function admin_edit_gallery_handle_save(array $gallery, string $returnTab): void
 {
     try {
-        // Preflight Smart Gallery attachment schema and graph validation before any gallery mutation.
-        $smartGalleriesEnabled = !function_exists('Gallery\Services\feature_capability_effective_enabled')
-            || feature_capability_effective_enabled('smart_galleries');
-        $smartGalleryChildrenInput = (array) ($_POST['smart_gallery_children'] ?? []);
-        if ($smartGalleriesEnabled && isset($_POST['smart_gallery_children_present'])) {
-            $proposedSmartGalleryParentId = (int) ($_POST['parent_id'] ?? 0);
-            if ($proposedSmartGalleryParentId > 0 && !find_gallery($proposedSmartGalleryParentId)) $proposedSmartGalleryParentId = 0;
-            smart_gallery_validate_children_assignment((int) $gallery['id'], $smartGalleryChildrenInput, $proposedSmartGalleryParentId > 0 ? $proposedSmartGalleryParentId : null, true);
-        }
         // $saveResult stores the shared gallery save outcome used by both page and panel workflows.
         $saveResult = admin_save_gallery_from_input($gallery, $_POST, $_FILES, $returnTab, true);
-        if ($smartGalleriesEnabled && isset($_POST['smart_gallery_children_present'])) {
-            smart_gallery_assign_children_to_gallery((int) $gallery['id'], $smartGalleryChildrenInput);
-        }
+    } catch (GalleryEditConflict|GalleryEditUnavailable $exception) {
+        admin_gallery_edit_conflict_response($exception, (int) $gallery['id'], $returnTab, $_POST);
+        return;
     } catch (Throwable $exception) {
         if (admin_wants_json()) {
             admin_panel_error_response($exception->getMessage());

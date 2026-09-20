@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Test Fixture
+ * Purpose: Trigger a controlled exception on a JSON response path.
+ * Responsibilities:
+ *   - Verify structured early-runtime failure handling.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/fixtures/runtime_json_exception.php

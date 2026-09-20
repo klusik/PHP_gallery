@@ -2,6 +2,10 @@
 
 A modern PHP 8.1+ gallery CMS designed for ordinary shared hosting. The application uses the filesystem as the authoritative source for gallery structure, while storing all metadata, access rules, votes, user accounts, and audit logs in MySQL or MariaDB.
 
+PHP 8.1 is the compatibility minimum. For deployment, use the latest patch release
+of maintained PHP 8.3 or newer; PHP 8.5 is preferred after staging verification.
+See [runtime support and upstream lifecycle dates](docs/RUNTIME_SUPPORT.md).
+
 **Current Version:** 0.104.1
 
 **Key Benefit:** Deploy in minutes on shared hosting. No npm, no Composer, no framework overhead. Just PHP + MySQL.
@@ -258,6 +262,11 @@ Deployment-tunable download limits are centralized in `app/configuration_default
 
 The easiest way to install on shared hosting is the one-file bootstrap installer:
 
+Before starting, select a maintained PHP version in the hosting control panel
+(PHP 8.3 minimum deployment recommendation; PHP 8.5 preferred). Verify both the
+web runtime and any CLI used for maintenance. The installer's PHP 8.1 check is a
+compatibility floor, not an upstream security-support guarantee.
+
 1. **Create database** - Create an empty MySQL or MariaDB database in your hosting control panel
 2. **Upload one file** - Upload `setup-gallery.php` via FTP to your web directory
 3. **Open in browser** - Visit `https://example.com/setup-gallery.php`
@@ -277,14 +286,18 @@ After successful installation, you can delete `setup-gallery.php` via FTP as an 
 
 ### Requirements
 
-**Minimum:**
-- PHP 8.1 or newer
+**Minimum compatibility:**
+
+- PHP 8.1 or newer (PHP 8.1 is upstream end of life)
 - MySQL 5.7+ or MariaDB 10.2+
 - PDO MySQL extension
 - ZipArchive extension
 - GD extension (for thumbnail generation)
 
 **Recommended:**
+
+- Latest patch release of maintained PHP 8.3 or newer; prefer PHP 8.5 after staging checks
+- Both `intl` and `mbstring` for Unicode title completion; the supported fallback matches ASCII only
 - Apache with `.htaccess` support (for pretty URLs)
 - Outbound HTTPS access (for updates and GitHub release notes)
 
@@ -308,6 +321,12 @@ If you prefer to upload the complete package manually:
 ### Manual Shell Setup
 
 If you prefer command-line setup or your host doesn't allow browser installation:
+
+Check that the CLI and web server use the intended maintained PHP branch and
+extensions; they may load different runtime configurations. After setup, **Admin
+> Maintenance > System health** and **Runtime diagnostics** show the shared
+runtime-support advisory. See [runtime guidance](docs/RUNTIME_SUPPORT.md) before
+changing an existing host's PHP version.
 
 ```bash
 # 1. Copy example config

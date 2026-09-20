@@ -1,6 +1,12 @@
 <?php
 /**
  * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ * File: scripts/gallery_workflow_ci.php
+ * Module Type: CLI Tool
+ * Purpose: Prepare the explicitly named disposable CI workflow database.
+ * Responsibilities:
+ *   - Apply isolation guards before invoking the central audit workflow.
  * Author: Rudolf Klusal
  * Provision only the explicitly named disposable CI database service, then use the central audit.
  */
@@ -39,7 +45,10 @@ try {
         'Disposable CI database identity mismatch.');
     $pdo->exec("CREATE USER 'gallery_workflow_runner'@'%' IDENTIFIED BY " . $pdo->quote($password));
     $quotedSchemaPattern = chr(96) . 'gallery\\_workflow\\_%' . chr(96);
-    $pdo->exec("GRANT ALL PRIVILEGES ON " . $quotedSchemaPattern . ".* TO 'gallery_workflow_runner'@'%'");
+    // Match ordinary application ownership: schema-local data and portable DDL
+    // only. Migrations must not depend on TRIGGER, SUPER or server-global state.
+    $pdo->exec("GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, DROP, INDEX, REFERENCES ON "
+        . $quotedSchemaPattern . ".* TO 'gallery_workflow_runner'@'%'");
     $pdo = null;
     putenv('GALLERY_WORKFLOW_REQUIRED=1');
     // Keep the service root credential out of application/audit child environments.

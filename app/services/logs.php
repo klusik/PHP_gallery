@@ -69,13 +69,15 @@ use function Gallery\Models\admin_log_model_update_status;
 use function Gallery\Services\translation_interpolate;
 use function Gallery\Services\translation_load_language;
 
-const ADMIN_LOG_GROUP_MEMBER_PAGE_SIZE = 50;
-const ADMIN_LOG_EXPORT_BATCH_SIZE = 500;
-const ADMIN_LOG_DEFAULT_RETENTION_DAYS = 30;
-const ADMIN_LOG_MIN_RETENTION_DAYS = 1;
-const ADMIN_LOG_MAX_RETENTION_DAYS = 3650;
-const ADMIN_LOG_RETENTION_DELETE_BATCH_SIZE = 2000;
-const ADMIN_LOG_RETENTION_MAX_DELETE_PER_RUN = 100000;
+require_once dirname(__DIR__) . '/policy_constants.php';
+
+use const Gallery\Core\ADMIN_LOG_GROUP_MEMBER_PAGE_SIZE;
+use const Gallery\Core\ADMIN_LOG_EXPORT_BATCH_SIZE;
+use const Gallery\Core\ADMIN_LOG_DEFAULT_RETENTION_DAYS;
+use const Gallery\Core\ADMIN_LOG_MIN_RETENTION_DAYS;
+use const Gallery\Core\ADMIN_LOG_MAX_RETENTION_DAYS;
+use const Gallery\Core\ADMIN_LOG_RETENTION_DELETE_BATCH_SIZE;
+use const Gallery\Core\ADMIN_LOG_RETENTION_MAX_DELETE_PER_RUN;
 
 /**
  * Administrative log service model.
@@ -988,7 +990,35 @@ function admin_log_export_temp_path(): string
     if ($filePath === false) {
         throw new RuntimeException('Unable to allocate temporary admin log export file.');
     }
+    $owned = &admin_log_export_owned_paths();
+    $owned[$filePath] = true;
     return $filePath;
+}
+
+/**
+ * Track only temporary exports allocated by this request, never arbitrary paths.
+ * @return array<string,true> Request-local ownership registry returned by reference.
+ */
+function &admin_log_export_owned_paths(): array
+{
+    static $paths = [];
+    return $paths;
+}
+
+/**
+ * Release an export allocated by this request after streaming or a failed build.
+ * @param string $path Exact path returned by admin_log_export_temp_path(), or empty.
+ * @return void Unknown paths are ignored; cleanup failure never hides the primary response.
+ */
+function admin_log_export_release(string $path): void
+{
+    $owned = &admin_log_export_owned_paths();
+    if (!isset($owned[$path])) {
+        return;
+    }
+    if (!file_exists($path) || @unlink($path)) {
+        unset($owned[$path]);
+    }
 }
 
 /**

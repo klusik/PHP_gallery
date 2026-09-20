@@ -36,6 +36,8 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+require_once __DIR__ . '/gallery_edit_concurrency.php';
+
 use InvalidArgumentException;
 use RuntimeException;
 use Throwable;
@@ -302,8 +304,30 @@ function gallery_branding_asset_abs_path(array $gallery, string $kind): ?string
  *
  * @param int $galleryId Gallery identifier.
  * @param string $kind Kind value.
+ * @return void
  */
 function delete_gallery_branding_asset(int $galleryId, string $kind): void
+{
+    $writerLock = gallery_edit_writer_begin();
+    try {
+        delete_gallery_branding_asset_owned($galleryId, $kind);
+    } finally {
+        gallery_edit_writer_end($writerLock);
+    }
+}
+
+/**
+ * Remove a gallery branding asset and clear its stored reference.
+ *
+ * Internal implementation: enter through delete_gallery_branding_asset() so
+ * reads, early returns and failure cleanup remain inside the same writer lease.
+ *
+ * @param int $galleryId Gallery identifier.
+ * @param string $kind Supported gallery branding kind.
+ * @return void
+ * @author Rudolf Klusal
+ */
+function delete_gallery_branding_asset_owned(int $galleryId, string $kind): void
 {
     // $gallery stores an intermediate value used by the surrounding gallery workflow.
     $gallery = find_gallery($galleryId, true);

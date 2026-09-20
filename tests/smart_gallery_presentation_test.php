@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Regression Test
+ * Purpose: Verify Smart Gallery presentation inheritance.
+ * Responsibilities:
+ *   - Exercise defaults, overrides and display guardrails.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/smart_gallery_presentation_test.php

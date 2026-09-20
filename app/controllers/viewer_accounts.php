@@ -125,12 +125,13 @@ use function Gallery\Services\viewer_security_transport_allowed;
 use function Gallery\Services\viewer_security_url;
 use function Gallery\Services\viewer_session_revoke_all;
 use function Gallery\Services\viewer_session_revoke_current;
-use const Gallery\Services\VIEWER_ANTI_AUTOMATION_ACTION_REGISTER;
-use const Gallery\Services\VIEWER_ANTI_AUTOMATION_ACTION_RESEND;
-use const Gallery\Services\VIEWER_ANTI_AUTOMATION_RESULT_ALLOW;
-use const Gallery\Services\VIEWER_ANTI_AUTOMATION_RESULT_CHALLENGE_REQUIRED;
-use const Gallery\Services\VIEWER_ANTI_AUTOMATION_RESULT_INVALID;
-use const Gallery\Services\VIEWER_ANTI_AUTOMATION_RESULT_SUPPRESS;
+use const Gallery\Core\VIEWER_ANTI_AUTOMATION_SESSION_NAMESPACE;
+use const Gallery\Core\VIEWER_ANTI_AUTOMATION_ACTION_REGISTER;
+use const Gallery\Core\VIEWER_ANTI_AUTOMATION_ACTION_RESEND;
+use const Gallery\Core\VIEWER_ANTI_AUTOMATION_RESULT_ALLOW;
+use const Gallery\Core\VIEWER_ANTI_AUTOMATION_RESULT_CHALLENGE_REQUIRED;
+use const Gallery\Core\VIEWER_ANTI_AUTOMATION_RESULT_INVALID;
+use const Gallery\Core\VIEWER_ANTI_AUTOMATION_RESULT_SUPPRESS;
 use const Gallery\Services\VIEWER_ACCOUNT_STATUS_ACTIVE;
 use const Gallery\Services\VIEWER_ACCOUNT_STATUS_DISABLED;
 use const Gallery\Services\VIEWER_ACCOUNT_STATUS_PENDING_VERIFICATION;
@@ -195,7 +196,18 @@ function viewer_anti_automation_form_fields(string $action): string
     if (!viewer_anti_automation_enabled()) {
         return '';
     }
-    return \Gallery\Views\view_viewer_anti_automation_form_fields(viewer_anti_automation_form_issue($action));
+    $ticketContext = is_array($_SESSION[VIEWER_ANTI_AUTOMATION_SESSION_NAMESPACE] ?? null)
+        ? $_SESSION[VIEWER_ANTI_AUTOMATION_SESSION_NAMESPACE] : [];
+    $originalTicketContext = $ticketContext;
+    try {
+        $form = viewer_anti_automation_form_issue($ticketContext, $action);
+    } finally {
+        // Persist registration/pruning even if signing or later rendering refuses the response.
+        if ($ticketContext !== $originalTicketContext) {
+            $_SESSION[VIEWER_ANTI_AUTOMATION_SESSION_NAMESPACE] = $ticketContext;
+        }
+    }
+    return \Gallery\Views\view_viewer_anti_automation_form_fields($form);
 }
 
 /**
@@ -980,6 +992,10 @@ function cms_admin_viewer_invitations(): void
 
 /**
  * Render and process anonymous verified-email open registration.
+ *
+ * Viewer CSRF and local syntax checks precede the gate. This HTTP boundary publishes
+ * only its borrowed anti-automation namespace in finally, before rendering or business work.
+ * @return void Render the generic registration/challenge response, refuse, or redirect an existing Viewer.
  */
 function cms_viewer_register(): void
 {
@@ -1004,11 +1020,23 @@ function cms_viewer_register(): void
             // Invalid syntax never reaches registration or mail work and keeps the same generic public completion result.
             $complete = true;
         } else {
-            $antiAutomation = viewer_anti_automation_authorize_submission(
-                VIEWER_ANTI_AUTOMATION_ACTION_REGISTER,
-                $_POST,
-                request_client_ip()
-            );
+            $ticketContext = is_array($_SESSION[VIEWER_ANTI_AUTOMATION_SESSION_NAMESPACE] ?? null)
+                ? $_SESSION[VIEWER_ANTI_AUTOMATION_SESSION_NAMESPACE] : [];
+            $originalTicketContext = $ticketContext;
+            try {
+                $antiAutomation = viewer_anti_automation_authorize_submission(
+                    $ticketContext,
+                    VIEWER_ANTI_AUTOMATION_ACTION_REGISTER,
+                    $_POST,
+                    request_client_ip()
+                );
+            } finally {
+                // Commit one-use consumption/replacement before any refusal, render or downstream work.
+                // No-op/disabled validation must not create or normalize an untouched session namespace.
+                if ($ticketContext !== $originalTicketContext) {
+                    $_SESSION[VIEWER_ANTI_AUTOMATION_SESSION_NAMESPACE] = $ticketContext;
+                }
+            }
             $antiAutomationResult = (string) ($antiAutomation['result'] ?? VIEWER_ANTI_AUTOMATION_RESULT_INVALID);
             if ($antiAutomationResult === VIEWER_ANTI_AUTOMATION_RESULT_CHALLENGE_REQUIRED) {
                 viewer_render_anti_automation_challenge(
@@ -1126,6 +1154,10 @@ function cms_viewer_invite(): void
 
 /**
  * Render and process the generic explicit verification-resend recovery flow.
+ *
+ * Preserve CSRF, route readiness and generic refusal semantics while committing one-use
+ * ticket changes before resend/mail work; no session authority belongs to the service.
+ * @return void Emit the existing resend or challenge presentation from prepared results.
  */
 function cms_viewer_resend_verification(): void
 {
@@ -1146,11 +1178,23 @@ function cms_viewer_resend_verification(): void
         if (viewer_email_normalize($email) === null) {
             $error = t('viewer.resend.invalid_email', 'Enter a valid email address.');
         } else {
-            $antiAutomation = viewer_anti_automation_authorize_submission(
-                VIEWER_ANTI_AUTOMATION_ACTION_RESEND,
-                $_POST,
-                request_client_ip()
-            );
+            $ticketContext = is_array($_SESSION[VIEWER_ANTI_AUTOMATION_SESSION_NAMESPACE] ?? null)
+                ? $_SESSION[VIEWER_ANTI_AUTOMATION_SESSION_NAMESPACE] : [];
+            $originalTicketContext = $ticketContext;
+            try {
+                $antiAutomation = viewer_anti_automation_authorize_submission(
+                    $ticketContext,
+                    VIEWER_ANTI_AUTOMATION_ACTION_RESEND,
+                    $_POST,
+                    request_client_ip()
+                );
+            } finally {
+                // Commit one-use consumption/replacement before any refusal, render or downstream work.
+                // No-op/disabled validation must not create or normalize an untouched session namespace.
+                if ($ticketContext !== $originalTicketContext) {
+                    $_SESSION[VIEWER_ANTI_AUTOMATION_SESSION_NAMESPACE] = $ticketContext;
+                }
+            }
             $antiAutomationResult = (string) ($antiAutomation['result'] ?? VIEWER_ANTI_AUTOMATION_RESULT_INVALID);
             if ($antiAutomationResult === VIEWER_ANTI_AUTOMATION_RESULT_CHALLENGE_REQUIRED) {
                 viewer_render_anti_automation_challenge(

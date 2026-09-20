@@ -38,6 +38,32 @@ namespace Gallery\Models;
 
 use function Gallery\Core\db;
 
+/**
+ * Read only the public account projection needed to validate an existing Admin session.
+ *
+ * @param int $userId Session-selected user identifier; authorization remains in the caller.
+ * @param bool $emailAvailable Whether three-state policy verified the optional email column.
+ * @return array{id:mixed,username:string,role:string,email?:?string}|null Non-credential account row.
+ */
+function auth_model_session_user(int $userId, bool $emailAvailable): ?array
+{
+    $stmt = db()->prepare($emailAvailable
+        ? 'SELECT id, username, email, role FROM users WHERE id = ?'
+        : 'SELECT id, username, role FROM users WHERE id = ?');
+    $stmt->execute([$userId]);
+    return $stmt->fetch() ?: null;
+}
+
+/**
+ * Observe whether the one-time setup has an administrator account.
+ *
+ * @return bool True when at least one Admin row exists.
+ */
+function auth_model_admin_exists(): bool
+{
+    return (bool) db()->query("SELECT 1 FROM users WHERE role = 'admin' LIMIT 1")->fetchColumn();
+}
+
 /** @return array<string,mixed>|null */
 function auth_model_find_user_by_email(string $email): ?array
 {

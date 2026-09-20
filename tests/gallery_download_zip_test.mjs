@@ -1,5 +1,9 @@
 /**
  * Project: PHP Gallery
+ * Module Type: Regression Test
+ * Purpose: Verify browser ZIP archive construction.
+ * Responsibilities:
+ *   - Check entry metadata, byte layout and archive completion.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/gallery_download_zip_test.mjs

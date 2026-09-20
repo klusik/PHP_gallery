@@ -1,5 +1,10 @@
 /**
  * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ * Module Type: Regression Test
+ * Purpose: Exercise production title-completion events in disposable Chromium.
+ * Responsibilities:
+ *   - Check input behavior and suggestion lifecycle against a synthetic document.
  * File: tests/admin_gallery_title_completion_browser_test.mjs
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
@@ -22,6 +27,7 @@ if (!executable) {
 const routes = new Map([
     ['/', 'tests/fixtures/admin_gallery_title_completion.html'],
     ['/completion.js', 'public/assets/gallery-modules/admin-gallery-title-completion.js'],
+    ['/admin-interaction-policy.js', 'public/assets/gallery-modules/admin-interaction-policy.js'],
     ['/completion.css', 'public/assets/styles/admin-gallery-title-completion.css'],
 ]);
 const server = createServer(async (request, response) => {

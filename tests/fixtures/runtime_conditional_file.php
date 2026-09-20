@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Test Fixture
+ * Purpose: Exercise conditional file responses without a database.
+ * Responsibilities:
+ *   - Expose deterministic media bytes and validators for HTTP fixture requests.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/fixtures/runtime_conditional_file.php

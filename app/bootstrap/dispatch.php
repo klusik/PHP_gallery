@@ -52,6 +52,7 @@ use function Gallery\Views\view_render_not_found;
  * Dispatch a resolved page identifier to the existing controller route table.
  *
  * @param string $page Resolved page identifier.
+ * @return void Runs the route's preflight and controller, or emits the centralized refusal/not-found response.
  */
 function cms_dispatch_page(string $page): void
 {
@@ -179,6 +180,7 @@ function cms_dispatch_page(string $page): void
         'admin_import' => '\\Gallery\\Controllers\\cms_admin_import',
         'admin_new_gallery' => '\\Gallery\\Controllers\\cms_admin_new_gallery',
         'admin_gallery_title_completion' => '\\Gallery\\Controllers\\cms_admin_gallery_title_completion',
+        'admin_gallery_picker_search' => '\\Gallery\\Controllers\\cms_admin_gallery_picker_search',
         'admin_upload' => '\\Gallery\\Controllers\\cms_admin_upload',
         'admin_upload_settings' => '\\Gallery\\Controllers\\cms_admin_upload_settings',
         'admin_upload_browser_batch' => '\\Gallery\\Controllers\\cms_admin_upload_browser_batch',

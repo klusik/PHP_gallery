@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Test Fixture
+ * Purpose: Expose a controlled uncaught exception to the early-runtime guard.
+ * Responsibilities:
+ *   - Exercise bounded human-page error responses in the disposable server.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/fixtures/runtime_uncaught_exception.php

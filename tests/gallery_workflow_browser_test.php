@@ -1,6 +1,12 @@
 <?php
 /**
  * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ * File: tests/gallery_workflow_browser_test.php
+ * Module Type: Regression Test
+ * Purpose: Register real browser workflow coverage in PHP regression.
+ * Responsibilities:
+ *   - Delegate to the disposable workflow runner under its existing opt-in guards.
  * Author: Rudolf Klusal
  * Real browser workflow registration through the ordinary central PHP regression suite.
  */

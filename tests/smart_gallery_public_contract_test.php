@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Regression Test
+ * Purpose: Protect public Smart Gallery integration boundaries.
+ * Responsibilities:
+ *   - Check access, lightbox, Admin panel and download source contracts.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/smart_gallery_public_contract_test.php

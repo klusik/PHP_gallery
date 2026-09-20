@@ -1,5 +1,9 @@
 /**
  * Project: PHP Gallery
+ * Module Type: Regression Test
+ * Purpose: Verify browser merging of progressive search results.
+ * Responsibilities:
+ *   - Exercise stale-response suppression and phase result coordination.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/public_search_progressive_test.mjs

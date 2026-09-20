@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Regression Test
+ * Purpose: Protect Smart Gallery hardening regressions.
+ * Responsibilities:
+ *   - Check asset freshness, bounded graph fetches and batched count/cover lookups.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/smart_gallery_high_priority_hardening_test.php
@@ -46,8 +50,8 @@ $sidePanel = (string) file_get_contents($root . '/public/assets/gallery-modules/
 
 smart_gallery_high_priority_assert(
     str_contains($galleryJs, 'admin-smart-galleries.js?v=20260919-smart-gallery-presentation-v1')
-    && str_contains($galleryJs, 'admin-operations.js?v=20260920-lightbox-preload-lifecycle-v1')
-    && str_contains($adminOperations, 'admin-side-panel.js?v=20260920-lightbox-preload-lifecycle-v1')
+    && str_contains($galleryJs, 'admin-operations.js?v=20260920-panel-lifecycle-interaction-policy-v2')
+    && str_contains($adminOperations, 'admin-side-panel.js?v=20260920-panel-lifecycle-v1')
     && str_contains($sidePanel, 'admin-smart-galleries.js?v=20260919-smart-gallery-presentation-v1'),
     'Every Admin import edge uses the current cache-busting revision of the module it imports.'
 );

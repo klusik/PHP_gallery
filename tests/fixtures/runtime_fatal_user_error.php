@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Test Fixture
+ * Purpose: Trigger a controlled fatal user error for runtime response checks.
+ * Responsibilities:
+ *   - Exercise shutdown error handling inside the disposable HTTP fixture.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/fixtures/runtime_fatal_user_error.php

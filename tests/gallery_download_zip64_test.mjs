@@ -1,5 +1,9 @@
 /**
  * Project: PHP Gallery
+ * Module Type: Regression Test
+ * Purpose: Verify browser ZIP64 archive structure.
+ * Responsibilities:
+ *   - Check large-format metadata without requiring a production gallery download.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/gallery_download_zip64_test.mjs

@@ -2,6 +2,8 @@
 
 /**
  * Project: PHP Gallery
+ * Responsibilities:
+ *   - Reject malformed evidence before recovery comparisons or rehearsal.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: scripts/recovery/contracts.php

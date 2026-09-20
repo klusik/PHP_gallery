@@ -119,7 +119,7 @@ function picture_manager_model_copy_rows(
             $destinationCoverImageId = gallery_mutation_model_first_cover_candidate($destinationGalleryId, []);
         }
 
-        $updateCover = $pdo->prepare('UPDATE galleries SET cover_image_id = ?, updated_at = ? WHERE id = ?');
+        $updateCover = $pdo->prepare('UPDATE galleries SET cover_image_id = ?, updated_at = ?, edit_revision = edit_revision + 1 WHERE id = ?');
         $updateCover->execute([$destinationCoverImageId, $now, $destinationGalleryId]);
         $pdo->commit();
 

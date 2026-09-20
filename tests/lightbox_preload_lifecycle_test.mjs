@@ -1,5 +1,8 @@
 /**
  * Project: PHP Gallery
+ * Purpose: Verify the production nearby-preview lifecycle and viewer integration seam.
+ * Responsibilities:
+ *   - Exercise queue generations, bounded work and cancellation.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/lightbox_preload_lifecycle_test.mjs

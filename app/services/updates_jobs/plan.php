@@ -270,7 +270,8 @@ function application_update_backup_items_for_plan(string $root, array $files, ar
 /**
  * Build and persist the complete activation plan before active files are touched.
  *
- * @param array $job Job state, updated by reference.
+ * @param array<string,mixed> $job Durable update job, updated by reference with activation-file, backup, migration and verification checkpoints.
+ * @return void Stores the prepared plan or throws before active application files are replaced.
  */
 function application_update_job_build_plan(array &$job): void
 {
@@ -283,6 +284,7 @@ function application_update_job_build_plan(array &$job): void
             throw new RuntimeException('Rollback source snapshot is incomplete.');
         }
         $sourceRoot = $sourceJobDir . '/rollback/original';
+        application_update_assert_gallery_edit_enforcement($sourceRoot);
         $job['checkpoints']['source_root'] = $sourceRoot;
         $files = application_update_changed_release_files(
             $sourceRoot,
@@ -314,6 +316,7 @@ function application_update_job_build_plan(array &$job): void
     }
     $root = application_update_project_root();
     application_update_assert_activation_schema_known('application_update.job_activation');
+    application_update_assert_gallery_edit_enforcement($sourceRoot);
     $releaseFiles = application_update_release_files($sourceRoot);
     if ($releaseFiles === []) {
         throw new RuntimeException('Validated update package contains no installable files.');

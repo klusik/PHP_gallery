@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Regression Test
+ * Purpose: Protect progressive public search layer boundaries.
+ * Responsibilities:
+ *   - Keep persistence, ranking, HTTP flow and result markup with their owners.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/public_search_mvc_boundaries_test.php

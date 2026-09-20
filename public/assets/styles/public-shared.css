@@ -1,5 +1,9 @@
 /**
  * Project: PHP Gallery
+ * Module Type: Stylesheet
+ * Purpose: Style shared public components extracted from mixed Admin CSS.
+ * Responsibilities:
+ *   - Preserve footer, hero metadata, tags, branding, voting and map layout.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: public/assets/styles/public-shared.css

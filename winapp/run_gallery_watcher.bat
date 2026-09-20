@@ -1,6 +1,10 @@
 @echo off
 
 rem Project: PHP Gallery
+rem Module Type: Windows Tooling
+rem Purpose: Launch the watched-folder uploader with the local Python environment.
+rem Responsibilities:
+rem   - Forward the Windows invocation to the maintained uploader entrypoint.
 rem Repository: https://github.com/klusik/PHP_gallery
 rem
 rem File: winapp/run_gallery_watcher.bat

@@ -2,6 +2,8 @@
 
 /**
  * Project: PHP Gallery
+ * Responsibilities:
+ *   - Validate command intent and route it to the isolated recovery operations.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: scripts/recovery/cli.php
@@ -33,7 +35,10 @@ use Throwable;
 require_once __DIR__ . '/validation.php';
 require_once __DIR__ . '/fixture.php';
 
-/** Describe commands, private output requirements and limited evidence claims. */
+/**
+ * Describe commands, private output requirements and limited evidence claims.
+ * @return string Static CLI help text; does not print, inspect paths or run recovery operations.
+ */
 function usage(): string
 {
     return <<<'HELP'

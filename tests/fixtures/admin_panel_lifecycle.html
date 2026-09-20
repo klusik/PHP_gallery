@@ -1,0 +1,552 @@
+<!doctype html>
+<!--
+Project: PHP Gallery
+Repository: https://github.com/klusik/PHP_gallery
+File: tests/fixtures/admin_panel_lifecycle.html
+Module Type: Browser Test Fixture
+Purpose: Exercise production Admin panel lifecycle behavior in a disposable document.
+Responsibilities:
+  - Provide synthetic drawer, draft and focus targets for browser assertions.
+Author: Rudolf Klusal
+-->
+<!-- Project: PHP Gallery; Author: Rudolf Klusal; License: MIT -->
+<html lang="en">
+<meta charset="utf-8">
+<title>Disposable Admin panel lifecycle fixture</title>
+<style>
+    [hidden] { display: none !important; }
+    .admin-side-panel { position: fixed; inset: 0; background: #ddd; overflow: auto; }
+    .admin-side-panel-dialog { padding: 1rem; background: white; min-height: 90vh; }
+    input, textarea, button, a { margin: 4px; }
+</style>
+<main class="site-main" id="background"><h1>Disposable gallery</h1>
+    <a id="open-a" href="/fixture-editor?id=1" data-gallery-side-panel-link data-admin-side-panel-workflow="gallery-edit" data-admin-side-panel-title="Gallery A">A</a>
+    <a id="open-b" href="/fixture-editor?id=2" data-gallery-side-panel-link data-admin-side-panel-workflow="gallery-edit" data-admin-side-panel-title="Gallery B">B</a>
+    <a id="open-c" href="/fixture-editor?id=3" data-gallery-side-panel-link data-admin-side-panel-workflow="gallery-edit" data-admin-side-panel-title="Gallery C">C</a>
+    <a id="open-create" href="/fixture-create?parent_id=0" data-gallery-side-panel-link>Create</a>
+</main>
+<div id="already-inert" inert="original"><button>Already inert</button></div>
+<pre id="results">BROWSER PENDING</pre>
+<script type="module">
+import {setupAdminGallerySidePanel} from '/public/assets/gallery-modules/admin-side-panel.js';
+import {setupAdminGalleryTitleCompletion} from '/public/assets/gallery-modules/admin-gallery-title-completion.js';
+import {setupAdminMetadataOrganizer} from '/public/assets/gallery-modules/admin-metadata-organizer.js?v=20260920-panel-lifecycle-v1';
+import {ADMIN_PANEL_DRAFT_LIMIT, ADMIN_PANEL_DRAFT_TEXT_LIMIT} from '/public/assets/gallery-modules/admin-panel-policy.js?v=20260920-panel-lifecycle-v1';
+
+/** Millisecond pause used to deliver queued promises and close transitions in Chromium. */
+const settleMs = 30;
+/** @type {Object<string, string>} Synthetic persisted text, never a live gallery. */
+const titles = {1: 'Server A', 2: 'Server B', 3: 'Server C'};
+/** @type {Object<string, number|string>} Synthetic decimal and opaque edit revisions. */
+const revisions = {1: 1, 2: 1, 3: 1};
+/** @type {Object<string, string>} Explicit server revision field names exercised by the fixture. */
+const revisionFieldNames = {};
+/** @type {Array<Object>} Controlled response gates, including deliberately ignored aborts. */
+const pending = [];
+/** @type {Set<string>} Gallery GETs held until explicitly released by this fixture. */
+const held = new Set();
+let holdRefresh = false;
+let holdPost = false;
+let failPost = false;
+let failGet = false;
+let holdOrder = false;
+let holdOrganizer = false;
+let lastOrderDetail = null;
+let lastOrganizerDetail = null;
+let lastBulkParent = null;
+let revisionConflicts = 0;
+/** @type {Map<string, string>} Active form precondition observed as each editor GET starts. */
+const revisionAtRefreshStart = new Map();
+let posts = 0;
+let refreshes = 0;
+let assertions = 0;
+const originalUrl = location.href;
+const originalDocument = document;
+/** Native loopback fetch reserved for the owned Chromium keyboard adapter. */
+const fixtureFetch = window.fetch.bind(window);
+
+/**
+ * Assert a named browser-visible postcondition.
+ * @param {boolean} condition Observed result.
+ * @param {string} message Diagnostic stage, never private form text.
+ * @return {void}
+ */
+function check(condition, message) {
+    if (!condition) throw new Error(message);
+    assertions++;
+}
+/**
+ * Let queued UI work settle without relying on production network timing.
+ * @param {number} milliseconds Virtual time to advance.
+ * @return {Promise<void>} Queued timer completion.
+ */
+function wait(milliseconds = settleMs) { return new Promise(/** Yield until the requested fixture delay has elapsed. @param {function(): void} resolve Resume queued assertions. @return {number} Browser timer handle ignored by the executor. */ resolve => setTimeout(resolve, milliseconds)); }
+/**
+ * Produce ordinary server-shaped editor HTML with identity, revision and secret exclusions.
+ * @param {string} id Synthetic gallery identity.
+ * @return {string} Disposable fragment.
+ */
+function editor(id) {
+    return `<section><form class="admin-edit-gallery-form">
+        <input type="hidden" name="id" value="${id}"><input type="hidden" name="${revisionFieldNames[id] || 'expected_edit_revision'}" value="${revisions[id]}">
+        <input type="hidden" name="csrf_token" value="fresh-fixture-csrf"><input name="title" value="${titles[id]}">
+        <textarea name="description">Server description</textarea><input type="password" name="password" value="">
+        <input name="share_token" value=""><input type="file" name="images[]"><input type="checkbox" name="visibility" value="private">
+        <button name="action" value="save">Save</button><button type="button" hidden>Hidden</button><button type="button" disabled>Disabled</button>
+        <fieldset disabled><button type="button">Disabled fieldset</button></fieldset>
+    </form>${toolForms(id)}<div data-gallery-search-picker data-search-url="/picker" data-page-size="30" data-search-delay="0">
+        <input data-gallery-search-picker-value type="hidden" value="0"><input id="destination" data-gallery-search-picker-input aria-expanded="false">
+        <div data-gallery-search-picker-menu hidden><button type="button" data-gallery-search-picker-option data-gallery-search-picker-root data-gallery-id="0" data-gallery-label="Root">Root</button></div>
+        <span data-gallery-search-picker-status></span></div>
+        <a href="/fixture-editor?id=2" data-gallery-side-panel-link data-admin-side-panel-workflow="gallery-edit" data-admin-side-panel-title="Gallery B">Edit B in place</a></section>`;
+}
+/**
+ * Render actual reorder/organizer/bulk controls against synthetic endpoints only.
+ * @param {string} id Fixture gallery identity.
+ * @return {string} Minimal production-shaped tool fragments with independent forms.
+ */
+function toolForms(id) {
+    return `<div data-admin-image-order-toolbar data-reorder-url="/fixture-order?id=${id}"><span data-admin-image-order-status></span></div>
+        <form data-admin-image-bulk-form action="/fixture-bulk?id=${id}">
+        <input type="hidden" name="csrf_token" value="fixture-only"><input type="hidden" name="gallery_id" value="${id}">
+        <input type="hidden" name="new_gallery_parent_id" value="999" disabled><input type="hidden" name="new_gallery_parent_id" value="42">
+        <input name="new_gallery_title" value="New child"><input name="new_gallery_folder_name" value="new-child">
+        <table data-admin-image-order-table><thead><tr><th><button type="button" data-admin-image-name-sort>Name</button></th></tr></thead>
+        <tbody><tr data-admin-image-order-row data-image-id="11" data-image-name="Beta"><td><input type="checkbox" name="image_ids[]" value="11" checked>Beta</td></tr>
+        <tr data-admin-image-order-row data-image-id="12" data-image-name="Alpha"><td>Alpha</td></tr></tbody></table>
+        <button name="action" value="move_new">Move to new child</button></form>
+        <div data-admin-metadata-organizer><div data-admin-metadata-organizer-progress hidden><progress data-admin-metadata-organizer-progress-bar></progress><span data-admin-metadata-organizer-progress-text></span></div>
+        <div data-admin-metadata-organizer-results><form data-admin-metadata-organizer-apply-form action="/fixture-organizer?id=${id}" data-candidate-count="1">
+        <input type="hidden" name="gallery_id" value="${id}"><input type="hidden" name="csrf_token" value="fixture-only">
+        <input type="checkbox" name="confirm_metadata_organizer" value="1" checked><button>Apply fixture organizer</button></form></div></div>`;
+}
+/**
+ * Create the title-completion create form used to test nested Escape/Tab priority.
+ * @return {string} Synthetic create fragment, no live endpoint.
+ */
+function creator() {
+    return `<section data-gallery-create-panel><form data-gallery-panel-create-form>
+        <input type="hidden" name="parent_id" value="0"><span data-gallery-title-completion data-gallery-title-completion-url="/suggest">
+        <input name="title" data-gallery-title-completion-input autocomplete="off"><span data-gallery-title-completion-overlay hidden>
+        <span data-gallery-title-completion-prefix></span><span data-gallery-title-completion-tail></span></span>
+        <span data-gallery-title-completion-help>Tab accepts</span><span data-gallery-title-completion-status role="status"></span></span>
+        <textarea name="description"></textarea><button>Create</button></form></section>`;
+}
+/**
+ * Return the canonical success envelope for a synthetic gallery save.
+ * @param {string} id Synthetic entity identity.
+ * @return {{ok: boolean, message: string, edit_revision: string, gallery_visibility: string, mutation: {type: string, entity: string, action: string, entity_ids: number[]}, panel: {workflow: string, refresh_url: string, keep_open: boolean}, contexts: never[], fallback: Record<string, never>}} Synthetic canonical envelope; contexts intentionally empty in this fixture.
+ */
+function success(id) {
+    return {ok: true, message: 'Saved fixture', edit_revision: String(revisions[id]), gallery_visibility: 'public', mutation: {type: 'gallery.update', entity: 'gallery', action: 'update', entity_ids: [Number(id)]},
+        panel: {workflow: 'gallery-edit', refresh_url: `${location.origin}/fixture-editor?id=${id}`, keep_open: true}, contexts: [], fallback: {}};
+}
+/**
+ * Fetch-shaped response supplied only by this disposable fixture.
+ * @typedef {Object} FixtureResponse
+ * @property {boolean} ok Synthetic HTTP success flag.
+ * @property {number} [status] Optional failure HTTP status.
+ * @property {Headers} [headers] Optional parser content-type headers.
+ * @property {string} [url] Optional accepted editor URL.
+ * @property {function(): Promise<string>} [text] Captured HTML or JSON body reader.
+ * @property {function(): Promise<Record<string, unknown>>} [json] Synthetic tool/picker JSON body reader.
+ */
+/**
+ * One delayed synthetic response and its cancellation observation.
+ * @typedef {Object} FixtureGate
+ * @property {string} kind Open, refresh, POST or independent tool request class.
+ * @property {string} id Synthetic gallery identity.
+ * @property {AbortSignal|undefined} signal Original request signal, deliberately ignored by release.
+ * @property {function(): void} release Resolve the captured response exactly when the test requests it.
+ */
+/**
+ * Queue controlled responses while retaining their signal for cancellation assertions.
+ * @param {string} kind Gate class.
+ * @param {string} id Synthetic identity.
+ * @param {RequestInit} options Original production fetch options.
+ * @param {FixtureResponse} response Response captured before a later state change.
+ * @return {Promise<FixtureResponse>} Response released by the test, deliberately ignoring abort.
+ */
+function gated(kind, id, options, response) {
+    return new Promise(/** Register a deliberately delayed response without honoring abort. @param {function(FixtureResponse): void} resolve Captured response consumer. @return {number} Queued-gate count ignored by the executor. */ resolve => pending.push({kind, id, signal: options.signal, /** Release only this captured fixture response. @return {void} Resolves its waiting production request. */ release: () => resolve(response)}));
+}
+/**
+ * Intercept only synthetic workflow endpoints; imported production modules stay unchanged.
+ * @param {string} value Fixture endpoint.
+ * @param {RequestInit} options Production request options.
+ * @return {Promise<FixtureResponse>} Controlled fetch-shaped response.
+ */
+async function fetchPanelFixture(value, options = {}) {
+    const url = new URL(value, location.href);
+    const id = url.searchParams.get('id') || '1';
+    if (url.pathname === '/picker') {
+        return {ok: true, /** Return one bounded synthetic destination page. @return {Promise<{ok: boolean, rows: Array<{id: string, title: string, label: string, path: string, depth: number}>, next_after_id: null}>} Picker results without live catalog access. */ json: async () => ({ok: true, rows: [{id: '9', title: 'Destination', label: 'Destination #9', path: 'destination', depth: 0}], next_after_id: null})};
+    }
+    if (url.pathname === '/suggest') {
+        return {ok: true, /** Return the fixed fixture title-completion candidate. @return {Promise<{ok: boolean, candidates: Array<{id: number, parent_id: number, title: string}>}>} Synthetic candidate list. */ json: async () => ({ok: true, candidates: [{id: 7, parent_id: 0, title: 'West walk'}]})};
+    }
+    if (options.method === 'POST' && ['/fixture-order', '/fixture-organizer', '/fixture-bulk'].includes(url.pathname)) {
+        posts++;
+        const payload = {...success(id), result: {done: true, remaining_after: 0, moved_images: 1, requested_images: 1}, bulk_action: 'move_new'};
+        const response = {ok: true, headers: new Headers({'Content-Type': 'application/json'}), /** Deliver the captured tool acknowledgment to JSON consumers. @return {Promise<typeof payload>} Original synthetic payload. */ json: async () => payload, /** Deliver the same tool acknowledgment to text parsers. @return {Promise<string>} Captured JSON representation. */ text: async () => JSON.stringify(payload)};
+        if (url.pathname === '/fixture-bulk') lastBulkParent = options.body.get('new_gallery_parent_id');
+        if (url.pathname === '/fixture-order' && holdOrder) return gated('order', id, options, response);
+        if (url.pathname === '/fixture-organizer' && holdOrganizer) return gated('organizer', id, options, response);
+        return response;
+    }
+    if (options.method === 'POST') {
+        posts++;
+        if (failPost) return {ok: false, headers: new Headers({'Content-Type': 'application/json'}), /** Model an unsuccessful authenticated/validated save without modifying fixture state. @return {Promise<string>} Bounded synthetic refusal JSON. */ text: async () => JSON.stringify({ok: false, message: 'Authentication or validation failed'})};
+        const expectedRevision = options.body.get('edit_revision') || options.body.get('expected_edit_revision');
+        if (url.pathname === '/fixture-editor' && expectedRevision !== String(revisions[id])) {
+            revisionConflicts++;
+            return {ok: false, status: 409, headers: new Headers({'Content-Type': 'application/json'}), /** Report the synthetic stale-revision refusal. @return {Promise<string>} HTTP-conflict JSON without advancing state. */ text: async () => JSON.stringify({ok: false, message: 'Fixture edit revision conflict'})};
+        }
+        const text = options.body.get('title');
+        titles[id] = text;
+        revisions[id] = typeof revisions[id] === 'number' ? revisions[id] + 1
+            : /^[1-9][0-9]{0,19}$/.test(revisions[id]) ? String(BigInt(revisions[id]) + 1n) : 'd'.repeat(64);
+        // Freeze the just-saved response now; a delayed body must not borrow a later writer's revision.
+        const payload = success(id);
+        const response = {ok: true, headers: new Headers({'Content-Type': 'application/json'}), /** Read the just-saved snapshot, never a later writer's revision. @return {Promise<string>} Frozen acknowledgment JSON. */ text: async () => JSON.stringify(payload)};
+        return holdPost ? gated('post', id, options, response) : response;
+    }
+    const isRefresh = url.searchParams.has('_panel_refresh');
+    if (isRefresh) {
+        refreshes++;
+        revisionAtRefreshStart.set(id, field('[name="edit_revision"], [name="expected_edit_revision"]')?.value || '');
+    }
+    const html = url.pathname === '/fixture-create' ? creator() : editor(id);
+    const response = {ok: !failGet, url: url.toString(), /** Read HTML captured before later fixture mutations. @return {Promise<string>} Original requested editor/create fragment. */ text: async () => html};
+    if ((isRefresh && holdRefresh) || (!isRefresh && held.has(id))) return gated(isRefresh ? 'refresh' : 'open', id, options, response);
+    return response;
+}
+window.fetch = fetchPanelFixture;
+/**
+ * Resolve one named queued request.
+ * @param {string} kind Request class.
+ * @param {string} id Synthetic identity.
+ * @return {FixtureGate} Released gate for inspecting abort state.
+ */
+function release(kind, id) {
+    const index = pending.findIndex(/** Locate the next requested synthetic response by workflow and entity. @param {FixtureGate} item Delayed fixture request. @return {boolean} Whether it matches this release. */ item => item.kind === kind && item.id === id);
+    check(index >= 0, 'Expected queued ' + kind + ' response');
+    const [gate] = pending.splice(index, 1);
+    gate.release();
+    return gate;
+}
+/**
+ * Get the mounted shell.
+ * @return {HTMLElement} Reusable drawer.
+ */
+function panel() { return document.querySelector('[data-admin-side-panel]'); }
+/**
+ * Query a control inside the current drawer.
+ * @param {string} selector Owned selector.
+ * @return {HTMLElement} Current node.
+ */
+function field(selector = '[name="title"]') { return panel().querySelector(selector); }
+/**
+ * Enter ordinary text and dispatch the production delegated input event.
+ * @param {HTMLElement} control Synthetic text input/textarea.
+ * @param {string} value New text.
+ * @return {void}
+ */
+function type(control, value) {
+    control.focus(); control.value = value;
+    if (control.setSelectionRange) control.setSelectionRange(value.length, value.length);
+    control.dispatchEvent(new Event('input', {bubbles: true}));
+}
+/**
+ * Deliver a cancellable keyboard event through the real Chromium DOM.
+ * @param {HTMLElement} target Focus target.
+ * @param {string} value Key value.
+ * @param {KeyboardEventInit} options Native modifier/composition state supplied by the fixture.
+ * @return {boolean} Whether production handlers consumed the key.
+ */
+function key(target, value, options = {}) {
+    const event = new KeyboardEvent('keydown', {key: value, bubbles: true, cancelable: true, ...options});
+    target.dispatchEvent(event);
+    return event.defaultPrevented;
+}
+/**
+ * Send an actual browser key through the disposable process's DevTools session.
+ * @param {string} value Tab or Escape.
+ * @param {boolean} shift Whether to hold Shift.
+ * @return {Promise<void>} Native key delivery and queued focus effects.
+ */
+async function trustedKey(value, shift = false) {
+    const response = await fixtureFetch(`/__key?key=${value}&shift=${shift ? '1' : '0'}`);
+    check(response.ok, 'Owned native keyboard adapter is available');
+    await wait();
+}
+/**
+ * Activate one of the explicit non-submitting draft choices.
+ * @param {string} action Stable inline action key.
+ * @return {void}
+ */
+function draftAction(action) { field(`[data-admin-panel-draft-action="${action}"]`).click(); }
+/**
+ * Click the persistent close control.
+ * @return {void}
+ */
+function close() { field('[data-admin-side-panel-close]').click(); }
+/**
+ * Invoke the actual delegated save path on the current replacement form.
+ * @return {void}
+ */
+function save() { field('form').requestSubmit(field('button[name="action"]')); }
+/**
+ * Submit an independently owned tool form through the real delegated handlers.
+ * @param {string} selector Tool form selector in the active drawer.
+ * @return {void}
+ */
+function submitTool(selector) {
+    const form = field(selector);
+    form.requestSubmit(form.querySelector('button:not([type="button"])'));
+}
+
+try {
+    setupAdminGallerySidePanel(); setupAdminGallerySidePanel();
+    setupAdminGalleryTitleCompletion();
+    setupAdminMetadataOrganizer();
+    document.addEventListener('php-gallery:admin-image-order-saved', /** Observe the real reorder emitter's captured owner. @param {CustomEvent} event Production result and panelOwner. @return {void} Retains only fixture event detail for assertions. */ event => { lastOrderDetail = event.detail; });
+    document.addEventListener('php-gallery:metadata-organizer-applied', /** Observe the real organizer emitter's captured owner. @param {CustomEvent} event Production result and panelOwner. @return {void} Retains only fixture event detail for assertions. */ event => { lastOrganizerDetail = event.detail; });
+    held.add('1'); held.add('2');
+    document.getElementById('open-a').click();
+    check(field('[data-admin-side-panel-close]') === document.activeElement, 'Loading focuses visible Close immediately');
+    document.getElementById('open-b').click();
+    check(pending[0].signal.aborted, 'New open aborts earlier GET');
+    release('open', '2'); await wait();
+    const bFocus = document.activeElement;
+    release('open', '1'); await wait();
+    check(field().value === 'Server B' && field('form').getAttribute('action').includes('id=2'), 'Reversed A/B load keeps B body and form target');
+    check(field('[data-admin-side-panel-title]').textContent === 'Gallery B' && panel().dataset.adminSidePanelSourceUrl.includes('id=2'), 'Reversed A/B keeps B heading and source');
+    check(document.activeElement === bFocus, 'Late A cannot steal focus');
+    held.clear();
+    check(document.getElementById('background').inert, 'Modal background is inert');
+    const added = document.createElement('div'); added.innerHTML = '<button>Added background</button>'; document.body.append(added); await wait();
+    check(added.inert, 'New background siblings inherit modal isolation');
+    const last = field('[data-gallery-side-panel-link]'); last.focus();
+    await trustedKey('Tab');
+    check(document.activeElement === field('[data-admin-side-panel-close]'), 'Native Tab wraps from final eligible control');
+    await trustedKey('Tab', true);
+    check(document.activeElement === last, 'Native Shift Tab wraps back from Close');
+    field('[data-admin-side-panel-close]').focus(); await trustedKey('Tab');
+    check(document.activeElement === field(), 'Native interior Tab reaches the first visible form field');
+    document.getElementById('open-a').focus();
+    check(panel().contains(document.activeElement), 'Inert background cannot take focus');
+    const picker = field('[data-gallery-search-picker-input]'); picker.focus(); await wait();
+    check(picker.getAttribute('aria-expanded') === 'true', 'Production destination picker opens');
+    await trustedKey('Escape');
+    check(picker.getAttribute('aria-expanded') === 'false' && !panel().classList.contains('is-closing'), 'Destination picker consumes its first Escape');
+    close(); await wait(310);
+    check(panel().hidden && document.activeElement === document.getElementById('open-b'), 'Close restores the connected opener');
+    check(!document.getElementById('background').inert && !added.inert && document.getElementById('already-inert').getAttribute('inert') === 'original', 'Close preserves prior inert attributes exactly');
+
+    held.add('1'); document.getElementById('open-a').click(); close();
+    const cancelled = release('open', '1'); await wait(310);
+    check(cancelled.signal.aborted && panel().hidden && !panel().classList.contains('is-open'), 'Close before animation frame and late response cannot reopen');
+    document.getElementById('open-a').click(); close(); document.getElementById('open-c').click(); await wait();
+    release('open', '1'); await wait(310);
+    check(!panel().hidden && field().value === 'Server C', 'Close/open C survives late A and old close timer');
+    held.clear();
+
+    type(field('[name="description"]'), 'Long local description '.repeat(80));
+    type(field('[name="password"]'), 'fixture-secret-never-retain');
+    type(field('[name="share_token"]'), 'fixture-token-never-retain');
+    field('[name="visibility"]').checked = true;
+    const draftText = field('[name="description"]').value;
+    field('[data-gallery-side-panel-link]').click();
+    check(field('[name="description"]').value === draftText && document.activeElement.dataset.adminPanelDraftAction === 'keep-editing', 'Context switch pauses in inline guard');
+    draftAction('keep-editing');
+    check(field('[name="description"]').value === draftText, 'Keep editing preserves text');
+    close(); draftAction('keep-continue'); await wait(310);
+    revisions[3]++;
+    document.getElementById('open-c').click(); await wait();
+    check(field('[name="description"]').value === 'Server description' && field('[data-admin-panel-draft]').textContent.includes('revision'), 'Reopen offers explicit revision-aware restore');
+    draftAction('restore');
+    check(field('[name="description"]').value === draftText, 'Long description restored explicitly');
+    check(field('[name="password"]').value === '' && field('[name="share_token"]').value === '' && !field('[name="visibility"]').checked, 'Draft excludes secrets and access choices');
+    check(field('[name="expected_edit_revision"]').value === String(revisions[3]) && field('[name="csrf_token"]').value === 'fresh-fixture-csrf', 'Restore preserves current server revision and CSRF');
+    const dirtyForm = field('form');
+    field('button[name="action"]').dispatchEvent(new CustomEvent('php-gallery:auxiliary-mutation-success', {bubbles: true, detail: {
+        result: {...success('3'), mutation: {type: 'api.update', entity: 'api_key', action: 'update', entity_ids: [91]}}, refreshPanel: true,
+    }}));
+    await wait();
+    check(field('form') === dirtyForm && field('[name="description"]').value === draftText, 'Unrelated successful mutation cannot clear the gallery text draft');
+    const beforeFailure = posts; failPost = true; save(); await wait(); failPost = false;
+    check(posts === beforeFailure + 1 && field('[name="description"]').value === draftText, 'Authentication/validation refusal retains the only text copy');
+
+    holdPost = true; save(); await wait();
+    type(field('[name="description"]'), 'Edited again while POST is pending');
+    field('[name="visibility"]').checked = true;
+    release('post', '3'); await wait(); holdPost = false;
+    check(field('[name="description"]').value === 'Edited again while POST is pending' && field('[data-admin-panel-draft]').textContent.includes('Unsaved'), 'Success clears only submitted text, preserves later typing');
+    check(field('[name="expected_edit_revision"]').value === String(revisions[3]) && field('[name="visibility"]').checked, 'Owned acknowledgment advances only revision while in-flight text/privacy edits survive');
+    close(); draftAction('discard-continue'); await wait(310);
+    document.getElementById('open-c').click(); await wait();
+    check(!field('[data-admin-panel-draft-action="restore"]'), 'Explicit discard removes the retained draft');
+
+    holdRefresh = true; type(field(), 'Saved C'); save(); await wait();
+    check(pending.some(/** Confirm a successful save reached the existing coordinator refresh path. @param {FixtureGate} item Queued fixture request. @return {boolean} Whether it is a mutation refresh. */ item => item.kind === 'refresh'), 'Successful save reaches canonical refresh callback');
+    type(field('[name="description"]'), 'Typed during refresh');
+    release('refresh', '3'); await wait();
+    check(field('[name="description"]').value === 'Typed during refresh', 'Delayed matching refresh cannot erase new typing');
+    close(); draftAction('discard-continue'); await wait(310); holdRefresh = false;
+
+    document.getElementById('open-a').click(); await wait(); holdRefresh = true;
+    type(field(), 'Saved A'); save(); await wait();
+    field('[data-gallery-side-panel-link]').click(); await wait();
+    release('refresh', '1'); await wait(); holdRefresh = false;
+    check(field().value === 'Server B' && field('[data-admin-side-panel-title]').textContent === 'Gallery B', 'Late mutation GET cannot replace another open workflow');
+
+    const detachedRevisionField = field('[name="expected_edit_revision"]'); const detachedRevision = detachedRevisionField.value;
+    holdPost = true; type(field(), 'Saved B'); save(); await wait();
+    close(); draftAction('keep-continue'); document.getElementById('open-c').click(); await wait();
+    const cBody = field('form'); const cStatus = field('[data-admin-side-panel-status]').textContent;
+    release('post', '2'); await wait(); holdPost = false;
+    check(field('form') === cBody && field('[data-admin-side-panel-status]').textContent === cStatus, 'Detached POST completion preserves new panel body and status');
+    check(detachedRevisionField.value === detachedRevision, 'Late response cannot advance a detached submitting form revision');
+    close(); await wait(310);
+    document.getElementById('open-b').click(); await wait();
+    check(!field('[data-admin-panel-draft-action="restore"]'), 'Matching late success clears only B submitted draft');
+    const firstBForm = field('form'); type(field(), 'Second B save'); save(); await wait();
+    check(field('form') !== firstBForm && field() === document.activeElement, 'Accepted fragment replacement restores equivalent visible focus');
+    const secondBForm = field('form'); type(field(), 'Third B save'); save(); await wait();
+    check(field('form') !== secondBForm && !field('[data-admin-panel-draft-action="restore"]'), 'Dynamically replaced save control stays intercepted and matching draft clears');
+    type(field('[name="description"]'), 'Temporary edit'); type(field('[name="description"]'), 'Server description');
+    check(field('[data-admin-panel-draft]').hidden, 'Returning text to baseline removes its obsolete draft');
+
+    const sequentialForm = field('form'); const conflictsBeforeSequential = revisionConflicts;
+    holdRefresh = true; type(field(), 'First sequential save'); save(); await wait();
+    const firstSavedRevision = String(revisions[2]);
+    check(field('form') === sequentialForm && field('[name="expected_edit_revision"]').value === firstSavedRevision,
+        'Successful POST advances the same form precondition while its GET remains held');
+    check(revisionAtRefreshStart.get('2') === firstSavedRevision, 'Just-saved revision is acknowledged synchronously before refresh starts');
+    check(!field('button[name="action"]').disabled, 'Original complete form is usable while its refresh is pending');
+    holdRefresh = false; type(field(), 'Second sequential save'); save(); await wait();
+    const secondSequentialForm = field('form');
+    check(revisionConflicts === conflictsBeforeSequential && secondSequentialForm !== sequentialForm && field().value === 'Second sequential save',
+        'Second complete-form intent succeeds using the immediately acknowledged revision');
+    const secondSavedRevision = field('[name="expected_edit_revision"]').value;
+    release('refresh', '2'); await wait();
+    check(field('form') === secondSequentialForm && field('[name="expected_edit_revision"]').value === secondSavedRevision,
+        'Old GET cannot regress the later form or its revision');
+    revisions[2]++;
+    type(field(), 'Local edit after external writer'); field('[name="visibility"]').checked = true; save(); await wait();
+    check(revisionConflicts === conflictsBeforeSequential + 1 && field('form') === secondSequentialForm
+        && field('[name="expected_edit_revision"]').value === secondSavedRevision && field().value === 'Local edit after external writer'
+        && field('[name="visibility"]').checked, 'A later external writer still rejects the stale revision without merging controls or dropping text');
+    close(); draftAction('discard-continue'); document.getElementById('open-b').click(); await wait();
+
+    const supersededRevisionField = field('[name="expected_edit_revision"]'); const supersededRevision = supersededRevisionField.value;
+    holdPost = true; type(field(), 'Older in-flight form submission'); save(); await wait();
+    type(field(), 'Newer form submission'); save(); await wait();
+    release('post', '2'); await wait(); holdPost = false;
+    check(field('[name="expected_edit_revision"]') === supersededRevisionField && supersededRevisionField.value === supersededRevision
+        && field().value === 'Newer form submission', 'Superseded same-form POST cannot acknowledge revision or overwrite the latest submitted text');
+    close(); draftAction('discard-continue'); document.getElementById('open-b').click(); await wait();
+
+    type(field('[name="description"]'), 'x'.repeat(ADMIN_PANEL_DRAFT_TEXT_LIMIT + 1));
+    close();
+    check(field('[data-admin-panel-draft-action="keep-continue"]') === null && field('[name="description"]').value.length > ADMIN_PANEL_DRAFT_TEXT_LIMIT, 'Memory cap blocks loss without truncating text');
+    draftAction('discard-continue'); await wait(310);
+    failGet = true; document.getElementById('open-a').click(); await wait(); failGet = false;
+    check(field('[data-admin-side-panel-body] a') === document.activeElement, 'Load failure focuses the direct recovery link');
+    key(document.activeElement, 'Escape'); await wait(310);
+    check(panel().hidden, 'Escape closes an error panel');
+
+    document.getElementById('open-a').click(); await wait(); holdOrder = true;
+    field('[data-admin-image-name-sort]').click(); await wait();
+    field('[data-gallery-side-panel-link]').click(); await wait();
+    const orderReplacement = field('form'); const orderStatus = field('[data-admin-side-panel-status]').textContent;
+    release('order', '1'); await wait(); holdOrder = false;
+    check(lastOrderDetail?.panelOwner?.isCurrent() === false, 'Reordering event retains its pre-request owner');
+    check(field('form') === orderReplacement && field('[data-admin-side-panel-status]').textContent === orderStatus, 'Late reordering completion cannot redraw the replacement editor');
+    field('[data-admin-image-name-sort]').click(); await wait();
+    check(lastOrderDetail?.panelOwner?.isCurrent() === true && field('form') !== orderReplacement, 'Current reorder event still refreshes its own editor');
+
+    holdOrganizer = true; submitTool('[data-admin-metadata-organizer-apply-form]'); await wait(100);
+    document.getElementById('open-c').click(); await wait();
+    const organizerReplacement = field('form'); const organizerStatus = field('[data-admin-side-panel-status]').textContent;
+    release('organizer', '2'); await wait(100); holdOrganizer = false;
+    check(lastOrganizerDetail?.panelOwner?.isCurrent() === false, 'Organizer completion retains the owner captured before its batch loop');
+    check(field('form') === organizerReplacement && field('[data-admin-side-panel-status]').textContent === organizerStatus, 'Late organizer completion cannot redraw the replacement editor');
+    submitTool('[data-admin-metadata-organizer-apply-form]'); await wait(150);
+    check(lastOrganizerDetail?.panelOwner?.isCurrent() === true && field('form') !== organizerReplacement, 'Current organizer completion reaches the canonical panel refresh');
+
+    submitTool('[data-admin-panel-bulk-form]'); await wait();
+    check(lastBulkParent === '42', 'Bulk move submits the enabled hidden parent and ignores disabled fallback');
+    field('input[type="hidden"][name="new_gallery_parent_id"]:enabled').value = '0';
+    submitTool('[data-admin-panel-bulk-form]'); await wait();
+    check(lastBulkParent === '0', 'Bulk move preserves explicit root through the hidden picker field');
+    const legacyParent = document.createElement('select'); legacyParent.name = 'new_gallery_parent_id'; legacyParent.innerHTML = '<option value="73">Legacy parent</option>';
+    field('input[type="hidden"][name="new_gallery_parent_id"]:enabled').replaceWith(legacyParent);
+    submitTool('[data-admin-panel-bulk-form]'); await wait();
+    check(lastBulkParent === '73', 'Bulk move retains its legacy select compatibility');
+    close(); await wait(310);
+
+    revisionFieldNames[1] = 'edit_revision'; revisions[1] = 'a'.repeat(64);
+    document.getElementById('open-a').click(); await wait(); type(field(), 'Opaque revision draft'); close(); draftAction('keep-continue');
+    document.getElementById('open-a').click(); await wait();
+    check(!field('[data-admin-panel-draft]').textContent.includes('revision'), 'Unchanged hexadecimal revision is recognized as a verified matching revision');
+    close(); revisions[1] = 'b'.repeat(64); document.getElementById('open-a').click(); await wait();
+    check(field('[data-admin-panel-draft]').textContent.includes('revision'), 'Changed hexadecimal revision requires review');
+    draftAction('restore');
+    check(field('[name="edit_revision"]').value === 'b'.repeat(64), 'Opaque draft restore preserves the new server precondition');
+    save(); await wait();
+    check(!field('[data-admin-panel-draft-action="restore"]'), 'Matching opaque-revision save clears only its submitted draft');
+    close(); await wait(310);
+    revisions[1] = 'a'.repeat(129);
+    document.getElementById('open-a').click(); await wait(); type(field(), 'Oversized revision draft'); close(); draftAction('keep-continue');
+    document.getElementById('open-a').click(); await wait();
+    check(field('[data-admin-panel-draft]').textContent.includes('cannot be verified'), 'Oversized revision is unavailable even when the server repeats it');
+    draftAction('discard'); close(); await wait(310);
+
+    document.getElementById('open-create').click(); await wait();
+    type(field(), 'We'); await wait(250);
+    key(field(), 'Escape'); await wait();
+    check(!panel().classList.contains('is-closing') && !field('[data-admin-panel-draft-action="keep-editing"]'), 'Title completion consumes Escape before drawer guard');
+    type(field(), 'We'); await wait(250);
+    check(key(field(), 'Tab') && field().value === 'West walk', 'Title completion keeps its intended Tab key');
+    await wait(250);
+    key(field(), 'Escape'); await wait();
+    check(Boolean(field('[data-admin-panel-draft-action="keep-editing"]')), 'Next unclaimed Escape invokes inline dirty guard');
+    draftAction('discard-continue'); await wait(310);
+
+    for (let slot = 0; slot <= ADMIN_PANEL_DRAFT_LIMIT; slot++) {
+        const id = String(100 + slot); titles[id] = 'Fixture ' + id; revisions[id] = 1;
+        const opener = document.createElement('a');
+        opener.id = 'capacity-' + id;
+        opener.href = '/fixture-editor?id=' + id;
+        opener.dataset.gallerySidePanelLink = '';
+        opener.dataset.adminSidePanelWorkflow = 'gallery-edit';
+        opener.textContent = 'Capacity fixture ' + id;
+        document.getElementById('background').append(opener);
+        opener.click(); await wait();
+        type(field('[name="description"]'), 'Retained fixture ' + id); close();
+        if (slot < ADMIN_PANEL_DRAFT_LIMIT) {
+            check(Boolean(field('[data-admin-panel-draft-action="keep-continue"]')), 'Each available draft slot retains a full edit');
+            draftAction('keep-continue');
+        } else {
+            check(!field('[data-admin-panel-draft-action="keep-continue"]'), 'Entity-count cap refuses implicit eviction');
+            draftAction('discard-continue');
+        }
+    }
+    document.getElementById('capacity-100').click(); await wait();
+    check(Boolean(field('[data-admin-panel-draft-action="restore"]')), 'First retained draft survives capacity refusal');
+    draftAction('discard'); close(); await wait(310);
+
+    document.getElementById('open-c').click(); await wait();
+    const replacementOpener = document.getElementById('open-c'); replacementOpener.remove();
+    close(); await wait(310);
+    check(document.activeElement.isConnected && !panel().contains(document.activeElement) && document.activeElement !== document.body, 'Removed opener restores a connected logical fallback');
+    check(location.href === originalUrl && document === originalDocument, 'All mutations and guards preserve URL and document');
+    check(localStorage.length === 0 && sessionStorage.length === 0, 'Drafts do not use persistent browser storage');
+    document.getElementById('results').textContent = `BROWSER PASS: ${assertions} lifecycle, draft, race and modal focus assertions including native Tab/Shift-Tab/Escape; ${posts} explicit fixture POSTs, ${refreshes} coordinator refreshes.`;
+} catch (error) {
+    document.getElementById('results').textContent = 'BROWSER FAIL: ' + error.message;
+}
+</script>
+</html>

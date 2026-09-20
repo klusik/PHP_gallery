@@ -37,6 +37,8 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+require_once __DIR__ . '/gallery_edit_concurrency.php';
+
 use function Gallery\Core\normalize_relative_path;
 use function Gallery\Core\now_sql;
 use function Gallery\Models\gallery_model_all_rows_by_folder_path;
@@ -175,9 +177,28 @@ function gallery_effective_grid_settings(array $gallery): array
  * them would allow stale custom grids to reappear after a rescan, so this helper
  * keeps both layers synchronized.
  *
- * @return array Structured result data for the caller.
+ * @return array{database_rows:int,sidecars:int,schema_ready:bool} Changed row/sidecar counts and whether database overrides were available.
  */
 function reset_all_gallery_grid_overrides(): array
+{
+    $writerLock = gallery_edit_writer_begin();
+    try {
+        return reset_all_gallery_grid_overrides_owned();
+    } finally {
+        gallery_edit_writer_end($writerLock);
+    }
+}
+
+/**
+ * Reset stored gallery grid overrides and their sidecar copies.
+ *
+ * Internal implementation: enter through reset_all_gallery_grid_overrides() so
+ * reads, early returns and failure cleanup remain inside the same writer lease.
+ *
+ * @return array{database_rows:int,sidecars:int,schema_ready:bool} Changed row/sidecar counts and whether database overrides were available.
+ * @author Rudolf Klusal
+ */
+function reset_all_gallery_grid_overrides_owned(): array
 {
     // $result stores counters for the Admin confirmation message after redirect.
     $result = [

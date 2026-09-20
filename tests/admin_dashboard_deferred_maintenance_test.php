@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ * Module Type: Regression Test
+ * Responsibilities:
+ *   - Detect eager maintenance work during ordinary dashboard rendering.
  * File: tests/admin_dashboard_deferred_maintenance_test.php
  * Purpose: Verify that dashboard maintenance work is deferred until activation.
   *
@@ -10,6 +14,8 @@
 */
 
 declare(strict_types=1);
+
+require_once __DIR__ . '/support/module_source.php';
 
 /**
  * Assert that dashboard source contains a required deferred-maintenance marker.
@@ -21,7 +27,7 @@ function assert_admin_dashboard_deferred_contains(string $source, string $needle
     }
 }
 
-$serviceSource = (string) file_get_contents(__DIR__ . '/../app/services/admin_dashboard.php');
+$serviceSource = module_source(__DIR__ . '/../app/services/admin_dashboard.php');
 $controllerSource = (string) file_get_contents(__DIR__ . '/../app/controllers/admin_dashboard.php');
 $viewSource = (string) file_get_contents(__DIR__ . '/../app/views/admin_dashboard.php');
 $sectionsSource = (string) file_get_contents(__DIR__ . '/../app/views/admin_dashboard_sections.php');

@@ -193,11 +193,12 @@ function render_admin_gallery_ai_reprocess_panel(array $gallery): void
 /**
  * Render the admin image bulk toolbar and guided move workflow.
  *
- * The standard select keeps existing bulk behavior intact. Moving photos uses a
+ * Bounded destination pickers keep the submitted field names intact. Moving photos uses a
  * staged panel so admins first choose whether the target is an existing gallery
  * or a new child gallery, then confirm the exact physical move.
  *
- * @param array $gallery Gallery row or gallery data.
+ * @param array{id:int} $gallery Source gallery identity; no other row fields are consumed.
+ * @return void Render the prepared image action and destination controls.
  */
 function render_admin_image_bulk_toolbar(array $gallery): void
 {
@@ -211,7 +212,7 @@ function render_admin_image_bulk_toolbar(array $gallery): void
             'placeholder' => t('admin.gallery_editor.search_destination_gallery', 'Search destination gallery'),
             'prefill_gallery_id' => $suggestedDestinationId,
         ]),
-        'parent_options_html' => gallery_options_for_select($galleryId),
+        'parent_picker_html' => render_gallery_parent_picker($galleryId, 0, 'new_gallery_parent_id'),
     ]);
 }
 

@@ -1,4 +1,8 @@
 # Project: PHP Gallery
+# Module Type: Windows Tooling
+# Purpose: Discover manual files, folders and ZIP inputs for upload.
+# Responsibilities:
+#   - Bound archive staging and normalize selected upload candidates.
 # Repository: https://github.com/klusik/PHP_gallery
 #
 # File: winapp/uploader/discovery.py

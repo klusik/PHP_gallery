@@ -242,15 +242,21 @@ function view_render_admin_dashboard_open_maintenance_card(): void
 /**
  * Render the Maintenance tab as nested, logical tool groups.
  *
- * @param array $model Model value.
+ * @param array<string,mixed> $model Maintenance-enabled admin_dashboard_view_model() map;
+ *   runtime_support_status.policy.action_required and image_move_pending_status.action_required
+ *   are booleans; capability-keyed schema records carry the shared three-state diagnosis.
+ * @return void Emit tool tabs and badges from already prepared maintenance inventories.
+ * @see \Gallery\Services\admin_dashboard_view_model()
  */
 function view_render_admin_dashboard_maintenance_panel(array $model): void
 {
     $migrationPending = view_admin_dashboard_bool($model, 'migration_pending');
     $missingThumbnailVariants = view_admin_dashboard_int($model, 'missing_thumbnail_variants');
     $securitySchemaStatuses = view_admin_dashboard_array($model, 'security_schema_statuses');
-    $systemHealthActionRequired = $migrationPending;
-    foreach ($securitySchemaStatuses as $securityStatus) {
+    $runtimeSupport = view_admin_dashboard_array($model, 'runtime_support_status');
+    $systemHealthActionRequired = $migrationPending || !empty($runtimeSupport['policy']['action_required']);
+    $systemHealthActionRequired = $systemHealthActionRequired || !empty($model['image_move_pending_status']['action_required']);
+    foreach (array_merge($securitySchemaStatuses, view_admin_dashboard_array($model, 'mutation_schema_statuses')) as $securityStatus) {
         if (is_array($securityStatus) && in_array((string) ($securityStatus['state'] ?? 'unknown'), ['missing', 'unknown'], true)) {
             $systemHealthActionRequired = true;
             break;
@@ -417,7 +423,11 @@ function view_render_admin_gallery_report_maintenance_card(array $model, string 
 /**
  * Render maintenance tools for application health and diagnostics.
  *
- * @param array $model Model value.
+ * @param array<string,mixed> $model Dashboard read model containing runtime_support_status,
+ *   image_move_pending_status and capability-keyed security/mutation/presentation records
+ *   prepared by their shared service owners, plus update labels and migration readiness.
+ * @return void Emit escaped health cards and tool links without resolving service policy.
+ * @see \Gallery\Services\admin_dashboard_view_model()
  */
 function view_render_admin_dashboard_system_tools(array $model): void
 {
@@ -428,6 +438,10 @@ function view_render_admin_dashboard_system_tools(array $model): void
     $securitySchemaStatuses = view_admin_dashboard_array($model, 'security_schema_statuses');
     $mutationSchemaStatuses = view_admin_dashboard_array($model, 'mutation_schema_statuses');
     $presentationSchemaStatuses = view_admin_dashboard_array($model, 'presentation_schema_statuses');
+    $runtimeSupport = view_admin_dashboard_array($model, 'runtime_support_status');
+    $runtimeActionRequired = !empty($runtimeSupport['policy']['action_required']);
+    $imageMovePending = view_admin_dashboard_array($model, 'image_move_pending_status');
+    $pendingActionRequired = !empty($imageMovePending['action_required']);
     $schemaActionRequired = false;
     foreach (array_merge($securitySchemaStatuses, $mutationSchemaStatuses, $presentationSchemaStatuses) as $schemaStatus) {
         if (is_array($schemaStatus) && in_array((string) ($schemaStatus['state'] ?? 'unknown'), ['missing', 'unknown'], true)) {
@@ -443,6 +457,8 @@ function view_render_admin_dashboard_system_tools(array $model): void
         'class' => 'admin-dashboard-subtab-heading',
     ]);
     echo '<div class="admin-maintenance-grid">';
+    view_render_admin_runtime_support_card($runtimeSupport);
+    view_render_admin_image_move_pending_card($imageMovePending);
     echo '<article class="admin-maintenance-card"><strong>' . e(t('admin.dashboard.logs', 'Logs')) . '</strong><span>' . e(t('admin.dashboard.logs_hint', 'Review operational events, failures, and workflow status.')) . '</span><a class="button secondary" href="' . e(url_for('admin_logs')) . '">' . e(t('admin.dashboard.open_logs', 'Open logs')) . '</a></article>';
     if (view_admin_dashboard_feature_enabled($model, 'telemetry')) {
         echo '<article class="admin-maintenance-card"><strong>' . e(t('admin.dashboard.telemetry', 'Telemetry')) . '</strong><span>' . e(t('admin.dashboard.telemetry_hint', 'Inspect anonymous usage telemetry without collecting personal data.')) . '</span><a class="button secondary" href="' . e(url_for('admin_telemetry')) . '">' . e(t('admin.dashboard.open_telemetry', 'Open telemetry')) . '</a></article>';
@@ -471,10 +487,67 @@ function view_render_admin_dashboard_system_tools(array $model): void
             view_render_admin_dashboard_presentation_schema_card((string) $feature, $presentationStatus, 'admin-maintenance-card');
         }
     }
-    if (!$updatePending && !$migrationPending && !$schemaActionRequired) {
+    if (!$updatePending && !$migrationPending && !$schemaActionRequired && !$runtimeActionRequired && !$pendingActionRequired) {
         echo '<article class="admin-maintenance-card"><strong>' . e(t('admin.dashboard.system_ready_title', 'System ready')) . '</strong><span>' . e(t('admin.dashboard.system_ready_hint', 'No update or migration warning is currently active on the dashboard.')) . '</span></article>';
     }
     echo '</div>';
+}
+
+/**
+ * Render the shared runtime support card from its already localized health model.
+ *
+ * @param array{policy?:array<string,mixed>,labels?:array<string,string>} $health
+ *   Prepared runtime_support_health_status() model; omitted legacy models render no card.
+ * @param string $className Existing presentation class for the owning surface.
+ * @return void All policy values, localized strings and the official URL are escaped.
+ */
+function view_render_admin_runtime_support_card(array $health, string $className = 'admin-maintenance-card'): void
+{
+    $policy = $health['policy'] ?? [];
+    $labels = $health['labels'] ?? [];
+    if ($policy === [] || $labels === []) {
+        return;
+    }
+    echo '<article class="' . e($className) . '" data-runtime-support data-runtime-state="' . e((string) $policy['state']) . '">';
+    echo '<strong>' . e((string) $labels['title']) . '</strong>';
+    if (!empty($policy['action_required'])) {
+        echo '<span class="admin-tab-badge">' . e((string) $labels['action']) . '</span>';
+    }
+    foreach (['summary', 'deadline', 'baseline', 'guidance', 'reviewed'] as $label) {
+        echo '<span>' . e((string) $labels[$label]) . '</span>';
+    }
+    echo '<a href="' . e((string) $policy['reference_url']) . '" rel="noopener noreferrer" target="_blank">'
+        . e((string) $labels['reference']) . '</a></article>';
+}
+
+/**
+ * Render the same prepared, read-only pending-move snapshot on both Admin surfaces.
+ *
+ * @param array{state?:string,action_required?:bool,request_id?:string,entries?:list<string>,labels?:array<string,string>} $health
+ *   Localized health data; an omitted lazy snapshot renders nothing.
+ * @param string $className Existing presentation class for the owning surface.
+ * @return void All prepared text and identifiers are HTML-escaped; there are no actions.
+ */
+function view_render_admin_image_move_pending_card(array $health, string $className = 'admin-maintenance-card'): void
+{
+    if ($health === []) {
+        return;
+    }
+    $labels = $health['labels'] ?? [];
+    echo '<article class="' . e($className) . '" data-image-move-pending data-pending-state="' . e((string) ($health['state'] ?? 'unknown')) . '">';
+    echo '<strong>' . e((string) ($labels['title'] ?? '')) . '</strong>';
+    if (!empty($health['action_required'])) {
+        echo '<span class="admin-tab-badge">' . e((string) ($labels['action'] ?? '')) . '</span>';
+    }
+    echo '<span>' . e((string) ($labels['summary'] ?? '')) . '</span>';
+    foreach ($health['entries'] ?? [] as $entry) {
+        echo '<span>' . e((string) $entry) . '</span>';
+    }
+    echo '<span>' . e((string) ($labels['guidance'] ?? '')) . '</span>';
+    if ((string) ($health['request_id'] ?? '') !== '') {
+        echo '<span>' . e(t('public.request_reference', 'Reference: {request_id}', ['request_id' => $health['request_id']])) . '</span>';
+    }
+    echo '</article>';
 }
 
 /**
@@ -526,8 +599,11 @@ function view_render_admin_dashboard_security_schema_card(string $feature, array
  * Render one Phase 10 destructive/ingestion schema diagnosis.
  *
  * @param string $feature Bounded capability key.
- * @param array $status Normalized Admin schema-health result.
+ * @param array{state:string,feature:string,request_id:string,affected_objects:array<int,string>,suggested_checks:array<int,string>,title?:string,message?:string} $status
+ *   Shared mutation-health record: state is available/missing/unknown/disabled; optional
+ *   title/message are localized upstream and affected_objects contains safe identifiers only.
  * @param string $className CSS class name for the card wrapper.
+ * @return void Render escaped schema state and any centrally prepared protection message.
  */
 function view_render_admin_dashboard_mutation_schema_card(string $feature, array $status, string $className): void
 {
@@ -544,11 +620,19 @@ function view_render_admin_dashboard_mutation_schema_card(string $feature, array
         'mutation_database_maintenance' => t('admin.dashboard.mutation_schema_feature_database_maintenance', 'Database cleanup and repair'),
         'mutation_application_update' => t('admin.dashboard.mutation_schema_feature_application_update', 'Application update activation'),
     ];
-    $title = $labels[$feature] ?? 'Mutation schema capability';
+    $title = (string) ($status['title'] ?? $labels[$feature] ?? 'Mutation schema capability');
     $state = (string) ($status['state'] ?? 'unknown');
 
     echo '<article class="' . e($className) . '"><strong>' . e($title) . '</strong>';
-    if ($state === 'available') {
+    if (isset($status['message'])) {
+        if (in_array($state, ['missing', 'unknown'], true)) {
+            echo '<span class="admin-tab-badge">' . e(t('admin.dashboard.badge_action', 'Action')) . '</span>';
+        }
+        echo '<span>' . e((string) $status['message']) . '</span>';
+        if ((string) ($status['request_id'] ?? '') !== '') {
+            echo '<span>' . e(t('public.request_reference', 'Reference: {request_id}', ['request_id' => (string) $status['request_id']])) . '</span>';
+        }
+    } elseif ($state === 'available') {
         echo '<span>' . e(t('admin.dashboard.mutation_schema_available', 'Required mutation database objects are installed and verified.')) . '</span>';
     } elseif ($state === 'missing') {
         echo '<span>' . e(t('admin.dashboard.mutation_schema_missing', 'Database inspection succeeded and confirmed required mutation objects are missing. Apply pending migrations before using this workflow, except where a documented legacy compatibility path explicitly applies.')) . '</span>';

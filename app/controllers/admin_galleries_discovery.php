@@ -37,8 +37,8 @@ declare(strict_types=1);
 namespace Gallery\Controllers;
 
 use Throwable;
-use const Gallery\Services\ADMIN_GALLERY_DISCOVERY_DEFAULT_BATCH_SIZE;
-use const Gallery\Services\ADMIN_GALLERY_DISCOVERY_MAX_BATCH_SIZE;
+use const Gallery\Core\ADMIN_GALLERY_DISCOVERY_DEFAULT_BATCH_SIZE;
+use const Gallery\Core\ADMIN_GALLERY_DISCOVERY_MAX_BATCH_SIZE;
 use function Gallery\Core\csrf_field;
 use function Gallery\Core\csrf_token;
 use function Gallery\Core\flash_message;
@@ -72,6 +72,16 @@ use function Gallery\Views\view_render_admin_new_gallery_fields;
 use function Gallery\Views\view_render_admin_new_gallery_side_panel;
 use function Gallery\Views\view_render_gallery_description_formatting_hint;
 use function Gallery\Services\admin_log_event;
+use Gallery\Services\AdminOperationRefusal;
+use function Gallery\Core\current_user;
+use function Gallery\Services\admin_operation_begin;
+use function Gallery\Services\admin_operation_complete;
+use function Gallery\Services\admin_operation_fail;
+use function Gallery\Services\admin_operation_fingerprint;
+use function Gallery\Services\admin_operation_form_key;
+use function Gallery\Services\admin_operation_require_key;
+
+require_once dirname(__DIR__) . '/services/admin_operation_keys.php';
 
 /**
  * Render the Admin gallery discovery page or process its Ajax batches.
@@ -106,6 +116,7 @@ function cms_admin_discover(): void
 
 /**
  * Process one Admin gallery discovery Ajax action.
+ * @return void Emits authenticated bounded discovery progress while retaining the caller's job map in the session.
  */
 function cms_admin_discover_ajax(): void
 {
@@ -124,12 +135,16 @@ function cms_admin_discover_ajax(): void
         $token = preg_replace('/[^A-Fa-f0-9]/', '', (string) ($_POST['job_token'] ?? '')) ?: '';
         $batchSize = max(1, min(ADMIN_GALLERY_DISCOVERY_MAX_BATCH_SIZE, (int) ($_POST['batch_size'] ?? ADMIN_GALLERY_DISCOVERY_DEFAULT_BATCH_SIZE)));
 
+        if (!isset($_SESSION['admin_gallery_discovery_jobs']) || !is_array($_SESSION['admin_gallery_discovery_jobs'])) {
+            $_SESSION['admin_gallery_discovery_jobs'] = [];
+        }
+        $jobs = &$_SESSION['admin_gallery_discovery_jobs'];
         if ($action === 'start') {
-            $state = admin_gallery_discovery_start_job();
+            $state = admin_gallery_discovery_start_job($jobs);
         } elseif ($action === 'status') {
-            $state = admin_gallery_discovery_job_status($token);
+            $state = admin_gallery_discovery_job_status($token, $jobs);
         } else {
-            $state = admin_gallery_discovery_process_job($token, $batchSize);
+            $state = admin_gallery_discovery_process_job($token, $jobs, $batchSize);
         }
 
         $payload = admin_gallery_discovery_controller_payload($state);
@@ -357,7 +372,24 @@ function admin_gallery_discovery_flash_action_result(array $result): void
 }
 
 /**
- * Handles cms admin new gallery logic for the gallery application.
+ * Map closed operation-domain refusals at the HTTP boundary shared by create/upload.
+ *
+ * @param AdminOperationRefusal $refusal Bounded domain reason, without transport state.
+ * @return int Central immutable HTTP status for the owning controller.
+ */
+function admin_operation_refusal_status(AdminOperationRefusal $refusal): int
+{
+    return match ($refusal->reason) {
+        'operation_payload_invalid' => \Gallery\Core\HTTP_STATUS_UNPROCESSABLE_ENTITY,
+        'operation_storage_unavailable', 'operation_outcome_unknown' => \Gallery\Core\HTTP_STATUS_SERVICE_UNAVAILABLE,
+        default => \Gallery\Core\HTTP_STATUS_CONFLICT,
+    };
+}
+
+/**
+ * Handle authenticated create requests, durably recording success before response output.
+ *
+ * @return void Render a keyed form, send a JSON result, or redirect the direct-page fallback.
  */
 function cms_admin_new_gallery(): void
 {
@@ -372,27 +404,49 @@ function cms_admin_new_gallery(): void
     $error = '';
     if (request_method() === 'POST') {
         verify_csrf();
+        $operationClaim = null;
+        header('Cache-Control: private, no-store');
         try {
-            // $gallery stores an intermediate value used by the surrounding gallery workflow.
-            $gallery = admin_create_gallery_from_input($_POST);
+            $operationKey = admin_operation_require_key($_POST['operation_key'] ?? null);
+            $input = admin_new_gallery_input_from_post();
+            $operationClaim = admin_operation_begin((int) (current_user()['id'] ?? 0), $operationKey, 'gallery.create', admin_operation_fingerprint('gallery.create', $input));
+            if (!empty($operationClaim['replay'])) {
+                $response = $operationClaim['response'];
+            } else {
+                // $gallery stores an intermediate value used by the surrounding gallery workflow.
+                $gallery = admin_create_gallery_from_input($input);
+                $response = admin_operation_complete($operationClaim, admin_new_gallery_success_response($gallery));
+            }
             if (admin_wants_json()) {
                 header('Content-Type: application/json');
-                echo json_encode(admin_new_gallery_success_response($gallery));
+                echo json_encode($response);
                 return;
             }
             flash_message('admin_notice', t('admin.galleries.folder_created'));
-            redirect_to(url_for('admin_edit_gallery', ['id' => $gallery['id'], 'created' => 1]));
+            redirect_to((string) $response['fallback']['redirect_url']);
         } catch (Throwable $exception) {
+            admin_operation_fail($operationClaim);
+            if ($operationClaim && empty($operationClaim['replay']) && !$exception instanceof AdminOperationRefusal && !$exception instanceof \Gallery\Services\GalleryCatalogConflict) {
+                $exception = new AdminOperationRefusal('operation_outcome_unknown', 'The operation may have changed gallery data. Retain its key and reconcile the original attempt before retrying replacement work.');
+            }
             // $error stores an intermediate value used by the surrounding gallery workflow.
             $error = $exception->getMessage();
+            $catalogConflict = $exception instanceof \Gallery\Services\GalleryCatalogConflict;
+            $operationRefusal = $exception instanceof AdminOperationRefusal;
+            if ($operationRefusal) {
+                http_response_code(admin_operation_refusal_status($exception));
+            }
+            if ($catalogConflict) {
+                http_response_code(\Gallery\Core\HTTP_STATUS_CONFLICT);
+            }
             admin_log_event('error', 'gallery.folder_create_failed', t('admin.galleries.log_empty_folder_failed'), ['error' => $error]);
             if (admin_wants_json()) {
-                http_response_code(422);
+                http_response_code($operationRefusal ? admin_operation_refusal_status($exception) : ($catalogConflict ? \Gallery\Core\HTTP_STATUS_CONFLICT : 422));
                 header('Content-Type: application/json');
                 echo json_encode(admin_mutation_error_envelope(
                     $error,
-                    'gallery_create_failed',
-                    admin_mutation_descriptor('gallery.create', 'gallery', 'create')
+                    $operationRefusal ? $exception->reason : ($catalogConflict ? 'gallery_catalog_conflict' : 'gallery_create_failed'),
+                    admin_mutation_descriptor('gallery.create', 'gallery', 'create', $catalogConflict ? [$exception->galleryId] : [])
                 ));
                 return;
             }
@@ -575,23 +629,31 @@ function render_gallery_description_formatting_hint(): void
 /**
  * Render create-gallery fields shared by full admin pages and panel fragments.
  *
- * @param int $prefillParentId Prefill parent id identifier.
- * @param bool $panelMode Panel mode value.
- * @param string $workflow Workflow value.
+ * @param int $prefillParentId Selected parent gallery ID, or zero for root creation.
+ * @param bool $panelMode Whether the fields belong to the in-place side panel.
+ * @param string $workflow Create/upload presentation workflow selected by the controller.
+ * @return void Emit prepared fields with a bounded parent picker and replay key.
  */
 function render_admin_new_gallery_fields(int $prefillParentId, bool $panelMode, string $workflow = 'create'): void
 {
-    view_render_admin_new_gallery_fields($prefillParentId, $panelMode, $workflow, admin_gallery_form_view_model('gallery'));
+    $formModel = admin_gallery_form_view_model('gallery');
+    $formModel['parent_picker_html'] = render_gallery_parent_picker($prefillParentId);
+    $formModel['operation_key'] = admin_operation_form_key($_POST['operation_key'] ?? null);
+    view_render_admin_new_gallery_fields($prefillParentId, $panelMode, $workflow, $formModel);
 }
 
 /**
  * Render the focused side-panel create workflow without the normal admin shell.
  *
  * @param int $prefillParentId Prefill parent id identifier.
- * @param ?array $prefillParentGallery Prefill parent gallery value.
- * @param string $error Error value.
+ * @param array<string,mixed>|null $prefillParentGallery Prepared selected-parent row, or null for the root context.
+ * @param string $error Safe validation/refusal message for the current form.
+ * @return void Emit the focused creation panel with its retained or fresh operation key.
  */
 function render_admin_new_gallery_side_panel(int $prefillParentId, ?array $prefillParentGallery, string $error): void
 {
-    view_render_admin_new_gallery_side_panel($prefillParentId, $prefillParentGallery, $error, admin_gallery_form_view_model('gallery'));
+    $formModel = admin_gallery_form_view_model('gallery');
+    $formModel['parent_picker_html'] = render_gallery_parent_picker($prefillParentId);
+    $formModel['operation_key'] = admin_operation_form_key($_POST['operation_key'] ?? null);
+    view_render_admin_new_gallery_side_panel($prefillParentId, $prefillParentGallery, $error, $formModel);
 }

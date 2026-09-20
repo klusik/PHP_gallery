@@ -1,5 +1,9 @@
 /**
  * Project: PHP Gallery
+ * Module Type: Regression Test
+ * Purpose: Exercise production lightbox navigation with controlled boundaries.
+ * Responsibilities:
+ *   - Check DOM, fetch and timer behavior without duplicating the navigation algorithm.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/lightbox_map_navigation_test.mjs

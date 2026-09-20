@@ -53,6 +53,7 @@ require_once __DIR__ . '/models/database_maintenance.php';
 require_once __DIR__ . '/models/schema_inspection.php';
 require_once __DIR__ . '/models/site_maintenance.php';
 require_once __DIR__ . '/models/galleries.php';
+require_once __DIR__ . '/models/gallery_picker_search.php';
 require_once __DIR__ . '/models/images.php';
 require_once __DIR__ . '/models/duplicate_photo_ledger.php';
 require_once __DIR__ . '/models/telemetry.php';

@@ -45,6 +45,12 @@ use function Gallery\Services\t;
  * Render the Admin runtime diagnostics page body.
  *
  * @param array<string, mixed> $viewModel Prepared diagnostics presentation model.
+ *   runtime_support_status and image_move_pending_status retain their shared service
+ *   record shapes; schema maps are capability-keyed diagnoses, diagnostics is a list
+ *   of label/value strings, and report_text is the already bounded plain-text report.
+ * @return void Emit escaped diagnostics cards and report text; perform no runtime probes.
+ * @see \Gallery\Services\runtime_support_health_status()
+ * @see \Gallery\Services\admin_image_move_pending_health_status()
  */
 function view_render_admin_diagnostics_page(array $viewModel): void
 {
@@ -67,6 +73,9 @@ function view_render_admin_diagnostics_page(array $viewModel): void
     if ($notice !== '') {
         echo '<div class="notice">' . e($notice) . '</div>';
     }
+
+    view_render_admin_runtime_support_card((array) ($viewModel['runtime_support_status'] ?? []), 'panel admin-maintenance-card');
+    view_render_admin_image_move_pending_card((array) ($viewModel['image_move_pending_status'] ?? []), 'panel admin-maintenance-card');
 
     echo '<section class="panel"><div class="admin-panel-heading"><div><p class="admin-kicker">' . e(t('admin.diagnostics.security_schema_kicker', 'Database protection')) . '</p><h2>' . e(t('admin.diagnostics.security_schema_title', 'Security and authentication database status')) . '</h2></div><p class="muted">' . e(t('admin.diagnostics.security_schema_description', 'These checks distinguish verified schema, confirmed pending migrations, and temporary metadata-inspection failures. Security-sensitive operations never use an unknown state as a legacy fallback.')) . '</p></div>';
     foreach ($securitySchemaHealth as $feature => $schemaHealth) {
@@ -111,8 +120,13 @@ function view_render_admin_diagnostics_page(array $viewModel): void
             continue;
         }
         $state = (string) ($schemaHealth['state'] ?? 'unknown');
-        echo '<div class="account-settings-readiness ' . ($state === 'available' ? 'is-ready' : 'is-incomplete') . '"><strong>' . e($schemaFeatureLabels[$feature] ?? $feature) . '</strong> ';
-        if ($state === 'available') {
+        echo '<div class="account-settings-readiness ' . ($state === 'available' ? 'is-ready' : 'is-incomplete') . '"><strong>' . e((string) ($schemaHealth['title'] ?? $schemaFeatureLabels[$feature] ?? $feature)) . '</strong> ';
+        if (isset($schemaHealth['message'])) {
+            if (in_array($state, ['missing', 'unknown'], true)) {
+                echo '<span class="admin-tab-badge">' . e(t('admin.dashboard.badge_action', 'Action')) . '</span>';
+            }
+            echo e((string) $schemaHealth['message']);
+        } elseif ($state === 'available') {
             echo e(t('admin.dashboard.mutation_schema_available', 'Required mutation database objects are installed and verified.'));
         } elseif ($state === 'missing') {
             echo e(t('admin.dashboard.mutation_schema_missing', 'Database inspection succeeded and confirmed required mutation objects are missing. Apply pending migrations before using this workflow, except where a documented legacy compatibility path explicitly applies.'));

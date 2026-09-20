@@ -1,5 +1,9 @@
 /**
  * Project: PHP Gallery
+ * Module Type: Stylesheet
+ * Purpose: Style theme previews and related color controls.
+ * Responsibilities:
+ *   - Align preview surfaces with the Theme editor's interactive states.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: public/assets/styles/admin-theme-preview.css

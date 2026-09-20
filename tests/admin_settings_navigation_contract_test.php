@@ -2,6 +2,8 @@
 
 /**
  * Project: PHP Gallery
+ * Responsibilities:
+ *   - Check registered routes and deep links resolve to the intended settings owners.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/admin_settings_navigation_contract_test.php
@@ -22,6 +24,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/support/module_source.php';
+
 $files = [
     'bootstrap' => (string) file_get_contents(__DIR__ . '/../app/bootstrap.php')
         . (string) file_get_contents(__DIR__ . '/../app/bootstrap/dispatch.php'),
@@ -36,9 +40,9 @@ $files = [
     'settings_view' => file_get_contents(__DIR__ . '/../app/views/admin_settings.php'),
     'tabs_js' => file_get_contents(__DIR__ . '/../public/assets/gallery-modules/admin-tabs.js'),
     'account' => file_get_contents(__DIR__ . '/../app/controllers/admin_auth.php'),
-    'dashboard' => (string) file_get_contents(__DIR__ . '/../app/services/admin_dashboard.php')
+    'dashboard' => module_source(__DIR__ . '/../app/services/admin_dashboard.php')
         . (string) file_get_contents(__DIR__ . '/../app/views/admin_dashboard.php'),
-    'dashboard_sections' => (string) file_get_contents(__DIR__ . '/../app/services/admin_dashboard.php')
+    'dashboard_sections' => module_source(__DIR__ . '/../app/services/admin_dashboard.php')
         . (string) file_get_contents(__DIR__ . '/../app/views/admin_dashboard_sections.php'),
 ];
 foreach ($files as $name => $source) {

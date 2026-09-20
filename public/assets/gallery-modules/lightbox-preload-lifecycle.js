@@ -1,5 +1,8 @@
 /**
  * Project: PHP Gallery
+ * Purpose: Own the nearby-preview queue for one lightbox setup instance.
+ * Responsibilities:
+ *   - Bound queue generations, concurrency, scheduling and cancellation.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: public/assets/gallery-modules/lightbox-preload-lifecycle.js

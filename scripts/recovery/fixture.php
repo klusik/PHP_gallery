@@ -2,6 +2,8 @@
 
 /**
  * Project: PHP Gallery
+ * Responsibilities:
+ *   - Own disposable recovery data without starting a restored application.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: scripts/recovery/fixture.php

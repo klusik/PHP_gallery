@@ -1,5 +1,9 @@
 /**
  * Project: PHP Gallery
+ * File: public/assets/gallery-modules/admin-language-selector-design.js
+ * Module Type: Browser Module
+ * Responsibilities:
+ *   - Refresh the local preview and restore unsaved editor controls.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * Purpose:

@@ -1,5 +1,9 @@
 /**
  * Project: PHP Gallery
+ * Module Type: Regression Test
+ * Purpose: Protect delegated side-panel event handling.
+ * Responsibilities:
+ *   - Exercise dynamically replaced controls without rebinding the entire page.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/admin_side_panel_delegation_test.mjs
@@ -27,7 +31,10 @@ function assert(condition, message) {
     }
 }
 
-assert(source.includes("document.addEventListener('submit', async (event) => {"), 'Side-panel forms must be intercepted through document-level delegated submit handlers.');
+const delegatedSubmitPattern = /document\.addEventListener\(\s*['"]submit['"]\s*,\s*(?:\/\*[\s\S]*?\*\/\s*)?async\s*\(event\)\s*=>\s*\{/;
+assert(delegatedSubmitPattern.test(source), 'Side-panel forms must be intercepted through document-level delegated submit handlers, including documented callbacks.');
+assert(delegatedSubmitPattern.test("document.addEventListener('submit', /** callback */ async (event) => {"), 'Attached callback documentation must not hide document-level delegation.');
+assert(!delegatedSubmitPattern.test("form.addEventListener('submit', async (event) => {"), 'Direct form binding must not satisfy delegated document ownership.');
 assert(source.includes("form.matches('[data-gallery-panel-create-form]')"), 'Dynamically injected create forms must remain delegated.');
 assert(source.includes("form.matches('[data-admin-panel-edit-form]')"), 'Dynamically injected edit forms must remain delegated.');
 assert(source.includes("form.matches('[data-admin-panel-bulk-form]')"), 'Dynamically injected bulk forms must remain delegated.');

@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Regression Test
+ * Purpose: Verify gallery download service orchestration.
+ * Responsibilities:
+ *   - Exercise archive policy and capability handling without production storage.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/gallery_download_service_test.php

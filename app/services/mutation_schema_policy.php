@@ -377,6 +377,21 @@ function gallery_move_schema_status(): array
     ]);
 }
 
+/**
+ * Require the complete durable image-move ledger before touching source files.
+ *
+ * @return array{state:string,feature:string,requirements:array} Three-state mutation capability.
+ */
+function gallery_image_move_journal_schema_status(): array
+{
+    return mutation_schema_tables_status('mutation.gallery_image_move_journal', [
+        'galleries' => ['id', 'folder_path', 'cover_image_id', 'updated_at'],
+        'images' => ['id', 'gallery_id', 'relative_path', 'sort_order', 'updated_at'],
+        'gallery_image_move_journal' => ['operation_id', 'source_gallery_id', 'destination_gallery_id',
+            'state', 'database_committed', 'manifest_json', 'last_error_code', 'created_at', 'updated_at'],
+    ]);
+}
+
 /** @return array{state:string,feature:string,requirements:array} */
 function duplicate_photo_ledger_schema_status(): array
 {

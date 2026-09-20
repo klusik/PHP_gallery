@@ -1,5 +1,9 @@
 /**
  * Project: PHP Gallery
+ * Module Type: Stylesheet
+ * Purpose: Style shared Admin layout, controls and media cards.
+ * Responsibilities:
+ *   - Maintain responsive common components across feature-specific Admin pages.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: public/assets/styles/admin-layout.css

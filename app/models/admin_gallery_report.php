@@ -34,8 +34,12 @@ declare(strict_types=1);
 
 namespace Gallery\Models;
 
+require_once dirname(__DIR__) . '/policy_constants.php';
+
 use PDO;
 use Throwable;
+use const Gallery\Core\ADMIN_GALLERY_REPORT_MAX_BATCH_SIZE;
+use const Gallery\Core\ADMIN_GALLERY_REPORT_ROW_LIMITS;
 use function Gallery\Core\db;
 
 /** Execute a model-owned report query and return rows with failure isolation. */
@@ -62,7 +66,12 @@ function admin_gallery_report_model_scalar_int(string $sql, array $params = []):
     }
 }
 
-/** Return gallery structure summary fields used by the report. */
+/**
+ * Read core gallery structure counts and bounded ranking rows.
+ * @param bool $hasDates Whether both gallery date columns were verified available.
+ * @param bool $hasGpsMap Whether the GPS-map override column was verified available.
+ * @return array<string,mixed> Counts, label/count visibility/access groups and largest gallery rows; optional date/GPS fields are omitted without their capabilities.
+ */
 function admin_gallery_report_model_gallery_summary(bool $hasDates, bool $hasGpsMap): array
 {
     $summary = [
@@ -78,7 +87,7 @@ function admin_gallery_report_model_gallery_summary(bool $hasDates, bool $hasGps
         'access_rows' => admin_gallery_report_model_rows('SELECT access_mode AS label, COUNT(*) AS count FROM galleries GROUP BY access_mode ORDER BY count DESC'),
         'listing_rows' => admin_gallery_report_model_rows('SELECT access_listing AS label, COUNT(*) AS count FROM galleries GROUP BY access_listing ORDER BY count DESC'),
         'image_visibility_rows' => admin_gallery_report_model_rows('SELECT visibility AS label, COUNT(*) AS count FROM images GROUP BY visibility ORDER BY count DESC'),
-        'largest_rows' => admin_gallery_report_model_rows('SELECT g.id, g.title, g.folder_path, g.visibility, COUNT(i.id) AS image_count, COALESCE(SUM(COALESCE(i.file_size, 0)), 0) AS source_bytes FROM galleries g LEFT JOIN images i ON i.gallery_id = g.id GROUP BY g.id, g.title, g.folder_path, g.visibility ORDER BY image_count DESC, source_bytes DESC LIMIT 80'),
+        'largest_rows' => admin_gallery_report_model_rows('SELECT g.id, g.title, g.folder_path, g.visibility, COUNT(i.id) AS image_count, COALESCE(SUM(COALESCE(i.file_size, 0)), 0) AS source_bytes FROM galleries g LEFT JOIN images i ON i.gallery_id = g.id GROUP BY g.id, g.title, g.folder_path, g.visibility ORDER BY image_count DESC, source_bytes DESC LIMIT ' . ADMIN_GALLERY_REPORT_ROW_LIMITS['galleries']),
     ];
     if ($hasDates) {
         $summary['dated_gallery_count'] = admin_gallery_report_model_scalar_int('SELECT COUNT(*) FROM galleries WHERE date_start IS NOT NULL OR date_end IS NOT NULL');
@@ -137,13 +146,19 @@ function admin_gallery_report_model_gallery_detail_rows(array $capabilities): ar
     );
 }
 
-/** Return tag count and bounded tag-usage rows. */
+/**
+ * Read only positively available tag sections.
+ * @param bool $hasTags Verified tag-table availability.
+ * @param bool $hasGalleryTags Verified tag and gallery-tag storage availability.
+ * @param bool $hasImageTags Verified tag and image-tag storage availability.
+ * @return array{tag_count:int,gallery_tag_rows:list<array<string,mixed>>,image_tag_rows:list<array<string,mixed>>} Total and bounded label/count usage groups, empty where storage is unavailable.
+ */
 function admin_gallery_report_model_tag_summary(bool $hasTags, bool $hasGalleryTags, bool $hasImageTags): array
 {
     return [
         'tag_count' => $hasTags ? admin_gallery_report_model_scalar_int('SELECT COUNT(*) FROM tags') : 0,
-        'gallery_tag_rows' => $hasGalleryTags ? admin_gallery_report_model_rows('SELECT t.name AS label, COUNT(gt.gallery_id) AS count FROM tags t INNER JOIN gallery_tags gt ON gt.tag_id = t.id GROUP BY t.id, t.name ORDER BY count DESC, t.name ASC LIMIT 80') : [],
-        'image_tag_rows' => $hasImageTags ? admin_gallery_report_model_rows('SELECT t.name AS label, COUNT(it.image_id) AS count FROM tags t INNER JOIN image_tags it ON it.tag_id = t.id GROUP BY t.id, t.name ORDER BY count DESC, t.name ASC LIMIT 80') : [],
+        'gallery_tag_rows' => $hasGalleryTags ? admin_gallery_report_model_rows('SELECT t.name AS label, COUNT(gt.gallery_id) AS count FROM tags t INNER JOIN gallery_tags gt ON gt.tag_id = t.id GROUP BY t.id, t.name ORDER BY count DESC, t.name ASC LIMIT ' . ADMIN_GALLERY_REPORT_ROW_LIMITS['tag_usage']) : [],
+        'image_tag_rows' => $hasImageTags ? admin_gallery_report_model_rows('SELECT t.name AS label, COUNT(it.image_id) AS count FROM tags t INNER JOIN image_tags it ON it.tag_id = t.id GROUP BY t.id, t.name ORDER BY count DESC, t.name ASC LIMIT ' . ADMIN_GALLERY_REPORT_ROW_LIMITS['tag_usage']) : [],
     ];
 }
 
@@ -156,13 +171,21 @@ function admin_gallery_report_model_vote_summary(bool $hasImageVotes, bool $hasP
     ];
 }
 
-/** Return feature-related settings rows. */
+/**
+ * Read a bounded report snapshot of feature-related persisted settings.
+ * @return list<array{setting_key:string,setting_value:string|null,updated_at:string|null}> Settings matching the existing report vocabulary, empty on query failure.
+ */
 function admin_gallery_report_model_feature_settings(): array
 {
-    return admin_gallery_report_model_rows("SELECT setting_key, setting_value, updated_at FROM app_settings WHERE setting_key LIKE 'feature_%' OR setting_key LIKE '%enabled%' OR setting_key LIKE '%telemetry%' OR setting_key LIKE '%thumbnail%' ORDER BY setting_key ASC LIMIT 250");
+    return admin_gallery_report_model_rows("SELECT setting_key, setting_value, updated_at FROM app_settings WHERE setting_key LIKE 'feature_%' OR setting_key LIKE '%enabled%' OR setting_key LIKE '%telemetry%' OR setting_key LIKE '%thumbnail%' ORDER BY setting_key ASC LIMIT " . ADMIN_GALLERY_REPORT_ROW_LIMITS['feature_settings']);
 }
 
-/** Return operational Admin log summary rows. */
+/**
+ * Read Admin log counts and bounded error/event rankings.
+ * @param bool $hasSeverity Verified severity-column availability.
+ * @param bool $hasCategory Verified category-column availability.
+ * @return array<string,mixed> Total/seven-day counts, label/count groups, recent error details and event rankings; unavailable optional groups are empty.
+ */
 function admin_gallery_report_model_admin_log_summary(bool $hasSeverity, bool $hasCategory): array
 {
     $severitySelect = $hasSeverity ? 'severity' : "'' AS severity";
@@ -173,15 +196,19 @@ function admin_gallery_report_model_admin_log_summary(bool $hasSeverity, bool $h
         'level_rows' => admin_gallery_report_model_rows('SELECT level AS label, COUNT(*) AS count FROM admin_logs GROUP BY level ORDER BY count DESC'),
         'severity_rows' => $hasSeverity ? admin_gallery_report_model_rows('SELECT severity AS label, COUNT(*) AS count FROM admin_logs GROUP BY severity ORDER BY count DESC') : [],
         'category_rows' => $hasCategory ? admin_gallery_report_model_rows('SELECT category AS label, COUNT(*) AS count FROM admin_logs GROUP BY category ORDER BY count DESC') : [],
-        'recent_errors' => admin_gallery_report_model_rows('SELECT created_at, level, ' . $severitySelect . ', event_key, message, route_name FROM admin_logs WHERE ' . $errorPredicate . ' ORDER BY created_at DESC LIMIT 80'),
-        'top_events' => admin_gallery_report_model_rows('SELECT event_key AS label, COUNT(*) AS count FROM admin_logs GROUP BY event_key ORDER BY count DESC LIMIT 80'),
+        'recent_errors' => admin_gallery_report_model_rows('SELECT created_at, level, ' . $severitySelect . ', event_key, message, route_name FROM admin_logs WHERE ' . $errorPredicate . ' ORDER BY created_at DESC LIMIT ' . ADMIN_GALLERY_REPORT_ROW_LIMITS['log_errors']),
+        'top_events' => admin_gallery_report_model_rows('SELECT event_key AS label, COUNT(*) AS count FROM admin_logs GROUP BY event_key ORDER BY count DESC LIMIT ' . ADMIN_GALLERY_REPORT_ROW_LIMITS['log_events']),
     ];
 }
 
-/** Return largest source-image rows with gallery labels. */
+/**
+ * Return the bounded largest-source-image section with owning gallery labels.
+ * @param int $limit Requested row count, clamped to the centralized top-image ceiling.
+ * @return list<array{id:int,filename:string,relative_path:string,mime_type:string|null,file_size:int|null,width:int|null,height:int|null,visibility:string,gallery_title:string,gallery_folder_path:string}> Source-image rows; empty on query failure.
+ */
 function admin_gallery_report_model_largest_images(int $limit): array
 {
-    $limit = max(1, min(500, $limit));
+    $limit = max(1, min(ADMIN_GALLERY_REPORT_ROW_LIMITS['max_top_images'], $limit));
     return admin_gallery_report_model_rows('SELECT i.id, i.filename, i.relative_path, i.mime_type, i.file_size, i.width, i.height, i.visibility, g.title AS gallery_title, g.folder_path AS gallery_folder_path FROM images i INNER JOIN galleries g ON g.id = i.gallery_id ORDER BY COALESCE(i.file_size, 0) DESC, i.id DESC LIMIT ' . $limit);
 }
 
@@ -191,13 +218,25 @@ function admin_gallery_report_model_image_count(): int
     return admin_gallery_report_model_scalar_int('SELECT COUNT(*) FROM images');
 }
 
-/** Return one bounded image batch with schema-ready optional metadata columns. */
+/**
+ * Read the next monotonic image-ID batch with positively verified optional columns.
+ * @param int $lastImageId Exclusive lower image-ID bound; negative inputs become zero.
+ * @param int $limit Requested batch size, sharing the service's immutable ceiling.
+ * @param array<string,bool> $capabilities Verified image-column availability keyed by column identifier.
+ * @return list<array<string,mixed>> Image/gallery identity, storage, dimensions, timestamps and optional EXIF/GPS fields; missing optional values are null and query failure returns an empty list.
+ */
 function admin_gallery_report_model_image_rows_after_id(int $lastImageId, int $limit, array $capabilities): array
 {
     $lastImageId = max(0, $lastImageId);
     // Keep this clamp aligned with the report service. A lower model-only cap
     // silently multiplies Ajax requests and can hit shared-hosting request limits.
-    $limit = max(1, min(500, $limit));
+    $limit = max(1, min(ADMIN_GALLERY_REPORT_MAX_BATCH_SIZE, $limit));
+    /**
+     * Select a fixed internal optional column or an explicit null projection.
+     * @param string $column Internal image-column identifier with verified capability.
+     * @param string $alias Internal result-field identifier.
+     * @return string Model-owned SELECT expression; neither identifier is caller-supplied SQL.
+     */
     $optional = static function (string $column, string $alias) use ($capabilities): string {
         return !empty($capabilities[$column]) ? 'i.' . $column . ' AS ' . $alias : 'NULL AS ' . $alias;
     };

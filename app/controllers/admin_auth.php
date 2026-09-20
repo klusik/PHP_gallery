@@ -693,6 +693,7 @@ function cms_find_valid_password_reset_token(string $selector, string $token): ?
 
 /**
  * Start Google login or account linking through OpenID Connect.
+ * @return void Authorizes link intent, stores a one-time state and redirects to the configured provider.
  */
 function cms_admin_google_start(): void
 {
@@ -721,18 +722,28 @@ function cms_admin_google_start(): void
         require_admin();
     }
 
-    redirect_to(google_auth_authorization_url($mode, $returnTarget));
+    if (!isset($_SESSION['google_oauth_states']) || !is_array($_SESSION['google_oauth_states'])) {
+        $_SESSION['google_oauth_states'] = [];
+    }
+    $states = &$_SESSION['google_oauth_states'];
+    $user = current_user();
+    redirect_to(google_auth_authorization_url($mode, $returnTarget, $states, $user ? (int) $user['id'] : null));
 }
 
 /**
  * Handle the Google OpenID Connect callback for login and account linking.
+ * @return void Consumes the caller's one-time challenge before code exchange and redirects with the authenticated outcome.
  */
 function cms_admin_google_callback(): void
 {
     // $state stores the returned OAuth state used to prevent request forgery.
     $state = (string) ($_GET['state'] ?? '');
+    if (!isset($_SESSION['google_oauth_states']) || !is_array($_SESSION['google_oauth_states'])) {
+        $_SESSION['google_oauth_states'] = [];
+    }
+    $states = &$_SESSION['google_oauth_states'];
     // $stateEntry stores the local state metadata saved before redirecting to Google.
-    $stateEntry = function_exists('Gallery\\Services\\google_auth_consume_state') ? google_auth_consume_state($state) : null;
+    $stateEntry = function_exists('Gallery\\Services\\google_auth_consume_state') ? google_auth_consume_state($state, $states) : null;
     if (!$stateEntry) {
         flash_message('admin_notice', t('admin.google.state_invalid', 'Google login expired or returned an invalid state. Try again.'));
         redirect_to(url_for('admin_login'));

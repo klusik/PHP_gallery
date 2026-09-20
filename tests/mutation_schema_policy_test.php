@@ -189,7 +189,7 @@ $galleryMutationRegistration = strpos($servicesSource, "require_once __DIR__ . '
 mutation_policy_assert_true($policyRegistration !== false, 'mutation schema policy service registered');
 mutation_policy_assert_true($galleryMutationRegistration !== false && $policyRegistration < $galleryMutationRegistration, 'mutation schema policy loads before destructive consumers');
 
-$dashboardSource = (string) file_get_contents(__DIR__ . '/../app/services/admin_dashboard.php');
+$dashboardSource = module_source(__DIR__ . '/../app/services/admin_dashboard.php');
 foreach ([
     'mutation_gallery_delete',
     'mutation_gallery_move',

@@ -49,24 +49,28 @@ use Throwable;
 use function Gallery\Core\is_supported_image_path;
 use function Gallery\Core\normalize_relative_path;
 
-const ADMIN_GALLERY_DISCOVERY_DEFAULT_BATCH_SIZE = 80;
-const ADMIN_GALLERY_DISCOVERY_MAX_BATCH_SIZE = 300;
-const ADMIN_GALLERY_DISCOVERY_JOB_TTL_SECONDS = 7200;
+require_once dirname(__DIR__) . '/policy_constants.php';
+use const Gallery\Core\ADMIN_GALLERY_DISCOVERY_DEFAULT_BATCH_SIZE;
+use const Gallery\Core\ADMIN_GALLERY_DISCOVERY_MAX_BATCH_SIZE;
+use const Gallery\Core\ADMIN_GALLERY_DISCOVERY_JOB_TTL_SECONDS;
+use const Gallery\Core\ADMIN_GALLERY_DISCOVERY_RETAINED_JOB_LIMIT;
+use const Gallery\Core\ADMIN_GALLERY_DISCOVERY_TOKEN_BYTES;
 
 /**
  * Start a browser-driven Admin gallery discovery job.
  *
- * The job records traversal state in the admin session so every request only
- * scans a bounded number of folders. Imported gallery rows are not rescanned
+ * The caller owns traversal-state storage so every request only scans a bounded
+ * number of folders. Imported gallery rows are not rescanned
  * here, because the Discover folders action is a folder inventory check.
  *
+ * @param array<string,array<string,mixed>> $jobs Caller-owned discovery state, pruned and updated by reference; never the whole session.
  * @return array<string, mixed> Public job state for the Ajax caller.
  */
-function admin_gallery_discovery_start_job(): array
+function admin_gallery_discovery_start_job(array &$jobs): array
 {
-    admin_gallery_discovery_cleanup_jobs();
+    admin_gallery_discovery_cleanup_jobs($jobs);
 
-    $token = bin2hex(random_bytes(12));
+    $token = bin2hex(random_bytes(ADMIN_GALLERY_DISCOVERY_TOKEN_BYTES));
     $known = admin_gallery_discovery_known_gallery_paths();
     $job = admin_gallery_discovery_known_path_job_state($known);
     $job = array_merge($job, [
@@ -89,7 +93,7 @@ function admin_gallery_discovery_start_job(): array
         'errors' => [],
     ]);
 
-    admin_gallery_discovery_write_job($job);
+    admin_gallery_discovery_write_job($jobs, $job);
     return admin_gallery_discovery_public_state($job);
 }
 
@@ -97,12 +101,13 @@ function admin_gallery_discovery_start_job(): array
  * Process one browser-driven folder discovery batch.
  *
  * @param string $token Session job token supplied by the browser.
+ * @param array<string,array<string,mixed>> $jobs Caller-owned discovery state, updated only at the existing checkpoints.
  * @param int $batchSize Maximum number of directories to inspect.
  * @return array<string, mixed> Public job state for the Ajax caller.
  */
-function admin_gallery_discovery_process_job(string $token, int $batchSize = ADMIN_GALLERY_DISCOVERY_DEFAULT_BATCH_SIZE): array
+function admin_gallery_discovery_process_job(string $token, array &$jobs, int $batchSize = ADMIN_GALLERY_DISCOVERY_DEFAULT_BATCH_SIZE): array
 {
-    $job = admin_gallery_discovery_read_job($token);
+    $job = admin_gallery_discovery_read_job($jobs, $token);
     if ($job === null) {
         return admin_gallery_discovery_missing_state();
     }
@@ -116,7 +121,7 @@ function admin_gallery_discovery_process_job(string $token, int $batchSize = ADM
         $job['status'] = 'error';
         $job['errors'][] = 'The galleries directory does not exist.';
         $job['updated_at'] = time();
-        admin_gallery_discovery_write_job($job);
+        admin_gallery_discovery_write_job($jobs, $job);
         return admin_gallery_discovery_public_state($job, true);
     }
 
@@ -138,7 +143,7 @@ function admin_gallery_discovery_process_job(string $token, int $batchSize = ADM
         $job = admin_gallery_discovery_finish_job($job);
     }
 
-    admin_gallery_discovery_write_job($job);
+    admin_gallery_discovery_write_job($jobs, $job);
     return admin_gallery_discovery_public_state($job, (string) ($job['status'] ?? '') === 'complete');
 }
 
@@ -146,11 +151,12 @@ function admin_gallery_discovery_process_job(string $token, int $batchSize = ADM
  * Return the current public state for an existing discovery job.
  *
  * @param string $token Session job token supplied by the browser.
+ * @param array<string,array<string,mixed>> $jobs Caller-owned discovery state; an expired selected job is removed.
  * @return array<string, mixed> Public job state for the Ajax caller.
  */
-function admin_gallery_discovery_job_status(string $token): array
+function admin_gallery_discovery_job_status(string $token, array &$jobs): array
 {
-    $job = admin_gallery_discovery_read_job($token);
+    $job = admin_gallery_discovery_read_job($jobs, $token);
     if ($job === null) {
         return admin_gallery_discovery_missing_state();
     }
@@ -1329,21 +1335,22 @@ function admin_gallery_discovery_missing_state(): array
 }
 
 /**
- * Read one discovery job from the admin session.
+ * Read one discovery job and expire stale state in the caller's isolated map.
  *
+ * @param array<string,array<string,mixed>> $jobs Caller-owned job map, changed only when the selected job expired.
  * @param string $token Session job token supplied by the browser.
  * @return array<string, mixed>|null Discovery job state, or null when missing.
  */
-function admin_gallery_discovery_read_job(string $token): ?array
+function admin_gallery_discovery_read_job(array &$jobs, string $token): ?array
 {
     $token = preg_replace('/[^A-Fa-f0-9]/', '', $token) ?: '';
-    if ($token === '' || empty($_SESSION['admin_gallery_discovery_jobs'][$token]) || !is_array($_SESSION['admin_gallery_discovery_jobs'][$token])) {
+    if ($token === '' || empty($jobs[$token]) || !is_array($jobs[$token])) {
         return null;
     }
 
-    $job = $_SESSION['admin_gallery_discovery_jobs'][$token];
+    $job = $jobs[$token];
     if (time() - (int) ($job['updated_at'] ?? $job['started_at'] ?? 0) > ADMIN_GALLERY_DISCOVERY_JOB_TTL_SECONDS) {
-        unset($_SESSION['admin_gallery_discovery_jobs'][$token]);
+        unset($jobs[$token]);
         return null;
     }
 
@@ -1351,45 +1358,52 @@ function admin_gallery_discovery_read_job(string $token): ?array
 }
 
 /**
- * Write one discovery job into the admin session.
+ * Store one checkpoint in the caller-owned discovery map.
  *
+ * @param array<string,array<string,mixed>> $jobs Isolated job map updated by reference.
  * @param array<string, mixed> $job Discovery job state.
+ * @return void
  */
-function admin_gallery_discovery_write_job(array $job): void
+function admin_gallery_discovery_write_job(array &$jobs, array $job): void
 {
     $token = preg_replace('/[^A-Fa-f0-9]/', '', (string) ($job['token'] ?? '')) ?: '';
     if ($token === '') {
         return;
     }
 
-    if (!isset($_SESSION['admin_gallery_discovery_jobs']) || !is_array($_SESSION['admin_gallery_discovery_jobs'])) {
-        $_SESSION['admin_gallery_discovery_jobs'] = [];
-    }
-    $_SESSION['admin_gallery_discovery_jobs'][$token] = $job;
+    $jobs[$token] = $job;
 }
 
 /**
- * Remove stale discovery jobs from the admin session.
+ * Remove expired/malformed jobs and retain the most recently updated checkpoints.
+ * @param array<string,mixed> $jobs Caller-owned map; malformed entries are removed.
+ * @return void
  */
-function admin_gallery_discovery_cleanup_jobs(): void
+function admin_gallery_discovery_cleanup_jobs(array &$jobs): void
 {
-    if (empty($_SESSION['admin_gallery_discovery_jobs']) || !is_array($_SESSION['admin_gallery_discovery_jobs'])) {
-        $_SESSION['admin_gallery_discovery_jobs'] = [];
+    if ($jobs === []) {
         return;
     }
 
-    foreach ($_SESSION['admin_gallery_discovery_jobs'] as $token => $job) {
+    foreach ($jobs as $token => $job) {
         if (!is_array($job) || time() - (int) ($job['updated_at'] ?? $job['started_at'] ?? 0) > ADMIN_GALLERY_DISCOVERY_JOB_TTL_SECONDS) {
-            unset($_SESSION['admin_gallery_discovery_jobs'][$token]);
+            unset($jobs[$token]);
         }
     }
 
-    if (count($_SESSION['admin_gallery_discovery_jobs']) <= 5) {
+    if (count($jobs) <= ADMIN_GALLERY_DISCOVERY_RETAINED_JOB_LIMIT) {
         return;
     }
 
-    uasort($_SESSION['admin_gallery_discovery_jobs'], static function (array $left, array $right): int {
+    uasort($jobs,
+        /**
+         * Sort retained checkpoints newest first while preserving their token keys.
+         * @param array<string,mixed> $left Earlier candidate checkpoint.
+         * @param array<string,mixed> $right Later candidate checkpoint.
+         * @return int Descending last-update comparison.
+         */
+        static function (array $left, array $right): int {
         return (int) ($right['updated_at'] ?? 0) <=> (int) ($left['updated_at'] ?? 0);
     });
-    $_SESSION['admin_gallery_discovery_jobs'] = array_slice($_SESSION['admin_gallery_discovery_jobs'], 0, 5, true);
+    $jobs = array_slice($jobs, 0, ADMIN_GALLERY_DISCOVERY_RETAINED_JOB_LIMIT, true);
 }

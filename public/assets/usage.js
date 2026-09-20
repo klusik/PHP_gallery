@@ -2,16 +2,16 @@
  * Project: PHP Gallery
  * Repository: https://github.com/klusik/PHP_gallery
  *
- * File: public/assets/telemetry.js
+ * File: public/assets/usage.js (canonical); public/assets/telemetry.js (compatibility copy)
  * Module Type: Browser Module
  *
  * Purpose:
- *   Provides client-side behavior for the PHP Gallery user interface.
+ *   Collects bounded anonymous browser and photo-interaction telemetry.
  *
  * Responsibilities:
- *   - Attach behavior to existing server-rendered markup
- *   - Keep DOM interaction predictable and readable
- *   - Avoid unnecessary layout work in performance-sensitive paths
+ *   - Preserve one photo-open state machine and bounded activation-origin vocabulary
+ *   - Batch configured session, page, media and performance events
+ *   - Keep canonical usage.js and compatibility telemetry.js byte-identical
  *
  * Author:
  *   Rudolf Klusal

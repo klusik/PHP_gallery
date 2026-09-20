@@ -1,6 +1,12 @@
 <?php
 /**
  * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ * File: tests/support/gallery_workflow_router.php
+ * Module Type: Test Fixture
+ * Purpose: Route requests inside the disposable application copy.
+ * Responsibilities:
+ *   - Keep fixture serving separate from the active installation.
  * Author: Rudolf Klusal
  * Router copied into the disposable application; never served by the active installation.
  */

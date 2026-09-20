@@ -54,7 +54,11 @@ function view_render_admin_gallery_ai_reprocess_panel(array $viewModel): void
     echo '<span class="muted">' . e(t('admin.gallery_editor.ai_reprocess_note', 'After pressing this, keep or start the AI metadata worker with the backend and model version you want to use.')) . '</span></form></div>';
 }
 
-/** @param array<string,mixed> $viewModel Controller-prepared image bulk/move toolbar state. */
+/**
+ * Render bulk image actions and controller-prepared bounded destination controls.
+ * @param array<string,mixed> $viewModel Controller-prepared image bulk/move toolbar state.
+ * @return void Emit the in-place move toolbar and its existing form fields.
+ */
 function view_render_admin_image_bulk_toolbar(array $viewModel): void
 {
     $galleryId = (int) ($viewModel['gallery_id'] ?? 0);
@@ -73,7 +77,7 @@ function view_render_admin_image_bulk_toolbar(array $viewModel): void
     echo '</div><p class="admin-image-move-lead">' . e(t('admin.gallery_editor.move_lead')) . '</p>';
     echo '<div class="admin-image-move-choice-grid" role="group" aria-label="' . e(t('admin.gallery_editor.move_action')) . '"><button type="button" class="admin-image-move-choice" data-admin-image-move-choice="move_existing" aria-pressed="false"><span class="admin-image-move-choice-icon" aria-hidden="true">▭</span><span class="admin-image-move-choice-copy"><strong>' . e(t('admin.gallery_editor.move_existing')) . '</strong><small>' . e(t('admin.gallery_editor.move_existing_help')) . '</small></span><span class="admin-image-move-choice-radio" aria-hidden="true"></span></button><button type="button" class="admin-image-move-choice" data-admin-image-move-choice="move_new" aria-pressed="false"><span class="admin-image-move-choice-icon" aria-hidden="true">▭+</span><span class="admin-image-move-choice-copy"><strong>' . e(t('admin.gallery_editor.move_new')) . '</strong><small>' . e(t('admin.gallery_editor.move_new_help')) . '</small></span><span class="admin-image-move-choice-radio" aria-hidden="true"></span></button></div>';
     echo '<div class="admin-image-move-targets"><label class="admin-image-move-target" data-admin-image-move-existing hidden><span>' . e(t('admin.gallery_editor.destination_gallery')) . '</span>' . (string) ($viewModel['destination_picker_html'] ?? '') . '<small><span aria-hidden="true">ⓘ</span> ' . e(t('admin.gallery_editor.destination_help')) . '</small></label>';
-    echo '<div class="admin-image-move-target admin-image-move-new" data-admin-image-move-new hidden><label><span>' . e(t('admin.gallery_editor.parent_gallery')) . '</span><select name="new_gallery_parent_id"><option value="0">' . e(t('admin.gallery_editor.no_parent')) . '</option>' . (string) ($viewModel['parent_options_html'] ?? '') . '</select></label><label><span>' . e(t('admin.gallery_editor.new_gallery_title')) . '</span><input type="text" name="new_gallery_title" placeholder="' . e(t('admin.gallery_editor.example_gallery_title')) . '"></label><label><span>' . e(t('admin.gallery_editor.optional_folder_slug')) . '</span><input type="text" name="new_gallery_folder_name" placeholder="' . e(t('admin.gallery_editor.derive_from_title')) . '"></label><small><span aria-hidden="true">ⓘ</span> ' . e(t('admin.gallery_editor.new_gallery_move_help')) . '</small></div></div>';
+    echo '<div class="admin-image-move-target admin-image-move-new" data-admin-image-move-new hidden><label><span>' . e(t('admin.gallery_editor.parent_gallery')) . '</span>' . (string) ($viewModel['parent_picker_html'] ?? '') . '</label><label><span>' . e(t('admin.gallery_editor.new_gallery_title')) . '</span><input type="text" name="new_gallery_title" placeholder="' . e(t('admin.gallery_editor.example_gallery_title')) . '"></label><label><span>' . e(t('admin.gallery_editor.optional_folder_slug')) . '</span><input type="text" name="new_gallery_folder_name" placeholder="' . e(t('admin.gallery_editor.derive_from_title')) . '"></label><small><span aria-hidden="true">ⓘ</span> ' . e(t('admin.gallery_editor.new_gallery_move_help')) . '</small></div></div>';
     echo '<div class="admin-image-move-confirm"><button type="button" class="secondary admin-image-move-cancel-bottom" data-admin-image-move-cancel>' . e(t('admin.gallery_editor.cancel')) . '</button><div><strong>' . e(t('admin.gallery_editor.move_summary')) . '</strong><p data-admin-image-move-summary>' . e(t('admin.gallery_editor.move_summary_empty')) . '</p></div><button type="submit" name="move_images" value="1" data-admin-image-move-submit disabled>' . e(t('admin.gallery_editor.move_selected_now')) . '</button></div></section></div>';
 }
 
@@ -109,6 +113,8 @@ function view_render_admin_gallery_branding_fields(array $viewModel): void
  * receiving the first mouse movement. The script uses a custom mouse/pointer
  * fallback instead of HTML5 drag-and-drop, so it does not depend on browser
  * drag images, table-row draggable support, or dragover/drop acceptance rules.
+ *
+ * @return void Emits the inline Admin image-reordering initialization beside its table.
  */
 function view_render_admin_image_reorder_script(): void
 {

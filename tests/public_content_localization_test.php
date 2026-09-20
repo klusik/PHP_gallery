@@ -2,6 +2,10 @@
 
 /**
  * Project: PHP Gallery
+ * Module Type: Regression Test
+ * Purpose: Protect multilingual public rendering boundaries.
+ * Responsibilities:
+ *   - Check language fallback while preserving access-before-localization ordering.
  * Repository: https://github.com/klusik/PHP_gallery
  *
  * File: tests/public_content_localization_test.php
