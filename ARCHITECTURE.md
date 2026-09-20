@@ -9,7 +9,7 @@ This document is intended to help future maintainers and AI coding agents unders
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.106';
+const CMS_VERSION = '0.106.1';
 ```
 
 Update-related code uses:
@@ -1716,6 +1716,8 @@ The lifecycle is persisted as `analyzing -> ready -> running <-> paused -> compl
 `maintenance_jobs.lock_key` is a nullable unique durable mutation claim. Only a running or paused central job owns `lock_key=central`; analyzed plans do not block ordinary maintenance. A short-lived MySQL advisory lock serializes individual browser steps for the same job, which prevents two tabs from advancing one checkpoint concurrently. Automatic `site_maintenance` checks the durable claim before its first mutation slice and yields while the central job owns it. Existing subsystem locks remain authoritative inside their own owners.
 
 Execution is bounded and checkpointed. Telemetry follows its existing `has_more` contract, Trash uses bounded purge/reconciliation, thumbnail orphan metadata is deleted in bounded batches, logical database cleanup delegates to its resumable owner, and physical database maintenance executes at most one server-selected table per HTTP request. Before an indivisible `ANALYZE TABLE` or `OPTIMIZE TABLE`, the table cursor and an `atomic_inflight` marker are persisted. If the browser response is lost after the statement commits, the same table is not blindly replayed on retry. Large or currently ineligible tables are skipped after an immediate server-side inventory/policy recheck.
+
+Download/cache cleanup is also split into one owner per browser checkpoint: manifest metadata, legacy download artifacts, then generated ZIP cache. These owners are independent optional optimizations. A hosting-specific failure in one owner records only a bounded operation name, exception class, stable error code, and duration, marks that owner skipped, preserves already completed cleanup, and continues with unrelated maintenance. Raw exception messages, SQL, credentials, private paths, and traces never enter the job state or lifecycle log.
 
 Cancellation is cooperative and takes effect between bounded operations. It does not roll back already committed cleanup and cannot interrupt a currently executing MySQL table operation. Completion requires the registry `verify` task to finish and stores a bounded before/after report in the job state. Terminal job history is retained for operator diagnostics and removed in bounded batches after the configured central retention period.
 
