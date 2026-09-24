@@ -20,13 +20,42 @@ payload. New moves refuse while either gallery has an unresolved journal.
 Connection-scoped, non-waiting locks serialize image moves and recovery across
 sessions. They cannot lock FTP operators or unrelated storage maintenance.
 
-Physical moves use exclusive hard-link creation followed by source unlink:
-destination files cannot be replaced by POSIX rename semantics. Both paths must
-support same-filesystem hard links. Unsupported/cross-filesystem moves refuse
-and retain originals; no copy-and-delete fallback silently changes that guarantee.
-A crash can temporarily leave two names. Recovery removes the other name only
-when positive device/inode identity proves a shared file. On a platform unable
-to prove that identity, both copies remain for operator reconciliation.
+When a move fails, the Organizer warning now identifies the phase and a safe
+reason, such as `file transfer: the destination directory cannot be created`
+or `file transfer: the original file could not be moved to its destination`.
+It includes the original/derivative manifest entry number and journal operation
+ID when available. The `gallery.image_move_failed` Admin log event records the
+source/destination gallery IDs, requested image count, phase, reason code,
+operation ID, entry number and file kind. Its private `debug` context additionally
+records the failed source/destination path resolution or transfer step, exact
+gallery-root-relative and absolute file paths, exception class/message, PHP
+source file/line and a bounded call trace without arguments. It also captures
+the configured storage root's real path, each file parent's real path, the
+stored source/destination gallery paths, and whether each file exists or is a
+symbolic link at failure time. Native filesystem
+warnings are retained as exception causes. Database exception messages are
+withheld because they may contain SQL or credentials. Do not share this Admin
+log entry outside trusted operators; the Organizer's on-screen warning retains
+only the safe reason and operation ID. A failure before the journal is written
+has no operation ID and need not appear in the pending list.
+An ownership transaction failure is reported separately from a file transfer
+failure; if automatic reconciliation also fails, the recovery reason takes
+priority and remains on the pending journal for the operator.
+Journal path checks normalize legacy separators in stored gallery folder paths
+before comparing them with canonical manifest paths. A real escape, symlink or
+changed parent directory still fails with its own safe reason code.
+
+Physical image moves use `rename()` on the original file, after checking that
+the destination is unoccupied. The moved file is verified against the journaled
+size and SHA-256 before database ownership changes. The folder tree and files
+remain authoritative; no hard or symbolic links are created. Gallery locks
+serialize application writers. External filesystem writers must be stopped
+during a move because PHP has no portable atomic no-replace rename. Recovery
+uses the database commit marker to choose the required location. If an older
+interrupted operation left two regular files, recovery removes the extra file
+only when both match the journaled bytes. Missing, changed or unverified files
+remain for operator reconciliation. Gallery-folder relocation separately uses
+a physical directory rename; this image-move journal does not cover that workflow.
 
 ## Operator workflow
 

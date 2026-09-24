@@ -281,6 +281,13 @@ namespace {
     maintenance_health_assert(str_contains($bounded['entries'][0], 'identity_or_storage_unverified'), 'Approved safe recovery category remains discoverable.');
     maintenance_health_assert(!str_contains(json_encode($bounded, JSON_THROW_ON_ERROR), 'PRIVATE_'), 'No manifests, paths, hashes or extra row fields escape.');
 
+    $GLOBALS['maintenance_rows'][0]['last_error_code'] = 'destination_directory_unavailable';
+    $classified = Gallery\Services\admin_image_move_pending_health_status(['state' => 'available'], true);
+    maintenance_health_assert(str_contains($classified['entries'][0], 'destination_directory_unavailable'), 'New safe recovery reason remains visible.');
+    $GLOBALS['maintenance_rows'][0]['last_error_code'] = 'gallery_ancestry_changed';
+    $classified = Gallery\Services\admin_image_move_pending_health_status(['state' => 'available'], true);
+    maintenance_health_assert(str_contains($classified['entries'][0], 'gallery_ancestry_changed'), 'Gallery ancestry failure remains visible without a path.');
+
     $GLOBALS['maintenance_rows'][0]['last_error_code'] = 'PRIVATE_STORED_ERROR';
     $GLOBALS['maintenance_rows'][1]['state'] = 'PRIVATE_STORED_STATE';
     $GLOBALS['maintenance_rows'][2]['operation_id'] = 'PRIVATE_OPERATION_PATH';
