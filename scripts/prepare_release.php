@@ -124,6 +124,8 @@ if ($changed === []) {
 fwrite(STDOUT, str_repeat('-', 72) . "\n");
 fwrite(STDOUT, "Preparation is not release qualification. Continue with RELEASE.md.\n");
 fwrite(STDOUT, "Complete PATCH_NOTES.md and release-sensitive documentation, rebuild the manual,\n");
-fwrite(STDOUT, "then regenerate the manifest and run exactly one release audit:\n");
+fwrite(STDOUT, "then regenerate the manifest, pass the cheap preflight, and run one release audit:\n");
 fwrite(STDOUT, "  php scripts/generate_manifest.php\n");
+fwrite(STDOUT, "  php scripts/check_release.php " . $version . "\n");
+fwrite(STDOUT, "  php scripts/generate_manifest.php --check\n");
 fwrite(STDOUT, "  php scripts/audit.php --profile=release\n");

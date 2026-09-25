@@ -6,7 +6,7 @@ PHP 8.1 is the compatibility minimum. For deployment, use the latest patch relea
 of maintained PHP 8.3 or newer; PHP 8.5 is preferred after staging verification.
 See [runtime support and upstream lifecycle dates](docs/RUNTIME_SUPPORT.md).
 
-**Current Version:** 0.108.1
+**Current Version:** 0.108.2
 
 **Key Benefit:** Deploy in minutes on shared hosting. No npm, no Composer, no framework overhead. Just PHP + MySQL.
 
@@ -919,7 +919,7 @@ The tracked `tests/` tree is the authoritative framework-free suite, and `php sc
 
 Recovery and qualification have separate evidence requirements. The [recovery CLI](docs/RECOVERY_ASSURANCE.md) validates isolated recovery files; the [off-host runbook](docs/RECOVERY_OFF_HOST.md) explains the real restore exercise it cannot replace. [Disposable workflow testing](docs/GALLERY_WORKFLOWS.md) exercises generated data without using the live installation. The [qualification ledger](docs/RELEASE_QUALIFICATION.md) binds audit reports and explicit manual reviews to exact source/PDF bytes; automated PASS alone is not publication approval.
 
-`RELEASE.md` is the authoritative release playbook. Start by comparing the worktree with the exact previous release tag, then run `php scripts/prepare_release.php <version>` to update only registered mechanical version markers and create a patch-note scaffold when needed. Complete release notes/documentation, rebuild and inspect the manual, then run `php scripts/generate_manifest.php` followed by exactly one `php scripts/audit.php --profile=release`. Release profiles are not a quick/full/release staircase. The release audit includes `scripts/check_release.php`, manifest freshness, browser integration when available, and Git whitespace validation. Use `php scripts/check_release.php` independently only while diagnosing/preparing consistency. Inspect skipped/blocked coverage and the final package before publication. Release tooling never creates commits, tags, pushes, or hosted releases unless those actions are explicitly requested.
+`RELEASE.md` is the authoritative release playbook. Start by comparing the worktree with the exact previous release tag, then run `php scripts/prepare_release.php <version>` to update only registered mechanical version markers and create a patch-note scaffold when needed. Complete release notes/documentation, rebuild and inspect the manual, then generate the manifest. Before the long audit, run the cheap gate: `php scripts/check_release.php <version>`, `php scripts/generate_manifest.php --check`, and Git whitespace checks for both working-tree and staged changes; review the diff and clean package source. Fix missing metadata or other deterministic failures here, initialize the qualification fingerprint, freeze the inputs, and run exactly one release audit path. Release profiles are not a quick/full/release staircase. The release audit includes release consistency, manifest freshness, browser integration when available, and Git whitespace validation. Inspect skipped/blocked coverage and the final package before publication. Release tooling never creates commits, tags, pushes, or hosted releases unless those actions are explicitly requested.
 
 The runner discovers every tracked `tests/*_test.php` script deterministically. Individual scripts can still be run directly when isolating a behavior. The project intentionally has no Composer or PHPUnit dependency.
 

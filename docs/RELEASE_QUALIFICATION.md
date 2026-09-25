@@ -9,7 +9,8 @@ orchestrator.
 ## Prepare a content snapshot
 
 Finish source, documentation, PDF, and manifest generation first, following
-`RELEASE.md`. Immediately before the final central release audit, initialize:
+`RELEASE.md`. Pass its cheap release/manifest/diff preflight and freeze the
+inputs. Immediately before the final central release audit, initialize:
 
 ```text
 php scripts/release_qualification.php init 0.104

@@ -1,5 +1,44 @@
 # Patch notes
 
+## Version 0.108.2
+
+Version 0.108.2 streamlines release preparation so deterministic metadata and integrity checks are completed before the long qualification audit. It also prevents a newly prepared release from starting with incomplete release metadata.
+
+### Highlights
+
+#### Predictable release preparation
+
+- Completed new `release-metadata.json` entries with a timestamp, readable release label, and `v_<version>` tag during the first preparation command.
+- Added a cheap release preflight before the long audit for release consistency, manifest freshness, and working-tree/staged whitespace.
+- Documented the release-input freeze, single final audit path, clean package source selection, and package inspection sequence.
+
+### Technical Details
+
+#### Release tooling
+
+- Updated `scripts/release_lib.php` so metadata preparation defaults a missing timestamp to the current time while preserving complete existing entries on repeat runs.
+- Updated `scripts/prepare_release.php` to print the complete preflight sequence after mechanical preparation.
+- Refreshed `app/core-manifest.json` after the release tooling changes.
+
+#### Documentation
+
+- Updated `RELEASE.md`, `README.md`, and `docs/RELEASE_QUALIFICATION.md` with the gated release gameplan.
+- Updated the application, testing guide, database documentation, architecture example, and manual edition markers to Version 0.108.2.
+
+### Tests
+
+- Added regression coverage for first-run release metadata creation and idempotent repeat preparation in `tests/release_tooling_test.php`.
+- Passed the complete central audit with PHP, Node, WinApp, syntax, browser, manifest, and contract checks.
+
+### User Impact
+
+#### For maintainers
+
+- Release preparation now exposes incomplete metadata and other deterministic failures before expensive suites run, reducing avoidable release iterations.
+
+#### For administrators and visitors
+
+- No application runtime, database schema, public route, gallery behavior, or visitor-facing UI changes were introduced.
 ## Version 0.108.1
 
 Version 0.108.1 fixes server-side thumbnail generation on PHP 8.5 and stabilizes the release workflow checks for the Version 0.108 gallery editor. Thumbnail sizes, quality, formats, and public presentation remain unchanged.

@@ -152,6 +152,12 @@ function prepare_version_markers(string $root, string $version, string $manualDa
 
 /**
  * Upsert one release-metadata entry while preserving all historical formatting/content.
+ * A new entry gets the current time when no release timestamp is supplied.
+ *
+ * @param string $root Repository root containing release-metadata.json.
+ * @param string $version Target release version.
+ * @param ?DateTimeImmutable $releasedAt Explicit timestamp, or null to preserve/default it.
+ * @return bool True when the metadata file changed.
  */
 function upsert_release_metadata(string $root, string $version, ?DateTimeImmutable $releasedAt = null): bool
 {
@@ -176,6 +182,9 @@ function upsert_release_metadata(string $root, string $version, ?DateTimeImmutab
     } else {
         $releasedAtText = '';
         $releasedLabel = '';
+        if ($releasedAt === null) {
+            $releasedAt = new DateTimeImmutable('now');
+        }
     }
 
     if ($releasedAt !== null) {
