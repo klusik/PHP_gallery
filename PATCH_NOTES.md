@@ -1,5 +1,95 @@
 # Patch notes
 
+## Version 0.108
+
+Version 0.108 streamlines gallery creation around a short, name-first Admin panel and turns the resulting gallery editor into the main place for details. It adds optional personal defaults for SimBrief and source language, supports an editable SimBrief preview before a gallery exists, and makes Identity, API, Access and Display easier to scan without removing their saved settings. It also repairs drawer tab selection and the persistent Save gallery bar so these controls remain usable in the live right-side panel.
+
+### Highlights
+
+#### Name-first gallery creation
+
+- Changed the `+` controls on public gallery heroes and cards, and **Create gallery here** in the editor, to open the `admin_new_gallery` workflow for the selected parent. The right-side first step asks for a gallery title only; parent and operation identity travel as hidden form context.
+- Kept the existing bounded, accessible title completion on that single title field, including keyboard and pointer acceptance. A suggestion remains advisory and does not decide title uniqueness or submit the form.
+- Created the new gallery as Unpublished and opened its complete editor inside the already mounted panel after a successful enhanced submission. The public page URL stays unchanged while the normal server-rendered mutation coordinator refreshes affected gallery context.
+- Kept a direct Admin create page with additional initial fields and **More options**, plus the separate create-and-upload form for administrators who need to upload files immediately. Normal POST/redirect remains the no-JavaScript and direct-page fallback.
+- Preserved submitted non-secret fields and the chosen parent after a validation failure; the direct form opens its advanced controls when it is re-rendered with submitted input.
+
+#### Personal defaults and source metadata
+
+- Added a per-administrator choice to remember a SimBrief identifier and the current title/description language for future galleries. Saved values appear pre-filled in a later editor with a quiet **Pre-filled from your saved defaults** note; the administrator can still edit each value before saving.
+- Combined the visible SimBrief Pilot ID and pilot-name inputs into **Pilot ID or name**. An all-digit value maps to Pilot ID; other nonempty text maps to pilot name. Remembering one visible value clears the older alternate slot so a later prefill does not present an ambiguous identity.
+- Kept date/date range, source language, tags and SimBrief in the ordinary Identity flow. The language selector uses the existing language flag assets and places its Remember checkbox beside the choice; **Other languages** remains available as a disclosure.
+- Allowed the extended direct Admin create form to save tags and source-language selection with the new gallery. The service checks required tag and localization storage before the gallery mutation instead of silently dropping selected data when optional schema is unavailable.
+- Validated selected defaults before creating or editing a gallery. A failed preference write after a successful gallery mutation produces a clear warning without falsely reporting that the gallery was rolled back.
+
+#### SimBrief preview before creation
+
+- Added an authenticated SimBrief import path for a gallery that has not yet been created. It fetches the latest OFP, prepares an editable Markdown description draft and returns an opaque reference to private draft data.
+- Bound each draft to the current administrator and PHP session, capped the stored JSON to 8 MiB, and expired it after 30 minutes. Editing the identifier clears an earlier draft reference; an in-flight response is rejected if its identifier or destination description changed while the request was pending.
+- Attached a valid previewed OFP and any available route-map data only after the gallery exists. Optional OFP/route attachment failures are reported as warnings on the completed create response. The existing SimBrief route-map schema policy continues to allow description generation without falsely claiming an unavailable route write.
+- Replaced the pre-create text-overwrite browser dialog with an inline second-action label when a description already exists. Existing-gallery import retains its established replacement confirmation.
+
+#### Compact gallery editor
+
+- Put the API tab immediately after Identity and kept tab selection scoped to the currently injected editor. A public page containing another editor fragment no longer diverts the drawer's API, Access or other tab to a duplicate ID elsewhere in the document.
+- Measured the actual panel header height for sticky tabs, including wrapped titles. Kept **Save gallery** fixed and reachable at the bottom of the gallery editor while scrolling the settings tabs. The save action still uses the shared gallery form and its existing server validation.
+- Made Identity's description help available from a keyboard-accessible `?` disclosure, kept dates among the everyday fields, and moved AI gallery text, URL/folder/parent adjustments and other less frequent controls into **Advanced gallery settings**.
+- Compressed SimBrief to one identifier row with nearby Remember and Generate actions. The longer explanation remains available through `?`; imported data and the current save flow are unchanged.
+- Reduced API's first view to a copyable upload endpoint, key label and Generate action. Added copy feedback for the one-time generated API key, displayed the active-key list only when keys exist, and moved AI metadata regeneration, gallery migration and the global API manager under **Advanced API tools**. API keys remain gallery-scoped and raw generated keys are shown only once.
+- Placed visibility and password controls in a short Access layout, kept share-link controls close together, and exposed the NSFW flag as a small checkbox. Longer access and hosting explanations are available on demand.
+- Moved Display grid to the top of Display. Put ordinary voting and filename controls in a compact row, and placed Picture Game, EXIF/GPS, card layout, contained-picture badge, lightbox mode, responsive thumbnail bounds and flight-map text inside a closed **Advanced display settings** group. Thumbnail bounds and route text have their own expandable subsections.
+- Preserved the existing field names, option values, authorization, CSRF checks, direct-page fallback and Admin mutation envelopes while changing the presentation. English, Czech, German and Swedish catalogs include the new controls and copy feedback.
+
+### Technical Details
+
+#### Backend and service ownership
+
+- Updated `app/controllers/admin_galleries_discovery.php` to normalize new create fields, validate a supplied SimBrief draft and any selected remembered defaults before calling gallery creation, preserve parent context on error, and return a canonical `gallery.create` response that targets the editor panel.
+- Updated `app/controllers/admin_galleries_edit_page/post_actions.php` to expand the single visible SimBrief identifier, validate a requested default before the gallery save, and persist selected defaults only after the gallery save succeeds. A preference persistence failure is appended to the successful gallery notice.
+- Added `app/models/gallery_creation_preferences.php` for the user-owned SQL row and `app/services/gallery_creation_preferences.php` for schema readiness, value validation and selective updates. Registered both through the existing model/service entry points.
+- Added `app/services/simbrief_description_drafts.php` for bounded private OFP references and connected it through `app/controllers/admin_simbrief.php`. Updated `app/services/simbrief_descriptions.php` with the compact-identifier adapter; legacy two-field callers remain supported.
+- Updated `app/services/gallery_sidecars.php` to preflight explicitly requested tags and content localization, then persist them after the gallery row is available. Updated `app/controllers/public_gallery_cards.php` so both hero and card add controls use the focused creation route.
+- Kept existing actor-bound operation-key replay protection, gallery mutation and upload ownership, and the canonical Admin completion coordinator. A repeated completed request with the same operation key returns its original result; an optional post-create attachment warning is part of that result rather than a second create attempt.
+
+#### Database and upgrade behavior
+
+- Added migration `database/migrations/202609250001_gallery_creation_preferences.php`. It creates `user_gallery_creation_preferences` with one `user_id` primary-key row per administrator; `simbrief_pilot_id` (`VARCHAR(32)`), `simbrief_pilot_name` (`VARCHAR(80)`), `content_language` (`VARCHAR(16)`), and `created_at`/`updated_at` are the stored fields. The foreign key to `users.id` uses `ON DELETE CASCADE`.
+- Used ordinary idempotent `CREATE TABLE IF NOT EXISTS`, InnoDB and `utf8mb4`; no trigger, stored routine, global database setting, new application secret or new `config.php` key is required. Existing gallery, image, translation, OFP and access rows are not rewritten by this migration.
+- Treated confirmed available preference storage as the write-ready state. Confirmed missing or unknown storage yields empty optional read defaults but refuses an explicit Remember mutation before gallery creation/editing. There is no separate feature-disabled switch for this user preference table; SimBrief and content localization retain their established capability gates.
+- Kept SimBrief drafts under the private application `cache/` tree, outside public media paths. A missing or unknown optional flight-route schema may omit route persistence while preserving the independent draft/description result; it cannot authorize or misreport a route write.
+
+#### Frontend and browser lifecycle
+
+- Updated `app/views/admin_gallery_forms.php`, `app/views/admin_gallery_edit_tabs.php`, `app/views/admin_gallery_edit_components.php` and `app/views/upload_automation.php` for the focused create panel, saved-default indicators, native disclosures, compact controls and copyable API fields. Updated `public/assets/styles/side-panel.css` and `public/assets/styles/admin-cinematic.css` to retain legible narrow layouts, sticky tabs and the viewport-anchored save bar.
+- Added `public/assets/gallery-modules/admin-gallery-compact-editor.js` for delegated language-flag updates and clipboard copy feedback in newly injected fragments. The code uses Clipboard API when available and a selectable-field fallback when it is not.
+- Updated `public/assets/gallery-modules/admin-simbrief-description.js` for the compact identifier, draft reference and stale-response protection. Updated `public/assets/gallery-modules/admin-tabs.js` and `admin-side-panel.js` for panel-local tab targets, measured sticky offset and dynamically replaced create/editor fragments.
+- Changed versioned imports in `public/assets/gallery.js` and `public/assets/gallery-modules/admin-operations.js` so deployed browsers load the revised panel, tab and SimBrief handlers instead of a previously cached module.
+
+### Tests
+
+#### Automated coverage
+
+- Added `tests/gallery_creation_preferences_test.php` for per-user defaults, validation, missing/unknown storage, name-only panel markup and visible prefill indicators.
+- Added `tests/gallery_editor_creation_defaults_save_test.php` for validation-before-save ordering, refusal before a gallery mutation when preference storage is unavailable, and preference persistence only after a successful gallery save.
+- Added `tests/public_gallery_create_entrypoint_test.php` for the focused hero/card `+` route and retained parent/workflow context.
+- Added `tests/simbrief_create_draft_test.php` for draft owner, session, token-path and expiry boundaries; extended `tests/simbrief_description_model_test.php` for the single-field identifier adapter.
+- Added `tests/gallery_display_editor_layout_test.php` for grid-first presentation, closed Advanced sections and retention of submitted Display controls. Extended `tests/gallery_edit_concurrency_test.php` so real editor rendering catches incomplete tab/save output.
+- Extended the registered Admin panel lifecycle and gallery-refresh browser fixtures for clicked tab hit targets, sticky header and Save gallery visibility after scrolling, fragment replacement, API copy handling and unchanged public URL. Existing replay, schema, translation, MVC, mutation-envelope and syntax contracts remain in the central release audit.
+
+### User Impact
+
+#### For administrators
+
+- A gallery can be started from its parent with one name, then completed in the open editor. The new gallery begins Unpublished, so the administrator can fill in metadata and access choices before publishing.
+- Personal SimBrief and language defaults reduce repeated entry while remaining editable and explicitly marked as pre-filled. Apply the pending migration through the normal Admin migration action before using Remember; ordinary name-only creation remains available without this optional table.
+- SimBrief can prepare a description before creation, while the final OFP/route attachment occurs after the gallery exists. Failure messages distinguish a completed gallery from an optional attachment or preference-save problem.
+- Common Identity, API, Access and Display controls require less scrolling. Contextual help and Advanced sections retain the less frequent controls, and the Save gallery action remains reachable while switching settings tabs.
+
+#### For visitors
+
+- Visitors see the published title, date, description, tags, language fallback and display choices saved by the administrator through the usual access rules. A newly created Unpublished gallery does not enter normal public listings until it is published.
+- Public gallery browsing, protected media authorization and viewer account permissions do not gain any new route or credential from administrator creation defaults or SimBrief drafts.
+
 ## Version 0.107
 
 Version 0.107 adds gallery-scoped thumbnail regeneration with optional descendant coverage and makes browser generation the default for deliberate thumbnail rebuilds. It also improves physical image moves in the Metadata Organizer and the diagnostics available when a move needs attention.
