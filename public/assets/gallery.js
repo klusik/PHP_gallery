@@ -104,7 +104,7 @@ import {
     setupAdminMediaRenamer,
     setupAdminMetadataOrganizer,
     setupAdminTrashActions,
-} from './gallery-modules/admin-operations.js?v=20260920-panel-lifecycle-interaction-policy-v2';
+} from './gallery-modules/admin-operations.js?v=20260925-gallery-scope-fix-v1';
 
 /**
  * Runs a setup callback after the DOM is ready.

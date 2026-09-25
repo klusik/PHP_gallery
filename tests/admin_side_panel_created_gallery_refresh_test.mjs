@@ -180,7 +180,7 @@ assert.match(
 );
 assert.match(
     galleryEntrySource,
-    /admin-operations\.js\?v=20260920-panel-lifecycle-interaction-policy-v2/,
+    /admin-operations\.js\?v=20260925-gallery-scope-fix-v1/,
     'The gallery entrypoint must cache-bust the changed admin operations module.'
 );
 

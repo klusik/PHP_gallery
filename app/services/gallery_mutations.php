@@ -815,13 +815,46 @@ function move_gallery_images(int $sourceGalleryId, int $destinationGalleryId, ar
 {
     mutation_schema_assert_available(gallery_image_move_journal_schema_status(), 'gallery.move_images');
     $writerLock = gallery_edit_writer_begin();
+    $phase = 'gallery_lock';
     $locks = [];
     try {
         $locks = \Gallery\Models\gallery_image_move_model_lock([$sourceGalleryId, $destinationGalleryId]);
+        $phase = 'pending_check';
         \Gallery\Models\gallery_image_move_model_assert_idle($sourceGalleryId, $destinationGalleryId);
+        $phase = 'move_preflight';
         return gallery_move_images_locked($sourceGalleryId, $destinationGalleryId, $imageIds, $options);
-    } catch (Throwable) {
-        throw new RuntimeException('Image move could not complete. Inspect pending image-move operations before retrying; existing files and recovery records are retained.');
+    } catch (Throwable $exception) {
+        $diagnostic = $exception instanceof ImageMoveDiagnosticFailure ? $exception : null;
+        $safePhase = $diagnostic?->phase ?? $phase;
+        $reason = $diagnostic?->reason ?? match ($exception->getMessage()) {
+            'An earlier image move needs reconciliation before another move can use this gallery.' => 'pending_operation',
+            'Another image move or recovery is using this gallery.' => 'gallery_busy',
+            'Source or destination gallery was not found.' => 'gallery_missing',
+            'Source or destination gallery folder does not exist on disk.' => 'gallery_folder_missing',
+            'Choose a different destination gallery.' => 'same_gallery',
+            default => 'operation_unavailable',
+        };
+        if (function_exists('Gallery\\Services\\admin_log_event')) {
+            try {
+                admin_log_event('warning', 'gallery.image_move_failed', 'Image move failed; file and exception details are in this Admin log entry.', [
+                    'source_gallery_id' => $sourceGalleryId,
+                    'destination_gallery_id' => $destinationGalleryId,
+                    'requested_images' => count($imageIds),
+                    'phase' => $safePhase,
+                    'reason' => $reason,
+                    'operation_id' => $diagnostic?->operationId,
+                    'file_number' => $diagnostic?->fileNumber,
+                    'file_kind' => $diagnostic?->fileKind,
+                    'debug' => gallery_image_move_exception_context($exception),
+                ], ['category' => 'media', 'severity' => 'warning']);
+            } catch (Throwable) {
+                // Logging failure must not replace the safe move diagnostic.
+            }
+        }
+        $message = $diagnostic?->getMessage()
+            ?? 'Image move failed at ' . str_replace('_', ' ', $safePhase) . ': ' . gallery_image_move_reason_description($reason)
+                . '. Inspect pending image-move operations before retrying.';
+        throw new RuntimeException($message, 0, $exception);
     } finally {
         try {
             gallery_image_move_release_locks($locks);
@@ -1032,8 +1065,8 @@ function gallery_move_images_locked(int $sourceGalleryId, int $destinationGaller
      * @return int Persisted identifier already recorded in the move intent.
      */ static fn (array $image): int => (int) $image['id'], $images);
     // $destinationSortOrders stores append-style order values assigned in the destination gallery.
-    $destinationSortOrders = gallery_destination_sort_orders($destinationGalleryId, $imageIdsToMove);
     try {
+        $destinationSortOrders = gallery_destination_sort_orders($destinationGalleryId, $imageIdsToMove);
         // $moveResult stores the atomic ownership and title-picture update result.
         $moveResult = gallery_mutation_model_move_images(
             $sourceGalleryId,
@@ -1050,7 +1083,7 @@ function gallery_move_images_locked(int $sourceGalleryId, int $destinationGaller
     } catch (Throwable $exception) {
         // Recovery reads the transaction's durable marker; an uncertain COMMIT is never guessed.
         gallery_image_move_recover_locked($operationId);
-        throw $exception;
+        throw new ImageMoveDiagnosticFailure('database_commit', 'ownership_update_failed', $operationId, previous: $exception);
     }
 
     if ($checkpoint !== null) {

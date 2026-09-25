@@ -72,8 +72,20 @@ function admin_image_move_pending_health_status(array $schemaHealth, bool $inspe
                 $operationState = in_array($row['state'] ?? '', [IMAGE_MOVE_PREPARED, IMAGE_MOVE_MOVING, IMAGE_MOVE_DB_COMMITTED, IMAGE_MOVE_NEEDS_RECONCILIATION], true)
                     ? $row['state'] : 'unknown';
                 // Do not reflect arbitrary stored text, even if it resembles an error code.
-                $error = empty($row['last_error_code']) ? 'none'
-                    : ($row['last_error_code'] === 'identity_or_storage_unverified' ? 'identity_or_storage_unverified' : 'unclassified');
+                $safeMoveErrors = [
+                    'identity_or_storage_unverified', 'source_identity_changed', 'destination_occupied',
+                    'destination_boundary_unverified', 'destination_directory_unavailable',
+                    'manifest_path_invalid', 'gallery_directory_missing', 'path_outside_gallery',
+                    'file_symlink', 'gallery_ancestry_changed', 'storage_ancestry_untrusted',
+                    'storage_ancestry_missing',
+                    'exclusive_link_unavailable', 'destination_identity_unverified', 'source_unlink_failed',
+                    'file_rename_failed',
+                    'file_missing_or_changed', 'duplicate_identity_unverified', 'duplicate_unlink_failed',
+                    'image_ownership_changed', 'gallery_ownership_changed', 'metadata_refresh_failed',
+                    'manifest_invalid', 'recovery_verification_failed',
+                ];
+                $storedError = (string) ($row['last_error_code'] ?? '');
+                $error = $storedError === '' ? 'none' : (in_array($storedError, $safeMoveErrors, true) ? $storedError : 'unclassified');
                 $entries[] = t('admin.health_image_moves.entry', 'Operation {operation_id}: gallery {source_id} → {destination_id}; state {state}; error {error}.', [
                     'operation_id' => $operationId,
                     'source_id' => max(0, (int) ($row['source_gallery_id'] ?? 0)),

@@ -341,7 +341,7 @@ function browserThumbnailRebuildSessionId() {
  * @param {Record<string, *>} config Browser configuration.
  * @param {string} sessionId Rebuild session id.
  * @param {number} offset Source image offset.
- * @param {*} scope Scope value.
+ * @param {'all'|'missing'} scope Requested rebuild scope.
  * @return {Promise<Blob>} Source ZIP blob.
  */
 async function downloadSourceChunk(form, config, sessionId, offset, scope = 'all') {
@@ -349,6 +349,10 @@ async function downloadSourceChunk(form, config, sessionId, offset, scope = 'all
     body.set('csrf_token', form.querySelector('input[name="csrf_token"]')?.value || '');
     body.set('ajax', '1');
     body.set('scope', scope === 'missing' ? 'missing' : 'all');
+    const galleryId = form.querySelector('[data-create-all-thumbnails][name="thumbnail_gallery_id"]')?.value || '';
+    if (galleryId) body.set('thumbnail_gallery_id', galleryId);
+    const descendants = form.querySelector('input[name="include_subgalleries"]');
+    if (descendants instanceof HTMLInputElement && descendants.checked) body.set('include_subgalleries', '1');
     body.set('upload_session_id', sessionId);
     body.set('offset', String(offset));
     body.set('source_chunk_bytes', String(config.sourceChunkBytes));
