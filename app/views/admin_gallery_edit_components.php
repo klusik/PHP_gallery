@@ -35,6 +35,20 @@ namespace Gallery\Views;
 use function Gallery\Core\e;
 use function Gallery\Services\t;
 
+/**
+ * Place infrequent API maintenance tools behind a collapsed disclosure.
+ *
+ * @param string $label Controller-prepared summary label.
+ * @param string $contentHtml Trusted HTML from the existing tool renderers.
+ * @return void Emit the advanced tools section when it has content.
+ */
+function view_render_admin_gallery_advanced_tools(string $label, string $contentHtml): void
+{
+    if (trim($contentHtml) === '') {
+        return;
+    }
+    echo '<details class="admin-editor-advanced-tools"><summary>' . e($label) . '</summary><div class="admin-editor-advanced-tools-content">' . $contentHtml . '</div></details>';
+}
 /** @param array<string,mixed> $viewModel Controller-prepared AI reprocess state. */
 function view_render_admin_gallery_ai_reprocess_panel(array $viewModel): void
 {

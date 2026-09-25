@@ -133,10 +133,10 @@ async function serveFixture(request, response) {
         return;
     }
     const relative = pathname === '/' ? 'tests/fixtures/' + fixtureName
-        : /^\/public\/assets\/[a-zA-Z0-9_/-]+\.js$/.test(pathname) ? pathname.slice(1) : '';
+        : /^\/public\/assets\/[a-zA-Z0-9_/-]+\.(?:js|css)$/.test(pathname) ? pathname.slice(1) : '';
     if (!relative || relative.includes('..')) { response.writeHead(404).end(); return; }
     try {
-        response.setHeader('Content-Type', relative.endsWith('.html') ? 'text/html; charset=utf-8' : 'text/javascript; charset=utf-8');
+        response.setHeader('Content-Type', relative.endsWith('.html') ? 'text/html; charset=utf-8' : (relative.endsWith('.css') ? 'text/css; charset=utf-8' : 'text/javascript; charset=utf-8'));
         response.end(await readFile(path.join(root, relative)));
     } catch { response.writeHead(500).end(); }
 }

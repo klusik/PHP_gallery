@@ -46,6 +46,7 @@ use function Gallery\Services\simbrief_description_build_markdown;
 use function Gallery\Services\simbrief_description_extract_details;
 use function Gallery\Services\simbrief_description_fetch_latest_ofp;
 use function Gallery\Services\simbrief_description_identifier;
+use function Gallery\Services\simbrief_description_draft_create;
 use function Gallery\Services\simbrief_description_save_ofp_for_gallery;
 use function Gallery\Services\simbrief_description_save_route_map_from_ofp;
 use function Gallery\Services\t;
@@ -67,6 +68,8 @@ function admin_simbrief_json_response(array $payload, int $statusCode = 200): vo
 
 /**
  * Generate a gallery-description draft from the latest SimBrief OFP.
+ *
+ * @return void Send a JSON preview or saved-gallery result.
  */
 function cms_admin_simbrief_description(): void
 {
@@ -83,7 +86,7 @@ function cms_admin_simbrief_description(): void
 
     $galleryId = (int) ($_POST['gallery_id'] ?? 0);
     $gallery = $galleryId > 0 ? find_gallery($galleryId) : null;
-    if (!$gallery) {
+    if ($galleryId > 0 && !$gallery) {
         admin_simbrief_json_response([
             'ok' => false,
             'error' => t('admin.simbrief.error_gallery_missing', 'The gallery could not be found. Reload the editor and try again.'),
@@ -92,15 +95,29 @@ function cms_admin_simbrief_description(): void
     }
 
     try {
+        $simbriefInput = array_key_exists('simbrief_identifier', $_POST)
+            ? \Gallery\Services\simbrief_description_expand_identifier_input($_POST)
+            : $_POST;
         $identifier = simbrief_description_identifier(
-            (string) ($_POST['simbrief_pilot_id'] ?? ''),
-            (string) ($_POST['simbrief_pilot_name'] ?? '')
+            (string) ($simbriefInput['simbrief_pilot_id'] ?? ''),
+            (string) ($simbriefInput['simbrief_pilot_name'] ?? '')
         );
         $payload = simbrief_description_fetch_latest_ofp($identifier);
         $details = simbrief_description_extract_details($payload);
         $description = function_exists('Gallery\\Views\\view_simbrief_description_markdown')
             ? view_simbrief_description_markdown($details)
             : simbrief_description_build_markdown($details);
+        if ($galleryId === 0) {
+            $user = \Gallery\Core\current_user();
+            $draftRef = simbrief_description_draft_create((int) ($user['id'] ?? 0), $payload, $identifier, $details);
+            admin_simbrief_json_response([
+                'ok' => true,
+                'description' => $description,
+                'draft_ref' => $draftRef,
+                'message' => t('admin.simbrief.create_draft_ready', 'Flight description is ready. Review it, then create the gallery to save the OFP and route map.'),
+            ]);
+            return;
+        }
         $routeResult = function_exists('Gallery\\Services\\simbrief_description_save_route_map_from_ofp')
             ? simbrief_description_save_route_map_from_ofp($galleryId, $payload, $details)
             : ['saved' => false, 'route_text' => '', 'point_count' => 0, 'unresolved_count' => 0, 'points' => [], 'unresolved' => []];

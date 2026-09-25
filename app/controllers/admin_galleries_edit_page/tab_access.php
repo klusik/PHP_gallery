@@ -43,7 +43,6 @@ use function Gallery\Services\gallery_share_token_for_admin;
 use function Gallery\Services\nsfw_guard_schema_status;
 use function Gallery\Services\t;
 use function Gallery\Views\view_render_admin_gallery_access_fields;
-use function Gallery\Views\view_render_admin_tab_intro;
 
 /**
  * Render the Access tab panel.
@@ -51,6 +50,7 @@ use function Gallery\Views\view_render_admin_tab_intro;
  * @param array<string, mixed> $gallery Gallery row being edited.
  * @param string $activeEditTab Currently selected editor tab.
  * @param array<string, mixed> $capabilities Resolved editor capabilities.
+ * @return void Render the access tab.
  */
 function admin_edit_gallery_render_access_tab(array $gallery, string $activeEditTab, array $capabilities): void
 {
@@ -112,11 +112,6 @@ function admin_edit_gallery_render_access_tab(array $gallery, string $activeEdit
     $nsfwSchemaStatus = nsfw_guard_schema_status();
 
     ob_start();
-    view_render_admin_tab_intro([
-        'kicker' => t('admin.gallery_editor.access_kicker', 'Access'),
-        'title' => t('admin.gallery_editor.visibility_and_protection', 'Visibility and protection'),
-        'description' => t('admin.gallery_editor.access_help', 'Visibility decides discoverability. Passwords and generated links are optional on top of it.'),
-    ]);
     view_render_admin_gallery_access_fields([
         'access_ready' => $accessReady,
         'share_token_ready' => $shareTokenReady,

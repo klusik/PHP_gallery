@@ -76,7 +76,7 @@ function admin_edit_gallery_render_identity_tab(array $gallery, string $activeEd
     $localizationHtml = (string) ob_get_clean();
 
     ob_start();
-    render_admin_simbrief_description_tool((int) $gallery['id']);
+    render_admin_simbrief_description_tool((int) $gallery['id'], $formModel);
     $simbriefHtml = (string) ob_get_clean();
 
     $openaiHtml = '';
@@ -93,11 +93,6 @@ function admin_edit_gallery_render_identity_tab(array $gallery, string $activeEd
 
     view_render_admin_gallery_identity_tab([
         'active' => $activeEditTab === 'admin-edit-identity',
-        'intro' => [
-            'kicker' => t('admin.gallery_editor.identity_kicker', 'Identity'),
-            'title' => t('admin.gallery_editor.names_and_placement', 'Names and placement'),
-            'description' => t('admin.gallery_editor.identity_help', 'Controls the public title, URL slug, disk folder, and gallery tree position.'),
-        ],
         'gallery' => $gallery,
         'folder_name' => gallery_folder_name_from_path((string) $gallery['folder_path']),
         'parent_picker_html' => render_gallery_parent_picker((int) ($gallery['parent_id'] ?? 0), (int) $gallery['id']),

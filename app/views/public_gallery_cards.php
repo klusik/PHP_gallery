@@ -168,6 +168,7 @@ function view_render_public_smart_gallery_card(array $viewModel): void
  * Render the public-page child-gallery creation entry point.
  *
  * @param array<string,mixed> $viewModel Controller-prepared add-child state.
+ * @return void Emit the prepared creation link.
  */
 function view_render_public_gallery_admin_add_child_link(array $viewModel): void
 {
@@ -175,7 +176,7 @@ function view_render_public_gallery_admin_add_child_link(array $viewModel): void
     $title = (string) ($viewModel['title'] ?? '');
     $label = $placement === 'hero' ? t('gallery.add_here', 'Add gallery here') : t('gallery.add_inside', 'Add gallery inside {title}', ['title' => $title]);
     $class = $placement === 'hero' ? 'public-admin-add-gallery-button public-admin-add-gallery-button-hero hero-icon-button' : 'public-admin-add-gallery-button public-admin-add-gallery-button-card';
-    echo '<a class="' . e($class) . '" href="' . e((string) ($viewModel['url'] ?? '')) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="upload" data-admin-side-panel-kicker="' . e(t('gallery.workflow', 'Gallery workflow')) . '" data-admin-side-panel-title="' . e(t('gallery.add_here', 'Add gallery here')) . '" data-gallery-side-panel-url="' . e((string) ($viewModel['panel_url'] ?? '')) . '" aria-label="' . e($label) . '" title="' . e($label) . '"><span aria-hidden="true">+</span><span class="visually-hidden">' . e($label) . '</span></a>';
+    echo '<a class="' . e($class) . '" href="' . e((string) ($viewModel['url'] ?? '')) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="create" data-admin-side-panel-kicker="' . e(t('gallery.workflow', 'Gallery workflow')) . '" data-admin-side-panel-title="' . e(t('gallery.add_here', 'Add gallery here')) . '" data-gallery-side-panel-url="' . e((string) ($viewModel['panel_url'] ?? '')) . '" aria-label="' . e($label) . '" title="' . e($label) . '"><span aria-hidden="true">+</span><span class="visually-hidden">' . e($label) . '</span></a>';
 }
 
 /**

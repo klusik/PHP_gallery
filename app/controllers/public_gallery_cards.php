@@ -413,11 +413,11 @@ function render_smart_gallery_card(array $smartGallery, int $cardIndex = 0, arra
 /**
  * Render the compact public-page child-gallery creation entry point for logged-in admins.
  *
- * This opens the upload controller in create-and-upload mode, so the admin can
- * create a child gallery and optionally upload photos in one panel workflow.
+ * This opens the focused child-gallery creation form in the side panel.
  *
- * @param mixed $gallery Input used by this operation.
- * @param mixed $placement Input used by this operation.
+ * @param array<string,mixed> $gallery Parent gallery used for the child link.
+ * @param string $placement Hero or card placement.
+ * @return void Emit the admin link when inline administration is available.
  */
 function render_public_gallery_admin_add_child_link(array $gallery, string $placement = 'card'): void
 {
@@ -427,8 +427,8 @@ function render_public_gallery_admin_add_child_link(array $gallery, string $plac
     \Gallery\Views\view_render_public_gallery_admin_add_child_link([
         'placement' => $placement,
         'title' => (string) ($gallery['title'] ?? ''),
-        'url' => url_for('admin_upload', ['upload_mode' => 'new', 'parent_id' => $gallery['id']]),
-        'panel_url' => url_for('admin_upload', ['upload_mode' => 'new', 'parent_id' => $gallery['id'], 'panel' => 1]),
+        'url' => url_for('admin_new_gallery', ['parent_id' => $gallery['id']]),
+        'panel_url' => url_for('admin_new_gallery', ['parent_id' => $gallery['id'], 'panel' => 1]),
     ]);
 }
 

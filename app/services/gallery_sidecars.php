@@ -693,6 +693,27 @@ function create_empty_gallery_owned(array $input): array
     }
     // $description stores an intermediate value used by the surrounding gallery workflow.
     $description = (string) ($input['description'] ?? '');
+    $tags = trim((string) ($input['tags'] ?? ''));
+    if ($tags !== '' && !schema_inspection_is_available(schema_inspection_feature('gallery_create_tags', [
+        schema_inspection_table('tags'),
+        schema_inspection_column('tags', 'id'),
+        schema_inspection_column('tags', 'name'),
+        schema_inspection_column('tags', 'slug'),
+        schema_inspection_column('tags', 'created_at'),
+        schema_inspection_column('tags', 'updated_at'),
+        schema_inspection_table('gallery_tags'),
+        schema_inspection_column('gallery_tags', 'gallery_id'),
+        schema_inspection_column('gallery_tags', 'tag_id'),
+    ]))) {
+        throw new RuntimeException('Gallery tags are unavailable. Run pending database migrations.');
+    }
+    $contentLanguage = (string) ($input['content_language'] ?? '');
+    if ($contentLanguage !== '') {
+        if (!content_localization_enabled() || !in_array($contentLanguage, content_supported_languages(), true)
+            || !schema_inspection_is_available(content_localization_schema_status('gallery'))) {
+            throw new RuntimeException('The selected description language is unavailable.');
+        }
+    }
     if (!empty($input['voting_enabled'])) {
         presentation_schema_assert_write_available(
             presentation_voting_schema_status(),
@@ -789,6 +810,13 @@ function create_empty_gallery_owned(array $input): array
     }
     // $gallery stores an intermediate value used by the surrounding gallery workflow.
     $gallery = find_gallery((int) $gallery['id'], true) ?: $gallery;
+    if ($contentLanguage !== '') {
+        content_save_localizations('gallery', (int) $gallery['id'], $contentLanguage, []);
+        $gallery = find_gallery((int) $gallery['id'], true) ?: $gallery;
+    }
+    if ($tags !== '') {
+        sync_entity_tags('gallery', (int) $gallery['id'], $tags);
+    }
     write_gallery_sidecar($gallery);
     return $gallery;
 }

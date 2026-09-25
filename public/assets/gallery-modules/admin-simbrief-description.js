@@ -35,6 +35,8 @@ import { i18n } from './admin-core.js?v=20260512-modular-admin-v1';
 
 /**
  * Attach SimBrief draft-generation behavior to admin editor controls.
+ *
+ * @returns {void} Binds delegated controls once.
  */
 export function setupSimbriefDescriptionGenerator() {
     if (document.body?.dataset.simbriefDescriptionGeneratorBound === '1') {
@@ -56,6 +58,26 @@ export function setupSimbriefDescriptionGenerator() {
         event.preventDefault();
         await generateSimbriefDescription(tool, button);
     });
+    document.addEventListener('input', clearSimbriefDraftOnIdentifierInput);
+}
+
+/**
+ * Clear an imported draft when an identifier changes in any mounted form.
+ *
+ * @param {Event} event Delegated input event.
+ * @returns {void} Clears stale draft identity and replacement consent.
+ */
+function clearSimbriefDraftOnIdentifierInput(event) {
+    const input = event.target;
+    if (!(input instanceof HTMLInputElement) || !input.matches('[data-simbrief-identifier], [data-simbrief-pilot-id], [data-simbrief-pilot-name]')) return;
+    const tool = input.closest('[data-simbrief-description-tool]');
+    const draft = tool?.closest('form')?.querySelector('[data-simbrief-draft-ref]');
+    if (draft instanceof HTMLInputElement) draft.value = '';
+    const button = tool?.querySelector('[data-simbrief-generate]');
+    if (button instanceof HTMLButtonElement) {
+        button.dataset.simbriefReplaceText = '';
+        if (button.dataset.simbriefOriginalLabel) button.textContent = button.dataset.simbriefOriginalLabel;
+    }
 }
 
 /**
@@ -63,6 +85,7 @@ export function setupSimbriefDescriptionGenerator() {
  *
  * @param {HTMLElement} tool SimBrief tool root.
  * @param {HTMLButtonElement} button Generate button.
+ * @returns {Promise<void>} Completes the preview request and UI update.
  */
 async function generateSimbriefDescription(tool, button) {
     const form = tool.closest('form');
@@ -77,16 +100,35 @@ async function generateSimbriefDescription(tool, button) {
         return;
     }
 
-    const pilotId = String(tool.querySelector('[data-simbrief-pilot-id]')?.value || '').trim();
-    const pilotName = String(tool.querySelector('[data-simbrief-pilot-name]')?.value || '').trim();
+    const compactInput = tool.querySelector('[data-simbrief-identifier]');
+    const enteredIdentifier = compactInput instanceof HTMLInputElement ? compactInput.value.trim() : '';
+    const pilotId = compactInput instanceof HTMLInputElement
+        ? (/^\d+$/.test(enteredIdentifier) ? enteredIdentifier : '')
+        : String(tool.querySelector('[data-simbrief-pilot-id]')?.value || '').trim();
+    const pilotName = compactInput instanceof HTMLInputElement
+        ? (pilotId === '' ? enteredIdentifier : '')
+        : String(tool.querySelector('[data-simbrief-pilot-name]')?.value || '').trim();
     if (pilotId === '' && pilotName === '') {
         setSimbriefStatus(tool, i18n('admin.simbrief.js_missing_identifier', 'Enter a SimBrief Pilot ID or pilot name first.'), true);
         return;
     }
 
-    if (textarea.value.trim() !== '' && !window.confirm(i18n('admin.simbrief.js_replace_confirm', 'Replace the current description text in the editor? This is not saved until you save the gallery.'))) {
-        return;
+    if (textarea.value.trim() !== '') {
+        if (tool.dataset.galleryId === '0') {
+            if (button.dataset.simbriefReplaceText !== textarea.value) {
+                button.dataset.simbriefOriginalLabel ||= button.textContent || '';
+                button.dataset.simbriefReplaceText = textarea.value;
+                button.textContent = i18n('admin.simbrief.js_replace_button', 'Replace description and import');
+                setSimbriefStatus(tool, i18n('admin.simbrief.js_replace_inline', 'A description is already entered. Click Replace description and import to continue.'), false);
+                return;
+            }
+        } else if (!window.confirm(i18n('admin.simbrief.js_replace_confirm', 'Replace the current description text in the editor? This is not saved until you save the gallery.'))) {
+            return;
+        }
     }
+    button.dataset.simbriefReplaceText = '';
+    if (button.dataset.simbriefOriginalLabel) button.textContent = button.dataset.simbriefOriginalLabel;
+    const descriptionBeforeRequest = textarea.value;
 
     const endpoint = String(tool.dataset.simbriefEndpoint || '').trim();
     const csrfToken = String(form.querySelector('input[name="csrf_token"]')?.value || '').trim();
@@ -121,7 +163,17 @@ async function generateSimbriefDescription(tool, button) {
         if (description === '') {
             throw new Error(i18n('admin.simbrief.js_empty', 'SimBrief returned flight data, but no description could be generated.'));
         }
+        const currentIdentifier = compactInput instanceof HTMLInputElement ? compactInput.value.trim() : '';
+        const identifierChanged = compactInput instanceof HTMLInputElement
+            ? enteredIdentifier !== currentIdentifier
+            : pilotId !== String(tool.querySelector('[data-simbrief-pilot-id]')?.value || '').trim()
+                || pilotName !== String(tool.querySelector('[data-simbrief-pilot-name]')?.value || '').trim();
+        if (identifierChanged || descriptionBeforeRequest !== textarea.value) {
+            throw new Error(i18n('admin.simbrief.js_input_changed', 'The form changed during import. Your text was kept; import the flight again.'));
+        }
         textarea.value = description;
+        const draft = form.querySelector('[data-simbrief-draft-ref]');
+        if (draft instanceof HTMLInputElement) draft.value = String(result.draft_ref || '');
         textarea.dispatchEvent(new Event('input', {bubbles: true}));
         textarea.dispatchEvent(new Event('change', {bubbles: true}));
         updateSimbriefRouteTextarea(form, result);

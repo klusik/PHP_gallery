@@ -326,8 +326,20 @@ function admin_edit_gallery_handle_media_rename(array $gallery, bool $mediaRenam
 function admin_edit_gallery_handle_save(array $gallery, string $returnTab): void
 {
     try {
+        $editorInput = array_key_exists('simbrief_identifier', $_POST)
+            ? \Gallery\Services\simbrief_description_expand_identifier_input($_POST)
+            : $_POST;
+        $rememberDefaults = !empty($editorInput['remember_simbrief_pilot_id'])
+            || !empty($editorInput['remember_simbrief_pilot_name'])
+            || !empty($editorInput['remember_content_language']);
+        if ($rememberDefaults) {
+            if (!\Gallery\Services\gallery_creation_preferences_available()) {
+                throw new \RuntimeException('Gallery creation defaults are unavailable. Run pending migrations.');
+            }
+            \Gallery\Services\gallery_creation_preferences_validate($editorInput);
+        }
         // $saveResult stores the shared gallery save outcome used by both page and panel workflows.
-        $saveResult = admin_save_gallery_from_input($gallery, $_POST, $_FILES, $returnTab, true);
+        $saveResult = admin_save_gallery_from_input($gallery, $editorInput, $_FILES, $returnTab, true);
     } catch (GalleryEditConflict|GalleryEditUnavailable $exception) {
         admin_gallery_edit_conflict_response($exception, (int) $gallery['id'], $returnTab, $_POST);
         return;
@@ -344,6 +356,13 @@ function admin_edit_gallery_handle_save(array $gallery, string $returnTab): void
     $gallery = $saveResult['gallery'] ?? $gallery;
     // $notice stores an intermediate value used by the surrounding gallery workflow.
     $notice = (string) ($saveResult['notice'] ?? t('admin.gallery_editor.notice_saved', 'Gallery saved.'));
+    if ($rememberDefaults) {
+        try {
+            \Gallery\Services\gallery_creation_preferences_remember((int) (\Gallery\Core\current_user()['id'] ?? 0), $editorInput);
+        } catch (Throwable $exception) {
+            $notice .= ' ' . t('admin.gallery_editor.defaults_warning', 'The gallery was saved, but your new defaults could not be saved.');
+        }
+    }
     if (admin_wants_json()) {
         header('Content-Type: application/json');
         echo json_encode(admin_edit_gallery_success_response($gallery, $notice, $returnTab, $saveResult));

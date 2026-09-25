@@ -85,6 +85,9 @@ function admin_gallery_form_view_model(string $entityType, array $entity = [], ?
     $languages = $localizationSchemaReady ? content_supported_languages() : [];
     $translations = [];
     $entityId = (int) ($entity['id'] ?? 0);
+    $creationPreferences = $entityType === 'gallery'
+        ? \Gallery\Services\gallery_creation_preferences_for_user($resolvedUserId)
+        : [];
     if ($localizationSchemaReady && $entityId > 0) {
         $translationRows = content_translation_rows($entityType, [$entityId]);
         $translations = is_array($translationRows[$entityId] ?? null) ? $translationRows[$entityId] : [];
@@ -133,6 +136,11 @@ function admin_gallery_form_view_model(string $entityType, array $entity = [], ?
     }
 
     return [
+        'creation_preferences' => $creationPreferences,
+        'creation_preferences_available' => $entityType === 'gallery'
+            && \Gallery\Services\gallery_creation_preferences_available(),
+        'simbrief_enabled' => $entityType === 'gallery'
+            && feature_capability_effective_enabled('simbrief'),
         'localization' => [
             'enabled' => $localizationEnabled,
             'schema_ready' => $localizationSchemaReady,

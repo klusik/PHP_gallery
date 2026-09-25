@@ -110,6 +110,31 @@ function simbrief_description_identifier(string $pilotId, string $pilotName): ar
 }
 
 /**
+ * Map the compact editor identifier to the legacy ID/name request contract.
+ *
+ * A value made entirely of digits is a Pilot ID; every other nonempty value is
+ * a pilot name. Legacy two-field callers remain unchanged.
+ *
+ * @param array<string,mixed> $input Submitted editor or creation fields.
+ * @return array<string,mixed> Input with the existing SimBrief fields populated.
+ */
+function simbrief_description_expand_identifier_input(array $input): array
+{
+    if (!array_key_exists('simbrief_identifier', $input)) {
+        return $input;
+    }
+    $identifier = trim((string) $input['simbrief_identifier']);
+    $isPilotId = $identifier !== '' && ctype_digit($identifier);
+    $input['simbrief_pilot_id'] = $isPilotId ? $identifier : '';
+    $input['simbrief_pilot_name'] = $isPilotId ? '' : $identifier;
+    if (!empty($input['remember_simbrief_identifier'])) {
+        // Saving the single visible default also clears the obsolete other slot.
+        $input['remember_simbrief_pilot_id'] = 1;
+        $input['remember_simbrief_pilot_name'] = 1;
+    }
+    return $input;
+}
+/**
  * Normalize a short SimBrief identifier string from form input.
  *
  * @param string $value Raw form value.

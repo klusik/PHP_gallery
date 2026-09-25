@@ -39,6 +39,7 @@ declare(strict_types=1);
 use function Gallery\Services\simbrief_description_build_markdown;
 use function Gallery\Services\simbrief_description_coordinate_value;
 use function Gallery\Services\simbrief_description_extract_details;
+use function Gallery\Services\simbrief_description_expand_identifier_input;
 use function Gallery\Services\simbrief_description_extract_route_points;
 use function Gallery\Services\simbrief_description_identifier;
 use function Gallery\Services\simbrief_description_pdf_url;
@@ -77,6 +78,12 @@ function assert_simbrief_description_contains(string $needle, string $haystack, 
 $id = simbrief_description_identifier('123456', 'Ignored Name');
 assert_simbrief_description_same('userid', $id['kind'], 'Pilot ID identifier kind');
 assert_simbrief_description_same('123456', $id['value'], 'Pilot ID identifier value');
+
+assert_simbrief_description_same(['simbrief_identifier' => ' 123456 ', 'simbrief_pilot_id' => '123456', 'simbrief_pilot_name' => ''],
+    simbrief_description_expand_identifier_input(['simbrief_identifier' => ' 123456 ']), 'compact numeric Pilot ID');
+assert_simbrief_description_same(['simbrief_identifier' => 'Rudolf Pilot', 'remember_simbrief_identifier' => '1', 'simbrief_pilot_id' => '', 'simbrief_pilot_name' => 'Rudolf Pilot', 'remember_simbrief_pilot_id' => 1, 'remember_simbrief_pilot_name' => 1],
+    simbrief_description_expand_identifier_input(['simbrief_identifier' => 'Rudolf Pilot', 'remember_simbrief_identifier' => '1']), 'compact name and remembered default');
+assert_simbrief_description_same(['simbrief_pilot_id' => 'pilot-11'], simbrief_description_expand_identifier_input(['simbrief_pilot_id' => 'pilot-11']), 'legacy identifier input');
 
 $name = simbrief_description_identifier('', 'Rudolf Pilot');
 assert_simbrief_description_same('username', $name['kind'], 'pilot name identifier kind');

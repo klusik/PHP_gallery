@@ -81,6 +81,7 @@ use function Gallery\Views\render_admin_thumbnail_bound_slider;
  * @param array<string, mixed> $gallery Gallery row being edited.
  * @param string $activeEditTab Currently selected editor tab.
  * @param array<string, mixed> $capabilities Resolved editor capabilities.
+ * @return void Render the Display tab.
  */
 function admin_edit_gallery_render_display_tab(array $gallery, string $activeEditTab, array $capabilities): void
 {
@@ -266,9 +267,11 @@ function admin_edit_gallery_render_display_tab(array $gallery, string $activeEdi
             $thumbnailBoundState['min_index'],
             $thumbnailBoundState['max_index'],
             t('admin.gallery_editor.thumbnail_quality_bounds', 'Responsive thumbnail quality bounds'),
-            t('admin.gallery_editor.thumbnail_quality_bounds_help', 'Optional guardrails for automatic thumbnail selection. Leave both sides on Auto to keep the current behavior.')
+            ''
         );
         $thumbnailBounds += [
+            'title' => t('admin.gallery_editor.thumbnail_quality_bounds', 'Responsive thumbnail quality bounds'),
+            'help' => t('admin.gallery_editor.thumbnail_quality_bounds_help', 'Optional guardrails for automatic thumbnail selection. Leave both sides on Auto to keep the current behavior.'),
             'control_html' => (string) ob_get_clean(),
             'recursive_label' => t('admin.gallery_editor.save_bounds_recursively', 'Save these bounds recursively to subgalleries'),
             'recursive_help' => t('admin.gallery_editor.recursive_bounds_help', 'Recursive save is intentionally off by default. It copies the selected bounds to every descendant gallery, but does not change individual photo overrides.'),
@@ -277,11 +280,7 @@ function admin_edit_gallery_render_display_tab(array $gallery, string $activeEdi
 
     view_render_admin_gallery_display_tab([
         'active' => $activeEditTab === 'admin-edit-display',
-        'intro' => [
-            'kicker' => t('admin.gallery_editor.display_kicker', 'Display'),
-            'title' => t('admin.gallery_editor.gallery_behavior', 'Gallery behavior'),
-            'description' => t('admin.gallery_editor.gallery_behavior_help', 'Feature toggles and grid overrides affecting this gallery branch.'),
-        ],
+        'advanced_label' => t('admin.gallery_editor.advanced_display_settings', 'Advanced display settings'),
         'picture_game' => [
             'visible' => (bool) $capabilities['picture_game_ready'],
             'checked' => (int) ($gallery['picture_game_enabled'] ?? 0) === 1,

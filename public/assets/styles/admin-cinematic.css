@@ -677,7 +677,7 @@
 
 .admin-side-panel.is-open .admin-side-panel-dialog {
     opacity: 1;
-    transform: translateX(0);
+    transform: none;
 }
 
 .admin-side-panel.is-closing .admin-side-panel-scrim {

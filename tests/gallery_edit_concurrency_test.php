@@ -15,6 +15,8 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/support/gallery_edit_runtime.php';
 require_once __DIR__ . '/support/gallery_workflow_safety.php';
+require_once dirname(__DIR__) . '/app/views/admin_chrome.php';
+require_once dirname(__DIR__) . '/app/views/admin_ui.php';
 require_once dirname(__DIR__) . '/app/views/admin_gallery_edit_tabs.php';
 
 use Gallery\Services\GalleryEditUnavailable;
@@ -25,7 +27,9 @@ use function Gallery\Services\gallery_edit_review_draft;
 use function Gallery\Services\gallery_edit_schema_state;
 use function Gallery\Services\schema_inspection_set_query_executor_for_tests;
 use function Gallery\Views\view_render_admin_gallery_edit_conflict;
+use function Gallery\Views\view_render_admin_gallery_editor_form_close;
 use function Gallery\Views\view_render_admin_gallery_editor_form_open;
+use function Gallery\Views\view_render_admin_gallery_identity_tab;
 use function GalleryWorkflow\check;
 
 $gallery = ['id' => 8, 'edit_revision' => '17', 'title' => 'Original',
@@ -45,8 +49,23 @@ check(($draft['gallery_thumbnail_bounds_recursive'] ?? '') === '1' && ($draft['r
     'Review dropped an entered recursive or asset-removal choice.');
 ob_start();
 view_render_admin_gallery_editor_form_open(['gallery_id' => 8, 'edit_revision' => gallery_edit_revision($gallery)]);
+view_render_admin_gallery_identity_tab([
+    'active' => true,
+    'gallery' => $gallery + ['slug' => 'original'],
+    'folder_name' => 'original',
+    'labels' => ['title' => 'Title', 'description' => 'Description'],
+    'intro' => ['title' => 'Identity'],
+]);
+view_render_admin_gallery_editor_form_close(['save_label' => 'Save gallery', 'help' => 'Save every shared tab.']);
 $form = (string) ob_get_clean();
 check(str_contains($form, 'name="edit_revision" value="17"'), 'Form omitted exact prepared revision.');
+check(str_contains($form, 'data-admin-gallery-settings-form')
+    && str_contains($form, 'id="admin-edit-identity"')
+    && str_contains($form, 'data-admin-tab-panel')
+    && str_contains($form, 'data-admin-gallery-savebar')
+    && preg_match('/<form[^>]*data-admin-gallery-settings-form[^>]*>.*data-admin-gallery-savebar.*<\/form>/s', $form) === 1,
+    'Gallery settings form must own a stable, server-rendered save bar.');
+
 ob_start();
 view_render_admin_gallery_edit_conflict(['message' => 'Conflict', 'reload_url' => '?id=8', 'latest' => $comparison,
     'draft' => $draft, 'labels' => ['draft' => 'Entered', 'latest' => 'Latest', 'open' => 'Review', 'help' => 'Keep this page']]);
