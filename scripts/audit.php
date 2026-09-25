@@ -440,7 +440,15 @@ function audit_run_node_suite(string $suiteId, string $label, array $definitions
         }
         if ((int) $process['exit_code'] !== 0) {
             $counts['failed']++;
-            $problems[] = $name . ': exit code ' . $process['exit_code'] . '.';
+            $problem = $name . ': exit code ' . $process['exit_code'] . '.';
+            if (in_array($name, ['admin_panel_lifecycle_browser_test.mjs', 'admin_operation_keys_browser_test.mjs'], true)) {
+                if (str_contains($output, 'Owned Chromium debugging endpoint unavailable')) {
+                    $problem .= ' Chromium did not expose its debugging endpoint before the startup deadline.';
+                } elseif (preg_match('/BROWSER FAIL #([0-9]{1,3}):/', $output, $matches) === 1) {
+                    $problem .= ' Browser fixture assertion #' . $matches[1] . ' failed.';
+                }
+            }
+            $problems[] = $problem;
             $log[] = '[FAIL] ' . $name . ' ' . format_duration((float) $process['duration']) . ' exit=' . $process['exit_code'];
             $log[] = $output;
             continue;

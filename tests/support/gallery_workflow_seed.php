@@ -39,7 +39,7 @@ try {
             $image = imagecreatetruecolor(48, 32);
             imagefill($image, 0, 0, imagecolorallocate($image, $index * 60, 80, 130));
             imagejpeg($image, $directory . '/galleries/' . $gallery['folder_path'] . '/sample-' . $index . '.jpg');
-            imagedestroy($image);
+            unset($image);
         }
         \Gallery\Services\scan_gallery_images((int) $gallery['id']);
     }

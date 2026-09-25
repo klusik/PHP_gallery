@@ -40,7 +40,9 @@ final class Fixture
         $this->directory = sys_get_temp_dir() . '/gallery-workflow-' . $this->token;
     }
 
-    /** Create an owned database, migrate and seed the clone, and start its loopback server. */
+    /** Create an owned database, migrate and seed the clone, and start its loopback server.
+     * @return void The disposable fixture is ready for HTTP requests.
+     */
     public function start(): void
     {
         check(@mkdir($this->directory, 0700), 'Could not allocate disposable fixture directory.');
@@ -95,7 +97,7 @@ final class Fixture
         $probe = curl_init($this->url . '/__workflow_' . $this->token . '/health');
         curl_setopt_array($probe, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 5, CURLOPT_PROXY => '']);
         $identity = curl_exec($probe);
-        curl_close($probe);
+        unset($probe);
         check(is_string($identity) && hash_equals($this->token, $identity), 'Isolated HTTP server identity mismatch.');
         file_put_contents($this->directory . '/endpoint.json', json_encode(['url' => $this->url], JSON_THROW_ON_ERROR));
     }

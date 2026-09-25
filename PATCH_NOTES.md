@@ -1,5 +1,43 @@
 # Patch notes
 
+## Version 0.108.1
+
+Version 0.108.1 fixes server-side thumbnail generation on PHP 8.5 and stabilizes the release workflow checks for the Version 0.108 gallery editor. Thumbnail sizes, quality, formats, and public presentation remain unchanged.
+
+### Highlights
+
+#### PHP 8.5 thumbnail compatibility
+
+- Replaced deprecated `imagedestroy()` calls in `app/services/thumbnail_generation.php` with normal GD object release. This prevents deprecation output from disrupting a JSON response during image processing.
+
+#### Reliable release checks
+
+- Updated the isolated browser journey to use the existing name-only gallery creation form and verify that a new gallery opens in the editor as Unpublished.
+- Allowed more time for disposable Chromium to start on a busy CI runner. When the panel lifecycle fixture fails, the compact audit report now identifies a bounded startup reason or assertion number.
+
+### Technical Details
+
+#### Backend and compatibility
+
+- Kept the JPEG and WebP resize algorithms, EXIF orientation handling, thumbnail policy, and failure results unchanged while removing five deprecated GD cleanup calls.
+- Added no database migration, setting, route, public asset, or configuration requirement. PHP 8.1 remains the compatibility minimum.
+
+#### CI and tests
+
+- Corrected a PHP 8.1-incompatible return type in `tests/legacy_download_cache_health_test.php` and removed deprecated cleanup calls from isolated test fixtures.
+- Updated `tests/support/gallery_workflow_browser.js` for the Version 0.108 create panel. Extended the shared Chromium fixture startup deadline and its bounded failure reporting in `scripts/audit.php`.
+- Verified the complete local audit and all four isolated GitHub Actions jobs across PHP 8.1, 8.3, and 8.5 with MySQL and MariaDB where applicable.
+
+### User Impact
+
+#### For administrators
+
+- Server-side thumbnail and image-processing responses remain usable on PHP 8.5 without GD deprecation warnings appearing in the response.
+
+#### For visitors
+
+- Gallery images and thumbnails retain their existing presentation and access rules.
+
 ## Version 0.108
 
 Version 0.108 streamlines gallery creation around a short, name-first Admin panel and turns the resulting gallery editor into the main place for details. It adds optional personal defaults for SimBrief and source language, supports an editable SimBrief preview before a gallery exists, and makes Identity, API, Access and Display easier to scan without removing their saved settings. It also repairs drawer tab selection and the persistent Save gallery bar so these controls remain usable in the live right-side panel.

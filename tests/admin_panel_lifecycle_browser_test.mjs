@@ -23,6 +23,8 @@ import {fileURLToPath} from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 /** Browser process wall-clock deadline, in milliseconds; separate from virtual fixture time. */
 const browserTimeoutMs = 45000;
+/** Allow hosted runners time to start Chromium before its DevTools endpoint appears. */
+const browserStartupTimeoutMs = 15000;
 /** Chromium executable supplied by the central browser registry. */
 const executable = process.argv[2];
 /** Explicit fixture allowlist; alternate wrapper never exposes arbitrary repository files. */
@@ -50,7 +52,7 @@ let closeOwnedBrowser = null;
  */
 async function attachKeyboard(profilePath) {
     if (typeof WebSocket !== 'function') throw new Error('Native WebSocket support (Node 22+) is required for trusted keyboard coverage');
-    const deadline = Date.now() + 5000;
+    const deadline = Date.now() + browserStartupTimeoutMs;
     let endpoint;
     while (Date.now() < deadline) {
         try {
