@@ -1281,6 +1281,7 @@
     "admin.gallery_editor.create_gallery_empty_help": "Skapa ett nytt tomt galleri i den valda överordnade platsen. Fotouppladdning ligger kvar i det separata uppladdningsflödet.",
     "admin.gallery_editor.create_gallery_here": "Skapa galleri här",
     "admin.gallery_editor.create_gallery_thumbnails": "Skapa galleriminiatyrbilder",
+    "admin.gallery_editor.thumbnails_include_subgalleries": "Inkludera undergallerier",
     "admin.gallery_editor.create_thumbnails": "Skapa miniatyrbilder",
     "admin.gallery_editor.current_source": "Aktuell källa: {source}.",
     "admin.gallery_editor.delete": "Ta bort",

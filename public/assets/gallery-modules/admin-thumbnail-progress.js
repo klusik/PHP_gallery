@@ -31,7 +31,7 @@
  */
 
 import { adminUrlWithParams, ensureThumbnailProgress, i18n, isThumbnailSubmission, thumbnailEndpoint, updateThumbnailProgress } from './admin-core.js?v=20260512-modular-admin-v1';
-import { browserThumbnailRebuildRequested, runBrowserThumbnailRebuild } from './admin-browser-thumbnail-rebuild.js?v=20260610-thumbnail-serial-v5';
+import { browserThumbnailRebuildRequested, runBrowserThumbnailRebuild } from './admin-browser-thumbnail-rebuild.js?v=20260925-gallery-scope-fix-v1';
 
 
 /**
@@ -100,12 +100,21 @@ function createMissingThumbnailStateMessage(affectedImages, missingVariants) {
 
 // Function `setupThumbnailProgress` executes this focused behavior.
 /**
- * Handle setup thumbnail progress.
+ * Bind delegated thumbnail-maintenance actions and submit handlers.
  *
- * Used by browser-side gallery behavior.
+ * @return {void} Install document-level behavior that also covers injected admin fragments.
  */
 export function setupThumbnailProgress() {
-    document.addEventListener('click', async (event) => {
+    /**
+     * Route one delegated click to its owned thumbnail action and run it in place.
+     * Handles dynamic dashboard, gallery editor, and injected panel controls through delegation.
+     * This handler also owns metadata refresh and cleanup controls in the dashboard card.
+     * It leaves unrelated document clicks untouched and delegates submit interception below.
+     * It also routes persistent mutations through shared thumbnail and mutation completion helpers.
+     * @param {MouseEvent} event Delegated document click.
+     * @return {Promise<void>} Completion of the selected in-place action.
+     */
+    async function handleThumbnailActionClick(event) {
         if (!(event.target instanceof Element)) {
             return;
         }
@@ -187,12 +196,20 @@ export function setupThumbnailProgress() {
             }
             return;
         }
-        const browserForm = button.closest('form');
-        if (browserForm instanceof HTMLFormElement && browserThumbnailRebuildRequested(browserForm)) {
+        const galleryForm = button.closest('form');
+        if (galleryForm instanceof HTMLFormElement && button instanceof HTMLButtonElement && button.name === 'thumbnail_gallery_id') {
             event.preventDefault();
             button.disabled = true;
+            const progress = ensureThumbnailProgress(galleryForm);
             try {
-                await runBrowserThumbnailRebuild(browserForm, ensureThumbnailProgress(browserForm), {scope: 'all'});
+                if (browserThumbnailRebuildRequested(galleryForm)) {
+                    await runBrowserThumbnailRebuild(galleryForm, progress, {scope: 'all'});
+                } else {
+                    await runThumbnailJob(galleryForm, button, {scope: 'all'});
+                }
+            } catch (error) {
+                const detail = error instanceof Error && error.message ? error.message : i18n('admin.thumbnails.request_failed', 'Thumbnail request failed.');
+                updateThumbnailProgress(progress, 0, 0, 0, 0, detail);
             } finally {
                 button.disabled = false;
             }
@@ -203,12 +220,12 @@ export function setupThumbnailProgress() {
         if (!(form instanceof HTMLFormElement)) {
             return;
         }
-        form.querySelectorAll('input[type="checkbox"][name="gallery_ids[]"]').forEach((checkbox) => {
+        for (const checkbox of form.querySelectorAll('input[type="checkbox"][name="gallery_ids[]"]')) {
             checkbox.checked = true;
-        });
-        form.querySelectorAll('input[type="checkbox"][data-select-all="gallery_ids[]"]').forEach((checkbox) => {
+        }
+        for (const checkbox of form.querySelectorAll('input[type="checkbox"][data-select-all="gallery_ids[]"]')) {
             checkbox.checked = true;
-        });
+        }
         // Variable `action` stores this steps working value.
         const action = form.querySelector('select[name="action"]');
         if (action) {
@@ -220,9 +237,16 @@ export function setupThumbnailProgress() {
         } finally {
             button.disabled = false;
         }
-    });
+    }
 
-    document.addEventListener('submit', (event) => {
+    document.addEventListener('click', handleThumbnailActionClick);
+
+    /**
+     * Intercept thumbnail maintenance and selected image submissions.
+     * @param {SubmitEvent} event Submitted admin form event.
+     * @return {void} Dispatch the owned thumbnail request in place.
+     */
+    function handleThumbnailSubmit(event) {
         // Variable `form` stores this steps working value.
         const form = event.target;
         if (form instanceof HTMLFormElement && form.matches('[data-thumbnail-check-form]')) {
@@ -235,9 +259,16 @@ export function setupThumbnailProgress() {
         }
         event.preventDefault();
         runThumbnailJob(form, event.submitter);
-    });
+    }
 
-    document.addEventListener('submit', (event) => {
+    document.addEventListener('submit', handleThumbnailSubmit);
+
+    /**
+     * Continue gallery imports that requested thumbnail creation.
+     * @param {SubmitEvent} event Submitted import form event.
+     * @return {void} Start the import progress workflow when applicable.
+     */
+    function handleImportThumbnailSubmit(event) {
         // form stores state or configuration for the gallery front-end flow.
         const form = event.target;
         if (event.defaultPrevented || !(form instanceof HTMLFormElement) || !form.matches('[data-import-galleries-form]')) {
@@ -249,7 +280,9 @@ export function setupThumbnailProgress() {
         }
         event.preventDefault();
         runImportWithThumbnailProgress(form);
-    });
+    }
+
+    document.addEventListener('submit', handleImportThumbnailSubmit);
 }
 
 

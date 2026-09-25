@@ -43,6 +43,8 @@ use Throwable;
 use function Gallery\Models\gallery_model_ids_by_folder_path;
 use function Gallery\Models\image_model_all_direct_ids_ordered;
 use function Gallery\Models\image_model_direct_ids_for_galleries;
+use function Gallery\Services\find_gallery;
+use function Gallery\Services\gallery_subtree_ids;
 
 require_once __DIR__ . '/image_decode_policy.php';
 
@@ -701,6 +703,28 @@ function image_ids_for_galleries(array $galleryIds): array
         return [];
     }
     return image_model_direct_ids_for_galleries($galleryIds);
+}
+
+/**
+ * Resolve direct images for a gallery and, optionally, every catalogued subgallery.
+ *
+ * @param int $galleryId Root gallery identity.
+ * @param bool $includeSubgalleries Whether to include folder descendants.
+ * @param bool $missingOnly Whether to limit the scope to images needing thumbnail repair.
+ * @return list<int> Image IDs in the requested gallery scope.
+ */
+function thumbnail_image_ids_for_gallery_scope(int $galleryId, bool $includeSubgalleries = false, bool $missingOnly = false): array
+{
+    if ($galleryId <= 0 || !find_gallery($galleryId, true)) {
+        return [];
+    }
+
+    $galleryIds = [$galleryId];
+    if ($includeSubgalleries) {
+        $galleryIds = gallery_subtree_ids($galleryId);
+    }
+
+    return $missingOnly ? thumbnail_maintenance_image_ids($galleryIds, 0) : image_ids_for_galleries($galleryIds);
 }
 
 /**

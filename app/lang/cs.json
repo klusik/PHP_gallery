@@ -1281,6 +1281,7 @@
     "admin.gallery_editor.create_gallery_empty_help": "Vytvoří novou prázdnou galerii ve vybrané nadřazené galerii. Nahrávání fotografií zůstává v samostatném procesu nahrávání.",
     "admin.gallery_editor.create_gallery_here": "Vytvořit galerii zde",
     "admin.gallery_editor.create_gallery_thumbnails": "Vytvořit náhledy galerie",
+    "admin.gallery_editor.thumbnails_include_subgalleries": "Zahrnout podgalerie",
     "admin.gallery_editor.create_thumbnails": "Vytvořit náhledy",
     "admin.gallery_editor.current_source": "Aktuální zdroj: {source}.",
     "admin.gallery_editor.delete": "Smazat",

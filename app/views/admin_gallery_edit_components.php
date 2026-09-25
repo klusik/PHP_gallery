@@ -57,17 +57,22 @@ function view_render_admin_gallery_ai_reprocess_panel(array $viewModel): void
 /**
  * Render bulk image actions and controller-prepared bounded destination controls.
  * @param array<string,mixed> $viewModel Controller-prepared image bulk/move toolbar state.
- * @return void Emit the in-place move toolbar and its existing form fields.
+ * @return void Render gallery actions and move controls.
  */
 function view_render_admin_image_bulk_toolbar(array $viewModel): void
 {
     $galleryId = (int) ($viewModel['gallery_id'] ?? 0);
+    $browserRebuildConfig = is_array($viewModel['browser_thumbnail_rebuild_config'] ?? null) ? $viewModel['browser_thumbnail_rebuild_config'] : ['enabled' => false];
+    $browserRebuildJson = json_encode($browserRebuildConfig, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if (!is_string($browserRebuildJson)) {
+        $browserRebuildJson = '{}';
+    }
     echo '<div class="bulk-row admin-edit-image-toolbar" data-admin-image-move-toolbar><div class="admin-image-bulk-primary">';
     echo '<label class="admin-image-select-all"><input type="checkbox" data-select-all="image_ids[]"> ' . e(t('admin.gallery_editor.select_all_images')) . '</label>';
     echo '<span class="admin-image-selection-count" data-admin-image-selected-count>' . e(t('admin.gallery_editor.selected_count_zero')) . '</span>';
     echo '<label>' . e(t('admin.gallery_editor.bulk_action')) . '<select name="action" data-admin-image-bulk-action><option value="public">' . e(t('admin.gallery_editor.set_public')) . '</option><option value="draft">' . e(t('admin.gallery_editor.set_draft')) . '</option><option value="private">' . e(t('admin.gallery_editor.set_private')) . '</option><option value="cover">' . e(t('admin.gallery_editor.set_as_title_picture')) . '</option><option value="thumbs">' . e(t('admin.gallery_editor.create_thumbnails')) . '</option><option value="nsfw_on">' . e(t('admin.gallery_editor.mark_nsfw')) . '</option><option value="nsfw_off">' . e(t('admin.gallery_editor.remove_nsfw')) . '</option><option value="delete">' . e(t('admin.gallery_editor.delete_selected_photos')) . '</option><option value="move_existing" hidden>' . e(t('admin.gallery_editor.move_existing')) . '</option><option value="move_new" hidden>' . e(t('admin.gallery_editor.move_new')) . '</option></select></label>';
     echo '<button type="submit">' . e(t('admin.gallery_editor.apply_to_selected')) . '</button><button type="button" class="secondary" data-admin-image-move-open>' . e(t('admin.gallery_editor.move_selected_photos')) . '</button>';
-    echo '<button type="submit" class="secondary" name="thumbnail_gallery_id" value="' . $galleryId . '" formaction="' . e((string) ($viewModel['thumbnail_url'] ?? '')) . '">' . e(t('admin.gallery_editor.create_gallery_thumbnails')) . '</button></div>';
+    echo '<button type="submit" class="secondary" name="thumbnail_gallery_id" value="' . $galleryId . '" data-create-all-thumbnails formaction="' . e((string) ($viewModel['thumbnail_url'] ?? '')) . '">' . e(t('admin.gallery_editor.create_gallery_thumbnails')) . '</button><label class="admin-compact-toggle browser-thumbnail-rebuild-toggle"><input type="checkbox" name="browser_thumbnail_rebuild" value="1" data-browser-thumbnail-rebuild-toggle data-browser-thumbnail-rebuild-config="' . e($browserRebuildJson) . '"' . (empty($browserRebuildConfig['enabled']) ? ' disabled' : ' checked') . '> <span>' . e(t('admin.thumbnails.browser_rebuild_label', 'Browser-side thumbnail rebuild')) . '</span></label><label class="admin-compact-toggle"><input type="checkbox" name="include_subgalleries" value="1"> <span>' . e(t('admin.gallery_editor.thumbnails_include_subgalleries', 'Include subgalleries')) . '</span></label></div>';
     echo '<section class="admin-image-move-panel" data-admin-image-move-panel hidden aria-label="' . e(t('admin.gallery_editor.move_selected_photos')) . '">';
     echo '<div class="admin-image-move-panel-head"><div class="admin-image-move-title"><span class="admin-image-move-title-icon" aria-hidden="true">⇄</span><div><h3>' . e(t('admin.gallery_editor.move_selected_photos')) . '</h3><span class="admin-image-move-count-pill" data-admin-image-selected-count>' . e(t('admin.gallery_editor.selected_count_zero')) . '</span></div></div><button type="button" class="admin-image-move-close" data-admin-image-move-cancel aria-label="' . e(t('admin.gallery_editor.close_move_panel')) . '">×</button></div>';
     echo '<div class="admin-image-move-steps" aria-label="' . e(t('admin.gallery_editor.move_progress')) . '">';

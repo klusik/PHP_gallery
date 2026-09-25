@@ -268,6 +268,10 @@ namespace {
     Gallery\Controllers\render_admin_image_bulk_toolbar(['id' => 10000]);
     $bulkHtml = (string) ob_get_clean();
     picker_assert(str_contains($bulkHtml, 'name="new_gallery_parent_id" value="10000"'), 'Bulk new-gallery parent uses its bounded committed picker.');
+    picker_assert(str_contains($bulkHtml, 'data-create-all-thumbnails')
+        && str_contains($bulkHtml, 'name="thumbnail_gallery_id" value="10000"')
+        && str_contains($bulkHtml, 'data-browser-thumbnail-rebuild-config="')
+        && str_contains($bulkHtml, 'name="include_subgalleries"'), 'Gallery thumbnail action exposes its scoped browser workflow without changing bulk selection.');
     picker_assert(!str_contains($bulkHtml, '<select name="new_gallery_parent_id"')
         && substr_count($bulkHtml, 'data-gallery-search-picker-option ') <= 61, 'Bulk toolbar contains two bounded destination pages and no parent catalog select.');
 

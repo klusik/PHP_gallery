@@ -1281,6 +1281,7 @@
     "admin.gallery_editor.create_gallery_empty_help": "Erstellt eine neue leere Galerie im ausgewählten übergeordneten Element. Das Hochladen von Fotos bleibt im separaten Upload-Ablauf.",
     "admin.gallery_editor.create_gallery_here": "Galerie hier erstellen",
     "admin.gallery_editor.create_gallery_thumbnails": "Galerie-Vorschaubilder erstellen",
+    "admin.gallery_editor.thumbnails_include_subgalleries": "Untergalerien einbeziehen",
     "admin.gallery_editor.create_thumbnails": "Vorschaubilder erstellen",
     "admin.gallery_editor.current_source": "Aktuelle Quelle: {source}.",
     "admin.gallery_editor.delete": "Löschen",

@@ -89,6 +89,8 @@ use function Gallery\Services\thumbnail_maintenance_last_check;
 use function Gallery\Services\thumbnail_maintenance_last_check_image_ids;
 use function Gallery\Services\thumbnail_maintenance_merge_check_reports;
 use function Gallery\Services\thumbnail_maintenance_store_last_check;
+use function Gallery\Services\thumbnail_image_ids_for_gallery_scope;
+use function Gallery\Services\gallery_subtree_ids;
 use function Gallery\Services\thumbnail_maintenance_summary_cache_clear;
 use function Gallery\Services\thumbnail_metadata_refresh_image;
 use function Gallery\Views\view_render_admin_thumbnail_maintenance_notice;
@@ -865,7 +867,9 @@ function cms_admin_thumbnail_mutation_descriptor(array $post): array
 {
     $scope = trim((string) ($post['scope'] ?? ''));
     $action = $scope === 'metadata' ? 'refresh_metadata' : 'rebuild';
-    return admin_mutation_descriptor('thumbnail.' . $action, 'thumbnail', $action, []);
+    $galleryId = (int) ($post['thumbnail_gallery_id'] ?? 0);
+    $entityIds = $galleryId > 0 ? array_values(array_filter(array_map('intval', !empty($post['include_subgalleries']) ? gallery_subtree_ids($galleryId) : [$galleryId]))) : [];
+    return admin_mutation_descriptor('thumbnail.' . $action, 'thumbnail', $action, $entityIds);
 }
 
 
@@ -1096,13 +1100,16 @@ function thumbnail_maintenance_request_image_ids(array $post): array
 /**
  * Return image IDs selected by one thumbnail generation request.
  *
- * @param array $post Submitted thumbnail request data.
- * @return array<int int> Image IDs selected for generation.
+ * @param array<string,mixed> $post Submitted thumbnail request data, including an optional gallery tree scope.
+ * @return list<int> Selected source-image identities for the requested gallery, missing, or global scope.
  */
 function thumbnail_request_image_ids(array $post): array
 {
     // $scope stores the requested thumbnail job scope shared by normal forms and AJAX batch jobs.
     $scope = (string) ($post['scope'] ?? '');
+    if ((int) ($post['thumbnail_gallery_id'] ?? 0) > 0) {
+        return thumbnail_image_ids_for_gallery_scope((int) $post['thumbnail_gallery_id'], !empty($post['include_subgalleries']));
+    }
     if ($scope === 'all' || $scope === 'metadata') {
         return all_image_ids();
     }

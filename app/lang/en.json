@@ -1281,6 +1281,7 @@
     "admin.gallery_editor.create_gallery_empty_help": "Create a new empty gallery in the selected parent. Photo upload stays in the separate upload workflow.",
     "admin.gallery_editor.create_gallery_here": "Create gallery here",
     "admin.gallery_editor.create_gallery_thumbnails": "Create gallery thumbnails",
+    "admin.gallery_editor.thumbnails_include_subgalleries": "Include subgalleries",
     "admin.gallery_editor.create_thumbnails": "Create thumbnails",
     "admin.gallery_editor.current_source": "Current source: {source}.",
     "admin.gallery_editor.delete": "Delete",

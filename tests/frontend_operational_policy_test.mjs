@@ -331,7 +331,7 @@ for (const name of ['admin-settings-search', 'admin-navdata-panel']) {
     assert.ok(entry.includes(name + '.js?v=20260920-admin-interaction-policy-v1'));
 }
 assert.ok(entry.includes('admin-gallery-title-completion.js?v=20260920-gallery-title-completion-policy-v4'));
-assert.ok(entry.includes('admin-operations.js?v=20260920-panel-lifecycle-interaction-policy-v2'));
+assert.ok(entry.includes('admin-operations.js?v=20260925-gallery-scope-fix-v1'));
 const operations = await readFile(path.join(directory, 'admin-operations.js'), 'utf8');
 assert.ok(operations.includes('admin-navdata-update.js?v=20260920-admin-interaction-policy-v1'));
 console.log('frontend_operational_policy_test: PASS (21 unchanged policy values, title/Settings/navigation consumer seams; report runtime has a separate fixture; not browser acceptance)');

@@ -813,8 +813,9 @@ function view_render_admin_dashboard_seo_guard_card(string $className, array $mo
 /**
  * Render thumbnail cache actions.
  *
- * @param array $model Model value.
- * @param string $className Class name value.
+ * @param array<string,mixed> $model Prepared dashboard and thumbnail-maintenance view model.
+ * @param string $className Card CSS class supplied by the dashboard composer.
+ * @return void Emit the dashboard thumbnail maintenance card.
  */
 function view_render_admin_dashboard_thumbnail_card(array $model, string $className): void
 {
@@ -938,7 +939,7 @@ function view_render_admin_dashboard_thumbnail_card(array $model, string $classN
         : t('admin.thumbnails.create_missing_requires_check', 'Run Check missing thumbnails first to populate the targeted repair list.');
 
     echo '<form method="post" action="' . e(url_for('admin_create_thumbnails')) . '" class="admin-thumbnail-cache-actions-form" data-thumbnail-maintenance-action-form data-thumbnail-progress-target="#admin-dashboard-thumbnail-progress">' . csrf_field();
-    echo '<label class="admin-compact-toggle browser-thumbnail-rebuild-toggle"><input type="checkbox" name="browser_thumbnail_rebuild" value="1" data-browser-thumbnail-rebuild-toggle data-browser-thumbnail-rebuild-config="' . e($browserRebuildJson) . '"' . ($browserRebuildDisabled ? ' disabled' : '') . '> <span><strong>' . e(t('admin.thumbnails.browser_rebuild_label', 'Browser-side thumbnail rebuild')) . '</strong> ' . e(t('admin.thumbnails.browser_rebuild_help', 'Off by default. The server sends original files in source ZIP chunks, this browser creates thumbnails, then uploads prepared thumbnail ZIP batches back.')) . '</span></label>';
+    echo '<label class="admin-compact-toggle browser-thumbnail-rebuild-toggle"><input type="checkbox" name="browser_thumbnail_rebuild" value="1" data-browser-thumbnail-rebuild-toggle data-browser-thumbnail-rebuild-config="' . e($browserRebuildJson) . '"' . ($browserRebuildDisabled ? ' disabled' : ' checked') . '> <span><strong>' . e(t('admin.thumbnails.browser_rebuild_label', 'Browser-side thumbnail rebuild')) . '</strong> ' . e(t('admin.thumbnails.browser_rebuild_help', 'On by default. The server sends original files in source ZIP chunks, this browser creates thumbnails, then uploads prepared thumbnail ZIP batches back.')) . '</span></label>';
     echo '<div class="nav"><button type="button" class="secondary" data-create-all-thumbnails>' . e(t('admin.dashboard.create_all_thumbnails', 'Create all thumbnails')) . '</button><button type="button" class="secondary" data-create-missing-thumbnails' . ($missingButtonDisabled ? ' disabled' : '') . ' aria-disabled="' . ($missingButtonDisabled ? 'true' : 'false') . '">' . e(t('admin.thumbnails.create_missing', 'Create missing thumbnails')) . '</button></div>';
     echo '<span class="muted" data-create-missing-thumbnails-status>' . e($missingButtonStatus) . '</span></form>';
 

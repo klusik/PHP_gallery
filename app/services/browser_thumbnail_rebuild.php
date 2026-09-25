@@ -106,7 +106,7 @@ function browser_thumbnail_rebuild_source_chunk_bytes(): int
 /**
  * Persist the source-download chunk setting from the upload settings form.
  *
- * @param array $input Input value.
+ * @param array<string,mixed> $input Browser rebuild request fields.
  * @return int Integer result for the caller.
  */
 function set_browser_thumbnail_rebuild_settings(array $input): int
@@ -249,12 +249,17 @@ function browser_thumbnail_rebuild_requested_chunk_bytes(mixed $value): int
 /**
  * Return all source image identifiers for a thumbnail rebuild request.
  *
- * @param array $input Input value.
- * @return array<int int>.
+ * @param array<string,mixed> $input Browser rebuild request fields.
+ * @return list<int> Source-image identities selected by gallery, missing, or global scope.
  */
 function browser_thumbnail_rebuild_request_image_ids(array $input): array
 {
     $scope = trim((string) ($input['scope'] ?? 'all'));
+    if ((int) ($input['thumbnail_gallery_id'] ?? 0) > 0) {
+        return function_exists('Gallery\\Services\\thumbnail_image_ids_for_gallery_scope')
+            ? thumbnail_image_ids_for_gallery_scope((int) $input['thumbnail_gallery_id'], !empty($input['include_subgalleries']), $scope === 'missing')
+            : [];
+    }
     if ($scope === 'missing') {
         return function_exists('Gallery\\Services\\thumbnail_maintenance_image_ids') ? thumbnail_maintenance_image_ids(null, 0) : [];
     }

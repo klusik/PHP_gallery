@@ -69,6 +69,7 @@ use function Gallery\Services\exif_gps_override_schema_ready;
 use function Gallery\Services\exif_gps_schema_ready;
 use function Gallery\Services\feature_capability_effective_enabled;
 use function Gallery\Services\find_gallery;
+use function Gallery\Services\browser_thumbnail_rebuild_browser_config;
 use function Gallery\Services\find_image;
 use function Gallery\Services\flight_map_schema_ready;
 use function Gallery\Services\gallery_access_schema_ready;
@@ -207,6 +208,7 @@ function render_admin_image_bulk_toolbar(array $gallery): void
     \Gallery\Views\view_render_admin_image_bulk_toolbar([
         'gallery_id' => $galleryId,
         'thumbnail_url' => url_for('admin_create_thumbnails'),
+        'browser_thumbnail_rebuild_config' => function_exists('Gallery\\Services\\browser_thumbnail_rebuild_browser_config') ? browser_thumbnail_rebuild_browser_config() : ['enabled' => false],
         'destination_picker_html' => render_gallery_search_picker('destination_gallery_id', 0, $galleryId, [
             'id' => 'admin-image-move-destination-' . $galleryId,
             'placeholder' => t('admin.gallery_editor.search_destination_gallery', 'Search destination gallery'),
