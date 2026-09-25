@@ -12,7 +12,7 @@ For an actual release, do **not** run `quick`, then `full`, then `release`. Comp
 php scripts/audit.php --profile=release
 ```
 
-The release profile already contains the deterministic coverage from `full`, plus browser integration when available, release consistency, manifest freshness, and Git whitespace validation. If a source or release artifact changes after a successful release audit, regenerate the manifest and rerun only the release profile.
+The release profile already contains the deterministic coverage from `full`, plus browser integration when available, release consistency, manifest freshness, and Git whitespace validation. Finish every expected edit, generate the manifest, pass the cheap preflight in phase 6, and freeze the release inputs before starting this long audit. If a source or release artifact changes after a successful release audit, regenerate the manifest, repeat the preflight, and rerun only the release profile.
 
 Strict MVC is part of release qualification. The release audit invokes `scripts/check_mvc_boundaries.php` against an intentionally empty baseline. A non-zero MVC finding is a release failure and must be corrected in source; release preparation must not reintroduce legacy baseline debt.
 
@@ -34,6 +34,8 @@ Before changing version markers:
    - generated artifacts;
    - user-facing behavior that must be reflected in documentation and the manual.
 5. Decide whether the release is patch, feature, or larger-scope work based on the actual diff. Do not infer the version solely from the branch name.
+6. Choose the final audit path now: direct release profile or the disposable MySQL/Chromium fixture when its prerequisites are available. Run one of them in phase 7, not both.
+7. Choose a clean package source now. The deploy scripts walk physical directories and do not exclude every ignored local agent folder. Use a clean checkout or a reviewed staging tree copied from tracked files; stage any new release files before copying. Keep local `.codex/`, `.agent-local/`, and other private/runtime files out of the package source.
 
 If Git metadata is unavailable, record that the previous-tag comparison is a coverage gap instead of inventing history from the ZIP contents.
 
@@ -74,7 +76,9 @@ The preparation script also deliberately does **not**:
 - create a Git commit or tag;
 - publish or package the release.
 
-A successful preparation means only that the mechanical release worktree has been initialized.
+The first preparation creates a complete `release-metadata.json` entry with a timestamp, readable label, and `v_<version>` tag. With no `--released-at` option it uses the preparation time; a repeat without that option preserves a complete entry. If the intended timestamp differs, set it explicitly before the final manifest and audit.
+
+A successful preparation means only that the mechanical release worktree has been initialized. Check the generated metadata and patch-note scaffold immediately so missing editorial work is visible before qualification.
 
 ### 3. Complete release notes and documentation
 
@@ -118,36 +122,7 @@ Inspect the resulting `docs/PHP_Gallery_Manual.pdf`, not only the compiler exit 
 
 Do not add release-news material to the beginning of the permanent manual. Release history belongs in `PATCH_NOTES.md` unless a deliberate manual appendix is required.
 
-### 5. Run standalone release consistency while editing when useful
-
-The read-only checker can be run at any point:
-
-```text
-php scripts/check_release.php
-```
-
-or against an explicit target:
-
-```text
-php scripts/check_release.php X.Y.Z
-```
-
-It verifies the deterministic release invariants without changing files:
-
-- runtime version;
-- README current version;
-- Testing guide version;
-- Database document version;
-- Architecture version example;
-- manual source version;
-- release-metadata entry and `v_<version>` tag value;
-- completed patch-note section with no release scaffold/TODO;
-- tracked manual PDF not older than its LaTeX source;
-- core manifest version.
-
-This checker is a diagnostic convenience. Do not run it redundantly immediately before the release audit unless you are diagnosing a release-consistency failure, because the release audit runs the same checker as a registered suite.
-
-### 6. Generate final integrity data
+### 5. Generate final integrity data
 
 Only after all source, documentation, release-note, and manual edits are complete, return to the repository root and run:
 
@@ -157,13 +132,28 @@ php scripts/generate_manifest.php
 
 Do not edit a manifest-covered source file after this step without regenerating the manifest.
 
-Initialize the artifact-bound qualification record after the final manifest is generated:
+### 6. Pass the cheap preflight and freeze the inputs
+
+Before the long audit, run these read-only checks against the finished tree:
+
+```text
+php scripts/check_release.php X.Y.Z
+php scripts/generate_manifest.php --check
+git diff --check
+git diff --cached --check
+```
+
+`check_release.php` validates the runtime and documentation versions, the manual source and PDF, complete patch notes, the manifest version, and the release-metadata timestamp, label, and tag. The manifest check validates actual file hashes. Review the pending diff and the chosen package source now: every new release file must be represented, and local ignored state must stay out. Resolve any failure or missing data before proceeding; after a source edit, regenerate the manifest and repeat this cheap gate. A consistency check here is intentional even though the final audit repeats it: it prevents a predictable failure after the expensive suites.
+
+If Git metadata is unavailable, record the missing diff/whitespace coverage. Do not substitute a full test run for these checks. Confirm the selected audit path from phase 1 can run before freezing the inputs.
+
+Initialize the artifact-bound qualification record only after this gate passes:
 
 ```text
 php scripts/release_qualification.php init X.Y.Z
 ```
 
-Retain the printed content fingerprint. Changed source, CI inputs, manual source or PDF bytes select a new all-pending record; old approvals remain historical only. See [release qualification evidence](docs/RELEASE_QUALIFICATION.md) for recording explicit reviewer/evidence text and rendering physical PDF pages into ignored cache. Rendering alone never approves a visual check.
+Retain the printed content fingerprint. Changed source, CI inputs, manual source or PDF bytes select a new all-pending record; old approvals remain historical only. See [release qualification evidence](docs/RELEASE_QUALIFICATION.md) for recording explicit reviewer/evidence text and rendering physical PDF pages into ignored cache. Rendering alone never approves a visual check. From here through audit attachment and packaging, treat the release inputs as frozen.
 
 ### 7. Run the authoritative release audit
 
@@ -200,7 +190,7 @@ Read the compact console summary first. Open `cache/test-audit/latest.md` only w
 
 A `PASS` release audit with skipped environment-dependent coverage does not mean "every test passed". Report each material `SKIP` or `BLOCKED` and its reason. Prefer the precise conclusion: "The local release audit passed with the following coverage gaps..." Do not claim that the application is fully functional solely from automated local verification.
 
-If the audit finds a problem, run only the focused command needed to diagnose that reported problem. After the fix, regenerate the manifest if any manifest-covered file changed, then rerun only `--profile=release`.
+If the audit finds a problem, run only the focused command needed to diagnose that reported problem. After the fix, regenerate the manifest if any manifest-covered file changed, repeat the cheap preflight and qualification initialization, then rerun only `--profile=release`. Do not rerun it for an unchanged tree merely to chase an environment-dependent skip.
 
 The release report captures source fingerprints before and after its suites. Missing identity blocks qualification; changed inputs invalidate release consistency. Its compact handoff lists outstanding human reviews separately from automated results. Attach the unchanged-tree report without rerunning tests:
 
@@ -213,7 +203,7 @@ Replace HASH with the exact initialized fingerprint. An old/unbound report, a pa
 
 ### 8. Build and inspect the release package
 
-After the release audit is green, create the requested deployment folder or ZIP with the existing deployment helper. The deploy scripts package files only. They do not repair stale release metadata or integrity data.
+After the release audit is green, create the requested deployment folder or ZIP with the existing deployment helper from the clean package source chosen in phase 1. Copy the reviewed, current tracked-file contents into staging if the working directory contains local agent state; do not use a stale `git archive HEAD` that omits uncommitted release edits. The deploy scripts package files only. They do not repair stale release metadata or integrity data.
 
 Inspect the archive listing before publication. Confirm that it contains the intended runtime files and release artifacts, including:
 
@@ -282,17 +272,17 @@ Do not weaken or bypass a consistency invariant merely to make the release audit
 
 ## Agent efficiency contract
 
-For release work, the intended low-context workflow is:
+For release work, follow these gates in order. The final audit starts only after the editorial and generated data are complete:
 
 ```text
-inspect diff from previous release
-php scripts/prepare_release.php <target>
-write/review release notes and affected documentation
-build and inspect manual
+scope and package source; choose direct or fixture-enabled audit
+prepare version markers and complete metadata
+finish notes, documentation, and manual PDF; inspect the result
 generate manifest
-php scripts/audit.php --profile=release
-inspect only reported failures/gaps
-package and inspect archive
+cheap gate: check_release, manifest --check, diff/package-input review
+initialize qualification fingerprint; freeze inputs
+run one release audit path; inspect reported failures/gaps only
+attach audit evidence; package from clean source and inspect archive
 ```
 
-Do not enumerate tests, run profiles sequentially, read passing suite logs, or rediscover version-marker locations that `prepare_release.php` and `check_release.php` already own.
+A failed cheap gate returns to editing without spending time on the release suite. A source edit after the frozen point requires a new manifest, preflight, fingerprint, and release audit. Do not enumerate tests, run profiles sequentially, read passing suite logs, or rediscover version-marker locations that `prepare_release.php` and `check_release.php` already own.

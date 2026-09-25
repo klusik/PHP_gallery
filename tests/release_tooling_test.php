@@ -95,6 +95,18 @@ try {
     release_test_assert(!upsert_release_metadata($fixture, '0.96.2'), 'Re-running metadata preparation without a new timestamp must be idempotent.');
     $metadata = json_decode(file_get_contents($fixture . '/release-metadata.json') ?: '', true);
     release_test_assert(($metadata['0.96.2']['tag'] ?? '') === 'v_0.96.2', 'Release metadata tag must use v_<version>.');
+    release_test_assert(upsert_release_metadata($fixture, '0.96.3'), 'First preparation without an explicit date must insert complete metadata.');
+    $metadata = json_decode(file_get_contents($fixture . '/release-metadata.json') ?: '', true);
+    release_test_assert(
+        preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', (string) ($metadata['0.96.3']['released_at'] ?? '')) === 1,
+        'First preparation must set the default release timestamp.'
+    );
+    release_test_assert(
+        trim((string) ($metadata['0.96.3']['released_label'] ?? '')) !== '',
+        'First preparation must set the default release label.'
+    );
+    release_test_assert(($metadata['0.96.3']['tag'] ?? '') === 'v_0.96.3', 'Default release metadata tag must use v_<version>.');
+    release_test_assert(!upsert_release_metadata($fixture, '0.96.3'), 'Re-running default metadata preparation must preserve the complete entry.');
 
     release_test_assert(ensure_patch_notes_scaffold($fixture, '0.96.2'), 'Missing patch notes must receive a scaffold.');
     release_test_assert(!ensure_patch_notes_scaffold($fixture, '0.96.2'), 'Patch-note scaffolding must be idempotent.');
