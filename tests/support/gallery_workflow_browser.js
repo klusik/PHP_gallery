@@ -9,7 +9,9 @@
  * Author: Rudolf Klusal
  * Real same-origin application journey executed by a standalone headless Chromium fixture.
  */
-(async () => {
+(
+/** Run the complete same-origin browser journey. @return {Promise<void>} Writes a bounded fixture result. */
+async () => {
     let stage = 'browser login';
     /** Yield briefly while actual HTTP and rendering work completes. */
     const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -80,8 +82,7 @@
         const panel = form.closest('[data-admin-side-panel]');
         expect(form.querySelector('[name="title"]').getAttribute('aria-label') === 'Gallery name');
         form.querySelector('[name="title"]').value = 'Browser workflow';
-        form.querySelector('[name="folder_name"]').value = 'browser-workflow';
-        form.querySelector('[name="visibility"]').value = 'public';
+        expect(!form.querySelector('[name="folder_name"]') && !form.querySelector('[name="visibility"]'));
         stage = 'create double click and refresh';
         const submit = form.querySelector('[type="submit"]');
         submit.click();
@@ -89,6 +90,7 @@
         await until(() => doc.querySelector('[data-admin-panel-edit-form]'));
         expect(posts === 1 && !panel.hidden && win.location.href === initialUrl && frame.contentDocument === initialDocument);
         expect(doc.querySelector('[data-admin-panel-edit-form] [name="title"]').value === 'Browser workflow');
+        expect(doc.querySelector('[data-admin-panel-edit-form] [name="visibility"]').value === 'unpublished');
         for (let revision = 1; revision <= 2; revision++) {
             stage = 'edit replaced panel revision ' + revision;
             const edit = doc.querySelector('[data-admin-panel-edit-form]');

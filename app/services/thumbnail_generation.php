@@ -470,7 +470,7 @@ function create_image_thumbnails_result(array $image, array $gallery, ?array $re
     try {
         $source = thumbnail_apply_gd_exif_orientation($sourcePath, $source, $mime);
     } catch (Throwable) {
-        imagedestroy($source);
+        unset($source);
         return thumbnail_source_decode_failure_result(image_decode_status('processing_failed'), [
             'skipped' => $skipped,
             'webp_skipped' => $webpSkipped,
@@ -543,7 +543,7 @@ function create_image_thumbnails_result(array $image, array $gallery, ?array $re
             }
         }
     }
-    imagedestroy($source);
+    unset($source);
     return ['created' => $created, 'skipped' => $skipped, 'webp_skipped' => $webpSkipped, 'failed' => $failed, 'errors' => array_values(array_unique($errors)), 'created_files' => $createdFiles, 'target_formats' => $formats, 'thumbnail_policy' => $thumbnailPolicy, 'invalid_geometry_deleted' => $invalidGeometryDeleted, 'invalid_geometry_files' => $invalidGeometryFiles];
 }
 
@@ -798,7 +798,7 @@ function thumbnail_apply_gd_exif_orientation(string $sourcePath, GdImage $source
     }
 
     if ($oriented instanceof GdImage) {
-        imagedestroy($source);
+        unset($source);
         return $oriented;
     }
 
@@ -866,14 +866,14 @@ function image_create_from_path(string $path, string $mime, ?int $targetMaxSide 
 }
 
 /**
- * Handles write resized jpeg logic for the gallery application.
+ * Resize an authorized GD source into a JPEG thumbnail.
  *
- * @param mixed $source Input used by this operation.
- * @param mixed $width Input used by this operation.
- * @param mixed $height Input used by this operation.
- * @param mixed $maxSide Input used by this operation.
- * @param mixed $targetPath Input used by this operation.
- * @return mixed Result produced by this operation.
+ * @param GdImage $source Decoded source image.
+ * @param int $width Source width in pixels.
+ * @param int $height Source height in pixels.
+ * @param int $maxSide Maximum target side in pixels.
+ * @param string $targetPath Destination for the JPEG thumbnail.
+ * @return bool Whether GD wrote the target successfully.
  */
 function write_resized_jpeg(GdImage $source, int $width, int $height, int $maxSide, string $targetPath): bool
 {
@@ -892,7 +892,7 @@ function write_resized_jpeg(GdImage $source, int $width, int $height, int $maxSi
     imageinterlace($target, true);
     // Variable $written stores this steps working value.
     $written = imagejpeg($target, $targetPath, thumbnail_jpeg_quality());
-    imagedestroy($target);
+    unset($target);
     return $written;
 }
 
@@ -960,14 +960,14 @@ function thumbnail_remove_partial_file(string $targetPath): void
 }
 
 /**
- * Handles write resized webp with gd logic for the gallery application.
+ * Resize an authorized GD source into a WebP thumbnail.
  *
- * @param mixed $source Input used by this operation.
- * @param mixed $width Input used by this operation.
- * @param mixed $height Input used by this operation.
- * @param mixed $maxSide Input used by this operation.
- * @param mixed $targetPath Input used by this operation.
- * @return mixed Result produced by this operation.
+ * @param GdImage $source Decoded source image.
+ * @param int $width Source width in pixels.
+ * @param int $height Source height in pixels.
+ * @param int $maxSide Maximum target side in pixels.
+ * @param string $targetPath Destination for the WebP thumbnail.
+ * @return bool Whether GD wrote the target successfully.
  */
 function write_resized_webp_with_gd(GdImage $source, int $width, int $height, int $maxSide, string $targetPath): bool
 {
@@ -987,7 +987,7 @@ function write_resized_webp_with_gd(GdImage $source, int $width, int $height, in
     imagecopyresampled($target, $source, 0, 0, 0, 0, $targetWidth, $targetHeight, $width, $height);
     // Variable $written stores this steps working value.
     $written = imagewebp($target, $targetPath, thumbnail_webp_quality());
-    imagedestroy($target);
+    unset($target);
     return $written;
 }
 

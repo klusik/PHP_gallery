@@ -291,7 +291,7 @@ namespace {
         $preview = imagecreatetruecolor(32, 24);
         imagecopyresampled($preview, $pixels, 0, 0, 0, 0, 32, 24, 64, 48);
         imagejpeg($preview, $incomingPreview);
-        imagedestroy($preview);
+        unset($preview);
         $lease = \Gallery\Services\gallery_edit_writer_begin();
         try {
             $installed = \Gallery\Services\upload_automation_install_client_thumbnails(10, $gallery,
@@ -336,7 +336,7 @@ namespace {
         decode_upload_expect($GLOBALS['decode_upload_preflights'] !== [] && $GLOBALS['operation_fixture_db']->locks === [], 'Pipeline lost schema preflight or leaked writer ownership.');
         echo "PASS real classic upload and client-prepared/server-completion decoder admission (tiny GD, isolated SQL/scanner/auth).\n";
     } finally {
-        imagedestroy($pixels);
+        unset($pixels);
         foreach ([$root . '/gallery/thumbs', $root . '/gallery', $root . '/incoming', $root] as $directory) {
             if (!is_dir($directory)) { continue; }
             foreach (glob($directory . '/*') ?: [] as $path) {

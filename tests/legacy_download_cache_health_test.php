@@ -78,7 +78,8 @@ try {
 
     $unknownFree = legacy_download_artifact_cache_status_for_path(
         $fixtureRoot . DIRECTORY_SEPARATOR . 'unknown-free',
-        static fn(string $path): false => false
+        /** Simulate an unavailable free-space probe. @param string $path Controlled fixture path. @return bool Always unavailable. */
+        static fn(string $path): bool => false
     );
     legacy_cache_expect(!empty($unknownFree['legacy_server_build_capable']), 'Unavailable free-space telemetry alone must not disable the legacy fallback.');
     legacy_cache_expect(empty($unknownFree['free_space_known']), 'Unavailable free-space telemetry must be marked unknown.');

@@ -642,7 +642,7 @@ try {
     check(localStorage.length === 0 && sessionStorage.length === 0, 'Drafts do not use persistent browser storage');
     document.getElementById('results').textContent = `BROWSER PASS: ${assertions} lifecycle, draft, race and modal focus assertions including native Tab/Shift-Tab/Escape; ${posts} explicit fixture POSTs, ${refreshes} coordinator refreshes.`;
 } catch (error) {
-    document.getElementById('results').textContent = 'BROWSER FAIL: ' + error.message;
+    document.getElementById('results').textContent = 'BROWSER FAIL #' + (assertions + 1) + ': ' + error.message;
 }
 </script>
 </html>
