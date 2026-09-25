@@ -36,7 +36,7 @@ import { setupBackToTopButton, teardownBackToTopButton } from './back-to-top.js?
 import { setupGalleryLightbox, setupTagSuggestions, teardownGalleryLightbox } from './lightbox-deferred.js?v=20260920-lightbox-preload-lifecycle-v1';
 import { setupPictureManager, teardownPictureManager } from './picture-manager.js?v=20260914-picture-manager-mixed-v1';
 import { setupResponsiveThumbnailSizes, teardownResponsiveThumbnailSizes } from './responsive-thumbnails.js?v=20260510-lazy-map-v1';
-import { activateAdminTabInRoot, activeAdminTabId, setupAdminTabsInRoot } from './admin-tabs.js?v=20260812-deferred-maintenance-v2';
+import { activateAdminTabInRoot, activeAdminTabId, setupAdminTabsInRoot } from './admin-tabs.js?v=20260925-editor-tabs-v2';
 import { setupAdminNestedTabs } from './admin-nested-tabs.js?v=20260608-admin-cinematic-v1';
 import { setupAdminImageReordering } from './admin-image-reordering.js?v=20260920-panel-lifecycle-v1';
 import { setupPublicGalleryPageReordering } from './admin-gallery-list.js?v=20260512-modular-admin-v1';
@@ -550,6 +550,28 @@ export function setupAdminGallerySidePanel() {
         }
         event.preventDefault();
         await submitAdminGalleryPanelCreateForm(form);
+    });
+    document.addEventListener('change', /** Keep the compact create summary aligned with advanced selections. @param {Event} event Delegated visibility or parent-picker change. @return {void} Update only this form's summary. */ (event) => {
+        const field = event.target;
+        if (!(field instanceof HTMLElement) || !field.matches('select[name="visibility"], input[name="parent_id"], select[name="parent_id"]')) return;
+        const form = field.closest('form');
+        const summary = form?.querySelector('[data-gallery-create-summary]');
+        if (!(summary instanceof HTMLElement)) return;
+        const visibility = form.querySelector('select[name="visibility"]');
+        const visibilityLabel = summary.querySelector('[data-gallery-create-visibility]');
+        if (visibility instanceof HTMLSelectElement && visibilityLabel instanceof HTMLElement) {
+            visibilityLabel.textContent = visibility.selectedOptions[0]?.textContent?.trim() || visibility.value;
+        }
+        const parent = form.querySelector('input[name="parent_id"]:enabled, select[name="parent_id"]:enabled');
+        const parentLabel = summary.querySelector('[data-gallery-create-parent]');
+        if (parent instanceof HTMLInputElement && parentLabel instanceof HTMLElement) {
+            const pickerLabel = parent.closest('[data-gallery-search-picker]')?.querySelector('[data-gallery-search-picker-input]');
+            parentLabel.textContent = parent.value === '0'
+                ? String(summary.dataset.rootLabel || '')
+                : (pickerLabel instanceof HTMLInputElement ? pickerLabel.value.trim() : '') || `#${parent.value}`;
+        } else if (parent instanceof HTMLSelectElement && parentLabel instanceof HTMLElement) {
+            parentLabel.textContent = parent.selectedOptions[0]?.textContent?.trim() || parent.value;
+        }
     });
 
     document.addEventListener('click', /** Capture the clicked Smart Gallery submitter as a fallback for SubmitEvent.submitter. @param {MouseEvent} event Delegated click narrowed before using its target. @return {void} Changes only the indicated menu, closure request or submitter bookkeeping. */ (event) => {

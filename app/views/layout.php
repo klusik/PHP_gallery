@@ -563,6 +563,10 @@ function view_render_browser_i18n_script(string $assetUrl): void
  * Handle view render footer.
  *
  * Used by server-rendered view helpers.
+ *
+ * @param string $page Current page key.
+ * @param array<string,mixed> $model Controller-prepared footer data.
+ * @return void Render the footer.
  */
 function view_render_footer(string $page = 'home', array $model = []): void
 {
@@ -624,6 +628,7 @@ function view_render_footer(string $page = 'home', array $model = []): void
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-gallery-title-completion.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-duplicate-photo-detector.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-simbrief-description.js',
+        dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-gallery-compact-editor.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-storage-statistics.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-gallery-report.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-maintenance-center.js',

@@ -706,13 +706,15 @@ function admin_panel_error_response(string $message, int $statusCode = 422): voi
  * Render the SimBrief draft generator for the existing description textarea.
  *
  * @param int $galleryId Gallery edited by the current form.
+ * @param array<string,mixed> $formModel Prepared saved defaults and control availability.
+ * @return void Emit the generator when SimBrief is enabled.
  */
-function render_admin_simbrief_description_tool(int $galleryId): void
+function render_admin_simbrief_description_tool(int $galleryId, array $formModel = []): void
 {
     if (function_exists('Gallery\\Services\\feature_capability_effective_enabled') && !feature_capability_effective_enabled('simbrief')) {
         return;
     }
-    view_render_admin_simbrief_description_tool($galleryId);
+    view_render_admin_simbrief_description_tool($galleryId, $formModel);
 }
 
 /**

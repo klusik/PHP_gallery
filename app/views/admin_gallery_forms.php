@@ -37,6 +37,7 @@ declare(strict_types=1);
 namespace Gallery\Views;
 
 use function Gallery\Controllers\visibility_options;
+use function Gallery\Core\asset_url;
 use function Gallery\Core\csrf_field;
 use function Gallery\Core\csrf_token;
 use function Gallery\Core\current_user;
@@ -49,6 +50,8 @@ use function Gallery\Services\t;
  *
  * @param string $entityType Gallery or image architecture identifier.
  * @param array<string,mixed> $entity Entity row being edited.
+ * @param array<string,mixed> $formModel Prepared localization and saved-default presentation.
+ * @return void Emit the localization fields.
  */
 function view_render_content_localization_fields(string $entityType, array $entity, array $formModel = []): void
 {
@@ -63,16 +66,35 @@ function view_render_content_localization_fields(string $entityType, array $enti
     $languages = (array) ($localization['languages'] ?? []);
     $presentation = (array) ($localization['presentation'] ?? []);
     $sourceLanguage = (string) ($entity['content_language'] ?? '');
+    $savedLanguage = $entityType === 'gallery' ? (string) (($formModel['creation_preferences'] ?? [])['content_language'] ?? '') : '';
+    $usingSavedDefault = $sourceLanguage === '' && $savedLanguage !== '' && in_array($savedLanguage, $languages, true);
+    if ($usingSavedDefault) {
+        $sourceLanguage = $savedLanguage;
+    }
     $translations = (array) ($localization['translations'] ?? []);
 
     echo '<div class="admin-content-localization" data-content-localization>';
-    echo '<label class="admin-content-source-language"><span>' . e(t('admin.content_localization.source_language', 'Language of the current title and description')) . '</span><select name="content_language">';
+    echo '<div class="admin-content-source-row"><div class="admin-content-source-picker">';
+    echo '<label class="admin-content-source-language"><span>' . e(t('admin.content_localization.source_language', 'Language of the current title and description')) . '</span><span class="admin-content-source-select">';
+    $selectedFlagAsset = trim((string) ($presentation[$sourceLanguage]['flag_asset'] ?? ''));
+    echo '<img data-content-language-flag' . ($selectedFlagAsset !== '' ? ' src="' . e(asset_url($selectedFlagAsset)) . '"' : '') . ' alt="" aria-hidden="true" width="24" height="18"' . ($selectedFlagAsset === '' ? ' hidden' : '') . '>';
+    echo '<select name="content_language" data-content-language-select>';
     echo '<option value="">' . e(t('admin.content_localization.not_specified', 'Not specified')) . '</option>';
     foreach ($languages as $language) {
         $name = (string) ($presentation[$language]['name'] ?? strtoupper((string) $language));
-        echo '<option value="' . e((string) $language) . '"' . ($sourceLanguage === $language ? ' selected' : '') . '>' . e($name . ' (' . strtoupper((string) $language) . ')') . '</option>';
+        $flagAsset = trim((string) ($presentation[$language]['flag_asset'] ?? ''));
+        echo '<option value="' . e((string) $language) . '" data-flag-src="' . e($flagAsset !== '' ? asset_url($flagAsset) : '') . '"' . ($sourceLanguage === $language ? ' selected' : '') . '>' . e($name . ' (' . strtoupper((string) $language) . ')') . '</option>';
     }
-    echo '</select><small class="muted">' . e(t('admin.content_localization.source_help', 'Existing fields remain the source content. Missing translations fall back to them.')) . '</small></label>';
+    echo '</select></span></label>';
+    echo '<details class="admin-inline-help"><summary aria-label="' . e(t('admin.content_localization.source_language', 'Language of the current title and description')) . '" title="' . e(t('admin.content_localization.source_language', 'Language of the current title and description')) . '"><span aria-hidden="true">?</span></summary><div class="admin-inline-help-content">' . e(t('admin.content_localization.source_help', 'Existing fields remain the source content. Missing translations fall back to them.')) . '</div></details>';
+    echo '</div>';
+    if ($entityType === 'gallery' && !empty($formModel['creation_preferences_available'])) {
+        echo '<label class="checkbox-label admin-content-remember"><input type="checkbox" name="remember_content_language" value="1"> ' . e(t('admin.gallery_editor.remember_language', 'Remember this as my default language')) . '</label>';
+    }
+    if ($usingSavedDefault) {
+        echo '<small class="admin-gallery-saved-default-note">' . e(t('admin.gallery_editor.prefilled_default', 'Pre-filled from your saved defaults.')) . '</small>';
+    }
+    echo '</div>';
     echo '<details class="admin-content-translations"><summary><span aria-hidden="true">&#127760;</span><span>' . e(t('admin.content_localization.other_languages', 'Other languages')) . '</span></summary>';
     echo '<div class="admin-content-translation-list">';
     foreach ($languages as $language) {
@@ -116,10 +138,12 @@ function view_render_content_translation_suggestion_tool(string $entityType, arr
  * Handle view render gallery description formatting hint.
  *
  * Used by server-rendered view helpers.
+ *
+ * @return void Render the disclosure.
  */
 function view_render_gallery_description_formatting_hint(): void
 {
-    echo '<details class="gallery-description-format-help"><summary><span aria-hidden="true">&#128161;</span><span>' . e(t('admin.gallery_editor.description_format_hints', 'Formatting hints')) . '</span></summary><div class="gallery-description-format-help-popover">';
+    echo '<details class="gallery-description-format-help"><summary aria-label="' . e(t('admin.gallery_editor.description_format_hints', 'Formatting hints')) . '" title="' . e(t('admin.gallery_editor.description_format_hints', 'Formatting hints')) . '"><span aria-hidden="true">?</span></summary><div class="gallery-description-format-help-popover">';
     echo '<p>' . e(t('admin.gallery_editor.description_format_intro', 'Basic formatting is supported in public gallery descriptions.')) . '</p>';
     echo '<ul>';
     echo '<li><code>**' . e(t('admin.gallery_editor.description_format_bold_word', 'bold')) . '**</code> ' . e(t('admin.gallery_editor.description_format_bold', 'makes bold text')) . '</li>';
@@ -235,6 +259,7 @@ function view_render_admin_gallery_date_range_fields(array $gallery = [], bool $
  * create-gallery request contract.
  *
  * @param array<string,mixed> $formModel Prepared gallery form presentation data.
+ * @return void Emit the accessible title completion field.
  */
 function view_render_admin_new_gallery_title_input(array $formModel = []): void
 {
@@ -252,7 +277,7 @@ function view_render_admin_new_gallery_title_input(array $formModel = []): void
     $helpId = 'gallery-title-help-' . bin2hex(random_bytes(8));
     // Keep the accessible name stable: the surrounding label also contains the
     // help and live region, which must not become part of the field's name.
-    echo '<input name="title" required autocomplete="off" aria-label="' . e(t('admin.gallery_editor.gallery_name', 'Gallery name')) . '" aria-describedby="' . e($helpId) . '" data-gallery-title-completion-input>';
+    echo '<input name="title" value="' . e((string) (($formModel['submitted'] ?? [])['title'] ?? '')) . '" required autocomplete="off" aria-label="' . e(t('admin.gallery_editor.gallery_name', 'Gallery name')) . '" aria-describedby="' . e($helpId) . '" data-gallery-title-completion-input>';
     echo '<span class="admin-gallery-title-completion-overlay" aria-hidden="true" data-gallery-title-completion-overlay hidden><span class="admin-gallery-title-completion-prefix" data-gallery-title-completion-prefix></span><span class="admin-gallery-title-completion-tail" data-gallery-title-completion-tail></span></span>';
     echo '<span class="admin-gallery-title-completion-accessible" id="' . e($helpId) . '" data-gallery-title-completion-help>' . e(t('admin.gallery_title_completion.help', 'Type at least two characters for a title suggestion. At the end of the field, press Tab or Right Arrow to accept it, or Escape to dismiss it.')) . '</span>';
     echo '<span class="admin-gallery-title-completion-accessible" data-gallery-title-completion-status role="status" aria-live="polite" aria-atomic="true"></span>';
@@ -273,6 +298,20 @@ function view_render_admin_new_gallery_title_input(array $formModel = []): void
 function view_render_admin_new_gallery_fields(int $prefillParentId, bool $panelMode, string $workflow = 'create', array $formModel = []): void
 {
     echo '<input type="hidden" name="operation_key" value="' . e((string) ($formModel['operation_key'] ?? '')) . '" data-admin-operation-key>';
+    if ($workflow === 'create') {
+        if ($panelMode) {
+            echo '<input type="hidden" name="panel" value="1">';
+            echo '<input type="hidden" name="parent_id" value="' . $prefillParentId . '">';
+            echo '<div class="admin-side-panel-card admin-side-panel-primary-card admin-gallery-create-quick">';
+            echo '<label><span>' . e(t('admin.gallery_editor.gallery_name', 'Gallery name')) . '</span>';
+            view_render_admin_new_gallery_title_input($formModel);
+            echo '</label></div>';
+            return;
+        }
+        view_render_admin_new_gallery_quick_fields($formModel, $panelMode);
+        view_render_admin_new_gallery_advanced_fields($formModel, $panelMode, $prefillParentId);
+        return;
+    }
     if ($panelMode) {
         echo '<input type="hidden" name="panel" value="1">';
         $isUploadWorkflow = $workflow === 'upload';
@@ -325,6 +364,80 @@ function view_render_admin_new_gallery_fields(int $prefillParentId, bool $panelM
 }
 
 /**
+ * Render the frequent fields for an empty gallery before optional adjustments.
+ *
+ * @param array<string,mixed> $formModel Prepared creation presentation data.
+ * @param bool $panelMode Whether this is the side-panel form.
+ * @return void Emit the primary field group.
+ */
+function view_render_admin_new_gallery_quick_fields(array $formModel, bool $panelMode): void
+{
+    $preferences = (array) ($formModel['creation_preferences'] ?? []);
+    $submitted = (array) ($formModel['submitted'] ?? []);
+    $localization = (array) ($formModel['localization'] ?? []);
+    $language = (string) ($submitted['content_language'] ?? $preferences['content_language'] ?? '');
+    echo '<div class="admin-side-panel-card admin-side-panel-primary-card admin-gallery-create-quick">';
+    echo '<label><span>' . e(t('admin.gallery_editor.gallery_name', 'Gallery name')) . '</span>';
+    view_render_admin_new_gallery_title_input($formModel);
+    echo '</label>';
+    if (!empty($formModel['simbrief_enabled'])) {
+        view_render_admin_simbrief_description_tool(0, $formModel);
+        echo '<input type="hidden" name="simbrief_draft_ref" value="' . e((string) ($submitted['simbrief_draft_ref'] ?? '')) . '" data-simbrief-draft-ref>';
+    }
+    echo '<label><span>' . e(t('admin.gallery_editor.description', 'Description')) . '</span><textarea name="description" rows="5" data-gallery-description-textarea>' . e((string) ($submitted['description'] ?? '')) . '</textarea></label>';
+    view_render_gallery_description_formatting_hint();
+    if (!empty($localization['enabled']) && !empty($localization['schema_ready'])) {
+        echo '<label><span>' . e(t('admin.content_localization.source_language', 'Language of the current title and description')) . '</span><select name="content_language">';
+        echo '<option value=""' . ($language === '' ? ' selected' : '') . '>' . e(t('admin.content_localization.not_specified', 'Not specified')) . '</option>';
+        foreach ((array) ($localization['languages'] ?? []) as $code) {
+            $presentation = (array) (($localization['presentation'] ?? [])[$code] ?? []);
+            echo '<option value="' . e((string) $code) . '"' . ($language === $code ? ' selected' : '') . '>' . e((string) ($presentation['name'] ?? strtoupper((string) $code))) . '</option>';
+        }
+        echo '</select></label>';
+        if (!empty($formModel['creation_preferences_available'])) {
+            echo '<label class="checkbox-label"><input type="checkbox" name="remember_content_language" value="1"' . (!empty($submitted['remember_content_language']) ? ' checked' : '') . '> ' . e(t('admin.gallery_editor.remember_language', 'Remember this as my default language')) . '</label>';
+        }
+    }
+    echo '<label><span>' . e(t('admin.gallery_editor.tags', 'Tags')) . '</span><input name="tags" value="' . e((string) ($submitted['tags'] ?? '')) . '" list="tag-suggestions" data-tag-input' . (string) ($formModel['tag_suggestions_attribute'] ?? '') . '><small>' . e(t('admin.gallery_editor.tags_help', 'Separate tags with commas.')) . '</small></label>';
+    echo (string) ($formModel['tag_datalist_html'] ?? '');
+    echo '</div>';
+}
+
+/**
+ * Keep less frequent gallery creation controls available in one disclosure.
+ *
+ * @param array<string,mixed> $formModel Prepared creation presentation data.
+ * @param bool $panelMode Whether this is the side-panel form.
+ * @param int $prefillParentId Selected parent gallery ID.
+ * @return void Emit the advanced field group.
+ */
+function view_render_admin_new_gallery_advanced_fields(array $formModel, bool $panelMode, int $prefillParentId): void
+{
+    $submitted = (array) ($formModel['submitted'] ?? []);
+    echo '<details class="admin-side-panel-card admin-gallery-advanced-settings"' . ($submitted !== [] ? ' open' : '') . '><summary>' . e(t('admin.gallery_editor.more_options', 'More options')) . '</summary>';
+    echo '<div class="admin-gallery-create-advanced-fields">';
+    echo '<label><span>' . e(t('admin.gallery_editor.folder_name', 'Folder name')) . '</span><input name="folder_name" value="' . e((string) ($submitted['folder_name'] ?? '')) . '" autocomplete="off"><small>' . e(t('admin.gallery_editor.derive_from_gallery_name', 'Leave empty to derive it from the gallery name.')) . '</small></label>';
+    $visibility = (string) ($submitted['visibility'] ?? 'unpublished');
+    echo '<label><span>' . e(t('admin.gallery_editor.visibility', 'Visibility')) . '</span><select name="visibility">' . visibility_options($visibility) . '</select></label>';
+    view_render_admin_gallery_date_range_fields([], $panelMode, $formModel);
+    echo (string) ($formModel['parent_picker_html'] ?? '');
+    echo '<label class="checkbox-label"><input type="checkbox" name="voting_enabled" value="1"' . (!empty($submitted['voting_enabled']) ? ' checked' : '') . '> ' . e(t('admin.gallery_editor.enable_image_voting', 'Enable image voting for this gallery')) . '</label>';
+    echo '<label class="checkbox-label"><input type="checkbox" name="show_filenames" value="1"' . (!empty($submitted['show_filenames']) ? ' checked' : '') . '> ' . e(t('admin.gallery_editor.show_file_names', 'Show file names')) . '</label>';
+    if (!empty(($formModel['count_badge'] ?? [])['schema_ready'])) {
+        echo '<label><span>' . e(t('admin.gallery_editor.count_badge_title', 'Contained-picture badge')) . '</span><select name="count_badge_visibility">';
+        foreach ((array) (($formModel['count_badge'] ?? [])['options'] ?? []) as $option) {
+            $value = (string) ($option['value'] ?? '');
+            echo '<option value="' . e($value) . '"' . ($value === (string) ($submitted['count_badge_visibility'] ?? 'inherit') ? ' selected' : '') . '>' . e((string) ($option['label'] ?? $value)) . '</option>';
+        }
+        echo '</select></label>';
+    }
+    echo '</div></details>';
+    echo '<p class="muted admin-gallery-create-summary" data-gallery-create-summary data-root-label="' . e(t('admin.gallery_editor.no_parent', 'No parent')) . '">';
+    echo e(t('admin.gallery_editor.visibility', 'Visibility')) . ': <strong data-gallery-create-visibility>' . e((string) ($formModel['visibility_summary'] ?? 'unpublished')) . '</strong>';
+    echo ' · ' . e(t('admin.gallery_editor.parent_gallery', 'Parent gallery')) . ': <strong data-gallery-create-parent>' . e((string) ($formModel['parent_summary'] ?? t('admin.gallery_editor.no_parent', 'No parent'))) . '</strong></p>';
+}
+
+/**
  * Handle view render admin new gallery side panel.
  *
  * Used by server-rendered view helpers.
@@ -332,21 +445,20 @@ function view_render_admin_new_gallery_fields(int $prefillParentId, bool $panelM
  * @param int $prefillParentId Prefill parent id identifier.
  * @param ?array $prefillParentGallery Prefill parent gallery value.
  * @param string $error Error value.
+ * @param array<string,mixed> $formModel Prepared title completion and replay identity.
+ * @return void Emit the name-only create panel.
  */
 function view_render_admin_new_gallery_side_panel(int $prefillParentId, ?array $prefillParentGallery, string $error, array $formModel = []): void
 {
     echo '<div class="admin-side-panel-stack" data-gallery-create-panel>';
-    echo '<div class="admin-side-panel-copy"><p class="admin-kicker">' . e(t('admin.gallery_editor.gallery_workflow', 'Gallery workflow')) . '</p><h2>' . e(t('admin.gallery_editor.create_gallery', 'Create gallery')) . '</h2><p class="muted">' . e(t('admin.gallery_editor.create_gallery_empty_help', 'Create a new empty gallery in the selected parent. Photo upload stays in the separate upload workflow.')) . '</p></div>';
-    if ($prefillParentGallery) {
-        echo '<div class="notice">' . e(t('admin.gallery_editor.target_parent', 'Target parent: {title}.', ['title' => (string) $prefillParentGallery['title']])) . '</div>';
-    }
+    echo '<div class="admin-side-panel-copy"><h2>' . e(t('admin.gallery_editor.create_gallery', 'Create gallery')) . '</h2><p class="muted">' . e(t('admin.gallery_editor.name_first_help', 'Enter the gallery name. After creation, its editor opens for all other settings.')) . '</p></div>';
     if ($error !== '') {
         echo '<div class="notice">' . e(t('admin.galleries.create_failed', ['error' => $error])) . '</div>';
     }
     echo '<section class="admin-side-panel-workflow" data-gallery-panel-workflow>';
     echo '<form method="post" action="' . e(url_for('admin_new_gallery')) . '" class="admin-side-panel-form" data-gallery-panel-create-form>' . csrf_field();
     view_render_admin_new_gallery_fields($prefillParentId, true, 'create', $formModel);
-    echo '<div class="admin-side-panel-actions"><button type="submit" class="button primary" data-gallery-panel-submit>' . e(t('admin.gallery_editor.create_gallery', 'Create gallery')) . '</button><p class="muted">' . e(t('admin.gallery_editor.new_gallery_empty_help', 'The new gallery is created empty. Use Upload photos for media.')) . '</p></div>';
+    echo '<div class="admin-side-panel-actions"><button type="submit" class="button primary" data-gallery-panel-submit>' . e(t('admin.gallery_editor.create_gallery', 'Create gallery')) . '</button></div>';
     echo '</form></section>';
     echo '</div>';
 }
@@ -357,17 +469,39 @@ function view_render_admin_new_gallery_side_panel(int $prefillParentId, ?array $
  * Used by server-rendered view helpers.
  *
  * @param int $galleryId Gallery identifier.
+ * @param array<string,mixed> $formModel Prepared creation defaults, if applicable.
+ * @return void Emit the SimBrief controls.
  */
-function view_render_admin_simbrief_description_tool(int $galleryId): void
+function view_render_admin_simbrief_description_tool(int $galleryId, array $formModel = []): void
 {
+    $preferences = (array) ($formModel['creation_preferences'] ?? []);
+    $submitted = (array) ($formModel['submitted'] ?? []);
+    $savedIdentifier = trim((string) ($preferences['simbrief_pilot_id'] ?? ''));
+    if ($savedIdentifier === '') {
+        $savedIdentifier = trim((string) ($preferences['simbrief_pilot_name'] ?? ''));
+    }
+    $submittedIdentifier = null;
+    if (array_key_exists('simbrief_identifier', $submitted)) {
+        $submittedIdentifier = (string) $submitted['simbrief_identifier'];
+    } elseif (array_key_exists('simbrief_pilot_id', $submitted) || array_key_exists('simbrief_pilot_name', $submitted)) {
+        $submittedIdentifier = trim((string) ($submitted['simbrief_pilot_id'] ?? ''));
+        if ($submittedIdentifier === '') {
+            $submittedIdentifier = (string) ($submitted['simbrief_pilot_name'] ?? '');
+        }
+    }
+    $identifier = $submittedIdentifier ?? $savedIdentifier;
+    $prefilled = $submittedIdentifier === null && $savedIdentifier !== '';
     echo '<div class="admin-simbrief-description" data-simbrief-description-tool data-simbrief-endpoint="' . e(url_for('admin_simbrief_description')) . '" data-gallery-id="' . (int) $galleryId . '">';
-    echo '<div class="admin-simbrief-description-heading"><div><h3>' . e(t('admin.simbrief.title', 'Generate from SimBrief')) . '</h3><p class="muted">' . e(t('admin.simbrief.help', 'Fetch the latest SimBrief OFP and create an editable gallery-description draft. Nothing is saved until you save the gallery.')) . '</p></div></div>';
-    echo '<div class="admin-simbrief-description-grid">';
-    echo '<label>' . e(t('admin.simbrief.pilot_id', 'SimBrief Pilot ID')) . '<input name="simbrief_pilot_id" autocomplete="off" inputmode="text" data-simbrief-pilot-id><span class="muted">' . e(t('admin.simbrief.pilot_id_help', 'Pilot ID = the numeric or account identifier used by SimBrief. If both fields are filled, Pilot ID is used first.')) . '</span></label>';
-    echo '<label>' . e(t('admin.simbrief.pilot_name', 'SimBrief pilot name')) . '<input name="simbrief_pilot_name" autocomplete="off" data-simbrief-pilot-name><span class="muted">' . e(t('admin.simbrief.pilot_name_help', 'Pilot name = the SimBrief pilot name exactly as it appears in the SimBrief profile.')) . '</span></label>';
-    echo '</div>';
-    echo '<div class="admin-simbrief-description-actions"><button type="button" class="button secondary" data-simbrief-generate>' . e(t('admin.simbrief.generate_button', 'Generate description draft')) . '</button><span class="muted" data-simbrief-status role="status" aria-live="polite"></span></div>';
-    echo '</div>';
+    echo '<div class="admin-simbrief-description-heading"><h3>' . e(t('admin.simbrief.title', 'Generate from SimBrief')) . '</h3><details class="admin-inline-help"><summary aria-label="' . e(t('admin.simbrief.help_label', 'About SimBrief import')) . '" title="' . e(t('admin.simbrief.help_label', 'About SimBrief import')) . '"><span aria-hidden="true">?</span></summary><div class="admin-inline-help-content">' . e(t('admin.simbrief.help', 'Fetch the latest SimBrief OFP and create an editable gallery-description draft. Nothing is saved until you save the gallery.')) . '</div></details></div>';
+    echo '<div class="admin-simbrief-description-main"><label class="admin-simbrief-identifier"><span>' . e(t('admin.simbrief.identifier', 'Pilot ID or name')) . '</span><input name="simbrief_identifier" value="' . e($identifier) . '" autocomplete="off" data-simbrief-identifier></label>';
+    if (!empty($formModel['creation_preferences_available'])) {
+        echo '<label class="checkbox-label admin-simbrief-remember"><input type="checkbox" name="remember_simbrief_identifier" value="1"' . (!empty($submitted['remember_simbrief_identifier']) ? ' checked' : '') . '> ' . e(t('admin.simbrief.remember_identifier', 'Remember for future galleries')) . '</label>';
+    }
+    echo '<button type="button" class="button secondary" data-simbrief-generate>' . e(t('admin.simbrief.generate_button', 'Generate description draft')) . '</button></div>';
+    if ($prefilled) {
+        echo '<small class="admin-gallery-saved-default-note">' . e(t('admin.gallery_editor.prefilled_default', 'Pre-filled from your saved defaults.')) . '</small>';
+    }
+    echo '<span class="muted" data-simbrief-status role="status" aria-live="polite"></span></div>';
 }
 
 /**

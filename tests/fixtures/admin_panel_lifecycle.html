@@ -13,10 +13,12 @@ Author: Rudolf Klusal
 <html lang="en">
 <meta charset="utf-8">
 <title>Disposable Admin panel lifecycle fixture</title>
+<link rel="stylesheet" href="/public/assets/styles/side-panel.css">
+<link rel="stylesheet" href="/public/assets/styles/admin-cinematic.css">
 <style>
     [hidden] { display: none !important; }
     .admin-side-panel { position: fixed; inset: 0; background: #ddd; overflow: auto; }
-    .admin-side-panel-dialog { padding: 1rem; background: white; min-height: 90vh; }
+    .admin-side-panel-dialog { padding: 0; background: white; min-height: 90vh; }
     input, textarea, button, a { margin: 4px; }
 </style>
 <main class="site-main" id="background"><h1>Disposable gallery</h1>
@@ -30,6 +32,7 @@ Author: Rudolf Klusal
 <script type="module">
 import {setupAdminGallerySidePanel} from '/public/assets/gallery-modules/admin-side-panel.js';
 import {setupAdminGalleryTitleCompletion} from '/public/assets/gallery-modules/admin-gallery-title-completion.js';
+import {setupAdminGalleryCompactEditor} from '/public/assets/gallery-modules/admin-gallery-compact-editor.js';
 import {setupAdminMetadataOrganizer} from '/public/assets/gallery-modules/admin-metadata-organizer.js?v=20260920-panel-lifecycle-v1';
 import {ADMIN_PANEL_DRAFT_LIMIT, ADMIN_PANEL_DRAFT_TEXT_LIMIT} from '/public/assets/gallery-modules/admin-panel-policy.js?v=20260920-panel-lifecycle-v1';
 
@@ -55,6 +58,13 @@ let lastOrderDetail = null;
 let lastOrganizerDetail = null;
 let lastBulkParent = null;
 let revisionConflicts = 0;
+let clipboardValue = '';
+/**
+ * Capture one synthetic endpoint copied by the production button.
+ * @param {string} value Fixture endpoint.
+ * @return {Promise<void>} Resolved after recording the value.
+ */
+async function writeFixtureClipboard(value) { clipboardValue = value; }
 /** @type {Map<string, string>} Active form precondition observed as each editor GET starts. */
 const revisionAtRefreshStart = new Map();
 let posts = 0;
@@ -87,19 +97,28 @@ function wait(milliseconds = settleMs) { return new Promise(/** Yield until the 
  * @return {string} Disposable fragment.
  */
 function editor(id) {
-    return `<section><form class="admin-edit-gallery-form">
+    return `<section><nav class="admin-tabs" data-admin-tabs aria-label="Admin sections"><div class="admin-tab-list" role="tablist">
+        <a class="admin-tab is-active" id="admin-edit-identity-control" href="#admin-edit-identity" role="tab" aria-controls="admin-edit-identity" aria-selected="true" tabindex="0" data-admin-tab-target="admin-edit-identity"><span>Identity</span></a>
+        <a class="admin-tab" id="admin-edit-api-control" href="#admin-edit-api" role="tab" aria-controls="admin-edit-api" aria-selected="false" tabindex="-1" data-admin-tab-target="admin-edit-api"><span>API</span></a>
+        <a class="admin-tab" id="admin-edit-access-control" href="#admin-edit-access" role="tab" aria-controls="admin-edit-access" aria-selected="false" tabindex="-1" data-admin-tab-target="admin-edit-access"><span>Access</span></a>
+        </div></nav><form class="admin-edit-gallery-form" data-admin-gallery-settings-form>
         <input type="hidden" name="id" value="${id}"><input type="hidden" name="${revisionFieldNames[id] || 'expected_edit_revision'}" value="${revisions[id]}">
-        <input type="hidden" name="csrf_token" value="fresh-fixture-csrf"><input name="title" value="${titles[id]}">
-        <textarea name="description">Server description</textarea><input type="password" name="password" value="">
+        <input type="hidden" name="csrf_token" value="fresh-fixture-csrf"><input type="hidden" name="return_tab" value="admin-edit-identity">
+        <section class="panel admin-tab-panel is-active" id="admin-edit-identity" role="tabpanel" aria-labelledby="admin-edit-identity-control" data-admin-tab-panel>
+        <input name="title" value="${titles[id]}"><textarea name="description">Server description</textarea><input type="password" name="password" value="">
         <input name="share_token" value=""><input type="file" name="images[]"><input type="checkbox" name="visibility" value="private">
         <button name="action" value="save">Save</button><button type="button" hidden>Hidden</button><button type="button" disabled>Disabled</button>
-        <fieldset disabled><button type="button">Disabled fieldset</button></fieldset>
-    </form>${toolForms(id)}<div data-gallery-search-picker data-search-url="/picker" data-page-size="30" data-search-delay="0">
+        <fieldset disabled><button type="button">Disabled fieldset</button></fieldset></section>
+        <section class="panel admin-tab-panel" id="admin-edit-access" role="tabpanel" aria-labelledby="admin-edit-access-control" data-admin-tab-panel>Access settings</section>
+        <div class="admin-edit-gallery-savebar" data-admin-gallery-savebar><button type="submit">Save gallery</button></div></form>
+        <section class="panel admin-tab-panel" id="admin-edit-api" role="tabpanel" aria-labelledby="admin-edit-api-control" data-admin-tab-panel><div data-admin-copy-row><label>Endpoint<input data-admin-copy-input readonly value="https://fixture.invalid/upload/${id}"></label><button type="button" data-admin-copy-button data-copy-success="Copied" aria-label="Copy endpoint"><span aria-hidden="true">⧉</span></button><span class="visually-hidden" data-admin-copy-status role="status"></span></div><form><button type="button">Generate API key</button></form></section>
+        ${toolForms(id)}<div data-gallery-search-picker data-search-url="/picker" data-page-size="30" data-search-delay="0">
         <input data-gallery-search-picker-value type="hidden" value="0"><input id="destination" data-gallery-search-picker-input aria-expanded="false">
         <div data-gallery-search-picker-menu hidden><button type="button" data-gallery-search-picker-option data-gallery-search-picker-root data-gallery-id="0" data-gallery-label="Root">Root</button></div>
         <span data-gallery-search-picker-status></span></div>
         <a href="/fixture-editor?id=2" data-gallery-side-panel-link data-admin-side-panel-workflow="gallery-edit" data-admin-side-panel-title="Gallery B">Edit B in place</a></section>`;
 }
+
 /**
  * Render actual reorder/organizer/bulk controls against synthetic endpoints only.
  * @param {string} id Fixture gallery identity.
@@ -125,8 +144,8 @@ function toolForms(id) {
  * @return {string} Synthetic create fragment, no live endpoint.
  */
 function creator() {
-    return `<section data-gallery-create-panel><form data-gallery-panel-create-form>
-        <input type="hidden" name="parent_id" value="0"><span data-gallery-title-completion data-gallery-title-completion-url="/suggest">
+    return `<section data-gallery-create-panel><form action="/fixture-create" method="post" data-gallery-panel-create-form>
+        <input type="hidden" name="parent_id" value="0"><input type="hidden" name="operation_key" value="${'a'.repeat(64)}"><span data-gallery-title-completion data-gallery-title-completion-url="/suggest">
         <input name="title" data-gallery-title-completion-input autocomplete="off"><span data-gallery-title-completion-overlay hidden>
         <span data-gallery-title-completion-prefix></span><span data-gallery-title-completion-tail></span></span>
         <span data-gallery-title-completion-help>Tab accepts</span><span data-gallery-title-completion-status role="status"></span></span>
@@ -196,6 +215,25 @@ async function fetchPanelFixture(value, options = {}) {
     }
     if (options.method === 'POST') {
         posts++;
+        if (url.pathname === '/fixture-create') {
+            const createdId = '77';
+            titles[createdId] = String(options.body.get('title') || 'Created gallery');
+            revisions[createdId] = 1;
+            const editUrl = `${location.origin}/fixture-editor?id=${createdId}`;
+            const payload = {
+                ok: true,
+                message: 'Created fixture gallery',
+                mutation: {type: 'gallery.create', entity: 'gallery', action: 'create', entity_ids: [Number(createdId)]},
+                panel: {workflow: 'gallery-edit', refresh_url: editUrl, keep_open: true},
+                contexts: [],
+                fallback: {redirect_url: editUrl},
+                gallery_id: Number(createdId),
+                gallery_title: titles[createdId],
+                gallery_url: `${location.origin}/gallery/${createdId}`,
+                edit_url: editUrl,
+            };
+            return {ok: true, headers: new Headers({'Content-Type': 'application/json'}), /** Return the canonical create envelope used by the production transition. @return {Promise<string>} Serialized fixture result. */ text: async () => JSON.stringify(payload)};
+        }
         if (failPost) return {ok: false, headers: new Headers({'Content-Type': 'application/json'}), /** Model an unsuccessful authenticated/validated save without modifying fixture state. @return {Promise<string>} Bounded synthetic refusal JSON. */ text: async () => JSON.stringify({ok: false, message: 'Authentication or validation failed'})};
         const expectedRevision = options.body.get('edit_revision') || options.body.get('expected_edit_revision');
         if (url.pathname === '/fixture-editor' && expectedRevision !== String(revisions[id])) {
@@ -307,6 +345,8 @@ function submitTool(selector) {
 }
 
 try {
+    Object.defineProperty(navigator, 'clipboard', {configurable: true, value: {writeText: writeFixtureClipboard}});
+    setupAdminGalleryCompactEditor(); setupAdminGalleryCompactEditor();
     setupAdminGallerySidePanel(); setupAdminGallerySidePanel();
     setupAdminGalleryTitleCompletion();
     setupAdminMetadataOrganizer();
@@ -333,7 +373,7 @@ try {
     await trustedKey('Tab', true);
     check(document.activeElement === last, 'Native Shift Tab wraps back from Close');
     field('[data-admin-side-panel-close]').focus(); await trustedKey('Tab');
-    check(document.activeElement === field(), 'Native interior Tab reaches the first visible form field');
+    check(document.activeElement === field('[data-admin-tab-target="admin-edit-identity"]'), 'Native interior Tab reaches the first visible production tab');
     document.getElementById('open-a').focus();
     check(panel().contains(document.activeElement), 'Inert background cannot take focus');
     const picker = field('[data-gallery-search-picker-input]'); picker.focus(); await wait();
@@ -515,6 +555,20 @@ try {
     check(Boolean(field('[data-admin-panel-draft-action="keep-editing"]')), 'Next unclaimed Escape invokes inline dirty guard');
     draftAction('discard-continue'); await wait(310);
 
+    document.getElementById('open-create').click(); await wait();
+    type(field(), 'Created through drawer');
+    field('[data-gallery-panel-create-form]').requestSubmit();
+    await wait(120);
+    const createdBody = field('[data-admin-side-panel-body]');
+    const createdUrl = location.href;
+    check(panel().dataset.adminSidePanelWorkflow === 'gallery-edit' && createdBody.querySelector('[name="title"]').value === 'Created through drawer', `Create lifecycle state: workflow=${panel().dataset.adminSidePanelWorkflow || ''}; title=${createdBody.querySelector('[name="title"]')?.value || ''}; status=${field('[data-admin-side-panel-status]')?.textContent || ''}; posts=${posts}; refreshes=${refreshes}`);
+    check(createdBody.querySelector('[data-admin-tabs]').dataset.adminTabsBound === '1' && getComputedStyle(createdBody.querySelector('[data-admin-gallery-savebar]')).display !== 'none', 'Created gallery editor binds real anchor tabs and exposes the settings save bar');
+    createdBody.querySelector('[data-admin-tab-target="admin-edit-api"]').click();
+    check(createdBody.querySelector('[data-admin-tab-target="admin-edit-api"]').getAttribute('aria-selected') === 'true' && !createdBody.querySelector('#admin-edit-api').hidden && getComputedStyle(createdBody.querySelector('[data-admin-gallery-savebar]')).display !== 'none', 'Created gallery API tab activates in place and keeps gallery settings save available');
+    createdBody.querySelector('[data-admin-tab-target="admin-edit-access"]').click();
+    check(!createdBody.querySelector('#admin-edit-access').hidden && getComputedStyle(createdBody.querySelector('[data-admin-gallery-savebar]')).display !== 'none' && location.href === createdUrl, 'Created gallery Access tab and save bar work without changing the public URL');
+    close(); await wait(310);
+
     for (let slot = 0; slot <= ADMIN_PANEL_DRAFT_LIMIT; slot++) {
         const id = String(100 + slot); titles[id] = 'Fixture ' + id; revisions[id] = 1;
         const opener = document.createElement('a');
@@ -542,6 +596,48 @@ try {
     const replacementOpener = document.getElementById('open-c'); replacementOpener.remove();
     close(); await wait(310);
     check(document.activeElement.isConnected && !panel().contains(document.activeElement) && document.activeElement !== document.body, 'Removed opener restores a connected logical fallback');
+
+    // The production renderer places settings panels inside one shared form and API after it.
+    // A public/admin background can simultaneously retain older elements with the same panel IDs.
+    const backgroundTabs = document.createElement('div');
+    backgroundTabs.innerHTML = '<section id="admin-edit-identity" data-admin-tab-panel>Background identity</section><section id="admin-edit-api" data-admin-tab-panel>Background API</section><section id="admin-edit-access" data-admin-tab-panel>Background Access</section>';
+    document.getElementById('background').append(backgroundTabs);
+    document.getElementById('open-a').click(); await wait();
+    const tabBody = field('[data-admin-side-panel-body]');
+    const tabRoot = tabBody.querySelector('[data-admin-tabs]');
+    const savebar = tabBody.querySelector('[data-admin-gallery-savebar]');
+    const longHeading = field('[data-admin-side-panel-title]');
+    longHeading.textContent = 'Gallery title '.repeat(28);
+    await wait(310);
+    field('.admin-side-panel-dialog').scrollTop = 400;
+    await wait();
+    const dialogRect = field('.admin-side-panel-dialog').getBoundingClientRect();
+    const savebarRect = savebar.getBoundingClientRect();
+    check(Math.abs(savebarRect.bottom - dialogRect.bottom) <= 2, `Settings save bar must stay at the drawer bottom while scrolling: save=${savebarRect.bottom}, drawer=${dialogRect.bottom}, scroll=${field('.admin-side-panel-dialog').scrollTop}, transform=${getComputedStyle(field('.admin-side-panel-dialog')).transform}, savePosition=${getComputedStyle(savebar).position}`);
+    const apiTab = tabBody.querySelector('[data-admin-tab-target="admin-edit-api"]');
+    const apiRect = apiTab.getBoundingClientRect();
+    const apiHit = document.elementFromPoint(apiRect.left + (apiRect.width / 2), apiRect.top + (apiRect.height / 2));
+    check(apiTab.contains(apiHit) || apiHit === apiTab, `Sticky API tab hit target is ${apiHit?.className || apiHit?.tagName || 'none'} below a wrapped drawer heading`);
+    field('.admin-side-panel-dialog').scrollTop = 0;
+    check(tabRoot.dataset.adminTabsBound === '1' && getComputedStyle(savebar).display !== 'none', 'Production-shaped editor binds its anchor tabs and shows the shared save bar on Identity');
+    tabBody.querySelector('[data-admin-tab-target="admin-edit-api"]').click();
+    check(tabBody.querySelector('[data-admin-tab-target="admin-edit-api"]').getAttribute('aria-selected') === 'true' && !tabBody.querySelector('#admin-edit-api').hidden && tabBody.querySelector('#admin-edit-identity').hidden, 'API anchor switches the injected drawer content despite split form ownership and duplicate page IDs');
+    check(getComputedStyle(savebar).display !== 'none', 'API keeps the gallery settings save bar available across tabs');
+    tabBody.querySelector('[data-admin-copy-button]').click(); await wait();
+    check(clipboardValue === 'https://fixture.invalid/upload/1' && location.href === originalUrl && !panel().hidden, 'Copy endpoint stays in the open drawer without navigation');
+    tabBody.querySelector('[data-admin-tab-target="admin-edit-access"]').click();
+    check(tabBody.querySelector('[data-admin-tab-target="admin-edit-access"]').getAttribute('aria-selected') === 'true' && !tabBody.querySelector('#admin-edit-access').hidden && tabBody.querySelector('#admin-edit-api').hidden, 'Access anchor switches back into the shared settings form');
+    check(getComputedStyle(savebar).display !== 'none', 'Access shows the shared settings save bar');
+    check(backgroundTabs.querySelector('#admin-edit-identity').hidden === false && location.href === originalUrl && !panel().hidden, 'Panel tab clicks preserve background editor, URL and open drawer');
+    const beforeRerender = tabRoot;
+    document.getElementById('open-b').click(); await wait();
+    const rerenderedBody = field('[data-admin-side-panel-body]');
+    check(rerenderedBody.querySelector('[data-admin-tabs]') !== beforeRerender && rerenderedBody.querySelector('[data-admin-tabs]').dataset.adminTabsBound === '1', 'Server-rendered replacement editor receives a fresh tab binding');
+    rerenderedBody.querySelector('[data-admin-tab-target="admin-edit-api"]').click();
+    check(!rerenderedBody.querySelector('#admin-edit-api').hidden && rerenderedBody.querySelector('#admin-edit-identity').hidden, 'Re-rendered production-shaped anchor tabs remain interactive');
+    rerenderedBody.querySelector('[data-admin-copy-button]').click(); await wait();
+    check(clipboardValue === 'https://fixture.invalid/upload/2' && location.href === originalUrl && !panel().hidden, 'Re-rendered copy control keeps working in place');
+    close(); await wait(310);
     check(location.href === originalUrl && document === originalDocument, 'All mutations and guards preserve URL and document');
     check(localStorage.length === 0 && sessionStorage.length === 0, 'Drafts do not use persistent browser storage');
     document.getElementById('results').textContent = `BROWSER PASS: ${assertions} lifecycle, draft, race and modal focus assertions including native Tab/Shift-Tab/Escape; ${posts} explicit fixture POSTs, ${refreshes} coordinator refreshes.`;

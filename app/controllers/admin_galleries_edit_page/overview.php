@@ -111,6 +111,7 @@ function admin_edit_gallery_render_notices(array $gallery, array $capabilities):
  * @param int $imageCount Number of images attached to this gallery.
  * @param string $activeEditTab Tab selected by redirect query state.
  * @param array<string, mixed> $capabilities Resolved editor capabilities.
+ * @return void Emits the editor overview and its tab navigation.
  */
 function admin_edit_gallery_render_overview(array $gallery, int $imageCount, string $activeEditTab, array $capabilities): void
 {
@@ -119,10 +120,10 @@ function admin_edit_gallery_render_overview(array $gallery, int $imageCount, str
     // $adminTabs stores the edit-gallery sections shown by the shared admin tab controller.
     $adminTabs = [
         ['id' => 'admin-edit-identity', 'label' => t('admin.gallery_editor.tab_identity')],
+        ['id' => 'admin-edit-api', 'label' => t('admin.gallery_editor.tab_api', 'API')],
         ['id' => 'admin-edit-access', 'label' => t('admin.gallery_editor.tab_access')],
         ['id' => 'admin-edit-display', 'label' => t('admin.gallery_editor.tab_display')],
         ['id' => 'admin-edit-media', 'label' => t('admin.gallery_editor.tab_media')],
-        ['id' => 'admin-edit-api', 'label' => t('admin.gallery_editor.tab_api', 'API')],
         ['id' => 'admin-edit-images', 'label' => t('admin.gallery_editor.tab_images'), 'badge' => $imageCount],
     ];
     if (feature_capability_effective_enabled('metadata_organizer')) {
@@ -153,14 +154,14 @@ function admin_edit_gallery_render_overview(array $gallery, int $imageCount, str
             ],
             [
                 'label' => t('admin.gallery_editor.create_gallery_here'),
-                'url' => url_for('admin_upload', ['upload_mode' => 'new', 'parent_id' => $gallery['id']]),
+                'url' => url_for('admin_new_gallery', ['parent_id' => $gallery['id']]),
                 'class' => 'button secondary',
                 'attributes' => [
                     'data-gallery-side-panel-link' => true,
-                    'data-admin-side-panel-workflow' => 'upload',
+                    'data-admin-side-panel-workflow' => 'create',
                     'data-admin-side-panel-kicker' => t('gallery.workflow'),
                     'data-admin-side-panel-title' => t('gallery.create_here'),
-                    'data-gallery-side-panel-url' => url_for('admin_upload', ['upload_mode' => 'new', 'parent_id' => $gallery['id'], 'panel' => 1]),
+                    'data-gallery-side-panel-url' => url_for('admin_new_gallery', ['parent_id' => $gallery['id'], 'panel' => 1]),
                 ],
             ],
             ['label' => t('admin.gallery_editor.view_gallery'), 'url' => gallery_public_url($gallery), 'class' => 'button secondary', 'target' => '_blank'],

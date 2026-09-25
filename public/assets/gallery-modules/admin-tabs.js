@@ -27,12 +27,55 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-06-08
+ *   2026-09-25
  */
 
 import { i18n } from './admin-core.js?v=20260512-modular-admin-v1';
 import { setupAdminNestedTabs } from './admin-nested-tabs.js?v=20260812-deferred-maintenance-v1';
 
+const adminSidePanelTabObservers = new WeakMap();
+
+/**
+ * Keep sticky drawer tabs below the real header height, including wrapped titles.
+ *
+ * The reusable panel header stays mounted while server-rendered bodies are replaced.
+ * One observer per panel therefore updates every current marked tab strip without
+ * retaining removed fragments or changing standalone Admin pages.
+ *
+ * @param {HTMLElement} tabsRoot Tab strip inside a dynamically injected drawer.
+ * @return {void} Applies the current offset and installs the panel observer once.
+ */
+function setupAdminSidePanelTabOffset(tabsRoot) {
+    const panel = tabsRoot.closest('[data-admin-side-panel]');
+    const header = panel?.querySelector('.admin-side-panel-header');
+    if (!(panel instanceof HTMLElement) || !(header instanceof HTMLElement)) {
+        return;
+    }
+    tabsRoot.dataset.adminSidePanelStickyOffset = '1';
+    let state = adminSidePanelTabObservers.get(panel);
+    if (!state) {
+        /** Synchronize every current marked drawer tab strip with the live header height. @return {void} Updates sticky positions only. */
+        const sync = () => {
+            const liveHeader = panel.querySelector('.admin-side-panel-header');
+            if (!(liveHeader instanceof HTMLElement)) {
+                return;
+            }
+            const offset = Math.ceil(liveHeader.getBoundingClientRect().height);
+            panel.querySelectorAll('[data-admin-tabs][data-admin-side-panel-sticky-offset="1"]').forEach(/** Offset only live drawer tab strips; removed server fragments are no longer queried. @param {Element} tabStrip Current marked tab strip. @return {void} Updates its sticky position from the reusable header. */ (tabStrip) => {
+                if (tabStrip instanceof HTMLElement) {
+                    tabStrip.style.top = String(offset) + 'px';
+                }
+            });
+        };
+        const observer = typeof ResizeObserver === 'function'
+            ? new ResizeObserver(/** Recompute after title wrapping, viewport changes or workflow heading replacement. @return {void} Updates current drawer strips only. */ () => sync())
+            : null;
+        observer?.observe(header);
+        state = {sync, observer};
+        adminSidePanelTabObservers.set(panel, state);
+    }
+    state.sync();
+}
 const legacyAdminTabHashes = new Map([
     ['#admin-galleries', '#admin-tab-galleries'],
     ['#admin-ordering', '#admin-tab-galleries'],
@@ -224,22 +267,33 @@ export function setupAdminTabs(root = document) {
  * Attach admin tab behavior inside one document area.
  *
  * @param {ParentNode} root DOM root that contains admin tab controls.
+ * @return {void} Bind each unbound tab group in this root.
  */
 export function setupAdminTabsInRoot(root) {
-    root.querySelectorAll('[data-admin-tabs]').forEach((tabsRoot) => {
+    root.querySelectorAll('[data-admin-tabs]').forEach(/** Bind one tab group in its own document region. @param {Element} tabsRoot Candidate tab strip. @return {void} Installs selection handlers when its panels exist. */ (tabsRoot) => {
         if (!(tabsRoot instanceof HTMLElement) || tabsRoot.dataset.adminTabsBound === '1') {
             return;
         }
+        setupAdminSidePanelTabOffset(tabsRoot);
         tabsRoot.dataset.adminTabsBound = '1';
         // tabs stores state or configuration for the admin tab flow.
         const tabs = Array.from(tabsRoot.querySelectorAll('[role="tab"][data-admin-tab-target]'));
         if (!tabs.length) {
             return;
         }
-        // panels stores state or configuration for the admin tab flow.
-        const panels = tabs
-            .map((tab) => document.getElementById(tab.dataset.adminTabTarget || ''))
-            .filter((panel) => panel instanceof HTMLElement && panel.matches('[data-admin-tab-panel]'));
+        // Resolve IDs within this editor; the public page may contain an older
+        // hidden copy of the same editor outside the dynamically injected drawer.
+        const panelScope = tabsRoot.closest('[data-admin-side-panel-body]') || tabsRoot.closest('main') || document;
+        const availablePanels = panelScope.querySelectorAll('[data-admin-tab-panel]');
+        const panels = [];
+        for (const tab of tabs) {
+            for (const candidate of availablePanels) {
+                if (candidate instanceof HTMLElement && candidate.id === (tab.dataset.adminTabTarget || '')) {
+                    panels.push(candidate);
+                    break;
+                }
+            }
+        }
         if (!panels.length) {
             return;
         }

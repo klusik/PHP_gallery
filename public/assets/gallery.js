@@ -61,7 +61,8 @@ import { setupBackToTopButton } from './gallery-modules/back-to-top.js?v=2026051
 import { setupGallerySearchPickers } from './gallery-modules/searchable-gallery-picker.js?v=20260920-bounded-gallery-picker-v2';
 import { setupPictureManager } from './gallery-modules/picture-manager.js?v=20260914-picture-manager-mixed-v1';
 import { setupAdminDatePickers } from './gallery-modules/admin-date-picker.js?v=20260512-admin-date-picker-v1';
-import { setupSimbriefDescriptionGenerator } from './gallery-modules/admin-simbrief-description.js?v=20260527-simbrief-ofp-route-v1';
+import { setupSimbriefDescriptionGenerator } from './gallery-modules/admin-simbrief-description.js?v=20260925-compact-identifier-v1';
+import { setupAdminGalleryCompactEditor } from './gallery-modules/admin-gallery-compact-editor.js?v=20260925-compact-editor-v2';
 import { setupAdminNavigationDataPanel } from './gallery-modules/admin-navdata-panel.js?v=20260920-admin-interaction-policy-v1';
 import { setupOpenAITextAssist } from './gallery-modules/admin-openai-text-assist.js?v=20260815-content-translation-v1';
 import { setupPublicHomeSearch } from './gallery-modules/public-home-search.js?v=20260913-progressive-search-v4';
@@ -104,7 +105,7 @@ import {
     setupAdminMediaRenamer,
     setupAdminMetadataOrganizer,
     setupAdminTrashActions,
-} from './gallery-modules/admin-operations.js?v=20260925-gallery-scope-fix-v1';
+} from './gallery-modules/admin-operations.js?v=20260925-editor-tabs-v2';
 
 /**
  * Runs a setup callback after the DOM is ready.
@@ -144,6 +145,8 @@ function setupProgressiveThumbnailRendererWhenPresent() {
  * Each setup function is null-safe. Pages that do not contain the corresponding
  * controls simply return from that module, so the same entrypoint can be loaded
  * on public gallery pages, admin pages, setup pages, and utility screens.
+ *
+ * @returns {void} Start the available browser features.
  */
 function bootGalleryBrowserFeatures() {
     setupAdminBulkSelection();
@@ -166,6 +169,7 @@ function bootGalleryBrowserFeatures() {
     setupAdminNestedTabs();
     setupAdminDatePickers();
     setupSimbriefDescriptionGenerator();
+    setupAdminGalleryCompactEditor();
     setupOpenAITextAssist();
     setupAdminGalleryMigration();
     setupAdminMediaRenamer();

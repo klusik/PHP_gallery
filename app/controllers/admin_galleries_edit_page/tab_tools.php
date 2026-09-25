@@ -41,7 +41,7 @@ use function Gallery\Core\render_admin_tab_panel;
 use function Gallery\Core\url_for;
 use function Gallery\Services\feature_capability_effective_enabled;
 use function Gallery\Services\t;
-use function Gallery\Views\view_render_admin_tab_intro;
+use function Gallery\Views\view_render_admin_gallery_advanced_tools;
 use function Gallery\Views\view_render_admin_upload_automation_manager_action;
 
 /**
@@ -85,18 +85,15 @@ function admin_edit_gallery_render_renamer_tab(array $gallery, string $activeEdi
  * @param array<string, mixed> $gallery Gallery row being edited.
  * @param string $activeEditTab Currently selected editor tab.
  * @param array<string, mixed> $capabilities Resolved editor capabilities.
+ * @return void Render the API tab.
  */
 function admin_edit_gallery_render_api_tab(array $gallery, string $activeEditTab, array $capabilities): void
 {
     ob_start();
-    view_render_admin_tab_intro([
-        'kicker' => t('upload_automation.kicker', 'Automation'),
-        'title' => t('admin.upload_automation.gallery_tab_title', 'Upload API keys'),
-        'description' => t('admin.upload_automation.gallery_tab_help', 'Generate and revoke the API keys used by the Windows companion app. Keys stay scoped to this gallery, and the global API manager shows every active key across the site.'),
-    ]);
     if ($capabilities['upload_api_feature_enabled']) {
         render_admin_gallery_upload_automation_panel($gallery, 'admin-edit-api');
     }
+    ob_start();
     render_admin_gallery_ai_reprocess_panel($gallery);
     if ($capabilities['gallery_migration_feature_enabled']) {
         render_admin_gallery_migration_panel($gallery);
@@ -106,6 +103,10 @@ function admin_edit_gallery_render_api_tab(array $gallery, string $activeEditTab
             'href' => url_for('admin_api_manager'),
             'label' => t('admin.upload_automation.open_manager', 'Open API manager'),
         ]);
+    }
+    $advancedTools = (string) ob_get_clean();
+    if (trim($advancedTools) !== '') {
+        view_render_admin_gallery_advanced_tools(t('admin.gallery_editor.advanced_api_tools', 'Advanced API tools'), $advancedTools);
     }
     render_admin_tab_panel('admin-edit-api', (string) ob_get_clean(), $activeEditTab === 'admin-edit-api');
 }
