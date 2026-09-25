@@ -61,8 +61,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.106.1}
-\newcommand{\manualdate}{20 September 2026}
+\newcommand{\version}{0.107}
+\newcommand{\manualdate}{25 September 2026}
 
 \hypersetup{
   colorlinks=true,
@@ -522,6 +522,7 @@ Media & Background source & Inherit Theme, upload a~new background, choose an~ex
 Media & Branding assets & Optional gallery-specific banner/logo/separator assets override Theme fallbacks only for~that gallery where configured.\\
 Media & Flight route & Manual route text supports local identifier lookup and~explicit \codeword{NAME@latitude,longitude} points. SimBrief can~save an~OFP, description draft, and~resolved route coordinates.\\
 Images & Scan/import & Re-scans the~physical gallery folder and~synchronizes supported media into the~catalog.\\
+Images & Create all thumbnails & Rebuilds thumbnails for~this gallery. Select \ui{Include subgalleries} to~cover its descendants; other gallery branches remain outside the~job. Browser generation is~selected by~default when available, with a~server-generation option.\\
 Tools & Organizer, Renamer, API & Date organizer, physical Media Renamer, upload API key management, AI regeneration, and~gallery migration appear only when their schemas/features are~available.\\
 \bottomrule
 \end{longtable}
@@ -542,7 +543,7 @@ Gallery branding can~provide a~logo, banner, background, separator, or~presentat
 
 Moving a~gallery changes its place in~the~hierarchy and~can~affect inherited access or~presentation. Review the~destination before confirming the~move. Reordering changes the~sequence shown among siblings and~supports a~curated reading order.
 
-Moving photographs between galleries uses a~durable operation journal. If~a~worker or~connection stops partway through, System Health and~Runtime Diagnostics show a~bounded action state without exposing private paths. Stop competing storage work, preserve a~backup, and~follow \filepath{docs/IMAGE_MOVE_RECOVERY.md}; recovery retains changed or~unverifiable files instead of~overwriting them.
+Moving photographs between galleries uses a~durable operation journal. The~Organizer physically moves each original and~verifies its recorded identity before changing catalog ownership. If~a~worker or~connection stops partway through, System Health and~Runtime Diagnostics show a~bounded action state without exposing private paths. A~failed move gives a~safe reason on~screen; trusted Admin logs retain more detailed private diagnostics. Stop competing storage work, preserve a~backup, and~follow \filepath{docs/IMAGE_MOVE_RECOVERY.md}; recovery retains changed or~unverifiable files instead of~overwriting them.
 
 Ordering may~be~chronological, geographical, narrative, alphabetical, or~manually featured. Within one parent gallery, keep the~choice consistent enough that visitors can~anticipate the~next item.
 
@@ -1174,11 +1175,11 @@ Every additional enabled size and~format uses storage because it~creates another
 
 The~maintenance panel has~two compatibility policies. \ui{Modern} generates WebP thumbnails wherever the~server can~write WebP. \ui{Legacy} generates JPEG fallback thumbnails as~well as~WebP. After switching an~installation permanently to~Modern, \ui{Remove legacy JPG thumbnails} deletes only generated JPEG thumbnail files; originals, WebP derivatives, and~DNG display masters are~preserved.
 
-A~full \ui{Check missing thumbnails} pass inspects imported photographs and~records galleries with missing, stale, metadata-missing, or~wrong-ratio generated variants without creating anything. The~stored result enables \ui{Create missing thumbnails}, which targets only the~reported images. \ui{Create all thumbnails} runs the~broader creation path. These Admin operations remain the~primary deliberate maintenance workflow. Public browsing does~not~start an~unbounded repair sweep, but~the~current renderer has~a~small guarded background warmup for~specific cards that had~to~fall back to~authorized original media because an~expected derivative was~missing.
+A~full \ui{Check missing thumbnails} pass inspects imported photographs and~records galleries with missing, stale, metadata-missing, or~wrong-ratio generated variants without creating anything. The~stored result enables \ui{Create missing thumbnails}, which targets only the~reported images. \ui{Create all thumbnails} in~Maintenance covers all galleries; the~same action in~a~gallery's Images editor covers that gallery and, when \ui{Include subgalleries} is~selected, its descendants. These Admin operations remain the~primary deliberate maintenance workflow. Public browsing does~not~start an~unbounded repair sweep, but~the~current renderer has~a~small guarded background warmup for~specific cards that had~to~fall back to~authorized original media because an~expected derivative was~missing.
 
 \ui{Refresh thumbnail database} reconciles database metadata with existing generated files and~removes wrong-ratio generated files instead of~publishing them. \ui{Delete all thumbnails} is~a~separately confirmed destructive cache operation; source photographs remain untouched and~the~derivatives can~be~rebuilt later.
 
-For~hosts where server-side image processing is~the~bottleneck, an~optional \ui{Browser-side thumbnail rebuild} is~available and~is~off by~default. The~server sends original files to~the~authenticated browser in~bounded source ZIP chunks, the~browser generates thumbnail variants, and~prepared thumbnail ZIP batches are>uploaded back for~server validation and~installation. The~source-chunk and~batch limits are~configured with the~browser-upload settings so~the~workflow does~not~depend on~one oversized PHP request.
+\ui{Browser-side thumbnail rebuild} is~selected by~default for~these regeneration actions when browser processing is~available. Clear its checkbox to~use server generation. The~server sends original files to~the~authenticated browser in~bounded source ZIP chunks, the~browser generates thumbnail variants, and~prepared thumbnail ZIP batches are~uploaded back for~server validation and~installation. The~source-chunk and~batch limits are~configured with the~browser-upload settings so~the~workflow does~not~depend on~one oversized PHP request.
 
 \subsubsection{Guarded public thumbnail warmup}
 \index{thumbnail warmup}

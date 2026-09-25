@@ -1,5 +1,61 @@
 # Patch notes
 
+## Version 0.107
+
+Version 0.107 adds gallery-scoped thumbnail regeneration with optional descendant coverage and makes browser generation the default for deliberate thumbnail rebuilds. It also improves physical image moves in the Metadata Organizer and the diagnostics available when a move needs attention.
+
+### Highlights
+
+#### Gallery thumbnail regeneration
+
+- Added **Create all thumbnails** to a gallery's Images editor. The action targets that gallery, with an optional **Include subgalleries** checkbox for its descendants.
+- Selected browser-side thumbnail rebuilding by default in both the gallery editor and the Maintenance thumbnail card. Administrators can uncheck it to use server generation. Browser generation remains available only when its configured support is enabled.
+- Reused the existing bounded browser rebuild workflow: the server sends source ZIP chunks, the browser prepares derivatives, and the server validates and installs uploaded batches.
+
+#### Metadata Organizer image moves
+
+- Moved original files physically with `rename()` after source and destination checks, then verified the destination against the journaled size and SHA-256 identity before changing database ownership.
+- Improved safe on-screen failure reasons and pending-move health entries. Trusted Admin logs retain bounded private file and exception context for diagnosis; database exception messages remain withheld.
+- Normalized legacy gallery folder separators during journal path checks and kept unresolved moves available for explicit reconciliation.
+
+### Technical Details
+
+#### Backend
+
+- Updated `app/controllers/admin_thumbnails.php`, `app/services/browser_thumbnail_rebuild.php`, and `app/services/thumbnail_generation.php` to keep thumbnail work inside the selected gallery scope and its requested descendants.
+- Updated `app/services/gallery_image_move_journal.php` and `app/services/gallery_mutations.php` for physical moves, verified recovery, and structured failure diagnostics.
+- Updated `app/services/admin_dashboard/maintenance_health.php` to show allowlisted move failure categories without exposing private paths.
+
+#### Database and compatibility
+
+- Added no migration, table, column, setting key, or configuration requirement. Existing thumbnail metadata and image-move journal storage continue to be used.
+- Kept the direct-page and non-JavaScript thumbnail submission path available; browser rebuilding depends on the existing browser-upload capability.
+
+#### Frontend and administration
+
+- Updated `app/views/admin_gallery_edit_components.php` and `app/views/admin_dashboard_sections.php` to default the browser choice on and expose the gallery branch option.
+- Updated `public/assets/gallery-modules/admin-browser-thumbnail-rebuild.js`, `public/assets/gallery-modules/admin-thumbnail-progress.js`, `public/assets/gallery-modules/admin-operations.js`, and the `public/assets/gallery.js` import revision for the in-place Admin workflow.
+- Updated English, Czech, German, and Swedish strings in `app/lang/`.
+
+### Tests
+
+#### Automated coverage
+
+- Extended gallery-editor panel, thumbnail scope, maintenance-health, and image-move regression contracts in `tests/`.
+- The central release audit covers PHP and JavaScript regression, source contracts, syntax, release consistency, manifest freshness, and available browser integration.
+
+### User Impact
+
+#### For administrators
+
+- Administrators can repair one gallery's thumbnails without sweeping unrelated galleries and can include its descendants when needed.
+- Browser rebuilding is the initial choice for gallery and all-gallery regeneration; server generation remains selectable.
+- Organizer failures provide a safer reason on screen and more useful private diagnostic context for recovery.
+
+#### For visitors
+
+- Visitors can see repaired gallery thumbnails after the administrator completes regeneration. Public access and source-image rules are unchanged.
+
 ## Version 0.106.1
 
 Version 0.106.1 is a focused Maintenance Center reliability release. It fixes a production-only failure where an unavailable legacy download-artifact cache could stop the entire central maintenance job during the `downloads.cache` phase, even though the other independent cache owners were healthy. The corrected workflow isolates each cache owner, preserves completed cleanup, reports a bounded warning, and continues safely without exposing hosting paths or raw exception details.

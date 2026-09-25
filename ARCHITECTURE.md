@@ -9,7 +9,7 @@ This document is intended to help future maintainers and AI coding agents unders
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.106.1';
+const CMS_VERSION = '0.107';
 ```
 
 Update-related code uses:
@@ -1144,7 +1144,7 @@ The browser implementation lives in `public/assets/gallery-modules/admin-browser
 
 When browser-assisted upload is selected, the file input also accepts user ZIP archives such as iCloud Photos exports. Archives are inspected and expanded entirely in a short-lived browser worker before the normal image-preparation pool runs; the original user ZIP is never posted to PHP. The parser reads the central directory, supports stored and Deflate entries, skips directories, hidden metadata, encrypted entries, unsupported compression and unsupported media, and verifies image signatures. It refuses traversal paths, multi-disk/ZIP64 structures, excessive entry counts, oversized entries, suspicious compression ratios, invalid boundaries, and excessive total expansion. Extracted supported images then follow exactly the same thumbnail, manifest, bounded-batch, server validation, access, and mutation-schema path as individually selected images. A ZIP selection cannot fall back to classic PHP upload.
 
-The same browser settings also control the optional browser-assisted thumbnail rebuild path exposed from the admin maintenance thumbnail card. The normal server-side job remains the default. When enabled, the server streams originals as deterministic store-only source ZIP chunks; browser workers create thumbnails and upload prepared derivative batches. The server remains authoritative for image identity, source selection, thumbnail paths, payload validation, final writes, and metadata refresh. Bounded repair passes can revisit missing-thumbnail inventory after the main pass.
+The same browser settings also control browser-assisted thumbnail rebuilds in the Admin maintenance thumbnail card and the gallery editor. Browser generation is selected by default when available; the administrator can choose server generation. The gallery-editor action targets the current gallery and optionally its descendants, never unrelated galleries. The server streams originals as deterministic store-only source ZIP chunks; browser workers create thumbnails and upload prepared derivative batches. The server remains authoritative for image identity, source selection, thumbnail paths, payload validation, final writes, and metadata refresh. Bounded repair passes can revisit missing-thumbnail inventory after the main pass.
 
 ## Migration Compatibility and Repairs
 
@@ -1779,8 +1779,11 @@ Ordinary creation preserves existing catalog ownership when storage is missing o
 unobservable; reconciliation is explicit. See
 [catalog reconciliation](docs/GALLERY_CATALOG_RECONCILIATION.md).
 Image moves persist intent and an ownership-transaction commit marker before
-recovery decides whether to finish or compensate. Uncertain identities are
-preserved, never overwritten. See [image move recovery](docs/IMAGE_MOVE_RECOVERY.md).
+recovery decides whether to finish or compensate. Original files are physically
+renamed and checked against their journaled identity before ownership changes.
+Uncertain identities are preserved, never overwritten. Safe failure categories
+appear in Admin health; private diagnostic context stays in trusted Admin logs.
+See [image move recovery](docs/IMAGE_MOVE_RECOVERY.md).
 
 Base-gallery edits use a dedicated decimal revision, a short atomic reservation
 and connection-owned operation lock spanning subsequent side effects. Database

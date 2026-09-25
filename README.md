@@ -6,7 +6,7 @@ PHP 8.1 is the compatibility minimum. For deployment, use the latest patch relea
 of maintained PHP 8.3 or newer; PHP 8.5 is preferred after staging verification.
 See [runtime support and upstream lifecycle dates](docs/RUNTIME_SUPPORT.md).
 
-**Current Version:** 0.106.1
+**Current Version:** 0.107
 
 **Key Benefit:** Deploy in minutes on shared hosting. No npm, no Composer, no framework overhead. Just PHP + MySQL.
 
@@ -410,6 +410,8 @@ Deep links use stable identifiers such as `?page=admin_settings&section=appearan
 2. Use admin **Scan for new images** to import them
 3. Create thumbnails from the admin interface
 
+For an existing gallery, open its Admin editor and use **Images > Create all thumbnails** to rebuild only that gallery. Check **Include subgalleries** to cover its descendants as well. Browser-side rebuilding is selected by default when available; clear that option to run generation on the server. **Maintenance > Thumbnails > Create all thumbnails** applies to all galleries and also selects browser generation by default.
+
 #### Finding Duplicate Photos
 
 1. Open an existing gallery in the Admin editor.
@@ -549,7 +551,7 @@ For developers interested in the codebase structure, see **[ARCHITECTURE.md](ARC
 
 By default, thumbnails are generated automatically during import. You can fine-tune this:
 
-1. **Batch generation** - Go to **Thumbnails** to regenerate missing thumbnails in bulk
+1. **Batch generation** - Go to **Thumbnails** to regenerate missing or all thumbnails in bulk, or use a gallery's Images editor to rebuild only that gallery and optionally its descendants
 2. **Quality settings** - Edit in theme settings to balance quality vs. file size
 3. **WebP support** - Modern browsers download smaller files automatically
 4. **Lazy loading** - Fullscreen galleries defer thumbnail loading
