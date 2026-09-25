@@ -6,7 +6,7 @@ PHP 8.1 is the compatibility minimum. For deployment, use the latest patch relea
 of maintained PHP 8.3 or newer; PHP 8.5 is preferred after staging verification.
 See [runtime support and upstream lifecycle dates](docs/RUNTIME_SUPPORT.md).
 
-**Current Version:** 0.107
+**Current Version:** 0.108
 
 **Key Benefit:** Deploy in minutes on shared hosting. No npm, no Composer, no framework overhead. Just PHP + MySQL.
 
@@ -16,7 +16,8 @@ See [runtime support and upstream lifecycle dates](docs/RUNTIME_SUPPORT.md).
 - **Filesystem-first design** - Galleries are folders on disk; the database mirrors and enhances them
 - **Nested galleries** - Create gallery hierarchies with unlimited depth
 - **Gallery discovery** - Automatically detect and import new folders
-- **Manual creation** - Create empty gallery folders from the admin interface
+- **Name-first gallery creation** - Public-page `+` controls create an unpublished gallery from its name and open the full editor in the same Admin panel
+- **Personal creation defaults** - Administrators can remember their SimBrief identifier and source language for later galleries, with a visible indication when a value was pre-filled
 - **Optional title completion** - Reuse recent gallery titles through a bounded Admin-only lookup, with Unicode-safe suffixes, keyboard/pointer acceptance, and accessible help in full-page and side-panel create forms; see [title completion](docs/TITLE_COMPLETION.md)
 - **Bulk operations** - Rename, delete, move, reorder, or change visibility for multiple galleries at once
 - **Gallery metadata** - Title, description, optional date range, cover image, custom slug, and safe external links with local brand icons or cached site favicons
@@ -392,10 +393,14 @@ Deep links use stable identifiers such as `?page=admin_settings&section=appearan
 2. Use admin **Discovery** to import the new folder
 
 **Option B: From Admin Interface**
-1. Click **Create empty gallery** on the dashboard
-2. Enter gallery name and choose parent gallery
-3. (Optional) Upload images immediately
-4. Publish when ready
+1. Use a gallery's **+** control to create a child, or the Admin create action for a root gallery. The right-side create panel asks only for a title; its parent is the gallery from which it was opened. Title completion remains available while typing.
+2. Submit the title. The new gallery is created as **Unpublished** and its full editor opens in the same panel. The public page URL does not change.
+3. In **Identity**, add the description, date or date range, source language, tags, and optional SimBrief flight data. Select **Remember for future galleries** beside the SimBrief identifier or language to save that value for your administrator account. A later editor shows a small note beside a value pre-filled from those saved defaults.
+4. Use **API**, **Access**, **Display**, and **Media** for the remaining settings. The editor's **Save gallery** bar stays at the bottom of the panel as you switch settings tabs. Upload photographs from **Images** or the upload action, then publish when ready.
+
+The direct Admin create page remains available without the side panel. It offers the title, SimBrief import, description, language, and tags up front, with folder, visibility, date, parent, voting, filename display, and count badge under **More options**. Its summary shows the chosen visibility and parent. The upload-and-create workflow still uses its dedicated upload form.
+
+SimBrief accepts one visible **Pilot ID or name** field: digits alone mean a Pilot ID; other text is treated as a pilot name. An import into a new-gallery form creates an editable description preview and a private, 30-minute OFP draft bound to the current administrator session. The draft is attached only after gallery creation; a changed identifier invalidates it. If the remote request or optional attachment fails, the gallery can still be edited, and a successful creation reports any attachment warning. Saved creation defaults require migration `202609250001_gallery_creation_preferences.php`; when that storage is unavailable, ordinary name-first creation remains usable, while attempts to save new defaults are refused with migration guidance.
 
 #### Adding Images
 

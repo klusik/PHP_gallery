@@ -34,6 +34,8 @@ The registry also contains an exhaustive discovery-only catalog for global contr
 
 Per-gallery and per-image values are intentionally not global registry entries. Their controls depend on the selected gallery or photograph and remain searchable only within those contextual editors. Secret values are never copied into the registry; only a safe setting name and destination are indexed.
 
+Version 0.108 also adds optional **per-administrator** gallery creation defaults. SimBrief Pilot ID/name and source-content language are stored in `user_gallery_creation_preferences` by `app/services/gallery_creation_preferences.php`, edited through the gallery create/editor controls, and kept out of the global Settings registry. These defaults belong to the authenticated administrator; they are not site-wide Theme settings and do not grant gallery or API access. An explicit Remember save requires migration `202609250001_gallery_creation_preferences.php` and verified storage.
+
 ## Classification legend
 
 - **Edit**: safe central editing is enabled and the save delegates to the existing canonical service setter.
@@ -85,7 +87,7 @@ Tag names, slugs, descriptions and usage metadata are not global `app_settings` 
 
 | Canonical key | Owner / current Admin location | Type and accepted values | Default and invalid/missing fallback | Side effects / migration | Central | Specialized link | Sensitivity |
 |---|---|---|---|---|---|---|---|
-| `public_thumbnail_rendering_mode` | `public_thumbnail_rendering.php`; Theme Layout | enum `responsive`, `progressive` | `responsive`; every unsupported value normalizes to `responsive` | Revision on change through the shared renderer service; no migration | Edit | Theme Layout | normal |
+| `public_thumbnail_rendering_mode` | `public_thumbnail_rendering.php`; Theme Layout | enum `responsive`, `progressive` | `progressive`; every unsupported value normalizes to `progressive` | Revision on change through the shared renderer service; no migration | Edit | Theme Layout | normal |
 | `theme_lightbox_browsing_mode` | `gallery_lightbox_mode.php`; Theme Layout | enum `single`, `picture_strip`, `3d_carousel` | `single`; feature flag can force `single` | Revision on change; global key needs no migration; per-gallery override column is separate | Summary | Theme Layout | normal |
 | `exif_gps_maps_default_enabled` | `exif.php`; Dashboard Maintenance | boolean | enabled by default | no revision; central edit only when the existing EXIF/GPS override schema is ready | Edit conditionally | Dashboard Maintenance | location-display preference |
 | `theme_gps_pin_enabled` | `theme.php`; Theme Appearance | boolean | `1` | generated Theme UI/CSS behavior; no migration | Specialized | Theme Appearance | normal |

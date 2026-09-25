@@ -61,7 +61,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.107}
+\newcommand{\version}{0.108}
 \newcommand{\manualdate}{25 September 2026}
 
 \hypersetup{
@@ -150,7 +150,11 @@
 \end{titlepage}
 
 \pagenumbering{roman}
+\begingroup
+\small
+\setlength{\parskip}{0pt}
 \tableofcontents
+\endgroup
 \clearpage
 \pagenumbering{arabic}
 
@@ -436,7 +440,9 @@ Examples include:
 
 \subsection{Create a~gallery from Admin}
 
-Choose a~parent gallery when the~new collection belongs inside an~existing subject, year, place, or~client. Leave the~parent empty for~a~top-level gallery. Enter a~title, review the~proposed folder or~public path, and~add the~description, dates, and~initial visibility.
+Use the~\ui{+} control on~a~public gallery or~\ui{Create gallery here} in~its editor to~start a~child gallery. The~right-side Admin panel asks only for~the~new title; it~already knows the~parent gallery that supplied the~control. The~new gallery starts \ui{Unpublished}. After creation, the~same panel opens its complete editor for~description, date, language, tags, access, display, media, and~photographs. The~public page does~not~navigate away during this enhanced workflow.
+
+To~start from~the~standalone Admin create page, enter a~title and~optionally provide SimBrief details, description, source language, and~tags before submitting. Its closed \ui{More options} section contains the~folder name, initial visibility, date range, parent, voting, filename display, and~contained-picture badge. A~short summary below it~shows the~current visibility and~parent. The~dedicated create-and-upload form remains available when photographs should be~uploaded during creation. On~a~validation error, submitted non-secret values and~parent context stay available for~correction.
 
 As~you type at~least two characters in~the~title field, Admin may~show the~remaining text of~a~matching existing gallery as~a~faint inline suggestion. Recent titles under the~selected parent are~preferred; matches elsewhere are~considered only after the~bounded sibling search is~exhausted. Older titles can~be~omitted, so~no~suggestion does~not~prove that a~title is~unique. The~form requests at~most eight candidates instead of~loading the~complete title catalog.
 
@@ -444,23 +450,36 @@ With the~caret at~the~end and~no~text selected, press unmodified \codeword{Tab} 
 
 Unicode matching accepts only safe whole-character boundaries. Some non-ASCII suggestions are~omitted when server extensions or~browser segmentation support are~unavailable. A~slow, failed, or~outdated lookup never prevents ordinary typing. Acceptance changes only the~title field: it~does~not~submit the~form, rename an~existing gallery, or~alter its access rules. The~same behavior applies after a~side-panel form is~replaced. See \filepath{docs/TITLE_COMPLETION.md} for~matching limits and~technical details.
 
-After saving, the~gallery becomes a~real collection in~the~gallery tree. Its folder can~receive photographs through the~browser, filesystem transfer, discovery, or~another supported upload workflow. The~database stores its descriptive and~presentation settings.
+After the~name-only creation, the~gallery is~already a~real collection in~the~gallery tree, even before additional editor fields are~saved. Its physical folder can~receive photographs through the~browser, filesystem transfer, discovery, or~another supported upload workflow. Fill and~save the~editor fields before publishing. The~database stores descriptive and~presentation settings; the~normal access policy determines what visitors can~see.
 
 Each generated create or~classic-upload form also carries a~private operation identity. If~a~connection fails after the~server may~have finished the~work, retry the~same form instead of~opening a~new one: the~same administrator, operation, and~content receive the~original completed result. A~freshly opened form represents a~new intentional operation and~can~still create a~deliberate duplicate. This identity is~not~a~password or~a~replacement for~sign-in and~CSRF protection.
 
 \subsubsection{Creation sequence}
 
 \begin{enumerate}
-  \item Choose the~intended parent.
-  \item Enter a~visitor-friendly title.
-  \item Confirm the~folder and~public-path proposal.
-  \item Add a~description and~date range where useful.
-  \item Select visibility and~access.
-  \item Save the~gallery.
-  \item Add photographs or~create child galleries.
-  \item Select a~cover after suitable photographs exist.
-  \item Preview the~result anonymously.
+  \item Open the~intended parent and~choose its \ui{+} control, or~start a~root gallery from~Admin.
+  \item Enter a~visitor-friendly title; optionally accept a~title suggestion.
+  \item Create the~Unpublished gallery. The~full editor opens in~the~same panel when JavaScript is~available.
+  \item Add the~description, date or~date range, source language, tags, and~optional SimBrief data in~\ui{Identity}.
+  \item Review \ui{Access}, \ui{Display}, \ui{Media}, and~the~gallery folder/parent values in~Advanced where relevant.
+  \item Save the~gallery, add photographs, and~choose a~cover after suitable photographs exist.
+  \item Publish when ready, then preview the~result anonymously.
 \end{enumerate}
+
+\subsubsection{Remembered defaults and~SimBrief drafts}
+\index{gallery creation!remembered defaults}
+\index{SimBrief!pre-create draft}
+
+The~editor can~remember the~current SimBrief identifier and~source language for~the~signed-in administrator. Select the~nearby \ui{Remember for~future galleries} choice only for~a~value you~want to~reuse. Later galleries show that value already selected with a~small note saying it~came from~your saved defaults. The~value remains editable; leaving Remember unchecked preserves the~previous saved choice. Defaults belong to~one administrator and~do not~publish credentials or~copy access rules. The~normal migration action must apply \codeword{202609250001\_gallery\_creation\_preferences.php} before Remember can~save a~new default; gallery creation still works without that optional table.
+
+The~visible SimBrief field accepts a~Pilot ID or~pilot name. Digits alone are~treated as~a~Pilot ID, while other text is~treated as~a~name. On~the~direct creation form, \ui{Generate description draft} can~fetch the~latest OFP before a~gallery exists. Review and~edit the~proposed description before saving. The~import keeps a~private reference for~30~minutes, limited to~the~same administrator and~session; changing the~identifier invalidates that reference. The~OFP and~available route coordinates are~attached only after the~gallery has~been created. If~an~optional attachment or~default save fails after creation, the~gallery stays created and~the~panel reports the~specific warning. Re-import when the~draft expires or~the~session changes.
+
+\subsubsection{Working in~the~compact editor}
+\index{gallery editor!side panel}
+
+The~ordinary work areas are~\ui{Identity}, \ui{API}, \ui{Access}, \ui{Display}, and~\ui{Media}; image and~specialized tools follow as~available. The~right-side panel keeps \ui{Save gallery} visible at~its bottom while the~settings form scrolls. Changing tabs does~not~save automatically. Use the~button after editing, then reopen the~gallery if~you~want to~verify the~stored values. Longer explanations sit behind keyboard-accessible question-mark controls, and~less frequent choices sit under \ui{Advanced} disclosures. A~direct Admin editor follows the~same fields, while a~browser without JavaScript uses the~normal form submission.
+
+\ui{Identity} keeps title, description, date, source language, SimBrief, and~tags readily available. Its Advanced section includes slug, folder, parent, sort order, and~AI gallery text when enabled. \ui{API} displays a~copyable upload endpoint, the~key label/action, and~a~newly generated key only once; existing keys appear only when there are~any. AI metadata regeneration, migration, and~the~global API manager live under \ui{Advanced API tools}. \ui{Access} groups visibility, password, share-link controls, and~the~NSFW checkbox, with longer policy explanations under question marks. \ui{Display} starts with the~grid and~common voting/filename switches; EXIF/GPS, gallery-card format, count badge, lightbox mode, Picture Game, thumbnail bounds, and~flight-map text are~under \ui{Advanced display settings}.
 
 \subsection{Edit identity and~context}
 \index{gallery metadata}
@@ -486,7 +505,7 @@ Admin date fields keep the~native browser date input as~the~submitted value but~
 \index{gallery!visibility}
 \index{gallery!display overrides}
 
-The~gallery editor is~the~authoritative place for~settings that belong to~one physical gallery. The~controls are~grouped as~Identity, Access, Display, Media, Images, Organizer, Renamer, and~API-related tools where the~corresponding optional feature is~enabled. The~following table summarizes the~current gallery-owned controls in~Version~\version{}.
+The~gallery editor is~the~authoritative place for~settings that belong to~one physical gallery. The~ordinary tabs are~Identity, API, Access, Display, and~Media, followed by~Images and~optional Organizer/Renamer tools where available. Advanced disclosures retain infrequent settings without removing them from~the~shared save form. The~following table summarizes the~current gallery-owned controls in~Version~\version{}.
 
 \begin{longtable}{>{\raggedright\arraybackslash}p{0.21\textwidth} >{\raggedright\arraybackslash}p{0.27\textwidth} >{\raggedright\arraybackslash}p{0.43\textwidth}}
 \toprule
@@ -503,24 +522,26 @@ Identity & Slug & Controls the~public gallery URL identity. Keep established slu
 Identity & Folder name & Renames the~physical gallery folder on~disk through the~normal mutation path. It~is~not~only a~display label.\\
 Identity & Parent and~sort order & Changes hierarchy and~sibling ordering. Moving a~gallery physically relocates its folder tree where the~configured gallery root permits it.\\
 Identity & Tags & Reusable tags separated by~commas. Suggestions are~weighted by~nearby galleries, photographs, and~folder context rather than~being a~flat random list.\\
+Identity & SimBrief identifier and~defaults & A~single visible field accepts numeric Pilot ID or~pilot name. The~administrator may~remember that identifier and~the~source language for~future galleries; pre-filled values are~marked.\\
+API & Upload endpoint and~keys & Copy the~gallery-scoped endpoint, generate a~key with a~label, and~copy the~new raw value immediately. Active keys appear only when present; the~raw value is~not~shown again. AI regeneration and~migration are~under Advanced.\\
 Access & Visibility & \ui{Public} is~listed normally. \ui{Unpublished} is~hidden from normal listings but~can~still open from its normal URL when access rules allow it. \ui{Private} is~administrator-only except through supported direct-token access.\\
 Access & Password lock & Independent from visibility. A~public, unpublished, or~private gallery can~have its own password policy where the~access schema is~available. Leaving the~new-password field empty preserves the~existing password.\\
 Access & Share link & Can~be~generated, regenerated, revoked, and~optionally given an~expiry. Stored token material is~hash-protected; an~older or~non-decryptable token may~need regeneration before a~copyable link can~be~shown again.\\
 Access & NSFW / 18+ & Marks the~gallery branch for~anonymous age confirmation. The~protection also applies to~subgalleries and~served media according to~the~effective access policy.\\
-Display & Picture Game & Enables the~comparison game for~the~gallery branch. Enabling the~game also requires image voting to~be~available.\\
+Display & Picture Game & Advanced option for~the~comparison game in~this gallery branch. Enabling the~game also requires image voting to~be~available.\\
 Display & Image voting & Enables public image likes for~this gallery. Disabling it~leaves stored scores intact but~removes new vote controls and~blocks new submissions.\\
 Display & Show file names & Off by~default. Raw uploaded filenames remain hidden unless enabled; custom photo titles and~descriptions are~still shown.\\
 Display & EXIF/GPS display & \ui{Use global default}, \ui{Force on}, or~\ui{Force off}. The~effective state controls public GPS pins, gallery EXIF maps, and~GPS coordinate display.\\
 Display & Gallery-card description format & Inherits Theme by~default and~can~override the~card layout for~this gallery where supported.\\
 Display & Contained-picture badge & Inherits Theme or~overrides the~stacked-picture icon and~contained-image count shown on~gallery cards.\\
 Display & Lightbox browsing mode & Inherit Theme, classic single image, picture strip, or~3D carousel. Fullscreen and~slideshow behavior remain available across the~modes.\\
-Display & Custom grid & Optional columns and~rows for~this gallery. A~gallery without an~explicit grid inherits the~nearest parent grid that permits subgallery inheritance, then falls back to~Theme.\\
+Display & Custom grid & First visible Display control: optional columns and~rows for~this gallery. Without an~explicit grid, the~nearest parent grid that permits subgallery inheritance applies, then Theme.\\
 Display & Responsive thumbnail bounds & Optional minimum/maximum thumbnail-size guardrails. A~save can~copy gallery bounds recursively to~descendants; recursive save is~off by~default.\\
+Display & Flight route & Advanced manual route text supports local identifier lookup and~explicit \codeword{NAME@latitude,longitude} points. SimBrief can~save an~OFP, description draft, and~resolved route coordinates.\\
 Media & Title picture & Automatic or~a~selected photograph, including eligible photographs from descendants when the~picker offers them.\\
 Media & Uploaded gallery thumbnail & Separate gallery-card media asset stored independently from ordinary gallery photographs.\\
 Media & Background source & Inherit Theme, upload a~new background, choose an~existing gallery image, or~generate a~collage from public galleries.\\
 Media & Branding assets & Optional gallery-specific banner/logo/separator assets override Theme fallbacks only for~that gallery where configured.\\
-Media & Flight route & Manual route text supports local identifier lookup and~explicit \codeword{NAME@latitude,longitude} points. SimBrief can~save an~OFP, description draft, and~resolved route coordinates.\\
 Images & Scan/import & Re-scans the~physical gallery folder and~synchronizes supported media into the~catalog.\\
 Images & Create all thumbnails & Rebuilds thumbnails for~this gallery. Select \ui{Include subgalleries} to~cover its descendants; other gallery branches remain outside the~job. Browser generation is~selected by~default when available, with a~server-generation option.\\
 Tools & Organizer, Renamer, API & Date organizer, physical Media Renamer, upload API key management, AI regeneration, and~gallery migration appear only when their schemas/features are~available.\\
@@ -1250,7 +1271,7 @@ Selecting \ui{Open photo} in~a~gallery-map marker opens that photograph in~the~c
 \index{flight maps}
 \index{navigation data}
 
-Flight-oriented collections can~use the~optional SimBrief integration to~retrieve the~latest operational flight plan for~a~Pilot ID or~pilot name. The~gallery editor saves the~OFP with the~gallery, creates an~editable Markdown description draft, and~writes the~OFP route coordinates into the~gallery flight-map record. If~both identifiers are~provided, the~Pilot ID is~preferred. A~failed SimBrief request leaves the~ordinary description field and~manual route editor available.
+Flight-oriented collections can~use the~optional SimBrief integration to~retrieve the~latest operational flight plan for~a~Pilot ID or~pilot name. The~compact editor accepts one visible identifier: digits alone select the~Pilot ID path; other text selects the~pilot-name path. Existing integrations that submit separate fields remain compatible, with Pilot ID preferred when both are~provided. The~editor creates an~editable Markdown description draft, saves the~OFP with the~gallery, and~writes available route coordinates into the~gallery flight-map record. A~failed SimBrief request leaves the~ordinary description field and~manual route editor available. The~pre-create draft is~private and~temporary as~described in~the~gallery creation section.
 
 Manual route text is~resolved offline-first. Imported OurAirports database rows are~checked first, then the~small bundled CSV fallback. A~valid cached provider result may~be~used next; when an~administrator has~linked a~configured Navigraph account and~remote lookup is~allowed, an~unknown identifier can~be~resolved through Navigraph and~cached under the~known AIRAC cycle. The~Navigation Data manager shows local database and~bundled counts, provides a~lookup tester for~identifiers such as~airports/navaids/fixes, and~can~refresh the~local OurAirports airport/navaid dataset. Navigraph OAuth/account storage is~optional and~can~be~disconnected without removing local data.
 

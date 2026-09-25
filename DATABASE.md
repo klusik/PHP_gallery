@@ -1,6 +1,8 @@
 # PHP Gallery Database Documentation
 
-This document describes the database schema used by PHP Gallery as of application version 0.107. Version 0.97 adds the recoverable gallery-trash state machine through migrations `202609070001_gallery_trash_bin.php` and `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6 introduced no schema changes. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
+This document describes the database schema used by PHP Gallery as of application version 0.108. Version 0.97 adds the recoverable gallery-trash state machine through migrations `202609070001_gallery_trash_bin.php` and `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6 introduced no schema changes. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
+
+Version 0.108 adds `database/migrations/202609250001_gallery_creation_preferences.php`. Its one new table stores optional per-administrator SimBrief and source-language defaults for later gallery editing; it does not alter gallery rows, visibility, media ownership, or the existing creation replay ledger. The table uses ordinary `CREATE TABLE IF NOT EXISTS` DDL, InnoDB and `utf8mb4`, and requires only the installation's normal migration/table-creation authority. The application can still create a name-only gallery before this optional migration, but an explicit request to remember defaults needs verified table and column readiness.
 
 Version 0.105 adds three integrity structures. Migration `202609200001_gallery_image_move_journal.php` records durable image-move intent and recovery state; `202609200002_gallery_edit_revision.php` adds the application-owned `galleries.edit_revision` concurrency value; and `202609200003_admin_operation_keys.php` stores actor-bound replay outcomes for gallery creation and classic uploads. The edit-revision migration is a column-only alteration: it creates no trigger, routine, function, or server-global setting and requires no `SUPER`-style privilege. A retry after an interrupted attempt that already added the column is accepted and records the migration normally.
 
@@ -103,11 +105,13 @@ Current migration sequence:
 | `202609200001_gallery_image_move_journal.php` | Adds durable image-move intent, same-transaction database commit markers, private recovery manifests, and bounded pending/source/destination indexes. |
 | `202609200002_gallery_edit_revision.php` | Adds unsigned `galleries.edit_revision` with default `1` for application-owned edit conflict detection. Uses ordinary column DDL only. |
 | `202609200003_admin_operation_keys.php` | Adds the actor/key-bound replay ledger for gallery creation and classic upload, including payload/owner hashes, lifecycle state, bounded original response, and pending-state index. |
+| `202609250001_gallery_creation_preferences.php` | Adds one user-owned row for optional SimBrief Pilot ID/name and gallery source-language defaults, with a foreign key that removes preferences when the administrator account is deleted. |
 
 ## Entity Relationship Overview
 
 ```text
 users
+  -> user_gallery_creation_preferences.user_id (one row per administrator; ON DELETE CASCADE)
   -> image_votes.user_id
   -> admin_logs.user_id
   -> admin_operation_keys.actor_id (logical actor identity; no cascading foreign key)
@@ -327,6 +331,20 @@ Important columns:
 | `created_at`, `updated_at` | Claim and lifecycle timestamps. |
 
 The exact primary-key order and uniqueness are inspected before claims are accepted. Confirmed missing or unknown storage refuses the operation before target work; requests never create or repair the ledger themselves. Uncertain rows are retained for explicit `scripts/reconcile_admin_operations.php` investigation instead of being expired, stolen, or rerun automatically.
+
+### `user_gallery_creation_preferences`
+
+One optional row per administrator supplies pre-filled values when that administrator edits or creates a later gallery. It is not a site-wide setting and does not copy secrets, access rights, or a particular gallery's metadata into new galleries.
+
+| Column | Type and meaning |
+| --- | --- |
+| `user_id` | `BIGINT UNSIGNED` primary key and foreign key to `users.id`; `ON DELETE CASCADE` removes the preferences with the administrator account. |
+| `simbrief_pilot_id` | `VARCHAR(32) NOT NULL DEFAULT ''`; remembered numeric/account Pilot ID. |
+| `simbrief_pilot_name` | `VARCHAR(80) NOT NULL DEFAULT ''`; remembered pilot name. |
+| `content_language` | `VARCHAR(16) NOT NULL DEFAULT ''`; selected source-content language, accepted only from supported language codes. |
+| `created_at`, `updated_at` | Non-null SQL datetimes for row creation and the latest preference update. |
+
+The model uses an insert-or-update on `user_id` and preserves values whose Remember checkboxes were not selected. Choosing the single visible SimBrief identifier for a new default updates its matching slot and clears the alternate slot so later prefill is unambiguous. Reads return empty defaults when storage is confirmed missing or inspection is unknown; they do not treat an unknown state as permission to write. Explicit Remember requests are validated and require confirmed available storage before any new-gallery mutation or editor save. If persistence fails after a successful gallery save or creation, the gallery remains saved and the administrator receives a warning about the defaults. Applying the migration does not rewrite existing gallery descriptions, OFP files, translations, or user preferences in other tables.
 
 ### `gallery_trash_entries`
 
