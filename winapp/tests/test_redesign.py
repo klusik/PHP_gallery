@@ -58,6 +58,23 @@ def load_main_module():
 MAIN = load_main_module()
 
 
+class FrozenDependencyTests(unittest.TestCase):
+    """A frozen executable must never relaunch itself as a pip interpreter."""
+
+    def test_frozen_dependency_actions_never_spawn_pip(self):
+        with mock.patch.object(MAIN.sys, "frozen", True, create=True), mock.patch.object(MAIN.subprocess, "run") as run:
+            with mock.patch.object(MAIN, "Image", object()), mock.patch.object(MAIN, "pystray", object()):
+                self.assertTrue(MAIN.install_dependencies_for_current_runtime()[0])
+            with mock.patch.object(MAIN, "Image", None):
+                ok, message = MAIN.install_dependencies_for_current_runtime()
+                self.assertFalse(ok)
+                self.assertIn("Reinstall", message)
+            ok, message = MAIN.install_semantic_ai_dependencies_for_current_runtime()
+            self.assertFalse(ok)
+            self.assertIn("Ollama", message)
+            run.assert_not_called()
+
+
 class ConfigStateTests(unittest.TestCase):
     """Configuration, persistence, migration, and redaction contracts."""
 
