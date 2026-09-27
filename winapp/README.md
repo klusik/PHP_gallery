@@ -4,6 +4,62 @@ The Windows companion app is a desktop import client for one PHP Gallery target 
 
 The application keeps the existing `gallery_watch_upload.pyw` launcher, `run_gallery_watcher.bat`, and `--once` compatibility. Normal operation needs only Python plus the lightweight dependencies in `requirements.txt`.
 
+## Windows installer (winapp 0.1.0)
+
+The companion app has its own version in `winapp/VERSION`, independent of the PHP
+Gallery CMS release. The installer includes Python, Tkinter, Pillow, pystray,
+the tray icons, and `SimConnect.dll` inside one application EXE. End users do not
+need Python. Installation requests administrator rights and defaults to
+`Program Files\PHP Gallery Uploader`, with a Start Menu shortcut, an optional
+desktop shortcut for all users, and a normal Windows uninstaller. Existing settings and jobs
+in `%APPDATA%\PHPGalleryUploader` survive upgrades and uninstalling.
+
+To build on Windows, install x64 Python 3.10+ with Tkinter and Inno Setup 6.3+
+(including Inno Setup 7), then run from the repository root:
+
+```bat
+winapp\build.bat
+```
+
+The script downloads the build dependencies into a temporary virtual environment,
+uses PyInstaller `--onefile --windowed`, checks the EXE startup with `--help`
+using a disposable app-data directory, then calls the installed `ISCC.exe`.
+Internet access to the configured Python package index is needed for each build.
+The only published build artifact is:
+
+```text
+winapp/dist/PHPGalleryUploader-0.1.0-Setup.exe
+```
+
+The installer is unsigned and may be uploaded manually to GitHub Releases.
+The script never changes CMS version markers or publishes a release. A failed
+build returns a nonzero exit code and preserves any previous successful installer.
+Its unique `winapp/.build-*` staging directory (virtual environment, downloads,
+caches, spec file, work files, intermediate application EXE and partial installer)
+is removed on success, errors and normal Ctrl+C cancellation. Forced process
+termination or power loss can leave a staging directory; remove that `.build-*`
+directory manually before retrying if needed. Existing unrelated files are never
+cleaned. Add `dist/`, `build/`, `.build-*/`, and Python build caches to the local
+`.git/info/exclude` to keep generated files out of Git.
+
+The compiler is discovered on PATH and in standard Inno Setup installation
+folders. Custom tool locations can be selected explicitly:
+
+```bat
+set "PHP_GALLERY_PYTHON=C:\Program Files\Python313\python.exe"
+winapp\build.bat --iscc "C:\Program Files\Inno Setup 7\ISCC.exe"
+```
+
+`ISCC_EXE` is also accepted as a compiler path override. Alternatively, run
+`python winapp/build_installer.py --iscc "C:\path\ISCC.exe"` directly.
+
+The standalone build includes the normal uploader and Pillow AI fallback. Optional
+in-process Transformers/PyTorch packages are not bundled or installable into the
+frozen EXE; use Ollama, an external analyzer, or the Python source installation for
+that optional backend. Dependency repair in the EXE reports bundled dependency
+status without starting pip. The separate `gallery_http_monitor.py` diagnostic
+tool remains a source-only utility.
+
 ## Main window
 
 The redesigned window is organized around five tasks:

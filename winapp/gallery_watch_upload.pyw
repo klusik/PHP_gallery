@@ -110,6 +110,7 @@ STATE_PATH = CONFIG_DIR / "upload_state.json"
 LOG_PATH = CONFIG_DIR / "watcher.log"
 STAGING_ROOT = CONFIG_DIR / "staging"
 APP_DIR = Path(__file__).resolve().parent
+APP_VERSION = (APP_DIR / "VERSION").read_text(encoding="utf-8").strip()
 REQUIREMENTS_PATH = APP_DIR / "requirements.txt"
 ASSETS_DIR = APP_DIR / "assets"
 TRAY_ICON_PNG_PATH = ASSETS_DIR / "tray-icon.png"
@@ -1996,6 +1997,12 @@ def install_dependencies_for_current_runtime() -> Tuple[bool, str]:
     
     @return Tuple[bool, str] Tuple containing success flag and command output text.
     """
+    if getattr(sys, "frozen", False):
+        available = Image is not None and pystray is not None
+        return available, (
+            "Required dependencies are bundled with this application."
+            if available else "Bundled dependencies are unavailable. Reinstall PHP Gallery Uploader."
+        )
     command = [sys.executable, "-m", "pip", "install", "--user"]
     if REQUIREMENTS_PATH.is_file():
         command.extend(["-r", str(REQUIREMENTS_PATH)])
@@ -2037,6 +2044,11 @@ def install_semantic_ai_dependencies_for_current_runtime() -> Tuple[bool, str]:
     
     @return Tuple[bool, str] Tuple containing success flag and command output text.
     """
+    if getattr(sys, "frozen", False):
+        return False, (
+            "The standalone installer cannot install Python packages. Use Ollama or an external analyzer, "
+            "or run the Python source version to use Transformers."
+        )
     command = [
         sys.executable,
         "-m",
@@ -4247,7 +4259,7 @@ class WatcherApp:
             raise RuntimeError("Tkinter is not available in this Python installation.")
 
         self.root = tk.Tk()
-        self.root.title(APP_DISPLAY_NAME)
+        self.root.title(f"{APP_DISPLAY_NAME} {APP_VERSION}")
         self.root.geometry("1180x820")
         self.root.minsize(900, 650)
 
@@ -5089,6 +5101,10 @@ class WatcherApp:
         """
         Install winapp dependencies into the current Python interpreter.
         """
+        if getattr(sys, "frozen", False):
+            ok, output = install_dependencies_for_current_runtime()
+            (messagebox.showinfo if ok else messagebox.showerror)("Bundled dependencies", output)
+            return
         self.write_log("Installing or repairing Python dependencies for the current runtime...")
         ok, output = install_dependencies_for_current_runtime()
         for line in output.splitlines()[-12:]:
@@ -5540,6 +5556,10 @@ class WatcherApp:
         PyTorch and Transformers are large packages and may also cause model
         downloads later. Installation is therefore explicit and confirmed.
         """
+        if getattr(sys, "frozen", False):
+            _ok, output = install_semantic_ai_dependencies_for_current_runtime()
+            messagebox.showinfo("Local AI module", output)
+            return
         if self.semantic_ai_install_running:
             self.write_log("Optional local AI module dependency installation is already running.")
             return

@@ -1,5 +1,53 @@
 # Patch notes
 
+## Version 0.109
+
+Version 0.109 adds a distributable Windows uploader installer. The companion app can now be built as a single bundled executable and packaged through the installed Inno Setup compiler, so end users can install it without managing Python or its runtime dependencies.
+
+### Highlights
+
+#### Windows uploader installer
+
+- Added a standalone `PHPGalleryUploader-0.1.0-Setup.exe` build for the Windows companion app.
+- Added a per-machine installer that requests administrator approval and defaults to `Program Files\PHP Gallery Uploader`.
+- Added Start Menu and optional desktop shortcuts, a normal uninstaller, and preservation of existing uploader settings and durable jobs in `%APPDATA%\PHPGalleryUploader`.
+
+### Technical Details
+
+#### Build and packaging
+
+- Added `winapp/build.bat` and `winapp/build_installer.py` to create a temporary isolated Python build environment, install the pinned build requirements, build a PyInstaller one-file windowed executable, run an application smoke check, and invoke the installed Inno Setup `ISCC.exe` compiler.
+- Added `winapp/installer.iss` with the independent WinApp version `0.1.0`; the CMS release version remains `0.109`.
+- Added `winapp/VERSION` and `winapp/requirements-build.txt`. Temporary virtual environments, caches, intermediate executables, and installer staging files are removed after each build, including failed builds where cleanup is possible.
+- Added local Git exclude rules for generated `build`, `dist`, staging, virtual-environment, and installer output directories. The generated installer is intentionally not part of the repository release commit.
+
+#### Runtime compatibility
+
+- Bundled Python, Tkinter, Pillow, pystray, tray assets, and `SimConnect.dll` into the application executable.
+- Updated dependency-repair controls so a frozen application reports bundled dependency status instead of attempting to run `pip` against itself. Optional Transformers/PyTorch installation remains available only to the source-based Python runtime.
+- Added the WinApp version to the desktop window title while preserving existing configuration paths, upload routes, API-key handling, and `--once` compatibility.
+
+#### Database
+
+- Added no database migration, table, column, index, or stored-data change.
+
+### Tests
+
+- Added `winapp/tests/test_build_installer.py` covering atomic installer publication, cleanup after each build-tool failure, compiler validation, and invalid-version rejection.
+- Extended `winapp/tests/test_redesign.py` to verify that frozen dependency actions never spawn a package installer.
+- The WinApp regression suite passes all 41 tests. The installer was built locally with Inno Setup 7 and its versioned output passed the standalone `--help` smoke check.
+
+### User Impact
+
+#### For Windows uploader users
+
+- Users can install the uploader through a conventional elevated Windows installer and launch it from the Start Menu or optional desktop shortcut without installing Python separately.
+- Existing uploader settings, API keys, upload state, logs, and recoverable jobs remain in the user profile across installer upgrades.
+
+#### For gallery administrators and visitors
+
+- No PHP Gallery web route, gallery access rule, media authorization policy, public page, administrator workflow, or visitor-facing feature changed.
+
 ## Version 0.108.2
 
 Version 0.108.2 streamlines release preparation so deterministic metadata and integrity checks are completed before the long qualification audit. It also prevents a newly prepared release from starting with incomplete release metadata.
