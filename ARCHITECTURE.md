@@ -9,7 +9,7 @@ This document is intended to help future maintainers and AI coding agents unders
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.109';
+const CMS_VERSION = '0.110';
 ```
 
 Update-related code uses:
@@ -18,6 +18,10 @@ Update-related code uses:
 const CMS_GITHUB_REPOSITORY = 'klusik/PHP_gallery';
 const CMS_UPDATE_BRANCHES = ['main', 'master'];
 ```
+
+## Local website-address configuration
+
+`config.php` remains the sole storage owner for `base_url`. The Settings hub's dedicated `site` section delegates URL validation and filesystem persistence to `app/services/site_url.php`; the controller owns administrator authentication, CSRF validation, and the redirect to the new address. The service edits only a single top-level literal value, serializes writers, checks the original bytes before atomic replacement, preserves permissions, and invalidates OPcache. It never uses `app_settings` for this configuration. Computed or duplicate values and unavailable write access cause refusal with the original configuration preserved.
 
 ## Core Design Principles
 
