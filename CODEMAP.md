@@ -162,6 +162,7 @@ There is intentionally no viewer controller, view, route, JavaScript, CSS, mail 
 
 | Path | Responsibility |
 | --- | --- |
+| `app/services/site_url.php` | Validates the public installation URL and updates only the literal `base_url` in local `config.php`, with locked atomic replacement and no database settings write. |
 | `app/controllers/admin_settings.php` | Admin-authenticated Settings hub controller, per-section validation, delegated saves, flash/redirect handling and safe audit metadata. |
 | `app/services/admin_settings_registry.php`, `app/views/admin_settings.php`, `public/assets/gallery-modules/admin-settings-search.js` | Canonical Settings ownership plus complete global-control discovery, Spotlight-style local search, keyboard navigation, section activation, and specialist deep links. |
 | `app/services/admin_settings_registry.php` | Stable section taxonomy, setting ownership metadata, current/default/source resolution, central-edit whitelist, canonical normalizers/save delegation and deep-link helpers. |

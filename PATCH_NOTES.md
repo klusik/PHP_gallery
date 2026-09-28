@@ -1,5 +1,59 @@
 # Patch notes
 
+## Version 0.110
+
+Version 0.110 adds an administrator setting for correcting the gallery's public installation address after setup. The website URL is saved directly in local configuration, so an incorrectly detected hosting subdirectory can be corrected without editing the file manually.
+
+### Highlights
+
+#### Website address in Admin Settings
+
+- Added **Settings > Website address** with a dedicated website URL field and section-scoped save.
+- Added validation for absolute HTTP/HTTPS addresses, with an optional real installation subdirectory and removal of trailing slashes.
+- Redirected successful saves to the Settings section at the newly configured address.
+
+### Technical Details
+
+#### Backend and configuration
+
+- Added `app/services/site_url.php` for URL validation and safe updates of the top-level literal `base_url` in `config.php`.
+- Preserved unrelated configuration values, formatting, and comments through token-based source editing.
+- Serialized saves with a configuration lock, wrote a temporary replacement with the existing file permissions, checked for intervening source changes, and invalidated OPcache after replacement.
+- Refused missing or unwritable configuration, duplicate or computed `base_url` expressions, credentials, query parameters, fragments, and malformed URLs.
+- Registered the setting in `app/services/admin_settings_registry.php` and delegated persistence from `app/controllers/admin_settings.php` through the existing administrator authentication and CSRF boundary.
+- Added `config.php.lock` to `.gitignore` as local runtime state.
+
+#### Database
+
+- Added no migration, table, column, index, or database setting. The website address remains owned exclusively by `config.php`.
+
+#### Frontend and translations
+
+- Added the Website address section to the existing Settings hub, using its search, accessible form controls, and normal no-JavaScript submission.
+- Added Czech, English, German, and Swedish labels and help text with a generic example address.
+
+#### Documentation
+
+- Updated the Settings inventory, code map, testing guidance, and administrator manual to describe the configuration owner and save requirements.
+- Updated the release markers and rebuilt the manual for Version 0.110.
+
+### Tests
+
+- Added `tests/site_url_config_test.php` covering URL normalization and rejection, unrelated-content preservation, literal configuration variants, and refusal of unsafe rewrites.
+- Covered actual configuration persistence in disposable files without accessing the installation's configuration or database.
+- Extended the Settings registry contract for the Website address section.
+
+### User Impact
+
+#### For administrators
+
+- Administrators can correct the public gallery address from Settings after installation, including removal of an incorrectly detected subdirectory.
+- Saving requires write access to `config.php` and its containing directory. Custom computed configuration remains editable manually.
+
+#### For visitors
+
+- Generated gallery links use the corrected configured address on subsequent requests.
+
 ## Version 0.109
 
 Version 0.109 adds a distributable Windows uploader installer. The companion app can now be built as a single bundled executable and packaged through the installed Inno Setup compiler, so end users can install it without managing Python or its runtime dependencies.

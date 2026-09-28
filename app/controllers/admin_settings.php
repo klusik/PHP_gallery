@@ -57,6 +57,7 @@ use function Gallery\Views\view_render_admin_settings_page;
 
 /**
  * Render and process the centralized Admin Settings hub.
+ * @return void
  */
 function cms_admin_settings(): void
 {
@@ -102,6 +103,10 @@ function cms_admin_settings(): void
             try {
                 foreach ($normalized as $id => $value) {
                     admin_settings_save_editable_value($id, $value);
+                }
+                if ($section === 'site') {
+                    flash_message('admin_notice', t('admin.settings.notice.saved', 'Settings saved.'));
+                    redirect_to((string) $normalized['base_url'] . '/index.php?page=admin_settings&section=site');
                 }
                 admin_log_event('info', 'settings.central_updated', 'Admin updated centralized settings.', [
                     'section' => $section,

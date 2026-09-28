@@ -44,6 +44,14 @@ Version 0.108 also adds optional **per-administrator** gallery creation defaults
 - **Revision**: changing the setting through its current canonical Theme workflow bumps `theme_public_content_revision` when the rendered public HTML contract changes.
 - **Migration**: `No` means the central hub itself adds no schema requirement. A conditional entry may still depend on an already-existing optional schema before it is editable.
 
+## Website address
+
+| Canonical key | Owner / current Admin location | Type and accepted values | Default and invalid/missing fallback | Side effects / migration | Central | Specialized link | Sensitivity |
+|---|---|---|---|---|---|---|---|
+| `base_url` | `site_url.php`; Settings > Website address (`site`) | absolute HTTP/HTTPS URL; optional installation path; no credentials, query, or fragment | displays current local configuration; malformed/empty submissions are rejected | replaces only the top-level literal in `config.php`; requires writable file and directory; no DB write or migration | Edit | none | operational |
+
+This section has its own form, so saving the website address does not save the General section's database settings. `site_url_save()` serializes writes, preserves unrelated source bytes and existing permissions, atomically replaces the configuration, and invalidates OPcache. Computed or ambiguous configuration is refused and remains available for manual editing. A successful save redirects to the newly configured URL. The setting changes generated addresses; filesystem placement, DNS, and web-server configuration remain separate responsibilities.
+
 ## General
 
 | Canonical key | Owner / current Admin location | Type and accepted values | Default and invalid/missing fallback | Side effects / migration | Central | Specialized link | Sensitivity |

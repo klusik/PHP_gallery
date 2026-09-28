@@ -1,4 +1,8 @@
 {
+    "admin.settings.section.site": "Webbadress",
+    "admin.settings.section.site_hint": "Publik installationsadress direkt i config.php.",
+    "admin.settings.item.base_url": "Galleriets URL",
+    "admin.settings.item.base_url.hint": "Fullständig publik adress, till exempel https://example.com. Ange en sökväg endast om galleriet finns i en undermapp. Sparas direkt i config.php; inga databasinställningar ändras.",
     "admin.operation.client_capacity": "Formuläret är för stort för säker spårning av återförsök på sidan. Behåll det ursprungliga formuläret och granska dess indata.",
     "admin.operation.client_key_required": "Ladda om ett genererat formulär för att skapa ett galleri eller ladda upp innan du startar den här operationen.",
     "admin.operation.client_unresolved": "Resultatet av ett tidigare uppdrag att skapa ett galleri eller ladda upp är fortfarande oklart. Behåll formuläret med dess ursprungliga indata och filer. Försök vid behov igen efter ny inloggning, eller utred resultatet innan du börjar med annat arbete.",

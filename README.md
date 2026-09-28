@@ -6,7 +6,7 @@ PHP 8.1 is the compatibility minimum. For deployment, use the latest patch relea
 of maintained PHP 8.3 or newer; PHP 8.5 is preferred after staging verification.
 See [runtime support and upstream lifecycle dates](docs/RUNTIME_SUPPORT.md).
 
-**Current Version:** 0.109
+**Current Version:** 0.110
 
 **Key Benefit:** Deploy in minutes on shared hosting. No npm, no Composer, no framework overhead. Just PHP + MySQL.
 
@@ -284,6 +284,10 @@ The bootstrap installer:
 - Creates `galleries/` and `cache/` folders
 
 After successful installation, you can delete `setup-gallery.php` via FTP as an extra hardening step.
+
+### Correcting the installed website address
+
+After installation, open **Admin > Settings > Website address** to correct the public URL. Enter an absolute address such as `https://example.com`, including a subdirectory only when the gallery is actually installed there. Saving updates only `base_url` in local `config.php`, preserves other configuration, and requires write access to the file and its directory. No database setting is created or changed. Computed/custom configuration that cannot be safely edited remains a manual file-editing task.
 
 ### Requirements
 
