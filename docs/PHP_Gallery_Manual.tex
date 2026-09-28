@@ -61,8 +61,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.109}
-\newcommand{\manualdate}{27 September 2026}
+\newcommand{\version}{0.110}
+\newcommand{\manualdate}{28 September 2026}
 
 \hypersetup{
   colorlinks=true,
@@ -883,7 +883,7 @@ Browser-assisted create/upload has~additional safeguards. Selecting browser proc
 \subsection{Central Settings hub}
 \index{Settings!central hub}
 
-The~Admin navigation includes a~central \textbf{Settings} page for~site-wide configuration. It~is~divided into General, Public appearance, Content, Media and~browsing, Uploads and~automation, Privacy and~diagnostics, and~Advanced. Each section has~its own stable address, so~refresh, bookmarks, browser history, and~the~no-JavaScript fallback return to~the~same category.
+The~Admin navigation includes a~central \textbf{Settings} page for~site-wide configuration. It~is~divided into General, Website address, Public appearance, Content, Media and~browsing, Uploads and~automation, Privacy and~diagnostics, and~Advanced. Each section has~its own stable address, so~refresh, bookmarks, browser history, and~the~no-JavaScript fallback return to~the~same category.
 
 A~Spotlight-style field searches settings as~you type. It~matches names, descriptions, categories, and~technical names, including controls that are~owned by~specialist Admin pages. Selecting a~result opens the~relevant section or~specialist page and~focuses the~matching control. Arrow keys, Enter, Escape, and~the~clear button can~be~used without leaving the~keyboard.
 
@@ -892,6 +892,16 @@ Frequently used global settings can~be~edited directly from the~hub, including t
 The~hub does not~flatten existing inheritance. Tag-page layout can~continue inheriting the~global grid and~card design, while gallery-specific card, lightbox, and~EXIF/GPS choices stay with the~gallery that owns them. Context-specific gallery and~photo values are~not~turned into global settings.
 
 Secrets are~never shown in~search results or~summaries. Passwords, tokens, API credentials, and~similar values appear only as~safe states such as~Configured, Not~configured, or~a~link to~their specialist page.
+
+\subsubsection{Correcting the~website address}
+\index{Settings!website address}
+\index{configuration!base URL}
+
+Open \ui{Settings > Website address} to~correct the~public installation URL after setup. Enter an~absolute HTTP or~HTTPS address such as~\url{https://example.com}. Include a~path only when the~gallery is~actually installed in~that subdirectory. If~hosting detection added an~unwanted directory, remove it~from this field and~save.
+
+The~save changes only the~top-level \codeword{base_url} string in~\filepath{config.php}; it~does not~create or~change a~database setting. Other configuration values, comments, and~formatting are~preserved. Both the~file and~its containing directory must be~writable. The~application rejects addresses with credentials, query parameters, or~fragments, and~refuses to~rewrite duplicate or~computed configuration values. Edit a~custom configuration manually when it~cannot be~updated safely.
+
+After a~successful save, the~browser opens the~same Settings section at~the~new address. Subsequent requests use the~updated configuration. This setting corrects generated addresses; it~does not~move gallery files or~configure DNS and~web-server routing.
 
 \subsection{Tag metadata administration}
 \index{tags!administration}
