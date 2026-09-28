@@ -1,4 +1,8 @@
 {
+    "admin.settings.section.site": "Website-Adresse",
+    "admin.settings.section.site_hint": "Öffentliche Installationsadresse direkt in config.php.",
+    "admin.settings.item.base_url": "Galerie-URL",
+    "admin.settings.item.base_url.hint": "Vollständige öffentliche Adresse, z. B. https://example.com. Einen Pfad nur bei Installation in einem Unterordner angeben. Speicherung direkt in config.php; keine Datenbankeinstellung wird geändert.",
     "admin.operation.client_capacity": "Dieses Formular ist zu groß, um Wiederholungsversuche auf dieser Seite sicher zu verfolgen. Behalten Sie das ursprüngliche Formular und prüfen Sie seine Eingaben.",
     "admin.operation.client_key_required": "Laden Sie ein erzeugtes Formular zum Erstellen einer Galerie oder zum Hochladen neu, bevor Sie diese Operation starten.",
     "admin.operation.client_unresolved": "Das Ergebnis eines früheren Erstellungs- oder Upload-Auftrags ist ungeklärt. Behalten Sie dieses Formular mit seinen ursprünglichen Eingaben und Dateien. Wiederholen Sie den Auftrag bei Bedarf nach erneuter Anmeldung oder klären Sie sein Ergebnis, bevor Sie andere Arbeiten beginnen.",

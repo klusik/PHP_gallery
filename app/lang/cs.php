@@ -33,6 +33,10 @@
  */
 
 return [
+    'admin.settings.section.site' => 'Adresa webu',
+    'admin.settings.section.site_hint' => 'Veřejná adresa instalace uložená přímo v config.php.',
+    'admin.settings.item.base_url' => 'URL galerie',
+    'admin.settings.item.base_url.hint' => 'Úplná veřejná adresa, například https://example.com. Cestu přidejte pouze tehdy, pokud je galerie skutečně v podadresáři. Ukládá se přímo do config.php; nastavení v databázi se nemění.',
     'admin.operation.client_capacity' => 'Tento formulář je příliš velký pro bezpečné sledování opakovaných pokusů na stránce. Ponechte původní formulář a zkontrolujte jeho údaje.',
     'admin.operation.client_key_required' => 'Před zahájením této operace znovu načtěte vygenerovaný formulář pro vytvoření galerie nebo nahrávání.',
     'admin.operation.client_unresolved' => 'Výsledek předchozího požadavku na vytvoření galerie nebo nahrávání není vyřešen. Ponechte tento formulář i původní údaje a soubory. V případě potřeby se znovu přihlaste a požadavek zopakujte, nebo před zahájením jiné práce nejprve objasněte jeho výsledek.',

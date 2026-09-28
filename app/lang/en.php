@@ -33,6 +33,10 @@
  */
 
 return [
+    'admin.settings.section.site' => 'Website address',
+    'admin.settings.section.site_hint' => 'Public installation URL stored directly in config.php.',
+    'admin.settings.item.base_url' => 'Website URL',
+    'admin.settings.item.base_url.hint' => 'Full public address, for example https://example.com. Include a path only when the gallery is actually installed there. Saves directly to config.php; no database setting is changed.',
     'admin.operation.client_capacity' => 'This form is too large for safe in-page retry tracking. Keep the original form and review its input.',
     'admin.operation.client_key_required' => 'Reload a generated create/upload form before starting this operation.',
     'admin.operation.client_unresolved' => 'An earlier create/upload intent is unresolved. Keep this form and its original fields/files, retry it after reauthentication if needed, or resolve its outcome before starting different work.',

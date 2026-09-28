@@ -36,8 +36,11 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 use InvalidArgumentException;
+use function Gallery\Core\cms_config;
 use function Gallery\Core\cms_runtime_limit;
 use function Gallery\Core\url_for;
+
+require_once __DIR__ . '/site_url.php';
 
 /**
  * Return the stable top-level Settings section taxonomy.
@@ -52,6 +55,12 @@ function admin_settings_sections(): array
             'label' => 'General',
             'description_key' => 'admin.settings.section.general_hint',
             'description' => 'Site identity, public language, URL behavior, and public search.',
+        ],
+        'site' => [
+            'label_key' => 'admin.settings.section.site',
+            'label' => 'Website address',
+            'description_key' => 'admin.settings.section.site_hint',
+            'description' => 'Public installation URL stored directly in config.php.',
         ],
         'appearance' => [
             'label_key' => 'admin.settings.section.appearance',
@@ -348,6 +357,7 @@ function admin_settings_registry(): array
     $theme = theme_settings();
 
     $registry = [
+        'base_url' => admin_settings_entry('base_url', 'site', 'Website URL', 'Full public address, for example https://example.com. Include a path only when the gallery is actually installed there. Saves directly to config.php; no database setting is changed.', 'base_url', 'text', '', (string) (cms_config()['base_url'] ?? ''), '', [], '', true, 'normal', ['max_length' => 2048]),
         'site_name' => admin_settings_entry('site_name', 'general', 'Site name', 'Public site title used in the header and browser title.', 'site_name', 'text', 'Gallery CMS', site_name(), 'admin_theme', [], 'admin-theme-tab-appearance', true, 'normal', ['max_length' => 120]),
         'public_language' => admin_settings_entry('public_language', 'general', 'Public language', 'Default language for anonymous visitors.', 'public_language', 'select', 'en', translation_public_language(), 'admin_theme', [], 'admin-theme-tab-language', true, 'normal', ['allowed' => function_exists('Gallery\\Services\\translation_supported_languages') ? translation_supported_languages() : ['en', 'cs', 'de', 'sv']]),
         'public_language_selector_enabled' => admin_settings_entry('public_language_selector_enabled', 'general', 'Viewer language selector', 'Allow each public viewer to choose a language stored only in that viewer\'s browser; this never changes the site default or another viewer.', 'public_language_selector_enabled', 'checkbox', '1', translation_public_language_selector_enabled() ? '1' : '0', 'admin_theme', [], 'admin-theme-tab-language', true),
@@ -418,6 +428,9 @@ function admin_settings_registry(): array
  */
 function admin_settings_owner_for_id(string $id): string
 {
+    if ($id === 'base_url') {
+        return 'config.php / site_url';
+    }
     if (in_array($id, ['site_name', 'url_rewrite_enabled', 'dev_mode_enabled', 'remote_favicon_discovery_enabled'], true)) {
         return 'app_settings';
     }
@@ -456,6 +469,21 @@ function admin_settings_owner_for_id(string $id): string
 
 /**
  * Build one normalized registry entry.
+ * @param string $id Stable setting identifier.
+ * @param string $group Settings section identifier.
+ * @param string $label Human-readable fallback label.
+ * @param string $description Human-readable fallback explanation.
+ * @param string $key Canonical storage key.
+ * @param string $inputType Presentation control type.
+ * @param string|bool|int|array<string,mixed>|list<string>|null $default Scalar or structured default owned by the setting service.
+ * @param string|bool|int|array<string,mixed>|list<string>|null $current Scalar or structured resolved setting value.
+ * @param string $specializedRoute Dedicated controller route or empty.
+ * @param array<string,mixed> $specializedParams Dedicated route parameters.
+ * @param string $specializedFragment Dedicated page anchor.
+ * @param bool $centralEditable Whether the hub may persist this setting.
+ * @param string $sensitivity Presentation sensitivity classification.
+ * @param array<string,mixed> $validation Input bounds and allowed values.
+ * @param bool $migrationRequired Whether a schema upgrade is needed.
  *
  * @return array<string,mixed> Registry entry.
  */
@@ -476,7 +504,7 @@ function admin_settings_entry(
     array $validation = [],
     bool $migrationRequired = false
 ): array {
-    $explicit = $key !== '' ? admin_settings_has_explicit_value($key) : false;
+    $explicit = $id === 'base_url' ? true : ($key !== '' ? admin_settings_has_explicit_value($key) : false);
     $inheritable = str_starts_with($key, 'tag_page_') || str_starts_with($key, 'home_gallery_grid_');
     return [
         'id' => $id,
@@ -525,8 +553,8 @@ function admin_settings_registry_for_section(string $section): array
  * Normalize one centrally editable submitted value.
  *
  * @param array<string,mixed> $entry Registry entry.
- * @param mixed $value Submitted value.
- * @return mixed Normalized value.
+ * @param string|bool|int|array<string,mixed>|list<string>|null $value Submitted value.
+ * @return string|bool|int|array<string,mixed>|list<string>|null Normalized scalar or structured setting payload owned by its canonical service.
  */
 function admin_settings_normalize_editable_value(array $entry, mixed $value): mixed
 {
@@ -535,6 +563,9 @@ function admin_settings_normalize_editable_value(array $entry, mixed $value): mi
     }
 
     $id = (string) ($entry['id'] ?? '');
+    if ($id === 'base_url') {
+        return site_url_normalize($value);
+    }
     if ($id === 'site_name') {
         $normalized = trim((string) $value);
         return $normalized !== '' ? substr($normalized, 0, 120) : 'Gallery CMS';
@@ -582,7 +613,8 @@ function admin_settings_normalize_editable_value(array $entry, mixed $value): mi
  * Persist one centrally editable value through the canonical service boundary.
  *
  * @param string $id Stable registry identifier.
- * @param mixed $value Normalized submitted value.
+ * @param string|bool|int|array<string,mixed>|list<string>|null $value Normalized scalar or structured setting payload owned by its canonical service.
+ * @return void
  */
 function admin_settings_save_editable_value(string $id, mixed $value): void
 {
@@ -594,6 +626,7 @@ function admin_settings_save_editable_value(string $id, mixed $value): void
     }
 
     match ($id) {
+        'base_url' => site_url_save((string) $value),
         'site_name' => set_site_name((string) $value),
         'public_language' => translation_set_public_language((string) $value),
         'public_language_selector_enabled' => translation_save_public_language_selector_settings((string) $value === '1', translation_public_language_selector_languages()),

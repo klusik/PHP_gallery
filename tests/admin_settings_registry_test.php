@@ -158,7 +158,7 @@ if (!is_string($registrySource) || !is_string($bootstrapSource)) {
     throw new RuntimeException('Unable to read Settings registry or router source.');
 }
 
-$sections = ['general', 'appearance', 'content', 'media', 'uploads', 'privacy', 'advanced'];
+$sections = ['general', 'site', 'appearance', 'content', 'media', 'uploads', 'privacy', 'advanced'];
 $calls = settings_test_registry_calls($registrySource);
 $ids = [];
 $canonicalKeys = [];
