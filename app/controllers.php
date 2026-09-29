@@ -84,6 +84,7 @@ require_once __DIR__ . '/controllers/admin_thumbnails.php';
 require_once __DIR__ . '/controllers/admin_dashboard.php';
 // Load the centralized Admin Settings hub after dashboard setting endpoints.
 require_once __DIR__ . '/controllers/admin_settings.php';
+require_once __DIR__ . '/controllers/admin_setup_wizard.php';
 require_once __DIR__ . '/controllers/admin_database_maintenance.php';
 require_once __DIR__ . '/controllers/admin_maintenance_center.php';
 require_once __DIR__ . '/controllers/admin_gallery_report.php';

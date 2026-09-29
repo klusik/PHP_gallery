@@ -341,6 +341,10 @@ The navigation contract is implemented by `admin_settings_url()` and `admin_sett
 
 The complete source audit and setting inventory is maintained in `docs/ADMIN_SETTINGS_INVENTORY.md`. The central page itself requires no database migration. Optional existing schemas, for example telemetry or per-gallery EXIF/GPS overrides, continue to gate only the features that already depend on them.
 
+The `admin_setup_wizard` route adds a guided Settings workflow, launched or resumed from the central hub. Its service derives steps from the same registry, its controller keeps an administrator-bound session draft, and its view presents explanations, examples, per-setting skips, and a final approval summary. Skipped values remain unchanged. Steps never persist application settings; only the approved final request invokes the canonical domain setters. Theme previews share the existing Theme presentation and browser module.
+
+The first wizard version stages centrally editable settings and explicitly supported scalar Theme settings. Specialized credentials, asset uploads, filesystem relocation, and maintenance operations are explained and deferred to their existing owners; those editor operations are outside the wizard draft. The public installation URL and the physical gallery storage directory remain distinct configuration concepts. The temporary implementation roadmap is `TEMP_SETUP_WIZARD_IMPLEMENTATION.md`.
+
 ### Integration and automation routes
 
 | Page | Handler | Responsibility |
@@ -492,6 +496,7 @@ contract and load order are preserved.
 
 | Module entry point | Part directory | Parts |
 | --- | --- | --- |
+| `app/services/admin_setup_wizard.php` | `app/services/admin_setup_wizard/` | `catalog.php`, `draft.php`, `apply.php` (registry discovery, staged choices, and approved transactional settings writes) |
 | `app/services/admin_dashboard.php` | `app/services/admin_dashboard/` | `maintenance_health.php` (bounded gallery-edit and lazy pending-image-move health) |
 | `app/services/admin_operation_keys.php` | `app/services/admin_operation_keys/` | `diagnostics.php`, `maintenance.php` (bounded replay outcome projection and explicit operator reconciliation) |
 | `app/services/admin_gallery_report.php` | `app/services/admin_gallery_report/` | `job.php`, `image_summary.php`, `gps.php`, `system_summary.php`, `database_section.php`, `content_summary.php`, `query_helpers.php`, `format.php`, `render.php` |

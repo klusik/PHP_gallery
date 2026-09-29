@@ -94,6 +94,7 @@ require_once __DIR__ . '/views/admin_dashboard.php';
 require_once __DIR__ . '/views/admin_trash.php';
 require_once __DIR__ . '/views/admin_language_settings.php';
 require_once __DIR__ . '/views/admin_settings.php';
+require_once __DIR__ . '/views/admin_setup_wizard.php';
 require_once __DIR__ . '/views/navigation_data.php';
 require_once __DIR__ . '/views/admin_gallery_renderers.php';
 require_once __DIR__ . '/views/admin_gallery_forms.php';

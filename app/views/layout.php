@@ -151,6 +151,7 @@ function view_admin_stylesheet_files(): array
         'assets/styles/admin-maintenance-center.css',
         'assets/styles/admin-subtabs.css',
         'assets/styles/admin-theme-preview.css',
+        'assets/styles/admin-setup-wizard.css',
         'assets/styles/admin-reordering.css',
         'assets/styles/admin-media-tools.css',
         'assets/styles/admin-theme-editor.css',

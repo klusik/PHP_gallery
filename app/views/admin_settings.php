@@ -45,6 +45,7 @@ use function Gallery\Services\t;
  * Render the centralized Admin Settings page.
  *
  * @param array<string,mixed> $model Page model.
+ * @return void
  */
 function view_render_admin_settings_page(array $model): void
 {
@@ -61,6 +62,14 @@ function view_render_admin_settings_page(array $model): void
         'title' => t('admin.settings.title', 'Settings'),
         'description' => t('admin.settings.description', 'Central overview of important global settings. Complex, sensitive, and destructive controls remain on their specialized pages.'),
     ]);
+    $wizard = (array) ($model['setup_wizard'] ?? []);
+    if ((string) ($wizard['url'] ?? '') !== '') {
+        echo '<section class="panel admin-setup-wizard-launcher"><h2>' . e(t('admin.setup_wizard.title', 'Setup wizard')) . '</h2>';
+        echo '<p>' . e(t('admin.setup_wizard.intro', 'Review your settings step by step. Nothing is saved until you approve the summary.')) . '</p>';
+        echo '<a class="button" href="' . e((string) $wizard['url']) . '">' . e(!empty($wizard['resume'])
+            ? t('admin.setup_wizard.resume', 'Resume setup wizard')
+            : t('admin.setup_wizard.start', 'Start setup wizard')) . '</a></section>';
+    }
     view_render_admin_settings_search($sections, $registry);
 
     if ($notice !== '') {

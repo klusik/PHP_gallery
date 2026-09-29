@@ -236,3 +236,4 @@ require_once __DIR__ . '/services/maintenance_center.php';
 
 // Load the centralized Admin Settings ownership registry after all setting providers.
 require_once __DIR__ . '/services/admin_settings_registry.php';
+require_once __DIR__ . '/services/admin_setup_wizard.php';

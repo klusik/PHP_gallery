@@ -333,7 +333,7 @@ function customPageWidthValue(value) {
  * @param {HTMLFormElement} form Theme form containing the appearance controls.
  * @return {void} Result value for the caller.
  */
-function setupThemeLivePreview(form) {
+export function setupThemeLivePreview(form) {
     // previewRoot stores the split Appearance editor that owns all preview state.
     const previewRoot = form.querySelector('[data-theme-preview-root]');
     // previewPage stores the miniature public page shown on the right side.
@@ -341,6 +341,10 @@ function setupThemeLivePreview(form) {
     if (!previewRoot || !previewPage) {
         return;
     }
+    if (previewRoot.dataset.themePreviewReady === '1') {
+        return;
+    }
+    previewRoot.dataset.themePreviewReady = '1';
 
     // brandText stores the visible site title inside the preview header.
     const brandText = form.querySelector('[data-theme-preview-brand]');

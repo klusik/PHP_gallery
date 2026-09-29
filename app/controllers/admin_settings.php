@@ -38,10 +38,12 @@ namespace Gallery\Controllers;
 use InvalidArgumentException;
 use Throwable;
 use function Gallery\Core\flash_message;
+use function Gallery\Core\current_user;
 use function Gallery\Core\redirect_to;
 use function Gallery\Core\request_method;
 use function Gallery\Core\require_admin;
 use function Gallery\Core\verify_csrf;
+use function Gallery\Core\url_for;
 use function Gallery\Services\admin_log_event;
 use function Gallery\Services\admin_settings_normalize_editable_value;
 use function Gallery\Services\admin_settings_registry;
@@ -163,5 +165,10 @@ function cms_admin_settings(): void
         'submitted_values' => $submittedValues,
         'notice' => $notice,
         'language_selector' => translation_public_language_selector_view_data(),
+        'setup_wizard' => [
+            'url' => url_for('admin_setup_wizard'),
+            'resume' => is_array($_SESSION['admin_setup_wizard_draft'] ?? null)
+                && (int) ($_SESSION['admin_setup_wizard_draft']['owner'] ?? 0) === (int) (current_user()['id'] ?? 0),
+        ],
     ]);
 }

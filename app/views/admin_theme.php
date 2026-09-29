@@ -80,6 +80,33 @@ function view_render_admin_theme_page(array $viewModel): void
 }
 
 /**
+ * Render the shared miniature public Theme preview from presentation-only data.
+ *
+ * @param array<string,mixed> $preview Prepared site name, Theme values, and optional background URL.
+ * @return void
+ */
+function view_render_admin_theme_live_preview(array $preview): void
+{
+    $siteName = trim((string) ($preview['site_name'] ?? ''));
+    $siteName = $siteName !== '' ? $siteName : 'Gallery CMS';
+    $pageWidthMode = (string) ($preview['page_width'] ?? 'default');
+    if (!in_array($pageWidthMode, ['default', 'wide', 'custom', 'full'], true)) {
+        $pageWidthMode = 'default';
+    }
+    $customPageWidth = max(1024, min(2048, (int) ($preview['page_width_custom'] ?? 1440)));
+
+    echo '<aside class="theme-live-preview" aria-label="' . e(t('admin.theme.appearance.live_preview_label', 'Live theme preview')) . '" data-theme-live-preview>';
+    // The preview starts from the saved or staged page-width mode and custom pixel value before JavaScript runs.
+    echo '<div class="theme-preview-page" data-theme-preview-page data-preview-width="' . e($pageWidthMode) . '" style="--preview-custom-width-scale: ' . number_format(($customPageWidth - 1024) / 1024, 4, '.', '') . ';">';
+    echo '<div class="theme-preview-background"><span data-theme-preview-background-image></span></div>';
+    echo '<header class="theme-preview-header"><strong data-theme-preview-brand>' . e($siteName) . '</strong><nav><span class="theme-preview-link">' . e(t('admin.theme.appearance.preview_home', 'Home')) . '</span><span class="theme-preview-link">' . e(t('admin.theme.appearance.preview_galleries', 'Galleries')) . '</span></nav></header>';
+    echo '<section class="theme-preview-hero"><p>' . e(t('admin.theme.appearance.preview_open_gallery', 'Open gallery')) . '</p><h2 data-theme-preview-hero-title>' . e(t('admin.theme.appearance.preview_gallery_title', 'Aircraft Weekend')) . '</h2><span class="theme-preview-tag">' . e(t('admin.theme.appearance.preview_tag', 'travel')) . '</span></section>';
+    echo '<div class="theme-preview-grid"><article class="theme-preview-card"><div></div><h3>' . e(t('admin.theme.appearance.preview_subgallery_card', 'Subgallery card')) . '</h3><p>' . e(t('admin.theme.appearance.preview_panel_background', 'Panel background')) . '</p></article><article class="theme-preview-card theme-preview-gallery-card"><div></div><h3>' . e(t('admin.theme.appearance.preview_photo_card', 'Photo card')) . '</h3><p>' . e(t('admin.theme.appearance.preview_open_gallery_panel', 'Open gallery panel')) . '</p></article></div>';
+    echo '<div class="theme-preview-pagination"><span>1</span><span>2</span><span>3</span></div></div>';
+    echo '<p class="muted">' . e(t('admin.theme.appearance.preview_hint', 'Preview updates while editing. It is intentionally small, but uses the same colors, font mode, corner radius, and background transparency controls as the public theme.')) . '</p></aside>';
+}
+
+/**
  * Render the Theme Custom CSS tab from controller-prepared presentation data.
  *
  * @param array<string, mixed> $viewModel Controller-prepared labels and preset options.
@@ -416,6 +443,7 @@ function view_render_admin_theme_media_tab(array $viewModel): void
  * Render the Theme Appearance tab from controller-prepared presentation data.
  *
  * @param array<string, mixed> $viewModel Controller-prepared appearance state.
+ * @return void
  */
 function view_render_admin_theme_appearance_tab(array $viewModel): void
 {
@@ -526,17 +554,11 @@ function view_render_admin_theme_appearance_tab(array $viewModel): void
     render_admin_subtab_panel('admin-theme-appearance-subtab-gallery-tags', $appearanceGalleryTagsHtml, false);
 
     ob_start();
-    echo '<aside class="theme-live-preview" aria-label="' . e(t('admin.theme.appearance.live_preview_label', 'Live theme preview')) . '" data-theme-live-preview>';
-    // The preview starts from the saved page-width mode and custom pixel value before JavaScript runs.
-    echo '<div class="theme-preview-page" data-theme-preview-page data-preview-width="' . e($pageWidthMode) . '" style="--preview-custom-width-scale: ' . number_format(($customPageWidth - 1024) / 1024, 4, '.', '') . ';">';
-    echo '<div class="theme-preview-background"><span data-theme-preview-background-image></span></div>';
-    echo '<header class="theme-preview-header"><strong data-theme-preview-brand>' . e($siteName) . '</strong><nav><span class="theme-preview-link">' . e(t('admin.theme.appearance.preview_home', 'Home')) . '</span><span class="theme-preview-link">' . e(t('admin.theme.appearance.preview_galleries', 'Galleries')) . '</span></nav></header>';
-    echo '<section class="theme-preview-hero"><p>' . e(t('admin.theme.appearance.preview_open_gallery', 'Open gallery')) . '</p><h2 data-theme-preview-hero-title>' . e(t('admin.theme.appearance.preview_gallery_title', 'Aircraft Weekend')) . '</h2><span class="theme-preview-tag">' . e(t('admin.theme.appearance.preview_tag', 'travel')) . '</span></section>';
-    echo '<div class="theme-preview-grid"><article class="theme-preview-card"><div></div><h3>' . e(t('admin.theme.appearance.preview_subgallery_card', 'Subgallery card')) . '</h3><p>' . e(t('admin.theme.appearance.preview_panel_background', 'Panel background')) . '</p></article><article class="theme-preview-card theme-preview-gallery-card"><div></div><h3>' . e(t('admin.theme.appearance.preview_photo_card', 'Photo card')) . '</h3><p>' . e(t('admin.theme.appearance.preview_open_gallery_panel', 'Open gallery panel')) . '</p></article></div>';
-    echo '<div class="theme-preview-pagination"><span>1</span><span>2</span><span>3</span></div>';
-    echo '</div>';
-    echo '<p class="muted">' . e(t('admin.theme.appearance.preview_hint', 'Preview updates while editing. It is intentionally small, but uses the same colors, font mode, corner radius, and background transparency controls as the public theme.')) . '</p>';
-    echo '</aside>';
+    view_render_admin_theme_live_preview([
+        'site_name' => $siteName,
+        'page_width' => $pageWidthMode,
+        'page_width_custom' => $customPageWidth,
+    ]);
     $appearancePreviewHtml = ob_get_clean();
     render_admin_subtab_panel('admin-theme-appearance-subtab-preview', $appearancePreviewHtml, false);
     echo '</div>';
