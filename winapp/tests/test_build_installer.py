@@ -127,7 +127,13 @@ class InstallerBuildTests(unittest.TestCase):
         self.exercise_build(fail_at=1, use_installed_dependencies=True)
 
     def test_installed_dependency_preflight_rejects_missing_and_old_packages(self):
-        """Enforce package bounds and missing-package failure without installing."""
+        """Enforce package bounds without installing packages or requiring Tkinter.
+
+        Linux audit runners need no GUI runtime for these negative cases. Stub
+        only the initial Tkinter import; package refusal must happen before Tcl
+        creation or imports of the actual installer build dependencies.
+        """
+        tkinter_stub = types.ModuleType("tkinter")
         for versions in (
             {"PyInstaller": "6.18.0", "Pillow": "12.2.0", "pystray": "0.19.5"},
             {"PyInstaller": "7.0.0", "Pillow": "12.2.0", "pystray": "0.19.5"},
@@ -136,10 +142,12 @@ class InstallerBuildTests(unittest.TestCase):
         ):
             with self.subTest(versions=versions), mock.patch(
                 "importlib.metadata.version", side_effect=versions.__getitem__
-            ):
+            ), mock.patch.dict(sys.modules, {"tkinter": tkinter_stub}):
                 with self.assertRaises(SystemExit):
                     exec(BUILD.installed_dependencies_code(), {})
-        with mock.patch("importlib.metadata.version", side_effect=PackageNotFoundError("pystray")):
+        with mock.patch("importlib.metadata.version", side_effect=PackageNotFoundError("pystray")), mock.patch.dict(
+            sys.modules, {"tkinter": tkinter_stub}
+        ):
             with self.assertRaises(PackageNotFoundError):
                 exec(BUILD.installed_dependencies_code(), {})
 
