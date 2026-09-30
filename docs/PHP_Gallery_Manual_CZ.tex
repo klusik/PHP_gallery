@@ -63,8 +63,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.113.1}
-\newcommand{\manualdate}{30.~září~2026}
+\newcommand{\version}{0.113.2}
+\newcommand{\manualdate}{1.~října~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -1912,6 +1912,8 @@ Pomocné nástroje nasazení & Skripty nasazení Windows/Linux, metadata vydán�
 \bottomrule
 \end{longtable}
 \subsection{Aktualizace aplikace}
+
+Kompaktní přehled vydání sdružuje nainstalovanou a~dostupnou verzi, kanál, stav a~hlavní akce; podrobnosti repozitáře a~GitHub API zůstávají ve sbalené diagnostické sekci. Po dokončení úlohy prohlížeč obnoví přehled z~místních metadat přímo na místě, ponechá panel otevřený a~URL beze změny a~skryje již neaktuální akci stabilní aktualizace. Obnova neprovádí další kontrolu GitHubu. Pokud selže, tlačítkem obnovení stavu zopakujte místní načtení bez opakování instalace.
 
 Aktualizátor kontroluje nastavené kanály, ověřuje balíčky, připravuje obsah, ověřuje požadované běhové soubory a~velikosti, uchovává přepsané soubory v~úložišti obnovy a~aktivuje aktualizaci. Obsluha omezení četnosti a~stav opakovaných pokusů brání opakovaným vzdáleným požadavkům během čekacích období poskytovatele. Karta úlohy s~možností pokračování se objevuje ve \ui{Stav} i~\ui{Pokročilé nástroje}, takže instalace beta, obnova nebo přeinstalace nadále ukazuje průběh tam, kde začala. Stránku lze zavřít a~znovu otevřít bez zahození dokončených kontrolních bodů.
 
