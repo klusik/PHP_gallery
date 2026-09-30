@@ -1,5 +1,49 @@
 # Patch notes
 
+## Version 0.112
+
+Version 0.112 adds complete Czech, German and Swedish editions of the PHP Gallery administrator and developer manual. Each edition is supplied as a searchable PDF and an editable LaTeX source alongside the English reference.
+
+### Highlights
+
+#### Localized product documentation
+
+- Added Czech documentation in `docs/PHP_Gallery_Manual_CZ.tex` and `docs/PHP_Gallery_Manual_CZ.pdf`.
+- Added German documentation in `docs/PHP_Gallery_Manual_DE.tex` and `docs/PHP_Gallery_Manual_DE.pdf`.
+- Added Swedish documentation in `docs/PHP_Gallery_Manual_SV.tex` and `docs/PHP_Gallery_Manual_SV.pdf`.
+- Preserved the installation, administration, Setup Wizard, architecture, security, maintenance and development coverage of the English reference, with localized contents and indexes.
+- Updated all four manual editions to Version 0.112 and added direct documentation links to the README.
+
+### Technical Details
+
+#### Documentation and packaging
+
+- Added language-specific LaTeX typography, hyphenation and table layout for the translated manuals.
+- Rebuilt all four PDF editions with resolved contents, index entries, bookmarks and internal references.
+- Updated registered release markers and `release-metadata.json`, and regenerated `app/core-manifest.json` for the release.
+
+#### Backend, database and frontend
+
+- Added no application feature, route, setting, database migration, table or column.
+- Preserved the runtime behavior, schema policies, access checks and browser assets of Version 0.111; changed only the runtime release marker.
+- Kept manual-language selection independent of the administrator and public interface language settings.
+
+#### Tests
+
+- Added no new regression suite for this documentation-only release; retained qualification through the central release audit.
+- Reviewed PDF edition metadata, reference resolution and rendered manual pages during preparation.
+
+### User Impact
+
+#### For administrators
+
+- Added offline product documentation in Czech, German and Swedish, with editable sources for maintaining each edition.
+- Required no configuration change or database migration for this release.
+
+#### For visitors
+
+- Preserved public gallery behavior and existing interface-language selection.
+
 ## Version 0.111
 
 Version 0.111 adds a guided administrator Setup Wizard. Administrators can stage supported global settings, preview appearance changes, skip individual choices or whole sections, and review all proposed changes before explicitly applying them.
