@@ -61,8 +61,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.110}
-\newcommand{\manualdate}{28 September 2026}
+\newcommand{\version}{0.111}
+\newcommand{\manualdate}{30 September 2026}
 
 \hypersetup{
   colorlinks=true,
@@ -892,6 +892,20 @@ Frequently used global settings can~be~edited directly from the~hub, including t
 The~hub does not~flatten existing inheritance. Tag-page layout can~continue inheriting the~global grid and~card design, while gallery-specific card, lightbox, and~EXIF/GPS choices stay with the~gallery that owns them. Context-specific gallery and~photo values are~not~turned into global settings.
 
 Secrets are~never shown in~search results or~summaries. Passwords, tokens, API credentials, and~similar values appear only as~safe states such as~Configured, Not~configured, or~a~link to~their specialist page.
+
+\subsubsection{Guided Setup Wizard}
+\index{Settings!Setup Wizard}
+\index{Setup Wizard}
+
+Choose \ui{Setup Wizard} at~the~top of~\ui{Settings} to~start or~resume a~guided configuration draft. The~wizard follows the~same eight sections as~the~hub. Short subsections keep related choices together; \ui{Advanced} and~\ui{Expert and~specialist settings} reveal less common options. With JavaScript disabled, all subsection content remains readable and~normal form navigation still works.
+
+Each supported setting has~an~explanation and~an~example. Keep its inclusion checkbox selected to~stage a~value, or~clear it~to~preserve the~original setting. \ui{Skip} preserves the~whole section. \ui{Next}, \ui{Back}, and~subsection navigation do~not~save application settings. Supported Theme choices share the~existing live preview; a~preview is~temporary and~does not~change the~public site.
+
+The~wizard supports safe central Settings values, basic Theme colors and~layout, grid/card and~hero-tag options, bounded upload and~telemetry preferences, thumbnail warm-up, SEO guard, Gallery Trash, automatic updates, and~Scheduled Maintenance preferences. Credentials, API-key actions, uploaded branding, raw CSS, gallery-storage relocation, and~destructive maintenance remain informational. Their specialist pages are~not~opened from the~draft; leave the~wizard before using those workflows. Per-gallery overrides remain unchanged.
+
+The~final review shows proposed changes first. Expand the~unchanged details or~use \ui{Show all settings} to~inspect preserved and~informational items. Select the~approval checkbox and~apply only after reviewing the~summary. \ui{Cancel} or~\ui{Restart} discards the~draft. A~draft belongs to~the~signed-in administrator and~the~current browser session; it~is~not~a~shared configuration document.
+
+Saving validates the~current settings again. If~another session changed an~affected value, the~wizard refuses to~overwrite it. Required database storage must be~verified; missing or~unknown storage blocks the~affected save. Application and~telemetry rows use a~transaction, while website-address changes have a~reversible configuration write for~failure recovery. Trash and~Scheduled Maintenance preferences are~saved through their existing owners as~coherent groups. Secrets are~never placed in~the~draft, summary, or~wizard log.
 
 \subsubsection{Correcting the~website address}
 \index{Settings!website address}
@@ -1887,7 +1901,7 @@ Theme and~layout & Direct palette colors, font mode, rounded corners, page width
 Branding and~browser identity & Site header banner, separator dimensions/stretching, optimized background and~opacity, per-gallery overrides, public cover assets, square-cropped favicon with~32/48/180-pixel generated variants, and~custom CSS presets/editor.\\
 Localization & English canonical fallback plus maintained selectable Czech, German, and~Swedish UI packs, per-viewer browser preference, flag/native-name selector designs, shared browser/server catalogs, pack diagnostics/editor/import/export, and~per-gallery/photo maintained-language content.\\
 Feature switches & Global route-aware switches for~public search, lightbox modes, Picture Manager, image voting, Picture Game, downloads, viewer accounts and~private collections, gallery maps, flight maps, navigation data, SimBrief, OpenAI, local AI metadata, upload API, mobile WebDAV, gallery migration, Media Renamer, and~telemetry.\\
-Central Settings & Searchable categorized registry, keyboard-driven Spotlight navigation, canonical save delegation for~approved global values, specialist deep links, inheritance-aware ownership, default/source labels, and~secret redaction.\\
+Central Settings & Guided staged Setup Wizard with final approval, live preview and~safe owner adapters; searchable categorized registry, keyboard-driven Spotlight navigation, canonical save delegation for~approved global values, specialist deep links, inheritance-aware ownership, default/source labels, and~secret redaction.\\
 Admin gallery workspace & Visibility filter with hidden-row deselection, persistent per-branch collapse state, Collapse/Expand all, hierarchy reordering, visible-page public reorder tools, side-panel editors, and~contextual public-page edit/remove/visibility controls for~signed-in administrators.\\
 Administrator authentication & Username-or-recovery-email login, CSRF/session protection, hashed rate-limit subjects, optional durable login token, password reset by~PHP mail/SMTP, account/profile changes protected by~current-password checks, and~optional Google sign-in that must first be~linked from~an~authenticated password session and~requires the~current password to~disconnect.\\
 Viewer accounts, lifecycle, favourites, private collections, and~unlisted sharing & Administrator direct viewer creation/deletion plus invite-only registration, Admin suspend/restore/sign-out-everywhere controls with~central viewer-authority revocation, forced replacement of~Admin-provisioned temporary passwords before normal viewer authority, scanner-safe email verification and~activation, separate viewer login/logout, dedicated rotating remember-me credential, generic scanner-safe password reset, recent password reauthentication for~sensitive account actions, password/email change, viewer self-deletion, private no-store account/favourite/collection/lifecycle responses, favourite controls on~authorized cards/lightbox images, viewer-owned ordered collections with~live source authorization, one revocable 30-day unlisted read-only collection link with~show-once secret and~clean redirect, recipient-context source ACL intersection without Admin bypass, and~strict separation from~gallery authorization; no~open signup, public collection discovery/profiles, recipient collaboration, comments, or~uploads.\\

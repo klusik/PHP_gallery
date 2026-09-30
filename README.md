@@ -6,7 +6,7 @@ PHP 8.1 is the compatibility minimum. For deployment, use the latest patch relea
 of maintained PHP 8.3 or newer; PHP 8.5 is preferred after staging verification.
 See [runtime support and upstream lifecycle dates](docs/RUNTIME_SUPPORT.md).
 
-**Current Version:** 0.110
+**Current Version:** 0.111
 
 **Key Benefit:** Deploy in minutes on shared hosting. No npm, no Composer, no framework overhead. Just PHP + MySQL.
 
@@ -370,7 +370,7 @@ Then open `http://localhost:8000/` in your browser.
 
 ### Centralized Settings
 
-Use **Settings** in the Admin navigation as the central overview for important global configuration. The hub is intentionally not one giant form. It groups stable peer sections for General, Public appearance, Content, Media and browsing, Uploads and automation, Privacy and diagnostics, and Advanced configuration. Each section shows current values and whether a value is explicitly configured, inherited, or using its default.
+Use **Settings** in the Admin navigation as the central overview for important global configuration. The hub is intentionally not one giant form. It groups stable peer sections for General, Website address, Public appearance, Content, Media and browsing, Uploads and automation, Privacy and diagnostics, and Advanced configuration. Each section shows current values and whether a value is explicitly configured, inherited, or using its default.
 
 The hub can directly edit only settings that already have a safe canonical service setter: site name, public language, URL rewrite, public search when available, the public thumbnail renderer, the global EXIF/GPS display default when its existing schema is ready, and development diagnostics. Theme layout, tag presentation, upload tuning, telemetry, Account credentials, language-pack editing, raw CSS, API keys, database tools and destructive maintenance remain on their existing specialized pages. Those pages remain fully supported and link back to the relevant Settings section.
 
@@ -378,7 +378,13 @@ The hub can directly edit only settings that already have a safe canonical servi
 
 Version 0.97 adds a recoverable gallery trash bin. Administrator gallery deletion now moves the complete selected subtree out of the live gallery root and stores a durable metadata snapshot before removing live rows. Administrators can restore an entry to its original path, permanently delete one entry, or empty the trash in bounded batches from **Maintenance > Trash**. Trash is enabled by default; optional retention-based automatic purge is disabled by default and integrates with scheduled Site Maintenance. Existing installations receive the required state-machine storage through two ordered migrations.
 
-Deep links use stable identifiers such as `?page=admin_settings&section=appearance#settings-appearance`. JavaScript tab changes update the complete query plus hash URL so Back/Forward and refresh preserve the selected section. Without JavaScript, the tab links load the same section as normal pages. See `docs/ADMIN_SETTINGS_INVENTORY.md` for canonical ownership, defaults, fallbacks, sensitivity and migration status.
+Settings links use stable identifiers such as `?page=admin_settings&section=appearance`. JavaScript tab changes preserve the section query without adding a scroll-driving fragment, so Back/Forward and refresh retain the section and the wizard launcher remains visible. Without JavaScript, the tab links load the same section as normal pages. See `docs/ADMIN_SETTINGS_INVENTORY.md` for canonical ownership, defaults, fallbacks, sensitivity and migration status.
+
+#### Guided Setup Wizard
+
+Choose **Setup Wizard** at the top of Settings to start or resume an administrator-bound session draft. The wizard covers the same eight registry sections and offers short subsections, Advanced/Expert disclosure, localized help and live Theme preview. Next, Back and Skip only stage choices; they do not save configuration. Review the proposed changes, check the approval box and apply once to persist supported values. Cancel or restart discards the draft.
+
+Supported values include the safe central Settings fields, basic Theme appearance/layout and hero-tag options, bounded upload and telemetry preferences, thumbnail warm-up, SEO guard, Trash, automatic-update and Scheduled Maintenance preferences. Credentials, file uploads, API-key actions, gallery-storage relocation and destructive tools remain informational. Use their specialized pages after leaving the draft. Skips preserve current values; saving checks schema readiness and rejects concurrent changes rather than silently overwriting them. Per-gallery overrides stay with their galleries.
 
 ### Initial Setup (First Time)
 
