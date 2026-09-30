@@ -63,8 +63,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine Versionsänderung benötigt.
-\newcommand{\version}{0.113.1}
-\newcommand{\manualdate}{30.~September~2026}
+\newcommand{\version}{0.113.2}
+\newcommand{\manualdate}{1.~Oktober~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -1918,6 +1918,8 @@ Bereitstellungshelfer & Windows-/Linux-Bereitstellungsskripte, Veröffentlichung
 \bottomrule
 \end{longtable}
 \subsection{Anwendungsaktualisierungen}
+
+Die kompakte Versionsübersicht fasst installierte und verfügbare Version, Kanal, Status und Hauptaktionen zusammen; Repository- und GitHub-API-Details bleiben in einem eingeklappten Diagnosebereich. Nach Abschluss eines Auftrags aktualisiert der Browser die Übersicht direkt aus lokalen Metadaten, hält das Panel offen und die URL unverändert und blendet eine überholte Aktion für stabile Updates aus. Dabei erfolgt keine weitere GitHub-Prüfung. Schlägt das Laden fehl, wiederholt die Schaltfläche zur Statusaktualisierung nur den lokalen Lesevorgang, ohne die Installation zu wiederholen.
 
 Das Aktualisierungssystem prüft konfigurierte Kanäle, validiert Pakete, bereitet Inhalte vor, prüft erforderliche Laufzeitdateien und Größen, bewahrt überschriebene Dateien im Wiederherstellungsspeicher auf und aktiviert die Aktualisierung. Ratenbegrenzungsbehandlung und Wiederholungszustand verhindern wiederholte entfernte Anfragen während Anbieterwartezeiten. Eine fortsetzbare Auftragskarte erscheint sowohl unter \ui{Status} als auch unter \ui{Erweiterte Werkzeuge}, sodass Beta-Installation, Wiederherstellung oder Neuinstallation ihren Fortschritt weiterhin am Ausgangsort zeigt. Die Seite darf geschlossen und wieder geöffnet werden, ohne abgeschlossene Kontrollpunkte zu verwerfen.
 

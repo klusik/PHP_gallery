@@ -61,8 +61,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.113.1}
-\newcommand{\manualdate}{30~September~2026}
+\newcommand{\version}{0.113.2}
+\newcommand{\manualdate}{1~October~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -1935,6 +1935,8 @@ Deployment helpers & Windows/Linux deploy scripts, release metadata, core-manife
 \end{longtable}
 
 \subsection{Application updates}
+
+The~compact release summary keeps installed and~available versions, channel, status, and~the~main actions together; repository and~GitHub API details remain in~a~collapsed diagnostics section. When a~job completes, the~browser refreshes the~summary from~local metadata in~place, keeps the~panel open and~the~URL unchanged, and~hides an~obsolete stable-update action. This refresh does~not~perform another GitHub check. If~it~fails, use the~status-refresh button to~retry the~local read without repeating the~installation.
 
 The~updater checks configured channels, validates packages, stages content, verifies required runtime files and~sizes, preserves overwritten files in~recovery storage, and~activates the~update. Rate-limit handling and~retry state prevent repeated remote requests during provider wait periods. A~resumable job card appears in~both \ui{Status} and~\ui{Advanced tools}, so~a~beta install, restore, or~reinstall continues to~show its progress where it~was~started. The~page may~be~closed and~reopened without discarding completed checkpoints.
 
