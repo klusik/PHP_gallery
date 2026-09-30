@@ -168,12 +168,24 @@ There is intentionally no viewer controller, view, route, JavaScript, CSS, mail 
 | `app/services/admin_settings_registry.php` | Stable section taxonomy, setting ownership metadata, current/default/source resolution, central-edit whitelist, canonical normalizers/save delegation and deep-link helpers. |
 | `app/views/admin_settings.php` | Accessible Settings overview, tab/section navigation, scoped fieldsets, error summary, current-source labels, redacted summaries and specialized-page links. |
 | `app/views/admin_chrome.php` | Persistent Admin navigation entry for Settings. |
-| `public/assets/gallery-modules/admin-tabs.js` | Shared Admin tab behavior; Settings opts into href-history mode so query and hash remain synchronized. |
+| `public/assets/gallery-modules/admin-tabs.js` | Shared Admin tab behavior; Settings opts into fragment-free href-history mode so the active section query is preserved. |
 | `public/assets/styles/admin.css` | Responsive Settings tab strip and field/summary layout. |
 | `docs/ADMIN_SETTINGS_INVENTORY.md` | Canonical ownership, defaults, fallbacks, migration and sensitivity inventory. |
 | `tests/admin_settings_*_test.php` | Registry, normalization, navigation and rendering/accessibility contracts. |
 
 Future global settings should be registered summary-only first. Enable central editing only after the entry can call the same service normalizer and setter as its specialized owner. Never register per-gallery/per-image values, raw secrets, file editors or destructive actions as generic centrally editable keys.
+
+### Guided Setup Wizard
+
+| Path | Responsibility |
+| --- | --- |
+| `app/controllers/admin_setup_wizard.php` | Authentication, CSRF, session draft ownership/revision, navigation, final approval and response flow. |
+| `app/services/admin_setup_wizard.php`, `app/services/admin_setup_wizard/` | Registry-derived catalog, presentation metadata, normalization, draft/summary, schema preflight, conflicts and canonical apply orchestration. |
+| `app/models/admin_setup_wizard.php` | Database transaction and ordered application/telemetry row locks. |
+| `app/services/theme_layout_settings.php` | Shared safe Theme scalar validation/persistence and public-content revision behavior. |
+| `app/views/admin_setup_wizard.php` | Prepared-data rendering, subsection/disclosure groups, preview and final review. |
+| `public/assets/gallery-modules/admin-setup-wizard.js`, `public/assets/styles/admin-setup-wizard.css` | Form inclusion, presentation-only subsection switching, preview wiring and summary disclosure. |
+| `tests/admin_setup_wizard_*`, `tests/site_url_reversible_test.php`, `tests/theme_layout_settings_test.php` | Wizard behavior, model, rendering, browser-module, URL compensation and Theme owner contracts; orchestrated by the central audit. |
 
 ## Feature Capability Policy
 

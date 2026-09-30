@@ -111,6 +111,7 @@ function setupWizardSummaryDisclosure(wizard) {
     if (!toggle) return;
     const details = Array.from(wizard.querySelectorAll('[data-wizard-summary-unchanged]'));
     const unchangedOnlyGroups = Array.from(wizard.querySelectorAll('[data-wizard-summary-unchanged-group]'));
+    /** Show unchanged-only review groups when the global disclosure is enabled. @returns {void} */
     const syncUnchangedOnlyGroups = () => {
         for (const group of unchangedOnlyGroups) group.hidden = !toggle.checked;
     };

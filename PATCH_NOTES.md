@@ -1,5 +1,67 @@
 # Patch notes
 
+## Version 0.111
+
+Version 0.111 adds a guided administrator Setup Wizard. Administrators can stage supported global settings, preview appearance changes, skip individual choices or whole sections, and review all proposed changes before explicitly applying them.
+
+### Highlights
+
+#### Guided configuration
+
+- Added a launch/resume entry in Admin Settings and eight guided sections derived from the canonical Settings registry.
+- Added short subsections, collapsed Advanced and Expert groups, localized explanations and examples, and a change-first final review with optional unchanged-setting disclosure.
+- Added per-setting and section skips, Back/Next navigation, draft cancellation/restart, and a usable no-JavaScript path.
+- Added live Theme preview for supported appearance, layout, card, grid, GPS-pin, hero-tag and media choices without saving during navigation.
+- Added safe staged upload, telemetry, thumbnail warm-up, SEO guard, Gallery Trash, automatic-update and Scheduled Maintenance preferences.
+- Kept credentials, uploaded assets, raw CSS, API-key lifecycle, filesystem relocation and destructive maintenance as informational items inside the wizard.
+
+### Technical Details
+
+#### Backend and configuration
+
+- Added the `admin_setup_wizard` route, `app/controllers/admin_setup_wizard.php`, `app/services/admin_setup_wizard.php` and its catalog, draft, apply and preference parts, and `app/models/admin_setup_wizard.php`.
+- Bound drafts to the authenticated administrator and validated CSRF, revision and explicit final approval at the controller boundary.
+- Reused canonical domain normalizers and setters; rejected unsupported identifiers, invalid values, unavailable capabilities and stale originals before saving.
+- Added separate stable row-lock domains for application and telemetry settings, sibling preference locks and grouped saves for Trash and Scheduled Maintenance, and reversible `base_url` persistence with compensation on transaction failure.
+- Required positively available settings storage for writes and verified telemetry storage for telemetry edits. Missing or unknown required storage refuses apply; disabled capability-owned settings remain unavailable. Existing specialized owners retain their schema safeguards.
+- Shared bounded Theme layout persistence through `app/services/theme_layout_settings.php` and retained public-content revision updates.
+- Logged stable setting identifiers only; kept secrets and raw exception details out of draft summaries and wizard audit events.
+
+#### Database
+
+- Added no migration, table or column. Reused `app_settings` and existing `telemetry_settings` storage; kept `base_url` exclusively in local `config.php`.
+
+#### Frontend and translations
+
+- Added `app/views/admin_setup_wizard.php`, `public/assets/gallery-modules/admin-setup-wizard.js` and `public/assets/styles/admin-setup-wizard.css`.
+- Reused the existing Theme preview renderer and browser hooks, and refreshed browser import cache keys.
+- Kept subsection switching within the current form and preserved staged values when inclusion controls are toggled.
+- Kept ordinary Settings section URLs fragment-free so the wizard launcher stays visible after navigation or save.
+- Added English, Czech, German and Swedish wizard labels, descriptions and examples.
+
+#### Documentation
+
+- Documented the guided workflow, supported scope, conflict/schema behavior and canonical owners in the README, architecture, code map, testing guide, Settings inventory and administrator manual.
+- Replaced the temporary implementation roadmap with permanent documentation and updated the manual edition to Version 0.111.
+
+#### Tests
+
+- Added deterministic wizard catalog, draft, apply, transaction-model, rendering and browser-module contracts.
+- Covered approval/revision rejection, conflicts, rollback and URL compensation, secret redaction, registry coverage, localization, staged controls, subsections and summary disclosure.
+- Added reversible website-address and shared Theme-layout contracts, and extended upload, telemetry and Settings navigation coverage.
+
+### User Impact
+
+#### For administrators
+
+- Added a guided alternative to editing supported global settings one page at a time, with persistence only after final review and approval.
+- Preserved skipped values, per-gallery overrides and existing specialized editors; unsupported specialist operations remain informational within the draft.
+- Required no additional installation step or database migration for the wizard itself.
+
+#### For visitors
+
+- Preserved the existing public gallery workflow. Supported global choices take effect after an administrator approves and saves the draft.
+
 ## Version 0.110
 
 Version 0.110 adds an administrator setting for correcting the gallery's public installation address after setup. The website URL is saved directly in local configuration, so an incorrectly detected hosting subdirectory can be corrected without editing the file manually.
