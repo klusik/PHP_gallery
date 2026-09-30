@@ -63,8 +63,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.113.1}
-\newcommand{\manualdate}{30~september~2026}
+\newcommand{\version}{0.113.2}
+\newcommand{\manualdate}{1~oktober~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -1914,6 +1914,8 @@ Driftsättningshjälpmedel & Windows- och Linux-driftsättningsskript, utgåveme
 \bottomrule
 \end{longtable}
 \subsection{Programuppdateringar}
+
+Den kompakta versionsöversikten samlar installerad och tillgänglig version, kanal, status och huvudåtgärder; detaljer om kodförrådet och GitHub API finns kvar i ett hopfällt diagnostikavsnitt. När ett jobb slutförs uppdaterar webbläsaren översikten direkt från lokala metadata, håller panelen öppen och URL:en oförändrad och döljer en inaktuell åtgärd för stabil uppdatering. Detta gör ingen ny GitHub-kontroll. Om läsningen misslyckas kan knappen för statusuppdatering försöka läsa lokalt igen utan att upprepa installationen.
 
 Uppdateraren kontrollerar konfigurerade kanaler, validerar paket, förbereder innehåll, verifierar nödvändiga körningsfiler och storlekar, bevarar överskrivna filer i återställningslagring och aktiverar uppdateringen. Hantering av frekvensbegränsning och återförsökstillstånd förhindrar upprepade fjärrbegäranden under leverantörens väntetider. Ett återupptagningsbart jobbkort visas både under \ui{Status} och \ui{Avancerade verktyg}, så att en beta-installation, återställning eller ominstallation fortsätter visa sitt förlopp där den startades. Sidan kan stängas och öppnas igen utan att färdiga kontrollpunkter kastas.
 

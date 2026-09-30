@@ -70,7 +70,7 @@ import { setupAdminSettingsSearch } from './gallery-modules/admin-settings-searc
 import { setupAdminSetupWizard } from './gallery-modules/admin-setup-wizard.js?v=20260930-setup-wizard-v5';
 import { setupAdminLanguageSelectorDesign } from './gallery-modules/admin-language-selector-design.js?v=20260814-language-selector-design-v1';
 import { setupAdminSmartGalleries } from './gallery-modules/admin-smart-galleries.js?v=20260919-smart-gallery-presentation-v1';
-import { setupAdminUpdateJobs } from './gallery-modules/admin-update-jobs.js?v=20260813-resumable-updates-v3';
+import { setupAdminUpdateJobs } from './gallery-modules/admin-update-jobs.js?v=20261001-compact-update-status';
 import { setupAdminGalleryMigration } from './gallery-modules/admin-gallery-migration.js?v=20260920-gallery-migration-policy-v3';
 import { setupAdminGalleryDateSuggestions } from './gallery-modules/admin-gallery-date-suggestion.js?v=20260902-mutation-stage3-part6-v1';
 import { setupAdminGalleryTitleCompletion } from './gallery-modules/admin-gallery-title-completion.js?v=20260920-gallery-title-completion-policy-v4';

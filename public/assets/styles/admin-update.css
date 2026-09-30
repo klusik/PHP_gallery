@@ -23,167 +23,237 @@
  * Split from admin.css on 2026-05-12 to keep admin styling modular.
  */
 
-.admin-update-hero {
+/* Keep density overrides local to Updates, including injected panel copies. */
+.admin-page .admin-updates-page > .admin-tabs {
+    position: static;
+}
+
+.admin-updates-page .admin-update-hero {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
-    gap: 1rem;
-    background:
-        radial-gradient(circle at top left, color-mix(in srgb, var(--admin-accent, #2271b1) 10%, transparent), transparent 28rem),
-        linear-gradient(135deg, #ffffff, #f5f9fc);
+    gap: 0.75rem;
+    padding: 0.85rem 1rem;
+    margin-bottom: 0.75rem;
 }
 
-.admin-update-hero h1,
-.admin-update-hero p {
-    margin-top: 0;
+.admin-updates-page .admin-update-hero h1 {
+    margin: 0.15rem 0 0.3rem;
+    font-size: 1.4rem;
 }
 
-.admin-update-hero h1 {
-    margin-bottom: 0.35rem;
-    font-size: 2rem;
-    letter-spacing: -0.035em;
+.admin-updates-page .admin-update-hero p {
+    margin: 0;
 }
 
-.admin-update-metric-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+.admin-updates-page .admin-update-hero .nav {
+    flex-shrink: 0;
 }
 
-.admin-update-state-card.is-ok {
-    border-color: rgba(22, 163, 74, 0.18);
-    background: linear-gradient(180deg, rgba(240, 253, 244, 0.92), #ffffff);
+.admin-updates-page .admin-update-workspace {
+    position: sticky;
+    top: 4rem;
+    z-index: 5;
+    padding: 0.85rem 1rem;
+    margin-bottom: 0.85rem;
+    border: 1px solid var(--admin-border);
+    border-radius: 10px;
+    background: var(--admin-surface, #fff);
+    box-shadow: var(--admin-shadow, 0 4px 14px rgba(15, 23, 42, 0.08));
 }
 
-.admin-update-state-card.is-attention {
-    border-color: color-mix(in srgb, var(--admin-accent, #2271b1) 28%, transparent);
-    background:
-        radial-gradient(circle at top left, color-mix(in srgb, var(--admin-accent, #2271b1) 12%, transparent), transparent 18rem),
-        #ffffff;
+.admin-side-panel .admin-updates-page .admin-update-workspace {
+    top: 4.65rem;
 }
 
-.admin-update-state-card.is-warning {
-    border-color: rgba(185, 28, 28, 0.18);
-    background: linear-gradient(180deg, rgba(254, 242, 242, 0.94), #ffffff);
+.admin-updates-page .admin-update-release-heading,
+.admin-updates-page .admin-update-release-actions,
+.admin-updates-page .admin-update-inline-form,
+.admin-updates-page .admin-update-automatic-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
 }
 
-.admin-update-status-layout {
+.admin-updates-page .admin-update-release-heading {
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.admin-updates-page .admin-update-release-heading h2 {
+    margin: 0.15rem 0 0;
+    font-size: 1.2rem;
+    line-height: 1.3;
+}
+
+.admin-updates-page .admin-update-state.is-ok h2 {
+    color: var(--admin-ready, #237a3b);
+}
+
+.admin-updates-page .admin-update-state.is-warning h2 {
+    color: var(--admin-danger, #a33a2f);
+}
+
+.admin-updates-page .admin-update-state.is-attention h2 {
+    color: var(--admin-accent, #2271b1);
+}
+
+.admin-updates-page .admin-update-versions {
     display: grid;
-    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
-    gap: 0.85rem;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.75rem;
+    padding-top: 0.65rem;
+    margin: 0.65rem 0 0;
+    border-top: 1px solid var(--admin-border);
 }
 
-.admin-update-card {
+.admin-updates-page .admin-update-versions dt,
+.admin-updates-page .admin-update-diagnostics-grid dt {
+    color: var(--admin-muted-text, #52616f);
+    font-size: 0.82rem;
+}
+
+.admin-updates-page .admin-update-versions dd {
+    margin: 0.15rem 0 0;
+    font-size: 1.1rem;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+}
+
+.admin-updates-page .admin-update-card {
     display: grid;
     align-content: start;
-    gap: 0.7rem;
-    padding: 1rem;
+    gap: 0.5rem;
+    padding: 0.8rem 1rem;
     border: 1px solid var(--admin-border);
-    border-radius: 14px;
-    background: #fbfcfd;
-    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+    border-radius: 10px;
+    background: var(--admin-surface, #fff);
 }
 
-.admin-update-card h3,
-.admin-update-card p,
-.admin-update-card form {
-    margin-top: 0;
-}
-
-.admin-update-card h3 {
-    margin-bottom: 0.1rem;
-    color: #16202a;
-    letter-spacing: -0.015em;
-}
-
-.admin-update-card.is-attention {
-    border-color: color-mix(in srgb, var(--admin-accent, #2271b1) 30%, var(--admin-border, #d7dde3));
-    background:
-        radial-gradient(circle at top left, color-mix(in srgb, var(--admin-accent, #2271b1) 10%, transparent), transparent 20rem),
-        #ffffff;
-}
-
-.admin-update-action-form {
-    gap: 0.75rem;
-}
-
-.admin-update-tools-grid {
-    align-items: stretch;
-}
-
-.admin-update-tool-card {
-    min-height: 0;
-}
-
-.admin-update-tool-card form {
+.admin-updates-page .admin-update-card h3,
+.admin-updates-page .admin-update-card p,
+.admin-updates-page .admin-update-card form,
+.admin-updates-page .admin-update-workspace p,
+.admin-updates-page .admin-update-workspace form,
+.admin-updates-page .admin-update-job p,
+.admin-updates-page .admin-update-job form,
+.admin-updates-page .admin-update-job .notice {
     margin: 0;
 }
 
-.admin-update-tool-card.is-danger {
-    border-color: rgba(185, 28, 28, 0.18);
-    background: linear-gradient(180deg, rgba(254, 242, 242, 0.84), #ffffff);
+.admin-updates-page .admin-update-card h3 {
+    font-size: 1rem;
 }
 
-.admin-update-tool-card .danger-zone {
-    border: 0;
-    padding: 0;
-    background: transparent;
+.admin-updates-page .admin-update-automatic {
+    margin-bottom: 0.75rem;
 }
 
-@media (max-width: 1080px) {
-    .admin-update-metric-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .admin-update-status-layout {
-        grid-template-columns: 1fr;
-    }
-}
-
-@media (max-width: 760px) {
-    .admin-update-hero {
-        display: grid;
-    }
-
-    .admin-update-metric-grid {
-        grid-template-columns: 1fr;
-    }
-}
-
-
-
-.admin-update-job {
-    display: grid;
-    gap: 0.75rem;
-    margin: 0 0 1rem;
-    padding: 1rem;
-    border: 1px solid var(--admin-border);
-    border-radius: 14px;
-    background: #fbfcfd;
-}
-
-.admin-update-job[hidden] {
-    display: none;
-}
-
-.admin-update-job-heading {
-    display: flex;
-    align-items: start;
+.admin-updates-page .admin-update-automatic-actions {
     justify-content: space-between;
-    gap: 1rem;
+    padding-top: 0.25rem;
+    gap: 0.6rem 1rem;
 }
 
-.admin-update-job-heading h3,
-.admin-update-job-heading p {
+.admin-updates-page .admin-update-inline-form .checkbox-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
     margin: 0;
 }
 
-.admin-update-job-progress {
-    overflow: hidden;
-    height: 0.65rem;
-    border-radius: 999px;
-    background: rgba(100, 116, 139, 0.16);
+.admin-updates-page .admin-update-diagnostics > summary,
+.admin-updates-page .admin-update-job-details > summary {
+    cursor: pointer;
+    color: var(--admin-muted-text, #52616f);
+    overflow-wrap: anywhere;
 }
 
-.admin-update-job-progress > span {
+.admin-updates-page .admin-update-diagnostics > summary {
+    padding: 0.55rem 0;
+    font-weight: 600;
+}
+
+.admin-updates-page .admin-update-diagnostics-content {
+    display: grid;
+    gap: 0.65rem;
+    margin-top: 0.35rem;
+}
+
+.admin-updates-page .admin-update-repository {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 1rem;
+}
+
+.admin-updates-page .admin-update-repository .button {
+    margin-left: auto;
+}
+
+.admin-updates-page .admin-update-diagnostics-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.55rem 1rem;
+    margin: 0.15rem 0 0;
+}
+
+.admin-updates-page .admin-update-source-notes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1rem;
+}
+
+.admin-updates-page .admin-update-diagnostics-grid dd {
+    margin: 0.1rem 0 0;
+    overflow-wrap: anywhere;
+}
+
+.admin-updates-page .admin-update-job {
+    display: grid;
+    gap: 0.45rem;
+    margin: 0.75rem 0 0;
+    padding: 0.7rem 0 0;
+    border-top: 1px solid var(--admin-border);
+}
+
+.admin-updates-page [hidden] {
+    display: none !important;
+}
+
+.admin-updates-page .admin-update-job-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.admin-updates-page .admin-update-job-heading > div {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.35rem 0.75rem;
+}
+
+.admin-updates-page .admin-update-job-heading h3 {
+    margin: 0;
+    font-size: 1rem;
+}
+
+.admin-updates-page .admin-update-job-heading > strong {
+    font-variant-numeric: tabular-nums;
+    color: var(--admin-accent, #2271b1);
+}
+
+.admin-updates-page .admin-update-job-progress {
+    overflow: hidden;
+    height: 0.5rem;
+    border-radius: 999px;
+    background: var(--admin-mist, #e7eef6);
+}
+
+.admin-updates-page .admin-update-job-progress > span {
     display: block;
     width: 0;
     height: 100%;
@@ -192,9 +262,98 @@
     transition: width 160ms ease;
 }
 
-.admin-update-job [data-update-job-actions] {
+.admin-updates-page .admin-update-job-details {
+    font-size: 0.85rem;
+}
+
+.admin-updates-page .admin-update-job-details p {
+    padding-top: 0.35rem;
+}
+
+.admin-updates-page .admin-update-job .notice {
+    padding: 0.45rem 0.65rem;
+}
+
+.admin-updates-page .admin-update-job [data-update-job-complete] {
+    border-color: #bce0c4;
+    background: #f0faf3;
+    color: #216537;
+}
+
+.admin-updates-page .admin-update-job [data-update-job-actions] {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     gap: 0.5rem;
+}
+
+.admin-updates-page .admin-update-job [data-update-job-actions]:empty {
+    display: none;
+}
+
+.admin-updates-page .admin-update-progress-location {
+    margin: 0 0 0.5rem;
+}
+
+.admin-updates-page .admin-update-tools-grid {
+    align-items: start;
+    margin-top: 0.75rem;
+}
+
+.admin-updates-page .admin-update-tool-card {
+    min-height: 0;
+    gap: 0.5rem;
+    padding: 0.85rem;
+}
+
+.admin-updates-page .admin-update-tool-card form,
+.admin-updates-page .admin-update-tool-card p {
+    margin: 0;
+}
+
+.admin-updates-page .admin-update-tool-card.is-danger {
+    border-color: rgba(185, 28, 28, 0.18);
+    background: #fff8f7;
+}
+
+.admin-updates-page .admin-update-tool-card .danger-zone {
+    border: 0;
+    padding: 0;
+    background: transparent;
+}
+
+@media (max-width: 760px) {
+    .admin-updates-page .admin-update-hero {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .admin-updates-page .admin-update-diagnostics-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .admin-updates-page .admin-update-workspace {
+        padding: 0.7rem;
+    }
+}
+
+/* Keep the page reachable when a short viewport cannot fit the sticky workspace. */
+@media (max-height: 600px) {
+    .admin-updates-page .admin-update-workspace {
+        position: static;
+    }
+}
+
+@media (max-width: 460px) {
+    .admin-updates-page .admin-update-versions {
+        gap: 0.5rem;
+    }
+
+    .admin-updates-page .admin-update-versions dt {
+        font-size: 0.75rem;
+    }
+
+    .admin-updates-page .admin-update-diagnostics-grid {
+        grid-template-columns: 1fr;
+    }
 }

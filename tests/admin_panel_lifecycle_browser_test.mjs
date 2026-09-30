@@ -28,7 +28,7 @@ const browserStartupTimeoutMs = 15000;
 /** Chromium executable supplied by the central browser registry. */
 const executable = process.argv[2];
 /** Explicit fixture allowlist; alternate wrapper never exposes arbitrary repository files. */
-const fixtureName = ['admin_operation_keys.html', 'admin_cooperative_galleries.html'].includes(process.argv[3]) ? process.argv[3] : 'admin_panel_lifecycle.html';
+const fixtureName = ['admin_operation_keys.html', 'admin_cooperative_galleries.html', 'admin_update_jobs.html'].includes(process.argv[3]) ? process.argv[3] : 'admin_panel_lifecycle.html';
 if (!executable) {
     console.log('SKIP panel lifecycle browser: no Chromium executable supplied.');
     process.exit(0);

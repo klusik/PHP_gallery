@@ -3578,6 +3578,8 @@
     "admin.updates.confirm_reinstall_label": "Pro potvrzení napište REINSTALL",
     "admin.updates.current": "Tato instalace je aktuální.",
     "admin.updates.failed_value": "Aktualizace selhala: {error}",
+    "admin.updates.refresh_status_failed": "Nepodařilo se obnovit stav vydání.",
+    "admin.updates.refresh_status_retry": "Obnovit stav",
     "admin.updates.force_check_button": "Vynutit kontrolu",
     "admin.updates.force_check_completed": "Vynucená kontrola aktualizací přes GitHub byla dokončena.",
     "admin.updates.force_check_completed_with_error": "Vynucená kontrola přes GitHub byla dokončena s varováním: {error}",

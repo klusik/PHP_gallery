@@ -88,6 +88,7 @@ function view_render_update_patch_notes_fragment(array $patchNotesModel): string
  * @param array<string, mixed>|null $job Controller-prepared update job view model.
  * @param bool $installerEnabled Whether installer mutation controls are available.
  * @param string $csrfHtml Trusted CSRF field markup prepared by the controller.
+ * @return void Emits synchronized progress and recovery markup.
  */
 function view_render_update_job_card(?array $job, bool $installerEnabled, string $csrfHtml): void
 {
@@ -98,22 +99,19 @@ function view_render_update_job_card(?array $job, bool $installerEnabled, string
     }
 
     echo ' data-update-job-id="' . e((string) ($job['id'] ?? '')) . '" data-update-job-status="' . e((string) ($job['status'] ?? '')) . '">';
-    echo '<div class="admin-update-job-heading"><div><p class="admin-kicker">Resumable update job</p><h3 data-update-job-title>' . e((string) ($job['stage_label'] ?? '')) . '</h3></div><code>' . e((string) ($job['id'] ?? '')) . '</code></div>';
     $progress = (array) ($job['progress'] ?? []);
     $percent = isset($progress['percent']) ? (int) $progress['percent'] : (int) ($job['stage_percent'] ?? 0);
+    echo '<div class="admin-update-job-heading"><div><p class="admin-kicker">Resumable update job</p><h3 data-update-job-title>' . e((string) ($job['stage_label'] ?? '')) . '</h3></div><strong data-update-job-percent>' . e((string) max(0, min(100, $percent))) . '%</strong></div>';
     echo '<div class="admin-update-job-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' . e((string) $percent) . '"><span data-update-job-progress style="width:' . e((string) max(0, min(100, $percent))) . '%"></span></div>';
     echo '<p class="muted" data-update-job-message>' . e((string) ($progress['message'] ?? 'Update job is ready to continue.')) . '</p>';
-    echo '<p class="muted"><strong>Stage:</strong> <span data-update-job-stage>' . e((string) ($job['stage_label'] ?? '')) . '</span> · <strong>Attempts:</strong> <span data-update-job-attempts>' . e((string) (int) ($job['attempts'] ?? 0)) . '</span></p>';
+    echo '<details class="admin-update-job-details"><summary>' . e(t('admin.updates.status', 'Status')) . ' · <code data-update-job-code>' . e((string) ($job['id'] ?? '')) . '</code></summary><p class="muted"><strong>Stage:</strong> <span data-update-job-stage>' . e((string) ($job['stage_label'] ?? '')) . '</span> · <strong>Attempts:</strong> <span data-update-job-attempts>' . e((string) (int) ($job['attempts'] ?? 0)) . '</span></p></details>';
     if (!empty($job['error']) && is_array($job['error'])) {
         echo '<div class="notice" data-update-job-error>' . e((string) ($job['error']['message'] ?? 'Update failed.')) . ' Reference: <code>' . e((string) ($job['error']['reference'] ?? '')) . '</code></div>';
     } else {
         echo '<div class="notice" data-update-job-error hidden></div>';
     }
-    if ((string) ($job['status'] ?? '') === 'completed') {
-        echo '<div class="notice" data-update-job-complete>Update completed successfully. The saved pre-update snapshot remains available for rollback.</div>';
-    } elseif ((string) ($job['status'] ?? '') === 'cancelled') {
-        echo '<div class="notice" data-update-job-cancelled>Prepared update cancelled before activation. No application files were changed.</div>';
-    }
+    echo '<div class="notice" data-update-job-complete' . ((string) ($job['status'] ?? '') === 'completed' ? '' : ' hidden') . '>Update completed successfully. The saved pre-update snapshot remains available for rollback.</div>';
+    echo '<div class="notice" data-update-job-cancelled' . ((string) ($job['status'] ?? '') === 'cancelled' ? '' : ' hidden') . '>Prepared update cancelled before activation. No application files were changed.</div>';
     echo '<div data-update-job-actions>';
     if ($installerEnabled && !empty($job['can_resume'])) {
         echo '<form method="post" class="inline-action-form" data-update-job-control>' . $csrfHtml;
@@ -141,9 +139,53 @@ function view_render_update_job_card(?array $job, bool $installerEnabled, string
 }
 
 /**
+ * Render the compact release summary shared by the page and passive AJAX refresh.
+ *
+ * @param array<string, mixed> $viewModel Controller-prepared release presentation state.
+ * @return void Emits release state and primary controls.
+ */
+function view_render_update_release_summary(array $viewModel): void
+{
+    $status = (array) ($viewModel['status'] ?? []);
+    $betaActive = !empty($viewModel['beta_active']);
+    $installerEnabled = !empty($viewModel['installer_enabled']);
+    $csrfHtml = (string) ($viewModel['csrf_html'] ?? '');
+    $updateUrl = (string) ($viewModel['urls']['update'] ?? '');
+    // $latestVersion stores the readable latest release value for the status summary.
+    $latestVersion = !empty($status['latest_version']) ? (string) $status['latest_version'] : t('admin.common.unknown', 'Unknown');
+    // $channelLabel stores the readable channel currently installed on this instance.
+    $channelLabel = $betaActive ? t('admin.updates.channel_beta') : t('admin.updates.channel_stable');
+    // $updateStateLabel stores the high-level update state displayed in the summary.
+    $updateStateLabel = !empty($status['error']) ? t('admin.updates.check_failed', 'Check failed') : (!empty($status['update_available']) ? t('admin.updates.update_available', 'Update available') : t('admin.updates.current'));
+    // $updateStateClass stores a neutral class name for update state styling.
+    $updateStateClass = !empty($status['error']) ? 'is-warning' : (!empty($status['update_available']) ? 'is-attention' : 'is-ok');
+
+    echo '<div class="admin-update-release-heading">';
+    echo '<div class="admin-update-state ' . e($updateStateClass) . '"><p class="admin-kicker">' . e(t('admin.updates.status_kicker', 'Release status')) . '</p><h2>' . e($updateStateLabel) . '</h2></div>';
+    echo '<div class="admin-update-release-actions">';
+    echo '<form method="post" action="' . e($updateUrl) . '" class="inline-action-form">' . $csrfHtml . '<input type="hidden" name="update_action" value="force_check"><button type="submit" class="button secondary" title="' . e(t('admin.updates.force_check_hint', 'Bypass the local one-hour cache and ask GitHub now. GitHub rate-limit headers are still recorded and respected after the response.')) . '">' . e(t('admin.updates.force_check_button', 'Force check')) . '</button></form>';
+    if (empty($status['error']) && !empty($status['update_available']) && $installerEnabled) {
+        echo '<form method="post" action="' . e($updateUrl) . '" class="inline-action-form" data-update-job-form>' . $csrfHtml . '<input type="hidden" name="update_action" value="stable_update"><button type="submit" class="is-update-pending">' . e(t('admin.updates.update_button')) . '</button></form>';
+    }
+    echo '<a class="button secondary" href="#admin-update-tab-notes">' . e(t('admin.updates.patch_notes_title', 'Patch notes')) . '</a>';
+    echo '</div></div>';
+    echo '<dl class="admin-update-versions">';
+    echo '<div><dt>' . e(t('admin.updates.installed_version')) . '</dt><dd>' . e((string) ($viewModel['installed_version'] ?? '')) . '</dd></div>';
+    echo '<div><dt>' . e(t('admin.updates.latest_version')) . '</dt><dd>' . e($latestVersion) . '</dd></div>';
+    echo '<div><dt>' . e(t('admin.updates.active_channel')) . '</dt><dd>' . e($channelLabel) . ($betaActive ? ' · <code>' . e((string) ($viewModel['beta_commit'] ?? '')) . '</code>' : '') . '</dd></div>';
+    echo '</dl>';
+    if (!empty($status['error'])) {
+        echo '<p class="muted">Update metadata check failed. Reference: <code>' . e((string) ($viewModel['status_error_reference'] ?? '')) . '</code></p>';
+    } elseif (!empty($status['update_available']) && !$installerEnabled) {
+        echo '<p class="muted">' . e(t('admin.features.built_in_update_installer.disabled_action', 'The built-in update installer is disabled in Admin > Features. Read-only update checks remain available.')) . '</p>';
+    }
+}
+
+/**
  * Render the Admin application update page body.
  *
  * @param array<string, mixed> $viewModel Controller-prepared updater presentation state.
+ * @return void Emits the complete Updates page body.
  */
 function view_render_admin_update_page(array $viewModel): void
 {
@@ -164,21 +206,10 @@ function view_render_admin_update_page(array $viewModel): void
     $githubProjectUrl = (string) ($viewModel['github_project_url'] ?? '');
     $csrfHtml = (string) ($viewModel['csrf_html'] ?? '');
     $urls = (array) ($viewModel['urls'] ?? []);
-    $statusErrorReference = (string) ($viewModel['status_error_reference'] ?? '');
 
-    // $latestVersion stores the readable latest release value for the status summary.
-    $latestVersion = !empty($status['latest_version']) ? (string) $status['latest_version'] : t('admin.common.unknown', 'Unknown');
-    // $channelLabel stores the readable channel currently installed on this instance.
-    $channelLabel = $betaActive ? t('admin.updates.channel_beta') : t('admin.updates.channel_stable');
-    // $updateStateLabel stores the high-level update state displayed in the summary cards.
-    $updateStateLabel = !empty($status['error']) ? t('admin.updates.check_failed', 'Check failed') : (!empty($status['update_available']) ? t('admin.updates.update_available', 'Update available') : t('admin.updates.current'));
-    // $updateStateClass stores a neutral class name for update state styling.
-    $updateStateClass = !empty($status['error']) ? 'is-warning' : (!empty($status['update_available']) ? 'is-attention' : 'is-ok');
-
+    echo '<div class="admin-updates-page">';
     echo '<section class="hero admin-update-hero"><div><p class="admin-kicker">' . e(t('admin.updates.kicker', 'Application maintenance')) . '</p><h1>' . e(t('admin.updates.title')) . '</h1><p class="muted">' . e(t('admin.updates.page_hint', 'Check releases, review patch notes, install updates, and use advanced recovery tools from one place.')) . '</p></div><nav class="nav">';
     echo '<a class="button secondary" href="' . e((string) ($urls['admin'] ?? '')) . '">' . e(t('admin.common.back_to_dashboard')) . '</a>';
-    echo '<a class="button secondary" href="' . e($githubProjectUrl) . '" target="_blank" rel="noopener noreferrer">' . e(t('admin.updates.open_github')) . '</a>';
-    echo '<form method="post" class="inline-action-form">' . $csrfHtml . '<input type="hidden" name="update_action" value="force_check"><button type="submit" class="button secondary">' . e(t('admin.updates.force_check_button', 'Force check')) . '</button></form>';
     echo '</nav></section>';
 
     if ($notice !== '') {
@@ -195,41 +226,17 @@ function view_render_admin_update_page(array $viewModel): void
     ], 'admin-update-tab-status');
 
     ob_start();
-    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.updates.status_kicker', 'Release status')) . '</p><h2>' . e(t('admin.updates.status')) . '</h2></div><p class="muted">' . e(t('admin.updates.status_hint', 'The updater checks GitHub metadata through the service layer and runs installs as durable, resumable jobs with bounded request-time slices.')) . '</p></div>';
-    view_render_update_job_card($activeUpdateJob, $installerEnabled, $csrfHtml);
-    echo '<div class="admin-metric-grid admin-update-metric-grid">';
-    echo '<article class="admin-metric-card"><span>' . e(t('admin.updates.installed_version')) . '</span><strong>' . e($installedVersion) . '</strong><small>' . e(t('admin.updates.installed_version_hint', 'Version currently running on this installation.')) . '</small></article>';
-    echo '<article class="admin-metric-card"><span>' . e(t('admin.updates.latest_version')) . '</span><strong>' . e($latestVersion) . '</strong><small>' . e(empty($status['branch']) ? t('admin.updates.branch_unknown', 'Branch not available') : t('admin.updates.checked_branch_value', ['branch' => (string) $status['branch']])) . '</small></article>';
-    echo '<article class="admin-metric-card"><span>' . e(t('admin.updates.active_channel')) . '</span><strong>' . e($channelLabel) . '</strong><small>' . ($betaActive ? e(t('admin.updates.installed_beta_code')) . ': <code>' . e($betaCommit) . '</code>' : e(t('admin.updates.stable_channel_hint', 'Stable release channel is active.'))) . '</small></article>';
-    echo '<article class="admin-metric-card admin-update-state-card ' . e($updateStateClass) . '"><span>' . e(t('admin.updates.update_state', 'Update state')) . '</span><strong>' . e($updateStateLabel) . '</strong><small>' . e(!empty($status['version_source']) ? t('admin.updates.version_source_value', ['source' => (string) $status['version_source']]) : t('admin.updates.version_source_unknown', 'Version source not reported.')) . '</small></article>';
+    echo '<div class="admin-update-workspace">';
+    echo '<div data-update-release-summary data-update-status-url="' . e((string) ($urls['status_fragment'] ?? '')) . '">';
+    view_render_update_release_summary($viewModel);
     echo '</div>';
-
-    echo '<div class="admin-update-status-layout">';
-    echo '<article class="admin-update-card">';
-    echo '<div><p class="admin-kicker">' . e(t('admin.updates.repository')) . '</p><h3>' . e($repository) . '</h3></div>';
-    echo '<p class="muted">' . e(t('admin.updates.repository_hint', 'The updater uses this repository for release metadata and ZIP downloads.')) . '</p>';
-    echo '<a class="button secondary" href="' . e($githubProjectUrl) . '" target="_blank" rel="noopener noreferrer">' . e(t('admin.updates.open_github')) . '</a>';
-    echo '</article>';
-    echo '<article class="admin-update-card">';
-    echo '<div><p class="admin-kicker">' . e(t('admin.updates.github_api_kicker', 'GitHub API policy')) . '</p><h3>' . e(t('admin.updates.github_api_title', 'Rate-limit status')) . '</h3></div>';
-    echo '<p class="muted">' . e(t('admin.updates.github_api_hint', 'The updater uses response headers from normal GitHub API calls. It does not call /rate_limit just to inspect limits.')) . '</p>';
-    echo '<p class="muted"><strong>' . e(t('admin.updates.github_api_last_checked', 'Last GitHub API response')) . ':</strong> ' . e((string) ($githubApiStatus['last_checked_label'] ?? '')) . '</p>';
-    echo '<p class="muted"><strong>' . e(t('admin.updates.github_api_remaining', 'Remaining quota')) . ':</strong> ' . e((string) ($githubApiStatus['remaining'] ?? '')) . ' / ' . e((string) ($githubApiStatus['limit'] ?? '')) . '</p>';
-    echo '<p class="muted"><strong>' . e(t('admin.updates.github_api_used', 'Used quota')) . ':</strong> ' . e((string) ($githubApiStatus['used'] ?? '')) . '</p>';
-    echo '<p class="muted"><strong>' . e(t('admin.updates.github_api_resource', 'Resource')) . ':</strong> ' . e((string) ($githubApiStatus['resource'] ?? '')) . '</p>';
-    echo '<p class="muted"><strong>' . e(t('admin.updates.github_api_status_code', 'Last HTTP status')) . ':</strong> ' . e((string) ($githubApiStatus['last_status'] ?? '')) . (!empty($githubApiStatus['last_from_cache']) ? ' <span class="tag">' . e(t('admin.updates.github_api_cache_hit', 'served from local ETag cache')) . '</span>' : '') . '</p>';
-    echo '<p class="muted"><strong>' . e(t('admin.updates.github_api_etag', 'ETag')) . ':</strong> ' . e((string) ($githubApiStatus['etag'] ?? '')) . '</p>';
-    echo '<p class="muted"><strong>' . e(t('admin.updates.github_api_reset', 'Primary reset')) . ':</strong> ' . e((string) ($githubApiStatus['reset_label'] ?? '')) . '</p>';
+    echo '<p class="muted" data-update-status-error hidden>' . e(t('admin.updates.refresh_status_failed', 'Could not refresh the release status.')) . ' <button type="button" class="button secondary" data-update-status-refresh>' . e(t('admin.updates.refresh_status_retry', 'Refresh status')) . '</button></p>';
+    view_render_update_job_card($activeUpdateJob, $installerEnabled, $csrfHtml);
+    echo '</div>';
     if (!empty($githubApiStatus['wait']['active'])) {
         echo '<p class="notice"><strong>' . e(t('admin.updates.github_api_waiting', 'Waiting')) . ':</strong> ' . e(t('admin.updates.github_api_next_allowed', 'Next allowed check: {time}', ['time' => (string) ($githubApiStatus['wait']['next_allowed_label'] ?? '')])) . '</p>';
     }
-    echo '<form method="post" class="form-grid admin-update-action-form">' . $csrfHtml;
-    echo '<input type="hidden" name="update_action" value="force_check">';
-    echo '<p class="muted">' . e(t('admin.updates.force_check_hint', 'Bypass the local one-hour cache and ask GitHub now. GitHub rate-limit headers are still recorded and respected after the response.')) . '</p>';
-    echo '<button type="submit" class="button secondary">' . e(t('admin.updates.force_check_button', 'Force check')) . '</button>';
-    echo '</form>';
-    echo '</article>';
-    echo '<article class="admin-update-card">';
+    echo '<article class="admin-update-card admin-update-automatic">';
     echo '<div><p class="admin-kicker">' . e(t('admin.updates.autoupdate_kicker', 'Automatic updates')) . '</p><h3>' . e(!empty($autoupdateStatus['enabled']) ? t('admin.common.enabled', 'Enabled') : t('admin.common.disabled', 'Disabled')) . '</h3></div>';
     if (!$installerEnabled) {
         echo '<p class="muted">' . e(t('admin.features.built_in_update_installer.autoupdate_inactive', 'The automatic-update preference is preserved, but installation is inactive while Built-in Update Installer is disabled.')) . '</p>';
@@ -250,35 +257,37 @@ function view_render_admin_update_page(array $viewModel): void
     // $autoupdateLastResult stores the last persisted automatic updater result, if any.
     $autoupdateLastResult = (string) ($autoupdateStatus['last_result'] ?? '');
     echo '<p class="muted"><strong>' . e(t('admin.updates.autoupdate_last_result_label', 'Last result')) . ':</strong> ' . e($autoupdateLastResult !== '' ? $autoupdateLastResult : t('admin.updates.autoupdate_last_result_none', 'not recorded yet')) . '</p>';
-    echo '<form method="post" class="form-grid admin-update-action-form">' . $csrfHtml;
+    echo '<div class="admin-update-automatic-actions"><form method="post" class="admin-update-inline-form">' . $csrfHtml;
     echo '<input type="hidden" name="update_action" value="autoupdate_settings">';
     echo '<label class="checkbox-row"><input type="checkbox" name="application_autoupdate_enabled" value="1"' . (!empty($autoupdateStatus['enabled']) ? ' checked' : '') . '> <span>' . e(t('admin.updates.autoupdate_enable_label', 'Enable automatic stable updates')) . '</span></label>';
     echo '<button type="submit" class="button secondary">' . e(t('admin.common.save', 'Save')) . '</button>';
     echo '</form>';
-    echo '<form method="post" class="form-grid admin-update-action-form">' . $csrfHtml;
+    echo '<form method="post" class="admin-update-inline-form">' . $csrfHtml;
     echo '<input type="hidden" name="update_action" value="autoupdate_dry_run">';
-    echo '<p class="muted">' . e(t('admin.updates.autoupdate_dry_run_hint', 'Run a metadata-only check now. This updates the last check diagnostics but never installs files.')) . '</p>';
-    echo '<button type="submit" class="button secondary">' . e(t('admin.updates.autoupdate_dry_run_button', 'Run dry check now')) . '</button>';
-    echo '</form></article>';
-    echo '<article class="admin-update-card ' . (!empty($status['update_available']) ? 'is-attention' : '') . '">';
-    echo '<div><p class="admin-kicker">' . e(t('admin.updates.primary_action', 'Primary action')) . '</p><h3>' . e($updateStateLabel) . '</h3></div>';
-    if (!empty($status['error'])) {
-        echo '<p class="muted">Update metadata check failed. Reference: <code>' . e($statusErrorReference) . '</code></p>';
-    } elseif (!empty($status['update_available'])) {
-        echo '<p>' . t('admin.updates.newer_available_description') . '</p>';
-        if ($installerEnabled) {
-            echo '<form method="post" class="form-grid admin-update-action-form" data-update-job-form>' . $csrfHtml;
-            echo '<input type="hidden" name="update_action" value="stable_update">';
-            echo '<button type="submit" class="is-update-pending">' . e(t('admin.updates.update_button')) . '</button></form>';
-        } else {
-            echo '<p class="muted">' . e(t('admin.features.built_in_update_installer.disabled_action', 'The built-in update installer is disabled in Admin > Features. Read-only update checks remain available.')) . '</p>';
-        }
-    } else {
-        echo '<p class="muted">' . e(t('admin.updates.current')) . '</p>';
-        echo '<a class="button secondary" href="#admin-update-tab-notes">' . e(t('admin.updates.patch_notes_title', 'Patch notes')) . '</a>';
-    }
+    echo '<button type="submit" class="button secondary" title="' . e(t('admin.updates.autoupdate_dry_run_hint', 'Run a metadata-only check now. This updates the last check diagnostics but never installs files.')) . '">' . e(t('admin.updates.autoupdate_dry_run_button', 'Run dry check now')) . '</button>';
+    echo '</form></div></article>';
+    echo '<details class="admin-update-diagnostics"><summary>' . e(t('admin.updates.github_api_title', 'Rate-limit status')) . ' · ' . e($repository) . '</summary><div class="admin-update-diagnostics-content">';
+    echo '<article class="admin-update-card admin-update-repository">';
+    echo '<div><p class="admin-kicker">' . e(t('admin.updates.repository')) . '</p><h3>' . e($repository) . '</h3></div>';
+    echo '<p class="muted">' . e(t('admin.updates.repository_hint', 'The updater uses this repository for release metadata and ZIP downloads.')) . '</p>';
+    echo '<a class="button secondary" href="' . e($githubProjectUrl) . '" target="_blank" rel="noopener noreferrer">' . e(t('admin.updates.open_github')) . '</a>';
     echo '</article>';
-    echo '</div>';
+    echo '<article class="admin-update-card">';
+    echo '<div><p class="admin-kicker">' . e(t('admin.updates.github_api_kicker', 'GitHub API policy')) . '</p><h3>' . e(t('admin.updates.github_api_title', 'Rate-limit status')) . '</h3></div>';
+    echo '<p class="muted">' . e(t('admin.updates.github_api_hint', 'The updater uses response headers from normal GitHub API calls. It does not call /rate_limit just to inspect limits.')) . '</p>';
+    echo '<div class="admin-update-source-notes"><p class="muted">' . e(empty($status['branch']) ? t('admin.updates.branch_unknown', 'Branch not available') : t('admin.updates.checked_branch_value', ['branch' => (string) $status['branch']])) . '</p>';
+    echo '<p class="muted">' . e(!empty($status['version_source']) ? t('admin.updates.version_source_value', ['source' => (string) $status['version_source']]) : t('admin.updates.version_source_unknown', 'Version source not reported.')) . '</p></div>';
+    echo '<dl class="admin-update-diagnostics-grid">';
+    echo '<div><dt>' . e(t('admin.updates.github_api_last_checked', 'Last GitHub API response')) . '</dt><dd>' . e((string) ($githubApiStatus['last_checked_label'] ?? '')) . '</dd></div>';
+    echo '<div><dt>' . e(t('admin.updates.github_api_remaining', 'Remaining quota')) . '</dt><dd>' . e((string) ($githubApiStatus['remaining'] ?? '')) . ' / ' . e((string) ($githubApiStatus['limit'] ?? '')) . '</dd></div>';
+    echo '<div><dt>' . e(t('admin.updates.github_api_used', 'Used quota')) . '</dt><dd>' . e((string) ($githubApiStatus['used'] ?? '')) . '</dd></div>';
+    echo '<div><dt>' . e(t('admin.updates.github_api_resource', 'Resource')) . '</dt><dd>' . e((string) ($githubApiStatus['resource'] ?? '')) . '</dd></div>';
+    echo '<div><dt>' . e(t('admin.updates.github_api_status_code', 'Last HTTP status')) . '</dt><dd>' . e((string) ($githubApiStatus['last_status'] ?? '')) . (!empty($githubApiStatus['last_from_cache']) ? ' <span class="tag">' . e(t('admin.updates.github_api_cache_hit', 'served from local ETag cache')) . '</span>' : '') . '</dd></div>';
+    echo '<div><dt>' . e(t('admin.updates.github_api_etag', 'ETag')) . '</dt><dd>' . e((string) ($githubApiStatus['etag'] ?? '')) . '</dd></div>';
+    echo '<div><dt>' . e(t('admin.updates.github_api_reset', 'Primary reset')) . '</dt><dd>' . e((string) ($githubApiStatus['reset_label'] ?? '')) . '</dd></div>';
+    echo '</dl>';
+    echo '</article>';
+    echo '</div></details>';
     $statusHtml = (string) ob_get_clean();
     render_admin_tab_panel('admin-update-tab-status', $statusHtml, true);
 
@@ -434,4 +443,5 @@ function view_render_admin_update_page(array $viewModel): void
     echo '</div>';
     $advancedHtml = (string) ob_get_clean();
     render_admin_tab_panel('admin-update-tab-advanced', $advancedHtml, false);
+    echo '</div>';
 }

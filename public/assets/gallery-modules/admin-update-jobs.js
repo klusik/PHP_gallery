@@ -30,6 +30,15 @@
  */
 
 const ACTIVE_REQUESTS = new Map();
+/**
+ * Purpose: Serialize passive summary requests for each current DOM fragment.
+ * Units: one completed job ID per pending summary request.
+ * Scope: this browser document; detached fragments are weakly held.
+ * Consumers: refreshReleaseSummary().
+ * Rationale: duplicate completion renders must not issue duplicate passive reads.
+ * @type {WeakMap<Element, string>}
+ */
+const SUMMARY_REQUESTS = new WeakMap();
 const STAGE_LABELS = {
     download: 'Downloading package',
     archive_validate: 'Checking archive',
@@ -73,7 +82,11 @@ function csrfTokenFrom(context) {
     return String(context?.querySelector?.('input[name="csrf_token"]')?.value || document.querySelector('input[name="csrf_token"]')?.value || '');
 }
 
-/** Create the updater progress-card markup when a scope is initially empty. */
+/**
+ * Create the updater progress-card markup when a scope is initially empty.
+ * @param {HTMLElement} scope Owned job surface.
+ * @return {void} Inserts progress markup if absent.
+ */
 function ensureScopeMarkup(scope) {
     if (!scope || scope.querySelector('[data-update-job-title]')) {
         return;
@@ -81,18 +94,23 @@ function ensureScopeMarkup(scope) {
     scope.innerHTML = `
         <div class="admin-update-job-heading">
             <div><p class="admin-kicker">Resumable update job</p><h3 data-update-job-title></h3></div>
-            <code data-update-job-code></code>
+            <strong data-update-job-percent>0%</strong>
         </div>
         <div class="admin-update-job-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span data-update-job-progress></span></div>
         <p class="muted" data-update-job-message></p>
-        <p class="muted"><strong>Stage:</strong> <span data-update-job-stage></span> · <strong>Attempts:</strong> <span data-update-job-attempts></span></p>
+        <details class="admin-update-job-details"><summary>Status · <code data-update-job-code></code></summary><p class="muted"><strong>Stage:</strong> <span data-update-job-stage></span> · <strong>Attempts:</strong> <span data-update-job-attempts></span></p></details>
         <div class="notice" data-update-job-error hidden></div>
-        <div class="notice" data-update-job-complete hidden>Update completed successfully. The next request will run the activated application version.</div>
+        <div class="notice" data-update-job-complete hidden>Update completed successfully. The saved pre-update snapshot remains available for rollback.</div>
         <div class="notice" data-update-job-cancelled hidden>Prepared update cancelled before activation. No application files were changed.</div>
         <div data-update-job-actions></div>`;
 }
 
-/** Render a durable update job into every synchronized Admin surface. */
+/**
+ * Render a durable update job into every synchronized Admin surface.
+ * @param {{id:string, status:string, stage?:string, progress?:{percent:number, message:string}}} job Durable public job state.
+ * @param {Document|Element} context DOM context containing update surfaces.
+ * @return {void} Renders progress and schedules passive completion presentation.
+ */
 function renderJob(job, context = document) {
     if (!job || !job.id) {
         return;
@@ -102,6 +120,78 @@ function renderJob(job, context = document) {
     for (const scope of scopes) {
         renderJobInScope(scope, job);
     }
+    syncReleaseControls(job);
+    if (job.status === 'completed') {
+        for (const summary of document.querySelectorAll('[data-update-release-summary]')) {
+            refreshReleaseSummary(summary, String(job.id));
+        }
+    }
+}
+
+/**
+ * Keep stale start controls inactive while a job runs or its summary refreshes.
+ * @param {{status:string}} job Current durable job state.
+ * @return {void} Updates only updater-owned controls.
+ */
+function syncReleaseControls(job) {
+    for (const form of document.querySelectorAll('[data-update-job-form]')) {
+        const action = form.querySelector('input[name="update_action"]')?.value;
+        if (job.status === 'completed' && action === 'stable_update') {
+            form.hidden = true;
+        }
+        for (const button of form.querySelectorAll('button, input[type="submit"]')) {
+            button.disabled = job.status === 'running';
+        }
+    }
+    for (const summary of document.querySelectorAll('[data-update-release-summary]')) {
+        const check = summary.querySelector('input[value="force_check"]')?.form;
+        for (const button of check?.querySelectorAll('button') || []) {
+            button.disabled = job.status === 'running';
+        }
+    }
+}
+
+/**
+ * Refresh only release presentation after completion, using passive local metadata.
+ * @param {HTMLElement} summary Current release summary fragment.
+ * @param {string} jobId Completed job owning this refresh.
+ * @return {Promise<void>} Settles after rendering the summary or its retry affordance.
+ */
+async function refreshReleaseSummary(summary, jobId) {
+    if (!summary.dataset.updateStatusUrl || summary.dataset.updateStatusJob === jobId || SUMMARY_REQUESTS.has(summary)) {
+        return;
+    }
+    const errorBox = summary.parentElement?.querySelector('[data-update-status-error]');
+    SUMMARY_REQUESTS.set(summary, jobId);
+    summary.setAttribute('aria-busy', 'true');
+    if (errorBox) errorBox.hidden = true;
+    try {
+        const response = await fetch(summary.dataset.updateStatusUrl, {
+            credentials: 'same-origin',
+            cache: 'no-store',
+            headers: {'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json'},
+        });
+        const payload = await response.json();
+        if (!response.ok || !payload?.ok || typeof payload.html !== 'string') {
+            throw new Error('Release summary could not be refreshed.');
+        }
+        // A newer job can start while this passive request is pending. Do not
+        // replace its controls with an older completion response.
+        if (!summary.isConnected || findUpdateScopes(document).some(/** Reject a summary for a superseded job. @param {HTMLElement} scope Current progress surface. @return {boolean} Whether another job now owns the surface. */ (scope) => scope.dataset.updateJobId !== jobId)) {
+            return;
+        }
+        summary.innerHTML = payload.html;
+        summary.dataset.updateStatusJob = jobId;
+    } catch {
+        if (errorBox && summary.isConnected) errorBox.hidden = false;
+    } finally {
+        summary.removeAttribute('aria-busy');
+        SUMMARY_REQUESTS.delete(summary);
+        const latestScope = findUpdateScope(document);
+        if (summary.isConnected && latestScope?.dataset.updateJobStatus === 'completed' && latestScope.dataset.updateJobId !== jobId) {
+            refreshReleaseSummary(summary, String(latestScope.dataset.updateJobId || ''));
+        }
+    }
 }
 
 /**
@@ -109,6 +199,9 @@ function renderJob(job, context = document) {
  *
  * Status and Advanced tools intentionally contain the same job surface so an
  * operation remains visible in the tab where the administrator launched it.
+ * @param {HTMLElement} scope Owned synchronized surface.
+ * @param {{id:string, status:string, stage?:string, attempts?:number, progress?:{percent:number, message:string}, error?:{message:string, reference:string}, can_cancel?:boolean, can_rollback?:boolean, can_resume?:boolean}} job Durable public job state.
+ * @return {void} Updates presentation and available recovery controls.
  */
 function renderJobInScope(scope, job) {
     ensureScopeMarkup(scope);
@@ -119,6 +212,8 @@ function renderJobInScope(scope, job) {
     const progress = job.progress || {};
     const percent = Number.isFinite(Number(progress.percent)) ? Number(progress.percent) : Number(job.stage_percent || 0);
     const safePercent = Math.max(0, Math.min(100, Math.round(percent)));
+    const percentLabel = scope.querySelector('[data-update-job-percent]');
+    if (percentLabel) percentLabel.textContent = `${safePercent}%`;
     scope.querySelector('[data-update-job-title]').textContent = stageLabel(job.stage);
     const code = scope.querySelector('[data-update-job-code]') || scope.querySelector('.admin-update-job-heading code');
     if (code) code.textContent = String(job.id);
@@ -237,7 +332,11 @@ function scheduleContinuation(job, endpoint, csrfToken, context = document) {
     }, 250);
 }
 
-/** Start an update job from an intercepted Admin form without navigation. */
+/**
+ * Start an update job from an intercepted Admin form without navigation.
+ * @param {HTMLFormElement} form Submitted updater-owned form.
+ * @return {Promise<void>} Starts bounded continuation or renders a safe failure.
+ */
 async function handleStartForm(form) {
     const endpoint = endpointFor(form);
     const csrfToken = csrfTokenFrom(form);
@@ -259,7 +358,8 @@ async function handleStartForm(form) {
             errorBox.hidden = false;
         }
     } finally {
-        buttons.forEach((button) => { button.disabled = false; });
+        const running = findUpdateScope(document)?.dataset.updateJobStatus === 'running';
+        buttons.forEach(/** Preserve running-job button state after the first response. @param {HTMLButtonElement|HTMLInputElement} button Submitted control. @return {void} Updates disabled state. */ (button) => { button.disabled = running; });
     }
 }
 
@@ -334,6 +434,7 @@ async function rollbackJob(button) {
  * Delegation is intentional because Admin side-panel HTML is inserted after the
  * initial module boot. Non-JavaScript clients keep the server-rendered POST and
  * redirect path because this module is the only code that prevents submission.
+ * @return {void} Installs delegated listeners and resumes existing running jobs.
  */
 export function setupAdminUpdateJobs() {
     if (document.documentElement.dataset.adminUpdateJobsReady === '1') {
@@ -362,7 +463,7 @@ export function setupAdminUpdateJobs() {
         handleStartForm(form);
     });
 
-    document.addEventListener('click', (event) => {
+    document.addEventListener('click', /** Route dynamic recovery and passive-summary controls. @param {MouseEvent} event Delegated click. @return {void} Dispatches the owned updater action. */ (event) => {
         const button = event.target instanceof Element ? event.target.closest('[data-update-job-retry]') : null;
         if (button instanceof HTMLButtonElement) {
             retryJob(button);
@@ -376,6 +477,15 @@ export function setupAdminUpdateJobs() {
         const rollback = event.target instanceof Element ? event.target.closest('[data-update-job-rollback]') : null;
         if (rollback instanceof HTMLButtonElement) {
             rollbackJob(rollback);
+            return;
+        }
+        const refresh = event.target instanceof Element ? event.target.closest('[data-update-status-refresh]') : null;
+        if (refresh instanceof HTMLButtonElement) {
+            const summary = refresh.closest('.admin-update-workspace')?.querySelector('[data-update-release-summary]');
+            const scope = findUpdateScope(document);
+            if (summary && scope?.dataset.updateJobStatus === 'completed') {
+                refreshReleaseSummary(summary, String(scope.dataset.updateJobId || ''));
+            }
         }
     });
 

@@ -3578,6 +3578,8 @@
     "admin.updates.confirm_reinstall_label": "Type REINSTALL to confirm",
     "admin.updates.current": "This installation is current.",
     "admin.updates.failed_value": "Update failed: {error}",
+    "admin.updates.refresh_status_failed": "Could not refresh the release status.",
+    "admin.updates.refresh_status_retry": "Refresh status",
     "admin.updates.force_check_button": "Force check",
     "admin.updates.force_check_completed": "Forced GitHub update check completed.",
     "admin.updates.force_check_completed_with_error": "Forced GitHub update check completed with a warning: {error}",

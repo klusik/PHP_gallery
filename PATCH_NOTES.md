@@ -1,5 +1,62 @@
 # Patch notes
 
+## Version 0.113.2
+
+Version 0.113.2 makes the Admin Updates page more compact and refreshes the installed version and release status in place when an update finishes. It preserves existing updater jobs, recovery controls and public gallery behavior.
+
+### Highlights
+
+#### Clearer update status
+
+- Reorganized release status and actions into a compact, responsive workspace, with repository and GitHub API details in a collapsed diagnostics section.
+- Refreshed the installed version, channel and update availability after a completed job without closing the Admin panel, changing the browser URL or reloading the page.
+- Hid obsolete stable-update controls after completion and added an explicit status-refresh retry when the passive read fails.
+- Kept progress synchronized between Status and Advanced tools.
+
+### Technical Details
+
+#### Backend
+
+- Updated `app/controllers/updates.php` with a prepared release view model and the authenticated, private/no-store `update_status_fragment` response.
+- Compared cached discovery with the version currently installed on disk; the completion refresh reads local metadata without a new GitHub check.
+- Preserved installer capability gating, access checks, CSRF-protected mutations and durable update/recovery semantics.
+
+#### Frontend
+
+- Updated `app/views/admin_updates.php` and `public/assets/styles/admin-update.css` for compact release presentation and responsive layout.
+- Updated `public/assets/gallery-modules/admin-update-jobs.js` with delegated status retry, duplicate-request suppression and protection against detached or superseded job fragments.
+- Updated the module cache key in `public/assets/gallery.js` and added status-refresh messages in English, Czech, German and Swedish.
+
+#### Database and compatibility
+
+- Added no migration, table, column, capability or setting.
+- Preserved ordinary POST fallback for browsers without JavaScript and existing stable/beta installation and rollback workflows.
+- Kept WinApp at its independent version `0.2.0`; changed no companion runtime, dependency or installer behavior.
+
+#### Tests
+
+- Added `tests/admin_updates_ui_test.php` for compact markup, passive status refresh, installed-version comparison and frontend wiring contracts.
+- Extended `tests/admin_update_jobs_browser_test.mjs` and its fixture for completion refresh, failure/retry, synchronized progress and unchanged URL/open-panel behavior.
+- Updated `tests/admin_panel_lifecycle_browser_test.mjs` and registered updater browser coverage in `scripts/audit_registry.php`.
+
+#### Documentation and release artifacts
+
+- Updated registered release markers and metadata for `v_0.113.2`.
+- Updated all four manual editions with the completion/status-refresh workflow and rebuilt their PDFs.
+- Refreshed `app/core-manifest.json`.
+
+### User Impact
+
+#### For administrators
+
+- Improved readability of update status and kept completed installation information current without manual page reloads.
+- Added a local status-refresh retry without repeating installation or consuming another GitHub discovery request.
+- Required no new configuration or database migration.
+
+#### For visitors
+
+- Preserved public gallery rendering and authorized media access.
+
 ## Version 0.113.1
 
 Version 0.113.1 fixes the Windows installer dependency regression test so it runs on headless Linux CI workers without Tkinter. It preserves the gallery and WinApp runtime behavior introduced in Version 0.113.
