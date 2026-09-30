@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine Versionsänderung benötigt.
-\newcommand{\version}{0.112}
+\newcommand{\version}{0.113}
 \newcommand{\manualdate}{30.~September~2026}
 
 \hypersetup{
@@ -626,6 +626,19 @@ So bleiben große virtuelle Sammlungen praktikabel: Das Öffnen einer Smart Gall
 Sind sowohl Website-Downloads als auch die Downloadoption der Smart Gallery aktiviert, kann der Server eine ZIP-Datei aus den aktuell autorisierten passenden Originalen vorbereiten. Er wertet gespeicherte Regeln und Zugriffsrichtlinie erneut aus, statt Dateisystempfade gegenüber dem Browser offenzulegen. Der Archivablauf lehnt Sammlungen mit mehr als 5.000 passenden Bildern ab und erzwingt außerdem eine Gesamtobergrenze für die Bytes der Originaldateien. Bestehende Installationen verwenden eine Grenze von 2~GiB, sofern \texttt{smart\_gallery\_zip\_max\_source\_bytes} nicht in \texttt{config.php} gesetzt ist. Gleichzeitige Anfragen für dieselbe Archivsignatur werden durch eine Dateisperre serialisiert; nach Erhalt der Sperre wird der Cache erneut geprüft, eine eindeutige vorläufige ZIP-Datei geschrieben und das vollständige Archiv durch atomare Umbenennung bereitgestellt. Fehlerprotokolle enthalten nur begrenzte Gründe-/Klassendiagnosen statt unverarbeiteter Ausnahmemeldungen oder privater Serverpfade.
 
 Regeln sind lesbares versioniertes JSON, niemals vom Benutzer geliefertes SQL: Felder/Operatoren stehen auf einer Positivliste, Werte sind vorbereitete Parameter, die Tiefe ist auf fünf begrenzt und höchstens 50 Bedingungen werden akzeptiert. Gelöschte Referenzen treffen nichts; fehlerhafte oder unbekannte Regelversionen werden abgelehnt. Der normale Migrationsablauf ergänzt den Speicher für die Smart-Gallery-Präsentation; vorhandene Smart Galleries übernehmen Design-/Websitevorgaben, bis eine Überschreibung gespeichert wird.
+
+\section{Kooperative Galerien}
+\index{kooperative Galerien}
+Kooperative Galerien verbinden unabhängige, öffentlich erreichbare HTTPS-Installationen. Jeder Betreiber behält seine Alben und Originale. Wenden Sie ausstehende Migrationen über den normalen Verwaltungsablauf an und aktivieren Sie kooperative Galerien unter Funktionen auf jedem Server. Die Funktion ist standardmäßig ausgeschaltet; Ausschalten bewahrt Identitäten, Freundschaften, Vorschläge und Einstellungen.
+
+Koppeln Sie unter Einstellungen > Erweitert > Befreundete Galerien jede Teilnehmerpaarung direkt. Freundschaft allein teilt keine Fotos. Wählen Sie bei Albumzusammenarbeit ein öffentliches, gelistetes Album ohne Passwort und NSFW und erstellen Sie seinen Referenzcode. Ein Teilnehmer kombiniert die Referenzen zu einem unveränderlichen Vorschlag. Jeder Administrator prüft Mitglieder und Berechtigungen und stimmt auf seiner eigenen Installation ausdrücklich zu. Zustellung und Prüfung laufen in begrenzten Schritten im Seitenpanel. E-Mail-Einladungen verwenden den konfigurierten Mailtransport; Öffnen eines Links ist keine Zustimmung.
+
+Nach Aktivierung öffnen Sie gemeinsame Fotos im Panel oder über den Link des lokalen Albums. Quellen behalten Zuordnung und Seitennavigation. Nur vorhandene autorisierte JPEG/WebP-Vorschaubilder werden geteilt; Originale, geschützte Alben und entfernte Schreibzugriffe bleiben ausgeschlossen. Links funktionieren ohne JavaScript. Fehlende Vorschaubilder benötigen die normale Erzeugung. Neue Fotos erhalten vollständige Pfadidentitäten einschließlich Erweiterung. Alte Namen bleiben ohne Massenerneuerung erhalten, mehrdeutige Eigentümerschaft wird jedoch abgelehnt.
+
+Rücknahme, geänderter Quellschutz und lokale Freundschaftswiderrufe sperren nachfolgende autorisierte Zugriffe. Unerreichbare Teilnehmer bleiben durch höchstens 120 Sekunden Prüfungsdauer begrenzt; bereits heruntergeladene Pixel lassen sich nicht zurückrufen. Neue Teilnehmer benötigen einen separaten Vorschlag mit neuer Zustimmung aller. Technische Erneuerung kann bei Nutzung erfolgen; ein Zeitplan ist optional. Fehlendes oder unbekanntes erforderliches Schema verweigert Freigaben und Änderungen. Betriebsgrenzen beschreibt \filepath{docs/COOPERATIVE_GALLERIES.md}.
+
+\subsection{Simulatorposition unter Windows}
+WinApp 0.2.0 verwendet automatisch die Kameraweltposition in MSFS 2024 und fällt bei begrenztem Kamerafehler auf die Flugzeugposition zurück. MSFS 2020 verwendet direkt die Flugzeugposition über dieselbe SimConnect-Laufzeit. Koordinaten sind optional; ein fehlender Simulator verhindert keine Uploads. Die Diagnose unterscheidet die Positionsquelle. Das Installationsprogramm fordert das Beenden der Anwendung vor dem Dateiaustausch an. Schließen Sie laufende Aufgaben vorher ab. Prüfen Sie echte Simulatoren und das Upgrade auf dem Ziel-PC.
 
 \section{Fotos hinzufügen, beschreiben und organisieren}
 \label{sec:photo-workflow}
@@ -1717,7 +1730,7 @@ Schemaänderungen liegen in PHP-Dateien mit Zeitstempel unter \filepath{database
 
 Datenbankbereitschaftsprüfungen werden nur für die aktuelle PHP-Anfrage gespeichert. Das verringert normalerweise wiederholte Metadatenabfragen; eine Migration kann die Antwort jedoch ändern, während derselbe Administrations-, Installations-, Aktualisierungs- oder Befehlszeilenprozess noch läuft. Der Migrationsläufer leert daher diese gespeicherten Antworten nach schemaändernden Anweisungen und erfolgreichen Reparaturcallbacks. Eine Prüfung nach der Migration liest dann den neuen Datenbankkatalog, statt eine Antwort von vorher wiederzuverwenden. Gewöhnliche reine Datenmigrationsanweisungen leeren den Bereitschaftscache nicht, weil sie keine Tabelle, kein Feld und keinen Index erstellen oder entfernen können.
 
-Version~0.106 ergänzte die Tabelle \codeword{maintenance\_jobs} durch eine gewöhnliche Migration. Führen Sie diese wie üblich auf der Galerieverwaltungsseite aus, sofern noch nicht geschehen. Sie benötigt die normale Berechtigung der Installation zur Tabellenerstellung, aber keine Datenbanktrigger, gespeicherten Routinen, \codeword{SUPER}, globale Servervariablenänderung oder separate Datenbankadministratorhilfe. Bis die Migration verfügbar und geprüft ist, verweigert die Wartungszentrale einen Auftragsstart, statt Wartung ohne dauerhafte Kontrollpunkte zu versuchen. Version~\version{} ergänzt keine Datenbankmigration.
+Version~0.106 ergänzte die Tabelle \codeword{maintenance\_jobs} durch eine gewöhnliche Migration. Führen Sie diese wie üblich auf der Galerieverwaltungsseite aus, sofern noch nicht geschehen. Sie benötigt die normale Berechtigung der Installation zur Tabellenerstellung, aber keine Datenbanktrigger, gespeicherten Routinen, \codeword{SUPER}, globale Servervariablenänderung oder separate Datenbankadministratorhilfe. Bis die Migration verfügbar und geprüft ist, verweigert die Wartungszentrale einen Auftragsstart, statt Wartung ohne dauerhafte Kontrollpunkte zu versuchen. Die Migrationen für kooperative Galerien und Vorschaubildidentitäten verwenden denselben normalen Aktualisierungsablauf.
 
 \subsection{Wie die Galerie Datenbankbereitschaft prüft}
 \index{d00062@Datenbank!b00032@Bereitschaft}

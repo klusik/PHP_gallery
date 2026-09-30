@@ -221,3 +221,7 @@ The feature policy may declare a one-time `fresh_default_enabled` only for writa
 ## Future registration rule
 
 A new global setting should be added to the registry only after its canonical owner and normalization path are known. Prefer summary-only registration first. Central editing is allowed only when the registry save callback can delegate to the same service setter used by the specialized page, including the same feature/schema guards and side effects. Do not register per-gallery/per-image values, raw secrets, destructive actions or file editors as centrally editable controls.
+
+## Cooperative galleries
+
+`cooperative_galleries` uses the canonical `feature_flag.cooperative_galleries.enabled` switch, disabled by default. Effective availability controls its routes and Advanced Settings discovery. **Friendly galleries** (`admin_cooperative_galleries`) owns pairing; **Album collaborations** (`admin_cooperative_collaborations`) owns proposal composition, explicit consent, email invitations, verification and withdrawal. Both use the existing side panel and specialized service owners rather than central scalar saves. Disabling cooperation preserves stored identities, peers, proposals and preferences and avoids optional schema/network work. Required missing or unknown storage refuses authority and mutation; revocation retains its narrower verified storage contract. See `docs/COOPERATIVE_GALLERIES.md`.

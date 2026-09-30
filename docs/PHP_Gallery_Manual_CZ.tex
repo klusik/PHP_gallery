@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.112}
+\newcommand{\version}{0.113}
 \newcommand{\manualdate}{30.~září~2026}
 
 \hypersetup{
@@ -623,6 +623,19 @@ Jsou-li povoleny stahování na webu i~volba stahování chytré galerie, server
 
 Pravidla jsou čitelný verzovaný JSON, nikdy uživatelské SQL: pole a~operátory jsou na seznamu povolených, hodnoty jsou připravené parametry, hloubka je omezena na pět a~přijímá se nejvýše 50 podmínek. Odstraněné odkazy neodpovídají ničemu a~chybné či neznámé verze pravidel se odmítají. Běžný migrační postup přidává úložiště prezentace chytrých galerií; existující chytré galerie dědí výchozí hodnoty Vzhledu a~webu, dokud není uloženo přepsání.
 
+\section{Kooperativní galerie}
+\index{kooperativní galerie}
+Kooperativní galerie propojují nezávislé instalace s~veřejně dostupným HTTPS; každý správce si ponechává vlastní alba a~originály. Použijte běžný migrační postup a~zapněte kooperativní galerie ve Funkcích na každém serveru. Funkce je ve výchozím stavu vypnutá. Vypnutí zachovává identity, přátelství, návrhy i~nastavení.
+
+V~Nastavení > Pokročilé > Spřátelené galerie přímo spárujte každou dvojici účastníků. Přátelství samo fotografie nesdílí. Ve spolupráci alb vyberte veřejné, uvedené album bez hesla a~bez NSFW a~vytvořte jeho referenční kód. Jeden účastník spojí kódy do neměnného návrhu; každý správce zkontroluje členy a~oprávnění a~výslovně schválí účast na vlastní instalaci. Doručení a~ověření probíhá v~omezených krocích v~bočním panelu. E-mailová pozvánka používá nastavené odesílání pošty; otevření odkazu není souhlas.
+
+Po aktivaci otevřete sdílené fotografie z~panelu nebo odkazu v~místním albu. Každý zdroj má vlastní označení a~stránkování. Sdílí se pouze existující autorizované náhledy JPEG/WebP; originály, chráněná alba a~vzdálený zápis nejsou podporovány. Odkazy fungují i~bez JavaScriptu. Chybějící náhledy vytvořte běžným postupem. Nové fotografie získávají identitu celé cesty včetně přípony; staré názvy zůstávají zachovány bez hromadné obnovy, nejednoznačné vlastnictví se však odmítá.
+
+Odvolání účasti, změna ochrany nebo místní zrušení přátelství blokuje další autorizovaná čtení. Nedostupný server je omezen nejvýše 120 sekundami platnosti ověření; již stažené pixely nelze odvolat. Přidání účastníka vytváří samostatný návrh vyžadující nový souhlas všech. Obnova ověření může probíhat při používání; plánovač je volitelný. Chybějící nebo neznámé povinné schéma odmítá sdílení i~mutace. Podrobnosti a~omezení nasazení uvádí \filepath{docs/COOPERATIVE_GALLERIES.md}.
+
+\subsection{Poloha simulátoru ve Windows}
+WinApp 0.2.0 automaticky používá světovou polohu kamery MSFS 2024 a~při omezeném selhání přechází na polohu letadla. MSFS 2020 používá přímo polohu letadla přes stejný SimConnect. Souřadnice jsou volitelné; nedostupný simulátor neblokuje nahrávání. Diagnostika rozlišuje zdroj polohy. Instalátor požaduje ukončení aplikace před výměnou souborů; před aktualizací dokončete rozpracované úlohy. Skutečný simulátor a~aktualizaci ověřte na cílovém PC.
+
 \section{Přidávání, popisování a~uspořádání fotografií}
 \label{sec:photo-workflow}
 \index{p00157@práce s fotografiemi}
@@ -1031,7 +1044,7 @@ Volitelná fronta analýzy obrázků, místní nebo založená na pracovním pro
 
 Pro opakované přenosy vytvořte token automatizace nahrávání omezený na zamýšlenou galerii a~odesílejte podporované soubory do koncového bodu nahrávání. Tokeny lze nezávisle zrušit a~je nutné s~nimi zacházet jako s~hesly. Nezpracovaný klíč API se zobrazuje pouze při vytvoření; poté se ukládá jen jeho hash, proto nový klíč při vytváření zkopírujte do zamýšleného klienta. Globální \ui{Správce API} uvádí přihlašovací údaje automatizace napříč galeriemi a~poskytuje centrální postup zrušení bez odhalení původních tajných hodnot. Ovládací prvky jednotlivých galerií zůstávají dostupné pro stejné přihlašovací údaje s~vymezeným rozsahem.
 
-Doprovodná aplikace pro Windows používá stejný kontrakt nahrávání omezený na galerii. Má dva běžné režimy nahrávání. \ui{Sledování složky} ignoruje soubory přítomné již při zahájení sledování, čeká na ustálení nových souborů, místně si pamatuje potvrzená nahrání a~opakovaně zkouší dočasná selhání s~prodlužováním prodlevy. Volitelně může prostřednictvím SimConnect bezprostředně před každým sledovaným nahráním připojit aktuální zeměpisnou šířku, délku a~výšku kamery Microsoft Flight Simulator a~sledovaný zdroj může odstranit pouze po potvrzení úspěšného nahrání galerií. \ui{Ruční nahrávání} přijímá výběr souborů nezávisle na sledované složce a~může buď generovat responzivní náhledy na PC pomocí pracovních procesů, nebo požádat server galerie o~jejich vytvoření. Práce s~náhledy a~síťové nahrávání probíhají souběžně v~navazujících fázích místo předchozí přípravy celého velkého výběru. Podpora oznamovací oblasti umožňuje pokračování sledování nebo ruční úlohy se skrytým hlavním oknem.
+Doprovodná aplikace pro Windows používá stejný kontrakt nahrávání omezený na galerii. Má dva běžné režimy nahrávání. \ui{Sledování složky} ignoruje soubory přítomné již při zahájení sledování, čeká na ustálení nových souborů, místně si pamatuje potvrzená nahrání a~opakovaně zkouší dočasná selhání s~prodlužováním prodlevy. Volitelně může prostřednictvím SimConnect bezprostředně před každým sledovaným nahráním připojit aktuální zeměpisnou šířku, délku a~výšku kamery nebo letadla Microsoft Flight Simulator a~sledovaný zdroj může odstranit pouze po potvrzení úspěšného nahrání galerií. \ui{Ruční nahrávání} přijímá výběr souborů nezávisle na sledované složce a~může buď generovat responzivní náhledy na PC pomocí pracovních procesů, nebo požádat server galerie o~jejich vytvoření. Práce s~náhledy a~síťové nahrávání probíhají souběžně v~navazujících fázích místo předchozí přípravy celého velkého výběru. Podpora oznamovací oblasti umožňuje pokračování sledování nebo ruční úlohy se skrytým hlavním oknem.
 
 Stejná aplikace Windows může volitelně provozovat pracovní proces metadat AI s~nízkou prioritou. Převezme jednu ověřenou analytickou úlohu, stáhne pouze převzatý podklad, vytvoří interní prohledávatelná metadata pomocí vybrané generace místního backendu a~modelu a~vrátí výsledek do stávajícího koncového bodu automatizace nahrávání. Tento pracovní proces je oddělený od lidských popisků. Akce \ui{Vynutit opětovné generování metadat AI} na úrovni galerie vymaže uložené generované řádky a~starý stav fronty pro danou větev a~zařadí novou práci; náročná analýza nadále probíhá v~pracovním procesu Windows.
 
@@ -1711,7 +1724,7 @@ Změny schématu jsou v~souborech PHP s~časovým razítkem pod \filepath{databa
 
 Kontroly připravenosti databáze se pamatují pouze pro aktuální požadavek PHP. To běžně snižuje počet opakovaných dotazů na metadata, ale migrace může změnit odpověď během stále běžícího procesu administrace, instalátoru, aktualizátoru nebo příkazového řádku. Migrační nástroj proto maže zapamatované odpovědi po příkazech měnících schéma a~po úspěšných opravných callbacích. Kontrola po migraci pak čte nový databázový katalog místo použití odpovědi z~doby před migrací. Běžné migrační příkazy měnící pouze data mezipaměť připravenosti nemažou, protože nemohou vytvořit ani odstranit tabulku, pole či index.
 
-Verze~0.106 přidala tabulku \codeword{maintenance\_jobs} běžnou migrací. Pokud dosud nebyla použita, spusťte ji obvyklým způsobem ze stránky správy galerií. Vyžaduje běžné oprávnění instalace vytvářet tabulky, ale nevyžaduje databázové triggery, uložené rutiny, \codeword{SUPER}, změnu globální serverové proměnné ani samostatný zásah správce databáze. Dokud migrace není dostupná a~ověřená, Centrum údržby odmítá zahájit úlohu místo pokusu o~údržbu bez trvalých kontrolních bodů. Verze~\version{} nepřidává žádnou databázovou migraci.
+Verze~0.106 přidala tabulku \codeword{maintenance\_jobs} běžnou migrací. Pokud dosud nebyla použita, spusťte ji obvyklým způsobem ze stránky správy galerií. Vyžaduje běžné oprávnění instalace vytvářet tabulky, ale nevyžaduje databázové triggery, uložené rutiny, \codeword{SUPER}, změnu globální serverové proměnné ani samostatný zásah správce databáze. Dokud migrace není dostupná a~ověřená, Centrum údržby odmítá zahájit úlohu místo pokusu o~údržbu bez trvalých kontrolních bodů. Migrace kooperativních galerií a~identity náhledů používají stejný běžný postup aktualizace.
 
 \subsection{Jak galerie kontroluje připravenost databáze}
 \index{d00024@databáze!p00187@připravenost}
