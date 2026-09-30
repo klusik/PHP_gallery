@@ -36,6 +36,8 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+use InvalidArgumentException;
+
 /**
  * Theme setting service helpers.
  *
@@ -83,6 +85,99 @@ function theme_settings(): array
         'gallery_count_badge_enabled' => !function_exists('Gallery\\Services\\theme_gallery_count_badge_enabled') || theme_gallery_count_badge_enabled() ? '1' : '0',
         'lightbox_browsing_mode' => function_exists('Gallery\\Services\\theme_lightbox_browsing_mode') ? theme_lightbox_browsing_mode() : 'single',
     ];
+}
+
+/**
+ * Return the safe scalar Theme settings that may be edited outside the full Theme form.
+ *
+ * File uploads, custom CSS, background processing, and other compound Theme actions
+ * deliberately remain on the specialized Theme page.
+ *
+ * @return array<string,string> Normalized basic appearance values keyed by stable setting id.
+ */
+function theme_basic_appearance_settings(): array
+{
+    $theme = theme_settings();
+    return [
+        'theme_accent' => (string) ($theme['accent'] ?? '#a5481c'),
+        'theme_accent_dark' => (string) ($theme['accent_dark'] ?? '#713414'),
+        'theme_paper' => (string) ($theme['paper'] ?? '#f8f4ec'),
+        'theme_panel' => (string) ($theme['panel'] ?? '#fffaf0'),
+        'theme_gallery_panel' => (string) ($theme['gallery_panel'] ?? '#fffaf0'),
+        'theme_header_text' => (string) ($theme['header_text'] ?? '#0f172a'),
+        'theme_hero_text' => (string) ($theme['hero_text'] ?? '#0f172a'),
+        'theme_radius' => (string) ($theme['radius'] ?? '16'),
+        'theme_font' => (string) ($theme['font'] ?? 'serif'),
+        'theme_page_width' => (string) ($theme['page_width'] ?? 'default'),
+        'theme_page_width_custom' => (string) ($theme['page_width_custom'] ?? '1440'),
+    ];
+}
+
+/**
+ * Normalize one basic Theme appearance scalar through the Theme domain owner.
+ *
+ * @param string $id Stable basic Theme setting id.
+ * @param scalar|array<array-key,mixed>|object|null $value Submitted value, including invalid non-scalars to reject.
+ * @return non-empty-string Canonical persisted value.
+ */
+function theme_basic_appearance_normalize(string $id, mixed $value): string
+{
+    if (!is_scalar($value) || is_bool($value)) {
+        throw new InvalidArgumentException('Enter a valid appearance value.');
+    }
+    $value = trim((string) $value);
+    if (in_array($id, [
+        'theme_accent',
+        'theme_accent_dark',
+        'theme_paper',
+        'theme_panel',
+        'theme_gallery_panel',
+        'theme_header_text',
+        'theme_hero_text',
+    ], true)) {
+        if (!preg_match('/^#[0-9a-fA-F]{6}$/', $value)) {
+            throw new InvalidArgumentException('Enter a six-digit hexadecimal color.');
+        }
+        return strtolower($value);
+    }
+    if ($id === 'theme_radius') {
+        if (filter_var($value, FILTER_VALIDATE_INT) === false || (int) $value < 0 || (int) $value > 32) {
+            throw new InvalidArgumentException('Choose a corner radius from 0 to 32 pixels.');
+        }
+        return (string) (int) $value;
+    }
+    if ($id === 'theme_font') {
+        if (!in_array($value, ['serif', 'sans'], true)) {
+            throw new InvalidArgumentException('Choose a supported font style.');
+        }
+        return $value;
+    }
+    if ($id === 'theme_page_width') {
+        if (!in_array($value, ['default', 'wide', 'custom', 'full'], true)) {
+            throw new InvalidArgumentException('Choose a supported page-width mode.');
+        }
+        return $value;
+    }
+    if ($id === 'theme_page_width_custom') {
+        if (filter_var($value, FILTER_VALIDATE_INT) === false || (int) $value < 1024 || (int) $value > 2048) {
+            throw new InvalidArgumentException('Choose a custom page width from 1024 to 2048 pixels.');
+        }
+        return (string) (int) $value;
+    }
+    throw new InvalidArgumentException('Unknown basic appearance setting.');
+}
+
+/**
+ * Persist one normalized basic appearance scalar through the Theme storage owner.
+ *
+ * @param string $id Stable basic Theme setting id.
+ * @param scalar $value Submitted scalar value.
+ * @return void
+ */
+function theme_basic_appearance_save(string $id, mixed $value): void
+{
+    $normalized = theme_basic_appearance_normalize($id, $value);
+    set_app_setting($id, $normalized);
 }
 
 /**

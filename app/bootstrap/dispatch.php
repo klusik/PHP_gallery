@@ -143,6 +143,7 @@ function cms_dispatch_page(string $page): void
         'admin_logout' => '\\Gallery\\Controllers\\cms_admin_logout',
         'admin_theme' => '\\Gallery\\Controllers\\cms_admin_theme',
         'admin_settings' => '\\Gallery\\Controllers\\cms_admin_settings',
+        'admin_setup_wizard' => '\\Gallery\\Controllers\\cms_admin_setup_wizard',
         'admin_account' => '\\Gallery\\Controllers\\cms_admin_account',
         'admin_viewer_invitations' => '\\Gallery\\Controllers\\cms_admin_viewer_invitations',
         'admin_update' => '\\Gallery\\Controllers\\cms_admin_update',
@@ -340,4 +341,3 @@ function cms_apply_feature_disabled_route_response(array $decision): void
     }
     render_footer();
 }
-

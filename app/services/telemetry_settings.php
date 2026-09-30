@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-04
+ *   2026-09-29
  */
 
 declare(strict_types=1);
@@ -40,6 +40,7 @@ const TELEMETRY_SEMANTICS_VERSION = '2';
 const TELEMETRY_SEMANTICS_VERSION_KEY = 'telemetry_semantics_version';
 const TELEMETRY_SEMANTICS_EFFECTIVE_AT_KEY = 'telemetry_semantics_v2_effective_at';
 
+use InvalidArgumentException;
 use Throwable;
 use RuntimeException;
 use function Gallery\Core\now_sql;
@@ -132,6 +133,119 @@ function telemetry_all_settings(): array
 function telemetry_setting_enabled(string $key, string $default = '0'): bool
 {
     return telemetry_setting($key, $default) === '1';
+}
+
+/**
+ * Return the strict allowlist and validation metadata for safe telemetry preferences.
+ *
+ * @return array<string,array{input_type:string,default:string,validation:array<string,int>}> Safe setting definitions.
+ */
+function telemetry_admin_editable_setting_definitions(): array
+{
+    return [
+        'telemetry_enabled' => ['input_type' => 'checkbox', 'default' => '0', 'validation' => []],
+        'telemetry_public_usage_enabled' => ['input_type' => 'checkbox', 'default' => '0', 'validation' => []],
+        'telemetry_performance_enabled' => ['input_type' => 'checkbox', 'default' => '0', 'validation' => []],
+        'telemetry_cache_enabled' => ['input_type' => 'checkbox', 'default' => '1', 'validation' => []],
+        'telemetry_database_enabled' => ['input_type' => 'checkbox', 'default' => '1', 'validation' => []],
+        'telemetry_respect_dnt' => ['input_type' => 'checkbox', 'default' => '1', 'validation' => []],
+        'telemetry_admin_excluded' => ['input_type' => 'checkbox', 'default' => '1', 'validation' => []],
+        'telemetry_max_photo_view_seconds' => ['input_type' => 'number', 'default' => '900', 'validation' => ['min' => 10, 'max' => 3600, 'step' => 1]],
+        'telemetry_raw_retention_days' => ['input_type' => 'number', 'default' => '7', 'validation' => ['min' => 1, 'max' => 90, 'step' => 1]],
+        'telemetry_hourly_retention_days' => ['input_type' => 'number', 'default' => '90', 'validation' => ['min' => 7, 'max' => 730, 'step' => 1]],
+        'telemetry_daily_retention_days' => ['input_type' => 'number', 'default' => '730', 'validation' => ['min' => 30, 'max' => 3650, 'step' => 1]],
+    ];
+}
+
+/**
+ * Return telemetry preferences safe for reuse by guided administrative settings flows.
+ *
+ * Export, maintenance, sampling, and other operational controls deliberately remain on the
+ * dedicated telemetry surface. The availability flag fails closed when schema inspection
+ * cannot prove that the telemetry settings table is writable.
+ *
+ * @return array<string,array{input_type:string,current:string,validation:array<string,int>,available:bool}> Safe setting definitions.
+ */
+function telemetry_admin_editable_settings(): array
+{
+    $status = presentation_telemetry_settings_schema_status();
+    $available = schema_inspection_is_available($status);
+    $stored = [];
+    if ($available) {
+        try {
+            foreach (telemetry_model_all_settings() as $row) {
+                $stored[(string) $row['setting_key']] = (string) ($row['setting_value'] ?? '');
+            }
+        } catch (Throwable) {
+            $available = false;
+            $stored = [];
+        }
+    }
+    $settings = [];
+    foreach (telemetry_admin_editable_setting_definitions() as $id => $definition) {
+        $default = (string) $definition['default'];
+        $settings[$id] = [
+            'input_type' => (string) $definition['input_type'],
+            'current' => (string) ($stored[$id] ?? $default),
+            'validation' => (array) $definition['validation'],
+            'available' => $available,
+        ];
+    }
+    return $settings;
+}
+
+/**
+ * Strictly normalize one safe telemetry preference.
+ *
+ * @param string $id Stable telemetry setting id.
+ * @param mixed $value Candidate setting value.
+ * @return string Canonical persisted scalar.
+ */
+function telemetry_admin_setting_normalize(string $id, mixed $value): string
+{
+    $definitions = telemetry_admin_editable_setting_definitions();
+    if (!isset($definitions[$id])) {
+        throw new InvalidArgumentException('Unsupported telemetry setting.');
+    }
+    if (($definitions[$id]['input_type'] ?? '') === 'checkbox') {
+        if (is_bool($value)) {
+            return $value ? '1' : '0';
+        }
+        if (is_int($value) && ($value === 0 || $value === 1)) {
+            return (string) $value;
+        }
+        if (is_string($value) && in_array(trim($value), ['0', '1'], true)) {
+            return trim($value);
+        }
+        throw new InvalidArgumentException('Invalid telemetry checkbox value.');
+    }
+    if (!is_scalar($value)) {
+        throw new InvalidArgumentException('Invalid telemetry numeric value.');
+    }
+    $candidate = trim((string) $value);
+    if ($candidate === '' || !ctype_digit($candidate)) {
+        throw new InvalidArgumentException('Invalid telemetry numeric value.');
+    }
+    $number = (int) $candidate;
+    $validation = $definitions[$id]['validation'];
+    if ($number < (int) ($validation['min'] ?? 0) || $number > (int) ($validation['max'] ?? PHP_INT_MAX)) {
+        throw new InvalidArgumentException('Telemetry value is outside the supported range.');
+    }
+    return (string) $number;
+}
+
+/**
+ * Persist one safe telemetry preference through the telemetry settings owner.
+ *
+ * @param string $id Stable telemetry setting id.
+ * @param mixed $value Candidate setting value.
+ * @return string Persisted canonical scalar.
+ */
+function telemetry_admin_setting_save(string $id, mixed $value): string
+{
+    $normalized = telemetry_admin_setting_normalize($id, $value);
+    telemetry_set_setting($id, $normalized);
+    return $normalized;
 }
 
 /**

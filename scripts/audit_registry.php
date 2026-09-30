@@ -140,6 +140,7 @@ return [
 
     // Explicit registry is intentional. Some Node scripts need arguments or a real browser.
     'node_tests' => [
+        'admin_setup_wizard_browser_test.mjs' => [],
         'admin_panel_lifecycle_browser_test.mjs' => [
             'browser' => true,
             'timeout' => 60,

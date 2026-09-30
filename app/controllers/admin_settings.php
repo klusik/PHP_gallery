@@ -38,10 +38,12 @@ namespace Gallery\Controllers;
 use InvalidArgumentException;
 use Throwable;
 use function Gallery\Core\flash_message;
+use function Gallery\Core\current_user;
 use function Gallery\Core\redirect_to;
 use function Gallery\Core\request_method;
 use function Gallery\Core\require_admin;
 use function Gallery\Core\verify_csrf;
+use function Gallery\Core\url_for;
 use function Gallery\Services\admin_log_event;
 use function Gallery\Services\admin_settings_normalize_editable_value;
 use function Gallery\Services\admin_settings_registry;
@@ -117,7 +119,7 @@ function cms_admin_settings(): void
                     'route_name' => 'admin_settings',
                 ]);
                 flash_message('admin_notice', t('admin.settings.notice.saved', 'Settings saved.'));
-                redirect_to(admin_settings_url($section));
+                redirect_to(admin_settings_url($section, null, false));
             } catch (Throwable $exception) {
                 $errors['_page'][] = t('admin.settings.error.save_failed', 'Settings could not be saved: {error}', ['error' => $exception->getMessage()]);
                 admin_log_event('error', 'settings.central_update_failed', 'Centralized settings update failed.', [
@@ -138,6 +140,7 @@ function cms_admin_settings(): void
     foreach ($sections as $sectionId => $definition) {
         $sections[$sectionId]['panel_id'] = admin_settings_section_id($sectionId);
         $sections[$sectionId]['url'] = admin_settings_url($sectionId);
+        $sections[$sectionId]['tab_url'] = admin_settings_url($sectionId, null, false);
     }
     $registry = admin_settings_registry();
     $languagePresentations = translation_language_presentation();
@@ -163,5 +166,10 @@ function cms_admin_settings(): void
         'submitted_values' => $submittedValues,
         'notice' => $notice,
         'language_selector' => translation_public_language_selector_view_data(),
+        'setup_wizard' => [
+            'url' => url_for('admin_setup_wizard'),
+            'resume' => is_array($_SESSION['admin_setup_wizard_draft'] ?? null)
+                && (int) ($_SESSION['admin_setup_wizard_draft']['owner'] ?? 0) === (int) (current_user()['id'] ?? 0),
+        ],
     ]);
 }

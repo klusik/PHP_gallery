@@ -272,16 +272,17 @@ function admin_settings_section_id(string $section): string
  *
  * @param ?string $section Optional section identifier.
  * @param ?string $return Optional return-context token.
+ * @param bool $includeFragment Whether a section deep-link fragment should be appended.
  * @return string Admin URL.
  */
-function admin_settings_url(?string $section = null, ?string $return = null): string
+function admin_settings_url(?string $section = null, ?string $return = null, bool $includeFragment = false): string
 {
     $params = [];
     $fragment = '';
     if ($section !== null && trim($section) !== '') {
         $section = admin_settings_section_normalize($section);
         $params['section'] = $section;
-        $fragment = '#' . admin_settings_section_id($section);
+        $fragment = $includeFragment ? '#' . admin_settings_section_id($section) : '';
     }
     if ($return !== null && trim($return) !== '') {
         $params['return'] = preg_replace('/[^a-z0-9_.:-]/i', '', $return) ?: '';

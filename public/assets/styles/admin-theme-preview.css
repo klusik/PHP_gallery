@@ -902,7 +902,7 @@ body.admin-image-order-active {
 }
 
 /* Creates a tiny image placeholder whose gradient uses the current accent color. */
-.theme-preview-card div {
+.theme-preview-card > .theme-preview-media {
     min-height: 4.3rem;
     background:
         linear-gradient(135deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0)),
@@ -922,6 +922,87 @@ body.admin-image-order-active {
     margin: 0 0.55rem 0.6rem;
     color: #5d6874;
     font-size: 0.72rem;
+}
+
+/* Gives preview media a positioning context for the GPS and contained-picture badges. */
+.theme-preview-media {
+    position: relative;
+}
+
+/* Mirrors the compact contained-picture badge used by public gallery cards. */
+.theme-preview-count-badge {
+    position: absolute;
+    right: 0.35rem;
+    bottom: 0.35rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.7rem;
+    min-height: 1.4rem;
+    padding: 0.1rem 0.35rem;
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.72);
+    color: #fff;
+    font-size: 0.68rem;
+    font-weight: 800;
+}
+
+/* Places the shared GPS sample on a representative photo card inside the live preview. */
+.theme-preview-gps-pin {
+    position: absolute;
+    right: 0.35rem;
+    top: 0.35rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: calc(var(--gps-pin-background-size, 22) * 1px);
+    height: calc(var(--gps-pin-background-size, 22) * 1px);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 999px;
+    color: #fff;
+    font-size: calc(var(--gps-pin-size, 26) * 0.55px);
+    line-height: 1;
+}
+
+/* Lets the safe card-layout control alter the miniature gallery-card composition. */
+.theme-preview-gallery-card[data-description-layout="horizontal"] {
+    display: grid;
+    grid-template-columns: minmax(3.8rem, 42%) minmax(0, 1fr);
+}
+
+.theme-preview-gallery-card[data-description-layout="horizontal"] > .theme-preview-media {
+    min-height: 100%;
+}
+
+/* Shows more or fewer representative cards as the staged home-grid density changes. */
+.theme-preview-grid {
+    grid-template-columns: repeat(var(--preview-grid-columns, 2), minmax(0, 1fr));
+}
+
+/* Keeps the layout/media state legible without competing with the visual preview. */
+.theme-preview-settings {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.35rem 0.75rem;
+    margin-top: 0.65rem;
+    color: #5d6874;
+    font-size: 0.68rem;
+}
+
+.theme-preview-settings span {
+    min-width: 0;
+}
+
+.theme-preview-settings strong,
+.theme-preview-settings i {
+    font-style: normal;
+}
+
+.theme-preview-settings i {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 /* Presents selected and unselected pagination states with the configured accent. */
@@ -965,6 +1046,10 @@ body.admin-image-order-active {
 
     /* Keeps the preview cards readable on phones. */
     .theme-preview-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .theme-preview-settings {
         grid-template-columns: 1fr;
     }
 }

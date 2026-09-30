@@ -109,6 +109,7 @@ use function Gallery\Services\theme_gallery_description_layout;
 use function Gallery\Services\theme_gps_pin_background_size_value;
 use function Gallery\Services\theme_gps_pin_size_value;
 use function Gallery\Services\theme_lightbox_browsing_mode;
+use function Gallery\Services\theme_layout_safe_save;
 use function Gallery\Services\theme_hero_tag_display_all_enabled;
 use function Gallery\Services\theme_hero_tag_scrollbar_enabled;
 use function Gallery\Services\theme_hero_tag_scrollbar_rows;
@@ -442,15 +443,15 @@ function admin_theme_process_post(bool $gpsMapsFeatureEnabled, bool $lightboxMod
         $themeBackgroundSource = (string) ($_POST['theme_background_source'] ?? '');
         set_app_setting('theme_background_source', in_array($themeBackgroundSource, ['upload', 'existing', 'collage'], true) ? $themeBackgroundSource : '');
         if ($gpsMapsFeatureEnabled) {
-            set_app_setting('theme_gps_pin_enabled', !empty($_POST['theme_gps_pin_enabled']) ? '1' : '0');
-            set_app_setting('theme_gps_pin_background_enabled', !empty($_POST['theme_gps_pin_background_enabled']) ? '1' : '0');
-            set_app_setting('theme_gps_pin_size', (string) theme_gps_pin_size_value($_POST['theme_gps_pin_size'] ?? null));
-            set_app_setting('theme_gps_pin_background_size', (string) theme_gps_pin_background_size_value($_POST['theme_gps_pin_background_size'] ?? null));
+            theme_layout_safe_save('theme_gps_pin_enabled', !empty($_POST['theme_gps_pin_enabled']) ? '1' : '0');
+            theme_layout_safe_save('theme_gps_pin_background_enabled', !empty($_POST['theme_gps_pin_background_enabled']) ? '1' : '0');
+            theme_layout_safe_save('theme_gps_pin_size', (string) theme_gps_pin_size_value($_POST['theme_gps_pin_size'] ?? null));
+            theme_layout_safe_save('theme_gps_pin_background_size', (string) theme_gps_pin_background_size_value($_POST['theme_gps_pin_background_size'] ?? null));
             if (!empty($_POST['reset_gps_pin_size'])) {
-                set_app_setting('theme_gps_pin_enabled', '1');
-                set_app_setting('theme_gps_pin_background_enabled', '1');
-                set_app_setting('theme_gps_pin_size', '26');
-                set_app_setting('theme_gps_pin_background_size', '22');
+                theme_layout_safe_save('theme_gps_pin_enabled', '1');
+                theme_layout_safe_save('theme_gps_pin_background_enabled', '1');
+                theme_layout_safe_save('theme_gps_pin_size', '26');
+                theme_layout_safe_save('theme_gps_pin_background_size', '22');
             }
             // The GPS pin controls are part of the theme editor even when no color/font override changed.
             // Mark the form as changed so the save flow consistently persists the full appearance state.
@@ -491,40 +492,33 @@ function admin_theme_process_post(bool $gpsMapsFeatureEnabled, bool $lightboxMod
         set_app_setting('theme_branding_separator_width', (string) theme_branding_separator_width_value($_POST['theme_branding_separator_width'] ?? null));
         set_app_setting('theme_branding_separator_height', (string) theme_branding_separator_height_value($_POST['theme_branding_separator_height'] ?? null));
         set_app_setting('theme_branding_separator_stretch', !empty($_POST['theme_branding_separator_stretch']) ? '1' : '0');
-        // $previousDescriptionLayout stores the rendered public-card layout before this save.
-        $previousDescriptionLayout = theme_gallery_description_layout();
-        // $nextDescriptionLayout stores the submitted public-card layout after validation.
-        $nextDescriptionLayout = gallery_description_layout_normalize($_POST['theme_gallery_description_layout'] ?? 'vertical');
-        set_app_setting('theme_gallery_description_layout', $nextDescriptionLayout);
-        if ($nextDescriptionLayout !== $previousDescriptionLayout) {
-            // The description layout changes public-card HTML classes, not only CSS.
-            // Bump a content revision so public HTML caches and diagnostics can see the change immediately.
-            set_app_setting('theme_public_content_revision', (string) time());
-        }
-        set_app_setting('theme_gallery_count_badge_enabled', !empty($_POST['theme_gallery_count_badge_enabled']) ? '1' : '0');
+        // The shared Theme owner preserves the same public-content revision side effect for card-layout changes.
+        theme_layout_safe_save(
+            'theme_gallery_description_layout',
+            gallery_description_layout_normalize($_POST['theme_gallery_description_layout'] ?? 'vertical')
+        );
+        theme_layout_safe_save('theme_gallery_count_badge_enabled', !empty($_POST['theme_gallery_count_badge_enabled']) ? '1' : '0');
         // Public thumbnail renderer values and their public-content revision side effect share one service path.
         public_thumbnail_rendering_mode_save_with_revision($_POST['public_thumbnail_rendering_mode'] ?? null);
         if ($lightboxModesFeatureEnabled) {
-            // $previousLightboxBrowsingMode stores the currently rendered lightbox mode before this save.
-            $previousLightboxBrowsingMode = theme_lightbox_browsing_mode();
-            // $nextLightboxBrowsingMode stores the submitted public lightbox browsing-mode default after validation.
-            $nextLightboxBrowsingMode = gallery_lightbox_browsing_mode_normalize($_POST['theme_lightbox_browsing_mode'] ?? 'single');
-            set_app_setting('theme_lightbox_browsing_mode', $nextLightboxBrowsingMode);
-            if ($nextLightboxBrowsingMode !== $previousLightboxBrowsingMode) {
-                // The lightbox browsing mode changes public data attributes and optional strip rendering behavior.
-                // Bump a content revision so public HTML caches and diagnostics can see the change immediately.
-                set_app_setting('theme_public_content_revision', (string) time());
-            }
+            // The shared Theme owner preserves the public-content revision side effect for lightbox-mode changes.
+            theme_layout_safe_save(
+                'theme_lightbox_browsing_mode',
+                gallery_lightbox_browsing_mode_normalize($_POST['theme_lightbox_browsing_mode'] ?? 'single')
+            );
         }
-        // Pagination settings are saved independently from color/font overrides so enabling pagination does not force a CSS override state.
-        set_app_setting('pagination_enabled', !empty($_POST['pagination_enabled']) ? '1' : '0');
-        set_app_setting('pagination_columns', (string) pagination_dimension_value($_POST['pagination_columns'] ?? CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_MAX_COLUMNS));
-        set_app_setting('pagination_rows', (string) pagination_dimension_value($_POST['pagination_rows'] ?? CMS_PAGINATION_DEFAULT_ROWS, CMS_PAGINATION_DEFAULT_ROWS, CMS_PAGINATION_MAX_ROWS));
-        set_app_setting('home_gallery_grid_columns', (string) pagination_dimension_value($_POST['home_gallery_grid_columns'] ?? CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_MAX_COLUMNS));
-        set_app_setting('home_gallery_grid_rows', (string) pagination_dimension_value($_POST['home_gallery_grid_rows'] ?? CMS_PAGINATION_DEFAULT_ROWS, CMS_PAGINATION_DEFAULT_ROWS, CMS_PAGINATION_MAX_ROWS));
-        set_app_setting('tag_page_gallery_grid_columns', (string) pagination_dimension_value($_POST['tag_page_gallery_grid_columns'] ?? CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_MAX_COLUMNS));
-        set_app_setting('tag_page_gallery_grid_rows', (string) pagination_dimension_value($_POST['tag_page_gallery_grid_rows'] ?? CMS_PAGINATION_DEFAULT_ROWS, CMS_PAGINATION_DEFAULT_ROWS, CMS_PAGINATION_MAX_ROWS));
-        set_app_setting('tag_page_gallery_description_layout', gallery_description_layout_normalize($_POST['tag_page_gallery_description_layout'] ?? theme_gallery_description_layout(), theme_gallery_description_layout()));
+        // Pagination and grid values use the shared safe Theme owner so the Setup Wizard and Theme editor cannot drift.
+        theme_layout_safe_save('pagination_enabled', !empty($_POST['pagination_enabled']) ? '1' : '0');
+        theme_layout_safe_save('pagination_columns', (string) pagination_dimension_value($_POST['pagination_columns'] ?? CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_MAX_COLUMNS));
+        theme_layout_safe_save('pagination_rows', (string) pagination_dimension_value($_POST['pagination_rows'] ?? CMS_PAGINATION_DEFAULT_ROWS, CMS_PAGINATION_DEFAULT_ROWS, CMS_PAGINATION_MAX_ROWS));
+        theme_layout_safe_save('home_gallery_grid_columns', (string) pagination_dimension_value($_POST['home_gallery_grid_columns'] ?? CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_MAX_COLUMNS));
+        theme_layout_safe_save('home_gallery_grid_rows', (string) pagination_dimension_value($_POST['home_gallery_grid_rows'] ?? CMS_PAGINATION_DEFAULT_ROWS, CMS_PAGINATION_DEFAULT_ROWS, CMS_PAGINATION_MAX_ROWS));
+        theme_layout_safe_save('tag_page_gallery_grid_columns', (string) pagination_dimension_value($_POST['tag_page_gallery_grid_columns'] ?? CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_MAX_COLUMNS));
+        theme_layout_safe_save('tag_page_gallery_grid_rows', (string) pagination_dimension_value($_POST['tag_page_gallery_grid_rows'] ?? CMS_PAGINATION_DEFAULT_ROWS, CMS_PAGINATION_DEFAULT_ROWS, CMS_PAGINATION_MAX_ROWS));
+        theme_layout_safe_save(
+            'tag_page_gallery_description_layout',
+            gallery_description_layout_normalize($_POST['tag_page_gallery_description_layout'] ?? theme_gallery_description_layout(), theme_gallery_description_layout())
+        );
         if ($themeControlsChanged) {
             set_app_setting('theme_accent', sanitize_hex_color((string) $_POST['theme_accent'], '#a5481c'));
             set_app_setting('theme_accent_dark', sanitize_hex_color((string) $_POST['theme_accent_dark'], '#713414'));

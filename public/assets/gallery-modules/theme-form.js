@@ -294,6 +294,47 @@ function themeControlValue(form, selector, fallback) {
 
 
 /**
+ * Reads one checkbox or hidden boolean preview control without assuming one DOM input type.
+ *
+ * Wizard fallback values are hidden inputs while the canonical Theme editor uses checkboxes.
+ * This helper lets both surfaces drive exactly the same preview code.
+ *
+ * @param {HTMLFormElement} form Theme or Setup Wizard form.
+ * @param {string} selector CSS selector for the boolean control.
+ * @param {boolean} fallback Value used when the control is missing.
+ * @return {boolean} Normalized boolean preview state.
+ */
+function themeBooleanControlValue(form, selector, fallback) {
+    const control = form.querySelector(selector);
+    if (!control) {
+        return fallback;
+    }
+    if (control.type === 'checkbox' && typeof control.checked === 'boolean') {
+        return control.checked;
+    }
+    return typeof control.value === 'string' ? control.value === '1' : fallback;
+}
+
+
+/**
+ * Returns the visible label for one select-backed preview value when possible.
+ *
+ * @param {HTMLFormElement} form Theme or Setup Wizard form.
+ * @param {string} selector CSS selector for the source control.
+ * @param {string} fallback Raw fallback label.
+ * @return {string} Human-readable selected label.
+ */
+function themePreviewControlLabel(form, selector, fallback) {
+    const control = form.querySelector(selector);
+    if (control && control.tagName === 'SELECT' && control.options) {
+        return control.options[control.selectedIndex]?.text || fallback;
+    }
+    const value = control && typeof control.value === 'string' ? control.value : fallback;
+    return String(value || fallback).replaceAll('_', ' ');
+}
+
+
+/**
  * Converts the two stored font modes into the real preview CSS font stack.
  *
  * @param {string} fontMode Theme font mode from the Admin select control.
@@ -333,7 +374,7 @@ function customPageWidthValue(value) {
  * @param {HTMLFormElement} form Theme form containing the appearance controls.
  * @return {void} Result value for the caller.
  */
-function setupThemeLivePreview(form) {
+export function setupThemeLivePreview(form) {
     // previewRoot stores the split Appearance editor that owns all preview state.
     const previewRoot = form.querySelector('[data-theme-preview-root]');
     // previewPage stores the miniature public page shown on the right side.
@@ -341,6 +382,10 @@ function setupThemeLivePreview(form) {
     if (!previewRoot || !previewPage) {
         return;
     }
+    if (previewRoot.dataset.themePreviewReady === '1') {
+        return;
+    }
+    previewRoot.dataset.themePreviewReady = '1';
 
     // brandText stores the visible site title inside the preview header.
     const brandText = form.querySelector('[data-theme-preview-brand]');
@@ -352,13 +397,18 @@ function setupThemeLivePreview(form) {
     const backgroundImage = form.querySelector('[data-theme-preview-background-image]');
     // backgroundUrl stores the already-saved theme background URL supplied by the PHP controller.
     const backgroundUrl = previewRoot.getAttribute('data-theme-preview-background-url') || '';
-    const gpsPinSample = form.querySelector('[data-theme-gps-pin-sample]');
-    const gpsPinEnabled = form.querySelector('[data-theme-gps-pin-enabled]');
-    const gpsPinBackgroundEnabled = form.querySelector('[data-theme-gps-pin-background-enabled]');
-    const gpsPinSize = form.querySelector('[data-theme-gps-pin-size]');
-    const gpsPinBackgroundSize = form.querySelector('[data-theme-gps-pin-background-size]');
+    const gpsPinSamples = Array.from(form.querySelectorAll('[data-theme-gps-pin-sample]'));
     const gpsPinSizeDisplay = form.querySelector('[data-theme-gps-pin-size-display]');
     const gpsPinBackgroundSizeDisplay = form.querySelector('[data-theme-gps-pin-background-size-display]');
+    const descriptionCards = Array.from(form.querySelectorAll('[data-theme-preview-description-card]'));
+    const countBadgeSamples = Array.from(form.querySelectorAll('[data-theme-preview-count-badge-sample]'));
+    const previewGrid = form.querySelector('[data-theme-preview-grid]');
+    const paginationPreview = form.querySelector('[data-theme-preview-pagination]');
+    const homeGridState = form.querySelector('[data-theme-preview-home-grid-state]');
+    const tagGridState = form.querySelector('[data-theme-preview-tag-grid-state]');
+    const lightboxState = form.querySelector('[data-theme-preview-lightbox-state]');
+    const thumbnailState = form.querySelector('[data-theme-preview-thumbnail-state]');
+    const wizardStep = form.querySelector('[name="wizard_step"]')?.value || '';
     // pageWidthSelect stores the preset selector that decides whether the custom-width controls are visible.
     const pageWidthSelect = form.querySelector('[data-theme-page-width-select]');
     // customWidthShell stores the conditional slider/number UI for the Custom page-width preset.
@@ -451,29 +501,65 @@ function setupThemeLivePreview(form) {
             brandText.textContent = siteNameControl.value.trim() || 'Gallery CMS';
         }
 
-        if (gpsPinSample) {
-            const enabled = !gpsPinEnabled || gpsPinEnabled.checked;
-            const backgroundEnabled = !gpsPinBackgroundEnabled || gpsPinBackgroundEnabled.checked;
-            const pinSize = Math.max(14, Math.min(48, parseInt(gpsPinSize?.value || '26', 10) || 26));
-            const backgroundSize = Math.max(0, Math.min(48, parseInt(gpsPinBackgroundSize?.value || '22', 10) || 22));
-            gpsPinSample.style.display = enabled ? 'inline-flex' : 'none';
+        const gpsEnabled = themeBooleanControlValue(form, '[data-theme-gps-pin-enabled]', true);
+        const gpsBackgroundEnabled = themeBooleanControlValue(form, '[data-theme-gps-pin-background-enabled]', true);
+        const pinSize = Math.max(14, Math.min(48, parseInt(themeControlValue(form, '[data-theme-gps-pin-size]', '26'), 10) || 26));
+        const backgroundSize = Math.max(0, Math.min(48, parseInt(themeControlValue(form, '[data-theme-gps-pin-background-size]', '22'), 10) || 22));
+        gpsPinSamples.forEach((gpsPinSample) => {
+            gpsPinSample.style.display = gpsEnabled ? 'inline-flex' : 'none';
             gpsPinSample.style.setProperty('--gps-pin-size', String(pinSize));
             gpsPinSample.style.setProperty('--gps-pin-background-size', String(backgroundSize));
-            gpsPinSample.style.background = backgroundEnabled ? 'rgba(15, 23, 42, 0.55)' : 'transparent';
-            gpsPinSample.style.borderColor = backgroundEnabled ? 'rgba(255, 255, 255, 0.25)' : 'transparent';
-            gpsPinSample.style.boxShadow = backgroundEnabled ? '0 1px 3px rgba(0, 0, 0, 0.16)' : 'none';
-            gpsPinSample.style.backdropFilter = backgroundEnabled ? 'blur(4px)' : 'none';
-            gpsPinSample.style.webkitBackdropFilter = backgroundEnabled ? 'blur(4px)' : 'none';
-            if (gpsPinSizeDisplay) {
-                gpsPinSizeDisplay.textContent = `${pinSize}px`;
-            }
-            if (gpsPinBackgroundSizeDisplay) {
-                gpsPinBackgroundSizeDisplay.textContent = `${backgroundSize}px`;
-            }
+            gpsPinSample.style.background = gpsBackgroundEnabled ? 'rgba(15, 23, 42, 0.55)' : 'transparent';
+            gpsPinSample.style.borderColor = gpsBackgroundEnabled ? 'rgba(255, 255, 255, 0.25)' : 'transparent';
+            gpsPinSample.style.boxShadow = gpsBackgroundEnabled ? '0 1px 3px rgba(0, 0, 0, 0.16)' : 'none';
+            gpsPinSample.style.backdropFilter = gpsBackgroundEnabled ? 'blur(4px)' : 'none';
+            gpsPinSample.style.webkitBackdropFilter = gpsBackgroundEnabled ? 'blur(4px)' : 'none';
+        });
+        if (gpsPinSizeDisplay) {
+            gpsPinSizeDisplay.textContent = `${pinSize}px`;
+        }
+        if (gpsPinBackgroundSizeDisplay) {
+            gpsPinBackgroundSizeDisplay.textContent = `${backgroundSize}px`;
+        }
+
+        const baseDescriptionLayout = themeControlValue(form, '[data-theme-preview-description-layout]', 'vertical');
+        const tagDescriptionLayout = themeControlValue(form, '[data-theme-preview-tag-description-layout]', baseDescriptionLayout);
+        const activeDescriptionLayout = wizardStep === 'content' ? tagDescriptionLayout : baseDescriptionLayout;
+        descriptionCards.forEach((card) => card.setAttribute('data-description-layout', activeDescriptionLayout === 'horizontal' ? 'horizontal' : 'vertical'));
+
+        const countBadgeEnabled = themeBooleanControlValue(form, '[data-theme-preview-count-badge]', true);
+        countBadgeSamples.forEach((badge) => { badge.hidden = !countBadgeEnabled; });
+
+        const paginationEnabled = themeBooleanControlValue(form, '[data-theme-preview-pagination-enabled]', false);
+        if (paginationPreview) {
+            paginationPreview.hidden = !paginationEnabled;
+        }
+
+        const globalColumns = Math.max(1, Math.min(12, parseInt(themeControlValue(form, '[data-theme-preview-grid-columns]', '3'), 10) || 3));
+        const globalRows = Math.max(1, Math.min(50, parseInt(themeControlValue(form, '[data-theme-preview-grid-rows]', '3'), 10) || 3));
+        const homeColumns = Math.max(1, Math.min(12, parseInt(themeControlValue(form, '[data-theme-preview-home-grid-columns]', String(globalColumns)), 10) || globalColumns));
+        const homeRows = Math.max(1, Math.min(50, parseInt(themeControlValue(form, '[data-theme-preview-home-grid-rows]', String(globalRows)), 10) || globalRows));
+        const tagColumns = Math.max(1, Math.min(12, parseInt(themeControlValue(form, '[data-theme-preview-tag-grid-columns]', String(globalColumns)), 10) || globalColumns));
+        const tagRows = Math.max(1, Math.min(50, parseInt(themeControlValue(form, '[data-theme-preview-tag-grid-rows]', String(globalRows)), 10) || globalRows));
+        const visibleColumns = wizardStep === 'content' ? tagColumns : homeColumns;
+        if (previewGrid) {
+            previewGrid.style.setProperty('--preview-grid-columns', String(Math.min(4, visibleColumns)));
+        }
+        if (homeGridState) {
+            homeGridState.textContent = `${homeColumns} × ${homeRows}`;
+        }
+        if (tagGridState) {
+            tagGridState.textContent = `${tagColumns} × ${tagRows}`;
+        }
+        if (lightboxState) {
+            lightboxState.textContent = themePreviewControlLabel(form, '[data-theme-preview-lightbox-mode]', 'single');
+        }
+        if (thumbnailState) {
+            thumbnailState.textContent = themePreviewControlLabel(form, '[data-theme-preview-thumbnail-mode]', 'progressive');
         }
     };
 
-    form.querySelectorAll('[data-theme-preview-color], [data-theme-preview-radius], [data-theme-preview-font], [data-theme-preview-width], [data-theme-background-opacity], [data-theme-preview-site-name], [data-theme-gps-pin-enabled], [data-theme-gps-pin-background-enabled], [data-theme-gps-pin-size], [data-theme-gps-pin-background-size]').forEach((control) => {
+    form.querySelectorAll('[data-theme-preview-color], [data-theme-preview-radius], [data-theme-preview-font], [data-theme-preview-width], [data-theme-background-opacity], [data-theme-preview-site-name], [data-theme-gps-pin-enabled], [data-theme-gps-pin-background-enabled], [data-theme-gps-pin-size], [data-theme-gps-pin-background-size], [data-theme-preview-description-layout], [data-theme-preview-count-badge], [data-theme-preview-pagination-enabled], [data-theme-preview-grid-columns], [data-theme-preview-grid-rows], [data-theme-preview-home-grid-columns], [data-theme-preview-home-grid-rows], [data-theme-preview-tag-grid-columns], [data-theme-preview-tag-grid-rows], [data-theme-preview-tag-description-layout], [data-theme-preview-lightbox-mode], [data-theme-preview-thumbnail-mode]').forEach((control) => {
         control.addEventListener('input', syncPreview);
         control.addEventListener('change', syncPreview);
     });
@@ -489,6 +575,17 @@ function setupThemeLivePreview(form) {
             syncCustomWidthControls(control);
             syncPreview();
         });
+    });
+    form.querySelectorAll('[data-theme-preview-grid-columns], [data-theme-preview-grid-rows], [data-theme-preview-home-grid-columns], [data-theme-preview-home-grid-rows], [data-theme-preview-tag-grid-columns], [data-theme-preview-tag-grid-rows]').forEach((control) => {
+        const output = control.parentElement?.querySelector('output');
+        if (!output) {
+            return;
+        }
+        /** Keep the range readout synchronized with its source control. @returns {void} */
+        const syncOutput = () => { output.textContent = control.value; };
+        control.addEventListener('input', syncOutput);
+        control.addEventListener('change', syncOutput);
+        syncOutput();
     });
     syncPreview();
 }

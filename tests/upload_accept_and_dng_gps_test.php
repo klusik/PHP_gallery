@@ -13,6 +13,7 @@
  * Responsibilities:
  *   - Confirm that default upload accept values preserve historic server-supported formats
  *   - Confirm that phone-rendered upload mode avoids RAW/DNG accept filters
+ *   - Confirm strict setup-safe upload preference validation rejects malformed values
  *   - Confirm that DNG/TIFF GPS metadata can be read without PHP exif_read_data support
  *   - Remain executable with plain PHP on shared-hosting style environments
  *
@@ -30,12 +31,14 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-06-04
+ *   2026-09-29
  */
 
 declare(strict_types=1);
 
 use function Gallery\Services\admin_upload_accept_value_for_mode;
+use function Gallery\Services\admin_upload_auto_rename_setting_normalize;
+use function Gallery\Services\admin_upload_client_format_mode_validate;
 use function Gallery\Services\extract_dng_gps_metadata;
 
 require_once __DIR__ . '/../app/models/app_settings.php';
@@ -88,6 +91,23 @@ function assert_upload_dng_float_close(float $expected, mixed $actual, string $m
         fwrite(STDERR, $message . ' expected ' . var_export($expected, true) . ', got ' . var_export($actual, true) . PHP_EOL);
         exit(1);
     }
+}
+
+/**
+ * Assert that a callback rejects malformed setting input.
+ *
+ * @param callable $callback Callback expected to throw InvalidArgumentException.
+ * @param string $message Message value.
+ */
+function assert_upload_dng_invalid_argument(callable $callback, string $message): void
+{
+    try {
+        $callback();
+    } catch (InvalidArgumentException) {
+        return;
+    }
+    fwrite(STDERR, $message . PHP_EOL);
+    exit(1);
 }
 
 /**
@@ -166,6 +186,18 @@ assert_upload_dng_true(!str_contains($phoneAccept, '.dng'), 'Phone-rendered acce
 assert_upload_dng_true(!str_contains($phoneAccept, '.heic'), 'Phone-rendered accept mode must not advertise HEIC.');
 assert_upload_dng_true(!str_contains($phoneAccept, 'image/*'), 'Phone-rendered accept mode must avoid broad image/* when asking for rendered browser images.');
 assert_upload_dng_true(str_contains($phoneAccept, 'image/jpeg'), 'Phone-rendered accept mode must explicitly request JPEG.');
+
+assert_upload_dng_true(admin_upload_client_format_mode_validate(' PHONE_JPEG ') === 'phone_jpeg', 'Strict source-format validation must normalize supported values.');
+assert_upload_dng_invalid_argument(
+    static fn (): string => admin_upload_client_format_mode_validate('future_format'),
+    'Strict source-format validation must reject unsupported values.'
+);
+assert_upload_dng_true(admin_upload_auto_rename_setting_normalize(true) === '1', 'Strict auto-rename validation must accept boolean true.');
+assert_upload_dng_true(admin_upload_auto_rename_setting_normalize(' 0 ') === '0', 'Strict auto-rename validation must normalize the disabled scalar.');
+assert_upload_dng_invalid_argument(
+    static fn (): string => admin_upload_auto_rename_setting_normalize('yes'),
+    'Strict auto-rename validation must reject non-canonical checkbox values.'
+);
 
 $path = tempnam(sys_get_temp_dir(), 'php-gallery-dng-gps-');
 if ($path === false) {

@@ -64,6 +64,7 @@ require_once __DIR__ . '/models/telemetry_diagnostics.php';
 require_once __DIR__ . '/models/upload_automation.php';
 require_once __DIR__ . '/models/mobile_webdav.php';
 require_once __DIR__ . '/models/app_settings.php';
+require_once __DIR__ . '/models/admin_setup_wizard.php';
 require_once __DIR__ . '/models/openai_text_assist.php';
 require_once __DIR__ . '/models/gallery_creation_preferences.php';
 require_once __DIR__ . '/models/ai_image_analysis.php';
