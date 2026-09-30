@@ -309,9 +309,32 @@ contract_require($nsfwSection, 'if (admin_wants_json())', 'Bulk NSFW mutation no
 contract_require($nsfwSection, 'admin_bulk_images_success_response', 'Bulk NSFW AJAX branch no longer returns the canonical mutation response.', $failures, $checks);
 contract_require($nsfwSection, 'return;', 'Bulk NSFW AJAX branch can fall through to redirect handling.', $failures, $checks);
 
+// Friendship actions retain the canonical completion owner and delegate dynamic controls.
+$cooperativePanel = contract_file($root, 'public/assets/gallery-modules/admin-cooperative-galleries.js', $failures);
+$cooperativeController = contract_file($root, 'app/controllers/cooperative_pairing.php', $failures);
+$cooperativeView = contract_file($root, 'app/views/admin_cooperative_galleries.php', $failures);
+contract_require($cooperativePanel, "document.addEventListener('submit'", 'Friendship forms lost delegated submission.', $failures, $checks);
+contract_require($cooperativePanel, 'event.stopImmediatePropagation()', 'Generic handlers may take over friendship forms.', $failures, $checks);
+contract_require($cooperativePanel, 'completeAdminMutation(payload', 'Friendship mutations bypass the canonical completion envelope.', $failures, $checks);
+contract_require($cooperativePanel, 'captureAdminPanelOwner', 'Late friendship responses can overwrite another drawer.', $failures, $checks);
+contract_require($cooperativePanel, 'guard.isCurrent()', 'Friendship fragment replacement ignores the shared completion guard.', $failures, $checks);
+contract_forbid($cooperativePanel, 'window.location.reload', 'Friendship actions reload the page.', $failures, $checks);
+contract_forbid($cooperativePanel, 'window.location.href =', 'Friendship actions navigate away.', $failures, $checks);
+contract_require($cooperativeController, 'admin_mutation_success_envelope', 'Friendship actions lost canonical response metadata.', $failures, $checks);
+contract_require($cooperativeView, 'data-cooperative-form', 'Friendship forms lost their explicit workflow marker.', $failures, $checks);
+
+// Album review uses the same delegated browser owner and canonical completion pipeline.
+$proposalUi = contract_file($root, 'app/controllers/admin_cooperative_proposals.php', $failures);
+$proposalView = contract_file($root, 'app/views/admin_cooperative_proposals.php', $failures);
+contract_require($proposalUi, 'admin_mutation_panel_metadata', 'Proposal review lost canonical panel metadata.', $failures, $checks);
+contract_require($proposalUi, "['panel_html']", 'Proposal actions no longer return their owned fragment.', $failures, $checks);
+contract_require($proposalView, 'data-cooperative-form', 'Proposal forms escaped shared dynamic delegation.', $failures, $checks);
+contract_require($proposalView, 'cooperative_proposal_ui', 'Proposal forms lost their explicit UI adapter.', $failures, $checks);
+
 // Retry/backoff for postcondition synchronization belongs in the coordinator. The
 // known workflow modules below may yield for UI work, but must not define retry loops.
 foreach ([
+    'public/assets/gallery-modules/admin-cooperative-galleries.js' => $cooperativePanel,
     'public/assets/gallery-modules/admin-side-panel.js' => $sidePanel,
     'public/assets/gallery-modules/admin-metadata-organizer.js' => $metadataOrganizer,
     'public/assets/gallery-modules/admin-media-renamer.js' => $mediaRenamer,

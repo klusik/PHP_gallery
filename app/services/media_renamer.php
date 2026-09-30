@@ -1225,6 +1225,8 @@ function media_renamer_execute_plan_owned(array $plan): array
 
     $galleryRoot = gallery_abs_path((string) $gallery['folder_path']);
     $manifest = media_renamer_file_manifest($gallery, $galleryRoot, $items);
+    $preInvalidation = media_renamer_preinvalidate_thumbnail_caches($items, $gallery, $galleryRoot);
+    $approvedOldDerivatives = $preInvalidation['approved_old_derivatives'];
     $stagedFiles = [];
     $finalFiles = [];
 
@@ -1267,12 +1269,13 @@ function media_renamer_execute_plan_owned(array $plan): array
         }
 
         $databaseResult = media_renamer_update_database_rows($items);
+        thumbnail_legacy_identity_cache_clear();
     } catch (Throwable $exception) {
         media_renamer_rollback_file_moves($finalFiles, $stagedFiles);
         throw $exception;
     }
 
-    $cleanupResult = media_renamer_cleanup_generated_derivatives($items, $gallery);
+    $cleanupResult = media_renamer_cleanup_generated_derivatives($items, $gallery, array_values($approvedOldDerivatives));
 
     $result['renamed'] = count($items);
     $result['titles_updated'] = (int) ($databaseResult['titles_updated'] ?? 0);
@@ -1292,7 +1295,7 @@ function media_renamer_execute_plan_owned(array $plan): array
          * @author Rudolf Klusal
          */
         static fn (array $entry): bool => (string) ($entry['kind'] ?? '') === 'derivative'));
-    $result['derivatives_cleaned'] = (int) ($cleanupResult['cleaned'] ?? 0);
+    $result['derivatives_cleaned'] = (int) ($cleanupResult['cleaned'] ?? 0) + $preInvalidation['cleaned'];
     $result['derivative_failures'] += (int) ($cleanupResult['failures'] ?? 0);
     foreach ((array) ($cleanupResult['warnings'] ?? []) as $warning) {
         $result['warnings'][] = (string) $warning;
@@ -1439,28 +1442,80 @@ function media_renamer_file_manifest(array $gallery, string $galleryRoot, array 
 }
 
 /**
+ * Invalidate old and prospective thumbnail names before originals or database rows change.
+ *
+ * Every source membership is verified before the first cache deletion. Canonical and
+ * legacy swaps cannot transfer old private pixels into a public derivative identity.
+ * DNG display masters retain their image-ID ownership and are left for normal cleanup.
+ * @param array<int,array{image:array<string,mixed>,target_image:array<string,mixed>}> $items Revalidated source and provisional target rows.
+ * @param array<string,mixed> $gallery Owning gallery row used for pure derivative path construction.
+ * @param string $galleryRoot Existing absolute directory bounding all invalidated cache files.
+ * @return array{approved_old_derivatives:array<int,string>,cleaned:int} Preapproved old paths and count of thumbnail files removed before rename.
+ */
+function media_renamer_preinvalidate_thumbnail_caches(array $items, array $gallery, string $galleryRoot): array
+{
+    // Invalidate both old and prospective cache names before changing originals
+    // or database ownership. This also protects swaps and reused filename stems.
+    $approvedOldDerivatives = [];
+    $preRenameDerivatives = [];
+    $cleaned = 0;
+    foreach ($items as $item) {
+        $sourceImage = (array) ($item['image'] ?? []);
+        thumbnail_source_identity_invalidation_stem($sourceImage);
+        foreach (media_renamer_generated_derivative_paths($sourceImage, $gallery) as $path) {
+            $approvedOldDerivatives[media_renamer_path_key($path)] = $path;
+            if (preg_match('/_thumb[0-9]+\.(?:jpg|webp)$/i', basename($path)) === 1) {
+                $preRenameDerivatives[media_renamer_path_key($path)] = $path;
+            }
+        }
+        foreach (media_renamer_generated_derivative_paths((array) $item['target_image'], $gallery) as $path) {
+            if (preg_match('/_thumb[0-9]+\.(?:jpg|webp)$/i', basename($path)) === 1) {
+                $preRenameDerivatives[media_renamer_path_key($path)] = $path;
+            }
+        }
+    }
+    // Failure must leave source names and rows unchanged. A stale private cache
+    // must never survive a completed rename into a newly public source identity.
+    foreach ($preRenameDerivatives as $path) {
+        if (!is_file($path)) { continue; }
+        if (!thumbnail_path_inside_existing_gallery($galleryRoot, $path) || !@unlink($path)) {
+            throw new RuntimeException('Thumbnail cache could not be invalidated before rename.');
+        }
+        $cleaned++;
+    }
+    return ['approved_old_derivatives' => array_values($approvedOldDerivatives), 'cleaned' => $cleaned];
+}
+
+/**
  * Remove generated derivatives for old and new names after a successful original rename.
  *
- * Generated thumbnails are cache artifacts. Keeping stale files is safe but wasteful, and
- * moving them can fail on Windows when Apache, PHP, an image viewer, or antivirus has a
- * handle open. Invalidating them is more robust: the app will regenerate thumbnails for
- * the new filename when they are requested.
+ * Thumbnail cache names are invalidated before ownership changes, because stale pixels
+ * must not transfer between source identities. This final cleanup removes remaining
+ * approved artifacts; moving derivatives can fail on Windows when another process has
+ * an open handle. Normal regeneration for an explicitly renamed source remains intact.
  *
- * @param array<int,array<string,mixed>> $items Items value.
- * @param array $gallery Gallery row or gallery data.
- * @return array{cleaned:int,failures:int,warnings:array<int,string>} Structured result data for the caller.
+ * @param array<int,array<string,mixed>> $items Executed rename entries containing source and provisional target rows.
+ * @param array<string,mixed> $gallery Owning gallery row used to bound derivative paths.
+ * @param array<int,string> $approvedOldDerivatives Old derivative paths whose ownership was verified before the rename.
+ * @return array{cleaned:int,failures:int,warnings:array<int,string>} Cleanup counts and safe filesystem warnings.
  */
-function media_renamer_cleanup_generated_derivatives(array $items, array $gallery): array
+function media_renamer_cleanup_generated_derivatives(array $items, array $gallery, array $approvedOldDerivatives = []): array
 {
     $result = ['cleaned' => 0, 'failures' => 0, 'warnings' => []];
     $paths = [];
+    foreach ($approvedOldDerivatives as $path) {
+        $paths[media_renamer_path_key($path)] = $path;
+    }
 
     foreach ($items as $item) {
-        foreach (['image', 'target_image'] as $key) {
-            $image = (array) ($item[$key] ?? []);
-            foreach (media_renamer_generated_derivative_paths($image, $gallery) as $path) {
-                $paths[media_renamer_path_key($path)] = $path;
-            }
+        $targetImage = (array) ($item['target_image'] ?? []);
+        $image = find_image((int) ($targetImage['id'] ?? 0), true);
+        if (!$image || (int) ($image['gallery_id'] ?? 0) !== (int) ($gallery['id'] ?? 0)
+            || !thumbnail_legacy_identity_owned($image)) {
+            continue;
+        }
+        foreach (media_renamer_generated_derivative_paths($image, $gallery) as $path) {
+            $paths[media_renamer_path_key($path)] = $path;
         }
     }
 

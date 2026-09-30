@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.112}
+\newcommand{\version}{0.113}
 \newcommand{\manualdate}{30~september~2026}
 
 \hypersetup{
@@ -623,6 +623,19 @@ När både webbplatsens hämtningar och det smarta galleriets hämtningsalternat
 
 Reglerna är läsbar versionshanterad JSON, aldrig användar-SQL: fält och operatorer tillåts enligt en uttrycklig lista, värden är parametrar i förberedda frågor, djupet är begränsat till fem och högst 50 villkor accepteras. Raderade referenser matchar ingenting, och felaktiga eller okända regelversioner avvisas. Det vanliga migreringsflödet lägger till lagring för smarta galleriers presentation; befintliga smarta gallerier ärver standardvärden för Tema och webbplats tills en åsidosättning sparas.
 
+\section{Kooperativa gallerier}
+\index{kooperativa gallerier}
+Kooperativa gallerier kopplar samman oberoende installationer med offentligt nåbar HTTPS. Varje ägare behåller sina album och original. Kör väntande migreringar genom det vanliga administrationsflödet och aktivera kooperativa gallerier under Funktioner på varje server. Funktionen är avstängd från början; avstängning bevarar identiteter, vänskap, förslag och inställningar.
+
+Para ihop varje deltagarpar direkt under Inställningar > Avancerat > Vänliga gallerier. Vänskap delar inga fotografier i sig. Välj ett offentligt, listat album utan lösenord eller NSFW under albumsamarbete och skapa dess referenskod. En deltagare kombinerar koderna till ett oföränderligt förslag. Varje administratör granskar deltagare och behörigheter och godkänner uttryckligen på sin egen installation. Leverans och verifiering sker i begränsade steg i sidopanelen. E-postinbjudningar använder den konfigurerade e-posttransporten; att öppna länken är inget samtycke.
+
+Efter aktivering öppnas gemensamma fotografier från panelen eller länken i det lokala albumet. Varje källa behåller attribution och sidindelning. Endast befintliga auktoriserade JPEG/WebP-miniatyrer och förhandsvisningar delas. Original, skyddade album och fjärrskrivning stöds inte. Länkar fungerar utan JavaScript. Saknade miniatyrer kräver normal generering. Nya fotografier får identiteter från hela sökvägen inklusive filändelsen. Gamla namn bevaras utan massgenerering, men tvetydigt ägarskap avvisas.
+
+Återkallat deltagande, ändrat källskydd och lokalt återkallad vänskap blockerar efterföljande auktoriserade läsningar. Onåbara deltagare begränsas till högst 120 sekunders verifieringsgiltighet; redan hämtade pixlar kan inte återkallas. Nya deltagare kräver ett separat förslag med nytt godkännande från alla. Teknisk förnyelse kan ske vid användning; schemaläggning är valfri. Saknat eller okänt obligatoriskt schema avvisar delning och ändringar. Se \filepath{docs/COOPERATIVE_GALLERIES.md} för driftsgränser.
+
+\subsection{Simulatorposition i Windows}
+WinApp 0.2.0 använder automatiskt kamerans världsposition i MSFS 2024 och faller tillbaka till flygplanets position vid ett begränsat kamerafel. MSFS 2020 använder direkt flygplanets position genom samma SimConnect-runtime. Koordinater är valfria; en otillgänglig simulator stoppar inte uppladdningen. Diagnostiken skiljer mellan positionskällorna. Installationsprogrammet begär att programmet avslutas före filbyte. Slutför pågående arbete före uppdatering. Verifiera verkliga simulatorer och uppgradering på måldatorn.
+
 \section{Lägga till, beskriva och organisera fotografier}
 \label{sec:photo-workflow}
 \index{f00084@fotografiarbetsflöde}
@@ -1031,7 +1044,7 @@ Den valfria lokala eller arbetarbaserade bildanalyskön kan registrera visuella 
 
 För återkommande överföringar skapar du en avgränsad token för uppladdningsautomatisering till det avsedda galleriet och skickar stödda filer till uppladdningsadressen. Token kan återkallas oberoende av varandra och måste behandlas som lösenord. Den råa API-nyckeln visas bara när den skapas; därefter lagras endast dess hash, så kopiera den nya nyckeln till den avsedda klienten vid skapandet. Den globala \ui{API-hanteraren} listar automatiseringsuppgifter över gallerier och ger ett centralt återkallningsflöde utan att exponera ursprungliga hemligheter. Gallerikontroller finns kvar för samma avgränsade uppgifter.
 
-Det kompletterande Windows-programmet använder samma galleribegränsade uppladdningskontrakt. Det har två vanliga uppladdningslägen. \ui{Bevaka mapp} ignorerar filer som redan fanns när bevakningen börjar, väntar på att nya filer blir stabila, kommer ihåg bekräftade uppladdningar lokalt och försöker igen vid tillfälliga fel med ökande väntetid. Det kan vid behov bifoga aktuell kameralatitud, longitud och höjd från Microsoft Flight Simulator genom SimConnect omedelbart före varje bevakad uppladdning och radera ett bevakat original först efter att galleriet bekräftat en lyckad uppladdning. \ui{Manuell uppladdning} accepterar ett filurval oberoende av den bevakade mappen och kan antingen generera responsiva miniatyrbilder på datorn med arbetarprocesser eller be galleriservern att generera dem. Miniatyrbildsarbete och nätverksuppladdningar överlappar i en pipeline i stället för att först förbereda ett helt stort urval. Stöd för meddelandefältet låter bevakaren eller det manuella jobbet fortsätta medan huvudfönstret är dolt.
+Det kompletterande Windows-programmet använder samma galleribegränsade uppladdningskontrakt. Det har två vanliga uppladdningslägen. \ui{Bevaka mapp} ignorerar filer som redan fanns när bevakningen börjar, väntar på att nya filer blir stabila, kommer ihåg bekräftade uppladdningar lokalt och försöker igen vid tillfälliga fel med ökande väntetid. Det kan vid behov bifoga aktuell latitud, longitud och höjd för kameran eller flygplanet i Microsoft Flight Simulator genom SimConnect omedelbart före varje bevakad uppladdning och radera ett bevakat original först efter att galleriet bekräftat en lyckad uppladdning. \ui{Manuell uppladdning} accepterar ett filurval oberoende av den bevakade mappen och kan antingen generera responsiva miniatyrbilder på datorn med arbetarprocesser eller be galleriservern att generera dem. Miniatyrbildsarbete och nätverksuppladdningar överlappar i en pipeline i stället för att först förbereda ett helt stort urval. Stöd för meddelandefältet låter bevakaren eller det manuella jobbet fortsätta medan huvudfönstret är dolt.
 
 Samma Windows-program kan vid behov köra en lågprioriterad AI-metadataarbetare. Den tar ett autentiserat analysjobb, hämtar bara den tilldelade resursen, skapar interna sökbara metadata med vald lokal bakände och modellgeneration och skickar tillbaka resultatet till den befintliga adressen för uppladdningsautomatisering. Arbetaren är åtskild från mänskliga bildtexter. Galleriets åtgärd \ui{Tvinga omgenerering av AI-metadata} rensar lagrade genererade rader och gammalt kötillstånd för den gallerigrenen och köar nytt arbete; den tunga analysen körs fortfarande på Windows-arbetaren.
 
@@ -1713,7 +1726,7 @@ Schemaändringar ligger i tidsstämplade PHP-filer under \filepath{database/migr
 
 Kontroller av databasberedskap sparas bara för aktuell PHP-begäran. Det minskar normalt upprepade metadatafrågor, men en migrering kan ändra svaret medan samma administrations-, installations-, uppdaterings- eller kommandoradsprocess fortfarande körs. Migreringsköraren rensar därför de sparade svaren efter schemaändrande satser och efter lyckade reparationsfunktioner. En kontroll efter migreringen läser då den nya databaskatalogen i stället för att återanvända ett svar från före migreringen. Vanliga migreringssatser som enbart ändrar data rensar inte beredskapscachen eftersom de inte kan skapa eller ta bort en tabell, ett fält eller ett index.
 
-Version~0.106 lade till tabellen \codeword{maintenance\_jobs} genom en vanlig migrering. Kör den som vanligt från galleriadministrationssidan om den inte redan har tillämpats. Den kräver installationens vanliga behörighet att skapa tabeller, men kräver inte databasutlösare, lagrade rutiner, \codeword{SUPER}, ändring av en global servervariabel eller separat ingripande av en databasadministratör. Tills migreringen är tillgänglig och verifierad vägrar Underhållscentret starta ett jobb i stället för att försöka underhålla utan beständiga kontrollpunkter. Version~\version{} lägger inte till någon databasmigrering.
+Version~0.106 lade till tabellen \codeword{maintenance\_jobs} genom en vanlig migrering. Kör den som vanligt från galleriadministrationssidan om den inte redan har tillämpats. Den kräver installationens vanliga behörighet att skapa tabeller, men kräver inte databasutlösare, lagrade rutiner, \codeword{SUPER}, ändring av en global servervariabel eller separat ingripande av en databasadministratör. Tills migreringen är tillgänglig och verifierad vägrar Underhållscentret starta ett jobb i stället för att försöka underhålla utan beständiga kontrollpunkter. Migreringarna för kooperativa gallerier och miniatyridentiteter använder samma normala uppgraderingsflöde.
 
 \subsection{Så kontrollerar galleriet databasberedskap}
 \index{d00049@databas!b00023@beredskap}

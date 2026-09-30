@@ -1,5 +1,75 @@
 # Patch notes
 
+## Version 0.113
+
+Version 0.113 adds opt-in cooperative galleries across independently operated HTTPS installations, with explicit approval by every participant and authorized shared previews. It also strengthens thumbnail ownership and delivers WinApp 0.2.0 with automatic Microsoft Flight Simulator location selection and safer installer shutdown.
+
+### Highlights
+
+#### Cooperative galleries
+
+- Added Friendly galleries and Album collaborations under Advanced Settings, with resumable two-way pairing and independent credentials for each peer.
+- Added public album reference codes, immutable proposals, local approval, email invitations, bounded delivery and verification, withdrawal and separately approved successor groups.
+- Added a shared photograph page with source attribution, pagination, progressive loading, short-lived derivative links and no-JavaScript navigation.
+- Kept cooperation disabled by default. Turning it off preserves stored identities, friendships, proposals and preferences; friendship alone grants no album access.
+- Limited export to currently public, listed, password-free, non-NSFW albums and their authorized existing JPEG/WebP thumbnails and previews. Originals, protected audiences and remote writes remain unsupported.
+
+#### Thumbnail ownership and Windows uploads
+
+- Added complete source-path identities, including extensions, for new photographs while preserving existing thumbnail names and metadata without bulk regeneration.
+- Refused ambiguous derivative ownership, including collisions with private or NSFW siblings; preserved verified derivative bytes during copies and clones and invalidated shared cache artifacts before ownership changes.
+- Added automatic MSFS 2024 camera-position selection with bounded aircraft fallback, and MSFS 2020 aircraft-position support through one SimConnect transport in WinApp 0.2.0.
+- Added bundled-runtime validation and installer application shutdown handling. Simulator location remains optional; unavailable coordinates do not block photograph uploads.
+
+### Technical Details
+
+#### Backend and security
+
+- Added cooperative models, services, controllers and prepared views, including `app/services/cooperative_galleries.php`, `app/services/cooperative_pairing.php`, `app/services/cooperative_proposals.php` and `app/services/cooperative_content.php`.
+- Registered `cooperative_galleries` in the canonical capability and Settings registries. Disabled paths remain dormant without optional storage or network work.
+- Added encrypted outbound credentials, hashed inbound secrets, expiring challenges, generation binding and nonce/revision checked reservations that reject replay, stale responses and concurrent ownership conflicts.
+- Added `app/services/outbound_http.php` with paired HTTPS origins, fixed protocol routes, public-address DNS pinning, no redirects and bounded responses/timeouts; reused configured mail through `app/services/configured_mail.php`.
+- Required verified available cooperative storage for authority and writes. Confirmed missing or unknown required schema refuses pairing, consent, activation and export; credential revocation uses its narrower verified requirements.
+- Preflighted ingestion and thumbnail identity/metadata storage before target files are committed. Unknown schema refuses mutation; prepared uploads and migration jobs remain recoverable. Existing identity-version-zero derivatives retain only verified legacy compatibility.
+- Rechecked album/ancestor visibility, passwords, NSFW policy, image ownership, current consent, peer generation, membership revision and lease at content reads. Stripped derivative metadata in memory within an 8 MiB input limit and refused malformed or animated containers.
+- Added private/no-store, noindex and referrer protection, bounded safe errors and credential redaction. Diagnostics do not expose raw SQL, database exceptions, credentials, bearer capabilities or private paths.
+- Added `scripts/cooperative_renew.php` for explicit per-group renewal; ordinary shared-page use can advance bounded verification on demand without a scheduler.
+
+#### Database
+
+- Added `database/migrations/202609270001_cooperative_galleries_foundations.php` for `cooperative_albums`, `cooperative_identity`, `cooperative_peers` and `cooperative_groups`.
+- Added `database/migrations/202609270002_cooperative_pairing.php` for resumable `cooperative_pairings` invitations and retry state.
+- Added `database/migrations/202609300001_thumbnail_source_identity.php` for `images.thumbnail_source_identity_version` and `idx_images_gallery_filename`. Existing rows retain version 0; subsequent inserts receive version 1. The migration does not rename, regenerate or delete existing derivatives.
+
+#### Frontend and Windows companion
+
+- Added `public/assets/cooperative-gallery.js`, `public/assets/cooperative-gallery.css` and `public/assets/gallery-modules/admin-cooperative-galleries.js`, with updated browser cache keys.
+- Integrated persistent Admin actions with dynamic in-place panels and the canonical mutation completion envelope, retaining POST fallback and explicit consent.
+- Added English, Czech, German and Swedish interface strings.
+- Added `winapp/uploader/simconnect_location.py`, packet/exception correlation, position-source diagnostics and validation of the single packaged x64 SimConnect runtime in `winapp/build_installer.py`.
+- Updated all four product manual editions and permanent architecture, schema, testing, source-map and Settings documentation; removed completed temporary implementation plans.
+
+#### Tests
+
+- Added isolated multi-installation pairing, proposal, activation, maintenance, metadata, catalog and derivative-byte fixtures, plus Admin panel and public cooperative browser contracts.
+- Added thumbnail identity, ownership, bounded indexed lookup, copy and clone regressions, including a 10,000-row lookup fixture.
+- Added outbound transport and SimConnect/installer regression coverage; retained both supported public thumbnail renderers.
+- Updated CI workflow policy while preserving explicit coverage gaps for unavailable browser or deployment environments. Isolated fixtures do not qualify real independent HTTPS peers, production SMTP or live simulator behavior.
+
+### User Impact
+
+#### For administrators
+
+- Added explicitly approved shared galleries without transferring ownership of albums or originals. Every participant must pair directly and approve the exact membership and scopes.
+- Required normal database migrations before using the new storage. Existing photographs and settings remain intact; mass thumbnail rebuilding is unnecessary.
+- Added independent withdrawal and friendship revocation. Local changes block subsequent reads immediately; unreachable peers remain bounded by the maximum 120-second lease. Already downloaded pixels cannot be recalled.
+- Added optional simulator coordinates in WinApp 0.2.0. Live MSFS 2020/2024 and installer upgrade acceptance still require testing on the target Windows system.
+
+#### For visitors
+
+- Added attributed shared photographs from consenting public albums, with ordinary links and pagination available without JavaScript.
+- Preserved ordinary galleries, protected media access, originals and both supported thumbnail renderers.
+
 ## Version 0.112
 
 Version 0.112 adds complete Czech, German and Swedish editions of the PHP Gallery administrator and developer manual. Each edition is supplied as a searchable PDF and an editable LaTeX source alongside the English reference.

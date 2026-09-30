@@ -2,7 +2,7 @@
 # Repository: https://github.com/klusik/PHP_gallery
 # File: .github/workflows/gallery-workflows.yml
 # Module Type: Continuous Integration Workflow
-# Purpose: Run isolated database and browser workflows across supported runtime combinations.
+# Purpose: Run isolated database and HTTP workflows across supported runtime combinations.
 # Responsibilities:
 #   - Provision disposable services and execute the central audit with required runtime capabilities.
 # Author: Rudolf Klusal
@@ -17,6 +17,11 @@ on:
 
 permissions:
   contents: read
+
+env:
+  # Chromium is explicitly disabled only in this GitHub workflow; local audits retain browser discovery.
+  PHP_GALLERY_BROWSER: disabled
+  GALLERY_WORKFLOW_BROWSER: disabled
 
 jobs:
   real-database-browser:
@@ -61,12 +66,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Require installed Chromium
-        shell: bash
-        run: |
-          browser_path="$(command -v google-chrome || command -v chromium || true)"
-          test -n "$browser_path" || { echo 'BLOCKED gallery workflow Chromium unavailable'; exit 1; }
-          echo "GALLERY_WORKFLOW_BROWSER=$browser_path" >> "$GITHUB_ENV"
       - name: Central audit with mandatory real workflows and database races
         run: php scripts/gallery_workflow_ci.php
       - name: Upload compact audit reports only

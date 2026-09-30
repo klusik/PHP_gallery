@@ -67,6 +67,7 @@ from uploader.discovery import (
 )
 from uploader.media import capability_notes, detect_suffix_capabilities, probe_file
 from uploader.models import ActivityEvent, ImportItem, ImportJob, ImportPlan, ITEM_ACTIVE_STATES, RECOVERABLE_ITEM_STATES
+from uploader.simconnect_location import SimCameraLocation, SimConnectCameraClient, SimulatorInfo
 from uploader.state_store import (
     JobStateStore,
     atomic_write_json,
@@ -168,28 +169,6 @@ DEFAULT_THUMBNAIL_WORKERS = max(2, min(12, (os.cpu_count() or 4) // 2 or 2))
 DEFAULT_UPLOAD_WORKERS = 1
 MAX_THUMBNAIL_WORKERS = 32
 MAX_UPLOAD_WORKERS = 1
-SIMCONNECT_CAMERA_QUERY_TIMEOUT_SECONDS = 1.0
-SIMCONNECT_POSITION_REFERENTIAL_WORLD = 2
-SIMCONNECT_DLL_ENV_VAR = "SIMCONNECT_DLL"
-SIMCONNECT_CLIENT_ID = b"PHPGalleryUploader"
-SIMCONNECT_RECV_ID_EXCEPTION = 1
-SIMCONNECT_RECV_ID_CAMERA_DATA = 40
-SIMCONNECT_RECV_ID_CAMERA_STATUS = 41
-SIMCONNECT_CAMERA_AVAILABILITY_LABELS = {
-    0: "not acquired",
-    1: "acquired",
-    2: "acquired by another client",
-    3: "user disabled",
-}
-SIMCONNECT_COMMON_DLL_PATHS = [
-    Path.home() / "MSFS 2024 SDK" / "SimConnect SDK" / "lib" / "SimConnect.dll",
-    Path.home() / "MSFS SDK" / "SimConnect SDK" / "lib" / "SimConnect.dll",
-    Path.home() / "AppData" / "Local" / "Programs" / "MSFS 2024 SDK" / "SimConnect SDK" / "lib" / "SimConnect.dll",
-    Path.home() / "AppData" / "Local" / "Programs" / "MSFS SDK" / "SimConnect SDK" / "lib" / "SimConnect.dll",
-]
-
-
-
 @dataclass
 class WatcherConfig:
     """
@@ -395,383 +374,6 @@ class LocalThumbnail:
     path: Path
     size: int
     format: str
-
-
-@dataclass
-class SimCameraLocation:
-    """
-    Flight Simulator camera world position captured through SimConnect.
-
-    @param latitude: Camera latitude in degrees.
-    @param longitude: Camera longitude in degrees.
-    @param altitude: Camera altitude in feet.
-    """
-
-    latitude: float
-    longitude: float
-    altitude: float
-
-    def upload_fields(self) -> Dict[str, str]:
-        """
-        Convert the camera position into upload automation metadata fields.
-        
-        @return Dict[str, str] Multipart form fields accepted by PHP Gallery.
-        """
-        return {
-            "sim_location_source": "simconnect_camera",
-            "sim_camera_latitude": f"{self.latitude:.7f}",
-            "sim_camera_longitude": f"{self.longitude:.7f}",
-            "sim_camera_altitude": f"{self.altitude:.2f}",
-        }
-
-
-class _SimConnectRecv(ctypes.Structure):
-    _fields_ = [
-        ("dwSize", ctypes.c_uint32),
-        ("dwVersion", ctypes.c_uint32),
-        ("dwID", ctypes.c_uint32),
-    ]
-
-
-class _SimConnectDataXYZ(ctypes.Structure):
-    _fields_ = [
-        ("x", ctypes.c_double),
-        ("y", ctypes.c_double),
-        ("z", ctypes.c_double),
-    ]
-
-
-class _SimConnectDataPBH(ctypes.Structure):
-    _fields_ = [
-        ("Pitch", ctypes.c_float),
-        ("Bank", ctypes.c_float),
-        ("Heading", ctypes.c_float),
-    ]
-
-
-class _SimConnectDataCamera(ctypes.Structure):
-    _pack_ = 1
-    _fields_ = [
-        ("Position", _SimConnectDataXYZ),
-        ("PositionReferential", ctypes.c_uint32),
-        ("PositionReferentialObjectId", ctypes.c_uint32),
-        ("TargetedPos", _SimConnectDataXYZ),
-        ("Pbh", _SimConnectDataPBH),
-        ("RotationReferential", ctypes.c_uint32),
-        ("RotationReferentialObjectId", ctypes.c_uint32),
-        ("Fov", ctypes.c_double),
-    ]
-
-
-class _SimConnectRecvCameraData(ctypes.Structure):
-    _pack_ = 1
-    _fields_ = [
-        ("dwSize", ctypes.c_uint32),
-        ("dwVersion", ctypes.c_uint32),
-        ("dwID", ctypes.c_uint32),
-        ("CameraData", _SimConnectDataCamera),
-    ]
-
-
-class _SimConnectRecvException(ctypes.Structure):
-    _pack_ = 1
-    _fields_ = [
-        ("dwSize", ctypes.c_uint32),
-        ("dwVersion", ctypes.c_uint32),
-        ("dwID", ctypes.c_uint32),
-        ("dwException", ctypes.c_uint32),
-        ("dwSendID", ctypes.c_uint32),
-        ("dwIndex", ctypes.c_uint32),
-    ]
-
-
-class _SimConnectRecvCameraStatus(ctypes.Structure):
-    _pack_ = 1
-    _fields_ = [
-        ("dwSize", ctypes.c_uint32),
-        ("dwVersion", ctypes.c_uint32),
-        ("dwID", ctypes.c_uint32),
-        ("acquiredState", ctypes.c_uint32),
-        ("bGameControlled", ctypes.c_int32),
-    ]
-
-
-def simconnect_hresult_failed(value: int) -> bool:
-    """
-    Return whether a signed HRESULT indicates failure.
-    
-    @param int value: HRESULT returned by SimConnect.
-    @return bool True when the HRESULT is a failure code.
-    """
-    return int(value) < 0
-
-
-def simconnect_camera_position_valid(location: SimCameraLocation) -> bool:
-    """
-    Validate a world camera position before sending it to PHP Gallery.
-    
-    @param SimCameraLocation location: Candidate camera position.
-    @return bool True when latitude, longitude, and altitude are usable.
-    """
-    return (
-        math.isfinite(location.latitude)
-        and math.isfinite(location.longitude)
-        and math.isfinite(location.altitude)
-        and -90.0 <= location.latitude <= 90.0
-        and -180.0 <= location.longitude <= 180.0
-    )
-
-
-class SimConnectCameraClient:
-    """
-    Minimal SimConnect camera reader used by watched-folder uploads.
-
-    The client opens a short-lived SimConnect connection, requests the current
-    camera in world referential coordinates, then closes the connection. Missing
-    simulator, missing DLL, or camera API failures are reported as soft failures
-    so uploads can continue without location metadata.
-    """
-
-    def __init__(self, dll_path: str = "", timeout_seconds: float = SIMCONNECT_CAMERA_QUERY_TIMEOUT_SECONDS) -> None:
-        """
-        Create a camera client.
-        
-        @param str dll_path: Optional explicit SimConnect.dll path selected by the user.
-        @param float timeout_seconds: Maximum time to wait for one camera response.
-        """
-        self.timeout_seconds = max(0.2, float(timeout_seconds))
-        self.configured_dll_path = trim_path(dll_path)
-        self.handle = ctypes.c_void_p()
-        self.error_message = ""
-        self.dll_message = ""
-        self.status_message = ""
-        self.diagnostics: List[str] = []
-        self.dispatch_count = 0
-        self.last_recv_id: Optional[int] = None
-        self.camera_data_packets = 0
-        self.location: Optional[SimCameraLocation] = None
-
-    def current_camera_location(self) -> Tuple[Optional[SimCameraLocation], str]:
-        """
-        Query the current Flight Simulator camera location.
-        
-        @return Tuple[Optional[SimCameraLocation], str] Tuple containing the location or None, plus a diagnostic string.
-        """
-        if os.name != "nt":
-            return None, "SimConnect camera metadata is available only on Windows."
-
-        try:
-            dll_path, tried_paths = self.resolve_dll_path()
-            if dll_path is None:
-                return None, "SimConnect.dll is unavailable: no usable candidate found. Tried: " + ", ".join(str(path) for path in tried_paths)
-            resolved_dll_path = dll_path.resolve()
-            self.dll_message = f"Using SimConnect.dll: {resolved_dll_path}"
-            self.diagnostics.append(self.dll_message)
-            dll = ctypes.WinDLL(str(dll_path))
-        except Exception as exc:  # noqa: BLE001
-            return None, f"SimConnect.dll is unavailable: {exc}"
-
-        try:
-            dispatch_type = getattr(ctypes, "WINFUNCTYPE", ctypes.CFUNCTYPE)(None, ctypes.POINTER(_SimConnectRecv), ctypes.c_uint32, ctypes.c_void_p)
-            self.configure_functions(dll, dispatch_type)
-        except Exception as exc:  # noqa: BLE001
-            return None, f"SimConnect camera API is unavailable: {exc}"
-
-        try:
-            open_result = dll.SimConnect_Open(ctypes.byref(self.handle), b"PHP Gallery uploader", None, 0, None, 0)
-            self.diagnostics.append(f"SimConnect_Open HRESULT {int(open_result)}")
-            if simconnect_hresult_failed(open_result) or not self.handle.value:
-                return None, self.diagnostic_message(f"SimConnect connection failed: HRESULT {int(open_result)}")
-
-            pre_dispatch_failure = ""
-            acquire_result = dll.SimConnect_CameraAcquire(self.handle, SIMCONNECT_CLIENT_ID)
-            self.diagnostics.append(f"SimConnect_CameraAcquire HRESULT {int(acquire_result)}")
-            if simconnect_hresult_failed(acquire_result):
-                pre_dispatch_failure = f"SimConnect_CameraAcquire failed: HRESULT {int(acquire_result)}"
-            status_result = dll.SimConnect_CameraGetStatus(self.handle)
-            self.diagnostics.append(f"SimConnect_CameraGetStatus HRESULT {int(status_result)}")
-            camera_result = dll.SimConnect_CameraGet(self.handle, SIMCONNECT_POSITION_REFERENTIAL_WORLD)
-            self.diagnostics.append(f"SimConnect_CameraGet WORLD HRESULT {int(camera_result)}")
-            if simconnect_hresult_failed(camera_result):
-                return None, self.diagnostic_message(f"SimConnect_CameraGet failed: HRESULT {int(camera_result)}")
-
-            callback = dispatch_type(self.dispatch)
-            deadline = time.time() + self.timeout_seconds
-            while time.time() < deadline and self.location is None and self.error_message == "":
-                dispatch_result = dll.SimConnect_CallDispatch(self.handle, callback, None)
-                if simconnect_hresult_failed(dispatch_result):
-                    self.error_message = f"SimConnect_CallDispatch failed: HRESULT {int(dispatch_result)}"
-                    break
-                time.sleep(0.01)
-
-            if self.location is not None:
-                return self.location, self.dll_message or f"Using SimConnect.dll: {resolved_dll_path}"
-            if self.error_message:
-                return None, self.diagnostic_message(self.error_message)
-            if pre_dispatch_failure:
-                return None, self.diagnostic_message(pre_dispatch_failure)
-            return None, self.diagnostic_message("SimConnect camera data was not returned before the timeout.")
-        except Exception as exc:  # noqa: BLE001
-            return None, self.diagnostic_message(str(exc))
-        finally:
-            if self.handle.value:
-                try:
-                    dll.SimConnect_CameraRelease(self.handle, SIMCONNECT_CLIENT_ID)
-                    dll.SimConnect_Close(self.handle)
-                except Exception:  # noqa: BLE001
-                    logging.debug("SimConnect close failed.", exc_info=True)
-                self.handle = ctypes.c_void_p()
-
-    def configure_functions(self, dll: Any, dispatch_type: Any) -> None:
-        """
-        Configure ctypes signatures for the SimConnect functions used here.
-        
-        @param Any dll: Loaded SimConnect.dll handle.
-        @param Any dispatch_type: Callback type used by SimConnect_CallDispatch.
-        """
-        dll.SimConnect_Open.argtypes = [ctypes.POINTER(ctypes.c_void_p), ctypes.c_char_p, ctypes.c_void_p, ctypes.c_uint32, ctypes.c_void_p, ctypes.c_uint32]
-        dll.SimConnect_Open.restype = ctypes.c_long
-        dll.SimConnect_CameraAcquire.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
-        dll.SimConnect_CameraAcquire.restype = ctypes.c_long
-        dll.SimConnect_CameraRelease.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
-        dll.SimConnect_CameraRelease.restype = ctypes.c_long
-        dll.SimConnect_CameraGetStatus.argtypes = [ctypes.c_void_p]
-        dll.SimConnect_CameraGetStatus.restype = ctypes.c_long
-        dll.SimConnect_CameraGet.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
-        dll.SimConnect_CameraGet.restype = ctypes.c_long
-        dll.SimConnect_CallDispatch.argtypes = [ctypes.c_void_p, dispatch_type, ctypes.c_void_p]
-        dll.SimConnect_CallDispatch.restype = ctypes.c_long
-        dll.SimConnect_Close.argtypes = [ctypes.c_void_p]
-        dll.SimConnect_Close.restype = ctypes.c_long
-
-    def resolve_dll_path(self) -> Tuple[Optional[Path], List[Path]]:
-        """
-        Find a usable SimConnect client DLL on the local machine.
-        
-        @return Tuple[Optional[Path], List[Path]] Tuple of the selected DLL path and every absolute candidate checked.
-        """
-        tried_paths: List[Path] = []
-
-        def record(candidate: Optional[Path]) -> Optional[Path]:
-            """
-            Handle record.
-            
-            @param Optional[Path] candidate: Candidate value.
-            @return Optional[Path] Result value for the caller.
-            """
-            if candidate is None:
-                return None
-            resolved = candidate.resolve(strict=False)
-            tried_paths.append(resolved)
-            return resolved if resolved.is_file() else None
-
-        if self.configured_dll_path is not None and self.configured_dll_path.is_file():
-            return self.configured_dll_path.resolve(), [self.configured_dll_path.resolve()]
-
-        env_path = trim_path(os.environ.get(SIMCONNECT_DLL_ENV_VAR, ""))
-        env_selected = record(env_path)
-        if env_selected is not None:
-            return env_selected, tried_paths
-
-        local_candidates = [
-            APP_DIR / "SimConnect.dll",
-            APP_DIR.parent / "SimConnect.dll",
-            Path.cwd() / "SimConnect.dll",
-        ]
-        for candidate in local_candidates:
-            selected = record(candidate)
-            if selected is not None:
-                return selected, tried_paths
-
-        for candidate in SIMCONNECT_COMMON_DLL_PATHS:
-            selected = record(candidate)
-            if selected is not None:
-                return selected, tried_paths
-
-        return None, tried_paths
-
-    def dll_resolution_message(self) -> str:
-        """
-        Describe which SimConnect DLL path would be used without opening the sim.
-        
-        @return str Human-readable DLL resolution summary.
-        """
-        dll_path, tried_paths = self.resolve_dll_path()
-        if dll_path is not None:
-            return f"Using SimConnect.dll: {dll_path.resolve()}"
-        if tried_paths:
-            return "No SimConnect.dll found. Tried: " + ", ".join(str(path) for path in tried_paths)
-        return "No SimConnect.dll path candidates were available."
-
-    def diagnostic_message(self, reason: str) -> str:
-        """
-        Build one compact diagnostic message for the watcher console.
-        
-        @param str reason: Primary reason camera coordinates were not returned.
-        @return str Human-readable diagnostic summary.
-        """
-        details = list(self.diagnostics)
-        if self.status_message:
-            details.append(self.status_message)
-        if self.dispatch_count > 0:
-            details.append(f"dispatch packets={self.dispatch_count}, last recv id={self.last_recv_id}, camera data packets={self.camera_data_packets}")
-        else:
-            details.append("dispatch packets=0")
-        return reason + " Details: " + "; ".join(details)
-
-    def dispatch(self, data: ctypes.POINTER(_SimConnectRecv), size: int, _context: ctypes.c_void_p) -> None:
-        """
-        Receive one SimConnect dispatch packet.
-        
-        @param ctypes.POINTER(_SimConnectRecv) data: Pointer to the base SimConnect receive structure.
-        @param int size: Packet byte length.
-        @param ctypes.c_void_p _context: Unused callback context.
-        """
-        if not data:
-            return
-        header = data.contents
-        self.dispatch_count += 1
-        self.last_recv_id = int(header.dwID)
-        if header.dwID == SIMCONNECT_RECV_ID_EXCEPTION and size >= ctypes.sizeof(_SimConnectRecvException):
-            exception = ctypes.cast(data, ctypes.POINTER(_SimConnectRecvException)).contents
-            self.error_message = (
-                f"SimConnect camera request failed with exception {int(exception.dwException)} "
-                f"(send={int(exception.dwSendID)}, index={int(exception.dwIndex)})."
-            )
-            return
-        if header.dwID == SIMCONNECT_RECV_ID_CAMERA_STATUS and size >= ctypes.sizeof(_SimConnectRecvCameraStatus):
-            status = ctypes.cast(data, ctypes.POINTER(_SimConnectRecvCameraStatus)).contents
-            status_id = int(status.acquiredState)
-            status_label = SIMCONNECT_CAMERA_AVAILABILITY_LABELS.get(status_id, f"unknown {status_id}")
-            self.status_message = (
-                f"SimConnect camera status: {status_label}, game_controlled={int(bool(status.bGameControlled))}"
-            )
-            return
-        if header.dwID != SIMCONNECT_RECV_ID_CAMERA_DATA:
-            return
-        self.camera_data_packets += 1
-        if size < ctypes.sizeof(_SimConnectRecvCameraData):
-            self.error_message = f"SimConnect camera data packet was too small: {size} bytes."
-            return
-
-        camera_packet = ctypes.cast(data, ctypes.POINTER(_SimConnectRecvCameraData)).contents
-        camera = camera_packet.CameraData
-        if int(camera.PositionReferential) != SIMCONNECT_POSITION_REFERENTIAL_WORLD:
-            self.error_message = f"SimConnect returned camera referential {int(camera.PositionReferential)} instead of WORLD."
-            return
-
-        location = SimCameraLocation(
-            latitude=float(camera.Position.x),
-            longitude=float(camera.Position.y),
-            altitude=float(camera.Position.z),
-        )
-        if simconnect_camera_position_valid(location):
-            self.location = location
-        else:
-            self.error_message = (
-                f"SimConnect returned invalid camera position: "
-                f"lat={location.latitude}, lng={location.longitude}, alt={location.altitude}."
-            )
 
 
 def trim_path(value: str) -> Optional[Path]:
@@ -3154,6 +2756,9 @@ class WatcherThread(threading.Thread):
         self.remote_inventory = RemoteInventorySession(config.inventory_refresh_seconds, self.emit)
         self.remote_skipped_paths: Set[Tuple[Path, str]] = set()
         self.initial_paths: Set[Path] = set()
+        self.simconnect_client = SimConnectCameraClient(config.simconnect_dll_path, event_sink=self.emit)
+        # Publish a complete snapshot by assignment; the UI never probes SimConnect.
+        self.simconnect_diagnostics = self.simconnect_client.diagnostics_snapshot()
 
     def stop(self) -> None:
         """
@@ -3195,9 +2800,9 @@ class WatcherThread(threading.Thread):
         self.emit("info", f"Upload endpoint: {upload_url}")
         self.emit("info", f"Remote inventory reconnect interval: {self.config.inventory_refresh_seconds:g} seconds.")
         if self.config.attach_sim_camera_metadata:
-            self.emit("info", "Flight Simulator camera metadata enabled. " + SimConnectCameraClient(self.config.simconnect_dll_path).dll_resolution_message())
+            self.emit("info", "[simconnect] Flight Simulator location metadata enabled. " + self.simconnect_client.dll_resolution_message())
         else:
-            self.emit("info", "Flight Simulator camera metadata disabled.")
+            self.emit("info", "[simconnect] Flight Simulator location metadata disabled.")
         if self.initial_paths:
             self.emit("info", f"Ignoring {len(self.initial_paths)} existing image file(s); only files added after watcher start will upload.")
 
@@ -3274,9 +2879,9 @@ class WatcherThread(threading.Thread):
                     attached_count = int(sim_result.get("attached", 0) or 0)
                     sim_error = str(sim_result.get("error", "") or "")
                     if attached_count > 0:
-                        self.emit("info", f"Stored Flight Simulator camera location for {path.name}.")
+                        self.emit("info", f"[simconnect] Stored Flight Simulator location for {path.name}.")
                     elif sim_error:
-                        self.emit("warning", f"Uploaded {path.name}, but camera location metadata was not stored: {sim_error}")
+                        self.emit("warning", f"Uploaded {path.name}, but simulator location metadata was not stored: {sim_error}")
                 if self.config.delete_uploaded_files:
                     self.delete_uploaded_file(path, payload)
             except Exception as exc:  # noqa: BLE001
@@ -3346,6 +2951,12 @@ class WatcherThread(threading.Thread):
     def sim_camera_metadata_fields(self, path: Path) -> Dict[str, str]:
         """
         Return Flight Simulator camera metadata fields for one watched upload.
+
+        The historical method/field names also cover aircraft-position results.
+        Acquire coordinates immediately before upload, publish the completed
+        diagnostic snapshot, and log the actual provider source. Any host/API
+        exception returns no extra form fields so optional GPS cannot block
+        thumbnails, uploading, retry state or confirmed-source deletion.
         
         @param Path path: Local image path about to be uploaded.
         @return Dict[str, str] Multipart form fields, or an empty dictionary when unavailable.
@@ -3353,20 +2964,28 @@ class WatcherThread(threading.Thread):
         if not self.config.attach_sim_camera_metadata:
             return {}
 
-        location, message = SimConnectCameraClient(self.config.simconnect_dll_path).current_camera_location()
-        if location is None:
-            self.emit("info", f"Flight Simulator camera location unavailable for {path.name}: {message}")
-            return {}
+        try:
+            location, message = self.simconnect_client.current_location()
+            self.simconnect_diagnostics = self.simconnect_client.diagnostics_snapshot()
+            if location is None:
+                self.emit("warning", f"[simconnect] Simulator location unavailable for {path.name}: {message} Upload will continue without simulator location.")
+                return {}
 
-        self.emit(
-            "info",
-            (
-                f"Attached Flight Simulator camera location for {path.name}: "
-                f"lat={location.latitude:.7f}, lng={location.longitude:.7f}, alt={location.altitude:.2f} ft. "
-                f"{message}"
-            ),
-        )
-        return location.upload_fields()
+            fields = location.upload_fields()
+            self.emit(
+                "info",
+                (
+                    f"[simconnect] Attached Flight Simulator location for {path.name}: "
+                    f"source={location.source}, lat={location.latitude:.7f}, lng={location.longitude:.7f}, "
+                    f"alt={location.altitude:.2f} ft."
+                ),
+            )
+            return fields
+        except Exception as exc:  # noqa: BLE001
+            # Optional host integration must never turn a valid photo into an upload failure.
+            self.simconnect_diagnostics = {"last_result": "failed", "reason": str(exc), "connection": "unknown"}
+            self.emit("warning", f"[simconnect] Simulator location acquisition failed for {path.name}: {exc}. Upload will continue without simulator location.")
+            return {}
 
     def delete_uploaded_file(self, path: Path, payload: Dict[str, Any]) -> None:
         """
@@ -4734,7 +4353,7 @@ class WatcherApp:
         ttk.Entry(policy, textvariable=self.stable_var, width=8).grid(row=0, column=1, sticky="w", pady=7)
         ttk.Label(policy, text="seconds before upload").grid(row=0, column=2, sticky="w", padx=(4, 18), pady=7)
         ttk.Label(policy, text="This protects against files that are visible before a copy finishes.", foreground="#666666").grid(row=0, column=3, sticky="w", pady=7)
-        ttk.Checkbutton(policy, text="Attach current Flight Simulator camera location when available", variable=self.attach_sim_camera_metadata_var).grid(row=1, column=0, columnspan=4, sticky="w", padx=8, pady=5)
+        ttk.Checkbutton(policy, text="Attach current Flight Simulator location when available", variable=self.attach_sim_camera_metadata_var).grid(row=1, column=0, columnspan=4, sticky="w", padx=8, pady=5)
         ttk.Checkbutton(policy, text="Delete source only after the gallery confirms a successful upload", variable=self.delete_uploaded_files_var, command=self.refresh_watch_delete_warning).grid(row=2, column=0, columnspan=4, sticky="w", padx=8, pady=5)
         self.watch_delete_warning = ttk.Label(policy, text="", foreground="#b36b00")
         self.watch_delete_warning.grid(row=3, column=0, columnspan=4, sticky="w", padx=28, pady=(0, 6))
@@ -6241,6 +5860,7 @@ class WatcherApp:
             f"{time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(event.timestamp))} [{event.level}/{event.operation}] {event.message}"
             for event in self.activity_events[-30:]
         )
+        simconnect = getattr(self.worker, "simconnect_diagnostics", {"connection": "not queried", "last_result": "not requested"})
         raw = "\n".join(
             [
                 f"App: {APP_DISPLAY_NAME}",
@@ -6256,6 +5876,8 @@ class WatcherApp:
                 f"Config path: {CONFIG_PATH}",
                 f"State path: {STATE_PATH}",
                 f"Log path: {LOG_PATH}",
+                "SimConnect (last acquisition; connections close after each request):",
+                json.dumps(simconnect, indent=2, ensure_ascii=False),
                 "Recent activity:",
                 recent,
             ]
@@ -6466,7 +6088,9 @@ class WatcherApp:
             log_level = self.classify_log_level(level, message)
             self.write_log(f"{level.upper()}: {message}", log_level)
             operation = "system"
-            if message.startswith(("Manual ", "Uploading ", "Uploaded ", "Skipped already present", "Generated ", "Local thumbnails")):
+            if message.startswith("[simconnect]"):
+                operation = "simconnect"
+            elif message.startswith(("Manual ", "Uploading ", "Uploaded ", "Skipped already present", "Generated ", "Local thumbnails")):
                 operation = "import" if (self.manual_worker and self.manual_worker.is_alive()) or message.startswith("Manual ") else "watcher"
             elif message.startswith(("Watching ", "Watcher ", "Ignoring ", "Flight Simulator")):
                 operation = "watcher"

@@ -108,7 +108,8 @@ namespace Gallery\Services {
         foreach ($filenames as $filename) {
             \decode_upload_expect(is_file(gallery_abs_path('gallery') . '/' . $filename), 'Scanner seam ran before accepted original storage.');
             $id = count($GLOBALS['decode_upload_images']) + 1;
-            $GLOBALS['decode_upload_images'][$id] = ['id' => $id, 'gallery_id' => $galleryId, 'filename' => $filename];
+            $GLOBALS['decode_upload_images'][$id] = ['id' => $id, 'gallery_id' => $galleryId, 'filename' => $filename,
+                'relative_path' => $filename, 'thumbnail_source_identity_version' => 1];
         }
         return count($filenames);
     }
@@ -158,6 +159,18 @@ namespace Gallery\Services {
     }
     /** Resolve a fixture derivative by accepted identity and standard side. @param array{id:int,...} $image Stored identity. @param array<string,mixed> $gallery Owning gallery. @param int $size Standard side. @param string $format Target extension. @return string Disposable variant path. */
     function thumbnail_abs_path(array $image, array $gallery, int $size, string $format): string { return gallery_thumbs_dir($gallery) . '/' . $image['id'] . '-' . $size . '.' . $format; }
+    /** Verify source ownership against the isolated scanner catalog before decoding.
+     * @param array{id:int,gallery_id:int,filename:string,relative_path:string,thumbnail_source_identity_version:int} $image Accepted fixture row.
+     * @return void Refuse a missing catalog identity, migration marker or accepted original.
+     */
+    function thumbnail_assert_source_identity_owned(array $image): void
+    {
+        \decode_upload_expect(($GLOBALS['decode_upload_images'][$image['id']] ?? null) === $image
+            && ($image['thumbnail_source_identity_version'] ?? null) === 1
+            && ($image['relative_path'] ?? null) === $image['filename']
+            && is_file(image_abs_path($image, $GLOBALS['decode_upload_gallery'])),
+            'Thumbnail decoder escaped the migrated scanner source identity.');
+    }
     /** Keep maintenance invalidation inside the test process. @return void Record invalidation without touching app cache. */
     function thumbnail_maintenance_summary_cache_clear(): void { ++$GLOBALS['decode_upload_invalidations']; }
 }

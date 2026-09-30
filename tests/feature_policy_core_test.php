@@ -106,6 +106,7 @@ namespace {
     $GLOBALS['feature_policy_core_settings'] = [];
     $definitions = feature_capability_definitions();
     $expectedKeys = [
+        'cooperative_galleries',
         'public_search',
         'lightbox_modes',
         'picture_manager',
@@ -141,7 +142,7 @@ namespace {
         'admin_test_runs',
     ];
 
-    feature_policy_core_assert(array_keys($definitions) === $expectedKeys, 'Canonical feature policy changed the expected set or order of the 33 Admin feature switches.');
+    feature_policy_core_assert(array_keys($definitions) === $expectedKeys, 'Canonical feature policy changed the expected set or order of the 34 Admin feature switches.');
     feature_policy_core_assert(feature_capability_validate_registry() === [], 'The canonical capability registry must validate without errors.');
     feature_policy_core_assert(($definitions['picture_game']['dependencies'] ?? []) === ['image_voting'], 'Picture Game must canonically depend on Image Voting.');
     feature_policy_core_assert(($definitions['viewer_accounts']['default_enabled'] ?? null) === false, 'Viewer accounts must remain disabled by default.');
@@ -154,6 +155,15 @@ namespace {
     feature_policy_core_assert(($definitions['development_diagnostics']['default_enabled'] ?? null) === false, 'Development Diagnostics must remain disabled by default.');
     feature_policy_core_assert(($definitions['remote_favicon_discovery']['source'] ?? null) === ['type' => 'app_setting', 'key' => 'remote_favicon_discovery_enabled'], 'Remote Favicon Discovery must own one canonical app_setting.');
     feature_policy_core_assert(($definitions['remote_favicon_discovery']['fresh_default_enabled'] ?? null) === false, 'Remote Favicon Discovery must seed OFF only on fresh installations while upgrades retain ON fallback.');
+
+    feature_policy_core_assert(!feature_capability_effective_enabled('cooperative_galleries'), 'Cooperative transport must default OFF.');
+    foreach (['cooperative_peer_api', 'admin_cooperative_state', 'admin_cooperative_action', 'admin_cooperative_galleries', 'admin_cooperative_collaborations', 'cooperative_metadata_api'] as $route) {
+        feature_policy_core_assert(feature_flag_for_route($route) === 'cooperative_galleries', 'Pairing route escaped its capability.');
+        feature_policy_core_assert(!feature_flag_route_enabled($route), 'Disabled pairing route remained available.');
+    }
+    set_feature_capability_enabled('cooperative_galleries', true);
+    feature_policy_core_assert(feature_flag_route_enabled('cooperative_peer_api'), 'Explicitly enabled pairing route stayed disabled.');
+    set_feature_capability_enabled('cooperative_galleries', false);
 
     // Established switches remain configured ON by default, including Picture Game and its dependency.
     feature_policy_core_assert(feature_capability_configured_enabled('picture_game'), 'Picture Game configured state must remain enabled by default.');

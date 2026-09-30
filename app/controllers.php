@@ -104,3 +104,14 @@ require_once __DIR__ . '/controllers/tags.php';
 require_once __DIR__ . '/controllers/exif.php';
 // Load Smart Gallery Admin and public routes after the shared gallery controllers.
 require_once __DIR__ . '/controllers/smart_galleries.php';
+
+// JSON adapters for peer protocol and future cooperative Admin panels.
+require_once __DIR__ . '/controllers/cooperative_pairing.php';
+require_once __DIR__ . '/controllers/admin_cooperative_galleries.php';
+require_once __DIR__ . '/controllers/admin_cooperative_albums.php';
+require_once __DIR__ . '/controllers/cooperative_proposals.php';
+
+require_once __DIR__ . '/controllers/admin_cooperative_proposals.php';
+require_once __DIR__ . '/controllers/cooperative_metadata.php';
+
+require_once __DIR__ . '/controllers/cooperative_content.php';

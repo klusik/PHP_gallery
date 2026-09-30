@@ -265,6 +265,15 @@ assert_admin_test_run_v11(
 );
 
 $opaqueToken = str_repeat('a', 32);
+foreach (['ticket', 'pairing_ticket', 'access-ticket', 'auth[ticket]', 'auth%5Bticket%5D', 'ticket[proof]'] as $ticketKey) {
+    $ticketUrl = '/?id=17&request_id=stable&' . $ticketKey . '=authority-proof&gallery_id=42';
+    foreach ([\Gallery\Services\admin_test_run_sanitize_url($ticketUrl),
+        \Gallery\Services\admin_test_run_sanitize_text('Location: ' . $ticketUrl)] as $ticketResult) {
+        assert_admin_test_run_v11(!str_contains($ticketResult, 'authority-proof')
+            && str_contains($ticketResult, 'id=17') && str_contains($ticketResult, 'request_id=stable')
+            && str_contains($ticketResult, 'gallery_id=42'), 'Ticket authority must be redacted without losing harmless IDs.');
+    }
+}
 $publicRunId = \Gallery\Services\admin_test_run_public_run_id($opaqueToken);
 assert_admin_test_run_v11(
     strlen($publicRunId) === 8 && $publicRunId !== substr($opaqueToken, 0, 8),

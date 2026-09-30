@@ -93,10 +93,12 @@ function thumbnail_bundle_media_url(array $image, ?array $gallery): string
  * Preloading keeps the existing single-image bundle API while allowing durable
  * thumbnail metadata to be read in one batched query.
  *
- * @param array $images Image rows to preload.
+ * @param array<int,array<string,mixed>> $images Image rows whose bounded ownership and variants will be reused.
+ * @return void Primes request-local ownership and thumbnail bundle caches.
  */
 function thumbnail_bundles_preload(array $images): void
 {
+    thumbnail_source_identity_preload($images);
     // $imagesById stores unique image rows keyed by image id.
     $imagesById = [];
     foreach ($images as $image) {
@@ -131,8 +133,8 @@ function thumbnail_bundles_preload(array $images): void
  * derivatives continue to use the existing safe fallback behavior on the next
  * request.
  *
- * @param array $image Image row or image data.
- * @return array{ Structured result data for the caller.
+ * @param array<string,mixed> $image Persisted image row with source identity and dimensions.
+ * @return array{image:array<string,mixed>,gallery:array<string,mixed>|null,media_url:string,sizes:array<int,int>,variants:array<string,array<int,string>>,warmup_sizes:array<int,int>} Authorized variants and safe source fallback.
  */
 function thumbnail_bundle(array $image): array
 {
@@ -147,7 +149,7 @@ function thumbnail_bundle(array $image): array
     }
 
     public_render_profile_count('thumbnail_bundle_cache_misses');
-    return $cache[$cacheKey] = public_render_profile_span('thumbnail_bundle', static function () use ($image): array {
+    return $cache[$cacheKey] = public_render_profile_span('thumbnail_bundle', /** Discover authorized variants for this persisted image. @return array<string,mixed> */ static function () use ($image): array {
         // $gallery stores the current gallery row used to build safe thumbnail and media URLs.
         $gallery = find_gallery((int) ($image['gallery_id'] ?? 0)) ?: null;
         // $sizes stores generated thumbnail sizes that are valid for this image in this gallery.
@@ -170,7 +172,7 @@ function thumbnail_bundle(array $image): array
             'warmup_sizes' => [],
         ];
 
-        if (!$gallery) {
+        if (!$gallery || !thumbnail_legacy_identity_owned($image)) {
             return $bundle;
         }
 

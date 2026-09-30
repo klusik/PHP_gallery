@@ -366,6 +366,7 @@ function thumbnail_source_decode_failure_result(array $status, array $context = 
  */
 function create_image_thumbnails_result(array $image, array $gallery, ?array $requestedSizes = null, array $options = []): array
 {
+    thumbnail_assert_source_identity_owned($image);
     thumbnail_metadata_preflight_write_schema('thumbnail_generation.create_image_thumbnails');
     // Variable $sourcePath stores this steps working value.
     $sourcePath = image_abs_path($image, $gallery);
@@ -607,14 +608,17 @@ function thumbnail_response_file_has_valid_geometry(array $image, array $gallery
  * public gallery page itself still selects variants from DB metadata; this helper
  * may touch files only when the browser requests one concrete thumbnail URL.
  *
- * @param array $image Image row or image data.
- * @param array $gallery Gallery row or gallery data.
- * @param int $size Size value.
- * @param string $format Format value.
+ * @param array<string,mixed> $image Persisted source row whose derivative ownership is required.
+ * @param array<string,mixed> $gallery Owning gallery row used to bound the response file.
+ * @param int $size Supported derivative maximum side in pixels.
+ * @param string $format Supported derivative format.
  * @return array{path:string,geometry_status:array<string,mixed>}|null Structured result data for the caller.
  */
 function thumbnail_ensure_image_thumbnail_variant_file(array $image, array $gallery, int $size, string $format): ?array
 {
+    if (!thumbnail_legacy_identity_owned($image)) {
+        return null;
+    }
     if (!in_array($size, thumbnail_sizes(), true) || !in_array($format, ['jpg', 'webp'], true)) {
         return null;
     }

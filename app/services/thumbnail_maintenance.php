@@ -55,14 +55,15 @@ const THUMBNAIL_MAINTENANCE_LAST_CHECK_SETTING = 'thumbnail_maintenance_last_che
 /**
  * Return maintenance status for a limited set of thumbnail sizes.
  *
- * @param array $image Image row or image data.
- * @param array $gallery Gallery row or gallery data.
- * @param array $sizes Sizes value.
+ * @param array<string,mixed> $image Persisted source row whose derivatives are inspected.
+ * @param array<string,mixed> $gallery Owning gallery row used for safe cache paths.
+ * @param array<int,int> $sizes Supported derivative sizes to inspect.
  * @param bool $mutate Mutate value.
- * @return array<string mixed>.
+ * @return array<string,mixed> Required and missing variant counts with maintenance policy details.
  */
 function thumbnail_maintenance_status_for_sizes(array $image, array $gallery, array $sizes, bool $mutate = true): array
 {
+    thumbnail_assert_source_identity_owned($image);
     // $sourcePath stores the original image path inspected before any decoding is attempted.
     $sourcePath = image_abs_path($image, $gallery);
     if (!is_file($sourcePath)) {
@@ -860,9 +861,13 @@ function cached_thumbnail_maintenance_summary_if_available(?array $galleryIds = 
  * Invalidate cached thumbnail maintenance summaries after cache files change.
  *
  * @param ?array<string,mixed> $diagnostics Optional Test Run timing payload populated only when explicitly requested.
+ * @return void Clears request-local ownership and durable maintenance summaries.
  */
 function thumbnail_maintenance_summary_cache_clear(?array &$diagnostics = null): void
 {
+    if (function_exists(__NAMESPACE__ . '\\thumbnail_legacy_identity_cache_clear')) {
+        thumbnail_legacy_identity_cache_clear();
+    }
     $diagnosticMode = $diagnostics !== null;
     $started = $diagnosticMode ? microtime(true) : 0.0;
     $steps = [];

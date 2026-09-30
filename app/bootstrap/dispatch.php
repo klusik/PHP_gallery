@@ -58,6 +58,19 @@ function cms_dispatch_page(string $page): void
 {
     // Variable $routes stores this steps working value.
     $routes = [
+        'admin_cooperative_galleries' => '\\Gallery\\Controllers\\cms_admin_cooperative_galleries',
+        'cooperative_peer_api' => '\\Gallery\\Controllers\\cms_cooperative_peer_api',
+        'cooperative_gallery' => '\\Gallery\\Controllers\\cms_cooperative_gallery',
+        'cooperative_content_api' => '\\Gallery\\Controllers\\cms_cooperative_content_api',
+        'cooperative_media' => '\\Gallery\\Controllers\\cms_cooperative_media',
+        'cooperative_metadata_api' => '\\Gallery\\Controllers\\cms_cooperative_metadata_api',
+        'cooperative_proposal_api' => '\\Gallery\\Controllers\\cms_cooperative_proposal_api',
+        'admin_cooperative_collaborations' => '\\Gallery\\Controllers\\cms_admin_cooperative_collaborations',
+        'admin_cooperative_proposals' => '\\Gallery\\Controllers\\cms_admin_cooperative_proposals',
+        'admin_cooperative_proposal_action' => '\\Gallery\\Controllers\\cms_admin_cooperative_proposal_action',
+        'admin_cooperative_albums' => '\\Gallery\\Controllers\\cms_admin_cooperative_albums',
+        'admin_cooperative_state' => '\\Gallery\\Controllers\\cms_admin_cooperative_state',
+        'admin_cooperative_action' => '\\Gallery\\Controllers\\cms_admin_cooperative_action',
         'home' => '\\Gallery\\Controllers\\cms_home',
         'gallery' => '\\Gallery\\Controllers\\cms_gallery',
         'smart_gallery' => '\\Gallery\\Controllers\\cms_smart_gallery',
@@ -292,7 +305,7 @@ function cms_dispatch_page(string $page): void
     $handler = $routes[$page] ?? '\\Gallery\\Controllers\\cms_not_found';
     try {
         // Verify access/privacy policy before a sensitive controller can emit partial HTML, metadata, archives, or media bytes.
-        if (in_array($page, ['home', 'gallery', 'smart_gallery', 'gallery_access', 'share', 'tag', 'sitemap', 'picture_game', 'media', 'thumb', 'public_media', 'public_thumb', 'thumbnail_warmup', 'gallery_cover_asset', 'gallery_branding_asset', 'vote', 'gallery_map_data', 'gallery_lightbox_data', 'smart_gallery_lightbox_data', 'smart_gallery_map_data', 'public_search', 'download_gallery_start', 'download_gallery', 'download_gallery_manifest', 'download_gallery_file', 'download_smart_gallery_start', 'download_smart_gallery', 'download_smart_gallery_manifest', 'download_smart_gallery_file'], true)) {
+        if (in_array($page, ['cooperative_gallery', 'cooperative_content_api', 'cooperative_metadata_api', 'cooperative_media', 'home', 'gallery', 'smart_gallery', 'gallery_access', 'share', 'tag', 'sitemap', 'picture_game', 'media', 'thumb', 'public_media', 'public_thumb', 'thumbnail_warmup', 'gallery_cover_asset', 'gallery_branding_asset', 'vote', 'gallery_map_data', 'gallery_lightbox_data', 'smart_gallery_lightbox_data', 'smart_gallery_map_data', 'public_search', 'download_gallery_start', 'download_gallery', 'download_gallery_manifest', 'download_gallery_file', 'download_smart_gallery_start', 'download_smart_gallery', 'download_smart_gallery_manifest', 'download_smart_gallery_file'], true)) {
             gallery_visibility_assert_public_policy_available();
             gallery_access_assert_public_policy_available();
             nsfw_guard_assert_public_policy_available();

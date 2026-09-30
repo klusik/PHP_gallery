@@ -238,3 +238,14 @@ require_once __DIR__ . '/services/maintenance_center.php';
 // Load the centralized Admin Settings ownership registry after all setting providers.
 require_once __DIR__ . '/services/admin_settings_registry.php';
 require_once __DIR__ . '/services/admin_setup_wizard.php';
+
+// Dormant cooperative domain; no routes or network activity are registered here.
+require_once __DIR__ . '/services/cooperative_galleries.php';
+
+// Shared pinned transport and explicitly enabled bilateral pairing orchestration.
+require_once __DIR__ . '/services/outbound_http.php';
+require_once __DIR__ . '/services/cooperative_pairing.php';
+require_once __DIR__ . '/services/cooperative_proposals.php';
+
+require_once __DIR__ . '/services/cooperative_content.php';
+require_once __DIR__ . '/services/configured_mail.php';

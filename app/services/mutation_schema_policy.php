@@ -401,12 +401,16 @@ function duplicate_photo_ledger_schema_status(): array
     ]);
 }
 
-/** @return array{state:string,feature:string,requirements:array} */
+/** Require complete ingestion storage, including the additive source identity marker.
+ * @return array{state:string,feature:string,requirements:array} Bounded available/missing/unknown ingestion status.
+ */
 function upload_ingestion_schema_status(): array
 {
     return mutation_schema_tables_status('mutation.upload_ingestion', [
         'galleries' => ['id', 'folder_path'],
-        'images' => ['id', 'gallery_id', 'relative_path', 'relative_path_hash', 'filename', 'sort_order', 'created_at', 'updated_at'],
+        // New sources must opt into source-bound derivative identities; confirmed
+        // absence is not a compatibility path for a newly committed image.
+        'images' => ['id', 'gallery_id', 'relative_path', 'relative_path_hash', 'filename', 'sort_order', 'created_at', 'updated_at', 'thumbnail_source_identity_version'],
     ]);
 }
 
@@ -442,12 +446,14 @@ function mobile_webdav_revocation_schema_status(): array
     ]);
 }
 
-/** @return array{state:string,feature:string,requirements:array} */
+/** Require complete target registration storage before migration asset writes.
+ * @return array{state:string,feature:string,requirements:array} Bounded available/missing/unknown migration status.
+ */
 function gallery_migration_schema_status(): array
 {
     return mutation_schema_tables_status('mutation.gallery_migration', [
         'galleries' => ['id', 'folder_path', 'updated_at'],
-        'images' => ['id', 'gallery_id', 'relative_path', 'relative_path_hash', 'created_at', 'updated_at'],
+        'images' => ['id', 'gallery_id', 'relative_path', 'relative_path_hash', 'created_at', 'updated_at', 'thumbnail_source_identity_version'],
     ]);
 }
 

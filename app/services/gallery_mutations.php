@@ -488,17 +488,23 @@ function delete_directory_tree(string $directory, string $allowedRoot): void
  * collision suffix or, worse, become visible again when a filename/public slug is
  * reused after deletion.
  *
- * @param array $image Image row or image data.
- * @param array $gallery Gallery row or gallery data.
- * @param string $galleryRoot Absolute owning gallery directory.
- * @return array<int,string> Absolute derivative paths safe to remove.
+ * @param array<string,mixed> $image image input for this operation.
+ * @param array<string,mixed> $gallery gallery input for this operation.
+ * @param string $galleryRoot galleryRoot input for this operation.
+ * @return array<string,mixed> Result produced by this operation.
  */
 function gallery_image_deletion_derivative_paths(array $image, array $gallery, string $galleryRoot): array
 {
     // $paths stores normalized unique cache artifacts keyed by absolute path.
     $paths = [];
+    // Confirmed shared files must disappear before a competing row is deleted.
+    // Unknown membership refuses the destructive operation before any target moves.
+    $stem = thumbnail_source_identity_invalidation_stem($image);
     foreach (thumbnail_sizes() as $size) {
         foreach (['jpg', 'webp'] as $format) {
+            if ($stem === null) {
+                continue;
+            }
             $path = thumbnail_abs_path($image, $gallery, (int) $size, $format);
             if (thumbnail_path_inside_existing_gallery($galleryRoot, $path) && is_file($path)) {
                 $paths[$path] = $path;
@@ -521,17 +527,14 @@ function gallery_image_deletion_derivative_paths(array $image, array $gallery, s
         return array_values($paths);
     }
 
-    // $stem stores the exact readable filename prefix used by thumbnail_filename().
-    $stem = pathinfo((string) ($image['filename'] ?? ''), PATHINFO_FILENAME);
-    if ($stem === '') {
-        return array_values($paths);
-    }
-    // $thumbnailPattern matches current/legacy configured sizes plus interrupted
+    // $stem identifies only derivatives owned by this complete source path.
+    // $thumbnailPattern matches canonical configured sizes plus interrupted
     // atomic-write temporary files such as name_thumb300.jpg.<token>.tmp.jpg.
-    $thumbnailPattern = '/^' . preg_quote($stem, '/') . '_thumb\\d+\\.(?:jpg|webp)(?:\\.[A-Fa-f0-9]+\\.tmp\\.(?:jpg|webp))?$/i';
+    $thumbnailPattern = $stem === null ? '/^(?!)$/' : '/^' . preg_quote($stem, '/') . '_thumb\\d+\\.(?:jpg|webp)(?:\\.[A-Fa-f0-9]+\\.tmp\\.(?:jpg|webp))?$/i';
     // $dngPattern catches a DNG display master for this exact image id even when a
     // future cleanup runs after the source MIME metadata has become incomplete.
-    $dngPattern = '/^' . preg_quote($stem, '/') . '_display_' . max(0, (int) ($image['id'] ?? 0)) . '\\.webp$/i';
+    $dngStem = pathinfo((string) ($image['filename'] ?? ''), PATHINFO_FILENAME);
+    $dngPattern = '/^' . preg_quote($dngStem, '/') . '_display_' . max(0, (int) ($image['id'] ?? 0)) . '\\.webp$/i';
 
     try {
         $iterator = new \DirectoryIterator($thumbsDir);
@@ -944,6 +947,7 @@ function gallery_move_images_locked(int $sourceGalleryId, int $destinationGaller
         ];
     }
 
+    thumbnail_source_identity_preload($images);
     usort($images, /**
      * Preserve displayed source order, then filename and ID, during destination append.
      * @param array{id?:int|string,sort_order?:int|string,filename?:string} $left First validated image row.
@@ -1078,10 +1082,12 @@ function gallery_move_images_locked(int $sourceGalleryId, int $destinationGaller
             $operationId
         );
         $updatedRows = (int) $moveResult['moved'];
+        thumbnail_legacy_identity_cache_clear();
         $sourceCoverImageId = $moveResult['source_cover_image_id'];
         $destinationCoverImageId = $moveResult['destination_cover_image_id'];
     } catch (Throwable $exception) {
         // Recovery reads the transaction's durable marker; an uncertain COMMIT is never guessed.
+        thumbnail_legacy_identity_cache_clear();
         gallery_image_move_recover_locked($operationId);
         throw new ImageMoveDiagnosticFailure('database_commit', 'ownership_update_failed', $operationId, previous: $exception);
     }
@@ -1171,15 +1177,33 @@ function gallery_add_image_move_manifest_entry(array &$manifest, array &$targetP
 /**
  * Return generated files that should move with one source image.
  *
- * @param array $image Image row or image data.
- * @param array $sourceGallery Source gallery value.
- * @param array $destinationGallery Destination gallery value.
+ * @param array<string,mixed> $image Existing source image row.
+ * @param array<string,mixed> $sourceGallery Existing source gallery.
+ * @param array<string,mixed> $destinationGallery Receiving gallery.
  * @param string $sourceRoot Source root value.
  * @param string $destinationRoot Destination root value.
  * @return array<int,array{from:string,to:string}> Structured result data for the caller.
  */
 function gallery_image_derivative_move_paths(array $image, array $sourceGallery, array $destinationGallery, string $sourceRoot, string $destinationRoot): array
 {
+    // This planner executes before the durable manifest can move any original.
+    // Pure naming must never promote a shared legacy artifact into new ownership.
+    thumbnail_assert_source_identity_owned($image);
+    $stem = thumbnail_filename_stem($image);
+    // Candidate observation includes every access class and a finite
+    // overflow sentinel; no full-gallery inventory or provisional grant.
+    $targetRows = thumbnail_identity_candidates((int) $destinationGallery['id'], [], [$stem], 65);
+    if ($targetRows === null) { throw new RuntimeException('Destination thumbnail ownership could not be verified.'); }
+    foreach ($targetRows as $targetRow) {
+        if (!in_array(thumbnail_source_identity_version($targetRow), [0, 1], true)) {
+            throw new RuntimeException('Destination thumbnail source identity could not be verified.');
+        }
+        $targetStem = thumbnail_filename_stem($targetRow);
+        $match = preg_match('/^' . preg_quote($stem, '/') . '$/iuD', $targetStem);
+        if ($match === false || $match === 1) {
+            throw new RuntimeException('Destination contains an image sharing this thumbnail identity.');
+        }
+    }
     // $paths stores derivative file renames that are present on disk.
     $paths = [];
     foreach (thumbnail_sizes() as $size) {
@@ -1716,4 +1740,3 @@ function gallery_subtree_ids(int $galleryId): array
     $folderPath = normalize_relative_path((string) $gallery['folder_path']);
     return gallery_mutation_model_subtree_ids($folderPath, gallery_folder_path_descendant_like_pattern($folderPath));
 }
-

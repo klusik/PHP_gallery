@@ -1,0 +1,155 @@
+<!doctype html>
+<!--
+Project: PHP Gallery
+Repository: https://github.com/klusik/PHP_gallery
+File: tests/fixtures/admin_cooperative_galleries.html
+Module Type: Browser Test Fixture
+Purpose: Exercise production friendship handlers inside the real Admin drawer.
+Responsibilities: Confine synthetic responses and assert in-place lifecycle behavior.
+Author: Rudolf Klusal
+License: MIT
+-->
+<html lang="en"><meta charset="utf-8"><title>Friendship panel fixture</title>
+<link rel="stylesheet" href="/public/assets/styles/base.css">
+<link rel="stylesheet" href="/public/assets/styles/admin.css">
+<body class="admin-page">
+<main><a id="open" href="/fixture-page" data-gallery-side-panel-link data-gallery-side-panel-url="/fixture-page?panel=1" data-admin-side-panel-workflow="cooperative_pairing" data-admin-side-panel-title="Friendly galleries">Open friendships</a></main>
+<pre id="results">BROWSER PENDING</pre>
+<script type="module">
+import {setupAdminCooperativeGalleries} from '/public/assets/gallery-modules/admin-cooperative-galleries.js?v=20260927-cooperative-complete-v4';
+import {setupAdminGallerySidePanel} from '/public/assets/gallery-modules/admin-side-panel.js?v=20260927-cooperative-review-v2';
+
+let assertions = 0;
+let requests = 0;
+let completions = 0;
+let generation = 0;
+let fault = false;
+let hold = false;
+let release;
+let lastBody;
+const originalUrl = location.href;
+
+/** Check a visible behavior without printing credentials.
+ * @param {boolean} value Expected behavior.
+ * @param {string} message Bounded assertion description.
+ * @return {void} Throws on mismatch.
+ */
+function check(value, message) {
+    assertions++;
+    if (!value) throw new Error(message);
+}
+/** Wait for bounded observable fixture progress.
+ * @param {function(): boolean} predicate Expected browser state.
+ * @return {Promise<void>} Settles within the fixture deadline.
+ */
+async function until(predicate) {
+    const deadline = Date.now() + 5000;
+    while (!predicate()) {
+        if (Date.now() > deadline) throw new Error('Fixture progress timeout');
+        await new Promise(/** Yield to pending browser tasks. @param {function(): void} resolve Timer consumer. @return {number} Timer handle. */ resolve => setTimeout(resolve, 10));
+    }
+}
+/** Build a synthetic server fragment with the same owned form contract as PHP.
+ * @param {string} marker Safe fixture result marker.
+ * @return {string} Component HTML containing all tested actions.
+ */
+function markup(marker) {
+    return '<section class="cooperative-panel" data-cooperative-panel data-generation="' + marker + '" data-cooperative-error="State unavailable" data-cooperative-busy="Working">'
+        + '<h1 tabindex="-1" data-cooperative-heading>Friendly galleries</h1><p data-cooperative-status role="status"></p><p data-cooperative-error-message role="alert"></p>'
+        + ['invite', 'import', 'accept', 'retry', 'revoke'].map(/** Render one synthetic action form. @param {string} action Controlled action name. @return {string} Form markup. */ action =>
+            '<form data-cooperative-form action="/fixture-action" method="post"><input name="action" type="hidden" value="' + action + '">'
+            + '<input name="csrf_token" type="hidden" value="fixture-csrf"><input name="cooperative_ui" type="hidden" value="1">'
+            + (action === 'invite' ? '<input name="request_id" type="hidden" value="fixture-request"><input name="base_url" value="https://b.example">' : '')
+            + (action === 'import' ? '<textarea name="invitation_code">fixture-invitation</textarea>' : '')
+            + '<button type="submit">' + action + '</button></form>').join('')
+        + '<button disabled type="button" data-disabled-retry>Retry later</button><a data-cooperative-refresh href="/fixture-page">Refresh status</a></section>';
+}
+/** Return the canonical mutation response with an owned replacement fragment.
+ * @param {string} marker Safe fixture result marker.
+ * @return {Response} JSON mutation response.
+ */
+function result(marker) {
+    return new Response(JSON.stringify({ok: true, message: 'Updated',
+        mutation: {type: 'cooperative_pairing.update', entity: 'cooperative_pairing', action: 'update', entity_ids: [1]},
+        panel: {workflow: 'cooperative_pairing', refresh_url: '/fixture-page?panel=1', keep_open: true},
+        contexts: [], fallback: {redirect_url: '/fixture-page'}, panel_html: markup(marker),
+    }), {headers: {'Content-Type': 'application/json'}});
+}
+
+window.fetch = /** Simulate only the confined page and action endpoints.
+ * @param {string|URL} url Requested local URL.
+ * @param {RequestInit} options Fetch options and disposable form data.
+ * @return {Promise<Response>} Controlled success, refusal or delayed response.
+ */ async (url, options = {}) => {
+    const target = new URL(url, location.href);
+    check(target.origin === location.origin, 'No fixture request leaves loopback');
+    if (options.method === 'POST') {
+        requests++;
+        lastBody = options.body;
+        check(lastBody.get('csrf_token') === 'fixture-csrf' && lastBody.get('ajax') === '1', 'Mutation keeps CSRF and AJAX fields');
+        if (fault) return new Response(JSON.stringify({ok: false, message: 'Try after refreshing'}), {status: 409, headers: {'Content-Type': 'application/json'}});
+        if (hold) return new Promise(/** Retain a response until after the drawer changes. @param {function(Response): void} resolve Response consumer. @return {void} Stores a fixture-only release callback. */ resolve => {
+            release = /** Deliver the old mutation response. @return {void} Settles this request only. */ () => resolve(result('late'));
+        });
+        return result(String(++generation));
+    }
+    check(target.pathname === '/fixture-page', 'Only the owned read endpoint is requested');
+    return new Response(markup('read-' + (++generation)), {headers: {'Content-Type': 'text/html'}});
+};
+document.addEventListener('php-gallery:mutation-complete', /** Observe the shared completion coordinator. @param {CustomEvent} event Canonical synchronization event. @return {void} Counts successful completions. */ event => {
+    check(event.detail.envelope.mutation.entity_ids[0] === 1, 'Canonical entity metadata survived');
+    completions++;
+});
+
+try {
+    setupAdminCooperativeGalleries();
+    setupAdminCooperativeGalleries();
+    setupAdminGallerySidePanel();
+    document.getElementById('open').click();
+    await until(/** Wait for the real drawer to mount its fragment. @return {boolean} Whether component HTML arrived. */ () => Boolean(document.querySelector('[data-cooperative-panel]')));
+    const panel = document.querySelector('[data-admin-side-panel]');
+    check(panel.dataset.adminSidePanelWorkflow === 'cooperative_pairing', 'Friendship keeps its own drawer workflow');
+    for (const action of ['invite', 'import', 'accept', 'retry', 'revoke', 'revoke']) {
+        const count = completions;
+        const root = panel.querySelector('[data-cooperative-panel]');
+        const form = root.querySelector('input[name="action"][value="' + action + '"]').form;
+        form.requestSubmit();
+        await until(/** Wait for canonical completion of this real handler. @return {boolean} Whether the event arrived. */ () => completions > count);
+        check(root !== panel.querySelector('[data-cooperative-panel]'), 'A successful action replaced its owned fragment');
+        check(location.href === originalUrl && panel.getAttribute('aria-hidden') === 'false', 'Action preserves URL and open drawer');
+    }
+    check(requests === 6, 'Double setup and dynamic rerender never duplicate submissions');
+    fault = true;
+    let root = panel.querySelector('[data-cooperative-panel]');
+    root.querySelector('[name="base_url"]').value = 'https://kept.example';
+    root.querySelector('form').requestSubmit();
+    await until(/** Wait for refusal to restore controls. @return {boolean} Whether pending ended. */ () => !root.hasAttribute('aria-busy'));
+    check(root.querySelector('[name="base_url"]').value === 'https://kept.example'
+        && root.querySelector('[data-cooperative-error-message]').textContent === 'Try after refreshing'
+        && root.querySelector('[data-disabled-retry]').disabled, 'Refusal preserves input and originally disabled controls');
+    fault = false;
+    root.querySelector('[data-cooperative-refresh]').click();
+    await until(/** Wait for the read-only fragment replacement. @return {boolean} Whether old root detached. */ () => !root.isConnected);
+    root = panel.querySelector('[data-cooperative-panel]');
+    check(root.querySelector('[name="base_url"]').value === 'https://kept.example'
+        && root.querySelector('[name="request_id"]').value === 'fixture-request', 'Refresh preserves unresolved invitation intent');
+    hold = true;
+    const before = requests;
+    const oldRoot = root;
+    oldRoot.querySelector('form').requestSubmit();
+    oldRoot.querySelector('form').dispatchEvent(new Event('submit', {bubbles: true, cancelable: true}));
+    check(requests === before + 1, 'Pending duplicate submission was suppressed');
+    panel.querySelector('[data-admin-side-panel-close]').click();
+    document.getElementById('open').click();
+    await until(/** Wait for a new drawer generation. @return {boolean} Whether old root was replaced. */ () => !oldRoot.isConnected && Boolean(panel.querySelector('[data-cooperative-panel]')));
+    const newRoot = panel.querySelector('[data-cooperative-panel]');
+    const count = completions;
+    release();
+    await until(/** Wait for the old write to complete through the shared coordinator. @return {boolean} Whether completion arrived. */ () => completions > count);
+    check(panel.querySelector('[data-cooperative-panel]') === newRoot && newRoot.dataset.generation !== 'late', 'Late completion cannot overwrite a reopened drawer');
+    check(location.href === originalUrl && panel.getAttribute('aria-hidden') === 'false', 'All actions leave URL and current drawer intact');
+    document.getElementById('results').textContent = 'BROWSER PASS: ' + assertions + ' friendship panel assertions';
+} catch (error) {
+    document.getElementById('results').textContent = 'BROWSER FAIL: ' + error.message + '\n' + error.stack;
+}
+</script></body></html>

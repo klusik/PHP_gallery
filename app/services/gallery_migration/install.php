@@ -374,10 +374,10 @@ function gallery_migration_install_original(int $targetGalleryId, array $imageMa
  * Insert or update the target image row from manifest metadata.
  *
  * @param int $targetGalleryId Target gallery id identifier.
- * @param array $imageManifest Image manifest value.
+ * @param array{relative_path?:string,title?:string,description?:string,width?:int,height?:int,mime_type?:string,sort_order?:int,visibility?:string,tags?:string,translations?:array<string,mixed>,...} $imageManifest Validated source manifest with optional localized, EXIF/GPS and presentation fields.
  * @param string $targetPath Target filesystem path.
- * @param array $info Info value.
- * @return int Integer result for the caller.
+ * @param array{width?:int,height?:int,mime?:string,...} $info Observed source dimensions and MIME used when the manifest omits them.
+ * @return int Persisted target image identifier, retaining the existing identifier for an upsert.
  */
 function gallery_migration_upsert_image_metadata(int $targetGalleryId, array $imageManifest, string $targetPath, array $info): int
 {
@@ -431,6 +431,7 @@ function gallery_migration_upsert_image_metadata(int $targetGalleryId, array $im
         $columns,
         now_sql()
     );
+    thumbnail_legacy_identity_cache_clear();
 
     if (function_exists('Gallery\\Services\\sync_entity_tags')) {
         sync_entity_tags('image', $imageId, (string) ($imageManifest['tags'] ?? ''));
@@ -471,6 +472,7 @@ function gallery_migration_install_thumbnail(int $targetGalleryId, int $imageId,
     if (!$gallery || !$image || (int) ($image['gallery_id'] ?? 0) !== $targetGalleryId) {
         throw new RuntimeException(gallery_migration_t('gallery_migration.error.image_missing', 'Requested source image was not found.'));
     }
+    thumbnail_assert_source_identity_owned($image);
     $size = (int) ($asset['size'] ?? 0);
     $format = (string) ($asset['format'] ?? '');
     if (!in_array($size, thumbnail_sizes(), true) || !in_array($format, ['jpg', 'webp'], true)) {

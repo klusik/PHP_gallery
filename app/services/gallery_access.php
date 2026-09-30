@@ -1050,3 +1050,85 @@ function gallery_access_find_by_token(string $token, int $galleryId = 0): ?array
     }
     return gallery_model_find_by_access_token_hash(hash('sha256', $token), $galleryId);
 }
+
+/**
+ * Inspect the complete source policy needed for exporting public gallery metadata.
+ * Unlike historical browsing, export has no pre-feature schema compatibility path.
+ *
+ * @return array<string,mixed> Three-state schema result with bounded object identifiers.
+ */
+function gallery_public_export_schema_status(): array
+{
+    $requirements = array_merge(gallery_access_schema_status()['requirements'], nsfw_guard_schema_status()['requirements']);
+    foreach (['id', 'parent_id', 'title', 'visibility'] as $column) {
+        $requirements[] = schema_inspection_column('galleries', $column);
+    }
+    return schema_inspection_feature('gallery_public_export', $requirements);
+}
+
+/**
+ * Evaluate a current local album for anonymous public metadata export.
+ * No session, administrator privilege or share token can satisfy this policy.
+ * Every ancestor must remain listed, public, password-free and unrestricted.
+ * Purpose: Bound malformed ancestry traversal. Type: integer. Units: ancestors.
+ * Scope: this operation. Consumers: cooperative source selection and revalidation.
+ * Rationale: 64 levels accommodate nested albums while bounding cycles and query work.
+ *
+ * @param int $galleryId Local gallery identity, never a remotely supplied gallery row.
+ * @return array{allowed:bool,reason:string} Bounded eligibility without source rows or credentials.
+ */
+function gallery_public_export_policy(int $galleryId): array
+{
+    if ($galleryId < 1) {
+        return ['allowed' => false, 'reason' => 'invalid_gallery'];
+    }
+    $schema = gallery_public_export_schema_status();
+    if (!schema_inspection_is_available($schema)) {
+        return ['allowed' => false, 'reason' => schema_inspection_is_missing($schema) ? 'schema_missing' : 'schema_unknown'];
+    }
+    if (schema_inspection_is_unknown(gallery_visibility_schema_status())) {
+        return ['allowed' => false, 'reason' => 'schema_unknown'];
+    }
+    $visited = [];
+    $currentId = $galleryId;
+    try {
+        while ($currentId > 0) {
+            if (isset($visited[$currentId]) || count($visited) >= 64) {
+                return ['allowed' => false, 'reason' => 'invalid_hierarchy'];
+            }
+            $visited[$currentId] = true;
+            // Read current model state, bypassing presentation/session caches.
+            $row = \Gallery\Models\gallery_model_find_by_id($currentId);
+            if ($row === null) {
+                return ['allowed' => false, 'reason' => $currentId === $galleryId ? 'gallery_missing' : 'invalid_hierarchy'];
+            }
+            foreach (['id', 'parent_id', 'visibility', 'access_mode', 'access_listing', 'nsfw_enabled'] as $key) {
+                if (!array_key_exists($key, $row)) {
+                    return ['allowed' => false, 'reason' => 'source_unavailable'];
+                }
+            }
+            if (!gallery_is_public_listed($row)) {
+                return ['allowed' => false, 'reason' => 'not_public'];
+            }
+            if ($row['access_mode'] !== 'normal' || $row['access_listing'] !== 'listed') {
+                return ['allowed' => false, 'reason' => 'access_restricted'];
+            }
+            if (!in_array($row['nsfw_enabled'], [0, '0'], true)) {
+                return ['allowed' => false, 'reason' => 'nsfw_restricted'];
+            }
+            $parent = $row['parent_id'];
+            if ($parent === null) {
+                $currentId = 0;
+            } else {
+                $parentId = filter_var($parent, FILTER_VALIDATE_INT);
+                if ($parentId === false || $parentId < 0) {
+                    return ['allowed' => false, 'reason' => 'invalid_hierarchy'];
+                }
+                $currentId = $parentId;
+            }
+        }
+    } catch (\Throwable) {
+        return ['allowed' => false, 'reason' => 'source_unavailable'];
+    }
+    return ['allowed' => true, 'reason' => ''];
+}

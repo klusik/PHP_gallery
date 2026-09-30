@@ -39,6 +39,69 @@ namespace Gallery\Models;
 use InvalidArgumentException;
 use function Gallery\Core\db;
 
+/** Select bounded potential thumbnail-name conflicts through indexed semantic identities.
+ * Non-ASCII characters widen to single-character patterns so binary database
+ * collations cannot hide case-equivalent names. Services filter the bounded superset.
+ * ASCII matching uses the installed MySQL utf8mb4_unicode_ci filename collation.
+ * SQLite additionally widens K/S because its LIKE omits Kelvin/long-S Unicode folds.
+ * @param int $galleryId Positive gallery owner identifier.
+ * @param list<int> $imageIds Selected source identifiers, including projected renames.
+ * @param list<string> $effectiveStems Literal effective thumbnail stems.
+ * @param list<string> $candidatePathHashes Canonical lowercase SHA-256 relative-path digests.
+ * @param bool $hasIdentityVersion Whether the naming-version column is verified available.
+ * @param int $limit Positive shared candidate/lookahead bound, at most 4097 rows.
+ * @return list<array{id:int|string,filename:string,relative_path:string,thumbnail_source_identity_version:int|string}> Potential conflicts across every access class.
+ */
+function image_model_thumbnail_identity_candidates(int $galleryId, array $imageIds, array $effectiveStems,
+    array $candidatePathHashes, bool $hasIdentityVersion, int $limit): array
+{
+    if ($galleryId < 1 || $limit < 1 || $limit > 4097 || count($imageIds) > 256
+        || count($effectiveStems) > 128 || count($candidatePathHashes) > 256) {
+        throw new InvalidArgumentException('Invalid thumbnail identity candidate bounds.');
+    }
+    foreach ($imageIds as $id) {
+        if (!is_int($id) || $id < 1) { throw new InvalidArgumentException('Invalid thumbnail source identifier.'); }
+    }
+    foreach ($effectiveStems as $stem) {
+        if (!is_string($stem) || $stem === '' || strlen($stem) > 255) {
+            throw new InvalidArgumentException('Invalid thumbnail identity stem.');
+        }
+    }
+    foreach ($candidatePathHashes as $hash) {
+        if (!is_string($hash) || preg_match('/\A[a-f0-9]{64}\z/', $hash) !== 1) {
+            throw new InvalidArgumentException('Invalid thumbnail identity digest.');
+        }
+    }
+    $version = $hasIdentityVersion ? 'thumbnail_source_identity_version' : '0 AS thumbnail_source_identity_version';
+    $select = 'SELECT id, filename, relative_path, ' . $version . ' FROM images WHERE gallery_id = ? AND ';
+    $database = db();
+    $sqlite = $database->getAttribute(\PDO::ATTR_DRIVER_NAME) === 'sqlite';
+    $branches = [];
+    $params = [];
+    if ($imageIds !== []) {
+        $branches[] = $select . 'id IN (' . implode(',', array_fill(0, count($imageIds), '?')) . ')';
+        array_push($params, $galleryId, ...$imageIds);
+    }
+    foreach (array_unique($effectiveStems) as $stem) {
+        $branches[] = $select . "(filename = ? OR filename LIKE ? ESCAPE '=' OR filename LIKE ? ESCAPE '=')";
+        $prefix = str_replace(['=', '%', '_'], ['==', '=%', '=_'], $stem);
+        $prefix = preg_replace('/[^\x00-\x7F]/u', '_', $prefix);
+        if ($prefix === null) { throw new InvalidArgumentException('Invalid thumbnail identity encoding.'); }
+        // SQLite's ASCII-only LIKE misses Unicode folds K/K and S/ſ. MySQL's
+        // installed Unicode collation already includes their primary UCA weights.
+        if ($sqlite) { $prefix = str_replace(['k', 'K', 's', 'S'], '_', $prefix); }
+        array_push($params, $galleryId, $stem, $prefix, $prefix . '.%');
+    }
+    if ($hasIdentityVersion && $candidatePathHashes !== []) {
+        $branches[] = $select . 'relative_path_hash IN (' . implode(',', array_fill(0, count($candidatePathHashes), '?')) . ')';
+        array_push($params, $galleryId, ...$candidatePathHashes);
+    }
+    if ($branches === []) { return []; }
+    $stmt = $database->prepare('SELECT * FROM (' . implode(' UNION ', $branches) . ') AS identity_candidates LIMIT ' . $limit);
+    $stmt->execute($params);
+    return $stmt->fetchAll() ?: [];
+}
+
 /**
  * Update one explicitly supported scalar image column for a set of rows.
  *
@@ -319,6 +382,7 @@ function image_model_delete_thumbnail_variants(int $imageId): void
 
 /**
  * Insert one scanner-discovered image row.
+ * New sources explicitly use canonical naming even after interrupted default DDL.
  *
  * @param array<string,mixed> $fields Schema-aware scanner persistence values.
  * @return int Newly created image identifier.
@@ -367,6 +431,8 @@ function image_model_insert_scan_row(array $fields): int
         $values[] = $value;
     }
 
+    $columns[] = 'thumbnail_source_identity_version';
+    $values[] = 1;
     $pdo = db();
     $stmt = $pdo->prepare('INSERT INTO images (' . implode(', ', $columns) . ') VALUES (' . implode(', ', array_fill(0, count($columns), '?')) . ')');
     $stmt->execute($values);
@@ -774,6 +840,8 @@ function image_model_all_direct_ids_ordered(): array
  * The service has already filtered optional columns through schema policy. This
  * model still validates every column name against the migration persistence
  * allowlist before composing SQL.
+ * Inserts explicitly select canonical thumbnail naming; updates preserve the
+ * existing naming marker and never import a source installation's marker.
  *
  * @param int $galleryId Target gallery identifier.
  * @param ?int $existingImageId Existing image identifier, or null for insert.
@@ -844,6 +912,7 @@ function image_model_migration_upsert(int $galleryId, ?int $existingImageId, arr
     $insertFields['gallery_id'] = $galleryId;
     $insertFields['created_at'] = $now;
     $insertFields['updated_at'] = $now;
+    $insertFields['thumbnail_source_identity_version'] = 1;
     $columns = array_keys($insertFields);
     $stmt = db()->prepare('INSERT INTO images (' . implode(', ', $columns) . ') VALUES (' . implode(', ', array_fill(0, count($columns), '?')) . ')');
     $stmt->execute(array_values($insertFields));

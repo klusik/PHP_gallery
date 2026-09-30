@@ -41,9 +41,11 @@ require_once __DIR__ . '/../app/services/mutation_schema_policy.php';
 
 use Gallery\Services\MutationSchemaUnavailableException;
 use function Gallery\Services\gallery_deletion_schema_status;
+use function Gallery\Services\gallery_migration_schema_status;
 use function Gallery\Services\mobile_webdav_revocation_schema_status;
 use function Gallery\Services\mobile_webdav_schema_status;
 use function Gallery\Services\mutation_schema_optional_column_available;
+use function Gallery\Services\mutation_schema_assert_available;
 use function Gallery\Services\schema_inspection_is_available;
 use function Gallery\Services\schema_inspection_is_missing;
 use function Gallery\Services\schema_inspection_is_unknown;
@@ -156,9 +158,38 @@ schema_inspection_set_query_executor_for_tests(
 schema_inspection_reset_request_cache();
 mutation_policy_assert_true(schema_inspection_is_available(upload_ingestion_schema_status()), 'upload ingestion current schema available');
 $firstQueryCount = $queryCount;
-mutation_policy_assert_same(12, $firstQueryCount, 'upload ingestion metadata query budget');
+mutation_policy_assert_same(13, $firstQueryCount, 'upload ingestion metadata query budget');
 mutation_policy_assert_true(schema_inspection_is_available(upload_ingestion_schema_status()), 'upload ingestion cached schema available');
 mutation_policy_assert_same($firstQueryCount, $queryCount, 'upload ingestion request-local cache prevents repeat metadata queries');
+
+foreach (['missing', 'unknown'] as $markerState) {
+    schema_inspection_set_query_executor_for_tests(
+        /** Observe only the marker dependency as missing or unknown in isolated metadata.
+         * @param string $type Metadata object kind.
+         * @param string $table Validated table identifier.
+         * @param string $object Validated column identifier.
+         * @return bool True for verified prerequisites; false for confirmed marker absence.
+         */
+        static function (string $type, string $table, string $object) use ($markerState): bool {
+            if ($type === 'column' && $table === 'images' && $object === 'thumbnail_source_identity_version') {
+                if ($markerState === 'unknown') { throw new PDOException('marker metadata unavailable'); }
+                return false;
+            }
+            return true;
+        }
+    );
+    foreach ([upload_ingestion_schema_status(), gallery_migration_schema_status()] as $status) {
+        mutation_policy_assert_same($markerState, $status['state'], 'new source marker must be verified before ingestion');
+        $refused = false;
+        try {
+            mutation_schema_assert_available($status, 'test.source_identity_ingestion');
+        } catch (MutationSchemaUnavailableException $exception) {
+            $refused = $exception->state === $markerState;
+        }
+        mutation_policy_assert_true($refused, 'new source marker has no missing/unknown ingestion compatibility path');
+    }
+}
+schema_inspection_set_query_executor_for_tests($allAvailableExecutor);
 
 $phase10MutationSources = [
     'app/services/gallery_mutations.php',
@@ -224,6 +255,29 @@ $browserFunctionStart = strpos($browserUploadSource, 'function browser_upload_st
 $browserPreflight = strpos($browserUploadSource, "thumbnail_metadata_preflight_write_schema('browser_upload.thumbnail_metadata_preflight')", $browserFunctionStart);
 $browserGalleryWrite = strpos($browserUploadSource, 'file_put_contents($targetPath', $browserFunctionStart);
 mutation_policy_assert_true($browserFunctionStart !== false && $browserPreflight !== false && $browserGalleryWrite !== false && $browserPreflight < $browserGalleryWrite, 'prepared browser upload preflight occurs before gallery file write');
+
+$classicIngestion = strpos($uploadSource, 'upload_ingestion_schema_status()');
+mutation_policy_assert_true($classicIngestion !== false && $classicIngestion < strpos($uploadSource, 'move_uploaded_file('), 'classic upload source identity preflight precedes original move');
+$browserIngestion = strpos($browserUploadSource, 'upload_ingestion_schema_status()', $browserFunctionStart);
+mutation_policy_assert_true($browserIngestion !== false && $browserIngestion < $browserGalleryWrite, 'browser upload source identity preflight precedes target write');
+$webdavSource = module_source(__DIR__ . '/../app/services/mobile_webdav.php');
+$webdavStoreStart = strpos($webdavSource, 'function mobile_webdav_store_put_owned');
+$webdavIngestion = strpos($webdavSource, 'upload_ingestion_schema_status()', $webdavStoreStart);
+$webdavTargetMove = strpos($webdavSource, 'rename($sourcePath, $targetPath)', $webdavStoreStart);
+mutation_policy_assert_true($webdavIngestion !== false && $webdavTargetMove !== false && $webdavIngestion < $webdavTargetMove, 'WebDAV source identity preflight precedes original target move');
+$migrationSource = module_source(__DIR__ . '/../app/services/gallery_migration.php');
+$migrationInstallStart = strpos($migrationSource, 'function gallery_migration_install_asset_file_owned');
+$migrationIngestion = strpos($migrationSource, 'gallery_migration_schema_status()', $migrationInstallStart);
+$migrationCopy = strpos($migrationSource, 'copy($sourcePath, $targetPath)', $migrationInstallStart);
+mutation_policy_assert_true($migrationIngestion !== false && $migrationCopy !== false && $migrationIngestion < $migrationCopy, 'migration source identity preflight precedes original target copy');
+$scanSource = module_source(__DIR__ . '/../app/services/image_scanning.php');
+$scanFunctionStart = strpos($scanSource, 'function scan_gallery_image_file_entry');
+$scanExisting = strpos($scanSource, 'scan_gallery_image_row_by_path($galleryId, $relative)', $scanFunctionStart);
+$scanIngestion = strpos($scanSource, 'upload_ingestion_schema_status()', $scanFunctionStart);
+$scanInsert = strpos($scanSource, 'image_model_insert_scan_row($fields)', $scanFunctionStart);
+mutation_policy_assert_true($scanExisting !== false && $scanIngestion !== false && $scanInsert !== false
+    && $scanExisting < $scanIngestion && $scanIngestion < $scanInsert,
+    'scanner retains legacy existing rows and preflights new registrations before insert');
 
 $thumbnailGenerationSource = (string) file_get_contents(__DIR__ . '/../app/services/thumbnail_generation.php');
 $generationFunctionStart = strpos($thumbnailGenerationSource, 'function create_image_thumbnails_result');

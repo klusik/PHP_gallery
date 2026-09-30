@@ -571,6 +571,7 @@ function gallery_image_move_recover_locked(string $operationId): array
             gallery_image_move_reconcile_file($wanted, $other, $identity);
         }
         if ($committed) {
+            thumbnail_legacy_identity_cache_clear();
             thumbnail_maintenance_summary_cache_clear();
             if (public_path_schema_ready()) {
                 regenerate_gallery_image_public_slugs((int) $source['id']);

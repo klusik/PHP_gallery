@@ -203,7 +203,7 @@ $environment = [
     ['component' => 'Node', 'status' => $node !== null ? STATUS_PASS : STATUS_BLOCKED, 'value' => $node !== null ? audit_tool_version([$node], ['--version']) : 'not found'],
     ['component' => 'Python', 'status' => $python !== null ? STATUS_PASS : STATUS_BLOCKED, 'value' => $python !== null ? audit_tool_version($python, ['--version']) : 'not found'],
     ['component' => 'Git', 'status' => $git !== null && is_dir($root . '/.git') ? STATUS_PASS : STATUS_SKIP, 'value' => $git !== null ? ($git . (is_dir($root . '/.git') ? '' : ' (no checkout metadata)')) : 'not found'],
-    ['component' => 'Chromium browser', 'status' => $browser !== null ? STATUS_PASS : STATUS_SKIP, 'value' => $browser ?? 'not found'],
+    ['component' => 'Chromium browser', 'status' => $browser !== null ? STATUS_PASS : STATUS_SKIP, 'value' => $browser ?? (trim((string) getenv('PHP_GALLERY_BROWSER')) === 'disabled' ? 'explicitly disabled by PHP_GALLERY_BROWSER' : 'not found')],
 ];
 
 $tasks = [];
@@ -412,8 +412,10 @@ function audit_run_node_suite(string $suiteId, string $label, array $definitions
         if (!empty($definition['browser'])) {
             if ($browser === null) {
                 $counts['skipped']++;
-                $gaps[] = $name . ': no Chrome/Chromium/Edge executable detected';
-                $log[] = '[SKIP] ' . $name . ' - no Chrome/Chromium/Edge executable detected';
+                $reason = trim((string) getenv('PHP_GALLERY_BROWSER')) === 'disabled'
+                    ? 'Chromium explicitly disabled by PHP_GALLERY_BROWSER' : 'no Chrome/Chromium/Edge executable detected';
+                $gaps[] = $name . ': ' . $reason;
+                $log[] = '[SKIP] ' . $name . ' - ' . $reason;
                 continue;
             }
             $command[] = $browser;

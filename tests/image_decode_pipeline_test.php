@@ -47,6 +47,19 @@ namespace Gallery\Core {
 
 namespace Gallery\Services {
     /**
+     * Trust the disposable fixture's isolated derivative identity.
+     * @param array<string,mixed> $image Disposable source row.
+     * @return bool True for this non-database decode fixture.
+     */
+    function thumbnail_legacy_identity_owned(array $image): bool { return true; }
+
+    /**
+     * Accept isolated ownership before testing decoder admission.
+     * @param array<string,mixed> $image Disposable source row.
+     * @return void
+     */
+    function thumbnail_assert_source_identity_owned(array $image): void {}
+    /**
      * Provide synthetic metadata only for explicitly selected disposable sources.
      *
      * @param string $path Disposable fixture source or thumbnail path.

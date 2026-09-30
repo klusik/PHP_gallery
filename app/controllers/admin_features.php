@@ -234,7 +234,8 @@ function admin_feature_card_view_model(string $featureKey, array $definition, ar
         'schema_state_label' => is_string($schemaState) && $schemaState !== '' ? t('admin.features.schema_state', 'Schema: {state}', ['state' => $schemaState]) : '',
         'blocker_label' => $blockerLabel,
         'context_hint' => is_string($contextHint) ? $contextHint : '',
-        'settings_url' => $settingsUrl,
+        'settings_url' => $featureKey === 'cooperative_galleries' && !$effectiveEnabled ? '' : $settingsUrl,
+        'settings_panel' => $featureKey === 'cooperative_galleries' && $effectiveEnabled,
         'settings_label' => t('admin.features.specialized_settings', 'Open specialized settings'),
         'effective_state' => $effectiveEnabled ? $enabledLabel : $disabledLabel,
     ];

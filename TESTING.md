@@ -1,6 +1,6 @@
 # Testing Guide
 
-This guide applies to PHP Gallery Version 0.112. Release verification uses the central audit runner's `release` profile as the single authoritative automated qualification pass, plus any material environment-dependent/manual coverage reported by that profile and the retained Version 0.97 coverage: recoverable gallery-subtree deletion, restore, manual purge, bounded Empty Trash, crash reconciliation, optional retention-based automatic purge, persistent protected trash storage, and fail-closed schema readiness; recursive, resumable gallery migration with bounded ZIP packages and imported child-tree reconstruction; canonical map-marker photo-page fallbacks and in-viewer map navigation across physical-gallery pagination, fullscreen split-map persistence, the canonical Admin side-panel mutation envelope and completion coordinator, multi-context postcondition verification, stale/out-of-order suppression, browser upload pipeline safeguards, opened-gallery branch image counters and their Theme/per-gallery visibility policy, progressive thumbnail dimension detection and responsive compatibility, the Version 0.93 request-budget/TTFB behavior, request-local database caching, resumable updater safety, updater server-policy reconciliation, Admin test-run diagnostics, public media concurrency and cache invalidation, clean-home URL handling, upload auto-renaming and inventory behavior, the redesigned Windows uploader, the Windows HTTP monitor schedules/protocol snapshots/report ZIPs, deployment exclusion rules, lightbox detached-image cleanup, decoded-cache ownership, preload-generation invalidation, navigation-transaction settlement, recoverable loading failures, teardown/reopen cycles, public lightbox zoom and progressive quality promotion, Shift+Left/Right ten-photo navigation, public Smart Gallery visibility, presentation settings, cycle-safe placement/order evaluation, viewer account privacy/access, collection sharing, bounded gallery benchmark diagnostics, access intersection and pagination; multilingual gallery/photo content and fallbacks; browser-local ZIP imports; progressive gallery and Smart Gallery ZIP downloads; browser download symbol rendering; ordered migration upgrades; complete deployment packaging; updater safety; the configurable public language selector; hourly automatic-update throttling; and the supported English, Czech, German, and Swedish catalogs.
+This guide applies to PHP Gallery Version 0.113. Release verification uses the central audit runner's `release` profile as the single authoritative automated qualification pass, plus any material environment-dependent/manual coverage reported by that profile and the retained Version 0.97 coverage: recoverable gallery-subtree deletion, restore, manual purge, bounded Empty Trash, crash reconciliation, optional retention-based automatic purge, persistent protected trash storage, and fail-closed schema readiness; recursive, resumable gallery migration with bounded ZIP packages and imported child-tree reconstruction; canonical map-marker photo-page fallbacks and in-viewer map navigation across physical-gallery pagination, fullscreen split-map persistence, the canonical Admin side-panel mutation envelope and completion coordinator, multi-context postcondition verification, stale/out-of-order suppression, browser upload pipeline safeguards, opened-gallery branch image counters and their Theme/per-gallery visibility policy, progressive thumbnail dimension detection and responsive compatibility, the Version 0.93 request-budget/TTFB behavior, request-local database caching, resumable updater safety, updater server-policy reconciliation, Admin test-run diagnostics, public media concurrency and cache invalidation, clean-home URL handling, upload auto-renaming and inventory behavior, the redesigned Windows uploader, the Windows HTTP monitor schedules/protocol snapshots/report ZIPs, deployment exclusion rules, lightbox detached-image cleanup, decoded-cache ownership, preload-generation invalidation, navigation-transaction settlement, recoverable loading failures, teardown/reopen cycles, public lightbox zoom and progressive quality promotion, Shift+Left/Right ten-photo navigation, public Smart Gallery visibility, presentation settings, cycle-safe placement/order evaluation, viewer account privacy/access, collection sharing, bounded gallery benchmark diagnostics, access intersection and pagination; multilingual gallery/photo content and fallbacks; browser-local ZIP imports; progressive gallery and Smart Gallery ZIP downloads; browser download symbol rendering; ordered migration upgrades; complete deployment packaging; updater safety; the configurable public language selector; hourly automatic-update throttling; and the supported English, Czech, German, and Swedish catalogs.
 
 ## Purpose
 
@@ -79,6 +79,34 @@ Node execution is registry-driven through `scripts/audit_registry.php`, not a bl
 Python discovery is execution-based rather than filesystem-only. The runner probes `python3 --version`, `python --version`, and `py -3 --version` in order and accepts only a successful Python 3 response. This is intentional on Windows: App Execution Aliases and launchers can be runnable from `PATH` even when PHP does not expose the alias as an ordinary file to `is_file()`. `PHP_GALLERY_PYTHON` remains available as an explicit executable-name/path override and is validated by the same Python 3 probe before WinApp tests start.
 
 WinApp tests that exercise optional host integrations must remain isolated from the developer workstation. In particular, SimConnect tests must not assume that a deliberately invalid manual override means no usable SimConnect DLL exists: the runtime intentionally falls back to automatic DLL discovery. The regression fixture therefore stubs DLL resolution when testing the nonfatal missing-DLL branch. The audit also parses Python `unittest` trailers so the compact console/report summary distinguishes passed tests, assertion failures, errors, and skips without dumping the full Python log.
+
+`winapp/tests/test_simconnect.py` uses fake native DLL calls and real packed
+ctypes packets to cover MSFS 2020 aircraft position, MSFS 2024 camera/fallback,
+unknown-generation capability handling, explicit exceptions, response
+correlation, bounded waits, cleanup, repeated acquisitions and nonfatal upload
+integration. Build tests verify the x64 runtime, required exports, embedded DLL
+hash and the installer entry that distributes only the application EXE with its
+embedded runtime. These tests run through the central WinApp regression suite.
+
+The installer contract also covers forced shutdown before file replacement,
+exact installation-path matching, verified exit, and refusal on unknown state.
+Compile the real script with the existing Inno Setup compiler. Manual upgrade
+acceptance must check a running/tray uploader and both onefile processes, silent
+installation, an uploader copy in another directory, and refusal when shutdown
+or WMI verification is unavailable. Compilation/source contracts do not prove
+live shutdown behavior; WMI query latency is controlled by Windows.
+
+Real-simulator acceptance requires separate Windows runs with MSFS 2020 and
+MSFS 2024: capture a watched screenshot during a flight, confirm provider/source
+and degrees/feet in logs, and verify the uploaded image's map position. In 2024,
+compare camera coordinates with an external/drone camera, then make the camera
+unavailable and verify aircraft fallback. With the simulator closed, upload must
+still succeed. Capture several screenshots quickly and confirm per-file metadata
+and optional source deletion. In an installed build, check that the local log
+resolves the bundled `runtime/simconnect/SimConnect.dll` in PyInstaller's
+extraction directory. Copy diagnostics must show the last result without triggering a
+new connection. Fake-DLL tests and packaging checks cannot establish live native
+compatibility or simulator response timing on another workstation.
 
 `php tests/run.php` is retained only for compatibility and delegates to `scripts/audit.php --suite=php-regression --no-report`. It is not an agent entrypoint. Focused commands elsewhere in this document are reproduction/diagnostic references or manual acceptance steps only; the global agent execution rule above takes precedence over them. Do not pre-run focused tests "just in case", and do not replay them after a successful central audit. Duplicate runs are justified only while investigating a concrete failure or validating a new test before registry integration.
 
@@ -1611,3 +1639,115 @@ browser retries. Run these through the central audit, not a separate test loop.
 ## Browser upload oversized-single-image batching
 
 For browser-assisted gallery uploads, treat the configured ZIP batch size (24 MB by default) as a soft packing target. A prepared image package is atomic because it contains the original plus all browser-generated thumbnail variants. If one package alone exceeds the target, it must be emitted as a one-image ZIP batch instead of failing. The client and server must still reject a prepared ZIP that exceeds the detected effective PHP upload limit. Multi-image batches must continue splitting at the configured target and maximum-images-per-batch setting. Run `php scripts/check_admin_mutation_contracts.php`, PHP/JavaScript syntax checks, and verify `app/core-manifest.json` after changes to this path.
+
+## Cooperative galleries foundations
+
+The central audit discovers `cooperative_galleries_foundations_test.php` and
+`cooperative_galleries_storage_test.php`. They cover unanimous A+B+C approval,
+missing friendship edges, exact consent hashes, stale revisions, generation-bound
+trust, source-policy refusal and isolated credential persistence. Storage tests use
+in-memory SQLite and OpenSSL, with no production configuration or live migration.
+The audit registry reports missing extensions as BLOCKED. This coverage does not
+claim real MySQL concurrency, networking or browser workflows.
+
+`cooperative_pairing_workflow_test.php` adds two isolated SQLite installations running
+real domain services plus real Admin controller calls with fixture authentication. It
+covers reverse proof, no-consent imports, secret-free projections, lost replies, retry
+backoff, expiry, narrow schema revocation, simultaneous disconnects and fresh pairing
+without resetting credential generations. `outbound_http_transport_test.php` supplies
+controlled DNS/cURL responses to verify pinning, TLS options, no redirect/proxy forwarding,
+response bounds and safe errors without external networking. Their required extensions
+are explicit in the central audit registry. Real MySQL row-lock concurrency and two
+public HTTPS deployments remain deployment qualification; production deployment interactions remain separate from isolated browser fixtures.
+
+The cooperative workflow test now also exercises real UI fragments, secret isolation,
+HTML escaping and the ordinary POST fallback. `admin_cooperative_galleries_browser_test.mjs`
+is registered in the central browser suite and reuses the confined drawer fixture runner.
+It checks every friendship action, dynamic rerender, duplicate setup/submission, preserved
+URL/open drawer/input, refresh without lost request identity, and late-response suppression
+after close/reopen. It uses production browser modules and synthetic local responses;
+no live gallery credentials or remote installations participate.
+
+`cooperative_album_sources_test.php` runs source selection, canonical public export
+policy, identity preparation and the read-only Admin endpoint on isolated SQLite.
+It checks inherited password/visibility/NSFW restrictions without session bypasses,
+changed or deleted source albums, invalid ancestry, scope normalization, pagination,
+safe projection, complete schema preflight and disabled/anonymous/method refusal.
+This is preparation coverage, not group approval or media-export qualification.
+
+`cooperative_proposals_exchange_test.php` exercises initial proposal delivery and
+independently owned decisions on separate A/B/C SQLite nodes plus an unrelated peer.
+It covers missing direct friendship, immutable replay, lost acknowledgements, forged
+claims, source and credential changes, terminal decline, concurrent response suppression,
+explicitly unsupported expansion, expiry and Admin/CSRF/OFF/schema boundaries. It asserts
+that all observations still leave sharing inactive. Networking is substituted in process;
+live HTTPS deployments and MySQL concurrency require separate qualification.
+
+`cooperative_activation_test.php` shares the independent-node fixture with the proposal
+suite. It covers fresh nonce-bound verification, missing proofs/edges, failed retries,
+partial activation, exact local metadata authority, expiry/renewal, lost-finalization
+retry, local and observed remote withdrawal, concurrent decisions, changed friendship
+generations, and feature/schema refusal. It also distinguishes initial proposal expiry
+from renewal of already active consent. No sleeps or live remote installations are used.
+
+`cooperative_maintenance_test.php` covers automatic single-step verification, the
+active-only scheduler pass, fresh-lease no-op behavior, renewal near expiry, interrupted
+round recovery, negative-consent backoff, expired evidence replacement and concurrent
+withdrawal. The production Admin controller retains its canonical mutation response and
+capability OFF refuses before storage. Additional cases cover concurrent transport
+polling, dropped replies, crash ownership expiry, durable retry cooldown and stale
+responses after a newer owner or concurrent decline. Run the central audit; no live cron or peer server
+is needed for these isolated regressions.
+
+The cooperative proposal review contracts cover no-write/no-network reads (including
+empty installations), escaped local titles, visible participants and permissions, exact
+digest/revision forms, UI-specific canonical completion, stale submissions and HTML
+fallback. The registered Chromium fixture covers approve, decline, deliver, refresh and
+advance actions with dynamic form replacement, preserved drawer/URL, error recovery and
+late-response suppression. Both are run through the central audit.
+
+The composition regression verifies that album locator codes never grant consent, require
+current direct friendships, reject unknown scopes/duplicate participants and retain the
+same immutable proposal on a repeated request ID. Browser coverage additionally checks
+reference and composition actions, retained codes/selection across picker pagination,
+preservation of a separate draft and reset only after successful creation.
+
+The cooperative metadata regression uses only synthetic in-memory SQLite installations.
+It verifies exact exported fields, no raw row/credential leakage, current public-source
+restrictions, exact membership/revision binding, lease expiry, directed credentials,
+Unicode title bounds, unknown schema, revocation and no-write behavior. Controller tests
+cover method refusal, ignored query/form/cookie credentials and content type; no external
+server or production data is used. Run through the central audit.
+
+The public cooperative workflow is covered by cooperative_content_test.php and
+cooperative_completion_test.php, automatically discovered by the central audit.
+Independent SQLite installations exercise A+B to A+B+C with missing A-C friendship,
+fresh unanimous decisions, fixed one-day email expiry, captured mail/cooldown,
+direct withdrawal invalidation, photo pagination, hidden/NSFW/password rejection,
+unknown schema and stale media tickets. No production data or mail transport is used.
+
+`cooperative_content_admission_test.php` covers group-wide remote catalog admission,
+success spacing, failed/crashed retry bounds, concurrent readers, replacement ownership
+and concurrent withdrawal. `cooperative_derivative_bytes_test.php` checks real JPEG/WebP
+containers, EXIF/XMP/ICC/comment removal, progressive scans, malformed/oversized inputs,
+animation refusal and trailing bytes. `thumbnail_source_identity_test.php` uses actual
+path helpers to check extension/path collisions, legacy compatibility, cleanup ownership,
+metadata freshness and both permanent thumbnail renderers.
+`thumbnail_identity_lookup_budget_test.php` exercises the real model against 10,000
+unrelated rows, bounded candidate sets, restricted collisions, literal wildcard
+filenames and Unicode case variants. `picture_manager_copy_test.php` verifies that
+copies preserve derivative bytes and select new names without image generation.
+These regressions also cover shared legacy cache invalidation before deletion/rename
+and bounded refusal of changed, removed or oversized cooperative media files.
+
+The full audit includes cooperative_gallery_browser_test.mjs for automatic renewal,
+attribution, isolated failure, pagination and explicit retry in Chromium. The
+proposal panel fixture checks photo scope retention, email/expansion forms and finite
+automatic continuation across dynamic replacements. Both canonical thumbnail
+renderer suites remain in the central audit; the new cooperative grid does not
+change their rendering or lightbox contracts.
+
+Deployment qualification still needs separate HTTPS installations, verified
+migrations, generated derivatives and configured email delivery. These fixtures do
+not claim SMTP inbox delivery or cross-server MySQL/HTTPS coverage. Use the central
+audit rather than replacing it with focused-test loops.

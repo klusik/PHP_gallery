@@ -58,6 +58,7 @@ media_session_assert(
     str_contains($routingSource, 'function cms_route_is_read_only_media_asset(string $page): bool')
         && str_contains($routingSource, "'public_thumb'")
         && str_contains($routingSource, "'public_media'")
+        && str_contains($routingSource, "'cooperative_media'")
         && str_contains($routingSource, "'gallery_cover_asset'")
         && str_contains($routingSource, "'gallery_branding_asset'"),
     'Read-only media route classification must cover protected thumbnail/media asset endpoints.'

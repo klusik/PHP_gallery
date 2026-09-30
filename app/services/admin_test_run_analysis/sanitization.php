@@ -70,6 +70,8 @@ function admin_test_run_filter_provider_headers(array $headers): array
 
 /**
  * Sanitize a diagnostic URL so report artifacts do not preserve credentials or opaque run tokens.
+ * @param string $url Recorded absolute or relative URL.
+ * @return string Bounded URL with credential values redacted.
  */
 function admin_test_run_sanitize_url(string $url): string
 {
@@ -83,12 +85,7 @@ function admin_test_run_sanitize_url(string $url): string
     $query = [];
     if (!empty($parts['query'])) {
         parse_str((string) $parts['query'], $query);
-        foreach (array_keys($query) as $key) {
-            $lower = strtolower((string) $key);
-            if (preg_match('/(^|_)(token|csrf|password|passwd|secret|api[_-]?key|authorization|session)($|_)/', $lower) === 1) {
-                $query[$key] = '[REDACTED]';
-            }
-        }
+        $query = admin_test_run_sanitize_query($query);
     }
     $result = '';
     if (isset($parts['scheme'], $parts['host'])) {
@@ -108,13 +105,49 @@ function admin_test_run_sanitize_url(string $url): string
 }
 
 /**
+ * Identify authority-bearing query keys, including nested and encoded spellings.
+ *
+ * @param string $key Query parameter name or bracketed nested name.
+ * @return bool Whether the parameter conveys credential authority.
+ */
+function admin_test_run_sensitive_query_key(string $key): bool
+{
+    return preg_match('/(^|[_\-\[\]])(token|ticket|csrf|password|passwd|secret|api[_-]?key|authorization|session)($|[_\-\[\]])/i', urldecode($key)) === 1;
+}
+
+/**
+ * Recursively redact query authority while preserving ordinary identifiers.
+ *
+ * @param array<string|int,mixed> $query Parsed diagnostic query parameters.
+ * @return array<string|int,mixed> Parameters with credential values redacted.
+ */
+function admin_test_run_sanitize_query(array $query): array
+{
+    foreach ($query as $key => $value) {
+        if (admin_test_run_sensitive_query_key((string) $key)) {
+            $query[$key] = '[REDACTED]';
+        } elseif (is_array($value)) {
+            $query[$key] = admin_test_run_sanitize_query($value);
+        }
+    }
+    return $query;
+}
+
+/**
  * Redact credential-like query parameters embedded in arbitrary diagnostic text.
+ * @param string $value Recorded diagnostic text.
+ * @return string Bounded text with credential query values redacted.
  */
 function admin_test_run_sanitize_text(string $value): string
 {
     $value = preg_replace_callback(
-        '/([?&](?:[^=&#\s]*?(?:token|csrf|password|passwd|secret|api[_-]?key|authorization|session)[^=&#\s]*)=)([^&#\s]*)/i',
-        static fn (array $match): string => (string) $match[1] . '[REDACTED]',
+        '/([?&]([^=&#\s]+)=)([^&#\s]*)/i',
+        /** Redact the credential value in one recorded query parameter.
+         * @param array<int,string> $match Full regex match, parameter prefix, key and value.
+         * @return string Original safe parameter or redacted credential parameter.
+         */
+        static fn (array $match): string => admin_test_run_sensitive_query_key((string) $match[2])
+            ? (string) $match[1] . '[REDACTED]' : (string) $match[0],
         $value
     ) ?? $value;
     $value = preg_replace(

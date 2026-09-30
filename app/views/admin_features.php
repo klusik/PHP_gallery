@@ -103,6 +103,7 @@ function view_render_admin_feature_group(array $group, string $groupKicker): voi
  * Render one feature card.
  *
  * @param array<string, mixed> $feature Prepared feature presentation model.
+ * @return void Emits one prepared feature card.
  */
 function view_render_admin_feature_card(array $feature): void
 {
@@ -135,7 +136,9 @@ function view_render_admin_feature_card(array $feature): void
         echo '<small class="admin-feature-context">' . e((string) $feature['context_hint']) . '</small>';
     }
     if ((string) ($feature['settings_url'] ?? '') !== '') {
-        echo '<a class="admin-feature-settings-link" href="' . e((string) $feature['settings_url']) . '">' . e((string) ($feature['settings_label'] ?? '')) . '</a>';
+        $panelAttributes = !empty($feature['settings_panel'])
+            ? ' data-gallery-side-panel-link data-admin-side-panel-workflow="cooperative_pairing" data-admin-side-panel-title="' . e((string) $feature['label']) . '" data-gallery-side-panel-url="' . e((string) $feature['settings_url'] . '&panel=1') . '"' : '';
+        echo '<a class="admin-feature-settings-link" href="' . e((string) $feature['settings_url']) . '"' . $panelAttributes . '>' . e((string) ($feature['settings_label'] ?? '')) . '</a>';
     }
 
     echo '<code>' . e((string) ($feature['key'] ?? '')) . '</code></span>';

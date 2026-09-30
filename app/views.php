@@ -104,3 +104,9 @@ require_once __DIR__ . '/views/admin_gallery_migration.php';
 require_once __DIR__ . '/views/gallery_descriptions.php';
 require_once __DIR__ . '/views/simbrief_descriptions.php';
 require_once __DIR__ . '/views/layout.php';
+
+require_once __DIR__ . '/views/admin_cooperative_galleries.php';
+
+require_once __DIR__ . '/views/admin_cooperative_proposals.php';
+
+require_once __DIR__ . '/views/cooperative_gallery.php';

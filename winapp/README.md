@@ -4,15 +4,24 @@ The Windows companion app is a desktop import client for one PHP Gallery target 
 
 The application keeps the existing `gallery_watch_upload.pyw` launcher, `run_gallery_watcher.bat`, and `--once` compatibility. Normal operation needs only Python plus the lightweight dependencies in `requirements.txt`.
 
-## Windows installer (winapp 0.1.0)
+## Windows installer (winapp 0.2.0)
 
 The companion app has its own version in `winapp/VERSION`, independent of the PHP
 Gallery CMS release. The installer includes Python, Tkinter, Pillow, pystray,
-the tray icons, and `SimConnect.dll` inside one application EXE. End users do not
+the tray icons, and an embedded `SimConnect.dll` inside one application EXE.
+There is no separate DLL to install or distribute. End users do not
 need Python. Installation requests administrator rights and defaults to
 `Program Files\PHP Gallery Uploader`, with a Start Menu shortcut, an optional
 desktop shortcut for all users, and a normal Windows uninstaller. Existing settings and jobs
 in `%APPDATA%\PHPGalleryUploader` survive upgrades and uninstalling.
+
+Before installation/update replaces files, Setup forcibly closes running uploader
+processes whose executable path matches the selected installation directory,
+including the tray app and PyInstaller's onefile parent/child processes. It
+checks the fresh process list for up to three seconds and refuses installation
+if shutdown cannot be verified. Copies running from another directory are not
+terminated. This check also applies to silent installation. Restart Manager
+provides a secondary file-lock check; the final launch checkbox controls relaunch.
 
 To build on Windows, install x64 Python 3.10+ with Tkinter and Inno Setup 6.3+
 (including Inno Setup 7), then run from the repository root:
@@ -22,13 +31,24 @@ winapp\build.bat
 ```
 
 The script downloads the build dependencies into a temporary virtual environment,
-uses PyInstaller `--onefile --windowed`, checks the EXE startup with `--help`
+validates the x64 SimConnect DLL and required exports, uses PyInstaller
+`--onefile --windowed`, verifies the embedded DLL against the source SHA256,
+checks the EXE startup with `--help`
 using a disposable app-data directory, then calls the installed `ISCC.exe`.
 Internet access to the configured Python package index is needed for each build.
+When the required dependencies are already installed, build without downloads or
+package installation using the existing Python and Inno Setup:
+
+```bat
+python winapp\build_installer.py --use-installed-dependencies
+```
+
+This mode verifies the installed dependency versions and keeps all intermediate
+files and caches in the same disposable staging directory.
 The only published build artifact is:
 
 ```text
-winapp/dist/PHPGalleryUploader-0.1.0-Setup.exe
+winapp/dist/PHPGalleryUploader-0.2.0-Setup.exe
 ```
 
 The installer is unsigned and may be uploaded manually to GitHub Releases.
@@ -296,20 +316,72 @@ The Watch folder tab shows how many existing supported files will be ignored at 
 
 ## SimConnect metadata
 
-The watcher can attach the current Microsoft Flight Simulator camera latitude, longitude, and altitude immediately before each watched upload.
+The watcher automatically selects a location strategy immediately before each
+watched upload. It reads simulator identity and version from the SimConnect OPEN
+handshake; there is no manual MSFS generation selector.
 
-SimConnect metadata is optional. If Flight Simulator, the DLL, or a valid camera location is unavailable, the image upload continues without simulator metadata.
+- **MSFS 2024:** the existing `CameraAcquire`, `CameraGetStatus` and
+  `CameraGet(WORLD)` path reads the actual camera world position. A request
+  failure, unsupported API, exception, invalid response or short timeout falls
+  back to user-aircraft position.
+- **MSFS 2020:** reads `PLANE LATITUDE`, `PLANE LONGITUDE` and `PLANE ALTITUDE`
+  through the classic user-aircraft data-definition API; it does not call the
+  newer Camera API. Latitude/longitude use degrees and altitude uses feet.
+- **Unknown generation:** available camera exports allow a bounded capability
+  attempt; unavailable camera data always leads to an aircraft-position attempt.
 
-DLL lookup order includes:
+Handshake application major versions 11 and 12 identify MSFS 2020 and 2024
+respectively. The native server names `KittyHawk` (2020) and `SunRise` (2024),
+and explicit simulator generation names, are recognized with consistent version
+metadata. Other
+or ambiguous identities remain unknown. The server version is separate from DLL
+version and camera capability: exporting a function does not prove the server
+supports it. See the [OPEN structure](https://docs.flightsimulator.com/msfs2024/html/6_Programming_APIs/SimConnect/API_Reference/Structures_And_Enumerations/SIMCONNECT_RECV_OPEN.htm)
+and [Asobo's version clarification](https://devsupport.flightsimulator.com/t/documentation-for-simconnect-recv-exception-is-incorrect/13555).
+The reported application version is the SimConnect server's internal version,
+which can differ from the retail version shown in the simulator's title bar.
+The native server names are illustrated in the [server-version discussion](https://devsupport.flightsimulator.com/t/simconnect-recv-open-reports-different-version-number-to-fs/11727).
 
-1. bundled `winapp/SimConnect.dll`;
-2. the `SIMCONNECT_DLL` environment variable;
-3. common MSFS SDK locations;
-4. normal Windows DLL lookup.
+One short-lived connection and one shared dispatch loop serve both strategies.
+The default total response-wait budget is one second, shared by handshake,
+camera and aircraft attempts. Requests are serialized per client, exception
+send IDs are attributed to their operation, and aircraft responses must match
+the active request/definition/user-object IDs. No old location is reused for a
+later screenshot. SimConnect calls run in the watcher thread, not the UI thread.
 
-A manual `SimConnect.dll override` is available in Settings.
+Location is optional: a stopped simulator, unavailable DLL, failed dispatch or
+both providers failing leaves upload, thumbnails and confirmed-source deletion
+working normally. Logs identify the simulator, provider, actual position source,
+fallback and failure reason. **Copy redacted diagnostics** includes the last
+acquisition snapshot without opening a new simulator connection. Connections
+close after each attempt, so the report distinguishes the last successful
+handshake from the current closed transport. Detailed HRESULT/dispatch counters
+are retained in diagnostics/debug output.
 
-`SimConnect.dll` is a binary dependency. It is not Python source.
+DLL lookup order:
+
+1. valid optional Settings override;
+2. `SIMCONNECT_DLL` environment override;
+3. embedded `runtime/simconnect/SimConnect.dll` in PyInstaller's extraction root;
+4. source-tree/legacy local DLL locations (including an adjacent EXE DLL if
+   present), then common SDK locations.
+
+Normal installed use requires no SDK, manual DLL copying, simulator selection or
+SimConnect configuration. The installer and embedded fallback use the same existing
+x64 `winapp/SimConnect.dll`; no second generation-specific runtime is introduced.
+Build checks reject missing/wrong-architecture DLLs, missing required exports or
+an embedded payload whose SHA256 differs from that source DLL. This Microsoft
+native binary is retained unchanged; the repository does not contain its original
+SDK provenance or redistribution license, and the project's MIT license is not
+a replacement for Microsoft's terms.
+
+For compatibility with existing gallery servers, multipart fields keep the
+historical names `sim_camera_latitude`, `sim_camera_longitude`,
+`sim_camera_altitude` and `sim_location_source=simconnect_camera`. The actual
+source (`camera_world_position`, `aircraft_position` or
+`aircraft_position_fallback`) is recorded internally and in logs. The server API
+is unchanged. Aircraft coordinates label the user aircraft, which can differ
+from an external/drone camera's position.
 
 ## AI metadata worker
 

@@ -28,6 +28,26 @@ declare(strict_types=1);
 
 namespace Gallery\Services {
     /**
+     * Accept the isolated filesystem fixture's derivative ownership.
+     * @param array<string,mixed> $image Fixture source row.
+     * @return void
+     */
+    function thumbnail_assert_source_identity_owned(array $image): void {}
+
+    /**
+     * Match this fixture's existing legacy derivative naming seam.
+     * @param array<string,mixed> $image Fixture source row.
+     * @return string Legacy basename stem.
+     */
+    function thumbnail_filename_stem(array $image): string { return pathinfo((string) $image['filename'], PATHINFO_FILENAME); }
+
+    /**
+     * Confirm source membership in the isolated deletion fixture.
+     * @param array<string,mixed> $image Fixture source row.
+     * @return string Existing fixture derivative stem.
+     */
+    function thumbnail_source_identity_invalidation_stem(array $image): string { return thumbnail_filename_stem($image); }
+    /**
      * Return the small configured size set used by this isolated filesystem test.
      *
      * @return array<int,int> Thumbnail sizes.

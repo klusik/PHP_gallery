@@ -1018,3 +1018,21 @@ function gallery_model_set_thumbnail_bounds(array $galleryIds, ?int $minSize, ?i
     $stmt->execute(array_merge([$minSize, $maxSize, $now], $ids));
     return $stmt->rowCount();
 }
+
+/**
+ * Read a bounded page of local album labels for an administrator source selector.
+ * Eligibility remains service-owned; no paths, credentials or remote content leave this query.
+ *
+ * @param int $afterId Exclusive local gallery cursor.
+ * @param int $limit Maximum rows including the service's lookahead row.
+ * @return list<array{id:int|string,title:string}> Local labels in stable ID order.
+ */
+function gallery_model_source_picker_page(int $afterId, int $limit): array
+{
+    if ($afterId < 0 || $limit < 1) {
+        throw new InvalidArgumentException('Invalid source picker bounds.');
+    }
+    $statement = db()->prepare('SELECT id, title FROM galleries WHERE id > ? ORDER BY id LIMIT ' . $limit);
+    $statement->execute([$afterId]);
+    return $statement->fetchAll(PDO::FETCH_ASSOC);
+}
