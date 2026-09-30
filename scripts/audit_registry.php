@@ -177,6 +177,10 @@ return [
             'browser' => true,
             'timeout' => 60,
         ],
+        'admin_update_jobs_browser_test.mjs' => [
+            'browser' => true,
+            'timeout' => 60,
+        ],
         'gallery_picker_browser_test.mjs' => [],
         'frontend_operational_policy_test.mjs' => [],
         'gallery_migration_policy_test.mjs' => [],

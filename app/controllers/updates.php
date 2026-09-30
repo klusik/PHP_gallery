@@ -82,6 +82,7 @@ use function Gallery\Services\admin_log_event;
 use function Gallery\Views\view_render_admin_update_page;
 use function Gallery\Views\view_render_update_job_card;
 use function Gallery\Views\view_render_update_patch_notes_fragment;
+use function Gallery\Views\view_render_update_release_summary;
 
 /**
  * Admin update controller model.
@@ -154,6 +155,33 @@ function cms_update_json_job_response(array $job): void
     header('Content-Type: application/json; charset=utf-8');
     header('Cache-Control: no-store, private');
     echo json_encode(['ok' => true, 'job' => $job], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+}
+
+/**
+ * Prepare release presentation using the version currently installed on disk.
+ *
+ * Cached discovery may describe the previous version, so availability displayed
+ * by this page is compared against the current installation without a remote check.
+ *
+ * @param array<string, mixed> $status Passive discovery metadata.
+ * @return array<string, mixed> Prepared release summary model.
+ */
+function cms_update_release_view_model(array $status): array
+{
+    $installedVersion = cms_current_version();
+    if (empty($status['error']) && !empty($status['latest_version'])) {
+        $status['update_available'] = version_compare((string) $status['latest_version'], $installedVersion, '>');
+    }
+    $safe = !empty($status['error']) ? application_update_safe_error((string) $status['error']) : null;
+    return [
+        'status' => $status,
+        'installed_version' => $installedVersion,
+        'beta_active' => application_update_beta_active(),
+        'beta_commit' => application_update_beta_commit(),
+        'installer_enabled' => feature_capability_effective_enabled('built_in_update_installer'),
+        'csrf_html' => csrf_field(),
+        'status_error_reference' => (string) ($safe['reference'] ?? ''),
+    ];
 }
 
 /**
@@ -240,12 +268,29 @@ function cms_render_update_job_card(?array $job, bool $installerEnabled = true):
 
 /**
  * Check GitHub for newer application versions and install them on request.
+ *
+ * @return void Emits the requested Admin response.
  */
 function cms_admin_update(): void
 {
     require_admin();
     // $error stores an intermediate value used by the surrounding gallery workflow.
     $error = null;
+
+    if (request_method() === 'GET' && isset($_GET['update_status_fragment'])) {
+        // A separate passive request reads the activated version after the worker
+        // finishes, avoiding request-local pre-update version and metadata caches.
+        $status = application_update_status_for_admin(false);
+        ob_start();
+        view_render_update_release_summary(array_merge(cms_update_release_view_model($status), [
+            'urls' => ['update' => url_for('admin_update')],
+        ]));
+        $html = (string) ob_get_clean();
+        header('Content-Type: application/json; charset=utf-8');
+        header('Cache-Control: no-store, private');
+        echo json_encode(['ok' => true, 'html' => $html], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        return;
+    }
 
     if (isset($_GET['update_job_status'])) {
         $requestedJobId = trim((string) ($_GET['job_id'] ?? ''));
@@ -389,7 +434,8 @@ function cms_admin_update(): void
     // $status stores the passive cached update state used by this page.
     // Normal page rendering must not contact GitHub because even a conditional 304
     // response can still reduce the visible GitHub rate-limit counters.
-    $status = application_update_status_for_admin(false);
+    $releaseModel = cms_update_release_view_model(application_update_status_for_admin(false));
+    $status = (array) $releaseModel['status'];
     // $betaActive stores an intermediate value used by the surrounding gallery workflow.
     $betaActive = application_update_beta_active();
     // $installerEnabled stores the effective Built-in Update Installer master state.
@@ -459,6 +505,7 @@ function cms_admin_update(): void
             'admin' => url_for('admin'),
             'update' => url_for('admin_update'),
             'patch_notes_fragment' => url_for('admin_update', ['patch_notes_fragment' => '1']),
+            'status_fragment' => url_for('admin_update', ['update_status_fragment' => '1']),
             'features' => url_for('admin_features'),
             'diagnostics' => url_for('admin_diagnostics'),
         ],

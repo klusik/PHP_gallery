@@ -3578,6 +3578,8 @@
     "admin.updates.confirm_reinstall_label": "Zur Bestätigung REINSTALL eingeben",
     "admin.updates.current": "Diese Installation ist aktuell.",
     "admin.updates.failed_value": "Update fehlgeschlagen: {error}",
+    "admin.updates.refresh_status_failed": "Der Versionsstatus konnte nicht aktualisiert werden.",
+    "admin.updates.refresh_status_retry": "Status aktualisieren",
     "admin.updates.force_check_button": "Prüfung erzwingen",
     "admin.updates.force_check_completed": "Erzwungene GitHub-Updateprüfung abgeschlossen.",
     "admin.updates.force_check_completed_with_error": "Erzwungene GitHub-Updateprüfung mit Warnung abgeschlossen: {error}",

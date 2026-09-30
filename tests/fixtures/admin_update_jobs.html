@@ -1,0 +1,163 @@
+<!doctype html>
+<!--
+Project: PHP Gallery
+Repository: https://github.com/klusik/PHP_gallery
+File: tests/fixtures/admin_update_jobs.html
+Module Type: Browser Test Fixture
+Purpose: Exercise production updater presentation with confined synthetic jobs.
+Responsibilities: Verify passive completion refresh, retry and drawer persistence without installing files.
+Author: Rudolf Klusal
+License: MIT
+-->
+<html lang="en"><meta charset="utf-8"><title>Updates drawer fixture</title>
+<link rel="stylesheet" href="/public/assets/styles/base.css">
+<link rel="stylesheet" href="/public/assets/styles/admin.css">
+<link rel="stylesheet" href="/public/assets/styles/admin-update.css">
+<link rel="stylesheet" href="/public/assets/styles/side-panel.css">
+<body class="admin-page">
+<main><a id="open" href="/fixture-page" data-gallery-side-panel-link data-gallery-side-panel-url="/fixture-page?panel=1" data-admin-side-panel-workflow="updates" data-admin-side-panel-title="Updates">Open updates</a></main>
+<pre id="results">BROWSER PENDING</pre>
+<script type="module">
+import {setupAdminUpdateJobs} from '/public/assets/gallery-modules/admin-update-jobs.js?v=20261001-compact-update-status';
+import {setupAdminGallerySidePanel} from '/public/assets/gallery-modules/admin-side-panel.js';
+
+let assertions = 0;
+let starts = 0;
+let continuations = 0;
+let reads = 0;
+let failRead = false;
+let failJob = false;
+let holdRead = false;
+let releaseRead;
+const originalUrl = location.href;
+
+/** Require an observable browser behavior.
+ * @param {boolean} value Expected behavior. @param {string} message Failure description. @return {void} Throws on failure.
+ */
+function check(value, message) { assertions++; if (!value) throw new Error(message); }
+/** Wait for bounded fixture progress.
+ * @param {function(): boolean} predicate Expected state. @return {Promise<void>} Resolves when the state appears.
+ */
+async function until(predicate) {
+    const deadline = Date.now() + 5000;
+    while (!predicate()) {
+        if (Date.now() > deadline) throw new Error('Fixture progress timeout');
+        await new Promise(/** Yield to browser tasks. @param {function(): void} resolve Timer consumer. @return {number} Timer. */ resolve => setTimeout(resolve, 10));
+    }
+}
+/** Build a synthetic release summary matching the real view contract.
+ * @param {boolean} pending Whether a newer version exists. @return {string} Summary HTML.
+ */
+function summary(pending) {
+    return '<h2>' + (pending ? 'Update available' : 'This installation is current.') + '</h2>'
+        + '<form method="post" action="/fixture-action"><input name="update_action" value="force_check" type="hidden"><button>Force check</button></form>'
+        + (pending ? '<form method="post" action="/fixture-action" data-update-job-form><input name="csrf_token" value="fixture-csrf" type="hidden"><input name="update_action" value="stable_update" type="hidden"><button>Update</button></form>' : '');
+}
+/** Build two synchronized progress scopes inside the production drawer.
+ * @return {string} Owned fixture page HTML.
+ */
+function markup() {
+    return '<div class="admin-updates-page"><div class="admin-update-workspace">'
+        + '<div data-update-release-summary data-update-status-url="/fixture-summary">' + summary(true) + '</div>'
+        + '<p data-update-status-error hidden>Check failed <button type="button" data-update-status-refresh>Retry</button></p>'
+        + '<section class="admin-update-job" data-update-job-scope hidden></section></div>'
+        + '<section class="admin-update-job" data-update-job-scope hidden></section></div>';
+}
+/** Return a synthetic durable job.
+ * @param {string} status Durable lifecycle state. @return {{id:string, status:string, stage:string, progress:{percent:number, message:string}, can_resume:boolean, can_cancel:boolean, can_rollback:boolean}} Job state.
+ */
+function job(status) {
+    return {id: 'fixture-' + starts, status, stage: status === 'completed' ? 'completed' : 'download',
+        progress: {percent: status === 'completed' ? 100 : 42, message: 'Fixture progress'},
+        can_resume: status !== 'completed', can_cancel: status === 'failed', can_rollback: status === 'completed'};
+}
+/** Return a confined JSON response.
+ * @param {{ok:boolean, job?:Object, html?:string}} body Safe synthetic payload. @param {number} status HTTP status. @return {Response} JSON response.
+ */
+function json(body, status = 200) { return new Response(JSON.stringify(body), {status, headers: {'Content-Type': 'application/json'}}); }
+
+window.fetch = /** Intercept only fixture endpoints; no updater files or GitHub are touched.
+ * @param {string|URL} url Local endpoint. @param {RequestInit} options Synthetic request. @return {Promise<Response>} Fixture response.
+ */ async (url, options = {}) => {
+    const target = new URL(url, location.href);
+    check(target.origin === location.origin, 'No fixture request leaves loopback');
+    if (options.method === 'POST') {
+        check(options.body.get('csrf_token') === 'fixture-csrf' && options.body.get('update_async') === '1', 'Existing update transport preserves CSRF and async fields');
+        const action = options.body.get('update_action');
+        check(action !== 'force_check', 'Completion never forces GitHub discovery');
+        if (action === 'stable_update') { starts++; return json({ok: true, job: job('running')}); }
+        if (action === 'job_continue') { continuations++; return json({ok: true, job: job(failJob ? 'failed' : 'completed')}); }
+        if (action === 'job_cancel') return json({ok: true, job: job('cancelled')});
+        throw new Error('Unexpected fixture mutation');
+    }
+    if (target.pathname === '/fixture-summary') {
+        reads++;
+        check(options.cache === 'no-store', 'Completion reads fresh local presentation');
+        if (failRead) return json({ok: false}, 503);
+        if (holdRead) return new Promise(/** Delay the old summary for supersession coverage. @param {function(Response): void} resolve Response consumer. @return {void} Stores release callback. */ resolve => { releaseRead = /** Release the held passive response. @return {void} Resolves only this fixture request. */ () => resolve(json({ok: true, html: summary(false)})); });
+        return json({ok: true, html: summary(false)});
+    }
+    check(target.pathname === '/fixture-page', 'Only the owned drawer page is loaded');
+    return new Response(markup(), {headers: {'Content-Type': 'text/html'}});
+};
+
+try {
+    setupAdminUpdateJobs();
+    setupAdminUpdateJobs();
+    setupAdminGallerySidePanel();
+    document.getElementById('open').click();
+    await until(/** Await dynamically injected update controls. @return {boolean} Whether summary arrived. */ () => Boolean(document.querySelector('[data-update-release-summary]')));
+    const panel = document.querySelector('[data-admin-side-panel]');
+    const release = panel.querySelector('[data-update-release-summary]');
+    const scope = panel.querySelector('[data-update-job-scope]');
+    let form = release.querySelector('[data-update-job-form]');
+    form.requestSubmit();
+    await until(/** Wait for production progress rendering. @return {boolean} Whether worker is running. */ () => scope.dataset.updateJobStatus === 'running');
+    check(form.querySelector('button').disabled, 'Update stays disabled throughout the running job');
+    await until(/** Wait for passive completion rendering. @return {boolean} Whether refreshed summary arrived. */ () => release.dataset.updateStatusJob === 'fixture-1');
+    check(!release.querySelector('[data-update-job-form]'), 'Update disappears after completion without Force check');
+    check(scope.querySelector('[data-update-job-complete]').hidden === false, 'Completion is visible in dynamically created cards');
+    check(panel.querySelectorAll('[data-update-job-scope][data-update-job-status="completed"]').length === 2, 'Status and Advanced progress remain synchronized');
+    check(starts === 1 && continuations === 1 && reads === 1, 'One start, one continuation and one passive read complete the workflow');
+    check(location.href === originalUrl && panel.getAttribute('aria-hidden') === 'false', 'Completion keeps URL and drawer open');
+
+    release.innerHTML = summary(true);
+    failRead = true;
+    release.querySelector('[data-update-job-form]').requestSubmit();
+    await until(/** Await failed passive read. @return {boolean} Whether retry is visible. */ () => !panel.querySelector('[data-update-status-error]').hidden);
+    check(release.querySelector('[data-update-job-form]').hidden, 'Failed presentation refresh cannot leave stale Update visible');
+    failRead = false;
+    panel.querySelector('[data-update-status-refresh]').click();
+    await until(/** Await retried presentation. @return {boolean} Whether second job summary arrived. */ () => release.dataset.updateStatusJob === 'fixture-2');
+    check(location.href === originalUrl && panel.getAttribute('aria-hidden') === 'false', 'Dynamic control and passive retry stay inside drawer');
+
+    release.innerHTML = summary(true);
+    failJob = true;
+    const readsBeforeFailure = reads;
+    release.querySelector('[data-update-job-form]').requestSubmit();
+    await until(/** Await a safe worker failure. @return {boolean} Whether failure is rendered. */ () => scope.dataset.updateJobStatus === 'failed');
+    check(reads === readsBeforeFailure && scope.querySelector('[data-update-job-complete]').hidden, 'Failed job is not presented as successful');
+    window.confirm = /** Accept only the fixture cancellation prompt. @return {boolean} Synthetic confirmation. */ () => true;
+    scope.querySelector('[data-update-job-cancel]').click();
+    await until(/** Await cancellation rendering. @return {boolean} Whether prepared job is cancelled. */ () => scope.dataset.updateJobStatus === 'cancelled');
+    check(!scope.querySelector('[data-update-job-cancelled]').hidden, 'Cancellation feedback survives dynamic rerender');
+
+    failJob = false;
+    holdRead = true;
+    release.innerHTML = summary(true);
+    release.querySelector('[data-update-job-form]').requestSubmit();
+    await until(/** Await delayed summary request. @return {boolean} Whether response is held. */ () => Boolean(releaseRead));
+    failJob = true;
+    release.innerHTML = summary(true);
+    release.querySelector('[data-update-job-form]').requestSubmit();
+    await until(/** Await superseding job progress. @return {boolean} Whether newer job owns the surface. */ () => scope.dataset.updateJobId === 'fixture-5');
+    releaseRead();
+    await until(/** Await old summary request settlement. @return {boolean} Whether pending status cleared. */ () => release.getAttribute('aria-busy') === null);
+    check(release.querySelector('[data-update-job-form]') !== null && release.dataset.updateStatusJob === 'fixture-2', 'Old completion cannot overwrite a newer job');
+    await until(/** Let final bounded continuation settle. @return {boolean} Whether newer worker stopped. */ () => scope.dataset.updateJobStatus === 'failed');
+    check(location.href === originalUrl && panel.getAttribute('aria-hidden') === 'false', 'Every tested transition preserves URL and drawer');
+    document.getElementById('results').textContent = 'BROWSER PASS: ' + assertions + ' updater presentation assertions';
+} catch (error) {
+    document.getElementById('results').textContent = 'BROWSER FAIL: ' + error.message + '\n' + error.stack;
+}
+</script></body></html>

@@ -3578,6 +3578,8 @@
     "admin.updates.confirm_reinstall_label": "Skriv REINSTALL för att bekräfta",
     "admin.updates.current": "Den här installationen är aktuell.",
     "admin.updates.failed_value": "Uppdateringen misslyckades: {error}",
+    "admin.updates.refresh_status_failed": "Det gick inte att uppdatera versionsstatus.",
+    "admin.updates.refresh_status_retry": "Uppdatera status",
     "admin.updates.force_check_button": "Tvinga kontroll",
     "admin.updates.force_check_completed": "Tvingad GitHub-kontroll av uppdateringar slutförd.",
     "admin.updates.force_check_completed_with_error": "Tvingad GitHub-kontroll av uppdateringar slutförd med en varning: {error}",
