@@ -56,6 +56,8 @@ namespace Gallery\Tests\AdminSetupWizardApply {
         $GLOBALS['wizard_schema_state'] = 'available';
         $GLOBALS['wizard_model_calls'] = 0;
         $GLOBALS['wizard_locked_keys'] = [];
+        $GLOBALS['wizard_locked_telemetry_keys'] = [];
+        $GLOBALS['wizard_telemetry_schema_state'] = 'available';
         $GLOBALS['wizard_events'] = [];
         $GLOBALS['wizard_save_calls'] = [];
         $GLOBALS['wizard_fail_save_id'] = null;
@@ -191,12 +193,18 @@ namespace Gallery\Models {
      * @param list<string> $settingKeys Locked canonical keys.
      * @param callable():array<string,mixed> $operation Transaction work.
      * @param null|callable():void $compensate File compensation.
+     * @param list<string> $telemetrySettingKeys Locked telemetry keys.
      * @return array<string,mixed> Applied normalized values.
      */
-    function admin_setup_wizard_model_transaction(array $settingKeys, callable $operation, ?callable $compensate = null): mixed
-    {
+    function admin_setup_wizard_model_transaction(
+        array $settingKeys,
+        callable $operation,
+        ?callable $compensate = null,
+        array $telemetrySettingKeys = []
+    ): mixed {
         $GLOBALS['wizard_model_calls']++;
         $GLOBALS['wizard_locked_keys'] = $settingKeys;
+        $GLOBALS['wizard_locked_telemetry_keys'] = $telemetrySettingKeys;
         $settingsBefore = $GLOBALS['wizard_settings'];
         $before = $GLOBALS['wizard_before_transaction_operation'];
         $GLOBALS['wizard_before_transaction_operation'] = null;
@@ -339,6 +347,140 @@ namespace Gallery\Services {
     function theme_basic_appearance_save(string $id, mixed $value): void
     {
         throw new InvalidArgumentException('unexpected theme save: ' . $id);
+    }
+
+    /**
+     * Return an empty safe Theme layout adapter map for central-setting fixtures.
+     *
+     * @return array<string,string> Empty Theme layout adapter map.
+     */
+    function theme_layout_safe_settings(): array
+    {
+        return [];
+    }
+
+    /**
+     * Reject unexpected safe Theme layout availability checks in this central fixture.
+     *
+     * @param string $id Theme layout id.
+     * @return bool Never returned for a registered fixture value.
+     */
+    function theme_layout_safe_setting_available(string $id): bool
+    {
+        return false;
+    }
+
+    /**
+     * Reject unexpected safe Theme layout normalization in this central fixture.
+     *
+     * @param string $id Theme layout id.
+     * @param scalar|array<array-key,mixed>|object|null $value Candidate value.
+     * @return string Never returned.
+     */
+    function theme_layout_safe_normalize(string $id, mixed $value): string
+    {
+        throw new InvalidArgumentException('unexpected theme layout adapter: ' . $id);
+    }
+
+    /**
+     * Reject unexpected safe Theme layout persistence in this central fixture.
+     *
+     * @param string $id Theme layout id.
+     * @param scalar|array<array-key,mixed>|object|null $value Candidate value.
+     * @return void
+     */
+    function theme_layout_safe_save(string $id, mixed $value): void
+    {
+        throw new InvalidArgumentException('unexpected theme layout save: ' . $id);
+    }
+
+    /**
+     * Strictly normalize the fixture Admin upload source-format adapter.
+     *
+     * @param mixed $value Candidate value.
+     * @return string Canonical value.
+     */
+    function admin_upload_client_format_mode_validate(mixed $value): string
+    {
+        if (!is_string($value) || !in_array(trim($value), ['server_supported', 'phone_jpeg'], true)) {
+            throw new InvalidArgumentException('invalid upload mode');
+        }
+        return trim($value);
+    }
+
+    /** Strictly normalize the fixture upload auto-rename adapter. */
+    function admin_upload_auto_rename_setting_normalize(mixed $value): string
+    {
+        if (!is_string($value) || !in_array(trim($value), ['0', '1'], true)) {
+            throw new InvalidArgumentException('invalid upload rename');
+        }
+        return trim($value);
+    }
+
+    /** Strictly normalize one fixture browser-upload scalar. */
+    function browser_upload_safe_scalar_normalize(string $id, mixed $value): string
+    {
+        if ($id !== 'browser_upload_enabled' || !is_string($value) || !in_array(trim($value), ['0', '1'], true)) {
+            throw new InvalidArgumentException('invalid browser upload value');
+        }
+        return trim($value);
+    }
+
+    /** Strictly normalize one fixture telemetry scalar. */
+    function telemetry_admin_setting_normalize(string $id, mixed $value): string
+    {
+        if ($id !== 'telemetry_enabled' || !is_string($value) || !in_array(trim($value), ['0', '1'], true)) {
+            throw new InvalidArgumentException('invalid telemetry value');
+        }
+        return trim($value);
+    }
+
+    /** Persist a fixture Admin upload mode through its owner adapter. */
+    function save_admin_upload_client_format_mode(mixed $value): string
+    {
+        $normalized = admin_upload_client_format_mode_validate($value);
+        $GLOBALS['wizard_events'][] = 'save:admin_upload_client_format_mode';
+        return $normalized;
+    }
+
+    /** Persist a fixture upload auto-rename value through its owner adapter. */
+    function save_admin_upload_auto_rename_setting(mixed $value): string
+    {
+        $normalized = admin_upload_auto_rename_setting_normalize($value);
+        $GLOBALS['wizard_events'][] = 'save:admin_upload_auto_rename_enabled';
+        return $normalized;
+    }
+
+    /** Persist a fixture browser-upload scalar through its owner adapter. */
+    function browser_upload_safe_scalar_save(string $id, mixed $value): string
+    {
+        $normalized = browser_upload_safe_scalar_normalize($id, $value);
+        $GLOBALS['wizard_events'][] = 'save:' . $id;
+        return $normalized;
+    }
+
+    /** Persist a fixture telemetry scalar through its owner adapter. */
+    function telemetry_admin_setting_save(string $id, mixed $value): string
+    {
+        $normalized = telemetry_admin_setting_normalize($id, $value);
+        $GLOBALS['wizard_events'][] = 'save:' . $id;
+        return $normalized;
+    }
+
+    /** Return the fixture telemetry settings schema status. */
+    function presentation_telemetry_settings_schema_status(): array
+    {
+        return ['state' => (string) $GLOBALS['wizard_telemetry_schema_state']];
+    }
+
+    /**
+     * Return the fixture public thumbnail renderer used by wizard preview preparation.
+     *
+     * @return string Fixture renderer mode.
+     */
+    function public_thumbnail_rendering_mode(): string
+    {
+        return 'progressive';
     }
 
     /**
@@ -572,7 +714,12 @@ namespace Gallery\Tests\AdminSetupWizardApply {
     use function Gallery\Controllers\cms_admin_setup_wizard;
     use function Gallery\Services\admin_setup_wizard_apply;
     use function Gallery\Services\admin_setup_wizard_begin_draft;
+    use function Gallery\Services\admin_setup_wizard_normalize_entry;
+    use function Gallery\Services\admin_setup_wizard_preflight;
+    use function Gallery\Services\admin_setup_wizard_save_entry;
     use function Gallery\Services\admin_setup_wizard_steps;
+    use function Gallery\Services\admin_setup_wizard_storage_keys;
+    use function Gallery\Services\admin_setup_wizard_telemetry_storage_keys;
 
     /**
      * Assert that wizard work fails with one bounded domain key.
@@ -743,6 +890,52 @@ namespace Gallery\Tests\AdminSetupWizardApply {
         'admin.setup_wizard.error.conflict'
     );
     assert_true(!in_array('save:base_url', $GLOBALS['wizard_events'], true), 'Stale config was overwritten.');
+
+    reset_fixture();
+    $phaseThreeEntries = [
+        'admin_upload_client_format_mode' => ['id' => 'admin_upload_client_format_mode', 'wizard_adapter' => 'admin_upload_safe', 'key' => 'admin_upload_client_format_mode', 'wizard_editable' => true, 'unavailable' => false],
+        'browser_upload_enabled' => ['id' => 'browser_upload_enabled', 'wizard_adapter' => 'browser_upload_safe', 'key' => 'browser_upload_enabled', 'wizard_editable' => true, 'unavailable' => false],
+        'telemetry_enabled' => ['id' => 'telemetry_enabled', 'wizard_adapter' => 'telemetry_safe', 'key' => '', 'wizard_editable' => true, 'unavailable' => false],
+    ];
+    assert_true(
+        admin_setup_wizard_storage_keys(
+            ['telemetry_enabled' => '1', 'browser_upload_enabled' => '1', 'admin_upload_client_format_mode' => 'phone_jpeg'],
+            $phaseThreeEntries
+        ) === ['browser_upload_enabled', 'admin_upload_client_format_mode'],
+        'Phase 3 app_settings lock keys crossed into telemetry storage or lost upload keys.'
+    );
+    assert_true(
+        admin_setup_wizard_telemetry_storage_keys(['telemetry_enabled' => '1', 'browser_upload_enabled' => '1'], $phaseThreeEntries) === ['telemetry_enabled'],
+        'Phase 3 telemetry lock keys were not isolated.'
+    );
+    assert_true(
+        admin_setup_wizard_storage_keys(
+            ['browser_upload_default_worker_count' => '8'],
+            ['browser_upload_default_worker_count' => ['id' => 'browser_upload_default_worker_count', 'wizard_adapter' => 'browser_upload_safe', 'key' => 'browser_upload_default_worker_count']]
+        ) === ['browser_upload_default_worker_count', 'browser_upload_max_worker_count', 'browser_upload_hard_worker_cap'],
+        'Browser default worker validation dependencies must be locked with the edited row.'
+    );
+    assert_true(
+        admin_setup_wizard_normalize_entry($phaseThreeEntries['admin_upload_client_format_mode'], 'phone_jpeg') === 'phone_jpeg'
+        && admin_setup_wizard_normalize_entry($phaseThreeEntries['browser_upload_enabled'], '1') === '1'
+        && admin_setup_wizard_normalize_entry($phaseThreeEntries['telemetry_enabled'], '1') === '1',
+        'Phase 3 owner adapters did not normalize through their dedicated boundaries.'
+    );
+    admin_setup_wizard_save_entry($phaseThreeEntries['admin_upload_client_format_mode'], 'phone_jpeg');
+    admin_setup_wizard_save_entry($phaseThreeEntries['browser_upload_enabled'], '1');
+    admin_setup_wizard_save_entry($phaseThreeEntries['telemetry_enabled'], '1');
+    assert_true(
+        array_slice($GLOBALS['wizard_events'], -3) === ['save:admin_upload_client_format_mode', 'save:browser_upload_enabled', 'save:telemetry_enabled'],
+        'Phase 3 values did not route through canonical upload and telemetry owner adapters.'
+    );
+    $GLOBALS['wizard_schema_state'] = 'missing';
+    $GLOBALS['wizard_telemetry_schema_state'] = 'available';
+    admin_setup_wizard_preflight(['telemetry_enabled' => '1'], $phaseThreeEntries);
+    $GLOBALS['wizard_telemetry_schema_state'] = 'unknown';
+    expect_wizard_error(
+        static fn (): array => (admin_setup_wizard_preflight(['telemetry_enabled' => '1'], $phaseThreeEntries) ?? []),
+        'admin.setup_wizard.error.unavailable'
+    );
 
     reset_fixture();
     $steps = admin_setup_wizard_steps();

@@ -15,6 +15,7 @@
  *   - Verify canonical daily session rows override legacy public.sessions aggregates
  *   - Verify the report reads unique sessions from telemetry_sessions
  *   - Verify corrected telemetry semantics are versioned without destructive history reset
+ *   - Verify setup-safe telemetry preference validation is strict and bounded
  *
  * Author:
  *   Rudolf Klusal
@@ -28,6 +29,7 @@
 
 declare(strict_types=1);
 
+use function Gallery\Services\telemetry_admin_setting_normalize;
 use function Gallery\Services\telemetry_merge_daily_trends;
 use function Gallery\Services\telemetry_session_page_increment_for_event;
 
@@ -39,8 +41,20 @@ function telemetry_semantics_contract_assert(bool $condition, string $label): vo
     }
 }
 
+/** Assert that strict telemetry preference validation rejects malformed input. */
+function telemetry_semantics_contract_assert_invalid(callable $callback, string $label): void
+{
+    try {
+        $callback();
+    } catch (InvalidArgumentException) {
+        return;
+    }
+    throw new RuntimeException($label);
+}
+
 $root = dirname(__DIR__);
 require_once $root . '/app/services/telemetry.php';
+require_once $root . '/app/services/telemetry_settings.php';
 
 telemetry_semantics_contract_assert(
     telemetry_session_page_increment_for_event('public.session.started') === 0,
@@ -57,6 +71,27 @@ telemetry_semantics_contract_assert(
 telemetry_semantics_contract_assert(
     telemetry_session_page_increment_for_event('public.photo.opened') === 0,
     'Photo-open events must not increment the session page-view counter.'
+);
+
+telemetry_semantics_contract_assert(
+    telemetry_admin_setting_normalize('telemetry_respect_dnt', true) === '1',
+    'Safe telemetry checkbox validation must accept canonical boolean values.'
+);
+telemetry_semantics_contract_assert(
+    telemetry_admin_setting_normalize('telemetry_max_photo_view_seconds', '3600') === '3600',
+    'Safe telemetry numeric validation must accept the documented upper boundary.'
+);
+telemetry_semantics_contract_assert_invalid(
+    static fn (): string => telemetry_admin_setting_normalize('telemetry_respect_dnt', 'yes'),
+    'Safe telemetry checkbox validation must reject non-canonical values.'
+);
+telemetry_semantics_contract_assert_invalid(
+    static fn (): string => telemetry_admin_setting_normalize('telemetry_max_photo_view_seconds', '3601'),
+    'Safe telemetry numeric validation must reject values above the documented boundary.'
+);
+telemetry_semantics_contract_assert_invalid(
+    static fn (): string => telemetry_admin_setting_normalize('telemetry_unknown_setting', '1'),
+    'Safe telemetry validation must reject unknown setting identifiers.'
 );
 
 $merged = telemetry_merge_daily_trends(

@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-04
+ *   2026-09-29
  */
 
 declare(strict_types=1);
@@ -37,6 +37,7 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 use Imagick;
+use InvalidArgumentException;
 use RuntimeException;
 use Throwable;
 use function Gallery\Core\is_dng_image_path;
@@ -238,6 +239,76 @@ function admin_upload_client_format_mode_normalize(mixed $value): string
     // $mode stores the submitted or configured upload picker preference.
     $mode = strtolower(trim((string) $value));
     return in_array($mode, ['server_supported', 'phone_jpeg'], true) ? $mode : 'server_supported';
+}
+
+/**
+ * Strictly validate one Admin upload source-format preference for reusable setting adapters.
+ *
+ * Unlike the compatibility normalizer above, this boundary rejects unknown values so a
+ * staged settings workflow cannot silently replace malformed input with a default.
+ *
+ * @param mixed $value Candidate source-format mode.
+ * @return string Canonical supported mode.
+ */
+function admin_upload_client_format_mode_validate(mixed $value): string
+{
+    if (!is_scalar($value)) {
+        throw new InvalidArgumentException('Invalid upload source format mode.');
+    }
+    $mode = strtolower(trim((string) $value));
+    if (!in_array($mode, ['server_supported', 'phone_jpeg'], true)) {
+        throw new InvalidArgumentException('Invalid upload source format mode.');
+    }
+    return $mode;
+}
+
+/**
+ * Persist one strictly validated Admin upload source-format preference.
+ *
+ * @param mixed $value Candidate source-format mode.
+ * @return string Persisted canonical mode.
+ */
+function save_admin_upload_client_format_mode(mixed $value): string
+{
+    $mode = admin_upload_client_format_mode_validate($value);
+    set_app_setting('admin_upload_client_format_mode', $mode);
+    return $mode;
+}
+
+/**
+ * Strictly normalize the upload-time automatic rename preference.
+ *
+ * @param mixed $value Candidate checkbox value.
+ * @return string Canonical 1 or 0 value.
+ */
+function admin_upload_auto_rename_setting_normalize(mixed $value): string
+{
+    if (is_bool($value)) {
+        return $value ? '1' : '0';
+    }
+    if (is_int($value) && ($value === 0 || $value === 1)) {
+        return (string) $value;
+    }
+    if (is_string($value)) {
+        $value = trim($value);
+        if ($value === '0' || $value === '1') {
+            return $value;
+        }
+    }
+    throw new InvalidArgumentException('Invalid automatic upload rename value.');
+}
+
+/**
+ * Persist one strictly normalized upload-time automatic rename preference.
+ *
+ * @param mixed $value Candidate checkbox value.
+ * @return string Persisted canonical 1 or 0 value.
+ */
+function save_admin_upload_auto_rename_setting(mixed $value): string
+{
+    $normalized = admin_upload_auto_rename_setting_normalize($value);
+    set_admin_upload_auto_rename_enabled($normalized === '1');
+    return $normalized;
 }
 
 /**

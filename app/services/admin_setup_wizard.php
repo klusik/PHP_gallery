@@ -13,7 +13,7 @@
  * Responsibilities:
  *   - Keep shared constants and bounded domain exceptions in one entry point
  *   - Preserve the historical service loader include contract
- *   - Load catalog, draft, and apply policy in deterministic order
+ *   - Load preference adapters, catalog, draft, and apply policy in deterministic order
  *
  * Author:
  *   Rudolf Klusal
@@ -115,6 +115,7 @@ final class AdminSetupWizardException extends RuntimeException
     }
 }
 
+require_once __DIR__ . '/admin_setup_wizard/preferences.php';
 require_once __DIR__ . '/admin_setup_wizard/catalog.php';
 require_once __DIR__ . '/admin_setup_wizard/draft.php';
 require_once __DIR__ . '/admin_setup_wizard/apply.php';

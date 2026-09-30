@@ -30,13 +30,14 @@
  *   - Keep comments and docstrings intact when modifying this file.
  *
  * Last Updated:
- *   2026-09-06
+ *   2026-09-29
  */
 
 declare(strict_types=1);
 
 namespace Gallery\Services;
 
+use InvalidArgumentException;
 use RuntimeException;
 use Throwable;
 use function Gallery\Core\cms_config;
@@ -211,6 +212,106 @@ function browser_upload_settings(): array
         'max_zip_batch_bytes' => app_setting('browser_upload_max_zip_batch_bytes', (string) (int) cms_runtime_limit('browser_upload.default_max_zip_batch_bytes')),
         'thumbnail_rebuild_source_chunk_bytes' => app_setting('browser_thumbnail_rebuild_source_chunk_bytes', (string) ((int) cms_runtime_limit('browser_thumbnail_rebuild.default_chunk_bytes'))),
     ]);
+}
+
+/**
+ * Return the browser-upload scalar settings safe for reuse by guided settings flows.
+ *
+ * The returned map is intentionally small. Coupled worker caps, byte-size policies, and
+ * thumbnail rebuild chunk tuning remain on the dedicated upload settings page.
+ *
+ * @return array<string,array{input_type:string,current:string,validation:array<string,int>}> Safe scalar definitions.
+ */
+function browser_upload_safe_scalar_settings(): array
+{
+    $settings = browser_upload_settings();
+    return [
+        'browser_upload_enabled' => [
+            'input_type' => 'checkbox',
+            'current' => !empty($settings['enabled']) ? '1' : '0',
+            'validation' => [],
+        ],
+        'browser_upload_default_worker_count' => [
+            'input_type' => 'number',
+            'current' => (string) (int) ($settings['default_worker_count'] ?? cms_runtime_limit('browser_upload.default_worker_count')),
+            'validation' => [
+                'min' => (int) cms_runtime_limit('browser_upload.min_worker_count'),
+                'max' => max(
+                    (int) cms_runtime_limit('browser_upload.min_worker_count'),
+                    (int) ($settings['max_worker_count'] ?? cms_runtime_limit('browser_upload.hard_worker_cap'))
+                ),
+                'step' => 1,
+            ],
+        ],
+        'browser_upload_max_items_per_batch' => [
+            'input_type' => 'number',
+            'current' => (string) (int) ($settings['max_items_per_batch'] ?? cms_runtime_limit('browser_upload.default_max_items_per_batch')),
+            'validation' => [
+                'min' => (int) cms_runtime_limit('browser_upload.min_items_per_batch'),
+                'max' => (int) cms_runtime_limit('browser_upload.max_items_per_batch'),
+                'step' => 1,
+            ],
+        ],
+    ];
+}
+
+/**
+ * Strictly normalize one safe browser-upload scalar setting.
+ *
+ * @param string $id Stable browser-upload setting id.
+ * @param mixed $value Candidate value.
+ * @return string Canonical persisted scalar.
+ */
+function browser_upload_safe_scalar_normalize(string $id, mixed $value): string
+{
+    $definitions = browser_upload_safe_scalar_settings();
+    if (!isset($definitions[$id])) {
+        throw new InvalidArgumentException('Unsupported browser upload scalar setting.');
+    }
+    if ($id === 'browser_upload_enabled') {
+        if (is_bool($value)) {
+            return $value ? '1' : '0';
+        }
+        if (is_int($value) && ($value === 0 || $value === 1)) {
+            return (string) $value;
+        }
+        if (is_string($value) && in_array(trim($value), ['0', '1'], true)) {
+            return trim($value);
+        }
+        throw new InvalidArgumentException('Invalid browser upload enabled value.');
+    }
+    if (!is_scalar($value)) {
+        throw new InvalidArgumentException('Invalid browser upload numeric value.');
+    }
+    $candidate = trim((string) $value);
+    if ($candidate === '' || !ctype_digit($candidate)) {
+        throw new InvalidArgumentException('Invalid browser upload numeric value.');
+    }
+    $number = (int) $candidate;
+    $validation = $definitions[$id]['validation'];
+    if ($number < (int) ($validation['min'] ?? 0) || $number > (int) ($validation['max'] ?? PHP_INT_MAX)) {
+        throw new InvalidArgumentException('Browser upload value is outside the supported range.');
+    }
+    return (string) $number;
+}
+
+/**
+ * Persist one safe browser-upload scalar through the upload settings owner.
+ *
+ * @param string $id Stable browser-upload setting id.
+ * @param mixed $value Candidate value.
+ * @return string Persisted canonical scalar.
+ */
+function browser_upload_safe_scalar_save(string $id, mixed $value): string
+{
+    $normalized = browser_upload_safe_scalar_normalize($id, $value);
+    match ($id) {
+        'browser_upload_enabled' => set_app_setting('browser_upload_enabled', $normalized),
+        'browser_upload_default_worker_count' => set_app_setting('browser_upload_default_worker_count', $normalized),
+        'browser_upload_max_items_per_batch' => set_app_setting('browser_upload_max_items_per_batch', $normalized),
+        default => throw new InvalidArgumentException('Unsupported browser upload scalar setting.'),
+    };
+    return $normalized;
 }
 
 /**

@@ -128,6 +128,7 @@ require_once __DIR__ . '/services/public_paths.php';
 require_once __DIR__ . '/services/gallery_lookup.php';
 // Load lightbox browsing-mode helpers before sidecar import/export reads gallery.json overrides.
 require_once __DIR__ . '/services/gallery_lightbox_mode.php';
+require_once __DIR__ . '/services/theme_layout_settings.php';
 require_once __DIR__ . '/services/gallery_sidecars.php';
 require_once __DIR__ . '/services/gallery_bulk_mutations.php';
 require_once __DIR__ . '/services/gallery_editor_mutations.php';

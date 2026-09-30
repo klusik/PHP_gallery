@@ -83,7 +83,7 @@ function view_render_admin_settings_page(array $model): void
     foreach ($sections as $sectionId => $section) {
         $panelId = (string) ($section['panel_id'] ?? ('settings-' . $sectionId));
         $isActive = $sectionId === $activeSection;
-        echo '<a class="admin-tab' . ($isActive ? ' is-active' : '') . '" id="' . e($panelId . '-control') . '" href="' . e((string) ($section['url'] ?? '')) . '" role="tab" aria-controls="' . e($panelId) . '" aria-selected="' . ($isActive ? 'true' : 'false') . '" tabindex="' . ($isActive ? '0' : '-1') . '" data-admin-tab-target="' . e($panelId) . '">';
+        echo '<a class="admin-tab' . ($isActive ? ' is-active' : '') . '" id="' . e($panelId . '-control') . '" href="' . e((string) ($section['tab_url'] ?? $section['url'] ?? '')) . '" role="tab" aria-controls="' . e($panelId) . '" aria-selected="' . ($isActive ? 'true' : 'false') . '" tabindex="' . ($isActive ? '0' : '-1') . '" data-admin-tab-target="' . e($panelId) . '">';
         echo '<span>' . e(t((string) $section['label_key'], (string) $section['label'])) . '</span></a>';
     }
     echo '</div></nav>';

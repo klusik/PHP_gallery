@@ -116,5 +116,23 @@ namespace Gallery\Services {
     if (!is_array($summary) || $summary === []) {
         throw new \RuntimeException('Summary did not contain staged/skipped state.');
     }
+
+    if (admin_setup_wizard_operational_group('gallery_trash_retention_days') !== 'gallery_trash') {
+        throw new \RuntimeException('Gallery Trash preferences lost their coupled owner group.');
+    }
+    if (admin_setup_wizard_operational_group('site_maintenance_utc_time') !== 'site_maintenance') {
+        throw new \RuntimeException('Scheduled Maintenance preferences lost their coupled owner group.');
+    }
+    if (admin_setup_wizard_operational_group('seo_request_guard_enabled') !== '') {
+        throw new \RuntimeException('Independent operational preference was incorrectly grouped.');
+    }
+    if (admin_setup_wizard_operational_bool('1') !== '1' || admin_setup_wizard_operational_bool('') !== '0') {
+        throw new \RuntimeException('Operational boolean normalization changed unexpectedly.');
+    }
+    try {
+        admin_setup_wizard_operational_bool('yes');
+        throw new \RuntimeException('Truthy operational string was accepted.');
+    } catch (\InvalidArgumentException) {
+    }
     echo "admin_setup_wizard_test: PASS\n";
 }

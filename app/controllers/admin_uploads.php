@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-09-02
+ *   2026-09-29
  */
 
 declare(strict_types=1);
@@ -73,8 +73,8 @@ use function Gallery\Services\gallery_lightbox_total_count;
 use function Gallery\Services\heic_conversion_supported;
 use function Gallery\Services\media_renamer_default_pattern;
 use function Gallery\Services\raw_conversion_supported;
-use function Gallery\Services\set_admin_upload_auto_rename_enabled;
-use function Gallery\Services\set_app_setting;
+use function Gallery\Services\save_admin_upload_auto_rename_setting;
+use function Gallery\Services\save_admin_upload_client_format_mode;
 use function Gallery\Services\set_browser_upload_settings;
 use function Gallery\Services\store_uploaded_gallery_images;
 use function Gallery\Services\t;
@@ -272,9 +272,10 @@ function admin_upload_support_model(): array
  */
 function admin_upload_save_general_settings(array $input): void
 {
-    $clientFormatMode = admin_upload_client_format_mode_normalize($input['admin_upload_client_format_mode'] ?? 'server_supported');
-    set_app_setting('admin_upload_client_format_mode', $clientFormatMode);
-    set_admin_upload_auto_rename_enabled(!empty($input['admin_upload_auto_rename_enabled']));
+    $clientFormatMode = save_admin_upload_client_format_mode(
+        admin_upload_client_format_mode_normalize($input['admin_upload_client_format_mode'] ?? 'server_supported')
+    );
+    save_admin_upload_auto_rename_setting(!empty($input['admin_upload_auto_rename_enabled']) ? '1' : '0');
     admin_log_event('info', 'settings.upload_general_updated', 'Admin updated general upload settings.', [
         'client_format_mode' => $clientFormatMode,
         'auto_rename_enabled' => admin_upload_auto_rename_enabled(),

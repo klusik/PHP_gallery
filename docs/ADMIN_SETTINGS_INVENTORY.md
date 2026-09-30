@@ -141,7 +141,7 @@ Attachment writes require the dedicated mutation-schema capability before any pa
 | `browser_upload_max_zip_batch_bytes` | `browser_uploads.php`; Upload settings Browser | bounded byte size | service default, bounded by hard maximum | clamped | Specialized summary | Upload settings Browser | operational |
 | `browser_thumbnail_rebuild_source_chunk_bytes` | `browser_thumbnail_rebuild.php`; Upload settings Browser | bounded byte size | 512 MiB service default | controls browser-side thumbnail rebuild source ZIP chunking | Summary | Upload settings Browser | operational |
 
-Gallery-scoped upload automation API keys are not exposed as values. The central Advanced section links to `admin_api_manager`; keys remain secret and are managed by the existing API manager/side-panel workflows.
+The Setup Wizard may edit only the bounded scalar subset `admin_upload_client_format_mode`, `admin_upload_auto_rename_enabled`, `browser_upload_enabled`, `browser_upload_default_worker_count`, and `browser_upload_max_items_per_batch`. It calls the upload-owned strict adapters and revalidates the current worker maximum before apply. When default worker count is changed, the transaction also locks `browser_upload_max_worker_count` and `browser_upload_hard_worker_cap` as read dependencies before the fresh comparison. Coupled max/hard worker caps, ZIP ratio/byte policies, thumbnail rebuild chunk tuning, and gallery-scoped automation API keys remain specialist/status-only items. API keys are never exposed as values. The staged Setup Wizard intentionally does not navigate to `admin_api_manager` or any other immediately-persisting specialist page.
 
 ## Privacy, diagnostics and maintenance
 
@@ -168,6 +168,16 @@ Gallery-scoped upload automation API keys are not exposed as values. The central
 | `site_maintenance_request_trigger_enabled` | `site_maintenance.php`; Dashboard Maintenance | boolean | `1` | allows normal requests to schedule due maintenance | Specialized | Dashboard Maintenance | operational |
 | `site_maintenance_window_minutes` | `site_maintenance.php`; Dashboard Maintenance | integer 15..1440 | 180 | bounds schedule window | Specialized | Dashboard Maintenance | operational |
 | `site_maintenance_token` | `site_maintenance.php`; Dashboard Maintenance | 64 hex chars generated from 32 random bytes | generated/rotated by canonical service | secret, token rotation invalidates old web-cron URL | Specialized, redacted | Dashboard Maintenance | secret |
+
+The Setup Wizard may edit the eleven telemetry preference rows listed above, but only after `telemetry_settings` schema inspection is positively available. Their strict owner adapter validates checkbox values and the documented numeric bounds, while apply locks changed telemetry rows separately from `app_settings`. Telemetry export and maintenance remain specialist/status-only actions and are never invoked by wizard navigation or summary approval.
+
+### Setup Wizard presentation and staged apply
+
+The Setup Wizard represents every entry from the canonical Settings registry inside the same eight top-level sections, but it does not make every entry an editable field. Each entry is classified for presentation as essential, advanced, expert, or status-only and is grouped into short in-step subsections. Advanced and expert groups use progressive disclosure so the normal path remains compact. Without JavaScript all subsection content remains readable; with JavaScript subsection switching is presentation-only and never commits the draft.
+
+The final review is change-first: changed settings are visible immediately, while unchanged, skipped, and informational/status items are collapsed by default with an explicit show-all control. During a staged draft the wizard renders no outbound configuration link to a specialist page, because those pages can persist immediately and would break the draft/approval model. Secrets, credentials, file-backed operations, destructive maintenance actions, API-key lifecycle operations, database repair/optimize actions, and similar workflows therefore remain status-only inside the wizard.
+
+Safe scalar owner adapters currently include Theme layout/hero-tag controls, bounded upload and telemetry preferences, thumbnail background warm-up, SEO request guard preferences, Gallery Trash preferences, application auto-update, and Scheduled Maintenance preferences. Gallery Trash and Scheduled Maintenance are coupled owners: when any member changes, apply locks the complete sibling preference set and persists the changed group through one canonical owner call (`set_gallery_trash_settings(...)` or `set_site_maintenance_settings(...)`) instead of producing intermediate side-effect states.
 
 Maintenance run state, last-result and completion marker settings are runtime state, not administrator preferences. They are intentionally omitted from central editing.
 

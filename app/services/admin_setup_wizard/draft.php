@@ -156,6 +156,13 @@ function admin_setup_wizard_stage_step(
         if (!is_array($entry)) {
             continue;
         }
+        if (empty($entry['wizard_editable'])) {
+            // Specialist operations and secret/file-backed resources are informational in the
+            // staged wizard. They never need a fake "reviewed" checkbox and are never marked
+            // skipped merely because no editable value was posted for them.
+            unset($candidate['skips'][$id], $candidate['changes'][$id]);
+            continue;
+        }
         if ($skipSection || !array_key_exists($id, $include)) {
             $candidate['skips'][$id] = true;
             unset($candidate['changes'][$id]);
@@ -163,10 +170,6 @@ function admin_setup_wizard_stage_step(
         }
         if (is_array($include[$id] ?? null)) {
             $errors[$id] = 'admin.setup_wizard.error.invalid_value';
-            continue;
-        }
-        if (empty($entry['wizard_editable'])) {
-            unset($candidate['skips'][$id], $candidate['changes'][$id]);
             continue;
         }
         $inputType = (string) ($entry['input_type'] ?? 'text');
@@ -269,7 +272,7 @@ function admin_setup_wizard_summary(array $draft, array $steps): array
                 $deferred[] = [
                     'id' => $id,
                     'label' => (string) ($entry['label'] ?? $id),
-                    'url' => (string) ($entry['deferred_url'] ?? ''),
+                    'label_key' => (string) ($entry['label_key'] ?? ''),
                 ];
             } else {
                 $value = $draft['original'][$id] ?? ($entry['current'] ?? null);

@@ -223,6 +223,14 @@ namespace {
         $steps['general']['entries']['public_language_selector_enabled'] = admin_setup_wizard_render_entry('public_language_selector_enabled', 'checkbox', '1');
         $steps['general']['entries']['public_language_selector_languages'] = admin_setup_wizard_render_entry('public_language_selector_languages', 'language-multicheckbox', ['en', 'cs']);
         $steps['general']['entries']['public_language_selector_design'] = admin_setup_wizard_render_entry('public_language_selector_design', 'language-design', ['preset' => 'classic', 'show_flags' => true]);
+        $steps['appearance']['entries']['theme_gallery_description_layout'] = admin_setup_wizard_render_entry('theme_gallery_description_layout', 'select', 'vertical', true, ['options' => ['vertical' => 'Vertical', 'horizontal' => 'Horizontal']]);
+        $steps['appearance']['entries']['theme_gallery_count_badge_enabled'] = admin_setup_wizard_render_entry('theme_gallery_count_badge_enabled', 'checkbox', '1');
+        $steps['appearance']['entries']['pagination_enabled'] = admin_setup_wizard_render_entry('pagination_enabled', 'checkbox', '1');
+        $steps['appearance']['entries']['home_gallery_grid_columns'] = admin_setup_wizard_render_entry('home_gallery_grid_columns', 'range', '4', true, ['validation' => ['min' => 1, 'max' => 12, 'step' => 1]]);
+        $steps['content']['entries']['tag_page_gallery_grid_columns'] = admin_setup_wizard_render_entry('tag_page_gallery_grid_columns', 'range', '3', true, ['validation' => ['min' => 1, 'max' => 12, 'step' => 1]]);
+        $steps['content']['entries']['tag_page_gallery_description_layout'] = admin_setup_wizard_render_entry('tag_page_gallery_description_layout', 'select', 'horizontal', true, ['options' => ['vertical' => 'Vertical', 'horizontal' => 'Horizontal']]);
+        $steps['media']['entries']['theme_lightbox_browsing_mode'] = admin_setup_wizard_render_entry('theme_lightbox_browsing_mode', 'select', 'single', true, ['options' => ['single' => 'Single photo', 'continuous' => 'Continuous']]);
+        $steps['media']['entries']['public_thumbnail_rendering_mode'] = admin_setup_wizard_render_entry('public_thumbnail_rendering_mode', 'select', 'progressive', true, ['options' => ['progressive' => 'Progressive', 'responsive' => 'Responsive']]);
         return $steps;
     }
 
@@ -252,7 +260,7 @@ namespace {
         'revision' => 7,
         'errors' => [],
         'urls' => ['action' => '/index.php?page=admin_setup_wizard', 'restart' => '/index.php?page=admin_setup_wizard'],
-        'theme_preview' => ['site_name' => 'Saved gallery', 'accent' => '#336699', 'accent_dark' => '#224466', 'paper' => '#ffffff', 'panel' => '#eeeeee', 'gallery_panel' => '#dddddd', 'header_text' => '#111111', 'hero_text' => '#222222', 'radius' => 12, 'font' => 'sans', 'page_width' => 'wide', 'page_width_custom' => 1440, 'background_url' => ''],
+        'theme_preview' => ['site_name' => 'Saved gallery', 'accent' => '#336699', 'accent_dark' => '#224466', 'paper' => '#ffffff', 'panel' => '#eeeeee', 'gallery_panel' => '#dddddd', 'header_text' => '#111111', 'hero_text' => '#222222', 'radius' => 12, 'font' => 'sans', 'page_width' => 'wide', 'page_width_custom' => 1440, 'gps_pin_enabled' => '1', 'gps_pin_background_enabled' => '1', 'gps_pin_size' => '26', 'gps_pin_background_size' => '22', 'gallery_description_layout' => 'vertical', 'gallery_count_badge_enabled' => '1', 'pagination_enabled' => '1', 'pagination_columns' => '4', 'pagination_rows' => '5', 'home_gallery_grid_columns' => '4', 'home_gallery_grid_rows' => '5', 'tag_page_gallery_grid_columns' => '3', 'tag_page_gallery_grid_rows' => '4', 'tag_page_gallery_description_layout' => 'horizontal', 'lightbox_browsing_mode' => 'single', 'public_thumbnail_rendering_mode' => 'progressive', 'background_url' => ''],
         'language_selector' => admin_setup_wizard_render_language_selector(),
         'summary_groups' => [],
     ];
@@ -275,7 +283,10 @@ namespace {
         admin_setup_wizard_render_assert(!str_contains($html, 'name="approval"'), 'Approval checkbox must never render before the final summary.');
         admin_setup_wizard_render_assert(!str_contains($html, 'admin-setup-wizard-summary'), 'Staged changes must not trigger a premature summary.');
         admin_setup_wizard_render_assert(str_contains($html, 'formnovalidate') && str_contains($html, 'value="skip"'), 'Skip/back actions must bypass browser validation and remain server-owned.');
+        admin_setup_wizard_render_assert(substr_count($html, 'admin-setup-wizard-actions is-top') === 1, 'Every wizard section must expose navigation before its fields.');
+        admin_setup_wizard_render_assert(substr_count($html, 'admin-setup-wizard-actions is-bottom') === 1, 'Every wizard section must retain navigation after its fields.');
         admin_setup_wizard_render_assert(str_contains($html, '?page=admin_setup_wizard&amp;step=appearance'), 'Progress must expose a no-JavaScript GET fallback.');
+        admin_setup_wizard_render_assert(str_contains($html, 'wizard-progress-marker') && str_contains($html, 'wizard-progress-label'), 'Progress markup must separate compact markers from the active label.');
     }
 
     $generalModel = $baseModel;
@@ -292,8 +303,11 @@ namespace {
     $contentModel['active_step'] = 'content';
     $contentModel['draft']['step'] = 'content';
     $contentHtml = admin_setup_wizard_render($contentModel);
-    admin_setup_wizard_render_assert(str_contains($contentHtml, 'name="include[custom_css]"') && !str_contains($contentHtml, 'name="settings[custom_css]"'), 'Read-only entries must be reviewable/skippable without a value input.');
-    admin_setup_wizard_render_assert(str_contains($contentHtml, 'target="_blank" rel="noopener"'), 'Deferred deep links must open safely outside the draft.');
+    admin_setup_wizard_render_assert(!str_contains($contentHtml, 'name="include[custom_css]"') && !str_contains($contentHtml, 'name="settings[custom_css]"'), 'Specialist status entries must never submit staged values or fake review controls.');
+    admin_setup_wizard_render_assert(str_contains($contentHtml, 'wizard-deferred-notice') && !str_contains($contentHtml, 'target="_blank"') && !str_contains($contentHtml, 'href="/index.php?page=admin_theme#custom-css"'), 'Wizard specialist entries must stay inside the draft instead of navigating to separately committed settings.');
+    admin_setup_wizard_render_assert(str_contains($contentHtml, 'wizard-disclosure') && str_contains($contentHtml, 'data-wizard-subsection-panel'), 'Long sections must support progressive disclosure and in-step subsections.');
+    admin_setup_wizard_render_assert(substr_count($contentHtml, 'data-theme-live-preview') === 1 && str_contains($contentHtml, 'data-theme-preview-tag-grid-columns'), 'Content must reuse the Theme preview for tag-page grid controls.');
+    admin_setup_wizard_render_assert(str_contains($contentHtml, 'data-theme-preview-tag-description-layout'), 'Content tag-page card layout must drive the shared preview hook.');
 
     $appearanceModel = $baseModel;
     $appearanceModel['active_step'] = 'appearance';
@@ -301,6 +315,14 @@ namespace {
     $appearanceHtml = admin_setup_wizard_render($appearanceModel);
     admin_setup_wizard_render_assert(substr_count($appearanceHtml, 'data-theme-live-preview') === 1 && substr_count($appearanceHtml, 'data-theme-preview-page') === 1, 'Appearance must render exactly one coordinated shared Theme preview.');
     admin_setup_wizard_render_assert(str_contains($appearanceHtml, 'data-theme-preview-color="accent"'), 'Appearance control must drive the shared preview hook.');
+    admin_setup_wizard_render_assert(str_contains($appearanceHtml, 'data-theme-preview-description-layout') && str_contains($appearanceHtml, 'data-theme-preview-home-grid-columns'), 'Appearance Phase 2 layout controls must drive the shared preview hooks.');
+
+    $mediaModel = $baseModel;
+    $mediaModel['active_step'] = 'media';
+    $mediaModel['draft']['step'] = 'media';
+    $mediaHtml = admin_setup_wizard_render($mediaModel);
+    admin_setup_wizard_render_assert(substr_count($mediaHtml, 'data-theme-live-preview') === 1, 'Media must reuse the shared Theme preview exactly once.');
+    admin_setup_wizard_render_assert(str_contains($mediaHtml, 'data-theme-preview-lightbox-mode') && str_contains($mediaHtml, 'data-theme-preview-thumbnail-mode'), 'Media controls must drive lightbox and thumbnail preview state.');
 
     $summaryModel = $baseModel;
     $summaryModel['active_step'] = 'summary';
@@ -315,8 +337,23 @@ namespace {
     ]];
     $summaryHtml = admin_setup_wizard_render($summaryModel);
     admin_setup_wizard_render_assert(str_contains($summaryHtml, 'name="approval" value="1" required'), 'Only the final summary must require explicit approval.');
-    admin_setup_wizard_render_assert(str_contains($summaryHtml, 'Old name') && str_contains($summaryHtml, 'New name') && str_contains($summaryHtml, 'reviewed, unchanged') && str_contains($summaryHtml, 'Skipped'), 'Summary must show changed, reviewed, and skipped outcomes.');
+    admin_setup_wizard_render_assert(str_contains($summaryHtml, 'Old name') && str_contains($summaryHtml, 'New name') && str_contains($summaryHtml, 'reviewed, unchanged') && str_contains($summaryHtml, 'Skipped'), 'Summary must retain changed, reviewed, and skipped outcomes in its review markup.');
+    admin_setup_wizard_render_assert(str_contains($summaryHtml, 'data-wizard-summary-show-all') && str_contains($summaryHtml, 'data-wizard-summary-unchanged') && !str_contains($summaryHtml, 'href="/index.php?page=admin_account"'), 'Summary must hide unchanged/status items by default and must not link out to independently committed settings.');
+    admin_setup_wizard_render_assert(!str_contains($summaryHtml, 'data-wizard-summary-unchanged-group'), 'A summary group containing real changes must stay visible even when unchanged details are hidden.');
     admin_setup_wizard_render_assert(str_contains($summaryHtml, 'value="back" class="secondary" formnovalidate'), 'Summary Back must not require approval.');
+    admin_setup_wizard_render_assert(substr_count($summaryHtml, 'admin-setup-wizard-actions is-top') === 1 && substr_count($summaryHtml, 'admin-setup-wizard-actions is-bottom') === 1, 'Summary must expose navigation both before and after the review content.');
+    admin_setup_wizard_render_assert(substr_count($summaryHtml, 'value="apply"') === 1, 'Final Apply must remain a single bottom action after explicit approval.');
+
+    $unchangedOnlyModel = $summaryModel;
+    $unchangedOnlyModel['summary_groups'][] = [
+        'id' => 'content', 'title' => 'Content', 'title_key' => 'admin.settings.section.content',
+        'changes' => [],
+        'reviewed' => [],
+        'skipped' => ['custom_css'],
+        'deferred' => [],
+    ];
+    $unchangedOnlyHtml = admin_setup_wizard_render($unchangedOnlyModel);
+    admin_setup_wizard_render_assert(str_contains($unchangedOnlyHtml, 'class="wizard-summary-group is-unchanged-only" data-wizard-summary-unchanged-group'), 'Unchanged-only summary sections must be marked so enhancement can remove the entire empty block from the default review.');
 
     $document = admin_setup_wizard_render_dom($summaryHtml);
     if ($document !== null) {
@@ -337,9 +374,13 @@ namespace {
 
     $themeSource = (string) file_get_contents($root . '/app/views/admin_theme.php');
     $wizardJavascript = (string) file_get_contents($root . '/public/assets/gallery-modules/admin-setup-wizard.js');
+    $wizardStyles = (string) file_get_contents($root . '/public/assets/styles/admin-setup-wizard.css');
+    admin_setup_wizard_render_assert(str_contains($wizardStyles, '.admin-setup-wizard-progress .is-active .wizard-progress-label') && str_contains($wizardStyles, 'display: none;'), 'Progress CSS must hide non-active labels while preserving numbered markers.');
+    admin_setup_wizard_render_assert(!str_contains($wizardStyles, '.admin-setup-wizard-progress {\n    overflow-x: auto'), 'Progress bar must not reintroduce a horizontal scrollbar.');
+    admin_setup_wizard_render_assert(str_contains($wizardStyles, '.admin-setup-wizard-progress-nav {') && str_contains($wizardStyles, 'overflow: hidden;'), 'Progress navigation must clip accidental horizontal overflow instead of exposing a scrollbar.');
     admin_setup_wizard_render_assert(substr_count($themeSource, 'data-theme-live-preview') === 1, 'Theme source must define preview markup only in the shared helper.');
     admin_setup_wizard_render_assert(str_contains($themeSource, 'view_render_admin_theme_live_preview([') && str_contains($viewSource, 'view_render_admin_theme_live_preview($preview)'), 'Original Theme and wizard must call the same preview renderer.');
-    admin_setup_wizard_render_assert(str_contains($wizardJavascript, "./theme-form.js?v=20260929-setup-wizard-preview-v1"), 'Wizard must version the Theme preview dependency so a cached pre-export module cannot break gallery.js.');
+    admin_setup_wizard_render_assert(str_contains($wizardJavascript, "./theme-form.js?v=20260929-setup-wizard-preview-v2"), 'Wizard must version the Theme preview dependency so a cached pre-export module cannot break gallery.js.');
     admin_setup_wizard_render_assert(array_values(array_unique($GLOBALS['admin_setup_wizard_render_translation_calls'] ?? [])) !== [], 'Focused rendering must exercise only the explicit translation presentation boundary.');
 
     echo "Admin setup wizard rendering tests passed.\n";

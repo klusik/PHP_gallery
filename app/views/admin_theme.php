@@ -94,15 +94,46 @@ function view_render_admin_theme_live_preview(array $preview): void
         $pageWidthMode = 'default';
     }
     $customPageWidth = max(1024, min(2048, (int) ($preview['page_width_custom'] ?? 1440)));
+    $descriptionLayout = in_array((string) ($preview['gallery_description_layout'] ?? 'vertical'), ['vertical', 'horizontal'], true)
+        ? (string) $preview['gallery_description_layout']
+        : 'vertical';
+    $countBadgeEnabled = (string) ($preview['gallery_count_badge_enabled'] ?? '1') !== '0';
+    $paginationEnabled = (string) ($preview['pagination_enabled'] ?? '0') === '1';
+    $homeGridColumns = max(1, min(12, (int) ($preview['home_gallery_grid_columns'] ?? $preview['pagination_columns'] ?? 3)));
+    $homeGridRows = max(1, min(50, (int) ($preview['home_gallery_grid_rows'] ?? $preview['pagination_rows'] ?? 3)));
+    $tagGridColumns = max(1, min(12, (int) ($preview['tag_page_gallery_grid_columns'] ?? $preview['pagination_columns'] ?? 3)));
+    $tagGridRows = max(1, min(50, (int) ($preview['tag_page_gallery_grid_rows'] ?? $preview['pagination_rows'] ?? 3)));
+    $lightboxMode = trim((string) ($preview['lightbox_browsing_mode'] ?? 'single')) ?: 'single';
+    $thumbnailMode = trim((string) ($preview['public_thumbnail_rendering_mode'] ?? 'progressive')) ?: 'progressive';
 
     echo '<aside class="theme-live-preview" aria-label="' . e(t('admin.theme.appearance.live_preview_label', 'Live theme preview')) . '" data-theme-live-preview>';
     // The preview starts from the saved or staged page-width mode and custom pixel value before JavaScript runs.
-    echo '<div class="theme-preview-page" data-theme-preview-page data-preview-width="' . e($pageWidthMode) . '" style="--preview-custom-width-scale: ' . number_format(($customPageWidth - 1024) / 1024, 4, '.', '') . ';">';
+    echo '<div class="theme-preview-page" data-theme-preview-page data-preview-width="' . e($pageWidthMode) . '" style="--preview-custom-width-scale: ' . number_format(($customPageWidth - 1024) / 1024, 4, '.', '') . '; --preview-grid-columns: ' . min(4, $homeGridColumns) . ';">';
     echo '<div class="theme-preview-background"><span data-theme-preview-background-image></span></div>';
     echo '<header class="theme-preview-header"><strong data-theme-preview-brand>' . e($siteName) . '</strong><nav><span class="theme-preview-link">' . e(t('admin.theme.appearance.preview_home', 'Home')) . '</span><span class="theme-preview-link">' . e(t('admin.theme.appearance.preview_galleries', 'Galleries')) . '</span></nav></header>';
     echo '<section class="theme-preview-hero"><p>' . e(t('admin.theme.appearance.preview_open_gallery', 'Open gallery')) . '</p><h2 data-theme-preview-hero-title>' . e(t('admin.theme.appearance.preview_gallery_title', 'Aircraft Weekend')) . '</h2><span class="theme-preview-tag">' . e(t('admin.theme.appearance.preview_tag', 'travel')) . '</span></section>';
-    echo '<div class="theme-preview-grid"><article class="theme-preview-card"><div></div><h3>' . e(t('admin.theme.appearance.preview_subgallery_card', 'Subgallery card')) . '</h3><p>' . e(t('admin.theme.appearance.preview_panel_background', 'Panel background')) . '</p></article><article class="theme-preview-card theme-preview-gallery-card"><div></div><h3>' . e(t('admin.theme.appearance.preview_photo_card', 'Photo card')) . '</h3><p>' . e(t('admin.theme.appearance.preview_open_gallery_panel', 'Open gallery panel')) . '</p></article></div>';
-    echo '<div class="theme-preview-pagination"><span>1</span><span>2</span><span>3</span></div></div>';
+    echo '<div class="theme-preview-grid" data-theme-preview-grid>';
+    for ($index = 0; $index < 4; $index++) {
+        $galleryCard = $index % 2 === 0;
+        echo '<article class="theme-preview-card' . ($galleryCard ? ' theme-preview-gallery-card' : '') . '"' . ($galleryCard ? ' data-theme-preview-description-card data-description-layout="' . e($descriptionLayout) . '"' : '') . '>';
+        echo '<div class="theme-preview-media">';
+        if ($galleryCard) {
+            echo '<span class="theme-preview-count-badge" data-theme-preview-count-badge-sample' . ($countBadgeEnabled ? '' : ' hidden') . '>12</span>';
+        } else {
+            echo '<span class="photo-map-pin theme-preview-gps-pin" data-theme-gps-pin-sample aria-hidden="true">&#128205;</span>';
+        }
+        echo '</div>';
+        echo '<div class="theme-preview-card-copy"><h3>' . e($galleryCard ? t('admin.theme.appearance.preview_subgallery_card', 'Subgallery card') : t('admin.theme.appearance.preview_photo_card', 'Photo card')) . '</h3><p>' . e($galleryCard ? t('admin.theme.appearance.preview_panel_background', 'Panel background') : t('admin.theme.appearance.preview_open_gallery_panel', 'Open gallery panel')) . '</p></div>';
+        echo '</article>';
+    }
+    echo '</div>';
+    echo '<div class="theme-preview-pagination" data-theme-preview-pagination' . ($paginationEnabled ? '' : ' hidden') . '><span>1</span><span>2</span><span>3</span></div>';
+    echo '<div class="theme-preview-settings" aria-live="polite">';
+    echo '<span><strong>' . e(t('admin.theme.layout.main_page_grid_legend', 'Main page gallery grid')) . '</strong> <i data-theme-preview-home-grid-state>' . $homeGridColumns . ' × ' . $homeGridRows . '</i></span>';
+    echo '<span><strong>' . e(t('admin.theme.appearance.tag_page_legend', 'Public tag page layout')) . '</strong> <i data-theme-preview-tag-grid-state>' . $tagGridColumns . ' × ' . $tagGridRows . '</i></span>';
+    echo '<span><strong>' . e(t('admin.theme.layout.lightbox_mode_legend', 'Public lightbox browsing mode')) . '</strong> <i data-theme-preview-lightbox-state>' . e(str_replace('_', ' ', $lightboxMode)) . '</i></span>';
+    echo '<span><strong>' . e(t('admin.theme.layout.thumbnail_rendering_legend', 'Public thumbnail rendering')) . '</strong> <i data-theme-preview-thumbnail-state>' . e(str_replace('_', ' ', $thumbnailMode)) . '</i></span>';
+    echo '</div></div>';
     echo '<p class="muted">' . e(t('admin.theme.appearance.preview_hint', 'Preview updates while editing. It is intentionally small, but uses the same colors, font mode, corner radius, and background transparency controls as the public theme.')) . '</p></aside>';
 }
 

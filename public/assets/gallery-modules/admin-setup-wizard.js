@@ -11,7 +11,7 @@
  * Contact: https://github.com/klusik
  * License: MIT
  */
-import { setupThemeLivePreview } from './theme-form.js?v=20260929-setup-wizard-preview-v1';
+import { setupThemeLivePreview } from './theme-form.js?v=20260929-setup-wizard-preview-v2';
 
 /** Enable or disable one field's submitted values without losing its staged browser value.
  * @param {HTMLInputElement} include Inclusion checkbox.
@@ -78,6 +78,55 @@ function syncLanguageSelector(wizard) {
     );
 }
 
+/** Activate one in-step subsection without submitting or mutating staged controls.
+ * @param {HTMLElement} wizard Wizard root element.
+ * @param {string} target Stable subsection identifier.
+ * @returns {void}
+ */
+function activateWizardSubsection(wizard, target) {
+    wizard.querySelectorAll('[data-wizard-subsection-panel]').forEach(
+        /** @param {HTMLElement} panel Subsection panel. @returns {void} */
+        (panel) => {
+            const active = panel.dataset.wizardSubsectionPanel === target;
+            panel.classList.toggle('is-active', active);
+            panel.setAttribute?.('aria-hidden', active ? 'false' : 'true');
+        },
+    );
+    wizard.querySelectorAll('[data-wizard-subsection-target]').forEach(
+        /** @param {HTMLButtonElement} button Subsection navigation button. @returns {void} */
+        (button) => {
+            const active = button.dataset.wizardSubsectionTarget === target;
+            button.classList.toggle('is-active', active);
+            button.setAttribute?.('aria-selected', active ? 'true' : 'false');
+        },
+    );
+}
+
+/** Synchronize the final review's global unchanged-settings control with native details elements.
+ * @param {HTMLElement} wizard Wizard root element.
+ * @returns {void}
+ */
+function setupWizardSummaryDisclosure(wizard) {
+    const toggle = wizard.querySelector('[data-wizard-summary-show-all]');
+    if (!toggle) return;
+    const details = Array.from(wizard.querySelectorAll('[data-wizard-summary-unchanged]'));
+    const unchangedOnlyGroups = Array.from(wizard.querySelectorAll('[data-wizard-summary-unchanged-group]'));
+    const syncUnchangedOnlyGroups = () => {
+        for (const group of unchangedOnlyGroups) group.hidden = !toggle.checked;
+    };
+    syncUnchangedOnlyGroups();
+    toggle.addEventListener('change', () => {
+        for (const detail of details) detail.open = toggle.checked;
+        syncUnchangedOnlyGroups();
+    });
+    for (const detail of details) {
+        detail.addEventListener('toggle', () => {
+            toggle.checked = details.length > 0 && details.every((item) => item.open);
+            syncUnchangedOnlyGroups();
+        });
+    }
+}
+
 /**
  * Enhance one server-rendered wizard without taking over its navigation.
  * @param {Document|HTMLElement} root Search root containing the wizard.
@@ -87,8 +136,22 @@ export function setupAdminSetupWizard(root = document) {
     const wizard = root.querySelector('[data-admin-setup-wizard]');
     if (!wizard || wizard.dataset.wizardReady === '1') return;
     wizard.dataset.wizardReady = '1';
+    wizard.classList.toggle('is-enhanced', true);
     const themeForm = wizard.querySelector('[data-theme-form]');
     if (themeForm) setupThemeLivePreview(themeForm);
+    const initialSubsection = wizard.querySelector('[data-wizard-subsection-panel]');
+    if (initialSubsection) activateWizardSubsection(wizard, initialSubsection.dataset.wizardSubsectionPanel || '');
+    wizard.querySelectorAll('[data-wizard-subsection-target]').forEach(
+        /**
+         * Switch one visual subsection while preserving the entire staged form.
+         * @param {HTMLButtonElement} button Subsection navigation button.
+         * @returns {void}
+         */
+        (button) => {
+            button.addEventListener('click', () => activateWizardSubsection(wizard, button.dataset.wizardSubsectionTarget || ''));
+        },
+    );
+    setupWizardSummaryDisclosure(wizard);
     wizard.querySelectorAll('[data-wizard-progress-target]').forEach(
         /**
          * Attach server-owned goto navigation to one progress link.

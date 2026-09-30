@@ -11,8 +11,8 @@
  *   Owns the database transaction and row-lock boundary for Setup Wizard writes.
  *
  * Responsibilities:
- *   - Start, commit, and roll back the wizard's app-settings transaction
- *   - Lock every affected app_settings row before optimistic comparison
+ *   - Start, commit, and roll back the wizard's settings transaction
+ *   - Lock every affected app_settings and telemetry_settings row before optimistic comparison
  *   - Invoke a bounded compensation callback if a post-file-write commit fails
  *
  * Author:
@@ -40,19 +40,21 @@ use function Gallery\Core\db;
 /**
  * Execute one wizard apply operation inside a new database transaction.
  *
- * The operation runs after all named app-settings rows have been locked. The
+ * The operation runs after all named app-settings and telemetry-settings rows have been locked. The
  * compensation callback is intended only for restoring a file-backed setting
  * changed at the end of the operation if the database transaction cannot commit.
  *
  * @param list<string> $settingKeys Canonical app_settings keys affected by the apply.
  * @param callable():array<string,mixed> $operation Transactional callback returning normalized changes.
  * @param null|callable():void $compensate Best-effort file-setting compensation.
+ * @param list<string> $telemetrySettingKeys Canonical telemetry_settings keys affected by the apply.
  * @return array<string,mixed> Normalized changes returned by the operation.
  */
 function admin_setup_wizard_model_transaction(
     array $settingKeys,
     callable $operation,
-    ?callable $compensate = null
+    ?callable $compensate = null,
+    array $telemetrySettingKeys = []
 ): mixed {
     $pdo = db();
     if ($pdo->inTransaction()) {
@@ -64,6 +66,7 @@ function admin_setup_wizard_model_transaction(
     }
     try {
         admin_setup_wizard_model_lock_settings($settingKeys);
+        admin_setup_wizard_model_lock_telemetry_settings($telemetrySettingKeys);
         $result = $operation();
         if (!$pdo->commit()) {
             throw new RuntimeException('Setup Wizard database transaction could not commit.');
@@ -129,3 +132,42 @@ function admin_setup_wizard_model_lock_settings(array $settingKeys): void
     $statement->execute($keys);
     $statement->fetchAll();
 }
+
+/**
+ * Lock affected telemetry_settings rows in a stable order for optimistic comparison.
+ *
+ * @param list<string> $settingKeys Canonical non-empty telemetry setting keys.
+ * @return void
+ */
+function admin_setup_wizard_model_lock_telemetry_settings(array $settingKeys): void
+{
+    $keys = array_values(array_unique(array_filter(array_map(
+        /**
+         * Trim a candidate telemetry setting key before filtering empty values.
+         *
+         * @param string $key Candidate canonical telemetry setting key.
+         * @return string Trimmed key.
+         */
+        static fn (mixed $key): string => trim((string) $key),
+        $settingKeys
+    ),
+    /**
+     * Keep only non-empty canonical telemetry setting keys.
+     *
+     * @param string $key Candidate canonical telemetry setting key.
+     * @return bool Whether the key is usable.
+     */
+    static fn (string $key): bool => $key !== '')));
+    sort($keys, SORT_STRING);
+    if ($keys === []) {
+        return;
+    }
+
+    $placeholders = implode(', ', array_fill(0, count($keys), '?'));
+    $statement = db()->prepare(
+        'SELECT setting_key FROM telemetry_settings WHERE setting_key IN (' . $placeholders . ') ORDER BY setting_key FOR UPDATE'
+    );
+    $statement->execute($keys);
+    $statement->fetchAll();
+}
+

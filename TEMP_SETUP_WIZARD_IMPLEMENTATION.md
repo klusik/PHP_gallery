@@ -1,95 +1,93 @@
-# TEMP plán: Admin Setup Wizard v1
+# TEMP plán: Admin Setup Wizard, guided UX a owner-safe apply
 
-## Cíl a cesta administrátora
+## Cíl a uživatelský model
 
-Wizard provede administrátora celým kanonickým Settings registry. Každý krok zobrazí stabilní název, lokalizovaný popis, příklad použití, aktuální/default/inherited stav, vlastníka a bezpečný odkaz na specializovanou stránku. Administrátor může krok přeskočit; přeskočení zachová původní hodnotu. Na konci wizard zobrazí souhrn změn, přeskočených položek, blokací a konfliktů. Persistence smí začít až po explicitním potvrzení tohoto souhrnu.
+Setup Wizard má být rychlá cesta k rozumnému základnímu nastavení celé instalace. Nemá kopírovat každou specializovanou administrační obrazovku ani uživatele během rozpracovaného draftu posílat jinam. Zdroj katalogu zůstává výhradně `admin_settings_registry()` a `admin_settings_sections()`, takže wizard nevytváří paralelní seznam nastavení. Každá registry položka je ve wizardu reprezentovaná, ale její prezentace závisí na tom, zda je bezpečně editovatelná v jedné staged transakci.
 
-Appearance kroky musí znovu použít existující Theme preview hooks/state pro všechny relevantní položky. Preview je pouze dočasná klientská nebo serverová reprezentace a nesmí zapisovat nastavení. Tajné hodnoty se nikdy nevracejí do draftu, HTML, logu ani příkladů.
+Wizard drží změny pouze v serverovém draftu. Přechod mezi hlavními kroky, podsekcemi, rozbalení Advanced/Expert a Theme preview nesmí nic persistovat. Skutečné ukládání začne až po explicitním potvrzení final review. Secret hodnoty, credentials a tokeny se nikdy nevracejí do draftu, HTML, logu ani příkladů.
 
-## Exhaustive registry coverage
+## Osm hlavních kroků a podsekce
 
-Zdroj seznamu je výhradně `admin_settings_registry()`, v pořadí registry a stabilních sekcí. Wizard nesmí vytvářet druhý katalog. Zobrazí i summary-only/specialized položky, ale ty označí jako „otevřít specializovanou stránku“ a bezpečně odloží. Editovatelné položky mohou získat typovaný návrh pouze přes `admin_setup_wizard` API a kanonické ukládací funkce vlastníka nastavení.
+Serverový kontrakt zůstává na osmi stabilních sekcích: General, Site, Appearance, Content, Media, Uploads, Privacy a Advanced. Dlouhé sekce se nerozmnožují na desítky serverových kroků. Místo toho se uvnitř kroku dělí na krátké podsekce, například Privacy na Analytics, Trash, Maintenance a Security. Přepnutí podsekce je čistě klientské a nemění draft ani URL.
 
-Každá položka musí mít překladové klíče pro všechny čtyři podporované katalogy (`en`, `cs`, `de`, `sv`) s popisem a konkrétním příkladem; chybějící překlad použije bezpečný fallback a test jej nahlásí. Machine IDs zůstávají interní. Příklady musí být konkrétní pro dané nastavení (URL pro `base_url`, text názvu pro `site_name`, jazyky pro selector, checkbox příklady pro přepínače, renderer hodnoty pro thumbnail mode).
+Bez JavaScriptu zůstávají všechny podsekce čitelné za sebou. Po JS enhancementu je aktivní vždy jeden panel a ostatní jsou skryté s korektním ARIA stavem. Navigační tlačítka mají `type=button`, takže přepnutí podsekce nikdy omylem neodešle formulář.
 
-V1 skutečně editable registry pole jsou: `base_url`, `site_name`, `public_language`, `public_language_selector_enabled`, `public_language_selector_languages`, `public_language_selector_design`, `url_rewrite_enabled`, `public_home_search_enabled`, `public_thumbnail_rendering_mode`, `exif_gps_maps_default_enabled`, `dev_mode_enabled` a `remote_favicon_discovery_enabled`. Ostatní položky z aktuálních 177 registry ID jsou v této verzi summary/deferred podle svého canonical ownera.
+## Progressive disclosure
+
+Každá registry položka dostane prezentační tier nezávislý na svém canonical owneru:
+
+- `essential`: běžná rozhodnutí, která mají být viditelná bez další interakce;
+- `advanced`: méně časté bezpečné volby, zavřené ve společném Advanced bloku;
+- `expert`: provozní nebo citlivější konfigurace, zavřená v Expert bloku;
+- `status`: specialistické operace, secrets, file-backed workflow a jiné položky, které se v staged wizardu bezpečně nemění.
+
+Status položky nejsou falešně označované jako editovatelné a nemají checkbox `reviewed`. Wizard u nich pouze ukáže bezpečný stav, owner kontext a vysvětlení. Neobsahuje tlačítko ani odkaz typu „Open dedicated settings“, protože takový odchod by mohl okamžitě commitnout jinou konfiguraci mimo rozpracovaný draft. Uživatel tak může celý wizard dokončit bez přechodu na jiné Settings stránky.
+
+## Final review
+
+Final review je primárně diff, ne opakování celého registru. Změněné položky jsou viditelné rovnou. Nezměněné, přeskočené a informační/status položky jsou ve výchozím stavu sbalené. Uživatel může zapnout „Show unchanged and informational settings“, čímž se všechny příslušné bloky otevřou. Bez JavaScriptu zůstávají dostupné přes nativní `<details>`.
+
+Language selector summary se zobrazuje detailně pouze tehdy, když se skutečně změnila některá z jeho tří hodnot. Sekce bez změn explicitně řekne, že v ní nebude nic změněno.
+
+## Editace a canonical ownery
+
+Wizard smí editovat pouze položky s explicitním adapterem a canonical saverem. Neexistuje generický „zapiš libovolný registry key“ mechanismus. Současný rozsah zahrnuje:
+
+- centrální scalar settings přes existující Admin Settings normalizaci a saver;
+- Theme basic appearance a bezpečné layout/card/grid/media hodnoty přes Theme services;
+- Theme hero-tag scalar preference přes `theme_layout_settings.php`, včetně bumpu `theme_public_content_revision`;
+- bounded upload preference přes upload-owned services;
+- telemetry preference pouze při pozitivně dostupném `telemetry_settings` schema;
+- bezpečné provozní preference přes `app/services/admin_setup_wizard/preferences.php`: thumbnail background warm-up, SEO request guard, Gallery Trash preference, application auto-update a scheduled maintenance preference.
+
+Destruktivní akce zůstávají status-only. Wizard například může staged změnit Trash retention nebo auto-purge preference, ale nesmí během průchodu spustit Empty Trash/Purge. Stejně tak scheduled maintenance preference nejsou totéž jako Run now, database optimize/repair nebo updater activation.
+
+## Coupled owner semantics
+
+Některé preference mají společný canonical setter a side effects. Proto se nesmějí ukládat po jednotlivých řádcích.
+
+Gallery Trash (`gallery_trash_*`) se při apply seskupí a uloží jedním `set_gallery_trash_settings(...)`. Scheduled Maintenance (`site_maintenance_*`) se seskupí a uloží jedním `set_site_maintenance_settings(...)`. Tím nevzniká mezistav, ve kterém by například zapnutí auto-purge přepočítalo deadline podle staré retention hodnoty.
+
+Transakční model zároveň zamyká všechny app-settings siblings dané coupled skupiny, pokud se mění alespoň jeden člen. Optimistic comparison tak proběhne nad konzistentním owner snapshotem. Nezávislé provozní položky používají své canonical savery (`set_thumbnail_warmup_enabled`, SEO guard setters, `set_application_autoupdate_enabled`).
 
 ## Backend a MVC kontrakt
 
-Service `app/services/admin_setup_wizard.php` vlastní sestavení kroků, normalizaci, životní cyklus návrhu, kontrolu konfliktů a finální ukládání. Controller vlastní přihlášení, CSRF, čtení požadavku, HTTP odpověď a přípravu dat pro view. Model vlastní databázový přístup a transakci. View pouze vykresluje připravená data.
+`app/services/admin_setup_wizard.php` načítá jednotlivé service parts. `catalog.php` sestavuje registry-backed katalog, owner adapter metadata, vstupní kontrakty, podsekce a tier. `draft.php` vlastní staged změny, skip a summary model. `apply.php` vlastní preflight, optimistic conflict kontrolu, storage dependencies, grouping owner změn a canonical saver dispatch. `preferences.php` je pouze adapter bezpečných provozních preferencí.
 
-V1 backend API je `app/services/admin_setup_wizard.php`: `admin_setup_wizard_steps()`, `admin_setup_wizard_normalize_change()` a `admin_setup_wizard_apply($changes, $original)`; session draft používá `owner`, `revision`, `step`, `changes`, `skips`, `original`. Draft obsahuje pouze normalizované změny, nikdy kompletní kopii secretů. Normalizace odmítne neznámé ID, nepovolený typ, specializovanou položku a neplatnou hodnotu. Hodnoty rovné normalized current/default stavu se do draftu nezařadí.
+Controller vlastní auth, CSRF, request parsing a HTTP flow. Model vlastní PDO transakci a row locking. View pouze vykresluje připravená data a nesmí zapisovat nastavení. Browser modul vlastní pouze progressive enhancement, in-step subsection navigation, summary disclosure a Theme preview wiring.
 
-Final apply znovu ověří admina, CSRF, capabilities/schema state a revision každé dotčené položky. Model použije transakci pro DB změny; `base_url` změna vyžaduje explicitně popsanou kompenzaci/rollback URL a nesmí rozbít návrat do summary. Konflikt z jiné karty znamená odmítnutí apply a nové načtení snapshotu, nikoli tiché přepsání. Heterogenní specializované akce a destruktivní operace jsou ve v1 pouze deferred s canonical deep-linkem.
+Session draft používá `owner`, `revision`, `step`, `changes`, `skips` a `original`. Draft obsahuje pouze normalizované hodnoty položek, které wizard skutečně smí měnit. Neznámé ID, nepovolený adapter, neplatná hodnota nebo unavailable owner se odmítne před prvním saverem.
 
-Schema a capability rozhodování používá třístavový model `available/missing/unknown`. `unknown` blokuje apply; `missing` smí pokračovat pouze při dokumentované compatibility path. Feature effective state je rozhodující pro dostupnost, configured state se nesmí zaměnit.
+## Dostupnost, konflikty a bezpečnost
 
-## Implementační vlny a delegace
+Schema/capability rozhodování používá fail-closed přístup. `unknown` blokuje apply. Telemetry adapter smí pracovat jen při pozitivně dostupném schema. Feature-effective policy zůstává autoritativní tam, kde registry položka závisí na capability.
 
-**Povinné pravidlo: každou dílčí implementační úlohu delegovat subagentovi. Výchozí volba je `gpt-5.6-luna` s reasoning `low`. Toto pravidlo se nesmí tiše obejít tím, že hlavní agent začne psát všechny části sám.** Zadání musí mít konkrétní vlastnictví souborů, skutečné rozhraní a ověřitelnou podmínku dokončení. Hlavní agent odpovídá za integraci a kontrolu výsledku.
+Apply znovu ověří současné hodnoty proti `original`. Konflikt z jiné karty se nesmí tiše přepsat. `base_url` zachovává existující reversible save/compensation mechanismus. Secrets, API keys, passwords, raw credentials a file-backed asset payloady zůstávají mimo staged draft.
 
-Na silnější model řady `5.6` nebo vyšší reasoning přejít podle skutečné složitosti: transakce přes databázi a konfiguraci, konflikty, bezpečnostní hranice, opětovné využití složených editorů a důkladná kontrola překladů. Jednoduché izolované změny dál zadávat `gpt-5.6-luna/low`. **Silné subagenty GPT-6 pro tento úkol nepoužívat.** Povinnost delegace není důvod přijmout nedokončený výsledek; krátký report musí odpovídat skutečné implementaci a požadované kvalitě.
+## UX pravidla použita v implementaci
 
-Aktuální limit je čtyři sloty včetně rootu: nejvýše tři paralelní děti v jedné vlně. Celkový počet úkolů může být větší, ale musí běžet v po sobě jdoucích vlnách; plán nesmí předstírat neomezenou paralelitu.
+Wizard používá progressive disclosure místo jedné dlouhé stěny formulářů. Často používané volby jsou viditelné, méně časté jsou pod Advanced a provozní/specialistické pod Expert. Podsekce jsou organizované podle konkrétního úkolu uživatele, ne podle interního názvu service souboru. Repetitivní nápověda typu „pokud si nejsi jistý, přeskoč“ je na úrovni kroku, ne pod každým polem.
 
-1. Backend: service/model API, návrh, normalizace, revize a transakce s kompenzací.
-2. `wizard_ui`: controller/view/browser flow, summary approval, preview reuse, cache-busting.
-3. kontrakty a překlady: registry coverage, four-language examples, focused deterministic tests.
-4. root integruje změny, route registration, audit registration a řeší konflikty.
+Cílem není maximalizovat počet polí na obrazovce. Cílem je zachovat exhaustive registry coverage, ale běžnému administrátorovi ukázat malý počet relevantních rozhodnutí a zbytek zpřístupnit bez opuštění wizardu.
 
-Žádné commity, PDF, AI obrázky, release packaging ani duplicitní audity. Root spouští centrální audit podle AGENTS.md.
+## Akceptační kontrakt
 
-## Akceptační testy v1
+Focused a centrální testy mají ověřit zejména:
 
-`tests/admin_setup_wizard_test.php` musí být plain PHP, deterministický a bez live DB. Ověří:
+- všech osm hlavních registry sekcí a exhaustive representation registry položek;
+- status/specialist položky nemají staged input ani outbound settings link;
+- podsekce mění pouze prezentaci, ne URL, draft ani persistence;
+- Advanced/Expert bloky jsou defaultně sbalené a no-JS fallback zůstává čitelný;
+- final review ukazuje změny rovnou a unchanged/status bloky defaultně skrývá;
+- normalizace odmítá neznámé, neplatné a truthy-string boolean hodnoty;
+- Theme preview nepersistuje;
+- telemetry schema preflight a oddělené row locks zůstávají zachované;
+- Trash a Scheduled Maintenance jsou při apply seskupené do jednoho canonical owner callu;
+- secret hodnoty nejsou v draftu ani summary;
+- konfliktní stale draft se odmítne před saverem.
 
-- exhaustive registry coverage a stabilní sections;
-- skip každého pole zachová originál;
-- neznámé ID a chybný typ jsou odmítnuty;
-- draft obsahuje jen skutečně změněné normalized hodnoty;
-- bez explicitního approval nedojde k persistence;
-- final approval guard vyžaduje auth/CSRF/revision;
-- optimistic conflict a multi-tab revision jsou odmítnuty;
-- secret values nejsou v draftu ani summary;
-- překladové klíče, popisy a příklady existují v `en`, `cs`, `de`, `sv`;
-- appearance kroky používají existující preview hooks;
-- specialized/destructive položky jsou bezpečně deferred s canonical route.
+## Handoff
 
-Test musí používat skutečné API `admin_setup_wizard`; pokud agent API upraví, test a kontrakt se aktualizují společně. Nový test lze během vývoje spustit samostatně. PHP testy přebírá centrální audit automaticky; hlavní agent po integraci použije centrální audit místo ručního přehrávání testů.
+Po poslední source/documentation editaci se musí spustit `php scripts/generate_manifest.php` a následně `php scripts/generate_manifest.php --check`. Před vytvořením affected-files ZIPu se podle `AGENTS.md` spustí právě jeden `php scripts/audit.php --profile=full`. Pokud ZIP obsahuje updater-managed soubor, musí obsahovat i čerstvý `app/core-manifest.json`.
 
-## Verze a známé mezery v1
-
-V1 dodává registry průchod, bezpečné drafty, unchanged skip, finální explicitní approval, konflikty, lokalizované popisy/příklady a reuse existujícího appearance preview. `base_url` znamená pouze URL instalace; `galleries_root` je filesystem root a ve V1 je read-only, bez tiché migrace. Budoucí fáze musí dodat bezpečnou validaci, preview, potvrzení a recoverable migration workflow pro změnu galleries root. Specializované Theme uploady, raw CSS, language import/export, API keys, credentials, telemetry maintenance, migrations, database repair, updater activation a destruktivní maintenance zůstávají deferred; wizard je pouze vysvětlí a odkáže na canonical owner route. Další fáze mají dodat deferred adapters/export/import podle ownerů, nikoli druhý persistence mechanismus.
-
-Před handoffem root ověří MVC hranice, admin mutation contracts podle dopadu, poté po poslední editaci spustí `php scripts/generate_manifest.php` a `php scripts/generate_manifest.php --check`; před handoffem spustí `php scripts/audit.php --profile=full` právě jednou. Test je plain PHP a audit runner jej objeví automaticky; není potřeba vlastní registrace. Nové UI/JS soubory musí mít standardní hlavičku, cache-busting import a zůstat bez frameworku. Tento TEMP plán je implementační podklad a před release musí být nahrazen aktualizovanou permanentní dokumentací nebo odstraněn podle release pravidel.
-
-## Cíle a kontrolní body
-
-| Cíl | Účel a implementace | Akceptace V1 | Další fáze |
-|---|---|---|---|
-| G01 Registry | Osm sekcí vzniká pouze z `admin_settings_registry()` a `admin_settings_sections()`. | Wizard pokrývá registry snapshot a každou položku označí jako editable, readonly, deferred nebo unavailable; úplná coverage je ověřována navazujícími registry/rendering kontrakty. | Všechny bezpečné owner adaptéry postupně přidají skutečnou editaci bez generického setteru. |
-| G02 Draft | `admin_setup_wizard_begin_draft()`, `draft_valid()` a `stage_step()` drží owner, revision, step, changes, skips a normalized original. | Žádný saver se nespustí při průchodu, skipu ani preview; chybný krok je atomicky odmítnut. | Resume mimo běžný request pouze přes serverovou session/store s TTL a invalidací. |
-| G03 Apply | `admin_setup_wizard_apply()` provede finální preflight, konfliktovou kontrolu a modelovou transakci. | Apply je možné pouze ze summary s approval `1`, platnou revizí, auth a CSRF. | Rozšířit reversible apply na další owner adaptéry a exportovat auditovatelný diff. |
-| G04 Vlastníci | Controller `app/controllers/admin_setup_wizard.php`, service parts `catalog.php`, `draft.php`, `apply.php`, model `app/models/admin_setup_wizard.php`; každý adapter volá konkrétní canonical owner. | Žádný SQL ani arbitrary key setter ve view/controlleru; MVC audit bez nové baseline debt. | Přidat explicitní řádky owner adapterů pro Theme, upload, telemetry, account a maintenance. |
-| G05 Lokalizace | Každý krok má beginner help a konkrétní příklad přes `en`, `cs`, `de`, `sv` katalogové klíče. | Překladové katalogy jsou pro wizard doplněny; test ověřuje skutečné klíče a fallback; ID se uživateli nezobrazují jako instrukce. | Rozšířit help/deferred vysvětlení na všech 177 položek a owner deep-linky. |
-| G06 Appearance preview | Wizard znovu používá `view_render_admin_theme_live_preview` a export `setupThemeLivePreview` se stejným cached query revision `20260929` a `previewv1`; wizard vlastní revizi `v2`. | Staged změna mění pouze živý preview model, nikoli persistence; preview je dostupné pro všech 11 V1 Theme polí včetně language selectoru. | Rozšířit reuse na layout, cards, grids a media; zachovat cache-busting. |
-| G07 Cesty | `base_url` je URL instalace; `galleries_root` je filesystem root pouze pro čtení. | Wizard zobrazí začátečnický příklad, validuje URL a nikdy tiše nepřesune soubory. | Recoverable migration workflow: validace, temp quarantine, checksum, TTL, explicitní potvrzení a rollback. |
-| G08 Bezpečnost | Secrets jsou readonly statusy; žádné tokeny/passwordy do draftu, HTML, logu ani localStorage. Destruktivní volby pouze vysvětlují canonical route. | Secret payload je odmítnut před saverem; capability/schema `unknown` fail-closed. | Server-only ephemeral secret workflows s asset quarantine/checksum/TTL; žádná automatická destruktivní akce. |
-| G09 Přístupnost | Keyboard/mobile/no-JS fallback, jasná validace, jednotlivý skip i skip celé sekce, žádné implicitní potvrzení. | Každý krok lze projít bez JS; summary rozlišuje changed, unchanged, skipped, deferred a blocked. | Browser matrix pro screen readers, touch a offline/reload resume. |
-| G10 Konkurence | Revision je digit string z requestu; owner binding a optimistic conflict se kontrolují před prvním saverem. | Druhá karta dostane stale/conflict chybu a žádná změna se nezapíše; failure transaction spouští kompenzaci URL. | Per-setting merge pouze tam, kde owner výslovně definuje bezpečnou politiku. |
-| G11 Regrese | Plain PHP behavior tests pokryjí model transaction stub, controller `process_post`, catalog, draft, apply a renderer hooks. | Test je deterministic, bez live DB; audit runner jej objeví automaticky. | Přidat browser fixture až když změna skutečně vyžaduje interakční coverage. |
-| G12 Handoff | Root řídí waves, audit a release-manifest pravidla podle `AGENTS.md`, `ARCHITECTURE.md`, `TESTING.md`, `RELEASE.md` a `docs/ADMIN_SETTINGS_INVENTORY.md`. | Bez commitů, ZIPů, release metadata, PDF nebo tvrzení o passu bez skutečného auditu; před handoffem přesně jeden full audit. | Permanentní dokumentace nahradí TEMP plán před release; žádná nová baseline položka. |
-
-## Přesný V1 průchod a API
-
-Katalog `app/services/admin_setup_wizard/catalog.php` obaluje 12 centrálních položek z registry a 11 bezpečných Theme basic appearance položek: `theme_accent`, `theme_accent_dark`, `theme_paper`, `theme_panel`, `theme_gallery_panel`, `theme_header_text`, `theme_hero_text`, `theme_radius`, `theme_font`, `theme_page_width`, `theme_page_width_custom`. Dostupnost `public_home_search_enabled`, `exif_gps_maps_default_enabled` a dalších capability/schema řízených hodnot je podmíněná effective policy; `missing` může pokračovat jen dokumentovanou compatibility cestou, `unknown` apply blokuje.
-
-Controller přijímá jen `settings[id]`, `include[id]`, `wizard_step`, digit-string `revision`, `wizard_action` z whitelistu `next/back/skip/goto/cancel/restart/apply`, `target_step` a při apply přesně `approval=1` ze summary. `admin_setup_wizard_process_post()` provádí staging před navigation změnou, zatímco `admin_setup_wizard_process_apply()` odmítne non-summary nebo chybějící approval. Stavy cancel/restart vyčistí serverový draft; nikdy nepoužívají browser localStorage pro secrets ani hodnoty credentialů.
-
-Model `app/models/admin_setup_wizard.php` s PDO transakcí přes `admin_setup_wizard_model_transaction(settingKeys, operation, compensate)` je jediná hranice transakce. Operation musí nejprve provést čerstvý snapshot/preflight, potom canonical saver calls, a při výjimce zavolat kompenzaci. `base_url` používá reversible URL save a redirect rebase; databázové hodnoty používají explicitní owner savery. Přímé SQL, obecný setter podle uživatelského klíče a přesun souborů v apply jsou zakázány.
-
-## Fázovaný rozsah po V1
-
-V1 transparentně vede specializované akce na jejich canonical owner routes. Fáze 2 přidá safe adapters pro základní Theme layout/card/grid/media s preview; language selector je již součástí V1. Fáze 3 přidá upload/telemetry preference přes jejich services po schema preflight. Fáze 4 řeší credentials/API keys pouze přes serverové ephemeral flows a nikdy přes draft HTML. Fáze 5 řeší galleries-root migration jako recoverable job s karanténou, checksumem, TTL, explicitním potvrzením a rollbackem. Fáze 6 může přidat explicitní maintenance/update/database adapters; ani tehdy wizard nesmí automaticky spouštět destruktivní intent bez samostatného potvrzení vlastníka operace.
-
-Za kompletní wizard se bude považovat až stav, kdy je každý registry item buď bezpečně editovatelný vlastním adapterem, nebo má ověřený readonly/deferred důvod, každý owner má rollback/conflict/schema kontrakt, všechny čtyři katalogy mají help+example, appearance preview pokrývá relevantní surface, no-JS cesta funguje a `docs/ADMIN_SETTINGS_INVENTORY.md` odpovídá skutečnému registry snapshotu. V1 tohoto cíle záměrně nedosahuje; jeho hranice jsou součástí acceptance review.
+Tento TEMP dokument je pracovní implementační specifikace. Před release se má buď převést do permanentní dokumentace, nebo odstranit podle release pravidel.

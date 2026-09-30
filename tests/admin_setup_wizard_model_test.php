@@ -90,6 +90,12 @@ namespace Gallery\Tests\AdminSetupWizardModel {
         /** @var string Last row-lock query prepared by the model. */
         public string $preparedSql = '';
 
+        /** @var list<string> Row-lock queries prepared by the model in call order. */
+        public array $preparedSqlLog = [];
+
+        /** @var list<FakeStatement> Statement fixtures returned by prepare() in call order. */
+        public array $statements = [];
+
         /** @var FakeStatement Current statement fixture returned by prepare(). */
         public FakeStatement $statement;
 
@@ -162,7 +168,9 @@ namespace Gallery\Tests\AdminSetupWizardModel {
         public function prepare(string $sql): FakeStatement
         {
             $this->preparedSql = $sql;
+            $this->preparedSqlLog[] = $sql;
             $this->statement = new FakeStatement();
+            $this->statements[] = $this->statement;
             return $this->statement;
         }
     }
@@ -229,6 +237,21 @@ namespace Gallery\Tests\AdminSetupWizardModel {
     assert_true($pdo->beginCalls === 1 && $pdo->commitCalls === 1 && $pdo->rollbackCalls === 0, 'Successful transaction lifecycle is incorrect.');
     assert_true($pdo->statement->executed === ['alpha', 'zeta'], 'Lock keys were not unique and sorted.');
     assert_true(str_contains($pdo->preparedSql, 'FOR UPDATE'), 'Model did not issue a row lock.');
+
+    $pdo = new FakePdo();
+    use_pdo($pdo);
+    $result = admin_setup_wizard_model_transaction(
+        ['zeta', 'alpha'],
+        $successfulOperation,
+        null,
+        ['telemetry_public_usage_enabled', 'telemetry_enabled', 'telemetry_enabled']
+    );
+    assert_true($result === 'done', 'Mixed settings transaction lost its result.');
+    assert_true(count($pdo->preparedSqlLog) === 2, 'Mixed settings transaction did not lock both storage domains.');
+    assert_true(str_contains($pdo->preparedSqlLog[0], 'FROM app_settings'), 'First lock did not target app_settings.');
+    assert_true(str_contains($pdo->preparedSqlLog[1], 'FROM telemetry_settings'), 'Second lock did not target telemetry_settings.');
+    assert_true(($pdo->statements[0]->executed ?? []) === ['alpha', 'zeta'], 'App settings lock ordering changed.');
+    assert_true(($pdo->statements[1]->executed ?? []) === ['telemetry_enabled', 'telemetry_public_usage_enabled'], 'Telemetry settings lock ordering is not deterministic.');
 
     $pdo = new FakePdo();
     $pdo->beginResult = false;

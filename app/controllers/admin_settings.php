@@ -119,7 +119,7 @@ function cms_admin_settings(): void
                     'route_name' => 'admin_settings',
                 ]);
                 flash_message('admin_notice', t('admin.settings.notice.saved', 'Settings saved.'));
-                redirect_to(admin_settings_url($section));
+                redirect_to(admin_settings_url($section, null, false));
             } catch (Throwable $exception) {
                 $errors['_page'][] = t('admin.settings.error.save_failed', 'Settings could not be saved: {error}', ['error' => $exception->getMessage()]);
                 admin_log_event('error', 'settings.central_update_failed', 'Centralized settings update failed.', [
@@ -140,6 +140,7 @@ function cms_admin_settings(): void
     foreach ($sections as $sectionId => $definition) {
         $sections[$sectionId]['panel_id'] = admin_settings_section_id($sectionId);
         $sections[$sectionId]['url'] = admin_settings_url($sectionId);
+        $sections[$sectionId]['tab_url'] = admin_settings_url($sectionId, null, false);
     }
     $registry = admin_settings_registry();
     $languagePresentations = translation_language_presentation();

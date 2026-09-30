@@ -52,7 +52,7 @@
  *   .then((module) => module.setupResponsiveThumbnailSizes());
  */
 
-import { setupThemeOverrideForm } from './gallery-modules/theme-form.js?v=20260929-setup-wizard-preview-v1';
+import { setupThemeOverrideForm } from './gallery-modules/theme-form.js?v=20260929-setup-wizard-preview-v2';
 import { setupHeroTagDisclosure } from './gallery-modules/hero-tags.js?v=20260811-hero-tags-v1';
 import { setupResponsiveThumbnailSizes } from './gallery-modules/responsive-thumbnails.js?v=20260510-lazy-map-v1';
 import { setupThumbnailWarmup } from './gallery-modules/thumbnail-warmup.js?v=20260608-thumbnail-warmup-v1';
@@ -67,7 +67,7 @@ import { setupAdminNavigationDataPanel } from './gallery-modules/admin-navdata-p
 import { setupOpenAITextAssist } from './gallery-modules/admin-openai-text-assist.js?v=20260815-content-translation-v1';
 import { setupPublicHomeSearch } from './gallery-modules/public-home-search.js?v=20260913-progressive-search-v4';
 import { setupAdminSettingsSearch } from './gallery-modules/admin-settings-search.js?v=20260920-admin-interaction-policy-v1';
-import { setupAdminSetupWizard } from './gallery-modules/admin-setup-wizard.js?v=20260929-setup-wizard-v2';
+import { setupAdminSetupWizard } from './gallery-modules/admin-setup-wizard.js?v=20260929-setup-wizard-v4';
 import { setupAdminLanguageSelectorDesign } from './gallery-modules/admin-language-selector-design.js?v=20260814-language-selector-design-v1';
 import { setupAdminSmartGalleries } from './gallery-modules/admin-smart-galleries.js?v=20260919-smart-gallery-presentation-v1';
 import { setupAdminUpdateJobs } from './gallery-modules/admin-update-jobs.js?v=20260813-resumable-updates-v3';
