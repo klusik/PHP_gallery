@@ -1,5 +1,47 @@
 # Patch notes
 
+## Version 0.113.1
+
+Version 0.113.1 fixes the Windows installer dependency regression test so it runs on headless Linux CI workers without Tkinter. It preserves the gallery and WinApp runtime behavior introduced in Version 0.113.
+
+### Highlights
+
+#### Portable installer regression coverage
+
+- Fixed the five negative dependency cases that previously failed when Tkinter was unavailable on the CI host.
+- Kept validation of unsupported or missing build packages independent of the test machine's GUI runtime and installed build tools.
+
+### Technical Details
+
+#### Tests
+
+- Updated `winapp/tests/test_build_installer.py` to provide an import-only Tkinter stub for negative package checks.
+- Preserved the expected `SystemExit` and `PackageNotFoundError` outcomes, with package refusal before Tcl creation or imports of actual installer build dependencies.
+- Preserved real installer dependency checks; changed test isolation only.
+
+#### Backend, database and frontend
+
+- Added no application feature, route, capability, setting, database migration, table or column.
+- Preserved existing access policies, cooperative gallery behavior, thumbnail ownership and browser assets.
+- Kept the independent WinApp version at `0.2.0`; added no companion runtime or installer behavior change.
+
+#### Documentation and release artifacts
+
+- Updated registered release markers and `release-metadata.json` for `v_0.113.1`.
+- Updated the English, Czech, German and Swedish manual editions and rebuilt their PDFs.
+- Refreshed `app/core-manifest.json` for the release.
+
+### User Impact
+
+#### For administrators
+
+- Required no new configuration or database migration beyond the existing Version 0.113 upgrade requirements.
+- Improved reproducibility of installer dependency regression checks on headless CI workers; hosted CI confirmation remains separate from local verification.
+
+#### For visitors
+
+- Preserved public gallery behavior, shared photograph pages and authorized media access.
+
 ## Version 0.113
 
 Version 0.113 adds opt-in cooperative galleries across independently operated HTTPS installations, with explicit approval by every participant and authorized shared previews. It also strengthens thumbnail ownership and delivers WinApp 0.2.0 with automatic Microsoft Flight Simulator location selection and safer installer shutdown.

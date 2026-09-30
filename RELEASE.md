@@ -16,6 +16,12 @@ The release profile already contains the deterministic coverage from `full`, plu
 
 Strict MVC is part of release qualification. The release audit invokes `scripts/check_mvc_boundaries.php` against an intentionally empty baseline. A non-zero MVC finding is a release failure and must be corrected in source; release preparation must not reintroduce legacy baseline debt.
 
+## Default artifact policy
+
+Normal release preparation does not create a deployment folder, ZIP, packaging staging tree, checksum file or handoff bundle in `deploy/`. Packaging phases below apply only when the user explicitly requests a specific package/archive. Audit and qualification evidence stay in the existing ignored `cache/` locations.
+
+Rebuild the Windows installer in `winapp/dist/` only when shipped companion code, assets, dependencies, runtime binaries or build/installer behavior changed since its previous build. CMS metadata, documentation and test-only fixes do not trigger an installer rebuild. Keep its independent version unless the user requests a change; otherwise leave `winapp/dist/` untouched.
+
 ## Release phases
 
 ### 1. Establish the release scope
@@ -35,7 +41,7 @@ Before changing version markers:
    - user-facing behavior that must be reflected in documentation and the manual.
 5. Decide whether the release is patch, feature, or larger-scope work based on the actual diff. Do not infer the version solely from the branch name.
 6. Choose the final audit path now: direct release profile or the disposable MySQL/Chromium fixture when its prerequisites are available. Run one of them in phase 7, not both.
-7. Choose a clean package source now. The deploy scripts walk physical directories and do not exclude every ignored local agent folder. Use a clean checkout or a reviewed staging tree copied from tracked files; stage any new release files before copying. Keep local `.codex/`, `.agent-local/`, and other private/runtime files out of the package source.
+7. Only when packaging is explicitly requested, choose a clean package source now. The deploy scripts walk physical directories and do not exclude every ignored local agent folder. Use a clean checkout or a reviewed staging tree copied from tracked files; stage any new release files before copying. Keep local `.codex/`, `.agent-local/`, and other private/runtime files out of the package source.
 
 If Git metadata is unavailable, record that the previous-tag comparison is a coverage gap instead of inventing history from the ZIP contents.
 
@@ -98,7 +104,7 @@ Remove temporary implementation roadmaps, scratch migration plans, and other exp
 
 Do not mechanically rewrite historical version references. For schema changes, describe the new migration and final schema accurately instead of merely replacing the document's current-version marker. For frontend module changes, verify the deployed browser entrypoint or import chain receives the required cache-busting update.
 
-### 4. Build and inspect the manual
+### 4. Build the manuals and check compilation
 
 After the final manual source edit, rebuild the tracked PDF according to `docs/LATEX_BUILD.md`:
 
@@ -110,15 +116,9 @@ pdflatex PHP_Gallery_Manual.tex
 pdflatex PHP_Gallery_Manual.tex
 ```
 
-Inspect the resulting `docs/PHP_Gallery_Manual.pdf`, not only the compiler exit code. Verify at least:
+Apply this build to all four maintained editions (English, Czech, German and Swedish). Check the source version/date, successful compiler exit status and relevant warnings, including unresolved references/index entries or reported layout problems. Existing release consistency checks remain required.
 
-- target version and edition date;
-- title page;
-- table of contents;
-- bookmarks/internal links;
-- index;
-- page breaks and obvious layout damage;
-- changed feature sections.
+Do not routinely read the resulting PDFs, extract their text, render pages, take screenshots or create contact sheets. Visual PDF review is performed only on explicit user request or to diagnose a concrete build/layout problem, and should then cover only affected pages. A routine successful LaTeX rebuild does not require human PDF visual approval.
 
 Do not add release-news material to the beginning of the permanent manual. Release history belongs in `PATCH_NOTES.md` unless a deliberate manual appendix is required.
 
@@ -153,7 +153,7 @@ Initialize the artifact-bound qualification record only after this gate passes:
 php scripts/release_qualification.php init X.Y.Z
 ```
 
-Retain the printed content fingerprint. Changed source, CI inputs, manual source or PDF bytes select a new all-pending record; old approvals remain historical only. See [release qualification evidence](docs/RELEASE_QUALIFICATION.md) for recording explicit reviewer/evidence text and rendering physical PDF pages into ignored cache. Rendering alone never approves a visual check. From here through audit attachment and packaging, treat the release inputs as frozen.
+Retain the printed content fingerprint. Changed source, CI inputs, manual source or PDF bytes select a new all-pending record; old approvals remain historical only. See [release qualification evidence](docs/RELEASE_QUALIFICATION.md) for recording explicit reviewer/evidence text. Its PDF-rendering workflow is optional and applies only when explicitly requested or needed to diagnose a concrete problem. From here through audit attachment and packaging, treat the release inputs as frozen.
 
 ### 7. Run the authoritative release audit
 
@@ -199,11 +199,11 @@ php scripts/release_qualification.php record-audit X.Y.Z --fingerprint=HASH
 php scripts/release_qualification.php check X.Y.Z
 ```
 
-Replace HASH with the exact initialized fingerprint. An old/unbound report, a partial suite run, or a full/quick report cannot stand in for release evidence. Complete applicable PDF and browser reviews using the documented `record` command; retain skips and post-publication checks as unresolved. A qualification check returning INCOMPLETE is not permission to publish.
+Replace HASH with the exact initialized fingerprint. An old/unbound report, a partial suite run, or a full/quick report cannot stand in for release evidence. Complete applicable browser reviews and any explicitly requested PDF review using the documented `record` command; retain skips and post-publication checks as unresolved. Optional PDF review fields may remain pending; do not fabricate visual approvals or make those fields an additional routine preparation gate. A qualification check returning INCOMPLETE is not permission to publish.
 
-### 8. Build and inspect the release package
+### 8. Build and inspect an explicitly requested release package
 
-After the release audit is green, create the requested deployment folder or ZIP with the existing deployment helper from the clean package source chosen in phase 1. Copy the reviewed, current tracked-file contents into staging if the working directory contains local agent state; do not use a stale `git archive HEAD` that omits uncommitted release edits. The deploy scripts package files only. They do not repair stale release metadata or integrity data.
+Skip this phase during normal release preparation. Only when the user explicitly requests packaging and the release audit is green, create the requested deployment folder or ZIP with the existing deployment helper from the clean package source chosen in phase 1. Copy the reviewed, current tracked-file contents into staging if the working directory contains local agent state; do not use a stale `git archive HEAD` that omits uncommitted release edits. The deploy scripts package files only. They do not repair stale release metadata or integrity data.
 
 Inspect the archive listing before publication. Confirm that it contains the intended runtime files and release artifacts, including:
 
@@ -275,14 +275,14 @@ Do not weaken or bypass a consistency invariant merely to make the release audit
 For release work, follow these gates in order. The final audit starts only after the editorial and generated data are complete:
 
 ```text
-scope and package source; choose direct or fixture-enabled audit
+scope; choose direct or fixture-enabled audit; package source only if explicitly requested
 prepare version markers and complete metadata
-finish notes, documentation, and manual PDF; inspect the result
+finish notes and documentation; build all four manual PDFs and check compiler results/warnings
 generate manifest
 cheap gate: check_release, manifest --check, diff/package-input review
 initialize qualification fingerprint; freeze inputs
 run one release audit path; inspect reported failures/gaps only
-attach audit evidence; package from clean source and inspect archive
+attach audit evidence; package and inspect only if explicitly requested
 ```
 
 A failed cheap gate returns to editing without spending time on the release suite. A source edit after the frozen point requires a new manifest, preflight, fingerprint, and release audit. Do not enumerate tests, run profiles sequentially, read passing suite logs, or rediscover version-marker locations that `prepare_release.php` and `check_release.php` already own.

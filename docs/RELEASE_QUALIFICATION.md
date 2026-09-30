@@ -97,6 +97,14 @@ publication authorization.
 
 ## Record actual human reviews
 
+PDF visual-review fields are optional during routine release preparation under
+the maintainer policy in `AGENTS.md` and `RELEASE.md`. Do not render, read or
+extract generated PDFs merely to fill these fields, and do not make their pending
+status an extra preparation gate. Use them only for an explicitly requested
+visual review or diagnosis of a concrete build/layout problem. Compiler success,
+relevant warnings and automated release consistency remain the normal checks;
+they must not be recorded as a human visual approval.
+
 Use one of `pending`, `pass`, or `fail`. Each write requires the exact fingerprint
 reviewed, a named reviewer, and concise evidence. The command rejects a stale
 fingerprint rather than attaching a review to a newly changed artifact.
@@ -144,7 +152,7 @@ Evidence must fit on one line (reviewer: 160 bytes; evidence: 2,000 bytes).
 Do not include credentials, tokens, private gallery contents or production
 secrets. Earlier status changes are retained in the record's history.
 
-## Render repeatable PDF previews
+## Render repeatable PDF previews only when requested or needed for diagnosis
 
 Install Poppler's `pdftoppm`, or use a compatible local installation providing
 that command. Run from the repository root after the manual is built:
