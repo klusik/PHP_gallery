@@ -26,3 +26,13 @@ For a release, start from a clean release branch and compare the working tree wi
 After the final source and documentation edits, build the PDF with the four commands above from `docs/`. Inspect the generated PDF title page, table of contents, bookmarks, index, page breaks, and feature documentation. Confirm that the opening guide flows from the purpose/reading guide directly into “How to use this manual” and contains no release-news block. Intermediate `.aux`, `.idx`, `.ilg`, `.log`, and related files are disposable and remain ignored; `docs/PHP_Gallery_Manual.pdf` is the tracked release artifact.
 
 The manual build does not refresh application integrity data. Run `php scripts/generate_manifest.php` from the repository root only after all source edits are complete, then run `php scripts/generate_manifest.php --check`. The manifest check must pass before a deployment ZIP, release commit, tag, or handoff is created. Inspect the final archive listing and confirm the manual PDF, migrations, patch notes, release metadata, and manifest are present. The `CMS_VERSION`, patch-note heading, release-metadata key/tag, PDF edition, archive/release name, and annotated Git tag must all agree before publishing. After publication, smoke-test an updater upgrade from the previous stable tag and verify migrations, Admin login, public rendering, and the integrity page.
+
+## Translated editions
+
+Czech, German and Swedish editions use `PHP_Gallery_Manual_CZ`,
+`PHP_Gallery_Manual_DE` and `PHP_Gallery_Manual_SV` as their source/PDF basenames.
+Run the same four-pass sequence for each basename, including `makeindex` on its
+own `.idx` file. Update each translated source's `\version` and localized
+`\manualdate` when preparing a release: `prepare_release.php` updates the
+English edition automatically, while translated edition markers require review.
+Rebuild and inspect all supplied PDFs before the final manifest and release audit.
