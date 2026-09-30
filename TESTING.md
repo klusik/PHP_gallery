@@ -80,6 +80,34 @@ Python discovery is execution-based rather than filesystem-only. The runner prob
 
 WinApp tests that exercise optional host integrations must remain isolated from the developer workstation. In particular, SimConnect tests must not assume that a deliberately invalid manual override means no usable SimConnect DLL exists: the runtime intentionally falls back to automatic DLL discovery. The regression fixture therefore stubs DLL resolution when testing the nonfatal missing-DLL branch. The audit also parses Python `unittest` trailers so the compact console/report summary distinguishes passed tests, assertion failures, errors, and skips without dumping the full Python log.
 
+`winapp/tests/test_simconnect.py` uses fake native DLL calls and real packed
+ctypes packets to cover MSFS 2020 aircraft position, MSFS 2024 camera/fallback,
+unknown-generation capability handling, explicit exceptions, response
+correlation, bounded waits, cleanup, repeated acquisitions and nonfatal upload
+integration. Build tests verify the x64 runtime, required exports, embedded DLL
+hash and the installer entry that distributes only the application EXE with its
+embedded runtime. These tests run through the central WinApp regression suite.
+
+The installer contract also covers forced shutdown before file replacement,
+exact installation-path matching, verified exit, and refusal on unknown state.
+Compile the real script with the existing Inno Setup compiler. Manual upgrade
+acceptance must check a running/tray uploader and both onefile processes, silent
+installation, an uploader copy in another directory, and refusal when shutdown
+or WMI verification is unavailable. Compilation/source contracts do not prove
+live shutdown behavior; WMI query latency is controlled by Windows.
+
+Real-simulator acceptance requires separate Windows runs with MSFS 2020 and
+MSFS 2024: capture a watched screenshot during a flight, confirm provider/source
+and degrees/feet in logs, and verify the uploaded image's map position. In 2024,
+compare camera coordinates with an external/drone camera, then make the camera
+unavailable and verify aircraft fallback. With the simulator closed, upload must
+still succeed. Capture several screenshots quickly and confirm per-file metadata
+and optional source deletion. In an installed build, check that the local log
+resolves the bundled `runtime/simconnect/SimConnect.dll` in PyInstaller's
+extraction directory. Copy diagnostics must show the last result without triggering a
+new connection. Fake-DLL tests and packaging checks cannot establish live native
+compatibility or simulator response timing on another workstation.
+
 `php tests/run.php` is retained only for compatibility and delegates to `scripts/audit.php --suite=php-regression --no-report`. It is not an agent entrypoint. Focused commands elsewhere in this document are reproduction/diagnostic references or manual acceptance steps only; the global agent execution rule above takes precedence over them. Do not pre-run focused tests "just in case", and do not replay them after a successful central audit. Duplicate runs are justified only while investigating a concrete failure or validating a new test before registry integration.
 
 ## Gallery integrity and panel integration

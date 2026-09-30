@@ -9,7 +9,7 @@ This document is intended to help future maintainers and AI coding agents unders
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.110';
+const CMS_VERSION = '0.112';
 ```
 
 Update-related code uses:
@@ -1697,6 +1697,22 @@ winapp/requirements.txt
 `gallery_upload_tokens` stores hashed tokens scoped to galleries. External tools should authenticate with those tokens and should not require admin session cookies.
 
 The Windows uploader intentionally uses one compatibility multipart contract across thumbnail policies. When local thumbnail generation is enabled it can submit both JPG and WebP variants for every supported size. The API validates the submitted files, then the server-side install phase applies the active thumbnail compatibility policy: modern WebP-only installations silently skip valid JPG extras, while legacy installations keep both formats. A policy-mismatched but otherwise valid client thumbnail must never reject the original API upload or force the watcher into server-side thumbnail generation.
+
+`winapp/uploader/simconnect_location.py` owns one shared SimConnect transport and
+the optional simulator-location strategies. The OPEN handshake identifies MSFS
+2020 (`KittyHawk`, application major 11) and MSFS 2024 (`SunRise`, major 12);
+conflicting or unrecognized identities use bounded capability detection. MSFS
+2020 reads user-aircraft latitude/longitude/altitude through classic SimVars.
+MSFS 2024 preserves the WORLD Camera API and falls back to aircraft position.
+The providers share a monotonic response budget and isolated connection per
+acquisition, with send-ID exception attribution, aircraft request/definition
+validation and serialized client use. Provider failures never block upload.
+Actual source and last-acquisition diagnostics remain local; historical
+`sim_camera_*` multipart fields preserve compatibility with existing galleries.
+PyInstaller embeds one x64 DLL at `runtime/simconnect/SimConnect.dll`; build
+preflight validates native exports and the embedded payload hash. Inno Setup
+distributes the application EXE without a separate DLL. See `winapp/README.md`
+for runtime discovery and the build mode using already installed dependencies.
 
 Gallery-scoped API-key create/revoke forms are also embedded in the gallery editor. Their enhanced path uses the canonical Admin mutation success/error envelope and `panel.workflow=gallery-edit`; the token mutation itself has no public gallery context because changing an API credential does not change public rendering. `admin-side-panel.js` delegates the successful response to the shared completion coordinator and refreshes the API-key fragment from the server-provided panel URL while keeping the drawer mounted. The ordinary POST/redirect route remains the non-JavaScript/direct-page fallback.
 
