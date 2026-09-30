@@ -122,6 +122,11 @@ strip/carousel controls, slideshow reset behavior, authorized media access, and 
 
 ## LaTeX Manual Typography
 
+### All manual language editions
+
+Every release preparation and every user-facing manual content change must update all four maintained editions together: `docs/PHP_Gallery_Manual.tex` (English), `docs/PHP_Gallery_Manual_CZ.tex` (Czech), `docs/PHP_Gallery_Manual_DE.tex` (German), and `docs/PHP_Gallery_Manual_SV.tex` (Swedish). Keep edition versions, localized dates, feature coverage, compatibility notes, and operational instructions aligned. `scripts/prepare_release.php` currently updates only the English source; agents must explicitly update the translated editions as well. After final source edits, rebuild each matching tracked PDF using `docs/LATEX_BUILD.md` and inspect its title, contents, index, links/layout, and changed sections before generating the manifest and running the final release audit. Updating English alone is not a completed manual or release handoff.
+
+
 The administrator manual is permanent product documentation, not a release-news feed. Do not add version-by-version “What is new”, patch-note, or release-history sections near the beginning of `docs/PHP_Gallery_Manual.tex`. Put release history in `PATCH_NOTES.md`; if a future manual genuinely needs historical material, add it deliberately as a documented appendix rather than inserting news before the usage guide. Before release, confirm the manual proceeds from its purpose/reading guide into the usage guide without a release-news block.
 
 For human-readable prose in `docs/PHP_Gallery_Manual.tex`, do not leave short function words stranded at the end of a rendered line. Use LaTeX non-breaking spaces (`~`) to bind them to the following word or visible phrase. Apply this throughout the manual, including headings, captions, list text, footnotes, and explanatory table text.

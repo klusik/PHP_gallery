@@ -237,7 +237,7 @@ function admin_settings_specialized_catalog(): array
         $entries['cooperative_collaborations'] = admin_settings_entry(
             'cooperative_collaborations', 'advanced',
             t('admin.cooperative.review.title', 'Album collaborations'),
-            t('admin.cooperative.review.intro', 'Review the exact participants and sharing permissions before approving. Each installation decides independently. Photograph display and email invitations are not available yet.'),
+            t('admin.cooperative.review.intro', 'Review the exact participants and sharing permissions before approving. Each installation decides independently. Shared photographs and email invitations require explicit participant approval.'),
             '', 'specialized', '', t('admin.settings.status.specialized_only', 'Specialized page only'),
             'admin_cooperative_collaborations', [], '', false
         );

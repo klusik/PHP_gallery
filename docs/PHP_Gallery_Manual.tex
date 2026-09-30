@@ -61,8 +61,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.112}
-\newcommand{\manualdate}{30 September 2026}
+\newcommand{\version}{0.113}
+\newcommand{\manualdate}{30~September~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -627,6 +627,19 @@ When site downloads and~the~Smart Gallery download option are~both enabled, the~
 
 Rules are~readable versioned JSON, never user SQL: fields/operators are~allowlisted, values are~prepared parameters, depth is~limited to~five, and~no~more than 50 conditions are~accepted. Deleted references match nothing and~malformed or~unknown rule versions are~rejected. The~normal migration workflow adds Smart Gallery presentation storage; existing Smart Galleries inherit Theme/site defaults until an~override is~saved.
 
+\section{Cooperative galleries}
+\index{cooperative galleries}
+Cooperative galleries connect independently operated HTTPS installations while each owner retains their albums and~original files. Apply pending migrations through the~normal administration workflow, then enable \ui{Cooperative galleries} in~\ui{Features} on~each server. The~feature is~off by~default; turning it~off preserves identities, friendships, proposals and~preferences.
+
+Open \ui{Settings > Advanced > Friendly galleries} and~pair every participating server directly. Friendship alone shares no~photographs. In~\ui{Album collaborations}, select a~public, listed, password-free, non-NSFW album and~prepare its reference code. One participant combines the~references into an~immutable proposal; every participant reviews the~exact members and~permissions and~explicitly approves locally. \ui{Deliver and~verify} advances a~bounded sequence in~the~existing panel. Email invitations use the~configured account-mail transport; opening an~invitation never grants consent.
+
+After activation, open the~shared photographs from the~collaboration panel or~the~local album's shared-trip link. Each source retains attribution and~pagination. Existing JPEG/WebP thumbnails and~previews are~authorized independently; originals, protected albums and~remote writes are~unsupported. Ordinary links work without JavaScript. Missing derivatives need the~normal thumbnail workflow. New photographs receive complete path-based identities; old names remain intact without bulk rebuilding, but~ambiguous ownership is~refused.
+
+Withdrawal, changed source protection and~local friendship revocation block subsequent authorized reads. An~unreachable peer remains bounded by~the~maximum 120-second verification lease; downloaded pixels cannot be~recalled. Adding a~participant creates a~separate proposal requiring fresh approval from everyone. Ordinary use can~advance technical renewal on~demand; unattended renewal is~optional. Missing or~unknown required schema refuses sharing and~mutations. See \filepath{docs/COOPERATIVE_GALLERIES.md} for~operational limits and~deployment qualification.
+
+\subsection{Windows simulator location}
+WinApp 0.2.0 automatically uses the~MSFS 2024 camera world position and~falls back to~the~aircraft position on~bounded camera failure. MSFS 2020 uses the~aircraft position directly through the~same SimConnect runtime. Coordinates are~optional: simulator unavailability does~not~prevent upload. Position-source diagnostics distinguish camera and~aircraft results. The~installer requests application shutdown before replacing files; complete pending work before updating. Live simulator and~upgrade acceptance must be~checked on~the~target PC.
+
 \section{Adding, describing, and~organizing photographs}
 \label{sec:photo-workflow}
 \index{photo workflow}
@@ -1039,7 +1052,7 @@ The~optional local or~worker-based image-analysis queue can~record visual metada
 
 For~repeated transfers, create a~scoped upload-automation token for~the~intended gallery and~send supported files to~the~upload endpoint. Tokens can~be~revoked independently and~must be~treated like passwords. The~raw API key is~shown only when it~is~created; only its hash is~stored afterward, so~copy the~new key to~the~intended client at~creation time. The~global \ui{API manager} lists automation credentials across galleries and~provides a~central revocation workflow without exposing the~original secrets. Gallery-level controls remain available for~the~same scoped credentials.
 
-The~Windows companion uses the~same gallery-scoped upload contract. It~has~two normal upload modes. \ui{Watch folder} ignores files that were already present when watching begins, waits for~new files to~become stable, remembers confirmed uploads locally, and~retries transient failures with backoff. It~can~optionally attach the~current Microsoft Flight Simulator camera latitude/longitude/altitude through SimConnect immediately before each watched upload, and~can~delete a~watched source only after the~gallery confirms a~successful upload. \ui{Manual upload} accepts a~file selection independently of~the~watch folder and~can~either generate responsive thumbnails on~the~PC with worker processes or~ask the~gallery server to~generate them. Thumbnail work and~network uploads are~pipelined rather than~staging an~entire large selection first. Tray support lets the~watcher or~manual job continue while the~main window is~hidden.
+The~Windows companion uses the~same gallery-scoped upload contract. It~has~two normal upload modes. \ui{Watch folder} ignores files that were already present when watching begins, waits for~new files to~become stable, remembers confirmed uploads locally, and~retries transient failures with backoff. It~can~optionally attach the~current Microsoft Flight Simulator camera or~aircraft latitude/longitude/altitude through SimConnect immediately before each watched upload, and~can~delete a~watched source only after the~gallery confirms a~successful upload. \ui{Manual upload} accepts a~file selection independently of~the~watch folder and~can~either generate responsive thumbnails on~the~PC with worker processes or~ask the~gallery server to~generate them. Thumbnail work and~network uploads are~pipelined rather than~staging an~entire large selection first. Tray support lets the~watcher or~manual job continue while the~main window is~hidden.
 
 The~same Windows application can~optionally run a~low-priority AI metadata worker. It~claims one authenticated analysis job, downloads only the~claimed asset, produces internal searchable metadata with the~selected local backend/model generation, and~returns the~result to~the~existing upload-automation endpoint. This worker is~separate from~human captions. A~gallery-level \ui{Force AI metadata regeneration} action clears the~stored generated rows/old queue state for~that gallery branch and~queues fresh work; the~heavy analysis still runs on~the~Windows worker.
 
@@ -1731,7 +1744,7 @@ normally reduces repeated metadata queries, but~a~migration can~change the~answe
 after schema-changing statements and~after successful repair callbacks. A~post-migration check then reads the~new database catalog instead of~reusing an~answer from before the~migration. Ordinary data-only migration statements do~not~clear the~readiness cache because they cannot create or~remove a~table,
 field, or~index.
 
-Version~0.106 added the~\codeword{maintenance\_jobs} table through an~ordinary migration. Run it~from the~Gallery administration page as~usual if~it~has~not~already been applied. It~requires the~installation's normal table-creation authority, but~does~not~require database triggers, stored routines, \codeword{SUPER}, a~global server-variable change, or~separate database-administrator intervention. Until the~migration is~available and~verified, the~Maintenance Center refuses to~start a~job instead of~attempting maintenance without durable checkpoints. Version~\version{} adds no~database migration.
+Version~0.106 added the~\codeword{maintenance\_jobs} table through an~ordinary migration. Run it~from the~Gallery administration page as~usual if~it~has~not~already been applied. It~requires the~installation's normal table-creation authority, but~does~not~require database triggers, stored routines, \codeword{SUPER}, a~global server-variable change, or~separate database-administrator intervention. Until the~migration is~available and~verified, the~Maintenance Center refuses to~start a~job instead of~attempting maintenance without durable checkpoints. The~cooperative and~thumbnail identity migrations use the~same normal upgrade workflow.
 
 \subsection{How the~gallery checks database readiness}
 \index{database!readiness}
