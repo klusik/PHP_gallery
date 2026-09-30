@@ -74,6 +74,7 @@ import { setupAdminUpdateJobs } from './gallery-modules/admin-update-jobs.js?v=2
 import { setupAdminGalleryMigration } from './gallery-modules/admin-gallery-migration.js?v=20260920-gallery-migration-policy-v3';
 import { setupAdminGalleryDateSuggestions } from './gallery-modules/admin-gallery-date-suggestion.js?v=20260902-mutation-stage3-part6-v1';
 import { setupAdminGalleryTitleCompletion } from './gallery-modules/admin-gallery-title-completion.js?v=20260920-gallery-title-completion-policy-v4';
+import { setupAdminCooperativeGalleries } from './gallery-modules/admin-cooperative-galleries.js?v=20260927-cooperative-complete-v4';
 import { setupAdminDuplicatePhotoDetector } from './gallery-modules/admin-duplicate-photo-detector.js?v=20260902-mutation-stage3-v2';
 import { setupAdminStorageStatistics } from './gallery-modules/admin-storage-statistics.js?v=20260608-storage-statistics-v1';
 import { setupAdminGalleryReport } from './gallery-modules/admin-gallery-report.js?v=20260920-admin-gallery-report-policy-v3';
@@ -106,7 +107,7 @@ import {
     setupAdminMediaRenamer,
     setupAdminMetadataOrganizer,
     setupAdminTrashActions,
-} from './gallery-modules/admin-operations.js?v=20260925-editor-tabs-v2';
+} from './gallery-modules/admin-operations.js?v=20260927-cooperative-review-v2';
 
 /**
  * Runs a setup callback after the DOM is ready.
@@ -153,6 +154,7 @@ function bootGalleryBrowserFeatures() {
     setupAdminBulkSelection();
     setupAdminGalleryDateSuggestions();
     setupAdminGalleryTitleCompletion();
+    setupAdminCooperativeGalleries();
     setupAdminDuplicatePhotoDetector();
     setupAdminStorageStatistics();
     setupAdminGalleryReport();

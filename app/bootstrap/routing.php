@@ -45,6 +45,8 @@ use function Gallery\Services\resolve_public_gallery_path;
  * These routes still execute the normal PHP authorization policy. The predicate
  * only allows the bootstrap to release the exclusive PHP session lock before
  * database/path/derivative work begins.
+ * @param string $page Resolved route identifier.
+ * @return bool Whether the route can release its session lock before dispatch.
  */
 function cms_route_is_read_only_media_asset(string $page): bool
 {
@@ -53,6 +55,7 @@ function cms_route_is_read_only_media_asset(string $page): bool
         'public_thumb',
         'media',
         'public_media',
+        'cooperative_media',
         'download_gallery_file',
         'download_smart_gallery_file',
         'gallery_cover_asset',

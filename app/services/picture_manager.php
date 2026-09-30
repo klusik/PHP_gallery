@@ -46,6 +46,7 @@ use function Gallery\Core\now_sql;
 use function Gallery\Models\gallery_mutation_model_max_image_sort_order;
 use function Gallery\Models\picture_manager_model_copy_rows;
 use function Gallery\Models\picture_manager_model_image_table_columns;
+use function Gallery\Models\image_model_rows_for_gallery;
 
 /**
  * Normalize submitted image IDs into unique positive integers while preserving order.
@@ -152,6 +153,12 @@ function copy_gallery_images_owned(int $sourceGalleryId, int $destinationGallery
         'Image copies require the current gallery/image ownership schema. Run pending migrations first.',
         'Image copies are temporarily unavailable because the required database schema could not be verified.'
     );
+    mutation_schema_assert_available(
+        upload_ingestion_schema_status(),
+        'picture_manager.copy_source_identity',
+        'New image copies require the source identity migration. Run pending migrations first.',
+        'Image copies are temporarily unavailable because source identity storage could not be verified. No file was copied.'
+    );
 
     // $normalizedIds stores unique positive IDs from the browser selection.
     $normalizedIds = picture_manager_normalize_image_ids($imageIds);
@@ -206,6 +213,7 @@ function copy_gallery_images_owned(int $sourceGalleryId, int $destinationGallery
         ];
     }
 
+    thumbnail_source_identity_preload($images);
     // $manifest stores every physical copy required for originals and generated files.
     $manifest = [];
     // $targetPaths stores target paths so collisions inside the selected set fail before file writes.
@@ -254,7 +262,7 @@ function copy_gallery_images_owned(int $sourceGalleryId, int $destinationGallery
 
         try {
             // $derivatives stores generated files already present on disk for this image.
-            $derivatives = gallery_image_derivative_move_paths($image, $sourceGallery, $destinationGallery, $sourceRoot, $destinationRoot);
+            $derivatives = picture_manager_image_derivative_copy_paths($image, $sourceGallery, $destinationGallery, $sourceRoot, $destinationRoot);
         } catch (Throwable $exception) {
             $failures[] = $imageLabel . ': ' . $exception->getMessage();
             continue;
@@ -356,6 +364,7 @@ function copy_gallery_images_owned(int $sourceGalleryId, int $destinationGallery
         throw $exception;
     }
 
+    thumbnail_legacy_identity_cache_clear();
     thumbnail_maintenance_summary_cache_clear();
     if (public_path_schema_ready()) {
         regenerate_public_paths();
@@ -474,6 +483,10 @@ function picture_manager_image_copy_row(array $image, int $destinationGalleryId,
             $row[$column] = $destinationGalleryId;
             continue;
         }
+        if ($column === 'thumbnail_source_identity_version') {
+            $row[$column] = 1;
+            continue;
+        }
         if ($column === 'relative_path') {
             $row[$column] = $relativePath;
             continue;
@@ -493,6 +506,127 @@ function picture_manager_image_copy_row(array $image, int $destinationGalleryId,
         $row[$column] = array_key_exists($column, $image) ? $image[$column] : null;
     }
     return $row;
+}
+
+/** Plan byte-preserving copies from verified source derivatives into new canonical identities.
+ * @param array<string,mixed> $image Existing source image row.
+ * @param array<string,mixed> $sourceGallery Owning source gallery.
+ * @param array<string,mixed> $destinationGallery Destination gallery for the new image.
+ * @param string $sourceRoot Absolute source filesystem boundary.
+ * @param string $destinationRoot Absolute destination filesystem boundary.
+ * @return list<array{from:string,to:string}> Existing source bytes with conflict-checked canonical destinations.
+ */
+function picture_manager_image_derivative_copy_paths(array $image, array $sourceGallery, array $destinationGallery, string $sourceRoot, string $destinationRoot): array
+{
+    thumbnail_assert_source_identity_owned($image);
+    // Naming is provisional: the new row does not exist yet and its source-bound
+    // identity needs no future database ID. Never assert ownership of this row.
+    $targetImage = $image;
+    $targetImage['id'] = 0;
+    $targetImage['gallery_id'] = (int) $destinationGallery['id'];
+    $targetImage['thumbnail_source_identity_version'] = 1;
+    $paths = [];
+    foreach (thumbnail_sizes() as $size) {
+        foreach (['jpg', 'webp'] as $format) {
+            $sourcePath = thumbnail_abs_path($image, $sourceGallery, (int) $size, $format);
+            $targetPath = thumbnail_abs_path($targetImage, $destinationGallery, (int) $size, $format);
+            if (!thumbnail_path_inside_existing_gallery($destinationRoot, $targetPath)) {
+                throw new RuntimeException('Destination thumbnail path is outside its gallery.');
+            }
+            // Check even absent source variants: a newly inserted identity must
+            // never inherit a stale canonical file already at the target path.
+            if (file_exists($targetPath)) {
+                throw new RuntimeException('Destination generated file already exists: ' . basename($targetPath) . '.');
+            }
+            if (thumbnail_path_inside_existing_gallery($sourceRoot, $sourcePath) && is_file($sourcePath)) {
+                $paths[] = ['from' => $sourcePath, 'to' => $targetPath];
+            }
+        }
+    }
+    // DNG display masters use their own historical image-ID naming contract.
+    if (function_exists('Gallery\\Services\\image_uses_dng_display_derivatives') && image_uses_dng_display_derivatives($image)) {
+        $sourcePath = dng_display_master_abs_path($image, $sourceGallery, false);
+        $targetPath = dng_display_master_abs_path($image, $destinationGallery, false);
+        if (thumbnail_path_inside_existing_gallery($sourceRoot, $sourcePath) && is_file($sourcePath)) {
+            if (!thumbnail_path_inside_existing_gallery($destinationRoot, $targetPath) || file_exists($targetPath)) {
+                throw new RuntimeException('Destination DNG display derivative is unavailable.');
+            }
+            $paths[] = ['from' => $sourcePath, 'to' => $targetPath];
+        }
+    }
+    return $paths;
+}
+
+/** Preserve verified existing thumbnail bytes for newly scanned canonical clone rows.
+ * @param array{id:int|string,folder_path:string,...} $sourceGallery Existing source gallery.
+ * @param array{id:int|string,folder_path:string,...} $targetGallery Newly created and scanned clone gallery.
+ * @return int Number of derivative files copied into canonical clone names.
+ */
+function picture_manager_clone_thumbnail_bytes(array $sourceGallery, array $targetGallery): int
+{
+    $sourceImages = image_model_rows_for_gallery((int) $sourceGallery['id'], false);
+    $targetImages = image_model_rows_for_gallery((int) $targetGallery['id'], false);
+    thumbnail_legacy_identity_cache_clear();
+    // The shared preloader chunks these already-needed clone catalogs into
+    // bounded candidate queries; later per-file assertions reuse that evidence.
+    thumbnail_source_identity_preload($sourceImages);
+    thumbnail_source_identity_preload($targetImages);
+    $targets = [];
+    foreach ($targetImages as $target) {
+        $targets[normalize_relative_path((string) $target['relative_path'])] = $target;
+    }
+    $sourceRoot = gallery_abs_path($sourceGallery['folder_path']);
+    $targetRoot = gallery_abs_path($targetGallery['folder_path']);
+    $copied = 0;
+    foreach ($sourceImages as $source) {
+        $target = $targets[normalize_relative_path((string) $source['relative_path'])] ?? null;
+        if (!is_array($target) || ($target['thumbnail_source_identity_version'] ?? null) != 1) { continue; }
+        try {
+            thumbnail_assert_source_identity_owned($source);
+            thumbnail_assert_source_identity_owned($target);
+        } catch (RuntimeException) {
+            // Ambiguous legacy bytes copied by the directory clone remain inert;
+            // they cannot be promoted into a new canonical source identity.
+            foreach (thumbnail_sizes() as $size) {
+                foreach (['jpg', 'webp'] as $format) {
+                    if (file_exists(thumbnail_abs_path($target, $targetGallery, (int) $size, $format))) {
+                        throw new RuntimeException('Ambiguous cloned source has an unverified canonical derivative.');
+                    }
+                }
+            }
+            continue;
+        }
+        foreach (thumbnail_sizes() as $size) {
+            foreach (['jpg', 'webp'] as $format) {
+                $from = thumbnail_abs_path($source, $sourceGallery, (int) $size, $format);
+                $to = thumbnail_abs_path($target, $targetGallery, (int) $size, $format);
+                if (!thumbnail_path_inside_existing_gallery($targetRoot, $to)) {
+                    throw new RuntimeException('Cloned thumbnail path is outside its gallery.');
+                }
+                if (!thumbnail_path_inside_existing_gallery($sourceRoot, $from) || !is_file($from)) {
+                    if (file_exists($to)) { throw new RuntimeException('Cloned canonical derivative has no verified source variant.'); }
+                    continue;
+                }
+                if (file_exists($to)) {
+                    $sourceHash = hash_file('sha256', $from);
+                    $targetHash = hash_file('sha256', $to);
+                    if (!is_string($sourceHash) || !is_string($targetHash) || !hash_equals($sourceHash, $targetHash)) {
+                        throw new RuntimeException('Cloned canonical thumbnail conflicts with its source bytes.');
+                    }
+                } else {
+                    if (!is_dir(dirname($to)) && !mkdir(dirname($to), 0775, true)) {
+                        throw new RuntimeException('Cloned thumbnail directory could not be created.');
+                    }
+                    if (!copy($from, $to)) { throw new RuntimeException('Cloned thumbnail bytes could not be copied.'); }
+                    $copied++;
+                }
+                // Record existing bytes only. This observes geometry and metadata
+                // without decode, re-encoding or generating a missing variant.
+                thumbnail_metadata_record_file($target, $targetGallery, (int) $size, $format, $to, null, false);
+            }
+        }
+    }
+    return $copied;
 }
 
 /**
@@ -634,6 +768,13 @@ function picture_manager_copy_gallery_subtrees(int $sourceGalleryId, int $destin
  */
 function picture_manager_copy_gallery_subtrees_owned(int $sourceGalleryId, int $destinationGalleryId, array $galleryIds): array
 {
+    mutation_schema_assert_available(
+        upload_ingestion_schema_status(),
+        'picture_manager.copy_gallery_source_identity',
+        'New gallery copies require the source identity migration. Run pending migrations first.',
+        'Gallery copies are temporarily unavailable because source identity storage could not be verified. No folder was copied.'
+    );
+    thumbnail_metadata_preflight_write_schema('picture_manager.clone_thumbnail_metadata');
     // $galleryIds stores a de-duplicated physical gallery selection.
     $galleryIds = picture_manager_normalize_gallery_ids($galleryIds);
     if (!$galleryIds) {
@@ -767,6 +908,18 @@ function picture_manager_copy_gallery_subtrees_owned(int $sourceGalleryId, int $
         }
         foreach ($createdGalleryIds as $createdGalleryId) {
             $scannedImages += scan_gallery_images($createdGalleryId);
+        }
+        // Only these new clone folders are converted. Existing live legacy
+        // galleries keep their historical rows and derivative names unchanged.
+        foreach ($plans as $plan) {
+            foreach ($plan['rows'] as $sourceRow) {
+                $sourcePath = normalize_relative_path((string) $sourceRow['folder_path']);
+                $suffix = $sourcePath === $plan['source_root_path'] ? '' : substr($sourcePath, strlen($plan['source_root_path']));
+                $targetPath = normalize_relative_path($plan['target_root_path'] . $suffix);
+                $targetGallery = find_gallery_by_folder_path($targetPath, true);
+                if (!$targetGallery) { throw new RuntimeException('Cloned gallery ownership could not be resolved.'); }
+                picture_manager_clone_thumbnail_bytes($sourceRow, $targetGallery);
+            }
         }
     } catch (Throwable $exception) {
         if ($createdRootIds) {

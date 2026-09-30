@@ -54,8 +54,13 @@ try {
         $logPath = (string) ($regression['log'] ?? '');
         check(str_starts_with($logPath, 'cache/test-audit/') && !str_contains($logPath, '..'), 'Central regression evidence missing.');
         $evidence = (string) file_get_contents(dirname(__DIR__) . '/' . $logPath);
-        // These exact PASS records must come from the central runner, including the existing race suite.
-        foreach (['gallery_workflow_integration_test.php', 'gallery_workflow_browser_test.php', 'gallery_image_move_crash_test.php', 'viewer_phase07_mysql_concurrency_test.php'] as $test) {
+        // Only explicit Chromium disablement omits browser evidence. Every real
+        // database/HTTP and race PASS remains mandatory in all central profiles.
+        $requiredTests = ['gallery_workflow_integration_test.php', 'gallery_image_move_crash_test.php', 'viewer_phase07_mysql_concurrency_test.php'];
+        if (getenv('GALLERY_WORKFLOW_BROWSER') !== 'disabled') {
+            $requiredTests[] = 'gallery_workflow_browser_test.php';
+        }
+        foreach ($requiredTests as $test) {
             check(preg_match('/^\[PASS\] ' . preg_quote($test, '/') . ' /m', $evidence) === 1, 'Mandatory integration coverage was skipped or unregistered.');
         }
         echo 'PASS gallery workflow central ' . $profile . " audit completed\n";

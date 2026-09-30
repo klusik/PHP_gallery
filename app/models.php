@@ -106,3 +106,9 @@ require_once __DIR__ . '/models/public_search.php';
 // Load optional request-local search query instrumentation before progressive model calls.
 require_once __DIR__ . '/models/public_search_diagnostics.php';
 require_once __DIR__ . '/models/public_search_progressive.php';
+
+// Load isolated cooperative persistence without initializing any records.
+require_once __DIR__ . '/models/cooperative_galleries.php';
+
+// Pairing transactions own invitation and peer changes atomically.
+require_once __DIR__ . '/models/cooperative_pairing.php';

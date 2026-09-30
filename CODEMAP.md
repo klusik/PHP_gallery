@@ -805,3 +805,79 @@ No Phase 3 migration is added. Existing gallery share links, gallery authorizati
 | `docs/VIEWER_SECURITY_FOUNDATIONS.md`, `TESTING.md`, `ARCHITECTURE.md`, `CODEMAP.md`, `DATABASE.md` | Phase 4.4 operations visibility, privacy, schema-reuse, limiter semantics, test coverage, and completed Phase 4 documentation. |
 
 Phase 4.1 adds no migration; Phase 4.2 adds only `viewer_registration_verification_tokens` so resend can add a second usable authority without rotating the historical primary token; Phase 4.3 adds no migration and reuses PHP session plus existing bounded rate-limit storage; Phase 4.4 also adds no migration and reads only the existing Viewer security/event/limiter/account/registration storage. The global Viewer Accounts feature remains OFF by default. Open registration remains verified-email only. Phase 4.3 protects only anonymous open registration and explicit verification resend before expensive work. Phase 4.4 observes those systems only and establishes no Viewer/Admin/registration/invitation/verification authority. Public telemetry remains independent. Traditional or third-party CAPTCHA, external reputation/security/monitoring services, browser fingerprinting, public profiles, passkeys, TOTP, and viewer OIDC remain out of scope. Phase 4 is complete after Phase 4.4.
+
+## Cooperative galleries foundation ownership
+
+- `app/models/cooperative_galleries.php`: isolated identity, peer and group persistence.
+- `app/services/cooperative_galleries.php`: entry point for validation, credentials,
+  proposal reducers and schema-gated storage in its sibling part directory.
+- `app/services/security_tokens.php`: reusable context-bound authenticated secret encryption.
+- `docs/COOPERATIVE_GALLERIES.md`: integration contracts and remaining group transport/UI work.
+
+- `app/models/cooperative_pairing.php`: transactional invitation and peer persistence.
+- `app/services/cooperative_pairing.php`: protocol, safe transport adapter, durable
+  invitation/consent/verification/revocation and nonsecret Admin projections.
+- `app/controllers/cooperative_pairing.php`: capability-owned peer endpoint and
+  authenticated Admin state/actions with CSRF and canonical mutation envelopes.
+- `app/services/outbound_http.php`: bounded pinned HTTPS JSON and shared public DNS policy.
+
+- `app/controllers/admin_cooperative_galleries.php` and `app/views/admin_cooperative_galleries.php`:
+  prepared friendship presentation, read-only page/drawer and HTML POST fallback.
+- `public/assets/gallery-modules/admin-cooperative-galleries.js`: delegated friendship
+  forms, retained input and shared coordinator/owned-drawer completion.
+
+- `app/services/cooperative_galleries/sources.php`: bounded local source picker and
+  policy-checked member preparation, loaded only through the cooperative entry point.
+- `app/services/gallery_access.php`: canonical session-independent public export
+  policy, with verified schema and bounded current ancestor traversal.
+- `app/controllers/admin_cooperative_albums.php`: read-only administrator album
+  candidates; `app/models/galleries.php` owns its bounded label query.
+
+- `app/services/cooperative_proposals.php`: initial immutable proposal inbox, local
+  decisions, direct participant queries and pinned one-peer delivery; sibling parts
+  are loaded only through this entry point. Observations never activate sharing.
+- `app/controllers/cooperative_proposals.php`: bearer-only proposal endpoint and
+  Admin/CSRF preparation, creation, decision, contact and verification/activation adapters.
+
+- `app/services/cooperative_proposals/verification.php`: durable nonce-bound direct
+  verification rounds and complete two-ended friendship evidence.
+- `app/services/cooperative_proposals/activation.php`: initial activation, bounded
+  lease validation and direct authenticated local album-metadata authorization.
+- `tests/support/cooperative_exchange_fixture.php`: shared independent SQLite nodes
+  and in-process transport for proposal and activation regressions.
+
+- `app/services/cooperative_proposals/maintenance.php`: read-only next-step planning,
+  one-request Admin advancement, and bounded renewal of already active groups.
+- `scripts/cooperative_renew.php`: CLI-only scheduled renewal of one explicitly selected
+  active group, with bounded status output and no implicit consent.
+- `tests/cooperative_maintenance_test.php`: isolated multi-node progress, renewal, backoff,
+  lost-response recovery, concurrency and Admin envelope contracts.
+
+- `app/services/cooperative_proposals/review.php`: bounded proposal review data and explicit
+  action opportunities, without peer requests or implicit consent.
+- `app/controllers/admin_cooperative_proposals.php` and `app/views/admin_cooperative_proposals.php`:
+  translated proposal inbox, AJAX fragment response and ordinary HTML fallback.
+- `tests/admin_cooperative_proposals_test.php` and `tests/admin_cooperative_proposals_browser_test.mjs`:
+  actual server markup/envelope and shared dynamic drawer behavior.
+
+- `app/services/cooperative_proposals/composition.php`: bounded metadata-only album
+  locator encoding/decoding and composition through existing immutable proposal storage.
+- `tests/cooperative_composition_test.php`: reference validation, explicit-authority
+  boundaries, source rechecks, stable request retries and UI composition responses.
+
+- `app/services/cooperative_proposals/metadata.php`: strict request binding and minimal
+  public source-title export under current exact membership/credential/lease authority.
+- `app/controllers/cooperative_metadata.php`: POST, header bearer, bounded JSON input
+  and safe no-store output for `cooperative_metadata_api`.
+- `tests/cooperative_metadata_test.php`: isolated minimal-export and refusal regressions.
+
+- app/services/cooperative_content.php: public source catalog, fixed-origin client,
+  image policy and encrypted short-lived derivative tickets.
+- app/controllers/cooperative_content.php, app/views/cooperative_gallery.php,
+  public/assets/cooperative-gallery.js: attributed shared gallery with bounded
+  progressive loading and ordinary HTML fallback.
+- app/services/cooperative_proposals/workflow.php: delivery/verification,
+  non-authorizing email links and direct withdrawal notifications.
+- app/services/configured_mail.php: shared existing mail configuration/transport.
+- tests/cooperative_content_test.php, tests/cooperative_completion_test.php,
+  tests/cooperative_gallery_browser_test.mjs: public workflow and refusal coverage.

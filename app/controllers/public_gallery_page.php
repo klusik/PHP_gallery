@@ -197,7 +197,8 @@ function render_public_smart_gallery_attachment_group(array $smartGalleries, str
 }
 
 /**
- * Handles cms gallery logic for the gallery application.
+ * Prepare an authorized gallery page, its cards, navigation and optional cooperation links.
+ * @return void Render the selected gallery through its prepared view model.
  */
 function cms_gallery(): void
 {
@@ -741,12 +742,18 @@ function cms_gallery(): void
         'image_id' => $requestedImage ? (int) $requestedImage['id'] : null,
     ]);
 
+    $cooperativeLinks = [];
+    foreach (\Gallery\Services\cooperative_content_gallery_groups((int) $gallery['id']) as $cooperativeId) {
+        $cooperativeLinks[] = ['url' => url_for('cooperative_gallery', ['group_id' => $cooperativeId]),
+            'label' => t('cooperative.public.title', 'Shared trip')];
+    }
+
     \Gallery\Views\view_render_public_gallery_detail([
         'page_title' => (string) $seo['title'],
         'gallery' => $gallery,
         'public_only' => $publicOnly,
         'notice' => $publicNotice,
-        'hero' => $heroViewModel,
+        'hero' => $heroViewModel + ['cooperative_links' => $cooperativeLinks],
         'branding_separator_html' => $brandingSeparatorHtml,
         'preview_toolbar_html' => $previewToolbarHtml,
         'search_bar' => public_search_bar_view_model($gallery),

@@ -46,6 +46,17 @@ namespace Gallery\Services;
 function feature_capability_definitions(): array
 {
     $definitions = [
+        'cooperative_galleries' => [
+            'group' => 'ai_automation',
+            'label' => t('admin.features.cooperative_galleries.label', 'Cooperative galleries'),
+            'description' => t('admin.features.cooperative_galleries.description', 'Explicitly approved server friendships with isolated system credentials and resumable pairing. Requires a configured canonical HTTPS base URL.'),
+            'default_enabled' => false,
+            'routes' => ['cooperative_gallery', 'cooperative_content_api', 'cooperative_media', 'cooperative_metadata_api', 'admin_cooperative_collaborations', 'cooperative_proposal_api', 'admin_cooperative_proposals', 'admin_cooperative_proposal_action', 'admin_cooperative_albums', 'cooperative_peer_api', 'admin_cooperative_state', 'admin_cooperative_action', 'admin_cooperative_galleries'],
+            'settings_route' => 'admin_cooperative_galleries',
+            'dependencies' => [],
+            'data_disable_policy' => 'preserve',
+            'behavior_tags' => ['admin-only', 'outbound-network', 'privacy'],
+        ],
         'public_search' => [
             'group' => 'public_display',
             'label' => t('admin.features.public_search.label', 'Public live search'),

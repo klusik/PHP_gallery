@@ -1,0 +1,17 @@
+/**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ * File: public/assets/cooperative-gallery.css
+ * Module Type: Browser Asset
+ * Purpose: Present independently authorized cooperative source albums.
+ * Responsibilities: Preserve attribution, bounded loading and ordinary link navigation.
+ * Author: Rudolf Klusal
+ * License: MIT License (see LICENSE file in repository)
+ */
+.cooperative-public { max-width: 90rem; margin: 2rem auto; padding: 0 1rem; }
+.cooperative-public section { margin-block: 2rem; padding-block: 1rem; border-top: 1px solid currentColor; }
+.cooperative-photo-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(min(100%,15rem),1fr)); gap: 1rem; }
+.cooperative-photo-grid figure { margin: 0; overflow-wrap: anywhere; }
+.cooperative-photo-grid img { width: 100%; height: 15rem; object-fit: contain; background: #8882; }
+.cooperative-photo-grid figcaption { font-size: .85rem; }
+.cooperative-public [aria-busy="true"] { opacity: .7; }

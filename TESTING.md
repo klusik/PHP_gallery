@@ -1611,3 +1611,115 @@ browser retries. Run these through the central audit, not a separate test loop.
 ## Browser upload oversized-single-image batching
 
 For browser-assisted gallery uploads, treat the configured ZIP batch size (24 MB by default) as a soft packing target. A prepared image package is atomic because it contains the original plus all browser-generated thumbnail variants. If one package alone exceeds the target, it must be emitted as a one-image ZIP batch instead of failing. The client and server must still reject a prepared ZIP that exceeds the detected effective PHP upload limit. Multi-image batches must continue splitting at the configured target and maximum-images-per-batch setting. Run `php scripts/check_admin_mutation_contracts.php`, PHP/JavaScript syntax checks, and verify `app/core-manifest.json` after changes to this path.
+
+## Cooperative galleries foundations
+
+The central audit discovers `cooperative_galleries_foundations_test.php` and
+`cooperative_galleries_storage_test.php`. They cover unanimous A+B+C approval,
+missing friendship edges, exact consent hashes, stale revisions, generation-bound
+trust, source-policy refusal and isolated credential persistence. Storage tests use
+in-memory SQLite and OpenSSL, with no production configuration or live migration.
+The audit registry reports missing extensions as BLOCKED. This coverage does not
+claim real MySQL concurrency, networking or browser workflows.
+
+`cooperative_pairing_workflow_test.php` adds two isolated SQLite installations running
+real domain services plus real Admin controller calls with fixture authentication. It
+covers reverse proof, no-consent imports, secret-free projections, lost replies, retry
+backoff, expiry, narrow schema revocation, simultaneous disconnects and fresh pairing
+without resetting credential generations. `outbound_http_transport_test.php` supplies
+controlled DNS/cURL responses to verify pinning, TLS options, no redirect/proxy forwarding,
+response bounds and safe errors without external networking. Their required extensions
+are explicit in the central audit registry. Real MySQL row-lock concurrency and two
+public HTTPS deployments remain deployment qualification; production deployment interactions remain separate from isolated browser fixtures.
+
+The cooperative workflow test now also exercises real UI fragments, secret isolation,
+HTML escaping and the ordinary POST fallback. `admin_cooperative_galleries_browser_test.mjs`
+is registered in the central browser suite and reuses the confined drawer fixture runner.
+It checks every friendship action, dynamic rerender, duplicate setup/submission, preserved
+URL/open drawer/input, refresh without lost request identity, and late-response suppression
+after close/reopen. It uses production browser modules and synthetic local responses;
+no live gallery credentials or remote installations participate.
+
+`cooperative_album_sources_test.php` runs source selection, canonical public export
+policy, identity preparation and the read-only Admin endpoint on isolated SQLite.
+It checks inherited password/visibility/NSFW restrictions without session bypasses,
+changed or deleted source albums, invalid ancestry, scope normalization, pagination,
+safe projection, complete schema preflight and disabled/anonymous/method refusal.
+This is preparation coverage, not group approval or media-export qualification.
+
+`cooperative_proposals_exchange_test.php` exercises initial proposal delivery and
+independently owned decisions on separate A/B/C SQLite nodes plus an unrelated peer.
+It covers missing direct friendship, immutable replay, lost acknowledgements, forged
+claims, source and credential changes, terminal decline, concurrent response suppression,
+explicitly unsupported expansion, expiry and Admin/CSRF/OFF/schema boundaries. It asserts
+that all observations still leave sharing inactive. Networking is substituted in process;
+live HTTPS deployments and MySQL concurrency require separate qualification.
+
+`cooperative_activation_test.php` shares the independent-node fixture with the proposal
+suite. It covers fresh nonce-bound verification, missing proofs/edges, failed retries,
+partial activation, exact local metadata authority, expiry/renewal, lost-finalization
+retry, local and observed remote withdrawal, concurrent decisions, changed friendship
+generations, and feature/schema refusal. It also distinguishes initial proposal expiry
+from renewal of already active consent. No sleeps or live remote installations are used.
+
+`cooperative_maintenance_test.php` covers automatic single-step verification, the
+active-only scheduler pass, fresh-lease no-op behavior, renewal near expiry, interrupted
+round recovery, negative-consent backoff, expired evidence replacement and concurrent
+withdrawal. The production Admin controller retains its canonical mutation response and
+capability OFF refuses before storage. Additional cases cover concurrent transport
+polling, dropped replies, crash ownership expiry, durable retry cooldown and stale
+responses after a newer owner or concurrent decline. Run the central audit; no live cron or peer server
+is needed for these isolated regressions.
+
+The cooperative proposal review contracts cover no-write/no-network reads (including
+empty installations), escaped local titles, visible participants and permissions, exact
+digest/revision forms, UI-specific canonical completion, stale submissions and HTML
+fallback. The registered Chromium fixture covers approve, decline, deliver, refresh and
+advance actions with dynamic form replacement, preserved drawer/URL, error recovery and
+late-response suppression. Both are run through the central audit.
+
+The composition regression verifies that album locator codes never grant consent, require
+current direct friendships, reject unknown scopes/duplicate participants and retain the
+same immutable proposal on a repeated request ID. Browser coverage additionally checks
+reference and composition actions, retained codes/selection across picker pagination,
+preservation of a separate draft and reset only after successful creation.
+
+The cooperative metadata regression uses only synthetic in-memory SQLite installations.
+It verifies exact exported fields, no raw row/credential leakage, current public-source
+restrictions, exact membership/revision binding, lease expiry, directed credentials,
+Unicode title bounds, unknown schema, revocation and no-write behavior. Controller tests
+cover method refusal, ignored query/form/cookie credentials and content type; no external
+server or production data is used. Run through the central audit.
+
+The public cooperative workflow is covered by cooperative_content_test.php and
+cooperative_completion_test.php, automatically discovered by the central audit.
+Independent SQLite installations exercise A+B to A+B+C with missing A-C friendship,
+fresh unanimous decisions, fixed one-day email expiry, captured mail/cooldown,
+direct withdrawal invalidation, photo pagination, hidden/NSFW/password rejection,
+unknown schema and stale media tickets. No production data or mail transport is used.
+
+`cooperative_content_admission_test.php` covers group-wide remote catalog admission,
+success spacing, failed/crashed retry bounds, concurrent readers, replacement ownership
+and concurrent withdrawal. `cooperative_derivative_bytes_test.php` checks real JPEG/WebP
+containers, EXIF/XMP/ICC/comment removal, progressive scans, malformed/oversized inputs,
+animation refusal and trailing bytes. `thumbnail_source_identity_test.php` uses actual
+path helpers to check extension/path collisions, legacy compatibility, cleanup ownership,
+metadata freshness and both permanent thumbnail renderers.
+`thumbnail_identity_lookup_budget_test.php` exercises the real model against 10,000
+unrelated rows, bounded candidate sets, restricted collisions, literal wildcard
+filenames and Unicode case variants. `picture_manager_copy_test.php` verifies that
+copies preserve derivative bytes and select new names without image generation.
+These regressions also cover shared legacy cache invalidation before deletion/rename
+and bounded refusal of changed, removed or oversized cooperative media files.
+
+The full audit includes cooperative_gallery_browser_test.mjs for automatic renewal,
+attribution, isolated failure, pagination and explicit retry in Chromium. The
+proposal panel fixture checks photo scope retention, email/expansion forms and finite
+automatic continuation across dynamic replacements. Both canonical thumbnail
+renderer suites remain in the central audit; the new cooperative grid does not
+change their rendering or lightbox contracts.
+
+Deployment qualification still needs separate HTTPS installations, verified
+migrations, generated derivatives and configured email delivery. These fixtures do
+not claim SMTP inbox delivery or cross-server MySQL/HTTPS coverage. Use the central
+audit rather than replacing it with focused-test loops.

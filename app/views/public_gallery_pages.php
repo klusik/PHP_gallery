@@ -106,6 +106,7 @@ function view_render_public_smart_gallery_attachment_group(array $viewModel): vo
  * Render the selected-gallery hero from controller-prepared state.
  *
  * @param array<string,mixed> $viewModel Controller-prepared hero state.
+ * @return void Render the hero and prepared actions.
  */
 function view_render_public_gallery_hero(array $viewModel): void
 {
@@ -128,6 +129,9 @@ function view_render_public_gallery_hero(array $viewModel): void
         echo '</div>';
     }
 
+    foreach (($viewModel['cooperative_links'] ?? []) as $link) {
+        echo '<p><a class="button secondary" href="' . e($link['url']) . '">' . e($link['label']) . '</a></p>';
+    }
     echo (string) ($viewModel['admin_actions_html'] ?? '');
 
     if (!empty($viewModel['download_enabled'])) {
@@ -204,6 +208,7 @@ function view_render_public_gallery_nsfw_image_card(array $viewModel): void
  * Render one normal public photo card.
  *
  * @param array<string,mixed> $viewModel Controller-prepared photo-card state.
+ * @return void Render semantic photo-card markup.
  */
 function view_render_public_gallery_image_card(array $viewModel): void
 {
@@ -280,6 +285,7 @@ function view_render_public_gallery_image_section(array $viewModel): void
  * Render one selected public gallery page from controller-prepared state.
  *
  * @param array<string,mixed> $viewModel Controller-prepared selected-gallery state.
+ * @return void Render the gallery page and its optional cooperation links.
  */
 function view_render_public_gallery_detail(array $viewModel): void
 {

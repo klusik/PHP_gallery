@@ -224,6 +224,26 @@ function admin_settings_specialized_catalog(): array
         $entries[$id] = admin_settings_entry($id, $group, $label, $description, '', 'specialized', '', t('admin.settings.status.specialized_only', 'Specialized page only'), $route, $params, $fragment, false, str_contains($id, 'password') || str_contains($id, 'token') || str_contains($id, 'api_key') ? 'secret' : 'normal');
         $entries[$id]['discovery_only'] = true;
     }
+    if (feature_capability_effective_enabled('cooperative_galleries')) {
+        $entries['cooperative_friendships'] = admin_settings_entry(
+            'cooperative_friendships', 'advanced',
+            t('admin.cooperative.ui.title', 'Friendly galleries'),
+            t('admin.cooperative.ui.intro', 'Connect two installations by invitation. Friendship alone does not share any albums or photographs.'),
+            '', 'specialized', '', t('admin.settings.status.specialized_only', 'Specialized page only'),
+            'admin_cooperative_galleries', [], '', false
+        );
+        $entries['cooperative_friendships']['specialized_panel_workflow'] = 'cooperative_pairing';
+        $entries['cooperative_friendships']['specialized_panel_url'] = admin_settings_specialized_url('admin_cooperative_galleries', ['panel' => '1']);
+        $entries['cooperative_collaborations'] = admin_settings_entry(
+            'cooperative_collaborations', 'advanced',
+            t('admin.cooperative.review.title', 'Album collaborations'),
+            t('admin.cooperative.review.intro', 'Review the exact participants and sharing permissions before approving. Each installation decides independently. Photograph display and email invitations are not available yet.'),
+            '', 'specialized', '', t('admin.settings.status.specialized_only', 'Specialized page only'),
+            'admin_cooperative_collaborations', [], '', false
+        );
+        $entries['cooperative_collaborations']['specialized_panel_workflow'] = 'cooperative_proposals';
+        $entries['cooperative_collaborations']['specialized_panel_url'] = admin_settings_specialized_url('admin_cooperative_collaborations', ['panel' => '1']);
+    }
     if (function_exists('Gallery\\Services\\feature_flag_definitions')) {
         foreach (feature_flag_definitions() as $featureKey => $definition) {
             $id = 'feature_' . feature_flag_normalize_key((string) $featureKey);

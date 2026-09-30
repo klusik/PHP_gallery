@@ -750,54 +750,13 @@ function link_favicon_http_request_once(string $url, int $maxBytes, string $acce
  *
  * The selected address is then pinned into the actual HTTP connection, avoiding
  * a second untrusted DNS lookup between validation and connect.
+ * @param string $host DNS hostname to resolve.
+ * @return string|null Validated public IPv4 address, or null when unavailable.
  */
 function link_favicon_resolve_public_ipv4(string $host): ?string
 {
-    if (filter_var($host, FILTER_VALIDATE_IP) !== false) {
-        return null;
-    }
-
-    $dnsHost = $host;
-    if (function_exists('idn_to_ascii')) {
-        $flags = defined('IDNA_DEFAULT') ? IDNA_DEFAULT : 0;
-        $variant = defined('INTL_IDNA_VARIANT_UTS46') ? INTL_IDNA_VARIANT_UTS46 : 1;
-        $ascii = @idn_to_ascii($host, $flags, $variant);
-        if (is_string($ascii) && $ascii !== '') {
-            $dnsHost = $ascii;
-        }
-    }
-    if (preg_match('/^[A-Za-z0-9.-]{1,253}$/', $dnsHost) !== 1) {
-        return null;
-    }
-
-    $addresses = [];
-    if (function_exists('dns_get_record')) {
-        $records = @dns_get_record($dnsHost, DNS_A);
-        if (is_array($records)) {
-            foreach ($records as $record) {
-                if (!empty($record['ip'])) {
-                    $addresses[] = (string) $record['ip'];
-                }
-            }
-        }
-    }
-    if ($addresses === []) {
-        $fallback = @gethostbynamel($dnsHost);
-        if (is_array($fallback)) {
-            $addresses = array_values(array_filter(array_map('strval', $fallback)));
-        }
-    }
-    $addresses = array_values(array_unique($addresses));
-    if ($addresses === []) {
-        return null;
-    }
-
-    foreach ($addresses as $address) {
-        if (filter_var($address, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 | FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false) {
-            return null;
-        }
-    }
-    return $addresses[0];
+    require_once __DIR__ . '/outbound_http.php';
+    return outbound_http_resolve_public_ipv4($host);
 }
 
 /**

@@ -462,13 +462,13 @@ function scan_gallery_image_row_by_path(int $galleryId, string $relativePath): ?
 /**
  * Reconcile one supported image file into the images table.
  *
- * @param array $gallery Gallery row used to resolve ownership and filesystem context.
+ * @param array{id:int|string,folder_path:string,...} $gallery Gallery row used to resolve ownership and filesystem context.
  * @param string $root Absolute gallery root path.
  * @param string $filePath Absolute image file path.
  * @param string $filename Basename used for display and file type checks.
  * @param bool $exifSchemaReady Whether EXIF and GPS columns are available.
  * @param int $nextSortOrder Next append sort order for newly inserted images.
- * @param array $options Scanner options; upload_fast_path skips expensive metadata reads.
+ * @param array{upload_fast_path?:bool,metadata?:array<string,mixed>,...} $options Scanner options; upload_fast_path skips expensive metadata reads.
  * @return int Number of changed image rows.
  */
 function scan_gallery_image_file_entry(array $gallery, string $root, string $filePath, string $filename, bool $exifSchemaReady, int &$nextSortOrder, array $options = []): int
@@ -500,6 +500,17 @@ function scan_gallery_image_file_entry(array $gallery, string $root, string $fil
     $modifiedAt = date('Y-m-d H:i:s', (int) (filemtime($filePath) ?: time()));
     // $existing stores any prior row for this exact gallery-relative path.
     $existing = scan_gallery_image_row_by_path($galleryId, $relative);
+    if (!$existing) {
+        // Existing legacy rows remain readable/reconcilable. New registration
+        // requires the additive source-identity migration before any row or
+        // derivative metadata is changed.
+        mutation_schema_assert_available(
+            upload_ingestion_schema_status(),
+            'image_scan.register_source',
+            'New image registration requires the current gallery/image database schema. Run pending migrations first.',
+            'New image registration is temporarily unavailable because the database schema could not be verified. No image row was created.'
+        );
+    }
     // $exifMetadata stores optional camera and GPS metadata when the schema supports it.
     $exifMetadata = [];
     if ($exifSchemaReady) {
@@ -547,6 +558,7 @@ function scan_gallery_image_file_entry(array $gallery, string $root, string $fil
             ];
         }
         $createdImageId = image_model_insert_scan_row($fields);
+        thumbnail_legacy_identity_cache_clear();
         scan_image_sync_master_display_metadata($createdImageId, $info);
         $nextSortOrder += 10;
         return 1;
@@ -584,6 +596,7 @@ function scan_gallery_image_file_entry(array $gallery, string $root, string $fil
         ];
     }
     image_model_update_scan_row((int) $existing['id'], $fields, now_sql());
+    thumbnail_legacy_identity_cache_clear();
     scan_image_sync_master_display_metadata((int) $existing['id'], $info);
     if ($sourceChanged) {
         scan_image_invalidate_thumbnail_derivatives((int) $existing['id']);

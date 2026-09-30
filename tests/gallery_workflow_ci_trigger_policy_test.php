@@ -180,6 +180,7 @@ namespace {
         'GALLERY_WORKFLOW_DB_HOST' => '127.0.0.1', 'GALLERY_WORKFLOW_DB_PORT' => '13316',
         'GALLERY_WORKFLOW_DB_USER' => 'gallery_workflow_runner',
         'GALLERY_WORKFLOW_CI_ROOT_PASSWORD' => 'fixture-root-only',
+        'PHP_GALLERY_BROWSER' => 'disabled', 'GALLERY_WORKFLOW_BROWSER' => 'disabled',
     ];
     $cases = [
         'restricted-account' => ['pass' => true],
@@ -214,8 +215,32 @@ namespace {
         check($state['account_writes'] === ($passed ? 2 : 0), 'Account changed before disposable-service ownership proof: ' . $label);
         if ($passed) {
             check(!isset($state['environment']['GALLERY_WORKFLOW_CI_ROOT_PASSWORD'])
-                && $state['environment']['GALLERY_WORKFLOW_REQUIRED'] === '1', 'CI child retained root authority or optionalized its audit.');
+                && $state['environment']['GALLERY_WORKFLOW_REQUIRED'] === '1'
+                && $state['environment']['PHP_GALLERY_BROWSER'] === 'disabled'
+                && $state['environment']['GALLERY_WORKFLOW_BROWSER'] === 'disabled',
+                'CI child retained root authority, lost explicit browser disablement or optionalized database/HTTP coverage.');
         }
     }
-    echo 'PASS CI schema-local migration account: ' . count($cases) . " inert ownership and authority cases; no database or CI execution\n";
+    $workflow = (string) file_get_contents(dirname(__DIR__) . '/.github/workflows/gallery-workflows.yml');
+    check(preg_match('/^env:\s*\n(?:[ \t]*#[^\n]*\n)*[ \t]+PHP_GALLERY_BROWSER: disabled\s*\n[ \t]+GALLERY_WORKFLOW_BROWSER: disabled\s*\n/m', $workflow) === 1,
+        'Both GitHub jobs must explicitly disable Chromium at workflow scope.');
+    check(!str_contains($workflow, 'Require installed Chromium') && !str_contains($workflow, 'command -v google-chrome')
+        && str_contains($workflow, 'php scripts/gallery_workflow_ci.php')
+        && str_contains($workflow, 'php scripts/audit.php --profile=full'),
+        'Chromium opt-out removed mandatory database/HTTP or full central audit coverage.');
+
+    $runner = (string) file_get_contents(dirname(__DIR__) . '/scripts/gallery_workflow_run.php');
+    $selectionStart = strpos($runner, '$requiredTests =');
+    $selectionEnd = strpos($runner, 'foreach ($requiredTests as $test)', $selectionStart);
+    check($selectionStart !== false && $selectionEnd !== false, 'Mandatory central workflow evidence selector missing.');
+    $selectionBody = substr($runner, $selectionStart, $selectionEnd - $selectionStart);
+    $selection = eval('namespace GalleryWorkflowCiPolicyFixture; return static function (): array {' . $selectionBody . 'return $requiredTests;};');
+    check($selection instanceof Closure, 'Actual central evidence selector did not compile.');
+    $GLOBALS['gallery_workflow_ci_policy_state']['environment']['GALLERY_WORKFLOW_BROWSER'] = 'disabled';
+    $requiredDatabaseTests = ['gallery_workflow_integration_test.php', 'gallery_image_move_crash_test.php', 'viewer_phase07_mysql_concurrency_test.php'];
+    check($selection() === $requiredDatabaseTests, 'Explicit browser disablement changed database/HTTP or race PASS requirements.');
+    $GLOBALS['gallery_workflow_ci_policy_state']['environment']['GALLERY_WORKFLOW_BROWSER'] = '';
+    check($selection() === [...$requiredDatabaseTests, 'gallery_workflow_browser_test.php'],
+        'Local defaults no longer require browser PASS in the workflow runner.');
+    echo 'PASS CI schema-local migration account and browser-only opt-out: ' . count($cases) . " inert ownership and authority cases; no database or CI execution\n";
 }

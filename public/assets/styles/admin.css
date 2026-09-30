@@ -5797,3 +5797,17 @@ button.gallery-row-action.secondary {
 @media (max-width: 720px) {
     .admin-language-design-preset .admin-language-design-field { grid-template-columns: 1fr; gap: 0.25rem; }
 }
+
+/* Friendship components share one responsive layout between the page and drawer. */
+.cooperative-panel { display: grid; gap: 1rem; max-width: 56rem; margin-inline: auto; }
+.cooperative-panel > h1, .cooperative-panel > p { margin: 0; }
+.cooperative-panel [role="status"]:empty, .cooperative-panel [role="alert"]:empty { display: none; }
+.cooperative-card { padding: 1.2rem; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); min-width: 0; }
+.cooperative-card h2 { margin-top: 0; overflow-wrap: anywhere; font-size: 1.1rem; }
+.cooperative-card fieldset { border: 0; padding: 0; margin: 0; min-width: 0; display: grid; gap: 0.8rem; }
+.cooperative-card label { display: grid; gap: 0.4rem; }
+.cooperative-card input[type="url"], .cooperative-card textarea { box-sizing: border-box; width: 100%; min-width: 0; }
+.cooperative-card textarea { resize: vertical; overflow-wrap: anywhere; }
+.cooperative-card form + form { margin-top: 0.5rem; }
+.cooperative-panel nav { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.cooperative-panel [role="alert"]:not(:empty) { padding: 0.8rem; border-inline-start: 3px solid var(--accent); }

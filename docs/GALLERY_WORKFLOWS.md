@@ -17,7 +17,9 @@ no browser tool runtime, npm install, Playwright, Selenium, or Composer dependen
 Ordinary audits without a disposable fixture run the safety test and explicitly
 SKIP the HTTP and browser integration tests. A skip is not full-stack evidence.
 GALLERY_WORKFLOW_REQUIRED=1 makes missing integration prerequisites BLOCKED with a
-nonzero exit code. Allow 180 seconds per integration PHP test in the audit registry.
+nonzero exit code. Explicit GALLERY_WORKFLOW_BROWSER=disabled records only browser
+coverage as SKIP, including when workflows are required. Allow 180 seconds per
+integration PHP test in the audit registry.
 
 Prerequisites: PHP 8.1+ with pdo_mysql, curl, gd, zip, dom and mbstring; Node.js;
 an installed Chrome/Chromium/Edge; and either MySQL 8 locally or a disposable
@@ -69,8 +71,9 @@ php scripts/gallery_workflow_mysql.php --release
 
 This provisions the owned fixture around exactly one
 `php scripts/audit.php --profile=release` invocation; it does not run `full`
-beforehand. Both central modes require the same three workflow/concurrency PASS
-records and preserve the central reports. An independently provisioned disposable
+beforehand. Both central modes require the same database/HTTP and concurrency PASS
+records, plus browser PASS when not explicitly disabled, and preserve the central
+reports. An independently provisioned disposable
 service can likewise use `scripts/gallery_workflow_run.php --release`.
 
 The local daemon launcher uses MySQL 8 initialization flags. A MariaDB executable
@@ -88,7 +91,7 @@ disposable service when these explicit environment variables are supplied:
 | GALLERY_WORKFLOW_DB_PORT | dedicated port 1024–65535, excluding 3306 |
 | GALLERY_WORKFLOW_DB_USER | gallery_workflow_runner |
 | GALLERY_WORKFLOW_DB_PASSWORD | dedicated password of at least 16 characters |
-| GALLERY_WORKFLOW_BROWSER | existing Chromium executable |
+| GALLERY_WORKFLOW_BROWSER | existing Chromium executable, or explicit disabled for browser-only opt-out |
 
 There is no accepted input database name or arbitrary DSN. The runner chooses
 gallery_workflow_ followed by 24 random hex characters, uses CREATE DATABASE
@@ -104,8 +107,14 @@ The fixed service bootstrap password is a disposable CI fixture value, not an
 installation credential. scripts/gallery_workflow_ci.php additionally requires
 GitHub Actions and verifies the service hostname before creating its restricted,
 random-password runner account. The root credential is removed from child
-environments. CI requires all three real-workflow/concurrency PASS records from
-the central regression log; an absent, skipped or unregistered test cannot qualify.
+environments. This GitHub workflow sets PHP_GALLERY_BROWSER=disabled and
+GALLERY_WORKFLOW_BROWSER=disabled at workflow scope, so both CI jobs skip Chromium
+without installing or discovering a browser. The full central audit remains in
+place, and the database/HTTP workflows, image-move crash recovery, and MySQL races
+still require PASS records from the central regression log. An absent, skipped or
+unregistered database/HTTP or concurrency test cannot qualify. Local browser
+discovery and explicit executable overrides retain their existing behavior unless
+the operator deliberately sets the same disabled value.
 Only compact audit Markdown/JSON reports are uploaded as artifacts.
 
 After verifying the disposable service identity, the CI bootstrap creates the

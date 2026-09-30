@@ -1,0 +1,91 @@
+<!doctype html>
+<!--
+Project: PHP Gallery
+Repository: https://github.com/klusik/PHP_gallery
+File: tests/fixtures/cooperative_gallery.html
+Module Type: Browser Test Fixture
+Purpose: Exercise progressive attributed source loading without external connections.
+Responsibilities: Verify pagination, bounded renewal, isolated failures and usable retry links.
+Author: Rudolf Klusal
+License: MIT
+-->
+<html lang="en"><meta charset="utf-8"><title>Cooperative gallery fixture</title>
+<link rel="stylesheet" href="/public/assets/cooperative-gallery.css">
+<body><main data-cooperative-gallery data-unavailable="Source unavailable">
+<section data-cooperative-source><h2>Photographs from A</h2><div data-cooperative-content aria-live="polite"></div><a data-cooperative-load href="/?page=cooperative_gallery&group_id=group&source=a">Load A</a></section>
+<section data-cooperative-source><h2>Photographs from B</h2><div data-cooperative-content aria-live="polite"></div><a data-cooperative-load href="/?page=cooperative_gallery&group_id=group&source=b">Load B</a></section>
+</main><pre id="results">BROWSER PENDING</pre>
+<script type="module">
+let calls = 0;
+let pending = true;
+let failB = true;
+let busy = 0;
+const initialUrl = location.href;
+const nativeTimeout = window.setTimeout;
+let refreshTimers = 0;
+window.setTimeout = /** Observe the production refresh cadence without accelerating real network loops.
+ * @param {function():void} callback Scheduled browser task.
+ * @param {number} delay Requested milliseconds.
+ * @return {number} Native timer handle.
+ */ (callback, delay) => {
+    if (delay === 45000) refreshTimers++;
+    return nativeTimeout(callback, delay);
+};
+const sections = document.querySelectorAll('[data-cooperative-source]');
+/** Assert actual DOM and fetch behavior.
+ * @param {boolean} value Expected condition.
+ * @param {string} message Bounded assertion diagnostic.
+ * @return {void} Throw when the browser regresses.
+ */
+function check(value, message) { if (!value) throw new Error(message); }
+/** Wait for an observable browser result within the fixture deadline.
+ * @param {function(): boolean} predicate Expected state.
+ * @return {Promise<void>} Settles after the state arrives.
+ */
+async function until(predicate) {
+    const deadline = Date.now() + 8000;
+    while (!predicate()) {
+        if (Date.now() > deadline) throw new Error('Fixture timeout');
+        await new Promise(/** Yield to DOM and fetch tasks. @param {function():void} resolve Timer completion. @return {number} Timer handle. */ resolve => setTimeout(resolve, 20));
+    }
+}
+window.fetch = /** Simulate only the local public fragment endpoint.
+ * @param {string|URL} input URL chosen by the real client.
+ * @param {RequestInit} options Actual production fetch options.
+ * @return {Promise<Response>} Confined catalog result or failure.
+ */ async (input, options) => {
+    const url = new URL(input, location.href);
+    check(url.origin === location.origin && url.searchParams.get('fragment') === '1', 'Only local fragments requested');
+    check(options.cache === 'no-store' && !options.headers?.Authorization, 'No browser system credential or shared cache');
+    busy++; calls++;
+    check(busy === 1, 'The page raced its own verification');
+    try {
+        if (url.searchParams.get('source') === 'b' && failB) return new Response('{}', {status: 503});
+        if (pending) { pending = false; return new Response(JSON.stringify({ok: true, pending: true, html: '<p>Verifying</p>'})); }
+        const next = url.searchParams.get('cursor') === 'next';
+        const html = '<h3>' + (next ? 'Second page' : 'Trip photos') + '</h3><img alt="Trip photograph" referrerpolicy="no-referrer" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7">'
+            + (next ? '' : '<a data-cooperative-more href="/?page=cooperative_gallery&group_id=group&source=a&cursor=next">More</a>');
+        return new Response(JSON.stringify({ok: true, pending: false, html}));
+    } finally { busy--; }
+};
+try {
+    await import('/public/assets/cooperative-gallery.js?v=20260927-photos-v1');
+    await until(/** Wait for the first source after automatic renewal. @return {boolean} Photo visible. */ () => Boolean(sections[0].querySelector('img')));
+    check(sections[0].querySelector('h2').textContent.includes('A'), 'Attribution survived source rendering');
+    const firstImage = sections[0].querySelector('img');
+    sections[1].querySelector('[data-cooperative-load]').click();
+    await until(/** Wait for the independent source error. @return {boolean} Failure visible. */ () => sections[1].textContent.includes('Source unavailable'));
+    check(firstImage.isConnected, 'Unavailable B removed working A');
+    sections[0].querySelector('[data-cooperative-more]').click();
+    await until(/** Wait for cursor page replacement. @return {boolean} New page visible. */ () => sections[0].textContent.includes('Second page'));
+    failB = false;
+    sections[1].querySelector('[data-cooperative-load]').click();
+    await until(/** Wait for a successful explicit retry. @return {boolean} Recovered source visible. */ () => Boolean(sections[1].querySelector('img')));
+    check(refreshTimers >= 3, 'Successful pages did not schedule lease refresh');
+    check(location.href === initialUrl && calls < 10, 'Source loading navigated or polled without a bound');
+    check(sections[0].querySelector('[data-cooperative-load]').href.includes('source=a'), 'Ordinary no-JS source link disappeared');
+    document.getElementById('results').textContent = 'BROWSER PASS: cooperative source renewal, attribution, pagination, retry and failure isolation';
+} catch (error) {
+    document.getElementById('results').textContent = 'BROWSER FAIL: ' + error.message + '\n' + error.stack;
+}
+</script></body></html>

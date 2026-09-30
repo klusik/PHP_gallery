@@ -104,3 +104,50 @@ function security_authority_token_verify(string $storedHash, string $token): boo
 
     return hash_equals($storedHash, hash('sha256', $token));
 }
+
+/**
+ * Seal a bounded secret with authenticated, purpose/owner-bound encryption.
+ * The caller owns key derivation; raw keys must contain exactly 32 bytes.
+ *
+ * @param string $secret Plaintext secret to encrypt for storage.
+ * @param string $key Exactly 32 bytes of caller-owned encryption key material.
+ * @param string $context Purpose and owner binding authenticated alongside the ciphertext.
+ * @return string Canonical identifier, digest or secret as described above.
+ */
+function security_secret_seal(string $secret, string $key, string $context): string
+{
+    if (strlen($key) !== 32 || $context === '' || strlen($context) > 512
+        || $secret === '' || strlen($secret) > 4096 || !function_exists('openssl_encrypt')) {
+        throw new \RuntimeException('Secret encryption is unavailable.');
+    }
+    $iv = random_bytes(12);
+    $tag = '';
+    $cipher = openssl_encrypt($secret, 'aes-256-gcm', $key, OPENSSL_RAW_DATA, $iv, $tag, $context, 16);
+    if ($cipher === false || strlen($tag) !== 16) {
+        throw new \RuntimeException('Secret encryption failed.');
+    }
+    return 'gcm1:' . base64_encode($iv . $tag . $cipher);
+}
+
+/** Open an authenticated secret, refusing malformed envelopes or another owner/context.
+ *
+ * @param string $envelope Versioned authenticated ciphertext envelope.
+ * @param string $key Exactly 32 bytes of caller-owned encryption key material.
+ * @param string $context Purpose and owner binding authenticated alongside the ciphertext.
+ * @return ?string Validated plaintext or null when authentication fails.
+ */
+function security_secret_open(string $envelope, string $key, string $context): ?string
+{
+    if (strlen($key) !== 32 || $context === '' || strlen($context) > 512
+        || strlen($envelope) > 5505 || !str_starts_with($envelope, 'gcm1:')
+        || !function_exists('openssl_decrypt')) {
+        return null;
+    }
+    $payload = base64_decode(substr($envelope, 5), true);
+    if ($payload === false || strlen($payload) < 29 || strlen($payload) > 4124) {
+        return null;
+    }
+    $plain = openssl_decrypt(substr($payload, 28), 'aes-256-gcm', $key, OPENSSL_RAW_DATA,
+        substr($payload, 0, 12), substr($payload, 12, 16), $context);
+    return $plain === false ? null : $plain;
+}

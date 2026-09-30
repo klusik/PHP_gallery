@@ -832,6 +832,15 @@ async function openAdminGallerySidePanel(link) {
  */
 function sidePanelWorkflowFromLink(link) {
     const name = String(link.dataset.adminSidePanelWorkflow || 'create');
+    if (name === 'cooperative_pairing' || name === 'cooperative_proposals') {
+        return {
+            name,
+            kicker: link.dataset.adminSidePanelKicker || i18n('admin.cooperative.ui.title', 'Friendly galleries'),
+            title: link.dataset.adminSidePanelTitle || i18n('admin.cooperative.ui.title', 'Friendly galleries'),
+            loadingMessage: i18n('admin.cooperative.ui.busy', 'Working…'),
+            loadErrorMessage: i18n('admin.cooperative.ui.unavailable', 'Could not verify the current state. Refresh to check it before repeating an action. Your input has been kept.'),
+        };
+    }
     if (name === 'gallery-edit') {
         return {
             name,

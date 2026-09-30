@@ -44,6 +44,7 @@ use function PhpGallery\Audit\parse_options;
 use function PhpGallery\Audit\python_command_is_usable;
 use function PhpGallery\Audit\relative_path;
 use function PhpGallery\Audit\resolve_python_command_from_candidates;
+use function PhpGallery\Audit\resolve_browser_executable;
 
 /**
  * Throw when an audit-runner contract is not satisfied.
@@ -97,6 +98,33 @@ audit_test_assert($options['report'] === 'cache/custom.md', 'Report parser must 
 audit_test_assert(output_is_skip("SKIP browser unavailable\n"), 'SKIP output at the first line must be recognized.');
 audit_test_assert(output_is_skip("setup\nSKIP: pdo_mysql unavailable\n"), 'SKIP output after setup text must be recognized.');
 audit_test_assert(!output_is_skip("All tests passed.\n"), 'Ordinary successful output must not be classified as SKIP.');
+
+$previousBrowser = getenv('PHP_GALLERY_BROWSER');
+try {
+    putenv('PHP_GALLERY_BROWSER=disabled');
+    audit_test_assert(resolve_browser_executable() === null, 'Explicit browser disablement must prevent fallback discovery.');
+    putenv('PHP_GALLERY_BROWSER=' . PHP_BINARY);
+    audit_test_assert(resolve_browser_executable() !== null, 'An explicit local executable must retain ordinary override discovery after disablement.');
+} finally {
+    putenv($previousBrowser === false ? 'PHP_GALLERY_BROWSER' : 'PHP_GALLERY_BROWSER=' . $previousBrowser);
+}
+
+$previousWorkflowBrowser = getenv('GALLERY_WORKFLOW_BROWSER');
+$previousWorkflowRequired = getenv('GALLERY_WORKFLOW_REQUIRED');
+try {
+    putenv('GALLERY_WORKFLOW_BROWSER=disabled');
+    putenv('GALLERY_WORKFLOW_REQUIRED=1');
+    $disabledWorkflow = \PhpGallery\Audit\run_process(
+        [PHP_BINARY, __DIR__ . '/gallery_workflow_browser_test.php'], dirname(__DIR__), 5
+    );
+    audit_test_assert($disabledWorkflow['exit_code'] === 0
+        && output_is_skip($disabledWorkflow['stdout'])
+        && str_contains($disabledWorkflow['stdout'], 'explicitly disabled'),
+        'Explicit browser-only opt-out must SKIP even when database/HTTP workflows remain required.');
+} finally {
+    putenv($previousWorkflowBrowser === false ? 'GALLERY_WORKFLOW_BROWSER' : 'GALLERY_WORKFLOW_BROWSER=' . $previousWorkflowBrowser);
+    putenv($previousWorkflowRequired === false ? 'GALLERY_WORKFLOW_REQUIRED' : 'GALLERY_WORKFLOW_REQUIRED=' . $previousWorkflowRequired);
+}
 
 $unittestFailure = parse_python_unittest_summary("Ran 36 tests in 0.320s\n\nFAILED (failures=1, errors=2, skipped=3)\n");
 audit_test_assert($unittestFailure['total'] === 36, 'Python unittest parser must retain the reported total.');

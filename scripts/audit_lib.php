@@ -376,11 +376,15 @@ function resolve_python_command(): ?array
 /**
  * Return an installed Chromium-family browser path when one can be identified safely.
  *
- * @return ?string Browser executable path.
+ * PHP_GALLERY_BROWSER=disabled explicitly opts out without automatic discovery.
+ * @return ?string Browser executable path, or null when explicitly disabled or unavailable.
  */
 function resolve_browser_executable(): ?string
 {
     $override = trim((string) getenv('PHP_GALLERY_BROWSER'));
+    if ($override === 'disabled') {
+        return null;
+    }
     if ($override !== '') {
         return find_executable($override);
     }

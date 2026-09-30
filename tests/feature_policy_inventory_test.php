@@ -86,6 +86,7 @@ namespace Gallery\Core {
     $definitions = \Gallery\Services\feature_flag_definitions();
     $registeredKeys = array_keys($definitions);
     $expectedKeys = [
+        'cooperative_galleries',
         'public_search',
         'lightbox_modes',
         'picture_manager',
@@ -123,11 +124,11 @@ namespace Gallery\Core {
 
     feature_policy_inventory_assert(
         $registeredKeys === $expectedKeys,
-        'Feature-policy inventory must explicitly account for the complete current 33-feature registry.'
+        'Feature-policy inventory must explicitly account for the complete current 34-feature registry.'
     );
 
     foreach ($expectedKeys as $featureKey) {
-        $expectedDefault = !in_array($featureKey, ['viewer_accounts', 'admin_test_runs', 'development_diagnostics'], true);
+        $expectedDefault = !in_array($featureKey, ['cooperative_galleries', 'viewer_accounts', 'admin_test_runs', 'development_diagnostics'], true);
         feature_policy_inventory_assert(
             \Gallery\Services\feature_flag_default_enabled($featureKey) === $expectedDefault,
             'Unexpected compatibility default for registered feature: ' . $featureKey

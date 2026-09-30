@@ -145,11 +145,13 @@ function thumbnail_metadata_size_cache_key(array $sizes): string
  * helper keeps the existing per-image bundle API while avoiding one metadata
  * query for every individual image during the same request.
  *
- * @param array $images Image rows keyed by id or sequential index.
- * @param array $sizes Sizes value.
+ * @param array<int,array<string,mixed>> $images Image rows keyed by ID or sequential index.
+ * @param array<int,int> $sizes Configured derivative sizes to preload.
+ * @return void Primes bounded ownership and renderable metadata observations.
  */
 function thumbnail_metadata_preload_renderable_rows(array $images, array $sizes): void
 {
+    thumbnail_source_identity_preload($images);
     if (!thumbnail_metadata_schema_ready()) {
         return;
     }
@@ -420,9 +422,10 @@ function thumbnail_metadata_source_payload(array $image, array $gallery, ?string
  * Return true when a stored metadata row still belongs to the current derivative generation.
  *
  * Compact thumbnail rows no longer duplicate source checksums, source mtimes,
- * or EXIF summaries. The master image row owns those facts. The tiny
- * derivative_version value is the only per-variant staleness marker needed by
- * public rendering.
+ * or EXIF summaries. The master image row owns those facts. The
+ * derivative_version value is the per-variant staleness marker needed by
+ * public rendering. Naming ownership is checked separately, preserving safe
+ * existing derivatives without global invalidation.
  *
  * @param array $row Row data.
  * @param array $image Image row or image data.
@@ -435,7 +438,6 @@ function thumbnail_metadata_row_matches_image_source(array $row, array $image): 
     if ($imageVersion > 0 && $rowVersion > 0) {
         return $imageVersion === $rowVersion;
     }
-
     return true;
 }
 
@@ -496,12 +498,17 @@ function thumbnail_metadata_row_has_valid_geometry(array $row, array $image): bo
 /**
  * Return true when a metadata row may be used for public rendering.
  *
- * @param array $row Row data.
- * @param array $image Image row or image data.
- * @return bool True when the condition matches.
+ * @param array<string,mixed> $row row input for this operation.
+ * @param array<string,mixed> $image image input for this operation.
+ * @return bool Result produced by this operation.
  */
 function thumbnail_metadata_row_is_renderable(array $row, array $image): bool
 {
+    try {
+        thumbnail_assert_source_identity_owned($image);
+    } catch (RuntimeException) {
+        return false;
+    }
     if ((string) ($row['status'] ?? '') !== 'valid') {
         return false;
     }
@@ -793,14 +800,14 @@ function thumbnail_metadata_sync_image_source_payload(array $image, array $sourc
 /**
  * Store metadata for one existing generated thumbnail file.
  *
- * @param array $image Image row or image data.
- * @param array $gallery Gallery row or gallery data.
- * @param int $size Size value.
- * @param string $format Format value.
- * @param string $thumbnailPath Thumbnail path filesystem path.
- * @param ?string $sourcePath Source filesystem path.
- * @param bool $deleteInvalid Delete invalid value.
- * @return array<string mixed>.
+ * @param array<string,mixed> $image image input for this operation.
+ * @param array<string,mixed> $gallery gallery input for this operation.
+ * @param int $size size input for this operation.
+ * @param string $format format input for this operation.
+ * @param string $thumbnailPath thumbnailPath input for this operation.
+ * @param ?string $sourcePath sourcePath input for this operation.
+ * @param bool $deleteInvalid deleteInvalid input for this operation.
+ * @return array<string,mixed> Result produced by this operation.
  */
 function thumbnail_metadata_record_file(array $image, array $gallery, int $size, string $format, string $thumbnailPath, ?string $sourcePath = null, bool $deleteInvalid = false): array
 {
@@ -814,8 +821,12 @@ function thumbnail_metadata_record_file(array $image, array $gallery, int $size,
         'Thumbnail metadata could not be written because its database schema could not be verified.'
     );
     thumbnail_metadata_preflight_write_schema('thumbnail_metadata.record_file');
+    thumbnail_assert_source_identity_owned($image);
     if (!in_array($format, ['jpg', 'webp'], true) || !in_array($size, thumbnail_sizes(), true)) {
         return ['status' => 'unsupported_variant', 'valid' => false, 'deleted' => false, 'metadata_written' => false];
+    }
+    if (normalize_filesystem_path($thumbnailPath) !== normalize_filesystem_path(thumbnail_abs_path($image, $gallery, $size, $format))) {
+        return ['status' => 'source_identity_mismatch', 'valid' => false, 'deleted' => false, 'metadata_written' => false];
     }
     if (function_exists('Gallery\\Services\\thumbnail_policy_format_allowed') && !thumbnail_policy_format_allowed($format)) {
         thumbnail_metadata_delete_variant($image, $size, $format);
@@ -933,14 +944,14 @@ function thumbnail_metadata_record_file(array $image, array $gallery, int $size,
  * getimagesize() on shared hosting wastes CPU, so this path records the trusted
  * admin-upload manifest metadata after the file has been written.
  *
- * @param array $image Image row or image data.
- * @param array $gallery Gallery row or gallery data.
- * @param int $size Size value.
- * @param string $format Format value.
- * @param string $thumbnailPath Thumbnail path filesystem path.
- * @param int $width Browser-reported thumbnail width.
- * @param int $height Browser-reported thumbnail height.
- * @return array<string mixed>.
+ * @param array<string,mixed> $image image input for this operation.
+ * @param array<string,mixed> $gallery gallery input for this operation.
+ * @param int $size size input for this operation.
+ * @param string $format format input for this operation.
+ * @param string $thumbnailPath thumbnailPath input for this operation.
+ * @param int $width width input for this operation.
+ * @param int $height height input for this operation.
+ * @return array<string,mixed> Result produced by this operation.
  */
 function thumbnail_metadata_record_prepared_variant(array $image, array $gallery, int $size, string $format, string $thumbnailPath, int $width, int $height): array
 {
@@ -954,8 +965,12 @@ function thumbnail_metadata_record_prepared_variant(array $image, array $gallery
         'Thumbnail metadata could not be written because its database schema could not be verified.'
     );
     thumbnail_metadata_preflight_write_schema('thumbnail_metadata.record_prepared');
+    thumbnail_assert_source_identity_owned($image);
     if (!in_array($format, ['jpg', 'webp'], true) || !in_array($size, thumbnail_sizes(), true)) {
         return ['status' => 'unsupported_variant', 'valid' => false, 'deleted' => false, 'metadata_written' => false];
+    }
+    if (normalize_filesystem_path($thumbnailPath) !== normalize_filesystem_path(thumbnail_abs_path($image, $gallery, $size, $format))) {
+        return ['status' => 'source_identity_mismatch', 'valid' => false, 'deleted' => false, 'metadata_written' => false];
     }
     if (function_exists('Gallery\\Services\\thumbnail_policy_format_allowed') && !thumbnail_policy_format_allowed($format)) {
         thumbnail_metadata_delete_variant($image, $size, $format);
@@ -1108,9 +1123,9 @@ function thumbnail_metadata_refresh_image(array $image, array $gallery, ?array $
 /**
  * Return rows for rendering and the sizes that still need deliberate repair.
  *
- * @param array $image Image row or image data.
- * @param array $gallery Gallery row or gallery data.
- * @param array $sizes Sizes value.
+ * @param array<string,mixed> $image Image row or image data.
+ * @param array<string,mixed> $gallery Gallery row or gallery data.
+ * @param array<int,int> $sizes Sizes value.
  * @return array{variants:array<string,array<int,string>>,warmup_sizes:array<int,int>,known_from_db:bool} Structured result data for the caller.
  */
 function thumbnail_metadata_bundle_data(array $image, array $gallery, array $sizes): array
@@ -1118,7 +1133,7 @@ function thumbnail_metadata_bundle_data(array $image, array $gallery, array $siz
     $variants = ['jpg' => [], 'webp' => []];
     $warmupSizes = [];
 
-    if (!thumbnail_metadata_schema_ready()) {
+    if (!thumbnail_legacy_identity_owned($image) || !thumbnail_metadata_schema_ready()) {
         return ['variants' => $variants, 'warmup_sizes' => [], 'known_from_db' => false];
     }
 

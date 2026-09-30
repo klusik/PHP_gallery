@@ -294,6 +294,7 @@ function view_render_admin_settings_input(string $id, array $entry, array $error
  * Render one summary-only setting card.
  *
  * @param array<string,mixed> $entry Registry entry.
+ * @return void Emit the card with its prepared navigation metadata.
  */
 function view_render_admin_settings_summary_card(array $entry): void
 {
@@ -305,7 +306,13 @@ function view_render_admin_settings_summary_card(array $entry): void
     view_render_admin_settings_source($entry);
     $url = (string) ($entry['specialized_url'] ?? '');
     if ($url !== '') {
-        echo '<a class="button secondary" href="' . e($url) . '">' . e(t('admin.settings.open_specialized', 'Open specialized page')) . '</a>';
+        $panelWorkflow = (string) ($entry['specialized_panel_workflow'] ?? '');
+        $panelUrl = (string) ($entry['specialized_panel_url'] ?? '');
+        $panelAttributes = $panelWorkflow !== '' && $panelUrl !== ''
+            ? ' data-gallery-side-panel-link data-admin-side-panel-workflow="' . e($panelWorkflow)
+                . '" data-admin-side-panel-title="' . e(view_admin_settings_entry_label($entry))
+                . '" data-gallery-side-panel-url="' . e($panelUrl) . '"' : '';
+        echo '<a class="button secondary" href="' . e($url) . '"' . $panelAttributes . '>' . e(t('admin.settings.open_specialized', 'Open specialized page')) . '</a>';
     }
     echo '</article>';
 }

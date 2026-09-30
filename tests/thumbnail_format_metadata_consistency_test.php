@@ -108,6 +108,19 @@ namespace Gallery\Core {
 }
 
 namespace Gallery\Services {
+    /**
+     * Trust the isolated fixture identity while testing format policy.
+     * @param array<string,mixed> $image Fixture source row.
+     * @return bool True for this non-database format fixture.
+     */
+    function thumbnail_legacy_identity_owned(array $image): bool { return true; }
+
+    /**
+     * Accept fixture ownership before testing format admission.
+     * @param array<string,mixed> $image Fixture source row.
+     * @return void
+     */
+    function thumbnail_assert_source_identity_owned(array $image): void {}
     /** Read one in-memory compatibility setting. */
     function app_setting(string $key, ?string $default = null): ?string
     {

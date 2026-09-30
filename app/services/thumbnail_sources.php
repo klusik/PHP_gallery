@@ -44,6 +44,23 @@ use function Gallery\Core\image_public_media_url;
 use function Gallery\Core\image_public_thumbnail_url;
 use function Gallery\Core\normalize_relative_path;
 use function Gallery\Core\url_for;
+use function Gallery\Models\image_model_thumbnail_identity_candidates;
+
+/** Bound the number of images sent in one ownership lookup batch.
+ * Type: int. Units: images. Scope: one gallery ownership batch.
+ * Consumers: thumbnail_source_identity_preload. Rationale: bound indexed query parameter counts.
+ */
+const THUMBNAIL_IDENTITY_BATCH_IMAGES = 128;
+/** Limit candidate observations before an overloaded ownership batch is refused.
+ * Type: int. Units: rows. Scope: one candidate query including overflow sentinel.
+ * Consumers: thumbnail_source_identity_preload. Rationale: refuse dense collision sets without a gallery scan.
+ */
+const THUMBNAIL_IDENTITY_CANDIDATE_LIMIT = 4097;
+/** Bound competing identities observed for an isolated thumbnail request.
+ * Type: int. Units: rows. Scope: one isolated media ownership query.
+ * Consumers: thumbnail_source_identity_preload. Rationale: cap single-photo competitor observations.
+ */
+const THUMBNAIL_IDENTITY_SINGLE_LIMIT = 129;
 
 /**
  * Thumbnail generation model.
@@ -87,15 +104,18 @@ function thumbnail_webp_srcset(array $image, array $sizes = [300, 600, 800]): st
 }
 
 /**
- * Handles thumbnail srcset for format logic for the gallery application.
+ * Select authorized derivative candidates for one browser format.
  *
- * @param mixed $image Input used by this operation.
- * @param mixed $sizes Input used by this operation.
- * @param mixed $format Input used by this operation.
- * @return mixed Result produced by this operation.
+ * @param array<string,mixed> $image image input for this operation.
+ * @param array<int,int> $sizes sizes input for this operation.
+ * @param string $format format input for this operation.
+ * @return string Result produced by this operation.
  */
 function thumbnail_srcset_for_format(array $image, array $sizes, string $format): string
 {
+    if (!thumbnail_legacy_identity_owned($image)) {
+        return '';
+    }
     // $entries stores an intermediate value used by the surrounding gallery workflow.
     $entries = [];
     // $gallery stores an intermediate value used by the surrounding gallery workflow.
@@ -270,19 +290,299 @@ function normalize_filesystem_path(string $path): string
 }
 
 /**
- * Handles thumbnail filename logic for the gallery application.
+ * Build a stable derivative filename for the selected source naming identity.
  *
- * @param mixed $image Input used by this operation.
- * @param mixed $size Input used by this operation.
- * @param mixed $format Input used by this operation.
- * @return mixed Result produced by this operation.
+ * @param array<string,mixed> $image image input for this operation.
+ * @param int $size size input for this operation.
+ * @param string $format format input for this operation.
+ * @return string Result produced by this operation.
  */
 function thumbnail_filename(array $image, int $size, string $format = 'jpg'): string
 {
     if (!in_array($format, ['jpg', 'webp'], true)) {
         throw new RuntimeException(t('thumbnails.error_unsupported_format'));
     }
-    return pathinfo((string) $image['filename'], PATHINFO_FILENAME) . '_thumb' . $size . '.' . $format;
+    return thumbnail_filename_stem($image) . '_thumb' . $size . '.' . $format;
+}
+
+/**
+ * Return the selected derivative identity without asserting filesystem ownership.
+ *
+ * The readable prefix is bounded and filesystem-safe. The full path digest includes
+ * the original extension and parent directories, so sibling names and nested sources
+ * never share canonical derivatives. Existing rows retain their historical stem;
+ * read and mutation boundaries separately verify that stem's exclusive ownership.
+ * @param array<string,mixed> $image Source row or provisional rename row with its persisted naming marker.
+ * @return string Selected legacy or canonical stem; this pure constructor grants no I/O permission.
+ */
+function thumbnail_filename_stem(array $image): string
+{
+    $version = thumbnail_source_identity_version($image);
+    if ($version === 0) {
+        return pathinfo((string) $image['filename'], PATHINFO_FILENAME);
+    }
+    if ($version !== 1) {
+        throw new RuntimeException('Thumbnail source identity could not be verified.');
+    }
+    return thumbnail_canonical_filename_stem($image);
+}
+
+/** Build the bounded canonical stem without storage access or ownership recursion.
+ * @param array<string,mixed> $image Source filename and complete gallery-relative path.
+ * @return string Bounded readable stem followed by the full normalized-path SHA-256 digest.
+ */
+function thumbnail_canonical_filename_stem(array $image): string
+{
+    $relativePath = normalize_relative_path((string) ($image['relative_path'] ?? $image['filename'] ?? ''));
+    if ($relativePath === '') {
+        throw new RuntimeException('Missing thumbnail source identity.');
+    }
+    $readableStem = pathinfo(basename($relativePath), PATHINFO_FILENAME);
+    $readableStem = trim((string) preg_replace('/[^A-Za-z0-9_-]+/', '_', $readableStem), '_-');
+    $readableStem = substr($readableStem !== '' ? $readableStem : 'image', 0, 48);
+    return $readableStem . '_' . hash('sha256', $relativePath);
+}
+
+/** Return a persisted naming version, or the confirmed pre-migration legacy state.
+ * @param array<string,mixed> $image Persisted image identity or provisional row with an explicit marker.
+ * @return int|null Legacy zero, canonical one, or null when persisted identity cannot be verified.
+ */
+function thumbnail_source_identity_version(array $image): ?int
+{
+    if (array_key_exists('thumbnail_source_identity_version', $image)) {
+        $version = (int) $image['thumbnail_source_identity_version'];
+        return in_array($version, [0, 1], true) ? $version : null;
+    }
+    if (!function_exists(__NAMESPACE__ . '\\schema_inspection_column')) {
+        return 0; // Pure naming compatibility only; I/O still requires verified ownership.
+    }
+    if ((int) ($image['id'] ?? 0) <= 0) {
+        return 1;
+    }
+    $galleryId = (int) ($image['gallery_id'] ?? 0);
+    $cache = &thumbnail_legacy_identity_request_cache();
+    $imageId = (int) ($image['id'] ?? 0);
+    if (!isset($cache['ids:' . $galleryId][$imageId])) {
+        thumbnail_identity_candidates($galleryId, [$imageId], [], 2);
+    }
+    $cache = &thumbnail_legacy_identity_request_cache();
+    $row = $cache['ids:' . $galleryId][(int) ($image['id'] ?? 0)] ?? null;
+    $version = is_array($row) ? (int) $row['thumbnail_source_identity_version'] : -1;
+    return in_array($version, [0, 1], true) ? $version : null;
+}
+
+/** Request-local bounded ownership observations; invalidate after image mutations.
+ * @return array<int|string,mixed> Selected source rows and verified/refused ownership results for this request.
+ */
+function &thumbnail_legacy_identity_request_cache(): array
+{
+    static $cache = [];
+    return $cache;
+}
+
+/** Clear ownership observations after source insert, rename, move, or deletion.
+ * @return void
+ */
+function thumbnail_legacy_identity_cache_clear(): void
+{
+    $cache = &thumbnail_legacy_identity_request_cache();
+    $cache = [];
+}
+
+/** Observe naming-marker availability without treating unknown as legacy.
+ * @return bool|null Verified marker availability, confirmed legacy schema, or unknown.
+ */
+function thumbnail_identity_marker_available(): ?bool
+{
+    try {
+        $status = schema_inspection_column('images', 'thumbnail_source_identity_version');
+        return schema_inspection_is_unknown($status) ? null : schema_inspection_is_available($status);
+    } catch (Throwable) {
+        return null;
+    }
+}
+
+/** Read a bounded indexed candidate set, retaining the cap sentinel for refusal.
+ * @param int $galleryId Owning gallery identifier.
+ * @param array<int,int> $imageIds Requested persisted source identifiers.
+ * @param array<int,string> $stems Effective derivative stems whose competitors are required.
+ * @param int $limit Maximum observed candidates including the overflow sentinel.
+ * @return array<int,array<string,mixed>>|null Candidate rows, or null on failed observation.
+ */
+function thumbnail_identity_candidates(int $galleryId, array $imageIds, array $stems, int $limit): ?array
+{
+    $available = thumbnail_identity_marker_available();
+    if ($available === null) {
+        return null;
+    }
+    $hashes = [];
+    foreach ($stems as $stem) {
+        if (preg_match('/_([a-f0-9]{64})$/i', $stem, $match) === 1) {
+            $hashes[] = strtolower($match[1]);
+        }
+    }
+    try {
+        $rows = image_model_thumbnail_identity_candidates($galleryId, $imageIds, $stems, array_values(array_unique($hashes)), $available, $limit);
+        if (count($rows) >= $limit) {
+            return null;
+        }
+        $cache = &thumbnail_legacy_identity_request_cache();
+        foreach ($rows as $row) {
+            $cache['ids:' . $galleryId][(int) $row['id']] = $row;
+        }
+        return $rows;
+    } catch (Throwable) {
+        return null;
+    }
+}
+
+/** Key ownership by source identity so provisional and stale rows cannot reuse permission.
+ * @param array<string,mixed> $image Persisted source identity with its naming version.
+ * @return string Request-local ownership key.
+ */
+function thumbnail_identity_ownership_key(array $image): string
+{
+    return (int) ($image['gallery_id'] ?? 0) . ':' . (int) ($image['id'] ?? 0) . ':'
+        . (string) ($image['thumbnail_source_identity_version'] ?? 'unresolved') . ':'
+        . hash('sha256', (string) ($image['relative_path'] ?? $image['filename'] ?? '') . '|' . (string) ($image['filename'] ?? ''));
+}
+
+/** Preload exclusive derivative ownership in bounded batches rather than scanning galleries.
+ * @param array<int,array<string,mixed>> $images Persisted sources about to render or mutate derivatives.
+ * @return void Stores verified and refused results in the request-local ownership cache.
+ */
+function thumbnail_source_identity_preload(array $images): void
+{
+    $cache = &thumbnail_legacy_identity_request_cache();
+    $groups = [];
+    foreach ($images as $image) {
+        $key = thumbnail_identity_ownership_key($image);
+        if (array_key_exists($key, $cache['owned'] ?? [])) {
+            continue;
+        }
+        $galleryId = (int) ($image['gallery_id'] ?? 0);
+        $imageId = (int) ($image['id'] ?? 0);
+        $cache['owned'][$key] = false;
+        if ($galleryId > 0 && $imageId > 0) {
+            $groups[$galleryId][$imageId] = $image;
+        }
+    }
+    foreach ($groups as $galleryId => $group) {
+        foreach (array_chunk($group, THUMBNAIL_IDENTITY_BATCH_IMAGES, true) as $batch) {
+            $missingIds = [];
+            foreach ($batch as $imageId => $image) {
+                if (!array_key_exists('thumbnail_source_identity_version', $image)
+                    && !isset($cache['ids:' . $galleryId][$imageId])) {
+                    $missingIds[] = $imageId;
+                }
+            }
+            if ($missingIds !== [] && thumbnail_identity_candidates($galleryId, $missingIds, [], count($missingIds) + 1) === null) {
+                continue;
+            }
+            $stems = [];
+            $prepared = [];
+            foreach ($batch as $imageId => $image) {
+                $ownershipKey = thumbnail_identity_ownership_key($image);
+                $version = thumbnail_source_identity_version($image);
+                if ($version === null) { continue; }
+                $image['thumbnail_source_identity_version'] = $version;
+                try {
+                    $stem = thumbnail_filename_stem($image);
+                } catch (RuntimeException) {
+                    continue;
+                }
+                if ($stem === '' || basename($stem) !== $stem || str_contains($stem, '\\') || thumbnail_identity_case_key($stem) === null) {
+                    continue;
+                }
+                $stems[] = $stem;
+                $prepared[$imageId] = ['image' => $image, 'stem' => $stem, 'key' => $ownershipKey];
+            }
+            if ($prepared === []) { continue; }
+            $limit = min(THUMBNAIL_IDENTITY_CANDIDATE_LIMIT, max(THUMBNAIL_IDENTITY_SINGLE_LIMIT, count($prepared) * 16 + 1));
+            $rows = thumbnail_identity_candidates($galleryId, array_keys($prepared), array_values(array_unique($stems)), $limit);
+            if ($rows === null) { continue; }
+            foreach ($prepared as $imageId => $entry) {
+                $matches = [];
+                $complete = true;
+                foreach ($rows as $row) {
+                    $version = (int) ($row['thumbnail_source_identity_version'] ?? -1);
+                    if (!in_array($version, [0, 1], true)) { $complete = false; break; }
+                    $rowStem = $version === 1 ? thumbnail_canonical_filename_stem($row) : pathinfo((string) $row['filename'], PATHINFO_FILENAME);
+                    $match = preg_match('/^' . preg_quote($rowStem, '/') . '$/iuD', $entry['stem']);
+                    if ($match === false) { $complete = false; break; }
+                    if ($match === 1) { $matches[] = $row; }
+                }
+                $memberVerified = false;
+                foreach ($matches as $match) {
+                    if ((int) $match['id'] === $imageId
+                        && (int) $match['thumbnail_source_identity_version'] === $entry['image']['thumbnail_source_identity_version']
+                        && (string) $match['filename'] === (string) ($entry['image']['filename'] ?? '')
+                        && normalize_relative_path((string) $match['relative_path']) === normalize_relative_path((string) ($entry['image']['relative_path'] ?? $entry['image']['filename'] ?? ''))) {
+                        $memberVerified = true;
+                    }
+                }
+                if ($complete && $memberVerified) {
+                    $cache['invalidate'][$entry['key']] = $entry['stem'];
+                }
+                $cache['owned'][$entry['key']] = $complete && $memberVerified && count($matches) === 1;
+            }
+        }
+    }
+}
+
+/** Verify effective derivative ownership across every indexed image and access class.
+ * @param array<string,mixed> $image Current source row whose derivative access is being authorized.
+ * @return bool Whether bounded storage evidence proves exclusive ownership of this source path.
+ */
+function thumbnail_legacy_identity_owned(array $image): bool
+{
+    thumbnail_source_identity_preload([$image]);
+    $cache = &thumbnail_legacy_identity_request_cache();
+    return $cache['owned'][thumbnail_identity_ownership_key($image)] ?? false;
+}
+
+/** Verify source membership for targeted invalidation, including confirmed shared artifacts.
+ *
+ * This permission never grants read or generation access. Removing a shared artifact
+ * before a competing row disappears prevents its pixels acquiring a new unique owner.
+ * @param array<string,mixed> $image Current source row selected for an explicit destructive action.
+ * @return string Verified effective derivative stem, even when confirmed shared.
+ */
+function thumbnail_source_identity_invalidation_stem(array $image): string
+{
+    thumbnail_source_identity_preload([$image]);
+    $cache = &thumbnail_legacy_identity_request_cache();
+    $stem = $cache['invalidate'][thumbnail_identity_ownership_key($image)] ?? null;
+    if (!is_string($stem)) {
+        throw new RuntimeException('Thumbnail invalidation membership could not be verified.');
+    }
+    return $stem;
+}
+
+/** Unicode case folding protects case-insensitive storage; ASCII needs no extension.
+ * @param string $stem Effective derivative stem to validate and fold for ownership indexing.
+ * @return string|null Valid UTF-8 case key, or null when the stem cannot be safely compared.
+ */
+function thumbnail_identity_case_key(string $stem): ?string
+{
+    if (preg_match('//u', $stem) !== 1) {
+        return null;
+    }
+    if (function_exists('mb_strtolower')) {
+        return mb_strtolower($stem, 'UTF-8');
+    }
+    return strtolower($stem); // PCRE /iu resolves Unicode equivalence when mbstring is absent.
+}
+
+/** Assert ownership at derivative I/O boundaries, never during provisional naming.
+ * @param array<string,mixed> $image Current persisted source row about to cross a derivative I/O boundary.
+ * @return void Throws when exclusive ownership cannot be established.
+ */
+function thumbnail_assert_source_identity_owned(array $image): void
+{
+    if (!thumbnail_legacy_identity_owned($image)) {
+        throw new RuntimeException('Thumbnail source ownership could not be verified.');
+    }
 }
 
 /**
@@ -335,12 +635,12 @@ function gallery_static_file_url(array $gallery, string $relativeFilePath): stri
 }
 
 /**
- * Handles thumbnail url logic for the gallery application.
+ * Resolve an authorized thumbnail URL or source-media fallback.
  *
- * @param mixed $image Input used by this operation.
- * @param mixed $size Input used by this operation.
- * @param mixed $format Input used by this operation.
- * @return mixed Result produced by this operation.
+ * @param array<string,mixed> $image image input for this operation.
+ * @param int $size size input for this operation.
+ * @param string $format format input for this operation.
+ * @return string Result produced by this operation.
  */
 function thumbnail_url(array $image, int $size, string $format = ''): string
 {
@@ -363,10 +663,13 @@ function thumbnail_url(array $image, int $size, string $format = ''): string
     public_render_profile_count('thumbnail_lookups');
     $startedAt = microtime(true);
     try {
-        return $cache[$cacheKey] = public_render_profile_span('thumbnail_lookup', static function () use ($image, $size, $format): string {
+        return $cache[$cacheKey] = public_render_profile_span('thumbnail_lookup', /** Return the selected authorized thumbnail URL. @return string */ static function () use ($image, $size, $format): string {
     // Variable $gallery stores this steps working value.
     $gallery = find_gallery((int) $image['gallery_id']);
     if ($gallery) {
+        if (!thumbnail_legacy_identity_owned($image)) {
+            return public_path_schema_ready() ? image_public_media_url($image, $gallery) : image_public_asset_url_with_version(url_for('media', ['id' => $image['id']]), $image);
+        }
         if (function_exists('Gallery\\Services\\thumbnail_bound_fallback_size')) {
             $size = thumbnail_bound_fallback_size($image, $size, $gallery);
         }
@@ -458,16 +761,19 @@ function thumbnail_serving_url(array $image, array $gallery, int $size, string $
 }
 
 /**
- * Handles thumbnail existing fallback logic for the gallery application.
+ * Find the closest derivative whose source ownership is verified.
  *
- * @param mixed $image Input used by this operation.
- * @param mixed $gallery Input used by this operation.
- * @param mixed $preferredSize Input used by this operation.
- * @param mixed $preferredFormat Input used by this operation.
- * @return mixed Result produced by this operation.
+ * @param array<string,mixed> $image image input for this operation.
+ * @param array<string,mixed> $gallery gallery input for this operation.
+ * @param int $preferredSize preferredSize input for this operation.
+ * @param string $preferredFormat preferredFormat input for this operation.
+ * @return array<int,array<string,mixed>>|null Result produced by this operation.
  */
 function thumbnail_existing_fallback(array $image, array $gallery, int $preferredSize, string $preferredFormat = 'jpg'): ?array
 {
+    if (!thumbnail_legacy_identity_owned($image)) {
+        return null;
+    }
     // Variable $sizes stores this steps working value.
     $sizes = thumbnail_sizes();
     if (function_exists('Gallery\\Services\\thumbnail_bound_filter_sizes')) {

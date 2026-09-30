@@ -447,13 +447,24 @@ Important columns:
 | `visibility` | `draft`, `public`, or `private`. |
 | `nsfw_enabled` | Image-level restricted flag. The migration creates it as `NOT NULL DEFAULT 0`. |
 | `thumbnail_min_size`, `thumbnail_max_size` | Optional image-level thumbnail bounds. |
+| `thumbnail_source_identity_version` | Derivative naming: existing photographs retain `0` (verified unique legacy stem); new inserts default to `1` (complete relative-path digest). |
 | `created_at`, `updated_at` | Audit timestamps. |
+
+Migration `202609300001_thumbnail_source_identity.php` adds the naming marker with
+default `0` for existing rows, then changes the insertion default to `1`. It does
+not read, regenerate, rename or delete image files, and preserves thumbnail metadata
+generations. New ingestion requires verified marker storage; legacy derivative reads
+also verify ownership across all images in the gallery, including protected images.
+The additive `idx_images_gallery_filename` index supports bounded collision candidate
+lookups. Creating this database index may take time on large installations; the
+migration performs no image processing.
 
 Important indexes and constraints:
 
 | Name | Purpose |
 | --- | --- |
 | `images_gallery_path_hash_unique` | Ensures one image row per gallery/path. |
+| `idx_images_gallery_filename` | Bounds thumbnail ownership candidates by gallery and filename. |
 | `images_gallery_id_foreign` | Cascades image rows when gallery is deleted. |
 | `images_visibility_sort_index` | Public gallery rendering. |
 | `images_gallery_url_slug_index` | Clean image URL lookup. |
@@ -1354,3 +1365,24 @@ Phase 3.0 adds no migration. It activates the existing `viewer_collection_share_
 One active share per collection is an application-level Phase 3 product invariant serialized by the authoritative `viewer_collections` row lock. Create/replace locks the viewer account, owned collection, and unrevoked share rows in one transaction, revokes every previous unrevoked row, then inserts one SHA-256 authority hash with a 30-day expiry. Historic revoked/expired rows may remain. Revoke marks unrevoked rows with `revoked_at` and does not delete the collection, items, favourites, images, galleries, or gallery shares. `last_used_at` is best-effort exchange telemetry only and is not human-open proof or authorization state.
 
 The existing foreign key from `viewer_collection_share_tokens.viewer_collection_id` to `viewer_collections.id` keeps collection deletion authoritative and never points toward `images`. Owner account deletion continues to remove/cascade viewer-owned collections and shares without touching source media. Account suspension explicitly revokes created shares through the established lifecycle transition; restoration never clears `revoked_at`. Sign out everywhere does not mutate share rows. Share schema inspection is intentionally separate from `viewer_collections_schema_status()`, so missing/unknown share storage fails sharing closed without disabling private collections.
+
+## Cooperative galleries foundations
+
+Migration `202609270001_cooperative_galleries_foundations.php` adds
+`cooperative_identity` (singleton installation identity), `cooperative_albums`
+(opaque identities referencing local galleries), `cooperative_peers` (separate
+hashed inbound/encrypted outbound credentials and pairing state), and
+`cooperative_groups` (bounded JSON aggregate plus optimistic storage revision).
+These tables are separate from ordinary API keys. Album mappings cascade on gallery
+deletion; an ID reused by a new gallery receives a different public identity.
+Missing/unknown schema refuses authority operations; revocation has a narrower
+verified dependency set. See [integration details](docs/COOPERATIVE_GALLERIES.md).
+
+Migration `202609270002_cooperative_pairing.php` adds `cooperative_pairings`, with a
+stable numeric ID, unique public invitation ID, unique peer ID, role/state/revision,
+Unix-second expiry, hashed bootstrap authority, context-bound encrypted recovery payload,
+attempt/backoff/error metadata and UTC update timestamp. No plaintext key is stored.
+Local transactions lock pairing before peer; delivery runs after commit. Fresh pairing
+replaces a revoked lifecycle with a new invitation while retaining its numeric ID and
+increasing revisions. Minimal local revocation depends only on verified invitation mapping
+and peer identity/state/revision/inbound hash, not recovery ciphertext availability.

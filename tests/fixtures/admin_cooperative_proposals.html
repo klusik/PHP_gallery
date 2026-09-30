@@ -1,0 +1,191 @@
+<!doctype html>
+<!--
+Project: PHP Gallery
+Repository: https://github.com/klusik/PHP_gallery
+File: tests/fixtures/admin_cooperative_proposals.html
+Module Type: Browser Test Fixture
+Purpose: Exercise production proposal handlers inside the real Admin drawer.
+Responsibilities: Confine synthetic responses and assert in-place lifecycle behavior.
+Author: Rudolf Klusal
+License: MIT
+-->
+<html lang="en"><meta charset="utf-8"><title>Proposal panel fixture</title>
+<link rel="stylesheet" href="/public/assets/styles/base.css">
+<link rel="stylesheet" href="/public/assets/styles/admin.css">
+<body class="admin-page">
+<main><a id="open" href="/fixture-page" data-gallery-side-panel-link data-gallery-side-panel-url="/fixture-page?panel=1" data-admin-side-panel-workflow="cooperative_proposals" data-admin-side-panel-title="Album collaborations">Open proposals</a></main>
+<pre id="results">BROWSER PENDING</pre>
+<script type="module">
+import {setupAdminCooperativeGalleries} from '/public/assets/gallery-modules/admin-cooperative-galleries.js?v=20260927-cooperative-complete-v4';
+import {setupAdminGallerySidePanel} from '/public/assets/gallery-modules/admin-side-panel.js?v=20260927-cooperative-review-v2';
+
+let assertions = 0;
+let requests = 0;
+let completions = 0;
+let generation = 0;
+let fault = false;
+let hold = false;
+let release;
+let lastBody;
+let autoSteps = 0;
+const originalUrl = location.href;
+
+/** Check a visible behavior without printing credentials.
+ * @param {boolean} value Expected behavior.
+ * @param {string} message Bounded assertion description.
+ * @return {void} Throws on mismatch.
+ */
+function check(value, message) {
+    assertions++;
+    if (!value) throw new Error(message);
+}
+/** Wait for bounded observable fixture progress.
+ * @param {function(): boolean} predicate Expected browser state.
+ * @return {Promise<void>} Settles within the fixture deadline.
+ */
+async function until(predicate) {
+    const deadline = Date.now() + 5000;
+    while (!predicate()) {
+        if (Date.now() > deadline) throw new Error('Fixture progress timeout');
+        await new Promise(/** Yield to pending browser tasks. @param {function(): void} resolve Timer consumer. @return {number} Timer handle. */ resolve => setTimeout(resolve, 10));
+    }
+}
+/** Build a synthetic server fragment with the same owned form contract as PHP.
+ * @param {string} marker Safe fixture result marker.
+ * @return {string} Component HTML containing all tested actions.
+ */
+function markup(marker) {
+    return '<section class="cooperative-panel" data-cooperative-panel data-generation="' + marker + '" data-cooperative-error="State unavailable" data-cooperative-busy="Working">'
+        + '<h1 tabindex="-1" data-cooperative-heading>Album collaborations</h1><p data-cooperative-status role="status"></p><p data-cooperative-error-message role="alert"></p>'
+        + ['approve', 'decline', 'deliver', 'refresh', 'advance', 'reference', 'compose', 'email', 'expand', ...(autoSteps > 0 ? ['synchronize'] : [])].map(/** Render one synthetic action form. @param {string} action Controlled action name. @return {string} Form markup. */ action =>
+            '<form data-cooperative-form data-cooperative-group="fixture-group" data-cooperative-action="' + action + '"' + (action === 'compose' ? ' data-cooperative-draft="proposal"' : action === 'reference' ? ' data-cooperative-draft="reference"' : '') + ' action="/fixture-action" method="post"><input name="action" type="hidden" value="' + action + '">'
+            + '<input name="csrf_token" type="hidden" value="fixture-csrf"><input name="cooperative_proposal_ui" type="hidden" value="1">'
+            + '<input name="group_id" type="hidden" value="fixture-group"><input name="revision" type="hidden" value="1"><input name="digest" type="hidden" value="exact-proposal">'
+            + (['reference', 'compose'].includes(action) ? '<select name="gallery_id" data-cooperative-retain><option value="1">Trip</option></select><input type="checkbox" name="photos" value="1" checked data-cooperative-retain>' : '')
+            + (action === 'compose' ? '<input name="request_id" value="intent-' + marker + '" data-cooperative-retain><textarea name="references" data-cooperative-retain></textarea>' : '')
+            + '<button type="submit">' + action + '</button></form>').join('')
+        + '<button disabled type="button" data-disabled-retry>Retry later</button><a data-cooperative-refresh href="/fixture-page">Refresh status</a></section>';
+}
+/** Return the canonical mutation response with an owned replacement fragment.
+ * @param {string} marker Safe fixture result marker.
+ * @return {Response} JSON mutation response.
+ */
+function result(marker) {
+    return new Response(JSON.stringify({ok: true, message: 'Updated',
+        mutation: {type: 'cooperative_proposal.update', entity: 'cooperative_album', action: lastBody?.get('action') || 'update', entity_ids: [1]},
+        panel: {workflow: 'cooperative_proposals', refresh_url: '/fixture-page?panel=1', keep_open: true},
+        contexts: [], fallback: {redirect_url: '/fixture-page'}, panel_html: markup(marker),
+    }), {headers: {'Content-Type': 'application/json'}});
+}
+
+window.fetch = /** Simulate only the confined page and action endpoints.
+ * @param {string|URL} url Requested local URL.
+ * @param {RequestInit} options Fetch options and disposable form data.
+ * @return {Promise<Response>} Controlled success, refusal or delayed response.
+ */ async (url, options = {}) => {
+    const target = new URL(url, location.href);
+    check(target.origin === location.origin, 'No fixture request leaves loopback');
+    if (options.method === 'POST') {
+        requests++;
+        lastBody = options.body;
+        if (lastBody.get('action') === 'synchronize') autoSteps--;
+        check(lastBody.get('csrf_token') === 'fixture-csrf' && lastBody.get('ajax') === '1', 'Mutation keeps CSRF and AJAX fields');
+        if (fault) return new Response(JSON.stringify({ok: false, message: 'Try after refreshing'}), {status: 409, headers: {'Content-Type': 'application/json'}});
+        if (hold) return new Promise(/** Retain a response until after the drawer changes. @param {function(Response): void} resolve Response consumer. @return {void} Stores a fixture-only release callback. */ resolve => {
+            release = /** Deliver the old mutation response. @return {void} Settles this request only. */ () => resolve(result('late'));
+        });
+        return result(String(++generation));
+    }
+    check(target.pathname === '/fixture-page', 'Only the owned read endpoint is requested');
+    return new Response(markup('read-' + (++generation)), {headers: {'Content-Type': 'text/html'}});
+};
+document.addEventListener('php-gallery:mutation-complete', /** Observe the shared completion coordinator. @param {CustomEvent} event Canonical synchronization event. @return {void} Counts successful completions. */ event => {
+    check(event.detail.envelope.mutation.entity_ids[0] === 1, 'Canonical entity metadata survived');
+    completions++;
+});
+
+try {
+    setupAdminCooperativeGalleries();
+    setupAdminCooperativeGalleries();
+    setupAdminGallerySidePanel();
+    document.getElementById('open').click();
+    await until(/** Wait for the real drawer to mount its fragment. @return {boolean} Whether component HTML arrived. */ () => Boolean(document.querySelector('[data-cooperative-panel]')));
+    const panel = document.querySelector('[data-admin-side-panel]');
+    check(panel.dataset.adminSidePanelWorkflow === 'cooperative_proposals', 'Proposal keeps its own drawer workflow');
+    for (const action of ['approve', 'decline', 'deliver', 'refresh', 'advance', 'reference', 'compose', 'compose', 'email', 'expand']) {
+        const count = completions;
+        const root = panel.querySelector('[data-cooperative-panel]');
+        const form = root.querySelector('input[name="action"][value="' + action + '"]').form;
+        form.requestSubmit();
+        await until(/** Wait for canonical completion of this real handler. @return {boolean} Whether the event arrived. */ () => completions > count);
+        check(root !== panel.querySelector('[data-cooperative-panel]'), 'A successful action replaced its owned fragment');
+        check(location.href === originalUrl && panel.getAttribute('aria-hidden') === 'false', 'Action preserves URL and open drawer');
+    }
+    check(requests === 10, 'Double setup and dynamic rerender never duplicate submissions');
+    let draftRoot = panel.querySelector('[data-cooperative-panel]');
+    let draftForm = draftRoot.querySelector('[data-cooperative-draft="proposal"]');
+    draftForm.elements.references.value = 'reference-b\nreference-c';
+    draftForm.elements.gallery_id.add(new Option('Selected earlier page', '3'));
+    draftForm.elements.gallery_id.value = '3';
+    draftForm.elements.photos.checked = false;
+    const intent = draftForm.elements.request_id.value;
+    draftRoot.querySelector('[data-cooperative-refresh]').click();
+    await until(/** Wait for refreshed source choices. @return {boolean} Whether the old root detached. */ () => !draftRoot.isConnected);
+    draftRoot = panel.querySelector('[data-cooperative-panel]');
+    draftForm = draftRoot.querySelector('[data-cooperative-draft="proposal"]');
+    check(draftForm.elements.references.value === 'reference-b\nreference-c' && draftForm.elements.request_id.value === intent
+        && draftForm.elements.gallery_id.value === '3' && !draftForm.elements.photos.checked, 'Refresh retains codes, intent and an album from an earlier page');
+    let completed = completions;
+    draftRoot.querySelector('[data-cooperative-draft="reference"]').requestSubmit();
+    await until(/** Wait for reference creation. @return {boolean} Whether completion arrived. */ () => completions > completed);
+    draftRoot = panel.querySelector('[data-cooperative-panel]');
+    draftForm = draftRoot.querySelector('[data-cooperative-draft="proposal"]');
+    check(draftForm.elements.request_id.value === intent && draftForm.elements.references.value.includes('reference-b'), 'Reference creation does not erase another form draft');
+    completed = completions;
+    draftForm.requestSubmit();
+    await until(/** Wait for proposal creation. @return {boolean} Whether completion arrived. */ () => completions > completed);
+    draftForm = panel.querySelector('[data-cooperative-draft="proposal"]');
+    check(draftForm.elements.request_id.value !== intent && draftForm.elements.references.value === '', 'Successful composition clears only the completed proposal intent');
+    autoSteps = 3;
+    let automaticRoot = panel.querySelector('[data-cooperative-panel]');
+    automaticRoot.querySelector('[data-cooperative-refresh]').click();
+    await until(/** Wait for the new resumable workflow button. @return {boolean} Whether root refreshed. */ () => !automaticRoot.isConnected);
+    const beforeAutomatic = requests;
+    panel.querySelector('[data-cooperative-action="synchronize"]').requestSubmit();
+    await until(/** Wait for the bounded sequence to finish. @return {boolean} Whether all steps completed. */ () => autoSteps === 0 && !panel.querySelector('[data-cooperative-action="synchronize"]'));
+    check(requests === beforeAutomatic + 3 && location.href === originalUrl && panel.getAttribute('aria-hidden') === 'false',
+        'One click completes a finite dynamic sequence inside the same drawer');
+    fault = true;
+    let root = panel.querySelector('[data-cooperative-panel]');
+    const revision = root.querySelector('[name="revision"]').value;
+    root.querySelector('form').requestSubmit();
+    await until(/** Wait for refusal to restore controls. @return {boolean} Whether pending ended. */ () => !root.hasAttribute('aria-busy'));
+    check(root.querySelector('[name="revision"]').value === revision
+        && root.querySelector('[data-cooperative-error-message]').textContent === 'Try after refreshing'
+        && root.querySelector('[data-disabled-retry]').disabled, 'Refusal preserves input and originally disabled controls');
+    fault = false;
+    root.querySelector('[data-cooperative-refresh]').click();
+    await until(/** Wait for the read-only fragment replacement. @return {boolean} Whether old root detached. */ () => !root.isConnected);
+    root = panel.querySelector('[data-cooperative-panel]');
+    check(root.querySelector('[name="revision"]').value === revision
+        && root.querySelector('[name="digest"]').value === 'exact-proposal', 'Refresh preserves the explicit proposal review context');
+    hold = true;
+    const before = requests;
+    const oldRoot = root;
+    oldRoot.querySelector('form').requestSubmit();
+    oldRoot.querySelector('form').dispatchEvent(new Event('submit', {bubbles: true, cancelable: true}));
+    check(requests === before + 1, 'Pending duplicate submission was suppressed');
+    panel.querySelector('[data-admin-side-panel-close]').click();
+    document.getElementById('open').click();
+    await until(/** Wait for a new drawer generation. @return {boolean} Whether old root was replaced. */ () => !oldRoot.isConnected && Boolean(panel.querySelector('[data-cooperative-panel]')));
+    const newRoot = panel.querySelector('[data-cooperative-panel]');
+    const count = completions;
+    release();
+    await until(/** Wait for the old write to complete through the shared coordinator. @return {boolean} Whether completion arrived. */ () => completions > count);
+    check(panel.querySelector('[data-cooperative-panel]') === newRoot && newRoot.dataset.generation !== 'late', 'Late completion cannot overwrite a reopened drawer');
+    check(location.href === originalUrl && panel.getAttribute('aria-hidden') === 'false', 'All actions leave URL and current drawer intact');
+    document.getElementById('results').textContent = 'BROWSER PASS: ' + assertions + ' proposal panel assertions';
+} catch (error) {
+    document.getElementById('results').textContent = 'BROWSER FAIL: ' + error.message + '\n' + error.stack;
+}
+</script></body></html>

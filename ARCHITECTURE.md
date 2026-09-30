@@ -9,7 +9,7 @@ This document is intended to help future maintainers and AI coding agents unders
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.112';
+const CMS_VERSION = '0.110';
 ```
 
 Update-related code uses:
@@ -329,7 +329,7 @@ The definitive route table and request dispatch live in `app/bootstrap/dispatch.
 
 ### Centralized Admin Settings ownership
 
-`app/services/admin_settings_registry.php` is the ownership and discovery registry for the central Settings hub. Stable section IDs are `general`, `site`, `appearance`, `content`, `media`, `uploads`, `privacy`, and `advanced`. Registry entries describe canonical keys, current/default resolvers, validation metadata, sensitivity, migration readiness and specialized destinations. Discovery-only entries index every global specialist control and registered feature flag without rendering hundreds of duplicate cards. The registry does not replace the domain services that own normalization or persistence.
+`app/services/admin_settings_registry.php` is the ownership and discovery registry for the central Settings hub. Stable section IDs are `general`, `appearance`, `content`, `media`, `uploads`, `privacy`, and `advanced`. Registry entries describe canonical keys, current/default resolvers, validation metadata, sensitivity, migration readiness and specialized destinations. Discovery-only entries index every global specialist control and registered feature flag without rendering hundreds of duplicate cards. The registry does not replace the domain services that own normalization or persistence.
 
 `app/controllers/admin_settings.php` accepts only registry-whitelisted centrally editable IDs. POST requests require Admin authentication and CSRF validation, retain field-level errors, and save through `admin_settings_save_editable_value()`. That function delegates to the same focused setters used elsewhere, including `set_site_name()`, `translation_set_public_language()`, `translation_save_public_language_selector_settings()`, `set_url_rewrite_enabled()`, `set_public_home_search_enabled()`, `public_thumbnail_rendering_mode_save()`, `set_exif_gps_default_enabled()`, and `set_dev_mode_enabled()`. Unknown IDs and specialized-only entries are rejected. No generic submitted key can be written directly to `app_settings`.
 
@@ -337,13 +337,13 @@ The central page starts from a read-only ownership model and enables editing onl
 
 Tag-page presentation keeps its existing inheritance rules: `tag_page_gallery_grid_columns` and `tag_page_gallery_grid_rows` fall back to global pagination dimensions, while `tag_page_gallery_description_layout` falls back to the global Theme card layout. Hero-tag controls are distinct settings. Per-gallery description layout, lightbox and EXIF/GPS overrides remain per-gallery.
 
-The navigation contract is implemented by `admin_settings_url()` and `admin_settings_section_id()`. Settings links are fragment-free by default and use only `section=<stable-id>`, so entering, reloading, switching tabs, or returning after save keeps the page at the top where the Setup Wizard launcher remains visible. A caller may opt into the legacy section fragment only by passing `true` as the third `admin_settings_url()` argument for an intentional deep-link jump. The Settings page explicitly prepares fragment-free tab URLs with `admin_settings_url($section, null, false)`, and save redirects use the same form. The existing Admin tab module keeps its opt-in `data-admin-tabs-url-mode="href"` behavior and therefore records the active section query without introducing a scroll-driving fragment. Existing tabs retain their original hash-only behavior. Normal links remain the JavaScript-disabled fallback.
+The navigation contract is implemented by `admin_settings_url()` and `admin_settings_section_id()`. Central links contain both `section=<stable-id>` and `#settings-<stable-id>`. The existing Admin tab module has an opt-in `data-admin-tabs-url-mode="href"` mode for this page so JavaScript activation updates the complete href in browser history rather than changing only the hash. Existing tabs retain their original hash-only behavior. Normal links remain the JavaScript-disabled fallback.
 
 The complete source audit and setting inventory is maintained in `docs/ADMIN_SETTINGS_INVENTORY.md`. The central page itself requires no database migration. Optional existing schemas, for example telemetry or per-gallery EXIF/GPS overrides, continue to gate only the features that already depend on them.
 
-The `admin_setup_wizard` route adds a guided Settings workflow, launched or resumed from the central hub. Its service derives steps from the same registry, its controller keeps an administrator-bound session draft, and its view presents explanations, examples, per-setting skips, and a final approval summary. Navigation actions are rendered both above and below each section so a section can be skipped before reading a long form. The progress strip keeps every numbered step visible but shows the textual label only for the active step, avoiding horizontal scrolling on narrow viewports. Skipped values remain unchanged. Steps never persist application settings; only the approved final request invokes the canonical domain setters. Theme previews share the existing Theme presentation and browser module.
+The `admin_setup_wizard` route adds a guided Settings workflow, launched or resumed from the central hub. Its service derives steps from the same registry, its controller keeps an administrator-bound session draft, and its view presents explanations, examples, per-setting skips, and a final approval summary. Skipped values remain unchanged. Steps never persist application settings; only the approved final request invokes the canonical domain setters. Theme previews share the existing Theme presentation and browser module.
 
-The wizard currently stages centrally editable settings, explicitly supported scalar Theme settings, a bounded safe subset of upload preferences, and safe telemetry preferences. Upload adapters reuse the upload owners for source-format policy, automatic rename, browser-assisted upload enablement, default worker count, and item batch size; coupled worker caps, ZIP byte policies, thumbnail rebuild chunk tuning, and API credentials remain deferred. When default worker count is edited, apply locks `browser_upload_max_worker_count` and `browser_upload_hard_worker_cap` as read dependencies before rebuilding the fresh catalog, so a concurrent ceiling change cannot invalidate the bounded value mid-apply. Telemetry adapters reuse `telemetry_settings.php` for collection switches, DNT/admin-exclusion preferences, the photo-view cap, and retention durations. Apply preflight requires the telemetry schema to be positively available, and the transaction model locks changed `app_settings` and `telemetry_settings` rows in separate stable lock domains before optimistic comparison. Specialized credentials, asset uploads, filesystem relocation, telemetry maintenance/export, and destructive maintenance operations remain explained and deferred to their existing owners. The public installation URL and the physical gallery storage directory remain distinct configuration concepts. Operational adapters also expose thumbnail warm-up, SEO request guard, Trash, automatic-update and Scheduled Maintenance scalar preferences. Trash and maintenance lock their full sibling preference sets and each save through one canonical owner call. In-step subsections and Advanced/Expert disclosure are presentation-only; the final review exposes changes first and optionally reveals unchanged/status values. Specialist items have no outbound mutation-page links during a draft. Permanent scope and ownership documentation lives in `docs/ADMIN_SETTINGS_INVENTORY.md`, and the manual/browser acceptance matrix lives in `TESTING.md`.
+The first wizard version stages centrally editable settings and explicitly supported scalar Theme settings. Specialized credentials, asset uploads, filesystem relocation, and maintenance operations are explained and deferred to their existing owners; those editor operations are outside the wizard draft. The public installation URL and the physical gallery storage directory remain distinct configuration concepts. The temporary implementation roadmap is `TEMP_SETUP_WIZARD_IMPLEMENTATION.md`.
 
 ### Integration and automation routes
 
@@ -497,6 +497,10 @@ contract and load order are preserved.
 | Module entry point | Part directory | Parts |
 | --- | --- | --- |
 | `app/services/admin_setup_wizard.php` | `app/services/admin_setup_wizard/` | `catalog.php`, `draft.php`, `preferences.php`, `apply.php` (registry discovery, staged choices, operational owner adapters, and approved transactional settings writes) |
+| `app/services/cooperative_galleries.php` | `app/services/cooperative_galleries/` | `validation.php`, `credentials.php`, `proposals.php`, `storage.php`, `sources.php` (peer, unanimous collaboration and local source preparation) |
+| `app/services/cooperative_proposals.php` | `app/services/cooperative_proposals/` | `state.php`, `decisions.php`, `protocol.php`, `transport.php`, `verification.php`, `activation.php`, `maintenance.php`, `review.php`, `composition.php`, `metadata.php`, `workflow.php` (proposal exchange, email, direct invalidation and bounded activation) |
+| `app/services/cooperative_content.php` | `app/services/cooperative_content/` | policy.php, catalog.php, admission.php, client.php, derivative_bytes.php, media.php (authorized public catalogs, bounded network admission and revocable metadata-free derivatives) |
+| `app/services/cooperative_pairing.php` | `app/services/cooperative_pairing/` | `protocol.php`, `transport.php`, `storage.php`, `lifecycle.php`, `inbound.php`, `admin.php` (opt-in bilateral friendship orchestration) |
 | `app/services/admin_dashboard.php` | `app/services/admin_dashboard/` | `maintenance_health.php` (bounded gallery-edit and lazy pending-image-move health) |
 | `app/services/admin_operation_keys.php` | `app/services/admin_operation_keys/` | `diagnostics.php`, `maintenance.php` (bounded replay outcome projection and explicit operator reconciliation) |
 | `app/services/admin_gallery_report.php` | `app/services/admin_gallery_report/` | `job.php`, `image_summary.php`, `gps.php`, `system_summary.php`, `database_section.php`, `content_summary.php`, `query_helpers.php`, `format.php`, `render.php` |
@@ -2105,3 +2109,91 @@ Phase 4.4 creates no migration, metrics table, event table, limiter table, files
 The operations layer is intentionally non-authoritative. Viewing it does not issue or consume anti-automation tickets/nonces, consume rate-limit budgets, mutate registration staging, rotate or consume Phase 4.2 verification authorities, alter invitation state, establish Viewer identity, or change scanner-safe verification. Phase 4.0 current-mode revalidation, Phase 4.1 generic registration semantics, Phase 4.2 token-A/sibling authority behavior, Phase 4.3 first-party anti-automation, Viewer/Admin identity separation, gallery authorization, and Phase 3 sharing remain unchanged.
 
 Phase 4 is complete after Phase 4.4: 4.0 owns registration policy/lifecycle foundations, 4.1 exposes verified-email open registration, 4.2 hardens verification resend/recovery, 4.3 provides fully first-party adaptive anti-automation, and 4.4 provides aggregate administrator operations visibility. No third-party CAPTCHA, reputation, monitoring, analytics, browser-fingerprinting, Composer/npm security package, Redis/Memcached, queue, daemon, or Phase 5 authentication mechanism is introduced.
+
+### Cooperative galleries foundations
+
+`app/services/cooperative_galleries.php` is a dormant domain entry point with
+`validation.php`, `credentials.php`, `proposals.php`, `storage.php` and `sources.php` parts in
+`app/services/cooperative_galleries/`. Only the entry point is registered in the
+service loader. Its model owns isolated peer credentials and optimistic aggregate
+persistence. No routes, probes or network activity occur on include. See
+[the integration contract](docs/COOPERATIVE_GALLERIES.md) for authenticated adapter
+requirements, unanimous group approval and generation-bound friendship evidence.
+
+The separate `cooperative_pairing.php` service now supplies opt-in bilateral friendship
+orchestration. Its model serializes peer/lifecycle transitions, its controller owns
+Admin/CSRF and bounded peer HTTP boundaries, and `outbound_http.php` owns pinned public
+HTTPS JSON transport plus shared favicon DNS validation. Capability `cooperative_galleries`
+is OFF by default and preserves state on disable. Network operations never run inside
+local transactions; encrypted recovery state supports retries, immediate local revocation
+and fresh pairing with monotonic generations. Album-group transport and UI remain separate.
+
+Initial album proposal exchange is owned by `cooperative_proposals.php` and its sibling
+parts, loaded after bilateral pairing. Its HTTP controller owns Admin/CSRF and bearer
+boundaries, while `cooperative_galleries.php` retains immutable proposal and persistence
+primitives. Stored JSON exchange state contains local decisions and direct observations;
+no received group snapshot or forwarded vote becomes authority. Separate nonce-bound
+verification rounds can activate initial membership locally with a 120-second lease
+measured from collection start. Every metadata authorization rechecks the source,
+local credential generations and exact revision. Membership expansion, media transport
+and UI orchestration remain separate. See `docs/COOPERATIVE_GALLERIES.md` for renewal,
+partial activation and bounded remote-revocation semantics.
+
+Cooperative verification maintenance selects a single CAS-protected operation per Admin
+`advance` action. The active-only `scripts/cooperative_renew.php` CLI runs a finite pass
+for one explicit group, skips fresh leases, renews in the final minute, resumes durable
+rounds and stops on unavailable consent or transport. A scheduler must invoke it on each
+participating installation; browser visits never silently approve membership.
+
+The cooperative proposal review is a separate capability-owned Admin HTML route using
+`admin_cooperative_proposals.php` controller/view and the domain `review.php` part. It
+reuses cooperative form delegation and the shared mutation coordinator; API-only callers
+retain JSON responses. The review is read-only until an explicit action and separates
+local consent, historical observations, membership and current authorization.
+
+The metadata-only cooperative composer uses non-authorizing `pga1.` album references.
+`composition.php` validates bounded locator input and direct friendships, then delegates
+source preparation and immutable proposal creation to the existing owners. The Admin
+picker and form projections remain read-only until explicit POST; reference creation and
+proposal creation never imply consent, network delivery or public export.
+
+Cooperative album metadata has a separate POST-only, system-bearer HTTP boundary in
+`controllers/cooperative_metadata.php`. The domain `metadata.php` part reuses exact grant,
+lease and anonymous public-source checks and projects only an opaque album ID and bounded
+title. It never serializes raw rows, returns media addresses, renews authority or performs
+outbound requests. Responses remain private/no-store through the shared JSON adapter.
+
+The public cooperative content layer uses source-issued encrypted derivative
+capabilities with per-request source/image policy checks. Its controller and view
+own the shared page and no-JavaScript pagination; source fetching has a fixed paired
+origin. On-demand maintenance advances at most one verification operation. Expansion
+creates a new unanimous successor group; no approval is reused. The configured_mail.php
+service owns existing Account SMTP/PHP-mail delivery; admin_auth.php helpers retain
+compatibility wrappers. See docs/COOPERATIVE_GALLERIES.md for current behavior.
+
+Verification reserves a nonce-bound operation in the persisted aggregate before network
+work. A worker failure leaves a finite ownership deadline and retry cooldown; stale
+replies cannot replace concurrent consent or a newer operation. Public remote catalogs
+have a separate group-wide admission reservation with one-second spacing after success
+and thirty-second backoff after failure. Neither mechanism extends the security lease.
+Cooperative media strips JPEG application/comment segments and WebP EXIF/XMP/ICC chunks
+from bounded existing derivatives before output, without generating files on GET.
+
+New photographs use thumbnail filenames containing a full SHA-256 digest of the
+normalized source path including its extension. Existing photographs retain their
+stored derivatives and metadata versions. A per-image naming marker separates these
+schemes; legacy reads require verified unique ownership of the stem in the gallery,
+including private and NSFW siblings. An ambiguous historical derivative is refused
+without requiring whole-gallery regeneration or scheduling automatic replacement.
+Ownership observes bounded collision candidates through the gallery/filename and
+relative-path indexes; page preloading batches selected sources instead of loading
+every photograph in the gallery. Copies and clones preserve existing derivative
+bytes under the new destination names without decoding or re-encoding photographs.
+Explicit deletion or rename invalidates confirmed shared cache files before changing
+source ownership, so removal of a private sibling cannot authorize its old pixels for
+a remaining public image. Unknown membership blocks that mutation. Cooperative reads
+also verify the bounded source fingerprint after authority checks before returning bytes.
+Explicit deletion or rename invalidates confirmed shared cache files before changing
+source ownership, so removal of a private sibling cannot authorize its old pixels for
+a remaining public image. Unknown membership blocks that mutation. Cooperative reads
+also verify the bounded source fingerprint after authority checks before returning bytes.

@@ -85,6 +85,26 @@ return [
 
     // Most PHP tests are self-contained. Keep only true environment exceptions here.
     'php_test_requirements' => [
+        'cooperative_galleries_foundations_test.php' => [
+            'extensions' => ['openssl'],
+            'missing_status' => 'BLOCKED',
+            'reason' => 'Cooperative secret contracts require authenticated OpenSSL encryption.',
+        ],
+        'outbound_http_transport_test.php' => [
+            'extensions' => ['curl'],
+            'missing_status' => 'BLOCKED',
+            'reason' => 'Pinned transport contracts need cURL handles and option constants but perform no networking.',
+        ],
+        'cooperative_pairing_workflow_test.php' => [
+            'extensions' => ['pdo_sqlite', 'openssl'],
+            'missing_status' => 'BLOCKED',
+            'reason' => 'Bilateral pairing contracts require two isolated SQLite databases and authenticated encryption.',
+        ],
+        'cooperative_galleries_storage_test.php' => [
+            'extensions' => ['pdo_sqlite', 'openssl'],
+            'missing_status' => 'BLOCKED',
+            'reason' => 'Cooperative persistence contracts use isolated SQLite and authenticated encryption.',
+        ],
         'gallery_migration_temporary_files_test.php' => [
             'extensions' => ['zip'],
             'missing_status' => 'BLOCKED',
@@ -141,6 +161,18 @@ return [
     // Explicit registry is intentional. Some Node scripts need arguments or a real browser.
     'node_tests' => [
         'admin_setup_wizard_browser_test.mjs' => [],
+        'cooperative_gallery_browser_test.mjs' => [
+            'browser' => true,
+            'timeout' => 60,
+        ],
+        'admin_cooperative_proposals_browser_test.mjs' => [
+            'browser' => true,
+            'timeout' => 60,
+        ],
+        'admin_cooperative_galleries_browser_test.mjs' => [
+            'browser' => true,
+            'timeout' => 60,
+        ],
         'admin_panel_lifecycle_browser_test.mjs' => [
             'browser' => true,
             'timeout' => 60,

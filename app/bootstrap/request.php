@@ -129,6 +129,7 @@ function cms_apply_seo_request_guard_decision(array $decision): void
  * inspection remains the fallback.
  *
  * @param string $page Resolved page identifier.
+ * @return void Prime bounded schema observations without authorizing a request.
  */
 function cms_prime_read_only_media_schema_cache(string $page): void
 {
@@ -140,7 +141,7 @@ function cms_prime_read_only_media_schema_cache(string $page): void
         return;
     }
 
-    \Gallery\Services\schema_inspection_prime_table_snapshots([
+    $tables = [
         'galleries',
         'images',
         'image_thumbnail_variants',
@@ -157,7 +158,12 @@ function cms_prime_read_only_media_schema_cache(string $page): void
         'viewer_invitations',
         'viewer_registration_state',
         'viewer_registration_requests',
-    ]);
+    ];
+    if ($page === 'cooperative_media'
+        && \Gallery\Services\feature_capability_effective_enabled('cooperative_galleries')) {
+        $tables = array_merge($tables, ['cooperative_identity', 'cooperative_albums', 'cooperative_peers', 'cooperative_groups']);
+    }
+    \Gallery\Services\schema_inspection_prime_table_snapshots($tables);
 }
 /**
  * Start optional request diagnostics before the normal CMS lifecycle marks begin.
