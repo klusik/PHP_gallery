@@ -9,7 +9,7 @@ This document is intended to help future maintainers and AI coding agents unders
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.113.2';
+const CMS_VERSION = '0.114';
 ```
 
 Update-related code uses:
@@ -1713,6 +1713,33 @@ PyInstaller embeds one x64 DLL at `runtime/simconnect/SimConnect.dll`; build
 preflight validates native exports and the embedded payload hash. Inno Setup
 distributes the application EXE without a separate DLL. See `winapp/README.md`
 for runtime discovery and the build mode using already installed dependencies.
+
+The installed WinApp updater is independent of the CMS version.
+`uploader/self_update.py` scans bounded paginated public GitHub releases for
+`klusik/PHP_gallery`, skips drafts/prereleases, and compares numeric versions in
+`PHPGalleryUploader-<major.minor.patch>-Setup.exe`. CMS tags and the repository
+latest marker are ignored. Duplicate installers across releases are accepted only
+with identical SHA256 and size. The highest newer installer requires a GitHub
+`sha256:` asset digest or a same-release `winapp-update.json` whose `assets` array
+contains a matching `name`, `version`, `size`, and hexadecimal `sha256`; missing or
+conflicting integrity data refuses the update instead of offering an older one.
+HTTPS repository URLs and exact supported GitHub CDN hosts are validated. No gallery
+credentials are used. A unique owned partial file is finalized only after streaming
+size/hash verification; failed downloads never delete unrelated files.
+
+`uploader/update_ui.py` schedules startup and subsequent checks at most hourly in
+independent per-user state, persisting the last automatic attempt across restarts. Manual Check for updates bypasses the throttle. Its
+nonmodal Update/Later window displays actual downloaded bytes and supports download
+cancellation. Update then blocks new work and waits up to 120 seconds for safe worker
+drain; failure refuses installation while keeping the uploader usable.
+`uploader/update_helper.py` independently rechecks the ticket and installer, waits
+for exact installed-path processes to exit, and invokes Inno Setup through UAC.
+Self-update never force-terminates these processes; normal directly launched
+installers retain their existing shutdown policy. Actual installer progress uses a
+session-scoped local named pipe. The helper restarts the application as the original
+user after successful installation and matching installed PE version, preserving saved settings and jobs. UAC cancellation reopens the existing application; installer exit 3010 requests a Windows restart instead of an application restart. There is no automatic
+rollback. Native Python/source mode offers a verified installer for manual launch.
+
 
 Gallery-scoped API-key create/revoke forms are also embedded in the gallery editor. Their enhanced path uses the canonical Admin mutation success/error envelope and `panel.workflow=gallery-edit`; the token mutation itself has no public gallery context because changing an API credential does not change public rendering. `admin-side-panel.js` delegates the successful response to the shared completion coordinator and refreshes the API-key fragment from the server-provided panel URL while keeping the drawer mounted. The ordinary POST/redirect route remains the non-JavaScript/direct-page fallback.
 

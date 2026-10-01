@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.113.2}
+\newcommand{\version}{0.114}
 \newcommand{\manualdate}{1~oktober~2026}
 
 \hypersetup{
@@ -634,7 +634,12 @@ Efter aktivering öppnas gemensamma fotografier från panelen eller länken i de
 Återkallat deltagande, ändrat källskydd och lokalt återkallad vänskap blockerar efterföljande auktoriserade läsningar. Onåbara deltagare begränsas till högst 120 sekunders verifieringsgiltighet; redan hämtade pixlar kan inte återkallas. Nya deltagare kräver ett separat förslag med nytt godkännande från alla. Teknisk förnyelse kan ske vid användning; schemaläggning är valfri. Saknat eller okänt obligatoriskt schema avvisar delning och ändringar. Se \filepath{docs/COOPERATIVE_GALLERIES.md} för driftsgränser.
 
 \subsection{Simulatorposition i Windows}
-WinApp 0.2.0 använder automatiskt kamerans världsposition i MSFS 2024 och faller tillbaka till flygplanets position vid ett begränsat kamerafel. MSFS 2020 använder direkt flygplanets position genom samma SimConnect-runtime. Koordinater är valfria; en otillgänglig simulator stoppar inte uppladdningen. Diagnostiken skiljer mellan positionskällorna. Installationsprogrammet begär att programmet avslutas före filbyte. Slutför pågående arbete före uppdatering. Verifiera verkliga simulatorer och uppgradering på måldatorn.
+WinApp 0.3.0 använder automatiskt kamerans världsposition i MSFS 2024 och faller tillbaka till flygplanets position vid ett begränsat kamerafel. MSFS 2020 använder direkt flygplanets position genom samma SimConnect-runtime. Koordinater är valfria; en otillgänglig simulator stoppar inte uppladdningen. Diagnostiken skiljer mellan positionskällorna. Installationsprogrammet begär att programmet avslutas före filbyte. Slutför pågående arbete före uppdatering. Verifiera verkliga simulatorer och uppgradering på måldatorn.
+
+Den installerade uppladdaren kontrollerar sin egen stabila GitHub-installationsversion högst en gång per timme; \ui{Check for updates} startar en manuell kontroll. Det senaste automatiska försöket sparas separat för den aktuella användaren och finns kvar efter programomstart. CMS-taggar bestämmer inte dess version. Den högsta numeriska versionen kräver SHA256 från GitHub-filen eller en matchande \filepath{winapp-update.json} från samma utgåva. Saknade eller motstridiga uppgifter stoppar uppdateringen; identiska installationsprogram i flera CMS-utgåvor accepteras. Galleriets inloggningsuppgifter skickas aldrig till GitHub.
+
+\ui{Update} hämtar installationsprogrammet med förlopp och avbrottsmöjlighet, verifierar det, stoppar nytt arbete och väntar högst 120 sekunder på att bakgrundsuppgifter avslutas säkert. Ett misslyckat avslut nekar installationen och uppladdaren förblir tillgänglig. En extern hjälpprocess kontrollerar filen igen och begär Windows UAC-godkännande. Självuppdateringen tvångsavslutar aldrig arbetare; vanliga manuellt startade installationsprogram behåller sin avslutningspolicy. Det verkliga installationsförloppet kommer genom en lokal kanal för den aktuella sessionen. Efter framgång startar uppladdaren som ursprunglig användare med sparade inställningar och uppgifter. Ingen automatisk återställning till tidigare version finns. Körning från Python eller källkod erbjuder det verifierade installationsprogrammet för manuell start. Om Windows kräver omstart ska Windows startas om innan uppladdaren öppnas igen; avbruten UAC öppnar den befintliga installationen på nytt.
+
 
 \section{Lägga till, beskriva och organisera fotografier}
 \label{sec:photo-workflow}

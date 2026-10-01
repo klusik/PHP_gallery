@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine Versionsänderung benötigt.
-\newcommand{\version}{0.113.2}
+\newcommand{\version}{0.114}
 \newcommand{\manualdate}{1.~Oktober~2026}
 
 \hypersetup{
@@ -638,7 +638,12 @@ Nach Aktivierung öffnen Sie gemeinsame Fotos im Panel oder über den Link des l
 Rücknahme, geänderter Quellschutz und lokale Freundschaftswiderrufe sperren nachfolgende autorisierte Zugriffe. Unerreichbare Teilnehmer bleiben durch höchstens 120 Sekunden Prüfungsdauer begrenzt; bereits heruntergeladene Pixel lassen sich nicht zurückrufen. Neue Teilnehmer benötigen einen separaten Vorschlag mit neuer Zustimmung aller. Technische Erneuerung kann bei Nutzung erfolgen; ein Zeitplan ist optional. Fehlendes oder unbekanntes erforderliches Schema verweigert Freigaben und Änderungen. Betriebsgrenzen beschreibt \filepath{docs/COOPERATIVE_GALLERIES.md}.
 
 \subsection{Simulatorposition unter Windows}
-WinApp 0.2.0 verwendet automatisch die Kameraweltposition in MSFS 2024 und fällt bei begrenztem Kamerafehler auf die Flugzeugposition zurück. MSFS 2020 verwendet direkt die Flugzeugposition über dieselbe SimConnect-Laufzeit. Koordinaten sind optional; ein fehlender Simulator verhindert keine Uploads. Die Diagnose unterscheidet die Positionsquelle. Das Installationsprogramm fordert das Beenden der Anwendung vor dem Dateiaustausch an. Schließen Sie laufende Aufgaben vorher ab. Prüfen Sie echte Simulatoren und das Upgrade auf dem Ziel-PC.
+WinApp 0.3.0 verwendet automatisch die Kameraweltposition in MSFS 2024 und fällt bei begrenztem Kamerafehler auf die Flugzeugposition zurück. MSFS 2020 verwendet direkt die Flugzeugposition über dieselbe SimConnect-Laufzeit. Koordinaten sind optional; ein fehlender Simulator verhindert keine Uploads. Die Diagnose unterscheidet die Positionsquelle. Das Installationsprogramm fordert das Beenden der Anwendung vor dem Dateiaustausch an. Schließen Sie laufende Aufgaben vorher ab. Prüfen Sie echte Simulatoren und das Upgrade auf dem Ziel-PC.
+
+Der installierte Uploader prüft seine eigene stabile GitHub-Installerversion höchstens einmal pro Stunde; \ui{Check for updates} startet eine manuelle Prüfung. Der letzte automatische Versuch wird unabhängig für den aktuellen Benutzer gespeichert und bleibt nach einem Anwendungsneustart erhalten. CMS-Tags bestimmen nicht seine Version. Die höchste numerische Version benötigt SHA256 vom GitHub-Asset oder aus einer passenden \filepath{winapp-update.json} desselben Releases. Fehlende oder widersprüchliche Daten verhindern das Update; identische Installer in mehreren CMS-Releases werden akzeptiert. Galerie-Zugangsdaten werden nie an GitHub gesendet.
+
+\ui{Update} lädt den Installer mit Fortschritt und Abbruchmöglichkeit herunter, prüft ihn, sperrt neue Arbeit und wartet bis zu 120 Sekunden auf den sicheren Abschluss der Hintergrundaufgaben. Misslingt dieser Abschluss, wird die Installation verweigert und der Uploader bleibt verfügbar. Ein externer Hilfsprozess prüft die Datei erneut und fordert Windows-UAC-Zustimmung an. Das Selbstupdate beendet keine Arbeiter gewaltsam; normal manuell gestartete Installer behalten ihre bisherige Beendigungsregel. Der tatsächliche Installationsfortschritt kommt über einen lokalen sitzungsspezifischen Kanal. Nach Erfolg startet der Uploader als ursprünglicher Benutzer mit gespeicherten Einstellungen und Aufgaben. Es gibt kein automatisches Rollback. Native Python- oder Quellcode-Ausführungen bieten den geprüften Installer zum manuellen Start an. Wenn Windows einen Neustart verlangt, starten Sie Windows vor dem erneuten Öffnen des Uploaders neu; ein UAC-Abbruch öffnet die vorhandene Installation erneut.
+
 
 \section{Fotos hinzufügen, beschreiben und organisieren}
 \label{sec:photo-workflow}

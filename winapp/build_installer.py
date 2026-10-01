@@ -175,7 +175,7 @@ def find_iscc(explicit=None):
     raise RuntimeError("Inno Setup was not found. Pass --iscc PATH or set ISCC_EXE.")
 
 
-def write_version_resource(path, version):
+def write_version_resource(path: Path, version: str) -> None:
     """Give the application EXE the same independent version as the installer."""
     numbers = tuple(int(part) for part in version.split(".")) + (0,)
     path.write_text(
@@ -281,6 +281,7 @@ def build_installer(iscc, source=WINAPP_DIR, use_installed_dependencies=False):
             "--add-data", f"{source / 'VERSION'}{os.pathsep}.",
             "--add-binary", f"{source / 'SimConnect.dll'}{os.pathsep}runtime/simconnect",
             "--hidden-import", "pystray._win32",
+            "--hidden-import", "uploader.update_helper",
             source / "gallery_watch_upload.pyw",
         ])
         app = work / "app" / APP_EXE

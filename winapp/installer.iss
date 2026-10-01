@@ -26,7 +26,9 @@ VersionInfoVersion={#AppVersion}.0
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
-CloseApplications=force
+; PrepareToInstall owns exact-path shutdown. Restart Manager must never force
+; terminate an uploader during SELFUPDATE, including an incorrectly active one.
+CloseApplications=no
 CloseApplicationsFilter=PHPGalleryUploader.exe
 RestartApplications=no
 
@@ -52,6 +54,62 @@ Name: "{autodesktop}\PHP Gallery Uploader"; Filename: "{app}\PHPGalleryUploader.
 Filename: "{app}\PHPGalleryUploader.exe"; Description: "{cm:LaunchProgram,PHP Gallery Uploader}"; Flags: nowait postinstall skipifsilent
 
 [Code]
+function CreateFileW(FileName: String; DesiredAccess, ShareMode: LongWord;
+  SecurityAttributes: LongWord; CreationDisposition, Flags: LongWord;
+  TemplateFile: LongWord): THandle;
+  external 'CreateFileW@kernel32.dll stdcall';
+function WriteFile(Handle: THandle; Buffer: AnsiString; Count: LongWord;
+  var Written: LongWord; Overlapped: LongWord): Boolean;
+  external 'WriteFile@kernel32.dll stdcall';
+function CloseHandle(Handle: THandle): Boolean;
+  external 'CloseHandle@kernel32.dll stdcall';
+
+function IsSelfUpdate: Boolean;
+begin
+  Result := ExpandConstant('{param:SELFUPDATE|0}') = '1';
+end;
+
+{ SELFUPDATE never invokes Restart Manager force-close behavior. Direct setup
+  retains its historical force-close fallback. PrepareToInstall is authoritative. }
+procedure WriteUpdateStatus(Phase, Percent: Integer);
+var
+  SessionName: String;
+  Index: Integer;
+  PipeHandle: THandle;
+  RecordText: AnsiString;
+  Written: LongWord;
+begin
+  if not IsSelfUpdate then Exit;
+  SessionName := ExpandConstant('{param:UPDATESTATUS|}');
+  if Length(SessionName) <> 32 then Exit;
+  for Index := 1 to Length(SessionName) do
+    if Pos(SessionName[Index], '0123456789abcdef') = 0 then Exit;
+  { Only an opaque local session ID is accepted, never a filesystem path.
+    Numeric status travels to the original user's helper-owned named pipe. }
+  PipeHandle := CreateFileW('\\.\pipe\PHPGalleryUploaderUpdate-' + SessionName,
+    $40000000, 0, 0, 3, 0, 0);
+  if PipeHandle = THandle(-1) then Exit;
+  try
+    RecordText := IntToStr(Phase) + ' ' + IntToStr(Percent);
+    WriteFile(PipeHandle, RecordText, Length(RecordText), Written, 0);
+  finally
+    CloseHandle(PipeHandle);
+  end;
+end;
+
+procedure CurInstallProgressChanged(CurProgress, MaxProgress: Integer);
+begin
+  if MaxProgress > 0 then
+    WriteUpdateStatus(2, Round(100.0 * CurProgress / MaxProgress));
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssInstall then WriteUpdateStatus(2, 0)
+  else if CurStep = ssPostInstall then WriteUpdateStatus(3, 100)
+  else if CurStep = ssDone then WriteUpdateStatus(4, 100);
+end;
+
 { Inspect only uploader processes and compare the absolute executable path.
   Unknown paths fail closed; copies running from other directories are untouched.
   Both PyInstaller onefile processes have the same executable path, so enumerate
@@ -97,7 +155,7 @@ end;
   setup. Force-stop only this installation's uploader, then poll up to three
   seconds for both onefile processes to disappear. A nonempty result prevents
   installation; raw COM/WMI exceptions stay out of the user-facing message.
-  Restart Manager remains a secondary file-lock safeguard. [Run] owns relaunch. }
+  File locks remain a secondary safeguard. [Run] owns direct-install relaunch. }
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 var
   Locator, Services: Variant;
@@ -109,7 +167,9 @@ begin
     TargetPath := ExpandFileName(ExpandConstant('{app}\PHPGalleryUploader.exe'));
     Locator := CreateOleObject('WbemScripting.SWbemLocator');
     Services := Locator.ConnectServer('', 'root\CIMV2');
-    InspectUploaderProcesses(Services, TargetPath, True);
+    WriteUpdateStatus(1, 0);
+    if not IsSelfUpdate then
+      InspectUploaderProcesses(Services, TargetPath, True);
     for Attempt := 0 to 30 do
     begin
       if InspectUploaderProcesses(Services, TargetPath, False) = 0 then

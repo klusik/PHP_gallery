@@ -36,8 +36,6 @@ import ctypes
 import hashlib
 import importlib
 import json
-import logging
-from logging.handlers import RotatingFileHandler
 import math
 import mimetypes
 import multiprocessing
@@ -55,6 +53,21 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 from urllib import error, parse, request
+
+# Dispatch helper/version modes before application configuration or logging.
+if __name__ == "__main__":
+    multiprocessing.freeze_support()
+    if sys.argv[1:] == ["--version"]:
+        print((Path(__file__).resolve().parent / "VERSION").read_text(encoding="utf-8").strip())
+        raise SystemExit(0)
+    if len(sys.argv) >= 2 and sys.argv[1] == "--self-update-helper":
+        if len(sys.argv) != 3:
+            raise SystemExit(2)
+        from uploader.update_helper import main as update_helper_main
+        raise SystemExit(update_helper_main(sys.argv[2]))
+
+import logging
+from logging.handlers import RotatingFileHandler
 
 from uploader.config import CONFIG_SCHEMA_VERSION, DEFAULTS as REDESIGN_CONFIG_DEFAULTS, migrate_config_payload
 from uploader.diagnostics import redact_text
@@ -3978,6 +3991,8 @@ class WatcherApp:
         recoverable_ids = [job.id for job in self.job_store.recoverable_jobs()]
         removed_staging = cleanup_stale_staging(STAGING_ROOT, self.config.staging_cleanup_age_hours, recoverable_ids)
 
+        from uploader.update_ui import UpdateController
+        self.updates = UpdateController(self, APP_VERSION)
         self.build_ui()
         self.configure_window_icon()
         self.start_tray_icon()
@@ -4012,6 +4027,8 @@ class WatcherApp:
         ttk.Label(status, textvariable=self.ai_activity_var).pack(side="left")
         ttk.Button(header, text="Connection / API key", command=self.open_connection_dialog).grid(row=0, column=2, sticky="e", padx=(12, 0))
         ttk.Button(header, text="Open app folder", command=self.open_config_folder).grid(row=0, column=3, sticky="e", padx=(8, 0))
+
+        ttk.Button(header, text="Check for updates", command=self.updates.check).grid(row=0, column=4, sticky="e", padx=(8, 0))
 
         subheader = ttk.Frame(outer)
         subheader.grid(row=1, column=0, sticky="ew", pady=(0, 8))
@@ -4720,6 +4737,8 @@ class WatcherApp:
         """
         Install winapp dependencies into the current Python interpreter.
         """
+        if getattr(self, "updates", None) is not None and self.updates.blocked():
+            return
         if getattr(sys, "frozen", False):
             ok, output = install_dependencies_for_current_runtime()
             (messagebox.showinfo if ok else messagebox.showerror)("Bundled dependencies", output)
@@ -4833,6 +4852,8 @@ class WatcherApp:
         """
         Open a file picker and add supported images to the manual upload list.
         """
+        if getattr(self, "updates", None) is not None and self.updates.blocked():
+            return
         selected = filedialog.askopenfilenames(
             title="Choose files to import",
             initialdir=self.watched_folder_var.get() or str(Path.home()),
@@ -4848,6 +4869,8 @@ class WatcherApp:
 
     def select_manual_folder(self) -> None:
         """Choose one folder for explicit manual import discovery."""
+        if getattr(self, "updates", None) is not None and self.updates.blocked():
+            return
         selected = filedialog.askdirectory(initialdir=self.watched_folder_var.get() or str(Path.home()), title="Choose folder to import")
         if not selected:
             return
@@ -4859,6 +4882,8 @@ class WatcherApp:
 
     def select_manual_zip(self) -> None:
         """Choose one ZIP archive for bounded staging and preflight."""
+        if getattr(self, "updates", None) is not None and self.updates.blocked():
+            return
         selected = filedialog.askopenfilename(
             title="Choose ZIP archive to import",
             initialdir=self.watched_folder_var.get() or str(Path.home()),
@@ -4877,6 +4902,8 @@ class WatcherApp:
         """
         Clear the manual upload selection.
         """
+        if getattr(self, "updates", None) is not None and self.updates.blocked():
+            return
         if self.preflight_worker and self.preflight_worker.is_alive():
             self.preflight_worker.stop()
         if self.manual_plan is not None and self.manual_plan.job.started_at <= 0:
@@ -4898,6 +4925,8 @@ class WatcherApp:
 
     def rebuild_manual_preflight(self) -> None:
         """Start a new non-uploading discovery/preflight pass for the selected source."""
+        if getattr(self, "updates", None) is not None and self.updates.blocked():
+            return
         if self.api_key_revoke_running:
             messagebox.showwarning("Connection", "Wait for API-key revocation to finish before starting import preflight.")
             return
@@ -5051,6 +5080,8 @@ class WatcherApp:
 
         @return bool True when the configuration was saved.
         """
+        if getattr(self, "updates", None) is not None and self.updates.blocked():
+            return False
         if self.api_key_revoke_running:
             messagebox.showwarning("Configuration", "Wait for API-key revocation to finish before changing connection credentials.")
             return False
@@ -5071,6 +5102,8 @@ class WatcherApp:
 
         Files already present at start are intentionally counted and ignored.
         """
+        if getattr(self, "updates", None) is not None and self.updates.blocked():
+            return
         if self.api_key_revoke_running:
             messagebox.showwarning("Connection", "Wait for API-key revocation to finish before starting watcher.")
             return
@@ -5120,6 +5153,8 @@ class WatcherApp:
         """
         Start the explicitly reviewed import plan.
         """
+        if getattr(self, "updates", None) is not None and self.updates.blocked():
+            return
         if self.api_key_revoke_running:
             messagebox.showwarning("Connection", "Wait for API-key revocation to finish before starting manual import.")
             return
@@ -5175,6 +5210,8 @@ class WatcherApp:
         PyTorch and Transformers are large packages and may also cause model
         downloads later. Installation is therefore explicit and confirmed.
         """
+        if getattr(self, "updates", None) is not None and self.updates.blocked():
+            return
         if getattr(sys, "frozen", False):
             _ok, output = install_semantic_ai_dependencies_for_current_runtime()
             messagebox.showinfo("Local AI module", output)
@@ -5209,6 +5246,8 @@ class WatcherApp:
         """
         Start the optional AI metadata worker using current shared connection fields.
         """
+        if getattr(self, "updates", None) is not None and self.updates.blocked():
+            return
         if self.api_key_revoke_running:
             messagebox.showwarning("Connection", "Wait for API-key revocation to finish before starting the AI metadata worker.")
             return
@@ -5327,6 +5366,8 @@ class WatcherApp:
         The dialog works with temporary values until Save or Save & Test is
         pressed, so closing it cannot accidentally replace a working key.
         """
+        if getattr(self, "updates", None) is not None and self.updates.blocked():
+            return
         self.restore_from_tray()
         dialog = tk.Toplevel(self.root)
         dialog.title("Gallery connection and API key")
@@ -5371,6 +5412,8 @@ class WatcherApp:
 
         def apply_values(test_after: bool) -> None:
             """Validate, store, and optionally test temporary connection values."""
+            if self.updates.blocked():
+                return
             if self.api_key_revoke_running:
                 messagebox.showwarning("Connection", "Wait for API-key revocation to finish before changing credentials.", parent=dialog)
                 return
@@ -5415,6 +5458,8 @@ class WatcherApp:
         authenticated request with the key. The key is cleared locally only
         after the server confirms revocation.
         """
+        if getattr(self, "updates", None) is not None and self.updates.blocked():
+            return
         if self.api_key_revoke_running:
             messagebox.showinfo("Revoke API key", "API-key revocation is already in progress.")
             return
@@ -5464,6 +5509,8 @@ class WatcherApp:
         """
         Coordinate shutdown with bounded worker waits and preserve recoverable state.
         """
+        if getattr(self, "updates", None) is not None and self.updates.request_close():
+            return
         if self.api_key_revoke_running:
             messagebox.showwarning("API-key revocation", "Wait for API-key revocation to finish before closing the app. This prevents a server-revoked key from remaining stored locally.")
             return
@@ -5595,6 +5642,8 @@ class WatcherApp:
 
     def test_connection(self) -> None:
         """Perform a minimal authenticated inventory request without uploading files."""
+        if getattr(self, "updates", None) is not None and self.updates.blocked():
+            return
         if self.api_key_revoke_running:
             messagebox.showwarning("Connection", "Wait for API-key revocation to finish before testing the connection.")
             return
@@ -5650,6 +5699,8 @@ class WatcherApp:
 
     def launch_manual_job(self, job: ImportJob, paths: List[Path], config: WatcherConfig) -> None:
         """Launch one durable manual-import job over the supplied recoverable paths."""
+        if getattr(self, "updates", None) is not None and self.updates.blocked():
+            return
         if not paths:
             return
         use_local_thumbnails = bool(self.manual_local_thumbnails_var.get()) and local_thumbnail_supported()
@@ -5692,6 +5743,8 @@ class WatcherApp:
 
     def resume_manual_upload(self) -> None:
         """Resume a paused manual import."""
+        if getattr(self, "updates", None) is not None and self.updates.blocked():
+            return
         if self.manual_worker and self.manual_worker.is_alive():
             self.manual_worker.resume()
             self.manual_status_var.set("Import running")
@@ -5701,6 +5754,8 @@ class WatcherApp:
 
     def retry_failed_import(self) -> None:
         """Explicitly retry failed/cancelled or crash-interrupted items in the selected job."""
+        if getattr(self, "updates", None) is not None and self.updates.blocked():
+            return
         if self.api_key_revoke_running:
             messagebox.showwarning("Connection", "Wait for API-key revocation to finish before retrying an import.")
             return

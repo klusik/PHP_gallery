@@ -190,7 +190,7 @@ class InstallerBuildTests(unittest.TestCase):
         """
         script = (BUILD.WINAPP_DIR / "installer.iss").read_text(encoding="utf-8")
         for required in (
-            "CloseApplications=force", "CloseApplicationsFilter=PHPGalleryUploader.exe",
+            "CloseApplications=no", "CloseApplicationsFilter=PHPGalleryUploader.exe",
             "RestartApplications=no", "function PrepareToInstall(var NeedsRestart: Boolean): String;",
             "TargetPath := ExpandFileName(ExpandConstant('{app}\\PHPGalleryUploader.exe'))",
             "CompareText(ExpandFileName(ProcessPath), TargetPath) = 0",
@@ -205,6 +205,17 @@ class InstallerBuildTests(unittest.TestCase):
         self.assertNotIn("taskkill", script.lower())
         self.assertNotIn("GetExceptionMessage", script)
         self.assertNotIn("WizardSilent", script)
+
+    def test_self_update_refuses_running_uploader_and_uses_scoped_progress_pipe(self) -> None:
+        """Separate graceful self-update from the direct install force-stop path."""
+        script = (BUILD.WINAPP_DIR / "installer.iss").read_text(encoding="utf-8")
+        self.assertIn("if not IsSelfUpdate then\n      InspectUploaderProcesses(Services, TargetPath, True)", script)
+        self.assertIn("'{param:SELFUPDATE|0}'", script)
+        self.assertIn("'{param:UPDATESTATUS|}'", script)
+        self.assertIn("PHPGalleryUploaderUpdate-", script)
+        self.assertIn("Length(SessionName) <> 32", script)
+        self.assertIn("procedure CurInstallProgressChanged", script)
+        self.assertNotIn("SaveStringToFile", script)
 
     def test_invalid_runtime_stops_before_build_tools(self):
         """Reject damaged, wrong-architecture, or incomplete DLLs before staging."""
