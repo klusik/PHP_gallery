@@ -96,6 +96,25 @@ installation, an uploader copy in another directory, and refusal when shutdown
 or WMI verification is unavailable. Compilation/source contracts do not prove
 live shutdown behavior; WMI query latency is controlled by Windows.
 
+Self-update regression uses fake releases/transports to cover numeric versions
+across paginated CMS releases, stable filtering, identical/conflicting duplicates,
+highest-version missing hashes, metadata/URL limits, same-release manifests,
+streaming hash/size refusal, cancellation and unrelated partial-file preservation.
+UI/helper fixtures exercise hourly scheduling, safe drain, ticket ownership, exact
+target identity and elevated installation. AST contracts enforce documented,
+typed definitions and absence of future imports in new updater modules/tests.
+The central WinApp suite owns these checks; tests never download a live installer.
+
+Manual installed-Windows acceptance covers automatic/manual checks, UAC acceptance
+and cancellation, a running/tray uploader and both onefile processes, active
+uploads/watchers/media preparation, worker-drain timeout, genuine installer
+progress, disconnects, and restart as the original user with saved settings/jobs.
+Self-update must refuse replacement while the exact installed process remains,
+preserve unrelated copies and never force-kill workers. Verify native Python/source
+mode's manual installer workflow. Installation failure has no automatic rollback.
+Fakes/source contracts do not establish live UAC, pipe progress or target-machine
+process behavior.
+
 Real-simulator acceptance requires separate Windows runs with MSFS 2020 and
 MSFS 2024: capture a watched screenshot during a flight, confirm provider/source
 and degrees/feet in logs, and verify the uploaded image's map position. In 2024,

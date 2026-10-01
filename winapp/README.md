@@ -4,7 +4,44 @@ The Windows companion app is a desktop import client for one PHP Gallery target 
 
 The application keeps the existing `gallery_watch_upload.pyw` launcher, `run_gallery_watcher.bat`, and `--once` compatibility. Normal operation needs only Python plus the lightweight dependencies in `requirements.txt`.
 
-## Windows installer (winapp 0.2.0)
+## Updating the Windows application
+
+The application checks public GitHub releases at startup and at most once hourly
+while it remains open. **Check for updates** also runs an explicit check. Checks
+use no Gallery API key; their timestamp and any available offer are stored
+separately in `%LOCALAPPDATA%\PHPGalleryUploader\updates`, so restarting within
+the hourly interval can still display an already discovered update.
+
+Discovery examines paginated releases for the highest newer
+`PHPGalleryUploader-X.Y.Z-Setup.exe` asset. CMS release tags are not the uploader
+version. The highest candidate must have a trusted published SHA-256 digest;
+missing digest information refuses the update rather than selecting an older
+installer. Downloaded bytes, file size and SHA-256 are verified before Setup is
+allowed to run. This verifies consistency with the GitHub release metadata; it
+is not an independent publisher code-signing guarantee. Older release assets
+without digest metadata may therefore require a manual installer download.
+
+The nonmodal notice offers **Update** and **Later**. Update downloads with actual
+byte progress and **Cancel download**, verifies the installer, then safely stops
+new work and waits for uploads, thumbnail workers, preflight, AI analysis,
+connection tests, key revocation and dependency repair to finish. Tk stays
+responsive. A drain timeout refuses installation and leaves the app usable.
+Update shutdown does not save unsaved Settings fields. Import workers preserve
+recoverable job state through their ordinary stop path; saved credentials,
+settings and job data remain under `%APPDATA%\PHPGalleryUploader`.
+
+For the installed standalone EXE, a copied external helper acknowledges readiness
+before the application completely exits, including its tray icon. The helper
+waits for both PyInstaller processes from that installation to exit, invokes
+Setup with the existing installation directory, and verifies the installed
+version before restarting the app. Windows may request administrator approval.
+Canceling that approval keeps the old application and permits its restart.
+Source-mode Python runs can check and download updates, but offer **Open installer**
+for manual installation and never overwrite the Python source folder. Only a
+frozen `PHPGalleryUploader.exe` outside a PyInstaller extraction directory is
+eligible for automatic handoff; helper validation also protects the target path.
+
+## Windows installer (winapp 0.3.0)
 
 The companion app has its own version in `winapp/VERSION`, independent of the PHP
 Gallery CMS release. The installer includes Python, Tkinter, Pillow, pystray,
@@ -45,13 +82,33 @@ python winapp\build_installer.py --use-installed-dependencies
 
 This mode verifies the installed dependency versions and keeps all intermediate
 files and caches in the same disposable staging directory.
-The only published build artifact is:
+The build script produces this installer:
 
 ```text
-winapp/dist/PHPGalleryUploader-0.2.0-Setup.exe
+winapp/dist/PHPGalleryUploader-0.3.0-Setup.exe
 ```
 
-The installer is unsigned and may be uploaded manually to GitHub Releases.
+The build script produces only this EXE. Attach it to the same GitHub release as
+the CMS release. The script does not generate or upload the optional metadata
+file. You can also attach `winapp-update.json` to that same release to provide
+trusted installer metadata when GitHub's asset digest is unavailable. Its schema is:
+
+```json
+{
+  "assets": [
+    {
+      "name": "PHPGalleryUploader-0.3.0-Setup.exe",
+      "version": "0.3.0",
+      "size": 12345678,
+      "sha256": "<64-character hexadecimal SHA-256 digest>"
+    }
+  ]
+}
+```
+
+The app checks for updates at startup and then at most once per hour while it
+remains open. The installer is unsigned and may be uploaded manually to GitHub
+Releases.
 The script never changes CMS version markers or publishes a release. A failed
 build returns a nonzero exit code and preserves any previous successful installer.
 Its unique `winapp/.build-*` staging directory (virtual environment, downloads,
@@ -505,25 +562,36 @@ winapp/uploader/
   discovery.py
   media.py
   models.py
+  self_update.py
   state_store.py
+  update_helper.py
+  update_ui.py
 ```
 
-This keeps versioned persistence, ZIP safety, media capability detection, job models, and diagnostic redaction independent from Tkinter while preserving the existing launcher and deployment workflow.
+This keeps versioned persistence, ZIP safety, media capability detection, job models, and diagnostic redaction independent from Tkinter. `self_update.py` owns release discovery, verified downloads and download-session storage; `update_helper.py` owns external installer handoff; `update_ui.py` coordinates the nonmodal notice and safe worker drain.
 
 ## Verification
 
-Compile all Windows uploader Python files:
+Use the central audit from the repository root. During implementation, run quick
+when a verification pass is useful; run full once before handing off changes:
 
 ```bat
-python -m py_compile winapp\gallery_watch_upload.pyw winapp\uploader\*.py winapp\tests\*.py
+php scripts/audit.php --profile=quick
+php scripts/audit.php --profile=full
 ```
 
-Run the deterministic redesign tests from repository root:
+For release preparation, follow `RELEASE.md` and use the release audit profile
+instead. The central runner owns Python tests and syntax validation as well as
+PHP regression checks. Read its compact summary first.
+
+Direct Python commands are reserved for diagnosing a specific reported failure
+or developing a new test before registration. For example:
 
 ```bat
-python -m unittest discover -s winapp\tests -v
+python -m py_compile winapp\uploader\update_ui.py
+python -m unittest discover -s winapp\tests -p test_update_ui.py -v
 ```
 
-The tests do not require a live gallery. They cover configuration/state migration, redaction, URL normalization, file stability, dedup/retry state, ZIP safety and cleanup, HEIC/DNG capability behavior, durable jobs, pause/cancel controls, SimConnect-unavailable handling, AI shutdown isolation, and tray callback scheduling.
+The tests do not require a live gallery. They cover configuration/state migration, redaction, URL normalization, file stability, dedup/retry state, ZIP safety and cleanup, HEIC/DNG capability behavior, durable jobs, pause/cancel controls, SimConnect-unavailable handling, AI shutdown isolation, tray callback scheduling, update integrity, cancellation, worker admission and helper readiness.
 
 For a release build, also smoke-test on Windows with the real target gallery, tray, local thumbnail runtime, optional SimConnect, and any intentionally enabled AI backend.

@@ -379,6 +379,10 @@ The Gallery tags Theme subsection is rendered by app/controllers/admin_theme.php
 | Token model | `app/services/upload_automation.php`, table `gallery_upload_tokens` |
 | Windows watcher | `winapp/gallery_watch_upload.pyw` |
 | Windows watcher installer | `winapp/install.bat`, `winapp/run_gallery_watcher.bat` |
+| Uploader release discovery and verified download | `winapp/uploader/self_update.py`, `winapp/tests/test_self_update.py` |
+| Update scheduling, progress and worker drain | `winapp/uploader/update_ui.py`, `winapp/gallery_watch_upload.pyw`, `winapp/tests/test_update_ui.py` |
+| External helper and installer progress | `winapp/uploader/update_helper.py`, `winapp/installer.iss`, `winapp/tests/test_update_helper.py` |
+| Updater documentation/type contracts | `winapp/tests/test_self_update_source_contracts.py` |
 
 ## Telemetry and Observability
 
