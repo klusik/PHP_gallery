@@ -1,5 +1,63 @@
 # Patch notes
 
+## Version 0.114
+
+Version 0.114 introduces verified self-updates for the independent Windows uploader 0.3.0. It discovers newer stable installers across CMS releases, verifies downloads and waits for background work to stop safely before handing installation to Windows.
+
+### Highlights
+
+#### Windows uploader updates
+
+- Added automatic update checks at startup and at most hourly, with a persisted per-user attempt timestamp and a manual **Check for updates** action.
+- Added a nonmodal **Update / Later** offer, actual download progress and download cancellation.
+- Verified installer size and SHA-256 before installation; refused missing or conflicting integrity metadata for the highest newer version.
+- Preserved saved settings and recoverable jobs while waiting up to 120 seconds for background workers to finish safely.
+- Added an external installation helper, Windows UAC handoff, actual installer progress and restart as the original user after successful version verification.
+
+### Technical Details
+
+#### Windows companion
+
+- Added `winapp/uploader/self_update.py` for bounded paginated GitHub discovery, numeric installer versions, HTTPS URL validation and verified streaming downloads.
+- Accepted GitHub asset digests or matching same-release `winapp-update.json` metadata; accepted duplicate installers only when their size and SHA-256 agree.
+- Added `winapp/uploader/update_ui.py` for scheduling, cancellation, progress and safe worker drain, and `winapp/uploader/update_helper.py` for independent ticket/download verification and exact installation-path process checks.
+- Updated `winapp/gallery_watch_upload.pyw` to block new work during update handoff and `winapp/installer.iss` to refuse self-update while target processes remain, without force-closing workers.
+- Updated standalone build/version metadata to WinApp `0.3.0`; kept CMS and companion versions independent.
+
+#### Backend, database and frontend compatibility
+
+- Added no CMS route, setting, capability, database migration, table or column.
+- Preserved public gallery rendering, authorized media access and existing Admin workflows.
+- Kept gallery credentials out of GitHub requests and preserved unrelated uploader copies and download files.
+- Preserved manual installer launch for native Python/source runs and existing shutdown behavior for directly launched installers.
+- Reopened the existing application after UAC cancellation; required a Windows restart when Setup returns restart-required status. Added no automatic rollback.
+
+#### Tests
+
+- Added `winapp/tests/test_self_update.py` for release selection, digest/URL limits, duplicate handling, download verification and cancellation.
+- Added `winapp/tests/test_update_helper.py` and `winapp/tests/test_update_ui.py` for scheduling, worker drain, ticket ownership, installation handoff and progress.
+- Added `winapp/tests/test_self_update_source_contracts.py` and extended `winapp/tests/test_build_installer.py` for updater source and installer contracts.
+- Documented installed-Windows acceptance in `TESTING.md`; fake transports and source contracts do not replace live UAC, process shutdown, installation and simulator checks.
+
+#### Documentation and release artifacts
+
+- Updated `README.md`, `ARCHITECTURE.md`, `CODEMAP.md` and `winapp/README.md` with updater ownership, security and operational behavior.
+- Aligned all four manual editions with CMS `0.114` and Windows uploader `0.3.0`, and rebuilt their PDFs.
+- Updated registered release markers and `release-metadata.json` for `v_0.114` and refreshed `app/core-manifest.json`.
+
+### User Impact
+
+#### For administrators
+
+- Added verified Windows uploader updates without a separate Python installation for standalone users.
+- Required no new CMS configuration or database migration.
+- Kept existing settings and jobs through upgrades; unsaved Settings fields must be saved before updating.
+- Required publication of the uploader installer with trusted digest metadata before automatic discovery can offer it.
+
+#### For visitors
+
+- Preserved existing public gallery and media behavior.
+
 ## Version 0.113.2
 
 Version 0.113.2 makes the Admin Updates page more compact and refreshes the installed version and release status in place when an update finishes. It preserves existing updater jobs, recovery controls and public gallery behavior.

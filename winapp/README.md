@@ -52,13 +52,15 @@ need Python. Installation requests administrator rights and defaults to
 desktop shortcut for all users, and a normal Windows uninstaller. Existing settings and jobs
 in `%APPDATA%\PHPGalleryUploader` survive upgrades and uninstalling.
 
-Before installation/update replaces files, Setup forcibly closes running uploader
-processes whose executable path matches the selected installation directory,
-including the tray app and PyInstaller's onefile parent/child processes. It
-checks the fresh process list for up to three seconds and refuses installation
-if shutdown cannot be verified. Copies running from another directory are not
-terminated. This check also applies to silent installation. Restart Manager
-provides a secondary file-lock check; the final launch checkbox controls relaunch.
+Directly launched Setup closes uploader processes whose executable path matches
+its selected installation directory, including the tray app and PyInstaller's
+onefile parent/child processes. Self-update never force-closes these processes:
+it waits for safe worker drain and refuses replacement while an exact-path
+process remains. Setup checks the fresh process list for up to three seconds
+and refuses installation if shutdown cannot be verified. Copies running from
+another directory are untouched. These checks also apply to silent installation.
+File locks remain a secondary safeguard; the final launch checkbox controls
+relaunch for a directly launched installer.
 
 To build on Windows, install x64 Python 3.10+ with Tkinter and Inno Setup 6.3+
 (including Inno Setup 7), then run from the repository root:
