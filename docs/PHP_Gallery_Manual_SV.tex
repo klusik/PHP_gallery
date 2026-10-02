@@ -63,8 +63,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.114}
-\newcommand{\manualdate}{1~oktober~2026}
+\newcommand{\version}{0.114.1}
+\newcommand{\manualdate}{2~oktober~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -634,7 +634,9 @@ Efter aktivering öppnas gemensamma fotografier från panelen eller länken i de
 Återkallat deltagande, ändrat källskydd och lokalt återkallad vänskap blockerar efterföljande auktoriserade läsningar. Onåbara deltagare begränsas till högst 120 sekunders verifieringsgiltighet; redan hämtade pixlar kan inte återkallas. Nya deltagare kräver ett separat förslag med nytt godkännande från alla. Teknisk förnyelse kan ske vid användning; schemaläggning är valfri. Saknat eller okänt obligatoriskt schema avvisar delning och ändringar. Se \filepath{docs/COOPERATIVE_GALLERIES.md} för driftsgränser.
 
 \subsection{Simulatorposition i Windows}
-WinApp 0.3.0 använder automatiskt kamerans världsposition i MSFS 2024 och faller tillbaka till flygplanets position vid ett begränsat kamerafel. MSFS 2020 använder direkt flygplanets position genom samma SimConnect-runtime. Koordinater är valfria; en otillgänglig simulator stoppar inte uppladdningen. Diagnostiken skiljer mellan positionskällorna. Installationsprogrammet begär att programmet avslutas före filbyte. Slutför pågående arbete före uppdatering. Verifiera verkliga simulatorer och uppgradering på måldatorn.
+WinApp 0.3.1 använder automatiskt kamerans världsposition i MSFS 2024 och faller tillbaka till flygplanets position vid ett begränsat kamerafel. MSFS 2020 använder direkt flygplanets position genom samma SimConnect-runtime. Koordinater är valfria; en otillgänglig simulator stoppar inte uppladdningen. Diagnostiken skiljer mellan positionskällorna. Installationsprogrammet begär att programmet avslutas före filbyte. Slutför pågående arbete före uppdatering. Verifiera verkliga simulatorer och uppgradering på måldatorn.
+
+Flygplanssvar kopplas till begärans och definitionens identifierare; begärans USER-väljare kräver inte att svarets objektidentifierare är noll. Begränsad diagnostik registrerar mottagningsmetadata, behandlingsordning och konkreta skäl till avvisade paket. Felorsaker förblir läsbara efter sökvägsredigering och aktivitetsmeddelanden visar en enda SimConnect-markering. Objektidentifierarfiltret var ett bekräftat kodfel, men det rapporterade FS2020-tidsfelet registrerade inte den returnerade objektidentifieraren. Testa korrigeringen på den berörda datorn; simulerade tester bevisar inte ett verkligt simulatorresultat.
 
 Den installerade uppladdaren kontrollerar sin egen stabila GitHub-installationsversion högst en gång per timme; \ui{Check for updates} startar en manuell kontroll. Det senaste automatiska försöket sparas separat för den aktuella användaren och finns kvar efter programomstart. CMS-taggar bestämmer inte dess version. Den högsta numeriska versionen kräver SHA256 från GitHub-filen eller en matchande \filepath{winapp-update.json} från samma utgåva. Saknade eller motstridiga uppgifter stoppar uppdateringen; identiska installationsprogram i flera CMS-utgåvor accepteras. Galleriets inloggningsuppgifter skickas aldrig till GitHub.
 
@@ -895,7 +897,9 @@ Webbläsarstödd skapande och uppladdning har ytterligare skydd. Att välja webb
 \subsection{Centralt inställningsnav}
 \index{i00126@Inställningar!c00045@centralt nav}
 
-Administrationens navigering innehåller en central sida \textbf{Inställningar} för webbplatsövergripande konfiguration. Den är uppdelad i Allmänt, Webbplatsadress, Offentligt utseende, Innehåll, Medier och bläddring, Uppladdningar och automatisering, Integritet och diagnostik samt Avancerat. Varje avsnitt har en egen stabil adress, så uppdatering, bokmärken, webbläsarhistorik och reservflödet utan JavaScript återgår till samma kategori.
+Administrationens navigering innehåller en central sida \textbf{Inställningar} för webbplatsövergripande konfiguration. Allmänt samlar webbplatsadress, namn, administrationsspråk, offentligt språk och navigering. Övriga avsnitt omfattar Offentligt utseende, Innehåll, Medier och bläddring, Uppladdningar och automatisering, Integritet och diagnostik samt Avancerat. Äldre länkar för webbplatsadress leder till Allmänt. Stabila avsnittslänkar och vanliga formulär fungerar utan JavaScript.
+
+Med JavaScript laddas avsnitten när de öppnas och sparas på plats. En fast sparrad visar ändrade inställningar och erbjuder att spara eller återställa utkastet. Avancerade sammanfattningar förblir hopfällda. Ändringar av adress eller administrationsspråk erbjuder en uttrycklig länk till den nya adressen eller språket. Administrationspanelen visar först sitt gränssnitt och laddar sedan Översiktens summor eller gallerilistan vid behov; misslyckade läsningar kan upprepas. Översikten räknar indexerade original utan filskanning eller sökning efter omslagsbilder.
 
 Ett Spotlight-liknande fält söker bland inställningar medan du skriver. Det matchar namn, beskrivningar, kategorier och tekniska namn, inklusive kontroller som ägs av specialiserade administrationssidor. När du väljer ett resultat öppnas relevant avsnitt eller specialsida och matchande kontroll får fokus. Piltangenter, Enter, Escape och rensningsknappen kan användas utan att lämna tangentbordet.
 
@@ -923,7 +927,7 @@ Vid sparande valideras aktuella inställningar igen. Om en annan session har än
 \index{i00126@Inställningar!w00269@webbplatsadress}
 \index{k00136@konfiguration!b00020@bas-URL}
 
-Öppna \ui{Inställningar > Webbplatsadress} för att rätta installationens offentliga URL efter installationen. Ange en absolut HTTP- eller HTTPS-adress, t.ex. \url{https://example.com}. Ta bara med en sökväg när galleriet faktiskt är installerat i den undermappen. Om webbhotellets identifiering lade till en oönskad mapp tar du bort den från fältet och sparar.
+Öppna \ui{Inställningar > Allmänt} för att rätta installationens offentliga URL efter installationen. Ange en absolut HTTP- eller HTTPS-adress, t.ex. \url{https://example.com}. Ta bara med en sökväg när galleriet faktiskt är installerat i den undermappen. Om webbhotellets identifiering lade till en oönskad mapp tar du bort den från fältet och sparar.
 
 Sparandet ändrar endast strängen \codeword{base_url} på översta nivån i \filepath{config.php}; det skapar eller ändrar ingen databasinställning. Andra konfigurationsvärden, kommentarer och formatering bevaras. Både filen och mappen som innehåller den måste vara skrivbara. Programmet avvisar adresser med inloggningsuppgifter, frågeparametrar eller fragment och vägrar skriva om dubblerade eller beräknade konfigurationsvärden. Redigera en anpassad konfiguration manuellt när den inte kan uppdateras säkert.
 

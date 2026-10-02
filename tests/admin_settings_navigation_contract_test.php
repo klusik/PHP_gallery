@@ -69,7 +69,7 @@ $expectations = [
     ['settings_controller', "admin_settings_url(\$sectionId, null, false)", 'Settings tabs receive fragment-free URLs that do not force a mid-page browser jump'],
     ['settings_controller', "redirect_to(admin_settings_url(\$section, null, false))", 'Settings save redirect preserves the active section without forcing a mid-page browser jump'],
     ['settings_view', "(string) (\$section['tab_url'] ?? \$section['url'] ?? '')", 'section tabs consume controller-prepared fragment-free URLs'],
-    ['settings_view', 'data-admin-tabs-url-mode="href"', 'Settings href-history tab mode'],
+    ['settings_view', 'data-admin-settings-navigation', 'Settings owns category navigation without changing other Admin tab groups'],
     ['tabs_js', "urlMode === 'href'", 'opt-in href-history support in reusable Admin tabs'],
     ['account', "admin_settings_url('advanced')", 'Account to central Advanced link'],
     ['dashboard', "admin_settings_url('media')", 'Dashboard EXIF/GPS to central Media link'],

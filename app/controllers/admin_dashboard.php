@@ -45,6 +45,7 @@ use function Gallery\Core\redirect_to;
 use function Gallery\Core\render_footer;
 use function Gallery\Core\request_method;
 use function Gallery\Core\current_user;
+use function Gallery\Core\csrf_token;
 use function Gallery\Core\require_admin;
 use function Gallery\Core\run_migrations;
 use function Gallery\Core\url_for;
@@ -87,6 +88,8 @@ use function Gallery\Services\set_url_rewrite_enabled;
 use function Gallery\Services\t;
 use function Gallery\Views\view_admin_storage_snapshot_status;
 use function Gallery\Views\view_render_admin_dashboard;
+use function Gallery\Views\view_render_admin_dashboard_galleries_panel;
+use function Gallery\Views\view_render_admin_dashboard_summary;
 use function Gallery\Views\view_render_admin_render_profile_panel;
 use function Gallery\Views\view_render_admin_dashboard_maintenance_panel;
 use function Gallery\Views\view_render_admin_devmode_panel;
@@ -100,6 +103,7 @@ use function Gallery\Services\admin_log_event;
 
 /**
  * Render the main Admin dashboard.
+ * @return void Outputs the authenticated dashboard shell or an explicitly requested tab.
  */
 function cms_admin(): void
 {
@@ -109,16 +113,74 @@ function cms_admin(): void
     // immediately usable and does not depend on a second deferred AJAX request succeeding.
     $requestedMaintenanceTab = strtolower(trim((string) ($_GET['maintenance_tab'] ?? '')));
     $maintenanceDeepLink = in_array($requestedMaintenanceTab, ['content', 'media', 'navigation', 'system', 'trash'], true);
-    $dashboardModel = admin_dashboard_view_model($maintenanceDeepLink);
+    $requestedTab = (string) ($_GET['dashboard_tab'] ?? '');
+    $activeTab = $maintenanceDeepLink || $requestedTab === 'maintenance' ? 'maintenance'
+        : ($requestedTab === 'galleries' ? 'galleries' : 'overview');
+    $maintenanceLoaded = $maintenanceDeepLink || $activeTab === 'maintenance';
+    // Explicit URLs also serve no-JavaScript navigation; ordinary Overview paints before totals are read.
+    $surface = $activeTab === 'galleries' ? 'galleries' : ($requestedTab === 'overview' ? 'overview' : 'shell');
+    $dashboardModel = admin_dashboard_view_model($maintenanceLoaded, $surface);
+    $dashboardModel['active_tab'] = $activeTab;
     $dashboardUser = current_user();
     $dashboardActorId = is_array($dashboardUser) ? max(0, (int) ($dashboardUser['id'] ?? 0)) : 0;
     $dashboardModel['maintenance_center_status'] = maintenance_center_dashboard_status($dashboardActorId > 0 ? $dashboardActorId : null);
-    $dashboardModel['maintenance_loaded'] = $maintenanceDeepLink;
+    $dashboardModel['maintenance_loaded'] = $maintenanceLoaded;
     $dashboardModel['requested_maintenance_tab'] = $requestedMaintenanceTab;
     $dashboardModel['notices'] = admin_dashboard_notice_messages($_GET, (string) flash_message('admin_notice'));
     admin_render_profile_span('render_dashboard', static function () use ($dashboardModel): void { view_render_admin_dashboard($dashboardModel); });
-    view_render_admin_render_profile_panel(admin_render_profile_panel_model());
+    view_render_admin_render_profile_panel(admin_render_profile_panel_model(), false);
     admin_render_profile_span('render_footer', static function (): void { render_footer(); });
+}
+
+/**
+ * Render one read-only dashboard fragment after its tab becomes visible.
+ *
+ * @return void Emits authenticated JSON containing prepared HTML, or a bounded retryable error.
+ */
+function cms_admin_dashboard_fragment(): void
+{
+    require_admin();
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: private, no-store');
+    if (request_method() !== 'GET') {
+        header('Allow: GET');
+        http_response_code(405);
+        echo json_encode(['ok' => false]);
+        return;
+    }
+    $surface = (string) ($_GET['surface'] ?? '');
+    if (!in_array($surface, ['overview', 'galleries'], true)) {
+        http_response_code(400);
+        echo json_encode(['ok' => false]);
+        return;
+    }
+    // Persist the form token before releasing the session so background reads never hold up other tabs/actions.
+    csrf_token();
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        session_write_close();
+    }
+    $bufferLevel = ob_get_level();
+    try {
+        $model = admin_dashboard_view_model(false, $surface);
+        ob_start();
+        if ($surface === 'galleries') {
+            view_render_admin_dashboard_galleries_panel($model);
+        } else {
+            view_render_admin_dashboard_summary($model);
+        }
+        $html = (string) ob_get_clean();
+        echo json_encode(['ok' => true, 'html' => $html, 'total_galleries' => $model['total_galleries']], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+    } catch (Throwable $exception) {
+        while (ob_get_level() > $bufferLevel) {
+            ob_end_clean();
+        }
+        http_response_code(503);
+        admin_log_event('warning', 'admin.dashboard_fragment_failed', 'Dashboard summary or gallery list is temporarily unavailable.', [
+            'surface' => $surface,
+            'exception_class' => $exception::class,
+        ], ['category' => 'admin', 'severity' => 'warning']);
+        echo json_encode(['ok' => false, 'error' => t('admin.dashboard.load_failed', 'Could not load this section. Try again.')], JSON_UNESCAPED_UNICODE);
+    }
 }
 
 /**
@@ -126,6 +188,7 @@ function cms_admin(): void
  *
  * This endpoint keeps database metadata, navdata, and maintenance status
  * queries out of the initial dashboard navigation request.
+ * @return void Emits the authenticated Maintenance HTML in a JSON response.
  */
 function cms_admin_dashboard_maintenance(): void
 {
@@ -133,7 +196,7 @@ function cms_admin_dashboard_maintenance(): void
     header('Content-Type: application/json; charset=utf-8');
     $bufferLevel = ob_get_level();
     try {
-        $model = admin_dashboard_view_model(true);
+        $model = admin_dashboard_view_model(true, 'shell');
         $requestedMaintenanceTab = strtolower(trim((string) ($_GET['maintenance_tab'] ?? '')));
         $model['requested_maintenance_tab'] = in_array($requestedMaintenanceTab, ['content', 'media', 'navigation', 'system', 'trash'], true) ? $requestedMaintenanceTab : '';
         ob_start();

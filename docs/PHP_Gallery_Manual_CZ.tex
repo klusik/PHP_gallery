@@ -63,8 +63,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.114}
-\newcommand{\manualdate}{1.~října~2026}
+\newcommand{\version}{0.114.1}
+\newcommand{\manualdate}{2.~října~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -634,7 +634,9 @@ Po aktivaci otevřete sdílené fotografie z~panelu nebo odkazu v~místním albu
 Odvolání účasti, změna ochrany nebo místní zrušení přátelství blokuje další autorizovaná čtení. Nedostupný server je omezen nejvýše 120 sekundami platnosti ověření; již stažené pixely nelze odvolat. Přidání účastníka vytváří samostatný návrh vyžadující nový souhlas všech. Obnova ověření může probíhat při používání; plánovač je volitelný. Chybějící nebo neznámé povinné schéma odmítá sdílení i~mutace. Podrobnosti a~omezení nasazení uvádí \filepath{docs/COOPERATIVE_GALLERIES.md}.
 
 \subsection{Poloha simulátoru ve Windows}
-WinApp 0.3.0 automaticky používá světovou polohu kamery MSFS 2024 a~při omezeném selhání přechází na polohu letadla. MSFS 2020 používá přímo polohu letadla přes stejný SimConnect. Souřadnice jsou volitelné; nedostupný simulátor neblokuje nahrávání. Diagnostika rozlišuje zdroj polohy. Instalátor požaduje ukončení aplikace před výměnou souborů; před aktualizací dokončete rozpracované úlohy. Skutečný simulátor a~aktualizaci ověřte na cílovém PC.
+WinApp 0.3.1 automaticky používá světovou polohu kamery MSFS 2024 a~při omezeném selhání přechází na polohu letadla. MSFS 2020 používá přímo polohu letadla přes stejný SimConnect. Souřadnice jsou volitelné; nedostupný simulátor neblokuje nahrávání. Diagnostika rozlišuje zdroj polohy. Instalátor požaduje ukončení aplikace před výměnou souborů; před aktualizací dokončete rozpracované úlohy. Skutečný simulátor a~aktualizaci ověřte na cílovém PC.
+
+Odpovědi s~polohou letadla se přiřazují podle identifikátorů požadavku a~definice; volba USER v~požadavku nevyžaduje nulový identifikátor objektu v~odpovědi. Omezená diagnostika zaznamenává metadata příjmu, pořadí zpracování a~konkrétní důvody odmítnutí paketů. Důvody selhání zůstávají čitelné po skrytí cest a~zprávy aktivity zobrazují jedinou značku SimConnect. Filtr identifikátoru objektu byl potvrzenou chybou kódu, ale hlášený timeout FS2020 vrácený identifikátor nezaznamenal. Ověřte opravu na dotčeném PC; simulované testy neprokazují skutečný výsledek.
 
 Nainstalovaný nahrávač kontroluje vlastní stabilní verzi instalátoru na GitHubu nejvýše jednou za hodinu; \ui{Check for updates} spustí ruční kontrolu. Poslední automatický pokus se ukládá samostatně pro aktuálního uživatele a~přetrvá restart aplikace. Verzi neurčují značky vydání CMS. Nejvyšší číselná verze vyžaduje SHA256 ze souboru GitHubu nebo odpovídajícího \filepath{winapp-update.json} stejného vydání. Chybějící či rozporné údaje aktualizaci odmítnou; shodné instalátory ve více vydáních CMS jsou přijímány. Přihlašovací údaje galerie se na GitHub neposílají.
 
@@ -895,7 +897,9 @@ Vytváření a~nahrávání s~pomocí prohlížeče má další ochrany. Výběr
 \subsection{Centrální centrum Nastavení}
 \index{n00099@Nastavení!c00015@centrální centrum}
 
-Navigace administrace obsahuje centrální stránku \textbf{Nastavení} pro konfiguraci celého webu. Je rozdělena na Obecné, Adresa webu, Veřejný vzhled, Obsah, Média a~prohlížení, Nahrávání a~automatizace, Soukromí a~diagnostika a~Pokročilé. Každý oddíl má vlastní stabilní adresu, takže obnovení, záložky, historie prohlížeče i~náhradní postup bez JavaScriptu se vracejí do stejné kategorie.
+Navigace administrace obsahuje centrální stránku \textbf{Nastavení} pro konfiguraci celého webu. Obecné nyní sdružuje adresu webu, název, jazyk administrace a~veřejné části i~navigaci. Další sekce zahrnují Veřejný vzhled, Obsah, Média a~prohlížení, Nahrávání a~automatizaci, Soukromí a~diagnostiku a~Pokročilé. Starší odkazy na Adresu webu vedou do Obecných. Stabilní odkazy a~běžné formuláře fungují i~bez JavaScriptu.
+
+S~JavaScriptem se sekce načítají při otevření a~ukládají na místě. Přichycená lišta ukazuje počet změněných nastavení a~nabízí uložení nebo vrácení rozepsaných změn. Pokročilé souhrny zůstávají sbalené. Změna adresy či jazyka administrace nabídne výslovný odkaz na novou adresu nebo jazyk. Úvodní stránka administrace nejprve zobrazí rozhraní, poté podle potřeby načte souhrny Přehledu nebo seznam Galerií; selhání nabízí opakování. Přehled počítá indexované originály bez procházení souborů a~hledání titulních fotografií.
 
 Pole ve stylu Spotlight vyhledává nastavení během psaní. Porovnává názvy, popisy, kategorie a~technické názvy včetně ovládacích prvků vlastněných specializovanými stránkami administrace. Výběr výsledku otevře příslušný oddíl nebo specializovanou stránku a~zaměří odpovídající ovládací prvek. Šipky, Enter, Escape a~tlačítko vymazání lze používat bez opuštění klávesnice.
 
@@ -923,7 +927,7 @@ Uložení znovu ověřuje aktuální nastavení. Pokud jiná relace změnila ovl
 \index{n00099@Nastavení!a00002@adresa webu}
 \index{k00065@konfigurace!z00274@základní URL}
 
-Pro opravu veřejné adresy URL instalace po nastavení otevřete \ui{Nastavení > Adresa webu}. Zadejte absolutní adresu HTTP nebo HTTPS, například \url{https://example.com}. Cestu zahrňte pouze tehdy, pokud je galerie skutečně instalovaná v~daném podadresáři. Pokud detekce hostingu přidala nežádoucí adresář, odstraňte jej z~tohoto pole a~uložte.
+Pro opravu veřejné adresy URL instalace po nastavení otevřete \ui{Nastavení > Obecné}. Zadejte absolutní adresu HTTP nebo HTTPS, například \url{https://example.com}. Cestu zahrňte pouze tehdy, pokud je galerie skutečně instalovaná v~daném podadresáři. Pokud detekce hostingu přidala nežádoucí adresář, odstraňte jej z~tohoto pole a~uložte.
 
 Uložení mění pouze řetězec nejvyšší úrovně \codeword{base_url} v~\filepath{config.php}; nevytváří ani nemění databázové nastavení. Ostatní hodnoty konfigurace, komentáře a~formátování se zachovávají. Soubor i~adresář, který jej obsahuje, musejí být zapisovatelné. Aplikace odmítá adresy s~přihlašovacími údaji, parametry dotazu nebo fragmenty a~odmítá přepsat duplicitní nebo vypočítávané hodnoty konfigurace. Vlastní konfiguraci upravte ručně, pokud ji nelze bezpečně aktualizovat.
 

@@ -58,6 +58,7 @@ require_once __DIR__ . '/../app/bootstrap/configuration.php';
 require_once __DIR__ . '/../app/services/public_thumbnail_rendering.php';
 require_once __DIR__ . '/../app/services/browser_uploads.php';
 require_once __DIR__ . '/../app/services/admin_settings_registry.php';
+require_once __DIR__ . '/../app/services/translations.php';
 
 use function Gallery\Services\admin_settings_normalize_editable_value;
 use function Gallery\Services\admin_settings_save_editable_value;
@@ -96,6 +97,19 @@ assert_admin_settings_same(0.95, $browser['zip_size_threshold_ratio'], 'browser 
 $siteEntry = ['id' => 'site_name', 'central_editable' => true];
 assert_admin_settings_same('Gallery CMS', admin_settings_normalize_editable_value($siteEntry, '   '), 'empty site name uses existing fallback');
 assert_admin_settings_same(str_repeat('x', 120), admin_settings_normalize_editable_value($siteEntry, str_repeat('x', 200)), 'site name preserves existing 120-character clamp');
+
+$_SESSION = ['cms_translation_context' => 'admin'];
+$adminLanguageEntry = ['id' => 'admin_language', 'central_editable' => true];
+assert_admin_settings_same('cs', admin_settings_normalize_editable_value($adminLanguageEntry, 'CS'), 'Admin language uses the existing language normalizer');
+$beforeAdminLanguage = $GLOBALS['admin_settings_test_store'];
+admin_settings_save_editable_value('admin_language', 'de');
+assert_admin_settings_same('de', \Gallery\Services\translation_active_language(), 'Admin language updates the existing browser preference');
+assert_admin_settings_same($beforeAdminLanguage, $GLOBALS['admin_settings_test_store'], 'Admin language creates no public language or shadow database setting');
+
+$design = \Gallery\Services\translation_public_language_selector_design();
+$basicDesign = admin_settings_normalize_editable_value(['id' => 'public_language_selector_design', 'central_editable' => true], ['basic_only' => '1', 'preset' => 'outline']);
+assert_admin_settings_same(false, $basicDesign['show_flags'], 'unchecked flags can be disabled from the basic editor');
+assert_admin_settings_same($design['presets'], $basicDesign['presets'], 'basic design saves preserve detailed preset styles');
 
 $unknownEntry = ['id' => 'arbitrary_database_key', 'central_editable' => true];
 try {

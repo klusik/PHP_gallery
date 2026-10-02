@@ -63,8 +63,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine Versionsänderung benötigt.
-\newcommand{\version}{0.114}
-\newcommand{\manualdate}{1.~Oktober~2026}
+\newcommand{\version}{0.114.1}
+\newcommand{\manualdate}{2.~Oktober~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -638,7 +638,9 @@ Nach Aktivierung öffnen Sie gemeinsame Fotos im Panel oder über den Link des l
 Rücknahme, geänderter Quellschutz und lokale Freundschaftswiderrufe sperren nachfolgende autorisierte Zugriffe. Unerreichbare Teilnehmer bleiben durch höchstens 120 Sekunden Prüfungsdauer begrenzt; bereits heruntergeladene Pixel lassen sich nicht zurückrufen. Neue Teilnehmer benötigen einen separaten Vorschlag mit neuer Zustimmung aller. Technische Erneuerung kann bei Nutzung erfolgen; ein Zeitplan ist optional. Fehlendes oder unbekanntes erforderliches Schema verweigert Freigaben und Änderungen. Betriebsgrenzen beschreibt \filepath{docs/COOPERATIVE_GALLERIES.md}.
 
 \subsection{Simulatorposition unter Windows}
-WinApp 0.3.0 verwendet automatisch die Kameraweltposition in MSFS 2024 und fällt bei begrenztem Kamerafehler auf die Flugzeugposition zurück. MSFS 2020 verwendet direkt die Flugzeugposition über dieselbe SimConnect-Laufzeit. Koordinaten sind optional; ein fehlender Simulator verhindert keine Uploads. Die Diagnose unterscheidet die Positionsquelle. Das Installationsprogramm fordert das Beenden der Anwendung vor dem Dateiaustausch an. Schließen Sie laufende Aufgaben vorher ab. Prüfen Sie echte Simulatoren und das Upgrade auf dem Ziel-PC.
+WinApp 0.3.1 verwendet automatisch die Kameraweltposition in MSFS 2024 und fällt bei begrenztem Kamerafehler auf die Flugzeugposition zurück. MSFS 2020 verwendet direkt die Flugzeugposition über dieselbe SimConnect-Laufzeit. Koordinaten sind optional; ein fehlender Simulator verhindert keine Uploads. Die Diagnose unterscheidet die Positionsquelle. Das Installationsprogramm fordert das Beenden der Anwendung vor dem Dateiaustausch an. Schließen Sie laufende Aufgaben vorher ab. Prüfen Sie echte Simulatoren und das Upgrade auf dem Ziel-PC.
+
+Flugzeugantworten werden anhand der Anfrage- und Definitionskennungen zugeordnet; der USER-Selektor der Anfrage verlangt keine Objektkennung null in der Antwort. Begrenzte Diagnosen erfassen Empfangsmetadaten, Verarbeitungsreihenfolge und konkrete Gründe für verworfene Pakete. Fehlergründe bleiben nach der Pfadredaktion lesbar, und Aktivitätsmeldungen zeigen nur eine SimConnect-Markierung. Der Objektkennungsfilter war ein bestätigter Codefehler, doch der gemeldete FS2020-Timeout enthielt die zurückgegebene Objektkennung nicht. Prüfen Sie die Korrektur auf dem betroffenen PC; simulierte Tests belegen keinen tatsächlichen Simulatorerfolg.
 
 Der installierte Uploader prüft seine eigene stabile GitHub-Installerversion höchstens einmal pro Stunde; \ui{Check for updates} startet eine manuelle Prüfung. Der letzte automatische Versuch wird unabhängig für den aktuellen Benutzer gespeichert und bleibt nach einem Anwendungsneustart erhalten. CMS-Tags bestimmen nicht seine Version. Die höchste numerische Version benötigt SHA256 vom GitHub-Asset oder aus einer passenden \filepath{winapp-update.json} desselben Releases. Fehlende oder widersprüchliche Daten verhindern das Update; identische Installer in mehreren CMS-Releases werden akzeptiert. Galerie-Zugangsdaten werden nie an GitHub gesendet.
 
@@ -899,7 +901,9 @@ Browsergestütztes Erstellen/Hochladen besitzt zusätzliche Schutzmaßnahmen. Di
 \subsection{Zentrale Einstellungen}
 \index{e00084@Einstellungen!z00275@Zentrale}
 
-Die Administrationsnavigation enthält eine zentrale Seite \textbf{Einstellungen} für websiteweite Konfiguration. Sie gliedert sich in Allgemein, Websiteadresse, Öffentliches Erscheinungsbild, Inhalte, Medien und Navigation, Uploads und Automatisierung, Datenschutz und Diagnose sowie Erweitert. Jeder Abschnitt besitzt eine eigene stabile Adresse, sodass Aktualisieren, Lesezeichen, Browserverlauf und der Ersatzweg ohne JavaScript zur selben Kategorie zurückkehren.
+Die Administrationsnavigation enthält eine zentrale Seite \textbf{Einstellungen} für websiteweite Konfiguration. Allgemein bündelt Websiteadresse, Namen, Administrations- und öffentliche Sprache sowie Navigation. Weitere Abschnitte umfassen Öffentliches Erscheinungsbild, Inhalte, Medien und Navigation, Uploads und Automatisierung, Datenschutz und Diagnose sowie Erweitert. Frühere Websiteadresslinks führen zu Allgemein. Stabile Abschnittslinks und normale Formulare funktionieren ohne JavaScript.
+
+Mit JavaScript werden Abschnitte beim Öffnen geladen und direkt gespeichert. Eine feste Speicherleiste zeigt geänderte Einstellungen und bietet Speichern oder Zurücksetzen des Entwurfs. Erweiterte Zusammenfassungen bleiben eingeklappt. Adress- oder Administrationssprachänderungen bieten einen ausdrücklichen Link zur neuen Adresse oder Sprache. Das Dashboard zeigt zuerst seine Oberfläche und lädt Übersichtssummen oder die Galerieliste bei Bedarf; fehlgeschlagene Abfragen können wiederholt werden. Die Übersicht zählt indexierte Originale ohne Dateiscan oder Ermittlung von Titelbildern.
 
 Ein Feld nach Spotlight-Art durchsucht Einstellungen während der Eingabe. Es gleicht Namen, Beschreibungen, Kategorien und technische Namen ab, einschließlich Steuerungen spezieller Administrationsseiten. Die Auswahl eines Ergebnisses öffnet den passenden Abschnitt oder die Spezialseite und fokussiert die entsprechende Steuerung. Pfeiltasten, Eingabetaste, Escape und die Löschschaltfläche sind ohne Maus nutzbar.
 
@@ -927,7 +931,7 @@ Das Speichern prüft die aktuellen Einstellungen erneut. Hat eine andere Sitzung
 \index{e00084@Einstellungen!w00272@Websiteadresse}
 \index{k00158@Konfiguration!b00026@Basis-URL}
 
-Öffnen Sie \ui{Einstellungen > Websiteadresse}, um nach der Einrichtung die öffentliche Installations-URL zu korrigieren. Geben Sie eine absolute HTTP- oder HTTPS-Adresse wie \url{https://example.com} ein. Fügen Sie nur dann einen Pfad hinzu, wenn die Galerie tatsächlich in diesem Unterverzeichnis installiert ist. Hat die Hostingerkennung ein unerwünschtes Verzeichnis ergänzt, entfernen Sie es aus diesem Feld und speichern Sie.
+Öffnen Sie \ui{Einstellungen > Allgemein}, um nach der Einrichtung die öffentliche Installations-URL zu korrigieren. Geben Sie eine absolute HTTP- oder HTTPS-Adresse wie \url{https://example.com} ein. Fügen Sie nur dann einen Pfad hinzu, wenn die Galerie tatsächlich in diesem Unterverzeichnis installiert ist. Hat die Hostingerkennung ein unerwünschtes Verzeichnis ergänzt, entfernen Sie es aus diesem Feld und speichern Sie.
 
 Das Speichern verändert nur die \codeword{base_url}-Zeichenfolge auf oberster Ebene in \filepath{config.php}; es erstellt oder verändert keine Datenbankeinstellung. Andere Konfigurationswerte, Kommentare und Formatierung bleiben erhalten. Sowohl die Datei als auch ihr Verzeichnis müssen beschreibbar sein. Die Anwendung lehnt Adressen mit Zugangsdaten, Abfrageparametern oder Fragmenten ab und verweigert das Umschreiben mehrfach vorhandener oder berechneter Konfigurationswerte. Bearbeiten Sie eine benutzerdefinierte Konfiguration manuell, wenn sie nicht sicher aktualisiert werden kann.
 

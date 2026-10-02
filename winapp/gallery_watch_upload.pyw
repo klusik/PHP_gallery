@@ -5861,6 +5861,9 @@ class WatcherApp:
     def record_activity(self, level: str, message: str, operation: str = "system", filename: str = "", job_id: str = "") -> None:
         """Persist one bounded activity event without credentials."""
         secret = self.api_key_var.get().strip() if hasattr(self, "api_key_var") else ""
+        # The queue marker has already selected the structured operation.
+        if operation == "simconnect" and message.startswith("[simconnect]"):
+            message = message[len("[simconnect]"):].lstrip()
         safe_message = redact_text(message, [secret], redact_paths=False)
         event = ActivityEvent(level=level, message=safe_message, operation=operation, filename=filename, job_id=job_id)
         self.activity_events.append(event)
@@ -6141,7 +6144,6 @@ class WatcherApp:
                 continue
             level, message = str(event[0]), str(event[1])
             log_level = self.classify_log_level(level, message)
-            self.write_log(f"{level.upper()}: {message}", log_level)
             operation = "system"
             if message.startswith("[simconnect]"):
                 operation = "simconnect"
@@ -6151,6 +6153,9 @@ class WatcherApp:
                 operation = "watcher"
             elif message.startswith("AI metadata"):
                 operation = "ai"
+            # Classify the original queue text before removing its routing marker.
+            display_message = message[len("[simconnect]"):].lstrip() if operation == "simconnect" else message
+            self.write_log(f"{level.upper()}: {display_message}", log_level)
             self.record_activity(log_level if log_level in {"success", "warning", "error"} else level, message, operation, job_id=self.current_job.id if operation == "import" and self.current_job else "")
 
             if message.startswith("Manual upload started"):

@@ -1,6 +1,6 @@
 # Testing Guide
 
-This guide applies to PHP Gallery Version 0.114. Release verification uses the central audit runner's `release` profile as the single authoritative automated qualification pass, plus any material environment-dependent/manual coverage reported by that profile and the retained Version 0.97 coverage: recoverable gallery-subtree deletion, restore, manual purge, bounded Empty Trash, crash reconciliation, optional retention-based automatic purge, persistent protected trash storage, and fail-closed schema readiness; recursive, resumable gallery migration with bounded ZIP packages and imported child-tree reconstruction; canonical map-marker photo-page fallbacks and in-viewer map navigation across physical-gallery pagination, fullscreen split-map persistence, the canonical Admin side-panel mutation envelope and completion coordinator, multi-context postcondition verification, stale/out-of-order suppression, browser upload pipeline safeguards, opened-gallery branch image counters and their Theme/per-gallery visibility policy, progressive thumbnail dimension detection and responsive compatibility, the Version 0.93 request-budget/TTFB behavior, request-local database caching, resumable updater safety, updater server-policy reconciliation, Admin test-run diagnostics, public media concurrency and cache invalidation, clean-home URL handling, upload auto-renaming and inventory behavior, the redesigned Windows uploader, the Windows HTTP monitor schedules/protocol snapshots/report ZIPs, deployment exclusion rules, lightbox detached-image cleanup, decoded-cache ownership, preload-generation invalidation, navigation-transaction settlement, recoverable loading failures, teardown/reopen cycles, public lightbox zoom and progressive quality promotion, Shift+Left/Right ten-photo navigation, public Smart Gallery visibility, presentation settings, cycle-safe placement/order evaluation, viewer account privacy/access, collection sharing, bounded gallery benchmark diagnostics, access intersection and pagination; multilingual gallery/photo content and fallbacks; browser-local ZIP imports; progressive gallery and Smart Gallery ZIP downloads; browser download symbol rendering; ordered migration upgrades; complete deployment packaging; updater safety; the configurable public language selector; hourly automatic-update throttling; and the supported English, Czech, German, and Swedish catalogs.
+This guide applies to PHP Gallery Version 0.114.1. Release verification uses the central audit runner's `release` profile as the single authoritative automated qualification pass, plus any material environment-dependent/manual coverage reported by that profile and the retained Version 0.97 coverage: recoverable gallery-subtree deletion, restore, manual purge, bounded Empty Trash, crash reconciliation, optional retention-based automatic purge, persistent protected trash storage, and fail-closed schema readiness; recursive, resumable gallery migration with bounded ZIP packages and imported child-tree reconstruction; canonical map-marker photo-page fallbacks and in-viewer map navigation across physical-gallery pagination, fullscreen split-map persistence, the canonical Admin side-panel mutation envelope and completion coordinator, multi-context postcondition verification, stale/out-of-order suppression, browser upload pipeline safeguards, opened-gallery branch image counters and their Theme/per-gallery visibility policy, progressive thumbnail dimension detection and responsive compatibility, the Version 0.93 request-budget/TTFB behavior, request-local database caching, resumable updater safety, updater server-policy reconciliation, Admin test-run diagnostics, public media concurrency and cache invalidation, clean-home URL handling, upload auto-renaming and inventory behavior, the redesigned Windows uploader, the Windows HTTP monitor schedules/protocol snapshots/report ZIPs, deployment exclusion rules, lightbox detached-image cleanup, decoded-cache ownership, preload-generation invalidation, navigation-transaction settlement, recoverable loading failures, teardown/reopen cycles, public lightbox zoom and progressive quality promotion, Shift+Left/Right ten-photo navigation, public Smart Gallery visibility, presentation settings, cycle-safe placement/order evaluation, viewer account privacy/access, collection sharing, bounded gallery benchmark diagnostics, access intersection and pagination; multilingual gallery/photo content and fallbacks; browser-local ZIP imports; progressive gallery and Smart Gallery ZIP downloads; browser download symbol rendering; ordered migration upgrades; complete deployment packaging; updater safety; the configurable public language selector; hourly automatic-update throttling; and the supported English, Czech, German, and Swedish catalogs.
 
 ## Purpose
 
@@ -84,7 +84,12 @@ WinApp tests that exercise optional host integrations must remain isolated from 
 ctypes packets to cover MSFS 2020 aircraft position, MSFS 2024 camera/fallback,
 unknown-generation capability handling, explicit exceptions, response
 correlation, bounded waits, cleanup, repeated acquisitions and nonfatal upload
-integration. Build tests verify the x64 runtime, required exports, embedded DLL
+integration. Independent wire-format packets cover nonzero reply object IDs,
+request/definition mismatches, the 40-byte metadata header plus three FLOAT64
+values, truncated payloads and valid zero coordinates. Diagnostics checks cover
+bounded receive metadata/dispatch sequence, specific rejection reasons,
+redaction preserving the primary failure and one displayed SimConnect marker.
+Build tests verify the x64 runtime, required exports, embedded DLL
 hash and the installer entry that distributes only the application EXE with its
 embedded runtime. These tests run through the central WinApp regression suite.
 
@@ -114,6 +119,11 @@ preserve unrelated copies and never force-kill workers. Verify native Python/sou
 mode's manual installer workflow. Installation failure has no automatic rollback.
 Fakes/source contracts do not establish live UAC, pipe progress or target-machine
 process behavior.
+
+The incorrect reply-object-ID filter is a confirmed code bug, but the reported
+FS2020 timeout did not record the returned object ID. Do not claim that a nonzero
+ID was observed or that fake tests establish its live fix. Retest on the affected
+PC and retain the bounded receive/rejection diagnostics if acquisition still fails.
 
 Real-simulator acceptance requires separate Windows runs with MSFS 2020 and
 MSFS 2024: capture a watched screenshot during a flight, confirm provider/source
@@ -1776,3 +1786,7 @@ audit rather than replacing it with focused-test loops.
 ### Headless installer dependency checks
 
 The negative installed-dependency cases in `winapp/tests/test_build_installer.py` use an import-only Tkinter stub. They must verify unsupported/missing package refusal without requiring Tcl/Tk, a display server or actual build packages on the audit host. Real installer builds retain their GUI/runtime dependency preflight. These cases are registered through the central WinApp regression suite; local results do not attest a hosted GitHub Actions run.
+
+### Compact Admin workspace coverage
+
+The central audit registers `tests/admin_settings_workspace_browser_test.mjs` and `tests/admin_dashboard_workspace_browser_test.mjs` with isolated fixtures. These cover lazy sections, save/revert, failure/retry and panel persistence. PHP contracts cover Settings normalization/controller envelopes, deferred dashboard fragment validation/session release and indexed Overview totals. Live authenticated installation testing remains separate from these fixtures.

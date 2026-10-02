@@ -885,3 +885,13 @@ Phase 4.1 adds no migration; Phase 4.2 adds only `viewer_registration_verificati
 - app/services/configured_mail.php: shared existing mail configuration/transport.
 - tests/cooperative_content_test.php, tests/cooperative_completion_test.php,
   tests/cooperative_gallery_browser_test.mjs: public workflow and refusal coverage.
+
+## Compact Admin workspace
+
+| Responsibility | Owner |
+| --- | --- |
+| Settings request/fragment/mutation view models | `app/controllers/admin_settings.php` |
+| Registry ownership and General alias | `app/services/admin_settings_registry.php` |
+| Settings draft/save/revert and search | `public/assets/gallery-modules/admin-settings-workspace.js`, `public/assets/gallery-modules/admin-settings-search.js` |
+| Deferred dashboard fragments | `app/controllers/admin_dashboard.php`, `app/services/admin_dashboard.php`, `app/models/admin_dashboard.php` |
+| Dashboard surface loading/retry | `public/assets/gallery-modules/admin-dashboard-workspace.js` |

@@ -1,0 +1,166 @@
+/**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ * File: public/assets/styles/admin-settings.css
+ * Module Type: Stylesheet
+ * Purpose: Keep the Settings workspace compact without changing other Admin pages.
+ * Responsibilities: Align category navigation, setting rows and in-place save controls.
+ * Author: Rudolf Klusal
+ * License: MIT License (see LICENSE file in repository)
+ */
+
+/* Reserve the scrollbar gutter so expanding Settings cannot shift the floating action. */
+html:has(.admin-settings-page) { scrollbar-gutter: stable; }
+
+/* One toolbar replaces the separate hero, wizard launcher and search panels. */
+.admin-settings-page {
+    min-width: 0;
+    padding-bottom: 90px;
+    --settings-toolbar-top: 56px;
+}
+
+.admin-settings-toolbar {
+    position: sticky;
+    top: var(--settings-toolbar-top);
+    z-index: 15;
+    display: grid;
+    grid-template-columns: auto minmax(180px, 1fr) auto;
+    align-items: center;
+    gap: 16px;
+    padding: 10px 14px;
+    margin-bottom: 12px;
+    border: 1px solid var(--admin-border, #ccd7e3);
+    border-radius: 10px;
+    background: var(--admin-surface, #fff);
+    box-shadow: var(--admin-shadow);
+}
+
+.admin-settings-toolbar h1 {
+    margin: 0 !important;
+    font-size: 1.4rem;
+    line-height: 1.3;
+}
+
+.admin-settings-page .admin-settings-search { z-index: auto; min-width: 0; }
+.admin-settings-page .admin-settings-search-shell { min-height: 38px; padding: 0 8px 0 10px; border-radius: 7px; }
+.admin-settings-page .admin-settings-search-input { min-width: 0; padding: 7px 0; font-size: 0.95rem; }
+.admin-settings-page .admin-settings-search-results { inset: calc(100% + 8px) 0 auto; }
+.admin-settings-page .admin-settings-search-result { padding: 9px; gap: 8px; }
+.admin-settings-wizard { white-space: nowrap; }
+
+/* Only the selected category occupies the working area. Navigation remains within reach. */
+.admin-settings-layout { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 14px; align-items: start; }
+.admin-settings-navigation { position: sticky; top: calc(var(--settings-toolbar-top) + 76px); }
+.admin-settings-navigation .admin-tab-list { display: flex; flex-direction: column; gap: 4px; }
+.admin-settings-navigation .admin-tab { display: flex; justify-content: space-between; gap: 8px; padding: 10px 12px; white-space: normal; }
+.admin-settings-mobile-label, .admin-settings-mobile-select { display: none; }
+.admin-settings-panels { min-width: 0; }
+.admin-settings-section, .admin-settings-page [data-admin-setting-target] { scroll-margin-top: calc(var(--settings-toolbar-top) + 76px); }
+.admin-settings-page .admin-settings-section.panel { margin: 0; padding: 16px; box-shadow: none; }
+/* Shared tab transforms would anchor fixed actions to the panel instead of the viewport. */
+.admin-settings-page .admin-settings-section.admin-tab-panel { transform: none; transition: none; }
+.admin-settings-page [hidden] { display: none !important; }
+.admin-settings-section-heading { padding-bottom: 12px; margin-bottom: 6px; border-bottom: 1px solid var(--admin-border, #ccd7e3); }
+.admin-settings-section-heading h2 { margin: 0 0 4px; font-size: 1.15rem; }
+.admin-settings-section-heading p { margin: 0; color: var(--admin-muted-text, #52616f); line-height: 1.45; }
+.admin-settings-draft-badge { flex-shrink: 0; align-self: center; min-width: 21px; padding: 1px 5px; border-radius: 12px; background: var(--admin-accent, #2563a8); color: #fff; font-size: 0.78rem; text-align: center; }
+
+/* Labels and explanations share a row with their controls; text remains comfortably readable. */
+.admin-settings-page .admin-settings-group-form { gap: 0; margin: 0; }
+.admin-settings-page .admin-settings-group-form > fieldset.form-grid { min-width: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 20px; padding: 8px 0 0; margin: 4px 0 10px; border: 0; border-radius: 0; }
+.admin-settings-group-form > fieldset > legend { padding: 0; font-size: 0.9rem; font-weight: 700; }
+.admin-settings-page .admin-settings-field, .admin-settings-summary-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 0.8fr); gap: 24px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--admin-border, #ccd7e3); }
+.admin-settings-field-copy { display: grid; min-width: 0; gap: 4px; }
+.admin-settings-field-copy > label, .admin-settings-field-copy > strong { font-weight: 650; line-height: 1.4; }
+.admin-settings-field-copy > .muted { font-size: 0.86rem; line-height: 1.45; }
+.admin-settings-field-control { display: grid; min-width: 0; gap: 4px; }
+.admin-settings-field-control > input, .admin-settings-field-control > select { width: 100%; box-sizing: border-box; }
+.admin-settings-page .admin-settings-group-form .admin-settings-field { grid-template-columns: minmax(105px, 0.45fr) minmax(0, 1fr); gap: 10px; padding: 8px 0; }
+.admin-settings-page .admin-settings-group-form .admin-settings-field-copy { display: flex; align-items: center; gap: 6px; }
+.admin-settings-help { position: relative; flex-shrink: 0; font-size: 0.85rem; font-weight: 400; }
+.admin-settings-help > summary { display: grid; place-items: center; width: 18px; height: 18px; border: 1px solid var(--admin-border, #ccd7e3); border-radius: 50%; color: var(--admin-muted-text, #52616f); cursor: pointer; list-style: none; }
+.admin-settings-help > summary::-webkit-details-marker { display: none; }
+.admin-settings-help > span { position: absolute; top: 25px; left: 0; z-index: 20; display: block; width: min(260px, 55vw); padding: 10px; border: 1px solid var(--admin-border, #ccd7e3); border-radius: 7px; background: var(--admin-surface, #fff); box-shadow: var(--admin-shadow); color: var(--admin-ink, #182230); line-height: 1.45; }
+.admin-settings-toggle { display: flex; align-items: center; gap: 8px; width: fit-content; padding: 5px 0; }
+.admin-settings-toggle input { width: 18px; height: 18px; margin: 0; }
+.admin-settings-field.has-error { border-bottom-color: var(--admin-danger, #a33a2f); }
+.admin-settings-page .admin-settings-source { font-size: 0.8rem; }
+
+/* Detailed language design stays fully functional inside an optional disclosure. */
+.admin-settings-language-details { grid-column: 1 / -1; margin: 4px 0 0; border: 1px solid var(--admin-border, #ccd7e3); border-radius: 7px; background: #f8fafc; }
+.admin-settings-language-details > summary { padding: 10px 12px; font-weight: 650; cursor: pointer; }
+.admin-settings-language-details > summary > span { margin-left: 8px; font-size: 0.86rem; font-weight: 400; }
+.admin-settings-page .admin-language-selector-settings { margin: 0; padding: 12px; border: 0; background: transparent; }
+.admin-settings-page .admin-language-selector-settings-copy { display: none; }
+.admin-settings-page .admin-language-selector-language-list,
+.admin-settings-page .admin-language-selector-design { margin: 8px 0 0; }
+.admin-settings-page .admin-language-selector-language-grid { grid-template-columns: repeat(auto-fit, minmax(135px, 1fr)); }
+.admin-settings-page .admin-language-selector-language-list { padding: 8px 0; border: 0; }
+.admin-settings-page .admin-language-selector-language-list > p { margin: 0 0 6px; font-size: 0.82rem; }
+.admin-settings-page .admin-language-selector-language { gap: 6px; padding: 5px 8px; }
+.admin-settings-page .admin-language-selector-language small { display: none; }
+.admin-settings-page .admin-language-selector-design { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 16px; align-items: end; padding: 8px 0 0; border: 0; }
+.admin-settings-page .admin-language-selector-design > legend { padding: 0; }
+.admin-settings-page .admin-language-design-global { margin: 0; }
+.admin-settings-page .admin-language-design-details-link { grid-column: 1 / -1; margin: 0; font-size: 0.82rem; }
+
+/* Specialized settings use rows with named actions instead of individual cards. */
+.admin-settings-summary-list { margin-top: 8px; }
+.admin-settings-summary-row:last-child { border-bottom: 0; }
+.admin-settings-summary-control { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 12px; min-width: 0; }
+.admin-settings-value { overflow-wrap: anywhere; font-weight: 600; }
+.admin-settings-edit-link { flex-shrink: 0; color: var(--admin-accent, #2563a8); font-weight: 600; text-decoration: none; }
+.admin-settings-edit-link:hover, .admin-settings-edit-link:focus-visible { text-decoration: underline; }
+
+/* The visible category owns one floating action at the same viewport position. */
+.admin-settings-savebar { position: fixed; right: 24px; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); z-index: 40; display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 12px; max-width: calc(100vw - 48px); box-sizing: border-box; padding: 8px; margin: 0; border: 1px solid var(--admin-border, #ccd7e3); border-radius: 10px; background: var(--admin-surface, #fff); box-shadow: 0 4px 20px rgb(24 34 48 / 15%); }
+.admin-settings-savebar > span { color: var(--admin-muted-text, #52616f); font-size: 0.86rem; }
+.admin-settings-savebar:not(.is-dirty) > span { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.admin-settings-group-form[aria-busy="true"] .admin-settings-savebar > span { position: static; width: auto; height: auto; overflow: visible; clip-path: none; white-space: normal; }
+.admin-settings-savebar > div { display: flex; flex-wrap: wrap; gap: 8px; }
+.admin-settings-savebar.is-dirty { border-color: var(--admin-brand-border, #9ec3e6); background: var(--admin-brand-soft, #e8f2fb); }
+.admin-settings-savebar button:disabled { opacity: 0.55; cursor: default; }
+.admin-settings-feedback, .admin-settings-form-errors { padding: 10px 12px; margin: 10px 0; border-radius: 7px; background: #eef8f0; color: var(--admin-ready, #237a3b); }
+.admin-settings-feedback.is-error, .admin-settings-form-errors { background: #fff2f0; color: var(--admin-danger, #a33a2f); }
+.admin-settings-form-errors ul { margin: 6px 0 0; padding-left: 20px; }
+.admin-settings-feedback a { margin-left: 8px; }
+
+/* Mobile category links remain available without JavaScript; the select is enhancement-only. */
+@media (max-width: 1100px) {
+    .admin-settings-layout { grid-template-columns: 170px minmax(0, 1fr); gap: 10px; }
+    .admin-settings-page .admin-settings-field, .admin-settings-summary-row { grid-template-columns: minmax(0, 1fr) minmax(170px, 0.9fr); gap: 14px; }
+    .admin-settings-toolbar { gap: 10px; }
+    .admin-settings-page .admin-settings-group-form .admin-settings-field { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+}
+
+@media (max-width: 850px) {
+    .admin-settings-layout { grid-template-columns: minmax(0, 1fr); }
+    .admin-settings-navigation { position: static; }
+    .admin-settings-navigation .admin-tab-list { flex-direction: row; flex-wrap: wrap; }
+    .admin-settings-page.is-enhanced .admin-settings-navigation .admin-tab-list { display: none; }
+    .admin-settings-page.is-enhanced .admin-settings-mobile-label { display: block; margin: 0 0 4px; font-size: 0.86rem; font-weight: 650; }
+    .admin-settings-page.is-enhanced .admin-settings-mobile-select { display: block; width: 100%; box-sizing: border-box; }
+    .admin-settings-toolbar { grid-template-columns: minmax(0, 1fr) auto; }
+    .admin-settings-toolbar h1 { font-size: 1.2rem; }
+    .admin-settings-page .admin-settings-search { grid-column: 1 / -1; grid-row: 2; }
+    .admin-settings-wizard { grid-column: 2; grid-row: 1; }
+}
+
+@media (max-width: 560px) {
+    .admin-settings-page { --settings-toolbar-top: 0px; }
+    .admin-settings-toolbar { position: relative; padding: 10px; }
+    .admin-settings-page .admin-settings-section.panel { padding: 12px; }
+    .admin-settings-page .admin-settings-field, .admin-settings-summary-row { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+    .admin-settings-page .admin-settings-group-form > fieldset.form-grid { grid-template-columns: minmax(0, 1fr); }
+    .admin-settings-page .admin-settings-group-form .admin-settings-field { grid-template-columns: minmax(100px, 0.5fr) minmax(0, 1fr); }
+    .admin-settings-page .admin-language-selector-design { grid-template-columns: minmax(0, 1fr); }
+    .admin-settings-savebar { right: 12px; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); max-width: calc(100vw - 24px); padding: 8px; gap: 6px; }
+    .admin-settings-savebar > span { flex-basis: 100%; }
+    .admin-settings-savebar > div { width: 100%; justify-content: flex-end; }
+    .admin-settings-page .admin-settings-search-result { grid-template-columns: minmax(0, 1fr) auto; }
+    .admin-settings-page .admin-settings-search-result-section { grid-column: 1 / -1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .admin-settings-page [data-admin-setting-target] { transition: none; }
+}

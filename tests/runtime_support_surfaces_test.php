@@ -247,7 +247,7 @@ namespace {
     $dashboard = runtime_surface_source('app/services/admin_dashboard.php');
     $controller = runtime_surface_source('app/controllers/admin_diagnostics.php');
     runtime_surface_assert(substr_count($loader, "'/services/runtime_support.php'") === 1, 'Runtime policy must be loaded once through the service entry point.');
-    runtime_surface_assert(str_contains($dashboard, "'runtime_support_status' => runtime_support_health_status()"),
+    runtime_surface_assert(str_contains($dashboard, '$runtimeSupportStatus = runtime_support_health_status();') && str_contains($dashboard, "'runtime_support_status' => \$runtimeSupportStatus"),
         'Dashboard service must prepare the shared runtime model.');
     $authorizationPosition = strpos($controller, 'require_admin();');
     $runtimePosition = strpos($controller, '$runtimeSupport = runtime_support_health_status();');

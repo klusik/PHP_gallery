@@ -114,7 +114,7 @@ foreach ([
     'role="tabpanel"',
     'data-admin-tab-panel',
     "? '' : ' hidden'",
-    '<fieldset class="form-grid">',
+    '<fieldset class="form-grid"',
     '<legend>',
     'aria-describedby=',
     'aria-invalid="true"',
@@ -139,8 +139,25 @@ foreach (['general', 'appearance', 'content', 'media', 'uploads', 'privacy', 'ad
     }
 }
 
-if (!str_contains($view, "href=\"' . e((string) (\$section['url'] ?? ''))")) {
+if (!str_contains($view, "(string) (\$section['tab_url'] ?? \$section['url'] ?? '')")) {
     throw new RuntimeException('Active Settings section is not represented by controller-prepared stable URL links.');
+}
+
+foreach (['data-admin-settings-workspace', 'admin-settings-toolbar', 'data-admin-settings-category', 'data-admin-settings-content', 'data-admin-settings-form', 'data-admin-settings-reset', 'data-admin-settings-savebar', 'data-search-external=', 'admin-settings-summary-row'] as $contract) {
+    if (!str_contains($view, $contract)) {
+        throw new RuntimeException('Settings workspace contract missing: ' . $contract);
+    }
+}
+if (str_contains($view, 'view_render_admin_settings_overview') || str_contains($view, 'admin-setup-wizard-launcher')) {
+    throw new RuntimeException('Settings must not restore the duplicate overview or full-size wizard launcher.');
+}
+foreach (['en', 'cs', 'de', 'sv'] as $language) {
+    $catalog = json_decode((string) file_get_contents(__DIR__ . '/../app/lang/' . $language . '.json'), true);
+    foreach (['admin.settings.item.admin_language', 'admin.settings.item.admin_language.hint', 'admin.settings.workspace.save', 'admin.settings.workspace.unsaved', 'admin.settings.workspace.reload_language'] as $key) {
+        if (empty($catalog[$key])) {
+            throw new RuntimeException('Missing localized Settings control: ' . $language . ':' . $key);
+        }
+    }
 }
 
 echo "Admin Settings rendering contract tests passed.\n";

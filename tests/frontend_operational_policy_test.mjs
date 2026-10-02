@@ -158,6 +158,7 @@ async function consumer(filename, names) {
         window, document, URL, AbortController, console, Intl, Event,
         HTMLInputElement: FixtureElement, HTMLElement: FixtureElement, HTMLSelectElement: FixtureElement,
         HTMLButtonElement: FixtureElement, HTMLAnchorElement: FixtureElement, HTMLFormElement: FixtureElement,
+        HTMLDetailsElement: FixtureElement,
         HTMLTextAreaElement: FixtureElement, Element: FixtureElement,
         CSS: {
             /** Preserve the safe fixture token. @param {string} value Selector token. @return {string} Same token. */
@@ -327,9 +328,8 @@ submit.callback();
 assert.ok(form.submitted);
 
 const entry = await readFile(path.join(root, 'public/assets/gallery.js'), 'utf8');
-for (const name of ['admin-settings-search', 'admin-navdata-panel']) {
-    assert.ok(entry.includes(name + '.js?v=20260920-admin-interaction-policy-v1'));
-}
+assert.ok(entry.includes('admin-settings-search.js?v=20261002-settings-workspace-v1'));
+assert.ok(entry.includes('admin-navdata-panel.js?v=20260920-admin-interaction-policy-v1'));
 assert.ok(entry.includes('admin-gallery-title-completion.js?v=20260920-gallery-title-completion-policy-v4'));
 assert.ok(entry.includes('admin-operations.js?v=20260927-cooperative-review-v2'));
 const operations = await readFile(path.join(directory, 'admin-operations.js'), 'utf8');

@@ -9,7 +9,7 @@ This document is intended to help future maintainers and AI coding agents unders
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.114';
+const CMS_VERSION = '0.114.1';
 ```
 
 Update-related code uses:
@@ -1706,7 +1706,13 @@ conflicting or unrecognized identities use bounded capability detection. MSFS
 MSFS 2024 preserves the WORLD Camera API and falls back to aircraft position.
 The providers share a monotonic response budget and isolated connection per
 acquisition, with send-ID exception attribution, aircraft request/definition
-validation and serialized client use. Provider failures never block upload.
+validation and serialized client use. Aircraft replies may carry a nonzero
+object ID; the request USER selector does not constrain that returned ID.
+The bounded decoder reads three FLOAT64 values after the 40-byte metadata
+header. Receive metadata, dispatch sequence and specific mismatch/malformed
+reasons explain ignored packets. Failure summaries place the primary reason
+before DLL paths to preserve it through redaction, and activity display removes
+duplicate SimConnect markers. Provider failures never block upload.
 Actual source and last-acquisition diagnostics remain local; historical
 `sim_camera_*` multipart fields preserve compatibility with existing galleries.
 PyInstaller embeds one x64 DLL at `runtime/simconnect/SimConnect.dll`; build
@@ -2240,3 +2246,9 @@ Explicit deletion or rename invalidates confirmed shared cache files before chan
 source ownership, so removal of a private sibling cannot authorize its old pixels for
 a remaining public image. Unknown membership blocks that mutation. Cooperative reads
 also verify the bounded source fingerprint after authority checks before returning bytes.
+
+## Admin Settings and dashboard workspace
+
+The central Settings workspace groups website identity/address, Admin/public languages and navigation under General. Historical `section=site` links resolve to General. `admin_settings` prepares compact view models, lazy section fragments and canonical mutation envelopes; persistence remains with the registry's domain owners. An unchanged base URL is skipped, changed addresses are written last, and saved address/language changes offer explicit navigation links. Browser code owns dirty-setting counts and draft revert and passes successful mutations to the shared completion coordinator. Ordinary URLs and POST forms remain the no-JavaScript path.
+
+The dashboard uses separately prepared `shell`, `overview` and `galleries` surfaces. Overview totals come from indexed metadata through the model, with effective gallery visibility counted in the service; they do not resolve covers or inventory files. The authenticated GET-only `admin_dashboard_fragment` endpoint releases the PHP session before reading its model, returns private/no-store JSON and bounds failed reads to a retryable 503. Dashboard workspace JavaScript loads the selected surface and handles retry; maintenance remains independently deferred.

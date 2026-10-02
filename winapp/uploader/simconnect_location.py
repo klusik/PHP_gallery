@@ -28,6 +28,7 @@ import ctypes
 import logging
 import math
 import os
+import struct
 from pathlib import Path
 import sys
 import threading
@@ -336,6 +337,10 @@ class SimConnectLocationClient:
         self.diagnostics: List[str] = []
         self.dispatch_count = 0
         self.last_recv_id: Optional[int] = None
+        self.dispatch_sequence: List[int] = []
+        self.aircraft_data_packets = 0
+        self.aircraft_packets: List[Dict[str, Any]] = []
+        self.aircraft_rejection = ""
         self.camera_data_packets = 0
         self.phase = "handshake"
         self.send_ids: Dict[int, str] = {}
@@ -462,6 +467,9 @@ class SimConnectLocationClient:
                 "reason": self.error_message[:500],
                 "dispatch_packets": self.dispatch_count,
                 "last_recv_id": self.last_recv_id,
+                "dispatch_sequence": list(self.dispatch_sequence),
+                "aircraft_data_packets": self.aircraft_data_packets,
+                "aircraft_packets": [dict(packet) for packet in self.aircraft_packets],
             }
 
     def diagnostic_message(self, reason: str) -> str:
@@ -472,11 +480,12 @@ class SimConnectLocationClient:
         @return str Human-readable diagnostic summary.
         """
         details = [
-            self.dll_message,
             f"Simulator={self.simulator_info.display_name}, server={self.simulator_info.app_name}, "
             f"version={self.simulator_info.app_version}, generation={self.simulator_info.generation}, provider={self.provider}",
             f"camera={self.camera_error or 'no failure'}, aircraft={self.aircraft_error or 'no failure'}",
             f"dispatch packets={self.dispatch_count}, last recv id={self.last_recv_id}",
+            f"last aircraft packet={self.aircraft_packets[-1]}" if self.aircraft_packets else "",
+            self.dll_message,
         ]
         return reason + " Details: " + "; ".join(detail for detail in details if detail)
 
@@ -651,12 +660,13 @@ class SimConnectLocationClient:
                         else:
                             self._pump(dll, callback, deadline)
                     if self.location is None and not self.aircraft_error:
-                        self.aircraft_error = self.error_message or "Aircraft data timeout"
+                        self.aircraft_error = self.error_message or self.aircraft_rejection or "Aircraft data timeout"
                 if self.location is not None:
                     self._emit("info", f"Location received: source={self.location.source}, lat={self.location.latitude:.7f}, lon={self.location.longitude:.7f}, alt={self.location.altitude:.2f} ft.")
                     return self.location, self.diagnostic_message("Simulator location acquired.")
-                self._emit("warning", "Simulator location unavailable. " + self.diagnostic_message(self.error_message or "All location providers failed.") + " Upload will continue without simulator location.")
-                return None, self.diagnostic_message(self.error_message or "All location providers failed.")
+                failure_reason = self.error_message or self.aircraft_error or self.camera_error or "All location providers failed."
+                self._emit("warning", "Simulator location unavailable. " + self.diagnostic_message(failure_reason) + " Upload will continue without simulator location.")
+                return None, self.diagnostic_message(failure_reason)
             except Exception as exc:
                 self.error_message = f"SimConnect acquisition failed: {type(exc).__name__}: {exc}"
                 self._emit("warning", self.error_message)
@@ -689,6 +699,37 @@ class SimConnectLocationClient:
                 self.error_message = reason
             self._emit("warning", reason)
 
+    def _record_aircraft_packet(self, data: ctypes.POINTER(_SimConnectRecv), cb_data: int, header: _SimConnectRecv) -> Dict[str, Any]:
+        """Copy bounded SDK metadata without reading the variable payload or padding.
+
+        DWORD metadata occupies bytes 0-39; native dwData starts at byte 40.
+        The user-aircraft request selector is not an echoed response object ID.
+        """
+        available = min(cb_data, int(header.dwSize))
+        record: Dict[str, Any] = {
+            "cb_data": cb_data, "dw_size": int(header.dwSize), "recv_id": int(header.dwID),
+            "expected_request_id": SIMCONNECT_REQUEST_ID,
+            "expected_definition_id": SIMCONNECT_DEFINITION_ID,
+            "header_size": 40, "payload_offset": 40,
+            "payload_available": max(0, available - 40), "rejection": "",
+        }
+        if available >= 40:
+            metadata = struct.unpack("<7I", ctypes.string_at(data, 40)[12:40])
+            record.update(zip(("request_id", "object_id", "definition_id", "flags", "entry_number", "out_of", "define_count"), metadata))
+        self.aircraft_data_packets += 1
+        self.aircraft_packets.append(record)
+        self.aircraft_packets = self.aircraft_packets[-8:]
+        logging.debug("SimConnect aircraft metadata: %s", record)
+        return record
+
+    def _reject_aircraft_packet(self, record: Dict[str, Any], reason: str, fatal: bool = False) -> None:
+        """Retain a concrete bounded rejection while allowing foreign replies to pass."""
+        record["rejection"] = reason
+        self.aircraft_rejection = reason
+        if fatal:
+            self.aircraft_error = reason
+        logging.debug("SimConnect aircraft packet rejected: %s; metadata=%s", reason, record)
+
     def dispatch(self, data: ctypes.POINTER(_SimConnectRecv), size: int, _context: ctypes.c_void_p) -> None:
         """
         Receive one SimConnect dispatch packet and correlate active requests.
@@ -701,18 +742,33 @@ class SimConnectLocationClient:
             self.error_message = "SimConnect receive header was too small."
             return
         header = data.contents
+        self.dispatch_count += 1
+        self.last_recv_id = int(header.dwID)
+        self.dispatch_sequence.append(int(header.dwID))
+        self.dispatch_sequence = self.dispatch_sequence[-12:]
+        aircraft_record = self._record_aircraft_packet(data, size, header) if header.dwID == SIMCONNECT_RECV_ID_SIMOBJECT_DATA else None
+        if aircraft_record is not None and self.phase != "aircraft":
+            self._reject_aircraft_packet(aircraft_record, f"Aircraft data packet received during {self.phase} phase.")
+            return
+        if aircraft_record is not None and self.phase == "aircraft" and "request_id" in aircraft_record:
+            # Correlate before payload validation: an unrelated short or tagged
+            # reply must not stop the pending user-aircraft request.
+            if aircraft_record["request_id"] != SIMCONNECT_REQUEST_ID:
+                self._reject_aircraft_packet(aircraft_record, f"Aircraft request ID mismatch: received {aircraft_record['request_id']}, expected {SIMCONNECT_REQUEST_ID}.")
+                return
+            if aircraft_record["definition_id"] != SIMCONNECT_DEFINITION_ID:
+                self._reject_aircraft_packet(aircraft_record, f"Aircraft definition ID mismatch: received {aircraft_record['definition_id']}, expected {SIMCONNECT_DEFINITION_ID}.")
+                return
         if header.dwSize < ctypes.sizeof(_SimConnectRecv) or header.dwSize > size:
             reason = "SimConnect receive packet size was invalid."
             if header.dwID in (SIMCONNECT_RECV_ID_CAMERA_DATA, SIMCONNECT_RECV_ID_CAMERA_STATUS):
                 self.camera_error = reason
             elif header.dwID == SIMCONNECT_RECV_ID_SIMOBJECT_DATA:
-                self.aircraft_error = reason
+                self._reject_aircraft_packet(aircraft_record, reason, True)
             else:
                 self.error_message = reason
             return
         size = min(size, int(header.dwSize))
-        self.dispatch_count += 1
-        self.last_recv_id = int(header.dwID)
         logging.debug("SimConnect dispatch recv=%d bytes=%d phase=%s", header.dwID, size, self.phase)
         packet_types = {SIMCONNECT_RECV_ID_OPEN: _SimConnectRecvOpen, SIMCONNECT_RECV_ID_EXCEPTION: _SimConnectRecvException, SIMCONNECT_RECV_ID_CAMERA_STATUS: _SimConnectRecvCameraStatus, SIMCONNECT_RECV_ID_CAMERA_DATA: _SimConnectRecvCameraData, SIMCONNECT_RECV_ID_SIMOBJECT_DATA: _SimConnectRecvSimobjectData}
         structure = packet_types.get(int(header.dwID))
@@ -721,7 +777,7 @@ class SimConnectLocationClient:
             if header.dwID in (SIMCONNECT_RECV_ID_CAMERA_DATA, SIMCONNECT_RECV_ID_CAMERA_STATUS):
                 self.camera_error = reason
             elif header.dwID == SIMCONNECT_RECV_ID_SIMOBJECT_DATA:
-                self.aircraft_error = reason
+                self._reject_aircraft_packet(aircraft_record, reason, True)
             else:
                 self.error_message = reason
             return
@@ -769,18 +825,20 @@ class SimConnectLocationClient:
             else:
                 self.camera_error = "SimConnect returned invalid camera position."
         elif header.dwID == SIMCONNECT_RECV_ID_SIMOBJECT_DATA and self.phase == "aircraft":
-            packet = ctypes.cast(data, ctypes.POINTER(_SimConnectRecvSimobjectData)).contents
-            if packet.dwRequestID != SIMCONNECT_REQUEST_ID or packet.dwDefineID != SIMCONNECT_DEFINITION_ID or packet.dwObjectID != 0:
-                return
-            if packet.dwDefineCount != 3 or packet.dwFlags != 0 or packet.dwentrynumber != 1 or packet.dwoutof != 1:
-                self.aircraft_error = "Aircraft data packet shape was invalid."
+            if aircraft_record["define_count"] != 3 or aircraft_record["flags"] != 0 or aircraft_record["entry_number"] != 1 or aircraft_record["out_of"] != 1:
+                self._reject_aircraft_packet(aircraft_record, "Aircraft data packet shape was invalid.", True)
                 return
             source = "aircraft_position" if self.simulator_info.generation == 2020 else "aircraft_position_fallback"
-            candidate = SimCameraLocation(float(packet.latitude), float(packet.longitude), float(packet.altitude), source)
+            # The SDK's dwData is an inline variable payload, not a pointer or
+            # an extra DWORD to skip. Copy only the three bounded FLOAT64 values.
+            latitude, longitude, altitude = struct.unpack("<ddd", ctypes.string_at(data, 64)[40:64])
+            logging.debug("SimConnect aircraft decoded latitude=%r longitude=%r altitude=%r", latitude, longitude, altitude)
+            candidate = SimCameraLocation(latitude, longitude, altitude, source)
             if simconnect_camera_position_valid(candidate):
                 self.location = candidate
+                self.aircraft_rejection = ""
             else:
-                self.aircraft_error = "SimConnect returned invalid aircraft position."
+                self._reject_aircraft_packet(aircraft_record, "SimConnect returned invalid aircraft position.", True)
 
 
 SimConnectCameraClient = SimConnectLocationClient

@@ -35,11 +35,11 @@ $tabsSource = (string) file_get_contents(__DIR__ . '/../public/assets/gallery-mo
 $bootstrapSource = (string) file_get_contents(__DIR__ . '/../app/bootstrap.php')
     . (string) file_get_contents(__DIR__ . '/../app/bootstrap/dispatch.php');
 
-assert_admin_dashboard_deferred_contains($serviceSource, 'function admin_dashboard_view_model(bool $includeMaintenance = false): array', 'dashboard model has an explicit maintenance loading flag');
+assert_admin_dashboard_deferred_contains($serviceSource, "function admin_dashboard_view_model(bool \$includeMaintenance = false, string \$surface = 'complete'): array", 'dashboard model preserves complete callers and explicit deferred surfaces');
 assert_admin_dashboard_deferred_contains($serviceSource, '$databaseUsage = $includeMaintenance &&', 'database usage is maintenance-only');
 assert_admin_dashboard_deferred_contains($controllerSource, 'function cms_admin_dashboard_maintenance(): void', 'deferred maintenance controller exists');
 assert_admin_dashboard_deferred_contains($controllerSource, 'use function Gallery\\Views\\view_render_admin_dashboard_maintenance_panel;', 'deferred maintenance controller imports its panel renderer');
-assert_admin_dashboard_deferred_contains($controllerSource, 'admin_dashboard_view_model($maintenanceDeepLink)', 'explicit Maintenance deep links render maintenance during the main request');
+assert_admin_dashboard_deferred_contains($controllerSource, 'admin_dashboard_view_model($maintenanceLoaded, $surface)', 'explicit Maintenance deep links render maintenance during the main request');
 assert_admin_dashboard_deferred_contains($controllerSource, "['content', 'media', 'navigation', 'system', 'trash']", 'Maintenance deep-link allowlist includes the Trash subtab');
 assert_admin_dashboard_deferred_contains($viewSource, 'data-admin-dashboard-maintenance-placeholder', 'dashboard renders a deferred maintenance placeholder');
 assert_admin_dashboard_deferred_contains($viewSource, '$maintenanceEndpointParams', 'dashboard forwards the selected Maintenance deep link to its deferred endpoint');

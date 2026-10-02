@@ -744,5 +744,43 @@ class IsolationAndCallbackTests(unittest.TestCase):
         self.assertEqual(["https://example.test/index.php?page=upload_automation_upload"], calls)
 
 
+class SimConnectActivityTests(unittest.TestCase):
+    """Keep queue routing separate from visible and persisted activity text."""
+
+    def test_simconnect_event_routes_before_visible_marker_removal(self) -> None:
+        """Keep the SimConnect operation and severity while cleaning its UI text."""
+        app = mock.Mock()
+        app.exiting = False
+        app.events = MAIN.queue.Queue()
+        app.events.put(("warning", "[simconnect] Aircraft data packet rejected."))
+        app.events.put(("info", "Watching folder"))
+        app.manual_worker = None
+        app.current_job = None
+        app.classify_log_level.side_effect = ["warning", "success"]
+
+        MAIN.WatcherApp.drain_events(app)
+
+        app.classify_log_level.assert_any_call("warning", "[simconnect] Aircraft data packet rejected.")
+        app.write_log.assert_any_call("WARNING: Aircraft data packet rejected.", "warning")
+        app.record_activity.assert_any_call("warning", "[simconnect] Aircraft data packet rejected.", "simconnect", job_id="")
+        app.write_log.assert_any_call("INFO: Watching folder", "success")
+        app.record_activity.assert_any_call("success", "Watching folder", "watcher", job_id="")
+
+    def test_simconnect_activity_persists_without_duplicate_marker(self) -> None:
+        """Store clean activity messages without changing their category or secrets."""
+        app = mock.Mock()
+        app.api_key_var.get.return_value = "private-key"
+        app.activity_events = []
+        app.config.activity_history_limit = 50
+
+        MAIN.WatcherApp.record_activity(app, "warning", "[simconnect] Failure private-key", "simconnect")
+
+        event = app.activity_events[0]
+        self.assertEqual("simconnect", event.operation)
+        self.assertEqual("warning", event.level)
+        self.assertEqual("Failure [REDACTED]", event.message)
+        app.job_store.append_event.assert_called_once_with(event)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

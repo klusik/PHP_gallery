@@ -61,8 +61,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.114}
-\newcommand{\manualdate}{1 October 2026}
+\newcommand{\version}{0.114.1}
+\newcommand{\manualdate}{2~October~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -638,7 +638,9 @@ After activation, open the~shared photographs from the~collaboration panel or~th
 Withdrawal, changed source protection and~local friendship revocation block subsequent authorized reads. An~unreachable peer remains bounded by~the~maximum 120-second verification lease; downloaded pixels cannot be~recalled. Adding a~participant creates a~separate proposal requiring fresh approval from everyone. Ordinary use can~advance technical renewal on~demand; unattended renewal is~optional. Missing or~unknown required schema refuses sharing and~mutations. See \filepath{docs/COOPERATIVE_GALLERIES.md} for~operational limits and~deployment qualification.
 
 \subsection{Windows simulator location}
-WinApp 0.3.0 automatically uses the~MSFS 2024 camera world position and~falls back to~the~aircraft position on~bounded camera failure. MSFS 2020 uses the~aircraft position directly through the~same SimConnect runtime. Coordinates are~optional: simulator unavailability does~not~prevent upload. Position-source diagnostics distinguish camera and~aircraft results. The~installer requests application shutdown before replacing files; complete pending work before updating. Live simulator and~upgrade acceptance must be~checked on~the~target PC.
+WinApp 0.3.1 automatically uses the~MSFS 2024 camera world position and~falls back to~the~aircraft position on~bounded camera failure. MSFS 2020 uses the~aircraft position directly through the~same SimConnect runtime. Coordinates are~optional: simulator unavailability does~not~prevent upload. Position-source diagnostics distinguish camera and~aircraft results. The~installer requests application shutdown before replacing files; complete pending work before updating. Live simulator and~upgrade acceptance must be~checked on~the~target PC.
+
+Aircraft replies are~matched by~request and~definition IDs; the~request USER selector does~not~require a~zero reply object ID. Bounded diagnostics record receive metadata, dispatch sequence and~specific rejected-packet reasons. Failure reasons survive path redaction and~activity messages display one SimConnect marker. The~object-ID filter was~a~confirmed code bug, but~the~reported FS2020 timeout did~not~record the~returned object ID. Retest on~the~affected PC; simulated tests do~not~prove a~live fix.
 
 The~installed uploader checks its own stable GitHub installer version at~most once per~hour; \ui{Check for~updates} also starts a~manual check. The~last automatic attempt is~saved independently for~the~current user and~survives application restarts. CMS tags do~not~determine its version. The~highest numeric installer version requires SHA256 from the~GitHub asset or~a~matching same-release \filepath{winapp-update.json}. Missing or~conflicting integrity data refuses the~update; identical installers in~several CMS releases are~accepted. Gallery credentials are~never sent to~GitHub.
 
@@ -901,7 +903,9 @@ Browser-assisted create/upload has~additional safeguards. Selecting browser proc
 \subsection{Central Settings hub}
 \index{Settings!central hub}
 
-The~Admin navigation includes a~central \textbf{Settings} page for~site-wide configuration. It~is~divided into General, Website address, Public appearance, Content, Media and~browsing, Uploads and~automation, Privacy and~diagnostics, and~Advanced. Each section has~its own stable address, so~refresh, bookmarks, browser history, and~the~no-JavaScript fallback return to~the~same category.
+The~Admin navigation includes a~central \textbf{Settings} page for~site-wide configuration. General now groups the~website address, site name, Admin/public languages and~navigation preferences. The~other sections cover Public appearance, Content, Media and~browsing, Uploads and~automation, Privacy and~diagnostics, and~Advanced. Existing Website address links still reach General. Stable section links and~ordinary forms remain available without JavaScript.
+
+With JavaScript, sections load when opened and~save in~place. A~sticky save bar shows changed settings and~offers saving or~reverting the~current draft. Advanced summaries remain collapsed until needed. Address or~Admin-language changes offer an~explicit link to~the~new address or~language. The~dashboard first displays its shell, then loads Overview totals or~the~Galleries list as~needed; failed reads offer a~retry. Overview counts indexed originals rather than scanning files or~resolving gallery covers.
 
 A~Spotlight-style field searches settings as~you type. It~matches names, descriptions, categories, and~technical names, including controls that are~owned by~specialist Admin pages. Selecting a~result opens the~relevant section or~specialist page and~focuses the~matching control. Arrow keys, Enter, Escape, and~the~clear button can~be~used without leaving the~keyboard.
 
@@ -929,7 +933,7 @@ Saving validates the~current settings again. If~another session changed an~affec
 \index{Settings!website address}
 \index{configuration!base URL}
 
-Open \ui{Settings > Website address} to~correct the~public installation URL after setup. Enter an~absolute HTTP or~HTTPS address such as~\url{https://example.com}. Include a~path only when the~gallery is~actually installed in~that subdirectory. If~hosting detection added an~unwanted directory, remove it~from this field and~save.
+Open \ui{Settings > General} to~correct the~public installation URL after setup. Enter an~absolute HTTP or~HTTPS address such as~\url{https://example.com}. Include a~path only when the~gallery is~actually installed in~that subdirectory. If~hosting detection added an~unwanted directory, remove it~from this field and~save.
 
 The~save changes only the~top-level \codeword{base_url} string in~\filepath{config.php}; it~does not~create or~change a~database setting. Other configuration values, comments, and~formatting are~preserved. Both the~file and~its containing directory must be~writable. The~application rejects addresses with credentials, query parameters, or~fragments, and~refuses to~rewrite duplicate or~computed configuration values. Edit a~custom configuration manually when it~cannot be~updated safely.
 

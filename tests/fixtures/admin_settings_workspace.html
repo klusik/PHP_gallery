@@ -1,0 +1,142 @@
+<!doctype html>
+<!--
+Project: PHP Gallery
+Repository: https://github.com/klusik/PHP_gallery
+File: tests/fixtures/admin_settings_workspace.html
+Module Type: Browser Test Fixture
+Purpose: Exercise production Settings navigation, drafts, validation and scoped saves.
+Responsibilities: Verify in-place behavior with synthetic forms and a confined fetch seam.
+Author: Rudolf Klusal
+License: MIT
+-->
+<html lang="en"><meta charset="utf-8"><title>Settings fixture</title>
+<link rel="stylesheet" href="/public/assets/styles/base.css">
+<link rel="stylesheet" href="/public/assets/styles/admin.css">
+<link rel="stylesheet" href="/public/assets/styles/admin-cinematic.css">
+<link rel="stylesheet" href="/public/assets/styles/admin-settings.css">
+<body class="admin-page"><main id="workspace"></main><pre id="results">BROWSER PENDING</pre>
+<script type="module">
+import {setupAdminSettingsWorkspace} from '/public/assets/gallery-modules/admin-settings-workspace.js';
+import {setupAdminSettingsSearch} from '/public/assets/gallery-modules/admin-settings-search.js';
+import {setupAdminLanguageSelectorDesign} from '/public/assets/gallery-modules/admin-language-selector-design.js';
+
+let assertions = 0;
+let requests = 0;
+let rejectNext = false;
+let releaseSave = null;
+const initialUrl = location.href;
+const originalFetch = window.fetch;
+
+/** Require an observable browser behavior. @param {boolean} value Assertion. @param {string} message Failure detail. @return {void} Throws on failure. */
+function check(value, message) { assertions++; if (!value) throw new Error(message); }
+/** Wait for asynchronous production work. @param {function():boolean} predicate Expected state. @return {Promise<void>} Resolves within the fixture deadline. */
+async function until(predicate) {
+    const deadline = Date.now() + 5000;
+    while (!predicate()) {
+        if (Date.now() > deadline) throw new Error('Fixture progress timeout');
+        await new Promise(/** Yield to browser tasks. @param {function():void} resolve Timer consumer. @return {number} Timer handle. */ resolve => setTimeout(resolve, 10));
+    }
+}
+/** Render a scoped form matching the real view's lifecycle contract. @param {string} section Category. @param {string} value Saved value. @return {string} Synthetic form HTML. */
+function formMarkup(section, value) {
+    const id = section === 'general' ? 'site_name' : 'media_setting';
+    const language = section === 'general' ? '<details id="language-details"><summary>Viewer languages</summary><fieldset id="admin-setting-result-public_language_selector_languages"><legend>Available languages</legend><label><input name="settings[languages][]" value="en" type="checkbox" checked>English</label></fieldset>'
+        + '<fieldset data-language-design-editor><legend>Design</legend><div class="admin-language-design-control"><input data-language-design-field="show_flags" data-default-value="1" name="settings[design][show_flags]" type="checkbox"><button type="button" data-language-design-reset-field>Reset flags</button></div></fieldset></details>' : '';
+    return `<form method="post" action="/fixture-save" data-admin-settings-form="${section}" data-changes-label="{count} changes" data-clean-label="Clean" data-saving-label="Saving" data-failed-label="Save failed" data-address-label="New address" data-language-label="Reload language">
+        <input name="csrf_token" value="fixture-only" type="hidden"><input name="return_section" value="${section}" type="hidden">
+        <div role="alert" data-admin-settings-errors hidden></div><div id="admin-setting-result-${id}"><label>${section}<input name="settings[${id}]" value="${value}"></label><span id="error-${id}" data-admin-settings-field-error hidden></span></div>
+        ${language}<div class="admin-settings-savebar" data-admin-settings-savebar><span data-admin-settings-changes></span><button type="button" data-admin-settings-reset hidden>Revert</button><button data-admin-settings-save>Save</button></div></form>`;
+}
+/** Render one category with stable presentation containers. @param {string} section Category. @return {string} Panel HTML. */
+function panelMarkup(section) {
+    return `<section id="settings-${section}" class="admin-settings-section admin-tab-panel" data-admin-tab-panel><div data-admin-settings-feedback hidden></div><div data-admin-settings-content>${formMarkup(section, section)}</div></section>`;
+}
+/** Resolve the current form after production markup replacement. @param {string} section Category. @return {HTMLFormElement} Current form. */
+function form(section) { return document.querySelector(`[data-admin-settings-form="${section}"]`); }
+/** Edit through native DOM events used by production listeners. @param {string} section Category. @param {string} value Draft value. @return {void} Emits input. */
+function edit(section, value) {
+    const control = form(section).querySelector('input:not([type="hidden"])');
+    control.value = value;
+    control.dispatchEvent(new Event('input', {bubbles:true}));
+}
+/** Activate an actual category tab. @param {string} section Category. @return {void} Uses the production click handler. */
+function tab(section) { document.querySelector(`[data-admin-tab-target="settings-${section}"]`).click(); }
+/** Return a fixture JSON response. @param {Record<string,unknown>} payload Completion data. @param {number} status HTTP status. @return {Response} Synthetic response. */
+function json(payload, status = 200) { return new Response(JSON.stringify(payload), {status, headers:{'Content-Type':'application/json'}}); }
+
+window.fetch = /** Confine mutations to this fixture. @param {string|URL} url Endpoint. @param {RequestInit} options Request options. @return {Promise<Response>} Synthetic save or first-party asset response. */ async (url, options = {}) => {
+    if (new URL(url, location.href).pathname !== '/fixture-save') return originalFetch(url, options);
+    requests++;
+    const section = options.body.get('return_section');
+    const id = section === 'general' ? 'site_name' : 'media_setting';
+    check(options.body.get('csrf_token') === 'fixture-only' && options.headers.Accept === 'application/json', 'Save retains CSRF and JSON transport');
+    check(!options.body.has(section === 'general' ? 'settings[media_setting]' : 'settings[site_name]'), 'Save submits only its category');
+    if (rejectNext) {
+        rejectNext = false;
+        return json({ok:false, section, message:'Check settings', errors:{[id]:'Invalid value'}}, 422);
+    }
+    const value = options.body.get(`settings[${id}]`);
+    return new Promise(/** Hold the save for duplicate-request coverage. @param {function(Response):void} resolve Response consumer. @return {void} Stores an explicit release function. */ resolve => {
+        releaseSave = /** Complete this synthetic save. @return {void} Returns canonical completion metadata and one category fragment. */ () => resolve(json({
+            ok:true, message:'Saved', mutation:{type:'settings.update', entity:'settings', action:'update', entity_ids:[]}, panel:null, contexts:[], fallback:{redirect_url:initialUrl},
+            section, errors:{}, html:formMarkup(section, value), language_url:initialUrl,
+        }));
+    });
+};
+
+try {
+    document.querySelector('#workspace').innerHTML = '<div class="admin-settings-page" data-admin-settings-workspace><header class="admin-settings-toolbar"><h1>Settings</h1><div data-admin-settings-search data-results-label="matches" data-empty-label="Empty"><input data-admin-settings-search-input><button data-admin-settings-search-clear>Clear</button><div data-admin-settings-search-results><p data-admin-settings-search-status></p><a href="?section=general" data-admin-settings-search-result data-search-label="Viewer languages" data-search-text="viewer languages" data-search-section="general" data-search-target="admin-setting-result-public_language_selector_languages">Viewer languages</a><a href="/specialized" data-admin-settings-search-result data-search-label="Specialized" data-search-text="specialized" data-search-external="1">Specialized</a></div></div><a>Wizard</a></header>'
+        + '<nav data-admin-settings-navigation><select data-admin-settings-category><option value="general">General</option><option value="media">Media</option></select><div role="tablist"><a href="?section=general" data-admin-tab-target="settings-general">General<span data-admin-settings-draft-badge="general" hidden></span></a><a href="?section=media" data-admin-tab-target="settings-media">Media<span data-admin-settings-draft-badge="media" hidden></span></a></div></nav>'
+        + panelMarkup('general') + panelMarkup('media') + '</div>';
+    setupAdminSettingsWorkspace(); setupAdminSettingsSearch(); setupAdminLanguageSelectorDesign();
+    check(form('general').querySelector('[data-admin-settings-save]').disabled, 'Clean form cannot create an unnecessary save');
+    const generalSave = form('general').querySelector('[data-admin-settings-save]').getBoundingClientRect();
+    tab('media');
+    const mediaSave = form('media').querySelector('[data-admin-settings-save]').getBoundingClientRect();
+    check(generalSave.right === mediaSave.right && generalSave.bottom === mediaSave.bottom && getComputedStyle(form('media').querySelector('[data-admin-settings-savebar]')).position === 'fixed', 'Save stays in the same floating viewport position across categories');
+    tab('general');
+    edit('general', 'draft'); tab('media'); edit('media', 'other draft'); tab('general');
+    check(form('general').elements.namedItem('settings[site_name]').value === 'draft', 'Switching categories preserves drafts');
+    const select = document.querySelector('[data-admin-settings-category]');
+    select.value = 'media'; select.dispatchEvent(new Event('change', {bubbles:true}));
+    check(!document.querySelector('#settings-media').hidden && location.search === '?section=media', 'Mobile selector preserves category and URL state');
+    history.back();
+    await until(/** Wait for native history restoration. @return {boolean} Whether General is visible. */ () => !document.querySelector('#settings-general').hidden);
+    check(form('general').elements.namedItem('settings[site_name]').value === 'draft', 'Back navigation preserves the draft');
+    form('general').querySelector('[data-admin-settings-reset]').click();
+    check(form('general').elements.namedItem('settings[site_name]').value === 'general' && form('media').elements.namedItem('settings[media_setting]').value === 'other draft', 'Revert affects only one category');
+    document.querySelector('#language-details').open = true;
+    form('general').querySelector('[data-language-design-reset-field]').click();
+    await until(/** Wait for reset dirty tracking after delegated editor handlers. @return {boolean} Whether the form is dirty. */ () => !form('general').querySelector('[data-admin-settings-save]').disabled);
+    check(form('general').querySelector('[data-admin-settings-changes]').textContent === '1 changes', 'Language reset updates the draft count');
+    const dirtySave = form('general').querySelector('[data-admin-settings-save]').getBoundingClientRect();
+    check(dirtySave.right === generalSave.right && dirtySave.bottom === generalSave.bottom, `Draft status and Revert do not move the floating Save button: clean ${generalSave.right},${generalSave.bottom}; dirty ${dirtySave.right},${dirtySave.bottom}`);
+    form('general').querySelector('[data-admin-settings-reset]').click();
+    document.querySelector('#language-details').open = false;
+    const search = document.querySelector('[data-admin-settings-search-input]');
+    search.value = 'Viewer'; search.dispatchEvent(new Event('input', {bubbles:true}));
+    search.dispatchEvent(new KeyboardEvent('keydown', {key:'Enter', bubbles:true}));
+    await until(/** Wait for search to reveal a nested setting. @return {boolean} Whether its disclosure is open. */ () => document.querySelector('#language-details').open);
+    edit('general', 'invalid'); rejectNext = true; form('general').requestSubmit();
+    await until(/** Wait for validation to unlock controls. @return {boolean} Whether invalid fields are visible. */ () => Boolean(form('general').querySelector('[aria-invalid="true"]')) && !form('general').hasAttribute('aria-busy'));
+    check(form('general').elements.namedItem('settings[site_name]').value === 'invalid' && document.activeElement === form('general').elements.namedItem('settings[site_name]'), 'Validation retains the draft and focuses the unlocked field');
+    edit('general', 'saved'); form('general').requestSubmit();
+    await until(/** Wait for the held request. @return {boolean} Whether saving has started. */ () => releaseSave !== null);
+    const requestCount = requests;
+    form('general').dispatchEvent(new Event('submit', {bubbles:true,cancelable:true}));
+    check(requests === requestCount, 'Pending saves are submitted only once');
+    const saveUrl = location.href;
+    releaseSave(); releaseSave = null;
+    await until(/** Wait for the returned saved form. @return {boolean} Whether its baseline is clean. */ () => form('general').querySelector('[data-admin-settings-save]').disabled && !form('general').hasAttribute('aria-busy'));
+    check(location.href === saveUrl && form('media').elements.namedItem('settings[media_setting]').value === 'other draft', 'Scoped completion preserves URL and other drafts');
+    check(document.querySelector('#language-details').open && document.querySelector('[data-admin-settings-feedback] a')?.href === initialUrl, 'Completion preserves disclosures and exposes the language reload link');
+    edit('general', 'second save'); form('general').requestSubmit();
+    await until(/** Wait for a save from dynamically rendered controls. @return {boolean} Whether its request is held. */ () => releaseSave !== null);
+    releaseSave(); releaseSave = null;
+    await until(/** Wait for the second replacement. @return {boolean} Whether its value is saved. */ () => form('general').elements.namedItem('settings[site_name]').value === 'second save' && form('general').querySelector('[data-admin-settings-save]').disabled);
+    check(requests === 3, 'Newly rendered forms remain intercepted without rebinding other categories');
+    history.replaceState(null, '', '?section=site'); dispatchEvent(new PopStateEvent('popstate'));
+    check(!document.querySelector('#settings-general').hidden, 'Historical Website deep links still select General');
+    document.querySelector('#results').textContent = `BROWSER PASS ${assertions} assertions`;
+} catch (error) { document.querySelector('#results').textContent = 'BROWSER FAIL ' + error.stack; }
+</script></body></html>

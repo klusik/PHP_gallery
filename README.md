@@ -6,7 +6,7 @@ PHP 8.1 is the compatibility minimum. For deployment, use the latest patch relea
 of maintained PHP 8.3 or newer; PHP 8.5 is preferred after staging verification.
 See [runtime support and upstream lifecycle dates](docs/RUNTIME_SUPPORT.md).
 
-**Current Version:** 0.114
+**Current Version:** 0.114.1
 
 **Key Benefit:** Deploy in minutes on shared hosting. No npm, no Composer, no framework overhead. Just PHP + MySQL.
 
@@ -29,7 +29,7 @@ The manual language does not change the administrator or public interface langua
 
 Enable Cooperative galleries in Features to pair independent HTTPS installations through **Settings > Advanced > Friendly galleries**. Use **Album collaborations** to exchange public album references, review exact scopes and approve participation independently. Friendship alone does not share photographs. Shared pages serve attributed, short-lived existing previews and thumbnails; originals and protected albums remain local. Apply the three new migrations through the ordinary migration workflow before use. See [cooperative administration and security](docs/COOPERATIVE_GALLERIES.md).
 
-WinApp **0.3.0** adds trusted GitHub update discovery, verified installer downloads, and safe update handoff; update checks run at startup and at most hourly afterward. MSFS 2024 camera location with aircraft fallback and MSFS 2020 aircraft location remain supported, with optional coordinates. Gallery credentials are never sent to GitHub. See [Windows companion](winapp/README.md) for installation, runtime packaging and live simulator verification limits.
+WinApp **0.3.1** corrects aircraft reply correlation for SimConnect and preserves trusted GitHub update discovery, verified installer downloads, and safe update handoff; update checks run at startup and at most hourly afterward. MSFS 2024 camera location with aircraft fallback and MSFS 2020 aircraft location remain supported, with optional coordinates. Aircraft replies match the request and definition IDs; the returned object ID need not be zero. Bounded receive diagnostics retain specific failure reasons after redaction. This fixes a confirmed code bug; the reported FS2020 timeout still requires a live target-PC retest because its response object ID was not recorded. Gallery credentials are never sent to GitHub. See [Windows companion](winapp/README.md) for installation, runtime packaging and live simulator verification limits.
 
 ### Gallery Management
 - **Filesystem-first design** - Galleries are folders on disk; the database mirrors and enhances them

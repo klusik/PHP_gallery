@@ -43,8 +43,10 @@ use function Gallery\Services\t;
  * Render the admin-only dashboard profile diagnostic panel.
  *
  * @param array<string, mixed>|null $model Prepared profile model.
+ * @param bool $expanded Whether diagnostics should be expanded initially.
+ * @return void Outputs diagnostics, or nothing when profiling is disabled.
  */
-function view_render_admin_render_profile_panel(?array $model): void
+function view_render_admin_render_profile_panel(?array $model, bool $expanded = true): void
 {
     if ($model === null) {
         return;
@@ -52,7 +54,7 @@ function view_render_admin_render_profile_panel(?array $model): void
     $counters = is_array($model['counters'] ?? null) ? $model['counters'] : [];
     $timers = is_array($model['timers'] ?? null) ? $model['timers'] : [];
 
-    echo '<details class="admin-render-profile" data-admin-render-profile open>';
+    echo '<details class="admin-render-profile" data-admin-render-profile' . ($expanded ? ' open' : '') . '>';
     echo '<summary>' . e(t('dev.admin_render_profile.title', 'Admin render profile'));
     if ((string) ($model['route'] ?? '') !== '') {
         echo ' · ' . e((string) $model['route']);

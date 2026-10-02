@@ -26,18 +26,21 @@ import ctypes
 import importlib.machinery
 import importlib.util
 import queue
+import struct
 import sys
 import tempfile
 import threading
 import unittest
 from pathlib import Path
 from unittest import mock
+from typing import Any, List, Optional, Tuple
 
 WINAPP_DIR = Path(__file__).resolve().parents[1]
 if str(WINAPP_DIR) not in sys.path:
     sys.path.insert(0, str(WINAPP_DIR))
 
 from uploader import simconnect_location as SIM
+from uploader.diagnostics import redact_text
 
 
 class NativeFunction:
@@ -248,6 +251,37 @@ class FakeSimConnectDLL:
         return 0
 
 
+class WireSimConnectDLL(FakeSimConnectDLL):
+    """Supply independently encoded SDK packets instead of production ctypes layouts."""
+
+    def __init__(self, generation: int = 2020, camera: str = "success", replies: Optional[List[Tuple[bytes, int]]] = None) -> None:
+        """Choose provider behavior and optional exact wire replies for aircraft requests."""
+        super().__init__(generation=generation, camera=camera)
+        self.replies = replies
+
+    def open(self, handle: Any, *args: Any) -> int:
+        """Encode literal OPEN receive ID 2 and SDK fixed-width identity fields."""
+        self.send("open", args)
+        ctypes.cast(handle, ctypes.POINTER(ctypes.c_void_p))[0] = ctypes.c_void_p(123)
+        name = b"KittyHawk" if self.generation == 2020 else b"SunRise"
+        wire = struct.pack("<3I256s10I", 308, 0, 2, name, 11 if self.generation == 2020 else 12, 0, 282174, 999, 11, 0, 62651, 3, 0, 0)
+        self.packets.append((ctypes.create_string_buffer(wire, len(wire)), len(wire)))
+        return 0
+
+    @staticmethod
+    def aircraft_wire(request: int = 1, definition: int = 1, object_id: int = 73, coordinates: Tuple[float, float, float] = (48.25, 12.75, 2000.0), declared_size: int = 64) -> bytes:
+        """Encode SDK SIMOBJECT_DATA ID 8, ten DWORDs and three little-endian doubles."""
+        return struct.pack("<10I3d", declared_size, 0, 8, request, object_id, definition, 0, 1, 1, 3, *coordinates)
+
+    def request_aircraft(self, *args: Any) -> int:
+        """Queue caller-selected byte buffers while preserving their callback byte counts."""
+        self.send("aircraft_get", args)
+        replies = self.replies if self.replies is not None else [(self.aircraft_wire(int(args[1]), int(args[2])), 64)]
+        for wire, callback_size in replies:
+            self.packets.append((ctypes.create_string_buffer(wire, len(wire)), callback_size))
+        return 0
+
+
 class SimConnectTransportTests(unittest.TestCase):
     """Protect both generations, fallbacks, bounded waits and packet correlation."""
 
@@ -269,6 +303,116 @@ class SimConnectTransportTests(unittest.TestCase):
         self.assertFalse(any(name == "aircraft_get" for name, _ in dll.calls))
         self.assertEqual(2024, client.simulator_info.generation)
         self.assertEqual(1, dll.close_count)
+
+    def test_independent_fs2020_wire_accepts_actual_user_aircraft_object_id(self) -> None:
+        """Accept literal receive ID 8 with a nonzero simulator-assigned user object ID."""
+        dll = WireSimConnectDLL()
+        location, message, client = self.acquire(dll)
+        self.assertIsNotNone(location, message)
+        self.assertEqual("aircraft_position", location.source)
+        self.assertEqual((48.25, 12.75, 2000.0), (location.latitude, location.longitude, location.altitude))
+        report = client.diagnostics_snapshot()
+        self.assertEqual([2, 8], report["dispatch_sequence"])
+        self.assertEqual(73, report["aircraft_packets"][-1]["object_id"])
+        self.assertEqual(40, report["aircraft_packets"][-1]["payload_offset"])
+        packet = report["aircraft_packets"][-1]
+        self.assertEqual(1, packet["expected_request_id"])
+        self.assertEqual(1, packet["expected_definition_id"])
+        self.assertEqual(packet["expected_request_id"], packet["request_id"])
+        self.assertEqual(packet["expected_definition_id"], packet["definition_id"])
+        self.assertEqual(64, packet["cb_data"])
+        self.assertEqual(64, packet["dw_size"])
+        self.assertEqual(40, packet["header_size"])
+        self.assertEqual(24, packet["payload_available"])
+        self.assertNotIn("timeout", message.lower())
+        self.assertEqual(1, dll.close_count)
+
+    def test_independent_wire_isolated_identifier_mismatches_are_observable(self) -> None:
+        """Reject foreign requests or definitions with concrete reasons instead of timeout."""
+        for field, request, definition in (("request", 99, 1), ("definition", 1, 99)):
+            with self.subTest(field=field):
+                wire = WireSimConnectDLL.aircraft_wire(request=request, definition=definition)
+                location, message, client = self.acquire(WireSimConnectDLL(replies=[(wire, len(wire))]))
+                self.assertIsNone(location)
+                report = client.diagnostics_snapshot()
+                self.assertIn(field, report["aircraft_reason"].lower())
+                self.assertIn("99", report["aircraft_reason"])
+                self.assertTrue(report["aircraft_packets"][-1]["rejection"])
+                self.assertNotIn("timeout", message.lower())
+
+    def test_independent_wire_foreign_packets_do_not_block_later_matching_reply(self) -> None:
+        """Continue dispatch after both identifier mismatches and accept the matching reply."""
+        replies = [(WireSimConnectDLL.aircraft_wire(request=99), 64), (WireSimConnectDLL.aircraft_wire(definition=99), 64), (WireSimConnectDLL.aircraft_wire(), 64)]
+        location, message, client = self.acquire(WireSimConnectDLL(replies=replies))
+        self.assertIsNotNone(location, message)
+        self.assertEqual(48.25, location.latitude)
+        packets = client.diagnostics_snapshot()["aircraft_packets"]
+        self.assertEqual(3, len(packets))
+        self.assertTrue(packets[0]["rejection"])
+        self.assertTrue(packets[1]["rejection"])
+        self.assertFalse(packets[2]["rejection"])
+
+    def test_independent_wire_truncation_never_reads_beyond_native_bounds(self) -> None:
+        """Reject short buffers and inconsistent declared/callback lengths with useful reasons."""
+        wire = WireSimConnectDLL.aircraft_wire()
+        cases = (("common header", wire[:8], 8), ("metadata", WireSimConnectDLL.aircraft_wire(declared_size=36)[:36], 36), ("payload", WireSimConnectDLL.aircraft_wire(declared_size=63)[:63], 63), ("callback length", wire, 63), ("declared short", WireSimConnectDLL.aircraft_wire(declared_size=40), 64), ("declared oversized", WireSimConnectDLL.aircraft_wire(declared_size=65), 64))
+        for label, packet, callback_size in cases:
+            with self.subTest(case=label):
+                location, message, client = self.acquire(WireSimConnectDLL(replies=[(packet, callback_size)]))
+                self.assertIsNone(location)
+                reason = client.diagnostics_snapshot()["aircraft_reason"].lower()
+                self.assertTrue(any(word in reason for word in ("small", "size", "short", "truncated", "payload", "header")), reason)
+                self.assertNotIn("timeout", message.lower())
+
+    def test_independent_wire_accepts_finite_zero_coordinates_and_altitude(self) -> None:
+        """Keep numeric zero valid independently for every field and at the geographic origin."""
+        for coordinates in ((0.0, 12.75, 2000.0), (48.25, 0.0, 2000.0), (48.25, 12.75, 0.0), (0.0, 0.0, 0.0)):
+            with self.subTest(coordinates=coordinates):
+                wire = WireSimConnectDLL.aircraft_wire(coordinates=coordinates)
+                location, message, _ = self.acquire(WireSimConnectDLL(replies=[(wire, 64)]))
+                self.assertIsNotNone(location, message)
+                self.assertEqual(coordinates, (location.latitude, location.longitude, location.altitude))
+
+    def test_fs2024_camera_failure_decodes_independent_aircraft_wire(self) -> None:
+        """Preserve camera-first strategy and decode real-layout aircraft fallback on camera failure."""
+        dll = WireSimConnectDLL(generation=2024, camera="exception")
+        location, message, _ = self.acquire(dll)
+        self.assertIsNotNone(location, message)
+        self.assertEqual("aircraft_position_fallback", location.source)
+        self.assertTrue(any(name == "camera_get" for name, _ in dll.calls))
+        self.assertTrue(any(name == "aircraft_get" for name, _ in dll.calls))
+
+    def test_wire_mismatch_reason_survives_windows_path_redaction(self) -> None:
+        """Keep failure details visible when native DLL paths are sanitized for support logs."""
+        wire = WireSimConnectDLL.aircraft_wire(request=99)
+        _, _, client = self.acquire(WireSimConnectDLL(replies=[(wire, 64)]))
+        client.dll_message = "Using SimConnect.dll: C:\\Users\\pilot\\SimConnect.dll"
+        redacted = redact_text(client.diagnostic_message(client.aircraft_error))
+        self.assertIn("request ID mismatch", redacted)
+        self.assertIn("received 99", redacted)
+        self.assertIn("provider=aircraft_position", redacted)
+        self.assertIn("last aircraft packet", redacted)
+        self.assertIn("expected_request_id", redacted)
+        self.assertNotIn("C:\\Users\\pilot", redacted)
+
+    def test_wire_diagnostic_history_is_bounded_and_resets_between_acquisitions(self) -> None:
+        """Bound foreign packet history and clear it before a subsequent acquisition."""
+        replies = [(WireSimConnectDLL.aircraft_wire(request=99), 64) for _ in range(20)]
+        replies.append((WireSimConnectDLL.aircraft_wire(), 64))
+        client = SIM.SimConnectLocationClient(timeout_seconds=0.5)
+        location, message, _ = self.acquire(WireSimConnectDLL(replies=replies), client)
+        self.assertIsNotNone(location, message)
+        report = client.diagnostics_snapshot()
+        self.assertEqual(21, report["aircraft_data_packets"])
+        self.assertEqual(8, len(report["aircraft_packets"]))
+        self.assertEqual(12, len(report["dispatch_sequence"]))
+        location, message, _ = self.acquire(WireSimConnectDLL(), client)
+        self.assertIsNotNone(location, message)
+        report = client.diagnostics_snapshot()
+        self.assertEqual(1, report["aircraft_data_packets"])
+        self.assertEqual(1, len(report["aircraft_packets"]))
+        self.assertEqual([2, 8], report["dispatch_sequence"])
+        self.assertEqual("", report["aircraft_reason"])
 
     def test_msfs_2024_camera_failures_fall_back_to_aircraft(self):
         """Recover aircraft coordinates after each supported camera failure category."""

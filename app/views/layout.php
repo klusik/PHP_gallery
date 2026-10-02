@@ -163,6 +163,7 @@ function view_admin_stylesheet_files(): array
         'assets/styles/side-panel.css',
         'assets/styles/admin-duplicate-photo-detector.css',
         'assets/styles/admin-cinematic.css',
+        'assets/styles/admin-settings.css',
         'assets/styles/utilities.css',
         'assets/styles.css',
     ];

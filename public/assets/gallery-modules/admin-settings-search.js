@@ -127,6 +127,10 @@ function setupAdminSettingsSearchRoot(root) {
         if (!(item instanceof HTMLAnchorElement)) {
             return;
         }
+        if (item.dataset.searchExternal === '1') {
+            item.click();
+            return;
+        }
         const sectionPanelId = `settings-${item.dataset.searchSection || 'general'}`;
         const tab = document.querySelector(`[data-admin-tab-target="${CSS.escape(sectionPanelId)}"]`);
         if (tab instanceof HTMLElement) {
@@ -140,6 +144,11 @@ function setupAdminSettingsSearchRoot(root) {
             if (!(target instanceof HTMLElement)) {
                 window.location.href = item.href;
                 return;
+            }
+            let disclosure = target;
+            while (disclosure) {
+                if (disclosure instanceof HTMLDetailsElement) disclosure.open = true;
+                disclosure = disclosure.parentElement;
             }
             target.scrollIntoView({behavior: 'smooth', block: 'center'});
             target.focus({preventScroll: true});
@@ -162,7 +171,11 @@ function setupAdminSettingsSearchRoot(root) {
         }
     });
     clear.addEventListener('click', () => { input.value = ''; update(); input.focus(); });
-    items.forEach((item) => item.addEventListener('click', (event) => { event.preventDefault(); activate(item); }));
+    items.forEach(/** Bind each indexed result. @param {HTMLAnchorElement} item Search destination. @return {void} Installs its click handler. */ (item) => item.addEventListener('click', /** Preserve specialized navigation or reveal a local setting. @param {MouseEvent} event Result activation. @return {void} Closes the search after choosing a result. */ (event) => {
+        if (item.dataset.searchExternal === '1') { closeResults(); return; }
+        event.preventDefault();
+        activate(item);
+    }));
     document.addEventListener('pointerdown', (event) => { if (!root.contains(event.target)) closeResults(); });
 }
 
