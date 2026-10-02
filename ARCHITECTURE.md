@@ -9,7 +9,7 @@ This document is intended to help future maintainers and AI coding agents unders
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.114.1';
+const CMS_VERSION = '0.114.2';
 ```
 
 Update-related code uses:
@@ -2252,3 +2252,5 @@ also verify the bounded source fingerprint after authority checks before returni
 The central Settings workspace groups website identity/address, Admin/public languages and navigation under General. Historical `section=site` links resolve to General. `admin_settings` prepares compact view models, lazy section fragments and canonical mutation envelopes; persistence remains with the registry's domain owners. An unchanged base URL is skipped, changed addresses are written last, and saved address/language changes offer explicit navigation links. Browser code owns dirty-setting counts and draft revert and passes successful mutations to the shared completion coordinator. Ordinary URLs and POST forms remain the no-JavaScript path.
 
 The dashboard uses separately prepared `shell`, `overview` and `galleries` surfaces. Overview totals come from indexed metadata through the model, with effective gallery visibility counted in the service; they do not resolve covers or inventory files. The authenticated GET-only `admin_dashboard_fragment` endpoint releases the PHP session before reading its model, returns private/no-store JSON and bounds failed reads to a retryable 503. Dashboard workspace JavaScript loads the selected surface and handles retry; maintenance remains independently deferred.
+
+The frozen updater loads `version.dll`, `kernel32.dll` and `shell32.dll` explicitly with `LOAD_LIBRARY_SEARCH_SYSTEM32`, preventing bundled `VERSION` data from shadowing the native version library. Before Inno Setup, the build runs a copied executable's read-only `--self-update-smoke` path and requires its PE version to match bundled metadata. This path runs before configuration/logging/GUI initialization and performs no elevation or installation. Upgrading from 0.3.1 requires manual installer launch to avoid reusing that running version's copied old helper; subsequent updates launched by 0.3.2 use the corrected code.
