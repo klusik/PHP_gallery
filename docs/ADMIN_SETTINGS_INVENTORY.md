@@ -24,6 +24,10 @@ The Settings work audited the requested sources and their effective owners:
 
 `app/services/admin_settings_registry.php` is now the machine-readable ownership registry for settings surfaced by the central hub. It records stable IDs, canonical keys, ownership, current/default resolvers, validation metadata, migration status, sensitivity and specialized routes.
 
+## Compact Settings workspace
+
+General groups website address/name, Admin/public languages and navigation controls. Historical `section=site` links normalize to General. The authenticated workspace loads sections on demand and saves through canonical mutation envelopes in place, with dirty-setting counts, draft revert and explicit links after address or Admin-language changes. An unchanged address does not rewrite `config.php`. Advanced summaries are collapsed; ordinary section URLs and POST forms remain the no-JavaScript fallback. Specialist ownership and inherited values remain unchanged.
+
 ## Settings search
 
 The central Settings page renders a local Spotlight-style search directly below its title. Its index is generated from every visible registry entry, using the translated setting label, description, section, stable ID and sensitivity classification. Results update while the administrator types; no request, external API or separate search index is involved. Matching is case-insensitive, accent-insensitive and token-based, with label-prefix matches ranked first and a maximum of twelve visible results.

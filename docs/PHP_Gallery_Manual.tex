@@ -61,8 +61,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.114}
-\newcommand{\manualdate}{1 October 2026}
+\newcommand{\version}{0.114.1}
+\newcommand{\manualdate}{2~October~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -903,7 +903,9 @@ Browser-assisted create/upload has~additional safeguards. Selecting browser proc
 \subsection{Central Settings hub}
 \index{Settings!central hub}
 
-The~Admin navigation includes a~central \textbf{Settings} page for~site-wide configuration. It~is~divided into General, Website address, Public appearance, Content, Media and~browsing, Uploads and~automation, Privacy and~diagnostics, and~Advanced. Each section has~its own stable address, so~refresh, bookmarks, browser history, and~the~no-JavaScript fallback return to~the~same category.
+The~Admin navigation includes a~central \textbf{Settings} page for~site-wide configuration. General now groups the~website address, site name, Admin/public languages and~navigation preferences. The~other sections cover Public appearance, Content, Media and~browsing, Uploads and~automation, Privacy and~diagnostics, and~Advanced. Existing Website address links still reach General. Stable section links and~ordinary forms remain available without JavaScript.
+
+With JavaScript, sections load when opened and~save in~place. A~sticky save bar shows changed settings and~offers saving or~reverting the~current draft. Advanced summaries remain collapsed until needed. Address or~Admin-language changes offer an~explicit link to~the~new address or~language. The~dashboard first displays its shell, then loads Overview totals or~the~Galleries list as~needed; failed reads offer a~retry. Overview counts indexed originals rather than scanning files or~resolving gallery covers.
 
 A~Spotlight-style field searches settings as~you type. It~matches names, descriptions, categories, and~technical names, including controls that are~owned by~specialist Admin pages. Selecting a~result opens the~relevant section or~specialist page and~focuses the~matching control. Arrow keys, Enter, Escape, and~the~clear button can~be~used without leaving the~keyboard.
 
@@ -931,7 +933,7 @@ Saving validates the~current settings again. If~another session changed an~affec
 \index{Settings!website address}
 \index{configuration!base URL}
 
-Open \ui{Settings > Website address} to~correct the~public installation URL after setup. Enter an~absolute HTTP or~HTTPS address such as~\url{https://example.com}. Include a~path only when the~gallery is~actually installed in~that subdirectory. If~hosting detection added an~unwanted directory, remove it~from this field and~save.
+Open \ui{Settings > General} to~correct the~public installation URL after setup. Enter an~absolute HTTP or~HTTPS address such as~\url{https://example.com}. Include a~path only when the~gallery is~actually installed in~that subdirectory. If~hosting detection added an~unwanted directory, remove it~from this field and~save.
 
 The~save changes only the~top-level \codeword{base_url} string in~\filepath{config.php}; it~does not~create or~change a~database setting. Other configuration values, comments, and~formatting are~preserved. Both the~file and~its containing directory must be~writable. The~application rejects addresses with credentials, query parameters, or~fragments, and~refuses to~rewrite duplicate or~computed configuration values. Edit a~custom configuration manually when it~cannot be~updated safely.
 

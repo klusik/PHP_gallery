@@ -63,8 +63,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.114}
-\newcommand{\manualdate}{1.~října~2026}
+\newcommand{\version}{0.114.1}
+\newcommand{\manualdate}{2.~října~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -897,7 +897,9 @@ Vytváření a~nahrávání s~pomocí prohlížeče má další ochrany. Výběr
 \subsection{Centrální centrum Nastavení}
 \index{n00099@Nastavení!c00015@centrální centrum}
 
-Navigace administrace obsahuje centrální stránku \textbf{Nastavení} pro konfiguraci celého webu. Je rozdělena na Obecné, Adresa webu, Veřejný vzhled, Obsah, Média a~prohlížení, Nahrávání a~automatizace, Soukromí a~diagnostika a~Pokročilé. Každý oddíl má vlastní stabilní adresu, takže obnovení, záložky, historie prohlížeče i~náhradní postup bez JavaScriptu se vracejí do stejné kategorie.
+Navigace administrace obsahuje centrální stránku \textbf{Nastavení} pro konfiguraci celého webu. Obecné nyní sdružuje adresu webu, název, jazyk administrace a~veřejné části i~navigaci. Další sekce zahrnují Veřejný vzhled, Obsah, Média a~prohlížení, Nahrávání a~automatizaci, Soukromí a~diagnostiku a~Pokročilé. Starší odkazy na Adresu webu vedou do Obecných. Stabilní odkazy a~běžné formuláře fungují i~bez JavaScriptu.
+
+S~JavaScriptem se sekce načítají při otevření a~ukládají na místě. Přichycená lišta ukazuje počet změněných nastavení a~nabízí uložení nebo vrácení rozepsaných změn. Pokročilé souhrny zůstávají sbalené. Změna adresy či jazyka administrace nabídne výslovný odkaz na novou adresu nebo jazyk. Úvodní stránka administrace nejprve zobrazí rozhraní, poté podle potřeby načte souhrny Přehledu nebo seznam Galerií; selhání nabízí opakování. Přehled počítá indexované originály bez procházení souborů a~hledání titulních fotografií.
 
 Pole ve stylu Spotlight vyhledává nastavení během psaní. Porovnává názvy, popisy, kategorie a~technické názvy včetně ovládacích prvků vlastněných specializovanými stránkami administrace. Výběr výsledku otevře příslušný oddíl nebo specializovanou stránku a~zaměří odpovídající ovládací prvek. Šipky, Enter, Escape a~tlačítko vymazání lze používat bez opuštění klávesnice.
 
@@ -925,7 +927,7 @@ Uložení znovu ověřuje aktuální nastavení. Pokud jiná relace změnila ovl
 \index{n00099@Nastavení!a00002@adresa webu}
 \index{k00065@konfigurace!z00274@základní URL}
 
-Pro opravu veřejné adresy URL instalace po nastavení otevřete \ui{Nastavení > Adresa webu}. Zadejte absolutní adresu HTTP nebo HTTPS, například \url{https://example.com}. Cestu zahrňte pouze tehdy, pokud je galerie skutečně instalovaná v~daném podadresáři. Pokud detekce hostingu přidala nežádoucí adresář, odstraňte jej z~tohoto pole a~uložte.
+Pro opravu veřejné adresy URL instalace po nastavení otevřete \ui{Nastavení > Obecné}. Zadejte absolutní adresu HTTP nebo HTTPS, například \url{https://example.com}. Cestu zahrňte pouze tehdy, pokud je galerie skutečně instalovaná v~daném podadresáři. Pokud detekce hostingu přidala nežádoucí adresář, odstraňte jej z~tohoto pole a~uložte.
 
 Uložení mění pouze řetězec nejvyšší úrovně \codeword{base_url} v~\filepath{config.php}; nevytváří ani nemění databázové nastavení. Ostatní hodnoty konfigurace, komentáře a~formátování se zachovávají. Soubor i~adresář, který jej obsahuje, musejí být zapisovatelné. Aplikace odmítá adresy s~přihlašovacími údaji, parametry dotazu nebo fragmenty a~odmítá přepsat duplicitní nebo vypočítávané hodnoty konfigurace. Vlastní konfiguraci upravte ručně, pokud ji nelze bezpečně aktualizovat.
 
