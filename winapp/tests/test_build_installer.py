@@ -38,7 +38,7 @@ SPEC.loader.exec_module(BUILD)
 class InstallerBuildTests(unittest.TestCase):
     """A failed tool must never publish a partial installer or retain staging."""
 
-    def exercise_build(self, fail_at=None, use_installed_dependencies=False):
+    def exercise_build(self, fail_at: int | None = None, use_installed_dependencies: bool = False) -> list[list[str]]:
         """Simulate tool output while checking staging and atomic publication.
 
         ``fail_at`` injects a subprocess failure at the numbered tool step.
@@ -55,7 +55,7 @@ class InstallerBuildTests(unittest.TestCase):
             output.write_bytes(b"previous successful installer")
             calls = []
 
-            def fake_run(command, **kwargs):
+            def fake_run(command: list[str], **kwargs: object) -> None:
                 """Emulate build artifacts and validate each subprocess contract.
 
                 No build tools run and no packages are installed. Create only
@@ -84,7 +84,15 @@ class InstallerBuildTests(unittest.TestCase):
                 if BUILD.SIMCONNECT_ARCHIVE_PATH in command:
                     self.assertIn("CArchiveReader", command[2])
                     self.assertEqual(hashlib.sha256((source / "SimConnect.dll").read_bytes()).hexdigest(), command[-1])
+                if "--self-update-smoke" in command:
+                    self.assertEqual(work / "helper-smoke" / "helper.exe", Path(command[0]))
+                    self.assertEqual(b"standalone app", Path(command[0]).read_bytes())
+                    self.assertEqual(60, kwargs["timeout"])
+                    self.assertEqual(str(work / "smoke-profile"), kwargs["env"]["APPDATA"])
+                    self.assertEqual(str(work / "smoke-local-profile"), kwargs["env"]["LOCALAPPDATA"])
+                    self.assertFalse(any(call[0] == "ISCC.exe" for call in calls))
                 if command[0] == "ISCC.exe":
+                    self.assertTrue(any("--self-update-smoke" in call for call in calls))
                     self.assertIn("/DAppVersion=0.1.0", command)
                     self.assertIn(f"/DSourceRoot={source}", command)
                     self.assertTrue((source / "SimConnect.dll").is_file())
@@ -106,16 +114,23 @@ class InstallerBuildTests(unittest.TestCase):
                 self.assertFalse(any("venv" in command or "pip" in command for command in calls))
                 self.assertEqual(BUILD.sys.executable, calls[0][0])
                 self.assertEqual(BUILD.installed_dependencies_code(), calls[0][2])
+            return calls
 
     def test_success_publishes_only_installer_and_cleans_staging(self):
         """Publish only the completed installer and discard all temporary files."""
         self.exercise_build()
 
-    def test_each_tool_failure_cleans_staging_and_preserves_previous_installer(self):
+    def test_each_tool_failure_cleans_staging_and_preserves_previous_installer(self) -> None:
         """Failure at any build step must retain the previous published artifact."""
-        for step in range(1, 8):
+        for step in range(1, 9):
             with self.subTest(step=step):
                 self.exercise_build(fail_at=step)
+
+    def test_frozen_helper_smoke_failure_prevents_inno_packaging(self) -> None:
+        """A failed real-helper check must preserve the previous installer."""
+        calls = self.exercise_build(fail_at=7)
+        self.assertEqual("--self-update-smoke", calls[-1][1])
+        self.assertFalse(any(call[0] == "ISCC.exe" for call in calls))
 
     def test_existing_dependencies_build_never_installs_packages(self):
         """Reusing a checked interpreter must avoid both pip and venv commands."""

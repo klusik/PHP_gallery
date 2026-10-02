@@ -110,6 +110,15 @@ target identity and elevated installation. AST contracts enforce documented,
 typed definitions and absence of future imports in new updater modules/tests.
 The central WinApp suite owns these checks; tests never download a live installer.
 
+Frozen updater regression must distinguish the bundled `VERSION` text file from
+Windows `version.dll`. Source tests cover explicit `version.dll`, `kernel32.dll`
+and `shell32.dll` names with System32 search; build qualification also runs the
+read-only native API smoke switch in a copied frozen helper before ISCC.
+The smoke check must not install, elevate or mutate updater state. Verify an
+installed 0.3.2 application's future helper handoff on Windows. A 0.3.1 app copies
+its old helper before installing 0.3.2 and may still show the earlier DLL error;
+manual installation of the verified 0.3.2 installer avoids that old-helper path.
+
 Manual installed-Windows acceptance covers automatic/manual checks, UAC acceptance
 and cancellation, a running/tray uploader and both onefile processes, active
 uploads/watchers/media preparation, worker-drain timeout, genuine installer

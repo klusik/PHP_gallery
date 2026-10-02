@@ -57,6 +57,18 @@ from urllib import error, parse, request
 # Dispatch helper/version modes before application configuration or logging.
 if __name__ == "__main__":
     multiprocessing.freeze_support()
+    if sys.argv[1:] == ["--self-update-smoke"]:
+        try:
+            from uploader.update_helper import WindowsBackend
+            expected_version = (Path(__file__).resolve().parent / "VERSION").read_text(encoding="utf-8").strip()
+            if WindowsBackend().version(sys.executable) != expected_version:
+                raise RuntimeError("Frozen executable version does not match bundled VERSION")
+        except Exception as exc:
+            # Windowed builds may have no stderr; the exit code remains authoritative.
+            if sys.stderr is not None:
+                print("Frozen update smoke failed: " + str(exc)[:500], file=sys.stderr)
+            raise SystemExit(1)
+        raise SystemExit(0)
     if sys.argv[1:] == ["--version"]:
         print((Path(__file__).resolve().parent / "VERSION").read_text(encoding="utf-8").strip())
         raise SystemExit(0)

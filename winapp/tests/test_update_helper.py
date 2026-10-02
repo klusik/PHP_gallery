@@ -87,6 +87,43 @@ class UpdateHelperTests(unittest.TestCase):
             with self.subTest(ticket=ticket), self.assertRaises(ValueError):
                 helper.validate_ticket(ticket, self.session / "ticket.json")
 
+    def test_native_libraries_avoid_frozen_version_data_collision(self) -> None:
+        """Exercise all native loads under PyInstaller's case-insensitive VERSION redirection."""
+        extraction = self.root / "_MEI"
+        extraction.mkdir()
+        version_data = extraction / "VERSION"
+        version_data.write_text("0.3.2", encoding="utf-8")
+        kernel, shell, version = mock.MagicMock(), mock.MagicMock(), mock.MagicMock()
+        shell.ShellExecuteExW.return_value = False
+        version.GetFileVersionInfoSizeW.return_value = 0
+        libraries = {"kernel32.dll": kernel, "shell32.dll": shell, "version.dll": version}
+
+        def frozen_name(name: str) -> str:
+            """Mirror the installed hook with Windows filename comparison on every platform."""
+            if not Path(name).is_file():
+                for candidate in extraction.iterdir():
+                    if candidate.name.casefold() == Path(name).name.casefold() and candidate.is_file():
+                        return str(candidate)
+            return name
+
+        def load_library(name: str, *, use_last_error: bool, winmode: int) -> mock.MagicMock:
+            """Reject bundled data and unrestricted searches before returning a fake native DLL."""
+            self.assertTrue(use_last_error)
+            self.assertEqual(0x00000800, winmode)
+            return libraries[frozen_name(name)]
+
+        self.assertEqual(str(version_data), frozen_name("version"))
+        with mock.patch.object(helper.ctypes, "WinDLL", side_effect=load_library, create=True) as loader, \
+                mock.patch.object(helper.ctypes, "get_last_error", return_value=1223, create=True):
+            backend = helper.WindowsBackend()
+            with mock.patch.object(backend, "create_status_pipe", return_value=None), \
+                    self.assertRaises(InterruptedError):
+                backend.install(self.ticket, mock.Mock())
+            with self.assertRaisesRegex(OSError, "version unavailable"):
+                backend.version(str(self.installed))
+        self.assertEqual([mock.call(name, use_last_error=True, winmode=0x00000800)
+                          for name in ("kernel32.dll", "shell32.dll", "version.dll")], loader.call_args_list)
+
     def test_broken_symlink_is_rejected_before_existence_check(self) -> None:
         """A dangling link remains a forbidden path even without a target."""
         with mock.patch.object(Path, "is_symlink", return_value=True), \

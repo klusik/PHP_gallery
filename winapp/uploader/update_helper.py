@@ -42,6 +42,9 @@ class UpdateTicket:
 
 Progress = Callable[[tuple[int, int] | None], None]
 
+# Load native Windows libraries only from System32, never the helper extraction directory.
+LOAD_LIBRARY_SEARCH_SYSTEM32 = 0x00000800
+
 
 class Backend(Protocol):
     """Injectable privilege and process boundary for deterministic tests."""
@@ -261,7 +264,7 @@ class WindowsBackend:
     """Windows process APIs loaded only when the standalone helper runs."""
     def __init__(self) -> None:
         """Declare native argument widths before touching any process handles."""
-        self.kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+        self.kernel = ctypes.WinDLL("kernel32.dll", use_last_error=True, winmode=LOAD_LIBRARY_SEARCH_SYSTEM32)
         self.kernel.OpenProcess.restype = wintypes.HANDLE
         self.kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
         self.kernel.CloseHandle.argtypes = [wintypes.HANDLE]
@@ -330,7 +333,7 @@ class WindowsBackend:
         info.lpFile = ticket.installer_path
         info.lpParameters = subprocess.list2cmdline(installer_arguments(ticket))
         info.nShow = 0
-        shell = ctypes.WinDLL("shell32", use_last_error=True)
+        shell = ctypes.WinDLL("shell32.dll", use_last_error=True, winmode=LOAD_LIBRARY_SEARCH_SYSTEM32)
         shell.ShellExecuteExW.argtypes = [ctypes.POINTER(ShellInfo)]
         shell.ShellExecuteExW.restype = wintypes.BOOL
         pipe = self.create_status_pipe(ticket.session_id)
@@ -390,7 +393,8 @@ class WindowsBackend:
 
     def version(self, executable: str) -> str:
         """Read fixed PE version data rather than trusting setup's exit code."""
-        library = ctypes.WinDLL("version", use_last_error=True)
+        # The explicit extension avoids PyInstaller matching the bundled VERSION text file.
+        library = ctypes.WinDLL("version.dll", use_last_error=True, winmode=LOAD_LIBRARY_SEARCH_SYSTEM32)
         library.GetFileVersionInfoSizeW.argtypes = [wintypes.LPCWSTR, ctypes.POINTER(wintypes.DWORD)]
         library.GetFileVersionInfoSizeW.restype = wintypes.DWORD
         library.GetFileVersionInfoW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, ctypes.c_void_p]

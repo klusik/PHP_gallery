@@ -195,7 +195,7 @@ def write_version_resource(path: Path, version: str) -> None:
     )
 
 
-def build_installer(iscc, source=WINAPP_DIR, use_installed_dependencies=False):
+def build_installer(iscc: str | Path, source: Path = WINAPP_DIR, use_installed_dependencies: bool = False) -> Path:
     """Publish only a complete installer; clean staging on success or failure.
 
     ``iscc`` selects an existing Inno Setup compiler and ``source`` identifies
@@ -252,7 +252,7 @@ def build_installer(iscc, source=WINAPP_DIR, use_installed_dependencies=False):
                 env[variable] = str(libraries[-1].parent)
         (work / "temp").mkdir()
 
-        def run(arguments):
+        def run(arguments: list[str | Path]) -> None:
             """Run one build step in owned staging with the isolated environment.
 
             Convert Path arguments to strings and propagate a nonzero exit so
@@ -293,6 +293,17 @@ def build_installer(iscc, source=WINAPP_DIR, use_installed_dependencies=False):
         subprocess.run(
             [str(app), "--help"], cwd=work, check=True, timeout=60,
             env={**env, "APPDATA": str(work / "smoke-profile")},
+        )
+        # Exercise the real frozen native version reader from a copied helper,
+        # before setup packaging. This never installs or starts the application UI.
+        helper_directory = work / "helper-smoke"
+        helper_directory.mkdir()
+        helper = helper_directory / "helper.exe"
+        shutil.copyfile(app, helper)
+        subprocess.run(
+            [str(helper), "--self-update-smoke"], cwd=work, check=True, timeout=60,
+            env={**env, "APPDATA": str(work / "smoke-profile"),
+                 "LOCALAPPDATA": str(work / "smoke-local-profile")},
         )
         run([
             iscc, f"/DAppVersion={version}", f"/DSourceRoot={source}",
