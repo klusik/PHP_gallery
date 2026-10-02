@@ -37,6 +37,7 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 use function Gallery\Models\admin_dashboard_model_gallery_rows;
+use function Gallery\Models\admin_dashboard_model_overview_totals;
 use function Gallery\Models\admin_dashboard_model_original_storage_bytes;
 use function Gallery\Models\admin_dashboard_model_parent_sync_fingerprint_row;
 use Throwable;
@@ -58,6 +59,33 @@ require_once __DIR__ . '/admin_dashboard/maintenance_health.php';
 function admin_dashboard_original_storage_bytes(): int
 {
     return admin_dashboard_model_original_storage_bytes();
+}
+
+/**
+ * Prepare indexed Overview totals using the canonical effective visibility policy.
+ *
+ * @param bool $accessReady Whether listing metadata may be read from verified columns.
+ * @return array{total_galleries:int,total_images:int,unpublished_galleries:int,private_galleries:int,original_bytes:int} Bounded metadata totals without cover resolution or filesystem inventory.
+ */
+function admin_dashboard_overview_totals(bool $accessReady): array
+{
+    $rows = admin_dashboard_model_overview_totals($accessReady);
+    $totals = [
+        'total_galleries' => count($rows['galleries']),
+        'total_images' => $rows['total_images'],
+        'unpublished_galleries' => 0,
+        'private_galleries' => 0,
+        'original_bytes' => $rows['original_bytes'],
+    ];
+    foreach ($rows['galleries'] as $gallery) {
+        $visibility = gallery_effective_visibility($gallery);
+        if ($visibility === 'unpublished') {
+            $totals['unpublished_galleries']++;
+        } elseif ($visibility === 'private') {
+            $totals['private_galleries']++;
+        }
+    }
+    return $totals;
 }
 
 /**
@@ -124,14 +152,19 @@ function admin_dashboard_parent_sync_fingerprint(): string
  *
  * @param bool $includeMaintenance Opt in to bounded maintenance queries and inventories;
  *   false leaves image-move row discovery deferred without probing its journal rows.
+ * @param string $surface complete preserves historical callers; shell omits totals and gallery rows;
+ *   overview reads indexed totals only; galleries resolves the workspace on demand.
  * @return array<string,mixed> Dashboard presentation map with the nested health records
  *   above, gallery hierarchy data, maintenance summaries and localized status labels.
  * @see runtime_support_health_status()
  * @see admin_image_move_pending_health_status()
  * @see admin_mutation_schema_health_statuses()
  */
-function admin_dashboard_view_model(bool $includeMaintenance = false): array
+function admin_dashboard_view_model(bool $includeMaintenance = false, string $surface = 'complete'): array
 {
+    // Historical callers keep a complete model; navigation opts into the cheap shell.
+    $includeGalleries = in_array($surface, ['complete', 'galleries'], true);
+    $includeOverview = in_array($surface, ['complete', 'overview'], true);
     // $securitySchemaStatuses preserves normalized security/auth capability state for System Health.
     $securitySchemaStatuses = admin_security_schema_health_statuses();
     // $mutationSchemaStatuses preserves Phase 10 destructive/ingestion capability state for System Health.
@@ -143,19 +176,19 @@ function admin_dashboard_view_model(bool $includeMaintenance = false): array
     // $pictureGameEnabled short-circuits optional schema inspection while the effective capability is unavailable.
     $pictureGameEnabled = !function_exists('Gallery\\Services\\feature_capability_effective_enabled') || feature_capability_effective_enabled('picture_game');
     // Variable $pictureGameReady stores this steps working value.
-    $pictureGameReady = $pictureGameEnabled && admin_render_profile_schema('schema_picture_game', static fn (): bool => picture_game_schema_ready());
+    $pictureGameReady = $includeGalleries && $pictureGameEnabled && admin_render_profile_schema('schema_picture_game', static fn (): bool => picture_game_schema_ready());
     // $gpsMapEnabled short-circuits optional schema inspection while the effective capability is unavailable.
     $gpsMapEnabled = !function_exists('Gallery\\Services\\feature_capability_effective_enabled') || feature_capability_effective_enabled('gallery_maps');
     // Variable $gpsMapReady stores this steps working value.
-    $gpsMapReady = $gpsMapEnabled && admin_render_profile_schema('schema_exif_gps', static fn (): bool => exif_gps_schema_ready());
+    $gpsMapReady = ($includeGalleries || $includeMaintenance) && $gpsMapEnabled && admin_render_profile_schema('schema_exif_gps', static fn (): bool => exif_gps_schema_ready());
     // $gpsMapOverrideReady stores whether EXIF/GPS display supports inherited per-gallery overrides.
     $gpsMapOverrideReady = $includeMaintenance && $gpsMapReady && admin_render_profile_schema('schema_exif_gps_overrides', static fn (): bool => exif_gps_override_schema_ready());
     // $votingEnabled short-circuits optional schema inspection while the effective capability is unavailable.
     $votingEnabled = !function_exists('Gallery\\Services\\feature_capability_effective_enabled') || feature_capability_effective_enabled('image_voting');
     // Variable $votingReady stores this steps working value.
-    $votingReady = $votingEnabled && admin_render_profile_schema('schema_gallery_voting', static fn (): bool => gallery_voting_schema_ready());
+    $votingReady = $includeGalleries && $votingEnabled && admin_render_profile_schema('schema_gallery_voting', static fn (): bool => gallery_voting_schema_ready());
     // Variable $filenameDisplayReady stores this steps working value.
-    $filenameDisplayReady = admin_render_profile_schema('schema_filename_display', static fn (): bool => gallery_filename_display_schema_ready());
+    $filenameDisplayReady = $includeGalleries && admin_render_profile_schema('schema_filename_display', static fn (): bool => gallery_filename_display_schema_ready());
     // $galleryDateRangeReady stores whether gallery rows can store range end dates.
     $galleryDateRangeReady = $includeMaintenance && admin_render_profile_schema('schema_gallery_date_ranges', static fn (): bool => gallery_date_range_schema_ready());
     // Variable $migrationPending stores this steps working value.
@@ -163,11 +196,11 @@ function admin_dashboard_view_model(bool $includeMaintenance = false): array
     // Variable $accessReady stores this steps working value.
     $accessReady = admin_render_profile_schema('schema_gallery_access', static fn (): bool => gallery_access_schema_ready());
     // $backgroundSourceReady stores whether gallery background source data can be read without optional-column errors.
-    $backgroundSourceReady = admin_render_profile_schema('schema_background_source', static fn (): bool => gallery_background_source_schema_ready());
+    $backgroundSourceReady = $includeGalleries && admin_render_profile_schema('schema_background_source', static fn (): bool => gallery_background_source_schema_ready());
     // $publicPathReady stores whether clean public URL paths can be read directly from gallery rows.
-    $publicPathReady = admin_render_profile_schema('schema_public_paths', static fn (): bool => public_path_schema_ready());
+    $publicPathReady = $includeGalleries && admin_render_profile_schema('schema_public_paths', static fn (): bool => public_path_schema_ready());
     // $coverAssetReady stores whether uploaded gallery cover assets can be shown in the admin gallery list.
-    $coverAssetReady = admin_render_profile_schema('schema_cover_asset', static fn (): bool => gallery_cover_asset_schema_ready());
+    $coverAssetReady = $includeGalleries && admin_render_profile_schema('schema_cover_asset', static fn (): bool => gallery_cover_asset_schema_ready());
     // $flightNavdataEnabled short-circuits optional schema inspection while the effective capability is unavailable.
     $flightNavdataEnabled = !function_exists('Gallery\\Services\\feature_capability_effective_enabled') || feature_capability_effective_enabled('navigation_data');
     // $flightNavdataReady stores whether route lookup data can be imported and read from the DB.
@@ -185,27 +218,32 @@ function admin_dashboard_view_model(bool $includeMaintenance = false): array
     // dashboard render unexpectedly expensive on larger installations. They
     // remain available through their explicit migration/maintenance workflows.
 
-    // Variable $galleries stores this steps working value.
-    $galleries = admin_render_profile_db('dashboard_gallery_rows', static fn (): array => admin_dashboard_gallery_rows($accessReady, $gpsMapReady, $backgroundSourceReady, $filenameDisplayReady, $votingReady, $pictureGameReady, $publicPathReady, $coverAssetReady));
-    admin_render_profile_set_counter('gallery_rows', count($galleries));
-    // Variable $galleries stores the admin tree in display order, with manual sibling ordering respected.
-    $galleries = admin_render_profile_span('order_gallery_tree', static fn (): array => admin_ordered_gallery_rows($galleries));
-    admin_render_profile_set_counter('ordered_gallery_rows', count($galleries));
-    // Variable $collapsedIds stores this steps working value.
-    $collapsedIds = admin_render_profile_setting_read('collapsed_gallery_ids', static fn (): array => array_flip(collapsed_gallery_ids()));
-    admin_render_profile_set_counter('collapsed_gallery_ids', count($collapsedIds));
-    // $childrenByParent stores direct child ids once so row rendering does not rescan the full gallery list.
-    $childrenByParent = admin_render_profile_span('gallery_children_index', static fn (): array => admin_gallery_children_by_parent($galleries));
-    admin_render_profile_set_counter('parent_groups', count($childrenByParent));
+    $galleries = [];
+    $collapsedIds = [];
+    $childrenByParent = [];
+    if ($includeGalleries) {
+        // Variable $galleries stores this steps working value.
+        $galleries = admin_render_profile_db('dashboard_gallery_rows', static fn (): array => admin_dashboard_gallery_rows($accessReady, $gpsMapReady, $backgroundSourceReady, $filenameDisplayReady, $votingReady, $pictureGameReady, $publicPathReady, $coverAssetReady));
+        admin_render_profile_set_counter('gallery_rows', count($galleries));
+        // Variable $galleries stores the admin tree in display order, with manual sibling ordering respected.
+        $galleries = admin_render_profile_span('order_gallery_tree', static fn (): array => admin_ordered_gallery_rows($galleries));
+        admin_render_profile_set_counter('ordered_gallery_rows', count($galleries));
+        // Variable $collapsedIds stores this steps working value.
+        $collapsedIds = admin_render_profile_setting_read('collapsed_gallery_ids', static fn (): array => array_flip(collapsed_gallery_ids()));
+        admin_render_profile_set_counter('collapsed_gallery_ids', count($collapsedIds));
+        // $childrenByParent stores direct child ids once so row rendering does not rescan the full gallery list.
+        $childrenByParent = admin_render_profile_span('gallery_children_index', static fn (): array => admin_gallery_children_by_parent($galleries));
+        admin_render_profile_set_counter('parent_groups', count($childrenByParent));
 
-    // Preview URLs may hit cover lookup helpers, so resolve them before handing rows to the view.
-    foreach ($galleries as $index => $gallery) {
-        $galleries[$index]['preview_url'] = admin_gallery_preview_url($gallery);
-        // Presentation-ready domain state keeps policy lookups out of the View layer.
-        $galleries[$index]['view_visibility'] = gallery_effective_visibility($gallery);
-        $galleries[$index]['view_visibility_label'] = gallery_visibility_label($galleries[$index]['view_visibility']);
-        $galleries[$index]['view_gps_map_enabled'] = $gpsMapReady && gallery_effective_gps_map_enabled($gallery);
-        $galleries[$index]['view_background_source_set'] = $backgroundSourceReady && gallery_background_source($gallery) !== null;
+        // Preview URLs may hit cover lookup helpers, so resolve them before handing rows to the view.
+        foreach ($galleries as $index => $gallery) {
+            $galleries[$index]['preview_url'] = admin_gallery_preview_url($gallery);
+            // Presentation-ready domain state keeps policy lookups out of the View layer.
+            $galleries[$index]['view_visibility'] = gallery_effective_visibility($gallery);
+            $galleries[$index]['view_visibility_label'] = gallery_visibility_label($galleries[$index]['view_visibility']);
+            $galleries[$index]['view_gps_map_enabled'] = $gpsMapReady && gallery_effective_gps_map_enabled($gallery);
+            $galleries[$index]['view_background_source_set'] = $backgroundSourceReady && gallery_background_source($gallery) !== null;
+        }
     }
 
     // $updatePending stores an intermediate value used by the surrounding gallery workflow.
@@ -252,7 +290,12 @@ function admin_dashboard_view_model(bool $includeMaintenance = false): array
         ];
     }
     // $originalStorageBytes stores the cheap database-only size of imported source files. Generated thumbnails and display derivatives are intentionally not scanned during normal dashboard rendering.
-    $originalStorageBytes = admin_render_profile_db('dashboard_original_storage_bytes', static fn (): int => admin_dashboard_original_storage_bytes());
+    $overviewTotals = $includeOverview && !$includeGalleries
+        ? admin_dashboard_overview_totals($accessReady)
+        : [];
+    $originalStorageBytes = $includeOverview && $includeGalleries
+        ? admin_render_profile_db('dashboard_original_storage_bytes', static fn (): int => admin_dashboard_original_storage_bytes())
+        : (int) ($overviewTotals['original_bytes'] ?? 0);
     // $originalStorageLabel stores a human-readable storage amount for the dashboard summary card.
     $originalStorageLabel = admin_dashboard_format_bytes($originalStorageBytes);
     // $databaseUsage stores a cheap information_schema estimate for DB capacity display.
@@ -266,13 +309,13 @@ function admin_dashboard_view_model(bool $includeMaintenance = false): array
     // $databaseUsageLabel stores a human-readable database storage amount for all database tables.
     $databaseUsageLabel = !empty($databaseUsage['available']) ? admin_dashboard_format_bytes($databaseUsageBytes) : '';
     // $totalGalleries stores an intermediate value used by the surrounding gallery workflow.
-    $totalGalleries = count($galleries);
+    $totalGalleries = $includeGalleries ? count($galleries) : (int) ($overviewTotals['total_galleries'] ?? 0);
     // $totalImages stores an intermediate value used by the surrounding gallery workflow.
-    $totalImages = 0;
+    $totalImages = (int) ($overviewTotals['total_images'] ?? 0);
     // $unpublishedGalleries stores an intermediate value used by the surrounding gallery workflow.
-    $unpublishedGalleries = 0;
+    $unpublishedGalleries = (int) ($overviewTotals['unpublished_galleries'] ?? 0);
     // $privateGalleries stores an intermediate value used by the surrounding gallery workflow.
-    $privateGalleries = 0;
+    $privateGalleries = (int) ($overviewTotals['private_galleries'] ?? 0);
     foreach ($galleries as $gallery) {
         $totalImages += (int) ($gallery['image_count'] ?? 0);
         if (gallery_effective_visibility($gallery) === 'unpublished') {
@@ -301,7 +344,19 @@ function admin_dashboard_view_model(bool $includeMaintenance = false): array
     $seoGuardStatus = $includeMaintenance ? seo_request_guard_status() : [];
     $browserThumbnailRebuildConfig = $includeMaintenance ? browser_thumbnail_rebuild_browser_config() : ['enabled' => false];
 
+    $runtimeSupportStatus = runtime_support_health_status();
+    $imageMovePendingStatus = admin_image_move_pending_health_status($mutationSchemaStatuses['mutation_gallery_move'] ?? [], $includeMaintenance);
+    $systemActionRequired = $migrationPending || !empty($runtimeSupportStatus['policy']['action_required']) || !empty($imageMovePendingStatus['action_required']);
+    foreach (array_merge($securitySchemaStatuses, $mutationSchemaStatuses) as $schemaStatus) {
+        if (in_array((string) ($schemaStatus['state'] ?? 'unknown'), ['missing', 'unknown'], true)) {
+            $systemActionRequired = true;
+            break;
+        }
+    }
+
     return [
+        'overview_loaded' => $includeOverview,
+        'galleries_loaded' => $includeGalleries,
         'picture_game_ready' => $pictureGameReady,
         'gps_map_ready' => $gpsMapReady,
         'gps_map_override_ready' => $gpsMapOverrideReady,
@@ -311,11 +366,12 @@ function admin_dashboard_view_model(bool $includeMaintenance = false): array
         'filename_display_ready' => $filenameDisplayReady,
         'gallery_date_range_ready' => $galleryDateRangeReady,
         'migration_pending' => $migrationPending,
-        'runtime_support_status' => runtime_support_health_status(),
+        'runtime_support_status' => $runtimeSupportStatus,
+        'system_action_required' => $systemActionRequired,
         'nsfw_schema_status' => $nsfwSchemaStatus,
         'security_schema_statuses' => $securitySchemaStatuses,
         'mutation_schema_statuses' => $mutationSchemaStatuses,
-        'image_move_pending_status' => admin_image_move_pending_health_status($mutationSchemaStatuses['mutation_gallery_move'] ?? [], $includeMaintenance),
+        'image_move_pending_status' => $imageMovePendingStatus,
         'presentation_schema_statuses' => $presentationSchemaStatuses,
         'access_ready' => $accessReady,
         'background_source_ready' => $backgroundSourceReady,

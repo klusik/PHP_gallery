@@ -59,17 +59,9 @@ use function Gallery\Services\t;
  */
 function view_render_admin_dashboard(array $model): void
 {
-    $pictureGameReady = !empty($model['picture_game_ready']);
-    $gpsMapReady = !empty($model['gps_map_ready']);
     $gpsMapOverrideReady = !empty($model['gps_map_override_ready']);
-    $votingReady = !empty($model['voting_ready']);
-    $filenameDisplayReady = !empty($model['filename_display_ready']);
     $migrationPending = !empty($model['migration_pending']);
-    $accessReady = !empty($model['access_ready']);
-    $backgroundSourceReady = !empty($model['background_source_ready']);
     $galleries = is_array($model['galleries'] ?? null) ? $model['galleries'] : [];
-    $collapsedIds = is_array($model['collapsed_ids'] ?? null) ? $model['collapsed_ids'] : [];
-    $childrenByParent = is_array($model['children_by_parent'] ?? null) ? $model['children_by_parent'] : [];
     $updatePending = !empty($model['update_pending']);
     $updateButtonClass = (string) ($model['update_button_class'] ?? 'button secondary');
     $updateLabel = (string) ($model['update_label'] ?? t('admin.menu.updates', 'Updates'));
@@ -77,9 +69,6 @@ function view_render_admin_dashboard(array $model): void
     $totalImages = (int) ($model['total_images'] ?? 0);
     $missingThumbnailVariants = (int) ($model['missing_thumbnail_variants'] ?? 0);
     $notices = is_array($model['notices'] ?? null) ? $model['notices'] : [];
-    $galleryTrashEnabled = !empty($model['gallery_trash_enabled']);
-    $galleryTrashAutoPurgeEnabled = !empty($model['gallery_trash_auto_purge_enabled']);
-    $galleryTrashRetentionDays = max(1, min(365, (int) ($model['gallery_trash_retention_days'] ?? 30)));
     // Security/auth schema health surfaces before the deferred Maintenance panel opens.
     $securitySchemaStatuses = is_array($model['security_schema_statuses'] ?? null) ? $model['security_schema_statuses'] : [];
     // Destructive/ingestion schema health uses the same badge so paused mutations are visible immediately.
@@ -97,7 +86,7 @@ function view_render_admin_dashboard(array $model): void
 
     $adminTabs = [
         ['id' => 'admin-tab-overview', 'label' => t('admin.dashboard.tab_overview', 'Overview')],
-        ['id' => 'admin-tab-galleries', 'label' => t('admin.dashboard.tab_galleries', 'Galleries'), 'badge' => $totalGalleries],
+        ['id' => 'admin-tab-galleries', 'label' => t('admin.dashboard.tab_galleries', 'Galleries'), 'badge' => !empty($model['galleries_loaded']) || !empty($model['overview_loaded']) ? $totalGalleries : null],
         ['id' => 'admin-tab-maintenance', 'label' => t('admin.dashboard.tab_maintenance', 'Maintenance'), 'badge' => $maintenanceBadge],
     ];
 
@@ -109,30 +98,77 @@ function view_render_admin_dashboard(array $model): void
     if ($updatePending) {
         $heroActions[] = ['label' => $updateLabel, 'url' => url_for('admin_update'), 'class' => $updateButtonClass];
     }
-    view_render_admin_hero([
-        'kicker' => t('admin.dashboard.kicker', 'Admin'),
-        'title' => t('admin.dashboard.title', 'Dashboard'),
-        'description' => t('admin.dashboard.description', 'A focused workspace for gallery management, media maintenance, and system health.'),
-        'actions' => $heroActions,
-        'actions_aria_label' => t('admin.dashboard.hero_actions_label', 'Dashboard actions'),
-        'meta' => [
-            ['value' => (string) $totalGalleries, 'label' => t('admin.dashboard.metric_galleries', 'Galleries')],
-            ['value' => (string) $totalImages, 'label' => t('admin.dashboard.metric_top_level_images', 'Top-level images')],
-        ],
-    ]);
+    echo '<div class="admin-dashboard-page" data-admin-dashboard-workspace>';
+    echo '<header class="admin-dashboard-toolbar"><h1>' . e(t('admin.dashboard.tab_overview', 'Overview')) . '</h1><div class="nav" aria-label="' . e(t('admin.dashboard.hero_actions_label', 'Dashboard actions')) . '">';
+    foreach ($heroActions as $action) {
+        echo '<a class="' . e($action['class']) . '" href="' . e($action['url']) . '">' . e($action['label']) . '</a>';
+    }
+    echo '</div></header>';
 
     view_render_admin_dashboard_notices($notices);
     view_render_admin_url_rewrite_warning($model);
     echo '<div id="admin-dashboard-thumbnail-progress" class="admin-dashboard-progress-slot" aria-live="polite"></div>';
 
-    render_admin_tabs($adminTabs, 'admin-tab-overview');
+    foreach ($adminTabs as &$tab) {
+        $tab['href'] = url_for('admin', ['dashboard_tab' => substr($tab['id'], strlen('admin-tab-'))]) . '#' . $tab['id'];
+    }
+    unset($tab);
+    $activeTab = 'admin-tab-' . (string) ($model['active_tab'] ?? 'overview');
+    ob_start();
+    render_admin_tabs($adminTabs, $activeTab);
+    // Synchronize the explicit fallback query as well as the hash when tabs change in place.
+    echo str_replace('data-admin-tabs ', 'data-admin-tabs data-admin-tabs-url-mode="href" ', (string) ob_get_clean());
 
     ob_start();
     view_render_admin_dashboard_overview_panel($model);
     $overviewHtml = (string) ob_get_clean();
-    render_admin_tab_panel('admin-tab-overview', $overviewHtml, true);
+    render_admin_tab_panel('admin-tab-overview', $overviewHtml, $activeTab === 'admin-tab-overview');
 
     ob_start();
+    if (!empty($model['galleries_loaded'])) {
+        view_render_admin_dashboard_galleries_panel($model);
+    } else {
+        view_render_admin_dashboard_deferred_read('galleries');
+    }
+    $galleriesHtml = (string) ob_get_clean();
+    render_admin_tab_panel('admin-tab-galleries', $galleriesHtml, $activeTab === 'admin-tab-galleries');
+
+    ob_start();
+    if (!empty($model['maintenance_loaded'])) {
+        view_render_admin_dashboard_maintenance_panel($model);
+    } else {
+        $requestedMaintenanceTab = strtolower(trim((string) ($model['requested_maintenance_tab'] ?? '')));
+        $maintenanceEndpointParams = in_array($requestedMaintenanceTab, ['content', 'media', 'navigation', 'system', 'trash'], true)
+            ? ['maintenance_tab' => $requestedMaintenanceTab]
+            : [];
+        echo '<div class="admin-dashboard-deferred-panel" data-admin-dashboard-maintenance-placeholder data-maintenance-endpoint="' . e(url_for('admin_dashboard_maintenance', $maintenanceEndpointParams)) . '" data-maintenance-log-endpoint="' . e(url_for('admin_dashboard_maintenance_client_log')) . '" data-csrf-token="' . e(csrf_token()) . '" role="status"><p class="muted">' . e(t('admin.dashboard.maintenance_loading', 'Loading maintenance tools…')) . '</p><noscript><a href="' . e(url_for('admin_storage_statistics')) . '">' . e(t('admin.storage.open_details', 'Open storage and maintenance details')) . '</a></noscript></div>';
+    }
+    $maintenanceHtml = (string) ob_get_clean();
+    render_admin_tab_panel('admin-tab-maintenance', $maintenanceHtml, $activeTab === 'admin-tab-maintenance');
+    echo '</div>';
+
+}
+
+/**
+ * Render the gallery workspace from prepared rows, also used by its deferred endpoint.
+ *
+ * @param array<string,mixed> $model Gallery rows, feature/schema readiness, collapse map and Trash settings.
+ * @return void Outputs the existing filter, bulk-action and reorder controls.
+ */
+function view_render_admin_dashboard_galleries_panel(array $model): void
+{
+    $pictureGameReady = !empty($model['picture_game_ready']);
+    $gpsMapReady = !empty($model['gps_map_ready']);
+    $votingReady = !empty($model['voting_ready']);
+    $filenameDisplayReady = !empty($model['filename_display_ready']);
+    $accessReady = !empty($model['access_ready']);
+    $backgroundSourceReady = !empty($model['background_source_ready']);
+    $galleries = is_array($model['galleries'] ?? null) ? $model['galleries'] : [];
+    $collapsedIds = is_array($model['collapsed_ids'] ?? null) ? $model['collapsed_ids'] : [];
+    $childrenByParent = is_array($model['children_by_parent'] ?? null) ? $model['children_by_parent'] : [];
+    $galleryTrashEnabled = !empty($model['gallery_trash_enabled']);
+    $galleryTrashAutoPurgeEnabled = !empty($model['gallery_trash_auto_purge_enabled']);
+    $galleryTrashRetentionDays = max(1, min(365, (int) ($model['gallery_trash_retention_days'] ?? 30)));
     view_render_admin_tab_intro([
         'kicker' => t('admin.dashboard.galleries_kicker', 'Galleries'),
         'title' => t('admin.dashboard.all_galleries', 'All galleries'),
@@ -211,22 +247,27 @@ function view_render_admin_dashboard(array $model): void
         echo '</div></td></tr>';
     }
     echo '</tbody></table></div></section></form>';
-    $galleriesHtml = (string) ob_get_clean();
-    render_admin_tab_panel('admin-tab-galleries', $galleriesHtml, false);
+}
 
-    ob_start();
-    if (!empty($model['maintenance_loaded'])) {
-        view_render_admin_dashboard_maintenance_panel($model);
+/**
+ * Render a retryable read placeholder with a functional direct-page fallback.
+ *
+ * @param string $surface overview or galleries; supplied by the owning dashboard view.
+ * @return void Outputs a loading region without pretending that uncomputed totals are zero.
+ */
+function view_render_admin_dashboard_deferred_read(string $surface): void
+{
+    echo '<div class="admin-dashboard-read" data-dashboard-read="' . e($surface) . '" data-endpoint="' . e(url_for('admin_dashboard_fragment', ['surface' => $surface])) . '" data-error="' . e(t('admin.dashboard.load_failed', 'Could not load this section. Try again.')) . '" data-retry="' . e(t('admin.dashboard.retry', 'Try again')) . '">';
+    if ($surface === 'overview') {
+        $cards = [];
+        foreach (['metric_galleries' => 'Galleries', 'metric_top_level_images' => 'Top-level images', 'metric_thumbnail_gaps' => 'Thumbnail gaps', 'metric_system_state' => 'System state'] as $key => $label) {
+            $cards[] = ['label' => t('admin.dashboard.' . $key, $label), 'value' => '…', 'help' => t('admin.dashboard.summary_loading', 'Loading summary…'), 'state' => 'neutral'];
+        }
+        view_render_admin_metric_grid($cards);
     } else {
-        $requestedMaintenanceTab = strtolower(trim((string) ($model['requested_maintenance_tab'] ?? '')));
-        $maintenanceEndpointParams = in_array($requestedMaintenanceTab, ['content', 'media', 'navigation', 'system', 'trash'], true)
-            ? ['maintenance_tab' => $requestedMaintenanceTab]
-            : [];
-        echo '<div class="admin-dashboard-deferred-panel" data-admin-dashboard-maintenance-placeholder data-maintenance-endpoint="' . e(url_for('admin_dashboard_maintenance', $maintenanceEndpointParams)) . '" data-maintenance-log-endpoint="' . e(url_for('admin_dashboard_maintenance_client_log')) . '" data-csrf-token="' . e(csrf_token()) . '" role="status"><p class="muted">' . e(t('admin.dashboard.maintenance_loading', 'Loading maintenance tools…')) . '</p><noscript><a href="' . e(url_for('admin_storage_statistics')) . '">' . e(t('admin.storage.open_details', 'Open storage and maintenance details')) . '</a></noscript></div>';
+        echo '<p class="muted" role="status">' . e(t('admin.dashboard.galleries_loading', 'Loading galleries…')) . '</p>';
     }
-    $maintenanceHtml = (string) ob_get_clean();
-    render_admin_tab_panel('admin-tab-maintenance', $maintenanceHtml, false);
-
+    echo '<noscript><a class="button secondary" href="' . e(url_for('admin', ['dashboard_tab' => $surface]) . '#admin-tab-' . $surface) . '">' . e(t('admin.dashboard.load_section', 'Load this section')) . '</a></noscript></div>';
 }
 
 /**

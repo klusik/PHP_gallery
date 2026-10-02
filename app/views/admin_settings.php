@@ -57,47 +57,49 @@ function view_render_admin_settings_page(array $model): void
     $sections = is_array($model['sections'] ?? null) ? $model['sections'] : [];
 
     render_header(t('admin.settings.page_title', 'Settings'));
-    view_render_admin_hero([
-        'kicker' => t('admin.settings.kicker', 'Administration'),
-        'title' => t('admin.settings.title', 'Settings'),
-        'description' => t('admin.settings.description', 'Central overview of important global settings. Complex, sensitive, and destructive controls remain on their specialized pages.'),
-    ]);
+    echo '<div class="admin-settings-page" data-admin-settings-workspace>';
+    echo '<header class="admin-settings-toolbar"><h1>' . e(t('admin.settings.title', 'Settings')) . '</h1>';
+    view_render_admin_settings_search($sections, $registry);
     $wizard = (array) ($model['setup_wizard'] ?? []);
     if ((string) ($wizard['url'] ?? '') !== '') {
-        echo '<section class="panel admin-setup-wizard-launcher"><h2>' . e(t('admin.setup_wizard.title', 'Setup wizard')) . '</h2>';
-        echo '<p>' . e(t('admin.setup_wizard.intro', 'Review your settings step by step. Nothing is saved until you approve the summary.')) . '</p>';
-        echo '<a class="button" href="' . e((string) $wizard['url']) . '">' . e(!empty($wizard['resume'])
+        echo '<a class="button secondary admin-settings-wizard" href="' . e((string) $wizard['url']) . '">' . e(!empty($wizard['resume'])
             ? t('admin.setup_wizard.resume', 'Resume setup wizard')
-            : t('admin.setup_wizard.start', 'Start setup wizard')) . '</a></section>';
+            : t('admin.setup_wizard.title', 'Setup wizard')) . '</a>';
     }
-    view_render_admin_settings_search($sections, $registry);
+    echo '</header><div class="admin-settings-layout">';
 
-    if ($notice !== '') {
-        echo '<section class="panel notice" role="status"><p>' . e($notice) . '</p></section>';
+    // Settings owns its navigation so changes never affect other Admin tab groups.
+    echo '<nav class="admin-settings-navigation" data-admin-settings-navigation aria-label="' . e(t('admin.settings.sections_aria', 'Settings sections')) . '">';
+    echo '<label class="admin-settings-mobile-label" for="admin-settings-category">' . e(t('admin.settings.workspace.category', 'Category')) . '</label>';
+    echo '<select class="admin-settings-mobile-select" id="admin-settings-category" data-admin-settings-category>';
+    foreach ($sections as $sectionId => $section) {
+        echo '<option value="' . e($sectionId) . '"' . ($sectionId === $activeSection ? ' selected' : '') . '>' . e(t((string) $section['label_key'], (string) $section['label'])) . '</option>';
     }
-    view_render_admin_settings_error_summary($errors);
-    view_render_admin_settings_overview($sections, $registry, $activeSection);
-
-    echo '<nav class="admin-tabs admin-settings-tabs" data-admin-tabs data-admin-tabs-url-mode="href" aria-label="' . e(t('admin.settings.sections_aria', 'Settings sections')) . '">';
-    echo '<div class="admin-tab-list" role="tablist">';
+    echo '</select><div class="admin-tab-list" role="tablist" aria-orientation="vertical">';
     foreach ($sections as $sectionId => $section) {
         $panelId = (string) ($section['panel_id'] ?? ('settings-' . $sectionId));
         $isActive = $sectionId === $activeSection;
         echo '<a class="admin-tab' . ($isActive ? ' is-active' : '') . '" id="' . e($panelId . '-control') . '" href="' . e((string) ($section['tab_url'] ?? $section['url'] ?? '')) . '" role="tab" aria-controls="' . e($panelId) . '" aria-selected="' . ($isActive ? 'true' : 'false') . '" tabindex="' . ($isActive ? '0' : '-1') . '" data-admin-tab-target="' . e($panelId) . '">';
-        echo '<span>' . e(t((string) $section['label_key'], (string) $section['label'])) . '</span></a>';
+        echo '<span>' . e(t((string) $section['label_key'], (string) $section['label'])) . '</span><span class="admin-settings-draft-badge" data-admin-settings-draft-badge="' . e($sectionId) . '" hidden></span></a>';
     }
     echo '</div></nav>';
 
+    echo '<div class="admin-settings-panels">';
     foreach ($sections as $sectionId => $section) {
         $panelId = (string) ($section['panel_id'] ?? ('settings-' . $sectionId));
         $isActive = $sectionId === $activeSection;
-        $entries = array_filter($registry, static fn (array $entry): bool => ($entry['group'] ?? '') === $sectionId && empty($entry['discovery_only']));
+        $entries = array_filter($registry, /** Select the current category's visible controls. @param array<string,mixed> $entry Prepared registry entry. @return bool Whether it belongs in this panel. */ static fn (array $entry): bool => ($entry['view_group'] ?? $entry['group'] ?? '') === $sectionId && empty($entry['discovery_only']));
         echo '<section class="panel admin-tab-panel admin-settings-section' . ($isActive ? ' is-active' : '') . '" id="' . e($panelId) . '" role="tabpanel" aria-labelledby="' . e($panelId . '-control') . '" data-admin-tab-panel' . ($isActive ? '' : ' hidden') . '>';
-        echo '<div class="admin-tab-intro"><div><h2>' . e(t((string) $section['label_key'], (string) $section['label'])) . '</h2><p>' . e(t((string) $section['description_key'], (string) $section['description'])) . '</p></div></div>';
+        echo '<div class="admin-settings-section-heading"><h2>' . e(t((string) $section['label_key'], (string) $section['label'])) . '</h2><p>' . e(t((string) $section['description_key'], (string) $section['description'])) . '</p></div>';
+        echo '<div class="admin-settings-feedback" role="status" aria-live="polite" data-admin-settings-feedback' . ($sectionId === $activeSection && $notice !== '' ? '' : ' hidden') . '>' . ($sectionId === $activeSection ? e($notice) : '') . '</div>';
+        if ($sectionId === $activeSection) {
+            view_render_admin_settings_error_summary($errors);
+        }
+        echo '<div data-admin-settings-content>';
         view_render_admin_settings_section($sectionId, $entries, $errors, $submittedValues, $model);
-        echo '</section>';
+        echo '</div></section>';
     }
-
+    echo '</div></div></div>';
     render_footer();
 }
 
@@ -106,10 +108,11 @@ function view_render_admin_settings_page(array $model): void
  *
  * @param array<string,array<string,string>> $sections Section taxonomy.
  * @param array<string,array<string,mixed>> $registry Settings registry.
+ * @return void Emit the searchable index and input.
  */
 function view_render_admin_settings_search(array $sections, array $registry): void
 {
-    echo '<section class="panel admin-settings-search" data-admin-settings-search data-results-label="' . e(t('admin.settings.search_matches', 'matching settings')) . '" data-empty-label="' . e(t('admin.settings.search_empty', 'No matching settings found.')) . '">';
+    echo '<div class="admin-settings-search" data-admin-settings-search data-results-label="' . e(t('admin.settings.search_matches', 'matching settings')) . '" data-empty-label="' . e(t('admin.settings.search_empty', 'No matching settings found.')) . '">';
     echo '<div class="admin-settings-search-shell">';
     echo '<span class="admin-settings-search-icon" aria-hidden="true">&#128269;</span>';
     echo '<input class="admin-settings-search-input" type="search" role="combobox" autocomplete="off" spellcheck="false" placeholder="' . e(t('admin.settings.search_placeholder', 'Search settings and tools...')) . '" aria-label="' . e(t('admin.settings.search_label', 'Search settings')) . '" aria-autocomplete="list" aria-controls="admin-settings-search-results" aria-expanded="false" data-admin-settings-search-input>';
@@ -126,55 +129,12 @@ function view_render_admin_settings_search(array $sections, array $registry): vo
         $sectionLabel = t((string) ($section['label_key'] ?? ''), (string) ($section['label'] ?? $sectionId));
         $targetId = 'admin-setting-result-' . preg_replace('/[^a-z0-9_-]/i', '-', (string) $id);
         $keywords = implode(' ', [(string) $id, str_replace('_', ' ', (string) $id), $label, $description, $sectionLabel, (string) ($entry['sensitivity'] ?? '')]);
-        echo '<a class="admin-settings-search-result" id="admin-settings-search-option-' . e((string) $id) . '" href="' . e((string) ($entry['view_section_url'] ?? '')) . '" role="option" aria-selected="false" data-admin-settings-search-result data-search-text="' . e($keywords) . '" data-search-label="' . e($label) . '" data-search-section="' . e($sectionId) . '" data-search-target="' . e($targetId) . '" hidden>';
+        echo '<a class="admin-settings-search-result" id="admin-settings-search-option-' . e((string) $id) . '" href="' . e((string) ($entry['view_search_url'] ?? $entry['view_section_url'] ?? '')) . '"' . (!empty($entry['discovery_only']) ? view_admin_settings_panel_attributes($entry) : '') . ' role="option" aria-selected="false" data-admin-settings-search-result data-search-text="' . e($keywords) . '" data-search-label="' . e($label) . '" data-search-section="' . e($sectionId) . '" data-search-target="' . e($targetId) . '" data-search-external="' . (!empty($entry['discovery_only']) ? '1' : '0') . '" hidden>';
         echo '<span class="admin-settings-search-result-section">' . e($sectionLabel) . '</span>';
         echo '<span class="admin-settings-search-result-copy"><strong>' . e($label) . '</strong><small>' . e($description) . '</small></span>';
         echo '<span class="admin-settings-search-result-arrow" aria-hidden="true">&rarr;</span></a>';
     }
-    echo '</div></div></section>';
-}
-
-/**
- * Render the cross-section overview before the focused section controls.
- *
- * @param array<string,array<string,string>> $sections Section taxonomy.
- * @param array<string,array<string,mixed>> $registry Settings registry.
- * @param string $activeSection Selected section.
- */
-function view_render_admin_settings_overview(array $sections, array $registry, string $activeSection): void
-{
-    echo '<section class="panel"><h2>' . e(t('admin.settings.overview_title', 'Settings overview')) . '</h2>';
-    echo '<p>' . e(t('admin.settings.overview_hint', 'Each category shows representative current values and links to the authoritative specialized page when more context is required.')) . '</p>';
-    echo '<div class="admin-maintenance-grid">';
-    foreach ($sections as $sectionId => $section) {
-        $entries = array_values(array_filter($registry, static fn (array $entry): bool => ($entry['group'] ?? '') === $sectionId));
-        echo '<article class="admin-maintenance-card' . ($sectionId === $activeSection ? ' is-active' : '') . '">';
-        echo '<strong>' . e(t((string) $section['label_key'], (string) $section['label'])) . '</strong>';
-        echo '<span>' . e(t((string) $section['description_key'], (string) $section['description'])) . '</span>';
-        $summaries = array_slice($entries, 0, 3);
-        if ($summaries !== []) {
-            echo '<dl class="admin-settings-overview-values">';
-            foreach ($summaries as $entry) {
-                echo '<div><dt>' . e(view_admin_settings_entry_label($entry)) . '</dt><dd>' . e(view_admin_settings_display_value($entry)) . '</dd></div>';
-            }
-            echo '</dl>';
-        }
-        echo '<div class="admin-settings-overview-actions">';
-        echo '<a class="button secondary" href="' . e((string) ($section['url'] ?? '')) . '">' . e(t('admin.settings.configure_section', 'Configure')) . '</a>';
-        $specializedEntry = null;
-        foreach ($entries as $entry) {
-            if ((string) ($entry['specialized_url'] ?? '') !== '') {
-                $specializedEntry = $entry;
-                break;
-            }
-        }
-        if (is_array($specializedEntry)) {
-            echo '<a class="button secondary" href="' . e((string) $specializedEntry['specialized_url']) . '">' . e(t('admin.settings.open_specialized', 'Open specialized page')) . '</a>';
-        }
-        echo '</div>';
-        echo '</article>';
-    }
-    echo '</div></section>';
+    echo '</div></div></div>';
 }
 
 /**
@@ -184,6 +144,8 @@ function view_render_admin_settings_overview(array $sections, array $registry, s
  * @param array<string,array<string,mixed>> $entries Registry entries.
  * @param array<string,mixed> $errors Validation errors.
  * @param array<string,mixed> $submittedValues Submitted values retained after validation failure.
+ * @param array<string,mixed> $pageModel Prepared section URLs and language selector presentation.
+ * @return void Emit the category form and specialized rows.
  */
 function view_render_admin_settings_section(string $sectionId, array $entries, array $errors, array $submittedValues, array $pageModel = []): void
 {
@@ -191,12 +153,25 @@ function view_render_admin_settings_section(string $sectionId, array $entries, a
     $summaryOnly = array_filter($entries, static fn (array $entry): bool => empty($entry['central_editable']));
 
     if ($editable !== []) {
-        echo '<form method="post" action="' . e((string) ($pageModel['sections'][$sectionId]['url'] ?? '')) . '" class="form-grid admin-settings-group-form">' . csrf_field();
+        echo '<form method="post" action="' . e((string) ($pageModel['sections'][$sectionId]['url'] ?? '')) . '" class="form-grid admin-settings-group-form" data-admin-settings-form="' . e($sectionId) . '" data-changes-label="' . e(t('admin.settings.workspace.unsaved', '{count} unsaved changes')) . '" data-clean-label="' . e(t('admin.settings.workspace.clean', 'No unsaved changes')) . '" data-saving-label="' . e(t('admin.settings.workspace.saving', 'Saving…')) . '" data-failed-label="' . e(t('admin.settings.workspace.save_failed', 'Settings could not be saved. Your changes are still here; please try again.')) . '" data-address-label="' . e(t('admin.settings.workspace.new_address', 'Continue at the new website address')) . '" data-language-label="' . e(t('admin.settings.workspace.reload_language', 'Reload the interface in the selected language')) . '">' . csrf_field();
         echo '<input type="hidden" name="return_section" value="' . e($sectionId) . '">';
-        echo '<fieldset class="form-grid"><legend>' . e(t('admin.settings.quick_settings', 'Central settings')) . '</legend>';
-        echo '<p class="muted">' . e(t('admin.settings.quick_settings_hint', 'Only settings with a shared canonical normalizer and safe service-level save path are editable here.')) . '</p>';
+        echo '<div class="admin-settings-form-errors" role="alert" data-admin-settings-errors hidden></div>';
+        $lastGroup = '';
         foreach ($editable as $id => $entry) {
+            $editGroup = (string) ($entry['view_edit_group'] ?? 'preferences');
+            if ($editGroup !== $lastGroup) {
+                if ($lastGroup !== '') {
+                    echo '</fieldset>';
+                }
+                $groupLabel = match ($editGroup) {
+                    'website' => 'Website', 'languages' => 'Languages', 'navigation' => 'Navigation and search', default => 'Preferences',
+                };
+                echo '<fieldset class="form-grid" data-settings-edit-group="' . e($editGroup) . '"><legend>' . e(t('admin.settings.workspace.group.' . $editGroup, $groupLabel)) . '</legend>';
+                $lastGroup = $editGroup;
+            }
             if ($id === 'public_language_selector_enabled') {
+                $selectorHasError = isset($errors['public_language_selector_enabled']) || isset($errors['public_language_selector_languages']) || isset($errors['public_language_selector_design']);
+                echo '<details class="admin-settings-language-details" id="admin-setting-result-public_language_selector_design" data-admin-setting-target tabindex="-1"' . ($selectorHasError ? ' open' : '') . '><summary>' . e(view_admin_settings_entry_label($entry)) . ' <span class="muted" data-settings-language-status data-enabled-label="' . e(t('admin.common.enabled', 'Enabled')) . '" data-disabled-label="' . e(t('admin.common.disabled', 'Disabled')) . '">' . e(view_admin_settings_display_value($entry)) . '</span></summary>';
                 view_render_public_language_selector_settings_panel([
                     'id_prefix' => 'admin-setting-result-public_language_selector_enabled',
                     'languages_target_id' => 'admin-setting-result-public_language_selector_languages',
@@ -205,6 +180,7 @@ function view_render_admin_settings_section(string $sectionId, array $entries, a
                     'languages_name' => 'settings[public_language_selector_languages][]',
                     'design_name' => 'settings[public_language_selector_design]',
                     'detailed_design' => false,
+                    'compact' => true,
                     'enabled' => array_key_exists('public_language_selector_enabled', $submittedValues)
                         ? !empty($submittedValues['public_language_selector_enabled'])
                         : !empty($pageModel['language_selector']['enabled']),
@@ -223,6 +199,7 @@ function view_render_admin_settings_section(string $sectionId, array $entries, a
                     'design_defaults' => (array) ($pageModel['language_selector']['design_defaults'] ?? []),
                     'design_bounds' => (array) ($pageModel['language_selector']['design_bounds'] ?? []),
                 ]);
+                echo '</details>';
                 continue;
             }
             if ($id === 'public_language_selector_languages' || $id === 'public_language_selector_design') {
@@ -230,12 +207,11 @@ function view_render_admin_settings_section(string $sectionId, array $entries, a
             }
             view_render_admin_settings_input((string) $id, $entry, $errors, $submittedValues);
         }
-        echo '<div class="bulk-row"><button type="submit">' . e(t('admin.settings.save_section', 'Save this section')) . '</button></div>';
-        echo '</fieldset></form>';
+        echo '</fieldset><div class="admin-settings-savebar" data-admin-settings-savebar><span role="status" aria-live="polite" data-admin-settings-changes>' . e(t('admin.settings.workspace.clean', 'No unsaved changes')) . '</span><div><button type="button" class="secondary" data-admin-settings-reset hidden>' . e(t('admin.settings.workspace.reset', 'Revert changes')) . '</button><button type="submit" data-admin-settings-save>' . e(t('admin.settings.workspace.save', 'Save changes')) . '</button></div></div></form>';
     }
 
     if ($summaryOnly !== []) {
-        echo '<div class="admin-maintenance-grid admin-settings-summary-grid">';
+        echo '<div class="admin-settings-summary-list">';
         foreach ($summaryOnly as $entry) {
             view_render_admin_settings_summary_card($entry);
         }
@@ -250,6 +226,7 @@ function view_render_admin_settings_section(string $sectionId, array $entries, a
  * @param array<string,mixed> $entry Registry entry.
  * @param array<string,mixed> $errors Validation errors.
  * @param array<string,mixed> $submittedValues Submitted values.
+ * @return void Emit the labeled input and optional errors.
  */
 function view_render_admin_settings_input(string $id, array $entry, array $errors, array $submittedValues): void
 {
@@ -261,33 +238,27 @@ function view_render_admin_settings_input(string $id, array $entry, array $error
     $type = (string) ($entry['input_type'] ?? 'text');
     $describedBy = $helpId . ($error !== '' ? ' ' . $errorId : '');
 
-    echo '<div class="admin-settings-field' . ($error !== '' ? ' has-error' : '') . '" id="admin-setting-result-' . e($id) . '" data-admin-setting-target tabindex="-1">';
+    echo '<div class="admin-settings-field' . ($error !== '' ? ' has-error' : '') . '" id="admin-setting-result-' . e($id) . '" data-admin-setting-target tabindex="-1"><div class="admin-settings-field-copy">';
+    echo '<label for="' . e($inputId) . '">' . e(view_admin_settings_entry_label($entry)) . '</label>';
+    echo '<details class="admin-settings-help"><summary aria-label="' . e(t('admin.settings.workspace.help_item', 'Help: {label}', ['label' => view_admin_settings_entry_label($entry)])) . '">?</summary><span id="' . e($helpId) . '">' . e(view_admin_settings_entry_description($entry)) . '</span></details>';
+    echo '</div><div class="admin-settings-field-control">';
     if ($type === 'checkbox') {
         $checked = array_key_exists($id, $submittedValues) ? !empty($submittedValues[$id]) : ((string) ($entry['current'] ?? '0') === '1');
-        echo '<label class="checkbox-label" for="' . e($inputId) . '"><input id="' . e($inputId) . '" type="checkbox" name="settings[' . e($id) . ']" value="1"' . ($checked ? ' checked' : '') . ' aria-describedby="' . e($describedBy) . '"' . ($error !== '' ? ' aria-invalid="true"' : '') . '> ' . e(view_admin_settings_entry_label($entry)) . '</label>';
+        echo '<label class="checkbox-label admin-settings-toggle" for="' . e($inputId) . '"><input id="' . e($inputId) . '" type="checkbox" name="settings[' . e($id) . ']" value="1"' . ($checked ? ' checked' : '') . ' aria-describedby="' . e($describedBy) . '"' . ($error !== '' ? ' aria-invalid="true"' : '') . '><span>' . e(t('admin.common.enabled', 'Enabled')) . '</span></label>';
     } elseif ($type === 'select') {
-        echo '<label for="' . e($inputId) . '">' . e(view_admin_settings_entry_label($entry)) . '</label>';
         echo '<select id="' . e($inputId) . '" name="settings[' . e($id) . ']" aria-describedby="' . e($describedBy) . '"' . ($error !== '' ? ' aria-invalid="true"' : '') . '>';
         $allowed = is_array($entry['validation']['allowed'] ?? null) ? $entry['validation']['allowed'] : [];
         foreach ($allowed as $option) {
             $option = (string) $option;
-            echo '<option value="' . e($option) . '"' . ((string) $current === $option ? ' selected' : '') . '>' . e(view_admin_settings_option_label($id, $option)) . '</option>';
+            echo '<option value="' . e($option) . '"' . ((string) $current === $option ? ' selected' : '') . '>' . e((string) ($entry['view_option_labels'][$option] ?? view_admin_settings_option_label($id, $option))) . '</option>';
         }
         echo '</select>';
     } else {
         $maxLength = (int) ($entry['validation']['max_length'] ?? 0);
-        echo '<label for="' . e($inputId) . '">' . e(view_admin_settings_entry_label($entry)) . '</label>';
         echo '<input id="' . e($inputId) . '" type="text" name="settings[' . e($id) . ']" value="' . e((string) $current) . '"' . ($maxLength > 0 ? ' maxlength="' . $maxLength . '"' : '') . ' aria-describedby="' . e($describedBy) . '"' . ($error !== '' ? ' aria-invalid="true"' : '') . '>';
     }
-    echo '<span class="muted" id="' . e($helpId) . '">' . e(view_admin_settings_entry_description($entry)) . '</span>';
-    if ($error !== '') {
-        echo '<span class="error" id="' . e($errorId) . '">' . e($error) . '</span>';
-    }
-    view_render_admin_settings_source($entry);
-    if ((string) ($entry['specialized_url'] ?? '') !== '') {
-        echo '<a class="button secondary" href="' . e((string) $entry['specialized_url']) . '">' . e(t('admin.settings.open_specialized', 'Open specialized page')) . '</a>';
-    }
-    echo '</div>';
+    echo '<span class="error" id="' . e($errorId) . '" data-admin-settings-field-error="' . e($id) . '"' . ($error === '' ? ' hidden' : '') . '>' . e($error) . '</span>';
+    echo '</div></div>';
 }
 
 /**
@@ -299,22 +270,33 @@ function view_render_admin_settings_input(string $id, array $entry, array $error
 function view_render_admin_settings_summary_card(array $entry): void
 {
     $id = (string) ($entry['id'] ?? '');
-    echo '<article class="admin-maintenance-card admin-settings-card" id="admin-setting-result-' . e($id) . '" data-admin-setting-target tabindex="-1">';
-    echo '<strong>' . e(view_admin_settings_entry_label($entry)) . '</strong>';
-    echo '<span>' . e(view_admin_settings_entry_description($entry)) . '</span>';
-    echo '<dl><div><dt>' . e(t('admin.settings.current_value', 'Current value')) . '</dt><dd>' . e(view_admin_settings_display_value($entry)) . '</dd></div></dl>';
-    view_render_admin_settings_source($entry);
+    echo '<article class="admin-settings-summary-row" id="admin-setting-result-' . e($id) . '" data-admin-setting-target tabindex="-1"><div class="admin-settings-field-copy">';
+    echo '<strong>' . e(view_admin_settings_entry_label($entry)) . '</strong><span class="muted">' . e(view_admin_settings_entry_description($entry)) . '</span>';
+    if (in_array((string) ($entry['source'] ?? ''), ['inherited'], true) || !empty($entry['migration_required'])) {
+        view_render_admin_settings_source($entry);
+    }
+    echo '</div><div class="admin-settings-summary-control"><span class="admin-settings-value">' . e(view_admin_settings_display_value($entry)) . '</span>';
     $url = (string) ($entry['specialized_url'] ?? '');
     if ($url !== '') {
-        $panelWorkflow = (string) ($entry['specialized_panel_workflow'] ?? '');
-        $panelUrl = (string) ($entry['specialized_panel_url'] ?? '');
-        $panelAttributes = $panelWorkflow !== '' && $panelUrl !== ''
-            ? ' data-gallery-side-panel-link data-admin-side-panel-workflow="' . e($panelWorkflow)
-                . '" data-admin-side-panel-title="' . e(view_admin_settings_entry_label($entry))
-                . '" data-gallery-side-panel-url="' . e($panelUrl) . '"' : '';
-        echo '<a class="button secondary" href="' . e($url) . '"' . $panelAttributes . '>' . e(t('admin.settings.open_specialized', 'Open specialized page')) . '</a>';
+        $panelAttributes = view_admin_settings_panel_attributes($entry);
+        echo '<a class="admin-settings-edit-link" href="' . e($url) . '"' . $panelAttributes . ' aria-label="' . e(t('admin.settings.workspace.edit_item', 'Edit: {label}', ['label' => view_admin_settings_entry_label($entry)])) . '">' . e(t('admin.settings.workspace.edit', 'Edit')) . ' <span aria-hidden="true">&nearr;</span></a>';
     }
-    echo '</article>';
+    echo '</div></article>';
+}
+
+/**
+ * Preserve prepared side-panel navigation on specialized Settings links.
+ * @param array<string,mixed> $entry Registry entry with presentation metadata.
+ * @return string Escaped link attributes or an empty string.
+ */
+function view_admin_settings_panel_attributes(array $entry): string
+{
+    $workflow = (string) ($entry['specialized_panel_workflow'] ?? '');
+    $url = (string) ($entry['specialized_panel_url'] ?? '');
+    return $workflow !== '' && $url !== ''
+        ? ' data-gallery-side-panel-link data-admin-side-panel-workflow="' . e($workflow)
+            . '" data-admin-side-panel-title="' . e(view_admin_settings_entry_label($entry))
+            . '" data-gallery-side-panel-url="' . e($url) . '"' : '';
 }
 
 /**
@@ -360,6 +342,9 @@ function view_admin_settings_entry_label(array $entry): string
  */
 function view_admin_settings_entry_description(array $entry): string
 {
+    if (isset($entry['view_description'])) {
+        return (string) $entry['view_description'];
+    }
     return t((string) ($entry['description_key'] ?? ''), (string) ($entry['description'] ?? ''));
 }
 
@@ -375,8 +360,24 @@ function view_admin_settings_display_value(array $entry): string
         return (string) ($entry['current'] ?? t('admin.settings.status.not_configured', 'Not configured'));
     }
     $value = $entry['current'] ?? '';
+    if (isset($entry['view_option_labels'][(string) $value])) {
+        return (string) $entry['view_option_labels'][(string) $value];
+    }
     if (in_array((string) ($entry['input_type'] ?? ''), ['checkbox'], true) || in_array((string) ($entry['id'] ?? ''), ['pagination_enabled', 'admin_upload_auto_rename_enabled', 'browser_upload_enabled', 'telemetry_enabled', 'telemetry_public_usage_enabled', 'seo_request_guard_enabled', 'seo_request_guard_logging_enabled', 'site_maintenance_enabled'], true)) {
         return (string) $value === '1' ? t('admin.common.enabled', 'Enabled') : t('admin.common.disabled', 'Disabled');
+    }
+    $labels = [
+        'wide' => 'Wide', 'default' => 'Default', 'custom' => 'Custom',
+        'horizontal' => 'Horizontal', 'vertical' => 'Vertical',
+        'single' => 'One photo', 'strip' => 'Photo strip', 'carousel' => 'Carousel',
+        'phone_jpeg' => 'Convert phone photos to JPEG',
+        'original' => 'Original format', 'preserve' => 'Preserve the source format',
+    ];
+    if (isset($labels[(string) $value])) {
+        return t('admin.settings.workspace.value.' . (string) $value, $labels[(string) $value]);
+    }
+    if (in_array((string) $value, ['progressive', 'responsive'], true)) {
+        return view_admin_settings_option_label('public_thumbnail_rendering_mode', (string) $value);
     }
     return trim((string) $value) !== '' ? (string) $value : t('admin.settings.status.not_configured', 'Not configured');
 }

@@ -181,6 +181,14 @@ return [
             'browser' => true,
             'timeout' => 60,
         ],
+        'admin_settings_workspace_browser_test.mjs' => [
+            'browser' => true,
+            'timeout' => 60,
+        ],
+        'admin_dashboard_workspace_browser_test.mjs' => [
+            'browser' => true,
+            'timeout' => 60,
+        ],
         'gallery_picker_browser_test.mjs' => [],
         'frontend_operational_policy_test.mjs' => [],
         'gallery_migration_policy_test.mjs' => [],

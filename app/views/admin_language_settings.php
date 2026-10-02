@@ -78,6 +78,7 @@ function view_render_language_design_value(string $id, string $name, string $lab
  * Render the shared viewer-language selector settings panel.
  *
  * @param array<string,mixed> $model Field names, values, errors, and id prefix.
+ * @return void Emit the prepared language controls.
  */
 function view_render_public_language_selector_settings_panel(array $model = []): void
 {
@@ -98,6 +99,7 @@ function view_render_public_language_selector_settings_panel(array $model = []):
     $languagesError = trim((string) ($errors['languages'] ?? ''));
     $presentations = is_array($model['presentations'] ?? null) ? $model['presentations'] : [];
     $detailedDesign = !array_key_exists('detailed_design', $model) || !empty($model['detailed_design']);
+    $compact = !empty($model['compact']);
     $designDefaults = is_array($model['design_defaults'] ?? null) ? $model['design_defaults'] : [];
     $design = is_array($model['design'] ?? null) ? $model['design'] : $designDefaults;
 
@@ -109,13 +111,13 @@ function view_render_public_language_selector_settings_panel(array $model = []):
     }
 
     $enabledId = $idPrefix . '-enabled';
-    echo '<label class="checkbox-label admin-language-selector-enabled" for="' . e($enabledId) . '"><input id="' . e($enabledId) . '" type="checkbox" name="' . e($enabledName) . '" value="1"' . ($enabled ? ' checked' : '') . ($enabledError !== '' ? ' aria-invalid="true"' : '') . '> ' . e(t('admin.theme.language.viewer_selector_enabled', 'Allow each public viewer to choose a browser-only interface language')) . '</label>';
+    echo '<label class="checkbox-label admin-language-selector-enabled" for="' . e($enabledId) . '"><input id="' . e($enabledId) . '" type="checkbox" name="' . e($enabledName) . '" value="1"' . ($enabled ? ' checked' : '') . ($enabledError !== '' ? ' aria-invalid="true"' : '') . '> ' . e($compact ? t('admin.settings.workspace.viewer_enable', 'Let visitors choose their language') : t('admin.theme.language.viewer_selector_enabled', 'Allow each public viewer to choose a browser-only interface language')) . '</label>';
     if ($enabledError !== '') {
         echo '<span class="error">' . e($enabledError) . '</span>';
     }
 
     echo '<fieldset class="admin-language-selector-language-list"' . ($languagesTargetId !== '' ? ' id="' . e($languagesTargetId) . '" data-admin-setting-target tabindex="-1"' : '') . ($languagesError !== '' ? ' aria-invalid="true"' : '') . '><legend>' . e(t('admin.theme.language.viewer_languages_legend', 'Languages available to viewers')) . '</legend>';
-    echo '<p class="muted">' . e(t('admin.theme.language.viewer_languages_hint', 'Select at least one language to offer. This list affects only the public viewer selector. A viewer\'s selection is stored in that viewer\'s browser, never as an account or site-wide language setting.')) . '</p>';
+    echo '<p class="muted">' . e($compact ? t('admin.settings.workspace.viewer_hint', 'Offer at least one language. Each visitor changes only their own display language.') : t('admin.theme.language.viewer_languages_hint', 'Select at least one language to offer. This list affects only the public viewer selector. A viewer\'s selection is stored in that viewer\'s browser, never as an account or site-wide language setting.')) . '</p>';
     echo '<div class="admin-language-selector-language-grid">';
     foreach ((array) ($model['supported_languages'] ?? []) as $language) {
         $presentation = $presentations[$language] ?? ['name' => strtoupper($language), 'flag_asset' => ''];
@@ -135,7 +137,9 @@ function view_render_public_language_selector_settings_panel(array $model = []):
     echo '</fieldset>';
 
     echo '<fieldset class="admin-language-selector-design" data-language-design-editor data-defaults="' . e((string) json_encode($designDefaults, JSON_UNESCAPED_SLASHES)) . '"><legend>' . e(t('admin.theme.language.design_legend', 'Viewer language selector design')) . '</legend>';
-    echo '<p class="muted">' . e(t('admin.theme.language.design_hint', 'Customize only the public viewer selector. The Admin language, site default, and each viewer\'s browser-local choice remain unchanged.')) . '</p>';
+    if (!$compact) {
+        echo '<p class="muted">' . e(t('admin.theme.language.design_hint', 'Customize only the public viewer selector. The Admin language, site default, and each viewer\'s browser-local choice remain unchanged.')) . '</p>';
+    }
     if (!$detailedDesign) {
         echo '<input type="hidden" name="' . e($designName . '[basic_only]') . '" value="1">';
     }
@@ -147,7 +151,11 @@ function view_render_public_language_selector_settings_panel(array $model = []):
     echo '<div class="admin-language-design-global">';
     view_render_language_design_checkbox($idPrefix . '-show-flags', $designName . '[show_flags]', t('admin.theme.language.design_show_flags', 'Show flags'), (bool) $design['show_flags'], true);
     if (!$detailedDesign) {
-        echo '</div><p class="muted admin-language-design-details-link">' . e(t('admin.theme.language.design_detailed_elsewhere', 'For colors, spacing, borders, sizing, preview, and reset controls, open Theme > Language.')) . ' <a href="' . e(url_for('admin_theme') . '#admin-theme-tab-language') . '">' . e(t('admin.theme.language.design_open_detailed', 'Open detailed language design settings')) . '</a></p></fieldset></section>';
+        echo '</div><p class="muted admin-language-design-details-link">';
+        if (!$compact) {
+            echo e(t('admin.theme.language.design_detailed_elsewhere', 'For colors, spacing, borders, sizing, preview, and reset controls, open Theme > Language.')) . ' ';
+        }
+        echo '<a href="' . e(url_for('admin_theme') . '#admin-theme-tab-language') . '">' . e($compact ? t('admin.settings.workspace.viewer_design', 'Detailed selector design') : t('admin.theme.language.design_open_detailed', 'Open detailed language design settings')) . '</a></p></fieldset></section>';
         return;
     }
     view_render_language_design_checkbox($idPrefix . '-show-codes', $designName . '[show_codes]', t('admin.theme.language.design_show_codes', 'Show language codes'), (bool) $design['show_codes'], true);

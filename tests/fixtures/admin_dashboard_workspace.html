@@ -1,0 +1,117 @@
+<!doctype html>
+<!--
+Project: PHP Gallery
+Repository: https://github.com/klusik/PHP_gallery
+File: tests/fixtures/admin_dashboard_workspace.html
+Module Type: Browser Test Fixture
+Purpose: Verify production dashboard deferral, retry, navigation and injected gallery controls.
+Responsibilities: Confine network reads to synthetic responses and first-party assets.
+Author: Rudolf Klusal
+License: MIT
+-->
+<html lang="en"><meta charset="utf-8"><title>Dashboard fixture</title>
+<link rel="stylesheet" href="/public/assets/styles/base.css">
+<link rel="stylesheet" href="/public/assets/styles/admin-dashboard.css">
+<link rel="stylesheet" href="/public/assets/styles/admin-cinematic.css">
+<body class="admin-page"><main>
+<div class="admin-dashboard-page" data-admin-dashboard-workspace>
+<header class="admin-dashboard-toolbar"><h1>Overview</h1><button id="primary-action">Primary action</button></header>
+<nav data-admin-tabs data-admin-tabs-url-mode="href"><div role="tablist">
+<a role="tab" href="?dashboard_tab=overview#admin-tab-overview" aria-selected="true" data-admin-tab-target="admin-tab-overview">Overview</a>
+<a role="tab" href="?dashboard_tab=galleries#admin-tab-galleries" data-admin-tab-target="admin-tab-galleries">Galleries</a>
+<a role="tab" href="?dashboard_tab=maintenance#admin-tab-maintenance" data-admin-tab-target="admin-tab-maintenance">Maintenance</a>
+</div></nav>
+<section id="admin-tab-overview" class="panel admin-tab-panel is-active" data-admin-tab-panel>
+<div data-dashboard-read="overview" data-endpoint="/fixture-overview" data-error="Summary unavailable" data-retry="Retry">Loading summary</div>
+<div class="admin-action-grid"><article class="admin-action-card"><strong>Settings</strong><span>Global preferences</span><div class="nav"><a href="#settings">Open</a></div></article></div>
+</section>
+<section id="admin-tab-galleries" class="panel admin-tab-panel" data-admin-tab-panel><div data-dashboard-read="galleries" data-endpoint="/fixture-galleries" data-error="Galleries unavailable" data-retry="Retry">Loading galleries</div></section>
+<section id="admin-tab-maintenance" class="panel admin-tab-panel" data-admin-tab-panel>Maintenance fixture</section>
+</div></main><pre id="results">BROWSER PENDING</pre>
+<script type="module">
+import {setupAdminDashboardWorkspace} from '/public/assets/gallery-modules/admin-dashboard-workspace.js';
+import {setupAdminTabsInRoot} from '/public/assets/gallery-modules/admin-tabs.js';
+import {setupAdminBulkSelection} from '/public/assets/gallery-modules/admin-bulk-actions.js';
+const originalFetch = window.fetch.bind(window);
+let assertions = 0, summaryReads = 0, galleryReads = 0, releaseSummary = null, releaseGalleries = null, primaryClicks = 0;
+/** Assert fixture behavior. @param {boolean} value Expected result. @param {string} message Failure context. @return {void} Counts successful checks. */
+function check(value, message) { if (!value) throw new Error(message); assertions++; }
+/** Wait for an observable condition. @param {function():boolean} predicate DOM or request condition. @return {Promise<void>} Resolves on success or throws a bounded failure. */
+async function until(predicate) { for (let i = 0; i < 160; i++) { if (predicate()) return; await new Promise(/** Schedule one fixture observation. @param {function():void} resolve Ready callback. @return {number} Timer handle. */ resolve => setTimeout(resolve, 10)); } throw new Error('Fixture timeout'); }
+/** Activate a production tab. @param {string} name Surface name. @return {void} Clicks the native link. */
+function tab(name) { document.querySelector(`[data-admin-tab-target="admin-tab-${name}"]`).click(); }
+/** Return synthetic read JSON. @param {string} html Fragment. @return {Response} Owned fixture response. */
+function json(html) { return new Response(JSON.stringify({ok:true,html,total_galleries:3}), {headers:{'Content-Type':'application/json'}}); }
+/** Build the existing gallery-controller markup with synthetic metadata. @return {string} Three fixture rows and their controls. */
+function galleryMarkup() {
+    return `<form data-gallery-bulk-form data-admin-gallery-order-form><input type="hidden" name="csrf_token" value="fixture">
+        <div data-admin-gallery-order-toolbar data-reorder-url="/fixture-reorder"><span data-admin-gallery-order-status></span></div>
+        <select data-gallery-visibility-filter><option value="all">All</option><option value="public">Public</option><option value="private">Private</option></select>
+        <span data-gallery-filter-summary></span><input type="checkbox" data-select-all="gallery_ids[]">
+        <table data-admin-gallery-order-table><tbody>${['public','unpublished','private'].map(/** Render one synthetic gallery row. @param {string} visibility State. @param {number} i Row index. @return {string} Row markup. */ (visibility, i) => `<tr data-gallery-row data-gallery-id="${i+1}" data-parent-id="0" data-depth="0" data-gallery-visibility="${visibility}"><td><input type="checkbox" name="gallery_ids[]" value="${i+1}"></td><td>Gallery ${i+1}</td></tr>`).join('')}</tbody></table></form>`;
+}
+window.fetch = /** Confine production reads to owned fixture data. @param {string|URL} url Request URL. @param {RequestInit} options Options. @return {Promise<Response>} Held response or safe first-party asset. */ async (url, options = {}) => {
+    const path = new URL(url, location.href).pathname;
+    if (path.startsWith('/public/assets/')) return originalFetch(url, options);
+    check(options.credentials === 'same-origin' && options.headers.Accept === 'application/json' && !options.body, 'Dashboard requests are credentialed reads');
+    if (path === '/fixture-overview') {
+        summaryReads++;
+        return new Promise(/** Hold summary completion. @param {function(Response):void} resolve Response callback. @return {void} Stores fixture release. */ resolve => { releaseSummary = /** Release prepared summary. @return {void} Completes the held read. */ () => resolve(json('<section id="summary-ready">3 galleries</section>')); });
+    }
+    if (path === '/fixture-galleries') {
+        galleryReads++;
+        if (galleryReads === 1) return new Response('Unavailable', {status:503});
+        return new Promise(/** Hold gallery completion. @param {function(Response):void} resolve Response callback. @return {void} Stores fixture release. */ resolve => { releaseGalleries = /** Release synthetic gallery rows. @return {void} Completes the held read. */ () => resolve(json(galleryMarkup())); });
+    }
+    throw new Error('Unexpected fixture request: ' + path);
+};
+try {
+    document.querySelector('#primary-action').addEventListener('click', /** Observe an available primary action. @return {number} Previous click count. */ () => primaryClicks++);
+    setupAdminTabsInRoot(document);
+    setupAdminBulkSelection();
+    setupAdminDashboardWorkspace(); setupAdminDashboardWorkspace();
+    check(summaryReads === 0 && galleryReads === 0, 'Initialization schedules reads after paint instead of blocking it');
+    await until(/** Observe the held summary request. @return {boolean} Whether a read started. */ () => releaseSummary !== null);
+    document.querySelector('#primary-action').click();
+    check(primaryClicks === 1 && !document.querySelector('#summary-ready'), 'Primary actions remain usable while totals are pending');
+    check(summaryReads === 1 && galleryReads === 0, 'Hidden gallery previews are never requested on Overview');
+    check(document.querySelector('.admin-action-card').getBoundingClientRect().height < 100, 'Overview action rows have no inherited tall card minimum');
+    tab('galleries'); await until(/** Observe the retry affordance after failure. @return {boolean} Whether retry exists. */ () => Boolean(document.querySelector('[data-dashboard-read="galleries"] button')));
+    check(galleryReads === 1 && !document.querySelector('#admin-tab-galleries').hidden, 'Failed gallery reads keep the active tab usable with retry');
+    const beforeRetry = location.href;
+    document.querySelector('[data-dashboard-read="galleries"] button').click(); await until(/** Observe the held gallery retry. @return {boolean} Whether the read started. */ () => releaseGalleries !== null);
+    tab('overview'); tab('galleries');
+    await new Promise(/** Allow production animation frames to run. @param {function():void} resolve Ready callback. @return {number} Timer handle. */ resolve => setTimeout(resolve, 40));
+    check(galleryReads === 2 && summaryReads === 1, 'Pending reads are deduplicated across rapid tab changes');
+    releaseSummary(); releaseGalleries();
+    await until(/** Observe both completed fragments. @return {boolean} Whether the fixtures are rendered. */ () => document.querySelectorAll('[data-gallery-row]').length === 3 && Boolean(document.querySelector('#summary-ready')));
+    check(location.href === beforeRetry && document.querySelector('#admin-tab-overview').hidden, 'Read completion and retry preserve the selected tab and URL');
+    check(document.querySelector('[data-admin-tab-target="admin-tab-galleries"] .admin-tab-badge').textContent === '3', 'Completed reads update the tab count');
+    const filter = document.querySelector('[data-gallery-visibility-filter]'); filter.value = 'public'; filter.dispatchEvent(new Event('change', {bubbles:true}));
+    check(Array.from(document.querySelectorAll('[data-gallery-row]')).filter(/** Count visible gallery rows. @param {HTMLElement} row Row. @return {boolean} Whether displayed. */ row => !row.hidden).length === 1 && document.querySelector('[data-gallery-filter-summary]').textContent.includes('1 / 1'), 'Deferred rows receive the original visibility filter');
+    const selectAll = document.querySelector('[data-select-all]'); selectAll.checked = true; selectAll.dispatchEvent(new Event('change', {bubbles:true}));
+    check(document.querySelectorAll('input[name="gallery_ids[]"]:checked').length === 1, 'Delegated bulk selection selects displayed rows only');
+    filter.value = 'private'; filter.dispatchEvent(new Event('change', {bubbles:true}));
+    check(document.querySelectorAll('input[name="gallery_ids[]"]:checked').length === 0, 'Filtering removes hidden stale bulk selections');
+    tab('overview'); tab('galleries'); tab('maintenance'); tab('overview');
+    await new Promise(/** Allow production animation frames to run. @param {function():void} resolve Ready callback. @return {number} Timer handle. */ resolve => setTimeout(resolve, 40));
+    check(summaryReads === 1 && galleryReads === 2 && filter.value === 'private', 'Loaded fragments and filter state survive repeated navigation without polling');
+    check(new URL(location.href).searchParams.get('dashboard_tab') === 'overview', 'In-place tabs synchronize the direct fallback query');
+    history.replaceState(null, '', '?dashboard_tab=galleries#admin-tab-galleries'); dispatchEvent(new PopStateEvent('popstate'));
+    check(!document.querySelector('#admin-tab-galleries').hidden && document.querySelector('#admin-tab-overview').hidden, 'Browser history restores the existing tab workflow');
+    // The owned sandbox disables scripts and enables noscript markup without changing the user's browser settings.
+    const noScriptFrame = document.createElement('iframe');
+    noScriptFrame.setAttribute('sandbox', 'allow-same-origin');
+    noScriptFrame.srcdoc = '<!doctype html><link rel="stylesheet" href="/public/assets/styles/admin-dashboard.css"><div class="admin-dashboard-page"><section class="admin-tab-panel is-active" id="admin-tab-overview">Overview</section><section class="admin-tab-panel" id="admin-tab-galleries">Loading galleries<noscript><a id="fallback" href="?dashboard_tab=galleries">Load galleries</a></noscript></section></div>';
+    document.body.append(noScriptFrame);
+    await until(/** Observe the disabled-script fallback after its stylesheet loads. @return {boolean} Whether the owned frame is ready. */ () => Boolean(noScriptFrame.contentDocument?.querySelector('#fallback')) && noScriptFrame.contentDocument.readyState === 'complete');
+    const noScriptDocument = noScriptFrame.contentDocument;
+    check(noScriptFrame.contentWindow.getComputedStyle(noScriptDocument.querySelector('#admin-tab-galleries')).display === 'none', 'No-script shell starts on Overview');
+    noScriptFrame.contentWindow.location.hash = 'admin-tab-galleries';
+    await until(/** Observe the legacy hash target in the owned frame. @return {boolean} Whether Galleries is targeted. */ () => Boolean(noScriptDocument.querySelector('#admin-tab-galleries:target')));
+    check(noScriptFrame.contentWindow.getComputedStyle(noScriptDocument.querySelector('#admin-tab-galleries')).display !== 'none' && noScriptFrame.contentWindow.getComputedStyle(noScriptDocument.querySelector('#admin-tab-overview')).display === 'none', 'Legacy hash links expose the no-script load fallback without a second visible panel');
+    check(noScriptDocument.querySelector('#fallback').href.includes('dashboard_tab=galleries'), 'No-script loading uses the directly rendered gallery route');
+    noScriptFrame.remove();
+    document.querySelector('#results').textContent = `BROWSER PASS ${assertions} assertions`;
+} catch (error) { document.querySelector('#results').textContent = 'BROWSER FAIL ' + error.stack; }
+</script></body></html>

@@ -367,9 +367,10 @@ function admin_settings_sensitive_status(string $key): string
  * settings. Complex Theme, Account, credential, maintenance, and per-gallery flows
  * stay specialized so the hub cannot become a competing source of truth.
  *
+ * @param bool $includeSessionSettings Include the Settings-only Admin/browser language control.
  * @return array<string,array<string,mixed>> Setting entries keyed by stable identifier.
  */
-function admin_settings_registry(): array
+function admin_settings_registry(bool $includeSessionSettings = false): array
 {
     $pagination = pagination_global_settings();
     $homeGrid = function_exists('Gallery\\Services\\main_page_gallery_grid_settings') ? main_page_gallery_grid_settings() : $pagination;
@@ -438,7 +439,14 @@ function admin_settings_registry(): array
         'account_credentials' => admin_settings_entry('account_credentials', 'advanced', 'Account and credentials', 'Passwords, Google OAuth, OpenAI API keys, and credential-bearing settings remain on Account.', '', 'specialized', '', t('admin.settings.status.specialized_only', 'Specialized page only'), 'admin_account', [], '', false, 'secret'),
     ];
 
-    return array_replace($registry, admin_settings_specialized_catalog());
+    $registry = array_replace($registry, admin_settings_specialized_catalog());
+    if ($includeSessionSettings) {
+        // This is the existing private Admin/browser preference, never a second site-wide setting.
+        $registry['admin_language'] = admin_settings_entry('admin_language', 'general', 'Application language', 'Language of the administrator interface in this browser. Visitor language is configured separately.', '', 'select', translation_default_language(), translation_active_language(), 'admin_theme', [], 'admin-theme-tab-language', true, 'normal', ['allowed' => translation_supported_languages()]);
+        $registry['admin_language']['explicit'] = true;
+        $registry['admin_language']['source'] = 'session';
+    }
+    return $registry;
 }
 
 /**
@@ -455,7 +463,7 @@ function admin_settings_owner_for_id(string $id): string
     if (in_array($id, ['site_name', 'url_rewrite_enabled', 'dev_mode_enabled', 'remote_favicon_discovery_enabled'], true)) {
         return 'app_settings';
     }
-    if ($id === 'public_language' || str_starts_with($id, 'public_language_selector_')) {
+    if (in_array($id, ['admin_language', 'public_language'], true) || str_starts_with($id, 'public_language_selector_')) {
         return 'translations';
     }
     if ($id === 'public_home_search_enabled') {
@@ -591,7 +599,7 @@ function admin_settings_normalize_editable_value(array $entry, mixed $value): mi
         $normalized = trim((string) $value);
         return $normalized !== '' ? substr($normalized, 0, 120) : 'Gallery CMS';
     }
-    if ($id === 'public_language') {
+    if (in_array($id, ['admin_language', 'public_language'], true)) {
         $normalized = translation_normalize_language_code((string) $value);
         if ($normalized === '' || !translation_language_allowed($normalized)) {
             throw new InvalidArgumentException(t('admin.settings.error.invalid_language', 'Choose a supported public language.'));
@@ -611,11 +619,11 @@ function admin_settings_normalize_editable_value(array $entry, mixed $value): mi
     if ($id === 'public_language_selector_design') {
         if (is_array($value) && !empty($value['basic_only'])) {
             $current = translation_public_language_selector_design();
-            foreach (['preset', 'show_flags'] as $field) {
-                if (array_key_exists($field, $value)) {
-                    $current[$field] = $value[$field];
-                }
+            if (array_key_exists('preset', $value)) {
+                $current['preset'] = $value['preset'];
             }
+            // A submitted basic editor omits an unchecked checkbox; preserve all detailed design fields.
+            $current['show_flags'] = !empty($value['show_flags']);
             return translation_public_language_selector_design_normalize($current);
         }
         return translation_public_language_selector_design_normalize($value);
@@ -650,6 +658,7 @@ function admin_settings_save_editable_value(string $id, mixed $value): void
         'base_url' => site_url_save((string) $value),
         'site_name' => set_site_name((string) $value),
         'public_language' => translation_set_public_language((string) $value),
+        'admin_language' => translation_set_active_language((string) $value),
         'public_language_selector_enabled' => translation_save_public_language_selector_settings((string) $value === '1', translation_public_language_selector_languages()),
         'public_language_selector_languages' => translation_save_public_language_selector_settings(translation_public_language_selector_enabled(), is_array($value) ? $value : []),
         'public_language_selector_design' => translation_save_public_language_selector_design($value),

@@ -35,6 +35,26 @@ namespace Gallery\Models;
 use Throwable;
 use function Gallery\Core\db;
 
+/**
+ * Read Overview totals from indexed metadata without resolving gallery covers or scanning files.
+ *
+ * @param bool $accessReady Whether the optional listing column is verified available.
+ * @return array{galleries:list<array<string,mixed>>,total_images:int,original_bytes:int} Minimal visibility rows and indexed image totals; database failures propagate to the read-only endpoint.
+ */
+function admin_dashboard_model_overview_totals(bool $accessReady): array
+{
+    $listing = $accessReady ? 'access_listing' : "'listed' AS access_listing";
+    $galleries = db()->query('SELECT visibility, ' . $listing . ' FROM galleries')->fetchAll();
+    // Count only top-level images belonging to an existing gallery, as the gallery table does.
+    // Storage retains the historical total for every indexed original, including orphan metadata.
+    $row = db()->query("SELECT COALESCE(SUM(CASE WHEN g.id IS NOT NULL AND i.relative_path NOT LIKE '%/%' THEN 1 ELSE 0 END), 0) AS total_images, COALESCE(SUM(i.file_size), 0) AS original_bytes FROM images i LEFT JOIN galleries g ON g.id = i.gallery_id")->fetch();
+    return [
+        'galleries' => $galleries,
+        'total_images' => max(0, (int) ($row['total_images'] ?? 0)),
+        'original_bytes' => max(0, (int) ($row['original_bytes'] ?? 0)),
+    ];
+}
+
 /** Return indexed source-file bytes from image metadata. */
 function admin_dashboard_model_original_storage_bytes(): int
 {
@@ -48,7 +68,11 @@ function admin_dashboard_model_original_storage_bytes(): int
     }
 }
 
-/** Return dashboard gallery rows with only schema-ready optional columns. */
+/**
+ * Return dashboard gallery rows with only schema-ready optional columns.
+ * @param array<string,bool> $capabilities Verified optional-column availability keyed by domain.
+ * @return list<array<string,mixed>> Gallery hierarchy rows with direct image counts and optional presentation fields.
+ */
 function admin_dashboard_model_gallery_rows(array $capabilities): array
 {
     $selects = [

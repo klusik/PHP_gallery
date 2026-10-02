@@ -94,48 +94,51 @@ function view_admin_dashboard_array(array $model, string $key): array
 /**
  * Render the focused Overview tab.
  *
- * @param array $model Model value.
+ * @param array<string,mixed> $model Dashboard totals, overview_loaded flag and prepared Settings/Maintenance links.
+ * @return void Outputs compact actions and a calculated or deferred summary.
  */
 function view_render_admin_dashboard_overview_panel(array $model): void
 {
     $migrationPending = view_admin_dashboard_bool($model, 'migration_pending');
-    $thumbnailSummary = view_admin_dashboard_array($model, 'thumbnail_summary');
-
-    view_render_admin_tab_intro([
-        'kicker' => t('admin.dashboard.overview_kicker', 'Overview'),
-        'title' => t('admin.dashboard.overview_title', 'Admin at a glance'),
-        'description' => t('admin.dashboard.overview_description', 'Status and primary entry points only. Detailed tools are grouped under Maintenance.'),
-    ]);
-    view_render_admin_dashboard_metric_grid($model);
+    if (!array_key_exists('overview_loaded', $model) || !empty($model['overview_loaded'])) {
+        view_render_admin_dashboard_summary($model);
+    } else {
+        view_render_admin_dashboard_deferred_read('overview');
+    }
 
     if ($migrationPending) {
         view_render_admin_migration_notice(t('admin.dashboard.migration_notice', 'Some admin features still need database migrations.'));
     }
-    if (empty($thumbnailSummary['deferred'])) {
-        view_render_admin_thumbnail_maintenance_notice($thumbnailSummary);
-    }
-
     echo '<section class="admin-quick-panel">';
-    view_render_admin_tab_intro([
-        'kicker' => t('admin.dashboard.primary_work_kicker', 'Start'),
-        'title' => t('admin.dashboard.primary_work_title', 'Primary work'),
-        'description' => t('admin.dashboard.primary_work_hint', 'Use these shortcuts for normal gallery work. Settings and repair tools stay in Maintenance.'),
-        'class' => 'admin-panel-heading',
-    ]);
+    echo '<h2>' . e(t('admin.dashboard.primary_work_title', 'Primary work')) . '</h2>';
     echo '<div class="admin-action-grid">';
     view_render_admin_dashboard_settings_card($model);
     view_render_admin_dashboard_manage_galleries_card();
-    view_render_admin_dashboard_upload_card();
     view_render_admin_dashboard_discover_card();
     view_render_admin_dashboard_open_maintenance_card($model);
     echo '</div></section>';
-    view_render_admin_design_spec_panel();
+}
+
+/**
+ * Render calculated Overview cards and any already-known thumbnail warning.
+ *
+ * @param array<string,mixed> $model Prepared indexed totals, cached thumbnail result and health state.
+ * @return void Outputs presentation HTML without inventory scans.
+ */
+function view_render_admin_dashboard_summary(array $model): void
+{
+    view_render_admin_dashboard_metric_grid($model);
+    $thumbnailSummary = view_admin_dashboard_array($model, 'thumbnail_summary');
+    if (empty($thumbnailSummary['deferred'])) {
+        view_render_admin_thumbnail_maintenance_notice($thumbnailSummary);
+    }
 }
 
 /**
  * Render summary metric cards for the dashboard overview.
  *
- * @param array $model Model value.
+ * @param array<string,mixed> $model Indexed totals, thumbnail_summary cached result and system_action_required health flag.
+ * @return void Outputs four summary cards using prepared values only.
  */
 function view_render_admin_dashboard_metric_grid(array $model): void
 {
@@ -151,15 +154,16 @@ function view_render_admin_dashboard_metric_grid(array $model): void
     $databaseUsageLabel = (string) ($model['database_usage_label'] ?? '');
     $databaseUsageAvailable = view_admin_dashboard_bool($model, 'database_usage_available');
     $migrationPending = view_admin_dashboard_bool($model, 'migration_pending');
+    $systemActionRequired = $migrationPending || view_admin_dashboard_bool($model, 'system_action_required');
 
     $thumbnailValue = !empty($thumbnailSummary['deferred']) ? t('admin.dashboard.metric_not_checked', 'Not checked') : (string) $missingThumbnailVariants;
     $thumbnailImagesLabel = !empty($thumbnailSummary['full_check'])
         ? t('admin.dashboard.metric_images_checked', 'images checked')
         : t('admin.dashboard.metric_images_sampled', 'images sampled');
     $thumbnailHelp = !empty($thumbnailSummary['deferred'])
-        ? e(t('admin.dashboard.metric_thumbnail_check_deferred', 'Open thumbnail maintenance for an exact scan.'))
+        ? e(t('admin.dashboard.thumbnail_scan_hint', 'Checked only on request.'))
             . '<br><a class="admin-metric-inline-link" href="' . e(url_for('admin', ['maintenance_tab' => 'media']) . '#admin-tab-maintenance') . '">'
-            . e(t('admin.dashboard.open_thumbnail_maintenance', 'Open thumbnail maintenance')) . '</a>'
+            . e(t('admin.dashboard.thumbnail_scan_link', 'Check thumbnails')) . '</a>'
         : e((int) ($thumbnailSummary['images_scanned'] ?? 0) . ' ' . $thumbnailImagesLabel);
     $galleryStorageHelp = e((int) $unpublishedGalleries . ' ' . t('admin.dashboard.metric_unpublished', 'unpublished') . ', ' . (int) $privateGalleries . ' ' . t('admin.dashboard.metric_private', 'private')) . '<br>' . e(t('admin.dashboard.metric_original_storage', 'Original files: {size}', ['size' => $originalStorageLabel]));
     if ($databaseUsageAvailable && $galleryDatabaseUsageLabel !== '') {
@@ -186,31 +190,36 @@ function view_render_admin_dashboard_metric_grid(array $model): void
             'label' => t('admin.dashboard.metric_thumbnail_gaps', 'Thumbnail gaps'),
             'value' => $thumbnailValue,
             'help_html' => $thumbnailHelp,
-            'state' => $missingThumbnailVariants > 0 ? 'care' : 'ready',
+            'state' => !empty($thumbnailSummary['deferred']) ? 'neutral' : ($missingThumbnailVariants > 0 ? 'care' : 'ready'),
         ],
         [
             'label' => t('admin.dashboard.metric_system_state', 'System state'),
-            'value' => $migrationPending ? t('admin.dashboard.badge_action', 'Action') : t('admin.dashboard.state_ready', 'Ready'),
-            'help' => $migrationPending ? t('admin.dashboard.state_migration_pending', 'Database migration pending') : t('admin.dashboard.state_no_migration_warning', 'No migration warning'),
-            'state' => $migrationPending ? 'care' : 'ready',
+            'value' => $systemActionRequired ? t('admin.dashboard.badge_action', 'Action') : t('admin.dashboard.state_ready', 'Ready'),
+            'help_html' => $systemActionRequired
+                ? '<a href="' . e(url_for('admin', ['maintenance_tab' => 'system']) . '#admin-tab-maintenance') . '">' . e(t('admin.dashboard.review_system_health', 'Review system health')) . '</a>'
+                : e(t('admin.dashboard.state_no_migration_warning', 'No migration warning')),
+            'state' => $systemActionRequired ? 'care' : 'ready',
         ],
     ], 'admin-metric-grid', t('admin.dashboard.admin_summary', 'Admin summary'));
 }
 
 /**
  * Render the overview card that opens the gallery tree.
+ * @return void Outputs a compact gallery-workspace shortcut.
  */
 function view_render_admin_dashboard_manage_galleries_card(): void
 {
-    echo '<article class="admin-action-card"><strong>' . e(t('admin.dashboard.manage_galleries_title', 'Manage galleries')) . '</strong><span>' . e(t('admin.dashboard.manage_galleries_hint', 'Open the gallery tree for visibility changes, ordering, bulk actions, and per-gallery editing.')) . '</span><div class="nav"><a class="button secondary" href="' . e(url_for('admin') . '#admin-tab-galleries') . '">' . e(t('admin.dashboard.open_gallery_tree', 'Open gallery tree')) . '</a></div></article>';
+    echo '<article class="admin-action-card"><strong>' . e(t('admin.dashboard.manage_galleries_title', 'Manage galleries')) . '</strong><span>' . e(t('admin.dashboard.compact_galleries_hint', 'Visibility, ordering and bulk actions.')) . '</span><div class="nav"><a class="button secondary" href="' . e(url_for('admin', ['dashboard_tab' => 'galleries']) . '#admin-tab-galleries') . '">' . e(t('admin.dashboard.open_gallery_tree', 'Open gallery tree')) . '</a></div></article>';
 }
 
 /**
  * Render the overview card for centralized global settings.
+ * @param array<string,mixed> $model Prepared admin_settings_urls map with a default destination.
+ * @return void Outputs the Settings shortcut.
  */
 function view_render_admin_dashboard_settings_card(array $model = []): void
 {
-    echo '<article class="admin-action-card"><strong>' . e(t('admin.settings.title', 'Settings')) . '</strong><span>' . e(t('admin.settings.dashboard_hint', 'Review important global values in one place, then open specialized pages for complex or sensitive configuration.')) . '</span><div class="nav"><a class="button secondary" href="' . e((string) ($model['admin_settings_urls']['default'] ?? url_for('admin_settings'))) . '">' . e(t('admin.settings.open_centralized', 'Open centralized settings')) . '</a></div></article>';
+    echo '<article class="admin-action-card"><strong>' . e(t('admin.settings.title', 'Settings')) . '</strong><span>' . e(t('admin.dashboard.compact_settings_hint', 'Languages, appearance and global preferences.')) . '</span><div class="nav"><a class="button secondary" href="' . e((string) ($model['admin_settings_urls']['default'] ?? url_for('admin_settings'))) . '">' . e(t('admin.dashboard.open_settings', 'Open settings')) . '</a></div></article>';
 }
 
 /**
@@ -223,16 +232,19 @@ function view_render_admin_dashboard_upload_card(): void
 
 /**
  * Render the overview card for filesystem discovery.
+ * @return void Outputs the existing explicit scan form and progress region.
  */
 function view_render_admin_dashboard_discover_card(): void
 {
     echo '<form method="post" action="' . e(url_for('admin_discover')) . '" class="admin-action-card" data-refresh-galleries-form data-admin-discovery-launch data-discovery-endpoint="' . e(url_for('admin_discover')) . '" data-csrf-token="' . e(csrf_token()) . '">' . csrf_field();
-    echo '<strong>' . e(t('admin.dashboard.discover_folders', 'Discover folders')) . '</strong><span>' . e(t('admin.dashboard.discover_folders_hint', 'Scan the galleries directory for new folders.')) . '</span><button type="submit">' . e(t('admin.dashboard.check_new_folders', 'Check for new gallery folders')) . '</button>';
+    echo '<strong>' . e(t('admin.dashboard.discover_folders', 'Discover folders')) . '</strong><span>' . e(t('admin.dashboard.discover_folders_hint', 'Scan the galleries directory for new folders.')) . '</span><button type="submit">' . e(t('admin.dashboard.check_folders', 'Check folders')) . '</button>';
     echo '<div class="thumbnail-progress" data-admin-discovery-progress hidden><progress class="thumbnail-progress-bar" max="100" value="0" data-admin-discovery-progress-bar></progress><p class="muted" data-admin-discovery-status></p><p class="muted" data-admin-discovery-counts></p></div></form>';
 }
 
 /**
  * Render the overview card that points to grouped maintenance tools.
+ * @param array<string,mixed> $model Prepared maintenance_center_status availability and resumable-job state.
+ * @return void Outputs Maintenance Center actions and the direct Maintenance fallback link.
  */
 function view_render_admin_dashboard_open_maintenance_card(array $model): void
 {
@@ -256,7 +268,7 @@ function view_render_admin_dashboard_open_maintenance_card(array $model): void
     } else {
         echo '<span>' . e(t('admin.maintenance_center.dashboard_idle', 'Analyze the installation, review the plan, then run bounded resumable maintenance.')) . '</span>';
     }
-    echo '<div class="nav"><a class="button secondary" href="' . e(url_for('admin_maintenance_center')) . '">' . e($actionLabel) . '</a><a class="button secondary" href="' . e(url_for('admin') . '#admin-tab-maintenance') . '">' . e(t('admin.dashboard.open_maintenance', 'Open maintenance')) . '</a></div></article>';
+    echo '<div class="nav"><a class="button secondary" href="' . e(url_for('admin_maintenance_center')) . '">' . e($actionLabel) . '</a><a class="button secondary" href="' . e(url_for('admin', ['dashboard_tab' => 'maintenance']) . '#admin-tab-maintenance') . '">' . e(t('admin.dashboard.open_maintenance', 'Open maintenance')) . '</a></div></article>';
 }
 
 /**
