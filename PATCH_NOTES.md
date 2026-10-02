@@ -1,5 +1,77 @@
 # Patch notes
 
+## Version 0.114.1
+
+Version 0.114.1 makes Admin Settings more compact, defers dashboard totals and gallery lists until needed, and includes Windows uploader 0.3.1 with corrected SimConnect aircraft reply correlation.
+
+### Highlights
+
+#### Compact Admin Settings
+
+- Grouped website address, site name, Admin/public languages and navigation in General, with advanced summaries collapsed.
+- Added section loading and saving in place, a sticky save bar, changed-setting counts and draft revert.
+- Preserved search, specialist destinations, stable section links and ordinary forms without JavaScript; mapped historical Website address links to General.
+- Added explicit links after saved address or Admin-language changes and avoided rewriting an unchanged address.
+
+#### Deferred dashboard
+
+- Displayed the dashboard shell before loading Overview totals and loaded the Galleries list when requested.
+- Added retry for failed section reads and preserved direct URLs and no-JavaScript navigation.
+- Calculated Overview from indexed gallery/image metadata without cover resolution or filesystem scanning.
+
+#### Windows uploader 0.3.1
+
+- Fixed aircraft reply matching to use request and definition IDs without requiring a zero returned object ID.
+- Added bounded receive metadata, dispatch sequence and specific packet-rejection diagnostics.
+- Preserved primary failure reasons through path redaction and removed duplicate SimConnect activity markers.
+- Preserved optional simulator coordinates, MSFS 2024 camera/aircraft fallback and verified self-update behavior.
+
+### Technical Details
+
+#### Backend
+
+- Updated `app/controllers/admin_settings.php` and `app/services/admin_settings_registry.php` for compact section models and canonical JSON mutation responses.
+- Added authenticated read-only `admin_dashboard_fragment` routing in `app/bootstrap/dispatch.php` and `app/controllers/admin_dashboard.php`, with private/no-store responses and early session release.
+- Updated `app/models/admin_dashboard.php` and `app/services/admin_dashboard.php` for separately prepared shell, Overview and Galleries models.
+- Preserved canonical visibility, security/schema policy, authentication and CSRF boundaries; added no capability or schema policy.
+
+#### Frontend
+
+- Added `public/assets/gallery-modules/admin-settings-workspace.js` and `public/assets/gallery-modules/admin-dashboard-workspace.js`, updated Settings search and cache-busting imports in `public/assets/gallery.js`.
+- Updated Admin views/styles and all four interface language catalogs; preserved panel interaction and shared mutation completion.
+
+#### Windows companion
+
+- Updated `winapp/uploader/simconnect_location.py` and `winapp/gallery_watch_upload.pyw` for reply decoding and diagnostics.
+- Validated three FLOAT64 coordinates following the 40-byte receive header, including nonzero object IDs, truncated packets and valid zero coordinates.
+- Kept WinApp at its independent version `0.3.1`, with its matching installer and integrity metadata.
+- Documented that the reported FS2020 timeout did not record its reply object ID; simulated tests do not establish a live fix on the affected PC.
+
+#### Database and compatibility
+
+- Added no migration, table or column and required no new CMS configuration.
+- Preserved public media authorization, both thumbnail renderers and existing updater behavior.
+
+#### Tests and documentation
+
+- Added `tests/admin_settings_controller_test.php`, `tests/admin_dashboard_fragment_controller_test.php` and `tests/admin_dashboard_overview_totals_test.php`, with updated navigation/rendering contracts.
+- Added registered Settings/dashboard browser fixtures and tests for deferred reads, in-place save, retry and panel lifecycle.
+- Extended `winapp/tests/test_simconnect.py` and `winapp/tests/test_redesign.py` with independent wire packets and diagnostic-redaction checks.
+- Updated permanent architecture, testing and Settings documentation, aligned all four manuals and rebuilt their PDFs.
+- Updated release metadata and registered markers for `v_0.114.1`, removed the completed temporary SimConnect plan and refreshed `app/core-manifest.json`.
+
+### User Impact
+
+#### For administrators
+
+- Improved navigation and readability of Settings and reduced unnecessary dashboard work.
+- Preserved ordinary form workflows without JavaScript and existing setting ownership.
+- Improved uploader diagnostics and corrected a confirmed SimConnect filter bug; required live FS2020/FS2024 acceptance on target Windows systems.
+
+#### For visitors
+
+- Preserved public gallery behavior and authorized media access.
+
 ## Version 0.114
 
 Version 0.114 introduces verified self-updates for the independent Windows uploader 0.3.0. It discovers newer stable installers across CMS releases, verifies downloads and waits for background work to stop safely before handing installation to Windows.

@@ -63,8 +63,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.114}
-\newcommand{\manualdate}{1~oktober~2026}
+\newcommand{\version}{0.114.1}
+\newcommand{\manualdate}{2~oktober~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -897,7 +897,9 @@ Webbläsarstödd skapande och uppladdning har ytterligare skydd. Att välja webb
 \subsection{Centralt inställningsnav}
 \index{i00126@Inställningar!c00045@centralt nav}
 
-Administrationens navigering innehåller en central sida \textbf{Inställningar} för webbplatsövergripande konfiguration. Den är uppdelad i Allmänt, Webbplatsadress, Offentligt utseende, Innehåll, Medier och bläddring, Uppladdningar och automatisering, Integritet och diagnostik samt Avancerat. Varje avsnitt har en egen stabil adress, så uppdatering, bokmärken, webbläsarhistorik och reservflödet utan JavaScript återgår till samma kategori.
+Administrationens navigering innehåller en central sida \textbf{Inställningar} för webbplatsövergripande konfiguration. Allmänt samlar webbplatsadress, namn, administrationsspråk, offentligt språk och navigering. Övriga avsnitt omfattar Offentligt utseende, Innehåll, Medier och bläddring, Uppladdningar och automatisering, Integritet och diagnostik samt Avancerat. Äldre länkar för webbplatsadress leder till Allmänt. Stabila avsnittslänkar och vanliga formulär fungerar utan JavaScript.
+
+Med JavaScript laddas avsnitten när de öppnas och sparas på plats. En fast sparrad visar ändrade inställningar och erbjuder att spara eller återställa utkastet. Avancerade sammanfattningar förblir hopfällda. Ändringar av adress eller administrationsspråk erbjuder en uttrycklig länk till den nya adressen eller språket. Administrationspanelen visar först sitt gränssnitt och laddar sedan Översiktens summor eller gallerilistan vid behov; misslyckade läsningar kan upprepas. Översikten räknar indexerade original utan filskanning eller sökning efter omslagsbilder.
 
 Ett Spotlight-liknande fält söker bland inställningar medan du skriver. Det matchar namn, beskrivningar, kategorier och tekniska namn, inklusive kontroller som ägs av specialiserade administrationssidor. När du väljer ett resultat öppnas relevant avsnitt eller specialsida och matchande kontroll får fokus. Piltangenter, Enter, Escape och rensningsknappen kan användas utan att lämna tangentbordet.
 
@@ -925,7 +927,7 @@ Vid sparande valideras aktuella inställningar igen. Om en annan session har än
 \index{i00126@Inställningar!w00269@webbplatsadress}
 \index{k00136@konfiguration!b00020@bas-URL}
 
-Öppna \ui{Inställningar > Webbplatsadress} för att rätta installationens offentliga URL efter installationen. Ange en absolut HTTP- eller HTTPS-adress, t.ex. \url{https://example.com}. Ta bara med en sökväg när galleriet faktiskt är installerat i den undermappen. Om webbhotellets identifiering lade till en oönskad mapp tar du bort den från fältet och sparar.
+Öppna \ui{Inställningar > Allmänt} för att rätta installationens offentliga URL efter installationen. Ange en absolut HTTP- eller HTTPS-adress, t.ex. \url{https://example.com}. Ta bara med en sökväg när galleriet faktiskt är installerat i den undermappen. Om webbhotellets identifiering lade till en oönskad mapp tar du bort den från fältet och sparar.
 
 Sparandet ändrar endast strängen \codeword{base_url} på översta nivån i \filepath{config.php}; det skapar eller ändrar ingen databasinställning. Andra konfigurationsvärden, kommentarer och formatering bevaras. Både filen och mappen som innehåller den måste vara skrivbara. Programmet avvisar adresser med inloggningsuppgifter, frågeparametrar eller fragment och vägrar skriva om dubblerade eller beräknade konfigurationsvärden. Redigera en anpassad konfiguration manuellt när den inte kan uppdateras säkert.
 
