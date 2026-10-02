@@ -1,13 +1,13 @@
 {
     "version": "0.114",
-    "generated_at": "2026-10-02T10:51:20+00:00",
+    "generated_at": "2026-10-02T11:18:41+00:00",
     "algorithm": "sha256",
     "hash_mode": "normalized-text-sha256",
     "files": {
         ".htaccess": "sha256:c2c5f9780efcd23b73948bf591384d6e2f32e42ab71a408475aaf612e35d3569",
-        "ARCHITECTURE.md": "sha256:bed1943351bfca681f486d9cd5fa9ce792fd5511b23c86c42ff9458cbecb2616",
+        "ARCHITECTURE.md": "sha256:5ba821a140d8ba1a2d0328d3610d2fd88edd0218207ddc75b2cfe096abcbeadf",
         "PATCH_NOTES.md": "sha256:aaf6c24a969aa652270b6eb4a95ff1c341bef3034889e2290e398fb43494d4f3",
-        "README.md": "sha256:0b2ed3a0e819783df9decbe9bb00da368f7c56743efff6af961b0e311768ac41",
+        "README.md": "sha256:c736b5c33aafe5907e6e6cce4430cc9083792615a1d4494ac568866af8082f52",
         "app/bootstrap.php": "sha256:51cd210737b36843bbbf1f9735bd0c335d7018ad114f943d3d6b33767f3fd885",
         "app/bootstrap/configuration.php": "sha256:32dd730bee28b264854f92fc4cd375a976156b0229ac611c97adfa18f5cab44b",
         "app/bootstrap/dispatch.php": "sha256:9ec53ded29b07c497c9b3466ba1a7b6526f43c6f1610444421ee40e298d8ba13",

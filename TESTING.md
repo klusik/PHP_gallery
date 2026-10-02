@@ -84,7 +84,12 @@ WinApp tests that exercise optional host integrations must remain isolated from 
 ctypes packets to cover MSFS 2020 aircraft position, MSFS 2024 camera/fallback,
 unknown-generation capability handling, explicit exceptions, response
 correlation, bounded waits, cleanup, repeated acquisitions and nonfatal upload
-integration. Build tests verify the x64 runtime, required exports, embedded DLL
+integration. Independent wire-format packets cover nonzero reply object IDs,
+request/definition mismatches, the 40-byte metadata header plus three FLOAT64
+values, truncated payloads and valid zero coordinates. Diagnostics checks cover
+bounded receive metadata/dispatch sequence, specific rejection reasons,
+redaction preserving the primary failure and one displayed SimConnect marker.
+Build tests verify the x64 runtime, required exports, embedded DLL
 hash and the installer entry that distributes only the application EXE with its
 embedded runtime. These tests run through the central WinApp regression suite.
 
@@ -114,6 +119,11 @@ preserve unrelated copies and never force-kill workers. Verify native Python/sou
 mode's manual installer workflow. Installation failure has no automatic rollback.
 Fakes/source contracts do not establish live UAC, pipe progress or target-machine
 process behavior.
+
+The incorrect reply-object-ID filter is a confirmed code bug, but the reported
+FS2020 timeout did not record the returned object ID. Do not claim that a nonzero
+ID was observed or that fake tests establish its live fix. Retest on the affected
+PC and retain the bounded receive/rejection diagnostics if acquisition still fails.
 
 Real-simulator acceptance requires separate Windows runs with MSFS 2020 and
 MSFS 2024: capture a watched screenshot during a flight, confirm provider/source

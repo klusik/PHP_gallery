@@ -1706,7 +1706,13 @@ conflicting or unrecognized identities use bounded capability detection. MSFS
 MSFS 2024 preserves the WORLD Camera API and falls back to aircraft position.
 The providers share a monotonic response budget and isolated connection per
 acquisition, with send-ID exception attribution, aircraft request/definition
-validation and serialized client use. Provider failures never block upload.
+validation and serialized client use. Aircraft replies may carry a nonzero
+object ID; the request USER selector does not constrain that returned ID.
+The bounded decoder reads three FLOAT64 values after the 40-byte metadata
+header. Receive metadata, dispatch sequence and specific mismatch/malformed
+reasons explain ignored packets. Failure summaries place the primary reason
+before DLL paths to preserve it through redaction, and activity display removes
+duplicate SimConnect markers. Provider failures never block upload.
 Actual source and last-acquisition diagnostics remain local; historical
 `sim_camera_*` multipart fields preserve compatibility with existing galleries.
 PyInstaller embeds one x64 DLL at `runtime/simconnect/SimConnect.dll`; build

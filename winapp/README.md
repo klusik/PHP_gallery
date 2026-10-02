@@ -41,7 +41,7 @@ for manual installation and never overwrite the Python source folder. Only a
 frozen `PHPGalleryUploader.exe` outside a PyInstaller extraction directory is
 eligible for automatic handoff; helper validation also protects the target path.
 
-## Windows installer (winapp 0.3.0)
+## Windows installer (winapp 0.3.1)
 
 The companion app has its own version in `winapp/VERSION`, independent of the PHP
 Gallery CMS release. The installer includes Python, Tkinter, Pillow, pystray,
@@ -87,7 +87,7 @@ files and caches in the same disposable staging directory.
 The build script produces this installer:
 
 ```text
-winapp/dist/PHPGalleryUploader-0.3.0-Setup.exe
+winapp/dist/PHPGalleryUploader-0.3.1-Setup.exe
 ```
 
 The build script produces only this EXE. Attach it to the same GitHub release as
@@ -99,8 +99,8 @@ trusted installer metadata when GitHub's asset digest is unavailable. Its schema
 {
   "assets": [
     {
-      "name": "PHPGalleryUploader-0.3.0-Setup.exe",
-      "version": "0.3.0",
+      "name": "PHPGalleryUploader-0.3.1-Setup.exe",
+      "version": "0.3.1",
       "size": 12345678,
       "sha256": "<64-character hexadecimal SHA-256 digest>"
     }
@@ -405,7 +405,8 @@ One short-lived connection and one shared dispatch loop serve both strategies.
 The default total response-wait budget is one second, shared by handshake,
 camera and aircraft attempts. Requests are serialized per client, exception
 send IDs are attributed to their operation, and aircraft responses must match
-the active request/definition/user-object IDs. No old location is reused for a
+the active request and definition IDs. The USER selector passed to a request
+is not a requirement that the reply object ID be zero. No old location is reused for a
 later screenshot. SimConnect calls run in the watcher thread, not the UI thread.
 
 Location is optional: a stopped simulator, unavailable DLL, failed dispatch or
@@ -415,7 +416,14 @@ fallback and failure reason. **Copy redacted diagnostics** includes the last
 acquisition snapshot without opening a new simulator connection. Connections
 close after each attempt, so the report distinguishes the last successful
 handshake from the current closed transport. Detailed HRESULT/dispatch counters
-are retained in diagnostics/debug output.
+are retained in diagnostics/debug output. Aircraft packets are bounded by the
+40-byte SDK metadata header and three FLOAT64 values. Receive metadata and
+dispatch sequence identify request/definition mismatches, short payloads and
+invalid coordinates. The primary failure reason precedes the DLL path so path
+redaction preserves it; activity messages show one SimConnect marker.
+The object-ID filter was a confirmed code bug. The reported FS2020 timeout
+did not record its response object ID, so its exact cause and the installed
+fix still require a live target-PC retest.
 
 DLL lookup order:
 
