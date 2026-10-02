@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.114.1}
+\newcommand{\version}{0.114.2}
 \newcommand{\manualdate}{2.~října~2026}
 
 \hypersetup{
@@ -634,7 +634,9 @@ Po aktivaci otevřete sdílené fotografie z~panelu nebo odkazu v~místním albu
 Odvolání účasti, změna ochrany nebo místní zrušení přátelství blokuje další autorizovaná čtení. Nedostupný server je omezen nejvýše 120 sekundami platnosti ověření; již stažené pixely nelze odvolat. Přidání účastníka vytváří samostatný návrh vyžadující nový souhlas všech. Obnova ověření může probíhat při používání; plánovač je volitelný. Chybějící nebo neznámé povinné schéma odmítá sdílení i~mutace. Podrobnosti a~omezení nasazení uvádí \filepath{docs/COOPERATIVE_GALLERIES.md}.
 
 \subsection{Poloha simulátoru ve Windows}
-WinApp 0.3.1 automaticky používá světovou polohu kamery MSFS 2024 a~při omezeném selhání přechází na polohu letadla. MSFS 2020 používá přímo polohu letadla přes stejný SimConnect. Souřadnice jsou volitelné; nedostupný simulátor neblokuje nahrávání. Diagnostika rozlišuje zdroj polohy. Instalátor požaduje ukončení aplikace před výměnou souborů; před aktualizací dokončete rozpracované úlohy. Skutečný simulátor a~aktualizaci ověřte na cílovém PC.
+WinApp 0.3.2 automaticky používá světovou polohu kamery MSFS 2024 a~při omezeném selhání přechází na polohu letadla. MSFS 2020 používá přímo polohu letadla přes stejný SimConnect. Souřadnice jsou volitelné; nedostupný simulátor neblokuje nahrávání. Diagnostika rozlišuje zdroj polohy. Instalátor požaduje ukončení aplikace před výměnou souborů; před aktualizací dokončete rozpracované úlohy. Skutečný simulátor a~aktualizaci ověřte na cílovém PC.
+
+Zabalený aktualizátor načítá rozhraní Windows výslovně ze System32, aby soubor VERSION nekolidoval s~knihovnou Windows pro verze. Při přechodu z~0.3.1 ručně spusťte ověřený instalátor 0.3.2. Běžící starší aplikace kopíruje vlastní pomocný proces před instalací, takže starý pomocník může i~po výměně aplikace ohlásit původní chybu DLL. Další aktualizace spuštěné z~opravené aplikace 0.3.2 používají opraveného pomocníka; ověřte předání na nainstalovaných Windows.
 
 Odpovědi s~polohou letadla se přiřazují podle identifikátorů požadavku a~definice; volba USER v~požadavku nevyžaduje nulový identifikátor objektu v~odpovědi. Omezená diagnostika zaznamenává metadata příjmu, pořadí zpracování a~konkrétní důvody odmítnutí paketů. Důvody selhání zůstávají čitelné po skrytí cest a~zprávy aktivity zobrazují jedinou značku SimConnect. Filtr identifikátoru objektu byl potvrzenou chybou kódu, ale hlášený timeout FS2020 vrácený identifikátor nezaznamenal. Ověřte opravu na dotčeném PC; simulované testy neprokazují skutečný výsledek.
 

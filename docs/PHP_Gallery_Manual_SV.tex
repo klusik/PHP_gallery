@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.114.1}
+\newcommand{\version}{0.114.2}
 \newcommand{\manualdate}{2~oktober~2026}
 
 \hypersetup{
@@ -634,7 +634,9 @@ Efter aktivering öppnas gemensamma fotografier från panelen eller länken i de
 Återkallat deltagande, ändrat källskydd och lokalt återkallad vänskap blockerar efterföljande auktoriserade läsningar. Onåbara deltagare begränsas till högst 120 sekunders verifieringsgiltighet; redan hämtade pixlar kan inte återkallas. Nya deltagare kräver ett separat förslag med nytt godkännande från alla. Teknisk förnyelse kan ske vid användning; schemaläggning är valfri. Saknat eller okänt obligatoriskt schema avvisar delning och ändringar. Se \filepath{docs/COOPERATIVE_GALLERIES.md} för driftsgränser.
 
 \subsection{Simulatorposition i Windows}
-WinApp 0.3.1 använder automatiskt kamerans världsposition i MSFS 2024 och faller tillbaka till flygplanets position vid ett begränsat kamerafel. MSFS 2020 använder direkt flygplanets position genom samma SimConnect-runtime. Koordinater är valfria; en otillgänglig simulator stoppar inte uppladdningen. Diagnostiken skiljer mellan positionskällorna. Installationsprogrammet begär att programmet avslutas före filbyte. Slutför pågående arbete före uppdatering. Verifiera verkliga simulatorer och uppgradering på måldatorn.
+WinApp 0.3.2 använder automatiskt kamerans världsposition i MSFS 2024 och faller tillbaka till flygplanets position vid ett begränsat kamerafel. MSFS 2020 använder direkt flygplanets position genom samma SimConnect-runtime. Koordinater är valfria; en otillgänglig simulator stoppar inte uppladdningen. Diagnostiken skiljer mellan positionskällorna. Installationsprogrammet begär att programmet avslutas före filbyte. Slutför pågående arbete före uppdatering. Verifiera verkliga simulatorer och uppgradering på måldatorn.
+
+Den paketerade uppdateraren laddar Windows-API:er uttryckligen från System32 för att undvika en kollision mellan textfilen VERSION och Windows versionsbibliotek. Starta det verifierade installationsprogrammet 0.3.2 manuellt vid uppgradering från 0.3.1. Den äldre appen kopierar sin egen hjälpprocess före installationen, så den gamla hjälparen kan fortfarande rapportera DLL-felet efter att appen ersatts. Framtida uppdateringar från den korrigerade appen 0.3.2 använder den reparerade hjälparen; verifiera den installerade överlämningen i Windows.
 
 Flygplanssvar kopplas till begärans och definitionens identifierare; begärans USER-väljare kräver inte att svarets objektidentifierare är noll. Begränsad diagnostik registrerar mottagningsmetadata, behandlingsordning och konkreta skäl till avvisade paket. Felorsaker förblir läsbara efter sökvägsredigering och aktivitetsmeddelanden visar en enda SimConnect-markering. Objektidentifierarfiltret var ett bekräftat kodfel, men det rapporterade FS2020-tidsfelet registrerade inte den returnerade objektidentifieraren. Testa korrigeringen på den berörda datorn; simulerade tester bevisar inte ett verkligt simulatorresultat.
 

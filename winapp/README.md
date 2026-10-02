@@ -41,7 +41,21 @@ for manual installation and never overwrite the Python source folder. Only a
 frozen `PHPGalleryUploader.exe` outside a PyInstaller extraction directory is
 eligible for automatic handoff; helper validation also protects the target path.
 
-## Windows installer (winapp 0.3.1)
+The frozen updater explicitly loads `version.dll`, `kernel32.dll` and
+`shell32.dll` using the Windows System32 search policy. This prevents
+PyInstaller from redirecting the extensionless `version` request to the bundled
+`VERSION` text file on case-insensitive Windows; no native DLL bundling is needed.
+Before Inno Setup compilation, the build runs a read-only native API smoke check
+inside a copied frozen helper outside the original executable directory.
+
+For an upgrade from 0.3.1, manually launch the verified 0.3.2 installer. The running
+older executable copies its helper before installation, so its old helper can
+still report the native-DLL error after replacing the app. Future updates started
+from the corrected 0.3.2 executable use the repaired helper. Retain the original
+0.3.1 installer and its update metadata; the new installer has distinct metadata
+at `winapp/dist/0.3.2/winapp-update.json`.
+
+## Windows installer (winapp 0.3.2)
 
 The companion app has its own version in `winapp/VERSION`, independent of the PHP
 Gallery CMS release. The installer includes Python, Tkinter, Pillow, pystray,
@@ -87,7 +101,7 @@ files and caches in the same disposable staging directory.
 The build script produces this installer:
 
 ```text
-winapp/dist/PHPGalleryUploader-0.3.1-Setup.exe
+winapp/dist/PHPGalleryUploader-0.3.2-Setup.exe
 ```
 
 The build script produces only this EXE. Attach it to the same GitHub release as
@@ -99,8 +113,8 @@ trusted installer metadata when GitHub's asset digest is unavailable. Its schema
 {
   "assets": [
     {
-      "name": "PHPGalleryUploader-0.3.1-Setup.exe",
-      "version": "0.3.1",
+      "name": "PHPGalleryUploader-0.3.2-Setup.exe",
+      "version": "0.3.2",
       "size": 12345678,
       "sha256": "<64-character hexadecimal SHA-256 digest>"
     }

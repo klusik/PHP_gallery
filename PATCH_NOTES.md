@@ -1,5 +1,59 @@
 # Patch notes
 
+## Version 0.114.2
+
+Version 0.114.2 includes Windows uploader 0.3.2 with repaired native Windows DLL loading in the frozen update helper and a build-time check of the copied helper. Users upgrading from 0.3.1 should manually launch the verified 0.3.2 installer, because their running older application still copies its older helper before replacement.
+
+### Highlights
+
+#### Windows updater native libraries
+
+- Fixed a collision between the bundled `VERSION` text file and extensionless Windows version-library loading on case-insensitive systems.
+- Loaded `version.dll`, `kernel32.dll` and `shell32.dll` explicitly through the Windows System32 search policy.
+- Added a read-only smoke check of a copied frozen helper before installer compilation, refusing packaging on native API failure or mismatched PE version.
+- Documented the manual upgrade path from 0.3.1 and retained its original installer/integrity metadata for diagnosis.
+
+### Technical Details
+
+#### Windows companion and build
+
+- Updated `winapp/uploader/update_helper.py` with explicit DLL extensions and `LOAD_LIBRARY_SEARCH_SYSTEM32` for version, process and installation APIs.
+- Added `--self-update-smoke` dispatch in `winapp/gallery_watch_upload.pyw` before configuration, logging or GUI startup; checked the frozen executable version against bundled `VERSION` without installing, elevating or changing updater state.
+- Updated `winapp/build_installer.py` to copy the built executable into an owned helper-smoke directory and run the native check before Inno Setup, preserving previous successful installers on build refusal.
+- Kept the companion version independent at `0.3.2`; reused its completed installer and matching SHA-256 metadata.
+
+#### Tests
+
+- Extended `winapp/tests/test_update_helper.py` with the bundled VERSION collision and restricted native-library loading contracts.
+- Added `winapp/tests/test_self_update_smoke.py` for matching/mismatched versions, native failures and early diagnostic dispatch.
+- Extended `winapp/tests/test_build_installer.py` for copied-helper smoke ordering, isolated state and build failure cleanup.
+- Updated `TESTING.md` to distinguish frozen API checks from live installed-app/UAC acceptance.
+
+#### CMS backend, database and frontend
+
+- Added no CMS route, setting, capability, migration, table or column.
+- Preserved Admin workflows, public gallery rendering, media authorization and both thumbnail renderers.
+- Preserved verified downloads, worker drain, update installation policy and existing SimConnect behavior.
+
+#### Documentation and release artifacts
+
+- Updated the Windows upgrade instructions in `README.md`, `winapp/README.md` and all four manual editions.
+- Aligned all manual versions/dates with CMS `0.114.2` and rebuilt their PDFs.
+- Updated registered release markers and `release-metadata.json` for `v_0.114.2` and refreshed `app/core-manifest.json`.
+
+### User Impact
+
+#### For administrators
+
+- Improved future self-update helper behavior when launched from the corrected 0.3.2 application.
+- Required manual installation of the verified 0.3.2 installer when upgrading from 0.3.1; an already copied old helper can still report its previous native-DLL error after replacement.
+- Required no new CMS configuration or database migration.
+- Kept live installed update handoff and simulator acceptance as target-PC checks; automated fixtures do not prove those workflows.
+
+#### For visitors
+
+- Preserved existing public gallery and authorized media behavior.
+
 ## Version 0.114.1
 
 Version 0.114.1 makes Admin Settings more compact, defers dashboard totals and gallery lists until needed, and includes Windows uploader 0.3.1 with corrected SimConnect aircraft reply correlation.
