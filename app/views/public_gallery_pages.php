@@ -48,6 +48,7 @@ use function Gallery\Services\t;
  * Render the public root gallery index.
  *
  * @param array<string,mixed> $viewModel Controller-prepared home-page state.
+ * @return void Emit public content and prepared inline actions without resolving authorization or catalog state.
  */
 function view_render_public_gallery_home(array $viewModel): void
 {
@@ -57,22 +58,34 @@ function view_render_public_gallery_home(array $viewModel): void
     $smartCount = (int) ($viewModel['smart_gallery_count'] ?? 0);
     $revision = (string) ($viewModel['physical_gallery_revision'] ?? '');
     $canonicalUrl = (string) ($viewModel['canonical_url'] ?? '');
+    $creationAction = $viewModel['creation_action'] ?? null;
+    if (is_array($creationAction)) {
+        echo '<div class="public-home-toolbar"><div class="hero-actions public-home-actions" aria-label="' . e(t('gallery.actions', 'Gallery actions')) . '">';
+        view_render_public_gallery_admin_add_child_link($creationAction);
+        echo '</div>';
+        view_render_public_search_bar((array) ($viewModel['search_bar'] ?? []));
+        echo '</div>';
+    } else {
+        view_render_public_search_bar((array) ($viewModel['search_bar'] ?? []));
+    }
+
+    // Keep the root frame mounted while empty so the shared completion coordinator
+    // can replace onboarding and verification metadata after the first creation.
+    echo '<div class="gallery-list-frame" data-back-to-top-scope><div class="gallery-list-content" data-back-to-top-list>';
     echo '<div data-public-gallery-index data-public-root-gallery-count="' . $physicalCount . '" data-public-root-gallery-revision="' . e($revision) . '" data-public-root-smart-gallery-count="' . $smartCount . '" data-admin-mutation-canonical-url="' . e($canonicalUrl) . '" hidden></div>';
-
-    view_render_public_search_bar((array) ($viewModel['search_bar'] ?? []));
-
+    if (is_array($creationAction) && !empty($viewModel['show_first_gallery'])) {
+        echo '<section class="public-home-empty" data-public-home-first-gallery><h2>' . e(t('gallery.home.empty_title', 'No galleries yet')) . '</h2><p class="muted">' . e(t('gallery.home.empty_help', 'Start with a name. You can add photos and adjust the gallery in the side panel.')) . '</p>';
+        view_render_public_gallery_admin_add_child_link(array_merge($creationAction, ['label' => t('gallery.home.add_first', 'Add your first gallery'), 'show_label' => true]));
+        echo '</section>';
+    }
     if ((int) ($viewModel['gallery_count'] ?? 0) > 0) {
-        echo '<div class="gallery-list-frame" data-back-to-top-scope>';
-        echo '<div class="gallery-list-content" data-back-to-top-list>';
         echo (string) ($viewModel['pagination_html'] ?? '');
         echo '<section class="grid public-home-gallery-grid' . e((string) ($viewModel['grid_class'] ?? '')) . '" data-public-gallery-index-grid data-public-root-gallery-count="' . $physicalCount . '" data-public-root-gallery-revision="' . e($revision) . '" data-public-root-smart-gallery-count="' . $smartCount . '" data-public-gallery-page="' . (int) ($viewModel['current_page'] ?? 1) . '" data-public-gallery-total-pages="' . (int) ($viewModel['total_pages'] ?? 1) . '">';
         echo (string) ($viewModel['cards_html'] ?? '');
         echo '</section>';
         echo (string) ($viewModel['pagination_html'] ?? '');
-        echo '</div>';
-        echo (string) ($viewModel['back_to_top_html'] ?? '');
-        echo '</div>';
     }
+    echo '</div>' . (string) ($viewModel['back_to_top_html'] ?? '') . '</div>';
 
     echo (string) ($viewModel['render_profile_html'] ?? '');
     render_footer();

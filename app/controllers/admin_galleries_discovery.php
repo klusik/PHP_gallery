@@ -500,21 +500,18 @@ function cms_admin_new_gallery(): void
     }
 
     \Gallery\Views\view_render_admin_new_gallery_page([
-        'title' => t('admin.galleries.create_empty_title'),
+        'title' => t('admin.gallery_editor.create_gallery', 'Create gallery'),
         'dashboard_url' => url_for('admin'),
         'dashboard_label' => t('admin.common.back_to_dashboard'),
-        'upload_url' => url_for('admin_upload'),
-        'upload_label' => t('admin.upload.title'),
-        'parent_notice' => $prefillParentGallery
-            ? t('admin.galleries.create_inside_notice', 'New gallery will be created inside: {gallery}.', ['gallery' => (string) $prefillParentGallery['title']])
-            : '',
+        'galleries_url' => url_for('home'),
+        'galleries_label' => t('admin.dashboard.open_galleries', 'Open galleries'),
         'error_notice' => $error !== '' ? t('admin.galleries.create_failed', ['error' => $error]) : '',
         'action_url' => url_for('admin_new_gallery'),
         'csrf_html' => csrf_field(),
         'fields_html' => admin_gallery_discovery_capture_html(static function () use ($prefillParentId): void {
             render_admin_new_gallery_fields($prefillParentId, false);
         }),
-        'submit_label' => t('admin.galleries.create_folder_button'),
+        'submit_label' => t('admin.gallery_editor.create_gallery', 'Create gallery'),
     ]);
 }
 

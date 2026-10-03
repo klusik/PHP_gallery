@@ -1,0 +1,69 @@
+<!doctype html>
+<!--
+Project: PHP Gallery
+Repository: https://github.com/klusik/PHP_gallery
+File: tests/fixtures/theme_custom_css.html
+Module Type: Browser Test Fixture
+Purpose: Preserve compact Custom CSS controls and explicit replacement intent.
+Responsibilities: Capture complete native forms without storing user files or live POSTs.
+Author: Rudolf Klusal
+License: MIT License (see LICENSE file in repository)
+-->
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Custom CSS regression</title></head><body class="admin-page"><main><!-- PRODUCTION_THEME_MARKUP --></main><pre id="results"></pre>
+<script type="module">
+import {setupAdminTabs} from '/public/assets/gallery-modules/admin-tabs.js';
+import {setupAdminNestedTabs} from '/public/assets/gallery-modules/admin-nested-tabs.js';
+import {setupThemeOverrideForm} from '/public/assets/gallery-modules/theme-form.js';
+import {setupGallerySearchPickers} from '/public/assets/gallery-modules/searchable-gallery-picker.js';
+let assertions=0; const submissions=[];
+/** Require native behavior or actual geometry. @param {boolean} condition Expected invariant. @param {string} message Failure context. @return {void} Counts success or throws. */
+function check(condition,message) { if(!condition) throw new Error(message); assertions++; }
+/** Find a production element. @param {string} selector Fixed DOM query. @return {HTMLElement} Matching native element. */
+function find(selector) { const node=document.querySelector(selector); if(!node) throw new Error('Missing '+selector); return node; }
+/** Wait for native handlers and layout. @return {Promise<void>} Resolves after browser work. */
+function settle() { return new Promise(/** Resume after events. @param {function():void} resolve Completion callback. @return {number} Timer identifier. */ resolve=>setTimeout(resolve,35)); }
+/** Edit a native control without committing settings. @param {HTMLInputElement|HTMLSelectElement} control Production input. @param {string} value Proposed draft value. @return {void} Emits normal delegated input events. */
+function edit(control,value) { control.value=value; control.dispatchEvent(new Event('input',{bubbles:true})); control.dispatchEvent(new Event('change',{bubbles:true})); }
+/** Activate a retained Custom CSS subsection. @param {string} name Retained subsection suffix. @return {void} Uses production native tab behavior. */
+function tab(name) { find(`[data-admin-subtab-target="admin-theme-css-subtab-${name}"]`).click(); }
+try {
+    setupAdminTabs(); setupAdminNestedTabs(); setupThemeOverrideForm(); setupGallerySearchPickers();
+    const form=find('[data-theme-form]'), save=find('.admin-theme-save-panel button:not([name])');
+    form.addEventListener('submit',/** Capture actual successful controls and cancel fixture transport. @param {SubmitEvent} event Native form submission. @return {void} Records complete intent with no live POST. */ event=>{submissions.push({prevented:event.defaultPrevented,data:new FormData(form,event.submitter)}); event.preventDefault();});
+    find('[data-admin-tab-target="admin-theme-tab-custom-css"]').click();
+    check(!find('#admin-theme-tab-custom-css').hidden,'actual primary tab opens Custom CSS');
+    const preset=find('[name="custom_css_preset"]'), upload=find('[name="custom_css"]');
+    check(preset.value==='' && preset.selectedOptions[0].textContent==='Keep current custom CSS','opening current stylesheet always defaults to Keep current');
+    check(find('#admin-custom-css').textContent.includes('Uploaded <safe> stylesheet'),'actual current state displays safe stored metadata');
+    check(upload.accept==='.css,text/css' && !upload.files.length,'native CSS upload starts empty and preserves accept syntax');
+    edit(preset,'night.css'); tab('reset'); tab('source');
+    check(preset.value==='night.css' && submissions.length===0,'preset staging and tab navigation do not submit or apply a skin');
+    edit(preset,''); form.requestSubmit(save);
+    check(submissions.length===1 && !submissions[0].prevented && submissions[0].data.get('custom_css_preset')==='','ordinary Save with Keep current carries explicit empty preset intent');
+    const transfer=new DataTransfer(); transfer.items.add(new File(['/* safe fixture */\n.fixture{color:#123456}'],'local.css',{type:'text/css'})); upload.files=transfer.files; upload.dispatchEvent(new Event('change',{bubbles:true})); edit(preset,'paper.css');
+    check(submissions.length===1 && upload.files[0].name==='local.css','file and preset selection remains local until Save');
+    find('[data-admin-tab-target="admin-theme-tab-appearance"]').click(); edit(find('[data-theme-color-hex]'),'invalid'); find('[data-admin-tab-target="admin-theme-tab-custom-css"]').click(); tab('reset');
+    for(const action of ['reset_theme_overrides','reset_custom_css']) find(`[name="${action}"]`).click();
+    check(submissions.length===3 && !submissions[1].prevented && !submissions[2].prevented,'existing distinct resets bypass invalid hidden Appearance draft');
+    for(const [index,action] of ['reset_theme_overrides','reset_custom_css'].entries()) { const data=submissions[index+1].data; check(data.get(action)==='1' && !data.has(index===0?'reset_custom_css':'reset_theme_overrides'),'native submitter identifies only requested reset '+action); check(data.get('custom_css_preset')==='paper.css' && data.get('custom_css').name==='local.css','reset transport preserves other staged Custom CSS fields'); }
+    edit(find('[data-theme-color-hex]'),'#445566'); tab('source'); form.requestSubmit(save);
+    check(submissions.length===4 && !submissions[3].prevented,'global floating Save preserves complete valid form intent');
+    const data=submissions[3].data; check(data.get('custom_css_preset')==='paper.css' && data.get('custom_css').name==='local.css' && data.get('custom_css').type==='text/css','normal Save preserves both explicit preset and genuine uploaded CSS descriptor');
+    for(const name of ['csrf_token','theme_accent','theme_page_width_custom','theme_gallery_description_layout','tag_page_gallery_description_layout','theme_branding_separator_width','favicon_cropped_png','pagination_columns','theme_favorite_gallery_types[]','theme_favorite_gallery_ids[]','cms_language','public_language','public_language_selector_settings_present','language_pack_json']) check(data.has(name),'complete multipart Save preserves hidden neighbor '+name);
+    check(data.get('csrf_token')==='theme-fixture','shared native CSRF authority retained');
+    const sourceTab=find('[data-admin-subtab-target="admin-theme-css-subtab-source"]'); sourceTab.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true,cancelable:true}));
+    check(!find('#admin-theme-css-subtab-reset').hidden && document.activeElement===find('[data-admin-subtab-target="admin-theme-css-subtab-reset"]'),'keyboard subsection navigation preserves reset focus and selection');
+    for(const width of [1280,390]) {
+        await fetch('/__viewport?width='+width); await settle();
+        for(const name of ['source','reset']) {
+            tab(name); for(const details of find('.theme-custom-css-workspace').querySelectorAll('details')) details.open=true; await settle();
+            const workspace=find('.theme-custom-css-workspace'), bounds=workspace.getBoundingClientRect();
+            check(workspace.scrollWidth<=workspace.clientWidth+1 && bounds.right<=innerWidth+1,width+' '+name+' compact Custom CSS including disclosures has no overflow');
+            if(name==='source') check(preset.getBoundingClientRect().width>=120,width+' native preset options remain readable');
+            if(name==='reset') for(const action of ['reset_theme_overrides','reset_custom_css']) { const button=find(`[name="${action}"]`), rect=button.getBoundingClientRect(); check(rect.width>0 && rect.left>=-1 && rect.right<=innerWidth+1,width+' reset action remains unclipped '+action); }
+            const saveBounds=save.getBoundingClientRect(); check(saveBounds.width>0 && saveBounds.left>=-1 && saveBounds.right<=innerWidth+1 && saveBounds.bottom<=innerHeight+1,width+' '+name+' floating Save stays usable');
+        }
+    }
+    document.getElementById('results').textContent='BROWSER PASS '+assertions+' Custom CSS assertions';
+} catch(error) { document.getElementById('results').textContent='BROWSER FAIL '+error.message+'\n'+error.stack; }
+</script></body></html>

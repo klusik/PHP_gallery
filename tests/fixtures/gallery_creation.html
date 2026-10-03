@@ -1,0 +1,101 @@
+<!doctype html>
+<!--
+Project: PHP Gallery
+Repository: https://github.com/klusik/PHP_gallery
+File: tests/fixtures/gallery_creation.html
+Module Type: Browser Test Fixture
+Purpose: Preserve actual full-page and dynamically loaded name-only creation forms.
+Responsibilities: Exercise native inputs, compact geometry and canonical panel completion without live mutations.
+Author: Rudolf Klusal
+License: MIT License (see LICENSE file in repository)
+-->
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Gallery creation regression</title></head><body class="admin-page"><main class="site-main"><!-- PRODUCTION_CREATION_MARKUP --><div id="panel-launcher"><a href="/fixture-create-panel?parent_id=7" data-gallery-side-panel-link data-admin-side-panel-workflow="create" data-admin-side-panel-title="Create gallery" data-gallery-side-panel-url="/fixture-create-panel?parent_id=7&amp;panel=1">Create child gallery</a></div></main><pre id="results"></pre>
+<script type="module">
+import {setupAdminGallerySidePanel} from '/public/assets/gallery-modules/admin-side-panel.js';
+import {setupAdminGalleryTitleCompletion} from '/public/assets/gallery-modules/admin-gallery-title-completion.js';
+import {setupGallerySearchPickers} from '/public/assets/gallery-modules/searchable-gallery-picker.js';
+import {setupTagSuggestions} from '/public/assets/gallery-modules/tag-suggestions.js';
+import {setupSimbriefDescriptionGenerator} from '/public/assets/gallery-modules/admin-simbrief-description.js';
+let assertions=0, panelPosts=0, panelGets=0, editorGets=0, simbriefRequests=0;
+const fullSubmissions=[], panelBodies=[], originalUrl=location.href, nativeFetch=window.fetch.bind(window);
+/** Require actual production behavior or geometry. @param {boolean} condition Expected invariant. @param {string} message Failure context. @return {void} Counts success or throws. */
+function check(condition,message) { if(!condition) throw new Error(message); assertions++; }
+/** Find one rendered element. @param {string} selector Fixed DOM query. @param {ParentNode} owner Scoped document owner. @return {HTMLElement} Actual production element. */
+function find(selector,owner=document) { const node=owner.querySelector(selector); if(!node) throw new Error('Missing '+selector); return node; }
+/** Yield to native event and layout work. @return {Promise<void>} Resolves after one browser task. */
+function settle() { return new Promise(/** Resume after browser tasks. @param {function():void} resolve Completion callback. @return {number} Timer identifier. */ resolve=>setTimeout(resolve,40)); }
+/** Wait for actual async completion without driving its owner. @param {function():boolean} predicate Required observable state. @return {Promise<void>} Resolves when state is reached. */
+async function until(predicate) { const end=Date.now()+6500; while(!predicate()) { if(Date.now()>end) throw new Error('Creation timeout: '+document.querySelector('[data-admin-side-panel-status]')?.textContent); await settle(); } }
+/** Edit one native draft input. @param {HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement} control Actual production control. @param {string|boolean} value Proposed draft value. @return {void} Emits normal bubbling events. */
+function edit(control,value) { if(typeof value==='boolean') control.checked=value; else control.value=value; control.dispatchEvent(new Event('input',{bubbles:true})); control.dispatchEvent(new Event('change',{bubbles:true})); }
+/** Confine every workflow request to disposable data or the fixture's viewport/input seam. @param {RequestInfo|URL} input Synthetic request destination. @param {RequestInit} options Production transport metadata. @return {Promise<Response>} Safe synthetic response, with no app bootstrap or mutation. */
+window.fetch=async(input,options={})=>{
+    const url=new URL(input instanceof Request?input.url:String(input),location.href);
+    check(url.origin===location.origin,'all creation fixture requests stay on loopback');
+    if(url.pathname.startsWith('/__')) return nativeFetch(input,options);
+    if(url.pathname==='/fixture-parent-search') return new Response(JSON.stringify({ok:true,rows:[{id:'7',title:'Parent <safe>',path:'parent',label:'Parent <safe> / parent'},{id:'8',title:'Another parent',path:'second',label:'Another parent / second'}],next_after_id:null}),{headers:{'Content-Type':'application/json'}});
+    if(url.pathname==='/fixture-title-completion') return new Response(JSON.stringify({ok:true,candidates:[{title:'Gallery fixture completion',parent_id:7}]}),{headers:{'Content-Type':'application/json'}});
+    if(url.searchParams.get('page')==='admin_simbrief_description') { check(options.method==='POST' && options.body.get('csrf_token')==='theme-fixture' && options.body.get('gallery_id')==='0' && options.body.get('simbrief_pilot_id')==='12345','actual SimBrief generator requests a protected unsaved draft'); simbriefRequests++; return new Response(JSON.stringify({ok:true,description:'Disposable flight description',draft_ref:'fixture-generated-draft',message:'Draft generated.'}),{headers:{'Content-Type':'application/json'}}); }
+    if(url.pathname==='/fixture-create-panel') { check(!options.method || options.method==='GET','panel loading is read-only'); const parent=url.searchParams.get('parent_id'); check(['0','7'].includes(parent),'panel GET has exact root or child scope'); panelGets++; return new Response(find(parent==='0'?'#production-create-root-panel':'#production-create-panel').innerHTML,{headers:{'Content-Type':'text/html'}}); }
+    if(url.searchParams.get('page')==='admin_new_gallery') {
+        check(options.method==='POST' && options.body instanceof FormData,'name-only panel uses existing AJAX multipart transport');
+        const data=options.body; check(data.get('csrf_token')==='theme-fixture' && data.get('ajax')==='1' && data.get('panel')==='1' && /^[a-f0-9]{64}$/.test(data.get('operation_key')),'dynamic actual panel retains CSRF/replay and AJAX authority');
+        const names=Array.from(data.keys()).sort(); check(JSON.stringify(names)===JSON.stringify(['ajax','csrf_token','operation_key','panel','parent_id','title']),'actual AJAX panel posts only title and required authority/scope fields');
+        panelBodies.push(data); panelPosts++; const id=76+panelPosts;
+        return new Response(JSON.stringify({ok:true,message:'Gallery created.',mutation:{type:'gallery.create',entity:'gallery',action:'create',entity_ids:[id]},panel:{workflow:'gallery-edit',refresh_url:'/fixture-editor?id='+id,keep_open:true},contexts:[],fallback:{redirect_url:'/fixture-editor?id='+id},gallery_id:id,gallery_title:data.get('title'),gallery_url:'/fixture-gallery?id='+id,edit_url:'/fixture-editor?id='+id,parent_gallery_id:Number(data.get('parent_id')),parent_gallery_url:'',created_gallery:true}),{headers:{'Content-Type':'application/json'}});
+    }
+    if(url.pathname==='/fixture-editor') { check(!options.method || options.method==='GET','canonical editor refresh is read-only'); editorGets++; return new Response('<section data-admin-edit-panel-workspace="gallery-edit"><h2 data-fixture-editor>Gallery editor '+url.searchParams.get('id')+'</h2></section>',{headers:{'Content-Type':'text/html'}}); }
+    throw new Error('Unexpected fixture request '+url.pathname);
+};
+try {
+    setupGallerySearchPickers(); setupTagSuggestions(); setupAdminGalleryTitleCompletion(); setupSimbriefDescriptionGenerator(); setupAdminGallerySidePanel();
+    const form=find('.gallery-create-form'), advanced=find('.admin-gallery-advanced-settings',form), simbrief=find('.gallery-create-simbrief',form);
+    form.addEventListener('submit',/** Capture complete native full-page intent and cancel fixture navigation. @param {SubmitEvent} event Native POST intent. @return {void} Stores all successful controls without transport. */ event=>{fullSubmissions.push(new FormData(form,event.submitter)); event.preventDefault();});
+    check(!advanced.open && !simbrief.open,'new full-page optional groups begin collapsed');
+    check(find('[name="content_language"]',form).value==='cs' && find('[name="simbrief_identifier"]',form).value==='12345','actual full-page defaults retain source language and remembered pilot');
+    edit(find('[name="visibility"]',form),'public'); check(new FormData(form).get('visibility')==='public','native public choice posts canonical visibility without a published alias');
+    const title=find('[name="title"]',form); title.focus(); edit(title,'Gallery fi'); title.setSelectionRange(title.value.length,title.value.length); await until(/** Observe bounded production completion after its actual debounce. @return {boolean} Whether the suggestion is visible. */ ()=>!find('[data-gallery-title-completion-overlay]',form).hidden);
+    check(!find('[data-gallery-title-completion-overlay]',form).hidden,'actual title completion presents prepared suggestion'); title.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true,cancelable:true}));
+    check(title.value==='Gallery fixture completion','actual native completion retains canonical title field');
+    const parentInput=find('[data-gallery-search-picker-input]',form); parentInput.focus(); parentInput.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true,cancelable:true})); await settle(); find('[data-gallery-id="8"]',form).click();
+    check(find('[name="parent_id"]:enabled',form).value==='8','real parent picker commits exact selected scope');
+    const tags=find('[data-tag-input]',form); for(const tag of ['flight','landscape']) { edit(tags,tag); tags.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true})); }
+    check(new FormData(form).get('tags')==='flight, landscape','actual enhanced tags preserve canonical hidden payload');
+    simbrief.querySelector('summary').focus(); const keyResponse=await fetch('/__key?key=Enter'); await settle(); check(keyResponse.ok && simbrief.open,'native keyboard opens optional SimBrief disclosure');
+    find('[data-simbrief-generate]',form).click(); await until(/** Observe actual local draft generation. @return {boolean} Whether the existing description tool completed. */ ()=>find('[data-simbrief-draft-ref]',form).value==='fixture-generated-draft');
+    check(simbriefRequests===1 && find('[name="description"]',form).value==='Disposable flight description' && fullSubmissions.length===0 && panelPosts===0,'SimBrief creates only a staged description and draft reference');
+    edit(find('[name="remember_simbrief_identifier"]',form),true); edit(find('[name="remember_content_language"]',form),true); edit(find('[name="visibility"]',form),'private'); edit(find('[name="gallery_date"]',form),'2026-10-01'); edit(find('[name="gallery_date_end"]',form),'2026-10-03');
+    advanced.querySelector('summary').focus(); await fetch('/__key?key=Enter'); await settle(); check(advanced.open,'native keyboard opens optional folder and feature settings');
+    edit(find('[name="folder_name"]',form),'fixture-folder'); edit(find('[name="voting_enabled"]',form),true); edit(find('[name="show_filenames"]',form),true); edit(find('[name="count_badge_visibility"]',form),'hide'); advanced.open=false;
+    form.requestSubmit(); check(fullSubmissions.length===1,'full-page native POST remains captured separately from panel workflow');
+    const data=fullSubmissions[0];
+    for(const [name,value] of Object.entries({csrf_token:'theme-fixture',operation_key:'a'.repeat(64),title:'Gallery fixture completion',parent_id:'8',description:'Disposable flight description',tags:'flight, landscape',content_language:'cs',remember_content_language:'1',simbrief_identifier:'12345',remember_simbrief_identifier:'1',simbrief_draft_ref:'fixture-generated-draft',visibility:'private',gallery_date:'2026-10-01',gallery_date_end:'2026-10-03',folder_name:'fixture-folder',voting_enabled:'1',show_filenames:'1',count_badge_visibility:'hide'})) check(data.get(name)===value,'complete full-page FormData retains '+name);
+    check(!data.has('panel') && !data.has('ajax'),'ordinary page preserves native non-panel request contract');
+    for(const width of [1280,390]) { await fetch('/__viewport?width='+width); advanced.open=true; simbrief.open=true; await settle(); const workspace=find('.gallery-create-page'), bounds=workspace.getBoundingClientRect(); check(workspace.scrollWidth<=workspace.clientWidth+1 && bounds.right<=innerWidth+1,width+' full-page editable groups do not overflow'); const contentBounds=find('.gallery-create-content',form).getBoundingClientRect(), settingsBounds=find('.gallery-create-settings',form).getBoundingClientRect(); check(width===1280?settingsBounds.left>=contentBounds.right-1 && Math.abs(settingsBounds.top-contentBounds.top)<=1:settingsBounds.top>=contentBounds.bottom-1,width+' content/destination cards retain intended responsive alignment'); for(const selector of ['[name="visibility"]','[name="content_language"]','[name="description"]','[data-gallery-search-picker-input]']) { const rect=find(selector,form).getBoundingClientRect(); check(rect.width>=120 && rect.left>=-1 && rect.right<=innerWidth+1,width+' real create control remains readable '+selector); } for(const name of ['gallery_date','gallery_date_end']) check(find(`[name="${name}"]`,form).getBoundingClientRect().width>=100,width+' native date input remains usable '+name); }
+    find('#full-create').innerHTML=find('#production-create-retry').innerHTML; setupGallerySearchPickers(); setupTagSuggestions();
+    const retry=find('.gallery-create-form'); check(find('.admin-gallery-advanced-settings',retry).open && find('[name="title"]',retry).value==='Retry <safe>' && find('[name="description"]',retry).value==='Keep <text> & description' && retry.textContent.includes('Validation <safe> failed')===false,'actual retry preserves editable values and reopens optional fields');
+    check(find('#full-create').textContent.includes('Validation <safe> failed') && !find('#full-create').querySelector('safe'),'prepared validation error stays escaped outside form');
+    check(find('[name="simbrief_identifier"]',retry).value==='Retry pilot' && find('[name="remember_simbrief_identifier"]',retry).checked,'normalized pilot-name retry retains combined input and remembered preference');
+    find('[data-gallery-side-panel-link]').click(); await until(/** Observe production dynamic create mounting. @return {boolean} Whether the actual panel form is present. */ ()=>Boolean(document.querySelector('[data-gallery-panel-create-form]')));
+    const panel=find('[data-admin-side-panel]'), firstForm=find('[data-gallery-panel-create-form]',panel); check(panel.getAttribute('aria-hidden')==='false' && location.href===originalUrl,'actual panel opens in place without navigation');
+    const panelContent=find('.gallery-create-panel',panel), drawer=find('.admin-side-panel-dialog',panel); await until(/** Observe the production drawer's completed cinematic entrance. @return {boolean} Whether its transform has settled. */ ()=>getComputedStyle(drawer).transform==='none'); const panelBounds=drawer.getBoundingClientRect(), panelTitleBounds=find('[name="title"]',firstForm).getBoundingClientRect();
+    let overflowDetails='';
+    for(const child of panelContent.querySelectorAll('*')) { const bounds=child.getBoundingClientRect(); if(bounds.width>0 && bounds.right>panelBounds.right+1) overflowDetails+=' '+child.tagName+'.'+child.className+' right='+bounds.right; }
+    const actionBounds=find('.admin-side-panel-actions',panelContent).getBoundingClientRect(), destinationBounds=find('.gallery-create-destination',panelContent).getBoundingClientRect();
+    check(drawer.scrollWidth<=drawer.clientWidth+1 && panelBounds.right<=innerWidth+1 && actionBounds.right<=panelBounds.right+1 && destinationBounds.right<=panelBounds.right+1 && panelTitleBounds.width>=180,'mobile name-only panel keeps actual title, destination and full-width footer unclipped; scroll='+drawer.scrollWidth+' client='+drawer.clientWidth+' right='+panelBounds.right+' titleWidth='+panelTitleBounds.width+overflowDetails);
+    check(find('.gallery-create-destination',panel).textContent.includes('Parent <safe>'),'actual child panel presents escaped known destination title');
+    await fetch('/__viewport?width=1280'); await settle();
+    const creationWidth=find('.admin-side-panel-dialog',panel).getBoundingClientRect().width;
+    check(creationWidth>=400 && creationWidth<=481,'desktop name-only creation uses the bounded narrow panel');
+    edit(find('[name="title"]',firstForm),'First actual child'); firstForm.requestSubmit(); await until(/** Observe canonical panel editor handoff. @return {boolean} Whether the first mutation completed in place. */ ()=>editorGets===1 && Boolean(document.querySelector('[data-fixture-editor]')));
+    check(panelPosts===1 && panelBodies[0].get('parent_id')==='7' && panel.getAttribute('aria-hidden')==='false' && panel.dataset.adminSidePanelWorkflow==='gallery-edit' && location.href===originalUrl,'canonical child completion keeps panel open and exact parent scope');
+    check(find('.admin-side-panel-dialog',panel).getBoundingClientRect().width>creationWidth+200,'canonical editor handoff restores its normal wider workspace');
+    find('[data-admin-side-panel-close]',panel).click();
+    find('#panel-launcher').innerHTML='<a href="/fixture-create-panel?parent_id=0" data-gallery-side-panel-link data-admin-side-panel-workflow="create" data-admin-side-panel-title="Create gallery" data-gallery-side-panel-url="/fixture-create-panel?parent_id=0&amp;panel=1">Create root gallery</a>';
+    find('[data-gallery-side-panel-link]').click(); await until(/** Observe independently injected second actual form. @return {boolean} Whether delegated remount completed. */ ()=>panelGets===2 && Boolean(document.querySelector('[data-gallery-panel-create-form]')));
+    const secondForm=find('[data-gallery-panel-create-form]',panel); check(secondForm!==firstForm && !firstForm.isConnected && find('[name="parent_id"]',secondForm).value==='0' && find('.gallery-create-destination',panel).textContent==='Top-level gallery','dynamic second form preserves root scope and destination without rebinding'); edit(find('[name="title"]',secondForm),'Second actual root'); secondForm.requestSubmit();
+    await until(/** Observe canonical completion for the injected root form. @return {boolean} Whether the second mutation refreshed its editor. */ ()=>editorGets===2 && find('[data-fixture-editor]').textContent.includes('78'));
+    check(panelPosts===2 && panelBodies[1].get('parent_id')==='0' && panel.getAttribute('aria-hidden')==='false' && location.href===originalUrl,'dynamic root completion remains in the open panel with unchanged URL');
+    document.getElementById('results').textContent='BROWSER PASS '+assertions+' gallery creation assertions';
+} catch(error) { document.getElementById('results').textContent='BROWSER FAIL '+error.message+'\n'+error.stack; }
+</script></body></html>

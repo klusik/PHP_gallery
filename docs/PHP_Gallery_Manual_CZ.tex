@@ -63,8 +63,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.114.2}
-\newcommand{\manualdate}{2.~října~2026}
+\newcommand{\version}{0.115}
+\newcommand{\manualdate}{3.~října~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -709,7 +709,7 @@ EXIF může fotografii obohatit o~datum pořízení, fotoaparát, objektiv, expo
 
 Veřejnému portfoliu prospívá malý počet výrazných galerií nejvyšší úrovně, jednotné titulní obrázky, stručné popisy a~pečlivé pořadí. Pro specializace napříč projekty používejte štítky. Zdrojové archivy uchovávejte v~soukromých nebo nezveřejněných větvích a~tam, kde postup vyžaduje samostatný výběr, kopírujte vybranou tvorbu do veřejných prezentačních galerií.
 
-Vyzkoušejte portfolio na telefonu, displeji s~vysokou hustotou bodů a~pomalejším připojení. Responzivní výběr náhledů poskytuje výchozí rovnováhu. Postupné zostřování umožňuje nejprve zobrazit malé náhledy v~instalacích upřednostňujících rychlou vizuální odezvu.
+Vyzkoušejte portfolio na telefonu, displeji s~vysokou hustotou bodů a~pomalejším připojení. Postupné zostřování je výchozí a~bezpečný náhradní režim pro karty fotografií v~otevřené galerii; responzivní výběr zůstává podporovanou alternativou.
 
 \subsection{Soukromý rodinný archiv}
 \index{r00195@rodinný archiv}
@@ -868,6 +868,31 @@ Prohledávané podklady zahrnují veřejné názvy a~popisy galerií a~fotografi
 \label{sec:admin}
 \index{s00219@správa}
 
+\subsection{Přehled galerií a kontrolované změny}
+\index{galerie!hromadné nastavení funkcí}
+Pracovní prostor Galerií ukazuje přímé fotografie, fotografie v potomcích, počet podgalerií a stav funkcí zapnuto/vypnuto/smíšený. Rozbalte větev a prohlédněte její potomky. Připravte změny map, názvů souborů, hlasování nebo Picture Game pro kořen i všechny potomky; samotná příprava nic neukládá. Zkontrolujte přesný rozsah a související změny a teprve potom plán použijte. Překrývající se záměry zachovávají pořadí. Picture Game vyžaduje hlasování; vypnutí hlasování vypne i hru. Zrušení kontroly nebo návrhu nemění uložené hodnoty. Při mezitím provedené změně zkontrolujte nový plán.
+
+Rychlé ovládání hesla mění jen vlastní heslo aktuální galerie. Zadejte nové heslo pro zapnutí či nahrazení, nebo vlastní heslo odeberte. Ochrana odkazovým tokenem i předkem, viditelnost a ostatní preference zůstávají zachovány. Uložení zastaralé revize je odmítnuto. Bez JavaScriptu zůstávají běžné formuláře; akce v postranním panelu se dokončují na místě a panel zůstává otevřený.
+
+Přihlášený správce může na veřejné hlavní stránce vytvořit kořenovou galerii. Nabídka první galerie vyžaduje potvrzeně prázdný katalog. Vytváření odděluje obsah od umístění a viditelnosti; další volby jsou rozbalovací. Jazyk obsahu, štítky, návrhy SimBrief a zapamatované výchozí hodnoty zůstávají dostupné.
+
+\subsubsection{Nastavení uploadů a mobilní připojení}
+Otevřete \ui{Nastavení > Nahrávání} pro formát, automatické přejmenování, počty a limity pracovníků, ZIP dávky, velikost zdrojových bloků miniatur a mobilní WebDAV připojení. Provázané limity se normalizují společně; velikosti se zobrazují v MB. Volbu starších odkazů v nabídce zapněte, pokud je potřebujete. Skrytí odkazů nevyřazuje původní adresy a služby.
+
+Mobilní akce obnovují vlastní pracovní prostor. Nové jednorázově zobrazené heslo ihned zkopírujte. Pokud následné načtení seznamu selže, připojení zůstává uložené a heslo je v této odpovědi stále viditelné; seznam obnovte zvlášť. Vypnuté mobilní nahrávání nečte seznam připojení.
+
+\subsubsection{Vzhled, jazyky a vlastní styly}
+Vzhled sdružuje ovládací prvky a živý náhled; na široké obrazovce lze poměr panelů upravit myší i klávesnicí. Šířka je místní preference prohlížeče. Obrázky webu sdružují branding a pozadí; Rozvržení odděluje zkratky, mřížky, karty a výchozí prohlížeč. Jazyk má části Nastavení, Design, Editor a Diagnostika. Náhled používá nabízené jazyky a veřejný výchozí jazyk téhož formuláře a sám nic neukládá.
+
+Ponechte výběr náhrady prázdný, chcete-li zachovat nainstalované CSS. Pro nahrazení vyberte šablonu nebo platný CSS soubor; upload má přednost. Nahrazení i reset nejprve ověřují úložiště a při chybě zápisu značky obnoví původní soubor. Při neúplné obnově zachovejte dostupnou kopii a postupujte podle bezpečného upozornění. Nasazení zachovává instalační \filepath{public/assets/custom.css}.
+
+\subsubsection{Orientace karet a provozní stav}
+Svislá karta má fotografii nad popisem, vodorovná vedle popisu. Běžná migrace orientace zachovává dosavadní vzhled uložených nastavení, fyzických i chytrých galerií, sidecar souborů, importovaných metadat a Koše. Zálohujte databázi, galerie a Koš společně. Po přerušení odstraňte hlášený problém a opakujte migraci; značky dokumentů brání dvojímu převodu. Nová instalace používá svislou výchozí kartu. Všechny štítky zůstávají dostupné bez JavaScriptu; rozbalování a posouvání funguje i na kartách.
+
+Veřejné hledání je výchozím způsobem zapnuté jen bez uložené preference a při dostupné funkci. Aktualizace společně obnovují verze, poznámky a stav API; automatická kontrola metadat je nejvýše hodinová a vypnuté automatické aktualizace ponechávají starší úlohy pozastavené. OurAirports používá týdenní obnovu a hodinový odstup po chybě. Koš ukazuje zbývající dobu a bezpečnou možnost trvalého odstranění. Také problémy prezentačního schématu vyžadují akci ve Zdraví systému.
+
+Samostatný uploader zůstává na 0.3.2. Správce sestavení získá instalátor a odpovídající generovaný \filepath{winapp-update.json} společně v \filepath{winapp/dist/0.3.2/}. Oba patří do stejného vydání. Sestavení nenahrazuje ověření nainstalovaného Windows programu a simulátoru.
+
 \subsection{Pracovní prostředí administrace}
 
 Po přihlášení správce vidí neveřejné ovládací prvky pro přehled, galerie, fotografie, vzhled, štítky, údržbu, aktualizace, protokoly a~nastavení účtu. Mnohé úpravy se otevírají v~pravém postranním panelu, takže při změně a~uložení jedné položky zůstává galerie viditelná.\footnote{Úplná stránka administrace zůstává dostupná pro postupy vyžadující více prostoru nebo pro případy, kdy není dostupné rozšířené ovládání v~prohlížeči.}
@@ -905,7 +930,7 @@ S~JavaScriptem se sekce načítají při otevření a~ukládají na místě. Př
 
 Pole ve stylu Spotlight vyhledává nastavení během psaní. Porovnává názvy, popisy, kategorie a~technické názvy včetně ovládacích prvků vlastněných specializovanými stránkami administrace. Výběr výsledku otevře příslušný oddíl nebo specializovanou stránku a~zaměří odpovídající ovládací prvek. Šipky, Enter, Escape a~tlačítko vymazání lze používat bez opuštění klávesnice.
 
-Často používaná globální nastavení lze upravovat přímo v~centru, včetně názvu webu, veřejného jazyka, přepisování URL, veřejného vyhledávání, kde je dostupné, vykreslování náhledů, globální výchozí hodnoty zobrazení EXIF/GPS a~vývojové diagnostiky. Další nastavení zůstávají na specializovaných stránkách, pokud potřebují více souvislostí, přihlašovací údaje, nahrávání souborů, destruktivní akce nebo větší editory. Příklady zahrnují rozvržení Vzhledu, nahrávání, telemetrii, zabezpečení účtu, konfiguraci Google/OpenAI, vlastní CSS, vlastní značku, jazykové balíčky a~údržbu databáze.
+Často používaná globální nastavení lze upravovat přímo v~centru, včetně názvu webu, veřejného jazyka, přepisování URL, veřejného vyhledávání, kde je dostupné, vykreslování náhledů, globální výchozí hodnoty zobrazení EXIF/GPS a~vývojové diagnostiky. Další nastavení zůstávají na specializovaných stránkách, pokud potřebují více souvislostí, přihlašovací údaje, nahrávání souborů, destruktivní akce nebo větší editory. Příklady zahrnují rozvržení Vzhledu, klíče API nahrávání pro konkrétní galerie, telemetrii, zabezpečení účtu, konfiguraci Google/OpenAI, vlastní CSS, vlastní značku, jazykové balíčky a~údržbu databáze.
 
 Centrum neruší stávající dědění. Rozvržení stránek štítků může nadále dědit globální mřížku a~návrh karet, zatímco volby karty galerie, lightboxu a~EXIF/GPS pro konkrétní galerii zůstávají u~galerie, která je vlastní. Kontextové hodnoty galerií a~fotografií se nemění na globální nastavení.
 
@@ -1152,7 +1177,7 @@ Přesná volba se může mezi prohlížeči a~obrazovkami lišit. Tato pružnost
 \index{s00222@srcset}
 \index{n00092@náhled!r00191@responzivní režim}
 
-\ui{Responzivní výběr prohlížečem} je výchozí režim v~\ui{Administrace > Vzhled > Rozvržení}. Stránka ihned zpřístupní dostupné kandidáty náhledů a~prohlížeč vybere toho, který nejlépe odpovídá vykreslené kartě a~hustotě displeje. Pro tento výběr není potřebný JavaScript.\footnote{Příslušný webový standard nazývá seznam kandidátů \emph{srcset}. Vlastníci galerií se mohou spolehnout na vizuální chování bez znalosti tohoto pojmu značkování.}
+\ui{Responzivní výběr prohlížečem} je podporovaný starší režim v~\ui{Administrace > Vzhled > Rozvržení}. Stránka ihned zpřístupní dostupné kandidáty náhledů a~prohlížeč vybere toho, který nejlépe odpovídá vykreslené kartě a~hustotě displeje. Pro tento výběr není potřebný JavaScript.\footnote{Příslušný webový standard nazývá seznam kandidátů \emph{srcset}. Vlastníci galerií se mohou spolehnout na vizuální chování bez znalosti tohoto pojmu značkování.}
 
 Responzivní výběr obvykle přenese jeden vybraný náhled pro každou načtenou kartu a~je běžnou volbou, pokud je nejdůležitější předvídatelné nativní chování prohlížeče.
 
@@ -1174,7 +1199,7 @@ Kopie o~300~pixelech slouží jako náhradní, pokud je dostupná. Její příto
 \index{p00150@postupné zostřování}
 \index{n00092@náhled!p00161@progresivní režim}
 
-\ui{Postupné zostřování náhledů} je volitelný režim v~\ui{Administrace > Vzhled > Rozvržení}. Galerie nejprve zobrazí malý náhled, obvykle o~300~pixelech, a~později nahradí příslušné karty většími kopiemi. Na pomalejším připojení se sbírka může stát dříve rozpoznatelnou za cenu možného přenosu malého i~náhradního náhledu.
+\ui{Postupné zostřování náhledů} je výchozí a~bezpečný náhradní režim v~\ui{Administrace > Vzhled > Rozvržení}. Galerie nejprve zobrazí malý náhled, obvykle o~300~pixelech, a~později nahradí příslušné karty většími kopiemi. Na pomalejším připojení se sbírka může stát dříve rozpoznatelnou za cenu možného přenosu malého i~náhradního náhledu.
 
 \subsubsection{Co se děje na obrazovce}
 
@@ -1186,7 +1211,7 @@ Kopie o~300~pixelech slouží jako náhradní, pokud je dostupná. Její příto
   \item Karta se nahradí, jakmile je větší kopie připravená.
 \end{enumerate}
 
-Větší vylepšení se řadí do fronty místo zahájení pro všechny karty současně a~viditelné karty mají přednost před vzdáleným obsahem. Současná progresivní volba platí pro karty fotografií v~otevřené galerii. Titulní obrázky galerií, buňky koláží, karty galerií na domovské stránce a~obrázky administrace nadále používají responzivní výběr prohlížečem. Rozhraní administrace označuje postupné zostřování jako Beta.
+Větší vylepšení se řadí do fronty místo zahájení pro všechny karty současně a~viditelné karty mají přednost před vzdáleným obsahem. Současná progresivní volba platí pro karty fotografií v~otevřené galerii. Titulní obrázky galerií, buňky koláží, karty galerií na domovské stránce a~obrázky administrace nadále používají responzivní výběr prohlížečem. Rozhraní administrace označuje postupné zostřování jako výchozí a~responzivní výběr jako starší podporovanou volbu.
 
 \subsubsection{Kompromis při přenosu}
 
@@ -1195,9 +1220,9 @@ Progresivní režim může pro jednu fotografii přenést dva soubory: první ma
 \subsection{Který režim má vlastník zvolit?}
 \index{n00092@náhled!v00259@výběr vykreslovače}
 
-Zvolte \ui{Responzivní výběr prohlížečem} pro spolehlivý výchozí režim, účinnou nativní volbu prohlížeče a~obvykle jediný přenos náhledu na načtenou kartu.
+Zvolte \ui{Responzivní výběr prohlížečem}, pokud sbírce vyhovuje účinná nativní volba prohlížeče a~obvykle jediný přenos náhledu na načtenou kartu.
 
-Vyzkoušejte \ui{Postupné zostřování náhledů}, pokud je velmi důležitá časná odezva stránky, mnoho návštěvníků používá pomalá připojení a~galerii vyhovuje nejprve malá vizuální podoba. Než jej zvolíte jako běžnou prezentaci, otestujte jej na reprezentativních galeriích a~zařízeních.
+Ponechte \ui{Postupné zostřování náhledů} pro první malý obrázek následovaný omezenými vylepšeními příslušných karet. Při volbě nejvhodnější prezentace pro návštěvníky vyzkoušejte oba podporované vykreslovače na reprezentativních galeriích a~zařízeních.
 
 Užitečné otázky:
 
@@ -1564,9 +1589,9 @@ Vzhled & Značka GPS & Je-li funkce map GPS povolena, značky na kartách fotogr
 Vzhled & Veřejné stránky štítků & Vlastní sloupce a~řádky stránek štítků používají stejné bezpečné maximální hodnoty jako jiné veřejné mřížky: 1--12 sloupců a~1--50 řádků. Karty výsledků štítků mohou používat svislý nebo vodorovný návrh karty galerie nezávisle na běžných výpisech galerií.\\
 Vzhled & Štítky úvodního panelu galerie & Řazení podle využití nebo abecedy. Buď zobrazit všechny ihned, nebo zobrazit 1--200 štítků před ovládáním rozbalení na místě; výchozí práh je 20. Volitelné posouvání používá 1--12 viditelných řádků, výchozí 5, a~aktivuje se jen tehdy, když vykreslené štítky skutečně přesáhnou nastavené řádky.\\
 Rozvržení & Zkratky záhlaví & Tři seřazené pozice. Pozice může být prázdná, odkazovat na hlavní stránku nebo na galerii nalezenou výběrem galerií. Veřejní návštěvníci vidí pouze veřejné cílové galerie uvedené v~seznamech.\\
-Rozvržení & Návrh karty galerie & Globální výchozí hodnota je \ui{Svislý systém} nebo \ui{Vodorovný systém}. Fyzická galerie může tuto hodnotu dědit nebo přepsat, je-li dostupné schéma prezentace.\\
+Vzhled & Návrh karty galerie & \ui{Svislý systém} klade fotografii nad popis, \ui{Vodorovný systém} vedle něj. Nové instalace začínají svisle; migrace zachovává vzhled starších instalací. Fyzická galerie může volbu Vzhledu dědit nebo přepsat, je-li dostupné schéma prezentace.\\
 Rozvržení & Odznak počtu fotografií & Globální odznak obsažených fotografií je ve výchozím stavu povolen. Jednotlivé galerie jej mohou dědit nebo uložit přepsání. Je-li povolen pro otevřenou galerii, úvodní panel také ukazuje počet obrázků její větve včetně přístupných podgalerií.\\
-Rozvržení & Veřejný vykreslovač náhledů & \ui{Responzivní výběr prohlížečem} je výchozí; \ui{Postupné zostřování náhledů} je volitelný režim beta pro karty fotografií v~otevřené galerii. Titulní obrázky galerií a~koláže nadále používají responzivní výběr prohlížečem.\\
+Rozvržení & Veřejný vykreslovač náhledů & \ui{Postupné zostřování náhledů} je výchozí a~bezpečný náhradní režim. \ui{Responzivní výběr prohlížečem} zůstává podporovanou starší volbou s~úplnými serverově vykreslenými kandidáty a~chováním bez JavaScriptu. Titulní obrázky a~koláže si ponechávají responzivní postup.\\
 Rozvržení & Stránkování & Globální stránkování je ve výchozím stavu vypnuté. Sloupce mají výchozí hodnotu 3 a~omezení 1--12; řádky mají výchozí hodnotu 3 a~omezení 1--50. Účinný počet položek na stránku je součin sloupců a~řádků.\\
 Rozvržení & Mřížka hlavní stránky & Úvodní stránka má vlastní mřížku s~1--12 sloupci a~1--50 řádky. Nemění mřížky uvnitř galerií.\\
 Rozvržení & Obnovení mřížek galerií & \ui{Obnovit všechny vlastní mřížky galerií} vymaže databázová přepsání, obnoví výchozí stav dědění podgalerií a~odstraní odpovídající klíče mřížky z~doprovodných souborů \filepath{gallery.json}, aby pozdější vyhledání nemohlo znovu importovat zastaralá nastavení mřížek.\\
@@ -1710,7 +1735,7 @@ Správce vybírá interval opětovného připojení od 5 do 300~sekund. Po vypr�
 \subsection{Mobilní přenos WebDAV}
 \index{w00269@WebDAV!m00089@mobilní nahrávání}
 
-\ui{Galerie > Mobilní nahrávání} vytváří připojení kompatibilní s~WebDAV pro jednu vybranou galerii. Zadejte rozpoznatelné označení, vyberte galerii, vytvořte připojení a~zkopírujte vygenerovanou URL serveru, uživatelské jméno a~heslo do mobilní aplikace. Heslo se zobrazuje pouze jednou a~ukládá jako hash. Existující řádky ukazují čas posledního použití a~lze je ihned odstranit z~administrace.
+\ui{Nastavení > Nahrávání} vytváří připojení kompatibilní s~WebDAV pro jednu vybranou galerii. Zadejte rozpoznatelné označení, vyberte galerii, vytvořte připojení a~zkopírujte vygenerovanou URL serveru, uživatelské jméno a~heslo do mobilní aplikace. Heslo se zobrazuje pouze jednou a~ukládá jako hash. Existující řádky ukazují čas posledního použití a~lze je ihned odstranit z~administrace.
 
 V~klientech, například PhotoSync, použijte typ cíle WebDAV. Současný serverový příjem přijímá JPG, PNG, GIF a~WebP, proto tam, kde je to dostupné, povolte v~klientovi převod HEIC do JPEG. Nahrávání WebDAV neobchází pravidla příjmu galerie: přihlašovací údaj je omezen na galerii, každý zápis vyžaduje autentizaci, schéma galerií a~obrázků musí být známé a~přijatá média se následně skenují, volitelně automaticky přejmenují a~zpracují běžným postupem náhledů.
 

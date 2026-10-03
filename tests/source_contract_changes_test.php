@@ -244,6 +244,12 @@ try {
     source_changes_assert($report['status'] === 'FAIL' && $report['summary']['finding_count'] > 0, 'Untracked undocumented source must fail, not disappear from the diff.');
     file_put_contents($root . '/tool.py', "print('changed-fixture')\n");
     $report = changed_documentation_report($root, ['tool.py'], $git);
+    source_changes_assert($report['status'] === 'PASS', 'Python AST coverage must accept a source without callable declarations.');
+    file_put_contents($root . '/tool.py', "def incomplete(value):\n    return value\n");
+    $report = changed_documentation_report($root, ['tool.py'], $git);
+    source_changes_assert($report['status'] === 'FAIL', 'Python additions must enforce documentation and native annotations.');
+    file_put_contents($root . '/tool.py', "def invalid(\n");
+    $report = changed_documentation_report($root, ['tool.py'], $git);
     source_changes_assert($report['status'] === 'BLOCKED', 'Unsupported changed native source must disclose unknown coverage.');
     /**
      * Simulate missing Git/HEAD without invoking or modifying a repository.

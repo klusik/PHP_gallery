@@ -101,6 +101,7 @@ function view_render_telemetry_key_value_table(array $rows, string $keyColumn, s
 function view_render_admin_telemetry_dashboard(array $viewModel): void
 {
     render_header((string) ($viewModel['page_title'] ?? ''));
+    echo '<div class="admin-telemetry-page">';
     echo '<section class="hero"><h1>' . e(t('admin.telemetry.title', 'Anonymous telemetry')) . '</h1><p>' . e(t('admin.telemetry.description', 'Local, privacy-safe usage and performance statistics for tuning the gallery.')) . '</p><nav class="nav">';
     echo '<a class="button secondary" href="' . e((string) ($viewModel['settings_url'] ?? '')) . '">' . e(t('admin.settings.open_centralized', 'Open centralized settings')) . '</a>';
     echo '<a class="button secondary" href="' . e((string) ($viewModel['logs_url'] ?? '')) . '">' . e(t('admin.telemetry.operational_logs', 'Operational logs')) . '</a>';
@@ -113,6 +114,7 @@ function view_render_admin_telemetry_dashboard(array $viewModel): void
 
     if (empty($viewModel['schema_ready'])) {
         echo '<section class="panel"><h2>' . e((string) ($viewModel['schema_title'] ?? '')) . '</h2><p>' . e((string) ($viewModel['schema_message'] ?? '')) . '</p></section>';
+        echo '</div>';
         render_footer();
         return;
     }
@@ -132,30 +134,38 @@ function view_render_admin_telemetry_dashboard(array $viewModel): void
     echo '</div></section>';
 
     $settings = (array) ($viewModel['settings'] ?? []);
-    echo '<section class="panel telemetry-settings-panel"><h2>' . e(t('admin.telemetry.settings', 'Settings')) . '</h2><form method="post" action="' . e((string) ($viewModel['settings_action_url'] ?? '')) . '" class="form-grid">' . (string) ($viewModel['csrf_html'] ?? '');
+    echo '<details class="panel telemetry-settings-panel"><summary><h2>' . e(t('admin.telemetry.settings', 'Settings')) . '</h2></summary><form method="post" action="' . e((string) ($viewModel['settings_action_url'] ?? '')) . '" class="form-grid">' . (string) ($viewModel['csrf_html'] ?? '');
+    echo '<div class="telemetry-settings-switches">';
     foreach ((array) ($viewModel['checkboxes'] ?? []) as $checkbox) {
         view_render_telemetry_checkbox((string) ($checkbox['key'] ?? ''), (string) ($checkbox['label'] ?? ''), !empty($checkbox['checked']));
     }
+    echo '</div><div class="telemetry-settings-limits">';
     echo '<label>' . e(t('admin.telemetry.max_photo_view_time', 'Maximum photo view time counted, seconds')) . '<input type="number" min="10" max="3600" name="telemetry_max_photo_view_seconds" value="' . e((string) ($settings['telemetry_max_photo_view_seconds'] ?? '900')) . '"><span class="muted">' . e(t('admin.telemetry.max_photo_view_time_hint', 'When someone opens a photo, we only count the first part of that session. If they leave the tab open for a long time, we stop counting after this limit so one forgotten tab does not make the numbers look bigger than real use.')) . '</span></label>';
     echo '<label>' . e(t('admin.telemetry.raw_event_retention', 'Raw event retention, days')) . '<input type="number" min="1" max="90" name="telemetry_raw_retention_days" value="' . e((string) ($settings['telemetry_raw_retention_days'] ?? '7')) . '"><span class="muted">' . e(t('admin.telemetry.raw_event_retention_hint', 'These are the detailed, line-by-line records. They are useful when you want to inspect exactly what happened, but they take the most space. This setting decides how long we keep the full detail before older entries are removed or condensed.')) . '</span></label>';
     echo '<label>' . e(t('admin.telemetry.hourly_retention', 'Hourly aggregate retention, days')) . '<input type="number" min="7" max="730" name="telemetry_hourly_retention_days" value="' . e((string) ($settings['telemetry_hourly_retention_days'] ?? '90')) . '"><span class="muted">' . e(t('admin.telemetry.hourly_retention_hint', 'These are the summary totals that say, for example, how many page views happened in each hour. They are much smaller than raw logs and are good for recent history, charts, and quick checks.')) . '</span></label>';
     echo '<label>' . e(t('admin.telemetry.daily_retention', 'Daily aggregate retention, days')) . '<input type="number" min="30" max="3650" name="telemetry_daily_retention_days" value="' . e((string) ($settings['telemetry_daily_retention_days'] ?? '730')) . '"><span class="muted">' . e(t('admin.telemetry.daily_retention_hint', 'These are the broad day-by-day totals. They are the lightest records we keep and are meant for long-term trends, like comparing this month with last month or last year.')) . '</span></label>';
-    echo '<div class="bulk-row"><button type="submit">' . e(t('admin.telemetry.save_settings', 'Save telemetry settings')) . '</button></div></form>';
+    echo '</div><div class="bulk-row"><button type="submit">' . e(t('admin.telemetry.save_settings', 'Save telemetry settings')) . '</button></div></form>';
     echo '<form method="post" action="' . e((string) ($viewModel['maintenance_url'] ?? '')) . '">' . (string) ($viewModel['csrf_html'] ?? '')
-        . '<button type="submit" class="button secondary">' . e(t('admin.telemetry.run_rollup_purge', 'Run rollup and purge now')) . '</button></form></section>';
+        . '<button type="submit" class="button secondary">' . e(t('admin.telemetry.run_rollup_purge', 'Run rollup and purge now')) . '</button></form></details>';
 
     view_render_telemetry_tables((array) ($viewModel['tables'] ?? []));
+    echo '</div>';
     render_footer();
 }
 
-/** @param array<string,mixed> $tables Controller-prepared aggregate table data. */
+/**
+ * Render paired photo rankings and browser/cache aggregate tables.
+ *
+ * @param array<string,mixed> $tables Controller-prepared aggregate table data.
+ * @return void Outputs the dashboard's grouped report tables.
+ */
 function view_render_telemetry_tables(array $tables): void
 {
-    echo '<section class="panel"><h2>' . e(t('admin.telemetry.top_viewed_photos', 'Top viewed photos')) . '</h2>';
+    echo '<div class="telemetry-table-grid"><section class="panel"><h2>' . e(t('admin.telemetry.top_viewed_photos', 'Top viewed photos')) . '</h2>';
     view_render_telemetry_photo_table((array) ($tables['top_photos'] ?? []), 'photo_views', t('admin.telemetry.views', 'Views'));
     echo '</section><section class="panel"><h2>' . e(t('admin.telemetry.longest_viewed_photos', 'Longest viewed photos')) . '</h2>';
     view_render_telemetry_photo_table((array) ($tables['longest_photos'] ?? []), 'avg_view_seconds', t('admin.telemetry.average_capped_seconds', 'Average capped seconds'));
-    echo '</section><section class="panel telemetry-split"><div><h2>' . e(t('admin.telemetry.browser_mix', 'Browser mix')) . '</h2>';
+    echo '</section></div><section class="panel telemetry-split"><div><h2>' . e(t('admin.telemetry.browser_mix', 'Browser mix')) . '</h2>';
     view_render_telemetry_key_value_table((array) ($tables['browser_mix'] ?? []), 'browser_family', 'sessions', t('admin.telemetry.browser', 'Browser'), t('admin.telemetry.sessions', 'Sessions'));
     echo '</div><div><h2>' . e(t('admin.telemetry.cache_events', 'Cache events')) . '</h2>';
     view_render_telemetry_key_value_table((array) ($tables['cache_mix'] ?? []), 'cache_result', 'events', t('admin.telemetry.cache_result', 'Cache result'), t('admin.telemetry.events', 'Events'));

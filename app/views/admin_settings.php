@@ -152,20 +152,45 @@ function view_render_admin_settings_section(string $sectionId, array $entries, a
     $editable = array_filter($entries, static fn (array $entry): bool => !empty($entry['central_editable']));
     $summaryOnly = array_filter($entries, static fn (array $entry): bool => empty($entry['central_editable']));
 
+    if ($sectionId === 'uploads') {
+        echo '<div class="admin-settings-upload-intro"><p class="muted">' . e(t('admin.settings.uploads.workflow_hint', 'Add photos from the gallery panel. Manage shared upload preferences and mobile connections here.')) . '</p><a class="button secondary" href="' . e((string) ($pageModel['upload_workflow_url'] ?? '')) . '">' . e(t('admin.dashboard.open_galleries', 'Open galleries')) . '</a></div>';
+        if (is_array($pageModel['upload_support'] ?? null)) {
+            echo '<details class="admin-settings-upload-details"><summary>' . e(t('admin.upload.support_title', 'Upload support')) . '</summary>';
+            view_render_admin_upload_support_matrix($pageModel['upload_support']);
+            echo '</details>';
+        }
+    }
+
     if ($editable !== []) {
         echo '<form method="post" action="' . e((string) ($pageModel['sections'][$sectionId]['url'] ?? '')) . '" class="form-grid admin-settings-group-form" data-admin-settings-form="' . e($sectionId) . '" data-changes-label="' . e(t('admin.settings.workspace.unsaved', '{count} unsaved changes')) . '" data-clean-label="' . e(t('admin.settings.workspace.clean', 'No unsaved changes')) . '" data-saving-label="' . e(t('admin.settings.workspace.saving', 'Saving…')) . '" data-failed-label="' . e(t('admin.settings.workspace.save_failed', 'Settings could not be saved. Your changes are still here; please try again.')) . '" data-address-label="' . e(t('admin.settings.workspace.new_address', 'Continue at the new website address')) . '" data-language-label="' . e(t('admin.settings.workspace.reload_language', 'Reload the interface in the selected language')) . '">' . csrf_field();
         echo '<input type="hidden" name="return_section" value="' . e($sectionId) . '">';
         echo '<div class="admin-settings-form-errors" role="alert" data-admin-settings-errors hidden></div>';
         $lastGroup = '';
+        $groupDisclosure = false;
         foreach ($editable as $id => $entry) {
             $editGroup = (string) ($entry['view_edit_group'] ?? 'preferences');
             if ($editGroup !== $lastGroup) {
                 if ($lastGroup !== '') {
                     echo '</fieldset>';
+                    if ($groupDisclosure) {
+                        echo '</details>';
+                    }
                 }
                 $groupLabel = match ($editGroup) {
-                    'website' => 'Website', 'languages' => 'Languages', 'navigation' => 'Navigation and search', default => 'Preferences',
+                    'website' => 'Website', 'languages' => 'Languages', 'navigation' => 'Navigation and search',
+                    'uploads_general' => 'Upload preferences', 'uploads_browser' => 'Browser preparation and limits',
+                    'uploads_thumbnail' => 'Thumbnail rebuild limits', 'uploads_legacy' => 'Legacy upload pages', default => 'Preferences',
                 };
+                $groupDisclosure = in_array($editGroup, ['uploads_browser', 'uploads_thumbnail'], true);
+                if ($groupDisclosure) {
+                    $groupHasErrors = false;
+                    foreach ($entries as $groupId => $groupEntry) {
+                        if (($groupEntry['view_edit_group'] ?? '') === $editGroup && isset($errors[$groupId])) {
+                            $groupHasErrors = true;
+                        }
+                    }
+                    echo '<details class="admin-settings-upload-details" id="admin-settings-group-' . e($editGroup) . '"' . ($groupHasErrors ? ' open' : '') . '><summary>' . e(t('admin.settings.workspace.group.' . $editGroup, $groupLabel)) . '</summary>';
+                }
                 echo '<fieldset class="form-grid" data-settings-edit-group="' . e($editGroup) . '"><legend>' . e(t('admin.settings.workspace.group.' . $editGroup, $groupLabel)) . '</legend>';
                 $lastGroup = $editGroup;
             }
@@ -207,7 +232,7 @@ function view_render_admin_settings_section(string $sectionId, array $entries, a
             }
             view_render_admin_settings_input((string) $id, $entry, $errors, $submittedValues);
         }
-        echo '</fieldset><div class="admin-settings-savebar" data-admin-settings-savebar><span role="status" aria-live="polite" data-admin-settings-changes>' . e(t('admin.settings.workspace.clean', 'No unsaved changes')) . '</span><div><button type="button" class="secondary" data-admin-settings-reset hidden>' . e(t('admin.settings.workspace.reset', 'Revert changes')) . '</button><button type="submit" data-admin-settings-save>' . e(t('admin.settings.workspace.save', 'Save changes')) . '</button></div></div></form>';
+        echo '</fieldset>' . ($groupDisclosure ? '</details>' : '') . '<div class="admin-settings-savebar" data-admin-settings-savebar><span role="status" aria-live="polite" data-admin-settings-changes>' . e(t('admin.settings.workspace.clean', 'No unsaved changes')) . '</span><div><button type="button" class="secondary" data-admin-settings-reset hidden>' . e(t('admin.settings.workspace.reset', 'Revert changes')) . '</button><button type="submit" data-admin-settings-save>' . e(t('admin.settings.workspace.save', 'Save changes')) . '</button></div></div></form>';
     }
 
     if ($summaryOnly !== []) {
@@ -216,6 +241,13 @@ function view_render_admin_settings_section(string $sectionId, array $entries, a
             view_render_admin_settings_summary_card($entry);
         }
         echo '</div>';
+    }
+    if ($sectionId === 'uploads') {
+        if (is_array($pageModel['mobile_uploads'] ?? null)) {
+            view_render_admin_mobile_uploads_settings($pageModel['mobile_uploads']);
+        } else {
+            echo '<section class="admin-settings-mobile" data-admin-settings-mobile data-mobile-load-url="' . e((string) ($pageModel['upload_mobile_url'] ?? '')) . '"><h3>' . e(t('mobile_webdav.title', 'Mobile uploads')) . '</h3><p class="muted" data-admin-settings-mobile-feedback role="status">' . e(t('admin.settings.uploads.mobile_loading', 'Loading mobile connections…')) . '</p><a href="' . e((string) ($pageModel['sections']['uploads']['url'] ?? '')) . '">' . e(t('admin.settings.uploads.open_mobile', 'Open mobile connection settings')) . '</a></section>';
+        }
     }
 }
 
@@ -244,7 +276,18 @@ function view_render_admin_settings_input(string $id, array $entry, array $error
     echo '</div><div class="admin-settings-field-control">';
     if ($type === 'checkbox') {
         $checked = array_key_exists($id, $submittedValues) ? !empty($submittedValues[$id]) : ((string) ($entry['current'] ?? '0') === '1');
+        if (($entry['group'] ?? '') === 'uploads') {
+            echo '<input type="hidden" name="settings[' . e($id) . ']" value="0">';
+        }
         echo '<label class="checkbox-label admin-settings-toggle" for="' . e($inputId) . '"><input id="' . e($inputId) . '" type="checkbox" name="settings[' . e($id) . ']" value="1"' . ($checked ? ' checked' : '') . ' aria-describedby="' . e($describedBy) . '"' . ($error !== '' ? ' aria-invalid="true"' : '') . '><span>' . e(t('admin.common.enabled', 'Enabled')) . '</span></label>';
+    } elseif ($type === 'number') {
+        $bounds = '';
+        foreach (['min', 'max', 'step'] as $attribute) {
+            if (isset($entry['validation'][$attribute])) {
+                $bounds .= ' ' . $attribute . '="' . e((string) $entry['validation'][$attribute]) . '"';
+            }
+        }
+        echo '<input id="' . e($inputId) . '" type="number" name="settings[' . e($id) . ']" value="' . e((string) $current) . '"' . $bounds . ' aria-describedby="' . e($describedBy) . '"' . ($error !== '' ? ' aria-invalid="true"' : '') . '>';
     } elseif ($type === 'select') {
         echo '<select id="' . e($inputId) . '" name="settings[' . e($id) . ']" aria-describedby="' . e($describedBy) . '"' . ($error !== '' ? ' aria-invalid="true"' : '') . '>';
         $allowed = is_array($entry['validation']['allowed'] ?? null) ? $entry['validation']['allowed'] : [];
@@ -391,6 +434,14 @@ function view_admin_settings_display_value(array $entry): string
  */
 function view_admin_settings_option_label(string $id, string $value): string
 {
+    if ($id === 'admin_upload_client_format_mode') {
+        return $value === 'phone_jpeg'
+            ? t('admin.upload.client_format_phone_jpeg', 'Prefer phone-rendered JPG/PNG/WebP, no RAW/DNG')
+            : t('admin.upload.client_format_server_supported', 'Allow all server-supported formats');
+    }
+    if ($id === 'browser_upload_batch_size_policy') {
+        return t('admin.upload.browser_batch_policy_ratio', 'Use PHP upload limit ratio');
+    }
     if ($id === 'public_thumbnail_rendering_mode') {
         return $value === 'progressive'
             ? t('admin.settings.thumbnail.progressive', 'Progressive (Default)')

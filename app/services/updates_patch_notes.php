@@ -63,58 +63,67 @@ use function Gallery\Core\run_migrations;
  */
 
 /**
- * Return parsed remote patch notes for the update page viewer.
+ * Return cached and bundled patch notes without spending GitHub quota.
  *
  * @param ?string $preferredBranch Preferred branch value.
- * @param int $ttlSeconds Ttl seconds value.
- * @return array Structured result data for the caller.
+ * @param int $ttlSeconds Compatibility argument; passive reads may use older release history.
+ * @return array{ok:bool,branch:string,cached_at:int,source:string,versions:array<string,array<string,mixed>>,error:string} Passive release history.
  */
 function application_patch_notes_viewer_data(?string $preferredBranch = null, int $ttlSeconds = 1800): array
 {
     // $branch stores the trusted branch selected by the update checker or fallback candidates.
     $branch = in_array($preferredBranch, application_update_branch_candidates(), true) ? (string) $preferredBranch : (string) application_update_branch_candidates()[0];
-    if ($ttlSeconds > 0) {
-        // $cachedData stores the file-backed payload when it is still fresh enough for admin viewing.
-        $cachedData = application_patch_notes_read_cache($branch, $ttlSeconds);
-        if ($cachedData !== null) {
-            $currentVersion = cms_current_version();
-            $currentEntry = (array) ($cachedData['versions'][$currentVersion] ?? []);
-            if ((isset($currentEntry['released_label']) && (string) $currentEntry['released_label'] !== '') || empty($cachedData['versions'])) {
-                return $cachedData;
-            }
-            application_patch_notes_clear_cache($branch);
-        }
+    $cachedData = application_patch_notes_read_cache($branch, PHP_INT_MAX);
+    $localPath = application_update_project_root() . '/PATCH_NOTES.md';
+    $localMarkdown = is_file($localPath) ? (string) file_get_contents($localPath) : '';
+    $localVersions = application_patch_notes_parse_versions($localMarkdown);
+    $versions = (array) ($cachedData['versions'] ?? []) + $localVersions;
+    // The installed package is authoritative for its own notes, even when a
+    // pre-update remote cache still contains an older copy of that section.
+    $currentVersion = cms_current_version();
+    if (isset($localVersions[$currentVersion])) {
+        $versions[$currentVersion] = $localVersions[$currentVersion];
     }
+    uksort($versions, /** Sort newest release first. @param string $left First version. @param string $right Second version. @return int Version order. */ static fn (string $left, string $right): int => version_compare($right, $left));
+    return [
+        'ok' => $versions !== [],
+        'branch' => $branch,
+        'cached_at' => (int) ($cachedData['cached_at'] ?? 0),
+        'source' => $cachedData !== null ? 'github-api' : 'local',
+        'versions' => $versions,
+        'error' => '',
+    ];
+}
 
+/**
+ * Fetch missing pending-release notes within the explicit discovery budget.
+ *
+ * Page renders and version selection never call this network operation. A
+ * bootstrap fallback that already downloaded PATCH_NOTES.md seeds this cache.
+ *
+ * @param string $branch Trusted stable branch.
+ * @param string $version Discovered pending version.
+ * @param float $deadline Discovery request's absolute wall-clock deadline.
+ * @return void Stores optional remote history; failures do not invalidate discovery.
+ */
+function application_patch_notes_refresh_pending(string $branch, string $version, float $deadline): void
+{
+    $cached = application_patch_notes_read_cache($branch, 1800);
+    if (version_compare($version, cms_current_version(), '<=') || isset($cached['versions'][$version])) {
+        return;
+    }
+    $timeout = application_update_remote_timeout_seconds($deadline, 5);
+    if ($timeout < 1) {
+        return;
+    }
     try {
-        // $markdown stores the remote PATCH_NOTES.md text fetched from GitHub Contents API.
-        $markdown = application_update_fetch_github_content($branch, 'PATCH_NOTES.md', 5);
-        // $versions stores the parsed version sections keyed by normalized version number.
-        $versions = application_patch_notes_parse_versions($markdown);
-        // $data stores the viewer payload cached for subsequent page views.
-        $data = [
-            'ok' => true,
-            'branch' => $branch,
-            'cached_at' => time(),
-            'source' => 'github-api',
-            'versions' => $versions,
-            'error' => '',
-        ];
-        application_patch_notes_write_cache($branch, $data);
-        return $data;
-    } catch (Throwable $exception) {
-        // $localPath stores the bundled patch notes file used when GitHub is unavailable.
-        $localPath = application_update_project_root() . '/PATCH_NOTES.md';
-        // $localMarkdown stores the bundled patch notes text when it can be read safely.
-        $localMarkdown = is_file($localPath) ? (string) file_get_contents($localPath) : '';
-        return [
-            'ok' => $localMarkdown !== '',
-            'branch' => $branch,
-            'cached_at' => time(),
-            'source' => 'local',
-            'versions' => $localMarkdown !== '' ? application_patch_notes_parse_versions($localMarkdown) : [],
-            'error' => 'Remote patch notes unavailable. Reference: ' . application_update_safe_error($exception)['reference'],
-        ];
+        $markdown = application_update_fetch_github_content($branch, 'PATCH_NOTES.md', $timeout);
+        application_patch_notes_write_cache($branch, [
+            'ok' => true, 'branch' => $branch, 'cached_at' => time(),
+            'source' => 'github-api', 'versions' => application_patch_notes_parse_versions($markdown), 'error' => '',
+        ]);
+    } catch (Throwable) {
+        // Bundled notes and the previous cache remain available offline.
     }
 }
 

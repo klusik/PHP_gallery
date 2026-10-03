@@ -303,7 +303,7 @@ function php_declarations(string $source): array
         }
         $bodyStart = $cursor + (($tokens[$cursor]['text'] ?? '') === '=>' ? 1 : 0);
         $bodyEnd = declaration_end($tokens, $bodyStart, $pairs);
-        $records[] = ['kind' => $named ? 'callable' : 'callback', 'name' => $name, 'line' => $token['line'],
+        $records[] = ['kind' => $named ? 'callable' : 'callback', 'language' => 'php', 'name' => $name, 'line' => $token['line'],
             'params' => $params, 'return_type' => $return, 'doc' => attached_doc($tokens, $docStart, $pairs),
             'start_token' => declaration_start($tokens, $docStart, $pairs),
             'end_token' => $bodyEnd,
@@ -324,9 +324,21 @@ function php_declarations(string $source): array
  */
 function declaration_issues(array $record): array
 {
+    $typing = $record['type_issues'] ?? [];
+    if (($record['language'] ?? '') === 'php' && in_array($record['kind'], ['callable', 'callback'], true)) {
+        foreach ($record['params'] as $parameter) {
+            if ($parameter['type'] === '') {
+                $typing[] = 'typing.parameter_missing:' . $parameter['name'];
+            }
+        }
+        // PHP forbids return declarations on constructors/destructors.
+        if ($record['return_type'] === '' && !in_array(strtolower($record['name']), ['__construct', '__destruct'], true)) {
+            $typing[] = 'typing.return_missing';
+        }
+    }
     $doc = $record['doc'];
     if ($doc === '') {
-        return ['documentation.missing'];
+        return array_merge(['documentation.missing'], $typing);
     }
     $clean = preg_replace('/^\s*\/?\*+\/?\s?/m', '', $doc) ?? $doc;
     $summary = trim(explode('@', $clean, 2)[0]);
@@ -334,7 +346,7 @@ function declaration_issues(array $record): array
         $propertyTags = documentation_tags($clean, 'var');
         $summary = documentation_type_description($propertyTags[0] ?? '');
     }
-    $issues = [];
+    $issues = $typing;
     if (strlen($summary) < 12 || preg_match('/^(?:handles? (?:this|the) operation|todo|fixme|documentation)\W*$/i', $summary) === 1
         || preg_match('/^Handles .+ logic for the gallery application\./i', $summary) === 1) {
         $issues[] = 'documentation.summary';
@@ -379,7 +391,7 @@ function declaration_issues(array $record): array
             $issues[] = 'parameter.duplicate:' . $name;
         }
         $documented[$name] = $parameterDoc['type'];
-        if ($parameterDoc['type'] === '') {
+        if ($parameterDoc['type'] === '' || documented_return('{' . $parameterDoc['type'] . '}')['type'] === '') {
             $issues[] = 'parameter.type:' . $name;
         }
         if ($parameterDoc['description'] === '') {
@@ -399,7 +411,7 @@ function declaration_issues(array $record): array
         }
     }
     foreach (array_keys($documented) as $name) {
-        if (!in_array($name, $expected, true) && !str_contains($name, '.')) {
+        if (!in_array(explode('.', $name, 2)[0], $expected, true)) {
             $issues[] = 'parameter.extra:' . $name;
         }
     }
@@ -408,6 +420,27 @@ function declaration_issues(array $record): array
         $issues[] = 'return.missing';
     } elseif (primitive_type_mismatch($record['return_type'], $returnTags[0])) {
         $issues[] = 'return.type_mismatch';
+    }
+    if (count($returnTags) > 1) {
+        $issues[] = 'return.duplicate';
+    }
+    foreach ($returnTags as $tag) {
+        $return = documented_return($tag);
+        if ($return['type'] === '') {
+            $issues[] = 'return.type';
+        } elseif ($return['description'] === '' && !in_array(strtolower($return['type']), ['void', 'never', 'none'], true)) {
+            $issues[] = 'return.description';
+        }
+        if (($record['language'] ?? '') === 'javascript' && !str_starts_with(trim($tag), '{')) {
+            $issues[] = 'return.format';
+        }
+    }
+    if (($record['language'] ?? '') === 'javascript') {
+        foreach ($parameterTags as $tag) {
+            if (!str_starts_with(trim($tag), '{')) {
+                $issues[] = 'parameter.format';
+            }
+        }
     }
     foreach ($documented as $name => $type) {
         if (unspecified_shape($type) && !documented_unused_opaque_parameter($record, $name, $type)) {
@@ -420,6 +453,45 @@ function declaration_issues(array $record): array
         }
     }
     return array_values(array_unique($issues));
+}
+
+/**
+ * Split a balanced return type from its description without losing generic spaces.
+ * @param string $tag PHPDoc, JSDoc or normalized Python return annotation body.
+ * @return array{type:string,description:string} Empty type for missing/unbalanced documentation.
+ */
+function documented_return(string $tag): array
+{
+    $tag = trim($tag);
+    $stack = [];
+    $braced = str_starts_with($tag, '{');
+    $quote = null;
+    for ($index = 0; $index < strlen($tag); $index++) {
+        $character = $tag[$index];
+        if ($quote !== null) {
+            if ($character === '\\') {
+                $index++;
+            } elseif ($character === $quote) {
+                $quote = null;
+            }
+            continue;
+        }
+        if (in_array($character, ['"', "'"], true)) {
+            $quote = $character;
+        } elseif (in_array($character, ['{', '[', '(', '<'], true)) {
+            $stack[] = $character;
+        } elseif (in_array($character, ['}', ']', ')', '>'], true)) {
+            if (array_pop($stack) !== ['}' => '{', ']' => '[', ')' => '(', '>' => '<'][$character]) {
+                return ['type' => '', 'description' => ''];
+            }
+            if ($braced && $stack === []) {
+                return ['type' => trim(substr($tag, 1, $index - 1)), 'description' => trim(substr($tag, $index + 1))];
+            }
+        } elseif ($stack === [] && ctype_space($character)) {
+            return ['type' => substr($tag, 0, $index), 'description' => trim(substr($tag, $index + 1))];
+        }
+    }
+    return ['type' => $stack === [] && $quote === null ? $tag : '', 'description' => ''];
 }
 
 /**

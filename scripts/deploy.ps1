@@ -139,6 +139,11 @@ function Should-Skip($Path) {
     $relative = Get-DeployRelativePath $Path
     # Variable $portableRelative stores this scripts working value.
     $portableRelative = $relative.Replace('\', '/')
+    # The active stylesheet belongs to the installation owner; deploying a local copy
+    # would overwrite their customization. Catalog templates remain deployable.
+    if ($portableRelative -eq 'public/assets/custom.css') {
+        return $true
+    }
     $protectedDeployPaths = @(
         'cache/.htaccess',
         'galleries/.htaccess',

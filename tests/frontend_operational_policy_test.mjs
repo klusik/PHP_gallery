@@ -303,35 +303,25 @@ assert.equal(copy.textContent, 'Copy');
 const lookup = new FixtureElement();
 const lookupInput = new FixtureElement();
 const lookupResult = new FixtureElement();
+lookupResult.hidden = true;
 lookupInput.value = 'A';
 lookup.query.set('input[name="ident"]', lookupInput);
 lookup.query.set('[data-admin-navdata-lookup-result]', lookupResult);
 await navigation.api.runNavigationDataLookup(lookup);
 assert.equal(lookupResult.textContent, 'Enter at least two characters.');
+assert.equal(lookupResult.hidden, false, 'Lookup feedback becomes visible only after an attempt');
 
-// The import form keeps exactly two paint frames, then its existing short delay.
-const update = await consumer('admin-navdata-update.js', ['setupAdminNavdataUpdateFeedback']);
-const form = new FixtureElement();
-update.document.queries.set('[data-navdata-update-form]', [form]);
-update.api.setupAdminNavdataUpdateFeedback();
-form.handlers.get('submit')(keyEvent(''));
-assert.equal(update.frames.length, 1);
-assert.equal(update.timers.size, 0);
-update.frames.shift()();
-assert.equal(update.frames.length, 1);
-assert.equal(update.timers.size, 0);
-update.frames.shift()();
-const submit = [...update.timers.values()][0];
-assert.equal(submit.delay, 250);
-assert.ok(!form.submitted);
-submit.callback();
-assert.ok(form.submitted);
+// Navigation import now owns an AJAX workflow; browser acceptance covers it.
+const updateSource = await readFile(path.join(directory, 'admin-navdata-update.js'), 'utf8');
+assert.ok(updateSource.includes('ADMIN_NAVDATA_SUBMIT_FEEDBACK_MS'));
+assert.ok(updateSource.includes('completeAdminMutation(payload)'));
+assert.ok(!updateSource.includes('HTMLFormElement.prototype.submit'));
 
 const entry = await readFile(path.join(root, 'public/assets/gallery.js'), 'utf8');
 assert.ok(entry.includes('admin-settings-search.js?v=20261002-settings-workspace-v1'));
-assert.ok(entry.includes('admin-navdata-panel.js?v=20260920-admin-interaction-policy-v1'));
+assert.ok(entry.includes('admin-navdata-panel.js?v=20261002-navdata-layout-v1'));
 assert.ok(entry.includes('admin-gallery-title-completion.js?v=20260920-gallery-title-completion-policy-v4'));
-assert.ok(entry.includes('admin-operations.js?v=20260927-cooperative-review-v2'));
+assert.ok(entry.includes('admin-operations.js?v=20261002-gallery-tree-v3'));
 const operations = await readFile(path.join(directory, 'admin-operations.js'), 'utf8');
-assert.ok(operations.includes('admin-navdata-update.js?v=20260920-admin-interaction-policy-v1'));
+assert.ok(operations.includes('admin-navdata-update.js?v=20261002-navdata-ajax-v1'));
 console.log('frontend_operational_policy_test: PASS (21 unchanged policy values, title/Settings/navigation consumer seams; report runtime has a separate fixture; not browser acceptance)');

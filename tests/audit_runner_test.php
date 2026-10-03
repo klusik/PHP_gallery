@@ -79,6 +79,7 @@ audit_test_assert(in_array('release-consistency', $profiles['release'], true), '
 audit_test_assert(in_array('manifest', $profiles['release'], true), 'Release profile must verify the core manifest.');
 foreach (['quick', 'full', 'release'] as $profile) {
     audit_test_assert(in_array('source-contract-inventory', $profiles[$profile], true), 'Every central profile must expose source documentation and policy debt.');
+    audit_test_assert(in_array('python-import-policy', $profiles[$profile], true), 'Every central profile must forbid future annotations across all admitted Python sources.');
     audit_test_assert(in_array('source-documentation-changed', $profiles[$profile], true), 'Every central profile must enforce added and materially changed declaration documentation.');
     audit_test_assert(in_array('source-policy-changed', $profiles[$profile], true), 'Every central profile must enforce recognized new or materially changed runtime policy sites.');
 }

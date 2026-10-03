@@ -36,6 +36,8 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+require_once __DIR__ . '/gallery_description_layout_compatibility.php';
+
 use DirectoryIterator;
 use FilesystemIterator;
 use RecursiveCallbackFilterIterator;
@@ -359,6 +361,7 @@ function write_gallery_sidecar(array $gallery): bool
 {
     // Variable $data stores this steps working value.
     $data = [
+        'description_layout_semantics_version' => GALLERY_DESCRIPTION_LAYOUT_SEMANTICS_VERSION,
         'title' => $gallery['title'],
         'description' => $gallery['description'],
         'tags' => implode(', ', array_column(tags_for_entity('gallery', (int) $gallery['id']), 'name')),

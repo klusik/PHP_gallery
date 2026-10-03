@@ -352,7 +352,7 @@ foreach (['install_application_update', 'install_application_beta', 'restore_app
 assert_updater_resumable(str_contains($installSource, 'application_update_continue_background_job(3.0)'), 'Background request flow no longer advances bounded durable jobs.');
 assert_updater_resumable(str_contains($jobsSource, "time() - (int) (\$job['updated_at'] ?? 0) < 60") && str_contains($jobsSource, "application_update_retry_job((string) \$job['id'])"), 'Background failure recovery bypasses safe retry cleanup or retry backoff.');
 assert_updater_resumable(str_contains($statusSource, 'float $requestedBudgetSeconds = 8.0') && str_contains($statusSource, '$branchDeadline'), 'Remote update discovery no longer has a per-request wall-clock budget shared across branches.');
-assert_updater_resumable(str_contains($patchNotesSource, "application_update_fetch_github_content(\$branch, 'PATCH_NOTES.md', 5)"), 'Admin patch-note refresh reintroduced a long remote timeout.');
+assert_updater_resumable(str_contains($patchNotesSource, 'application_update_remote_timeout_seconds($deadline, 5)'), 'Optional pending patch-note discovery must fit within the shared bounded timeout.');
 $autoStartPosition = strpos($installSource, 'function application_autoupdate_run_installing_check');
 $autoStartEnd = strpos($installSource, 'function application_update_beta_backup_path', (int) $autoStartPosition);
 $autoStartSource = substr($installSource, (int) $autoStartPosition, (int) $autoStartEnd - (int) $autoStartPosition);
@@ -390,8 +390,8 @@ $finalizeStart = strpos($jobsSource, 'function application_update_job_finalize('
 $finalizeEnd = strpos($jobsSource, 'function ', (int) $finalizeStart + 1);
 $finalizeSource = substr($jobsSource, (int) $finalizeStart, (int) $finalizeEnd - (int) $finalizeStart);
 assert_updater_resumable(str_contains($finalizeSource, "delete_app_settings(['application_update_check_cache', 'application_update_check_status_json', 'application_update_check_cached_at']);"), 'Update finalization no longer clears the stale pre-update GitHub check cache.');
-assert_updater_resumable(str_contains($finalizeSource, 'check_application_update()') && str_contains($finalizeSource, 'cache_application_update_check($freshUpdateStatus)'), 'Update finalization no longer refreshes the GitHub check cache for the newly activated version, leaving Admin on a stale "Force check" placeholder.');
-assert_updater_resumable((int) strpos($finalizeSource, 'catch (Throwable $exception)') > (int) strpos($finalizeSource, 'check_application_update()'), 'Finalization refresh of the GitHub check cache is not guarded against a local failure blocking an otherwise-successful update.');
+assert_updater_resumable(!str_contains($finalizeSource, 'check_application_update()') && str_contains($finalizeSource, 'application_update_installed_status(') && str_contains($finalizeSource, 'cache_application_update_check($freshUpdateStatus)'), 'Finalization must reconcile the verified installed version locally without repeating GitHub discovery.');
+assert_updater_resumable((int) strpos($finalizeSource, 'catch (Throwable $exception)') > (int) strpos($finalizeSource, 'application_update_installed_status('), 'Local finalization cache repair must not block an otherwise successful update.');
 assert_updater_resumable(str_contains($jobsSource, 'application_update_delete_tree_slice('), 'Updater cleanup no longer uses bounded physical cache deletion.');
 assert_updater_resumable(str_contains($jobsSource, 'if (!application_update_job_cleanup($job, $budget))'), 'Updater cleanup no longer yields across bounded worker slices.');
 assert_updater_resumable(str_contains($filesystemSource, "'github-api'") && str_contains($filesystemSource, "'patch-notes'") && str_contains($filesystemSource, "'integrity-status.json'"), 'Version-sensitive cache invalidation coverage regressed.');

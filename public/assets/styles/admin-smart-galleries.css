@@ -1,0 +1,121 @@
+/**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ * File: public/assets/styles/admin-smart-galleries.css
+ * Module Type: Stylesheet
+ * Purpose: Keep Smart Gallery lists and both editor surfaces compact.
+ * Responsibilities: Lay out direct view actions, rules and secondary settings responsively.
+ * Author: Rudolf Klusal
+ * License: MIT License (see LICENSE file in repository)
+ */
+.admin-smart-galleries-page { display: grid; gap: 12px; min-width: 0; }
+.admin-smart-galleries-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; border: 1px solid var(--admin-border); border-radius: 10px; background: var(--admin-surface, #fff); box-shadow: var(--admin-shadow); }
+.admin-smart-galleries-toolbar h1 { margin: 0; font-size: 1.4rem; }
+.admin-page .admin-smart-galleries-intro { margin: 0 2px; font-size: 0.85rem; }
+.admin-page .admin-smart-gallery-index,
+.admin-page .admin-smart-gallery-workspace { min-width: 0; padding: 14px; margin: 0; border-radius: 10px; box-shadow: none; }
+.admin-page .admin-smart-gallery-index h2 { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: 1rem; }
+.admin-smart-gallery-index > summary { cursor: pointer; font-weight: 700; }
+.admin-smart-gallery-count { display: inline-block; padding: 1px 7px; border-radius: 99px; background: var(--admin-accent-soft, #e8f0fa); color: var(--muted); font-size: 0.8rem; font-weight: 600; }
+.admin-page .admin-smart-gallery-row { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto; align-items: center; gap: 12px 20px; padding: 12px; margin-top: 8px; border: 1px solid var(--admin-border); border-radius: 8px; background: var(--admin-surface-muted, #f7f9fc); }
+.admin-smart-gallery-index[open] .admin-smart-gallery-row:first-of-type { margin-top: 8px; }
+.admin-smart-gallery-row-name { min-width: 0; }
+.admin-smart-gallery-row-name a { text-decoration: none; }
+.admin-smart-gallery-row-name small,
+.admin-smart-gallery-row-state small { display: block; margin-top: 3px; color: var(--muted); font-size: 0.8rem; overflow-wrap: anywhere; }
+.admin-smart-gallery-state { display: inline-block; font-size: 0.85rem; font-weight: 600; }
+.admin-smart-gallery-row-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
+.admin-smart-gallery-view-unavailable { color: var(--muted); font-size: 0.8rem; }
+/* This root travels with the editor when the existing side-panel workflow injects it. */
+.admin-smart-gallery-editor { container-type: inline-size; min-width: 0; }
+.admin-page .admin-smart-gallery-editor-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--admin-border); }
+.admin-page .admin-smart-gallery-editor-toolbar h2 { margin: 0; font-size: 1.1rem; overflow-wrap: anywhere; }
+.admin-page .admin-smart-gallery-editor [data-smart-gallery-editor] { display: grid; gap: 16px; min-width: 0; }
+.admin-smart-gallery-identity { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; }
+.admin-page .admin-smart-gallery-identity > label { display: grid; gap: 5px; margin: 0; font-size: 0.85rem; font-weight: 600; }
+.admin-page .admin-smart-gallery-identity > .admin-smart-gallery-description { grid-column: 1 / -1; }
+.admin-page .admin-smart-gallery-identity input,
+.admin-page .admin-smart-gallery-identity textarea { width: 100%; min-width: 0; font: inherit; box-sizing: border-box; }
+.admin-page .admin-smart-gallery-identity textarea { min-height: 3.25rem; resize: vertical; }
+.admin-page .admin-smart-gallery-editor input:not([type="checkbox"]):not([type="range"]),
+.admin-page .admin-smart-gallery-editor textarea,
+.admin-page .admin-smart-gallery-editor select { margin: 0; padding: 7px 10px; border: 1px solid var(--admin-border); border-radius: 6px; background: var(--admin-surface, #fff); font-size: 0.9rem; font-weight: 400; color: var(--text); box-sizing: border-box; }
+.admin-page .admin-smart-gallery-editor input:not([type="checkbox"]):not([type="range"]),
+.admin-page .admin-smart-gallery-editor select:not([multiple]) { min-height: 36px; }
+.admin-page .admin-smart-gallery-editor .admin-smart-gallery-placement { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: end; gap: 8px 16px; margin: 0; padding: 10px 12px 12px; border: 1px solid var(--admin-border); border-radius: 8px; background: var(--admin-surface-muted, #f7f9fc); }
+.admin-page .admin-smart-gallery-placement legend { padding: 0 4px; font-size: 0.85rem; font-weight: 700; }
+.admin-page .admin-smart-gallery-placement label { display: grid; gap: 5px; margin: 0; font-size: 0.85rem; }
+.admin-page .admin-smart-gallery-placement p { margin: 0; font-size: 0.8rem; line-height: 1.45; }
+.admin-page .admin-smart-gallery-editor select { min-width: 0; max-width: 100%; box-sizing: border-box; }
+.admin-page .admin-smart-gallery-editor .admin-smart-gallery-options { display: grid; grid-template-columns: minmax(0, 0.65fr) repeat(3, minmax(0, 1fr)); gap: 12px 16px; align-items: end; }
+.admin-page .admin-smart-gallery-options > label { display: grid; gap: 5px; margin: 0; min-width: 0; font-size: 0.85rem; }
+.admin-page .admin-smart-gallery-options > .admin-smart-gallery-enabled { display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 10px; border: 1px solid var(--admin-border); border-radius: 6px; background: var(--admin-surface-muted, #f7f9fc); box-sizing: border-box; }
+.admin-page .admin-smart-gallery-status > p { margin: 6px 0 0; font-size: 0.8rem; line-height: 1.5; }
+.admin-page .admin-smart-gallery-rules h3 { margin: 0 0 4px; font-size: 1rem; }
+.admin-page .admin-smart-gallery-rules-intro { margin: 0 0 10px; font-size: 0.8rem; line-height: 1.5; }
+.admin-smart-gallery-editor .smart-rule-builder { margin: 0; min-width: 0; }
+.admin-smart-gallery-editor .smart-rule-group { margin: 0; padding: 12px; min-width: 0; border: 1px solid var(--admin-border); border-radius: 8px; background: var(--admin-surface-muted, #f7f9fc); }
+.admin-smart-gallery-editor .smart-rule-children > .smart-rule-group { background: var(--admin-surface, #fff); border-left: 3px solid var(--accent); }
+.admin-smart-gallery-editor .smart-rule-group-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 10px 16px; }
+.admin-page .admin-smart-gallery-editor .smart-rule-group-head label { display: grid; gap: 5px; margin: 0; max-width: 22rem; min-width: 0; font-size: 0.8rem; }
+.admin-smart-gallery-editor .smart-rule-group-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.admin-smart-gallery-editor .smart-rule-group-actions .button { max-width: 100%; white-space: normal; }
+.admin-page .admin-smart-gallery-editor .smart-rule-group-help { margin: 7px 0 12px; font-size: 0.8rem; line-height: 1.4; color: var(--muted); }
+.admin-smart-gallery-editor .smart-rule-children { display: grid; gap: 8px; padding: 0; min-width: 0; }
+.admin-smart-gallery-editor .smart-rule-condition { display: grid; grid-template-columns: 24px minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.3fr) 32px; align-items: end; gap: 10px; padding: 10px; border: 1px solid var(--admin-border); border-radius: 6px; background: var(--admin-surface, #fff); }
+.admin-page .admin-smart-gallery-editor .smart-rule-control { display: grid; gap: 5px; min-width: 0; margin: 0; font-size: 0.75rem; font-weight: 500; color: var(--muted); }
+.admin-smart-gallery-editor .smart-rule-number { display: grid; place-items: center; align-self: end; height: 36px; font-size: 0.8rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.admin-page .admin-smart-gallery-editor .smart-rule-condition select,
+.admin-page .admin-smart-gallery-editor .smart-rule-condition input { width: 100%; min-width: 0; }
+.admin-smart-gallery-editor [data-rule-value] { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 5px; min-width: 0; }
+.admin-page .admin-smart-gallery-editor .smart-rule-remove { display: grid; place-items: center; width: 32px; min-height: 36px; padding: 0; border-color: transparent; background: transparent; font-size: 1.1rem; color: var(--muted); }
+.admin-page .admin-smart-gallery-editor .smart-rule-remove:hover { border-color: var(--admin-border); background: var(--admin-surface-muted, #f7f9fc); color: var(--text); }
+.admin-smart-gallery-editor .smart-rule-value-unused { display: flex; align-items: center; min-height: 36px; font-size: 0.8rem; color: var(--muted); }
+.admin-page .admin-smart-gallery-editor .smart-rule-empty { margin: 0; padding: 12px; border: 1px dashed var(--admin-border); border-radius: 6px; font-size: 0.85rem; color: var(--muted); }
+.admin-page .admin-smart-gallery-editor .admin-smart-gallery-details { min-width: 0; padding: 12px; margin: 0; border: 1px solid var(--admin-border); border-radius: 8px; background: var(--admin-surface-muted, #f7f9fc); }
+.admin-page .admin-smart-gallery-editor > .admin-smart-gallery-details { margin-top: 12px; }
+.admin-smart-gallery-details > summary { cursor: pointer; font-size: 0.9rem; font-weight: 700; }
+.admin-smart-gallery-details > summary > .muted { margin-left: 12px; font-size: 0.8rem; font-weight: 400; }
+.admin-page .admin-smart-gallery-details p { margin: 8px 0; font-size: 0.8rem; line-height: 1.5; }
+.admin-page .admin-smart-gallery-editor .admin-smart-gallery-presentation { margin: 10px 0 0; padding: 10px; border-color: var(--admin-border); }
+.admin-page .admin-smart-gallery-editor .admin-smart-gallery-presentation-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 10px; }
+.admin-page .admin-smart-gallery-editor .admin-smart-gallery-presentation-fields[hidden] { display: none; }
+.admin-page .admin-smart-gallery-editor .admin-edit-card { min-width: 0; padding: 10px; border-radius: 7px; box-shadow: none; }
+.admin-smart-gallery-editor .admin-edit-card.is-wide { grid-column: auto; }
+.admin-page .admin-smart-gallery-editor .admin-edit-card h3 { margin: 0 0 8px; font-size: 0.9rem; }
+.admin-page .admin-smart-gallery-editor .admin-edit-card label { margin-bottom: 7px; font-size: 0.85rem; }
+.admin-page .admin-smart-gallery-save-bar { position: sticky; bottom: 0; z-index: 3; display: flex; justify-content: flex-end; gap: 8px; padding: 12px 0; border-top: 1px solid var(--admin-border); background: var(--admin-surface, #fff); }
+.admin-page .admin-smart-gallery-placements .admin-smart-gallery-placement-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 12px; padding: 10px; border-color: var(--admin-border); }
+.admin-smart-gallery-editor .admin-smart-gallery-placement-row form { min-width: 0; grid-template-columns: minmax(0, 1fr) 6rem; }
+.admin-smart-gallery-editor .admin-smart-gallery-management .button-row { margin: 8px 0 0; }
+@container (max-width: 42rem) {
+    .admin-smart-gallery-identity,
+    .admin-page .admin-smart-gallery-editor .admin-smart-gallery-placement,
+    .admin-page .admin-smart-gallery-editor .admin-smart-gallery-presentation-fields,
+    .admin-page .admin-smart-gallery-placements .admin-smart-gallery-placement-row { grid-template-columns: minmax(0, 1fr); }
+    .admin-page .admin-smart-gallery-editor .admin-smart-gallery-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .admin-smart-gallery-editor .smart-rule-group-head { grid-template-columns: minmax(0, 1fr); }
+    .admin-smart-gallery-editor .smart-rule-group-head label { max-width: none; }
+    .admin-smart-gallery-editor .smart-rule-condition { grid-template-columns: 24px repeat(2, minmax(0, 1fr)) 32px; }
+    .admin-smart-gallery-editor .smart-rule-number { grid-column: 1; grid-row: 1 / 3; align-self: start; padding-top: 17px; }
+    .admin-smart-gallery-editor .smart-rule-value-control { grid-column: 2 / 4; }
+    .admin-smart-gallery-editor .smart-rule-condition > .smart-rule-remove { grid-column: 4; grid-row: 1 / 3; align-self: start; margin-top: 17px; }
+}
+@container (max-width: 25rem) {
+    .admin-page .admin-smart-gallery-editor .admin-smart-gallery-options,
+    .admin-smart-gallery-editor .admin-smart-gallery-placement-row form { grid-template-columns: minmax(0, 1fr); }
+    .admin-smart-gallery-editor .smart-rule-condition { grid-template-columns: 18px minmax(0, 1fr) 28px; gap: 8px; padding: 8px; }
+    .admin-smart-gallery-editor .smart-rule-control { grid-column: 2; }
+    .admin-smart-gallery-editor .smart-rule-number { grid-row: 1 / 4; }
+    .admin-smart-gallery-editor .smart-rule-condition > .smart-rule-remove { grid-column: 3; grid-row: 1 / 4; width: 28px; }
+    .admin-smart-gallery-details > summary > .muted { display: block; margin: 4px 0 0 1rem; }
+}
+@media (max-width: 820px) {
+    .admin-page .admin-smart-gallery-row { grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; }
+    .admin-smart-gallery-row-state { grid-column: 1; }
+    .admin-smart-gallery-row-actions { grid-column: 2; grid-row: 1 / 3; }
+}
+@media (max-width: 480px) {
+    .admin-page .admin-smart-gallery-row { grid-template-columns: minmax(0, 1fr); }
+    .admin-smart-gallery-row-actions { grid-column: 1; grid-row: auto; justify-content: flex-start; }
+}

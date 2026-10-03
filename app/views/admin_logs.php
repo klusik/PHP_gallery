@@ -148,6 +148,7 @@ function view_render_admin_log_pagination(array $viewModel): string
  * Render the live Admin log filter and results workspace.
  *
  * @param array<string, mixed> $viewModel Controller-prepared presentation state.
+ * @return void
  */
 function view_render_admin_logs_live(array $viewModel): void
 {
@@ -175,11 +176,11 @@ function view_render_admin_logs_live(array $viewModel): void
         echo '<div class="notice">' . e($notice) . '</div>';
     }
 
-    echo '<section class="panel admin-log-filters-panel"><div class="admin-log-filters-header"><div><h2>' . e((string) ($labels['filters'] ?? 'Filters')) . '</h2><p class="muted">' . e((string) ($labels['filters_intro'] ?? '')) . '</p></div><div class="admin-log-filters-header-actions"><a class="button secondary" href="' . e((string) ($urls['export_all_zip'] ?? '')) . '">' . e((string) ($labels['export_all_zip'] ?? 'Export all logs ZIP')) . '</a><span class="admin-log-filter-state" data-admin-log-live-state aria-live="polite"></span></div></div><form method="get" action="' . e((string) ($urls['index'] ?? '')) . '" class="admin-log-filter-grid" data-admin-log-filter-form data-admin-log-live-url="' . e((string) ($urls['live'] ?? '')) . '" data-admin-log-searching-text="' . e((string) ($labels['searching'] ?? 'Searching...')) . '" data-admin-log-updated-text="' . e((string) ($labels['updated'] ?? 'Updated.')) . '" data-admin-log-failed-text="' . e((string) ($labels['live_search_failed'] ?? 'Live search failed. Use Apply filters.')) . '" data-admin-log-shown-text="' . e((string) ($labels['shown_suffix'] ?? 'shown')) . '" data-admin-log-when-text="' . e((string) ($labels['when'] ?? 'When')) . '">';
+    echo '<section class="panel admin-log-filters-panel"><div class="admin-log-filters-header"><h2>' . e((string) ($labels['filters'] ?? 'Filters')) . '</h2><div class="admin-log-filters-header-actions"><a class="button secondary" href="' . e((string) ($urls['export_all_zip'] ?? '')) . '">' . e((string) ($labels['export_all_zip'] ?? 'Export all logs ZIP')) . '</a><span class="admin-log-filter-state" data-admin-log-live-state aria-live="polite"></span></div></div><form method="get" action="' . e((string) ($urls['index'] ?? '')) . '" class="admin-log-filter-grid" data-admin-log-filter-form data-admin-log-live-url="' . e((string) ($urls['live'] ?? '')) . '" data-admin-log-searching-text="' . e((string) ($labels['searching'] ?? 'Searching...')) . '" data-admin-log-updated-text="' . e((string) ($labels['updated'] ?? 'Updated.')) . '" data-admin-log-failed-text="' . e((string) ($labels['live_search_failed'] ?? 'Live search failed. Use Apply filters.')) . '" data-admin-log-shown-text="' . e((string) ($labels['shown_suffix'] ?? 'shown')) . '" data-admin-log-when-text="' . e((string) ($labels['when'] ?? 'When')) . '">';
     echo '<input type="hidden" name="page" value="admin_logs">';
     echo '<input type="hidden" name="log_page" value="' . $currentPage . '" data-admin-log-page-input>';
     echo '<div class="admin-log-filter-main">';
-    echo '<fieldset class="admin-log-filter-group"><legend>' . e((string) ($labels['filter_scope'] ?? 'Log scope')) . '</legend><div class="admin-log-control-grid">';
+    echo '<fieldset class="admin-log-filter-group admin-log-filter-scope"><legend>' . e((string) ($labels['filter_scope'] ?? 'Log scope')) . '</legend><div class="admin-log-control-grid">';
     echo '<label class="admin-log-filter-control"><span>' . e((string) ($labels['category'] ?? 'Category')) . '</span><select name="category" data-admin-log-live-filter><option value="">' . e((string) ($labels['all_categories'] ?? 'All categories')) . '</option>';
     foreach ($categoryOptions as $value => $label) {
         echo '<option value="' . e((string) $value) . '"' . ($category === (string) $value ? ' selected' : '') . '>' . e((string) $label) . '</option>';
@@ -194,7 +195,8 @@ function view_render_admin_logs_live(array $viewModel): void
     }
     echo '</select></label>';
     echo '</div></fieldset>';
-    echo '<fieldset class="admin-log-severity-filter admin-log-filter-group" data-admin-log-severity-filter data-all-text="' . e((string) ($labels['severity_filter_all_summary'] ?? 'All severities are shown.')) . '" data-active-template="' . e((string) ($labels['severity_filter_active_summary'] ?? 'Active severities: {values}')) . '"><legend><span>' . e((string) ($labels['severity'] ?? 'Severity')) . '</span><span class="admin-log-severity-count">' . e((string) count($selectedSeverities)) . '</span></legend>';
+    echo '<details class="admin-log-severity-disclosure"><summary><span class="admin-log-severity-trigger-label">' . e((string) ($labels['severity'] ?? 'Severity')) . '<span class="admin-log-severity-count' . ($selectedSeverities === [] ? ' is-empty' : '') . '">' . e((string) count($selectedSeverities)) . '</span></span><span class="admin-log-severity-summary" data-admin-log-severity-summary>' . e((string) ($viewModel['severity_summary'] ?? '')) . '</span></summary>';
+    echo '<fieldset class="admin-log-severity-filter admin-log-filter-group" data-admin-log-severity-filter data-all-text="' . e((string) ($labels['severity_filter_all_summary'] ?? 'All severities are shown.')) . '" data-active-template="' . e((string) ($labels['severity_filter_active_summary'] ?? 'Active severities: {values}')) . '"><legend>' . e((string) ($labels['severity'] ?? 'Severity')) . '</legend>';
     echo '<input type="hidden" name="severity_filter_submitted" value="1">';
     echo '<p class="admin-log-filter-help">' . e((string) ($labels['severity_filter_hint'] ?? '')) . '</p>';
     echo '<div class="admin-log-severity-options">';
@@ -202,16 +204,17 @@ function view_render_admin_logs_live(array $viewModel): void
         $valueString = (string) $value;
         echo '<label class="admin-log-severity-choice is-' . e($valueString) . '"><input class="admin-log-severity-checkbox" type="checkbox" name="severities[]" value="' . e($valueString) . '"' . (in_array($valueString, $selectedSeverities, true) ? ' checked' : '') . ' data-admin-log-live-filter> <span>' . e((string) $label) . '</span></label>';
     }
-    echo '</div><p class="admin-log-severity-summary" data-admin-log-severity-summary>' . e((string) ($viewModel['severity_summary'] ?? '')) . '</p></fieldset>';
+    echo '</div><a class="button secondary" href="' . e((string) ($urls['reset_severity'] ?? '')) . '">' . e((string) ($labels['reset_severity_filter'] ?? 'Reset severity filter')) . '</a></fieldset></details>';
     echo '</div>';
     echo '<div class="admin-log-filter-footer">';
     echo '<label class="admin-log-filter-control admin-log-search-control"><span>' . e((string) ($labels['search'] ?? 'Search')) . '</span><input name="q" value="' . e($query) . '" placeholder="' . e((string) ($labels['search_placeholder'] ?? '')) . '" autocomplete="off" data-admin-log-live-search></label>';
-    echo '<div class="admin-log-filter-actions"><button type="submit">' . e((string) ($labels['apply_filters'] ?? 'Apply filters')) . '</button><a class="button secondary" href="' . e((string) ($urls['reset_severity'] ?? '')) . '">' . e((string) ($labels['reset_severity_filter'] ?? 'Reset severity filter')) . '</a></div>';
+    echo '<div class="admin-log-filter-actions"><button type="submit">' . e((string) ($labels['apply_filters'] ?? 'Apply filters')) . '</button></div>';
     echo '</div>';
     echo '</form></section>';
 
-    echo '<section class="panel" data-admin-log-results><h2>' . e((string) ($labels['entries'] ?? 'Entries')) . ' <span class="muted" data-admin-log-count>(' . e($countText) . ')</span></h2>';
+    echo '<section class="panel" data-admin-log-results><div class="admin-log-results-header"><h2>' . e((string) ($labels['entries'] ?? 'Entries')) . ' <span class="muted" data-admin-log-count>(' . e($countText) . ')</span></h2>';
     echo $paginationHtml;
+    echo '</div>';
     if (!$hasLogs) {
         echo '<div data-admin-log-empty>' . view_render_admin_log_empty((string) ($labels['no_entries_match'] ?? 'No log entries match the current filters.')) . '</div>';
     }
@@ -368,6 +371,7 @@ function view_render_admin_log_archive_pagination(array $viewModel): string
  * Render filesystem-backed Admin log archive controls and archive files.
  *
  * @param array<string, mixed> $viewModel Controller-prepared archive presentation model.
+ * @return void
  */
 function view_render_admin_log_archive_panel(array $viewModel): void
 {
@@ -385,49 +389,12 @@ function view_render_admin_log_archive_panel(array $viewModel): void
         echo '<div class="notice">' . e($notice) . '</div>';
     }
 
-    echo '<section class="panel admin-log-archive-panel">';
-    echo '<div class="admin-log-archive-heading"><div><h2>' . e((string) ($labels['maintenance_title'] ?? 'Planned Admin log maintenance')) . '</h2><p class="muted">' . e((string) ($labels['maintenance_intro'] ?? '')) . '</p></div></div>';
-
-    if (empty($viewModel['zip_available'])) {
-        echo '<div class="notice">' . e((string) ($labels['zip_unavailable'] ?? '')) . '</div>';
-    }
-
-    echo '<div class="admin-log-archive-controls">';
-    echo '<form method="post" action="' . e($maintenanceUrl) . '" class="admin-log-archive-retention-form">' . $csrfHtml;
-    echo '<input type="hidden" name="action" value="save_retention">';
-    echo '<label><span>' . e((string) ($labels['keep_live_logs'] ?? 'Keep live logs')) . '</span><select name="retention_days">';
-    foreach ($retentionOptions as $option) {
-        if (!is_array($option)) {
-            continue;
-        }
-        $days = (int) ($option['days'] ?? 0);
-        echo '<option value="' . $days . '"' . ($retentionDays === $days ? ' selected' : '') . '>' . e((string) ($option['label'] ?? '')) . '</option>';
-    }
-    echo '</select></label><button type="submit" class="secondary">' . e((string) ($labels['save_retention'] ?? 'Save retention')) . '</button></form>';
-
-    echo '<form method="post" action="' . e($maintenanceUrl) . '" class="admin-log-archive-run-form">' . $csrfHtml;
-    echo '<input type="hidden" name="action" value="run_now">';
-    echo '<button type="submit">' . e((string) ($labels['run_now'] ?? 'Run maintenance cycle now')) . '</button>';
-    echo '</form>';
-    echo '</div>';
-
-    echo '<p class="muted admin-log-archive-policy">' . e((string) ($labels['policy'] ?? '')) . '</p>';
-
-    echo '<dl class="admin-log-archive-metrics">';
-    echo '<div><dt>' . e((string) ($labels['live_retention'] ?? 'Live retention')) . '</dt><dd>' . e((string) ($metrics['retention'] ?? '')) . '</dd></div>';
-    echo '<div><dt>' . e((string) ($labels['archived_zips'] ?? 'Archived ZIPs')) . '</dt><dd>' . e((string) ($metrics['count'] ?? '0')) . '</dd></div>';
-    echo '<div><dt>' . e((string) ($labels['storage'] ?? 'Archive storage')) . '</dt><dd>' . e((string) ($metrics['storage'] ?? '')) . '</dd></div>';
-    echo '<div><dt>' . e((string) ($labels['oldest'] ?? 'Oldest archive')) . '</dt><dd>' . e((string) ($metrics['oldest'] ?? '')) . '</dd></div>';
-    echo '<div><dt>' . e((string) ($labels['newest'] ?? 'Newest archive')) . '</dt><dd>' . e((string) ($metrics['newest'] ?? '')) . '</dd></div>';
-    echo '<div><dt>' . e((string) ($labels['next_check'] ?? 'Next automatic check')) . '</dt><dd>' . e((string) ($metrics['next_check'] ?? '')) . '</dd></div>';
-    echo '</dl>';
-
-    if (!empty($viewModel['last_summary'])) {
-        echo '<p class="muted admin-log-archive-last-result">' . e((string) $viewModel['last_summary']) . '</p>';
-    }
-
-    echo '<div class="admin-log-archive-heading admin-log-archive-files-heading"><div><h3>' . e((string) ($labels['files_title'] ?? 'Archived logs')) . '</h3><p class="muted">' . e((string) ($labels['files_intro'] ?? '')) . '</p></div></div>';
+    echo '<div class="admin-log-archive-workspace">';
+    echo '<section class="panel admin-log-archive-files">';
+    echo '<div class="admin-log-archive-files-header"><h2>' . e((string) ($labels['files_title'] ?? 'Archived logs')) . '</h2>';
     echo $paginationHtml;
+    echo '</div>';
+    echo '<details class="admin-log-archive-help"><summary>' . e((string) ($labels['details'] ?? 'Details')) . '</summary><p class="muted">' . e((string) ($labels['files_intro'] ?? '')) . '</p></details>';
     if ($items === []) {
         echo '<p class="muted">' . e((string) ($labels['none_yet'] ?? 'No Admin log ZIP archives exist yet.')) . '</p>';
     } else {
@@ -459,4 +426,50 @@ function view_render_admin_log_archive_panel(array $viewModel): void
     }
     echo $paginationHtml;
     echo '</section>';
+
+    echo '<aside class="panel admin-log-archive-panel admin-log-archive-sidebar">';
+    echo '<h2>' . e((string) ($labels['maintenance_title'] ?? 'Planned Admin log maintenance')) . '</h2>';
+
+    if (empty($viewModel['zip_available'])) {
+        echo '<div class="notice">' . e((string) ($labels['zip_unavailable'] ?? '')) . '</div>';
+    }
+
+    echo '<div class="admin-log-archive-controls">';
+    echo '<form method="post" action="' . e($maintenanceUrl) . '" class="admin-log-archive-retention-form">' . $csrfHtml;
+    echo '<input type="hidden" name="action" value="save_retention">';
+    echo '<label><span>' . e((string) ($labels['keep_live_logs'] ?? 'Keep live logs')) . '</span><select name="retention_days">';
+    foreach ($retentionOptions as $option) {
+        if (!is_array($option)) {
+            continue;
+        }
+        $days = (int) ($option['days'] ?? 0);
+        echo '<option value="' . $days . '"' . ($retentionDays === $days ? ' selected' : '') . '>' . e((string) ($option['label'] ?? '')) . '</option>';
+    }
+    echo '</select></label><button type="submit" class="secondary">' . e((string) ($labels['save_retention'] ?? 'Save retention')) . '</button></form>';
+
+    echo '<form method="post" action="' . e($maintenanceUrl) . '" class="admin-log-archive-run-form">' . $csrfHtml;
+    echo '<input type="hidden" name="action" value="run_now">';
+    echo '<button type="submit">' . e((string) ($labels['run_now'] ?? 'Run maintenance cycle now')) . '</button>';
+    echo '</form>';
+    echo '</div>';
+
+    echo '<dl class="admin-log-archive-metrics">';
+    echo '<div><dt>' . e((string) ($labels['live_retention'] ?? 'Live retention')) . '</dt><dd>' . e((string) ($metrics['retention'] ?? '')) . '</dd></div>';
+    echo '<div><dt>' . e((string) ($labels['archived_zips'] ?? 'Archived ZIPs')) . '</dt><dd>' . e((string) ($metrics['count'] ?? '0')) . '</dd></div>';
+    echo '<div><dt>' . e((string) ($labels['storage'] ?? 'Archive storage')) . '</dt><dd>' . e((string) ($metrics['storage'] ?? '')) . '</dd></div>';
+    echo '<div><dt>' . e((string) ($labels['oldest'] ?? 'Oldest archive')) . '</dt><dd>' . e((string) ($metrics['oldest'] ?? '')) . '</dd></div>';
+    echo '<div><dt>' . e((string) ($labels['newest'] ?? 'Newest archive')) . '</dt><dd>' . e((string) ($metrics['newest'] ?? '')) . '</dd></div>';
+    echo '<div><dt>' . e((string) ($labels['next_check'] ?? 'Next automatic check')) . '</dt><dd>' . e((string) ($metrics['next_check'] ?? '')) . '</dd></div>';
+    echo '</dl>';
+
+    if (!empty($viewModel['last_summary'])) {
+        echo '<p class="muted admin-log-archive-last-result">' . e((string) $viewModel['last_summary']) . '</p>';
+    }
+
+    echo '<details class="admin-log-archive-help"><summary>' . e((string) ($labels['details'] ?? 'Details')) . '</summary>';
+    echo '<p class="muted">' . e((string) ($labels['maintenance_intro'] ?? '')) . '</p>';
+    echo '<p class="muted">' . e((string) ($labels['policy'] ?? '')) . '</p></details>';
+    echo '</aside>';
+
+    echo '</div>';
 }

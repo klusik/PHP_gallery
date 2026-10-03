@@ -103,9 +103,10 @@ function admin_dashboard_overview_totals(bool $accessReady): array
  * @param bool $pictureGameReady Picture game ready value.
  * @param bool $publicPathReady Public path ready filesystem path.
  * @param bool $coverAssetReady Cover asset ready value.
- * @return array Structured result data for the caller.
+ * @param bool $editRevisionReady Whether the shared gallery-edit schema health verified revision storage.
+ * @return list<array<string,mixed>> Gallery rows with direct counts and verified optional columns.
  */
-function admin_dashboard_gallery_rows(bool $accessReady, bool $gpsMapReady, bool $backgroundSourceReady, bool $filenameDisplayReady, bool $votingReady, bool $pictureGameReady, bool $publicPathReady, bool $coverAssetReady): array
+function admin_dashboard_gallery_rows(bool $accessReady, bool $gpsMapReady, bool $backgroundSourceReady, bool $filenameDisplayReady, bool $votingReady, bool $pictureGameReady, bool $publicPathReady, bool $coverAssetReady, bool $editRevisionReady = false): array
 {
     return admin_dashboard_model_gallery_rows([
         'access' => $accessReady,
@@ -116,6 +117,7 @@ function admin_dashboard_gallery_rows(bool $accessReady, bool $gpsMapReady, bool
         'picture_game' => $pictureGameReady,
         'public_path' => $publicPathReady,
         'cover_asset' => $coverAssetReady,
+        'edit_revision' => $editRevisionReady,
     ]);
 }
 
@@ -182,7 +184,10 @@ function admin_dashboard_view_model(bool $includeMaintenance = false, string $su
     // Variable $gpsMapReady stores this steps working value.
     $gpsMapReady = ($includeGalleries || $includeMaintenance) && $gpsMapEnabled && admin_render_profile_schema('schema_exif_gps', static fn (): bool => exif_gps_schema_ready());
     // $gpsMapOverrideReady stores whether EXIF/GPS display supports inherited per-gallery overrides.
-    $gpsMapOverrideReady = $includeMaintenance && $gpsMapReady && admin_render_profile_schema('schema_exif_gps_overrides', static fn (): bool => exif_gps_override_schema_ready());
+    $gpsMapOverrideReady = ($includeGalleries || $includeMaintenance) && $gpsMapReady && admin_render_profile_schema('schema_exif_gps_overrides', /**
+     * Resolve inherited GPS override storage for an active gallery or maintenance surface.
+     * @return bool Whether the canonical optional override schema is verified available.
+     */ static fn (): bool => exif_gps_override_schema_ready());
     // $votingEnabled short-circuits optional schema inspection while the effective capability is unavailable.
     $votingEnabled = !function_exists('Gallery\\Services\\feature_capability_effective_enabled') || feature_capability_effective_enabled('image_voting');
     // Variable $votingReady stores this steps working value.
@@ -195,6 +200,8 @@ function admin_dashboard_view_model(bool $includeMaintenance = false, string $su
     $migrationPending = admin_render_profile_schema('schema_pending_migrations', static fn (): bool => pending_migrations_exist());
     // Variable $accessReady stores this steps working value.
     $accessReady = admin_render_profile_schema('schema_gallery_access', static fn (): bool => gallery_access_schema_ready());
+    // Reuse already resolved mutation health; quick access never adds a revision-column probe.
+    $editRevisionReady = ($mutationSchemaStatuses['mutation_gallery_edit']['state'] ?? 'unknown') === 'available';
     // $backgroundSourceReady stores whether gallery background source data can be read without optional-column errors.
     $backgroundSourceReady = $includeGalleries && admin_render_profile_schema('schema_background_source', static fn (): bool => gallery_background_source_schema_ready());
     // $publicPathReady stores whether clean public URL paths can be read directly from gallery rows.
@@ -223,7 +230,10 @@ function admin_dashboard_view_model(bool $includeMaintenance = false, string $su
     $childrenByParent = [];
     if ($includeGalleries) {
         // Variable $galleries stores this steps working value.
-        $galleries = admin_render_profile_db('dashboard_gallery_rows', static fn (): array => admin_dashboard_gallery_rows($accessReady, $gpsMapReady, $backgroundSourceReady, $filenameDisplayReady, $votingReady, $pictureGameReady, $publicPathReady, $coverAssetReady));
+        $galleries = admin_render_profile_db('dashboard_gallery_rows', /**
+         * Fetch dashboard rows using only the already verified optional column groups.
+         * @return list<array<string,mixed>> Safe inventory with presence flags and available revisions.
+         */ static fn (): array => admin_dashboard_gallery_rows($accessReady, $gpsMapReady, $backgroundSourceReady, $filenameDisplayReady, $votingReady, $pictureGameReady, $publicPathReady, $coverAssetReady, $editRevisionReady));
         admin_render_profile_set_counter('gallery_rows', count($galleries));
         // Variable $galleries stores the admin tree in display order, with manual sibling ordering respected.
         $galleries = admin_render_profile_span('order_gallery_tree', static fn (): array => admin_ordered_gallery_rows($galleries));
@@ -235,15 +245,37 @@ function admin_dashboard_view_model(bool $includeMaintenance = false, string $su
         $childrenByParent = admin_render_profile_span('gallery_children_index', static fn (): array => admin_gallery_children_by_parent($galleries));
         admin_render_profile_set_counter('parent_groups', count($childrenByParent));
 
+        // Resolve inherited GPS policy against this complete read instead of querying each parent again.
+        $galleryRowsById = [];
+        foreach ($galleries as $gallery) {
+            $galleryRowsById[(int) $gallery['id']] = $gallery;
+        }
+        /**
+         * Read a GPS ancestor from the existing dashboard gallery inventory.
+         * @param int $galleryId Canonical parent gallery identifier.
+         * @return array<string,mixed>|null Already fetched ancestor or null for an absent parent.
+         */
+        $galleryLookup = static fn (int $galleryId): ?array => $galleryRowsById[$galleryId] ?? null;
+
         // Preview URLs may hit cover lookup helpers, so resolve them before handing rows to the view.
         foreach ($galleries as $index => $gallery) {
             $galleries[$index]['preview_url'] = admin_gallery_preview_url($gallery);
             // Presentation-ready domain state keeps policy lookups out of the View layer.
             $galleries[$index]['view_visibility'] = gallery_effective_visibility($gallery);
             $galleries[$index]['view_visibility_label'] = gallery_visibility_label($galleries[$index]['view_visibility']);
-            $galleries[$index]['view_gps_map_enabled'] = $gpsMapReady && gallery_effective_gps_map_enabled($gallery);
+            $galleries[$index]['view_gps_map_enabled'] = $gpsMapReady && gallery_effective_gps_map_enabled($gallery, $galleryLookup);
             $galleries[$index]['view_background_source_set'] = $backgroundSourceReady && gallery_background_source($gallery) !== null;
+            $galleries[$index]['view_own_password_enabled'] = $accessReady && (string) ($gallery['access_mode'] ?? 'normal') === 'password' && !empty($gallery['own_password_set']);
+            $galleries[$index]['view_edit_revision'] = $editRevisionReady && isset($gallery['edit_revision']) ? (int) $gallery['edit_revision'] : null;
+            $galleries[$index]['view_quick_access_ready'] = $accessReady && $editRevisionReady && $galleries[$index]['view_edit_revision'] !== null;
         }
+        $availableFeatures = [];
+        foreach (['maps' => $gpsMapReady, 'filenames' => $filenameDisplayReady, 'voting' => $votingReady, 'game' => $pictureGameReady, 'background' => $backgroundSourceReady] as $feature => $ready) {
+            if ($ready) {
+                $availableFeatures[] = $feature;
+            }
+        }
+        $galleries = admin_dashboard_gallery_subtree_summaries($galleries, $availableFeatures);
     }
 
     // $updatePending stores an intermediate value used by the surrounding gallery workflow.
@@ -265,8 +297,11 @@ function admin_dashboard_view_model(bool $includeMaintenance = false, string $su
         ? admin_render_profile_db('gallery_trash_summary', static fn (): array => gallery_trash_summary())
         : ['available' => false, 'count' => 0, 'trashed_count' => 0, 'broken_count' => 0, 'transitional_count' => 0, 'problem_count' => 0, 'purgeable_count' => 0, 'active_count' => 0, 'bytes' => 0];
     // $galleryTrashEntries stores active/recoverable/problem rows. Historical restored/purged rows stay out of the dashboard payload.
-    $galleryTrashEntries = $includeMaintenance && !empty($galleryTrashSummary['available']) && function_exists('Gallery\\Services\\gallery_trash_entries')
-        ? admin_render_profile_db('gallery_trash_entries', static fn (): array => gallery_trash_entries(['status' => 'active', 'limit' => 200]))
+    $galleryTrashEntries = $includeMaintenance && !empty($galleryTrashSummary['available']) && function_exists('Gallery\\Services\\gallery_trash_admin_entries')
+        ? admin_render_profile_db('gallery_trash_entries', /**
+         * Prepare bounded Trash rows with canonical retention and purge policy for the dashboard.
+         * @return array<int,array<string,mixed>> Active rows augmented with prepared presentation fields.
+         */ static fn (): array => gallery_trash_admin_entries(['status' => 'active', 'limit' => 200]))
         : [];
     // $thumbnailSummary stores an intermediate value used by the surrounding gallery workflow.
     admin_render_profile_set_counter('thumbnail_maintenance_sample_limit', 1000);
@@ -347,7 +382,7 @@ function admin_dashboard_view_model(bool $includeMaintenance = false, string $su
     $runtimeSupportStatus = runtime_support_health_status();
     $imageMovePendingStatus = admin_image_move_pending_health_status($mutationSchemaStatuses['mutation_gallery_move'] ?? [], $includeMaintenance);
     $systemActionRequired = $migrationPending || !empty($runtimeSupportStatus['policy']['action_required']) || !empty($imageMovePendingStatus['action_required']);
-    foreach (array_merge($securitySchemaStatuses, $mutationSchemaStatuses) as $schemaStatus) {
+    foreach (array_merge($securitySchemaStatuses, $mutationSchemaStatuses, $presentationSchemaStatuses) as $schemaStatus) {
         if (in_array((string) ($schemaStatus['state'] ?? 'unknown'), ['missing', 'unknown'], true)) {
             $systemActionRequired = true;
             break;
@@ -739,6 +774,65 @@ function admin_gallery_children_by_parent(array $rows): array
         $childrenByParent[$parentId][] = (int) ($row['id'] ?? 0);
     }
     return $childrenByParent;
+}
+
+/**
+ * Aggregate direct and descendant counts and prepared feature states without additional reads.
+ *
+ * Rows are the complete parent-before-descendant order produced by the canonical
+ * dashboard hierarchy owner. A reverse pass folds each subtree into its parent;
+ * readiness controls which fixed feature keys are exposed, without probing schema.
+ * Background records source presence only and never implies a writable toggle.
+ *
+ * @param list<array<string,mixed>> $rows Complete ordered gallery rows with direct image counts and effective GPS/background flags.
+ * @param list<string> $availableFeatures Verified ready feature keys: maps, filenames, voting, game, or background.
+ * @return list<array<string,mixed>> Unchanged ordered rows augmented with view_total_image_count, view_subgallery_image_count, view_subgallery_count, view_subtree_count, view_feature_states and view_feature_counts containing on/total integers.
+ */
+function admin_dashboard_gallery_subtree_summaries(array $rows, array $availableFeatures): array
+{
+    $featureFields = [
+        'maps' => 'view_gps_map_enabled',
+        'filenames' => 'show_filenames',
+        'voting' => 'voting_enabled',
+        'game' => 'picture_game_enabled',
+        'background' => 'view_background_source_set',
+    ];
+    $featureFields = array_intersect_key($featureFields, array_fill_keys($availableFeatures, true));
+    $indexesById = [];
+    $aggregates = [];
+    foreach ($rows as $index => $row) {
+        $indexesById[(int) ($row['id'] ?? 0)] = $index;
+        $onCounts = [];
+        foreach ($featureFields as $feature => $field) {
+            $onCounts[$feature] = (int) ($row[$field] ?? 0) === 1 ? 1 : 0;
+        }
+        $aggregates[$index] = ['images' => max(0, (int) ($row['image_count'] ?? 0)), 'galleries' => 1, 'on' => $onCounts];
+    }
+    for ($index = count($rows) - 1; $index >= 0; $index--) {
+        $aggregate = $aggregates[$index];
+        $rows[$index]['view_total_image_count'] = $aggregate['images'];
+        $rows[$index]['view_subgallery_image_count'] = $aggregate['images'] - max(0, (int) ($rows[$index]['image_count'] ?? 0));
+        $rows[$index]['view_subgallery_count'] = $aggregate['galleries'] - 1;
+        $rows[$index]['view_subtree_count'] = $aggregate['galleries'];
+        $rows[$index]['view_feature_states'] = [];
+        $rows[$index]['view_feature_counts'] = [];
+        foreach ($aggregate['on'] as $feature => $onCount) {
+            $rows[$index]['view_feature_states'][$feature] = $onCount === 0 ? 'off' : ($onCount === $aggregate['galleries'] ? 'on' : 'mixed');
+            $rows[$index]['view_feature_counts'][$feature] = ['on' => $onCount, 'total' => $aggregate['galleries']];
+        }
+        $parentId = (int) ($rows[$index]['parent_id'] ?? 0);
+        $parentIndex = $parentId > 0 ? ($indexesById[$parentId] ?? null) : null;
+        // Missing/self/later parents are treated as roots; never create cycles or alter row ordering.
+        if ($parentIndex === null || $parentIndex >= $index) {
+            continue;
+        }
+        $aggregates[$parentIndex]['images'] += $aggregate['images'];
+        $aggregates[$parentIndex]['galleries'] += $aggregate['galleries'];
+        foreach ($aggregate['on'] as $feature => $onCount) {
+            $aggregates[$parentIndex]['on'][$feature] += $onCount;
+        }
+    }
+    return $rows;
 }
 
 /**

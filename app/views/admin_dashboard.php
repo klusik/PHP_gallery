@@ -76,7 +76,7 @@ function view_render_admin_dashboard(array $model): void
     $runtimeSupport = is_array($model['runtime_support_status'] ?? null) ? $model['runtime_support_status'] : [];
     $systemHealthActionRequired = !empty($runtimeSupport['policy']['action_required']);
     $systemHealthActionRequired = $systemHealthActionRequired || !empty($model['image_move_pending_status']['action_required']);
-    foreach (array_merge($securitySchemaStatuses, $mutationSchemaStatuses) as $schemaStatus) {
+    foreach (array_merge($securitySchemaStatuses, $mutationSchemaStatuses, (array) ($model['presentation_schema_statuses'] ?? [])) as $schemaStatus) {
         if (is_array($schemaStatus) && in_array((string) ($schemaStatus['state'] ?? 'unknown'), ['missing', 'unknown'], true)) {
             $systemHealthActionRequired = true;
             break;
@@ -93,7 +93,7 @@ function view_render_admin_dashboard(array $model): void
     render_header(t('admin.dashboard.page_title', 'Admin dashboard'));
     $heroActions = [
         ['label' => t('admin.dashboard.create_gallery', 'Create gallery'), 'url' => url_for('admin_new_gallery'), 'class' => 'button'],
-        ['label' => t('admin.dashboard.upload_photos', 'Upload photos'), 'url' => url_for('admin_upload'), 'class' => 'button secondary'],
+        ['label' => t('admin.dashboard.open_galleries', 'Open galleries'), 'url' => url_for('home'), 'class' => 'button secondary'],
     ];
     if ($updatePending) {
         $heroActions[] = ['label' => $updateLabel, 'url' => url_for('admin_update'), 'class' => $updateButtonClass];
@@ -110,7 +110,8 @@ function view_render_admin_dashboard(array $model): void
     echo '<div id="admin-dashboard-thumbnail-progress" class="admin-dashboard-progress-slot" aria-live="polite"></div>';
 
     foreach ($adminTabs as &$tab) {
-        $tab['href'] = url_for('admin', ['dashboard_tab' => substr($tab['id'], strlen('admin-tab-'))]) . '#' . $tab['id'];
+        $tab['href'] = url_for('admin', ['dashboard_tab' => substr($tab['id'], strlen('admin-tab-'))])
+            . ($tab['id'] === 'admin-tab-overview' ? '' : '#' . $tab['id']);
     }
     unset($tab);
     $activeTab = 'admin-tab-' . (string) ($model['active_tab'] ?? 'overview');
@@ -125,11 +126,7 @@ function view_render_admin_dashboard(array $model): void
     render_admin_tab_panel('admin-tab-overview', $overviewHtml, $activeTab === 'admin-tab-overview');
 
     ob_start();
-    if (!empty($model['galleries_loaded'])) {
-        view_render_admin_dashboard_galleries_panel($model);
-    } else {
-        view_render_admin_dashboard_deferred_read('galleries');
-    }
+    view_render_admin_dashboard_deferred_read('galleries', !empty($model['galleries_loaded']) ? $model : null);
     $galleriesHtml = (string) ob_get_clean();
     render_admin_tab_panel('admin-tab-galleries', $galleriesHtml, $activeTab === 'admin-tab-galleries');
 
@@ -159,6 +156,7 @@ function view_render_admin_dashboard_galleries_panel(array $model): void
 {
     $pictureGameReady = !empty($model['picture_game_ready']);
     $gpsMapReady = !empty($model['gps_map_ready']);
+    $gpsMapOverrideReady = !empty($model['gps_map_override_ready']);
     $votingReady = !empty($model['voting_ready']);
     $filenameDisplayReady = !empty($model['filename_display_ready']);
     $accessReady = !empty($model['access_ready']);
@@ -169,17 +167,12 @@ function view_render_admin_dashboard_galleries_panel(array $model): void
     $galleryTrashEnabled = !empty($model['gallery_trash_enabled']);
     $galleryTrashAutoPurgeEnabled = !empty($model['gallery_trash_auto_purge_enabled']);
     $galleryTrashRetentionDays = max(1, min(365, (int) ($model['gallery_trash_retention_days'] ?? 30)));
-    view_render_admin_tab_intro([
-        'kicker' => t('admin.dashboard.galleries_kicker', 'Galleries'),
-        'title' => t('admin.dashboard.all_galleries', 'All galleries'),
-        'actions' => [
-            ['label' => t('admin.dashboard.upload_photos', 'Upload photos'), 'url' => url_for('admin_upload'), 'class' => 'button secondary'],
-        ],
-    ]);
     echo '<form method="post" action="' . e(url_for('admin_bulk_galleries')) . '" data-gallery-bulk-form data-gallery-trash-enabled="' . ($galleryTrashEnabled ? '1' : '0') . '" data-gallery-trash-auto-purge-enabled="' . ($galleryTrashAutoPurgeEnabled ? '1' : '0') . '" data-gallery-trash-retention-days="' . $galleryTrashRetentionDays . '" data-admin-gallery-order-form data-thumbnail-progress-target="#admin-dashboard-thumbnail-progress">' . csrf_field();
-    echo '<section class="admin-gallery-workspace" aria-label="' . e(t('admin.dashboard.gallery_management', 'Gallery management')) . '">';
-    echo '<div class="admin-gallery-command-panel">';
-    echo '<div class="admin-image-order-toolbar admin-gallery-order-toolbar" data-admin-gallery-order-toolbar data-reorder-url="' . e(url_for('admin_reorder_galleries')) . '"><div><strong>' . e(t('admin.dashboard.tree_ordering', 'Tree ordering')) . '</strong><p class="muted">' . e(t('admin.dashboard.tree_ordering_hint', 'Drag a gallery thumbnail or title area to reorder. Move right to nest a gallery, or left to move it back out.')) . '</p></div><span class="admin-image-order-status" data-admin-gallery-order-status aria-live="polite">' . e(t('admin.dashboard.gallery_ordering_ready', 'Gallery ordering ready.')) . '</span></div>';
+    $controls = (array) ($model['gallery_controls'] ?? []);
+    echo '<section class="admin-gallery-workspace" data-feature-plan-url="' . e((string) ($controls['feature_plan_url'] ?? '')) . '" data-feature-apply-url="' . e((string) ($controls['feature_apply_url'] ?? '')) . '" aria-label="' . e(t('admin.dashboard.gallery_management', 'Gallery management')) . '">';
+    echo '<header class="admin-gallery-workspace-heading"><h2>' . e(t('admin.dashboard.all_galleries', 'All galleries')) . '</h2>';
+    echo '<div class="admin-image-order-toolbar admin-gallery-order-toolbar" data-admin-gallery-order-toolbar data-reorder-url="' . e(url_for('admin_reorder_galleries')) . '"><details class="admin-gallery-order-help"><summary>' . e(t('admin.dashboard.tree_ordering', 'Tree ordering')) . '</summary><p class="muted">' . e(t('admin.dashboard.tree_ordering_hint', 'Drag a gallery thumbnail or title area to reorder. Move right to nest a gallery, or left to move it back out.')) . '</p></details><span class="admin-image-order-status" data-admin-gallery-order-status aria-live="polite">' . e(t('admin.dashboard.gallery_ordering_ready', 'Gallery ordering ready.')) . '</span></div>';
+    echo '</header><div class="admin-gallery-command-panel">';
     echo '<div class="bulk-row admin-gallery-controls">';
     echo '<label>' . e(t('admin.dashboard.filter', 'Filter')) . '<select data-gallery-visibility-filter><option value="all">' . e(t('admin.dashboard.filter_all_statuses', 'All statuses')) . '</option><option value="unpublished">' . e(t('admin.dashboard.filter_only_unpublished', 'Only unpublished')) . '</option><option value="public">' . e(t('admin.dashboard.filter_only_public', 'Only public')) . '</option><option value="private">' . e(t('admin.dashboard.filter_only_private', 'Only private')) . '</option></select></label>';
     echo '<span class="muted admin-gallery-filter-summary" data-gallery-filter-summary></span>';
@@ -201,7 +194,7 @@ function view_render_admin_dashboard_galleries_panel(array $model): void
     if ($pictureGameReady) {
         echo '<option value="game_on">' . e(t('admin.dashboard.bulk_enable_picture_game', 'Enable picture game')) . '</option><option value="game_off">' . e(t('admin.dashboard.bulk_disable_picture_game', 'Disable picture game')) . '</option>';
     }
-    echo '</select></label><button type="submit">' . e(t('admin.dashboard.apply', 'Apply')) . '</button><button type="button" class="secondary" data-gallery-tree-action="collapse-all">' . e(t('admin.dashboard.collapse_all', 'Collapse all')) . '</button><button type="button" class="secondary" data-gallery-tree-action="expand-all">' . e(t('admin.dashboard.expand_all', 'Expand all')) . '</button></div></div>';
+    echo '</select></label><button type="submit">' . e(t('admin.dashboard.apply', 'Apply')) . '</button><span class="admin-gallery-tree-controls"><button type="button" class="secondary" data-gallery-tree-action="collapse-all">' . e(t('admin.dashboard.collapse_all', 'Collapse all')) . '</button><button type="button" class="secondary" data-gallery-tree-action="expand-all">' . e(t('admin.dashboard.expand_all', 'Expand all')) . '</button></span></div></div>';
     echo '<div class="admin-gallery-table-shell"><table class="admin-gallery-order-table admin-gallery-tree-table" data-admin-gallery-order-table><thead><tr><th class="admin-gallery-select-heading">' . e(t('admin.dashboard.column_select', 'Select')) . '</th><th>' . e(t('admin.dashboard.column_gallery', 'Gallery')) . '</th><th>' . e(t('admin.dashboard.column_state', 'State')) . '</th><th>' . e(t('admin.dashboard.column_features', 'Features')) . '</th><th class="admin-gallery-count-heading">' . e(t('admin.dashboard.column_images', 'Images')) . '</th><th class="admin-gallery-actions-heading">' . e(t('admin.dashboard.column_actions', 'Actions')) . '</th></tr></thead><tbody>';
     foreach ($galleries as $gallery) {
         // Variable $depth stores this steps working value.
@@ -221,43 +214,113 @@ function view_render_admin_dashboard_galleries_panel(array $model): void
         } else {
             echo '<span class="admin-gallery-preview is-empty" aria-hidden="true"><span>' . e(t('admin.dashboard.empty_gallery_preview', 'Gallery')) . '</span></span>';
         }
-        echo '<div class="admin-gallery-summary-text"><span class="tree-title ' . e($depthClass) . '">' . ($hasChildren ? '<button type="button" class="tree-toggle" data-gallery-toggle="' . (int) $gallery['id'] . '" aria-expanded="' . ($isCollapsed ? 'false' : 'true') . '">' . ($isCollapsed ? '+' : '-') . '</button>' : '<span class="tree-spacer" aria-hidden="true"></span>') . ($depth > 0 ? '<span class="tree-branch" aria-hidden="true"></span>' : '') . '<a class="admin-gallery-title-link" href="' . e(gallery_public_url($gallery)) . '">' . e($gallery['title']) . '</a></span><span class="admin-gallery-path">' . e($gallery['folder_path']) . '</span>' . ((string) ($gallery['parent_title'] ?: '') !== '' ? '<span class="admin-gallery-parent">' . e(t('admin.dashboard.parent_label', 'Parent:')) . ' ' . e((string) $gallery['parent_title']) . '</span>' : '') . '</div></div></td>';
+        echo '<div class="admin-gallery-summary-text"><span class="tree-title ' . e($depthClass) . '">' . ($hasChildren ? '<button type="button" class="tree-toggle" data-gallery-toggle="' . (int) $gallery['id'] . '" aria-expanded="' . ($isCollapsed ? 'false' : 'true') . '">' . ($isCollapsed ? '+' : '-') . '</button>' : '<span class="tree-spacer" aria-hidden="true"></span>') . ($depth > 0 ? '<span class="tree-branch" aria-hidden="true"></span>' : '') . '<a class="admin-gallery-title-link" href="' . e(gallery_public_url($gallery)) . '">' . e($gallery['title']) . '</a></span><span class="admin-gallery-path" title="' . e((string) $gallery['folder_path'] . ((string) ($gallery['parent_title'] ?? '') !== '' ? ' | ' . t('admin.dashboard.parent_label', 'Parent:') . ' ' . (string) $gallery['parent_title'] : '')) . '">' . e($gallery['folder_path']) . '</span>' . ((string) ($gallery['parent_title'] ?: '') !== '' ? '<span class="admin-gallery-parent">' . e(t('admin.dashboard.parent_label', 'Parent:')) . ' ' . e((string) $gallery['parent_title']) . '</span>' : '') . '</div></div></td>';
         echo '<td class="admin-gallery-state-cell"><span class="admin-gallery-status-pill is-' . e((string) ($gallery['view_visibility'] ?? 'unpublished')) . '">' . e((string) ($gallery['view_visibility_label'] ?? ($gallery['view_visibility'] ?? 'unpublished'))) . '</span>';
+        if (is_array($gallery['view_visibility_menu'] ?? null)) {
+            view_render_public_admin_visibility_menu($gallery['view_visibility_menu']);
+        }
         if ($accessReady) {
             // $accessLabel stores an intermediate value used by the surrounding gallery workflow.
-            $accessLabel = (string) ($gallery['access_mode'] ?? 'normal') === 'password' ? (!empty($gallery['access_password_hash']) ? '' . t('admin.dashboard.access_password_locked', 'Password locked') . '' : '' . t('admin.dashboard.access_direct_link_token', 'Direct-link token') . '') : '' . t('admin.dashboard.access_no_password', 'No password') . '';
-            echo '<span class="admin-gallery-access-label">' . e($accessLabel) . '</span>';
+            $accessLabel = (string) ($gallery['access_mode'] ?? 'normal') === 'password' ? (!empty($gallery['view_own_password_enabled']) ? t('admin.dashboard.access_password_locked', 'Password locked') : t('admin.dashboard.access_direct_link_token', 'Direct-link token')) : t('admin.dashboard.access_no_password', 'No password');
+            view_render_admin_gallery_password_control((array) ($gallery['view_password_control'] ?? []), $accessLabel);
         }
         $galleryGpsMapsEnabled = $gpsMapReady && !empty($gallery['view_gps_map_enabled']);
-        echo '</td><td class="admin-gallery-feature-cell"><span class="admin-gallery-feature" title="' . e(t('admin.dashboard.feature_maps', 'Maps')) . '">M ' . view_render_admin_feature_flag($galleryGpsMapsEnabled, '&#10003;', '' . t('admin.dashboard.feature_gps_maps_enabled', 'GPS maps enabled') . '') . '</span>';
-        echo '<span class="admin-gallery-feature" title="' . e(t('admin.dashboard.feature_background', 'Background')) . '">B ' . view_render_admin_feature_flag(!empty($gallery['view_background_source_set']), '&#10003;', '' . t('admin.dashboard.feature_custom_background_set', 'Custom gallery background set') . '') . '</span>';
+        echo '</td><td class="admin-gallery-feature-cell">' . view_render_admin_gallery_feature_control($gallery, 'maps', t('admin.dashboard.feature_maps', 'Maps'), $galleryGpsMapsEnabled, $gpsMapReady && $gpsMapOverrideReady);
+        echo view_render_admin_gallery_feature_control($gallery, 'background', t('admin.dashboard.feature_background', 'Background'), !empty($gallery['view_background_source_set']), false);
         if ($filenameDisplayReady) {
-            echo '<span class="admin-gallery-feature" title="' . e(t('admin.dashboard.feature_file_names_shown', 'File names shown')) . '">N ' . view_render_admin_feature_flag((int) ($gallery['show_filenames'] ?? 0) === 1, '&#10003;', '' . t('admin.dashboard.feature_file_names_are_shown', 'File names are shown') . '') . '</span>';
+            echo view_render_admin_gallery_feature_control($gallery, 'filenames', t('admin.dashboard.feature_file_names_shown', 'File names shown'), (int) ($gallery['show_filenames'] ?? 0) === 1, true);
         }
         if ($votingReady) {
-            echo '<span class="admin-gallery-feature" title="' . e(t('admin.dashboard.feature_voting', 'Voting')) . '">V ' . view_render_admin_feature_flag((int) ($gallery['voting_enabled'] ?? 0) === 1, '&#10003;', '' . t('admin.dashboard.feature_voting_enabled', 'Voting enabled') . '') . '</span>';
+            echo view_render_admin_gallery_feature_control($gallery, 'voting', t('admin.dashboard.feature_voting', 'Voting'), (int) ($gallery['voting_enabled'] ?? 0) === 1, true);
         }
         if ($pictureGameReady) {
-            echo '<span class="admin-gallery-feature" title="' . e(t('admin.dashboard.feature_game', 'Game')) . '">G ' . view_render_admin_feature_flag((int) ($gallery['picture_game_enabled'] ?? 0) === 1, '&#10003;', '' . t('admin.dashboard.feature_picture_game_enabled', 'Picture game enabled') . '') . '</span>';
+            echo view_render_admin_gallery_feature_control($gallery, 'game', t('admin.dashboard.feature_game', 'Game'), (int) ($gallery['picture_game_enabled'] ?? 0) === 1, true);
         }
-        echo '</td><td class="admin-gallery-image-count"><strong>' . (int) $gallery['image_count'] . '</strong></td><td class="nav gallery-row-actions">';
+        echo '</td><td class="admin-gallery-image-count"><strong class="admin-gallery-count-direct">' . e(t('admin.gallery_list.photos_direct', '{count} here', ['count' => (int) $gallery['image_count']])) . '</strong>';
+        if ((int) ($gallery['view_subgallery_count'] ?? 0) > 0) {
+            echo '<span class="admin-gallery-count-subgalleries">' . e(t('admin.gallery_list.photos_descendants', '{count} in subgalleries', ['count' => (int) ($gallery['view_subgallery_image_count'] ?? 0)])) . '</span>';
+        }
+        echo '</td><td class="gallery-row-actions">';
         echo '<div class="gallery-row-action-set" aria-label="' . e(t('admin.dashboard.actions_for', 'Actions for')) . ' ' . e((string) $gallery['title']) . '">';
         echo '<a class="gallery-row-action is-edit-action" href="' . e(url_for('admin_edit_gallery', ['id' => $gallery['id']])) . '" aria-label="' . e(t('admin.dashboard.edit_action', 'Edit')) . ' ' . e((string) $gallery['title']) . '" title="' . e(t('admin.dashboard.edit_gallery', 'Edit gallery')) . '"><span class="gallery-row-action-icon" aria-hidden="true">&#9998;</span><span class="admin-visually-hidden">' . e(t('admin.dashboard.edit', 'Edit')) . '</span></a>';
         echo '<button type="submit" class="secondary gallery-row-action is-thumbnail-action" name="thumbnail_gallery_id" value="' . (int) $gallery['id'] . '" formaction="' . e(url_for('admin_create_thumbnails')) . '" aria-label="' . e(t('admin.dashboard.create_thumbnails_for', 'Create thumbnails for')) . ' ' . e((string) $gallery['title']) . '" title="' . e(t('admin.dashboard.create_thumbnails', 'Create thumbnails')) . '"><span class="gallery-row-action-icon" aria-hidden="true">&#9639;</span><span class="admin-visually-hidden">' . e(t('admin.dashboard.thumbs', 'Thumbs')) . '</span></button>';
         echo '</div></td></tr>';
     }
-    echo '</tbody></table></div></section></form>';
+    echo '</tbody></table></div><div class="admin-gallery-feature-pending" data-gallery-feature-pending hidden><span data-gallery-feature-pending-status aria-live="polite"></span><button type="button" data-gallery-feature-review>' . e(t('admin.gallery_list.review_changes', 'Review changes')) . '</button><button type="button" class="secondary" data-gallery-feature-discard>' . e(t('admin.gallery_list.discard_changes', 'Discard')) . '</button></div><dialog class="admin-gallery-feature-dialog" data-gallery-feature-dialog aria-label="' . e(t('admin.gallery_list.review_title', 'Confirm gallery changes')) . '"></dialog></section></form>';
+}
+
+/**
+ * Render an aggregate feature state and an optional local preparation button.
+ * @param array<string,mixed> $gallery Prepared row with subtree states and counts.
+ * @param string $key Canonical feature identifier.
+ * @param string $label Localized feature name.
+ * @param bool $directEnabled Presentation fallback for historical fixtures.
+ * @param bool $writable Whether this verified feature supports staged changes.
+ * @return string Escaped control; clicking prepares an intent without submitting the bulk form.
+ */
+function view_render_admin_gallery_feature_control(array $gallery, string $key, string $label, bool $directEnabled, bool $writable): string
+{
+    $state = (string) ($gallery['view_feature_states'][$key] ?? ($directEnabled ? 'on' : 'off'));
+    $state = in_array($state, ['on', 'off', 'mixed'], true) ? $state : 'off';
+    $counts = (array) ($gallery['view_feature_counts'][$key] ?? ['on' => $directEnabled ? 1 : 0, 'total' => 1]);
+    $total = max(1, (int) ($counts['total'] ?? 1));
+    $on = max(0, min($total, (int) ($counts['on'] ?? 0)));
+    $description = $state === 'mixed'
+        ? t('admin.gallery_list.feature_mixed', 'Enabled in {on} of {total} galleries', ['on' => $on, 'total' => $total])
+        : ($state === 'on'
+            ? t('admin.gallery_list.feature_all_on', 'Enabled in all {count} galleries', ['count' => $total])
+            : t('admin.gallery_list.feature_all_off', 'Disabled in all {count} galleries', ['count' => $total]));
+    $tag = $writable ? 'button' : 'span';
+    $attributes = $writable ? ' type="button" data-gallery-feature-key="' . e($key) . '" data-gallery-feature-root-id="' . (int) $gallery['id'] . '" data-gallery-feature-state="' . e($state) . '" data-gallery-feature-own-state="' . ($directEnabled ? 'on' : 'off') . '" data-on-count="' . $on . '" data-total-count="' . $total . '" aria-pressed="' . ($state === 'mixed' ? 'mixed' : ($state === 'on' ? 'true' : 'false')) . '"' : '';
+    $marker = $state === 'on' ? '&#10003;' : ($state === 'mixed' ? '&#8722;' : '&#9675;');
+    return '<' . $tag . ' class="admin-gallery-feature is-' . e($state) . '"' . $attributes . ' title="' . e($label . ': ' . $description) . '"><span>' . e($label) . '</span><span class="admin-gallery-feature-marker" aria-hidden="true">' . $marker . '</span><span class="admin-visually-hidden">: ' . e($description) . '</span></' . $tag . '>';
+}
+
+/**
+ * Render a single-gallery password control without putting a password in the bulk form.
+ * @param array<string,mixed> $control Controller-prepared safe destination and revision.
+ * @param string $label Current localized access label.
+ * @return void Emits a local editor or the read-only label when storage is unavailable.
+ */
+function view_render_admin_gallery_password_control(array $control, string $label): void
+{
+    if ($control === []) {
+        echo '<span class="admin-gallery-access-label">' . e($label) . '</span>';
+        return;
+    }
+    echo '<div class="admin-gallery-password-control" data-admin-gallery-password data-action-url="' . e((string) $control['action_url']) . '" data-gallery-id="' . (int) $control['gallery_id'] . '" data-edit-revision="' . (int) $control['edit_revision'] . '" data-password-enabled="' . (!empty($control['enabled']) ? '1' : '0') . '" data-error-message="' . e(t('gallery.password_save_failed', 'Gallery password could not be saved.')) . '" data-password-required="' . e(t('gallery.password_required', 'Enter a gallery password.')) . '"><button type="button" class="admin-gallery-access-label" data-admin-gallery-password-toggle>' . e($label) . '</button>';
+    echo '<div class="admin-gallery-password-editor" data-admin-gallery-password-editor hidden><label>' . e(t('admin.gallery_editor.new_gallery_password', 'New gallery password')) . '<input type="password" autocomplete="new-password" data-admin-gallery-password-input></label><button type="button" data-admin-gallery-password-save>' . e(t('admin.common.save', 'Save')) . '</button></div><span class="admin-gallery-quick-status" data-admin-gallery-quick-status aria-live="polite"></span></div>';
+}
+
+/**
+ * Render a named, accessible feature state from already prepared row values.
+ *
+ * @param string $label Localized feature name shown in the table.
+ * @param bool $enabled Resolved state supplied by the owning gallery view model.
+ * @param string $enabledDescription Localized explanation retained for an enabled feature.
+ * @return string Escaped label with a visible state marker and an accessible state name.
+ */
+function view_render_admin_gallery_feature_state(string $label, bool $enabled, string $enabledDescription): string
+{
+    $stateLabel = $enabled ? t('admin.common.enabled', 'Enabled') : t('admin.common.disabled', 'Disabled');
+    return '<span class="admin-gallery-feature ' . ($enabled ? 'is-enabled' : 'is-disabled') . '" title="' . e($enabled ? $enabledDescription : $label . ': ' . $stateLabel) . '"><span>' . e($label) . '</span><span class="admin-flag ' . ($enabled ? 'is-enabled' : 'is-disabled') . '" aria-hidden="true">' . ($enabled ? '&#10003;' : '&ndash;') . '</span><span class="admin-visually-hidden">: ' . e($stateLabel) . '</span></span>';
 }
 
 /**
  * Render a retryable read placeholder with a functional direct-page fallback.
  *
  * @param string $surface overview or galleries; supplied by the owning dashboard view.
+ * @param array<string,mixed>|null $loadedModel Prepared Galleries model when rendered on the initial request.
  * @return void Outputs a loading region without pretending that uncomputed totals are zero.
  */
-function view_render_admin_dashboard_deferred_read(string $surface): void
+function view_render_admin_dashboard_deferred_read(string $surface, ?array $loadedModel = null): void
 {
-    echo '<div class="admin-dashboard-read" data-dashboard-read="' . e($surface) . '" data-endpoint="' . e(url_for('admin_dashboard_fragment', ['surface' => $surface])) . '" data-error="' . e(t('admin.dashboard.load_failed', 'Could not load this section. Try again.')) . '" data-retry="' . e(t('admin.dashboard.retry', 'Try again')) . '">';
+    echo '<div class="admin-dashboard-read" data-dashboard-read="' . e($surface) . '" data-dashboard-loaded="' . ($loadedModel !== null ? '1' : '0') . '" data-endpoint="' . e(url_for('admin_dashboard_fragment', ['surface' => $surface])) . '" data-error="' . e(t('admin.dashboard.load_failed', 'Could not load this section. Try again.')) . '" data-retry="' . e(t('admin.dashboard.retry', 'Try again')) . '">';
+    if ($loadedModel !== null) {
+        view_render_admin_dashboard_galleries_panel($loadedModel);
+        echo '</div>';
+        return;
+    }
     if ($surface === 'overview') {
         $cards = [];
         foreach (['metric_galleries' => 'Galleries', 'metric_top_level_images' => 'Top-level images', 'metric_thumbnail_gaps' => 'Thumbnail gaps', 'metric_system_state' => 'System state'] as $key => $label) {
@@ -306,42 +369,46 @@ function view_render_admin_url_rewrite_warning(array $model = []): void
 
 
 /**
- * Render the shared EXIF/GPS default display settings card.
+ * Render the global GPS map preference separately from bulk override resets.
  *
- * @param string $className Class name value.
- * @param bool $defaultEnabled Default enabled value.
- * @param int $overrideCount Override count value.
+ * @param string $className Row presentation class from the owning dashboard group.
+ * @param bool $defaultEnabled Prepared global map-display preference.
+ * @param int $overrideCount Prepared individual override count, retained for caller compatibility.
+ * @param array<string,mixed> $model Prepared global Settings URLs.
+ * @return void Emits only the global map preference with its owned Content return context.
  */
 function view_render_admin_exif_gps_defaults_card(string $className, bool $defaultEnabled, int $overrideCount, array $model = []): void
 {
     echo '<form method="post" action="' . e(url_for('admin_exif_gps_settings')) . '" class="' . e($className) . '">' . csrf_field();
-    echo '<strong>' . e(t('admin.dashboard.exif_gps_defaults', 'EXIF / GPS defaults')) . '</strong>';
-    echo '<span>' . e(t('admin.dashboard.exif_gps_defaults_hint', 'Global default is used by every gallery that has no explicit EXIF / GPS override.')) . '</span>';
-    echo '<label class="checkbox-label"><input type="checkbox" name="exif_gps_default_enabled" value="1"' . ($defaultEnabled ? ' checked' : '') . '> ' . e(t('admin.dashboard.exif_gps_default_enabled_label', 'Show EXIF GPS maps by default for all galleries')) . '</label>';
-    echo '<label class="checkbox-label"><input type="checkbox" name="reset_gallery_overrides" value="1"> ' . e(t('admin.dashboard.exif_gps_reset_overrides_label', 'Reset all per-gallery EXIF / GPS display overrides')) . '</label>';
-    echo '<span class="muted">' . e(t('admin.dashboard.exif_gps_override_count', 'Gallery override(s): {count}', ['count' => (string) $overrideCount])) . '</span>';
-    echo '<div class="nav"><button type="submit" class="secondary">' . e(t('admin.dashboard.save_exif_gps_defaults', 'Save EXIF / GPS defaults')) . '</button><a class="button secondary" href="' . e((string) (($model['admin_settings_urls']['media'] ?? url_for('admin_settings')))) . '">' . e(t('admin.settings.open_centralized', 'Open centralized settings')) . '</a></div></form>';
+    echo '<input type="hidden" name="maintenance_return" value="content"><div class="admin-content-copy"><strong>' . e(t('admin.dashboard.content_gps_title', 'GPS maps')) . '</strong><span>' . e(t('admin.dashboard.content_gps_hint', 'Default for galleries without a map override.')) . '</span></div>';
+    echo '<div class="admin-content-controls"><label class="admin-compact-toggle"><input type="checkbox" name="exif_gps_default_enabled" value="1" aria-label="' . e(t('admin.dashboard.content_gps_title', 'GPS maps')) . '"' . ($defaultEnabled ? ' checked' : '') . '> ' . e(t('admin.dashboard.content_enabled', 'Enabled')) . '</label></div>';
+    echo '<div class="admin-content-actions"><button type="submit" class="secondary" aria-label="' . e(t('admin.dashboard.content_save', 'Save') . ': ' . t('admin.dashboard.content_gps_title', 'GPS maps')) . '">' . e(t('admin.dashboard.content_save', 'Save')) . '</button><a href="' . e((string) (($model['admin_settings_urls']['media'] ?? url_for('admin_settings')))) . '">' . e(t('admin.dashboard.content_gps_settings', 'Map settings')) . '</a></div></form>';
 }
 
 /**
  * Render a dashboard card linking to the gallery date suggestion workflow.
  *
- * @param string $className Class name value.
+ * @param string $className Row presentation class from the owning dashboard group.
+ * @param array<string,mixed> $model Prepared effective gallery-date suggestion capability.
+ * @return void Emits the date workflow shortcut only when its capability is available.
  */
 function view_render_admin_gallery_dates_card(string $className, array $model = []): void
 {
     if (empty($model['feature_enabled']['exif_gallery_date_suggestions'])) {
         return;
     }
-    echo '<article class="' . e($className) . '"><strong>' . e(t('admin.dashboard.gallery_dates', 'Gallery dates')) . '</strong><span>' . e(t('admin.dashboard.gallery_dates_hint', 'Approve editable date ranges suggested from scanned EXIF capture dates, including subgalleries.')) . '</span><a class="button secondary" href="' . e(url_for('admin_gallery_dates')) . '">' . e(t('admin.dashboard.open_gallery_dates', 'Open gallery dates')) . '</a></article>';
+    echo '<article class="' . e($className) . '"><div class="admin-content-copy"><strong>' . e(t('admin.dashboard.gallery_dates', 'Gallery dates')) . '</strong><span title="' . e(t('admin.dashboard.gallery_dates_hint', 'Approve editable date ranges suggested from scanned EXIF capture dates, including subgalleries.')) . '">' . e(t('admin.dashboard.content_dates_hint', 'Review date ranges suggested from photo EXIF.')) . '</span></div><div class="admin-content-actions"><a class="button secondary" href="' . e(url_for('admin_gallery_dates')) . '">' . e(t('admin.dashboard.content_dates_action', 'Review dates')) . '</a></div></article>';
 }
 
 /**
  * Render the URL rewrite setting and compatibility summary.
  *
  * @param string $className Class name value.
+ * @param array<string,mixed> $model Prepared rewrite preference and compatibility diagnosis.
+ * @param bool $compact Whether to use the owned Content layout and return context.
+ * @return void Emits rewrite controls while retaining the historical layout for other callers.
  */
-function view_render_admin_url_rewrite_card(string $className, array $model = []): void
+function view_render_admin_url_rewrite_card(string $className, array $model = [], bool $compact = false): void
 {
     $enabled = !empty($model['url_rewrite_enabled']);
     $compatibility = is_array($model['url_rewrite_compatibility'] ?? null) ? $model['url_rewrite_compatibility'] : [];
@@ -355,6 +422,21 @@ function view_render_admin_url_rewrite_card(string $className, array $model = []
     ];
     $reason = (string) ($compatibility['reasons'][0] ?? t('admin.dashboard.url_rewrite_reason_unknown', 'No detailed compatibility signal is available for this request.'));
 
+    if ($compact) {
+        echo '<form method="post" action="' . e(url_for('admin_url_rewrite')) . '" class="' . e($className) . '">' . csrf_field() . '<input type="hidden" name="maintenance_return" value="content">';
+        echo '<div class="admin-content-copy"><div class="admin-content-title"><strong>' . e(t('admin.dashboard.content_rewrite_title', 'Clean public URLs')) . '</strong><small class="admin-content-status' . (in_array($status, ['unsupported', 'unknown'], true) ? ' is-attention' : '') . '"><span class="admin-content-status-label">' . e(t('admin.dashboard.url_rewrite_detected_status', 'Detected status:')) . '</span> ' . e($statusLabels[$status] ?? $statusLabels['unknown']) . '</small></div><span>' . e(t('admin.dashboard.content_rewrite_hint', 'Use readable gallery and photo URLs.')) . '</span>';
+        if (in_array($status, ['unsupported', 'unknown'], true)) {
+            echo '<span class="admin-content-status is-attention">' . e($reason) . '</span>';
+        }
+        view_render_admin_url_rewrite_warning($model);
+        echo '<details class="admin-content-details"><summary>' . e(t('admin.dashboard.content_details', 'Details')) . '</summary><p>' . e(t('admin.dashboard.url_rewrite_hint', 'Clean public URLs are enabled by default. Disable them only when your hosting cannot route rewritten paths.')) . '</p>';
+        if (!in_array($status, ['unsupported', 'unknown'], true)) {
+            echo '<p>' . e($reason) . '</p>';
+        }
+        echo '</details></div><div class="admin-content-controls"><label class="admin-compact-toggle"><input type="checkbox" name="url_rewrite_enabled" value="1" aria-label="' . e(t('admin.dashboard.content_rewrite_title', 'Clean public URLs')) . '"' . ($enabled ? ' checked' : '') . '> ' . e(t('admin.dashboard.content_enabled', 'Enabled')) . '</label></div><div class="admin-content-actions"><button type="submit" class="secondary" aria-label="' . e(t('admin.dashboard.content_save', 'Save') . ': ' . t('admin.dashboard.content_rewrite_title', 'Clean public URLs')) . '">' . e(t('admin.dashboard.content_save', 'Save')) . '</button></div></form>';
+        return;
+    }
+
     echo '<form method="post" action="' . e(url_for('admin_url_rewrite')) . '" class="' . e($className) . '">' . csrf_field();
     echo '<strong>' . e(t('admin.dashboard.url_rewrite_title', 'URL rewrite')) . '</strong>';
     echo '<span>' . e(t('admin.dashboard.url_rewrite_hint', 'Clean public URLs are enabled by default. Disable them only when your hosting cannot route rewritten paths.')) . '</span>';
@@ -367,52 +449,59 @@ function view_render_admin_url_rewrite_card(string $className, array $model = []
  * Render the admin maintenance card that refreshes local flight-map navdata.
  *
  * @param bool $flightNavdataReady Flight navdata ready value.
- * @param array $flightNavdataStatus Flight navdata status value.
+ * @param array<string,mixed> $flightNavdataStatus Prepared navdata freshness, totals and source status.
+ * @param string $returnPage Owned surface to preserve after fragment refresh or ordinary POST.
+ * @return void Emits the in-place refresh card.
  */
-function view_render_admin_navdata_maintenance_card(bool $flightNavdataReady, array $flightNavdataStatus): void
+function view_render_admin_navdata_maintenance_card(bool $flightNavdataReady, array $flightNavdataStatus, string $returnPage = 'admin'): void
 {
-    $confirmMessage = t('admin.dashboard.confirm_update_navdata', 'Download current OurAirports airports and navaids, then replace the local OurAirports lookup rows?');
+    $returnPage = $returnPage === 'admin_navdata' ? 'admin_navdata' : 'admin';
     $submittingText = t('admin.dashboard.updating_navdata', 'Updating navdata...');
     $hybridStatus = is_array($flightNavdataStatus['hybrid'] ?? null) ? $flightNavdataStatus['hybrid'] : [];
 
-    echo '<article class="admin-maintenance-card admin-navdata-update-card">';
-    echo '<div class="admin-maintenance-card-heading"><strong>' . e(t('admin.dashboard.flight_navdata', 'Flight map navdata')) . '</strong><a class="button secondary" href="' . e(url_for('admin_navdata')) . '">' . e(t('admin.dashboard.open_navdata_manager', 'Open manager')) . '</a></div>';
+    echo '<article class="admin-maintenance-card admin-navdata-update-card" data-navdata-card data-navdata-return-page="' . e($returnPage) . '">';
+    echo '<div class="admin-maintenance-card-heading"><strong>' . e(t('admin.dashboard.flight_navdata', 'Flight map navdata')) . '</strong>';
+    if ($returnPage === 'admin') {
+        echo '<a class="button secondary" href="' . e(url_for('admin_navdata')) . '">' . e(t('admin.dashboard.open_navdata_manager', 'Open manager')) . '</a>';
+    }
+    echo '</div>';
 
     if (!$flightNavdataReady) {
-        echo '<span>' . e(t('admin.dashboard.flight_navdata_requires_migration', 'Run database migrations before importing flight-map navdata.')) . '</span>';
+        echo '<p class="admin-navdata-import-note">' . e(t('admin.dashboard.flight_navdata_requires_migration', 'Run database migrations before importing flight-map navdata.')) . '</p>';
         echo '<button type="button" class="secondary" disabled>' . e(t('admin.dashboard.update_navdata', 'Update navdata')) . '</button></article>';
         return;
     }
 
+    echo '<form method="post" action="' . e(url_for('admin_update_navdata')) . '" class="admin-navdata-import-form" data-navdata-update-form data-navdata-auto-check="' . (!empty($flightNavdataStatus['refresh_due']) ? '1' : '0') . '" data-navdata-submitting-text="' . e($submittingText) . '">' . csrf_field();
+    echo '<input type="hidden" name="navdata_return_page" value="' . e($returnPage) . '">';
+    echo '<button type="submit" data-navdata-update-submit>' . e(t('admin.dashboard.update_navdata', 'Update navdata')) . '</button>';
+    echo '<div class="admin-navdata-update-status" data-navdata-update-status role="status" aria-live="polite" hidden><span class="admin-navdata-update-spinner" aria-hidden="true"></span><span data-navdata-status-text>' . e(t('admin.dashboard.navdata_update_in_progress', 'Downloading and importing navigation data in the background. You can use other pages.')) . '</span></div></form>';
+
     $lastUpdate = trim((string) ($flightNavdataStatus['last_update'] ?? ''));
-    $total = (int) ($flightNavdataStatus['total'] ?? 0);
-    $airportCount = (int) ($flightNavdataStatus['last_airports'] ?? 0);
-    $navaidCount = (int) ($flightNavdataStatus['last_navaids'] ?? 0);
-    $skippedCount = (int) ($flightNavdataStatus['last_skipped'] ?? 0);
-    $bundledCount = (int) ($hybridStatus['bundled_count'] ?? 0);
-
-    if ($lastUpdate !== '') {
-        echo '<span>' . e(t('admin.dashboard.flight_navdata_status', 'Local lookup rows: {total}. Last update: {updated}. Last import: {airports} airport identifier(s), {navaids} navaid(s), {skipped} skipped row(s).', [
-            'total' => $total,
-            'updated' => $lastUpdate,
-            'airports' => $airportCount,
-            'navaids' => $navaidCount,
-            'skipped' => $skippedCount,
-        ])) . '</span>';
-    } else {
-        echo '<span>' . e(t('admin.dashboard.flight_navdata_empty', 'No local route lookup data has been imported yet. Route maps can still use manual NAME@latitude,longitude points.')) . '</span>';
+    $metrics = [
+        [t('admin.navdata.total_points', 'Local points'), number_format((int) ($flightNavdataStatus['total'] ?? 0))],
+        [t('admin.navdata.last_update', 'Last update'), $lastUpdate !== '' ? $lastUpdate : t('admin.navdata.never_imported', 'Not imported yet')],
+        [t('admin.navdata.last_airports', 'Airport identifiers'), number_format((int) ($flightNavdataStatus['last_airports'] ?? 0))],
+        [t('admin.navdata.last_navaids', 'Navaids'), number_format((int) ($flightNavdataStatus['last_navaids'] ?? 0))],
+    ];
+    echo '<dl class="admin-navdata-import-metrics">';
+    foreach ($metrics as [$label, $value]) {
+        echo '<div><dt>' . e($label) . '</dt><dd>' . e($value) . '</dd></div>';
     }
-
-    echo '<span class="muted">' . e(t('admin.dashboard.flight_navdata_hybrid_status', 'Bundled fallback points: {bundled}. SimBrief OFPs are stored per gallery when imported.', [
-        'bundled' => $bundledCount,
-    ])) . '</span>';
-    echo '<span class="muted">' . e(t('admin.dashboard.flight_navdata_scope_hint', 'Imports airports and navaids from OurAirports for manual fallback lookup. SimBrief OFP coordinates are preferred for generated flight-route maps.')) . '</span>';
-
-    echo '<form method="post" action="' . e(url_for('admin_update_navdata')) . '" class="admin-navdata-update-card" data-navdata-update-form data-navdata-confirm="' . e($confirmMessage) . '" data-navdata-submitting-text="' . e($submittingText) . '">' . csrf_field();
-    echo '<div class="admin-navdata-update-status" data-navdata-update-status role="status" aria-live="polite" hidden><span class="admin-navdata-update-spinner" aria-hidden="true"></span><span>' . e(t('admin.dashboard.navdata_update_in_progress', 'Downloading and importing navdata. Keep this page open until the update completes.')) . '</span></div>';
-    echo '<button type="submit" class="secondary" data-navdata-update-submit>' . e(t('admin.dashboard.update_navdata', 'Update navdata')) . '</button></form>';
-
-
+    echo '</dl>';
+    if ($lastUpdate === '') {
+        echo '<p class="muted admin-navdata-import-note">' . e(t('admin.dashboard.flight_navdata_empty', 'No local route lookup data has been imported yet. Route maps can still use manual NAME@latitude,longitude points.')) . '</p>';
+    }
+    echo '<p class="muted admin-navdata-import-note">' . e(t('admin.dashboard.flight_navdata_scope_hint', 'Imports airports and navaids from OurAirports. It does not include full IFR fixes or SID/STAR procedure geometry.')) . '</p>';
+    echo '<details class="admin-navdata-import-details"><summary>' . e(t('admin.navdata.import_details', 'Import details')) . '</summary>';
+    echo '<p class="muted">' . e(t('admin.navdata.import_counts', 'Last import: {skipped} skipped rows, {deleted} stale rows removed.', [
+        'skipped' => number_format((int) ($flightNavdataStatus['last_skipped'] ?? 0)),
+        'deleted' => number_format((int) ($flightNavdataStatus['last_deleted'] ?? 0)),
+    ])) . '</p>';
+    echo '<p class="muted">' . e(t('admin.dashboard.flight_navdata_hybrid_status', 'Bundled fallback points: {bundled}. SimBrief OFPs are stored per gallery when imported.', [
+        'bundled' => (int) ($hybridStatus['bundled_count'] ?? 0),
+    ])) . '</p>';
+    echo '<p class="muted">' . e(t('admin.navdata.refresh_schedule', 'When this widget is visible, data older than a week refreshes in the background.')) . '</p></details>';
     echo '</article>';
 }
 

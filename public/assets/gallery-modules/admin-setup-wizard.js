@@ -11,7 +11,7 @@
  * Contact: https://github.com/klusik
  * License: MIT
  */
-import { setupThemeLivePreview } from './theme-form.js?v=20260929-setup-wizard-preview-v2';
+import { setupThemeLivePreview } from './theme-form.js?v=20261002-theme-layout-v1';
 
 /** Enable or disable one field's submitted values without losing its staged browser value.
  * @param {HTMLInputElement} include Inclusion checkbox.

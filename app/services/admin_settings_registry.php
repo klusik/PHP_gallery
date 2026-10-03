@@ -14,7 +14,7 @@
  *   - Keep stable section identifiers independent from translated labels
  *   - Describe canonical setting ownership without moving persistence into the view
  *   - Resolve safe current/default summaries for the central Settings hub
- *   - Whitelist the small set of settings that may be edited centrally
+ *   - Whitelist centrally editable preferences and coupled upload tuning
  *   - Redact sensitive settings before they reach presentation code
  *
  * Author:
@@ -41,6 +41,96 @@ use function Gallery\Core\cms_runtime_limit;
 use function Gallery\Core\url_for;
 
 require_once __DIR__ . '/site_url.php';
+
+/**
+ * Return the administrator preference for showing historical upload navigation.
+ *
+ * @return bool Whether the three legacy upload links should be visible.
+ */
+function admin_legacy_upload_navigation_enabled(): bool
+{
+    return app_setting('admin_legacy_upload_navigation_enabled', '0') === '1';
+}
+
+/**
+ * Describe centrally editable browser upload controls using canonical runtime limits.
+ *
+ * @return array<string,array<string,mixed>> Definitions with human-readable MB values.
+ */
+function admin_settings_browser_upload_definitions(): array
+{
+    $settings = browser_upload_settings();
+    $definitions = [];
+    foreach (['default_worker_count', 'max_worker_count', 'hard_worker_cap'] as $name) {
+        $definitions['browser_upload_' . $name] = ['current' => (string) $settings[$name], 'default' => (string) browser_upload_default_settings()[$name], 'validation' => ['min' => cms_runtime_limit('browser_upload.min_worker_count'), 'max' => cms_runtime_limit('browser_upload.hard_worker_cap'), 'step' => 1]];
+    }
+    $definitions['browser_upload_enabled'] = ['current' => $settings['enabled'] ? '1' : '0', 'default' => '1', 'validation' => []];
+    $definitions['browser_upload_batch_size_policy'] = ['current' => $settings['batch_size_policy'], 'default' => BROWSER_UPLOAD_BATCH_POLICY_LIMIT_RATIO, 'validation' => ['allowed' => [BROWSER_UPLOAD_BATCH_POLICY_LIMIT_RATIO]]];
+    $definitions['browser_upload_zip_size_threshold_ratio'] = ['current' => (string) $settings['zip_size_threshold_ratio'], 'default' => (string) cms_runtime_limit('browser_upload.default_zip_ratio'), 'validation' => ['min' => cms_runtime_limit('browser_upload.min_zip_ratio'), 'max' => cms_runtime_limit('browser_upload.max_zip_ratio'), 'step' => 0.01]];
+    $definitions['browser_upload_max_items_per_batch'] = ['current' => (string) $settings['max_items_per_batch'], 'default' => (string) cms_runtime_limit('browser_upload.default_max_items_per_batch'), 'validation' => ['min' => cms_runtime_limit('browser_upload.min_items_per_batch'), 'max' => cms_runtime_limit('browser_upload.max_items_per_batch'), 'step' => 1]];
+    foreach (['browser_upload_max_zip_batch_bytes' => ['max_zip_batch_bytes', 'browser_upload.default_max_zip_batch_bytes', 'browser_upload.min_max_zip_batch_bytes', 'browser_upload.hard_max_zip_batch_bytes'], 'browser_thumbnail_rebuild_source_chunk_bytes' => ['thumbnail_rebuild_source_chunk_bytes', 'browser_thumbnail_rebuild.default_chunk_bytes', 'browser_thumbnail_rebuild.min_chunk_bytes', 'browser_thumbnail_rebuild.hard_chunk_bytes']] as $id => $limits) {
+        $definitions[$id] = ['current' => (string) ($settings[$limits[0]] / 1048576), 'default' => (string) (cms_runtime_limit($limits[1]) / 1048576), 'validation' => ['min' => cms_runtime_limit($limits[2]) / 1048576, 'max' => cms_runtime_limit($limits[3]) / 1048576, 'step' => 0.01]];
+    }
+    return $definitions;
+}
+
+/**
+ * Strictly validate one browser upload field before coupled normalization.
+ *
+ * @param string $id Stable central setting identifier.
+ * @param string|int|float|bool $value Submitted scalar value, with sizes expressed in MB.
+ * @return string Canonical validated scalar value.
+ */
+function admin_settings_browser_upload_normalize_value(string $id, mixed $value): string
+{
+    $definition = admin_settings_browser_upload_definitions()[$id] ?? null;
+    if ($definition === null || !is_scalar($value)) {
+        throw new InvalidArgumentException('Invalid browser upload setting.');
+    }
+    $value = trim((string) $value);
+    if ($id === 'browser_upload_enabled') {
+        return admin_upload_auto_rename_setting_normalize($value === '' ? '0' : $value);
+    }
+    $validation = $definition['validation'];
+    if (isset($validation['allowed'])) {
+        if (!in_array($value, $validation['allowed'], true)) {
+            throw new InvalidArgumentException('Choose a supported upload batch policy.');
+        }
+        return $value;
+    }
+    $integer = $validation['step'] === 1;
+    if (!preg_match($integer ? '/^\d+$/' : '/^\d+(?:\.\d+)?$/', $value)
+        || !is_finite((float) $value) || (float) $value < $validation['min'] || (float) $value > $validation['max']) {
+        throw new InvalidArgumentException(t('admin.settings.uploads.invalid_number', 'Enter a number within the displayed limits.'));
+    }
+    return $integer ? (string) (int) $value : (string) (float) $value;
+}
+
+/**
+ * Prepare a complete browser upload patch and validate coupled worker bounds.
+ *
+ * @param array<string,string> $values Validated central values; absent fields stay unchanged.
+ * @return array<string,string> Canonical bulk-save input preserving omitted settings.
+ */
+function admin_settings_browser_upload_values(array $values): array
+{
+    $definitions = admin_settings_browser_upload_definitions();
+    if (array_diff_key($values, $definitions) !== []) {
+        throw new InvalidArgumentException('Unknown browser upload setting.');
+    }
+    $input = [];
+    foreach ($definitions as $id => $definition) {
+        $input[$id] = array_key_exists($id, $values)
+            ? admin_settings_browser_upload_normalize_value($id, $values[$id]) : $definition['current'];
+    }
+    if ((int) $input['browser_upload_default_worker_count'] > (int) $input['browser_upload_max_worker_count']
+        || (int) $input['browser_upload_max_worker_count'] > (int) $input['browser_upload_hard_worker_cap']) {
+        throw new InvalidArgumentException(t('admin.settings.uploads.invalid_workers', 'Default workers must not exceed maximum workers, and maximum workers must not exceed the hard cap.'));
+    }
+    $input['browser_upload_max_zip_batch_megabytes'] = $input['browser_upload_max_zip_batch_bytes'];
+    $input['browser_thumbnail_rebuild_source_chunk_megabytes'] = $input['browser_thumbnail_rebuild_source_chunk_bytes'];
+    return $input;
+}
 
 /**
  * Return the stable top-level Settings section taxonomy.
@@ -150,13 +240,7 @@ function admin_settings_specialized_catalog(): array
         ['theme_custom_css_preset', 'advanced', 'Custom CSS preset', 'Select and apply a built-in custom CSS starting point.', 'admin_theme', [], 'admin-theme-tab-custom-css'],
         ['theme_custom_css_import', 'advanced', 'Import custom CSS', 'Upload a custom stylesheet into the Theme editor.', 'admin_theme', [], 'admin-theme-tab-custom-css'],
 
-        // Upload pipeline.
-        ['browser_upload_max_worker_count', 'uploads', 'Maximum browser upload workers', 'Upper bound for browser preparation worker-pool parallelism.', 'admin_upload_settings', ['tab' => 'browser'], ''],
-        ['browser_upload_hard_worker_cap', 'uploads', 'Browser upload worker hard cap', 'Absolute safety cap for browser preparation workers.', 'admin_upload_settings', ['tab' => 'browser'], ''],
-        ['browser_upload_batch_size_policy', 'uploads', 'Browser upload batch policy', 'Choose how prepared ZIP batches are bounded against server limits.', 'admin_upload_settings', ['tab' => 'browser'], ''],
-        ['browser_upload_zip_size_threshold_ratio', 'uploads', 'Browser ZIP threshold ratio', 'Target fraction of the PHP upload limit used by each ZIP batch.', 'admin_upload_settings', ['tab' => 'browser'], ''],
-        ['browser_upload_max_zip_batch_bytes', 'uploads', 'Preferred browser ZIP batch target', 'Soft byte-size target for normal prepared ZIP batches; one atomic image package may exceed it up to the PHP upload limit.', 'admin_upload_settings', ['tab' => 'browser'], ''],
-        ['browser_thumbnail_rebuild_source_chunk', 'uploads', 'Browser thumbnail source chunk', 'Original-file download chunk size for browser thumbnail rebuilding.', 'admin_upload_settings', ['tab' => 'browser'], ''],
+        // Gallery-scoped upload credentials remain specialized.
         ['upload_api_key_management', 'advanced', 'Upload automation API keys', 'Create, revoke, and inspect gallery-scoped upload API credentials.', 'admin_api_manager', [], ''],
 
         // Telemetry and privacy.
@@ -375,7 +459,7 @@ function admin_settings_registry(bool $includeSessionSettings = false): array
     $pagination = pagination_global_settings();
     $homeGrid = function_exists('Gallery\\Services\\main_page_gallery_grid_settings') ? main_page_gallery_grid_settings() : $pagination;
     $tagGrid = tag_page_gallery_grid_settings();
-    $browserUpload = function_exists('Gallery\\Services\\browser_upload_settings') ? browser_upload_settings() : [];
+    $browserDefinitions = admin_settings_browser_upload_definitions();
     $theme = theme_settings();
 
     $registry = [
@@ -386,10 +470,10 @@ function admin_settings_registry(bool $includeSessionSettings = false): array
         'public_language_selector_languages' => admin_settings_entry('public_language_selector_languages', 'general', 'Viewer languages', 'Languages offered for each public viewer\'s browser-only preference; Admin and site-wide language settings are unchanged.', 'public_language_selector_languages', 'language-multicheckbox', CMS_SELECTABLE_LANGUAGES, translation_public_language_selector_languages(), 'admin_theme', [], 'admin-theme-tab-language', true, 'normal', ['allowed' => translation_supported_languages()]),
         'public_language_selector_design' => admin_settings_entry('public_language_selector_design', 'general', 'Viewer selector design', 'Choose five live-preview presets; configure flags, names, codes, colors, padding, margins, borders, sizing, layout, and reset controls.', CMS_PUBLIC_LANGUAGE_SELECTOR_DESIGN_KEY, 'language-selector-design', translation_public_language_selector_design_defaults(), translation_public_language_selector_design(), 'admin_theme', [], 'admin-theme-tab-language', true),
         'url_rewrite_enabled' => admin_settings_entry('url_rewrite_enabled', 'general', 'Clean public URLs', 'Controls whether generated public links prefer URL rewriting.', 'url_rewrite_enabled', 'checkbox', '1', url_rewrite_enabled() ? '1' : '0', 'admin', [], 'admin-tab-maintenance', true),
-        'public_home_search_enabled' => admin_settings_entry('public_home_search_enabled', 'general', 'Public search', 'Shows the public search interface when the feature is enabled.', 'public_home_search_enabled', 'checkbox', '0', public_home_search_enabled() ? '1' : '0', 'admin', [], 'admin-tab-maintenance', (!function_exists('Gallery\\Services\\feature_capability_effective_enabled') || feature_capability_effective_enabled('public_search'))),
+        'public_home_search_enabled' => admin_settings_entry('public_home_search_enabled', 'general', 'Public search', 'Shows the public search interface when the feature is enabled.', 'public_home_search_enabled', 'checkbox', '1', public_home_search_enabled() ? '1' : '0', 'admin', [], 'admin-tab-maintenance', (!function_exists('Gallery\\Services\\feature_capability_effective_enabled') || feature_capability_effective_enabled('public_search'))),
 
         'theme_page_width' => admin_settings_entry('theme_page_width', 'appearance', 'Page width', 'Global public page width mode.', 'theme_page_width', 'summary', 'default', (string) ($theme['page_width'] ?? 'default'), 'admin_theme', [], 'admin-theme-tab-appearance'),
-        'theme_gallery_description_layout' => admin_settings_entry('theme_gallery_description_layout', 'appearance', 'Gallery card layout', 'Global gallery-card description layout used unless a more specific override applies.', 'theme_gallery_description_layout', 'summary', 'vertical', theme_gallery_description_layout(), 'admin_theme', [], 'admin-theme-tab-layout'),
+        'theme_gallery_description_layout' => admin_settings_entry('theme_gallery_description_layout', 'appearance', 'Gallery card layout', 'Global gallery-card description layout used unless a more specific override applies.', 'theme_gallery_description_layout', 'summary', 'vertical', theme_gallery_description_layout(), 'admin_theme', ['appearance_subtab' => 'admin-theme-appearance-subtab-gallery-tags'], 'admin-theme-tab-appearance'),
         'pagination_enabled' => admin_settings_entry('pagination_enabled', 'appearance', 'Pagination', 'Global public list pagination switch.', 'pagination_enabled', 'summary', '0', !empty($pagination['enabled']) ? '1' : '0', 'admin_theme', [], 'admin-theme-tab-layout'),
         'pagination_columns' => admin_settings_entry('pagination_columns', 'appearance', 'Global grid columns', 'Default number of columns used by paginated public lists.', 'pagination_columns', 'number', defined('Gallery\\Services\\CMS_PAGINATION_DEFAULT_COLUMNS') ? (string) CMS_PAGINATION_DEFAULT_COLUMNS : '4', (string) ($pagination['columns'] ?? 4), 'admin_theme', [], 'admin-theme-tab-layout', false, 'normal', ['min' => 1, 'max' => defined('Gallery\\Services\\CMS_PAGINATION_MAX_COLUMNS') ? CMS_PAGINATION_MAX_COLUMNS : 12]),
         'pagination_rows' => admin_settings_entry('pagination_rows', 'appearance', 'Global grid rows', 'Default number of rows per paginated public list.', 'pagination_rows', 'number', defined('Gallery\\Services\\CMS_PAGINATION_DEFAULT_ROWS') ? (string) CMS_PAGINATION_DEFAULT_ROWS : '5', (string) ($pagination['rows'] ?? 5), 'admin_theme', [], 'admin-theme-tab-layout', false, 'normal', ['min' => 1, 'max' => defined('Gallery\\Services\\CMS_PAGINATION_MAX_ROWS') ? CMS_PAGINATION_MAX_ROWS : 50]),
@@ -408,12 +492,18 @@ function admin_settings_registry(bool $includeSessionSettings = false): array
         'exif_gps_maps_default_enabled' => admin_settings_entry('exif_gps_maps_default_enabled', 'media', 'EXIF / GPS public display', 'Global fallback used by galleries without an explicit GPS display override.', exif_gps_default_enabled_setting_key(), 'checkbox', '1', exif_gps_default_enabled() ? '1' : '0', 'admin', [], 'admin-tab-maintenance', exif_gps_override_schema_ready(), 'normal', [], !exif_gps_override_schema_ready()),
         'thumbnail_background_warmup_enabled' => admin_settings_entry('thumbnail_background_warmup_enabled', 'media', 'Public thumbnail self-healing', 'Allows guarded public requests to request background repair of missing thumbnails. Existing installations retain the historical enabled fallback.', 'thumbnail_background_warmup_enabled', 'summary', '1', function_exists('Gallery\Services\thumbnail_warmup_enabled') && thumbnail_warmup_enabled() ? '1' : '0', 'admin', ['maintenance_tab' => 'media'], 'admin-tab-maintenance', false, 'operational'),
 
-        'admin_upload_client_format_mode' => admin_settings_entry('admin_upload_client_format_mode', 'uploads', 'Upload source format policy', 'Controls which image formats the Admin upload picker accepts for client preparation.', 'admin_upload_client_format_mode', 'summary', 'server_supported', function_exists('Gallery\\Services\\admin_upload_client_format_mode') ? admin_upload_client_format_mode() : 'server_supported', 'admin_upload_settings', ['tab' => 'general']),
-        'admin_upload_auto_rename_enabled' => admin_settings_entry('admin_upload_auto_rename_enabled', 'uploads', 'Automatic upload rename', 'Controls whether imported uploads are automatically renamed by the existing upload pipeline.', 'admin_upload_auto_rename_enabled', 'summary', '1', function_exists('Gallery\\Services\\admin_upload_auto_rename_enabled') && admin_upload_auto_rename_enabled() ? '1' : '0', 'admin_upload_settings', ['tab' => 'general']),
-        'browser_upload_enabled' => admin_settings_entry('browser_upload_enabled', 'uploads', 'Browser-assisted uploads', 'Enables browser-side preparation and bounded ZIP upload batches.', 'browser_upload_enabled', 'summary', '1', !empty($browserUpload['enabled']) ? '1' : '0', 'admin_upload_settings', ['tab' => 'browser']),
-        'browser_upload_default_worker_count' => admin_settings_entry('browser_upload_default_worker_count', 'uploads', 'Browser upload workers', 'Default browser preparation worker count.', 'browser_upload_default_worker_count', 'number', (string) (int) cms_runtime_limit('browser_upload.default_worker_count'), (string) ($browserUpload['default_worker_count'] ?? (int) cms_runtime_limit('browser_upload.default_worker_count')), 'admin_upload_settings', ['tab' => 'browser'], '', false, 'normal', ['min' => (int) cms_runtime_limit('browser_upload.min_worker_count'), 'max' => (int) cms_runtime_limit('browser_upload.hard_worker_cap')]),
-        'browser_upload_max_items_per_batch' => admin_settings_entry('browser_upload_max_items_per_batch', 'uploads', 'Images per browser batch', 'Maximum number of prepared images in one browser upload batch.', 'browser_upload_max_items_per_batch', 'number', (string) (int) cms_runtime_limit('browser_upload.default_max_items_per_batch'), (string) ($browserUpload['max_items_per_batch'] ?? (int) cms_runtime_limit('browser_upload.default_max_items_per_batch')), 'admin_upload_settings', ['tab' => 'browser'], '', false, 'normal', ['min' => (int) cms_runtime_limit('browser_upload.min_items_per_batch'), 'max' => (int) cms_runtime_limit('browser_upload.max_items_per_batch')]),
-        'browser_thumbnail_rebuild_source_chunk_bytes' => admin_settings_entry('browser_thumbnail_rebuild_source_chunk_bytes', 'uploads', 'Thumbnail rebuild source chunk', 'Source ZIP chunk size used by the browser-side thumbnail rebuild workflow.', 'browser_thumbnail_rebuild_source_chunk_bytes', 'summary', (string) (int) cms_runtime_limit('browser_thumbnail_rebuild.default_chunk_bytes'), (string) ($browserUpload['thumbnail_rebuild_source_chunk_bytes'] ?? (int) cms_runtime_limit('browser_thumbnail_rebuild.default_chunk_bytes')), 'admin_upload_settings', ['tab' => 'browser']),
+        'admin_legacy_upload_navigation_enabled' => admin_settings_entry('admin_legacy_upload_navigation_enabled', 'uploads', 'Show legacy uploads', 'Show Upload photos, Upload settings, and Mobile uploads in the Admin menu. Hiding these links preserves existing routes and upload services.', 'admin_legacy_upload_navigation_enabled', 'checkbox', '0', admin_legacy_upload_navigation_enabled() ? '1' : '0', 'admin_upload_settings', [], '', true, 'normal', []),
+        'admin_upload_client_format_mode' => admin_settings_entry('admin_upload_client_format_mode', 'uploads', 'Upload source format policy', 'Choose which image formats the upload picker accepts.', 'admin_upload_client_format_mode', 'select', 'server_supported', admin_upload_client_format_mode(), 'admin_upload_settings', [], '', true, 'normal', ['allowed' => ['server_supported', 'phone_jpeg']]),
+        'admin_upload_auto_rename_enabled' => admin_settings_entry('admin_upload_auto_rename_enabled', 'uploads', 'Automatic upload rename', 'Automatically rename newly imported uploads.', 'admin_upload_auto_rename_enabled', 'checkbox', '1', admin_upload_auto_rename_enabled() ? '1' : '0', 'admin_upload_settings', [], '', true, 'normal', []),
+        'browser_upload_enabled' => admin_settings_entry('browser_upload_enabled', 'uploads', 'Browser-assisted uploads', 'Allow browser-side preparation and bounded ZIP batches.', 'browser_upload_enabled', 'checkbox', $browserDefinitions['browser_upload_enabled']['default'], $browserDefinitions['browser_upload_enabled']['current'], 'admin_upload_settings', [], '', true, 'normal', $browserDefinitions['browser_upload_enabled']['validation']),
+        'browser_upload_default_worker_count' => admin_settings_entry('browser_upload_default_worker_count', 'uploads', 'Default browser upload workers', 'Default preparation worker count.', 'browser_upload_default_worker_count', 'number', $browserDefinitions['browser_upload_default_worker_count']['default'], $browserDefinitions['browser_upload_default_worker_count']['current'], 'admin_upload_settings', [], '', true, 'normal', $browserDefinitions['browser_upload_default_worker_count']['validation']),
+        'browser_upload_max_worker_count' => admin_settings_entry('browser_upload_max_worker_count', 'uploads', 'Maximum browser upload workers', 'Upper bound for preparation workers.', 'browser_upload_max_worker_count', 'number', $browserDefinitions['browser_upload_max_worker_count']['default'], $browserDefinitions['browser_upload_max_worker_count']['current'], 'admin_upload_settings', [], '', true, 'normal', $browserDefinitions['browser_upload_max_worker_count']['validation']),
+        'browser_upload_hard_worker_cap' => admin_settings_entry('browser_upload_hard_worker_cap', 'uploads', 'Browser upload worker hard cap', 'Absolute worker safety cap.', 'browser_upload_hard_worker_cap', 'number', $browserDefinitions['browser_upload_hard_worker_cap']['default'], $browserDefinitions['browser_upload_hard_worker_cap']['current'], 'admin_upload_settings', [], '', true, 'normal', $browserDefinitions['browser_upload_hard_worker_cap']['validation']),
+        'browser_upload_batch_size_policy' => admin_settings_entry('browser_upload_batch_size_policy', 'uploads', 'Browser upload batch policy', 'Bound prepared ZIP batches against server upload limits.', 'browser_upload_batch_size_policy', 'select', $browserDefinitions['browser_upload_batch_size_policy']['default'], $browserDefinitions['browser_upload_batch_size_policy']['current'], 'admin_upload_settings', [], '', true, 'normal', $browserDefinitions['browser_upload_batch_size_policy']['validation']),
+        'browser_upload_zip_size_threshold_ratio' => admin_settings_entry('browser_upload_zip_size_threshold_ratio', 'uploads', 'Browser ZIP threshold ratio', 'Fraction of the PHP upload limit used by a ZIP batch.', 'browser_upload_zip_size_threshold_ratio', 'number', $browserDefinitions['browser_upload_zip_size_threshold_ratio']['default'], $browserDefinitions['browser_upload_zip_size_threshold_ratio']['current'], 'admin_upload_settings', [], '', true, 'normal', $browserDefinitions['browser_upload_zip_size_threshold_ratio']['validation']),
+        'browser_upload_max_items_per_batch' => admin_settings_entry('browser_upload_max_items_per_batch', 'uploads', 'Images per browser batch', 'Maximum prepared images in a batch.', 'browser_upload_max_items_per_batch', 'number', $browserDefinitions['browser_upload_max_items_per_batch']['default'], $browserDefinitions['browser_upload_max_items_per_batch']['current'], 'admin_upload_settings', [], '', true, 'normal', $browserDefinitions['browser_upload_max_items_per_batch']['validation']),
+        'browser_upload_max_zip_batch_bytes' => admin_settings_entry('browser_upload_max_zip_batch_bytes', 'uploads', 'Preferred browser ZIP batch target (MB)', 'Soft ZIP size target; an atomic image package may exceed it up to the PHP upload limit.', 'browser_upload_max_zip_batch_bytes', 'number', $browserDefinitions['browser_upload_max_zip_batch_bytes']['default'], $browserDefinitions['browser_upload_max_zip_batch_bytes']['current'], 'admin_upload_settings', [], '', true, 'normal', $browserDefinitions['browser_upload_max_zip_batch_bytes']['validation']),
+        'browser_thumbnail_rebuild_source_chunk_bytes' => admin_settings_entry('browser_thumbnail_rebuild_source_chunk_bytes', 'uploads', 'Thumbnail rebuild source chunk (MB)', 'Size of original-file ZIP chunks for browser thumbnail rebuilding.', 'browser_thumbnail_rebuild_source_chunk_bytes', 'number', $browserDefinitions['browser_thumbnail_rebuild_source_chunk_bytes']['default'], $browserDefinitions['browser_thumbnail_rebuild_source_chunk_bytes']['current'], 'admin_upload_settings', [], '', true, 'normal', $browserDefinitions['browser_thumbnail_rebuild_source_chunk_bytes']['validation']),
 
         'telemetry_enabled' => admin_settings_entry('telemetry_enabled', 'privacy', 'Telemetry subsystem', 'Master switch for local anonymous telemetry.', 'telemetry_enabled', 'summary', '0', telemetry_setting_enabled('telemetry_enabled', '0') ? '1' : '0', 'admin_telemetry', [], '', false, 'privacy', [], !telemetry_settings_schema_ready()),
         'telemetry_public_usage_enabled' => admin_settings_entry('telemetry_public_usage_enabled', 'privacy', 'Public usage telemetry', 'Anonymous public usage collection preference.', 'telemetry_public_usage_enabled', 'summary', '0', telemetry_setting_enabled('telemetry_public_usage_enabled', '0') ? '1' : '0', 'admin_telemetry', [], '', false, 'privacy', [], !telemetry_settings_schema_ready()),
@@ -457,6 +547,9 @@ function admin_settings_registry(bool $includeSessionSettings = false): array
  */
 function admin_settings_owner_for_id(string $id): string
 {
+    if ($id === 'admin_legacy_upload_navigation_enabled') {
+        return 'admin_settings_registry';
+    }
     if ($id === 'base_url') {
         return 'config.php / site_url';
     }
@@ -592,6 +685,15 @@ function admin_settings_normalize_editable_value(array $entry, mixed $value): mi
     }
 
     $id = (string) ($entry['id'] ?? '');
+    if (isset(admin_settings_browser_upload_definitions()[$id])) {
+        return admin_settings_browser_upload_normalize_value($id, $value);
+    }
+    if ($id === 'admin_upload_client_format_mode') {
+        return admin_upload_client_format_mode_validate($value);
+    }
+    if (in_array($id, ['admin_upload_auto_rename_enabled', 'admin_legacy_upload_navigation_enabled'], true)) {
+        return admin_upload_auto_rename_setting_normalize($value === '' ? '0' : $value);
+    }
     if ($id === 'base_url') {
         return site_url_normalize($value);
     }
@@ -655,6 +757,9 @@ function admin_settings_save_editable_value(string $id, mixed $value): void
     }
 
     match ($id) {
+        'admin_legacy_upload_navigation_enabled' => set_app_setting('admin_legacy_upload_navigation_enabled', (string) $value === '1' ? '1' : '0'),
+        'admin_upload_client_format_mode' => save_admin_upload_client_format_mode($value),
+        'admin_upload_auto_rename_enabled' => save_admin_upload_auto_rename_setting($value),
         'base_url' => site_url_save((string) $value),
         'site_name' => set_site_name((string) $value),
         'public_language' => translation_set_public_language((string) $value),

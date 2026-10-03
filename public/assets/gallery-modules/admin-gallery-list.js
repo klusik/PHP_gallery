@@ -34,17 +34,31 @@ import { i18n, setGalleryRowHiddenReason } from './admin-core.js?v=20260512-modu
 import { createTableDragGhost, createTableDragPlaceholder, moveTableDragGhostY } from './admin-table-drag-ghost.js?v=20260519-drag-ghost-v1';
 import { dispatchPublicPhotoMove, highlightPublicPhotoDropTarget, publicPhotoDropTargetAtPoint, publicPhotoDropTargetGalleryId, publicPhotoImageIdsFromItems, setPublicPhotoDropTargetsActive } from './public-photo-drop-actions.js?v=20260519-public-photo-drop-v1';
 
+/** @type {{filter:HTMLSelectElement, summaryListener:()=>void}|null} Current replaceable Admin filter listener owner. */
+let adminGalleryFilterBinding = null;
+/** @type {{table:Element, visibilityListener:()=>void}|null} Current replaceable Admin tree listener owner. */
+let adminGalleryTreeBinding = null;
+/** @type {WeakSet<Element>} Tables whose local reorder handlers have already been installed. */
+const adminGalleryReorderBindings = new WeakSet();
+
 // Function `setupAdminGalleryFilters` executes this focused behavior.
 /**
  * Handle setup admin gallery filters.
  *
  * Used by browser-side gallery behavior.
+ * @return {void} Binds the current filter once and retires the previous document summary listener.
  */
 export function setupAdminGalleryFilters() {
     // Variable `filter` stores this steps working value.
     const filter = document.querySelector('[data-gallery-visibility-filter]');
     if (!(filter instanceof HTMLSelectElement)) {
         return;
+    }
+    if (adminGalleryFilterBinding?.filter === filter) {
+        return;
+    }
+    if (adminGalleryFilterBinding) {
+        document.removeEventListener('galleryRowsChanged', adminGalleryFilterBinding.summaryListener);
     }
     // Variable `form` stores this steps working value.
     const form = filter.closest('form');
@@ -60,6 +74,7 @@ export function setupAdminGalleryFilters() {
      * Update summary.
      *
      * Used by browser-side gallery behavior.
+     * @return {void} Writes the current visible and matching gallery totals.
      */
     function updateSummary() {
         // displayed stores state or configuration for the gallery front-end flow.
@@ -110,6 +125,7 @@ export function setupAdminGalleryFilters() {
     }
 
     document.addEventListener('galleryRowsChanged', updateSummary);
+    adminGalleryFilterBinding = {filter, summaryListener: updateSummary};
     filter.addEventListener('change', applyFilter);
     applyFilter();
 }
@@ -120,13 +136,19 @@ export function setupAdminGalleryFilters() {
  *
  * Used by browser-side gallery behavior.
  *
- * @return {*} Result value for the caller.
+ * @return {void} Binds one current table and retires its predecessor's global tree listener.
  */
 export function setupAdminGalleryTree() {
     // Variable `table` stores this steps working value.
     const table = document.querySelector('[data-admin-gallery-order-table]');
     if (!table) {
         return;
+    }
+    if (adminGalleryTreeBinding?.table === table) {
+        return;
+    }
+    if (adminGalleryTreeBinding) {
+        document.removeEventListener('adminGalleryTreeMutated', adminGalleryTreeBinding.visibilityListener);
     }
     // Variable `csrf` stores this steps working value.
     const csrf = document.querySelector('input[name="csrf_token"]')?.value || '';
@@ -192,6 +214,7 @@ export function setupAdminGalleryTree() {
      *
      * @param {HTMLTableRowElement} row Gallery row to refresh.
      * @param {boolean} hasChildren Whether this row currently owns child rows.
+     * @return {void} Synchronizes a keyboard-accessible named chevron or an inert leaf spacer.
      */
     function syncRowToggle(row, hasChildren) {
         const title = row.querySelector('.tree-title');
@@ -203,16 +226,14 @@ export function setupAdminGalleryTree() {
         const existingSpacer = title.querySelector('.tree-spacer');
         if (hasChildren) {
             if (existingToggle) {
-                existingToggle.textContent = row.classList.contains('is-collapsed') ? '+' : '-';
-                existingToggle.setAttribute('aria-expanded', row.classList.contains('is-collapsed') ? 'false' : 'true');
+                syncTogglePresentation(existingToggle, row);
                 return;
             }
             const toggle = document.createElement('button');
             toggle.type = 'button';
             toggle.className = 'tree-toggle';
             toggle.dataset.galleryToggle = galleryId;
-            toggle.textContent = row.classList.contains('is-collapsed') ? '+' : '-';
-            toggle.setAttribute('aria-expanded', row.classList.contains('is-collapsed') ? 'false' : 'true');
+            syncTogglePresentation(toggle, row);
             existingSpacer?.remove();
             title.insertBefore(toggle, title.firstChild);
             return;
@@ -225,6 +246,28 @@ export function setupAdminGalleryTree() {
             spacer.setAttribute('aria-hidden', 'true');
             title.insertBefore(spacer, title.firstChild);
         }
+    }
+
+    /**
+     * Present a thin CSS chevron while retaining named expand/collapse semantics.
+     * @param {HTMLButtonElement} toggle Existing or dynamically created tree control.
+     * @param {HTMLTableRowElement} row Gallery row whose expansion state is authoritative.
+     * @return {void} Updates expansion, tooltip, accessible name and hidden text together.
+     */
+    function syncTogglePresentation(toggle, row) {
+        const collapsed = row.classList.contains('is-collapsed');
+        const gallery = row.dataset.galleryTitle || row.querySelector('.admin-gallery-title-link')?.textContent?.trim() || i18n('admin.gallery_list.gallery_fallback', 'Gallery');
+        const label = collapsed
+            ? i18n('admin.gallery_list.expand_named', 'Expand {gallery}', {gallery})
+            : i18n('admin.gallery_list.collapse_named', 'Collapse {gallery}', {gallery});
+        const text = document.createElement('span');
+        text.className = 'admin-visually-hidden';
+        text.setAttribute('aria-hidden', 'true');
+        text.textContent = collapsed ? '+' : '-';
+        toggle.replaceChildren(text);
+        toggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+        toggle.setAttribute('aria-label', label);
+        toggle.title = label;
     }
 
         /**
@@ -287,7 +330,11 @@ export function setupAdminGalleryTree() {
         document.dispatchEvent(new Event('galleryRowsChanged'));
     }
 
-    table.addEventListener('click', (event) => {
+    table.addEventListener('click', /**
+     * Toggle one gallery subtree and synchronize its named disclosure control.
+     * @param {MouseEvent} event Delegated click from the gallery table.
+     * @return {void} Updates visibility and persists the existing collapse preference.
+     */ (event) => {
         const button = event.target instanceof Element ? event.target.closest('[data-gallery-toggle]') : null;
         if (!button) {
             return;
@@ -300,26 +347,35 @@ export function setupAdminGalleryTree() {
         // Variable `collapsed` stores this steps working value.
         const collapsed = !row.classList.contains('is-collapsed');
         row.classList.toggle('is-collapsed', collapsed);
-        button.textContent = collapsed ? '+' : '-';
-        button.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+        syncTogglePresentation(button, row);
         refreshVisibility();
         save();
     });
 
-    document.querySelectorAll('[data-gallery-tree-action]').forEach((button) => {
-        button.addEventListener('click', () => {
+    document.querySelectorAll('[data-gallery-tree-action]').forEach(/**
+     * Bind the existing collapse-all or expand-all command.
+     * @param {HTMLButtonElement} button Native tree command control.
+     * @return {void} Attaches its click handler once during tree setup.
+     */ (button) => {
+        button.addEventListener('click', /**
+         * Apply a shared expansion state to all current parent rows.
+         * @return {void} Refreshes controls, visibility and the existing collapse preference.
+         */ () => {
             // Variable `collapse` stores this steps working value.
             const collapse = button.dataset.galleryTreeAction === 'collapse-all';
             syncTreeControls();
-            currentRows().forEach((row) => {
+            currentRows().forEach(/**
+             * Synchronize one current parent's state and accessible chevron.
+             * @param {HTMLTableRowElement} row Gallery row in the current tree.
+             * @return {void} Updates only rows that have a disclosure control.
+             */ (row) => {
                 // Variable `toggle` stores this steps working value.
                 const toggle = row.querySelector('[data-gallery-toggle]');
                 if (!toggle) {
                     return;
                 }
                 row.classList.toggle('is-collapsed', collapse);
-                toggle.textContent = collapse ? '+' : '-';
-                toggle.setAttribute('aria-expanded', collapse ? 'false' : 'true');
+                syncTogglePresentation(toggle, row);
             });
             refreshVisibility();
             save();
@@ -327,6 +383,7 @@ export function setupAdminGalleryTree() {
     });
 
     document.addEventListener('adminGalleryTreeMutated', refreshVisibility);
+    adminGalleryTreeBinding = {table, visibilityListener: refreshVisibility};
     refreshVisibility();
 }
 
@@ -360,9 +417,14 @@ export function setupAdminGalleryReordering() {
     const reorderUrl = toolbar.dataset.reorderUrl || '';
     // csrfInput stores the CSRF token generated by the PHP form helper.
     const csrfInput = form.querySelector('input[name="csrf_token"]');
+    const visibilityFilter = form.querySelector('[data-gallery-visibility-filter]');
     if (!body || !reorderUrl || !csrfInput) {
         return;
     }
+    if (adminGalleryReorderBindings.has(table)) {
+        return;
+    }
+    adminGalleryReorderBindings.add(table);
 
     // indentWidth stores the horizontal distance that represents one tree level.
     const indentWidth = 28;
@@ -394,6 +456,31 @@ export function setupAdminGalleryReordering() {
     let suppressClickUntil = 0;
     // saveController stores the in-flight request controller so a newer drop can supersede an older save.
     let saveController = null;
+    // acknowledgedOrderSignature defers a verified save notification until the matching tree is idle.
+    let acknowledgedOrderSignature = null;
+
+    /**
+     * Require the complete visible status scope before changing gallery hierarchy.
+     * @return {boolean} Whether filtering permits gallery movement.
+     */
+    function galleryReorderingAllowed() {
+        return !visibilityFilter || visibilityFilter.value === 'all';
+    }
+
+    /**
+     * Explain filtered ordering while preserving an in-flight save status.
+     * @return {void} Updates only the idle or filter-blocked status.
+     */
+    function updateReorderingFilterStatus() {
+        if (saveController || draggedRows.length > 0) {
+            return;
+        }
+        if (!galleryReorderingAllowed()) {
+            setStatus(i18n('admin.gallery_list.filter_blocks_ordering', 'Choose All statuses to reorder or nest galleries.'), 'filtered');
+        } else {
+            setStatus(i18n('admin.gallery_list.ready', 'Gallery ordering ready.'), 'idle');
+        }
+    }
 
         /**
      * Updates the small status label above the gallery order table.
@@ -528,7 +615,7 @@ export function setupAdminGalleryReordering() {
      * @return {HTMLTableRowElement[]} Rows not currently hidden as part of the moved subtree.
      */
     function availableRows() {
-        return galleryRows().filter((row) => !row.classList.contains('is-reorder-hidden'));
+        return galleryRows().filter(/** Keep only visible insertion targets outside the dragged subtree. @param {HTMLTableRowElement} row Candidate gallery row. @return {boolean} Whether the row participates in target geometry. */ (row) => !row.hidden && !row.classList.contains('is-reorder-hidden'));
     }
 
         /**
@@ -555,7 +642,7 @@ export function setupAdminGalleryReordering() {
      */
     function rowBeforePlaceholder() {
         let previous = placeholderRow?.previousElementSibling || null;
-        while (previous && !previous.matches('[data-gallery-row]:not(.is-reorder-hidden)')) {
+        while (previous && (previous.hidden || !previous.matches('[data-gallery-row]:not(.is-reorder-hidden)'))) {
             previous = previous.previousElementSibling;
         }
         return previous;
@@ -578,15 +665,17 @@ export function setupAdminGalleryReordering() {
      * Updates placeholder indentation and status text for the current target depth.
      *
      * @param {number} depth Candidate depth for the moved gallery.
+     * @return {void} Updates localized direction feedback without changing tree persistence.
      */
     function applyPlaceholderDepth(depth) {
         proposedDepth = depth;
         const direction = depth > originalDepth ? 'right' : (depth < originalDepth ? 'left' : 'level');
         const levelDelta = Math.abs(depth - originalDepth);
-        const levelText = levelDelta === 1 ? '1 level' : `${levelDelta} levels`;
         const message = direction === 'right'
-            ? `→ Nest deeper (${levelText}).`
-            : (direction === 'left' ? `← Move out (${levelText}).` : '↓ Same level.');
+            ? i18n('admin.gallery_list.drag_nest', '→ Nest deeper ({count} level(s)).', {count: levelDelta})
+            : (direction === 'left'
+                ? i18n('admin.gallery_list.drag_unnest', '← Move out ({count} level(s)).', {count: levelDelta})
+                : i18n('admin.gallery_list.drag_same_level', '↓ Same level.'));
         if (placeholderRow) {
             const placeholderCell = placeholderRow.firstElementChild;
             placeholderRow.dataset.depth = String(depth);
@@ -779,15 +868,16 @@ export function setupAdminGalleryReordering() {
 
         /**
      * Updates visible parent labels and folder paths after a client-side tree move.
+     * @return {void} Synchronizes visible paths, parent labels, link targets, and path tooltips.
      */
     function refreshVisibleGalleryTreeMetadata() {
         const titlesById = new Map();
         const pathsById = new Map();
         const urlPathsById = new Map();
-        galleryRows().forEach((row) => {
+        galleryRows().forEach(/** Cache current gallery titles for localized parent metadata. @param {HTMLTableRowElement} row Gallery row in complete tree order. @return {void} Records the row title without changing its identity. */ (row) => {
             titlesById.set(row.dataset.galleryId || '', row.dataset.galleryTitle || row.querySelector('.admin-gallery-title-link')?.textContent?.trim() || i18n('admin.gallery_list.gallery_fallback', 'Gallery'));
         });
-        galleryRows().forEach((row) => {
+        galleryRows().forEach(/** Synchronize one row path and parent presentation from its serialized hierarchy. @param {HTMLTableRowElement} row Gallery row including collapsed descendants. @return {void} Refreshes visible and tooltip metadata with current link targets. */ (row) => {
             const id = row.dataset.galleryId || '';
             const parentId = row.dataset.parentId || '0';
             const folderName = galleryFolderName(row);
@@ -807,6 +897,9 @@ export function setupAdminGalleryReordering() {
             urlPathsById.set(id, nextUrlPath);
             if (pathLabel) {
                 pathLabel.textContent = nextPath;
+                pathLabel.title = nextPath + (parentId !== '0'
+                    ? ' | ' + i18n('admin.gallery_list.parent_label', 'Parent: {gallery}', {gallery: titlesById.get(parentId) || i18n('admin.gallery_list.gallery_fallback', 'Gallery')})
+                    : '');
             }
             refreshGalleryLink(row, nextUrlPath);
             if (parentLabel) {
@@ -821,8 +914,25 @@ export function setupAdminGalleryReordering() {
         });
     }
 
-        /**
-     * Sends the complete gallery order to PHP for validation and persistence.
+    /**
+     * Notify refresh consumers only when the last acknowledged tree remains current and idle.
+     * @return {void} Emits one success event, or retains it while a pointer gesture is active.
+     */
+    function notifyAcknowledgedGalleryOrder() {
+        if (acknowledgedOrderSignature === null || saveController || pendingDrag || draggedRows.length > 0) {
+            return;
+        }
+        const signature = acknowledgedOrderSignature;
+        acknowledgedOrderSignature = null;
+        if (!table.isConnected || currentGallerySignature() !== signature) {
+            return;
+        }
+        document.dispatchEvent(new CustomEvent('adminGalleryOrderSaved', {detail: {signature}}));
+    }
+
+    /**
+     * Send the complete gallery order and acknowledge only the latest successfully validated request.
+     * @return {Promise<void>} Updates save status and announces a matching idle tree after success.
      */
     async function saveGalleryTree() {
         if (saveController) {
@@ -832,6 +942,8 @@ export function setupAdminGalleryReordering() {
         bodyData.set('csrf_token', csrfInput.value);
         bodyData.set('gallery_tree', JSON.stringify(serializeGalleryTree()));
         bodyData.set('ajax', '1');
+        const submittedSignature = currentGallerySignature();
+        acknowledgedOrderSignature = null;
 
         const controller = new AbortController();
         saveController = controller;
@@ -856,15 +968,20 @@ export function setupAdminGalleryReordering() {
             if (!result.ok) {
                 throw new Error(result.message || i18n('admin.gallery_list.save_failed', 'Gallery order could not be saved.'));
             }
+            if (saveController !== controller || controller.signal.aborted) {
+                return;
+            }
+            acknowledgedOrderSignature = submittedSignature;
             setStatus(result.message || i18n('admin.gallery_list.saved', 'Gallery order saved.'), 'saved');
         } catch (error) {
-            if (error.name === 'AbortError') {
+            if (error.name === 'AbortError' || saveController !== controller || controller.signal.aborted) {
                 return;
             }
             setStatus(error.message || i18n('admin.gallery_list.save_failed', 'Gallery order could not be saved.'), 'error');
         } finally {
             if (saveController === controller) {
                 saveController = null;
+                notifyAcknowledgedGalleryOrder();
             }
         }
     }
@@ -914,18 +1031,23 @@ export function setupAdminGalleryReordering() {
         return true;
     }
 
-        /**
+    /**
      * Cancels the active gallery reorder operation.
+     * @return {void} Discards the gesture without replacing an earlier in-flight save status.
      */
     function cancelReorder() {
         if (!cleanupVisuals(false)) {
             return;
         }
-        setStatus(i18n('admin.gallery_list.unchanged', 'Gallery order unchanged.'), 'idle');
+        if (!saveController) {
+            setStatus(i18n('admin.gallery_list.unchanged', 'Gallery order unchanged.'), 'idle');
+        }
+        notifyAcknowledgedGalleryOrder();
     }
 
         /**
-     * Ends the current reorder operation and persists the new tree when it changed.
+    * Ends the current reorder operation and persists the new tree when it changed.
+     * @return {void} Saves a changed tree or releases a deferred acknowledgement of an unchanged tree.
      */
     function finishReorder() {
         if (draggedRows.length === 0) {
@@ -941,6 +1063,7 @@ export function setupAdminGalleryReordering() {
             return;
         }
         setStatus(i18n('admin.gallery_list.unchanged', 'Gallery order unchanged.'), 'idle');
+        notifyAcknowledgedGalleryOrder();
     }
 
         /**
@@ -958,15 +1081,20 @@ export function setupAdminGalleryReordering() {
     }
 
         /**
-     * Handles pointer release or cancellation for the active drag session.
+     * Commit pointer release or cancel the active gesture without persisting it.
      *
      * @param {PointerEvent} event Pointer event emitted anywhere in the document.
+     * @return {void} Finishes a released drag or discards a cancelled gesture.
      */
     function handleDocumentPointerEnd(event) {
         if (activePointerId !== null && event.pointerId !== activePointerId) {
             return;
         }
         event.preventDefault();
+        if (event.type === 'pointercancel') {
+            cancelReorder();
+            return;
+        }
         finishReorder();
     }
 
@@ -1084,12 +1212,14 @@ export function setupAdminGalleryReordering() {
      * Clears a pointer candidate when the admin clicked without dragging.
      *
      * @param {PointerEvent} event Pointer end event emitted before a drag officially starts.
+     * @return {void} Clears the matching candidate and releases a deferred save notification.
      */
     function handlePendingPointerEnd(event) {
         if (!pendingDrag || pendingDrag.pointerId !== event.pointerId) {
             return;
         }
         clearPendingDrag();
+        notifyAcknowledgedGalleryOrder();
     }
 
         /**
@@ -1109,12 +1239,14 @@ export function setupAdminGalleryReordering() {
 
         /**
      * Clears a mouse candidate when the admin clicked without dragging.
+     * @return {void} Clears the matching candidate and releases a deferred save notification.
      */
     function handlePendingMouseEnd() {
         if (!pendingDrag || !pendingDrag.mouseFallback) {
             return;
         }
         clearPendingDrag();
+        notifyAcknowledgedGalleryOrder();
     }
 
         /**
@@ -1125,8 +1257,13 @@ export function setupAdminGalleryReordering() {
      * @param {number} clientY Starting viewport Y coordinate.
      * @param {number|null} pointerId Pointer id for Pointer Events, or null for mouse fallback.
      * @param {boolean} mouseFallback Whether mouse events should be accepted for this session.
+     * @return {void} Arms only unfiltered Admin gallery movement.
      */
     function armGalleryDragZone(zone, clientX, clientY, pointerId, mouseFallback) {
+        if (!galleryReorderingAllowed()) {
+            updateReorderingFilterStatus();
+            return;
+        }
         if (draggedRows.length > 0) {
             return;
         }
@@ -1150,8 +1287,12 @@ export function setupAdminGalleryReordering() {
      * @param {number} clientY Starting viewport Y coordinate.
      * @param {number|null} pointerId Pointer id for Pointer Events, or null for mouse fallback.
      * @param {boolean} mouseFallback Whether mouse events should be accepted for this session.
+     * @return {void} Begins the permitted subtree drag without altering stored rows.
      */
     function startReorder(handle, clientX, clientY, pointerId, mouseFallback) {
+        if (!galleryReorderingAllowed()) {
+            return;
+        }
         const row = handle.closest('[data-gallery-row]');
         if (!row || draggedRows.length > 0) {
             return;
@@ -1224,7 +1365,14 @@ export function setupAdminGalleryReordering() {
         });
     });
 
-    setStatus(i18n('admin.gallery_list.ready', 'Gallery ordering ready.'), 'idle');
+    visibilityFilter?.addEventListener('change', /** Cancel an unfinished gesture when filtering changes its visible targets. @return {void} Keeps filtering separate from in-flight persistence. */ () => {
+        clearPendingDrag();
+        if (draggedRows.length > 0) {
+            cancelReorder();
+        }
+        updateReorderingFilterStatus();
+    });
+    updateReorderingFilterStatus();
 }
 
 /**

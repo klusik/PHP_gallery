@@ -41,6 +41,7 @@ return [
             'php-regression',
             'mvc-boundaries',
             'source-contract-inventory',
+            'python-import-policy',
             'source-documentation-changed',
             'source-policy-changed',
             'node-fast',
@@ -54,6 +55,7 @@ return [
             'php-regression',
             'mvc-boundaries',
             'source-contract-inventory',
+            'python-import-policy',
             'source-documentation-changed',
             'source-policy-changed',
             'node-full',
@@ -68,6 +70,7 @@ return [
             'php-regression',
             'mvc-boundaries',
             'source-contract-inventory',
+            'python-import-policy',
             'source-documentation-changed',
             'source-policy-changed',
             'node-full',
@@ -185,7 +188,67 @@ return [
             'browser' => true,
             'timeout' => 60,
         ],
+        'admin_upload_workspace_browser_test.mjs' => [
+            'browser' => true,
+            'timeout' => 60,
+        ],
         'admin_dashboard_workspace_browser_test.mjs' => [
+            'browser' => true,
+            'timeout' => 60,
+        ],
+        'admin_trash_confirmation_browser_test.mjs' => [
+            'browser' => true,
+            'timeout' => 60,
+        ],
+        'admin_gallery_tree_browser_test.mjs' => [
+            'browser' => true,
+            'php_argument' => true,
+            'timeout' => 60,
+        ],
+        'admin_gallery_quick_access_browser_test.mjs' => [
+            'browser' => true,
+            'timeout' => 60,
+        ],
+        'admin_gallery_features_browser_test.mjs' => [
+            'browser' => true,
+            'php_argument' => true,
+            'timeout' => 60,
+        ],
+        'theme_appearance_browser_test.mjs' => [
+            'browser' => true,
+            'php_argument' => true,
+            'timeout' => 60,
+        ],
+        'theme_media_browser_test.mjs' => [
+            'browser' => true,
+            'php_argument' => true,
+            'timeout' => 60,
+        ],
+        'theme_layout_browser_test.mjs' => [
+            'browser' => true,
+            'php_argument' => true,
+            'timeout' => 60,
+        ],
+        'theme_language_browser_test.mjs' => [
+            'browser' => true,
+            'php_argument' => true,
+            'timeout' => 60,
+        ],
+        'theme_custom_css_browser_test.mjs' => [
+            'browser' => true,
+            'php_argument' => true,
+            'timeout' => 60,
+        ],
+        'gallery_creation_browser_test.mjs' => [
+            'browser' => true,
+            'php_argument' => true,
+            'timeout' => 60,
+        ],
+        'admin_smart_galleries_browser_test.mjs' => [
+            'browser' => true,
+            'timeout' => 60,
+        ],
+        'public_home_creation_browser_test.mjs' => [
             'browser' => true,
             'timeout' => 60,
         ],

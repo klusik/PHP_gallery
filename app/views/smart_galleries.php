@@ -48,11 +48,13 @@ use function Gallery\Services\t;
  * Render the complete Smart Gallery administration page.
  *
  * @param array<string,mixed> $viewModel Controller-prepared admin page state.
+ * @return void Emits the compact list and optional editor workspace.
  */
 function view_render_admin_smart_galleries(array $viewModel): void
 {
     render_header((string) ($viewModel['page_title'] ?? ''));
-    echo '<section class="hero"><div><p class="admin-kicker">' . e(t('smart_gallery.kicker', 'Saved dynamic collections')) . '</p><h1>' . e(t('smart_gallery.admin_title', 'Smart Galleries')) . '</h1><p class="muted">' . e(t('smart_gallery.intro', 'Images stay in their physical galleries. Membership changes immediately when metadata changes.')) . '</p></div><a class="button" href="' . e((string) ($viewModel['create_url'] ?? '')) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="smart-gallery" data-admin-side-panel-title="' . e(t('smart_gallery.create', 'Create Smart Gallery')) . '">' . e(t('smart_gallery.create', 'Create Smart Gallery')) . '</a></section>';
+    echo '<div class="admin-smart-galleries-page"><header class="admin-smart-galleries-toolbar"><h1>' . e(t('smart_gallery.admin_title', 'Smart Galleries')) . '</h1><a class="button" href="' . e((string) ($viewModel['create_url'] ?? '')) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="smart-gallery" data-admin-side-panel-title="' . e(t('smart_gallery.create', 'Create Smart Gallery')) . '">' . e(t('smart_gallery.create', 'Create Smart Gallery')) . '</a></header>';
+    echo '<p class="muted admin-smart-galleries-intro">' . e(t('smart_gallery.intro', 'Images stay in their physical galleries. Membership changes immediately when metadata changes.')) . '</p>';
 
     $notice = (string) ($viewModel['notice'] ?? '');
     $error = (string) ($viewModel['error'] ?? '');
@@ -63,53 +65,89 @@ function view_render_admin_smart_galleries(array $viewModel): void
         echo '<p class="error">' . e($error) . '</p>';
     }
 
-    echo '<div class="admin-smart-gallery-layout"><section class="panel"><h2>' . e(t('smart_gallery.existing', 'Existing Smart Galleries')) . '</h2>';
     $rows = (array) ($viewModel['rows'] ?? []);
+    $editor = $viewModel['editor'] ?? null;
+    if (is_array($editor)) {
+        echo '<details class="panel admin-smart-gallery-index"><summary>' . e(t('smart_gallery.existing', 'Existing Smart Galleries')) . ' <span class="admin-smart-gallery-count">' . count($rows) . '</span></summary>';
+    } else {
+        echo '<section class="panel admin-smart-gallery-index"><h2>' . e(t('smart_gallery.existing', 'Existing Smart Galleries')) . ' <span class="admin-smart-gallery-count">' . count($rows) . '</span></h2>';
+    }
     if ($rows === []) {
         echo '<p class="muted">' . e(t('smart_gallery.none', 'No Smart Galleries have been created.')) . '</p>';
     }
     foreach ($rows as $row) {
-        echo '<a class="admin-smart-gallery-row" href="' . e((string) ($row['url'] ?? '')) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="smart-gallery" data-admin-side-panel-title="' . e((string) ($row['title'] ?? '')) . '"><strong>' . e((string) ($row['title'] ?? '')) . '</strong><span>' . e((string) ($row['status_label'] ?? '')) . '</span></a>';
+        $editAttributes = ' href="' . e((string) ($row['url'] ?? '')) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="smart-gallery" data-admin-side-panel-title="' . e((string) ($row['title'] ?? '')) . '"';
+        echo '<article class="admin-smart-gallery-row"><div class="admin-smart-gallery-row-name"><a' . $editAttributes . '><strong>' . e((string) ($row['title'] ?? '')) . '</strong></a><small>' . e((string) ($row['slug'] ?? '')) . '</small></div>';
+        echo '<div class="admin-smart-gallery-row-state"><span class="admin-smart-gallery-state">' . e((string) ($row['status_label'] ?? '')) . '</span><small>' . e((string) ($row['placement_label'] ?? '')) . '</small></div>';
+        echo '<div class="admin-smart-gallery-row-actions">';
+        view_render_smart_gallery_open_link((string) ($row['public_url'] ?? ''));
+        echo '<a class="button secondary"' . $editAttributes . '>' . e(t('smart_gallery.edit', 'Edit')) . '</a></div></article>';
     }
-    echo '</section><section class="panel" data-smart-gallery-editor-workspace>';
-    $editor = $viewModel['editor'] ?? null;
+    echo is_array($editor) ? '</details>' : '</section>';
     if (is_array($editor)) {
+        echo '<section class="panel admin-smart-gallery-workspace" data-smart-gallery-editor-workspace>';
         view_render_smart_gallery_editor($editor);
-    } else {
-        echo '<h2>' . e(t('smart_gallery.select', 'Select a Smart Gallery or create a new one.')) . '</h2>';
+        echo '</section>';
     }
-    echo '</section></div>';
+    echo '</div>';
     render_footer();
+}
+
+/**
+ * Render a direct public gallery action without taking over the editor's tab.
+ *
+ * @param string $publicUrl Prepared published/enabled destination, or an empty value.
+ * @return void Emits a link or an explained unavailable action.
+ */
+function view_render_smart_gallery_open_link(string $publicUrl): void
+{
+    if ($publicUrl !== '') {
+        echo '<a class="button secondary" href="' . e($publicUrl) . '" target="_blank" rel="noopener" data-smart-gallery-open-public>' . e(t('smart_gallery.view_gallery', 'View gallery')) . ' <span aria-hidden="true">&#8599;</span></a>';
+    } else {
+        echo '<span class="admin-smart-gallery-view-unavailable" title="' . e(t('smart_gallery.view_unavailable', 'Publish and enable this gallery to open it.')) . '">' . e(t('smart_gallery.view_unavailable_short', 'Not published or disabled')) . '</span>';
+    }
 }
 
 /**
  * Render the Smart Gallery editor workspace.
  *
  * @param array<string,mixed> $viewModel Controller-prepared editor state.
+ * @return void Emits compact controls while preserving every form field and panel-owned action.
  */
 function view_render_smart_gallery_editor(array $viewModel): void
 {
     $gallery = (array) ($viewModel['gallery'] ?? []);
-    echo '<form method="post" action="' . e((string) ($viewModel['form_action'] ?? '')) . '" data-smart-gallery-editor data-smart-gallery-panel-form data-smart-gallery-catalog="' . e((string) ($viewModel['catalog_json'] ?? '{}')) . '" data-smart-gallery-tags="' . e((string) ($viewModel['tags_json'] ?? '[]')) . '" data-smart-gallery-galleries="' . e((string) ($viewModel['galleries_json'] ?? '[]')) . '">';
+    $ruleLabels = [];
+    foreach (['match', 'all', 'any', 'exclude', 'all_help', 'any_help', 'exclude_help', 'add_condition', 'add_group', 'group_help', 'remove_condition', 'remove_group', 'field', 'comparison', 'value', 'select_value', 'no_value', 'empty', 'from', 'to', 'missing_reference'] as $key) {
+        $ruleLabels[$key] = t('smart_gallery.rules.' . $key);
+    }
+    echo '<div class="admin-smart-gallery-editor"><div class="admin-smart-gallery-editor-toolbar"><h2>' . e(!empty($viewModel['existing']) ? t('admin.menu.settings', 'Settings') : t('smart_gallery.create', 'Create Smart Gallery')) . '</h2>';
+    if (!empty($viewModel['existing'])) view_render_smart_gallery_open_link((string) ($viewModel['public_url'] ?? ''));
+    echo '</div>';
+    echo '<form method="post" action="' . e((string) ($viewModel['form_action'] ?? '')) . '" data-smart-gallery-editor data-smart-gallery-panel-form data-smart-gallery-rule-labels="' . e((string) json_encode($ruleLabels, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR)) . '" data-smart-gallery-catalog="' . e((string) ($viewModel['catalog_json'] ?? '{}')) . '" data-smart-gallery-tags="' . e((string) ($viewModel['tags_json'] ?? '[]')) . '" data-smart-gallery-galleries="' . e((string) ($viewModel['galleries_json'] ?? '[]')) . '">';
     echo (string) ($viewModel['csrf_html'] ?? '');
+    echo '<div class="admin-smart-gallery-identity">';
     echo '<label>' . e(t('smart_gallery.title', 'Title')) . '<input name="title" required value="' . e((string) ($gallery['title'] ?? '')) . '"></label>';
-    echo '<label>' . e(t('smart_gallery.slug', 'Public URL slug')) . '<input name="slug" value="' . e((string) ($gallery['slug'] ?? '')) . '"><span class="muted">' . e(t('smart_gallery.slug_help', 'Leave blank to generate it automatically from the title.')) . '</span></label>';
-    echo '<label>' . e(t('smart_gallery.description', 'Description')) . '<textarea name="description">' . e((string) ($gallery['description'] ?? '')) . '</textarea></label>';
+    echo '<label>' . e(t('smart_gallery.slug', 'Public URL slug')) . '<input name="slug" title="' . e(t('smart_gallery.slug_help', 'Leave blank to generate it automatically from the title.')) . '" value="' . e((string) ($gallery['slug'] ?? '')) . '"></label>';
+    echo '<label class="admin-smart-gallery-description">' . e(t('smart_gallery.description', 'Description')) . '<textarea name="description" rows="2">' . e((string) ($gallery['description'] ?? '')) . '</textarea></label></div>';
     echo '<fieldset class="admin-smart-gallery-placement"><legend>' . e(t('smart_gallery.placement', 'Public placement')) . '</legend><label>' . e(t('smart_gallery.placement_mode', 'Show this Smart Gallery as')) . '<select name="placement_mode" data-smart-gallery-placement-mode>';
     foreach ((array) ($viewModel['placement_modes'] ?? []) as $option) {
         echo '<option value="' . e((string) ($option['value'] ?? '')) . '"' . (!empty($option['selected']) ? ' selected' : '') . '>' . e((string) ($option['label'] ?? '')) . '</option>';
     }
     echo '</select></label><p class="muted">' . e(t('smart_gallery.placement_help', 'Root lists the Smart Gallery on the homepage. Subgallery mode lets you attach it beneath any number of physical galleries from each gallery editor.')) . '</p></fieldset>';
 
-    echo '<div class="admin-smart-gallery-options"><label><input type="checkbox" name="enabled" value="1"' . (!empty($viewModel['enabled']) ? ' checked' : '') . '> ' . e(t('smart_gallery.enabled', 'Enabled')) . '</label><label>' . e(t('smart_gallery.visibility', 'Visibility')) . '<select name="visibility"><option value="private">' . e(t('smart_gallery.private', 'Private')) . '</option><option value="public"' . (($gallery['visibility'] ?? '') === 'public' ? ' selected' : '') . '>' . e(t('smart_gallery.public', 'Published')) . '</option></select></label><label>' . e(t('smart_gallery.sort', 'Sort')) . '<select name="sort_mode">';
+    echo '<section class="admin-smart-gallery-status"><div class="admin-smart-gallery-options"><label class="admin-smart-gallery-enabled"><input type="checkbox" name="enabled" value="1"' . (!empty($viewModel['enabled']) ? ' checked' : '') . '> ' . e(t('smart_gallery.active_label', 'Gallery active')) . '</label><label>' . e(t('smart_gallery.visibility', 'Visibility')) . '<select name="visibility"><option value="private">' . e(t('smart_gallery.private', 'Private')) . '</option><option value="public"' . (($gallery['visibility'] ?? '') === 'public' ? ' selected' : '') . '>' . e(t('smart_gallery.public', 'Published')) . '</option></select></label><label>' . e(t('smart_gallery.sort', 'Sort')) . '<select name="sort_mode">';
     foreach ((array) ($viewModel['sort_modes'] ?? []) as $option) {
         echo '<option value="' . e((string) ($option['value'] ?? '')) . '"' . (!empty($option['selected']) ? ' selected' : '') . '>' . e((string) ($option['label'] ?? '')) . '</option>';
     }
-    echo '</select></label><label>' . e(t('smart_gallery.direction', 'Direction')) . '<select name="sort_direction"><option value="desc">' . e(t('smart_gallery.desc', 'Descending')) . '</option><option value="asc"' . (($gallery['sort_direction'] ?? '') === 'asc' ? ' selected' : '') . '>' . e(t('smart_gallery.asc', 'Ascending')) . '</option></select></label></div>';
+    echo '</select></label><label>' . e(t('smart_gallery.direction', 'Direction')) . '<select name="sort_direction"><option value="desc">' . e(t('smart_gallery.desc', 'Descending')) . '</option><option value="asc"' . (($gallery['sort_direction'] ?? '') === 'asc' ? ' selected' : '') . '>' . e(t('smart_gallery.asc', 'Ascending')) . '</option></select></label></div><p class="muted">' . e(t('smart_gallery.enabled_help', 'Public viewing requires an active, published gallery. Switching it off keeps its settings and rules.')) . '</p></section>';
 
-    view_render_smart_gallery_presentation_controls((array) ($viewModel['presentation_controls'] ?? []));
+    echo '<section class="admin-smart-gallery-rules"><h3>' . e(t('smart_gallery.rules_title', 'Photo selection rules')) . '</h3><p class="muted admin-smart-gallery-rules-intro">' . e(t('smart_gallery.rules_help', 'Photos that match these conditions appear here automatically. Their original galleries stay unchanged.')) . '</p><input type="hidden" name="rules_json" value="' . e((string) ($viewModel['rules_json'] ?? '')) . '" data-smart-gallery-rules><div class="smart-rule-builder" data-smart-rule-builder></div><noscript><p class="error">' . e(t('smart_gallery.javascript_required', 'JavaScript is required for the visual nested rule editor. Existing rules remain safe and can still be previewed or saved unchanged.')) . '</p></noscript></section>';
 
-    echo '<input type="hidden" name="rules_json" value="' . e((string) ($viewModel['rules_json'] ?? '')) . '" data-smart-gallery-rules><div class="smart-rule-builder" data-smart-rule-builder></div><noscript><p class="error">' . e(t('smart_gallery.javascript_required', 'JavaScript is required for the visual nested rule editor. Existing rules remain safe and can still be previewed or saved unchanged.')) . '</p></noscript>';
+    $presentationControls = (array) ($viewModel['presentation_controls'] ?? []);
+    echo '<details class="admin-smart-gallery-details"><summary>' . e(t('smart_gallery.presentation', 'Presentation')) . '<span class="muted">' . e((string) ($presentationControls['source_label'] ?? '')) . '</span></summary>';
+    view_render_smart_gallery_presentation_controls($presentationControls);
+    echo '</details>';
     if (array_key_exists('preview_count', $viewModel) && $viewModel['preview_count'] !== null) {
         echo '<p class="notice">' . e(t('smart_gallery.preview_count', 'This Smart Gallery currently matches {count} images.', ['count' => (int) $viewModel['preview_count']])) . '</p>';
         if (is_array($viewModel['preview_cards'] ?? null)) {
@@ -118,14 +156,15 @@ function view_render_smart_gallery_editor(array $viewModel): void
             echo '</div>';
         }
     }
-    echo '<div class="button-row"><button name="action" value="preview" class="button secondary">' . e(t('smart_gallery.preview', 'Preview')) . '</button><button name="action" value="save" class="button">' . e(t('smart_gallery.save', 'Save Smart Gallery')) . '</button></div></form>';
+    echo '<div class="admin-smart-gallery-save-bar"><button name="action" value="preview" class="button secondary">' . e(t('smart_gallery.preview', 'Preview')) . '</button><button name="action" value="save" class="button">' . e(t('smart_gallery.save', 'Save Smart Gallery')) . '</button></div></form>';
 
     if (empty($viewModel['existing'])) {
+        echo '</div>';
         return;
     }
 
-    echo '<section class="admin-smart-gallery-placements"><h3>' . e(t('smart_gallery.used_in', 'Used in physical galleries')) . '</h3><p class="muted">' . e(t('smart_gallery.used_in_help', 'These galleries currently show this Smart Gallery as a subgallery. Removing one location does not affect the others.')) . '</p>';
     $placements = (array) ($viewModel['placements'] ?? []);
+    echo '<details class="admin-smart-gallery-details admin-smart-gallery-placements"><summary>' . e(t('smart_gallery.used_in', 'Used in physical galleries')) . ' <span class="admin-smart-gallery-count">' . count($placements) . '</span></summary><p class="muted">' . e(t('smart_gallery.used_in_help', 'These galleries currently show this Smart Gallery as a subgallery. Removing one location does not affect the others.')) . '</p>';
     if ($placements === []) {
         echo '<p class="muted">' . e(t('smart_gallery.used_nowhere', 'This Smart Gallery is not currently attached beneath a physical gallery.')) . '</p>';
     } else {
@@ -142,12 +181,8 @@ function view_render_smart_gallery_editor(array $viewModel): void
         }
         echo '</div>';
     }
-    echo '</section>';
-
-    if (!empty($viewModel['public_url'])) {
-        echo '<p><a class="button secondary" href="' . e((string) $viewModel['public_url']) . '">' . e(t('smart_gallery.open_public', 'Open published Smart Gallery')) . '</a></p>';
-    }
-    echo '<div class="button-row"><form method="post" action="' . e((string) ($viewModel['form_action'] ?? '')) . '" data-smart-gallery-panel-form>' . (string) ($viewModel['csrf_html'] ?? '') . '<input type="hidden" name="id" value="' . (int) ($viewModel['gallery_id'] ?? 0) . '"><button name="action" value="duplicate" class="button secondary">' . e(t('smart_gallery.duplicate', 'Duplicate')) . '</button></form><form method="post" action="' . e((string) ($viewModel['form_action'] ?? '')) . '" data-smart-gallery-panel-form onsubmit="return confirm(this.dataset.confirm)" data-confirm="' . e(t('smart_gallery.delete_confirm', 'Delete this Smart Gallery definition? Images and files will not be deleted.')) . '">' . (string) ($viewModel['csrf_html'] ?? '') . '<input type="hidden" name="id" value="' . (int) ($viewModel['gallery_id'] ?? 0) . '"><button name="action" value="delete" class="button danger">' . e(t('smart_gallery.delete', 'Delete')) . '</button></form></div>';
+    echo '</details>';
+    echo '<details class="admin-smart-gallery-details admin-smart-gallery-management"><summary>' . e(t('smart_gallery.manage', 'Manage gallery')) . '</summary><div class="button-row"><form method="post" action="' . e((string) ($viewModel['form_action'] ?? '')) . '" data-smart-gallery-panel-form>' . (string) ($viewModel['csrf_html'] ?? '') . '<input type="hidden" name="id" value="' . (int) ($viewModel['gallery_id'] ?? 0) . '"><button name="action" value="duplicate" class="button secondary">' . e(t('smart_gallery.duplicate', 'Duplicate')) . '</button></form><form method="post" action="' . e((string) ($viewModel['form_action'] ?? '')) . '" data-smart-gallery-panel-form onsubmit="return confirm(this.dataset.confirm)" data-confirm="' . e(t('smart_gallery.delete_confirm', 'Delete this Smart Gallery definition? Images and files will not be deleted.')) . '">' . (string) ($viewModel['csrf_html'] ?? '') . '<input type="hidden" name="id" value="' . (int) ($viewModel['gallery_id'] ?? 0) . '"><button name="action" value="delete" class="button danger">' . e(t('smart_gallery.delete', 'Delete')) . '</button></form></div></details></div>';
 }
 
 /**

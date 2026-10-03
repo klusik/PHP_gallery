@@ -15,6 +15,12 @@ namespace Gallery\Core {
     function require_admin(): void { if ($GLOBALS['overview_denied']) throw new \RuntimeException('auth'); }
     /** Seed a fixture token. @return string Token marker. */
     function csrf_token(): string { $GLOBALS['overview_token_seeded'] = true; return 'fixture'; }
+    /** Build prepared control destinations without runtime configuration.
+     * @param string $route Stable route identifier.
+     * @param array<string,mixed> $params Semantic route parameters.
+     * @return string Synthetic fixture destination.
+     */
+    function url_for(string $route, array $params = []): string { return '/index.php?' . http_build_query(['page' => $route] + $params); }
     /** Return fixture request method. @return string GET or POST. */
     function request_method(): string { return $GLOBALS['overview_method']; }
     /** Return a fixture administrator. @return array{id:int} Identity. */
@@ -38,7 +44,7 @@ namespace Gallery\Services {
     /** Omit profiling writes. @param string $route Route. @return void No output. */
     function admin_render_profile_start(string $route): void {}
     /** Omit real diagnostics. @return null Disabled panel. */
-    function admin_render_profile_panel_model(): null { return null; }
+    function admin_render_profile_panel_model(): ?array { return null; }
     /** Execute the owned renderer. @param string $name Span. @param callable $callback Rendering callback. @return void Calls once. */
     function admin_render_profile_span(string $name, callable $callback): void { $callback(); }
     /** Return fixture text. @param string $key Translation key. @param string $fallback Default. @return string Safe message. */

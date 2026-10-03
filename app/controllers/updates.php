@@ -70,6 +70,7 @@ use function Gallery\Services\application_update_cleanup_malformed_root_files;
 use function Gallery\Services\application_update_github_api_status;
 use function Gallery\Services\application_update_normalize_version;
 use function Gallery\Services\application_update_status_for_admin;
+use function Gallery\Services\application_update_check_if_due;
 use function Gallery\Services\feature_capability_effective_enabled;
 use function Gallery\Services\clean_reinstall_current_application_version;
 use function Gallery\Services\cms_github_project_url;
@@ -83,6 +84,8 @@ use function Gallery\Views\view_render_admin_update_page;
 use function Gallery\Views\view_render_update_job_card;
 use function Gallery\Views\view_render_update_patch_notes_fragment;
 use function Gallery\Views\view_render_update_release_summary;
+use function Gallery\Views\view_render_update_patch_notes_viewer;
+use function Gallery\Views\view_render_update_api_status;
 
 /**
  * Admin update controller model.
@@ -185,6 +188,42 @@ function cms_update_release_view_model(array $status): array
 }
 
 /**
+ * Prepare and return one synchronized passive Updates presentation.
+ *
+ * @param array<string,mixed> $status Cached or explicitly checked release status.
+ * @return void Emits summary and complete notes viewer from the same installed version.
+ */
+function cms_update_presentation_response(array $status): void
+{
+    $model = cms_update_release_view_model($status);
+    $notes = cms_update_patch_notes_model($model['status']);
+    $versions = (array) $notes['versions'];
+    $installed = (string) $model['installed_version'];
+    $latest = (string) ($model['status']['latest_version'] ?? '');
+    $model['patch_notes_model'] = $notes;
+    $model['github_api_status'] = application_update_github_api_status();
+    $model['repository'] = CMS_GITHUB_REPOSITORY;
+    $model['github_project_url'] = cms_github_project_url();
+    $model['installed_patch_url'] = isset($versions[$installed]) ? url_for('admin_update', ['patch_version' => $installed]) : '';
+    $model['pending_patch_url'] = !empty($model['status']['update_available']) && isset($versions[$latest]) ? url_for('admin_update', ['patch_version' => $latest]) : '';
+    $model['urls'] = [
+        'update' => url_for('admin_update'),
+        'patch_notes_fragment' => url_for('admin_update', ['patch_notes_fragment' => '1']),
+    ];
+    ob_start();
+    view_render_update_release_summary($model);
+    $html = (string) ob_get_clean();
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: no-store, private');
+    echo json_encode([
+        'ok' => true, 'html' => $html,
+        'notes_html' => view_render_update_patch_notes_viewer($model),
+        'api_html' => view_render_update_api_status($model),
+        'notes_count' => count($versions), 'installed_version' => $installed,
+    ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+}
+
+/**
  * Start the resumable job represented by one Admin update action.
  *
  * @param string $action Admin action identifier.
@@ -241,16 +280,27 @@ function cms_update_stage_label(string $stage): string
 /**
  * Build the presentation-only durable update job model.
  *
- * @param array|null $job Safe job state or null when no job is active.
- * @return array|null Controller-prepared update job view model.
+ * @param array<string,mixed>|null $job Safe job state or null when no job is active.
+ * @param bool $backgroundEnabled Whether automatic jobs may resume on page open.
+ * @return array<string,mixed>|null Controller-prepared update job view model.
  */
-function cms_update_job_view_model(?array $job): ?array
+function cms_update_job_view_model(?array $job, bool $backgroundEnabled = true): ?array
 {
     if ($job === null) {
         return null;
     }
 
     $job['stage_label'] = cms_update_stage_label((string) ($job['stage'] ?? ''));
+    $job['auto_resume'] = $backgroundEnabled || empty($job['background']);
+    $job['display_title'] = match ((string) ($job['status'] ?? '')) {
+        'failed' => t('admin.updates.job_failed_title', 'Update stopped'),
+        'cancelled' => t('admin.updates.job_cancelled_title', 'Update cancelled'),
+        'completed' => t('admin.updates.job_completed_title', 'Update completed'),
+        default => $job['stage_label'],
+    };
+    if (!$job['auto_resume'] && (string) ($job['status'] ?? '') === 'running') {
+        $job['display_title'] = t('admin.updates.job_paused_title', 'Update paused');
+    }
     return $job;
 }
 
@@ -280,15 +330,7 @@ function cms_admin_update(): void
     if (request_method() === 'GET' && isset($_GET['update_status_fragment'])) {
         // A separate passive request reads the activated version after the worker
         // finishes, avoiding request-local pre-update version and metadata caches.
-        $status = application_update_status_for_admin(false);
-        ob_start();
-        view_render_update_release_summary(array_merge(cms_update_release_view_model($status), [
-            'urls' => ['update' => url_for('admin_update')],
-        ]));
-        $html = (string) ob_get_clean();
-        header('Content-Type: application/json; charset=utf-8');
-        header('Cache-Control: no-store, private');
-        echo json_encode(['ok' => true, 'html' => $html], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        cms_update_presentation_response(application_update_status_for_admin(false));
         return;
     }
 
@@ -305,6 +347,15 @@ function cms_admin_update(): void
 
     if (request_method() === 'POST') {
         verify_csrf();
+        if (cms_update_async_request() && in_array((string) ($_POST['update_action'] ?? ''), ['force_check', 'check_due'], true)) {
+            // Keep other tabs and public pages usable during GitHub I/O.
+            session_write_close();
+            $checked = (string) $_POST['update_action'] === 'check_due'
+                ? application_update_check_if_due()
+                : application_update_status_for_admin(true);
+            cms_update_presentation_response($checked);
+            return;
+        }
         try {
             $action = (string) ($_POST['update_action'] ?? 'stable_update');
             $installerMutationActions = ['stable_update', 'beta_install', 'beta_revert', 'clean_reinstall', 'job_continue', 'job_retry', 'job_rollback'];
@@ -491,7 +542,7 @@ function cms_admin_update(): void
         'installer_enabled' => $installerEnabled,
         'autoupdate_status' => $autoupdateStatus,
         'github_api_status' => $githubApiStatus,
-        'active_update_job' => cms_update_job_view_model($activeUpdateJob),
+        'active_update_job' => cms_update_job_view_model($activeUpdateJob, $installerEnabled && !empty($autoupdateStatus['enabled'])),
         'patch_notes_model' => $patchNotesModel,
         'installed_version' => $installedVersion,
         'beta_commit' => $betaCommit,

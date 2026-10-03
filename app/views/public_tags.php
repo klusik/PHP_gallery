@@ -38,6 +38,7 @@ namespace Gallery\Views;
 
 use function Gallery\Core\csrf_field;
 use function Gallery\Core\e;
+use function Gallery\Services\t;
 
 /**
  * Render the public tag landing page body.
@@ -112,6 +113,7 @@ function view_render_public_tag_admin_delete_form(array $viewModel): void
  * Render clickable or read-only tag pills.
  *
  * @param array<string, mixed> $viewModel Prepared tag-list presentation model.
+ * @return void Emits tag pills and an optional inline disclosure control.
  */
 function view_render_tag_list(array $viewModel): void
 {
@@ -132,7 +134,36 @@ function view_render_tag_list(array $viewModel): void
             echo '<span class="tag">' . e((string) ($item['name'] ?? '')) . '</span>';
         }
     }
+    if (!empty($viewModel['inline_disclosure'])) {
+        echo '<button type="button" class="tag gallery-card-tags-toggle" data-hero-tags-toggle hidden data-show-all-label="' . e(t('gallery.show_all_tags', 'Display all tags')) . '" data-show-fewer-label="' . e(t('gallery.show_fewer_tags', 'Show fewer tags')) . '" aria-label="' . e(t('gallery.show_all_tags', 'Display all tags')) . '" aria-expanded="false">[...]</button>';
+    }
     echo '</p>';
+}
+
+/**
+ * Render gallery-card tags using the shared gallery tag disclosure pipeline.
+ *
+ * All tags stay in server-rendered HTML; the existing browser module applies
+ * the controller-prepared Theme limit, expansion, and responsive row scrolling.
+ *
+ * @param array<string, mixed> $viewModel Prepared tags and canonical Theme preferences.
+ * @return void Emits the collection and its in-place expansion control.
+ */
+function view_render_gallery_card_tags(array $viewModel): void
+{
+    $items = (array) ($viewModel['items'] ?? []);
+    if ($items === []) {
+        return;
+    }
+
+    $visibleLimit = max(1, (int) ($viewModel['visible_limit'] ?? 20));
+    $displayAll = !empty($viewModel['display_all']);
+    echo '<div class="gallery-card-tags" aria-label="' . e(t('gallery.tags', 'Gallery tags')) . '" data-hero-tags data-hero-tag-inline-toggle="1" data-hero-tag-visible-limit="' . $visibleLimit . '" data-hero-tag-display-all="' . ($displayAll ? '1' : '0') . '" data-hero-tag-scrollbar-enabled="' . (!empty($viewModel['scrollbar_enabled']) ? '1' : '0') . '" data-hero-tag-scrollbar-rows="' . max(1, (int) ($viewModel['scrollbar_rows'] ?? 5)) . '">';
+    echo '<div class="gallery-card-tags-content" data-hero-tags-content>';
+    $viewModel['inline_disclosure'] = !$displayAll && count($items) > $visibleLimit;
+    view_render_tag_list($viewModel);
+    echo '</div>';
+    echo '</div>';
 }
 
 /**

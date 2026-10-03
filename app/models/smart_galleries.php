@@ -112,6 +112,15 @@ function smart_gallery_model_existing_ids(array $ids): array
     return array_values(array_map('intval', $stmt->fetchAll(\PDO::FETCH_COLUMN)));
 }
 
+/**
+ * Check for any stored Smart Gallery, including private or disabled definitions.
+ * @return bool Whether at least one definition exists, without loading rules or placements.
+ */
+function smart_gallery_model_has_any(): bool
+{
+    return db()->query('SELECT 1 FROM smart_galleries LIMIT 1')->fetchColumn() !== false;
+}
+
 /** Return all Smart Gallery definitions for the Admin list. */
 function smart_gallery_model_all(): array
 {

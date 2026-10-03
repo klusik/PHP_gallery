@@ -54,6 +54,63 @@ function setupAdminSettingsWorkspaceRoot(root) {
     root.classList.add('is-enhanced');
     const selector = root.querySelector('[data-admin-settings-category]');
     const formStates = new WeakMap();
+    const mobilePending = new WeakSet();
+
+    /**
+     * Replace only the mobile connection fragment, leaving Settings drafts untouched.
+     * @param {HTMLElement} owner Current mobile fragment.
+     * @param {string} html Controller-rendered replacement markup.
+     * @return {void} Installs the new fragment after checking its ownership marker.
+     */
+    const replaceMobile = (owner, html) => {
+        const fragment = new DOMParser().parseFromString(html, 'text/html').querySelector('[data-admin-settings-mobile]');
+        if (!fragment) throw new Error('Incomplete mobile connection response');
+        if (owner.isConnected) owner.replaceWith(fragment);
+    };
+
+    /**
+     * Show a safe operation message within the mobile connection manager.
+     * @param {HTMLElement} owner Mobile fragment owning the operation.
+     * @param {string} message Localized feedback text.
+     * @return {void} Displays escaped feedback without changing another form.
+     */
+    const mobileFeedback = (owner, message) => {
+        let feedback = owner.querySelector('[data-admin-settings-mobile-feedback]');
+        if (!feedback) {
+            feedback = document.createElement('p');
+            feedback.dataset.adminSettingsMobileFeedback = '';
+            feedback.setAttribute('role', 'status');
+            owner.append(feedback);
+        }
+        feedback.textContent = message;
+        feedback.hidden = false;
+    };
+
+    /**
+     * Load mobile connections only when the Uploads category becomes visible.
+     * @return {Promise<void>} Settles one deduplicated read of the owned fragment.
+     */
+    const loadMobile = async () => {
+        const owner = root.querySelector('[data-admin-settings-mobile][data-mobile-load-url]');
+        if (!owner || mobilePending.has(owner)) return;
+        const settingsForm = owner.closest('.admin-settings-section')?.querySelector('[data-admin-settings-form]');
+        mobilePending.add(owner);
+        owner.setAttribute('aria-busy', 'true');
+        if (settingsForm) updateDraft(settingsForm);
+        try {
+            const response = await fetch(owner.dataset.mobileLoadUrl, {
+                credentials: 'same-origin', cache: 'no-store', headers: {'Accept': 'text/html'},
+            });
+            if (!response.ok) throw new Error('Mobile connections unavailable');
+            replaceMobile(owner, await response.text());
+        } catch (error) {
+            mobileFeedback(owner, owner.dataset.failedLabel || root.querySelector('[data-admin-settings-form]')?.dataset.failedLabel || 'Could not load mobile connections.');
+        } finally {
+            mobilePending.delete(owner);
+            owner.removeAttribute('aria-busy');
+            if (settingsForm?.isConnected) updateDraft(settingsForm);
+        }
+    };
 
     /** Select a category from URL history, accepting the historical Website address deep link. @return {string} Canonical visible category. */
     const sectionFromUrl = () => {
@@ -84,6 +141,7 @@ function setupAdminSettingsWorkspaceRoot(root) {
         }
         if (options.focus) selected?.focus();
         if (options.scroll) target.scrollIntoView({block: 'start', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth'});
+        if (target.id === 'settings-uploads') void loadMobile();
     };
 
     /** Update the active form's savebar and category badge without changing other drafts. @param {HTMLFormElement} form Category form. @return {void} Updates changed-setting counts. */
@@ -100,7 +158,8 @@ function setupAdminSettingsWorkspaceRoot(root) {
         form.querySelector('[data-admin-settings-changes]').textContent = count
             ? String(form.dataset.changesLabel).replace('{count}', String(count)) : form.dataset.cleanLabel;
         form.querySelector('[data-admin-settings-savebar]').classList.toggle('is-dirty', count > 0);
-        form.querySelector('[data-admin-settings-save]').disabled = count === 0 && !hasErrors;
+        form.querySelector('[data-admin-settings-save]').disabled = (count === 0 && !hasErrors)
+            || Boolean(form.closest('.admin-settings-section')?.querySelector('[data-admin-settings-mobile][aria-busy="true"]'));
         form.querySelector('[data-admin-settings-reset]').hidden = count === 0;
         const badge = root.querySelector(`[data-admin-settings-draft-badge="${CSS.escape(form.dataset.adminSettingsForm)}"]`);
         if (badge) {
@@ -167,6 +226,7 @@ function setupAdminSettingsWorkspaceRoot(root) {
         const state = formStates.get(form);
         if (!state || state.saving || !form.reportValidity()) return;
         const panel = form.closest('.admin-settings-section');
+        if (panel.querySelector('[data-admin-settings-mobile][aria-busy="true"]')) return;
         const feedback = panel.querySelector('[data-admin-settings-feedback]');
         const body = new FormData(form);
         clearErrors(form);
@@ -177,7 +237,7 @@ function setupAdminSettingsWorkspaceRoot(root) {
         for (const [control] of controls) control.disabled = true;
         form.querySelector('[data-admin-settings-changes]').textContent = form.dataset.savingLabel;
         try {
-            const response = await fetch(form.action, {
+            const response = await fetch(form.getAttribute('action') || window.location.href, {
                 method: 'POST', body, credentials: 'same-origin',
                 headers: {'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest'},
             });
@@ -190,6 +250,10 @@ function setupAdminSettingsWorkspaceRoot(root) {
             if (!response.ok || typeof result.html !== 'string') throw new Error('Incomplete Settings response');
             // The shared coordinator owns mutation completion; Settings only replaces its own form.
             await completeAdminMutation(result);
+            if (result.legacy_nav_changed && typeof result.sidebar_html === 'string') {
+                const sidebar = new DOMParser().parseFromString(result.sidebar_html, 'text/html').querySelector('aside.admin-sidebar');
+                if (sidebar) document.querySelector('aside.admin-sidebar')?.replaceWith(sidebar);
+            }
             const disclosureStates = Array.from(form.querySelectorAll('details[id]')).map(/** Preserve disclosure visibility across saved markup. @param {HTMLDetailsElement} details Disclosure. @return {[string,boolean]} Stable ID and open state. */ (details) => [details.id, details.open]);
             panel.querySelector('[data-admin-settings-content]').innerHTML = result.html;
             disclosureStates.forEach(/** Restore a returned disclosure. @param {[string,boolean]} pair ID and previous open state. @return {void} Restores matching elements. */ ([id, open]) => {
@@ -228,6 +292,62 @@ function setupAdminSettingsWorkspaceRoot(root) {
             }
         }
     };
+
+    /**
+     * Complete mobile connection mutations in place through the shared coordinator.
+     * @param {HTMLFormElement} form Dynamically rendered create or delete form.
+     * @return {Promise<void>} Restores controls or replaces only the mobile manager.
+     */
+    const saveMobile = async (form) => {
+        const owner = form.closest('[data-admin-settings-mobile]');
+        const settingsForm = form.closest('.admin-settings-section')?.querySelector('[data-admin-settings-form]');
+        if (!owner || mobilePending.has(owner) || formStates.get(settingsForm)?.saving || !form.reportValidity()) return;
+        const body = new FormData(form);
+        body.set('ajax', '1');
+        const controls = Array.from(owner.querySelectorAll('input, select, button')).map(
+            /** Remember the manager's available controls. @param {HTMLInputElement} control Form control. @return {[HTMLInputElement,boolean]} Prior disabled state. */
+            (control) => [control, control.disabled],
+        );
+        mobilePending.add(owner);
+        owner.setAttribute('aria-busy', 'true');
+        controls.forEach(/** Lock the manager while one mutation is pending. @param {[HTMLInputElement,boolean]} pair Control and prior state. @return {void} Prevents duplicate submissions. */ (pair) => { pair[0].disabled = true; });
+        if (settingsForm) updateDraft(settingsForm);
+        const feedback = owner.querySelector('[data-admin-settings-mobile-feedback]');
+        if (feedback) feedback.hidden = true;
+        try {
+            const response = await fetch(form.getAttribute('action') || window.location.href, {
+                method: 'POST', body, credentials: 'same-origin',
+                headers: {'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest'},
+            });
+            const result = await response.json();
+            if (!result.ok) {
+                mobileFeedback(owner, result.message || owner.dataset.failedLabel || form.dataset.failedLabel);
+                return;
+            }
+            if (!response.ok || typeof result.html !== 'string') throw new Error('Incomplete mobile connection response');
+            await completeAdminMutation(result);
+            replaceMobile(owner, result.html);
+        } catch (error) {
+            mobileFeedback(owner, owner.dataset.failedLabel || form.dataset.failedLabel || settingsForm?.dataset.failedLabel || 'Could not save mobile connections.');
+        } finally {
+            mobilePending.delete(owner);
+            owner.removeAttribute('aria-busy');
+            controls.forEach(/** Restore each original control. @param {[HTMLInputElement,boolean]} pair Control and prior state. @return {void} Unlocks after errors. */ (pair) => { pair[0].disabled = pair[1]; });
+            if (settingsForm?.isConnected) updateDraft(settingsForm);
+        }
+    };
+
+    root.addEventListener('submit', /**
+     * Intercept current and dynamically returned mobile forms before generic handlers.
+     * @param {SubmitEvent} event Submission from the Settings workspace.
+     * @return {void} Keeps connection actions in the current category.
+     */ (event) => {
+        const form = event.target;
+        if (!(form instanceof HTMLFormElement) || !form.matches('[data-admin-settings-mobile-form]')) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        void saveMobile(form);
+    }, true);
 
     /** Bind only newly returned forms; existing category drafts keep their original baselines. @return {void} Adds listeners once per form instance. */
     const bindForms = () => {

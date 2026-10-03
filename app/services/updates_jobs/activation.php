@@ -275,12 +275,11 @@ function application_update_job_migrate_slice(array &$job): bool
 /**
  * Finalize application settings only after files and migrations are complete.
  *
- * Also opportunistically refreshes the cached GitHub update-check result so the
- * Admin update page reflects the newly activated version immediately, instead of
- * showing an empty "Force check" placeholder until the next manual check or the
- * next automatic hourly probe.
+ * Reconcile cached release discovery with the verified installed package locally.
+ * Remote discovery is reserved for explicit or due background checks.
  *
- * @param array $job Job state, updated by reference.
+ * @param array<string,mixed> $job Job state, updated by reference.
+ * @return void Completes channel and cache reconciliation after activation.
  */
 function application_update_job_finalize(array &$job): void
 {
@@ -306,17 +305,13 @@ function application_update_job_finalize(array &$job): void
 
     application_update_invalidate_opcache($root, $sourceRoot);
     application_patch_notes_clear_cache();
-    delete_app_settings(['application_update_check_cache', 'application_update_check_status_json', 'application_update_check_cached_at']);
+    $installedVersion = application_update_version_from_local_bootstrap($root . '/app/bootstrap.php') ?? (string) ($job['checkpoints']['validated_version'] ?? '');
 
-    // Immediately replace the just-deleted cache with a fresh GitHub result computed
-    // against the now-active version, instead of leaving the update page with no
-    // cached data until an administrator clicks Force check or the next automatic
-    // probe runs. check_application_update() already catches its own remote/parsing
-    // failures and returns a diagnostic array rather than throwing, but the call is
-    // still wrapped defensively so a local failure while persisting the cached
-    // setting can never fail an otherwise-successful, already-activated update.
+    // Finalization must never repeat remote discovery. The verified package tells
+    // us what was installed; reconcile the already known release locally.
     try {
-        $freshUpdateStatus = check_application_update();
+        $freshUpdateStatus = application_update_installed_status($installedVersion, (string) ($job['parameters']['branch'] ?? ''));
+        delete_app_settings(['application_update_check_cache', 'application_update_check_status_json', 'application_update_check_cached_at']);
         cache_application_update_check($freshUpdateStatus);
     } catch (Throwable $exception) {
         // Non-fatal: the update itself already succeeded. Worst case, the admin

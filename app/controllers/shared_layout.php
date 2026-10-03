@@ -41,6 +41,7 @@ use function Gallery\Core\admin_anonymous_preview_active;
 use function Gallery\Core\current_login_return_target;
 use function Gallery\Core\current_user;
 use function Gallery\Core\url_for;
+use function Gallery\Services\admin_legacy_upload_navigation_enabled;
 use function Gallery\Services\admin_test_run_active;
 use function Gallery\Services\admin_test_run_panel_model;
 use function Gallery\Services\app_setting;
@@ -156,7 +157,7 @@ function shared_layout_language_selector_model(string $requestUri, string $scrip
 /**
  * Prepare feature-policy and updater state consumed by the Admin sidebar View.
  *
- * @return array<string, mixed>
+ * @return array{update_pending:bool,update_label:string,feature_enabled:array<string,bool>,admin_legacy_upload_navigation_enabled:bool} Prepared sidebar state.
  */
 function shared_layout_admin_chrome_model(): array
 {
@@ -170,6 +171,7 @@ function shared_layout_admin_chrome_model(): array
         'update_pending' => $updatePending,
         'update_label' => application_update_nav_label($updatePending),
         'feature_enabled' => $featureEnabled,
+        'admin_legacy_upload_navigation_enabled' => admin_legacy_upload_navigation_enabled(),
     ];
 }
 

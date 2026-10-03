@@ -258,7 +258,8 @@ use function Gallery\Views\view_render_admin_theme_media_tab;
 /**
  * Render the Theme branding and media tab.
  *
- * @param array $theme Current theme settings.
+ * @param array<string, mixed> $theme Current theme settings.
+ * @return void Prepares media asset state and emits the Media tab.
  */
 function render_admin_theme_media_tab(array $theme): void
 {
@@ -325,6 +326,16 @@ function render_admin_theme_media_tab(array $theme): void
             'source' => theme_background_source(),
         ],
         'labels' => [
+            'public_header_banner_compact_hint' => t('admin.theme.media.public_header_banner_compact_hint', 'Replaces the site title; galleries can override it.'),
+            'maintenance_title' => t('admin.theme.media.maintenance_title', 'Maintenance'),
+            'optimization_legend' => t('admin.theme.media.optimization_legend', 'Background optimization'),
+            'reset_backgrounds_hint' => t('admin.theme.media.reset_backgrounds_hint', 'Clear individual background choices for every gallery so they follow the Theme fallback.'),
+            'public_header_separator_compact_hint' => t('admin.theme.media.public_header_separator_compact_hint', 'Below the header; galleries can override it.'),
+            'remove_image' => t('admin.theme.media.remove_image', 'Remove image'),
+            'compact_hint' => t('admin.theme.media.compact_hint', 'Manage your header, browser icon and background.'),
+            'background_default_source' => t('admin.theme.media.background_default_source', 'Default source'),
+            'optimization_saved_hint' => t('admin.theme.media.optimization_saved_hint', 'Save a new image before regenerating its optimized copy.'),
+            'compact_title' => t('admin.theme.media.compact_title', 'Site images'),
             'kicker' => t('admin.theme.media.kicker', 'Branding & media'),
             'title' => t('admin.theme.media.title', 'Header branding, separator, favicon, and backgrounds'),
             'description' => t('admin.theme.media.description', 'Manage the public header images first, then browser identity and the global gallery background fallback.'),
@@ -340,7 +351,7 @@ function render_admin_theme_media_tab(array $theme): void
             'upload_replacement' => t('admin.theme.media.upload_replacement', 'Upload replacement'),
             'accepted_formats' => t('admin.theme.media.accepted_formats_8mb', 'Accepted formats: JPG, PNG, GIF, WebP. Maximum size: 8 MB.'),
             'separator_width' => t('admin.theme.media.separator_width', 'Separator width'),
-            'separator_width_hint' => t('admin.theme.media.separator_width_hint', 'Pixels. Use 0 to keep the current responsive page width.'),
+            'separator_width_hint' => t('admin.theme.media.separator_width_hint', 'Pixels. Use 0 for responsive page width, or 160–3840 for a fixed width.'),
             'separator_height' => t('admin.theme.media.separator_height', 'Separator height'),
             'separator_height_hint' => t('admin.theme.media.separator_height_hint', 'Pixels. With aspect ratio enabled this is a maximum; with stretching enabled this is the exact render height.'),
             'separator_stretch' => t('admin.theme.media.separator_stretch', 'Stretch to exact width and height'),
@@ -370,14 +381,14 @@ function render_admin_theme_media_tab(array $theme): void
             'delete_optimized_background' => t('admin.theme.media.delete_optimized_background', 'Delete optimized copy'),
             'view_served_image' => t('admin.theme.media.view_served_image', 'View used image'),
             'view_original_image' => t('admin.theme.media.view_original_image', 'View original'),
-            'background_transparency' => t('admin.theme.media.background_transparency', 'Background transparency'),
+            'background_transparency' => t('admin.theme.media.background_transparency', 'Background visibility'),
             'background_transparency_hint' => t('admin.theme.media.background_transparency_hint', 'Higher means more visible image, lower means more of the color underneath.'),
             'gallery_background_fallback' => t('admin.theme.media.gallery_background_fallback', 'Gallery background fallback'),
             'background_fallback_none' => t('admin.theme.media.background_fallback_none', 'No fallback set'),
-            'background_fallback_upload' => t('admin.theme.media.background_fallback_upload', 'Upload new image'),
-            'background_fallback_existing' => t('admin.theme.media.background_fallback_existing', 'Pick from existing gallery images'),
-            'background_fallback_collage' => t('admin.theme.media.background_fallback_collage', 'Generate collage from public galleries'),
-            'gallery_background_fallback_hint' => t('admin.theme.media.gallery_background_fallback_hint', 'Used when a gallery does not set its own background source.'),
+            'background_fallback_upload' => t('admin.theme.media.background_fallback_upload', 'Uploaded gallery cover'),
+            'background_fallback_existing' => t('admin.theme.media.background_fallback_existing', 'Gallery cover photo'),
+            'background_fallback_collage' => t('admin.theme.media.background_fallback_collage', 'Gallery collage photo'),
+            'gallery_background_fallback_hint' => t('admin.theme.media.gallery_background_fallback_hint', 'Used by galleries without their own background source. The selected mode uses the cover asset or photos of each gallery; it does not upload or choose the global background.'),
             'reset_all_gallery_backgrounds' => t('admin.theme.media.reset_all_gallery_backgrounds', 'Reset all gallery backgrounds'),
             'remove_theme_background' => t('admin.theme.media.remove_theme_background', 'Remove theme background'),
             'remove_favicon' => t('admin.theme.media.remove_favicon', 'Remove favicon'),

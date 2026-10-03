@@ -277,6 +277,21 @@ function admin_theme_download_language_pack(): void
 }
 
 /**
+ * Return a safe Custom CSS error to its owning tab while preserving installed styles.
+ * @param \Gallery\Services\CustomCssRecoveryException|null $recovery Exceptional rollback outcome, when files require attention.
+ * @return void Stores only a translated message and redirects to the existing Theme page.
+ */
+function admin_theme_custom_css_error_redirect(?\Gallery\Services\CustomCssRecoveryException $recovery = null): void
+{
+    $_SESSION['cms_custom_css_errors'] = [$recovery === null
+        ? t('admin.theme.custom_css.save_failed', 'The custom stylesheet could not be changed. The previous stylesheet was kept; check the selected file and try again.')
+        : ($recovery->hasRecoveryCopy
+        ? t('admin.theme.custom_css.recovery_required', 'The stylesheet change could not be completed. A recovery copy was kept on the server. Check file permissions before retrying.')
+        : t('admin.theme.custom_css.activation_incomplete', 'A stylesheet file was installed, but its saved status could not be confirmed. Check file permissions before retrying.'))];
+    redirect_to(url_for('admin_theme', ['css_error' => 1]) . '#admin-theme-tab-custom-css');
+}
+
+/**
  * Process a Theme POST request and redirect back to the Theme page.
  *
  * @param bool $gpsMapsFeatureEnabled Whether GPS map appearance settings are enabled.
@@ -350,7 +365,14 @@ function admin_theme_process_post(bool $gpsMapsFeatureEnabled, bool $lightboxMod
         redirect_to(url_for('admin_theme', ['saved' => 1]) . '#admin-theme-tab-language');
     }
     if (!empty($_POST['reset_custom_css'])) {
-        \Gallery\Services\custom_css_reset();
+        try {
+            \Gallery\Services\custom_css_reset();
+        } catch (RuntimeException $exception) {
+            if ($exception instanceof \Gallery\Services\MutationSchemaUnavailableException) {
+                throw $exception;
+            }
+            admin_theme_custom_css_error_redirect($exception instanceof \Gallery\Services\CustomCssRecoveryException ? $exception : null);
+        }
     } elseif (!empty($_POST['reset_favicon'])) {
         remove_stored_favicon();
     } elseif (!empty($_POST['reset_theme_background'])) {
@@ -386,19 +408,24 @@ function admin_theme_process_post(bool $gpsMapsFeatureEnabled, bool $lightboxMod
             'sidecars' => (int) $resetResult['sidecars'],
         ]));
     } else {
+        // Validate and stage explicit stylesheet replacement before other ordinary Theme mutations.
+        // A supplied upload wins; an invalid upload never falls through to the selected preset.
+        try {
+            \Gallery\Services\custom_css_save_selection(
+                (string) ($_POST['custom_css_preset'] ?? ''),
+                isset($_FILES['custom_css']) && is_array($_FILES['custom_css']) ? $_FILES['custom_css'] : null
+            );
+        } catch (RuntimeException $exception) {
+            if ($exception instanceof \Gallery\Services\MutationSchemaUnavailableException) {
+                throw $exception;
+            }
+            admin_theme_custom_css_error_redirect($exception instanceof \Gallery\Services\CustomCssRecoveryException ? $exception : null);
+        }
         // Variable $siteName stores this steps working value.
         $siteName = trim((string) ($_POST['site_name'] ?? ''));
         set_site_name($siteName);
         // $themeControlsChanged stores an intermediate value used by the surrounding gallery workflow.
         $themeControlsChanged = (string) ($_POST['theme_controls_changed'] ?? '') === '1';
-        // Variable $preset stores the posted skin selector value.
-        $preset = (string) ($_POST['custom_css_preset'] ?? '');
-        // Saving unrelated Theme controls must not re-copy the same skin and
-        // trigger a reset of visual overrides on every submit.
-        $customCssChanged = \Gallery\Services\custom_css_apply_preset($preset);
-        if (isset($_FILES['custom_css']) && is_array($_FILES['custom_css'])) {
-            $customCssChanged = \Gallery\Services\custom_css_store_uploaded($_FILES['custom_css']) || $customCssChanged;
-        }
         if (!empty($_FILES['favicon_source']['tmp_name']) && is_uploaded_file($_FILES['favicon_source']['tmp_name'])) {
             // $name stores an intermediate value used by the surrounding gallery workflow.
             $name = strtolower((string) ($_FILES['favicon_source']['name'] ?? ''));
@@ -529,8 +556,6 @@ function admin_theme_process_post(bool $gpsMapsFeatureEnabled, bool $lightboxMod
             set_app_setting('theme_hero_text', sanitize_hex_color((string) $_POST['theme_hero_text'], '#0f172a'));
             set_app_setting('theme_radius', (string) max(0, min(32, (int) $_POST['theme_radius'])));
             set_app_setting('theme_font', in_array($_POST['theme_font'] ?? '', ['serif', 'sans'], true) ? (string) $_POST['theme_font'] : 'serif');
-        } elseif ($customCssChanged) {
-            clear_theme_overrides();
         }
     }
     redirect_to(url_for('admin_theme', ['saved' => 1]));

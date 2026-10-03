@@ -895,3 +895,18 @@ Phase 4.1 adds no migration; Phase 4.2 adds only `viewer_registration_verificati
 | Settings draft/save/revert and search | `public/assets/gallery-modules/admin-settings-workspace.js`, `public/assets/gallery-modules/admin-settings-search.js` |
 | Deferred dashboard fragments | `app/controllers/admin_dashboard.php`, `app/services/admin_dashboard.php`, `app/models/admin_dashboard.php` |
 | Dashboard surface loading/retry | `public/assets/gallery-modules/admin-dashboard-workspace.js` |
+
+
+## Gallery workspace and compatibility owners
+
+| Responsibility | Files | Contract |
+| --- | --- | --- |
+| Reviewed branch features | `app/controllers/admin_gallery_features.php`, `app/services/gallery_feature_plans.php`, `app/models/gallery_feature_plans.php`, `public/assets/gallery-modules/admin-gallery-features.js` | Chronological staging, exact preview, locked revalidation and transaction. |
+| Own-password action | `app/controllers/admin_gallery_quick_access.php`, `app/services/gallery_editor_quick_access.php`, `public/assets/gallery-modules/admin-gallery-quick-access.js` | Existing schema/revision/mutation authority and bounded response. |
+| Orientation conversion | `database/migrations/202610020001_gallery_description_layout_semantics.php`, `app/models/gallery_description_layout_migration.php`, `app/services/gallery_description_layout_compatibility.php` | Preflight, replay markers, sidecar/import/Trash compatibility. |
+| Integrated uploads | `app/controllers/admin_settings.php`, `app/services/admin_settings_registry.php`, `app/controllers/mobile_webdav.php` | Coupled normalization, embedded fragments, one-time credential retention. |
+| Appearance resize | `public/assets/gallery-modules/theme-appearance-resizer.js`, `public/assets/gallery-modules/theme-form.js` | Accessible browser-local pane size and draft preview. |
+| Update notes | `app/controllers/updates.php`, `app/services/updates_status.php`, `app/services/updates_patch_notes.php`, `public/assets/gallery-modules/admin-update-notes.js` | Passive notes and bounded explicit discovery. |
+| Navdata | `app/services/flight_maps.php`, internal part `app/services/flight_maps/navdata_update.php`, `app/models/flight_maps.php` | Weekly/backoff/lock policy and atomic 200-row batches. |
+| Python policies | `scripts/source_contracts/python.php`, `scripts/source_contracts/python_scan.py`, `scripts/check_python_import_policy.php` | Non-executing AST declarations and whole-tree import prohibition. |
+| Windows release pair | `winapp/build_installer.py` | Version folder, exact JSON integrity and publication rollback. |

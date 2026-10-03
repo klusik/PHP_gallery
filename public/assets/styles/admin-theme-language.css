@@ -1,0 +1,543 @@
+/**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ * File: public/assets/styles/admin-theme-language.css
+ * Module Type: Stylesheet
+ * Purpose: Separate language preferences, visitor switcher design, and translation tools.
+ * Responsibilities:
+ *   - Keep language scopes and the live visitor switcher preview easy to identify.
+ *   - Present optional design details and translation tools in compact groups.
+ * Author: Rudolf Klusal
+ * License: MIT License (see LICENSE file in repository)
+ */
+
+.admin-page #admin-theme-tab-language {
+    container-name: theme-language-pane;
+    container-type: inline-size;
+}
+
+.admin-page .theme-language-workspace {
+    display: grid;
+    min-width: 0;
+    gap: 14px;
+}
+
+.theme-language-heading {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 6px 20px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--admin-border, #ccd7e3);
+}
+
+.theme-language-heading h2 {
+    margin: 0;
+    font-size: 1.2rem;
+    line-height: 1.25;
+}
+
+.theme-language-heading p {
+    margin: 0;
+    color: var(--admin-muted-text, #52616f);
+    font-size: 0.85rem;
+    line-height: 1.4;
+}
+
+.admin-page .theme-language-workspace .admin-subtabs {
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+}
+
+.theme-language-workspace .admin-subtab-list {
+    gap: 6px;
+}
+
+.admin-page .admin-theme-form .theme-language-workspace .admin-subtab {
+    min-height: 34px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--admin-muted-text, #52616f);
+    font-size: 0.88rem;
+    box-shadow: none;
+}
+
+.admin-page .admin-theme-form .theme-language-workspace .admin-subtab[aria-selected="true"],
+.admin-page .admin-theme-form .theme-language-workspace .admin-subtab:hover {
+    border-color: var(--admin-brand-border, #9ec3e6);
+    background: var(--admin-brand-soft, #e8f2fb);
+    color: var(--admin-brand, #315d9f);
+}
+
+.admin-page .theme-language-workspace .admin-subtab-panel {
+    padding: 0;
+    gap: 14px;
+}
+
+.theme-language-defaults {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+    min-width: 0;
+    gap: 14px;
+}
+
+.admin-page .theme-language-workspace .theme-language-card {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-content: start;
+    min-width: 0;
+    margin: 0;
+    padding: 12px;
+    gap: 10px;
+    border: 1px solid var(--admin-border, #ccd7e3);
+    border-radius: 8px;
+    background: var(--admin-surface, #fff);
+}
+
+.theme-language-card > legend {
+    padding: 0 5px;
+    font-size: 0.9rem;
+    font-weight: 700;
+}
+
+.admin-page .theme-language-workspace label {
+    min-width: 0;
+    margin: 0;
+    font-size: 0.86rem;
+    font-weight: 650;
+}
+
+.admin-page .theme-language-workspace .checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+}
+
+.admin-page .theme-language-workspace .theme-language-hint,
+.admin-page .theme-language-workspace .muted,
+.theme-language-fallback {
+    margin: 0;
+    color: var(--admin-muted-text, #52616f);
+    font-size: 0.8rem;
+    font-weight: 400;
+    line-height: 1.45;
+}
+
+.theme-language-workspace select,
+.theme-language-workspace textarea {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    margin: 0;
+    font-size: 0.85rem;
+    font-weight: 400;
+}
+
+.theme-language-workspace .theme-appearance-help {
+    position: relative;
+    display: inline-block;
+    vertical-align: middle;
+}
+
+.theme-language-workspace .theme-appearance-help > p {
+    width: 240px;
+    max-width: min(240px, calc(100vw - 48px));
+    text-align: left;
+}
+
+.theme-language-card-heading,
+.theme-language-fallback {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-width: 0;
+}
+
+/* Theme exposes choices and design separately; the shared Settings panel stays intact. */
+.admin-page .theme-language-workspace .admin-language-selector-settings {
+    min-width: 0;
+    padding: 12px;
+    gap: 10px;
+    border: 1px solid var(--admin-border, #ccd7e3);
+    border-radius: 8px;
+    background: var(--admin-surface, #fff);
+}
+
+.theme-language-workspace .admin-language-selector-settings-copy > strong {
+    font-size: 0.9rem;
+}
+
+.admin-page .theme-language-workspace .admin-language-selector-language-list {
+    padding: 8px 0 0;
+    border: 0;
+    background: transparent;
+    gap: 8px;
+}
+
+.theme-language-workspace .admin-language-selector-language-list > legend {
+    font-size: 0.84rem;
+}
+
+.theme-language-workspace .admin-language-selector-language-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.admin-page .theme-language-workspace .admin-language-selector-language {
+    padding: 7px 10px;
+    gap: 7px;
+    border-color: var(--admin-border, #ccd7e3);
+    border-radius: 6px;
+}
+
+.theme-language-workspace .admin-language-selector-language:has(input:checked) {
+    border-color: var(--admin-brand-border, #9ec3e6);
+    background: var(--admin-brand-soft, #e8f2fb);
+}
+
+.theme-language-workspace .admin-language-selector-language img {
+    width: 20px;
+    height: 15px;
+}
+
+.theme-language-workspace .admin-language-selector-language span {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 2px 6px;
+}
+
+.theme-language-workspace .admin-language-selector-language strong {
+    font-size: 0.83rem;
+}
+
+.admin-page .theme-language-workspace [data-language-theme-editor] {
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    gap: 14px;
+    border: 0;
+    background: transparent;
+}
+
+.theme-language-design-workspace {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 0.8fr);
+    align-items: start;
+    min-width: 0;
+    gap: 14px 20px;
+}
+
+.theme-language-design-basics {
+    display: grid;
+    min-width: 0;
+    gap: 10px;
+}
+
+.theme-language-design-workspace > .muted,
+.theme-language-design-workspace > .theme-language-hint,
+.theme-language-design-workspace > .admin-language-design-preset,
+.theme-language-design-workspace > button {
+    grid-column: 1 / -1;
+}
+
+.theme-language-design-workspace > button {
+    justify-self: start;
+}
+
+.theme-language-workspace .admin-language-design-global {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px 14px;
+}
+
+.theme-language-design-toggles {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 18px;
+    grid-column: 1 / -1;
+    min-width: 0;
+}
+
+.theme-language-workspace .admin-language-design-field {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: center;
+    min-width: 0;
+    gap: 5px;
+}
+
+.theme-language-workspace .admin-language-design-control {
+    gap: 6px;
+    min-width: 0;
+}
+
+.theme-language-workspace .admin-language-design-control > select,
+.theme-language-workspace .admin-language-design-control > input[type="range"] {
+    width: 0;
+}
+
+.theme-language-workspace .admin-language-design-control > input[type="color"] {
+    width: 34px;
+    min-width: 34px;
+    height: 28px;
+    min-height: 28px;
+    padding: 2px;
+}
+
+.theme-language-workspace .admin-language-design-control > output {
+    min-width: 40px;
+    font-size: 0.76rem;
+    text-align: right;
+}
+
+.admin-page .theme-language-workspace .admin-language-design-control > button {
+    min-height: 28px;
+    padding: 3px 6px;
+    font-size: 0.74rem;
+}
+
+/* Keep individual draft resets small while retaining their descriptive accessible names. */
+.admin-page .theme-language-workspace .admin-language-design-control > [data-language-design-reset-field] {
+    width: 28px;
+    padding: 3px;
+    font-size: 0;
+}
+
+.theme-language-workspace [data-language-design-reset-field]::before {
+    content: "↺";
+    font-size: 16px;
+    line-height: 1;
+}
+
+.admin-page .theme-language-workspace .admin-language-design-transparent {
+    font-size: 0.76rem;
+    font-weight: 400;
+}
+
+.theme-language-workspace .theme-language-design-preview {
+    position: sticky;
+    top: 14px;
+    min-width: 0;
+    gap: 8px;
+    padding: 12px;
+    border: 1px solid var(--admin-border, #ccd7e3);
+    border-radius: 8px;
+    background: var(--admin-surface-muted, #f5f8fb);
+}
+
+.theme-language-design-preview > strong {
+    font-size: 0.9rem;
+}
+
+.theme-language-workspace .admin-language-design-preview {
+    box-sizing: border-box;
+    min-width: 0;
+    min-height: 92px;
+    max-width: 100%;
+    padding: 12px;
+    border-radius: 6px;
+    background: var(--admin-surface, #fff);
+}
+
+.admin-page .theme-language-workspace .admin-language-design-preset {
+    grid-template-columns: minmax(80px, 0.12fr) minmax(0, 1fr);
+    align-items: center;
+    min-width: 0;
+    padding: 0;
+    gap: 12px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+}
+
+.theme-language-workspace .admin-language-design-preset > h4 {
+    margin: 0;
+    font-size: 0.9rem;
+}
+
+.theme-language-workspace .admin-language-design-preset > button {
+    grid-column: 1 / -1;
+    justify-self: start;
+    width: fit-content;
+}
+
+.theme-language-workspace .admin-language-design-preset > .admin-language-design-grid,
+.theme-language-workspace .admin-language-design-preset > .theme-language-hint {
+    grid-column: 1 / -1;
+}
+
+.theme-language-workspace .admin-language-design-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    min-width: 0;
+    padding-top: 10px;
+    gap: 10px 24px;
+}
+
+.theme-language-workspace .admin-language-design-preset .admin-language-design-field {
+    grid-template-columns: minmax(130px, 0.8fr) minmax(0, 1fr);
+    gap: 10px;
+}
+
+.theme-language-details {
+    min-width: 0;
+    margin: 0;
+    font-size: 0.82rem;
+}
+
+.theme-language-details > summary {
+    width: fit-content;
+    color: var(--admin-muted-text, #52616f);
+    cursor: pointer;
+}
+
+.theme-language-details > p {
+    margin: 8px 0;
+    color: var(--admin-muted-text, #52616f);
+    font-size: 0.8rem;
+    line-height: 1.45;
+}
+
+.theme-language-details .admin-language-design-field > label {
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.theme-language-details > .admin-language-design-field {
+    margin-top: 10px;
+}
+
+.theme-language-workspace [data-language-theme-editor]:not([data-language-design-ready]) [data-language-design-reset-field],
+.theme-language-workspace [data-language-theme-editor]:not([data-language-design-ready]) [data-language-design-reset-preset],
+.theme-language-workspace [data-language-theme-editor]:not([data-language-design-ready]) [data-language-design-reset-all] {
+    display: none;
+}
+
+.theme-language-editor-toolbar {
+    display: flex;
+    align-items: end;
+    flex-wrap: wrap;
+    gap: 10px 20px;
+    min-width: 0;
+}
+
+.theme-language-editor-toolbar > label {
+    display: grid;
+    flex: 0 1 280px;
+    gap: 5px;
+}
+
+.theme-language-workspace .admin-language-coverage-summary {
+    flex: 1 1 auto;
+    gap: 6px 16px;
+    margin: 0;
+    padding: 6px 0;
+    font-size: 0.78rem;
+}
+
+.theme-language-workspace .admin-language-coverage-summary span {
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+}
+
+.theme-language-workspace .admin-language-table-wrap {
+    min-width: 0;
+    margin: 0;
+    border: 1px solid var(--admin-border, #ccd7e3);
+    border-radius: 6px;
+}
+
+.admin-page .theme-language-workspace .admin-language-table th,
+.admin-page .theme-language-workspace .admin-language-table td {
+    padding: 7px 10px;
+    font-size: 0.78rem;
+    line-height: 1.4;
+}
+
+.theme-language-workspace .admin-language-json-editor {
+    min-height: 220px;
+    font-family: ui-monospace, Consolas, monospace;
+    font-size: 0.78rem;
+    line-height: 1.5;
+    resize: vertical;
+}
+
+.theme-language-workspace .admin-language-key-details,
+.theme-language-workspace .admin-language-key-list {
+    margin: 0;
+    font-size: 0.78rem;
+}
+
+.admin-page .theme-language-workspace .bulk-row {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+}
+
+.theme-language-workspace input[type="file"],
+.theme-language-workspace button,
+.theme-language-workspace .button {
+    box-sizing: border-box;
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.theme-language-workspace input[type="file"] {
+    width: 100%;
+    min-width: 0;
+    margin: 8px 0;
+    font-size: 0.82rem;
+}
+
+.theme-language-workspace .admin-language-convention-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 5px 20px;
+    margin: 8px 0;
+    padding-left: 18px;
+    font-size: 0.8rem;
+}
+
+.theme-language-workspace [hidden] {
+    display: none !important;
+}
+
+@container theme-language-pane (max-width: 880px) {
+    .theme-language-design-workspace,
+    .theme-language-workspace .admin-language-design-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .theme-language-workspace .theme-language-design-preview {
+        position: static;
+    }
+}
+
+@container theme-language-pane (max-width: 580px) {
+    .theme-language-defaults,
+    .theme-language-workspace .admin-language-design-global,
+    .theme-language-workspace .admin-language-convention-list {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .theme-language-workspace .admin-language-selector-language-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .theme-language-workspace .admin-language-design-preset .admin-language-design-field {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 5px;
+    }
+
+    .theme-language-editor-toolbar > label {
+        flex: 1 1 100%;
+    }
+}

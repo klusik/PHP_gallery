@@ -37,6 +37,16 @@ use Throwable;
 use function Gallery\Core\db;
 
 /**
+ * Purpose: Bound SQL parameter and packet size during atomic navdata replacement.
+ * Units: rows per prepared INSERT.
+ * Scope: OurAirports persistence batches.
+ * Consumers: flight_maps_model_replace_navdata().
+ * Rationale: 200 rows use 1,800 parameters and reduce database round trips while preserving atomicity.
+ * @var int
+ */
+const FLIGHT_MAPS_NAVDATA_BATCH_ROWS = 200;
+
+/**
  * Return one stored gallery flight-map row.
  *
  * @param int $galleryId Gallery identifier.
@@ -67,9 +77,11 @@ function flight_maps_model_delete(int $galleryId): void
  * @param int $galleryId Gallery identifier.
  * @param string $sourceType Map source type.
  * @param string $routeText Human-readable route text.
- * @param array $points Resolved route points.
- * @param array $unresolved Unresolved route tokens.
+ * @param list<array<string,mixed>> $points Resolved route points.
+ * @param list<array<string,mixed>> $unresolved Unresolved route tokens and reasons.
  * @param string $now Current SQL timestamp.
+ * @param ?string $resolvedAt Optional timestamp for the captured navigation cycle.
+ * @return void Stores one resolved map record.
  */
 function flight_maps_model_upsert(int $galleryId, string $sourceType, string $routeText, array $points, array $unresolved, string $now, ?string $resolvedAt = null): void
 {
@@ -130,7 +142,9 @@ function flight_maps_model_navdata_status(): array
 /**
  * Atomically persist one normalized navdata source snapshot.
  *
- * @param array<int,array{ident:string,kind:string,region:string,latitude:float,longitude:float,source:string,cycle:string,created_at:string,updated_at:string}> $rows
+ * @param array<int,array{ident:string,kind:string,region:string,latitude:float,longitude:float,source:string,cycle:string,created_at:string,updated_at:string}> $rows Normalized source snapshot.
+ * @param string $source Trusted snapshot owner whose stale rows may be removed.
+ * @param string $now Snapshot timestamp shared by all replacement rows.
  * @return int Number of stale source rows deleted after the upsert pass.
  */
 function flight_maps_model_replace_navdata(array $rows, string $source, string $now): int
@@ -138,7 +152,7 @@ function flight_maps_model_replace_navdata(array $rows, string $source, string $
     $pdo = db();
     $pdo->beginTransaction();
     try {
-        $stmt = $pdo->prepare("INSERT INTO flight_map_nav_points (
+        $insertSql = "INSERT INTO flight_map_nav_points (
             ident,
             kind,
             region,
@@ -148,25 +162,32 @@ function flight_maps_model_replace_navdata(array $rows, string $source, string $
             cycle,
             created_at,
             updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES %s
         ON DUPLICATE KEY UPDATE
             latitude = VALUES(latitude),
             longitude = VALUES(longitude),
             source = VALUES(source),
             cycle = VALUES(cycle),
-            updated_at = VALUES(updated_at)");
-        foreach ($rows as $row) {
-            $stmt->execute([
-                $row['ident'],
-                $row['kind'],
-                $row['region'],
-                $row['latitude'],
-                $row['longitude'],
-                $row['source'],
-                $row['cycle'],
-                $row['created_at'],
-                $row['updated_at'],
-            ]);
+            updated_at = VALUES(updated_at)";
+        // Bound prepared-statement parameters while reducing 100,000 individual
+        // round trips to roughly 500 batches. The transaction remains atomic.
+        foreach (array_chunk($rows, FLIGHT_MAPS_NAVDATA_BATCH_ROWS) as $batch) {
+            $stmt = $pdo->prepare(sprintf($insertSql, implode(', ', array_fill(0, count($batch), '(?, ?, ?, ?, ?, ?, ?, ?, ?)'))));
+            $parameters = [];
+            foreach ($batch as $row) {
+                array_push($parameters,
+                    $row['ident'],
+                    $row['kind'],
+                    $row['region'],
+                    $row['latitude'],
+                    $row['longitude'],
+                    $row['source'],
+                    $row['cycle'],
+                    $row['created_at'],
+                    $row['updated_at']
+                );
+            }
+            $stmt->execute($parameters);
         }
         $deleteStmt = $pdo->prepare('DELETE FROM flight_map_nav_points WHERE source = ? AND updated_at <> ?');
         $deleteStmt->execute([$source, $now]);

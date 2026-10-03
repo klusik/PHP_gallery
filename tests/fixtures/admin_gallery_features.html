@@ -1,0 +1,106 @@
+<!doctype html>
+<!--
+Project: PHP Gallery
+Repository: https://github.com/klusik/PHP_gallery
+File: tests/fixtures/admin_gallery_features.html
+Module Type: Browser Test Fixture
+Purpose: Verify staged feature changes and explicit confirmation with real gallery markup.
+Responsibilities: Preserve dynamic drafts and intercept all domain requests without live storage.
+Author: Rudolf Klusal
+License: MIT License (see LICENSE file in repository)
+-->
+<html lang="en"><head><meta charset="utf-8"><title>Gallery feature confirmation regression</title>
+<link rel="stylesheet" href="/public/assets/styles/base.css"><link rel="stylesheet" href="/public/assets/styles/public.css">
+<link rel="stylesheet" href="/public/assets/styles/admin.css"><link rel="stylesheet" href="/public/assets/styles/admin-layout.css">
+<link rel="stylesheet" href="/public/assets/styles/admin-dashboard.css"><link rel="stylesheet" href="/public/assets/styles/admin-reordering.css">
+<link rel="stylesheet" href="/public/assets/styles/admin-gallery-list.css"><link rel="stylesheet" href="/public/assets/styles/side-panel.css">
+<link rel="stylesheet" href="/public/assets/styles/admin-cinematic.css">
+</head><body class="admin-page"><main id="workspace" data-dashboard-read="galleries"><!-- PRODUCTION_GALLERY_MARKUP --></main><pre id="results"></pre>
+<script type="module">
+import {setupAdminGalleryFeatures} from '/public/assets/gallery-modules/admin-gallery-features.js';
+const owner = document.getElementById('workspace');
+const original = owner.innerHTML;
+const requests = [];
+let writes = 0, assertions = 0, refuse = false, malformed = false, completion = null;
+const initialUrl = location.href;
+/** Require a fixture behavior without leaking installation data.
+ * @param {boolean} condition Required invariant.
+ * @param {string} message Meaningful regression context.
+ * @return {void} Counts an assertion or throws.
+ */
+function check(condition,message) { if (!condition) throw new Error(message); assertions++; }
+/** Await asynchronous event handlers and synthetic responses.
+ * @return {Promise<void>} Resolves after the browser task boundary.
+ */
+function settle() { return new Promise(/** Continue after pending microtasks complete. @param {function():void} resolve Completion callback. @return {number} Timer handle. */ resolve=>setTimeout(resolve,30)); }
+/** Find one actual feature chip from PHP output.
+ * @param {number} id Gallery root identifier.
+ * @param {string} key Feature key.
+ * @return {HTMLButtonElement} Production chip.
+ */
+function chip(id,key) { return owner.querySelector(`[data-gallery-feature-root-id="${id}"][data-gallery-feature-key="${key}"]`); }
+/** Intercept all domain transports with precise synthetic preview and canonical application data.
+ * @param {RequestInfo|URL} input Domain endpoint.
+ * @param {RequestInit} options Request transport fields.
+ * @return {Promise<Response>} Synthetic JSON response, never a live network write.
+ */
+window.fetch = async (input,options={}) => {
+    check(options.method==='POST' && options.body.get('csrf_token')==='tree-fixture','feature transport retains POST and CSRF');
+    const intents = JSON.parse(options.body.get('intents'));
+    requests.push({url:String(input),intents,fingerprint:options.body.get('fingerprint')});
+    if (malformed) return new Response('INVALID_JSON_PRIVATE_DATABASE_PATH', {status:500});
+    const scope = [{id:1,parent_id:0,title:'Alpha <safe>'},{id:2,parent_id:1,title:'Child <img src=x>'},{id:3,parent_id:2,title:'Grandchild'}];
+    if (String(input)==='/fixture-feature-plan') return new Response(JSON.stringify({ok:true,plan:{intents,fingerprint:'a'.repeat(64),gallery_count:3,changed_gallery_count:1,change_count:2,scope,rows:[{...scope[0],changes:[{feature:'game',current:false,next:true,side_effect:false},{feature:'voting',current:false,next:true,side_effect:true}]}]}}),{headers:{'Content-Type':'application/json'}});
+    check(String(input)==='/fixture-feature-apply' && options.body.get('fingerprint')==='a'.repeat(64),'only reviewed fingerprint reaches apply endpoint');
+    if (refuse) return new Response(JSON.stringify({ok:false,message:'Synthetic stale hierarchy. Review again.'}),{status:409,headers:{'Content-Type':'application/json'}});
+    writes++;
+    return new Response(JSON.stringify({ok:true,message:'Saved reviewed changes.',mutation:{type:'gallery.features.update',entity:'gallery',action:'update',entity_ids:[1]},panel:null,contexts:[],fallback:{redirect_url:'/index.php?page=admin'}}),{headers:{'Content-Type':'application/json'}});
+};
+document.addEventListener('adminGalleryWorkspaceMutation',/** Observe canonical completion without initiating a new refresh pipeline. @param {CustomEvent<Record<string,any>>} event Successful original envelope. @return {void} Records observable metadata. */ event=>{completion=event.detail;});
+try {
+    setupAdminGalleryFeatures(); setupAdminGalleryFeatures();
+    check(owner.querySelectorAll('[data-gallery-feature-key="background"]').length===0,'background remains read-only');
+    chip(1,'game').click(); chip(2,'voting').click();
+    check(requests.length===0 && writes===0,'chip staging never contacts persistence');
+    check(chip(1,'game').hasAttribute('data-feature-prepared') && !owner.querySelector('[data-gallery-feature-pending]').hidden,'local intentions expose pending controls');
+    owner.innerHTML=original; setupAdminGalleryFeatures();
+    check(chip(1,'game').hasAttribute('data-feature-prepared') && chip(2,'voting').hasAttribute('data-feature-prepared'),'draft survives dynamic fragment replacement');
+    owner.querySelector('[data-gallery-feature-review]').click(); await settle();
+    const dialog=owner.querySelector('dialog');
+    check(dialog.open && requests.length===1 && writes===0,'review opens native confirmation with no writes');
+    check(requests[0].intents.length===2 && requests[0].intents[0].root_id===1 && requests[0].intents[1].root_id===2,'ordered overlapping subtree intentions preserve chronology');
+    check(dialog.textContent.includes('Alpha <safe> (#1)') && dialog.textContent.includes('Child <img src=x> (#2)') && dialog.textContent.includes('Grandchild (#3)'),'confirmation lists exact descendant scope titles and identifiers');
+    check(!dialog.querySelector('img') && dialog.textContent.includes('Off → On') && dialog.textContent.includes('required coupled change'),'preview uses escaped text and displays current-to-new coupled effects');
+    dialog.querySelector('[data-gallery-feature-cancel]').click(); await settle();
+    check(!dialog.open && writes===0 && requests.length===1,'cancel never writes or removes local draft');
+    owner.querySelector('[data-gallery-feature-review]').click(); await settle();
+    refuse=true; dialog.querySelector('[data-gallery-feature-confirm]').click(); await settle();
+    check(writes===0 && !dialog.open && owner.querySelector('[data-gallery-feature-pending-status]').textContent.includes('Synthetic stale hierarchy'),'stale application remains unapplied and requires renewed review');
+    check(chip(1,'game').hasAttribute('data-feature-prepared'),'stale refusal preserves local intentions');
+    refuse=false; owner.querySelector('[data-gallery-feature-review]').click(); await settle();
+    dialog.querySelector('[data-gallery-feature-confirm]').click(); await settle();
+    check(writes===1 && completion?.mutation?.type==='gallery.features.update' && completion.mutation.entity_ids.join()==='1','confirmed apply emits original canonical completion exactly once');
+    check(!chip(1,'game').hasAttribute('data-feature-prepared') && location.href===initialUrl,'successful apply clears local draft without navigating');
+    owner.innerHTML=original; setupAdminGalleryFeatures(); chip(1,'maps').click();
+    const requestCount=requests.length; owner.querySelector('[data-gallery-feature-discard]').click();
+    check(requests.length===requestCount && writes===1 && !chip(1,'maps').hasAttribute('data-feature-prepared'),'dynamically inserted discard removes only local intentions');
+    chip(2,'maps').click();
+    check(chip(1,'maps').querySelector('[data-feature-prepared-label]').textContent.includes('On'),'descendant intent updates planned ancestor aggregate');
+    chip(1,'maps').click();
+    check(chip(1,'maps').querySelector('[data-feature-prepared-label]').textContent.includes('Off'),'ancestor click toggles staged all-ON result to OFF');
+    chip(2,'maps').click();
+    check(chip(1,'maps').querySelector('[data-feature-prepared-label]').textContent.includes('2 of 3'),'inverse descendant overlap exposes planned mixed ancestor state');
+    chip(1,'maps').click(); chip(1,'maps').click();
+    check(chip(1,'maps').querySelector('[data-feature-prepared-label]').textContent.includes('Off'),'repeated click alternates planned aggregate instead of persisted state');
+    owner.querySelector('[data-gallery-feature-review]').click(); await settle();
+    const inverse = requests[requests.length-1].intents;
+    check(inverse.length===5 && inverse[0].root_id===2 && inverse[0].enabled===true && inverse[1].root_id===1 && inverse[1].enabled===false && inverse[2].enabled===true && inverse[3].enabled===true && inverse[4].enabled===false,'inverse overlaps preserve exact ordered enabled targets');
+    owner.querySelector('[data-gallery-feature-dialog] [data-gallery-feature-cancel]').click();
+    owner.querySelector('[data-gallery-feature-discard]').click();
+    check(writes===1,'repeated click and inverse-overlap review remain non-mutating');
+    chip(1,'maps').click(); malformed=true; owner.querySelector('[data-gallery-feature-review]').click(); await settle();
+    const failedPreview = owner.querySelector('[data-gallery-feature-pending-status]').textContent;
+    check(writes===1 && failedPreview.includes('Gallery changes could not be reviewed.') && !failedPreview.includes('INVALID_JSON_PRIVATE_DATABASE_PATH'),'malformed transport uses safe localized feedback without raw response diagnostics');
+    document.getElementById('results').textContent=`BROWSER PASS ${assertions} assertions`;
+} catch(error) { document.getElementById('results').textContent=`BROWSER FAIL ${error.message}`; }
+</script></body></html>

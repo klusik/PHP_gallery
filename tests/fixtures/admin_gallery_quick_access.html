@@ -1,0 +1,251 @@
+<!doctype html>
+<!--
+Project: PHP Gallery
+Repository: https://github.com/klusik/PHP_gallery
+File: tests/fixtures/admin_gallery_quick_access.html
+Module Type: Browser Test Fixture
+Purpose: Exercise embedded gallery quick controls without installation data or live mutations.
+Responsibilities:
+  - Exercise production delegated access controls and canonical completion against synthetic mutations.
+  - Verify password isolation, dynamic reinjection and unchanged navigation without installation data.
+Author: Rudolf Klusal
+License: MIT License (see LICENSE file in repository)
+-->
+<html lang="en"><meta charset="utf-8"><title>Gallery quick access fixture</title>
+<style>
+[data-admin-gallery-visibility], [data-admin-gallery-password] { position: relative; }
+.public-admin-visibility-options, [data-admin-gallery-password-editor] { position: absolute; top: 100%; left: 0; background: white; padding: 8px; border: 1px solid black; }
+.public-admin-visibility-options { display: none; flex-direction: column; }
+[data-admin-gallery-visibility][open] .public-admin-visibility-options { display: flex; }
+td { padding: 3px; }
+</style>
+<body><main id="workspace"></main><pre id="results">BROWSER PENDING</pre>
+<script type="module">
+import {setupAdminGalleryQuickAccess} from '/public/assets/gallery-modules/admin-gallery-quick-access.js';
+
+let assertions = 0;
+/** @type {Array<{action:string,password:string,revision:string,csrf:string}>} Captured synthetic mutations. */
+const requests = [];
+/** @type {Array<Record<string,unknown>>} Real coordinator results. */
+const completions = [];
+/** @type {Array<Record<string,unknown>>} Owned workspace refresh signals. */
+const refreshes = [];
+/** @type {function():void|null} Held synthetic response release. */
+let release = null;
+let failNext = false;
+let revision = 13;
+let ownPassword = false;
+let visibility = 'private';
+let failedReads = 0;
+const initialUrl = location.href;
+const documentIdentity = document;
+
+/**
+ * Assert observable production behavior without exposing fixture credentials.
+ * @param {boolean} condition Expected result.
+ * @param {string} message Regression description.
+ * @return {void}
+ */
+function check(condition, message) { assertions++; if (!condition) throw new Error(message); }
+
+/**
+ * Wait for bounded asynchronous production work.
+ * @param {function():boolean} predicate Expected observable condition.
+ * @return {Promise<void>} Resolves when the expected state appears before the deadline.
+ */
+async function until(predicate) {
+    const deadline = Date.now() + 5000;
+    while (!predicate()) {
+        if (Date.now() > deadline) throw new Error('Quick access progress timeout');
+        await new Promise(
+            /** Yield to pending browser tasks during bounded polling. @param {function():void} resolve Timer consumer. @return {number} Timer handle. */
+            (resolve) => setTimeout(resolve, 10)
+        );
+    }
+}
+
+/**
+ * Render synthetic row controls matching the prepared production selector contract.
+ * @return {string} Native bulk form containing no nested action forms.
+ */
+function markup() {
+    return `<form id="bulk" action="/fixture-bulk" method="post"><input name="csrf_token" type="hidden" value="fixture-csrf"><select data-gallery-visibility-filter><option value="all">All</option><option value="private">Private</option></select><input data-unrelated-selection type="checkbox" name="gallery_ids[]" value="8" checked><div data-scroll-shell style="width:360px;height:95px;overflow:auto"><table style="width:700px"><tbody><tr style="height:180px" aria-hidden="true"><td colspan="3">Fixture preceding rows</td></tr><tr data-gallery-id="7" data-gallery-visibility="${visibility}"><td><input type="checkbox" name="gallery_ids[]" value="7" checked></td><td><span class="admin-gallery-status-pill is-${visibility}">${visibility}</span><details data-admin-gallery-visibility data-action-url="/fixture-visibility" data-gallery-id="7" data-edit-revision="${revision}"><summary><span class="public-admin-visibility-icon public-admin-visibility-icon-${visibility}">eye</span></summary><div class="public-admin-visibility-options">${['public','unpublished','private'].map(
+        /** Render one canonical visibility choice as a native button. @param {string} value Canonical visibility state. @return {string} Native choice. */
+        (value) => `<button type="button" data-admin-gallery-visibility-choice data-visibility="${value}" aria-pressed="${value === visibility}">${value}</button>`
+    ).join('')}</div></details></td><td><div data-admin-gallery-password data-action-url="/fixture-password" data-gallery-id="7" data-edit-revision="${revision}" data-password-enabled="${ownPassword ? '1' : '0'}" data-password-required="Enter a password" data-error-message="Save failed"><button type="button" data-admin-gallery-password-toggle>Own password</button><div data-admin-gallery-password-editor hidden><input type="password" autocomplete="new-password" data-admin-gallery-password-input aria-label="New password"><button type="button" data-admin-gallery-password-save>Save password</button></div></div><span role="status" data-admin-gallery-quick-status></span></td></tr></tbody></table></div><button type="submit">Bulk Apply</button></form>`;
+}
+
+/**
+ * Resolve a current dynamically replaceable native control.
+ * @param {string} selector Owned control selector.
+ * @return {HTMLElement} Current control.
+ */
+function control(selector) { return document.querySelector(selector); }
+
+/**
+ * Verify the last-row popup escapes ancestor clipping while retaining form ownership.
+ * @param {string} selector Popup selector.
+ * @return {void}
+ */
+function checkPopup(selector) {
+    const popup = control(selector);
+    const bounds = popup.getBoundingClientRect();
+    const hit = document.elementFromPoint(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2);
+    check(bounds.width > 0 && bounds.height > 0 && bounds.left >= 0 && bounds.top >= 0 && bounds.right <= document.documentElement.clientWidth && bounds.bottom <= document.documentElement.clientHeight, 'Last-row popup escaped the viewport');
+    check(popup.matches(':popover-open') && (popup === hit || popup.contains(hit)), 'Last-row popup remained clipped by the scroll shell');
+    check(popup.closest('form') === control('#bulk'), 'Top-layer positioning moved controls outside their CSRF form');
+}
+
+/**
+ * Compose canonical response metadata with a marker whose retention is observable.
+ * @param {string} action Current synthetic operation.
+ * @return {Record<string,unknown>} Successful canonical mutation response.
+ */
+function envelope(action) {
+    return {ok:true,message:'Saved',mutation:{type:action === 'enable' || action === 'disable' ? 'gallery.password' : 'gallery.visibility',entity:'gallery',action:'update',entity_ids:[7]},panel:null,contexts:[],fallback:{redirect_url:'/fixture-canonical'},fixture_marker:'retained',gallery_state:{id:7,visibility,visibility_label:`Localized ${visibility}`,own_password_enabled:ownPassword,access_label:ownPassword ? 'Localized password locked' : 'Localized direct-link token',edit_revision:String(revision)}};
+}
+
+document.addEventListener('php-gallery:mutation-complete',
+    /** Record the envelope emitted by the real shared coordinator. @param {CustomEvent<{envelope:Record<string,unknown>}>} event Real shared coordinator result. @return {void} */
+    (event) => { completions.push(event.detail.envelope); }
+);
+document.addEventListener('adminGalleryWorkspaceMutation',
+    /** Simulate an owned-fragment refresh that cannot replace the row. @param {CustomEvent<Record<string,unknown>>} event Workspace refresh request. @return {void} */
+    (event) => {
+        refreshes.push(event.detail);
+        void fetch('/fixture-admin-read').then(
+            /** Count the refused owned-fragment read without replacing acknowledged labels. @param {Response} response Refused owned-fragment read. @return {void} */
+            (response) => { if (!response.ok) failedReads++; }
+        );
+    }
+);
+window.fetch =
+    /**
+     * Intercept only explicitly synthetic loopback action URLs.
+     * @param {RequestInfo|URL} resource Synthetic URL.
+     * @param {RequestInit} options Production request metadata.
+     * @return {Promise<Response>} Held canonical response.
+     */
+    async function (resource, options = {}) {
+        const url = new URL(String(resource), location.href);
+        if (url.origin === location.origin && url.pathname === '/fixture-admin-read') return new Response('Synthetic owned GET refusal', {status:503});
+        check(url.origin === location.origin && ['/fixture-visibility','/fixture-password'].includes(url.pathname), 'Unexpected network request');
+        check(options.method === 'POST' && options.credentials === 'same-origin' && options.headers.Accept === 'application/json', 'Mutation transport lost authenticated JSON semantics');
+        const data = options.body;
+        check(data instanceof FormData && data.get('gallery_id') === '7', 'Mutation lost gallery identity');
+        const action = String(data.get('action'));
+        requests.push({action,password:String(data.get('password') || ''),revision:String(data.get('edit_revision')),csrf:String(data.get('csrf_token'))});
+        return new Promise(
+            /** Hold the synthetic mutation until its explicit release. @param {function(Response):void} resolve Response consumer. @return {void} */
+            (resolve) => {
+                release =
+                    /** Complete only the captured synthetic action. @return {void} */
+                    () => {
+                        if (failNext) {
+                            failNext = false;
+                            resolve(new Response(JSON.stringify({ok:false,message:'Synthetic refusal',mutation:null,panel:null,contexts:[],fallback:{}}), {status:409,headers:{'Content-Type':'application/json'}}));
+                        } else {
+                            revision++;
+                            if (action === 'enable') ownPassword = true;
+                            else if (action === 'disable') ownPassword = false;
+                            else visibility = action;
+                            resolve(new Response(JSON.stringify(envelope(action)), {headers:{'Content-Type':'application/json'}}));
+                        }
+                    };
+            }
+        );
+    };
+
+try {
+    control('#workspace').innerHTML = markup();
+    setupAdminGalleryQuickAccess();
+    setupAdminGalleryQuickAccess();
+    control('[data-scroll-shell]').scrollTop = control('[data-scroll-shell]').scrollHeight;
+    let bulkSubmits = 0;
+    document.addEventListener('submit',
+        /** Count and contain native bulk submissions within the fixture. @param {SubmitEvent} event Confined bulk fallback. @return {void} */
+        (event) => { event.preventDefault(); bulkSubmits++; }
+    );
+    const input = control('[data-admin-gallery-password-input]');
+    check(!input.hasAttribute('name') && !input.required, 'Password input can leak into or block bulk form');
+    control('[data-admin-gallery-password-toggle]').click();
+    check(!control('[data-admin-gallery-password-editor]').hidden && document.activeElement === input && requests.length === 0, 'First password click must only open and focus the editor');
+    checkPopup('[data-admin-gallery-password-editor]');
+    input.value = '   ';
+    control('[data-admin-gallery-password-save]').click();
+    check(requests.length === 0 && control('[data-admin-gallery-quick-status]').textContent === 'Enter a password', 'Invalid password must not request a mutation');
+    input.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));
+    check(control('[data-admin-gallery-password-editor]').hidden && requests.length === 0, 'Canceled editor sent a mutation');
+    control('#bulk').requestSubmit();
+    check(bulkSubmits === 1 && control('#bulk').checkValidity(), 'Canceled invalid editor blocked native bulk submission');
+    control('[data-admin-gallery-password-toggle]').click();
+    input.value = 'fixture password';
+    check(!new FormData(control('#bulk')).has('password'), 'Bulk form captured the quick password');
+    input.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}));
+    await until(/** Observe the expected asynchronous fixture state. @return {boolean} Whether production work reached the expected state. */ () => requests.length === 1);
+    check(bulkSubmits === 1 && requests[0].action === 'enable' && requests[0].revision === '13' && requests[0].csrf === 'fixture-csrf', 'Password Enter lost action, exact revision, CSRF or triggered bulk submit');
+    control('[data-admin-gallery-password-save]').click();
+    check(requests.length === 1 && control('[data-admin-gallery-password-toggle]').disabled, 'Pending request did not lock duplicate row actions');
+    release();
+    await until(/** Observe the expected asynchronous fixture state. @return {boolean} Whether production work reached the expected state. */ () => refreshes.length === 1);
+    await until(/** Observe the expected asynchronous fixture state. @return {boolean} Whether production work reached the expected state. */ () => failedReads === 1);
+    check(completions.length === 1 && completions[0].fixture_marker === 'retained' && refreshes[0].mutation.type === 'gallery.password', 'Canonical response bypassed shared completion or lost metadata');
+    check(input.value === '' && control('[data-admin-gallery-password-editor]').hidden && control('[data-admin-gallery-password]').dataset.passwordEnabled === '1', 'Acknowledged password state failed to clear plaintext and close the editor');
+    check(control('[data-admin-gallery-password-toggle]').textContent === 'Localized password locked' && control('.admin-gallery-status-pill').textContent === 'Localized private', 'Acknowledged labels stayed stale after owned GET failure');
+    await until(/** Observe the expected asynchronous fixture state. @return {boolean} Whether production work reached the expected state. */ () => !control('[data-admin-gallery-password-toggle]').disabled);
+    control('[data-admin-gallery-password-toggle]').click();
+    await until(/** Observe the expected asynchronous fixture state. @return {boolean} Whether production work reached the expected state. */ () => requests.length === 2);
+    check(requests[1].action === 'disable' && requests[1].password === '' && requests[1].revision === '14', 'Second password click must disable only the current own password with updated revision');
+    release();
+    await until(/** Observe the expected asynchronous fixture state. @return {boolean} Whether production work reached the expected state. */ () => refreshes.length === 2);
+    await until(/** Observe the expected asynchronous fixture state. @return {boolean} Whether production work reached the expected state. */ () => !control('[data-admin-gallery-password-toggle]').disabled);
+    check(control('[data-admin-gallery-password]').dataset.passwordEnabled === '0', 'Acknowledged password disable state was not applied');
+    check(control('[data-admin-gallery-password-toggle]').textContent === 'Localized direct-link token', 'Password removal implied token protection was removed');
+    control('[data-gallery-visibility-filter]').value = 'private';
+    control('[data-admin-gallery-visibility] summary').click();
+    await until(/** Observe the expected asynchronous fixture state. @return {boolean} Whether production work reached the expected state. */ () => control('.public-admin-visibility-options').matches(':popover-open'));
+    checkPopup('.public-admin-visibility-options');
+    control('[data-admin-gallery-visibility-choice][data-visibility="public"]').click();
+    await until(/** Observe the expected asynchronous fixture state. @return {boolean} Whether production work reached the expected state. */ () => requests.length === 3);
+    check(requests[2].action === 'public' && requests[2].revision === '15' && requests[2].password === '', 'Embedded visibility reused stale revision or leaked a password');
+    release();
+    await until(/** Observe the expected asynchronous fixture state. @return {boolean} Whether production work reached the expected state. */ () => refreshes.length === 3);
+    check(control('[data-admin-gallery-visibility-choice][data-visibility="public"]').getAttribute('aria-pressed') === 'true' && control('summary .public-admin-visibility-icon').classList.contains('public-admin-visibility-icon-public'), 'Acknowledged shared eye state was not applied');
+    check(control('tr[data-gallery-id="7"]').dataset.galleryVisibility === 'public' && control('.admin-gallery-status-pill').textContent === 'Localized public' && control('.admin-gallery-status-pill').classList.contains('is-public'), 'Visibility acknowledgement left row filter state or localized pill stale');
+    check(control('tr[data-gallery-id="7"]').hidden && !control('tr[data-gallery-id="7"] input[name="gallery_ids[]"]').checked && control('[data-unrelated-selection]').checked, 'Visibility acknowledgement must filter and deselect only the newly mismatching row');
+    control('#workspace').innerHTML = markup();
+    control('[data-scroll-shell]').scrollTop = control('[data-scroll-shell]').scrollHeight;
+    control('[data-admin-gallery-password-toggle]').click();
+    checkPopup('[data-admin-gallery-password-editor]');
+    control('[data-admin-gallery-password-input]').value = 'another fixture password';
+    failNext = true;
+    control('[data-admin-gallery-password-save]').click();
+    await until(/** Observe the expected asynchronous fixture state. @return {boolean} Whether production work reached the expected state. */ () => requests.length === 4);
+    release();
+    await until(/** Observe the expected asynchronous fixture state. @return {boolean} Whether production work reached the expected state. */ () => !control('[data-admin-gallery-password-save]').disabled);
+    check(refreshes.length === 3 && completions.length === 3, 'Refused mutation issued successful completion');
+    check(!control('[data-admin-gallery-password-editor]').hidden && control('[data-admin-gallery-password-input]').value !== '' && control('[data-admin-gallery-quick-status]').textContent === 'Synthetic refusal', 'Refused mutation lost entered password, feedback or unlock');
+    checkPopup('[data-admin-gallery-password-editor]');
+    control('[data-admin-gallery-password-save]').click();
+    await until(/** Observe the expected asynchronous fixture state. @return {boolean} Whether production work reached the expected state. */ () => requests.length === 5);
+    release();
+    await until(/** Observe the expected asynchronous fixture state. @return {boolean} Whether production work reached the expected state. */ () => refreshes.length === 4);
+    check(refreshes[3].gallery_state.own_password_enabled === true && refreshes[3].fixture_marker === 'retained', 'Dynamic reinjection lost canonical mutation interception');
+    ownPassword = false;
+    control('#workspace').innerHTML = markup();
+    control('[data-scroll-shell]').scrollTop = control('[data-scroll-shell]').scrollHeight;
+    const fallbackEditor = control('[data-admin-gallery-password-editor]');
+    Object.defineProperty(fallbackEditor, 'showPopover', {value:undefined});
+    control('[data-admin-gallery-password-toggle]').click();
+    const fallbackBounds = fallbackEditor.getBoundingClientRect();
+    const fallbackHit = document.elementFromPoint(fallbackBounds.left + fallbackBounds.width / 2, fallbackBounds.top + fallbackBounds.height / 2);
+    check(fallbackBounds.width > 0 && fallbackBounds.right <= document.documentElement.clientWidth && fallbackBounds.bottom <= document.documentElement.clientHeight && fallbackBounds.top >= 0, 'Fixed fallback popup escaped viewport bounds');
+    check(fallbackHit === fallbackEditor || fallbackEditor.contains(fallbackHit), 'Fixed fallback popup remained clipped by scroll shell');
+    control('[data-admin-gallery-password-save]').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));
+    check(fallbackEditor.hidden && requests.length === 5, 'Escape from the popup Save control failed to cancel without a mutation');
+    check(location.href === initialUrl && document === documentIdentity && bulkSubmits === 1, 'Quick actions navigated, reloaded or submitted the bulk form');
+    control('#results').textContent = `BROWSER PASS ${assertions} assertions`;
+} catch (error) {
+    control('#results').textContent = `BROWSER FAIL ${error.message}`;
+}
+</script></body></html>

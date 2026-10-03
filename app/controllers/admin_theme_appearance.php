@@ -258,11 +258,12 @@ use function Gallery\Views\view_render_admin_theme_appearance_tab;
 /**
  * Render the Theme appearance tab.
  *
- * @param array $theme Current theme settings.
+ * @param array<string,mixed> $theme Current normalized theme preferences.
  * @param string $themeBackgroundUrl Current theme background URL.
  * @param bool $gpsMapsFeatureEnabled Whether GPS map appearance settings are enabled.
- * @param array $tagPageGridSettings Tag-page grid settings.
+ * @param array{columns:int,rows:int,items_per_page:int} $tagPageGridSettings Prepared tag-page dimensions and capacity.
  * @param string $tagPageDescriptionLayout Tag-page gallery-card layout.
+ * @return void Sends prepared values to the Appearance presentation renderer.
  */
 function render_admin_theme_appearance_tab(array $theme, string $themeBackgroundUrl, bool $gpsMapsFeatureEnabled, array $tagPageGridSettings, string $tagPageDescriptionLayout): void
 {
@@ -272,7 +273,6 @@ function render_admin_theme_appearance_tab(array $theme, string $themeBackground
         'admin-theme-appearance-subtab-colors',
         'admin-theme-appearance-subtab-width-map',
         'admin-theme-appearance-subtab-gallery-tags',
-        'admin-theme-appearance-subtab-preview',
     ];
     if (!in_array($appearanceSubtab, $appearanceSubtabOptions, true)) {
         $appearanceSubtab = 'admin-theme-appearance-subtab-colors';
@@ -299,6 +299,16 @@ function render_admin_theme_appearance_tab(array $theme, string $themeBackground
         ];
     }
 
+    $siteName = site_name();
+    $globalDescriptionLayout = theme_gallery_description_layout();
+    $preview = array_replace($theme, [
+        'site_name' => $siteName,
+        'page_width' => $pageWidthMode,
+        'page_width_custom' => $customPageWidth,
+        'gallery_description_layout' => $globalDescriptionLayout,
+        'tag_page_gallery_grid_columns' => (int) $tagPageGridSettings['columns'],
+        'tag_page_gallery_grid_rows' => (int) $tagPageGridSettings['rows'],
+    ]);
     view_render_admin_theme_appearance_tab([
         'theme' => $theme,
         'theme_background_url' => $themeBackgroundUrl,
@@ -311,13 +321,15 @@ function render_admin_theme_appearance_tab(array $theme, string $themeBackground
         'custom_page_width' => $customPageWidth,
         'tag_page_grid_settings' => $tagPageGridSettings,
         'tag_page_description_layout' => $tagPageDescriptionLayout,
+        'theme_gallery_description_layout' => $globalDescriptionLayout,
         'description_layouts' => $descriptionLayouts,
         'hero_tag_visible_limit' => $heroTagVisibleLimit,
         'hero_tag_display_all' => $heroTagDisplayAll,
         'hero_tag_scrollbar_enabled' => $heroTagScrollbarEnabled,
         'hero_tag_scrollbar_rows' => $heroTagScrollbarRows,
         'hero_tag_sort_mode' => $heroTagSortMode,
-        'site_name' => site_name(),
+        'site_name' => $siteName,
+        'preview' => $preview,
         'admin_tags_url' => url_for('admin_tags'),
         'active_subtab' => $appearanceSubtab,
         'max_columns' => CMS_PAGINATION_MAX_COLUMNS,

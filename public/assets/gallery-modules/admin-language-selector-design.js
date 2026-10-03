@@ -28,6 +28,35 @@ const DESIGN_PIXEL_PROPERTIES = {
     flag_height: '--language-flag-height', font_size: '--language-code-size',
 };
 
+/** Cache offered-language/default signatures independently of design changes. */
+const languagePreviewSignatures = new WeakMap();
+
+/**
+ * Resolve the explicitly paired choices panel without crossing form ownership.
+ * @param {HTMLElement} editor Designer root in Theme or shared Settings.
+ * @return {HTMLElement|null} Matching choices owner, or the historical enclosing panel.
+ */
+function languageDesignChoicesOwner(editor) {
+    const form = editor.closest('form');
+    const explicit = editor.dataset.languageSettingsId
+        ? document.getElementById(editor.dataset.languageSettingsId) : null;
+    if (explicit instanceof HTMLElement && explicit.matches('[data-public-language-selector-settings]')
+        && explicit.closest('form') === form) {
+        return explicit;
+    }
+    return editor.closest('[data-public-language-selector-settings]');
+}
+
+/**
+ * Read the current public default from the same form without changing it.
+ * @param {HTMLElement} editor Designer whose preview needs an active sample.
+ * @return {string} Uppercase offered language code, or an empty default.
+ */
+function languageDesignPublicDefault(editor) {
+    const control = editor.closest('form')?.querySelector('[name="public_language"], [name="settings[public_language]"]');
+    return String(control?.value || '').toUpperCase();
+}
+
 /** Return the design editor that owns a control or event target. */
 function languageDesignEditorFrom(target) {
     return target instanceof Element ? target.closest('[data-language-design-editor]') : null;
@@ -72,17 +101,35 @@ function setLanguageDesignFieldValue(input, value) {
     }
 }
 
-/** Build the preview buttons from the panel's real maintained-language cards. */
+/**
+ * Build the sample from the paired panel's checked maintained-language cards.
+ * @param {HTMLElement} editor Designer that owns the sample.
+ * @param {HTMLElement} preview Sample container to replace when its signature changes.
+ * @return {HTMLDivElement} Production-shaped switcher with the offered default active.
+ */
 function buildLanguageDesignPreviewButtons(editor, preview) {
     preview.replaceChildren();
     const switcher = document.createElement('div');
     switcher.className = 'public-language-switcher';
     switcher.setAttribute('role', 'group');
-    for (const [index, card] of Array.from(editor.closest('[data-public-language-selector-settings]')?.querySelectorAll('.admin-language-selector-language') || []).entries()) {
+    const cards = Array.from(languageDesignChoicesOwner(editor)?.querySelectorAll('.admin-language-selector-language') || [])
+        .filter(/**
+         * Include only languages offered by the current draft.
+         * @param {Element} card Maintained-language choice card.
+         * @return {boolean} Whether its checkbox is checked.
+         */ (card) => Boolean(card.querySelector('input')?.checked));
+    const publicDefault = languageDesignPublicDefault(editor);
+    const activeCode = cards.some(/**
+         * Check whether the public default is offered in this draft.
+         * @param {Element} card Checked language card.
+         * @return {boolean} Whether its code matches the public default.
+         */ (card) => String(card.querySelector('input')?.value || '').toUpperCase() === publicDefault)
+        ? publicDefault : String(cards[0]?.querySelector('input')?.value || '').toUpperCase();
+    for (const card of cards) {
         const code = String(card.querySelector('input')?.value || '').toUpperCase();
         const name = String(card.querySelector('strong')?.textContent || code);
         const button = document.createElement('span');
-        button.className = `public-language-button${index === 0 ? ' is-active' : ''}`;
+        button.className = `public-language-button${code === activeCode ? ' is-active' : ''}`;
         button.setAttribute('aria-label', name);
         const codeNode = document.createElement('span');
         codeNode.className = 'public-language-code';
@@ -104,7 +151,11 @@ function buildLanguageDesignPreviewButtons(editor, preview) {
     return switcher;
 }
 
-/** Apply the current unsaved editor state to its production-shaped preview. */
+/**
+ * Apply draft design and paired language choices to the local sample.
+ * @param {HTMLElement} editor Designer whose existing controls are read without persistence.
+ * @return {void} Updates presentation while preserving all submitted fields.
+ */
 function renderLanguageDesignPreview(editor) {
     if (!(editor instanceof HTMLElement)) {
         return;
@@ -114,9 +165,32 @@ function renderLanguageDesignPreview(editor) {
         return;
     }
     const preset = String(languageDesignValue(editor, 'preset') || 'classic');
+    const choices = languageDesignChoicesOwner(editor);
+    const offered = Array.from(choices?.querySelectorAll('.admin-language-selector-language input:checked') || []).map(/**
+     * Include the checked code in the bounded preview identity.
+     * @param {Element} input Offered-language checkbox.
+     * @return {string} Its current language code.
+     */ (input) => input.value);
+    const signature = JSON.stringify([offered, languageDesignPublicDefault(editor)]);
     let switcher = preview.querySelector('.public-language-switcher');
-    if (!(switcher instanceof HTMLElement)) {
+    if (!(switcher instanceof HTMLElement) || languagePreviewSignatures.get(editor) !== signature) {
+        languagePreviewSignatures.set(editor, signature);
         switcher = buildLanguageDesignPreviewButtons(editor, preview);
+    }
+    const status = editor.querySelector('[data-language-design-preview-status]');
+    if (status instanceof HTMLElement) {
+        const enabled = choices?.querySelector('.admin-language-selector-enabled input[type="checkbox"]');
+        status.textContent = offered.length === 0 ? (status.dataset.languagePreviewEmptyMessage || '')
+            : enabled instanceof HTMLInputElement && !enabled.checked ? (status.dataset.languagePreviewDisabledMessage || '') : '';
+        status.hidden = status.textContent === '';
+    }
+    editor.querySelectorAll('[data-language-theme-reset]').forEach(/**
+     * Reveal Theme's local draft resets after the designer has bound successfully.
+     * @param {Element} button JS-only local reset control.
+     * @return {void} Makes the existing delegated reset available.
+     */ (button) => { button.hidden = false; });
+    if (editor.hasAttribute('data-language-theme-editor') && !editor.hasAttribute('data-language-design-ready')) {
+        editor.setAttribute('data-language-design-ready', '1');
     }
     switcher.className = `public-language-switcher language-preset-${preset} language-orientation-${languageDesignValue(editor, 'orientation')} language-density-${languageDesignValue(editor, 'density')} language-align-${languageDesignValue(editor, 'alignment')} language-active-${languageDesignValue(editor, 'active_style')}`;
     for (const [field, property] of Object.entries(DESIGN_COLOR_PROPERTIES)) {
@@ -163,6 +237,30 @@ function resetAllLanguageDesignFields(editor) {
     renderLanguageDesignPreview(editor);
 }
 
+/**
+ * Refresh paired designers after an offered-language or public-default edit.
+ * @param {EventTarget|null} target Input whose draft value changed.
+ * @return {void} Updates only designers owned by the same form and choices panel.
+ */
+function refreshLanguageChoicesPreviews(target) {
+    if (!(target instanceof Element)
+        || !target.matches('.admin-language-selector-language input, .admin-language-selector-enabled input, [name="public_language"], [name="settings[public_language]"]')) {
+        return;
+    }
+    const form = target.closest('form');
+    if (!form) return;
+    form.querySelectorAll('[data-language-design-editor]').forEach(/**
+     * Refresh the affected owner while leaving other Settings forms untouched.
+     * @param {Element} editor Designer in the target form.
+     * @return {void} Reflects the offered list or current public default.
+     */ (editor) => {
+        if (editor instanceof HTMLElement && (target.matches('[name="public_language"], [name="settings[public_language]"]')
+            || languageDesignChoicesOwner(editor)?.contains(target))) {
+            renderLanguageDesignPreview(editor);
+        }
+    });
+}
+
 /** Attach initial previews while delegated handlers cover future panel fragments. */
 export function setupAdminLanguageSelectorDesign() {
     document.querySelectorAll('[data-language-design-editor]').forEach((editor) => renderLanguageDesignPreview(editor));
@@ -186,7 +284,12 @@ export function setupAdminLanguageSelectorDesign() {
     observer.observe(document.body, {childList: true, subtree: true});
 }
 
-document.addEventListener('input', (event) => {
+document.addEventListener('input', /**
+ * Reflect continuous design or paired language draft input.
+ * @param {Event} event Bubbling input from an existing form control.
+ * @return {void} Updates the owned preview and range readout.
+ */ (event) => {
+    refreshLanguageChoicesPreviews(event.target);
     const editor = languageDesignEditorFrom(event.target);
     if (editor && event.target.matches('[data-language-design-field]')) {
         if (!(event.target instanceof HTMLInputElement) || event.target.type !== 'checkbox') {
@@ -196,7 +299,12 @@ document.addEventListener('input', (event) => {
     }
 });
 
-document.addEventListener('change', (event) => {
+document.addEventListener('change', /**
+ * Reflect committed design or paired language draft changes.
+ * @param {Event} event Bubbling change from an existing form control.
+ * @return {void} Updates the affected preview without saving a preference.
+ */ (event) => {
+    refreshLanguageChoicesPreviews(event.target);
     const editor = languageDesignEditorFrom(event.target);
     if (editor && event.target.matches('[data-language-design-field]')) {
         renderLanguageDesignPreview(editor);

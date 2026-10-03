@@ -257,7 +257,7 @@ function javascript_declarations(string $source): array
                 $bodyStart++;
             }
         }
-        $records[] = ['kind' => $kind, 'name' => $name, 'line' => $token['line'],
+        $records[] = ['kind' => $kind, 'language' => 'javascript', 'name' => $name, 'line' => $token['line'],
             'params' => $params, 'return_type' => '', 'doc' => attached_doc($tokens, $start, $pairs),
             'start_token' => declaration_start($tokens, $start, $pairs),
             'end_token' => declaration_end($tokens, $bodyStart, $pairs)];

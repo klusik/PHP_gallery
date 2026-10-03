@@ -39,7 +39,50 @@
 
 .admin-maintenance-center {
     display: grid;
-    gap: 1rem;
+    gap: .65rem;
+    min-width: 0;
+}
+
+/* Override shared page-card spacing only inside this compact maintenance workspace. */
+.admin-page .admin-maintenance-center-hero,
+.admin-page .admin-maintenance-center .panel {
+    margin: 0;
+    padding: .75rem .9rem;
+    min-width: 0;
+}
+
+.admin-page .admin-maintenance-center-hero {
+    margin-bottom: .65rem;
+    align-items: center;
+}
+
+.admin-page .admin-maintenance-center-hero h1,
+.admin-page .admin-maintenance-center h2 {
+    margin: 0;
+    font-size: 1.15rem;
+    line-height: 1.35;
+}
+
+.admin-maintenance-center-hero p,
+.admin-maintenance-center p {
+    margin: .35rem 0 0;
+}
+
+.admin-maintenance-center-hero .admin-kicker,
+.admin-maintenance-center .admin-kicker {
+    margin: 0 0 .2rem;
+}
+
+.maintenance-center-analysis-note {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: .25rem .75rem;
+    font-size: .85rem;
+}
+
+.admin-maintenance-center .maintenance-center-analysis-note p {
+    margin: 0;
 }
 
 .maintenance-center-status-card {
@@ -68,8 +111,8 @@
 }
 
 .maintenance-center-progress {
-    height: .75rem;
-    margin-top: 1rem;
+    height: .5rem;
+    margin-top: .65rem;
     overflow: hidden;
     border-radius: 999px;
     background: color-mix(in srgb, currentColor 10%, transparent);
@@ -89,7 +132,7 @@
     display: flex;
     flex-wrap: wrap;
     gap: .5rem 1.25rem;
-    margin-top: .65rem;
+    margin-top: .4rem;
 }
 
 .maintenance-center-progress-meta {
@@ -97,13 +140,14 @@
 }
 
 .maintenance-center-current {
-    padding: .75rem 0;
+    padding: .4rem 0;
+    font-size: .85rem;
     border-top: 1px solid var(--border-color, rgba(127, 127, 127, .2));
     border-bottom: 1px solid var(--border-color, rgba(127, 127, 127, .2));
 }
 
 .maintenance-center-actions {
-    margin-top: .9rem;
+    margin-top: .5rem;
 }
 
 .maintenance-center-cancel-note {
@@ -114,15 +158,15 @@
     display: flex;
     flex-wrap: wrap;
     justify-content: flex-end;
-    gap: .6rem;
+    gap: .4rem;
 }
 
 .maintenance-center-plan-totals > span,
 .maintenance-center-task-facts > span {
     display: grid;
     gap: .05rem;
-    min-width: 7rem;
-    padding: .45rem .6rem;
+    min-width: 0;
+    padding: .3rem .5rem;
     border: 1px solid var(--border-color, rgba(127, 127, 127, .22));
     border-radius: .6rem;
 }
@@ -133,33 +177,48 @@
 }
 
 .maintenance-center-task-groups {
+    /* Read groups in plan order; aligned task rows separate names, state, and evidence. */
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 26rem), 1fr));
-    gap: 1rem;
-    margin-top: 1rem;
+    gap: .65rem;
+    margin-top: .65rem;
 }
 
 .maintenance-center-task-group {
     display: grid;
     align-content: start;
-    gap: .55rem;
-    padding: .85rem;
+    gap: 0;
+    overflow: hidden;
     border: 1px solid var(--border-color, rgba(127, 127, 127, .22));
     border-radius: .85rem;
 }
 
 .maintenance-center-task-group h3 {
-    margin: 0 0 .2rem;
+    margin: 0;
+    padding: .45rem .7rem;
+    font-size: .9rem;
+    background: color-mix(in srgb, var(--admin-brand, currentColor) 7%, transparent);
+    border-bottom: 1px solid var(--border-color, rgba(127, 127, 127, .22));
 }
 
-.maintenance-center-task {
+.admin-page .maintenance-center-task:has(input[type="checkbox"]) {
     display: grid;
-    grid-template-columns: auto 1fr;
+    grid-template-columns: auto minmax(0, 1fr);
     align-items: start;
-    gap: .7rem;
-    padding: .75rem;
-    border-radius: .7rem;
-    background: color-mix(in srgb, currentColor 4%, transparent);
+    gap: .45rem;
+    padding: .55rem .7rem;
+    font-size: .85rem;
+    line-height: 1.4;
+    border-radius: 0;
+    background: transparent;
+}
+
+.maintenance-center-task + .maintenance-center-task {
+    border-top: 1px solid var(--border-color, rgba(127, 127, 127, .14));
+}
+
+.maintenance-center-task:has(input:enabled):hover,
+.maintenance-center-task:focus-within {
+    background: color-mix(in srgb, var(--admin-brand, currentColor) 5%, transparent);
 }
 
 .maintenance-center-task.is-unavailable {
@@ -180,6 +239,11 @@
 
 .maintenance-center-task-body {
     display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, .65fr) minmax(0, 1.5fr);
+    align-items: center;
+    min-width: 0;
+    gap: .5rem 1rem;
+    overflow-wrap: anywhere;
 }
 
 .maintenance-center-task-title {
@@ -193,25 +257,70 @@
 }
 
 .maintenance-center-task-facts > span {
-    min-width: 6.2rem;
-    padding: .35rem .45rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: baseline;
+    gap: .4rem;
+    min-width: 0;
+    padding: .2rem .4rem;
+    border: 0;
+    border-radius: .25rem;
+    background: color-mix(in srgb, currentColor 4%, transparent);
+}
+
+.maintenance-center-task-facts small {
+    order: -1;
+    opacity: .85;
+}
+
+.maintenance-center-task-facts strong {
+    text-align: right;
+}
+
+.maintenance-center-task-facts {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .2rem .5rem;
+}
+
+/* On narrower workspaces, evidence follows the title and state instead of squeezing them. */
+@media (max-width: 1150px) {
+    .maintenance-center-task-body {
+        grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .maintenance-center-task-facts {
+        grid-column: 1 / -1;
+    }
+}
+
+@media (max-width: 560px) {
+    .maintenance-center-task-body,
+    .maintenance-center-task-facts {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .maintenance-center-task-facts {
+        grid-column: auto;
+    }
 }
 
 .maintenance-center-full-optimize {
-    margin-top: 1rem;
+    margin-top: .5rem;
 }
 
 .maintenance-center-lower-grid {
     display: grid;
-    grid-template-columns: minmax(0, 1.4fr) minmax(18rem, .8fr);
-    gap: 1rem;
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, .8fr);
+    align-items: start;
+    gap: .65rem;
 }
 
 .maintenance-center-activity {
     display: grid;
     gap: .4rem;
-    max-height: 24rem;
-    margin: 0;
+    max-height: 13rem;
+    margin: .5rem 0 0;
     padding: 0;
     overflow: auto;
     list-style: none;
@@ -246,8 +355,37 @@
 .maintenance-center-report-breakdown {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
-    gap: .8rem;
-    margin-top: 1rem;
+    gap: .65rem;
+    margin-top: .65rem;
+}
+
+/* Results stay scannable without giving each value a full dashboard-sized card. */
+.admin-maintenance-center .metric-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
+    gap: .5rem;
+    margin-top: .6rem;
+}
+
+.admin-maintenance-center .metric-card {
+    min-height: 0;
+    padding: .5rem .65rem;
+    gap: .2rem;
+}
+
+.admin-maintenance-center .metric-card strong {
+    font-size: 1.1rem;
+}
+
+.maintenance-center-report-breakdown ul {
+    columns: 14rem;
+    column-gap: 1.5rem;
+    font-size: .85rem;
+    overflow-wrap: anywhere;
+}
+
+.maintenance-center-report-breakdown li {
+    break-inside: avoid;
 }
 
 .maintenance-center-report-breakdown section {

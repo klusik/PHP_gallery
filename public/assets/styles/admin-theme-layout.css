@@ -1,0 +1,402 @@
+/**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ * File: public/assets/styles/admin-theme-layout.css
+ * Module Type: Stylesheet
+ * Purpose: Arrange Theme navigation, card, and grid settings in compact groups.
+ * Responsibilities:
+ *   - Align related controls while keeping their scope and current values visible.
+ *   - Adapt shortcut pickers and grid controls to the available panel width.
+ * Author: Rudolf Klusal
+ * License: MIT License (see LICENSE file in repository)
+ */
+
+.admin-page #admin-theme-tab-layout {
+    container-name: theme-layout-pane;
+    container-type: inline-size;
+}
+
+.admin-page .theme-layout-workspace {
+    display: grid;
+    min-width: 0;
+    gap: 14px;
+}
+
+.theme-layout-heading {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 6px 20px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--admin-border, #ccd7e3);
+}
+
+.theme-layout-heading h2 {
+    margin: 0;
+    font-size: 1.2rem;
+    line-height: 1.25;
+}
+
+.theme-layout-heading p {
+    margin: 0;
+    color: var(--admin-muted-text, #52616f);
+    font-size: 0.85rem;
+    line-height: 1.4;
+}
+
+.admin-page .theme-layout-workspace .admin-subtabs {
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+}
+
+.theme-layout-workspace .admin-subtab-list {
+    gap: 6px;
+}
+
+.admin-page .admin-theme-form .theme-layout-workspace .admin-subtab {
+    min-height: 34px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--admin-muted-text, #52616f);
+    font-size: 0.88rem;
+    box-shadow: none;
+}
+
+.admin-page .admin-theme-form .theme-layout-workspace .admin-subtab[aria-selected="true"],
+.admin-page .admin-theme-form .theme-layout-workspace .admin-subtab:hover {
+    border-color: var(--admin-brand-border, #9ec3e6);
+    background: var(--admin-brand-soft, #e8f2fb);
+    color: var(--admin-brand, #315d9f);
+}
+
+.admin-page .theme-layout-workspace .admin-subtab-panel {
+    padding: 0;
+    gap: 14px;
+}
+
+.theme-layout-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+    gap: 14px;
+    min-width: 0;
+}
+
+.admin-page .theme-layout-workspace .theme-layout-card {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-content: start;
+    gap: 10px;
+    min-width: 0;
+    margin: 0;
+    padding: 12px;
+    border: 1px solid var(--admin-border, #ccd7e3);
+    border-radius: 8px;
+    background: var(--admin-surface, #fff);
+}
+
+.theme-layout-card > legend {
+    padding: 0 5px;
+    font-size: 0.9rem;
+    font-weight: 700;
+}
+
+.theme-layout-shortcuts-card {
+    grid-column: 1 / -1;
+}
+
+.theme-layout-card-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-width: 0;
+}
+
+.admin-page .theme-layout-workspace label {
+    min-width: 0;
+    margin: 0;
+    font-size: 0.86rem;
+    font-weight: 650;
+}
+
+.admin-page .theme-layout-workspace .checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+}
+
+.admin-page .theme-layout-workspace .theme-layout-hint,
+.theme-layout-workspace .muted {
+    margin: 0;
+    color: var(--admin-muted-text, #52616f);
+    font-size: 0.8rem;
+    font-weight: 400;
+    line-height: 1.45;
+}
+
+.theme-layout-workspace select {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    margin: 0;
+    font-size: 0.85rem;
+    font-weight: 400;
+}
+
+/* Each slot retains its own target and canonical gallery ID in submission order. */
+.admin-page .theme-layout-workspace .theme-layout-shortcuts {
+    gap: 0;
+}
+
+.admin-page .theme-layout-workspace .theme-layout-shortcut {
+    display: grid;
+    grid-template-columns: 100px minmax(150px, 220px) minmax(0, 1fr);
+    align-items: start;
+    min-width: 0;
+    gap: 10px 18px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--admin-border, #ccd7e3);
+}
+
+.admin-page .theme-layout-workspace .theme-layout-shortcut:last-child {
+    border-bottom: 0;
+}
+
+.theme-layout-shortcut > strong {
+    padding-top: 8px;
+    font-size: 0.86rem;
+}
+
+.theme-layout-shortcut > label {
+    display: grid;
+    gap: 5px;
+}
+
+.theme-layout-picker {
+    display: grid;
+    min-width: 0;
+    gap: 5px;
+}
+
+/* The visible slot name identifies each row; its field labels remain accessible. */
+.theme-layout-shortcut-target-label,
+.theme-layout-shortcut-picker-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+.admin-page .theme-layout-workspace .theme-layout-shortcut > label,
+.theme-layout-shortcut .theme-layout-picker {
+    gap: 0;
+}
+
+.admin-page .theme-layout-workspace .gallery-search-picker {
+    min-width: 0;
+    gap: 4px;
+}
+
+.theme-layout-shortcut .gallery-search-picker-field input[type="text"] {
+    min-height: 34px;
+    margin: 0;
+    border-radius: 5px;
+    font-size: 0.85rem;
+}
+
+.theme-layout-shortcut .gallery-search-picker-help,
+.theme-layout-shortcut .gallery-search-picker > a {
+    font-size: 0.75rem;
+    line-height: 1.35;
+}
+
+.admin-page .admin-theme-form .theme-layout-workspace .gallery-search-picker-clear {
+    min-height: 24px;
+    min-width: 24px;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    background: transparent;
+    color: var(--admin-muted-text, #52616f);
+    box-shadow: none;
+}
+
+.admin-page .admin-theme-form .theme-layout-workspace .gallery-search-picker-clear:hover {
+    background: var(--admin-brand-soft, #e8f2fb);
+    color: var(--admin-brand, #315d9f);
+}
+
+.theme-layout-slider-row {
+    display: grid;
+    grid-template-columns: minmax(120px, 0.65fr) minmax(80px, 1fr) 28px;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+.theme-layout-slider-row input[type="range"] {
+    width: 100%;
+    min-width: 0;
+    margin: 0;
+}
+
+.theme-layout-slider-row output {
+    color: var(--admin-muted-text, #52616f);
+    font-size: 0.85rem;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.theme-layout-count {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin: 0;
+    padding-top: 10px;
+    border-top: 1px solid var(--admin-border, #ccd7e3);
+    font-size: 0.8rem;
+    color: var(--admin-muted-text, #52616f);
+}
+
+.theme-layout-count output,
+.theme-layout-count strong {
+    font-size: 1.05rem;
+    color: var(--admin-text, #1e2a3a);
+    font-variant-numeric: tabular-nums;
+}
+
+.theme-layout-lightbox {
+    grid-column: 1 / -1;
+}
+
+.admin-page .theme-layout-workspace .theme-layout-lightbox {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 0.7fr);
+    align-items: center;
+    gap: 10px 20px;
+}
+
+.theme-layout-control-row {
+    display: grid;
+    grid-template-columns: minmax(140px, 0.5fr) minmax(0, 1fr);
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+.theme-layout-label {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.theme-layout-workspace .theme-appearance-help {
+    position: relative;
+    display: inline-block;
+    vertical-align: middle;
+}
+
+.theme-layout-workspace .theme-appearance-help > p {
+    width: 240px;
+    max-width: min(240px, calc(100vw - 48px));
+    text-align: left;
+}
+
+.theme-layout-label .theme-appearance-help {
+    position: static;
+}
+
+.theme-layout-label .theme-appearance-help > p {
+    width: min(240px, 100%);
+    max-width: 100%;
+}
+
+.theme-layout-details {
+    min-width: 0;
+    margin: 0;
+    font-size: 0.82rem;
+}
+
+.theme-layout-details > summary {
+    width: fit-content;
+    color: var(--admin-muted-text, #52616f);
+    cursor: pointer;
+}
+
+.theme-layout-details > p {
+    margin: 8px 0;
+    color: var(--admin-muted-text, #52616f);
+    font-size: 0.8rem;
+    line-height: 1.45;
+}
+
+.theme-layout-details button {
+    max-width: 100%;
+    white-space: normal;
+}
+
+.admin-page .theme-layout-reset .bulk-row {
+    margin: 8px 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+}
+
+.theme-layout-workspace [hidden] {
+    display: none !important;
+}
+
+@container theme-layout-pane (max-width: 780px) {
+    .theme-layout-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .admin-page .theme-layout-workspace .theme-layout-lightbox {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .admin-page .theme-layout-workspace .theme-layout-shortcut {
+        grid-template-columns: 90px minmax(0, 1fr);
+    }
+
+    .theme-layout-shortcut > .theme-layout-picker,
+    .theme-layout-shortcut > .gallery-search-picker {
+        grid-column: 2;
+    }
+}
+
+@container theme-layout-pane (max-width: 440px) {
+    .admin-page .theme-layout-workspace .theme-layout-shortcut {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 8px;
+    }
+
+    .theme-layout-shortcut > strong {
+        padding-top: 0;
+    }
+
+    .theme-layout-shortcut > .theme-layout-picker,
+    .theme-layout-shortcut > .gallery-search-picker {
+        grid-column: auto;
+    }
+
+    .theme-layout-slider-row {
+        grid-template-columns: minmax(0, 1fr) 28px;
+        gap: 6px;
+    }
+
+    .theme-layout-slider-row > label {
+        grid-column: 1 / -1;
+    }
+
+    .theme-layout-control-row {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}

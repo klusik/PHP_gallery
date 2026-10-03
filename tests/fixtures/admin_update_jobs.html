@@ -12,13 +12,15 @@ License: MIT
 <html lang="en"><meta charset="utf-8"><title>Updates drawer fixture</title>
 <link rel="stylesheet" href="/public/assets/styles/base.css">
 <link rel="stylesheet" href="/public/assets/styles/admin.css">
+<link rel="stylesheet" href="/public/assets/styles/admin-dashboard.css">
 <link rel="stylesheet" href="/public/assets/styles/admin-update.css">
 <link rel="stylesheet" href="/public/assets/styles/side-panel.css">
 <body class="admin-page">
 <main><a id="open" href="/fixture-page" data-gallery-side-panel-link data-gallery-side-panel-url="/fixture-page?panel=1" data-admin-side-panel-workflow="updates" data-admin-side-panel-title="Updates">Open updates</a></main>
 <pre id="results">BROWSER PENDING</pre>
 <script type="module">
-import {setupAdminUpdateJobs} from '/public/assets/gallery-modules/admin-update-jobs.js?v=20261001-compact-update-status';
+import {setupAdminUpdateJobs} from '/public/assets/gallery-modules/admin-update-jobs.js?v=20261002-update-notes-v1';
+import {setupAdminNavdataUpdateFeedback} from '/public/assets/gallery-modules/admin-navdata-update.js?v=20261002-navdata-ajax-v1';
 import {setupAdminGallerySidePanel} from '/public/assets/gallery-modules/admin-side-panel.js';
 
 let assertions = 0;
@@ -29,6 +31,11 @@ let failRead = false;
 let failJob = false;
 let holdRead = false;
 let releaseRead;
+let releaseNotes;
+let releaseNavdata;
+let navdataCalls = 0;
+let periodicChecks = 0;
+let forcedChecks = 0;
 const originalUrl = location.href;
 
 /** Require an observable browser behavior.
@@ -50,7 +57,7 @@ async function until(predicate) {
  */
 function summary(pending) {
     return '<h2>' + (pending ? 'Update available' : 'This installation is current.') + '</h2>'
-        + '<form method="post" action="/fixture-action"><input name="update_action" value="force_check" type="hidden"><button>Force check</button></form>'
+        + '<form method="post" action="/fixture-action" data-update-check-form><input name="csrf_token" value="fixture-csrf" type="hidden"><input name="update_action" value="force_check" type="hidden"><button>Force check</button></form>'
         + (pending ? '<form method="post" action="/fixture-action" data-update-job-form><input name="csrf_token" value="fixture-csrf" type="hidden"><input name="update_action" value="stable_update" type="hidden"><button>Update</button></form>' : '');
 }
 /** Build two synchronized progress scopes inside the production drawer.
@@ -61,7 +68,18 @@ function markup() {
         + '<div data-update-release-summary data-update-status-url="/fixture-summary">' + summary(true) + '</div>'
         + '<p data-update-status-error hidden>Check failed <button type="button" data-update-status-refresh>Retry</button></p>'
         + '<section class="admin-update-job" data-update-job-scope hidden></section></div>'
-        + '<section class="admin-update-job" data-update-job-scope hidden></section></div>';
+        + '<section class="admin-update-job" data-update-job-scope hidden></section><div data-update-patch-notes>' + notes('old') + '</div>' + navdata() + '</div>';
+}
+/** Build a replaceable notes viewer. @param {string} version Displayed release. @return {string} Synthetic picker. */
+function notes(version) {
+    return '<details data-patch-notes-viewer data-fragment-url="/fixture-notes" open><form data-patch-notes-form><input data-patch-notes-input value="' + version + '"></form><button data-patch-version="older">Older notes</button><div data-patch-notes-fragment>Notes ' + version + '</div></details>';
+}
+/** Build a confined shared navdata card. @param {string} returnPage Owned surface. @return {string} Dynamic import form. */
+function navdata(returnPage = 'admin') {
+    return '<article class="admin-maintenance-card admin-navdata-update-card" data-navdata-card data-navdata-return-page="' + returnPage + '">'
+        + '<div class="admin-maintenance-card-heading"><strong>Flight map navdata</strong></div>'
+        + '<form class="admin-navdata-import-form" action="/fixture-navdata" data-navdata-update-form><input type="hidden" name="csrf_token" value="fixture-csrf"><input type="hidden" name="navdata_return_page" value="' + returnPage + '"><div class="admin-navdata-update-status" data-navdata-update-status hidden><span data-navdata-status-text>Importing</span></div><button data-navdata-update-submit>Update navdata</button></form>'
+        + '<dl class="admin-navdata-import-metrics"><div><dt>Local points</dt><dd>111,384</dd></div><div><dt>Last update</dt><dd>2026-10-02 12:00:00</dd></div><div><dt>Airport identifiers</dt><dd>100,851</dd></div><div><dt>Navaids</dt><dd>10,533</dd></div></dl></article>';
 }
 /** Return a synthetic durable job.
  * @param {string} status Durable lifecycle state. @return {{id:string, status:string, stage:string, progress:{percent:number, message:string}, can_resume:boolean, can_cancel:boolean, can_rollback:boolean}} Job state.
@@ -81,10 +99,19 @@ window.fetch = /** Intercept only fixture endpoints; no updater files or GitHub 
  */ async (url, options = {}) => {
     const target = new URL(url, location.href);
     check(target.origin === location.origin, 'No fixture request leaves loopback');
+    if (target.pathname === '/fixture-navdata') {
+        navdataCalls++;
+        check(options.body.get('csrf_token') === 'fixture-csrf' && options.body.get('ajax') === '1', 'Navdata AJAX retains authentication fields');
+        const returnPage = options.body.get('navdata_return_page');
+        check(returnPage === 'admin' || returnPage === 'admin_navdata', 'Navdata AJAX carries an owned surface');
+        return new Promise(/** Hold the import while other controls remain usable. @param {function(Response):void} resolve Response consumer. @return {void} Stores callback. */ resolve => { releaseNavdata = /** Finish the synthetic import. @return {void} Emits canonical completion. */ () => resolve(json({ok:true, message:'Navigation data updated', state:'updated', html:navdata(returnPage), mutation:{type:'navigation_data.refresh',entity:'navigation_data',action:'refresh',entity_ids:[]}, panel:null, contexts:[], fallback:{}})); });
+    }
+    if (target.pathname === '/fixture-notes') return new Promise(/** Delay a former version selection. @param {function(Response):void} resolve Response consumer. @return {void} Stores callback. */ resolve => { releaseNotes = /** Release superseded notes. @return {void} Returns old content. */ () => resolve(json({ok:true, version:'older', html:'Stale older notes'})); });
     if (options.method === 'POST') {
         check(options.body.get('csrf_token') === 'fixture-csrf' && options.body.get('update_async') === '1', 'Existing update transport preserves CSRF and async fields');
         const action = options.body.get('update_action');
-        check(action !== 'force_check', 'Completion never forces GitHub discovery');
+        if (action === 'check_due') { periodicChecks++; return json({ok:true, html:summary(true), notes_html:notes('old')}); }
+        if (action === 'force_check') { forcedChecks++; return json({ok:true, html:summary(false), notes_html:notes('new')}); }
         if (action === 'stable_update') { starts++; return json({ok: true, job: job('running')}); }
         if (action === 'job_continue') { continuations++; return json({ok: true, job: job(failJob ? 'failed' : 'completed')}); }
         if (action === 'job_cancel') return json({ok: true, job: job('cancelled')});
@@ -95,31 +122,51 @@ window.fetch = /** Intercept only fixture endpoints; no updater files or GitHub 
         check(options.cache === 'no-store', 'Completion reads fresh local presentation');
         if (failRead) return json({ok: false}, 503);
         if (holdRead) return new Promise(/** Delay the old summary for supersession coverage. @param {function(Response): void} resolve Response consumer. @return {void} Stores release callback. */ resolve => { releaseRead = /** Release the held passive response. @return {void} Resolves only this fixture request. */ () => resolve(json({ok: true, html: summary(false)})); });
-        return json({ok: true, html: summary(false)});
+        return json({ok: true, html: summary(false), notes_html: notes('new'), notes_count:2});
     }
     check(target.pathname === '/fixture-page', 'Only the owned drawer page is loaded');
     return new Response(markup(), {headers: {'Content-Type': 'text/html'}});
 };
 
 try {
+    const paused = document.createElement('section');
+    paused.setAttribute('data-update-job-scope', '');
+    paused.dataset.updateJobId = 'paused-background-job';
+    paused.dataset.updateJobStatus = 'running';
+    paused.dataset.updateJobAutoResume = '0';
+    paused.innerHTML = '<input name="csrf_token" value="fixture-csrf">';
+    document.body.append(paused);
     setupAdminUpdateJobs();
+    setupAdminNavdataUpdateFeedback();
     setupAdminUpdateJobs();
+    await new Promise(/** Allow an unwanted automatic continuation to expose itself. @param {function():void} resolve Timer consumer. @return {number} Timer. */ resolve => setTimeout(resolve, 300));
+    check(continuations === 0, 'A paused background job must not resume merely by opening Updates');
+    paused.remove();
     setupAdminGallerySidePanel();
     document.getElementById('open').click();
     await until(/** Await dynamically injected update controls. @return {boolean} Whether summary arrived. */ () => Boolean(document.querySelector('[data-update-release-summary]')));
     const panel = document.querySelector('[data-admin-side-panel]');
     const release = panel.querySelector('[data-update-release-summary]');
+    await until(/** Await the single initial age check. @return {boolean} Whether periodic presentation settled. */ () => periodicChecks === 1 && !release.hasAttribute('aria-busy'));
     const scope = panel.querySelector('[data-update-job-scope]');
     let form = release.querySelector('[data-update-job-form]');
+    panel.querySelector('[data-patch-version="older"]').click();
+    await until(/** Wait for pending old notes. @return {boolean} Whether held. */ () => Boolean(releaseNotes));
     form.requestSubmit();
     await until(/** Wait for production progress rendering. @return {boolean} Whether worker is running. */ () => scope.dataset.updateJobStatus === 'running');
     check(form.querySelector('button').disabled, 'Update stays disabled throughout the running job');
     await until(/** Wait for passive completion rendering. @return {boolean} Whether refreshed summary arrived. */ () => release.dataset.updateStatusJob === 'fixture-1');
     check(!release.querySelector('[data-update-job-form]'), 'Update disappears after completion without Force check');
+    releaseNotes();
+    await new Promise(/** Flush the superseded response. @param {function():void} resolve Timer consumer. @return {number} Timer. */ resolve => setTimeout(resolve, 20));
+    check(panel.querySelector('[data-patch-notes-input]').value === 'new' && panel.querySelector('[data-patch-notes-fragment]').textContent === 'Notes new', 'Completion refreshes selected notes and suppresses stale selection responses');
     check(scope.querySelector('[data-update-job-complete]').hidden === false, 'Completion is visible in dynamically created cards');
     check(panel.querySelectorAll('[data-update-job-scope][data-update-job-status="completed"]').length === 2, 'Status and Advanced progress remain synchronized');
     check(starts === 1 && continuations === 1 && reads === 1, 'One start, one continuation and one passive read complete the workflow');
     check(location.href === originalUrl && panel.getAttribute('aria-hidden') === 'false', 'Completion keeps URL and drawer open');
+    release.querySelector('[data-update-check-form]').requestSubmit();
+    await until(/** Await explicit asynchronous discovery. @return {boolean} Whether Force check settled. */ () => forcedChecks === 1 && !release.hasAttribute('aria-busy'));
+    check(starts === 1 && periodicChecks === 1 && location.href === originalUrl, 'Periodic and forced discovery stay asynchronous without installing or navigating');
 
     release.innerHTML = summary(true);
     failRead = true;
@@ -156,6 +203,36 @@ try {
     check(release.querySelector('[data-update-job-form]') !== null && release.dataset.updateStatusJob === 'fixture-2', 'Old completion cannot overwrite a newer job');
     await until(/** Let final bounded continuation settle. @return {boolean} Whether newer worker stopped. */ () => scope.dataset.updateJobStatus === 'failed');
     check(location.href === originalUrl && panel.getAttribute('aria-hidden') === 'false', 'Every tested transition preserves URL and drawer');
+    panel.querySelector('[data-navdata-update-form]').requestSubmit();
+    await until(/** Wait for AJAX import. @return {boolean} Whether held import started. */ () => Boolean(releaseNavdata));
+    check(panel.querySelector('[data-navdata-update-submit]').disabled && location.href === originalUrl, 'Navdata import paints progress without navigation');
+    check(document.getElementById('open').isConnected, 'Other page controls remain mounted during import');
+    releaseNavdata();
+    await until(/** Wait for replacement import card. @return {boolean} Whether success appeared. */ () => panel.querySelector('[data-navdata-card]').textContent.includes('Navigation data updated'));
+    check(panel.getAttribute('aria-hidden') === 'false' && location.href === originalUrl, 'Navdata completion keeps the panel open and URL unchanged');
+    releaseNavdata = null;
+    panel.querySelector('[data-navdata-update-form]').requestSubmit();
+    await until(/** Wait for delegated replacement form. @return {boolean} Whether second request is held. */ () => Boolean(releaseNavdata));
+    releaseNavdata();
+    await until(/** Wait for second replacement. @return {boolean} Whether import is idle. */ () => !panel.querySelector('[data-navdata-update-submit]').disabled);
+    check(navdataCalls === 2, 'Dynamically replaced navdata form remains intercepted without rebinding');
+    const manager = document.createElement('div');
+    manager.className = 'admin-navdata-page';
+    manager.style.width = '360px';
+    manager.style.maxWidth = '100%';
+    manager.innerHTML = navdata('admin_navdata');
+    document.querySelector('main').append(manager);
+    check(manager.scrollWidth <= manager.clientWidth + 1, 'Shared import metrics fit a narrow manager without horizontal overflow');
+    for (let attempt = 0; attempt < 2; attempt++) {
+        releaseNavdata = null;
+        manager.querySelector('[data-navdata-update-form]').requestSubmit();
+        await until(/** Wait for delegated manager request. @return {boolean} Whether AJAX is held. */ () => Boolean(releaseNavdata));
+        check(manager.querySelector('[data-navdata-update-submit]').disabled && location.href === originalUrl, 'Manager import runs in place and exposes progress');
+        releaseNavdata();
+        await until(/** Wait for the owned manager refresh. @return {boolean} Whether import is idle. */ () => !manager.querySelector('[data-navdata-update-submit]').disabled);
+        check(manager.querySelector('[name="navdata_return_page"]').value === 'admin_navdata', 'Manager context survives dynamically replaced import controls');
+    }
+    check(navdataCalls === 4 && location.href === originalUrl && panel.getAttribute('aria-hidden') === 'false', 'Both navdata surfaces share AJAX behavior without disturbing the drawer or URL');
     document.getElementById('results').textContent = 'BROWSER PASS: ' + assertions + ' updater presentation assertions';
 } catch (error) {
     document.getElementById('results').textContent = 'BROWSER FAIL: ' + error.message + '\n' + error.stack;

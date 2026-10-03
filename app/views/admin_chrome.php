@@ -43,15 +43,17 @@ use function Gallery\Core\url_for;
 use function Gallery\Services\t;
 
 /**
- * Handle view admin menu structure.
+ * Prepare Admin menu groups from controller-supplied navigation preferences.
  *
  * Used by server-rendered view helpers.
  *
- * @return array Structured result data for the caller.
+ * @param array{update_pending?:bool,update_label?:string,feature_enabled?:array<string,bool>,admin_legacy_upload_navigation_enabled?:bool} $model Prepared sidebar state; missing legacy preference keeps old entries hidden.
+ * @return list<array{label:string,items:list<array{label:string,page:string,url:string,feature?:string,highlight?:bool,icon?:string}>}> Navigation groups with optional feature ownership and decorative icons.
  */
 function view_admin_menu_structure(array $model = []): array
 {
     $updatePending = !empty($model['update_pending']);
+    $legacyUploadsEnabled = !empty($model['admin_legacy_upload_navigation_enabled']);
     $updateLabel = trim((string) ($model['update_label'] ?? ''));
     if ($updateLabel === '') {
         $updateLabel = t('admin.menu.updates', 'Updates');
@@ -60,50 +62,52 @@ function view_admin_menu_structure(array $model = []): array
         [
             'label' => t('admin.menu.dashboard', 'Dashboard'),
             'items' => [
-                ['label' => t('admin.menu.overview', 'Overview'), 'page' => 'admin', 'url' => url_for('admin')],
-                ['label' => t('admin.menu.settings', 'Settings'), 'page' => 'admin_settings', 'url' => url_for('admin_settings')],
+                ['label' => t('admin.menu.overview', 'Overview'), 'page' => 'admin', 'url' => url_for('admin'), 'icon' => 'overview'],
+                ['label' => t('admin.menu.settings', 'Settings'), 'page' => 'admin_settings', 'url' => url_for('admin_settings'), 'icon' => 'settings'],
             ],
         ],
         [
             'label' => t('admin.menu.galleries', 'Galleries'),
             'items' => [
-                ['label' => t('admin.menu.all_galleries', 'All galleries'), 'page' => 'admin', 'url' => url_for('admin') . '#admin-tab-galleries'],
-                ['label' => t('admin.menu.create_gallery', 'Create gallery'), 'page' => 'admin_new_gallery', 'url' => url_for('admin_new_gallery')],
-                ['label' => t('admin.menu.smart_galleries', 'Smart Galleries'), 'page' => 'admin_smart_galleries', 'url' => url_for('admin_smart_galleries'), 'feature' => 'smart_galleries'],
-                ['label' => t('admin.menu.upload_photos', 'Upload photos'), 'page' => 'admin_upload', 'url' => url_for('admin_upload')],
-                ['label' => t('admin.menu.upload_settings', 'Upload settings'), 'page' => 'admin_upload_settings', 'url' => url_for('admin_upload_settings')],
-                ['label' => t('admin.menu.mobile_uploads', 'Mobile uploads'), 'page' => 'admin_mobile_uploads', 'url' => url_for('admin_mobile_uploads'), 'feature' => 'mobile_webdav'],
-                ['label' => t('admin.menu.media_renamer', 'Media renamer'), 'page' => 'admin_media_renamer', 'url' => url_for('admin_media_renamer'), 'feature' => 'media_renamer'],
-                ['label' => t('admin.menu.api_manager', 'API manager'), 'page' => 'admin_api_manager', 'url' => url_for('admin_api_manager'), 'feature' => 'upload_api'],
-                ['label' => t('admin.menu.edit_tags', 'Edit tags'), 'page' => 'admin_tags', 'url' => url_for('admin_tags')],
+                ['label' => t('admin.menu.all_galleries', 'All galleries'), 'page' => 'admin', 'url' => url_for('admin') . '#admin-tab-galleries', 'icon' => 'galleries'],
+                ['label' => t('admin.menu.create_gallery', 'Create gallery'), 'page' => 'admin_new_gallery', 'url' => url_for('admin_new_gallery'), 'icon' => 'create'],
+                ['label' => t('admin.menu.smart_galleries', 'Smart Galleries'), 'page' => 'admin_smart_galleries', 'url' => url_for('admin_smart_galleries'), 'feature' => 'smart_galleries', 'icon' => 'smart'],
+                ...($legacyUploadsEnabled ? [
+                    ['label' => t('admin.menu.legacy_upload_photos', 'Legacy uploads'), 'page' => 'admin_upload', 'url' => url_for('admin_upload'), 'icon' => 'upload'],
+                    ['label' => t('admin.menu.legacy_upload_settings', 'Legacy upload settings'), 'page' => 'admin_upload_settings', 'url' => url_for('admin_upload_settings'), 'icon' => 'settings'],
+                    ['label' => t('admin.menu.legacy_upload_mobile', 'Legacy mobile uploads'), 'page' => 'admin_mobile_uploads', 'url' => url_for('admin_mobile_uploads'), 'feature' => 'mobile_webdav', 'icon' => 'mobile'],
+                ] : []),
+                ['label' => t('admin.menu.media_renamer', 'Media renamer'), 'page' => 'admin_media_renamer', 'url' => url_for('admin_media_renamer'), 'feature' => 'media_renamer', 'icon' => 'rename'],
+                ['label' => t('admin.menu.api_manager', 'API manager'), 'page' => 'admin_api_manager', 'url' => url_for('admin_api_manager'), 'feature' => 'upload_api', 'icon' => 'api'],
+                ['label' => t('admin.menu.edit_tags', 'Edit tags'), 'page' => 'admin_tags', 'url' => url_for('admin_tags'), 'icon' => 'tags'],
             ],
         ],
         [
             'label' => t('admin.menu.appearance', 'Appearance'),
             'items' => [
-                ['label' => t('admin.menu.theme', 'Theme'), 'page' => 'admin_theme', 'url' => url_for('admin_theme')],
-                ['label' => t('admin.menu.features', 'Features'), 'page' => 'admin_features', 'url' => url_for('admin_features')],
+                ['label' => t('admin.menu.theme', 'Theme'), 'page' => 'admin_theme', 'url' => url_for('admin_theme'), 'icon' => 'theme'],
+                ['label' => t('admin.menu.features', 'Features'), 'page' => 'admin_features', 'url' => url_for('admin_features'), 'icon' => 'features'],
             ],
         ],
         [
             'label' => t('admin.menu.maintenance', 'Maintenance'),
             'items' => [
-                ['label' => t('admin.menu.trash', 'Trash'), 'page' => 'admin_trash', 'url' => url_for('admin_trash')],
-                ['label' => t('admin.menu.logs', 'Logs'), 'page' => 'admin_logs', 'url' => url_for('admin_logs')],
-                ['label' => t('admin.menu.telemetry', 'Telemetry'), 'page' => 'admin_telemetry', 'url' => url_for('admin_telemetry'), 'feature' => 'telemetry'],
-                ['label' => t('admin.menu.maintenance_center', 'Maintenance Center'), 'page' => 'admin_maintenance_center', 'url' => url_for('admin_maintenance_center')],
-                ['label' => t('admin.menu.gallery_report', 'Complete report'), 'page' => 'admin_gallery_report', 'url' => url_for('admin_gallery_report'), 'feature' => 'complete_gallery_report'],
-                ['label' => t('admin.menu.integrity', 'Integrity'), 'page' => 'admin_integrity', 'url' => url_for('admin_integrity')],
-                ['label' => t('admin.menu.navdata', 'Navigation data'), 'page' => 'admin_navdata', 'url' => url_for('admin_navdata'), 'feature' => 'navigation_data'],
-                ['label' => $updateLabel, 'page' => 'admin_update', 'url' => url_for('admin_update'), 'highlight' => $updatePending],
+                ['label' => t('admin.menu.trash', 'Trash'), 'page' => 'admin_trash', 'url' => url_for('admin_trash'), 'icon' => 'trash'],
+                ['label' => t('admin.menu.logs', 'Logs'), 'page' => 'admin_logs', 'url' => url_for('admin_logs'), 'icon' => 'logs'],
+                ['label' => t('admin.menu.telemetry', 'Telemetry'), 'page' => 'admin_telemetry', 'url' => url_for('admin_telemetry'), 'feature' => 'telemetry', 'icon' => 'telemetry'],
+                ['label' => t('admin.menu.maintenance_center', 'Maintenance Center'), 'page' => 'admin_maintenance_center', 'url' => url_for('admin_maintenance_center'), 'icon' => 'maintenance'],
+                ['label' => t('admin.menu.gallery_report', 'Complete report'), 'page' => 'admin_gallery_report', 'url' => url_for('admin_gallery_report'), 'feature' => 'complete_gallery_report', 'icon' => 'report'],
+                ['label' => t('admin.menu.integrity', 'Integrity'), 'page' => 'admin_integrity', 'url' => url_for('admin_integrity'), 'icon' => 'integrity'],
+                ['label' => t('admin.menu.navdata', 'Navigation data'), 'page' => 'admin_navdata', 'url' => url_for('admin_navdata'), 'feature' => 'navigation_data', 'icon' => 'navigation'],
+                ['label' => $updateLabel, 'page' => 'admin_update', 'url' => url_for('admin_update'), 'highlight' => $updatePending, 'icon' => 'update'],
             ],
         ],
         [
             'label' => t('admin.menu.account', 'Account'),
             'items' => [
-                ['label' => t('admin.menu.profile', 'Profile'), 'page' => 'admin_account', 'url' => url_for('admin_account')],
-                ['label' => t('viewer.admin.invites.menu', 'Viewer accounts'), 'page' => 'admin_viewer_invitations', 'url' => url_for('admin_viewer_invitations'), 'feature' => 'viewer_accounts'],
-                ['label' => t('admin.menu.logout', 'Logout'), 'page' => 'admin_logout', 'url' => url_for('admin_logout')],
+                ['label' => t('admin.menu.profile', 'Profile'), 'page' => 'admin_account', 'url' => url_for('admin_account'), 'icon' => 'profile'],
+                ['label' => t('viewer.admin.invites.menu', 'Viewer accounts'), 'page' => 'admin_viewer_invitations', 'url' => url_for('admin_viewer_invitations'), 'feature' => 'viewer_accounts', 'icon' => 'viewers'],
+                ['label' => t('admin.menu.logout', 'Logout'), 'page' => 'admin_logout', 'url' => url_for('admin_logout'), 'icon' => 'logout'],
             ],
         ],
     ];
@@ -207,9 +211,10 @@ function view_render_admin_tab_panel(string $id, string $contentHtml, bool $acti
  * without fighting the parent tab state. Callers should keep ids unique inside
  * the page and render matching panels with view_render_admin_subtab_panel().
  *
- * @param array $tabs Tabs value.
+ * @param list<array{id:string,label?:string,active?:bool,badge?:string|int|null,icon?:string}> $tabs Prepared subtab labels and optional decorative icon identifiers.
  * @param string $activeId Preferred active subtab id. The first subtab is used when empty.
  * @param string $ariaLabel Accessible label for this subtab group.
+ * @return void Emits escaped labels and fixed decorative SVG for recognized icons.
  */
 function view_render_admin_subtabs(array $tabs, string $activeId = '', string $ariaLabel = ''): void
 {
@@ -238,7 +243,7 @@ function view_render_admin_subtabs(array $tabs, string $activeId = '', string $a
         $isActive = $tabId === $resolvedActiveId;
         $controlId = $tabId . '-control';
         echo '<button type="button" class="admin-subtab' . ($isActive ? ' is-active' : '') . '" id="' . e($controlId) . '" role="tab" aria-controls="' . e($tabId) . '" aria-selected="' . ($isActive ? 'true' : 'false') . '" tabindex="' . ($isActive ? '0' : '-1') . '" data-admin-subtab-target="' . e($tabId) . '">';
-        echo '<span>' . e($tabLabel) . '</span>';
+        echo '<span>' . (($tab['icon'] ?? '') === 'trash' ? view_admin_trash_icon() : '') . e($tabLabel) . '</span>';
         if (array_key_exists('badge', $tab) && $tab['badge'] !== null && $tab['badge'] !== '') {
             echo '<span class="admin-subtab-badge">' . e((string) $tab['badge']) . '</span>';
         }
@@ -327,11 +332,13 @@ function view_render_admin_thumbnail_maintenance_notice(array $summary): void
 }
 
 /**
- * Handle view render admin sidebar.
+ * Render Admin sidebar links from prepared preferences and effective capabilities.
  *
  * Used by server-rendered view helpers.
  *
  * @param string $currentPage Current page value.
+ * @param array{update_pending?:bool,update_label?:string,feature_enabled?:array<string,bool>,admin_legacy_upload_navigation_enabled?:bool} $model Controller-prepared sidebar state.
+ * @return void Outputs sidebar navigation without reading feature or setting policy.
  */
 function view_render_admin_sidebar(string $currentPage, array $model = []): void
 {
@@ -350,7 +357,7 @@ function view_render_admin_sidebar(string $currentPage, array $model = []): void
             }
             $activeClass = view_admin_menu_item_is_active($item, $currentPage) ? ' is-active' : '';
             $highlightClass = !empty($item['highlight']) ? ' is-update-pending' : '';
-            echo '<a class="admin-menu-link' . e($activeClass . $highlightClass) . '" href="' . e((string) $item['url']) . '">' . e((string) $item['label']) . '</a>';
+            echo '<a class="admin-menu-link' . e($activeClass . $highlightClass) . '" href="' . e((string) $item['url']) . '">' . view_admin_menu_icon((string) ($item['icon'] ?? '')) . e((string) $item['label']) . '</a>';
         }
         echo '</nav></section>';
     }

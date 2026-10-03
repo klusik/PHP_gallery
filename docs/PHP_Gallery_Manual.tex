@@ -61,8 +61,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.114.2}
-\newcommand{\manualdate}{2~October~2026}
+\newcommand{\version}{0.115}
+\newcommand{\manualdate}{3~October~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -713,7 +713,7 @@ EXIF can~enrich a~photograph with capture date, camera, lens, exposure, and~GPS 
 
 A~public portfolio benefits from a~small number of~strong top-level galleries, consistent covers, concise descriptions, and~careful ordering. Use tags for~specialties that cross projects. Keep source archives in~private or~unpublished branches and~copy selected work into public presentation galleries where the~workflow calls for~separate curation.
 
-Test the~portfolio on~a~phone, a~high-density display, and~a~slower connection. Responsive thumbnail selection provides the~default balance. Progressive sharpening can~make small thumbnails populate first for~installations that prioritize early visual response.
+Test the~portfolio on~a~phone, a~high-density display, and~a~slower connection. Progressive sharpening is~the~default and~safe fallback for~photo cards in~the~open gallery; responsive selection remains a~supported alternative.
 
 \subsection{Private family archive}
 \index{family archive}
@@ -874,6 +874,31 @@ Tags provide another route through the~archive. A~\emph{night photography} tag c
 \label{sec:admin}
 \index{administration}
 
+\subsection{Gallery inventory and~reviewed changes}
+\index{gallery!branch feature plans}
+The~Admin Galleries workspace shows direct photographs, descendant photographs, subgallery counts, and~on/off/mixed feature states. Expand a~branch to~inspect its children. Stage Maps, File names, Voting, or~Picture Game changes for~a~root and~all its descendants; staging alone does not~save. Review the~exact affected rows and~dependencies, then apply the~reviewed plan. Later overlapping intentions retain their order. Picture Game requires voting; disabling voting also disables the~game. Cancel or~discard to~keep stored values. If~another edit makes the~preview stale, review again.
+
+Quick password controls affect only the~current gallery's~own password. Enter a~new password to~enable or~replace it, or~remove the~own password. Share-token protection, ancestor protection, visibility, and~unrelated preferences stay in~force. An~outdated revision is~refused. Ordinary forms remain available without JavaScript; panel actions complete in~place and~keep the~panel open.
+
+On~the~public home, signed-in~administrators can~create a~root gallery. The~first-gallery prompt requires a~confirmed empty catalog. Creation groups content and~location/visibility, with secondary settings disclosed; source language, tags, SimBrief drafts, and~remembered defaults remain available.
+
+\subsubsection{Upload preferences and~mobile connections}
+Open \ui{Settings > Uploads} for~format/rename preferences, browser workers and~limits, ZIP batch tuning, thumbnail source chunks, and~mobile WebDAV connections. Related limits are~normalized together; size controls display MB. Enable the~legacy upload-menu preference only if~those original links are~useful. Hidden links do~not~disable the~existing routes.
+
+Mobile actions refresh their own workspace. Copy a~newly issued one-time password immediately. If~the~following connection-list refresh fails, the~connection remains saved and~the~password stays visible in~that response; retry the~list separately. Disabled mobile uploads do~not~read the~connection inventory.
+
+\subsubsection{Appearance, language, and~custom stylesheets}
+Appearance combines grouped controls with a~live preview and~a~bounded pointer/keyboard resizer on~wide screens. Pane size is~a~local browser preference. Site images groups branding/background tools; Layout separates shortcuts, grids, card details, and~viewer defaults. Language has~Settings, Design, Editor, and~Diagnostics. The~design preview uses that form's~offered languages and~public default; changing a~sample does not~save a~language preference.
+
+Keep the~installed custom stylesheet by~leaving replacement empty. Explicitly choose a~preset or~upload a~valid CSS file to~replace it; an~upload takes precedence. Replacement/reset verifies storage first and~restores prior bytes if~saving the~marker fails. If~recovery is~incomplete, retain the~available copy and~follow the~bounded warning before retrying. Deployment preserves the~installation-owned \filepath{public/assets/custom.css}.
+
+\subsubsection{Card orientation and~operational status}
+Vertical cards place the~photograph above the~description; horizontal cards place it~beside the~description. The~normal orientation migration preserves existing appearance across saved settings, physical and~Smart Galleries, sidecars, imported metadata, and~Trash. Back up~the~database, galleries, and~Trash together. If~conversion is~interrupted, resolve the~reported problem and~retry; document markers prevent double conversion. Fresh installations keep the~vertical default. Tags remain complete without JavaScript; browser expansion and~scrolling also work on~gallery cards.
+
+Public search defaults on~only without a~saved choice and~when its feature is~enabled. Updates refresh versions, notes, and~API status together; automatic metadata checks are~limited to~hourly, and~disabled automatic updates leave old background jobs paused. OurAirports refresh uses weekly freshness and~hourly failure backoff. Trash shows remaining retention and~safe purge availability. Presentation-schema problems also require action in~System Health.
+
+The~independent uploader remains at~0.3.2. Maintainers obtain its installer and~matching generated \filepath{winapp-update.json} together under \filepath{winapp/dist/0.3.2/}. Both belong to~the~same hosted release. This build check does not~replace installed-Windows or~simulator acceptance.
+
 \subsection{Admin workspace}
 
 After signing in, an~administrator sees private controls for~the~dashboard, galleries, photographs, theme, tags, maintenance, updates, logs, and~account settings. Many edits open in~the~right-side panel, leaving the~gallery visible while one item is~changed and~saved.\footnote{A~full Admin page remains available for~workflows that need more space or~when browser enhancement is~unavailable.}
@@ -911,7 +936,7 @@ With JavaScript, sections load when opened and~save in~place. A~sticky save bar 
 
 A~Spotlight-style field searches settings as~you type. It~matches names, descriptions, categories, and~technical names, including controls that are~owned by~specialist Admin pages. Selecting a~result opens the~relevant section or~specialist page and~focuses the~matching control. Arrow keys, Enter, Escape, and~the~clear button can~be~used without leaving the~keyboard.
 
-Frequently used global settings can~be~edited directly from the~hub, including the~site name, public language, URL rewriting, public search where available, thumbnail rendering, the~global EXIF/GPS display default, and~development diagnostics. Other settings remain on~their specialist pages when they need more context, credentials, file uploads, destructive actions, or~larger editors. Examples include Theme layout, uploads, telemetry, account security, Google/OpenAI configuration, custom CSS, branding, language packs, and~database maintenance.
+Frequently used global settings can~be~edited directly from the~hub, including the~site name, public language, URL rewriting, public search where available, thumbnail rendering, the~global EXIF/GPS display default, and~development diagnostics. Other settings remain on~their specialist pages when they need more context, credentials, file uploads, destructive actions, or~larger editors. Examples include Theme layout, gallery-scoped upload API keys, telemetry, account security, Google/OpenAI configuration, custom CSS, branding, language packs, and~database maintenance.
 
 The~hub does not~flatten existing inheritance. Tag-page layout can~continue inheriting the~global grid and~card design, while gallery-specific card, lightbox, and~EXIF/GPS choices stay with the~gallery that owns them. Context-specific gallery and~photo values are~not~turned into global settings.
 
@@ -1161,7 +1186,7 @@ The~exact choice can~differ between browsers and~screens. This flexibility is~us
 \index{srcset}
 \index{thumbnail!responsive mode}
 
-\ui{Responsive browser selection} is~the~default mode under \ui{Admin > Theme > Layout}. The~page exposes the~available thumbnail candidates immediately and~the~browser chooses the~one that best matches the~rendered card and~display density. JavaScript is~not~required for~this selection.\footnote{The~underlying web standard calls the~candidate list a~\emph{srcset}. Gallery owners can~rely on~the~visual behavior without learning that markup term.}
+\ui{Responsive browser selection} is~the~supported legacy mode under \ui{Admin > Theme > Layout}. The~page exposes the~available thumbnail candidates immediately and~the~browser chooses the~one that best matches the~rendered card and~display density. JavaScript is~not~required for~this selection.\footnote{The~underlying web standard calls the~candidate list a~\emph{srcset}. Gallery owners can~rely on~the~visual behavior without learning that markup term.}
 
 Responsive selection usually transfers one chosen thumbnail for~each loaded card and~is~the~normal choice when predictable browser-native behavior matters most.
 
@@ -1183,7 +1208,7 @@ The 300-pixel copy acts as~a~fallback when available. Its presence does not~forc
 \index{progressive sharpening}
 \index{thumbnail!progressive mode}
 
-\ui{Progressive thumbnail sharpening} is~an~optional mode under \ui{Admin > Theme > Layout}. The~gallery first presents a~small thumbnail, usually 300 pixels, and~later replaces relevant cards with larger copies. On~slower connections this can~make the~collection recognizable earlier, at~the~cost of~potentially transferring both the~small and~replacement thumbnail.
+\ui{Progressive thumbnail sharpening} is~the~default and~safe fallback under \ui{Admin > Theme > Layout}. The~gallery first presents a~small thumbnail, usually 300 pixels, and~later replaces relevant cards with larger copies. On~slower connections this can~make the~collection recognizable earlier, at~the~cost of~potentially transferring both the~small and~replacement thumbnail.
 
 \subsubsection{What happens on~the~screen}
 
@@ -1195,7 +1220,7 @@ The 300-pixel copy acts as~a~fallback when available. Its presence does not~forc
   \item The~card is~replaced after the~larger copy is~ready.
 \end{enumerate}
 
-Larger upgrades are~queued rather than started for~every card at~once, and~visible cards receive priority over distant content. The~current progressive option applies to~photo cards inside an~open gallery. Gallery covers, collage cells, home-page gallery cards, and~Admin images continue using responsive browser selection. The~Admin interface labels progressive sharpening as~Beta.
+Larger upgrades are~queued rather than started for~every card at~once, and~visible cards receive priority over distant content. The~current progressive option applies to~photo cards inside an~open gallery. Gallery covers, collage cells, home-page gallery cards, and~Admin images continue using responsive browser selection. The~Admin interface labels progressive sharpening as~Default and~responsive selection as~Legacy.
 
 \subsubsection{The~transfer tradeoff}
 
@@ -1204,9 +1229,9 @@ Progressive mode can~transfer two files for~one photograph: the~small first copy
 \subsection{Which mode should an~owner choose?}
 \index{thumbnail!choosing a renderer}
 
-Choose \ui{Responsive browser selection} for~a~dependable default, efficient browser-native choice, and~typically one thumbnail transfer per~loaded card.
+Choose \ui{Responsive browser selection} when efficient browser-native selection and~typically one thumbnail transfer per~loaded card suit the~collection.
 
-Try \ui{Progressive thumbnail sharpening} when early page response matters strongly, many visitors use slow connections, and~a~small-first visual experience suits the~gallery. Test it~with representative galleries and~devices before making it~the~normal presentation.
+Keep \ui{Progressive thumbnail sharpening} for~a~small first image followed by~bounded upgrades on~relevant cards. Test both supported renderers with representative galleries and~devices when choosing the~best presentation for~your visitors.
 
 Useful questions include:
 
@@ -1577,9 +1602,9 @@ Appearance & GPS pin & When the~GPS-maps feature is~enabled, photo-card pins and
 Appearance & Public tag pages & Dedicated tag-page columns and~rows use the~same safe maxima as~other public grids: 1--12 columns and~1--50 rows. Tag-result cards can~use the~vertical or~horizontal gallery-card design independently from ordinary gallery listings.\\
 Appearance & Gallery hero tags & Sort by~usage or~alphabetically. Either show all immediately or~show 1--200 tags before the~in-place expansion control; the~default threshold is~20. Optional scrolling uses 1--12 visible rows, default~5, and~activates only when the~rendered tags actually wrap beyond the~configured rows.\\
 Layout & Header shortcuts & Three ordered slots. A~slot can~be~empty, point to~the~main page, or~point to~a~gallery found by~the~gallery picker. Public visitors see only public/listed gallery targets.\\
-Layout & Gallery-card design & Global default is~\ui{Vertical system} or~\ui{Horizontal system}. A~physical gallery can~inherit or~override this default where the~presentation schema is~available.\\
+Appearance & Gallery-card design & \ui{Vertical system} places the~photograph above the~description; \ui{Horizontal system} places it~beside the~description. Fresh installations start with vertical cards; migration preserves older installations' appearance. A~physical gallery can~inherit or~override the~Theme choice where the~presentation schema is~available.\\
 Layout & Picture-count badge & Global contained-picture badge is~enabled by~default. Individual galleries can~inherit it~or~save an~override. When enabled for~the~opened gallery, the~hero panel also shows the~current gallery's branch image count, including accessible subgalleries.\\
-Layout & Public thumbnail renderer & \ui{Responsive browser selection} is~the~default; \ui{Progressive thumbnail sharpening} is~the~optional beta mode for~photo cards inside an~open gallery. Gallery covers and~collages continue to~use responsive browser selection.\\
+Layout & Public thumbnail renderer & \ui{Progressive thumbnail sharpening} is~the~default and~safe fallback. \ui{Responsive browser selection} remains the~supported legacy choice with complete server-rendered candidates and~no-JavaScript behavior. Covers and~collages retain their responsive pipeline.\\
 Layout & Pagination & Global pagination is~off by~default. Columns default to~3 and~are~clamped to~1--12; rows default to~3 and~are~clamped to~1--50. Effective items per~page are~columns multiplied by~rows.\\
 Layout & Main-page grid & The~front page has~its own 1--12-column and~1--50-row grid. This does not~change grids inside galleries.\\
 Layout & Per-gallery grid reset & \ui{Reset all custom gallery grids} clears database overrides, restores default subgallery-inheritance state, and~removes matching grid keys from~\filepath{gallery.json} sidecars so~a~later discovery pass cannot re-import stale grid settings.\\
@@ -1726,7 +1751,7 @@ The~administrator chooses a~reconnect interval from~5 to~300 seconds. After a~ti
 \subsection{Mobile WebDAV transfer}
 \index{WebDAV!mobile upload}
 
-\ui{Galleries > Mobile uploads} creates a~WebDAV-compatible connection for~one selected gallery. Record a~recognizable label, choose the~gallery, create the~connection, and~copy the~generated server URL, username, and~password into the~mobile application. The~password is~shown only once and~stored as~a~hash. Existing rows show their last-use time and~can~be~deleted immediately from~Admin.
+\ui{Settings > Uploads} creates a~WebDAV-compatible connection for~one selected gallery. Record a~recognizable label, choose the~gallery, create the~connection, and~copy the~generated server URL, username, and~password into the~mobile application. The~password is~shown only once and~stored as~a~hash. Existing rows show their last-use time and~can~be~deleted immediately from~Admin.
 
 Use the~WebDAV target type in~clients such as~PhotoSync. Current server ingestion accepts JPG, PNG, GIF, and~WebP, so~enable HEIC-to-JPEG conversion in~the~client where available. WebDAV uploads do~not~bypass gallery ingestion rules: the~credential is~gallery-scoped, authentication is~required on~every write, the~gallery/image schema must~be~known, and~accepted media is~then scanned, optionally auto-renamed, and~processed through the~ordinary thumbnail pipeline.
 

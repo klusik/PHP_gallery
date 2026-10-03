@@ -1,0 +1,213 @@
+/**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ * File: public/assets/styles/admin-theme-custom-css.css
+ * Module Type: Stylesheet
+ * Purpose: Present explicit stylesheet replacements and separate reset effects compactly.
+ * Responsibilities:
+ *   - Keep active stylesheet metadata distinct from the next saved selection.
+ *   - Align source controls and reset actions across desktop and narrow panels.
+ * Author: Rudolf Klusal
+ * License: MIT License (see LICENSE file in repository)
+ */
+
+.admin-page #admin-theme-tab-custom-css {
+    container-name: theme-custom-css-pane;
+    container-type: inline-size;
+}
+
+.admin-page .theme-custom-css-workspace {
+    display: grid;
+    min-width: 0;
+    gap: 14px;
+}
+
+.theme-custom-css-heading {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 6px 20px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--admin-border, #ccd7e3);
+}
+
+.theme-custom-css-heading h2 {
+    margin: 0;
+    font-size: 1.2rem;
+    line-height: 1.25;
+}
+
+.theme-custom-css-heading p,
+.theme-custom-css-hint {
+    margin: 0;
+    color: var(--admin-muted-text, #52616f);
+    font-size: 0.85rem;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+}
+
+.admin-page .theme-custom-css-workspace .admin-subtabs {
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+}
+
+.theme-custom-css-workspace .admin-subtab-list {
+    gap: 6px;
+}
+
+.admin-page .admin-theme-form .theme-custom-css-workspace .admin-subtab {
+    min-height: 34px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--admin-muted-text, #52616f);
+    font-size: 0.88rem;
+    box-shadow: none;
+}
+
+.admin-page .admin-theme-form .theme-custom-css-workspace .admin-subtab[aria-selected="true"],
+.admin-page .admin-theme-form .theme-custom-css-workspace .admin-subtab:hover {
+    border-color: var(--admin-brand-border, #9ec3e6);
+    background: var(--admin-brand-soft, #e8f2fb);
+    color: var(--admin-brand, #315d9f);
+}
+
+.admin-page .theme-custom-css-workspace .admin-subtab-panel {
+    padding: 0;
+    gap: 12px;
+}
+
+.theme-custom-css-status,
+.theme-custom-css-reset-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px 24px;
+    min-width: 0;
+    padding: 10px 12px;
+    border: 1px solid var(--admin-border, #ccd7e3);
+    border-radius: 8px;
+    background: var(--admin-surface, #fff);
+}
+
+.theme-custom-css-status > div,
+.theme-custom-css-reset-row > div {
+    display: grid;
+    min-width: 0;
+    gap: 5px;
+}
+
+.theme-custom-css-status h3,
+.theme-custom-css-reset-row h3 {
+    margin: 0;
+    font-size: 0.95rem;
+    line-height: 1.3;
+}
+
+.theme-custom-css-status strong {
+    font-size: 0.9rem;
+    overflow-wrap: anywhere;
+}
+
+.theme-custom-css-sources {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+    min-width: 0;
+}
+
+.admin-page .theme-custom-css-workspace .theme-custom-css-card {
+    display: grid;
+    align-content: start;
+    grid-template-columns: minmax(0, 1fr);
+    min-width: 0;
+    gap: 8px;
+    margin: 0;
+    padding: 12px;
+    border: 1px solid var(--admin-border, #ccd7e3);
+    border-radius: 8px;
+    background: var(--admin-surface, #fff);
+}
+
+.theme-custom-css-card > legend {
+    padding: 0 5px;
+    font-size: 0.9rem;
+    font-weight: 700;
+}
+
+.theme-custom-css-workspace label {
+    margin: 0;
+    font-size: 0.85rem;
+}
+
+.theme-custom-css-workspace input,
+.theme-custom-css-workspace select {
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+    margin: 0;
+}
+
+.admin-page .admin-theme-form .theme-custom-css-workspace button,
+.admin-page .admin-theme-form .theme-custom-css-workspace a.button {
+    width: auto;
+    min-height: 34px;
+    max-width: 100%;
+    padding: 7px 12px;
+    font-size: 0.85rem;
+    line-height: 1.3;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.theme-custom-css-status a.button,
+.theme-custom-css-reset-row button {
+    flex: 0 0 auto;
+}
+
+.theme-custom-css-details {
+    min-width: 0;
+    padding: 8px 0;
+    font-size: 0.85rem;
+}
+
+.theme-custom-css-details summary {
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.theme-custom-css-details p {
+    margin: 8px 0 0;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+}
+
+.theme-custom-css-resets {
+    display: grid;
+    gap: 12px;
+}
+
+@container theme-custom-css-pane (max-width: 650px) {
+    .theme-custom-css-sources {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .theme-custom-css-status,
+    .theme-custom-css-reset-row {
+        align-items: start;
+        flex-direction: column;
+    }
+}
+
+@media (max-width: 650px) {
+    .theme-custom-css-sources {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .theme-custom-css-status,
+    .theme-custom-css-reset-row {
+        align-items: start;
+        flex-direction: column;
+    }
+}

@@ -22,6 +22,9 @@ env:
   # Chromium is explicitly disabled only in this GitHub workflow; local audits retain browser discovery.
   PHP_GALLERY_BROWSER: disabled
   GALLERY_WORKFLOW_BROWSER: disabled
+  # PRs compare against the target SHA; pushes include every commit since the prior head.
+  # Manual runs compare against the first parent. Missing history blocks the source audit.
+  PHP_GALLERY_SOURCE_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'push' && github.event.before || 'HEAD^' }}
 
 jobs:
   real-database-browser:
@@ -57,6 +60,9 @@ jobs:
       GALLERY_SESSION_REQUIRED: '1'
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Preserve history for the event's comparison SHA, including multi-commit pushes.
+          fetch-depth: 0
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
@@ -76,6 +82,9 @@ jobs:
           path: |
             cache/test-audit/latest.json
             cache/test-audit/latest.md
+            cache/test-audit/**/source-documentation.json
+            cache/test-audit/**/source-documentation-changed.json
+            cache/test-audit/**/python-import-policy.json
           if-no-files-found: ignore
           retention-days: 7
 
@@ -98,6 +107,9 @@ jobs:
       GALLERY_SESSION_REQUIRED: '1'
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Preserve history for the event's comparison SHA, including multi-commit pushes.
+          fetch-depth: 0
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
@@ -117,5 +129,8 @@ jobs:
           path: |
             cache/test-audit/latest.json
             cache/test-audit/latest.md
+            cache/test-audit/**/source-documentation.json
+            cache/test-audit/**/source-documentation-changed.json
+            cache/test-audit/**/python-import-policy.json
           if-no-files-found: ignore
           retention-days: 7

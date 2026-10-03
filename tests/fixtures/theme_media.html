@@ -1,0 +1,71 @@
+<!doctype html>
+<!--
+Project: PHP Gallery
+Repository: https://github.com/klusik/PHP_gallery
+File: tests/fixtures/theme_media.html
+Module Type: Browser Test Fixture
+Purpose: Preserve compact Media editing and real local favicon canvas workflow.
+Responsibilities: Intercept shared form submissions and render only disposable assets/settings models.
+Author: Rudolf Klusal
+License: MIT License (see LICENSE file in repository)
+-->
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Media regression</title></head><body class="admin-page"><main><!-- PRODUCTION_THEME_MARKUP --></main><pre id="results"></pre>
+<script type="module">
+import {setupAdminTabs} from '/public/assets/gallery-modules/admin-tabs.js';
+import {setupAdminNestedTabs} from '/public/assets/gallery-modules/admin-nested-tabs.js';
+import {setupThemeOverrideForm} from '/public/assets/gallery-modules/theme-form.js';
+import {setupFaviconCropper} from '/public/assets/gallery-modules/favicon-cropper.js';
+let assertions=0;
+const submits=[];
+/** Require real control behavior or visible geometry. @param {boolean} condition Required invariant. @param {string} message Failure context. @return {void} Counts success or throws. */
+function check(condition,message) { if(!condition) throw new Error(message); assertions++; }
+/** Find an actual production control. @param {string} selector Fixed DOM selector. @return {HTMLElement} Matching element. */
+function find(selector) { const element=document.querySelector(selector); if(!element) throw new Error('Missing '+selector); return element; }
+/** Activate an existing Media subsection. @param {string} name Retained subsection suffix. @return {void} Uses native tab click behavior. */
+function tab(name) { find(`[data-admin-subtab-target="admin-theme-media-subtab-${name}"]`).click(); }
+/** Edit an existing control using the production event hooks. @param {string} selector Control selector. @param {string} value New value. @return {HTMLElement} Edited control. */
+function edit(selector,value) { const element=find(selector); element.value=value; element.dispatchEvent(new Event('input',{bubbles:true})); element.dispatchEvent(new Event('change',{bubbles:true})); return element; }
+/** Wait for current browser layout work. @return {Promise<void>} Resolves on a task boundary. */
+function settle() { return new Promise(/** Resume after browser event tasks. @param {function():void} resolve Completion callback. @return {number} Timer identifier. */ resolve=>setTimeout(resolve,30)); }
+/** Await a bounded asynchronous fixture postcondition. @param {function():boolean} predicate Observable local readiness. @return {Promise<void>} Resolves when ready or throws after two seconds. */
+async function until(predicate) { const deadline=performance.now()+2000; while(!predicate()) { if(performance.now()>deadline) throw new Error('Local cropper readiness timed out'); await settle(); } }
+/** Require a stored branding removal action to be visible and reachable within its asset card. @param {string} kind Banner or separator asset identifier. @param {string} context Viewport condition under examination. @return {Promise<void>} Reveals the actual action before checking bounds and clipping through native hit testing. */
+async function removalBounds(kind,context) { const button=find(`[name="reset_theme_branding_${kind}"]`), card=find(`#admin-theme-branding-${kind}`); check(!button.closest('.theme-media-asset-preview'),context+' '+kind+' removal stays outside the clipped image preview'); button.scrollIntoView({block:'center'}); await settle(); const rect=button.getBoundingClientRect(), bounds=card.getBoundingClientRect(); check(rect.width>20 && rect.height>=28 && rect.left>=bounds.left && rect.right<=bounds.right && rect.top>=bounds.top && rect.bottom<=bounds.bottom,context+' '+kind+' removal is visible inside its asset card'); for(const [x,y] of [[rect.left+3,rect.top+rect.height/2],[rect.right-3,rect.top+rect.height/2],[rect.left+rect.width/2,rect.top+3],[rect.left+rect.width/2,rect.bottom-3]]) check(button.contains(document.elementFromPoint(x,y)),context+' '+kind+' removal is not clipped or covered'); }
+try {
+    setupAdminTabs(); setupAdminNestedTabs(); setupThemeOverrideForm(); setupFaviconCropper();
+    const form=find('[data-theme-form]'), save=find('.admin-theme-save-panel button:not([name])');
+    form.addEventListener('submit',/** Capture complete intended POST values without storage mutation or navigation. @param {SubmitEvent} event Native submission event. @return {void} Records cancellation state before preventing fixture navigation. */ event=>{submits.push({prevented:event.defaultPrevented,data:new FormData(form,event.submitter)}); event.preventDefault();});
+    const initialUrl=location.pathname+location.search;
+    for(const name of ['appearance','media','layout','language','custom-css']) check(document.querySelectorAll(`#admin-theme-tab-${name}`).length===1,'unique actual primary panel '+name);
+    find('[data-admin-tab-target="admin-theme-tab-media"]').click();
+    check(!find('#admin-theme-tab-media').hidden,'existing primary tabs reveal the real Media panel');
+    edit('[name="theme_branding_separator_width"]','800'); edit('[name="theme_branding_separator_height"]','64');
+    tab('background'); edit('[data-theme-background-optimized-size]','2560'); edit('[data-theme-background-opacity]','37'); edit('[name="theme_background_source"]','collage');
+    check(find('[data-theme-background-optimized-size-display]').textContent.includes('2560'),'optimized slider readout follows staged value');
+    check(find('[data-theme-background-opacity-display]').textContent.includes('37'),'opacity slider readout follows staged value');
+    find('[data-admin-tab-target="admin-theme-tab-appearance"]').click(); edit('[data-theme-color-hex]','invalid');
+    find('[data-admin-tab-target="admin-theme-tab-media"]').click();
+    const actionTabs={reset_theme_branding_banner:'header',reset_theme_branding_separator:'header',generate_theme_background_optimized:'background',delete_theme_background_optimized:'background',reset_all_gallery_backgrounds:'background',reset_theme_background:'background',reset_favicon:'favicon'};
+    for(const [name,subtab] of Object.entries(actionTabs)) { tab(subtab); const button=find(`[name="${name}"]`); check(button.formNoValidate && !button.disabled,'available Media action preserves validation bypass '+name); button.click(); const submission=submits.at(-1); check(submission && !submission.prevented && submission.data.get(name)==='1','hidden invalid Appearance HEX cannot block Media action '+name); }
+    check(submits.length===7,'each Media action submits once');
+    check(location.pathname+location.search===initialUrl,'fixture actions preserve current document without live navigation');
+    tab('favicon');
+    const source=document.createElement('canvas'); source.width=300; source.height=160; const context=source.getContext('2d'); context.fillStyle='#123456'; context.fillRect(0,0,150,160); context.fillStyle='#abcdef'; context.fillRect(150,0,150,160);
+    const blob=await new Promise(/** Encode only a disposable locally painted image. @param {function(Blob|null):void} resolve PNG completion callback. @return {void} Starts local canvas encoding. */ resolve=>source.toBlob(resolve,'image/png'));
+    const transfer=new DataTransfer(); transfer.items.add(new File([blob],'fixture.png',{type:'image/png'})); const input=find('[data-favicon-input]'); input.files=transfer.files; input.dispatchEvent(new Event('change',{bubbles:true}));
+    await until(/** Observe existing cropper output without touching application storage. @return {boolean} Whether a real PNG payload is ready. */ ()=>find('[data-favicon-cropped]').value.startsWith('data:image/png;base64,'));
+    check(!find('[data-favicon-cropper]').hidden,'local PNG upload reveals actual cropper');
+    const crop=find('[data-favicon-canvas]'), preview=find('[data-favicon-preview]');
+    check(crop.width===256 && crop.height===256 && preview.width===48 && preview.height===48,'production favicon canvas dimensions remain supported');
+    check(crop.getContext('2d').getImageData(128,128,1,1).data[3]>0 && preview.getContext('2d').getImageData(24,24,1,1).data[3]>0,'crop and preview actually paint the local image');
+    const previous=find('[data-favicon-cropped]').value; edit('[data-favicon-zoom]','2');
+    check(find('[data-favicon-cropped]').value!==previous,'zoom redraws real cropped PNG payload');
+    edit('[data-theme-color-hex]','#445566'); form.requestSubmit(save); const data=submits.at(-1).data;
+    check(!submits.at(-1).prevented,'valid shared Save reaches native form');
+    for(const name of ['theme_branding_banner','theme_branding_separator','theme_branding_separator_width','theme_branding_separator_height','theme_branding_separator_stretch','favicon_source','favicon_cropped_png','theme_background','theme_background_optimized_max_side','theme_background_opacity','theme_background_source','theme_accent','theme_gallery_description_layout','tag_page_gallery_description_layout','pagination_columns','cms_language']) check(data.has(name),'complete shared POST retains '+name);
+    check(data.get('theme_branding_separator_width')==='800' && data.get('theme_branding_separator_height')==='64' && data.get('theme_background_opacity')==='37' && data.get('theme_background_optimized_max_side')==='2560' && data.get('theme_background_source')==='collage','POST preserves edits across Media subsection switches');
+    check(data.get('favicon_source').name==='fixture.png' && data.get('favicon_cropped_png').startsWith('data:image/png;base64,'),'multipart POST retains real local source and canonical crop payload');
+    for(const width of [1280,390]) { await fetch('/__viewport?width='+width); await settle(); for(const name of ['header','favicon','background']) { tab(name); await settle(); const workspace=find('.theme-media-workspace'), rect=workspace.getBoundingClientRect(); check(workspace.scrollWidth<=workspace.clientWidth+1,width+' '+name+' compact Media has no overflow'); check(rect.right<=innerWidth+1,width+' '+name+' workspace remains inside viewport'); const saveRect=save.getBoundingClientRect(); check(saveRect.width>0 && saveRect.left>=-1 && saveRect.right<=innerWidth+1 && saveRect.bottom<=innerHeight+1,width+' '+name+' global floating Save remains usable'); if(name==='header') { await removalBounds('banner',String(width)); await removalBounds('separator',String(width)); } } }
+    document.getElementById('results').textContent='BROWSER PASS '+assertions+' Media assertions';
+} catch(error) { document.getElementById('results').textContent='BROWSER FAIL '+error.message+'\n'+error.stack; }
+</script></body></html>

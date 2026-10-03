@@ -75,6 +75,12 @@ use function Gallery\Services\schema_inspection_is_available;
 use function Gallery\Services\presentation_gps_override_schema_status;
 use function Gallery\Services\feature_capability_effective_enabled;
 use function Gallery\Services\flight_map_update_navdata_from_ourairports;
+use function Gallery\Services\flight_map_navdata_refresh;
+use function Gallery\Services\flight_map_navdata_status;
+use function Gallery\Core\admin_wants_json;
+use function Gallery\Core\admin_mutation_success_envelope;
+use function Gallery\Core\admin_mutation_descriptor;
+use function Gallery\Core\admin_mutation_panel_metadata;
 use function Gallery\Services\public_home_search_enabled;
 use function Gallery\Services\reset_all_gallery_gps_map_overrides;
 use function Gallery\Services\seo_request_guard_enabled;
@@ -119,7 +125,7 @@ function cms_admin(): void
     $maintenanceLoaded = $maintenanceDeepLink || $activeTab === 'maintenance';
     // Explicit URLs also serve no-JavaScript navigation; ordinary Overview paints before totals are read.
     $surface = $activeTab === 'galleries' ? 'galleries' : ($requestedTab === 'overview' ? 'overview' : 'shell');
-    $dashboardModel = admin_dashboard_view_model($maintenanceLoaded, $surface);
+    $dashboardModel = admin_dashboard_prepare_gallery_controls(admin_dashboard_view_model($maintenanceLoaded, $surface));
     $dashboardModel['active_tab'] = $activeTab;
     $dashboardUser = current_user();
     $dashboardActorId = is_array($dashboardUser) ? max(0, (int) ($dashboardUser['id'] ?? 0)) : 0;
@@ -161,7 +167,7 @@ function cms_admin_dashboard_fragment(): void
     }
     $bufferLevel = ob_get_level();
     try {
-        $model = admin_dashboard_view_model(false, $surface);
+        $model = admin_dashboard_prepare_gallery_controls(admin_dashboard_view_model(false, $surface));
         ob_start();
         if ($surface === 'galleries') {
             view_render_admin_dashboard_galleries_panel($model);
@@ -181,6 +187,41 @@ function cms_admin_dashboard_fragment(): void
         ], ['category' => 'admin', 'severity' => 'warning']);
         echo json_encode(['ok' => false, 'error' => t('admin.dashboard.load_failed', 'Could not load this section. Try again.')], JSON_UNESCAPED_UNICODE);
     }
+}
+
+/**
+ * Prepare transport metadata for gallery controls without exposing stored credentials.
+ * @param array<string,mixed> $model Prepared dashboard domain data.
+ * @return array<string,mixed> Dashboard with single-gallery widget and feature-plan destinations.
+ */
+function admin_dashboard_prepare_gallery_controls(array $model): array
+{
+    $model['gallery_controls'] = [
+        'feature_plan_url' => url_for('admin_gallery_features_plan'),
+        'feature_apply_url' => url_for('admin_gallery_features_apply'),
+    ];
+    foreach ($model['galleries'] ?? [] as $index => $gallery) {
+        $id = (int) $gallery['id'];
+        $revision = $gallery['view_edit_revision'] ?? null;
+        if (!empty($gallery['view_quick_access_ready'])) {
+            $model['galleries'][$index]['view_visibility_menu'] = [
+                'embedded' => true,
+                'kind' => 'gallery',
+                'entity_id' => $id,
+                'name' => (string) $gallery['title'],
+                'visibility' => (string) $gallery['view_visibility'],
+                'action_url' => url_for('admin_public_update_gallery'),
+                'edit_revision' => $revision,
+            ];
+            $model['galleries'][$index]['view_password_control'] = [
+                'action_url' => url_for('admin_gallery_password'),
+                'gallery_id' => $id,
+                'edit_revision' => $revision,
+                'enabled' => !empty($gallery['view_own_password_enabled']),
+            ];
+        }
+    }
+    return $model;
 }
 
 /**
@@ -408,7 +449,22 @@ function render_admin_url_rewrite_card(string $className): void
 }
 
 /**
- * Persist the URL rewrite admin setting.
+ * Resolve the owned Content and display return target without accepting arbitrary URLs.
+ *
+ * @param string $fallbackUrl Existing direct-page destination for unmarked requests.
+ * @return string Fixed Maintenance content destination or the supplied controller fallback.
+ */
+function admin_dashboard_content_return_url(string $fallbackUrl): string
+{
+    return ($_POST['maintenance_return'] ?? '') === 'content'
+        ? url_for('admin', ['dashboard_tab' => 'maintenance', 'maintenance_tab' => 'content'])
+        : $fallbackUrl;
+}
+
+/**
+ * Persist the URL rewrite admin setting and return to its originating control group.
+ *
+ * @return void Saves an authenticated preference and redirects to the owned Admin surface.
  */
 function cms_admin_url_rewrite(): void
 {
@@ -420,12 +476,14 @@ function cms_admin_url_rewrite(): void
     verify_csrf();
     set_url_rewrite_enabled(isset($_POST['url_rewrite_enabled']));
     flash_message('admin_notice', '' . t('admin.dashboard.notice_url_rewrite_saved', 'URL rewrite setting saved.') . '');
-    redirect_to(url_for('admin', ['url_rewrite_saved' => 1]));
+    redirect_to(admin_dashboard_content_return_url(url_for('admin', ['url_rewrite_saved' => 1])));
 }
 
 
 /**
- * Persist the optional public search setting.
+ * Persist the optional public search setting and retain the selected maintenance group.
+ *
+ * @return void Saves the permitted preference or redirects with a capability notice.
  */
 function cms_admin_public_search_settings(): void
 {
@@ -437,19 +495,21 @@ function cms_admin_public_search_settings(): void
     verify_csrf();
     if (function_exists('Gallery\\Services\\feature_capability_effective_enabled') && !feature_capability_effective_enabled('public_search')) {
         flash_message('admin_notice', t('admin.dashboard.notice_public_search_disabled', 'Public search is disabled in Admin > Features.'));
-        redirect_to(url_for('admin'));
+        redirect_to(admin_dashboard_content_return_url(url_for('admin')));
     }
     set_public_home_search_enabled(isset($_POST['public_home_search_enabled']));
     admin_log_event('info', 'settings.public_search_updated', 'Admin updated the public home search setting.', [
         'enabled' => public_home_search_enabled(),
     ]);
     flash_message('admin_notice', t('admin.dashboard.notice_public_search_saved', 'Public search setting saved.'));
-    redirect_to(url_for('admin'));
+    redirect_to(admin_dashboard_content_return_url(url_for('admin')));
 }
 
 
 /**
- * Persist global EXIF/GPS display defaults and optionally clear gallery overrides.
+ * Persist the GPS map default or reset gallery overrides without changing that default.
+ *
+ * @return void Applies only the requested operation after schema verification and redirects.
  */
 function cms_admin_exif_gps_settings(): void
 {
@@ -467,10 +527,14 @@ function cms_admin_exif_gps_settings(): void
         } else {
             flash_message('admin_notice', t('admin.dashboard.exif_gps_requires_migration', 'EXIF/GPS default controls will be available after the database migration is applied.'));
         }
-        redirect_to(url_for('admin'));
+        redirect_to(admin_dashboard_content_return_url(url_for('admin')));
     }
 
-    set_exif_gps_default_enabled(!empty($_POST['exif_gps_default_enabled']));
+    // The dedicated bulk reset must not infer an unchecked default from its absent checkbox.
+    $resetOnly = ($_POST['reset_gallery_overrides_only'] ?? '') === '1';
+    if (!$resetOnly) {
+        set_exif_gps_default_enabled(!empty($_POST['exif_gps_default_enabled']));
+    }
     // $resetCount stores how many explicit gallery overrides were removed.
     $resetCount = !empty($_POST['reset_gallery_overrides']) ? reset_all_gallery_gps_map_overrides() : 0;
     admin_log_event('info', 'settings.exif_gps_updated', 'Admin updated EXIF/GPS display defaults.', [
@@ -478,16 +542,20 @@ function cms_admin_exif_gps_settings(): void
         'reset_gallery_overrides' => $resetCount,
     ]);
 
-    if ($resetCount > 0) {
+    if ($resetOnly) {
+        flash_message('admin_notice', t('admin.dashboard.content_gps_reset_done', 'Reset {count} gallery GPS override(s). The global default was kept.', ['count' => (string) $resetCount]));
+    } elseif ($resetCount > 0) {
         flash_message('admin_notice', t('admin.dashboard.notice_exif_gps_saved_with_reset', 'EXIF/GPS defaults saved. Reset {count} gallery override(s).', ['count' => (string) $resetCount]));
     } else {
         flash_message('admin_notice', t('admin.dashboard.notice_exif_gps_saved', 'EXIF/GPS defaults saved.'));
     }
-    redirect_to(url_for('admin'));
+    redirect_to(admin_dashboard_content_return_url(url_for('admin')));
 }
 
 /**
- * Persist SEO request guard settings.
+ * Persist crawler protection settings and retain the selected maintenance group.
+ *
+ * @return void Saves the authenticated protection preferences and redirects to Admin.
  */
 function cms_admin_seo_guard_settings(): void
 {
@@ -506,7 +574,7 @@ function cms_admin_seo_guard_settings(): void
     ], ['category' => 'security', 'severity' => 'info']);
 
     flash_message('admin_notice', t('admin.dashboard.notice_seo_guard_saved', 'SEO request guard setting saved.'));
-    redirect_to(url_for('admin') . '#admin-tab-maintenance');
+    redirect_to(admin_dashboard_content_return_url(url_for('admin') . '#admin-tab-maintenance'));
 }
 
 /**
@@ -521,7 +589,9 @@ function render_admin_navdata_maintenance_card(bool $flightNavdataReady, array $
 }
 
 /**
- * Handles admin-triggered flight-map navdata refreshes.
+ * Refresh navigation data in place after authentication and CSRF checks.
+ *
+ * @return void Emits AJAX completion or the ordinary POST fallback.
  */
 function cms_admin_update_navdata(): void
 {
@@ -532,8 +602,37 @@ function cms_admin_update_navdata(): void
     }
     verify_csrf();
 
+    // Accept only the two owned surfaces, including the non-JavaScript return path.
+    $returnPage = ($_POST['navdata_return_page'] ?? '') === 'admin_navdata' ? 'admin_navdata' : 'admin';
     try {
-        $result = flight_map_update_navdata_from_ourairports();
+        $async = admin_wants_json();
+        if ($async) {
+            // Downloads and database import must not hold this visitor's session.
+            session_write_close();
+            ignore_user_abort(true);
+        }
+        $outcome = flight_map_navdata_refresh(!empty($_POST['navdata_check_due']));
+        $result = (array) $outcome['result'];
+        if ($async) {
+            if ($outcome['state'] === 'updated') {
+                admin_log_event('info', 'flight_map.navdata_updated', 'Admin updated flight-map navdata from OurAirports.', $result);
+            }
+            $message = $outcome['state'] === 'updated'
+                ? t('admin.dashboard.notice_navdata_updated', ['airports' => (int) ($result['airports'] ?? 0), 'navaids' => (int) ($result['navaids'] ?? 0), 'skipped' => (int) ($result['skipped'] ?? 0), 'deleted' => (int) ($result['deleted'] ?? 0)])
+                : t($outcome['state'] === 'busy' ? 'admin.dashboard.navdata_busy' : 'admin.dashboard.navdata_current');
+            $payload = admin_mutation_success_envelope($message,
+                admin_mutation_descriptor('navigation_data.refresh', 'navigation_data', 'refresh'),
+                admin_mutation_panel_metadata('navigation_data'), [], ['redirect_url' => url_for($returnPage)]);
+            $status = flight_map_navdata_status();
+            ob_start();
+            view_render_admin_navdata_maintenance_card(!empty($status['ready']), $status, $returnPage);
+            $payload['html'] = (string) ob_get_clean();
+            $payload['state'] = $outcome['state'];
+            header('Content-Type: application/json; charset=utf-8');
+            header('Cache-Control: no-store, private');
+            echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            return;
+        }
         admin_log_event('info', 'flight_map.navdata_updated', 'Admin updated flight-map navdata from OurAirports.', $result);
         flash_message('admin_notice', t('admin.dashboard.notice_navdata_updated', 'Updated flight-map navdata. Imported {airports} airport identifier(s), {navaids} navaid(s), skipped {skipped} row(s), removed {deleted} stale row(s).', [
             'airports' => (int) ($result['airports'] ?? 0),
@@ -542,11 +641,20 @@ function cms_admin_update_navdata(): void
             'deleted' => (int) ($result['deleted'] ?? 0),
         ]));
     } catch (Throwable $exception) {
+        if (admin_wants_json()) {
+            $reference = bin2hex(random_bytes(6));
+            admin_log_event('error', 'flight_map.navdata_failed', 'Navigation data refresh failed.', ['reference' => $reference, 'exception_class' => $exception::class]);
+            header('Content-Type: application/json; charset=utf-8');
+            header('Cache-Control: no-store, private');
+            http_response_code(503);
+            echo json_encode(['ok' => false, 'message' => t('admin.dashboard.notice_navdata_failed', ['error' => 'Reference: ' . $reference])], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            return;
+        }
         admin_log_event('error', 'flight_map.navdata_failed', 'Admin flight-map navdata update failed.', ['exception' => $exception->getMessage()]);
         flash_message('admin_notice', t('admin.dashboard.notice_navdata_failed', 'Flight-map navdata update failed: {error}', ['error' => $exception->getMessage()]));
     }
 
-    redirect_to(url_for('admin'));
+    redirect_to(url_for($returnPage));
 }
 
 /**

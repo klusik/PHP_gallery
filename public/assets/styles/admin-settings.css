@@ -125,12 +125,51 @@ html:has(.admin-settings-page) { scrollbar-gutter: stable; }
 .admin-settings-form-errors ul { margin: 6px 0 0; padding-left: 20px; }
 .admin-settings-feedback a { margin-left: 8px; }
 
+/* Upload settings keep two compact field columns inside their optional disclosures. */
+#settings-uploads .admin-settings-upload-intro { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px; margin: 0 0 10px; }
+#settings-uploads .admin-settings-upload-intro > p { flex: 1 1 260px; min-width: 0; margin: 0; font-size: 0.88rem; line-height: 1.45; }
+#settings-uploads .admin-settings-upload-intro > a { flex-shrink: 0; }
+#settings-uploads .admin-settings-upload-details { min-width: 0; margin: 6px 0 10px; padding: 0; border: 1px solid var(--admin-border, #ccd7e3); border-radius: 7px; }
+#settings-uploads .admin-settings-upload-details > summary { padding: 9px 12px; font-size: 0.9rem; font-weight: 650; cursor: pointer; overflow-wrap: anywhere; }
+#settings-uploads .admin-settings-upload-details > fieldset.form-grid { min-width: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 20px; margin: 0; padding: 0 12px 10px; border: 0; border-radius: 0; }
+/* The disclosure summary names the group; keep its duplicate native legend accessible. */
+#settings-uploads .admin-settings-upload-details > fieldset > legend { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+#settings-uploads .admin-settings-upload-details > .support-matrix { width: calc(100% - 24px); table-layout: fixed; margin: 0 12px 10px; font-size: 0.82rem; }
+#settings-uploads .support-matrix th, #settings-uploads .support-matrix td { padding: 6px 4px; white-space: normal; overflow-wrap: anywhere; }
+#settings-uploads .admin-settings-upload-details > p { margin: 8px 12px; font-size: 0.86rem; line-height: 1.45; }
+
+/* Mobile credential forms replace only their own compact block, preserving preference drafts. */
+#settings-uploads .admin-settings-mobile { min-width: 0; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--admin-border, #ccd7e3); }
+#settings-uploads .admin-settings-mobile > h3 { margin: 0 0 4px; font-size: 1rem; }
+#settings-uploads .admin-settings-mobile > p { margin: 4px 0 10px; font-size: 0.88rem; line-height: 1.45; }
+#settings-uploads .admin-settings-mobile-create { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 10px; align-items: end; margin: 8px 0; }
+#settings-uploads .admin-settings-mobile-create > label { display: grid; min-width: 0; gap: 4px; font-size: 0.88rem; }
+#settings-uploads .admin-settings-mobile-create input:not([type="hidden"]), #settings-uploads .admin-settings-mobile-create select { min-width: 0; width: 100%; box-sizing: border-box; }
+#settings-uploads .admin-settings-mobile-create > button { align-self: end; max-width: 100%; white-space: normal; }
+#settings-uploads .admin-settings-mobile-help { margin: 8px 0; font-size: 0.85rem; line-height: 1.45; }
+#settings-uploads .admin-settings-mobile-help > summary { cursor: pointer; }
+#settings-uploads .admin-settings-mobile-help > p { margin: 6px 0; }
+#settings-uploads .admin-settings-mobile-connections { display: grid; gap: 0; margin-top: 10px; }
+#settings-uploads .admin-settings-mobile-connection { display: grid; grid-template-columns: minmax(100px, 0.5fr) minmax(0, 1fr) auto; gap: 4px 12px; align-items: center; padding: 9px 0; border-top: 1px solid var(--admin-border, #ccd7e3); }
+#settings-uploads .admin-settings-mobile-connection > div { display: grid; min-width: 0; gap: 3px; grid-row: 1 / span 2; overflow-wrap: anywhere; }
+#settings-uploads .admin-settings-mobile-url { min-width: 0; font-size: 0.8rem; overflow-wrap: anywhere; white-space: normal; }
+#settings-uploads .admin-settings-mobile-connection > span { grid-column: 2; font-size: 0.8rem; overflow-wrap: anywhere; }
+#settings-uploads .admin-settings-mobile-connection > form { grid-column: 3; grid-row: 1 / span 2; margin: 0; }
+#settings-uploads .admin-settings-mobile-connection button { max-width: 100%; padding: 6px 10px; white-space: normal; }
+#settings-uploads .admin-settings-mobile > .panel { min-width: 0; margin: 10px 0; padding: 12px; box-shadow: none; }
+#settings-uploads .admin-settings-mobile > .panel h2 { margin: 0 0 8px; font-size: 1rem; }
+#settings-uploads .admin-settings-mobile .admin-definition-list { grid-template-columns: minmax(80px, 0.3fr) minmax(0, 1fr); gap: 6px 12px; }
+#settings-uploads .admin-settings-mobile .admin-definition-list dd { min-width: 0; margin: 0; overflow-wrap: anywhere; }
+#settings-uploads .admin-settings-mobile .admin-definition-list code { white-space: normal; overflow-wrap: anywhere; }
+
 /* Mobile category links remain available without JavaScript; the select is enhancement-only. */
 @media (max-width: 1100px) {
     .admin-settings-layout { grid-template-columns: 170px minmax(0, 1fr); gap: 10px; }
     .admin-settings-page .admin-settings-field, .admin-settings-summary-row { grid-template-columns: minmax(0, 1fr) minmax(170px, 0.9fr); gap: 14px; }
     .admin-settings-toolbar { gap: 10px; }
     .admin-settings-page .admin-settings-group-form .admin-settings-field { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+    #settings-uploads .admin-settings-mobile-create { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    #settings-uploads .admin-settings-mobile-create > button { grid-column: 1 / -1; justify-self: start; }
 }
 
 @media (max-width: 850px) {
@@ -153,6 +192,13 @@ html:has(.admin-settings-page) { scrollbar-gutter: stable; }
     .admin-settings-page .admin-settings-field, .admin-settings-summary-row { grid-template-columns: minmax(0, 1fr); gap: 8px; }
     .admin-settings-page .admin-settings-group-form > fieldset.form-grid { grid-template-columns: minmax(0, 1fr); }
     .admin-settings-page .admin-settings-group-form .admin-settings-field { grid-template-columns: minmax(100px, 0.5fr) minmax(0, 1fr); }
+    #settings-uploads .admin-settings-upload-details > fieldset.form-grid { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+    #settings-uploads .admin-settings-mobile-create { grid-template-columns: minmax(0, 1fr); }
+    #settings-uploads .admin-settings-mobile-connection { grid-template-columns: minmax(0, 1fr) auto; gap: 6px 10px; }
+    #settings-uploads .admin-settings-mobile-connection > div { grid-column: 1; grid-row: 1; }
+    #settings-uploads .admin-settings-mobile-connection > form { grid-column: 2; grid-row: 1; }
+    #settings-uploads .admin-settings-mobile-url, #settings-uploads .admin-settings-mobile-connection > span { grid-column: 1 / -1; }
+    #settings-uploads .admin-settings-upload-details > .support-matrix { font-size: 0.76rem; }
     .admin-settings-page .admin-language-selector-design { grid-template-columns: minmax(0, 1fr); }
     .admin-settings-savebar { right: 12px; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); max-width: calc(100vw - 24px); padding: 8px; gap: 6px; }
     .admin-settings-savebar > span { flex-basis: 100%; }

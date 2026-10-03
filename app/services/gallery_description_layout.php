@@ -39,6 +39,8 @@ namespace Gallery\Services;
 
 use function Gallery\Core\e;
 
+require_once __DIR__ . '/gallery_description_layout_compatibility.php';
+
 /**
  * Return the public gallery-card description layouts supported by the renderer.
  *

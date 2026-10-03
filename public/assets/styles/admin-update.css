@@ -357,3 +357,10 @@
         grid-template-columns: 1fr;
     }
 }
+/* A saved failure is a paused checkpoint, not a live progress indicator. */
+.admin-update-job[data-update-job-status="failed"] .admin-update-job-progress,
+.admin-update-job[data-update-job-auto-resume="0"][data-update-job-status="running"] .admin-update-job-progress,
+.admin-update-job[data-update-job-auto-resume="0"][data-update-job-status="running"] [data-update-job-percent],
+.admin-update-job[data-update-job-status="failed"] [data-update-job-percent],
+.admin-update-job[data-update-job-status="cancelled"] .admin-update-job-progress,
+.admin-update-job[data-update-job-status="cancelled"] [data-update-job-percent] { display: none; }

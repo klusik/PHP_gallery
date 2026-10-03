@@ -29,12 +29,14 @@
  *   - Only one continuation request may be in flight for a job in this browser document.
  */
 
+import {setupAdminUpdateNotes, refreshUpdateNotes} from './admin-update-notes.js?v=20261002-update-notes-v1';
+
 const ACTIVE_REQUESTS = new Map();
 /**
  * Purpose: Serialize passive summary requests for each current DOM fragment.
- * Units: one completed job ID per pending summary request.
+ * Units: one completed job ID or discovery marker per pending summary request.
  * Scope: this browser document; detached fragments are weakly held.
- * Consumers: refreshReleaseSummary().
+ * Consumers: refreshReleaseSummary(), checkRelease().
  * Rationale: duplicate completion renders must not issue duplicate passive reads.
  * @type {WeakMap<Element, string>}
  */
@@ -181,6 +183,7 @@ async function refreshReleaseSummary(summary, jobId) {
             return;
         }
         summary.innerHTML = payload.html;
+        refreshUpdateNotes(summary.closest('.admin-updates-page'), payload);
         summary.dataset.updateStatusJob = jobId;
     } catch {
         if (errorBox && summary.isConnected) errorBox.hidden = false;
@@ -190,6 +193,48 @@ async function refreshReleaseSummary(summary, jobId) {
         const latestScope = findUpdateScope(document);
         if (summary.isConnected && latestScope?.dataset.updateJobStatus === 'completed' && latestScope.dataset.updateJobId !== jobId) {
             refreshReleaseSummary(summary, String(latestScope.dataset.updateJobId || ''));
+        }
+    }
+}
+
+/**
+ * Discover releases asynchronously while other pages keep their session access.
+ * @param {HTMLElement} summary Owned release presentation.
+ * @param {boolean} force Whether the administrator explicitly bypassed the hourly cache.
+ * @return {Promise<void>} Refreshes summary and notes together without installation.
+ */
+async function checkRelease(summary, force = false) {
+    const form = summary.querySelector('[data-update-check-form]');
+    if (!form || SUMMARY_REQUESTS.has(summary)) return;
+    const page = summary.closest('.admin-updates-page');
+    const scope = page?.querySelector('[data-update-job-scope]');
+    if (scope?.dataset.updateJobStatus === 'running' && scope.dataset.updateJobAutoResume !== '0') return;
+    const previousJob = scope?.dataset.updateJobId || '';
+    const body = new FormData(form);
+    body.set('update_action', force ? 'force_check' : 'check_due');
+    body.set('update_async', '1');
+    SUMMARY_REQUESTS.set(summary, 'check');
+    summary.setAttribute('aria-busy', 'true');
+    const button = form.querySelector('button');
+    if (button) button.disabled = true;
+    try {
+        const response = await fetch(form.action, {method: 'POST', credentials: 'same-origin', cache: 'no-store', headers: {'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest'}, body});
+        const payload = await response.json();
+        if (!response.ok || !payload?.ok || typeof payload.html !== 'string') throw new Error('Could not refresh release status.');
+        if (!summary.isConnected || (scope?.dataset.updateJobId || '') !== previousJob || (scope?.dataset.updateJobStatus === 'running' && scope.dataset.updateJobAutoResume !== '0')) return;
+        summary.innerHTML = payload.html;
+        refreshUpdateNotes(page, payload);
+        const error = page?.querySelector('[data-update-status-error]');
+        if (error) error.hidden = true;
+    } catch {
+        const error = page?.querySelector('[data-update-status-error]');
+        if (error && summary.isConnected) error.hidden = false;
+    } finally {
+        SUMMARY_REQUESTS.delete(summary);
+        summary.removeAttribute('aria-busy');
+        if (button) button.disabled = false;
+        if (summary.isConnected && scope?.dataset.updateJobStatus === 'completed' && summary.dataset.updateStatusJob !== scope.dataset.updateJobId) {
+            refreshReleaseSummary(summary, String(scope.dataset.updateJobId || ''));
         }
     }
 }
@@ -208,6 +253,8 @@ function renderJobInScope(scope, job) {
     scope.hidden = false;
     scope.dataset.updateJobId = String(job.id);
     scope.dataset.updateJobStatus = String(job.status || '');
+    // A deliberate Continue/Retry click opts into this job for the current visit.
+    scope.dataset.updateJobAutoResume = '1';
 
     const progress = job.progress || {};
     const percent = Number.isFinite(Number(progress.percent)) ? Number(progress.percent) : Number(job.stage_percent || 0);
@@ -215,6 +262,11 @@ function renderJobInScope(scope, job) {
     const percentLabel = scope.querySelector('[data-update-job-percent]');
     if (percentLabel) percentLabel.textContent = `${safePercent}%`;
     scope.querySelector('[data-update-job-title]').textContent = stageLabel(job.stage);
+    const page = scope.closest('.admin-updates-page');
+    const title = scope.querySelector('[data-update-job-title]');
+    if (job.status === 'failed') title.textContent = page?.dataset.updateJobFailedLabel || 'Update stopped';
+    if (job.status === 'cancelled') title.textContent = page?.dataset.updateJobCancelledLabel || 'Update cancelled';
+    if (job.status === 'completed') title.textContent = page?.dataset.updateJobCompletedLabel || 'Update completed';
     const code = scope.querySelector('[data-update-job-code]') || scope.querySelector('.admin-update-job-heading code');
     if (code) code.textContent = String(job.id);
     scope.querySelector('[data-update-job-stage]').textContent = stageLabel(job.stage);
@@ -437,10 +489,30 @@ async function rollbackJob(button) {
  * @return {void} Installs delegated listeners and resumes existing running jobs.
  */
 export function setupAdminUpdateJobs() {
+    setupAdminUpdateNotes();
     if (document.documentElement.dataset.adminUpdateJobsReady === '1') {
         return;
     }
     document.documentElement.dataset.adminUpdateJobsReady = '1';
+
+    document.addEventListener('submit', /** Own background discovery forms before generic panel handlers. @param {SubmitEvent} event Submitted form. @return {void} Checks releases without navigation. */ event => {
+        if (!(event.target instanceof HTMLFormElement) || !event.target.matches('[data-update-check-form]')) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        const summary = event.target.closest('[data-update-release-summary]');
+        if (summary) checkRelease(summary, true);
+    }, true);
+    /** Admit one age check per mounted Updates page. @return {void} Starts passive-interval discovery for dynamic pages too. */
+    function discoverPages() {
+        for (const page of document.querySelectorAll('.admin-updates-page')) {
+            if (page.dataset.updateCheckReady === '1') continue;
+            page.dataset.updateCheckReady = '1';
+            const summary = page.querySelector('[data-update-release-summary]');
+            if (summary) checkRelease(summary);
+        }
+    }
+    discoverPages();
+    new MutationObserver(/** Admit newly injected Updates workspaces. @return {void} Checks each page once. */ () => discoverPages()).observe(document.body, {childList: true, subtree: true});
 
     document.addEventListener('submit', (event) => {
         const form = event.target instanceof HTMLFormElement ? event.target : null;
@@ -485,12 +557,15 @@ export function setupAdminUpdateJobs() {
             const scope = findUpdateScope(document);
             if (summary && scope?.dataset.updateJobStatus === 'completed') {
                 refreshReleaseSummary(summary, String(scope.dataset.updateJobId || ''));
+            } else if (summary) {
+                checkRelease(summary, true);
             }
         }
     });
 
     const resumeScopes = Array.from(document.querySelectorAll('[data-update-job-scope][data-update-job-id][data-update-job-status="running"]'));
     for (const scope of resumeScopes) {
+        if (scope.dataset.updateJobAutoResume === '0') continue;
         const id = String(scope.dataset.updateJobId || '');
         const csrfToken = csrfTokenFrom(scope);
         if (id && csrfToken) {

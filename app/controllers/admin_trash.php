@@ -51,12 +51,10 @@ use function Gallery\Core\url_for;
 use function Gallery\Core\verify_csrf;
 use function Gallery\Services\admin_log_event;
 use function Gallery\Services\empty_gallery_trash;
-use function Gallery\Services\gallery_trash_entries;
+use function Gallery\Services\gallery_trash_admin_entries;
 use function Gallery\Services\gallery_trash_auto_purge_active;
 use function Gallery\Services\gallery_trash_auto_purge_enabled;
-use function Gallery\Services\gallery_trash_days_remaining;
 use function Gallery\Services\gallery_trash_enabled;
-use function Gallery\Services\gallery_trash_entry_can_purge;
 use function Gallery\Services\gallery_trash_entry;
 use function Gallery\Services\gallery_trash_retention_days;
 use function Gallery\Services\gallery_trash_purge_batch_size;
@@ -158,6 +156,8 @@ function admin_trash_finish(bool $wantsJson, bool $ok, string $message, string $
  * The primary user interface lives in Admin > Maintenance > Trash. Keeping the
  * fragment endpoint preserves canonical mutation panel refresh behavior without
  * maintaining a second standalone Trash page.
+ *
+ * @return void Renders the prepared panel or redirects to the canonical dashboard.
  */
 function cms_admin_trash(): void
 {
@@ -170,11 +170,7 @@ function cms_admin_trash(): void
 
     if (!empty($_GET['panel'])) {
         // $entries stores all currently active/problem trash rows so BROKEN entries cannot disappear from Admin.
-        $entries = gallery_trash_entries(['status' => 'active']);
-        foreach ($entries as $index => $entry) {
-            $entries[$index]['view_days_remaining'] = gallery_trash_days_remaining($entry);
-            $entries[$index]['view_can_purge'] = gallery_trash_entry_can_purge($entry);
-        }
+        $entries = gallery_trash_admin_entries(['status' => 'active']);
         // $summary stores the aggregate counters shown in the fragment header.
         $summary = gallery_trash_summary();
         render_admin_trash_page($entries, $summary, true, [

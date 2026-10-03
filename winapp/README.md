@@ -98,16 +98,18 @@ python winapp\build_installer.py --use-installed-dependencies
 
 This mode verifies the installed dependency versions and keeps all intermediate
 files and caches in the same disposable staging directory.
-The build script produces this installer:
+The build script produces the installer and its matching update metadata together
+in a folder named after the independent WinApp version:
 
 ```text
-winapp/dist/PHPGalleryUploader-0.3.2-Setup.exe
+winapp/dist/0.3.2/PHPGalleryUploader-0.3.2-Setup.exe
+winapp/dist/0.3.2/winapp-update.json
 ```
 
-The build script produces only this EXE. Attach it to the same GitHub release as
-the CMS release. The script does not generate or upload the optional metadata
-file. You can also attach `winapp-update.json` to that same release to provide
-trusted installer metadata when GitHub's asset digest is unavailable. Its schema is:
+Attach both files from that folder to the same GitHub release as the CMS release.
+The JSON is generated automatically from the completed installer, including its
+filename, version, byte size and SHA-256 digest. It provides trusted installer
+metadata when GitHub's asset digest is unavailable. Its schema is:
 
 ```json
 {
@@ -126,7 +128,9 @@ The app checks for updates at startup and then at most once per hour while it
 remains open. The installer is unsigned and may be uploaded manually to GitHub
 Releases.
 The script never changes CMS version markers or publishes a release. A failed
-build returns a nonzero exit code and preserves any previous successful installer.
+build returns a nonzero exit code and preserves any previous successful installer
+and its metadata. Older version folders and historical files directly under
+`winapp/dist/` are left untouched; new builds publish only to their version folder.
 Its unique `winapp/.build-*` staging directory (virtual environment, downloads,
 caches, spec file, work files, intermediate application EXE and partial installer)
 is removed on success, errors and normal Ctrl+C cancellation. Forced process

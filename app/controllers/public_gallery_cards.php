@@ -265,6 +265,7 @@ function public_gallery_card_rendering_contexts(array $galleries, bool $publicOn
  * @param mixed $cardIndex Input used by this operation.
  * @param array $cardContext Preloaded card rendering context.
  * @param bool $pictureManagerEnabled Whether this physical gallery card participates in Picture manager selection.
+ * @return void Emits the prepared gallery card.
  */
 function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicReorderHandle = false, bool $showSubgalleryBadge = false, int $cardIndex = 0, array $cardContext = [], bool $pictureManagerEnabled = false): void
 {
@@ -314,27 +315,23 @@ function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicR
         }
     }
 
-    // $hasHorizontalMeta keeps the exact legacy condition for showing the combined date/tag row.
-    $hasHorizontalMeta = $descriptionLayout === 'horizontal'
-        && !$isProtectedPublicCard
-        && ($galleryCardTags || gallery_date_range_display_value($gallery['gallery_date'] ?? null, $gallery['gallery_date_end'] ?? null) !== '');
-    // $horizontalMetaHtml, $dateHtml, and $tagListHtml reuse established presentation helpers as trusted fragments.
+    // Both card orientations consume the same saved Theme tag policy as opened galleries.
     $horizontalMetaHtml = '';
     $dateHtml = '';
     $tagListHtml = '';
-    if ($hasHorizontalMeta) {
-        ob_start();
-        view_render_gallery_date(gallery_date_view_model($gallery), 'gallery-card-date');
-        render_compact_tag_list($galleryCardTags);
-        $horizontalMetaHtml = (string) ob_get_clean();
-    } elseif (!$isProtectedPublicCard) {
+    if (!$isProtectedPublicCard) {
         ob_start();
         view_render_gallery_date(gallery_date_view_model($gallery), 'gallery-card-date');
         $dateHtml = (string) ob_get_clean();
-    }
-    if (!$isProtectedPublicCard && $descriptionLayout !== 'horizontal') {
+
+        $sortedTagGroups = sort_public_hero_tag_groups(['gallery' => $galleryCardTags], theme_hero_tag_sort_mode());
+        $cardTagViewModel = tag_list_view_model($sortedTagGroups['gallery']);
+        $cardTagViewModel['visible_limit'] = theme_hero_tag_visible_limit();
+        $cardTagViewModel['display_all'] = theme_hero_tag_display_all_enabled();
+        $cardTagViewModel['scrollbar_enabled'] = theme_hero_tag_scrollbar_enabled();
+        $cardTagViewModel['scrollbar_rows'] = theme_hero_tag_scrollbar_rows();
         ob_start();
-        render_tag_list($galleryCardTags, t('gallery.containing_tags', 'Containing tags'));
+        \Gallery\Views\view_render_gallery_card_tags($cardTagViewModel);
         $tagListHtml = (string) ob_get_clean();
     }
 
@@ -421,15 +418,31 @@ function render_smart_gallery_card(array $smartGallery, int $cardIndex = 0, arra
  */
 function render_public_gallery_admin_add_child_link(array $gallery, string $placement = 'card'): void
 {
-    if (!current_user() || admin_anonymous_preview_active() || !feature_capability_effective_enabled('inline_administration')) {
-        return;
+    $action = public_gallery_admin_creation_view_model($gallery, $placement);
+    if ($action !== null) {
+        \Gallery\Views\view_render_public_gallery_admin_add_child_link($action);
     }
-    \Gallery\Views\view_render_public_gallery_admin_add_child_link([
+}
+
+/**
+ * Prepare the existing inline creation workflow for a root or child gallery.
+ * @param array{id?:int|string,title?:string}|null $parentGallery Parent context, or null for a root gallery.
+ * @param string $placement Existing hero or card icon placement.
+ * @return array{placement:string,title:string,url:string,panel_url:string}|null Prepared link, or null when inline administration is unavailable.
+ */
+function public_gallery_admin_creation_view_model(?array $parentGallery = null, string $placement = 'hero'): ?array
+{
+    if (!current_user() || admin_anonymous_preview_active() || !feature_capability_effective_enabled('inline_administration')) {
+        return null;
+    }
+    $parentId = (int) ($parentGallery['id'] ?? 0);
+    $query = $parentId > 0 ? ['parent_id' => $parentId] : [];
+    return [
         'placement' => $placement,
-        'title' => (string) ($gallery['title'] ?? ''),
-        'url' => url_for('admin_new_gallery', ['parent_id' => $gallery['id']]),
-        'panel_url' => url_for('admin_new_gallery', ['parent_id' => $gallery['id'], 'panel' => 1]),
-    ]);
+        'title' => (string) ($parentGallery['title'] ?? ''),
+        'url' => url_for('admin_new_gallery', $query),
+        'panel_url' => url_for('admin_new_gallery', $query + ['panel' => 1]),
+    ];
 }
 
 /**
@@ -562,4 +575,3 @@ function render_public_admin_visibility_menu(string $kind, int $entityId, string
         'csrf_html' => csrf_field(),
     ]);
 }
-

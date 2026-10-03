@@ -412,6 +412,735 @@ button.gallery-row-action.secondary {
     transform: translateY(-0.02rem);
 }
 
+/* The dashboard gallery workspace owns dense controls while other gallery lists retain their layout. */
+.admin-gallery-workspace {
+    min-width: 0;
+    border-radius: 8px;
+    box-shadow: none;
+}
+
+.admin-gallery-workspace [hidden] {
+    display: none !important;
+}
+
+.admin-gallery-workspace .admin-gallery-workspace-heading {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px 14px;
+    margin: 0;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--admin-border, #d4dde7);
+}
+
+.admin-gallery-workspace .admin-gallery-workspace-heading > h2 {
+    margin: 0;
+    font-size: 1.08rem;
+    line-height: 1.35;
+}
+
+.admin-gallery-workspace .admin-gallery-command-panel {
+    gap: 8px;
+    padding: 9px 12px;
+    background: #f8fafc;
+}
+
+.admin-gallery-workspace .admin-gallery-order-toolbar {
+    flex: 1 1 360px;
+    justify-content: flex-end;
+    align-items: flex-start;
+    gap: 8px 14px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+}
+
+.admin-gallery-workspace .admin-gallery-order-help {
+    min-width: 0;
+    max-width: 700px;
+    font-size: 0.84rem;
+    line-height: 1.4;
+}
+
+.admin-gallery-workspace .admin-gallery-order-help > summary {
+    width: fit-content;
+    font-weight: 650;
+    cursor: pointer;
+}
+
+.admin-gallery-workspace .admin-gallery-order-help > p {
+    margin: 5px 0 0;
+    font-size: 0.82rem;
+}
+
+.admin-gallery-workspace .admin-image-order-status {
+    flex-shrink: 1;
+    min-width: 0;
+    max-width: 100%;
+    margin: 0;
+    font-size: 0.8rem;
+    line-height: 1.4;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.admin-gallery-workspace .admin-gallery-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 7px 10px;
+    margin: 0;
+}
+
+.admin-gallery-workspace .admin-gallery-controls > label {
+    gap: 6px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.admin-gallery-workspace .admin-gallery-controls select {
+    min-width: 0;
+    max-width: 260px;
+    padding: 5px 7px;
+    font-size: 0.82rem;
+}
+
+.admin-gallery-workspace .admin-gallery-select-all {
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    white-space: nowrap;
+}
+
+.admin-gallery-workspace input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    vertical-align: middle;
+}
+
+.admin-gallery-workspace .admin-gallery-filter-summary {
+    min-width: 0;
+    max-width: 100%;
+    font-size: 0.8rem;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.admin-gallery-workspace .admin-gallery-tree-controls {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-left: auto;
+}
+
+.admin-gallery-workspace-heading > .button, .admin-gallery-workspace .admin-gallery-controls button {
+    width: auto;
+    padding: 5px 9px;
+    font-size: 0.82rem;
+    line-height: 1.35;
+    white-space: normal;
+}
+
+
+/* Native table columns stay aligned and horizontal scrolling preserves readable controls on narrow screens. */
+.admin-gallery-workspace .admin-gallery-table-shell {
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: auto;
+}
+
+.admin-gallery-workspace .admin-gallery-tree-table {
+    width: 100%;
+    min-width: 1120px;
+    table-layout: fixed;
+}
+
+.admin-gallery-workspace .admin-gallery-tree-table thead th {
+    padding: 7px 9px;
+    font-size: 0.7rem;
+    letter-spacing: 0.02em;
+    text-align: left;
+}
+
+.admin-gallery-workspace .admin-gallery-tree-table tbody td {
+    padding: 7px 9px;
+    vertical-align: middle;
+}
+
+.admin-gallery-workspace .admin-gallery-tree-table th:nth-child(1) {
+    width: 56px;
+    text-align: center;
+}
+
+.admin-gallery-workspace .admin-gallery-tree-table th:nth-child(3) {
+    width: 145px;
+}
+
+.admin-gallery-workspace .admin-gallery-tree-table th:nth-child(4) {
+    width: 350px;
+}
+
+.admin-gallery-workspace .admin-gallery-tree-table th:nth-child(5) {
+    width: 135px;
+    text-align: right;
+}
+
+.admin-gallery-workspace .admin-gallery-tree-table th:nth-child(6) {
+    width: 86px;
+    text-align: right;
+}
+
+.admin-gallery-workspace .admin-gallery-tree-table tbody td:first-child {
+    text-align: center;
+}
+
+.admin-gallery-workspace .admin-gallery-title-cell, .admin-gallery-workspace .admin-gallery-state-cell, .admin-gallery-workspace .admin-gallery-feature-cell {
+    min-width: 0;
+}
+
+.admin-gallery-workspace .admin-gallery-summary {
+    position: relative;
+    gap: 8px;
+    min-height: 48px;
+    padding-left: calc(var(--gallery-depth, 0) * 28px);
+}
+
+.admin-gallery-workspace .admin-gallery-preview {
+    flex: 0 0 64px;
+    width: 64px;
+    height: 48px;
+    margin-left: 0;
+    border-radius: 5px;
+}
+
+.admin-gallery-workspace .admin-gallery-summary-text {
+    flex: 1;
+    min-width: 0;
+}
+
+.admin-gallery-workspace .admin-gallery-title-link {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    font-size: 0.86rem;
+    font-weight: 650;
+    line-height: 1.35;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.admin-gallery-workspace .admin-gallery-path, .admin-gallery-workspace .admin-gallery-parent {
+    margin-top: 2px;
+    font-size: 0.74rem;
+    line-height: 1.25;
+}
+
+.admin-gallery-workspace .admin-gallery-parent {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+.admin-gallery-workspace .admin-gallery-tree-table .tree-title[class*="tree-depth-"] {
+    max-width: 100%;
+    min-width: 0;
+    gap: 5px;
+    padding-left: 0;
+}
+
+.admin-gallery-workspace .tree-toggle, .admin-gallery-workspace .tree-spacer {
+    flex-shrink: 0;
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    min-height: 20px;
+    margin: 0;
+}
+
+.admin-page .admin-gallery-workspace button.tree-toggle[data-gallery-toggle] {
+    display: inline-grid;
+    place-items: center;
+    padding: 0;
+    border: 0;
+    border-radius: 3px;
+    background: transparent;
+    box-shadow: none;
+    color: #52677c;
+    font-size: 0;
+    line-height: 1;
+}
+
+/* Border strokes keep the disclosure lightweight and independent of installed fonts. */
+.admin-gallery-workspace .tree-toggle::before, .admin-gallery-order-ghost .tree-toggle::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-right: 1.5px solid currentColor;
+    border-bottom: 1.5px solid currentColor;
+    transform: rotate(-45deg);
+}
+
+.admin-gallery-workspace .tree-toggle[aria-expanded="true"]::before, .admin-gallery-order-ghost .tree-toggle[aria-expanded="true"]::before {
+    transform: translateY(-2px) rotate(45deg);
+}
+
+.admin-page .admin-gallery-workspace button.tree-toggle[data-gallery-toggle]:hover {
+    background: #edf3f8;
+    color: #183b60;
+}
+
+.admin-gallery-workspace .tree-toggle:focus-visible {
+    outline: 2px solid #2873b7;
+    outline-offset: 2px;
+}
+
+.admin-page .admin-gallery-order-ghost button.tree-toggle[data-gallery-toggle] {
+    display: inline-grid;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    min-height: 20px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: #52677c;
+    font-size: 0;
+    box-shadow: none;
+}
+
+.admin-gallery-workspace .tree-branch {
+    display: none;
+}
+
+
+/* A single 28px indent owns both the preview and text; later drawer rules cannot add a second offset. */
+.admin-gallery-workspace .admin-gallery-tree-table tbody tr[data-depth] .admin-gallery-title-cell::before {
+    content: none;
+    width: 0;
+}
+
+.admin-gallery-workspace .admin-gallery-summary::before {
+    top: 0;
+    bottom: 0;
+    width: calc(var(--gallery-depth, 0) * 28px);
+    border-radius: 0;
+    background: repeating-linear-gradient(90deg, #cfdeec 0, #cfdeec 1px, transparent 1px, transparent 28px);
+    opacity: 0.65;
+}
+
+.admin-gallery-workspace .admin-gallery-tree-table tbody tr[data-depth] .admin-gallery-depth-rail {
+    left: calc(var(--gallery-depth, 0) * 28px - 7px);
+    top: 3px;
+    bottom: 3px;
+    width: 2px;
+    border-radius: 0;
+}
+
+.admin-gallery-workspace .admin-gallery-tree-table tbody tr[data-depth="0"] .admin-gallery-depth-rail {
+    display: none;
+}
+
+.admin-gallery-workspace .admin-gallery-status-pill, .admin-gallery-workspace .admin-gallery-access-label {
+    margin: 2px 3px 2px 0;
+    padding: 2px 6px;
+    border-radius: 5px;
+    font-size: 0.74rem;
+    font-weight: 600;
+}
+
+.admin-gallery-workspace .admin-gallery-access-label {
+    display: block;
+}
+
+/* Embedded access controls remain neutral and keep the visibility eye beside the state. */
+.admin-page .admin-gallery-workspace button.admin-gallery-access-label[data-admin-gallery-password-toggle] {
+    display: inline-block;
+    width: auto;
+    min-width: 0;
+    min-height: 0;
+    margin: 2px 0 0;
+    padding: 2px 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    color: #617285;
+    font-size: 0.74rem;
+    font-weight: 500;
+    line-height: 1.3;
+    text-align: left;
+}
+
+.admin-page .admin-gallery-workspace button.admin-gallery-access-label[data-admin-gallery-password-toggle]:hover {
+    color: #183b60;
+    text-decoration: underline;
+}
+
+.admin-gallery-workspace .admin-gallery-status-pill {
+    vertical-align: middle;
+}
+
+.admin-page .admin-gallery-workspace details[data-admin-gallery-visibility] {
+    position: relative;
+    display: inline-block;
+    top: auto;
+    left: auto;
+    vertical-align: middle;
+    margin: 0;
+    z-index: 16;
+}
+
+.admin-gallery-workspace [data-admin-gallery-visibility] .public-admin-visibility-trigger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    min-width: 24px;
+    min-height: 24px;
+    padding: 0;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    box-shadow: none;
+    color: #52677c;
+    cursor: pointer;
+}
+
+.admin-gallery-workspace [data-admin-gallery-visibility] .public-admin-visibility-trigger:hover {
+    background: #edf3f8;
+    color: #183b60;
+}
+
+.admin-gallery-workspace [data-admin-gallery-visibility] .public-admin-visibility-options {
+    top: calc(100% + 3px);
+    left: 0;
+    flex-direction: column;
+    min-width: 150px;
+    padding: 4px;
+    border: 1px solid #c9d7e5;
+    border-radius: 5px;
+    background: #fff;
+    box-shadow: 0 5px 16px #142d4b26;
+    backdrop-filter: none;
+}
+
+.admin-page .admin-gallery-workspace [data-admin-gallery-visibility] button.public-admin-visibility-option {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 7px;
+    width: 100%;
+    height: auto;
+    min-height: 28px;
+    padding: 4px 6px;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    background: transparent;
+    box-shadow: none;
+    color: #334155;
+    font-size: 0.76rem;
+    font-weight: 500;
+    text-align: left;
+    white-space: nowrap;
+}
+
+.admin-page .admin-gallery-workspace [data-admin-gallery-visibility] button.public-admin-visibility-option:is(:hover, :focus-visible, .is-current) {
+    border-color: #c9dced;
+    background: #edf3f8;
+    color: #183b60;
+}
+
+.admin-gallery-workspace [data-admin-gallery-visibility] .admin-gallery-visibility-option-label {
+    display: inline;
+    color: inherit;
+    font-size: inherit;
+    line-height: 1.3;
+}
+
+.admin-gallery-workspace .admin-gallery-feature {
+    justify-content: flex-start;
+    gap: 4px;
+    min-width: 0;
+    margin: 2px 4px 2px 0;
+    padding: 2px 5px;
+    border-radius: 4px;
+    font-size: 0.74rem;
+    font-weight: 500;
+    line-height: 1.3;
+}
+
+.admin-gallery-workspace .admin-gallery-feature.is-enabled {
+    background: #eff8f1;
+    border-color: #c7e2ce;
+    color: #245f36;
+}
+
+.admin-gallery-workspace .admin-gallery-feature.is-disabled {
+    background: #f8fafc;
+    color: #64748b;
+}
+
+.admin-gallery-workspace .admin-gallery-feature-cell {
+    white-space: normal;
+    line-height: 1.4;
+}
+
+.admin-gallery-workspace .admin-gallery-image-count strong {
+    min-width: 0;
+    padding: 0;
+    background: transparent;
+    border-radius: 0;
+    font-size: 0.86rem;
+}
+
+.admin-gallery-workspace .admin-gallery-count-direct, .admin-gallery-workspace .admin-gallery-count-subgalleries, .admin-gallery-order-ghost .admin-gallery-count-direct, .admin-gallery-order-ghost .admin-gallery-count-subgalleries {
+    display: block;
+    margin-top: 2px;
+    color: #617285;
+    font-size: 0.7rem;
+    line-height: 1.25;
+    white-space: normal;
+}
+
+.admin-gallery-workspace .admin-gallery-image-count strong.admin-gallery-count-direct, .admin-gallery-order-ghost .admin-gallery-image-count strong.admin-gallery-count-direct {
+    margin-top: 0;
+    color: #17212b;
+    font-size: 0.86rem;
+}
+
+/* Native feature buttons share the compact footprint of readonly feature badges. */
+.admin-page .admin-gallery-workspace .admin-gallery-feature {
+    display: inline-flex;
+    width: auto;
+    min-height: 0;
+    margin: 2px 4px 2px 0;
+    padding: 2px 5px;
+    border: 1px solid #d6e0e9;
+    border-radius: 4px;
+    box-shadow: none;
+    font-size: 0.74rem;
+    font-weight: 500;
+    line-height: 1.3;
+}
+
+.admin-page .admin-gallery-workspace .admin-gallery-feature.is-on, .admin-gallery-order-ghost .admin-gallery-feature.is-on {
+    background: #eff8f1;
+    border-color: #c7e2ce;
+    color: #245f36;
+}
+
+.admin-page .admin-gallery-workspace .admin-gallery-feature.is-off, .admin-gallery-order-ghost .admin-gallery-feature.is-off {
+    background: #f8fafc;
+    border-color: #d6e0e9;
+    color: #64748b;
+}
+
+.admin-page .admin-gallery-workspace .admin-gallery-feature.is-mixed, .admin-gallery-order-ghost .admin-gallery-feature.is-mixed {
+    background: #fff8e7;
+    border-color: #e5d299;
+    color: #76551c;
+}
+
+.admin-gallery-workspace .admin-gallery-feature[data-feature-prepared] {
+    outline: 1px dashed #2873b7;
+    outline-offset: 2px;
+}
+
+.admin-gallery-workspace button.admin-gallery-feature:focus-visible {
+    outline: 2px solid #2873b7;
+    outline-offset: 2px;
+}
+
+.admin-gallery-workspace [data-gallery-feature-pending] {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 12px;
+    margin: 8px 0;
+    padding: 7px 9px;
+    border: 1px solid #c9dced;
+    border-radius: 5px;
+    background: #f4f8fc;
+    font-size: 0.8rem;
+}
+
+.admin-gallery-workspace [data-gallery-feature-pending][hidden] {
+    display: none;
+}
+
+.admin-gallery-workspace [data-gallery-feature-pending-status] {
+    flex: 1 1 200px;
+}
+
+.admin-page .admin-gallery-workspace [data-gallery-feature-review], .admin-page .admin-gallery-workspace [data-gallery-feature-discard] {
+    width: auto;
+    padding: 5px 9px;
+    font-size: 0.8rem;
+}
+
+.admin-gallery-workspace [data-gallery-feature-dialog] {
+    width: min(560px, calc(100vw - 32px));
+    max-height: calc(100vh - 48px);
+    box-sizing: border-box;
+    overflow: auto;
+    padding: 18px;
+    border: 1px solid #c9d7e5;
+    border-radius: 8px;
+    color: #243b53;
+    box-shadow: 0 12px 40px #142d4b33;
+}
+
+.admin-gallery-workspace [data-gallery-feature-dialog]::backdrop {
+    background: #142d4b55;
+}
+
+.admin-gallery-workspace [data-gallery-feature-dialog] h3 {
+    margin: 0 0 10px;
+    font-size: 1rem;
+}
+
+.admin-gallery-workspace [data-gallery-feature-dialog] p, .admin-gallery-workspace [data-gallery-feature-dialog] li {
+    font-size: 0.84rem;
+    line-height: 1.45;
+}
+
+.admin-page .admin-gallery-workspace [data-gallery-feature-dialog] button {
+    width: auto;
+    margin: 6px 8px 0 0;
+    padding: 6px 10px;
+    font-size: 0.84rem;
+}
+
+
+/* The action cell remains a table cell; Edit and thumbnail submit stay separate native controls. */
+.admin-gallery-workspace .admin-gallery-tree-table td.gallery-row-actions {
+    display: table-cell;
+    text-align: right;
+    white-space: nowrap;
+}
+
+.admin-gallery-workspace .gallery-row-action-set {
+    gap: 5px;
+    overflow: visible;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+.admin-gallery-workspace .gallery-row-actions .gallery-row-action {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    min-height: 32px;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    border: 1px solid #cbd9e7;
+    border-radius: 5px;
+    background: #fff;
+    font-size: 0.95rem;
+    line-height: 1;
+}
+
+.admin-gallery-workspace .gallery-row-action:hover, .admin-gallery-workspace .gallery-row-action:focus-visible {
+    background: #eaf3fb;
+    border-color: #2271b1;
+}
+
+
+/* Owned placeholders retain the localized direction text supplied by the gallery ordering module. */
+.admin-gallery-workspace .admin-gallery-order-placeholder[data-drag-direction] td::after {
+    content: attr(data-drag-hint);
+}
+
+.admin-gallery-workspace .admin-gallery-order-table tr.is-reorder-hidden {
+    display: none;
+}
+
+
+/* The drag ghost is attached outside the workspace, so its compact sizing needs its own explicit scope. */
+.admin-gallery-order-ghost td {
+    padding: 7px 9px;
+    vertical-align: middle;
+}
+
+.admin-gallery-order-ghost .admin-gallery-title-cell {
+    min-width: 0;
+}
+
+.admin-gallery-order-ghost .admin-gallery-summary {
+    gap: 8px;
+    min-height: 48px;
+    padding-left: calc(var(--gallery-depth, 0) * 28px);
+}
+
+.admin-gallery-order-ghost .admin-gallery-preview {
+    flex: 0 0 64px;
+    width: 64px;
+    height: 48px;
+    margin-left: 0;
+    border-radius: 5px;
+}
+
+.admin-gallery-order-ghost .admin-gallery-parent {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+.admin-gallery-order-ghost .admin-gallery-feature {
+    min-width: 0;
+    margin: 2px 4px 2px 0;
+    padding: 2px 5px;
+    border-radius: 4px;
+    font-size: 0.74rem;
+    font-weight: 500;
+    line-height: 1.3;
+}
+
+.admin-gallery-order-ghost td.gallery-row-actions {
+    display: table-cell;
+}
+
+
+@media (max-width: 700px) {
+    .admin-gallery-workspace .admin-gallery-order-toolbar {
+        flex-wrap: wrap;
+        gap: 5px;
+    }
+
+    .admin-gallery-workspace .admin-gallery-controls > label {
+        max-width: 100%;
+    }
+
+    .admin-gallery-workspace .admin-gallery-controls select {
+        max-width: min(260px, 65vw);
+    }
+
+    .admin-gallery-workspace .admin-gallery-tree-controls {
+        flex-basis: 100%;
+        margin-left: 0;
+    }
+
+}
+
 /* Keeps Admin branding asset controls readable inside the edit-gallery form. */
 .admin-branding-assets {
     padding: 1rem;

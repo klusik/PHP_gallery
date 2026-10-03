@@ -53,10 +53,10 @@ use function Gallery\Core\path_inside;
 use function Gallery\Core\unique_slug;
 
 /**
- * Return manifest-safe gallery settings.
+ * Return manifest-safe gallery settings with their orientation semantics marker.
  *
- * @param array $gallery Gallery row or gallery data.
- * @return array Structured result data for the caller.
+ * @param array<string,mixed> $gallery Persisted gallery row including its identifier and editable metadata.
+ * @return array<string,mixed> Exported metadata preserving explicit layouts and inheritance.
  */
 function gallery_migration_gallery_metadata(array $gallery): array
 {
@@ -87,7 +87,7 @@ function gallery_migration_gallery_metadata(array $gallery): array
         'nsfw_enabled',
     ];
 
-    $metadata = [];
+    $metadata = ['description_layout_semantics_version' => GALLERY_DESCRIPTION_LAYOUT_SEMANTICS_VERSION];
     foreach ($fields as $field) {
         if (array_key_exists($field, $gallery)) {
             $metadata[$field] = $gallery[$field];

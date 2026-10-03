@@ -1,0 +1,127 @@
+<!doctype html>
+<!--
+Project: PHP Gallery
+Repository: https://github.com/klusik/PHP_gallery
+File: tests/fixtures/admin_smart_galleries.html
+Module Type: Browser Test Fixture
+Purpose: Exercise production Smart Gallery presentation and panel actions offline.
+Responsibilities: Verify dynamic forms, successful collapsed controls and rule preservation.
+Author: Rudolf Klusal
+License: MIT
+-->
+<html lang="en"><meta charset="utf-8"><title>Smart Gallery drawer fixture</title>
+<link rel="stylesheet" href="/public/assets/styles/base.css">
+<link rel="stylesheet" href="/public/assets/styles/admin.css">
+<link rel="stylesheet" href="/public/assets/styles/side-panel.css">
+<link rel="stylesheet" href="/public/assets/styles/admin-smart-galleries.css">
+<body class="admin-page">
+<main><a id="edit" href="/index.php?page=admin_smart_galleries&amp;id=41" data-gallery-side-panel-link data-admin-side-panel-workflow="smart-gallery" data-admin-side-panel-title="Fixture collection">Edit collection</a></main>
+<pre id="results">BROWSER PENDING</pre>
+<script type="module">
+import {setupAdminGallerySidePanel} from '/public/assets/gallery-modules/admin-side-panel.js';
+
+let assertions = 0;
+let posts = 0;
+let gets = 0;
+const originalUrl = location.href;
+const originalDocument = document;
+
+/** Require an observable behavior. @param {boolean} condition Expected state. @param {string} message Failure reason. @return {void} Throws on failure. */
+function check(condition, message) { assertions++; if (!condition) throw new Error(message); }
+/** Await a bounded fixture transition. @param {function():boolean} predicate Expected state. @return {Promise<void>} Resolves when observed. */
+async function until(predicate) {
+    const deadline = Date.now() + 5000;
+    while (!predicate()) {
+        if (Date.now() > deadline) throw new Error('Smart Gallery fixture transition timed out');
+        await new Promise(/** Yield to DOM tasks. @param {function():void} resolve Continue test. @return {number} Timer handle. */ resolve => setTimeout(resolve, 10));
+    }
+}
+/** Build a server-shaped compact editor; the PHP companion checks real view markup. @return {string} Confined editor HTML. */
+function editor() {
+    return '<!doctype html><html><body><main><section class="panel admin-smart-gallery-workspace" data-smart-gallery-editor-workspace><div class="admin-smart-gallery-editor">'
+        + '<div class="admin-smart-gallery-editor-toolbar"><h2>Settings</h2><a class="button secondary" href="/public-gallery" target="_blank" rel="noopener" data-smart-gallery-open-public>View gallery</a></div>'
+        + '<form method="post" action="/index.php?page=admin_smart_galleries&amp;id=41" data-smart-gallery-editor data-smart-gallery-panel-form data-smart-gallery-rule-labels=\'{"all":"Every condition (localized)","any":"At least one condition (localized)","field":"Photo &lt;property&gt;"}\' data-smart-gallery-catalog=\'{"tag":{"label":"Tag","operators":["has_tag","untagged"]}}\' data-smart-gallery-tags=\'[{"id":7,"name":"flight"}]\' data-smart-gallery-galleries="[]">'
+        + '<input type="hidden" name="csrf_token" value="fixture-csrf"><div class="admin-smart-gallery-identity"><label>Title<input name="title" value="Fixture collection" required></label><label>Slug<input name="slug" value="fixture"></label><label class="admin-smart-gallery-description">Description<textarea name="description" rows="2">Fixture description</textarea></label></div>'
+        + '<section class="admin-smart-gallery-rules"><h3>Photo selection rules</h3><input type="hidden" name="rules_json" data-smart-gallery-rules value=\'{"version":1,"root":{"type":"group","operator":"AND","children":[{"type":"condition","field":"tag","operator":"has_tag","value":7}]}}\'><div class="smart-rule-builder" data-smart-rule-builder></div></section>'
+        + '<details class="admin-smart-gallery-details"><summary>Presentation <span class="muted">Smart Gallery override</span></summary><fieldset class="admin-smart-gallery-presentation"><label><input type="checkbox" name="presentation_override_enabled" value="1" data-smart-gallery-presentation-toggle checked>Override defaults</label>'
+        + '<div class="admin-smart-gallery-presentation-fields" data-smart-gallery-presentation-fields><div class="admin-edit-card"><label>Columns <span data-gallery-grid-columns-display>4</span><input type="range" min="1" max="12" name="presentation_grid_columns" value="4" data-smart-gallery-grid-columns></label><label data-smart-gallery-rows-control>Rows <span data-gallery-grid-rows-display>30</span><input type="range" min="1" max="50" name="presentation_grid_rows" value="30" data-smart-gallery-grid-rows></label><label><input type="checkbox" name="presentation_pagination_enabled" value="1" data-smart-gallery-pagination-toggle checked>Pagination</label><p data-smart-gallery-pagination-active-status>Items: <span data-smart-gallery-items-per-page>120</span></p><p data-smart-gallery-pagination-inactive-status hidden>Rows inactive</p></div></div></fieldset></details>'
+        + '<div class="admin-smart-gallery-save-bar"><button name="action" value="preview">Preview</button><button name="action" value="save">Save</button></div></form>'
+        + '<details class="admin-smart-gallery-details admin-smart-gallery-placements"><summary>Used in physical galleries</summary><div class="admin-smart-gallery-placement-row"><a href="/physical-gallery">Parent gallery</a><form method="post" action="/index.php?page=admin_smart_galleries&amp;id=41" data-smart-gallery-panel-form><input type="hidden" name="csrf_token" value="fixture-csrf"><input type="hidden" name="id" value="41"><input type="hidden" name="gallery_id" value="12"><label>Placement<select name="attachment_placement"><option value="bottom">Bottom</option></select></label><label>Order<input type="number" name="attachment_order" value="3"></label><div class="button-row"><button name="action" value="update_placement">Save placement</button></div></form></div></details>'
+        + '</div></section></main></body></html>';
+}
+window.fetch = /** Serve only synthetic loopback endpoints. @param {string|URL} url Endpoint. @param {RequestInit} options Request state. @return {Promise<Response>} Confined response. */ async (url, options = {}) => {
+    const target = new URL(url, location.href);
+    check(target.origin === location.origin && target.searchParams.get('page') === 'admin_smart_galleries', 'Fixture never contacts storage or public services');
+    if (options.method === 'POST') {
+        posts++;
+        const body = options.body;
+        const action = body.get('action');
+        check(body.get('ajax') === '1' && body.get('panel') === '1' && body.get('csrf_token') === 'fixture-csrf' && options.headers.Accept === 'application/json', 'Persistent controls retain the canonical AJAX transport');
+        if (action === 'save') {
+            check(body.get('presentation_grid_columns') === '4' && body.get('presentation_grid_rows') === '30' && body.get('presentation_override_enabled') === '1', 'Collapsed settings remain successful form controls');
+            const rules = JSON.parse(body.get('rules_json'));
+            check(rules.root.children[0].value === 7 && rules.root.children[0].operator === 'has_tag', 'Moving the rule editor preserves its canonical document');
+        } else check(action === 'update_placement' && body.get('gallery_id') === '12' && body.get('attachment_order') === '3', 'Secondary placement form keeps its original payload');
+        return new Response(JSON.stringify({ok:true, message:'Saved', mutation:{type:'smart_gallery.' + action, entity:'smart_gallery', action, entity_ids:[41]}, panel:{workflow:'smart-gallery', keep_open:true, refresh_url:'/index.php?page=admin_smart_galleries&id=41&panel=1'}, contexts:[], fallback:{redirect_url:'/index.php?page=admin_smart_galleries&id=41'}}), {headers:{'Content-Type':'application/json'}});
+    }
+    gets++;
+    return new Response(editor(), {headers:{'Content-Type':'text/html'}});
+};
+
+try {
+    setupAdminGallerySidePanel();
+    document.getElementById('edit').click();
+    await until(/** Wait for the initialized editor. @return {boolean} Whether rule controls are ready. */ () => document.querySelector('[data-smart-gallery-ready="1"]') !== null);
+    const panel = document.querySelector('[data-admin-side-panel]');
+    const body = panel.querySelector('[data-admin-side-panel-body]');
+    check(panel.getAttribute('aria-hidden') === 'false' && location.href === originalUrl, 'Editor opens in its existing panel without navigation');
+    const publicLink = body.querySelector('[data-smart-gallery-open-public]');
+    check(publicLink.target === '_blank' && publicLink.rel === 'noopener' && !publicLink.hasAttribute('data-gallery-side-panel-link'), 'View gallery remains independent of editing');
+    const groupOptions = body.querySelector('[data-rule-group-operator]').options;
+    check(groupOptions[0].textContent === 'Every condition (localized)' && groupOptions[1].textContent === 'At least one condition (localized)' && groupOptions[2].value === 'NOT', 'Readable localized choices retain the canonical boolean identifiers');
+    check(body.querySelector('.smart-rule-control > span').textContent === 'Photo <property>' && !body.querySelector('.smart-rule-control property'), 'Visible rule captions safely render localized text');
+    for (const mode of ['OR', 'NOT', 'AND']) {
+        const match = body.querySelector('[data-rule-group-operator]');
+        match.value = mode; match.dispatchEvent(new Event('change', {bubbles:true}));
+        const rules = JSON.parse(body.querySelector('[data-smart-gallery-rules]').value);
+        check(rules.root.operator === mode && rules.root.children[0].value === 7 && body.querySelector('.smart-rule-group-help').textContent.length > 0, 'Changing readable matching modes preserves the existing condition and updates its explanation');
+    }
+    body.querySelector('[data-rule-add-group]').click();
+    const nested = body.querySelector('.smart-rule-children > .smart-rule-group');
+    check(JSON.parse(body.querySelector('[data-smart-gallery-rules]').value).root.children[1].type === 'group', 'Condition groups still compose the canonical nested rule tree');
+    const operator = nested.querySelector('[data-rule-operator]');
+    operator.value = 'untagged'; operator.dispatchEvent(new Event('change', {bubbles:true}));
+    check(body.querySelector('.smart-rule-value-unused').textContent === 'No value needed', 'Conditions without a value explain the empty column');
+    body.querySelector('.smart-rule-children > .smart-rule-group > .smart-rule-group-head [data-rule-remove]').click();
+    body.querySelector('[data-rule-add-condition]').click();
+    body.querySelector('.smart-rule-children > .smart-rule-condition:last-child [data-rule-remove]').click();
+    check(JSON.parse(body.querySelector('[data-smart-gallery-rules]').value).root.children.length === 1, 'Accessible removal controls work after structural re-rendering without changing the original rule');
+    const presentation = body.querySelector('details.admin-smart-gallery-details');
+    check(!presentation.open && body.querySelector('[data-smart-rule-builder]').getBoundingClientRect().height > 0, 'Selection rules are visible while secondary settings are collapsed');
+    presentation.open = true;
+    const pagination = body.querySelector('[data-smart-gallery-pagination-toggle]');
+    pagination.checked = false; pagination.dispatchEvent(new Event('change', {bubbles:true}));
+    check(body.querySelector('[data-smart-gallery-rows-control]').getAttribute('aria-disabled') === 'true' && !body.querySelector('[data-smart-gallery-grid-rows]').disabled, 'Pagination semantics still preserve inactive row preferences');
+    pagination.checked = true; pagination.dispatchEvent(new Event('change', {bubbles:true}));
+    presentation.open = false;
+    for (let attempt = 1; attempt <= 2; attempt++) {
+        const before = gets;
+        body.querySelector('[data-smart-gallery-editor]').requestSubmit(body.querySelector('button[value="save"]'));
+        await until(/** Await canonical refresh and initialization. @return {boolean} Whether the replacement is usable. */ () => gets > before && body.querySelector('[data-smart-gallery-ready="1"]') && !body.querySelector('button[value="save"]').disabled);
+        check(posts === attempt && panel.getAttribute('aria-hidden') === 'false' && location.href === originalUrl && document === originalDocument, 'Repeated saves refresh only the panel, including replacement controls');
+    }
+    body.querySelector('.admin-smart-gallery-placements').open = true;
+    const before = gets;
+    const placement = body.querySelector('.admin-smart-gallery-placement-row form');
+    placement.requestSubmit(placement.querySelector('button'));
+    await until(/** Await the secondary form refresh. @return {boolean} Whether a new editor arrived. */ () => gets > before && body.querySelector('[data-smart-gallery-ready="1"]'));
+    check(posts === 3 && panel.getAttribute('aria-hidden') === 'false' && location.href === originalUrl, 'Placement actions remain in the same panel after the redesign');
+    const root = body.querySelector('.admin-smart-gallery-editor');
+    root.style.width = '340px'; root.style.maxWidth = '100%';
+    await new Promise(/** Let container layout settle. @param {function():void} resolve Continue assertion. @return {number} Animation frame handle. */ resolve => requestAnimationFrame(resolve));
+    check(root.scrollWidth <= root.clientWidth + 1, 'Rule and identity controls fit a narrow editor without horizontal overflow');
+    document.getElementById('results').textContent = 'BROWSER PASS: ' + assertions + ' Smart Gallery assertions';
+} catch (error) {
+    document.getElementById('results').textContent = 'BROWSER FAIL: ' + error.message + '\n' + error.stack;
+}
+</script></body></html>

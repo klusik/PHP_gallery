@@ -143,11 +143,11 @@ export const ADMIN_NAVDATA_COPY_FEEDBACK_MS = 1600;
 export const ADMIN_NAVDATA_LOOKUP_MIN_CHARACTERS = 2;
 
 /**
- * Delay the navigation-data POST after the two existing animation frames.
+ * Delay a due navigation-data AJAX check until the card has painted.
  * @var {number}
  * Units: milliseconds. Scope: navigation-data import submission feedback.
  * Consumers: admin-navdata-update.js.
- * Rationale: Retain the visible busy-state paint opportunity before ordinary form navigation; this is not a network timeout.
+ * Rationale: Leave initial navigation responsive before starting a periodic background import; this is not a network timeout.
  * Range: fixed positive integer; changes require review of the named consumer contract.
  */
 export const ADMIN_NAVDATA_SUBMIT_FEEDBACK_MS = 250;
