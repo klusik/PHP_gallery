@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine Versionsänderung benötigt.
-\newcommand{\version}{0.115.1}
+\newcommand{\version}{0.116}
 \newcommand{\manualdate}{3.~Oktober~2026}
 
 \hypersetup{
@@ -1034,7 +1034,9 @@ Sammelbildaktionen sind bewusst enger gefasst als der einzelne Editor und wieder
   \item Vorschaubilder für ausgewählte Fotos erstellen.
 \end{itemize}
 
-Die Fotoreihenfolge lässt sich durch Ziehen des Zeilengriffs ändern; über die Spalte Name kann die Galerie nach Dateinamen sortiert werden. Änderungen werden über die normale Reihenfolgeroute gespeichert und bleiben keine reine Browseranordnung.
+Die Fotoreihenfolge lässt sich durch Ziehen des Zeilengriffs ändern; sortiert werden kann nach Dateiname oder EXIF-Aufnahmedatum. Fotos ohne Aufnahmedatum bleiben am Ende; Änderungen werden über die normale Reihenfolgeroute gespeichert.
+
+Der Reiter \ui{Bilder} im Galeriebearbeiter bündelt häufige Fotoarbeiten in einer kompakten Liste. Zugängliche Vorschaubilder lassen sich mit Mauszeiger, Tastaturfokus oder Klick öffnen; die Zeilenauswahl unterstützt mit Umschalt-Klick einen Bereich. Jede Zeile bietet direkte Steuerungen für Sichtbarkeit, Titelbild der Galerie, Bearbeitung und Löschung des Fotos. Diese Aktionen verwenden weiterhin die vorhandenen authentifizierten Serverabläufe. \ui{Dateinamen anzeigen} ändert nur die Darstellung im Editor; Administratoren können eine optionale browserweite Vorgabe speichern, während jede Galerie ihre Auswahl für die aktuelle Editorsitzung merkt.
 
 Ist die optionale Funktion \ui{Picture Manager} aktiviert, kann ein normal angemeldeter Administrator Fotos und direkte physische Untergalerien im öffentlichen Galerieraster auswählen. Häkchen wählen einzelne Karten; Umschalt-Klick wählt einen Bereich; Strg-Klick oder Cmd-Klick schaltet die Auswahl einer Karte um; \ui{Alle auswählen}, \ui{Auswahl aufheben} und Strg/Cmd+A unterstützen größere Auswahlen auf der sichtbaren Seite. Smart-Gallery-Karten gehören nicht zu dieser dateibasierten Auswahl. Das Ziehen eines nicht ausgewählten Fotos beginnt mit diesem Foto als Auswahl; das Ziehen einer vorhandenen Fotoauswahl verschiebt die ausgewählten Fotos gemeinsam. Eine sichtbare Untergaleriekarte wird zum Ablageziel; das Ablegen führt denselben validierten Fotoverschiebevorgang aus wie die Zielauswahl. Physische Galeriekarten selbst sind keine Ziehquellen.
 

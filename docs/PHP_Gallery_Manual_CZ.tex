@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.115.1}
+\newcommand{\version}{0.116}
 \newcommand{\manualdate}{3.~října~2026}
 
 \hypersetup{
@@ -1030,7 +1030,9 @@ Hromadné operace s~obrázky jsou záměrně užší než individuální editor 
   \item vytvoření náhledů vybraných fotografií.
 \end{itemize}
 
-Pořadí fotografií lze měnit přetažením úchytu řádku a~galerii lze seřadit podle názvu souboru ze sloupce Název. Změny se ukládají běžnou trasou pořadí, nejde o~uspořádání pouze v~prohlížeči.
+Pořadí fotografií lze měnit přetažením úchytu řádku a~galerii lze seřadit podle názvu souboru nebo data pořízení EXIF. Fotografie bez data pořízení zůstávají na konci; změny se ukládají běžnou trasou pořadí.
+
+Karta \ui{Obrázky} v~editoru galerie soustřeďuje běžnou práci s~fotografiemi do přehledného seznamu. Přístupné náhledy lze otevřít ukazatelem, při zaměření klávesnicí nebo kliknutím; výběr řádků podporuje rozsah označený kliknutím se Shiftem. Každý řádek nabízí přímé ovládání viditelnosti, nastavení titulní fotografie galerie, úpravy a~odstranění fotografie. Tyto akce nadále používají stávající ověřené postupy na serveru. Volba \ui{Zobrazit názvy souborů} mění pouze zobrazení editoru; správce může uložit volitelné výchozí nastavení v~prohlížeči a~každá galerie si volbu pamatuje po~dobu aktuální relace editoru.
 
 Je-li povolena volitelná funkce \ui{Správce fotografií}, běžně přihlášený správce může vybírat fotografie a~přímé fyzické podgalerie ve veřejné mřížce galerie. Zaškrtnutí vybírá jednotlivé karty; kliknutí se Shiftem vybírá rozsah; kliknutí s~Ctrl nebo Cmd přepíná kartu; \ui{Vybrat vše}, \ui{Vymazat výběr} a~Ctrl/Cmd+A~podporují větší výběry na viditelné stránce. Karty chytrých galerií nejsou součástí tohoto výběru založeného na souborech. Přetažení nevybrané fotografie začíná výběrem této fotografie, zatímco přetažení existujícího výběru přesouvá vybrané fotografie společně. Viditelná karta podřízené galerie se stává cílem přetažení a~upuštění provádí stejný ověřený přesun fotografií jako výběr cíle. Samotné karty fyzických galerií nejsou zdroji přetažení.
 
