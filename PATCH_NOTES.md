@@ -1,5 +1,46 @@
 # Patch notes
 
+## Version 0.117.1
+
+Version 0.117.1 fixes first-paint tag disclosure in public gallery headers and gallery cards. The configured visible tag limit, overflow control, and optional row cap now come from server-rendered markup and CSS, keeping card geometry stable before JavaScript runs.
+
+### Highlights
+
+#### Public gallery tags
+
+- Rendered the configured number of gallery and contained tags on the server, with a native disclosure control for the remaining tags.
+- Kept tag expansion available without JavaScript and preserved tag links in the expanded collection.
+- Applied the optional tag row cap from the initial response and kept tag pills on a single line with truncation for long names.
+- Preserved compatibility handling for older button-based tag markup while current server-rendered roots remain untouched by browser layout initialization.
+
+### Technical Details
+
+#### Backend and frontend
+
+- Updated `app/controllers/public_gallery_page.php` to prepare tag-list view models and pass the existing Theme display settings to the view.
+- Updated `app/views/public_gallery_pages.php` and `app/views/public_tags.php` to render the initial visible tags, inline native disclosure, and server-configured row-height limit.
+- Updated `public/assets/gallery-modules/hero-tags.js` to leave current native disclosure markup unchanged and retain legacy markup support.
+- Added native disclosure, tag truncation, and stable row-cap styling to `public/assets/styles/public-shared.css`; updated gallery and public-gallery entrypoint cache versions.
+
+#### Database
+
+- Added no migration or setting. Tag assignments and existing Theme preferences remain in their current storage.
+
+#### Tests and documentation
+
+- Added `tests/gallery_tags_browser_test.mjs`, `tests/fixtures/gallery_tags.html`, and `tests/support/gallery_tags_render_fixture.php` for first-paint and card-geometry coverage.
+- Updated `tests/admin_panel_lifecycle_browser_test.mjs`, `tests/hero_tag_theme_model_test.php`, and `scripts/audit_registry.php` for the new browser fixture and server-first rendering contract.
+- Updated the architecture description and synchronized all four manual edition versions.
+
+### User Impact
+
+#### For visitors
+
+- Gallery and contained tags show their configured initial set immediately, while the `[...]` disclosure opens the remaining linked tags without a JavaScript-dependent initial layout shift.
+
+#### For administrators
+
+- Existing Theme settings for visible tag count, display-all mode, and row limits continue to control public tag presentation.
 ## Version 0.117
 
 Version 0.117 refines the gallery editor into a more compact, task-focused workspace and improves SimBrief description drafting for new and existing galleries. The update preserves the existing gallery storage, access rules, and optional flight-map behavior.
