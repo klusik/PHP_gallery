@@ -1019,7 +1019,14 @@ See **[docs/SMART_GALLERIES.md](docs/SMART_GALLERIES.md)** for the service, acce
 - **License:** MIT (see LICENSE file)
 - **Author:** Rudolf Klusal (@klusik)
 
-For issues, questions, or contributions, please open an issue on GitHub.
+For bug reports, feature ideas, and accessibility barriers, use the matching
+GitHub issue form. General questions and installation help belong in
+[Discussions](https://github.com/klusik/PHP_gallery/discussions). Before
+contributing, read [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of
+Conduct](CODE_OF_CONDUCT.md). Security reports should follow
+[SECURITY.md](.github/SECURITY.md), not be posted publicly. See
+[ACCESSIBILITY.md](ACCESSIBILITY.md) for the project's accessibility
+commitment and reporting guidance.
 
 ## Changelog
 

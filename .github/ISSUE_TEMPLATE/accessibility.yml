@@ -1,0 +1,35 @@
+name: Accessibility barrier
+description: Report an accessibility problem in a public page or Admin workflow.
+title: "[Accessibility]: "
+body:
+  - type: textarea
+    id: location
+    attributes:
+      label: Page or control
+      description: Identify the page and the control or content where you encountered the barrier. Do not include private gallery URLs.
+    validations:
+      required: true
+  - type: textarea
+    id: task
+    attributes:
+      label: Task and impact
+      description: What were you trying to do, and how did the barrier affect you?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps and observed result
+      description: Give a short sequence and say what happened.
+    validations:
+      required: true
+  - type: textarea
+    id: setup
+    attributes:
+      label: Relevant setup
+      description: Browser, operating system, assistive technology, input method, and versions when known.
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result or suggested improvement
+      description: Describe what would make the task accessible for you, if known.
