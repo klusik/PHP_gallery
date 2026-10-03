@@ -319,7 +319,7 @@ function php_declarations(string $source): array
 /**
  * Check substantive summaries, parameter agreement, returns, and loose array shapes.
  * Types are checked for presence; semantic subtype compatibility needs review.
- * @param array{kind:string,name:string,line:int,params:list<array{name:string,type:string,tuple_arity?:int}>,return_type:string,doc:string} $record Declaration with optional fixed JavaScript tuple metadata.
+ * @param array{kind:string,name:string,line:int,params?:list<array{name:string,type:string,tuple_arity?:int}>,return_type?:string,doc:string,language?:string} $record Declaration with optional fixed JavaScript tuple metadata or native-script summary-only coverage.
  * @return list<string> Stable findings; no source values or documentation text.
  */
 function declaration_issues(array $record): array
@@ -341,6 +341,9 @@ function declaration_issues(array $record): array
         return array_merge(['documentation.missing'], $typing);
     }
     $clean = preg_replace('/^\s*\/?\*+\/?\s?/m', '', $doc) ?? $doc;
+    if (($record['language'] ?? '') === 'script') {
+        $clean = preg_replace('/^\s*(?:<#|#>|#|\.SYNOPSIS)\s*/mi', '', $doc) ?? $doc;
+    }
     $summary = trim(explode('@', $clean, 2)[0]);
     if ($record['kind'] === 'property' && $summary === '') {
         $propertyTags = documentation_tags($clean, 'var');
@@ -350,6 +353,11 @@ function declaration_issues(array $record): array
     if (strlen($summary) < 12 || preg_match('/^(?:handles? (?:this|the) operation|todo|fixme|documentation)\W*$/i', $summary) === 1
         || preg_match('/^Handles .+ logic for the gallery application\./i', $summary) === 1) {
         $issues[] = 'documentation.summary';
+    }
+    if (($record['language'] ?? '') === 'script') {
+        // Native scripts have no shared PHP/JS annotation syntax. Their argument,
+        // result and execution contracts remain explicit manual coverage.
+        return $issues;
     }
     if (in_array($record['kind'], ['class', 'interface', 'trait', 'enum'], true)) {
         return $issues;

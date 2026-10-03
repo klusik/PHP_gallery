@@ -200,6 +200,7 @@ is_always_included() {
 }
 
 # Function should_skip returns success when a file should not be deployed.
+# Argument 1 is the candidate path; status 0 excludes it and status 1 includes it.
 should_skip() {
     # Variable path stores this scripts working value.
     local path="$1"

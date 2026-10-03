@@ -909,4 +909,5 @@ Phase 4.1 adds no migration; Phase 4.2 adds only `viewer_registration_verificati
 | Update notes | `app/controllers/updates.php`, `app/services/updates_status.php`, `app/services/updates_patch_notes.php`, `public/assets/gallery-modules/admin-update-notes.js` | Passive notes and bounded explicit discovery. |
 | Navdata | `app/services/flight_maps.php`, internal part `app/services/flight_maps/navdata_update.php`, `app/models/flight_maps.php` | Weekly/backoff/lock policy and atomic 200-row batches. |
 | Python policies | `scripts/source_contracts/python.php`, `scripts/source_contracts/python_scan.py`, `scripts/check_python_import_policy.php` | Non-executing AST declarations and whole-tree import prohibition. |
+| Bash and PowerShell source contracts | `scripts/source_contracts/scripts.php`, `tests/source_contract_scripts_test.php` | Non-executing bounded parser for changed brace-bodied functions, preceding documentation, stable body fingerprints, and explicit refusal of unsupported forms. |
 | Windows release pair | `winapp/build_installer.py` | Version folder, exact JSON integrity and publication rollback. |

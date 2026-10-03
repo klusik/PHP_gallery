@@ -44,7 +44,7 @@ namespace Gallery\Core;
  * Consumers: runtime diagnostics, release checks, updater compatibility, public assets and documentation.
  * Rationale: keep one canonical machine-readable version synchronized by the release preparation workflow.
  */
-const CMS_VERSION = '0.115';
+const CMS_VERSION = '0.115.1';
 const CMS_GITHUB_REPOSITORY = 'klusik/PHP_gallery';
 const CMS_UPDATE_BRANCHES = ['main', 'master'];
 

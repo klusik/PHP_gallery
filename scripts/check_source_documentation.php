@@ -21,6 +21,7 @@ require_once __DIR__ . '/source_contracts/inventory.php';
 require_once __DIR__ . '/source_contracts/php.php';
 require_once __DIR__ . '/source_contracts/javascript.php';
 require_once __DIR__ . '/source_contracts/python.php';
+require_once __DIR__ . '/source_contracts/scripts.php';
 require_once __DIR__ . '/source_contracts/changes.php';
 
 /**
@@ -106,7 +107,8 @@ function documentation_report(string $root, array $paths = []): array
             'javascript' => 'Conservative lexer: functions/generators, classes, methods, bound/inline arrows and nested template expressions; js/mjs/cjs and executable inline HTML scripts. Destructured parameters require review.',
             'python' => 'Python 3 AST: classes, nested/async functions, positional-only, keyword-only and variadic parameters; bound receivers excluded, staticmethod parameters included. Tag-style and typed Google docstrings accepted. Lambdas have no native docstring/annotation syntax and are excluded.',
             'typing' => 'PHP native parameter/return types required (constructor/destructor return syntax excluded); Python native annotations required; JavaScript uses typed JSDoc braces. This is declaration/contract validation, not a complete static type checker.',
-            'manual_declaration_languages' => 'PowerShell and shell/batch declaration/docstring semantics remain manual. SQL, YAML, SVG, TeX and Apache htaccess receive native header checks, not application-callable claims.',
+            'scripts' => 'Changed-source gate only: ordinary brace-bodied Bash and PowerShell functions require meaningful preceding comments. Whole-tree native scripts receive header checks; argument/result typing and execution semantics remain manual. Unsupported declarations, dynamic eval and unbalanced lexical boundaries block changed-source coverage.',
+            'manual_declaration_languages' => 'Batch declaration/docstring semantics remain manual. SQL, YAML, SVG, TeX and Apache htaccess receive native header checks, not application-callable claims.',
             'manual_semantics' => 'Primitive PHP type disagreement is detected; review aliases/subtypes, truthfulness, invariants, side effects, exceptions, field semantics, ambiguous JS regex and computed/private fields.',
             'other_formats' => 'Metadata, docs and binaries are extension-counted without reading contents; attribution belongs to their owning source/generator.',
         ],

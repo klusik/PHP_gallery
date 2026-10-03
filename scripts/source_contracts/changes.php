@@ -193,6 +193,14 @@ function compare_declaration_snapshots(array $old, array $current, ?callable $is
  */
 function source_declaration_snapshots(string $source, string $path): array
 {
+    if (in_array(strtolower(pathinfo($path, PATHINFO_EXTENSION)), ['sh', 'ps1', 'psm1'], true)) {
+        $snapshots = script_declaration_snapshots($source, strtolower(pathinfo($path, PATHINFO_EXTENSION)));
+        foreach ($snapshots as &$snapshot) {
+            $snapshot['path'] = $path;
+        }
+        unset($snapshot);
+        return $snapshots;
+    }
     if (in_array(strtolower(pathinfo($path, PATHINFO_EXTENSION)), ['py', 'pyw'], true)) {
         $snapshots = python_declaration_snapshots($source);
         foreach ($snapshots as &$snapshot) {
@@ -286,7 +294,7 @@ function source_head_declaration_allowed(string $path): bool
     $filename = array_pop($parts);
     return $path !== 'config.php' && !str_starts_with((string) $filename, '.env')
         && array_intersect($parts, source_excluded_directories()) === []
-        && in_array(strtolower(pathinfo($path, PATHINFO_EXTENSION)), ['php', 'js', 'mjs', 'cjs', 'html', 'htm', 'py', 'pyw'], true);
+        && in_array(strtolower(pathinfo($path, PATHINFO_EXTENSION)), ['php', 'js', 'mjs', 'cjs', 'html', 'htm', 'py', 'pyw', 'sh', 'ps1', 'psm1'], true);
 }
 
 
@@ -305,9 +313,9 @@ function changed_documentation_report(string $root, array $paths = [], ?callable
     $report = ['status' => 'BLOCKED', 'summary' => ['base' => $base, 'source_files' => 0, 'changed_files' => 0,
         'added' => 0, 'changed' => 0, 'unchanged' => 0, 'moved' => 0, 'doc_regressions' => 0, 'finding_count' => 0],
         'findings' => [], 'blocked' => [], 'coverage' => [
-            'scope' => 'Added/materially changed PHP, Python/PYW, JS/MJS/CJS and inline HTML script declarations; doc-only regressions. Unchanged legacy debt remains visible in the whole-tree inventory.',
+            'scope' => 'Added/materially changed PHP, Python/PYW, JS/MJS/CJS, inline HTML script declarations and ordinary Bash/PowerShell functions; doc-only regressions. Unchanged legacy debt remains visible in the whole-tree inventory.',
             'identity' => 'Namespace/containing declaration identity and executable-token fingerprints; no line-number identity or baseline.',
-            'limitations' => 'Conservative JS lexer, aliases/complex types and semantic truthfulness require review. Python lambdas cannot have native docstrings and are excluded. Changed shell/PowerShell bodies, missing Python runtime, invalid source and missing Git history mean BLOCKED coverage. CSS/YAML/SVG/TeX/Apache use the separate native-header gate.',
+            'limitations' => 'Conservative JS/native-script lexers, aliases/complex types and semantic truthfulness require review. Native-script argument/result typing remains manual. Python lambdas cannot have native docstrings and are excluded. Unsupported script declarations, changed batch bodies, missing Python runtime, invalid source and missing Git history mean BLOCKED coverage. CSS/YAML/SVG/TeX/Apache use the separate native-header gate.',
         ]];
     try {
         $root = realpath($root) ?: $root;
@@ -361,7 +369,7 @@ function changed_documentation_report(string $root, array $paths = [], ?callable
             if ($before === $after) {
                 continue;
             }
-            $supported = in_array($extension, ['php', 'js', 'mjs', 'cjs', 'html', 'htm', 'py', 'pyw'], true);
+            $supported = in_array($extension, ['php', 'js', 'mjs', 'cjs', 'html', 'htm', 'py', 'pyw', 'sh', 'ps1', 'psm1'], true);
             if (in_array($extension, ['css', 'yml', 'yaml', 'svg', 'tex', 'htaccess'], true)) {
                 continue; // Native header contract owns these non-application-callable formats.
             }

@@ -138,6 +138,7 @@ function syncInlineTagToggle(content, toggle, lastTag) {
  * Initialize one server-rendered gallery header or card tag collection.
  *
  * @param {HTMLElement} root Hero tag root element.
+ * @return {void} Binds disclosure controls and observes changes to the available width.
  */
 function setupHeroTagRoot(root) {
     if (root.dataset.heroTagsReady === '1') {
@@ -159,9 +160,14 @@ function setupHeroTagRoot(root) {
 
     /**
      * Hide labels for groups with no currently visible tag anchors.
+     * @return {void} Updates each group's label visibility.
      */
     const syncGroupLabels = () => {
-        content.querySelectorAll('.tag-list').forEach((list) => {
+        content.querySelectorAll('.tag-list').forEach(/**
+         * Hide the group label when every tag in the list is collapsed.
+         * @param {HTMLElement} list Tag group containing its label and anchors.
+         * @return {void} Updates the label when the group has one.
+         */ (list) => {
             const label = list.querySelector('.tag-list-label');
             if (!(label instanceof HTMLElement)) {
                 return;
@@ -173,6 +179,7 @@ function setupHeroTagRoot(root) {
 
     /**
      * Apply collapsed or expanded visibility and refresh all dependent UI.
+     * @return {void} Updates tags, toggle placement and scrollbar bounds.
      */
     const renderState = () => {
         tags.forEach((tag, index) => {
@@ -255,9 +262,21 @@ export function setupHeroTagDisclosure() {
     if (heroTagInsertionObserver || !document.body || !('MutationObserver' in window)) {
         return;
     }
-    heroTagInsertionObserver = new MutationObserver((records) => {
-        records.forEach((record) => {
-            record.addedNodes.forEach((node) => {
+    heroTagInsertionObserver = new MutationObserver(/**
+     * Initialize tag collections added by a gallery fragment refresh.
+     * @param {MutationRecord[]} records Observed changes to the document subtree.
+     * @return {void} Visits newly inserted nodes without observing them twice.
+     */ (records) => {
+        records.forEach(/**
+         * Visit the nodes inserted by one observed document change.
+         * @param {MutationRecord} record Child-list mutation containing inserted nodes.
+         * @return {void} Initializes each inserted collection and its descendants.
+         */ (record) => {
+            record.addedNodes.forEach(/**
+             * Initialize a newly inserted element's own and nested tag collections.
+             * @param {Node} node Inserted document node, possibly a non-element.
+             * @return {void} Enhances only elements containing supported tag roots.
+             */ (node) => {
                 if (!(node instanceof HTMLElement)) {
                     return;
                 }
