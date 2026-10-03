@@ -18,6 +18,7 @@ on:
 permissions:
   contents: read
 
+# The helper actions use Node 24; node-version below selects the separate test runtime.
 env:
   # Chromium is explicitly disabled only in this GitHub workflow; local audits retain browser discovery.
   PHP_GALLERY_BROWSER: disabled
@@ -59,7 +60,7 @@ jobs:
       GALLERY_RUNTIME_NORMALIZATION: unicode
       GALLERY_SESSION_REQUIRED: '1'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
         with:
           # Preserve history for the event's comparison SHA, including multi-commit pushes.
           fetch-depth: 0
@@ -69,14 +70,16 @@ jobs:
           extensions: pdo_mysql, pdo_sqlite, curl, gd, zip, dom, mbstring, intl
           ini-values: error_reporting=E_ALL, display_errors=On
           coverage: none
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7.0.0
         with:
           node-version: '22'
+          # This source checkout has no npm install or package-manager cache to restore.
+          package-manager-cache: false
       - name: Central audit with mandatory real workflows and database races
         run: php scripts/gallery_workflow_ci.php
       - name: Upload compact audit reports only
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: gallery-workflows-${{ strategy.job-index }}
           path: |
@@ -106,7 +109,7 @@ jobs:
       GALLERY_RUNTIME_NORMALIZATION: ${{ matrix.normalization }}
       GALLERY_SESSION_REQUIRED: '1'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
         with:
           # Preserve history for the event's comparison SHA, including multi-commit pushes.
           fetch-depth: 0
@@ -116,14 +119,16 @@ jobs:
           extensions: ${{ matrix.extensions }}
           ini-values: error_reporting=E_ALL, display_errors=On
           coverage: none
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7.0.0
         with:
           node-version: '22'
+          # This source checkout has no npm install or package-manager cache to restore.
+          package-manager-cache: false
       - name: Central source audit
         run: php scripts/audit.php --profile=full
       - name: Upload compact audit reports only
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: runtime-source-${{ strategy.job-index }}
           path: |
