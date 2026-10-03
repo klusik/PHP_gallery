@@ -66,7 +66,7 @@ This section has its own form, so saving the website address does not save the G
 | `public_language_selector_languages` | `translations.php`; shared Theme/Settings viewer-language panel | ordered non-empty JSON subset of `en`, `cs`, `de`, `sv` | all four; malformed/empty persisted values fall back to all, while empty submissions are rejected | limits languages offered for browser-local viewer choices only; Admin/default/pack tools keep all maintained languages; no migration | Edit | Theme Language | normal |
 | `public_language_selector_design` | `translations.php`; shared Theme/Settings viewer-language design panel | normalized JSON with preset, visibility/layout choices, and per-preset bounded styles | Classic, flags/codes on, names off; malformed values fall back field-by-field | Settings exposes a merge-safe basic subset; Theme owns compact details, transparent colors, preview, and unsaved all/preset/field resets; no migration | Edit | Theme Language | normal |
 | `url_rewrite_enabled` | `app_settings.php`; Dashboard Maintenance | boolean `0/1` | `1`; generated URLs use non-rewrite fallbacks where compatibility requires | no revision; no migration | Edit | Dashboard Maintenance | operational |
-| `public_home_search_enabled` | `public_search.php`; Dashboard Maintenance | boolean `0/1` | `0`; feature flag can force effective disabled | no revision; no migration | Edit only while feature is available | Dashboard Maintenance | normal |
+| `public_home_search_enabled` | `public_search.php`; Settings General | boolean `0/1` | `1` when absent; explicit `0` and effective capability remain authoritative | no revision; no migration | Edit only while feature is available | Dashboard Maintenance | normal |
 
 ## Public appearance and tag presentation
 
@@ -133,17 +133,17 @@ Attachment writes require the dedicated mutation-schema capability before any pa
 
 | Canonical key | Owner / current Admin location | Type and accepted values | Default and invalid/missing fallback | Side effects / migration | Central | Specialized link | Sensitivity |
 |---|---|---|---|---|---|---|---|
-| `admin_upload_client_format_mode` | `uploads.php`; Upload settings General | enum `server_supported`, `phone_jpeg` | `server_supported` | changes browser picker policy; no migration | Summary | Upload settings General | normal |
-| `admin_upload_auto_rename_enabled` | `uploads.php`; Upload settings General | boolean | `1` | affects post-scan rename behavior | Summary | Upload settings General | normal |
-| `browser_upload_enabled` | `browser_uploads.php`; Upload settings Browser | boolean | enabled | canonical browser-upload normalizer | Summary | Upload settings Browser | operational |
-| `browser_upload_default_worker_count` | `browser_uploads.php`; Upload settings Browser | integer, bounded by max/hard cap | service default 8 | clamped by canonical normalizer | Summary | Upload settings Browser | operational |
-| `browser_upload_max_worker_count` | `browser_uploads.php`; Upload settings Browser | integer, bounded by hard cap | hard cap | clamped | Specialized summary | Upload settings Browser | operational |
-| `browser_upload_hard_worker_cap` | `browser_uploads.php`; Upload settings Browser | integer 1..32 | 32 | clamped | Specialized summary | Upload settings Browser | operational |
-| `browser_upload_batch_size_policy` | `browser_uploads.php`; Upload settings Browser | currently canonical `limit_ratio` policy | `limit_ratio`; unsupported resets to it | no migration | Specialized summary | Upload settings Browser | operational |
-| `browser_upload_zip_size_threshold_ratio` | `browser_uploads.php`; Upload settings Browser | bounded ratio defined by service | service default; malformed/out-of-range clamped | no migration | Specialized summary | Upload settings Browser | operational |
-| `browser_upload_max_items_per_batch` | `browser_uploads.php`; Upload settings Browser | integer 1..64 | service default 8 | clamped | Summary | Upload settings Browser | operational |
-| `browser_upload_max_zip_batch_bytes` | `browser_uploads.php`; Upload settings Browser | bounded byte size | service default, bounded by hard maximum | clamped | Specialized summary | Upload settings Browser | operational |
-| `browser_thumbnail_rebuild_source_chunk_bytes` | `browser_thumbnail_rebuild.php`; Upload settings Browser | bounded byte size | 512 MiB service default | controls browser-side thumbnail rebuild source ZIP chunking | Summary | Upload settings Browser | operational |
+| `admin_upload_client_format_mode` | `uploads.php`; Settings Uploads (General) | enum `server_supported`, `phone_jpeg` | `server_supported` | changes browser picker policy; no migration | Edit | Settings Uploads (General) | normal |
+| `admin_upload_auto_rename_enabled` | `uploads.php`; Settings Uploads (General) | boolean | `1` | affects post-scan rename behavior | Edit | Settings Uploads (General) | normal |
+| `browser_upload_enabled` | `browser_uploads.php`; Settings Uploads (Browser) | boolean | enabled | canonical browser-upload normalizer | Edit | Settings Uploads (Browser) | operational |
+| `browser_upload_default_worker_count` | `browser_uploads.php`; Settings Uploads (Browser) | integer, bounded by max/hard cap | service default 8 | clamped by canonical normalizer | Edit | Settings Uploads (Browser) | operational |
+| `browser_upload_max_worker_count` | `browser_uploads.php`; Settings Uploads (Browser) | integer, bounded by hard cap | hard cap | clamped | Edit | Settings Uploads (Browser) | operational |
+| `browser_upload_hard_worker_cap` | `browser_uploads.php`; Settings Uploads (Browser) | integer 1..32 | 32 | clamped | Edit | Settings Uploads (Browser) | operational |
+| `browser_upload_batch_size_policy` | `browser_uploads.php`; Settings Uploads (Browser) | currently canonical `limit_ratio` policy | `limit_ratio`; unsupported resets to it | no migration | Edit | Settings Uploads (Browser) | operational |
+| `browser_upload_zip_size_threshold_ratio` | `browser_uploads.php`; Settings Uploads (Browser) | bounded ratio defined by service | service default; malformed/out-of-range clamped | no migration | Edit | Settings Uploads (Browser) | operational |
+| `browser_upload_max_items_per_batch` | `browser_uploads.php`; Settings Uploads (Browser) | integer 1..64 | service default 8 | clamped | Edit | Settings Uploads (Browser) | operational |
+| `browser_upload_max_zip_batch_bytes` | `browser_uploads.php`; Settings Uploads (Browser) | bounded byte size | service default, bounded by hard maximum | clamped | Edit | Settings Uploads (Browser) | operational |
+| `browser_thumbnail_rebuild_source_chunk_bytes` | `browser_thumbnail_rebuild.php`; Settings Uploads (Browser) | bounded byte size | 512 MiB service default | controls browser-side thumbnail rebuild source ZIP chunking | Edit | Settings Uploads (Browser) | operational |
 
 The Setup Wizard may edit only the bounded scalar subset `admin_upload_client_format_mode`, `admin_upload_auto_rename_enabled`, `browser_upload_enabled`, `browser_upload_default_worker_count`, and `browser_upload_max_items_per_batch`. It calls the upload-owned strict adapters and revalidates the current worker maximum before apply. When default worker count is changed, the transaction also locks `browser_upload_max_worker_count` and `browser_upload_hard_worker_cap` as read dependencies before the fresh comparison. Coupled max/hard worker caps, ZIP ratio/byte policies, thumbnail rebuild chunk tuning, and gallery-scoped automation API keys remain specialist/status-only items. API keys are never exposed as values. The staged Setup Wizard intentionally does not navigate to `admin_api_manager` or any other immediately-persisting specialist page.
 
@@ -229,3 +229,11 @@ A new global setting should be added to the registry only after its canonical ow
 ## Cooperative galleries
 
 `cooperative_galleries` uses the canonical `feature_flag.cooperative_galleries.enabled` switch, disabled by default. Effective availability controls its routes and Advanced Settings discovery. **Friendly galleries** (`admin_cooperative_galleries`) owns pairing; **Album collaborations** (`admin_cooperative_collaborations`) owns proposal composition, explicit consent, email invitations, verification and withdrawal. Both use the existing side panel and specialized service owners rather than central scalar saves. Disabling cooperation preserves stored identities, peers, proposals and preferences and avoids optional schema/network work. Required missing or unknown storage refuses authority and mutation; revocation retains its narrower verified storage contract. See `docs/COOPERATIVE_GALLERIES.md`.
+
+## Integrated Uploads ownership
+
+`admin_legacy_upload_navigation_enabled` is a registry-owned `app_settings` boolean, default `0`. Hidden Upload photos/Upload settings/Mobile uploads links do not disable their routes. Settings Uploads is the preference/connection workspace; the public-side creation/upload panel remains the contextual ingestion surface.
+
+Browser values enter `set_browser_upload_settings()` together. ZIP target/chunk controls display MB and persist bytes. Mobile connection controls use existing capability/schema owners and skip disabled inventory; successful issuance retains its one-time password if list refresh fails. Owned fragments use canonical in-place mutation completion.
+
+Vertical cards place photos above descriptions; horizontal cards place them beside descriptions. Migration `202610020001_gallery_description_layout_semantics.php` converts established global/gallery/tag/Smart/Trash preferences and sidecars while fresh installs retain vertical. Setting keys and capability ownership remain unchanged.

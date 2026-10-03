@@ -1,5 +1,587 @@
 # Patch notes
 
+## Version 0.115
+
+Version 0.115 brings a broad administration refresh: a clearer gallery tree, reviewed feature changes across entire branches, narrow password controls, integrated upload settings and mobile connections, and redesigned appearance, language, maintenance and diagnostic workspaces. It also corrects gallery-card orientation terminology with a compatibility migration, preserves installation-owned custom stylesheets more reliably, reduces redundant updater and navigation-data work, and strengthens PHP, JavaScript and Python source contracts. The independent Windows uploader remains at 0.3.2; its build now produces an installer and matching update metadata together in a version directory.
+
+### Highlights
+
+#### Administration workspace and navigation
+
+- Redesigned the dashboard and its Overview, Galleries and maintenance surfaces with clearer hierarchy, compact summaries, field icons and contextual actions.
+- Improved responsive layouts and the distinction between section navigation, operational state and actions that affect stored data.
+- Preserved separately deferred Overview totals, gallery inventory and maintenance content so opening the dashboard does not eagerly perform every operation.
+- Fixed unwanted Overview anchor jumps when activating or refreshing dashboard sections.
+- Updated dynamically mounted tabs and panel fragments so their actions remain usable after an in-place refresh.
+- Included optional presentation-schema health in the dashboard's action-required decision alongside security and destructive-mutation health.
+- Kept unavailable optional storage visible as an actionable health condition rather than allowing an otherwise healthy dashboard summary to hide it.
+- Refreshed the shared Admin chrome and control styling, and updated the setup wizard's integration with the redesigned workspaces.
+
+#### Gallery tree, inventory and branch summaries
+
+- Redesigned the gallery manager around the physical parent/child hierarchy, with expandable branches, feature indicators, direct actions and clearer current-row context.
+- Added separate direct-image counts, descendant-image counts and subgallery counts, making a branch's contents easier to understand without opening every descendant.
+- Added on, off and mixed feature summaries for branches rather than reporting only the root gallery's own preference.
+- Prepared summaries from the existing ordered inventory and accumulated descendant values in a reverse pass.
+- Reused already fetched ancestor rows when resolving inherited GPS/map preferences instead of repeatedly fetching each parent.
+- Improved gallery tree interaction across fragment replacements and retained contextual navigation to the existing editors.
+- Kept physical galleries and Smart Galleries distinct and retained their existing ownership and authorization rules.
+
+#### Reviewed feature changes across gallery branches
+
+- Added local staging of Maps, File names, Voting and Picture Game intentions from the gallery inventory.
+- Applied each intention to the selected root and descendants, retaining chronological order when selected branches overlap.
+- Added an exact server-prepared preview showing affected galleries, changed fields, current/proposed effective states, inherited map values and coupled side effects.
+- Added explicit review and application controls; activating a feature indicator stages an intention without immediately changing stored preferences.
+- Added draft discard and review cancellation, both of which preserve stored gallery state.
+- Disabled application when the reviewed plan contains no stored preference changes.
+- Counted replacing an inherited Maps preference with an explicit value as a change even when its current effective On/Off state matches.
+- Preserved Picture Game's dependency on voting: enabling the game also enables voting, and disabling voting also disables the game.
+- Checked canonical global capabilities before optional schema discovery and refused a requested feature when its effective capability is disabled.
+- Rechecked hierarchy, settings, dependencies and the reviewed fingerprint under writer and database locks before transactional application.
+- Refused stale plans after intervening gallery, hierarchy, revision or inherited-default changes instead of silently overwriting newer work.
+- Updated gallery revisions/public content through existing mutation owners and returned affected IDs through the shared completion envelope.
+- Reported sidecar or presentation refresh trouble as a warning after a committed change rather than falsely reporting that persistence failed.
+- Kept staged intentions attached to the stable workspace when its owned fragment is rendered again.
+
+#### Quick current-gallery password and visibility controls
+
+- Added a narrow password action for one current gallery from the gallery workspace.
+- Added entry controls for installing/replacing an own password and a corresponding removal action.
+- Checked the submitted edit revision through the existing gallery editor concurrency owner before changing the password.
+- Changed only password hash and access mode, preserving visibility, listing, share-token authority and unrelated display preferences.
+- Preserved token-only protection when an own password is removed from a gallery that still has a validating share token.
+- Preserved ancestor protection; removing a current gallery password does not remove protection inherited from an ancestor.
+- Returned bounded row state with ID, localized visibility/access labels, own-password status and revision.
+- Kept plaintext passwords and stored password/token hashes out of response state and discarded incidental output from credential-bearing requests.
+- Updated inline visibility mutations to return the same acknowledged gallery state so inventory controls reflect the saved result.
+- Preserved authentication, CSRF protection, canonical mutation completion and ordinary POST/redirect compatibility.
+
+#### Gallery creation and public home
+
+- Redesigned creation into content and location/visibility groups, with secondary settings under a disclosure.
+- Kept title, description, tags and source language readily available, and retained optional SimBrief drafts and remembered defaults.
+- Generated independent description-field IDs so labels remain correct when multiple creation fragments are mounted.
+- Improved root-gallery creation on the public home for authenticated administrators.
+- Added a first-gallery prompt only after confirming both the physical catalog and stored Smart Gallery definitions are empty, including disabled/private definitions; an empty visible listing alone no longer implies a new installation.
+- Kept creation controls and catalog emptiness checks out of anonymous visitor rendering.
+- Retained the side-panel creation/upload pipeline and refreshed affected home/gallery fragments after completion.
+- Updated creation titles, submit labels and contextual links to match their surface.
+
+#### Integrated uploads and mobile WebDAV in Settings
+
+- Moved ordinary legacy upload preferences into Settings > Uploads while retaining original setters and direct routes.
+- Added central editing of source format, automatic rename, browser-assisted availability, worker defaults/maxima/hard cap, ZIP batching and thumbnail source chunks.
+- Submitted coupled worker and batching values together through the canonical browser-upload normalizer.
+- Presented preferred ZIP targets and thumbnail chunks in MB while retaining byte-valued storage.
+- Added `admin_legacy_upload_navigation_enabled`, defaulting to hidden legacy Upload photos, Upload settings and Mobile uploads links.
+- Preserved legacy routes and ingestion services when menu links are hidden; the preference controls discovery.
+- Added an embedded mobile connection workspace with its own fragment refresh.
+- Prepared mobile connection state for central Settings and the original direct page.
+- Skipped mobile inventory reads when the effective upload capability is disabled.
+- Routed integrated mobile connection mutations through canonical JSON/AJAX completion.
+- Preserved a newly created one-time password even when subsequent inventory refresh fails, avoiding loss of its only display.
+- Reported refresh trouble separately from successful persistence and kept the saved connection recoverable.
+- Updated Settings discovery, upload navigation and dynamic workspace handlers.
+
+#### Appearance editing and live previews
+
+- Reworked Appearance control groups and coordinated previews for site name, width, card orientation and tag-page grid.
+- Added a resizable control/preview split with pointer and keyboard operation.
+- Bounded resizing by both pane minimum widths and retained stacked presentation when horizontal resizing is unavailable.
+- Remembered the split locally for the browser/path, separately from persistent public Theme settings.
+- Refreshed theme form interactions, draft state, range/number synchronization and dynamically rendered previews.
+- Added dedicated responsive styling for Appearance, Branding & Media, Layout, Language and Custom CSS.
+- Preserved saved Theme values and canonical owners while reorganizing presentation.
+
+#### Branding & Media and Layout
+
+- Grouped banner, separator, favicon and background tools in a compact Site images workspace.
+- Added clearer removal, background optimization and maintenance controls.
+- Clarified that gallery fallback modes use each gallery's cover/collage choices and do not select/upload the global background.
+- Retained separator limits, favicon cropping, original backgrounds and optimized derivatives.
+- Simplified Layout explanations for shortcuts, card details, home grids, lightbox defaults and per-gallery grid reset.
+- Corrected card previews and labels: vertical places photo above description; horizontal places it beside description.
+- Kept titles, dates, tags and shortened Markdown-capable descriptions in prepared cards.
+- Preserved permanent `progressive` and `responsive` renderers and existing access/no-JavaScript behavior.
+
+#### Language settings and translation maintenance
+
+- Split Language into Settings, Design, Editor and Diagnostics subtabs with dedicated styling.
+- Added explicit pack edit links and opened Editor after supported pack selection, import/save or validation error.
+- Paired selector-design controls with their own language panel, avoiding cross-form preview reads.
+- Made the selector sample show only languages offered by the current draft.
+- Marked the public draft default active when offered, otherwise using the first offered language.
+- Cached language/default signatures separately from design to avoid unnecessary preview rebuilding.
+- Preserved independent Admin language, public default and per-visitor override semantics.
+- Updated English, Czech, German and Swedish JSON catalogs and PHP compatibility dictionaries together.
+
+#### Gallery-card orientation compatibility
+
+- Added `database/migrations/202610020001_gallery_description_layout_semantics.php` to preserve existing appearance after correcting orientation semantics.
+- Converted explicit historical values in galleries, global Theme, tag-page settings and Smart Gallery presentation.
+- Kept nullable inheritance distinct from explicit preferences.
+- Preserved the old effective global default for established installations without an explicit saved value.
+- Kept corrected vertical default for fresh installations without prior gallery/user/presentation evidence.
+- Added installation `gallery_description_layout_semantics_version` and document `description_layout_semantics_version` markers.
+- Carried document semantics through `gallery.json`, gallery migration metadata and Trash snapshots.
+- Converted legacy imported/restored documents at existing boundaries so old data retains intended appearance.
+- Made database conversion transactional and replay-safe; independent document markers prevent double swapping after interruption.
+- Advanced gallery revisions for converted explicit values and refreshed public content revision.
+- Preserved historical public CSS class hooks through an explicit canonical-to-historical orientation mapping so existing custom skins retain their interpretation.
+
+#### Public cards, tags and search
+
+- Extended shared tag disclosure to gallery cards, including vertical cards.
+- Preserved all tags in server-rendered HTML; limits, expansion/collapse and scrolling remain browser enhancements.
+- Adjusted responsive measurement/scrolling to each rendered card/hero owner.
+- Applied the Theme tag sort order to card tags and initialized disclosure for dynamically inserted DOM content.
+- Defaulted home search on when `public_home_search_enabled` has never been stored.
+- Respected explicitly saved search OFF and the effective `public_search` capability.
+- Updated Content/Display controls with public presentation and corrected orientation help.
+- Fixed the dedicated GPS-override reset so an absent global-default checkbox does not overwrite the saved global preference.
+- Returned direct/non-JavaScript Content actions to Maintenance > Content after URL rewrite, search, GPS, crawler-safety and path-regeneration operations.
+- Updated public imports so deployed browsers receive tag behavior changes.
+
+#### Custom stylesheet preservation and recovery
+
+- Described installed CSS from the actual file instead of inferring contents/presence from a preset marker.
+- Kept active CSS when no replacement is selected and gave a successful upload precedence over presets.
+- Refused invalid selections/uploads without silently removing installed CSS.
+- Required verified `app_settings` storage before replacing/resetting active CSS.
+- Staged beside `public/assets/custom.css`, verified copied bytes with SHA-256 and preserved file permissions.
+- Retained the prior stylesheet while activating replacement and persisting its marker.
+- Rolled back on marker persistence failure and restored removed CSS when reset persistence failed.
+- Distinguished retained recovery copies from failed first-install cleanup and exposed bounded guidance.
+- Preserved unrelated Theme preferences during CSS save/replacement/reset.
+- Excluded installation-owned `public/assets/custom.css` from both deployment helpers while retaining deployable `custom_css/` presets.
+
+#### Updates workspace and remote budget
+
+- Refreshed installed/latest versions, release selection, complete notes and API diagnostics together.
+- Added in-place note-viewer handling synchronized after update operations.
+- Read cached/bundled notes without GitHub requests during page rendering or version selection.
+- Treated the installed package's own note entry as authoritative over older remote cache contents.
+- Fetched missing pending-release notes only within explicit discovery's remaining budget.
+- Stopped probing after a valid preferred stable branch; retained alternate branch compatibility fallback.
+- Serialized explicit cross-tab discovery through a nonblocking lock.
+- Throttled automatic Updates-page metadata checks to at most hourly.
+- Released the PHP session before async GitHub I/O so other requests can continue.
+- Reconciled installed status locally after activation instead of repeating remote discovery.
+- Replaced stale check metadata while retaining a known newer release for rollback/beta cases.
+- Added clear running, paused, failed, cancelled and completed job titles.
+- Paused old background-job resumption when auto updates or installer capability is disabled.
+- Retained resumable activation, retry, rollback and shared completion owners.
+
+#### Navigation Data and flight maps
+
+- Moved refresh to AJAX/background handling on dashboard, panel and dedicated page.
+- Prepared a shared source/import snapshot rather than independent status blocks.
+- Added weekly freshness for automatic OurAirports import and one-hour failure backoff.
+- Serialized import ownership with a nonblocking lock and kept explicit manual refresh.
+- Refused a downloaded snapshot with no valid airport rows or no valid navaid rows, preserving the previous navigation dataset.
+- Released the PHP session for asynchronous imports and allowed an already-running atomic import to finish after the browser disconnects.
+- Updated progress/panel handlers and owned-fragment refresh after background execution.
+- Batched upserts into at most 200 rows per statement instead of one statement per point.
+- Preserved the transaction around replacement and stale-source deletion.
+- Returned bounded AJAX errors with generated reference and exception class in the diagnostic event.
+- Preserved flight-map/navigation schema ownership and account/credential policy.
+
+#### Trash, Smart Galleries, telemetry, logs and maintenance
+
+- Refreshed Trash summaries and restore/permanent-delete confirmation presentation.
+- Prepared remaining retention days and purge availability through the service-owned entry projection.
+- Retained live-data overlap checks for broken entries before allowing purge.
+- Preserved bounded emptying, authorization and recoverable gallery-level deletion.
+- Refreshed Smart Gallery actions/listing while retaining relationship safety and result ownership.
+- Localized rule groups as All, Any and Exclude while retaining stored `AND`, `OR` and `NOT` operators.
+- Numbered rule conditions, labeled property/comparison/value fields and added empty-group and No value needed guidance.
+- Escaped catalog labels, preserved missing referenced IDs in rule editing and mounted the builder on replacement fragments.
+- Added slug/placement summaries and an Open link only for enabled public Smart Gallery definitions.
+- Improved navdata, telemetry and log-maintenance hierarchy, icons, disclosures and responsive groups.
+- Added dedicated log/telemetry styles and improved archive details/controls.
+- Preserved collection preferences, retention and verified archive behavior.
+- Updated maintenance and dynamic operation controls while retaining the shared refresh coordinator.
+
+#### Windows installer and paired metadata
+
+- Changed local build output to place installer and metadata together under `winapp/dist/<winapp-version>/`.
+- Generated JSON from completed installer filename, independent version, size and SHA-256.
+- Prepared both files before publication and restored the prior EXE if JSON replacement failed.
+- Preserved older version directories, historical root artifacts and unrelated files.
+- Kept build cleanup, bundled SimConnect verification and copied-helper native/version smoke before Inno Setup.
+- Kept uploader at `0.3.2`; changed build output without adding an uploader runtime feature.
+- Verified the changed builder with a successful build and retained its output as local qualification evidence.
+- Reused the established byte-identical 0.3.2 installer/JSON for distribution so duplicate same-version assets across CMS releases cannot conflict on size or SHA-256.
+- Updated the native smoke fixture's version-directory lookup.
+- Documented attaching both matching files and retained manual 0.3.1-to-0.3.2 transition guidance.
+
+### Technical Details
+
+#### Backend owners and routes
+
+- Added authenticated/CSRF-protected POST routes `admin_gallery_features_plan` and `admin_gallery_features_apply` in `app/controllers/admin_gallery_features.php`.
+- Added `admin_gallery_password` in `app/controllers/admin_gallery_quick_access.php` with JSON and ordinary form completion.
+- Added `app/services/gallery_feature_plans.php` and `app/models/gallery_feature_plans.php` for semantic normalization, snapshot, preview and transactional application.
+- Bounded plans to 256 ordered intentions and checked JSON payload size before parsing.
+- Added `app/services/gallery_editor_quick_access.php`, reusing editor revision, persistence and sidecar ownership.
+- Added `app/models/gallery_description_layout_migration.php` and `app/services/gallery_description_layout_compatibility.php` for separate persistence/conversion orchestration.
+- Added `app/services/flight_maps/navdata_update.php` through its module entrypoint for freshness/backoff/import policy.
+- Updated layer loaders, dispatcher, dashboard/gallery inventory, lookup, Smart Gallery and inline mutation owners.
+- Updated mobile, Settings, Theme, navdata and updater HTTP surfaces and prepared view models.
+- Kept SQL/PDO in models, domain/filesystem orchestration in services, request authority in controllers and markup in views.
+
+#### Database and migration recoverability
+
+- Added one timestamped data/metadata migration, `202610020001_gallery_description_layout_semantics.php`; added no table or column.
+- Reused `app_settings`, `galleries`, `smart_galleries` and `gallery_trash_entries`.
+- Read required database inputs, including gallery revisions, before changing sidecars.
+- Preflighted stored JSON and orientation-bearing sidecars before the first filesystem mutation.
+- Traversed verified physical gallery/Trash roots, excluding linked and derivative/internal directories.
+- Refused escaped, changed, unreadable or invalid orientation documents rather than silently completing partial conversion.
+- Preserved original bytes until same-directory replacement was prepared.
+- Used independent document markers and an atomic database checkpoint; failures leave migration retryable without double conversion.
+- Preserved canonical migration ordering and schema-cache invalidation.
+- Stored legacy-navigation preference in `app_settings` and reused upload/WebDAV storage.
+
+#### Schema, security and diagnostics
+
+- Required `available` gallery feature/revision storage; refused confirmed `missing` and `unknown` without a legacy write fallback.
+- Required conclusive GPS, voting/game dependencies only for requested/coupled features.
+- Refused effectively `disabled` features before unnecessary optional probes.
+- Required verified access/revision authority before own-password changes; preserved stored access state on refusal.
+- Required `available` settings storage before CSS replacement/reset, refusing `missing`/`unknown` before active-file mutation.
+- Retained distinct mobile issuance and narrower revocation schema policies.
+- Avoided treating omitted/inaccessible public content as proof of an empty catalog.
+- Updated dashboard action aggregation without adding a competing security/presentation registry.
+- Retained named presentation groups for GPS/EXIF, flight maps/navdata, voting, Picture Game, lightbox, OpenAI, AI metadata, SimBrief persistence, navigation accounts/cache, telemetry and reports.
+- Preserved optional omission only through established read policy and conclusive schema for writes.
+- Kept visibility, password/share-token, NSFW and media preflight at canonical access boundaries.
+- Kept new credential/feature/CSS transport state bounded and free of SQL, database exceptions, stored credentials/tokens and private paths.
+- Preserved secrets outside GitHub requests and source reports.
+
+#### Frontend and in-place completion
+
+- Added `public/assets/gallery-modules/admin-gallery-features.js`, `admin-gallery-quick-access.js`, `admin-update-notes.js` and `theme-appearance-resizer.js`.
+- Updated gallery tree, dashboard, Settings, side panel, interaction policy, tabs, operations, setup, navdata, Smart Gallery, Trash and updater handlers.
+- Updated Theme form, language-selector designer and shared hero-tag modules.
+- Updated cache-busting imports in `public/assets/gallery.js` and `public/assets/public-gallery.js`.
+- Retained canonical `ok`, `message`, typed `mutation`, stable `entity_ids`, affected `contexts`, optional `panel` and `fallback`.
+- Passed full successful envelopes to `public/assets/gallery-modules/admin-mutation-completion.js`.
+- Retained shared stale-read suppression, postconditions and refresh retries rather than adding workflow-specific pipelines.
+- Covered dynamically replaced controls and panel URL/open-state persistence.
+- Added dedicated gallery creation, logs, Smart Gallery, telemetry and Theme CSS, with updated dashboard/list/maintenance/Settings/Updates/public styles.
+- Retained framework-free modules and existing direct-page/server fallbacks; staged feature planning and embedded quick controls use JavaScript.
+
+#### Source contracts, Python policy and CI
+
+- Extended meaningful declaration summaries, typed/described parameters and return contracts across PHP, JavaScript and Python/PYW.
+- Checked missing/extra/duplicate parameters, missing type/description, duplicate returns and definite type mismatch.
+- Required legal native PHP parameter/return declarations and Python annotations, including `-> None`.
+- Supported typed Google-style Python docstrings and existing tagged contracts; retained braced JSDoc.
+- Added isolated batched Python AST parsing without importing examined modules, executing code or evaluating annotations.
+- Covered classes, nested/async functions, positional/keyword-only/variadic parameters and class/static methods; excluded lambdas lacking native documentation syntax.
+- Added immutable value-free source reports with safe locations.
+- Kept unchanged documentation debt advisory while enforcing new/material declarations and documentation regressions.
+- Added `PHP_GALLERY_SOURCE_BASE`/`--base`, retaining local HEAD comparison.
+- Fetched full CI history and used PR target, prior push head or manual first parent as comparison.
+- Blocked missing runtime/history, invalid source and incomplete/unsupported changed parsing.
+- Parsed current PHP source while comparing historical source lexically, allowing repairs of older runtime-incompatible syntax.
+- Added `scripts/check_python_import_policy.php`, `scripts/source_contracts/python.php` and `scripts/source_contracts/python_scan.py`.
+- Prohibited whole-tree `from __future__ import annotations`, including aliases, combined and multiline imports, without legacy exemption.
+- Excluded comments, strings, `concurrent.futures` and unrelated future imports from prohibition.
+- Registered policies with the central audit and uploaded JSON documentation/import reports in CI.
+- Added no Python requirement to normal shared-hosted PHP requests.
+
+#### Regression tests and fixtures
+
+- Added subtree aggregation, feature-plan normalization/model/transaction and own-password contracts.
+- Added browser coverage for trees, staged review/application, quick access, creation and empty public home.
+- Added Content/Display, creation rendering, search-default and orientation/replay contracts.
+- Added mobile Settings, coupled upload values and legacy-menu tests, including one-time password retention after failed inventory.
+- Added CSS keep/selection/upload/staging/persistence rollback and recovery-copy tests.
+- Added Appearance, Custom CSS, Language, Layout and Media rendering/browser fixtures.
+- Added navdata freshness/backoff/UI and updater metadata-budget contracts.
+- Added Trash retention/purge projection and confirmation coverage.
+- Extended dashboard health, Settings, setup, side-panel lifecycle, mutation refresh and filesystem ownership.
+- Extended Smart Gallery, operational policy, revisions, translations and resumable updater coverage.
+- Added declaration type/docstring/import fixtures for valid/invalid source, non-execution and Git comparison.
+- Extended audit registration and installer tests for exact paired metadata, publication rollback, first-build cleanup and older/unrelated artifact preservation.
+- Retained central release orchestration; deterministic fixtures do not establish installed-Windows/UAC/simulator or live publication acceptance.
+
+#### Documentation and artifacts
+
+- Updated permanent architecture, schema, code map, Settings inventory and testing guidance.
+- Aligned EN/CZ/DE/SV manual editions/dates and workflow/compatibility instructions with CMS `0.115`.
+- Rebuilt matching tracked PDFs after final source edits and checked compiler diagnostics.
+- Updated registered markers and `release-metadata.json` for `v_0.115`.
+- Refreshed `app/core-manifest.json` after final sources/documents/artifacts.
+- Kept audit/qualification evidence in ignored cache and publication as a separate maintainer action.
+
+### User Impact
+
+#### For visitors
+
+- Improved gallery-card tag disclosure and consistent orientation terminology.
+- Enabled search only where no preference exists and the canonical capability permits it.
+- Preserved saved search settings, migrated gallery appearance, access/NSFW rules, authorized media and no-JavaScript navigation.
+- Restricted creation/password/feature controls to authenticated administrators.
+
+#### For administrators
+
+- Made hierarchy, descendant contents and mixed features visible in one workspace.
+- Added exact review for subtree changes and stale-preview refusal.
+- Added quick own-password editing with normal editor concurrency protections.
+- Consolidated upload/mobile settings and allowed restoration of legacy links.
+- Improved Theme, language, maintenance and diagnostic navigation and dynamic controls.
+- Preserved newly issued mobile passwords across inventory-read failures; required saving the one-time value before leaving.
+- Required normal migration for orientation compatibility and recommended backing up database, gallery and Trash stores together.
+- Kept interrupted conversion replayable after resolving its storage/document problem.
+- Preserved installation-owned CSS on deploy and unrelated saves, retaining evidence when rollback cannot finish.
+- Reduced remote/import repetition and left other requests available during async checks.
+- Kept uploader version independent and paired installer/JSON in its version folder.
+- Kept live acceptance and post-publication updater smoke separate from preparation and automated fixtures.
+
+### Detailed changed-file inventory
+
+This inventory records every implementation path changed from `v_0.114.2` to the release branch before marker preparation. The regenerated manifest and release-document edits are described above.
+
+#### Database, tooling, CI and companion
+
+- Updated or added `.github/workflows/gallery-workflows.yml`.
+- Updated or added `TESTING.md`.
+- Updated or added `database/migrations/202610020001_gallery_description_layout_semantics.php`.
+- Updated or added `scripts/audit.php`.
+- Updated or added `scripts/audit_registry.php`.
+- Updated or added `scripts/check_python_import_policy.php`.
+- Updated or added `scripts/check_source_documentation.php`.
+- Updated or added `scripts/deploy.ps1`.
+- Updated or added `scripts/deploy.sh`.
+- Updated or added `scripts/source_contracts/changes.php`.
+- Updated or added `scripts/source_contracts/javascript.php`.
+- Updated or added `scripts/source_contracts/php.php`.
+- Updated or added `scripts/source_contracts/python.php`.
+- Updated or added `scripts/source_contracts/python_scan.py`.
+- Updated or added `winapp/README.md`.
+- Updated or added `winapp/build_installer.py`.
+
+#### Routing and HTTP controllers
+
+- Updated or added `app/bootstrap/dispatch.php`.
+- Updated or added `app/controllers.php`.
+- Updated or added `app/controllers/admin_dashboard.php`.
+- Updated or added `app/controllers/admin_galleries_bulk.php`.
+- Updated or added `app/controllers/admin_galleries_discovery.php`.
+- Updated or added `app/controllers/admin_galleries_edit_page/tab_display.php`.
+- Updated or added `app/controllers/admin_gallery_features.php`.
+- Updated or added `app/controllers/admin_gallery_quick_access.php`.
+- Updated or added `app/controllers/admin_logs.php`.
+- Updated or added `app/controllers/admin_public_inline.php`.
+- Updated or added `app/controllers/admin_settings.php`.
+- Updated or added `app/controllers/admin_theme_actions.php`.
+- Updated or added `app/controllers/admin_theme_appearance.php`.
+- Updated or added `app/controllers/admin_theme_custom_css.php`.
+- Updated or added `app/controllers/admin_theme_language.php`.
+- Updated or added `app/controllers/admin_theme_layout.php`.
+- Updated or added `app/controllers/admin_theme_media.php`.
+- Updated or added `app/controllers/admin_trash.php`.
+- Updated or added `app/controllers/mobile_webdav.php`.
+- Updated or added `app/controllers/navigation_data.php`.
+- Updated or added `app/controllers/public_gallery_cards.php`.
+- Updated or added `app/controllers/public_gallery_home.php`.
+- Updated or added `app/controllers/shared_layout.php`.
+- Updated or added `app/controllers/smart_galleries.php`.
+- Updated or added `app/controllers/updates.php`.
+
+#### Views and maintained catalogs
+
+- Updated or added `app/lang/cs.json`.
+- Updated or added `app/lang/cs.php`.
+- Updated or added `app/lang/de.json`.
+- Updated or added `app/lang/de.php`.
+- Updated or added `app/lang/en.json`.
+- Updated or added `app/lang/en.php`.
+- Updated or added `app/lang/sv.json`.
+- Updated or added `app/lang/sv.php`.
+- Updated or added `app/views/admin_chrome.php`.
+- Updated or added `app/views/admin_dashboard.php`.
+- Updated or added `app/views/admin_dashboard_sections.php`.
+- Updated or added `app/views/admin_gallery_discovery.php`.
+- Updated or added `app/views/admin_gallery_forms.php`.
+- Updated or added `app/views/admin_language_settings.php`.
+- Updated or added `app/views/admin_logs.php`.
+- Updated or added `app/views/admin_settings.php`.
+- Updated or added `app/views/admin_telemetry.php`.
+- Updated or added `app/views/admin_theme.php`.
+- Updated or added `app/views/admin_trash.php`.
+- Updated or added `app/views/admin_ui.php`.
+- Updated or added `app/views/admin_updates.php`.
+- Updated or added `app/views/layout.php`.
+- Updated or added `app/views/mobile_webdav.php`.
+- Updated or added `app/views/navigation_data.php`.
+- Updated or added `app/views/public_gallery_cards.php`.
+- Updated or added `app/views/public_gallery_pages.php`.
+- Updated or added `app/views/public_tags.php`.
+- Updated or added `app/views/smart_galleries.php`.
+
+#### Persistence models
+
+- Updated or added `app/models.php`.
+- Updated or added `app/models/admin_dashboard.php`.
+- Updated or added `app/models/flight_maps.php`.
+- Updated or added `app/models/galleries.php`.
+- Updated or added `app/models/gallery_description_layout_migration.php`.
+- Updated or added `app/models/gallery_feature_plans.php`.
+- Updated or added `app/models/smart_galleries.php`.
+
+#### Domain services
+
+- Updated or added `app/services.php`.
+- Updated or added `app/services/admin_dashboard.php`.
+- Updated or added `app/services/admin_settings_registry.php`.
+- Updated or added `app/services/custom_css.php`.
+- Updated or added `app/services/flight_maps.php`.
+- Updated or added `app/services/flight_maps/navdata_update.php`.
+- Updated or added `app/services/gallery_description_layout.php`.
+- Updated or added `app/services/gallery_description_layout_compatibility.php`.
+- Updated or added `app/services/gallery_editor_quick_access.php`.
+- Updated or added `app/services/gallery_feature_plans.php`.
+- Updated or added `app/services/gallery_lookup.php`.
+- Updated or added `app/services/gallery_migration.php`.
+- Updated or added `app/services/gallery_migration/metadata.php`.
+- Updated or added `app/services/gallery_migration/target_setup.php`.
+- Updated or added `app/services/gallery_sidecars.php`.
+- Updated or added `app/services/gallery_trash.php`.
+- Updated or added `app/services/public_search.php`.
+- Updated or added `app/services/updates_jobs/activation.php`.
+- Updated or added `app/services/updates_patch_notes.php`.
+- Updated or added `app/services/updates_remote.php`.
+- Updated or added `app/services/updates_status.php`.
+
+#### Browser modules and styles
+
+- Updated or added `public/assets/gallery-modules/admin-dashboard-workspace.js`.
+- Updated or added `public/assets/gallery-modules/admin-gallery-features.js`.
+- Updated or added `public/assets/gallery-modules/admin-gallery-list.js`.
+- Updated or added `public/assets/gallery-modules/admin-gallery-quick-access.js`.
+- Updated or added `public/assets/gallery-modules/admin-interaction-policy.js`.
+- Updated or added `public/assets/gallery-modules/admin-language-selector-design.js`.
+- Updated or added `public/assets/gallery-modules/admin-navdata-panel.js`.
+- Updated or added `public/assets/gallery-modules/admin-navdata-update.js`.
+- Updated or added `public/assets/gallery-modules/admin-operations.js`.
+- Updated or added `public/assets/gallery-modules/admin-settings-workspace.js`.
+- Updated or added `public/assets/gallery-modules/admin-setup-wizard.js`.
+- Updated or added `public/assets/gallery-modules/admin-side-panel.js`.
+- Updated or added `public/assets/gallery-modules/admin-smart-galleries.js`.
+- Updated or added `public/assets/gallery-modules/admin-tabs.js`.
+- Updated or added `public/assets/gallery-modules/admin-trash.js`.
+- Updated or added `public/assets/gallery-modules/admin-update-jobs.js`.
+- Updated or added `public/assets/gallery-modules/admin-update-notes.js`.
+- Updated or added `public/assets/gallery-modules/hero-tags.js`.
+- Updated or added `public/assets/gallery-modules/theme-appearance-resizer.js`.
+- Updated or added `public/assets/gallery-modules/theme-form.js`.
+- Updated or added `public/assets/gallery.js`.
+- Updated or added `public/assets/public-gallery.js`.
+- Updated or added `public/assets/styles/admin-dashboard.css`.
+- Updated or added `public/assets/styles/admin-gallery-create.css`.
+- Updated or added `public/assets/styles/admin-gallery-list.css`.
+- Updated or added `public/assets/styles/admin-logs.css`.
+- Updated or added `public/assets/styles/admin-maintenance-center.css`.
+- Updated or added `public/assets/styles/admin-settings.css`.
+- Updated or added `public/assets/styles/admin-smart-galleries.css`.
+- Updated or added `public/assets/styles/admin-telemetry.css`.
+- Updated or added `public/assets/styles/admin-theme-custom-css.css`.
+- Updated or added `public/assets/styles/admin-theme-editor.css`.
+- Updated or added `public/assets/styles/admin-theme-language.css`.
+- Updated or added `public/assets/styles/admin-theme-layout.css`.
+- Updated or added `public/assets/styles/admin-theme-media.css`.
+- Updated or added `public/assets/styles/admin-update.css`.
+- Updated or added `public/assets/styles/public-shared.css`.
+- Updated or added `public/assets/styles/public.css`.
+- Updated or added `public/assets/styles/utilities.css`.
+
+#### Regression tests and isolated fixtures
+
+- Updated or added `tests/admin_content_display_test.php`.
+- Updated or added `tests/admin_dashboard_fragment_controller_test.php`.
+- Updated or added `tests/admin_filesystem_ownership_test.php`.
+- Updated or added `tests/admin_gallery_features_browser_test.mjs`.
+- Updated or added `tests/admin_gallery_quick_access_browser_test.mjs`.
+- Updated or added `tests/admin_gallery_quick_access_test.php`.
+- Updated or added `tests/admin_gallery_subtree_summaries_test.php`.
+- Updated or added `tests/admin_gallery_tree_browser_test.mjs`.
+- Updated or added `tests/admin_maintenance_health_test.php`.
+- Updated or added `tests/admin_navigation_data_ui_test.php`.
+- Updated or added `tests/admin_panel_lifecycle_browser_test.mjs`.
+- Updated or added `tests/admin_settings_controller_test.php`.
+- Updated or added `tests/admin_settings_registry_test.php`.
+- Updated or added `tests/admin_setup_wizard_rendering_test.php`.
+- Updated or added `tests/admin_side_panel_created_gallery_refresh_test.mjs`.
+- Updated or added `tests/admin_side_panel_gallery_refresh_test.mjs`.
+- Updated or added `tests/admin_smart_galleries_browser_test.mjs`.
+- Updated or added `tests/admin_smart_galleries_ui_test.php`.
+- Updated or added `tests/admin_trash_confirmation_browser_test.mjs`.
+- Updated or added `tests/admin_trash_rendering_test.php`.
+- Updated or added `tests/admin_updates_ui_test.php`.
+- Updated or added `tests/admin_upload_workspace_browser_test.mjs`.
+- Updated or added `tests/audit_runner_test.php`.
+- Updated or added `tests/custom_css_preservation_test.php`.
+- Updated or added `tests/fixtures/admin_dashboard_workspace.html`.
+- Updated or added `tests/fixtures/admin_gallery_features.html`.
+- Updated or added `tests/fixtures/admin_gallery_quick_access.html`.
+- Updated or added `tests/fixtures/admin_gallery_tree.html`.
+- Updated or added `tests/fixtures/admin_smart_galleries.html`.
+- Updated or added `tests/fixtures/admin_trash_confirmation.html`.
+- Updated or added `tests/fixtures/admin_update_jobs.html`.
+- Updated or added `tests/fixtures/admin_upload_workspace.html`.
+- Updated or added `tests/fixtures/gallery_creation.html`.
+- Updated or added `tests/fixtures/public_home_creation.html`.
+- Updated or added `tests/fixtures/theme_appearance.html`.
+- Updated or added `tests/fixtures/theme_custom_css.html`.
+- Updated or added `tests/fixtures/theme_language.html`.
+- Updated or added `tests/fixtures/theme_layout.html`.
+- Updated or added `tests/fixtures/theme_media.html`.
+- Updated or added `tests/frontend_operational_policy_test.mjs`.
+- Updated or added `tests/gallery_creation_browser_test.mjs`.
+- Updated or added `tests/gallery_creation_rendering_test.php`.
+- Updated or added `tests/gallery_description_layout_compatibility_test.php`.
+- Updated or added `tests/gallery_feature_plan_model_test.php`.
+- Updated or added `tests/gallery_feature_plans_test.php`.
+- Updated or added `tests/gallery_revision_runtime_updates_test.php`.
+- Updated or added `tests/gallery_trash_admin_entries_test.php`.
+- Updated or added `tests/legacy_upload_navigation_test.php`.
+- Updated or added `tests/mobile_upload_settings_integration_test.php`.
+- Updated or added `tests/navdata_background_refresh_test.php`.
+- Updated or added `tests/public_home_creation_browser_test.mjs`.
+- Updated or added `tests/public_home_creation_ui_test.php`.
+- Updated or added `tests/public_search_default_policy_test.php`.
+- Updated or added `tests/python_import_policy_test.php`.
+- Updated or added `tests/smart_gallery_high_priority_hardening_test.php`.
+- Updated or added `tests/source_contract_changes_test.php`.
+- Updated or added `tests/source_type_documentation_test.php`.
+- Updated or added `tests/stage4_mutation_hardening_contract_test.php`.
+- Updated or added `tests/support/admin_gallery_tree_render_fixture.php`.
+- Updated or added `tests/support/gallery_creation_render_fixture.php`.
+- Updated or added `tests/support/language_design_defaults_fixture.php`.
+- Updated or added `tests/support/public_card_layout_fixture.php`.
+- Updated or added `tests/support/theme_appearance_fixture.php`.
+- Updated or added `tests/theme_appearance_browser_test.mjs`.
+- Updated or added `tests/theme_appearance_rendering_test.php`.
+- Updated or added `tests/theme_custom_css_browser_test.mjs`.
+- Updated or added `tests/theme_custom_css_rendering_test.php`.
+- Updated or added `tests/theme_language_browser_test.mjs`.
+- Updated or added `tests/theme_language_rendering_test.php`.
+- Updated or added `tests/theme_layout_browser_test.mjs`.
+- Updated or added `tests/theme_layout_rendering_test.php`.
+- Updated or added `tests/theme_media_browser_test.mjs`.
+- Updated or added `tests/theme_media_rendering_test.php`.
+- Updated or added `tests/translation_catalog_consistency_test.php`.
+- Updated or added `tests/updater_metadata_budget_test.php`.
+- Updated or added `tests/updater_resumable_state_machine_test.php`.
+- Updated or added `tests/uploads_settings_merge_test.php`.
+- Updated or added `winapp/tests/test_build_installer.py`.
+- Updated or added `winapp/tests/test_update_helper.py`.
+
 ## Version 0.114.2
 
 Version 0.114.2 includes Windows uploader 0.3.2 with repaired native Windows DLL loading in the frozen update helper and a build-time check of the copied helper. Users upgrading from 0.3.1 should manually launch the verified 0.3.2 installer, because their running older application still copies its older helper before replacement.
