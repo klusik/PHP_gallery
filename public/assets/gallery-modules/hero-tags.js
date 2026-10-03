@@ -383,6 +383,18 @@ function completeGalleryCardInfoPanelClose(details) {
 }
 
 /**
+ * Convert one CSS transition time value to milliseconds.
+ *
+ * @param {string} value CSS duration or delay value.
+ * @return {number} Parsed milliseconds, or zero for an unsupported value.
+ */
+function galleryCardInfoTransitionTimeMs(value) {
+    if (value.endsWith('ms')) return Number.parseFloat(value);
+    if (value.endsWith('s')) return Number.parseFloat(value) * 1000;
+    return 0;
+}
+
+/**
  * Read the longest active transition on a panel, including its transition delay.
  *
  * @param {HTMLElement} panel Animated information panel.
@@ -390,15 +402,33 @@ function completeGalleryCardInfoPanelClose(details) {
  */
 function galleryCardInfoTransitionDurationMs(panel) {
     const style = window.getComputedStyle(panel);
-    const durations = style.transitionDuration.split(',').map((value) => value.trim());
-    const delays = style.transitionDelay.split(',').map((value) => value.trim());
-    const toMilliseconds = (value) => {
-        if (value.endsWith('ms')) return Number.parseFloat(value);
-        if (value.endsWith('s')) return Number.parseFloat(value) * 1000;
-        return 0;
-    };
-    const totals = durations.map((duration, index) => toMilliseconds(duration) + toMilliseconds(delays[index % Math.max(delays.length, 1)] || '0s'));
-    return totals.length > 0 ? Math.max(0, ...totals.filter(Number.isFinite)) : 0;
+    const durations = style.transitionDuration.split(',');
+    const delays = style.transitionDelay.split(',');
+    let maximum = 0;
+    for (let index = 0; index < durations.length; index++) {
+        const duration = durations[index].trim();
+        const delay = (delays[index % Math.max(delays.length, 1)] || '0s').trim() || '0s';
+        const total = galleryCardInfoTransitionTimeMs(duration) + galleryCardInfoTransitionTimeMs(delay);
+        if (Number.isFinite(total)) maximum = Math.max(maximum, total);
+    }
+    return maximum;
+}
+
+/**
+ * Complete a card-info disclosure close when its panel opacity transition ends.
+ *
+ * @param {TransitionEvent} event Browser transition completion event.
+ * @return {void} Closes the disclosure only for its current panel opacity transition.
+ */
+function finishGalleryCardInfoPanelTransition(event) {
+    const panel = event.currentTarget;
+    if (!(panel instanceof HTMLElement) || event.target !== panel || event.propertyName !== 'opacity') {
+        return;
+    }
+    const details = panel.closest('[data-gallery-card-info-disclosure]');
+    if (details instanceof HTMLDetailsElement) {
+        completeGalleryCardInfoPanelClose(details);
+    }
 }
 
 /**
@@ -467,14 +497,9 @@ function closeGalleryCardInfoPanel(details) {
         return;
     }
     clearGalleryCardInfoCloseJob(details);
-    const onTransitionEnd = (event) => {
-        if (event.target === panel && event.propertyName === 'opacity') {
-            completeGalleryCardInfoPanelClose(details);
-        }
-    };
-    panel.addEventListener('transitionend', onTransitionEnd);
+    panel.addEventListener('transitionend', finishGalleryCardInfoPanelTransition);
     const timerId = window.setTimeout(() => completeGalleryCardInfoPanelClose(details), galleryCardInfoTransitionDurationMs(panel));
-    galleryCardInfoCloseJobs.set(details, { onTransitionEnd, panel, timerId });
+    galleryCardInfoCloseJobs.set(details, { onTransitionEnd: finishGalleryCardInfoPanelTransition, panel, timerId });
 }
 
 /**

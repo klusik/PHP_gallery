@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine Versionsänderung benötigt.
-\newcommand{\version}{0.117.1}
+\newcommand{\version}{0.118}
 \newcommand{\manualdate}{3.~Oktober~2026}
 
 \hypersetup{
@@ -1569,6 +1569,8 @@ Empfohlene Vorgehensweisen sind:
 
 Der Designbereich steuert Websiteidentität, Farben, Abmessungen, Seitenbreite, Hintergründe, Branding, Favicon-Ressourcen, Sprache, Galeriekartenpräsentation, Lightbox-Vorgaben, GPS-Präsentation, Favoritennavigation und öffentliche Vorschaubilddarstellung. Einstellungen verwenden normalisierte skalare Werte oder gezielte Dienstmodelle.
 
+Die Unterkarte \ui{Animationen} legt die Öffnungs- und Schließdauer für das öffentliche Informationsfenster auf Galeriekarten und das Admin-Seitenpanel fest. Beide Werte liegen zwischen 0 und 800~ms; 0 deaktiviert die jeweilige Bewegung. Die Standardwerte sind 320~ms und 260~ms. Das öffentliche Panel enthält Galerietitel, Beschreibung, Datum und die vollständige Schlagwortliste. Die native Offenlegung funktioniert auch ohne JavaScript; mit JavaScript bleibt das Panel im Ansichtsbereich und lässt sich durch Klick außerhalb oder mit Escape schließen. Die Interaktion berücksichtigt die Einstellung für reduzierte Bewegung des Browsers.
+
 Der Designeditor verwendet keinen getrennten Hell-/Dunkelmodus-Schalter. Stattdessen bestimmen gespeicherte Farbsteuerungen und ein optionales benutzerdefiniertes CSS-Design die öffentliche Farbpalette direkt. Er legt außerdem Galeriekarten- und Untergalerielayouts fest und kann bis zu drei Kopfzeilenverknüpfungen konfigurieren. Jede kann zur Hauptseite oder einer Galerie führen oder leer bleiben. Anonyme Besucher sehen nur konfigurierte Galerieverknüpfungen, die weiterhin öffentlich und gelistet sind; doppelte oder gelöschte Galerieauswahlen werden beim Speichern verworfen. Drei leere Plätze verbergen diese Favoritengalerie-Schaltflächen. Galeriekarten können außerdem eine konfigurierbare Kennzeichnung enthaltener Bilder anzeigen. Ist diese für eine Galerie wirksam, bleibt beim Öffnen dieselbe Zweiganzahl im Hero-Bereich sichtbar; gezählt werden Bilder der aktuellen Galerie und ihrer zugänglichen Untergalerien nach denselben Öffentlichkeits-/Zugriffsregeln wie bei der Karte. Galeriespezifische Präsentation kann Websitevorgaben erben oder die im Galerieeditor angebotenen Entscheidungen überschreiben.
 
 \subsection{Referenz der Designsteuerungen}
@@ -1594,6 +1596,7 @@ Erscheinungsbild & Öffentliche Seitenbreite & \ui{Standard}, \ui{Breiter}, \ui{
 Erscheinungsbild & GPS-Markierung & Bei aktivierter GPS-Kartenfunktion können Fotokartenmarkierungen und deren Hintergrundunterlegung separat gezeigt oder verborgen werden. Markierungsgröße 14--48~Pixel, Vorgabe 26. Der Unterlegungsregler zeigt 0--48~Pixel; die aktuelle Servernormalisierung behandelt 0 oder andere nicht positive Werte jedoch als ungesetzt und stellt 22~Pixel wieder her. Verbergen Sie den Hintergrund über das separate Unterlegungskontrollkästchen.\\
 Erscheinungsbild & Öffentliche Schlagwortseiten & Eigene Spalten und Zeilen für Schlagwortseiten verwenden dieselben sicheren Höchstwerte wie andere öffentliche Raster: 1--12 Spalten und 1--50 Zeilen. Schlagwort-Ergebniskarten können unabhängig von normalen Galerielisten vertikales oder horizontales Galeriekartendesign verwenden.\\
 Erscheinungsbild & Galerie-Hero-Schlagwörter & Nach Nutzung oder alphabetisch sortieren. Entweder alle sofort zeigen oder 1--200 Schlagwörter vor der Erweiterungssteuerung; Standardschwelle 20. Optionales Scrollen verwendet 1--12 sichtbare Zeilen, Vorgabe 5, und aktiviert sich nur, wenn die dargestellten Schlagwörter tatsächlich mehr konfigurierte Zeilen belegen.\\
+Erscheinungsbild & Oberflächenanimationen & Dauer des öffentlichen Informationspanels auf Galeriekarten: 0--800~ms (Standard 320~ms); Dauer des Admin-Seitenpanels: 0--800~ms (Standard 260~ms). 0 deaktiviert die jeweilige Bewegung.\\
 Layout & Kopfzeilenverknüpfungen & Drei geordnete Plätze. Ein Platz kann leer sein, auf die Hauptseite oder eine per Galerieauswahl gefundene Galerie zeigen. Öffentliche Besucher sehen nur öffentliche/gelistete Galerieziele.\\
 Erscheinungsbild & Galeriekartendesign & \ui{Vertikales System} zeigt das Foto über der Beschreibung; \ui{Horizontales System} daneben. Neuinstallationen beginnen vertikal; die Migration erhält das Aussehen älterer Installationen. Eine physische Galerie kann die Designvorgabe bei verfügbarem Präsentationsschema erben oder überschreiben.\\
 Layout & Bildanzahlkennzeichnung & Die globale Kennzeichnung enthaltener Bilder ist standardmäßig aktiviert. Einzelne Galerien können sie erben oder überschreiben. Bei Aktivierung für die geöffnete Galerie zeigt auch der Hero-Bereich deren Zweigbildanzahl einschließlich zugänglicher Untergalerien.\\

@@ -1,3 +1,11 @@
+# Project: PHP Gallery
+# Repository: https://github.com/klusik/PHP_gallery
+# File: .github/ISSUE_TEMPLATE/accessibility.yml
+# Module Type: GitHub Issue Form
+# Purpose: Collect structured accessibility barrier reports.
+# Responsibilities: Ask for the affected control, task and impact, reproduction, relevant assistive technology and input method, and expected outcome.
+# Author: Rudolf Klusal
+
 name: Accessibility barrier
 description: Report an accessibility problem in a public page or Admin workflow.
 title: "[Accessibility]: "

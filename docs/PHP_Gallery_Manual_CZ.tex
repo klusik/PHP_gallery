@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.117.1}
+\newcommand{\version}{0.118}
 \newcommand{\manualdate}{3.~října~2026}
 
 \hypersetup{
@@ -1567,6 +1567,8 @@ Oblast Vzhled řídí identitu webu, barvy, rozměry, šířku stránky, pozadí
 
 Editor Vzhledu nepoužívá samostatný přepínač světlého a~tmavého režimu. Veřejnou barevnou paletu přímo určují uložené barevné volby a~volitelný motiv Vlastního CSS. Nastavuje také rozvržení karet galerií a~podgalerií a~umožňuje nastavit až tři zkratky v~záhlaví. Každá může cílit na hlavní stránku, jednu galerii nebo zůstat prázdná. Anonymní návštěvníci vidí pouze nastavené zkratky galerií, které jsou stále veřejné a~uvedené v~seznamech; duplicitní nebo odstraněné galerie se při uložení nastavení vyřadí. Ponechání všech tří pozic prázdných skryje tlačítka oblíbených galerií. Karty galerií mohou zobrazovat také nastavitelný odznak počtu obsažených fotografií. Je-li odznak pro galerii účinný, otevření galerie zachovává stejný počet větve viditelný v~úvodním panelu: počítá obrázky v~aktuální galerii a~jejích přístupných podgaleriích podle stejných pravidel veřejnosti a~přístupu jako karta. Prezentace jednotlivé galerie může dědit výchozí hodnoty webu nebo přepsat volby nabízené editorem galerie.
 
+Podčást \ui{Animace} nastavuje dobu otevírání a~zavírání veřejného informačního panelu na kartách galerií a~pravého panelu administrace. Každá hodnota je v~rozsahu 0--800~ms; hodnota 0 příslušný pohyb vypne. Výchozí hodnoty jsou 320~ms a~260~ms. Veřejný panel obsahuje název, popis, datum a~úplný seznam štítků galerie. Nativní rozbalovací ovládání funguje i~bez JavaScriptu; s~JavaScriptem zůstává panel v~oblasti okna a~lze jej zavřít kliknutím mimo něj nebo klávesou Escape. Interakce respektuje nastavení omezení pohybu v~prohlížeči.
+
 \subsection{Přehled ovládacích prvků Vzhledu}
 \index{v00268@vzhled!o00131@ovládací prvky}
 \index{s00227@stránkování!n00100@nastavení Vzhledu}
@@ -1590,6 +1592,7 @@ Vzhled & Šířka veřejné stránky & \ui{Výchozí}, \ui{Širší}, \ui{Plná 
 Vzhled & Značka GPS & Je-li funkce map GPS povolena, značky na kartách fotografií a~jejich podklad lze zobrazit či skrýt samostatně. Velikost značky je 14--48~pixelů, výchozí 26. Posuvník podkladu se zobrazuje jako 0--48~pixelů, ale současný serverový normalizátor považuje 0 nebo jinou nekladnou hodnotu za nenastavenou a~obnoví 22~pixelů; pozadí skryjte samostatným zaškrtávacím polem podkladu.\\
 Vzhled & Veřejné stránky štítků & Vlastní sloupce a~řádky stránek štítků používají stejné bezpečné maximální hodnoty jako jiné veřejné mřížky: 1--12 sloupců a~1--50 řádků. Karty výsledků štítků mohou používat svislý nebo vodorovný návrh karty galerie nezávisle na běžných výpisech galerií.\\
 Vzhled & Štítky úvodního panelu galerie & Řazení podle využití nebo abecedy. Buď zobrazit všechny ihned, nebo zobrazit 1--200 štítků před ovládáním rozbalení na místě; výchozí práh je 20. Volitelné posouvání používá 1--12 viditelných řádků, výchozí 5, a~aktivuje se jen tehdy, když vykreslené štítky skutečně přesáhnou nastavené řádky.\\
+Vzhled & Animace rozhraní & Doba veřejného informačního panelu karty galerie je 0--800~ms (výchozí 320~ms) a~doba pravého panelu administrace 0--800~ms (výchozí 260~ms). Hodnota 0 daný pohyb vypne.\\
 Rozvržení & Zkratky záhlaví & Tři seřazené pozice. Pozice může být prázdná, odkazovat na hlavní stránku nebo na galerii nalezenou výběrem galerií. Veřejní návštěvníci vidí pouze veřejné cílové galerie uvedené v~seznamech.\\
 Vzhled & Návrh karty galerie & \ui{Svislý systém} klade fotografii nad popis, \ui{Vodorovný systém} vedle něj. Nové instalace začínají svisle; migrace zachovává vzhled starších instalací. Fyzická galerie může volbu Vzhledu dědit nebo přepsat, je-li dostupné schéma prezentace.\\
 Rozvržení & Odznak počtu fotografií & Globální odznak obsažených fotografií je ve výchozím stavu povolen. Jednotlivé galerie jej mohou dědit nebo uložit přepsání. Je-li povolen pro otevřenou galerii, úvodní panel také ukazuje počet obrázků její větve včetně přístupných podgalerií.\\
