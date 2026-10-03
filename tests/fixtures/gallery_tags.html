@@ -4,8 +4,8 @@ Project: PHP Gallery
 Repository: https://github.com/klusik/PHP_gallery
 File: tests/fixtures/gallery_tags.html
 Module Type: Browser Test Fixture
-Purpose: Check progressive gallery tag disclosure before and after module startup.
-Responsibilities: Measure server-rendered card geometry and exercise native details disclosure.
+Purpose: Check progressive gallery tag presentation before and after module startup.
+Responsibilities: Measure card geometry and exercise native tag-panel disclosure.
 Author: Rudolf Klusal
 License: MIT License (see LICENSE file in repository)
 -->
@@ -294,15 +294,8 @@ async function runFixture() {
     const summary = details?.querySelector('summary');
     const cappedList = capped?.querySelector('.tag-list');
     check(capped instanceof HTMLElement && details instanceof HTMLDetailsElement && summary instanceof HTMLElement && cappedList instanceof HTMLElement, 'row-one card uses native details disclosure');
-    check(!details.open && summary.textContent.includes('[...]'), 'native disclosure begins collapsed with the inline [...] control');
-    const tail = details.closest('.gallery-card-tag-tail');
-    const lastVisibleTag = tail?.querySelector(':scope > a.tag');
-    check(lastVisibleTag instanceof HTMLElement && tail.previousElementSibling?.matches('.tag') === true, 'non-wrapping tail starts with the final server-rendered visible tag');
-    const tailGeometry = {tag: absoluteRect(lastVisibleTag), summary: absoluteRect(summary), tail: absoluteRect(tail)};
-    const tagBottom = tailGeometry.tag[1] + tailGeometry.tag[3];
-    const summaryBottom = tailGeometry.summary[1] + tailGeometry.summary[3];
-    check(tailGeometry.summary[0] >= tailGeometry.tag[0] + tailGeometry.tag[2] - 1 && tailGeometry.summary[0] < tailGeometry.tag[0] + tailGeometry.tag[2] + 8 && tailGeometry.tag[1] <= summaryBottom && tailGeometry.summary[1] <= tagBottom, 'ellipsis stays beside and vertically overlaps the final visible tag inside the non-wrapping tail: ' + JSON.stringify(tailGeometry));
-    check(allTagsHidden(details.querySelectorAll('a.tag')), 'overflow tag links are hidden by native details before JavaScript starts');
+    check(!details.open && summary.querySelector('[aria-hidden="true"]')?.textContent.trim() === '…', 'native disclosure begins collapsed with a three-dot information control');
+    check(allTagsHidden(details.querySelectorAll('a.tag')), 'all public-info tag links stay hidden while the panel is closed');
     const visibleBefore = visibleTagAnchors(visibleTags(cappedList));
     check(visibleBefore.length === 4, 'configured visible tag count is already applied in first HTML paint');
     const beforeInit = snapshot('[data-fixture-case="rows-one"]');
@@ -320,7 +313,7 @@ async function runFixture() {
         if (Math.abs(rect.top - firstRowTop) <= 2) firstRowBottom = Math.max(firstRowBottom, rect.bottom);
         else if (rect.top > firstRowTop + 2) nextRowTop = Math.min(nextRowTop, rect.top);
     }
-    check(firstRowBottom <= contentRect.top + cappedContent.clientHeight + 1, 'all first-row pills and the disclosure control fit the one-row cap');
+    check(firstRowBottom <= contentRect.top + cappedContent.clientHeight + 1, 'all first-row pills and the information control fit the one-row cap');
     check(Number.isFinite(nextRowTop) && nextRowTop >= contentRect.top + cappedContent.clientHeight - 1, 'second visual row begins beyond the one-row cap');
     check(tagsKeepFullNames(visibleBefore), 'long tag labels stay single-line while retaining their full title text');
     check(document.querySelector('[data-fixture-case="rows-five"] details[data-hero-tags-disclosure]') instanceof HTMLDetailsElement, 'five-row card also has server-rendered disclosure');
@@ -366,9 +359,10 @@ async function runFixture() {
     const beforeModuleExpand = await fetch('/__key?key=Enter');
     check(beforeModuleExpand.ok, 'trusted Enter key reaches the server-rendered native summary before disclosure module startup');
     await settle();
-    check(details.open && allTagsVisible(details.querySelectorAll('a.tag')), 'native summary exposes overflow links before disclosure module startup');
+    check(details.open && allTagsVisible(details.querySelectorAll('a.tag')), 'native summary opens every public-info tag before module startup');
+    check(details.querySelector('.gallery-card-public-info-description')?.textContent.includes('A public description'), 'native panel contains the public gallery description');
     const expandedBeforeInit = snapshot('[data-fixture-case="rows-one"]');
-    check(JSON.stringify(expandedBeforeInit.card) === JSON.stringify(beforeInit.card) && JSON.stringify(expandedBeforeInit.tags) === JSON.stringify(beforeInit.tags), 'expanded scroll disclosure preserves card and tag-container geometry: ' + JSON.stringify({before: {card: beforeInit.card, tags: beforeInit.tags, list: beforeInit.list}, expanded: {card: expandedBeforeInit.card, tags: expandedBeforeInit.tags, list: expandedBeforeInit.list}}));
+    check(JSON.stringify(expandedBeforeInit.card) === JSON.stringify(beforeInit.card) && JSON.stringify(expandedBeforeInit.tags) === JSON.stringify(beforeInit.tags), 'opening public information preserves card and tag-container geometry: ' + JSON.stringify({before: {card: beforeInit.card, tags: beforeInit.tags, list: beforeInit.list}, expanded: {card: expandedBeforeInit.card, tags: expandedBeforeInit.tags, list: expandedBeforeInit.list}}));
     const beforeModuleCollapse = await fetch('/__key?key=Enter');
     check(beforeModuleCollapse.ok, 'second trusted Enter key reaches the server-rendered native summary before disclosure module startup');
     await settle();
@@ -412,23 +406,27 @@ async function runFixture() {
 
     summary.click();
     await settle();
-    check(details.open && allTagsVisible(details.querySelectorAll('a.tag')), 'native summary click reveals every overflow link');
+    check(details.open && allTagsVisible(details.querySelectorAll('a.tag')), 'native summary opens the complete public-info tag list');
     const expandedAfterInit = snapshot('[data-fixture-case="rows-one"]');
-    check(JSON.stringify(expandedAfterInit.card) === JSON.stringify(beforeInit.card) && JSON.stringify(expandedAfterInit.tags) === JSON.stringify(beforeInit.tags), 'expanded scroll disclosure keeps the gallery card geometry fixed');
-    const expandedNames = tagNames(cappedList);
-    check(expandedNames.indexOf('Long coast observation point tag') < expandedNames.indexOf('Migrating birds near the eastern shoreline'), 'expanded long tags keep their server order');
+    check(JSON.stringify(expandedAfterInit.card) === JSON.stringify(beforeInit.card) && JSON.stringify(expandedAfterInit.tags) === JSON.stringify(beforeInit.tags), 'public-info overlay keeps the gallery card geometry fixed');
+    const infoPanel = details.querySelector('.gallery-card-public-info-panel');
+    const infoRect = infoPanel?.getBoundingClientRect();
+    check(infoPanel instanceof HTMLElement && infoRect && infoRect.left >= 0 && infoRect.right <= window.innerWidth && infoRect.top >= 0 && infoRect.bottom <= window.innerHeight, 'public-info panel stays fully inside the viewport');
+    check(infoPanel?.querySelectorAll('.gallery-card-public-info-tag-list .tag').length === 12, 'public-info panel lists every gallery tag');
+    const expandedNames = tagNames(infoPanel);
+    check(expandedNames[1] === 'Long coast observation point tag' && expandedNames[4] === 'Migrating birds near the eastern shoreline', 'all public tags retain their server order in the panel');
     summary.click();
     await settle();
-    check(!details.open && JSON.stringify(snapshot('[data-fixture-case="rows-one"]')) === JSON.stringify(beforeInit), 'native collapse restores the original inline card geometry');
+    check(!details.open && JSON.stringify(snapshot('[data-fixture-case="rows-one"]')) === JSON.stringify(beforeInit), 'native collapse restores the original compact card geometry');
     summary.focus({preventScroll: true});
     const keyboard = await fetch('/__key?key=Enter');
     check(keyboard.ok, 'trusted Enter key reaches native summary');
     await settle();
     check(details.open, 'keyboard Enter expands details without JavaScript-owned disclosure logic');
-    const closeKeyboard = await fetch('/__key?key=Enter');
-    check(closeKeyboard.ok, 'second trusted Enter key reaches native summary');
+    const closeKeyboard = await fetch('/__key?key=Escape');
+    check(closeKeyboard.ok, 'trusted Escape key reaches the open public-info panel');
     await settle();
-    check(!details.open && JSON.stringify(snapshot('[data-fixture-case="rows-one"]')) === JSON.stringify(beforeInit), 'keyboard collapse restores the original card geometry');
+    check(!details.open && JSON.stringify(snapshot('[data-fixture-case="rows-one"]')) === JSON.stringify(beforeInit), 'Escape closes the public-info panel and restores the original card geometry');
     check(document.documentElement.scrollWidth <= 390, 'narrow viewport has no horizontal page overflow');
     document.getElementById('results').textContent = 'BROWSER PASS ' + assertions + ' gallery tag assertions; rows1 card=' + beforeInit.card[0] + 'x' + beforeInit.card[1] + ' cap=' + cappedContent.clientHeight + 'px scroll=' + cappedContent.scrollHeight + 'px; rows5 cap=' + fiveContent.clientHeight + 'px scroll=' + fiveContent.scrollHeight + 'px; hero rows1 cap=' + heroContent.clientHeight + 'px scroll=' + heroContent.scrollHeight + 'px; JS geometry deltas card/rows5/hero=0; display-all pre/post-init delta=0; initial=' + displayAllInitialContext + '; pre-init=' + displayAllModuleContext;
   } catch (error) {

@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-08-11
+ *   2026-10-03
  */
 
 declare(strict_types=1);
@@ -273,6 +273,7 @@ function render_admin_theme_appearance_tab(array $theme, string $themeBackground
         'admin-theme-appearance-subtab-colors',
         'admin-theme-appearance-subtab-width-map',
         'admin-theme-appearance-subtab-gallery-tags',
+        'admin-theme-appearance-subtab-animations',
     ];
     if (!in_array($appearanceSubtab, $appearanceSubtabOptions, true)) {
         $appearanceSubtab = 'admin-theme-appearance-subtab-colors';
@@ -328,6 +329,8 @@ function render_admin_theme_appearance_tab(array $theme, string $themeBackground
         'hero_tag_scrollbar_enabled' => $heroTagScrollbarEnabled,
         'hero_tag_scrollbar_rows' => $heroTagScrollbarRows,
         'hero_tag_sort_mode' => $heroTagSortMode,
+        'gallery_info_motion_ms' => (int) ($theme['gallery_info_motion_ms'] ?? 320),
+        'admin_side_panel_motion_ms' => (int) ($theme['admin_side_panel_motion_ms'] ?? 260),
         'site_name' => $siteName,
         'preview' => $preview,
         'admin_tags_url' => url_for('admin_tags'),

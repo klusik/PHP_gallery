@@ -27,7 +27,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-08-11
+ *   2026-10-03
  */
 
 import { setupThemeAppearanceResize } from './theme-appearance-resizer.js?v=20261002-theme-appearance-v5';
@@ -790,8 +790,9 @@ function i18n(key, fallback, parameters = {}) {
  * @param {number} minimum Lowest accepted integer.
  * @param {number} maximum Highest accepted integer.
  * @param {number} fallback Value used when direct input is empty or invalid.
+ * @param {string} displaySuffix Optional unit appended to the output value.
  */
-function setupThemeNumberSliderPair(form, sliderSelector, numberSelector, displaySelector, minimum, maximum, fallback) {
+function setupThemeNumberSliderPair(form, sliderSelector, numberSelector, displaySelector, minimum, maximum, fallback, displaySuffix = '') {
     const slider = form.querySelector(sliderSelector);
     const number = form.querySelector(numberSelector);
     const display = form.querySelector(displaySelector);
@@ -806,11 +807,15 @@ function setupThemeNumberSliderPair(form, sliderSelector, numberSelector, displa
      */
     const sync = (source) => {
         const parsed = Number.parseInt(source.value, 10);
-        const value = Math.max(minimum, Math.min(maximum, Number.isFinite(parsed) ? parsed : fallback));
+        const bounded = Math.max(minimum, Math.min(maximum, Number.isFinite(parsed) ? parsed : fallback));
+        const step = Number.parseFloat(slider.step);
+        const value = Number.isFinite(step) && step > 0
+            ? Math.max(minimum, Math.min(maximum, minimum + (Math.round((bounded - minimum) / step) * step)))
+            : bounded;
         slider.value = String(value);
         number.value = String(value);
         if (display instanceof HTMLElement) {
-            display.textContent = String(value);
+            display.textContent = `${value}${displaySuffix}`;
         }
     };
 
@@ -828,6 +833,73 @@ function setupThemeNumberSliderPair(form, sliderSelector, numberSelector, displa
         control.addEventListener('change', () => sync(control));
     });
     sync(number);
+}
+
+/**
+ * Initialize independent duration controls for the public tag panel and Admin drawer.
+ *
+ * @param {HTMLFormElement} form Theme form containing the animation controls.
+ * @return {void} Keeps each slider and numeric input synchronized.
+ */
+function setupThemeMotionDurationControls(form) {
+    setupThemeNumberSliderPair(
+        form,
+        '[data-theme-gallery-info-motion-slider]',
+        '[data-theme-gallery-info-motion-number]',
+        '[data-theme-gallery-info-motion-display]',
+        0,
+        800,
+        320,
+        ' ms',
+    );
+    setupThemeNumberSliderPair(
+        form,
+        '[data-theme-admin-side-panel-motion-slider]',
+        '[data-theme-admin-side-panel-motion-number]',
+        '[data-theme-admin-side-panel-motion-display]',
+        0,
+        800,
+        260,
+        ' ms',
+    );
+    [
+        ['[data-theme-gallery-info-motion-reset]', '[data-theme-gallery-info-motion-number]'],
+        ['[data-theme-admin-side-panel-motion-reset]', '[data-theme-admin-side-panel-motion-number]'],
+    ].forEach(([resetSelector, numberSelector]) => {
+        const reset = form.querySelector(resetSelector);
+        const number = form.querySelector(numberSelector);
+        if (!(reset instanceof HTMLButtonElement) || !(number instanceof HTMLInputElement)) {
+            return;
+        }
+        /** Restore one animation duration and let the paired controls sync normally. */
+        const restoreDefault = () => {
+            number.value = reset.dataset.themeMotionDefault || '';
+            number.dispatchEvent(new Event('input', { bubbles: true }));
+            number.dispatchEvent(new Event('change', { bubbles: true }));
+        };
+        reset.addEventListener('click', restoreDefault);
+    });
+}
+
+/**
+ * Preserve the selected Theme tab and Appearance subsection through form submission.
+ *
+ * @param {HTMLFormElement} form Theme form being submitted.
+ * @return {void} Writes the active tab ids into the server-bound hidden fields.
+ */
+function preserveThemeTabSelectionOnSubmit(form) {
+    const activeTabField = form.querySelector('[data-theme-active-tab]');
+    const activeSubtabField = form.querySelector('[data-theme-active-appearance-subtab]');
+    form.addEventListener('submit', /** Record current navigation before the browser sends the form. @return {void} Keeps saved settings on the same visible tab. */ () => {
+        const activeTab = document.querySelector('[data-admin-tabs] [data-admin-tab-target][aria-selected="true"]');
+        const activeSubtab = form.querySelector('[data-theme-preview-root] [data-admin-subtab-target][aria-selected="true"]');
+        if (activeTabField instanceof HTMLInputElement && activeTab instanceof HTMLElement) {
+            activeTabField.value = activeTab.dataset.adminTabTarget || activeTabField.value;
+        }
+        if (activeSubtabField instanceof HTMLInputElement && activeSubtab instanceof HTMLElement) {
+            activeSubtabField.value = activeSubtab.dataset.adminSubtabTarget || activeSubtabField.value;
+        }
+    });
 }
 
 /**
@@ -981,6 +1053,8 @@ export function setupThemeOverrideForm() {
     setupThemeBackgroundOptimizedSizeDisplay(form);
     setupThemeDescriptionLayoutPicker(form);
     setupThemeHeroTagControls(form);
+    setupThemeMotionDurationControls(form);
+    preserveThemeTabSelectionOnSubmit(form);
     // changed stores state or configuration for the gallery front-end flow.
     const changed = form.querySelector('[data-theme-controls-changed]');
     if (!changed) {

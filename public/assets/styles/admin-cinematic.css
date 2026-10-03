@@ -662,13 +662,13 @@
 .admin-side-panel-scrim {
     opacity: 0;
     background: rgba(15, 23, 42, 0.34);
-    transition: opacity 220ms ease;
+    transition: opacity var(--admin-side-panel-motion-duration, 260ms) ease;
 }
 
 .admin-side-panel-dialog {
     opacity: 0;
     transform: translateX(24px);
-    transition: opacity 220ms ease, transform 260ms ease;
+    transition: opacity var(--admin-side-panel-motion-duration, 260ms) ease, transform var(--admin-side-panel-motion-duration, 260ms) ease;
 }
 
 .admin-side-panel.is-open .admin-side-panel-scrim {

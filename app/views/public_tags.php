@@ -248,13 +248,13 @@ function view_render_public_hero_tags(array $viewModel): void
 }
 
 /**
- * Render gallery-card tags using the shared gallery tag disclosure pipeline.
+ * Render a compact card preview with a native public-information disclosure.
  *
- * The server applies the Theme limit in native disclosure markup; CSS provides
- * row scrolling before JavaScript starts and native HTML handles expansion.
+ * The server applies the Theme limit before first paint. Overflow details open a
+ * positioned panel that contains the public card summary and every prepared tag.
  *
  * @param array<string, mixed> $viewModel Prepared tags and canonical Theme preferences.
- * @return void Emits the collection and its in-place expansion control.
+ * @return void Emits tag pills and the optional public-information panel.
  */
 function view_render_gallery_card_tags(array $viewModel): void
 {
@@ -267,6 +267,11 @@ function view_render_gallery_card_tags(array $viewModel): void
     $displayAll = !empty($viewModel['display_all']);
     $scrollbarEnabled = !empty($viewModel['scrollbar_enabled']);
     $scrollbarRows = max(1, min(12, (int) ($viewModel['scrollbar_rows'] ?? 5)));
+    $hasInfoPanel = !$displayAll && count($items) > $visibleLimit;
+    $visibleItems = $displayAll ? $items : array_slice($items, 0, $visibleLimit);
+    $publicTitle = trim((string) ($viewModel['public_title'] ?? ''));
+    $publicDescriptionHtml = trim((string) ($viewModel['public_description_html'] ?? ''));
+    $publicDateHtml = trim((string) ($viewModel['public_date_html'] ?? ''));
     $rowHeight = [];
     for ($row = 0; $row < $scrollbarRows; $row++) {
         $rowHeight[] = '(1.35em + .2rem + 2px)';
@@ -276,11 +281,48 @@ function view_render_gallery_card_tags(array $viewModel): void
     }
     $scrollbarStyle = $scrollbarEnabled ? ' style="--hero-tag-scrollbar-height: calc(' . implode(' + ', $rowHeight) . ')"' : '';
     echo '<div class="gallery-card-tags' . ($scrollbarEnabled ? ' has-tag-scrollbar' : '') . '" aria-label="' . e(t('gallery.tags', 'Gallery tags')) . '" data-hero-tags data-hero-tags-native="1" data-hero-tag-visible-limit="' . $visibleLimit . '" data-hero-tag-display-all="' . ($displayAll ? '1' : '0') . '" data-hero-tag-scrollbar-enabled="' . ($scrollbarEnabled ? '1' : '0') . '" data-hero-tag-scrollbar-rows="' . $scrollbarRows . '"' . $scrollbarStyle . '>';
-    echo '<div class="gallery-card-tags-content" data-hero-tags-content>';
-    $viewModel['inline_disclosure'] = !$displayAll && count($items) > $visibleLimit;
-    view_render_tag_list($viewModel);
+    echo '<div class="gallery-card-tags-content" data-hero-tags-content><div class="tag-list gallery-card-tag-preview">';
+    view_render_public_gallery_card_tag_items($visibleItems);
+    if ($hasInfoPanel) {
+        $infoLabel = e(t('gallery.public_info', 'Gallery information'));
+        echo '<details class="hero-tag-disclosure gallery-card-info-disclosure" data-hero-tags-disclosure data-gallery-card-info-disclosure>';
+        echo '<summary class="tag gallery-card-tags-toggle gallery-card-info-toggle" aria-label="' . $infoLabel . '" title="' . $infoLabel . '"><span aria-hidden="true">…</span><span class="visually-hidden">' . $infoLabel . '</span></summary>';
+        echo '<section class="gallery-card-public-info-panel" role="region" aria-label="' . $infoLabel . '">';
+        echo '<h3>' . $infoLabel . '</h3>';
+        if ($publicTitle !== '') {
+            echo '<h4 class="gallery-card-public-info-title">' . e($publicTitle) . '</h4>';
+        }
+        if ($publicDescriptionHtml !== '') {
+            echo '<div class="gallery-card-public-info-description">' . $publicDescriptionHtml . '</div>';
+        }
+        if ($publicDateHtml !== '') {
+            echo '<div class="gallery-card-public-info-date">' . $publicDateHtml . '</div>';
+        }
+        echo '<div class="gallery-card-public-info-tags"><h4>' . e(t('gallery.all_tags', 'All tags')) . '</h4><div class="gallery-card-public-info-tag-list">';
+        view_render_public_gallery_card_tag_items($items);
+        echo '</div></div></section></details>';
+    }
+    echo '</div></div>';
     echo '</div>';
-    echo '</div>';
+}
+
+/**
+ * Render prepared public gallery tag links or read-only tag pills.
+ *
+ * @param array<int, array<string, mixed>> $items Ordered prepared tag items.
+ * @return void Emits escaped tag pills without changing their order.
+ */
+function view_render_public_gallery_card_tag_items(array $items): void
+{
+    foreach ($items as $item) {
+        $href = $item['href'] ?? null;
+        $name = (string) ($item['name'] ?? '');
+        if (is_string($href) && $href !== '') {
+            echo '<a class="tag" href="' . e($href) . '" title="' . e($name) . '">' . e($name) . '</a>';
+        } else {
+            echo '<span class="tag" title="' . e($name) . '">' . e($name) . '</span>';
+        }
+    }
 }
 
 /**

@@ -27,7 +27,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-09-14
+ *   2026-10-03
  */
 
 import { setupImageBulkMoveFields, confirmImageBulkSubmission } from './admin-bulk-actions.js?v=20261003-images-v4';
@@ -1342,13 +1342,36 @@ function closeAdminGallerySidePanel(panel) {
     panel.classList.add('is-closing');
     panel.setAttribute('aria-hidden', 'true');
     document.body.classList.remove('has-admin-side-panel');
+    const dialog = panel.querySelector('.admin-side-panel-dialog');
+    const transitionDurationMs = dialog instanceof HTMLElement
+        ? adminSidePanelTransitionDurationMs(dialog)
+        : adminSidePanelMotionDurationMs;
     window.setTimeout(/** Hide only the exact close generation that started this exit transition. @return {void} Cannot hide a reopened drawer. */ () => {
         if (stillClosing()) {
             panel.hidden = true;
             panel.classList.remove('is-closing');
         }
-    }, adminSidePanelMotionDurationMs);
+    }, transitionDurationMs);
     writeAdminGallerySidePanelStatus(panel, '', false);
+}
+
+/**
+ * Read the longest computed side-panel transition, including its delay.
+ *
+ * @param {HTMLElement} dialog Admin drawer dialog element.
+ * @return {number} Longest transition time in milliseconds.
+ */
+function adminSidePanelTransitionDurationMs(dialog) {
+    const style = window.getComputedStyle(dialog);
+    const durations = style.transitionDuration.split(',').map((value) => value.trim());
+    const delays = style.transitionDelay.split(',').map((value) => value.trim());
+    const toMilliseconds = (value) => {
+        if (value.endsWith('ms')) return Number.parseFloat(value);
+        if (value.endsWith('s')) return Number.parseFloat(value) * 1000;
+        return 0;
+    };
+    const totals = durations.map((duration, index) => toMilliseconds(duration) + toMilliseconds(delays[index % Math.max(delays.length, 1)] || '0s'));
+    return totals.length > 0 ? Math.max(0, ...totals.filter(Number.isFinite)) : adminSidePanelMotionDurationMs;
 }
 
 /**

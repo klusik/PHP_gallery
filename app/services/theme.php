@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-08-11
+ *   2026-10-03
  */
 
 declare(strict_types=1);
@@ -84,7 +84,65 @@ function theme_settings(): array
         'gallery_description_layout' => function_exists('Gallery\\Services\\theme_gallery_description_layout') ? theme_gallery_description_layout() : 'vertical',
         'gallery_count_badge_enabled' => !function_exists('Gallery\\Services\\theme_gallery_count_badge_enabled') || theme_gallery_count_badge_enabled() ? '1' : '0',
         'lightbox_browsing_mode' => function_exists('Gallery\\Services\\theme_lightbox_browsing_mode') ? theme_lightbox_browsing_mode() : 'single',
+        'gallery_info_motion_ms' => (string) theme_gallery_info_motion_ms(),
+        'admin_side_panel_motion_ms' => (string) theme_admin_side_panel_motion_ms(),
     ];
+}
+
+/**
+ * Normalize a public gallery-card information-panel animation duration.
+ *
+ * @param mixed $value Stored or submitted duration in milliseconds.
+ * @return int Duration clamped to the supported 0-800 ms range.
+ */
+function theme_gallery_info_motion_ms_value(mixed $value): int
+{
+    if (!is_scalar($value) || is_bool($value)) {
+        return 320;
+    }
+    $value = trim((string) $value);
+    if ($value === '' || filter_var($value, FILTER_VALIDATE_INT) === false) {
+        return 320;
+    }
+    return max(0, min(800, (int) $value));
+}
+
+/**
+ * Return the configured public gallery-card information-panel animation duration.
+ *
+ * @return int Duration in milliseconds, defaulting to 320 ms.
+ */
+function theme_gallery_info_motion_ms(): int
+{
+    return theme_gallery_info_motion_ms_value(app_setting('theme_gallery_info_motion_ms', '320'));
+}
+
+/**
+ * Normalize the Admin side-panel animation duration.
+ *
+ * @param mixed $value Stored or submitted duration in milliseconds.
+ * @return int Duration clamped to the supported 0-800 ms range.
+ */
+function theme_admin_side_panel_motion_ms_value(mixed $value): int
+{
+    if (!is_scalar($value) || is_bool($value)) {
+        return 260;
+    }
+    $value = trim((string) $value);
+    if ($value === '' || filter_var($value, FILTER_VALIDATE_INT) === false) {
+        return 260;
+    }
+    return max(0, min(800, (int) $value));
+}
+
+/**
+ * Return the configured Admin side-panel animation duration.
+ *
+ * @return int Duration in milliseconds, defaulting to 260 ms.
+ */
+function theme_admin_side_panel_motion_ms(): int
+{
+    return theme_admin_side_panel_motion_ms_value(app_setting('theme_admin_side_panel_motion_ms', '260'));
 }
 
 /**
@@ -215,6 +273,8 @@ function theme_override_settings(): array
         'gallery_description_layout' => app_setting('theme_gallery_description_layout'),
         'gallery_count_badge_enabled' => app_setting('theme_gallery_count_badge_enabled'),
         'lightbox_browsing_mode' => app_setting('theme_lightbox_browsing_mode'),
+        'gallery_info_motion_ms' => app_setting('theme_gallery_info_motion_ms'),
+        'admin_side_panel_motion_ms' => app_setting('theme_admin_side_panel_motion_ms'),
     ];
     return array_filter($settings, static fn (?string $value): bool => $value !== null && $value !== '');
 }
