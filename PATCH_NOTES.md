@@ -1,5 +1,56 @@
 # Patch notes
 
+## Version 0.117
+
+Version 0.117 refines the gallery editor into a more compact, task-focused workspace and improves SimBrief description drafting for new and existing galleries. The update preserves the existing gallery storage, access rules, and optional flight-map behavior.
+
+### Highlights
+
+#### Compact gallery editor
+
+- Reorganized the gallery overview and settings into clearer Identity, API, Access, Display, and Media work areas, with a persistent save action in the side panel.
+- Added contextual help and compact advanced disclosures so infrequent controls remain available without crowding routine editing.
+- Grouped route-map editing with SimBrief generation and improved gallery-date suggestions and controls.
+- Kept direct-page form submission available when JavaScript is disabled.
+
+#### SimBrief description drafts
+
+- Added a single Pilot ID or pilot-name field that selects the matching SimBrief lookup automatically.
+- Generated an editable description in the selected content language and populated available maintained-language description fields when localization storage is ready.
+- Kept generated descriptions as private temporary drafts until the administrator saves the gallery; saved OFP and route data are attached after the gallery save.
+- Preserved the ordinary description and manual route controls when SimBrief is unavailable or a request fails.
+
+### Technical Details
+
+#### Backend and frontend
+
+- Added localized draft construction to `app/services/simbrief_descriptions.php` and integrated the draft lifecycle with the gallery editor save workflow.
+- Updated `app/controllers/admin_simbrief.php`, `app/controllers/admin_galleries_edit_page/`, and `app/views/admin_gallery_forms.php` for compact editor data and SimBrief draft controls.
+- Added `public/assets/gallery-modules/admin-gallery-grid-controls.js` and split gallery editor presentation styles into focused access, API, display, and media assets.
+- Updated the Admin side-panel and gallery-editor modules to keep dynamically loaded editor actions working in place.
+
+#### Database and compatibility
+
+- Added no database migration; gallery descriptions, translations, SimBrief OFP data, and route maps continue to use their existing storage.
+- Kept optional localization and flight-map behavior bounded by their existing feature and schema readiness checks.
+- Kept the independent Windows uploader version and installer unchanged.
+
+#### Tests and documentation
+
+- Updated gallery-editor layout, localization, SimBrief draft, and side-panel lifecycle regression coverage.
+- Updated the English, Czech, German, and Swedish manuals and rebuilt their PDFs for Version 0.117.
+
+### User Impact
+
+#### For visitors
+
+- Public gallery behavior and visitor access rules are unchanged.
+
+#### For administrators
+
+- Common gallery settings are easier to find and edit in the compact workspace.
+- SimBrief drafts can be reviewed and edited in the gallery's language fields before saving, with flight data attached after the gallery save succeeds.
+
 ## Version 0.116
 
 Version 0.116 streamlines the physical gallery image editor with in-place photo controls, clearer selection and preview tools, and sorting by either filename or EXIF capture date. Existing gallery and photo authorization, server-side mutations, and database schema remain in place.
