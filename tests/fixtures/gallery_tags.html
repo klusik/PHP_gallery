@@ -44,6 +44,19 @@ async function settle() {
 }
 
 /**
+ * Wait for the animated public-info disclosure to finish closing.
+ * @param {HTMLDetailsElement} details Disclosure controlled by the fixture.
+ * @return {Promise<boolean>} Whether the disclosure closed before the animation bound.
+ */
+async function waitForDisclosureClose(details) {
+    const deadline = performance.now() + 1500;
+    while (details.open && performance.now() < deadline) {
+        await new Promise(resolveAnimationFrame);
+    }
+    return !details.open;
+}
+
+/**
  * Wait for the fixture's image and font resources before taking geometry baselines.
  * @return {Promise<void>} Resolves after images, fonts, and responsive layout settle.
  */
@@ -426,7 +439,9 @@ async function runFixture() {
     const closeKeyboard = await fetch('/__key?key=Escape');
     check(closeKeyboard.ok, 'trusted Escape key reaches the open public-info panel');
     await settle();
-    check(!details.open && JSON.stringify(snapshot('[data-fixture-case="rows-one"]')) === JSON.stringify(beforeInit), 'Escape closes the public-info panel and restores the original card geometry');
+    check(details.dataset.galleryCardInfoState === 'closing', 'Escape starts closing the public-info panel immediately');
+    const escapedCloseFinished = await waitForDisclosureClose(details);
+    check(escapedCloseFinished && JSON.stringify(snapshot('[data-fixture-case="rows-one"]')) === JSON.stringify(beforeInit), 'Escape finishes closing the public-info panel and restores the original card geometry');
     check(document.documentElement.scrollWidth <= 390, 'narrow viewport has no horizontal page overflow');
     document.getElementById('results').textContent = 'BROWSER PASS ' + assertions + ' gallery tag assertions; rows1 card=' + beforeInit.card[0] + 'x' + beforeInit.card[1] + ' cap=' + cappedContent.clientHeight + 'px scroll=' + cappedContent.scrollHeight + 'px; rows5 cap=' + fiveContent.clientHeight + 'px scroll=' + fiveContent.scrollHeight + 'px; hero rows1 cap=' + heroContent.clientHeight + 'px scroll=' + heroContent.scrollHeight + 'px; JS geometry deltas card/rows5/hero=0; display-all pre/post-init delta=0; initial=' + displayAllInitialContext + '; pre-init=' + displayAllModuleContext;
   } catch (error) {

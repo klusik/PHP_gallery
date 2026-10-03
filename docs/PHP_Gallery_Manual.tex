@@ -61,7 +61,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.117.1}
+\newcommand{\version}{0.118}
 \newcommand{\manualdate}{3 October 2026}
 
 \hypersetup{
@@ -1580,6 +1580,8 @@ The~Theme area controls site identity, colors, dimensions, page width, backgroun
 
 The~Theme editor does not use a~separate light/dark-mode switch. Instead, the~saved color controls and~an~optional Custom CSS skin define the~public visual palette directly. It~also sets gallery-card and~subgallery layouts and~can~configure up~to~three header shortcuts. Each shortcut can~target the~main page, one gallery, or~remain empty. Anonymous visitors see only configured gallery shortcuts that are~still public and~listed; duplicate or~deleted gallery selections are~discarded when the~settings are~saved. Leaving all three slots empty hides those favorite-gallery buttons. Gallery cards may~also show a~configurable contained-picture count badge. When that badge is~effective for~a~gallery, opening the~gallery keeps the~same branch count visible in~the~hero panel, counting images in~the~current gallery and~its accessible subgalleries under the~same public/access rules as~the~card. Per-gallery presentation can~inherit the~site defaults or~override the~choices offered by~the~gallery editor.
 
+The~\ui{Animations} subsection sets the~opening and~closing duration for~the~public information panel on~gallery cards and~the~Admin side panel. Each value ranges from~0~to~800~ms; 0 disables that motion. The~defaults are~320~ms and~260~ms respectively. The~public panel contains the~gallery title, description, date, and~complete tag list. Its native disclosure works without JavaScript; with~JavaScript, the~panel stays within the~viewport and~can~be~dismissed by~clicking elsewhere or~pressing Escape. The~interaction honors the~browser's reduced-motion preference.
+
 \subsection{Theme control reference}
 \index{theme!controls}
 \index{pagination!Theme settings}
@@ -1603,6 +1605,7 @@ Appearance & Public page width & \ui{Default}, \ui{Wider}, \ui{Full width}, or~\
 Appearance & GPS pin & When the~GPS-maps feature is~enabled, photo-card pins and~their background underlay can~be~shown or~hidden separately. Pin size is~14--48 pixels with~26 as~the~default. The~underlay slider is~displayed as~0--48 pixels, but~the~current server normalizer treats 0 or~another non-positive value as~unset and~restores 22 pixels; use the~separate underlay checkbox to~hide the~background.\\
 Appearance & Public tag pages & Dedicated tag-page columns and~rows use the~same safe maxima as~other public grids: 1--12 columns and~1--50 rows. Tag-result cards can~use the~vertical or~horizontal gallery-card design independently from ordinary gallery listings.\\
 Appearance & Gallery hero tags & Sort by~usage or~alphabetically. Either show all immediately or~show 1--200 tags before the~in-place expansion control; the~default threshold is~20. Optional scrolling uses 1--12 visible rows, default~5, and~activates only when the~rendered tags actually wrap beyond the~configured rows.\\
+Appearance & Interface animations & Set the~gallery-card public-information-panel duration to~0--800~ms (default~320~ms) and~the~Admin side-panel duration to~0--800~ms (default~260~ms). A~duration of~0 disables that motion.\\
 Layout & Header shortcuts & Three ordered slots. A~slot can~be~empty, point to~the~main page, or~point to~a~gallery found by~the~gallery picker. Public visitors see only public/listed gallery targets.\\
 Appearance & Gallery-card design & \ui{Vertical system} places the~photograph above the~description; \ui{Horizontal system} places it~beside the~description. Fresh installations start with vertical cards; migration preserves older installations' appearance. A~physical gallery can~inherit or~override the~Theme choice where the~presentation schema is~available.\\
 Layout & Picture-count badge & Global contained-picture badge is~enabled by~default. Individual galleries can~inherit it~or~save an~override. When enabled for~the~opened gallery, the~hero panel also shows the~current gallery's branch image count, including accessible subgalleries.\\

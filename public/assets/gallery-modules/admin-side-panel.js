@@ -1356,22 +1356,35 @@ function closeAdminGallerySidePanel(panel) {
 }
 
 /**
- * Read the longest computed side-panel transition, including its delay.
+ * Convert one CSS transition time value to milliseconds.
  *
- * @param {HTMLElement} dialog Admin drawer dialog element.
+ * @param {string} value CSS duration or delay value.
+ * @return {number} Parsed milliseconds, or zero for an unsupported value.
+ */
+function parseAdminSidePanelTransitionTimeMs(value) {
+    if (value.endsWith('ms')) return Number.parseFloat(value);
+    if (value.endsWith('s')) return Number.parseFloat(value) * 1000;
+    return 0;
+}
+
+/**
+ * Read the longest transition on the administrator panel, including its delay.
+ *
+ * @param {HTMLElement} dialog Administrator panel being closed.
  * @return {number} Longest transition time in milliseconds.
  */
 function adminSidePanelTransitionDurationMs(dialog) {
     const style = window.getComputedStyle(dialog);
-    const durations = style.transitionDuration.split(',').map((value) => value.trim());
-    const delays = style.transitionDelay.split(',').map((value) => value.trim());
-    const toMilliseconds = (value) => {
-        if (value.endsWith('ms')) return Number.parseFloat(value);
-        if (value.endsWith('s')) return Number.parseFloat(value) * 1000;
-        return 0;
-    };
-    const totals = durations.map((duration, index) => toMilliseconds(duration) + toMilliseconds(delays[index % Math.max(delays.length, 1)] || '0s'));
-    return totals.length > 0 ? Math.max(0, ...totals.filter(Number.isFinite)) : adminSidePanelMotionDurationMs;
+    const durations = style.transitionDuration.split(',');
+    const delays = style.transitionDelay.split(',');
+    let maximum = 0;
+    for (let index = 0; index < durations.length; index++) {
+        const duration = durations[index].trim();
+        const delay = (delays[index % Math.max(delays.length, 1)] || '0s').trim() || '0s';
+        const total = parseAdminSidePanelTransitionTimeMs(duration) + parseAdminSidePanelTransitionTimeMs(delay);
+        if (Number.isFinite(total)) maximum = Math.max(maximum, total);
+    }
+    return durations.length > 0 ? maximum : adminSidePanelMotionDurationMs;
 }
 
 /**

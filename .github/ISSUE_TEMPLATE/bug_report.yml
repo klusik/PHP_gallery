@@ -1,3 +1,11 @@
+# Project: PHP Gallery
+# Repository: https://github.com/klusik/PHP_gallery
+# File: .github/ISSUE_TEMPLATE/bug_report.yml
+# Module Type: GitHub Issue Form
+# Purpose: Collect reproducible PHP Gallery bug reports with safe diagnostic context.
+# Responsibilities: Ask for the product version, relevant environment, observed behavior, reproduction steps, and redacted diagnostics.
+# Author: Rudolf Klusal
+
 name: Bug report
 description: Report a reproducible problem in PHP Gallery.
 title: "[Bug]: "
