@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.115.1}
+\newcommand{\version}{0.116}
 \newcommand{\manualdate}{3~oktober~2026}
 
 \hypersetup{
@@ -1030,7 +1030,9 @@ Massåtgärder för bilder är avsiktligt mer begränsade än den enskilda redig
   \item skapa miniatyrbilder för valda fotografier.
 \end{itemize}
 
-Bildordningen kan ändras genom att dra i radhandtaget, och galleriet kan sorteras efter filnamn från kolumnen Namn. Ändringar sparas genom den vanliga ordningsrutten och är inte bara en ordning i webbläsaren.
+Bildordningen kan ändras genom att dra i radhandtaget, och galleriet kan sorteras efter filnamn eller EXIF-fotodatum. Foton utan fotodatum ligger kvar sist; ändringar sparas genom den vanliga ordningsrutten.
+
+Fliken \ui{Bilder} i galleriredigeraren samlar vanliga bildåtgärder i en kompakt lista. Tillgängliga miniatyrförhandsvisningar kan öppnas med pekaren, tangentbordsfokus eller klick; radmarkering stöder intervall med Skift-klick. Varje rad har direktkontroller för synlighet, val av galleriets titelbild, redigering och radering av fotot. Åtgärderna använder fortfarande de befintliga autentiserade arbetsflödena på servern. \ui{Visa filnamn} ändrar bara redigerarens visning; administratörer kan spara ett valfritt webbläsarstandardvärde, medan varje galleri kommer ihåg valet under den aktuella redigerarsessionen.
 
 När den valfria funktionen \ui{Bildhanteraren} är aktiverad kan en vanlig inloggad administratör välja fotografier och direkta fysiska undergallerier i det offentliga gallerirutnätet. Bockar väljer enskilda kort; Skift-klick väljer ett intervall; Ctrl-klick eller Cmd-klick växlar ett kort; \ui{Markera alla}, \ui{Rensa} och Ctrl/Cmd+A stöder större urval på den synliga sidan. Smarta gallerikort ingår inte i detta filbaserade urval. Att dra ett omarkerat fotografi börjar med det fotografiet som urval, medan dragning av ett befintligt bildurval flyttar de valda fotografierna tillsammans. Ett synligt undergallerikort blir ett släppmål, och släpp där utför samma validerade bildflytt som destinationsväljaren. Fysiska gallerikort kan inte själva dras.
 

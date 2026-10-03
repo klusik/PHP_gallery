@@ -1,5 +1,49 @@
 # Patch notes
 
+## Version 0.116
+
+Version 0.116 streamlines the physical gallery image editor with in-place photo controls, clearer selection and preview tools, and sorting by either filename or EXIF capture date. Existing gallery and photo authorization, server-side mutations, and database schema remain in place.
+
+### Highlights
+
+#### Gallery image editor
+
+- Added a compact, responsive photo list with accessible thumbnail previews and row selection, including Shift-click range selection.
+- Added direct row actions for photo visibility, gallery title-picture selection, editing, and deletion.
+- Added filename and EXIF capture-date sorting; photos without a capture date remain at the end, and saved ordering continues to use the existing server route.
+- Added a filename visibility preference for the current gallery editor and an optional browser-wide default.
+- Grouped thumbnail maintenance controls to keep the main image workflow focused.
+
+### Technical Details
+
+#### Backend and frontend
+
+- Added `public/assets/gallery-modules/admin-gallery-images.js` for dynamically mounted editor controls, keyboard and pointer previews, selection, and filename preferences.
+- Updated `app/controllers/admin_galleries_edit_page/tab_images.php` and `app/views/admin_gallery_edit_tabs.php` to prepare and render compact image rows, capture dates, authorized preview thumbnails, and row actions.
+- Updated `app/controllers/admin_images_bulk.php` to route explicit per-photo visibility, cover, and deletion actions through the existing authenticated and ownership-checked mutation pipeline.
+- Updated image reordering, Admin side-panel handling, gallery-card rendering, and `public/assets/styles/side-panel.css` for the new workflow and in-place panel updates.
+
+#### Database and compatibility
+
+- Added no database migration; the editor uses existing image, visibility, ordering, and cover data.
+- Preserved the existing direct-page form behavior when JavaScript is unavailable and the existing image authorization rules.
+- Kept the independent Windows uploader version and installer unchanged.
+
+#### Tests
+
+- Updated Admin side-panel delegation and gallery-refresh fixtures for dynamically rendered image controls and panel lifecycle behavior.
+- Updated frontend operational-policy, gallery-card visibility, Smart Gallery hardening, mutation hardening, and browser workflow support coverage.
+
+### User Impact
+
+#### For visitors
+
+- Public gallery presentation and visitor workflows are unchanged.
+
+#### For administrators
+
+- Photo ordering and common row actions are easier to use within the gallery editor, including when the editor is opened in the Admin side panel.
+
 ## Version 0.115.1
 
 Version 0.115.1 fixes the source-documentation checks introduced in 0.115 and updates GitHub Actions to supported Node.js runtimes. It documents existing PHP and JavaScript contracts more precisely, adds bounded checks for changed Bash and PowerShell functions, and removes obsolete action-runtime warnings. Gallery behavior and the independent Windows uploader version remain unchanged.
