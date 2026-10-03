@@ -17,6 +17,7 @@
 import importlib.util
 from importlib.metadata import PackageNotFoundError
 import hashlib
+import json
 from pathlib import Path
 import shutil
 import struct
@@ -38,21 +39,49 @@ SPEC.loader.exec_module(BUILD)
 class InstallerBuildTests(unittest.TestCase):
     """A failed tool must never publish a partial installer or retain staging."""
 
-    def exercise_build(self, fail_at: int | None = None, use_installed_dependencies: bool = False) -> list[list[str]]:
+    def exercise_build(self, fail_at: int | None = None, use_installed_dependencies: bool = False,
+                       fail_publication_at: int | None = None, previous_artifacts: bool = True) -> list[list[str]]:
         """Simulate tool output while checking staging and atomic publication.
 
         ``fail_at`` injects a subprocess failure at the numbered tool step.
         The installed-dependencies mode must skip pip and venv while retaining
         the same cleanup and previous-installer preservation guarantees.
+        ``fail_publication_at`` refuses either final file replacement; failures
+        must restore existing artifacts or leave a fresh build unpublished.
+
+        Args:
+            fail_at (int | None): Tool step to refuse, or None for successful tools.
+            use_installed_dependencies (bool): Exercise the build without pip or venv.
+            fail_publication_at (int | None): Replacement to refuse, or None to allow both.
+            previous_artifacts (bool): Seed a previous installer and matching metadata.
+
+        Returns:
+            list[list[str]]: Recorded subprocess argument lists for ordering checks.
         """
         with tempfile.TemporaryDirectory(prefix="installer tests ") as directory:
             source = Path(directory)
             (source / "VERSION").write_text("0.1.0\n", encoding="utf-8")
             shutil.copyfile(BUILD.WINAPP_DIR / "SimConnect.dll", source / "SimConnect.dll")
-            dist = source / "dist"
-            dist.mkdir()
+            dist = source / "dist" / "0.1.0"
+            dist.mkdir(parents=True)
             output = dist / "PHPGalleryUploader-0.1.0-Setup.exe"
-            output.write_bytes(b"previous successful installer")
+            metadata = dist / "winapp-update.json"
+            previous_metadata = json.dumps({"assets": [{
+                "name": output.name, "version": "0.1.0",
+                "size": len(b"previous successful installer"),
+                "sha256": hashlib.sha256(b"previous successful installer").hexdigest(),
+            }]})
+            if previous_artifacts:
+                output.write_bytes(b"previous successful installer")
+                metadata.write_text(previous_metadata, encoding="utf-8")
+            unrelated = dist / "notes.txt"
+            unrelated.write_bytes(b"unrelated release notes")
+            legacy = dist.parent / output.name
+            legacy.write_bytes(b"historical dist-root installer")
+            older = dist.parent / "0.0.9"
+            older.mkdir()
+            (older / "winapp-update.json").write_bytes(b"older metadata")
+            (older / "PHPGalleryUploader-0.0.9-Setup.exe").write_bytes(b"older installer")
             calls = []
 
             def fake_run(command: list[str], **kwargs: object) -> None:
@@ -100,25 +129,97 @@ class InstallerBuildTests(unittest.TestCase):
                     installer.parent.mkdir()
                     installer.write_bytes(b"complete installer")
 
-            with mock.patch.object(BUILD.subprocess, "run", side_effect=fake_run):
+            replace = BUILD.os.replace
+            publication_calls = []
+
+            def fake_replace(staged: Path, target: Path) -> None:
+                """Refuse one publication step without changing the old file.
+
+                Args:
+                    staged (Path): Completed staged artifact or rollback copy.
+                    target (Path): Final artifact destination.
+
+                Returns:
+                    None: Replace the file or raise the injected OSError.
+                """
+                publication_calls.append(target)
+                if len(publication_calls) == fail_publication_at:
+                    raise OSError("simulated publication failure")
+                replace(staged, target)
+
+            with mock.patch.object(BUILD.subprocess, "run", side_effect=fake_run), \
+                    mock.patch.object(BUILD.os, "replace", side_effect=fake_replace):
                 if fail_at:
                     with self.assertRaises(subprocess.CalledProcessError):
                         BUILD.build_installer("ISCC.exe", source, use_installed_dependencies)
-                    self.assertEqual(b"previous successful installer", output.read_bytes())
+                elif fail_publication_at:
+                    with self.assertRaisesRegex(OSError, "publication failure"):
+                        BUILD.build_installer("ISCC.exe", source, use_installed_dependencies)
                 else:
                     self.assertEqual(output, BUILD.build_installer("ISCC.exe", source, use_installed_dependencies))
                     self.assertEqual(b"complete installer", output.read_bytes())
+                    self.assertEqual({"assets": [{
+                        "name": output.name, "version": "0.1.0",
+                        "size": output.stat().st_size,
+                        "sha256": hashlib.sha256(output.read_bytes()).hexdigest(),
+                    }]}, json.loads(metadata.read_text(encoding="utf-8")))
+            if fail_at or fail_publication_at:
+                if previous_artifacts:
+                    self.assertEqual(b"previous successful installer", output.read_bytes())
+                    self.assertEqual(previous_metadata, metadata.read_text(encoding="utf-8"))
+                else:
+                    self.assertFalse(output.exists())
+                    self.assertFalse(metadata.exists())
             self.assertEqual([], list(source.glob(".build-*")))
-            self.assertEqual([output], list(dist.iterdir()))
+            expected = {unrelated}
+            if previous_artifacts or not (fail_at or fail_publication_at):
+                expected.update({output, metadata})
+            self.assertEqual(expected, set(dist.iterdir()))
+            self.assertEqual(b"unrelated release notes", unrelated.read_bytes())
+            self.assertEqual(b"historical dist-root installer", legacy.read_bytes())
+            self.assertEqual(b"older metadata", (older / "winapp-update.json").read_bytes())
+            self.assertEqual(b"older installer", (older / "PHPGalleryUploader-0.0.9-Setup.exe").read_bytes())
             if use_installed_dependencies:
                 self.assertFalse(any("venv" in command or "pip" in command for command in calls))
                 self.assertEqual(BUILD.sys.executable, calls[0][0])
                 self.assertEqual(BUILD.installed_dependencies_code(), calls[0][2])
             return calls
 
-    def test_success_publishes_only_installer_and_cleans_staging(self):
-        """Publish only the completed installer and discard all temporary files."""
+    def test_success_publishes_installer_beside_matching_metadata(self) -> None:
+        """Publish both files in their version folder and discard build staging.
+
+        Returns:
+            None: Assert replacement, matching metadata and cleanup.
+        """
         self.exercise_build()
+
+    def test_first_build_publishes_installer_beside_matching_metadata(self) -> None:
+        """Create a matching release pair without requiring previous artifacts.
+
+        Returns:
+            None: Assert first-publication metadata and installer placement.
+        """
+        self.exercise_build(previous_artifacts=False)
+
+    def test_publication_failure_preserves_previous_release_pair(self) -> None:
+        """A refused EXE or JSON replacement must preserve both previous files.
+
+        Returns:
+            None: Assert byte-identical rollback after either replacement fails.
+        """
+        for step in (1, 2):
+            with self.subTest(step=step):
+                self.exercise_build(fail_publication_at=step)
+
+    def test_publication_failure_leaves_no_partial_first_release(self) -> None:
+        """A refused publication must remove an EXE with no matching JSON.
+
+        Returns:
+            None: Assert failed first publication leaves both artifacts absent.
+        """
+        for step in (1, 2):
+            with self.subTest(step=step):
+                self.exercise_build(fail_publication_at=step, previous_artifacts=False)
 
     def test_each_tool_failure_cleans_staging_and_preserves_previous_installer(self) -> None:
         """Failure at any build step must retain the previous published artifact."""

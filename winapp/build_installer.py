@@ -2,7 +2,7 @@
 # Module Type: Windows Tooling
 # Purpose: Build the standalone uploader and its Inno Setup installer.
 # Responsibilities:
-#   - Isolate build dependencies, publish the installer and clean temporary files.
+#   - Isolate build dependencies, publish paired release files and clean staging.
 # Repository: https://github.com/klusik/PHP_gallery
 #
 # File: winapp/build_installer.py
@@ -12,10 +12,11 @@
 #
 # License:
 #   MIT License (see LICENSE file in repository)
-"""Build one Windows installer; temporary dependencies and outputs are discarded."""
+"""Build a Windows installer with matching JSON metadata; discard build staging."""
 
 import argparse
 import hashlib
+import json
 import os
 from pathlib import Path
 import platform
@@ -196,7 +197,7 @@ def write_version_resource(path: Path, version: str) -> None:
 
 
 def build_installer(iscc: str | Path, source: Path = WINAPP_DIR, use_installed_dependencies: bool = False) -> Path:
-    """Publish only a complete installer; clean staging on success or failure.
+    """Publish a complete installer and matching metadata in one version folder.
 
     ``iscc`` selects an existing Inno Setup compiler and ``source`` identifies
     the WinApp source directory. The default builds in a temporary venv;
@@ -208,10 +209,20 @@ def build_installer(iscc: str | Path, source: Path = WINAPP_DIR, use_installed_d
 
     Validate the source runtime, embed it at runtime/simconnect inside the
     single application EXE, verify its archived digest, and package that EXE.
-    Return the published installer Path. Source files and the DLL are read only;
-    only the final dist installer is atomically replaced after every check passes.
+    Return the installer Path under dist/<version>, beside winapp-update.json
+    containing its filename, version, byte size and SHA-256 digest. Source files
+    and the DLL are read only; final files are replaced after every check passes.
     OSError, RuntimeError, and subprocess errors propagate after staging cleanup,
-    preserving any previously successful installer on failure.
+    restoring the previous installer if metadata publication fails. Other
+    versions, historical dist-root artifacts and unrelated files are untouched.
+
+    Args:
+        iscc (str | Path): Existing Inno Setup compiler executable.
+        source (Path): WinApp source directory containing VERSION and its DLL.
+        use_installed_dependencies (bool): Reuse checked packages without downloads.
+
+    Returns:
+        Path: Published installer beside its matching update metadata.
     """
     source = Path(source).resolve()
     version = (source / "VERSION").read_text(encoding="utf-8").strip()
@@ -313,15 +324,42 @@ def build_installer(iscc: str | Path, source: Path = WINAPP_DIR, use_installed_d
         installer = work / "installer" / output_name
         if not installer.is_file() or installer.stat().st_size == 0:
             raise RuntimeError("Inno Setup did not produce the installer EXE.")
-        output = source / "dist" / output_name
-        output.parent.mkdir(exist_ok=True)
-        # Atomic replacement preserves an earlier successful build on failure.
+        digest = hashlib.sha256()
+        with installer.open("rb") as handle:
+            while chunk := handle.read(1024 * 1024):
+                digest.update(chunk)
+        metadata = installer.with_name("winapp-update.json")
+        metadata.write_text(json.dumps({"assets": [{
+            "name": output_name,
+            "version": version,
+            "size": installer.stat().st_size,
+            "sha256": digest.hexdigest(),
+        }]}, indent=2) + "\n", encoding="utf-8")
+        output = source / "dist" / version / output_name
+        output.parent.mkdir(parents=True, exist_ok=True)
+        previous = work / "previous-installer.exe"
+        if output.exists():
+            shutil.copyfile(output, previous)
+        # Prepare both files before publishing. If the JSON cannot be replaced,
+        # restore the old EXE so its existing metadata remains a matching pair.
         os.replace(installer, output)
+        try:
+            os.replace(metadata, output.with_name(metadata.name))
+        except OSError:
+            if previous.exists():
+                os.replace(previous, output)
+            else:
+                output.unlink()
+            raise
     return output
 
 
-def main():
-    """Require Windows x64 Python and report build failures with a nonzero exit."""
+def main() -> int:
+    """Require Windows x64 Python and report build failures with a nonzero exit.
+
+    Returns:
+        int: Zero on successful publication, one on a refused or failed build.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--iscc", help="Path to the installed Inno Setup ISCC.exe")
     parser.add_argument(
@@ -338,7 +376,7 @@ def main():
     except (OSError, RuntimeError, subprocess.SubprocessError) as exc:
         print(f"Build failed: {exc}", file=sys.stderr)
         return 1
-    print(f"Installer ready: {output}\nTemporary build files removed.")
+    print(f"Installer ready: {output}\nUpdate metadata ready: {output.with_name('winapp-update.json')}\nTemporary build files removed.")
     return 0
 
 

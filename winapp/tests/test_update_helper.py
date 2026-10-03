@@ -135,10 +135,14 @@ class UpdateHelperTests(unittest.TestCase):
     @unittest.skipUnless(sys.platform == "win32" and os.environ.get("PHP_GALLERY_NATIVE_UPDATE_SMOKE") == "1",
                          "Read-only native smoke requires a completed installer build")
     def test_native_windows_version_and_absent_target_process(self) -> None:
-        """Read real PE metadata and enumerate processes without starting setup."""
+        """Read real PE metadata and enumerate processes without starting setup.
+
+        Returns:
+            None: Assert the built installer's version and absence of target processes.
+        """
         winapp = Path(__file__).resolve().parents[1]
         version = (winapp / "VERSION").read_text(encoding="utf-8").strip()
-        installer = winapp / "dist" / f"PHPGalleryUploader-{version}-Setup.exe"
+        installer = winapp / "dist" / version / f"PHPGalleryUploader-{version}-Setup.exe"
         if not installer.is_file():
             self.skipTest(f"Built {version} installer is unavailable")
         backend = helper.WindowsBackend()
